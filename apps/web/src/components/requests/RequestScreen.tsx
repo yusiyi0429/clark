@@ -21,6 +21,7 @@ import { draftAnswer, draftRequest, prepareQuestion, readRequest, requestError, 
 import { RequestSteps, runningSteps } from "./RequestSteps";
 import { ImpactCardScreen } from "./ImpactCard";
 import { DocChangeScreen } from "./DocChange";
+import { CollectionScreen } from "@/components/collections/CollectionScreen";
 import s from "./requests.module.css";
 
 const NO_CARDS: Card[] = [];
@@ -44,6 +45,8 @@ export function RequestScreen({ initialRequest, base, initialPrompt }: { initial
   if (initialRequest?.kind === "impact") return <ImpactCardScreen request={initialRequest} base={base} />;
   // 文档变更：作者确认修订 / 取代哪份，或旧文档负责人回答还有效吗。
   if (initialRequest?.kind === "doc_change") return <DocChangeScreen request={initialRequest} />;
+  // ③ 信息收集的一轮：待办卡（接收人）或汇总（发起人）。
+  if (initialRequest?.kind === "collection") return <CollectionScreen request={initialRequest} />;
   return <RelayRequestScreen initialRequest={initialRequest} base={base} initialPrompt={initialPrompt} />;
 }
 
@@ -265,7 +268,7 @@ function SentRequest({ request, onChange }: { request: TRequestView; onChange: (
   );
 }
 
-function QuestionThread({ request, busy, perform }: {
+export function QuestionThread({ request, busy, perform }: {
   request: TRequestView; busy: boolean; perform: (action: TActionDescriptor | undefined, input?: unknown) => Promise<boolean>;
 }) {
   const ref = useRef<HTMLElement>(null);
@@ -339,7 +342,7 @@ function AnswerBox({ request, question, busy, perform }: {
 }
 
 /** 接收人提问：定位待办 → 查有没有人问过 → 整理问题 → 等你确认。查到答案就停在第二步。 */
-function AskBox({ request, perform }: { request: TRequestView; perform: (action: TActionDescriptor | undefined, input?: unknown) => Promise<boolean> }) {
+export function AskBox({ request, perform }: { request: TRequestView; perform: (action: TActionDescriptor | undefined, input?: unknown) => Promise<boolean> }) {
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<"idle" | "checking" | "found" | "preview" | "sending">("idle");
   const [result, setResult] = useState<TPrepareRequestQuestionResponse | null>(null);

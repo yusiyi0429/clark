@@ -41,3 +41,4 @@ export * from "./issueDrafts.js";
 export * from "./meetingDecisions.js";
 export * from "./impact.js";
 export * from "./docChanges.js";
+export * from "./collections.js";

@@ -351,7 +351,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         const entries = createConversationEntries({
           pool, agent: deliveryAgent, secret: env.sessionSecret, viewer: { personId: owner, role: person.role },
           message: resume ? resume.question : req.body.message, names, people: directory, directory, now: ctx.now,
-          reviews: ctx.monthlyReviewService, weeklyReviews: ctx.weeklyReviewService, fingerprint: `conversation:${runId}`,
+          reviews: ctx.monthlyReviewService, weeklyReviews: ctx.weeklyReviewService, collections: ctx.collections, fingerprint: `conversation:${runId}`,
           onStep: (step) => steps.report(step), onCard: (card) => { if (cards.length < 4) cards.push(card); },
         });
         // Agent 向本人提问：提问卡和上面的卡一样随运行记录存下、挂在回答后面；「等你回答」这一步留着高亮。

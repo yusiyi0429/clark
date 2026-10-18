@@ -9,6 +9,7 @@
  * - todo_answer：已有人问过的答案原文与出处，仍可以问；
  * - request_draft：本人发起的请求草稿，与请求页同一套收件人、要你定和发送；
  * - questions：Agent 的提问与「开始回答」（AskPanel，一题一页作答）。
+ * - collection_draft：本人发起的信息收集草稿（表头、收件人、截止、每周固定和发送）。
  * 已经发过的（读回历史时）按对象的最新状态显示成「已问」「已发出」。
  */
 import { useEffect, useRef, useState } from "react";
@@ -19,6 +20,7 @@ import { StepList, type Step } from "@/components/steps/StepList";
 import { AskCard } from "./AskPanel";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { DraftRequest } from "@/components/requests/RequestScreen";
+import { CollectionDraftCard } from "@/components/collections/CollectionDraft";
 import { prepareQuestion, readRequest, requestError, runRequestAction } from "@/components/requests/requestApi";
 import { browserApi } from "@/lib/api/client";
 import { relativeDayTime } from "@/lib/companyTime";
@@ -60,6 +62,7 @@ function EntryCard({ card, createdAt }: { card: TConversationCard; createdAt?: s
     );
     case "request_draft": return <RequestDraftCard requestId={card.requestId} href={card.href} />;
     case "questions": return <AskCard card={card} />;
+    case "collection_draft": return <section className={`${s.card} ${s.bare}`}><CollectionDraftCard collectionId={card.collectionId} /></section>;
   }
 }
 

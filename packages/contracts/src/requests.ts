@@ -3,7 +3,7 @@ import { ActionDescriptor } from "./cards.js";
 
 /**
  * 送达通道（⑨ 传话）：发起人一句话 → Agent 起草并自查歧义 → 预览 → 发出；接收人收到待办卡，卡上问答，完成由人标记。
- * kind：relay 传话；impact 影响卡；doc_change 文档变更要作者（或旧文档负责人）确认的那一条；collection / supplement 留给 ③ 信息收集和补充请求。
+ * kind：relay 传话；collection ③ 信息收集（每发一轮一条）；impact 影响卡；doc_change 文档变更要作者（或旧文档负责人）确认的那一条；supplement 留给补充请求。
  */
 export const RequestKind = Type.Union([Type.Literal("relay"), Type.Literal("collection"), Type.Literal("impact"), Type.Literal("supplement"), Type.Literal("doc_change")]);
 export const RequestStatus = Type.Union([Type.Literal("draft"), Type.Literal("open"), Type.Literal("done")]);
@@ -126,6 +126,8 @@ export const RequestListItem = Type.Object(
     openQuestions: Type.Integer({ minimum: 0 }),
     /** 这条请求上有给我的未读通知（收到、有人回答、有人完成）；打开请求即读。 */
     unread: Type.Boolean(),
+    /** 信息收集（kind = collection）收到的：我那一行必填栏填了几栏 / 一共几栏。 */
+    fieldsFilled: Type.Optional(Type.Object({ filled: Type.Integer({ minimum: 0 }), required: Type.Integer({ minimum: 0 }) }, { additionalProperties: false })),
   },
   { additionalProperties: false },
 );

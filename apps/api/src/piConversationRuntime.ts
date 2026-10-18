@@ -931,6 +931,16 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           }, { additionalProperties: false }),
           execute: async (_id, args) => textResult(await entries.requestHelp(args as { prompt: string; requestId?: string; answers?: string[] })),
         }),
+        defineTool({
+          name: "start_collection",
+          label: "发起信息收集",
+          description: "本人要定期向一群人收信息、大家共填一张表时调用（例如「每周五下班前收一下大家这周在灯塔项目上的开销」「方法部门每周收一次大家的进展」）。只支持财务每周开销和方法部门每周进展两类，其他的按返回如实说。系统判断场景、起草收什么、发给谁、截止和是否每周固定，放进草稿卡；本人在卡上确认、点「发送」才发出。prompt 照抄本人原话；本人要改上一版时带上那一版的 collectionId 和新的原话。按返回的 note 回答。",
+          parameters: Type.Object({
+            prompt: Type.String({ minLength: 1, maxLength: 2000 }),
+            collectionId: Type.Optional(Type.String({ maxLength: 64 })),
+          }, { additionalProperties: false }),
+          execute: async (_id, args) => textResult(await entries.startCollection(args as { prompt: string; collectionId?: string })),
+        }),
       ] : [];
       // 三层取用（companyMap.ts）：每个页面同一套，页面只决定默认焦点；权限在仓储层判，看不到的只记 filtered 条数。
       const map = input.companyMap;

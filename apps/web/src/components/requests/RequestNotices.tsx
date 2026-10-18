@@ -28,11 +28,12 @@ export function impactNotices(inbox: TRequestListItem[]): Notice[] {
 export function requestNotices(inbox: TRequestListItem[], sent: TRequestListItem[]): Notice[] {
   const received = inbox.filter((item) => item.kind !== "impact" && (item.myStatus === "pending" || item.unread)).map<Notice>((item) => ({
     id: item.id, title: item.title, tone: item.unread ? "amber" : "neutral",
-    detail: [item.initiatorName, monthDayTime(item.sentAt), item.myStatus === "done" ? "已完成" : ""].filter(Boolean).join(" · "),
+    detail: [item.initiatorName, monthDayTime(item.sentAt), item.myStatus === "done" ? (item.kind === "collection" ? "已确认" : "已完成")
+      : item.fieldsFilled ? `已填 ${item.fieldsFilled.filled}/${item.fieldsFilled.required}` : ""].filter(Boolean).join(" · "),
   }));
   const mine = sent.filter((item) => item.status !== "draft" && (item.openQuestions > 0 || item.unread)).map<Notice>((item) => ({
     id: item.id, title: item.title, tone: item.openQuestions > 0 ? "amber" : "neutral", qa: item.openQuestions > 0,
-    detail: item.openQuestions > 0 ? `${item.openQuestions} 问待回答` : `${item.recipientsDone}/${item.recipientNames.length} 完成`,
+    detail: item.openQuestions > 0 ? `${item.openQuestions} 问待回答` : `${item.recipientsDone}/${item.recipientNames.length} ${item.kind === "collection" ? "已确认" : "完成"}`,
   }));
   return [...received, ...mine];
 }

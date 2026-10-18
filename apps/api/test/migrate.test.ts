@@ -172,6 +172,7 @@ describe("migration", () => {
         "092_issue_drafts_and_message_kind.sql",
         "093_off_plan_resolution.sql",
         "095_admin_incidents.sql",
+        "097_collections.sql",
         "099_doc_changes.sql",
       ]);
 
@@ -180,7 +181,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(87);
+      expect(Number(again.rows[0].count)).toBe(88);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(

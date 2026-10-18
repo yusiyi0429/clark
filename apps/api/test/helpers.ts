@@ -237,6 +237,9 @@ export async function createTestApp(
     missionCardDraftAgent?: MissionCardDraftAgent;
     /** 送达通道的假 Agent；不注入时用真实装配（测试里不会被调用）。 */
     requestAgent?: RequestAgent;
+    /** ③ 信息收集的假起草 Agent 与假多维表格；不注入时用真实装配（起草不会被调用）、多维表格是进程内的 mock。 */
+    collectionAgent?: Parameters<typeof buildApp>[0]["collectionAgent"];
+    bitable?: Parameters<typeof buildApp>[0]["bitable"];
     driExporter?: DriExporter;
     ontologyUpdater?: OntologyUpdater;
     monthlyDraftAgent?: MonthlyDraftAgent;

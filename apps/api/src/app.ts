@@ -95,6 +95,12 @@ import { registerOntologyRoutes } from "./routes/ontology.js";
 import { registerMonthlyReviewRoutes } from "./routes/monthlyReviews.js";
 import { registerRequestRoutes } from "./routes/requests.js";
 import { createRequestAgent, type RequestAgent } from "./delivery/requestAgent.js";
+import { createCollectionAgent, type CollectionAgent } from "./collectionAgent.js";
+import { collectionJobs, type CollectionDeps } from "./collections.js";
+import { createFeishuBitable, createMockBitable, type BitableAdapter } from "./feishu/bitable.js";
+import { feishuNotifier } from "./feishu/notify.js";
+import { registerCollectionRoutes } from "./routes/collections.js";
+import type { JobHandler, RecurringJob } from "./jobs.js";
 import { registerCollectorRoutes } from "./routes/collector.js";
 import { registerWeeklyReviewRoutes } from "./routes/weeklyReviews.js";
 import { registerAdminRoutes } from "./routes/admin.js";
@@ -185,6 +191,8 @@ export type AppEnv = {
   adminPersonIds?: string[];
   /** 影响卡：live 推送（缺省；置信度低的仍只记影子）、shadow 只在后台记录（IMPACT_CARD_MODE）。 */
   impactCardMode?: "live" | "shadow";
+  /** ③ 信息收集的飞书多维表格：live 以发起人身份调开放接口（要先在飞书后台开通 base 权限，见 feishu/bitable.ts）；缺省 mock，不调飞书（FEISHU_BITABLE_MODE）。 */
+  collectionBitable?: "live" | "mock";
 } & CompanyMemorySeedEnv & WorldEnv & CompanyEnv;
 
 declare module "fastify" {
@@ -193,6 +201,8 @@ declare module "fastify" {
     meetingFollowThrough: MeetingFollowThrough;
     /** ⑧ 文档变更；server.ts 用它注册后台任务和群消息事件。 */
     docChanges: DocChangeService;
+    /** ③ 信息收集的后台任务（每分钟 collection.tick）；server.ts 注册给 jobs worker。 */
+    collectionJobs: { handlers: Record<string, JobHandler>; recurring: RecurringJob[] };
   }
 }
 
@@ -225,6 +235,8 @@ export async function buildApp({
   missionCardReviewAgent,
   missionCardDraftAgent,
   requestAgent,
+  collectionAgent,
+  bitable,
   webSearch,
   outlets,
   feishuClient,
@@ -280,6 +292,10 @@ export async function buildApp({
   missionCardDraftAgent?: MissionCardDraftAgent;
   /** 送达通道（⑨ 传话）的起草、查答案、起草回答；缺省用 light 模型槽位（测试注入假实现）。 */
   requestAgent?: RequestAgent;
+  /** ③ 信息收集的起草；缺省用 light 模型槽位（测试注入假实现）。 */
+  collectionAgent?: CollectionAgent;
+  /** ③ 信息收集的飞书多维表格适配层；缺省按 env.collectionBitable 装配（测试注入假表）。 */
+  bitable?: BitableAdapter;
   /** Pi web_search Tool 的真实 Provider；缺失时 Tool 调用如实失败（不伪装已配置）。 */
   webSearch?: WebSearchAdapter;
   /** 发布方级 feed adapter：Radar、预研与全局对话共用同一白名单来源。 */
@@ -481,6 +497,17 @@ export async function buildApp({
   // 写本体只按方案 A 一条决定记一条事件（实例配置允许写时）；原来「整场会记一条事件」已停用。
   const followThrough = createMeetingFollowThrough({ pool, env, companyMemory, world, outcomeAgent: outcome, now, ...meetingFollowThroughAgents });
   app.decorate("meetingFollowThrough", followThrough);
+  // ③ 信息收集：路由、对话入口和后台任务共用一份依赖；飞书通知配了飞书才发。
+  const collectionDeps: CollectionDeps = {
+    pool,
+    bitable: bitable ?? (env.collectionBitable === "live" && env.feishu ? createFeishuBitable() : createMockBitable()),
+    feishu: env.feishu,
+    notify: env.feishu ? feishuNotifier(q) : undefined,
+    isCeo: (personId) => companyMemory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false,
+    names: () => personDisplayNames(companyMemory),
+    now,
+  };
+  app.decorate("collectionJobs", collectionJobs(collectionDeps));
   app.addHook("onClose", async () => { followThrough.close(); });
   // 周复盘提交后按关联的 Mission、Task 写进展到本体：同样只在实例配置允许写时启用；不写时提交照常，等配好后补发。
   let weeklyReviewWorld: WeeklyReviewWorldSync | undefined;
@@ -592,6 +619,7 @@ export async function buildApp({
     monthlyReviewService,
     weeklyReviewService,
     weeklyReviewWorld,
+    collections: { agent: collectionAgent ?? createCollectionAgent(pool, env), deps: collectionDeps },
     recordings,
     voiceprints: voiceprintDeps,
     dictation: dictationDeps,
@@ -646,6 +674,7 @@ export async function buildApp({
   registerMyRadarRoutes(app, ctx);
   registerMonthlyReviewRoutes(app, ctx);
   registerRequestRoutes(app, ctx, deliveryAgent);
+  registerCollectionRoutes(app, ctx);
   registerPersonalMemoryRoutes(app, ctx);
   registerMemoryImportRoutes(app, ctx, memoryImports);
   registerCollectorRoutes(app, ctx);

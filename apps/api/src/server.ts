@@ -102,6 +102,7 @@ const env: AppEnv = {
   adminPersonIds: parseAdminPersonIds(process.env.TIANSHU_ADMIN_PERSON_IDS),
   // 影响卡：live（缺省）推送；shadow 只在后台记录，不打扰人。
   impactCardMode: process.env.IMPACT_CARD_MODE === "shadow" ? "shadow" : "live",
+  collectionBitable: process.env.FEISHU_BITABLE_MODE === "live" ? "live" : "mock",
 };
 
 const port = Number(process.env.PORT ?? "4000");
@@ -262,11 +263,11 @@ const docChangeJobs = app.docChanges.jobs();
 const jobWorker = createJobWorker({
   pool,
   handlers: {
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers,
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers,
     ...(env.feishu ? feishuEventJobs(pool, { ...followThroughJobs.feishuEvents, ...docChangeJobs.feishuEvents }) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },
-  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring],
+  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring],
 });
 let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {

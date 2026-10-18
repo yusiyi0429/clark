@@ -223,6 +223,8 @@ export const ConversationCard = Type.Union([
   Type.Object({ kind: Type.Literal("request_draft"), requestId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
   /** Agent 的提问：题目列表与「开始回答」；回答过的按后面那条作答消息显示成「已回答」。 */
   Type.Object({ kind: Type.Literal("questions"), askId: Type.String({ minLength: 1 }), questions: Type.Array(AskQuestion, { minItems: 1, maxItems: 4 }) }, { additionalProperties: false }),
+  /** 本人发起的信息收集草稿：收什么、发给谁、截止、每周固定与「发送」。 */
+  Type.Object({ kind: Type.Literal("collection_draft"), collectionId: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
 ]);
 
 export const ConversationMessage = Type.Object(

@@ -66,13 +66,17 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
       if (row.request_kind === "impact") return `${row.impact_trigger === "doc_change" ? "文档变更影响你" : "会后影响你"}：${row.request_title ?? ""}`;
       // 文档变更：作者确认新文档修订或取代了哪份，或旧文档负责人被问「还有效吗」。
       if (row.request_kind === "doc_change") return `文档变更：${row.request_title ?? ""}`;
+      if (row.request_kind === "collection") return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}请你填：${row.request_title ?? ""}`;
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}请你：${row.request_title ?? ""}`;
     case "request_answered":
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}回答了你的问题：${row.request_title ?? ""}`;
     case "request_asked":
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}问你：${row.request_title ?? ""}`;
     case "request_done":
+      if (row.request_kind === "collection") return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}确认了：${row.request_title ?? ""}`;
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}完成了：${row.request_title ?? ""}`;
+    case "collection_reminder":
+      return `截止前提醒：${row.request_title ?? ""}`;
   }
 }
 
