@@ -43,6 +43,8 @@ export function loadReviewEnv(): void {
     CONVERSATION_ATTACHMENT_STORAGE_DIR: join(DATA_DIR, "attachments"),
     MEETING_RECORDING_STORAGE_DIR: join(DATA_DIR, "recordings"),
     BUILD_SHA: "review-1018",
+    // 管理员视图：演示里由孙铭泽看（线上是孙铭泽、刘人豪）。
+    TIANSHU_ADMIN_PERSON_IDS: "sun-mingze",
   });
   for (const key of ["TKOS_WORLD_API_URL", "TKOS_WORLD_AGENT_TOKEN", "LANGSMITH_API_KEY", "LANGSMITH_TRACING", "FEISHU_APP_ID", "FEISHU_APP_SECRET", "BOCHA_API_KEY"]) delete process.env[key];
 }
