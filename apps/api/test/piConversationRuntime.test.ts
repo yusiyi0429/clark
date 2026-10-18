@@ -658,6 +658,41 @@ describe("controlled Pi conversation adapter public behavior", () => {
     }
   });
 
+  it("三层取用的工具每个页面都有；转议题只在 CEO 首页；带过来的那段首页对话接进模型历史", async () => {
+    const contexts: Context[] = [];
+    const runtime = await createPiConversationRuntime({
+      companyMemory: loadCompanyMemory(testEnv), baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
+      streamSimple: (_model, context) => { contexts.push(context); return stream(message([{ type: "text", text: "好" }], "stop")); },
+    });
+    const companyMap = { readMissionCards: async () => ({}), readProgress: async () => ({}), readReviews: async () => ({}), readObjectTree: async () => ({}) } as never;
+    const issueSuggest = { propose: async () => ({}), readIssueConversation: async () => ({}) };
+    const base = { currentObject: null, referencesSnapshot: [], runtimeEntries: [], signal: new AbortController().signal, emit: () => undefined };
+    const tools = (index: number) => (contexts[index].tools ?? []).map((tool) => tool.name);
+    try {
+      await runtime.run({ ...base, scope: "global", viewer: CEO_VIEWER, message: "渠道预算转不转", piSessionId: randomUUID(), companyMap, issueSuggest,
+        focus: { people: "all", period: "2026-10", label: "全员 · 10 月" }, issueContext: { issueThreads: [], declinedIssueTopics: ["渠道预算"] } });
+      expect(tools(0)).toEqual(expect.arrayContaining(["read_mission_cards", "read_progress", "read_reviews", "read_object_tree", "propose_issue", "read_issue_conversation"]));
+      expect(contexts[0].systemPrompt).toContain("# 三层取用");
+      expect(contexts[0].systemPrompt).toContain("# 深聊转议题");
+      expect(JSON.stringify(contexts[0].messages)).toContain("declinedIssueTopics");
+
+      await runtime.run({ ...base, scope: "task:11111111-1111-4111-8111-111111111111", viewer: MEMBER_VIEWER, message: "别人进展怎样", piSessionId: randomUUID(), companyMap,
+        focus: { people: "me", period: "2026-10", label: "我 · 10 月" }, scopeOverride: { people: "all", from: "2026-09", to: "2026-10" } });
+      expect(tools(1)).toEqual(expect.arrayContaining(["read_mission_cards", "read_progress", "read_reviews", "read_object_tree"]));
+      expect(tools(1)).not.toContain("propose_issue");
+      expect(contexts[1].systemPrompt).not.toContain("# 深聊转议题");
+      expect(JSON.stringify(contexts[1].messages)).toContain("scopeOverride");
+
+      await runtime.run({ ...base, scope: "issue:fixture-001", viewer: CEO_VIEWER, message: "接着说", piSessionId: randomUUID(),
+        carriedOver: [{ role: "user", content: "首页里问的渠道预算", createdAt: "2026-10-18T01:00:00.000Z" }, { role: "assistant", content: "首页里的回答", createdAt: "2026-10-18T01:00:05.000Z" }] });
+      const history = JSON.stringify(contexts[2].messages);
+      expect(history).toContain("首页里问的渠道预算");
+      expect(history.indexOf("首页里的回答")).toBeLessThan(history.indexOf("接着说"));
+    } finally {
+      await runtime.close?.();
+    }
+  });
+
   it("loads no user/coding resources, exposes only read-only CompanyMemory tools, and restores entries", async () => {
     const contexts: Context[] = [];
     const streamSimple = (_model: Model<any>, context: Context) => {

@@ -10,10 +10,14 @@ import type {
   TConversationCard,
   TConversationHistory,
   TConversationScope,
+  TReadScope,
+  TReadScopeParams,
   TReferenceSnapshot,
 } from "@warmap/contracts";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 import type { ConversationEntries } from "./conversationEntries.js";
+import type { CompanyMap, ReadFocus } from "./companyMap.js";
+import type { IssueSuggest, IssueSuggestContext } from "./issueDrafts.js";
 import type { TurnRecoverySummary } from "./conversationRecovery.js";
 import type { ParsedMaterial } from "./materialParser.js";
 import { roleOf, type SessionRole } from "./memberAccess.js";
@@ -46,7 +50,9 @@ export type ConversationRuntimeEvent =
   | { type: "escalation"; reason: "slow" | "retrieval"; expectSeconds: number; notice: string }
   /** 上游出错后正在自动恢复（conversationRecovery.ts）：notice 是给进度行的一句中文。 */
   | { type: "recovery"; reason: string; action: "retry" | "fallback" | "trim" | "continue" | "skip"; attempt: number; notice: string }
-  | { type: "usage"; input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number };
+  | { type: "usage"; input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number }
+  /** 跨对象读取的范围标签（三层取用，companyMap.ts）：界面显示成可以点开调整的标签。 */
+  | ({ type: "scope" } & TReadScope);
 
 export type PersonalMemoryEntry = { id: string; title: string; text: string };
 export type PersonalMemoryContext = PersonalMemoryEntry & { createdAt?: string; basedOnOldVersion?: boolean };
@@ -84,6 +90,21 @@ export type ConversationRuntime = {
     /** 对话里的一句话入口（生成复盘、帮我问问、请同事帮忙），已绑定本人与这一轮；运行时据此提供对应工具。 */
     entries?: ConversationEntries;
     recentMessages?: { role: "user" | "assistant"; content: string; createdAt: string }[];
+    /** 三层取用（companyMap.ts）：已绑定本人与这一轮，运行时据此提供 read_mission_cards / read_progress / read_reviews / read_object_tree。 */
+    companyMap?: CompanyMap;
+    /** 本页的默认读取焦点（页面只决定默认焦点，不是边界）：放进上下文包的 focus。 */
+    focus?: ReadFocus & { label: string };
+    /** 本人在范围标签上改过的读取范围：放进上下文包，这一轮的读取一律按它。 */
+    scopeOverride?: TReadScopeParams;
+    /** 一号位深聊转议题（只在 CEO 首页，issueDrafts.ts）：运行时据此提供 propose_issue、read_issue_conversation。 */
+    issueSuggest?: IssueSuggest;
+    /** 首页上下文包里的已转议题与拒绝过的话题。 */
+    issueContext?: IssueSuggestContext;
+    /**
+     * 模型还没见过的、从别的对话带进来的消息（转议题时复制进议题页的那一段）：运行时在这一轮之前接进模型历史。
+     * 模型历史重建或闲置重开时它们已经在 recentMessages 里，不再重复接。
+     */
+    carriedOver?: { role: "user" | "assistant"; content: string; createdAt: string }[];
     runtimeEntries: unknown[];
     piSessionId: string;
     signal: AbortSignal;
@@ -359,7 +380,8 @@ const MAIN_CONVERSATION_SQL = `SELECT id FROM conversations WHERE ${ACTIVE_CONVE
 export const CONVERSATION_IDLE_RESTART_MS = 12 * 60 * 60 * 1000;
 
 type MessageRow = { sequence: number; role: string; content: string; references_snapshot: unknown; attachments: TConversationAttachment[];
-  run_id: string; created_at: Date; recovery_note: { text?: unknown; detail?: unknown } | null; memory_used: unknown; cards?: unknown };
+  run_id: string; created_at: Date; recovery_note: { text?: unknown; detail?: unknown } | null; memory_used: unknown; cards?: unknown;
+  read_scope?: unknown; kind?: string; meta?: { issueId?: unknown; title?: unknown; href?: unknown } | null };
 
 function historyMessage(row: MessageRow): TConversationHistory["messages"][number] {
   const note = row.recovery_note;
@@ -375,14 +397,19 @@ function historyMessage(row: MessageRow): TConversationHistory["messages"][numbe
       ? { recoveryNote: { text: note.text, detail: typeof note.detail === "string" ? note.detail : "" } } : {}),
     ...(Array.isArray(row.memory_used) && row.memory_used.length ? { memoryUsed: row.memory_used.filter((id): id is string => typeof id === "string") } : {}),
     ...(row.role === "assistant" && Array.isArray(row.cards) && row.cards.length ? { cards: row.cards as TConversationCard[] } : {}),
+    ...(row.role === "assistant" && row.read_scope && typeof row.read_scope === "object" ? { readScope: row.read_scope as TReadScope } : {}),
+    ...(row.kind === "carried" || row.kind === "trace" ? { kind: row.kind } : {}),
+    ...(row.kind === "trace" && row.meta ? { meta: Object.fromEntries((["issueId", "title", "href"] as const)
+      .flatMap((key) => (typeof row.meta?.[key] === "string" ? [[key, row.meta[key]]] : []))) } : {}),
   };
 }
 
 async function conversationMessages(q: Query, conversationId: string): Promise<TConversationHistory["messages"]> {
   const result = await q(
     // 这一轮工具生成的卡记在运行记录里（routes/conversations.ts），随回答一起读回。
-    `SELECT m.sequence, m.role, m.content, m.references_snapshot, m.attachments, m.run_id, m.created_at, m.recovery_note, m.memory_used,
-            CASE WHEN m.role = 'assistant' THEN r.input_snapshot -> 'cards' END AS cards
+    `SELECT m.sequence, m.role, m.content, m.references_snapshot, m.attachments, m.run_id, m.created_at, m.recovery_note, m.memory_used, m.kind, m.meta,
+            CASE WHEN m.role = 'assistant' AND m.kind = 'message' THEN r.input_snapshot -> 'cards' END AS cards,
+            CASE WHEN m.role = 'assistant' AND m.kind = 'message' THEN r.input_snapshot -> 'readScope' END AS read_scope
        FROM conversation_messages m
        LEFT JOIN agent_runs r ON r.id = m.run_id
       WHERE m.conversation_id = $1

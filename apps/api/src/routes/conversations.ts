@@ -2,12 +2,16 @@ import { createHash, randomUUID } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
 import {
+  AcceptIssueDraftRequest,
   ConversationMessageRequest,
   ConversationScope,
+  IssueDraftResponse,
+  type TAcceptIssueDraftRequest,
   type TConversationAttachment,
   type TConversationCard,
   type TConversationMessageRequest,
   type TConversationScope,
+  type TReadScope,
 } from "@warmap/contracts";
 import {
   ACTIVE_CONVERSATION_WHERE,
@@ -36,10 +40,12 @@ import { createStepTracker } from "../conversationSteps.js";
 import { createConversationEntries, openTodoContext } from "../conversationEntries.js";
 import type { RequestAgent } from "../delivery/requestAgent.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
-import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
+import { createCompanyMap, defaultFocus, scopeLabel } from "../companyMap.js";
+import { acceptIssueDraft, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, saveDraftMaterial } from "../issueDrafts.js";
+import { idParams, type AppInstance, type RouteContext, type SessionPerson } from "./shared.js";
 
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, deliveryAgent: RequestAgent): void {
-  const { pool, q, env, fail, requirePerson, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, conversationStallTimeoutMs, conversationHeartbeatMs, conversationCompaction } = ctx;
+  const { pool, q, env, fail, requirePerson, requireCEO, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, conversationStallTimeoutMs, conversationHeartbeatMs, conversationCompaction, research } = ctx;
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
   // 我的 Agent 按「人 × 页面」私有；任务卡 scope 始终复查对象成员及当前拍板权。
@@ -175,6 +181,13 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           [row.id],
         );
         const userSequence = next.rows[0].sequence;
+        // 转议题时从首页带进来、模型还没见过的那一段：排在最后一轮普通问答之后的 carried 消息（运行时接进模型历史）。
+        const carried = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
+          `SELECT role, content, created_at FROM conversation_messages WHERE conversation_id = $1 AND kind = 'carried'
+              AND sequence > COALESCE((SELECT MAX(sequence) FROM conversation_messages WHERE conversation_id = $1 AND kind = 'message'), 0)
+            ORDER BY sequence`,
+          [row.id],
+        );
         // 闲置太久：这一轮模型侧只带摘要重新开始（「继续」那一轮要接上原来的工具结果，不重开）。
         const lastAt = next.rows[0].last_at;
         const idleRestart = !resume && Array.isArray(row.runtime_entries) && row.runtime_entries.length > 0
@@ -226,7 +239,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
           `SELECT role, content, created_at
              FROM conversation_messages
-            WHERE conversation_id = $1 AND run_id <> $2
+            WHERE conversation_id = $1 AND run_id <> $2 AND kind <> 'trace'
             ORDER BY sequence DESC LIMIT 20`,
           [row.id, runId],
         );
@@ -318,6 +331,29 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           onStep: (step) => steps.report(step), onCard: (card) => { if (cards.length < 4) cards.push(card); },
         });
 
+        // 三层取用（companyMap.ts）：页面只决定默认焦点；跨对象读取时发范围标签，同时记成「定范围」这一步。
+        const now = ctx.now();
+        const viewer = { personId: owner, role: person.role };
+        const baseFocus = defaultFocus(req.params.scope, object.snapshot, viewer, now);
+        const focusIds = baseFocus.people === "all" ? null : baseFocus.people === "me" ? [owner] : baseFocus.people;
+        const battlefieldName = baseFocus.battlefieldId
+          ? (await q("SELECT name FROM battlefield_config WHERE id = $1", [baseFocus.battlefieldId])).rows[0]?.name as string | undefined : undefined;
+        const focus = { ...baseFocus, label: scopeLabel({ people: focusIds, battlefieldName, from: baseFocus.period, to: baseFocus.period, viewerId: owner }, names) };
+        let readScope: TReadScope | undefined;
+        const companyMap = createCompanyMap({ q, viewer, people: directory, now: ctx.now, focus: baseFocus, override: req.body.scopeOverride,
+          onScope: (scope) => {
+            readScope = scope;
+            emit({ type: "scope", ...scope });
+            steps.report({ id: "scope", label: "定范围", status: "done", result: scope.label });
+          } });
+        // 一号位深聊转议题（只在 CEO 首页）：这一轮提了建议，回答末尾附建议卡。
+        let issueDraftId: string | undefined;
+        const homeOfCeo = person.role === "ceo" && req.params.scope === "global";
+        const issueSuggest = homeOfCeo ? createIssueSuggest({ pool, ownerId: owner, conversationId: row.id, runId, userSequence, now: ctx.now,
+          onDraft: (draftId) => { issueDraftId = draftId; } }) : undefined;
+        const issueContext = homeOfCeo ? await issueSuggestContext(q, owner).catch(() => undefined) : undefined;
+        const withSuggestCard = (text: string) => (issueDraftId ? `${text.trimEnd()}\n\n${issueSuggestBlock(issueDraftId)}` : text);
+
         // 整轮卡住检测（最后一道）：模型调用自己的卡住会就地恢复并发 recovery 事件；这里只在连恢复都没有进展时停下。
         const stall = setInterval(() => {
           if (compacting || Date.now() - lastEventAt < conversationStallTimeoutMs || abort.signal.aborted) return;
@@ -339,7 +375,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           return JSON.stringify({ route: { tier: routeTier ?? null, model: routeModel ?? null, recoveries,
             ...(summary ? { recovery: { originalModel: summary.originalModel, fallbackModel: summary.fallbackModel ?? null, reasons: summary.reasons,
               actions: summary.actions, retries: summary.retries } } : {}) },
-            ...(partial === undefined ? {} : { partial }), steps: steps.list(), ...(cards.length ? { cards } : {}), ...(signals.length ? { qualitySignals: signals } : {}) });
+            ...(partial === undefined ? {} : { partial }), steps: steps.list(), ...(cards.length ? { cards } : {}), ...(readScope ? { readScope } : {}),
+            ...(issueDraftId ? { issueDraftId } : {}), ...(signals.length ? { qualitySignals: signals } : {}) });
         };
         let recoverySummary: TurnRecoverySummary | undefined;
         /**
@@ -358,7 +395,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
             : "（这次回答在这里中断了，以上是已经写出的部分。）";
           let saved = false;
           if (partial || !stopped) {
-            const content = withNotice(notice, partial ? `${streamedBody.trimEnd()}\n\n${note}` : note);
+            const content = withSuggestCard(withNotice(notice, partial ? `${streamedBody.trimEnd()}\n\n${note}` : note));
             saved = await client.query(
               `INSERT INTO conversation_messages (conversation_id, sequence, role, content, references_snapshot, run_id, memory_used)
                VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4, $5::jsonb)`,
@@ -411,6 +448,12 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
             searchHistory: (query: string) => searchOwnConversationHistory(q, { personId: owner, query, excludeRunId: runId }),
             openTodos,
             entries,
+            companyMap,
+            focus,
+            ...(req.body.scopeOverride ? { scopeOverride: req.body.scopeOverride } : {}),
+            ...(issueSuggest ? { issueSuggest } : {}),
+            ...(issueContext ? { issueContext } : {}),
+            ...(carried.rows.length ? { carriedOver: carried.rows.map((message) => ({ role: message.role, content: message.content, createdAt: message.created_at.toISOString() })) } : {}),
             recentMessages: recent.rows.reverse().map((message) => ({
               role: message.role,
               content: message.content,
@@ -438,12 +481,15 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
             recoverySummary = result.recoverySummary;
             steps.finish(false);
             const note = recoveryNote(recoverySummary);
+            // 这一轮提了转议题建议：建议卡的块接在回答末尾（界面画成卡），也随正文流给界面。
+            const answer = withSuggestCard(result.assistantMessage);
+            if (answer !== result.assistantMessage) emit({ type: "message", delta: answer.slice(result.assistantMessage.length) });
             await client.query("BEGIN");
             await client.query(
               `INSERT INTO conversation_messages
                  (conversation_id, sequence, role, content, references_snapshot, run_id, recovery_note, memory_used)
                VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4, $5::jsonb, $6::jsonb)`,
-              [row.id, userSequence + 1, result.assistantMessage, runId, note ? JSON.stringify(note) : null, memoryUsedJson()],
+              [row.id, userSequence + 1, answer, runId, note ? JSON.stringify(note) : null, memoryUsedJson()],
             );
             await client.query(
               `UPDATE conversations
@@ -547,6 +593,31 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
     async (req: FastifyRequest<{ Params: { scope: TConversationScope }; Body: TConversationMessageRequest }>, reply) =>
       sendConversationTurn(req, reply),
   );
+
+  // 一号位深聊转议题（issueDrafts.ts）：建议卡读取、开议题 / 接到议题、不用。只有 CEO。
+  const names = () => personDisplayNames(companyMemory);
+  app.get("/api/issue-drafts/:id", { preHandler: requireCEO, schema: { params: idParams, response: { 200: IssueDraftResponse } } }, async (req, reply) => {
+    const view = await getIssueDraftView(q, req.person!.personId, req.params.id);
+    return view ? { draft: view } : fail(reply, 404, "ISSUE_DRAFT_NOT_FOUND", "这条建议不存在");
+  });
+  app.post("/api/issue-drafts/:id/accept", { preHandler: requireCEO, schema: { params: idParams, body: AcceptIssueDraftRequest, response: { 200: IssueDraftResponse } } },
+    async (req: FastifyRequest<{ Params: { id: string }; Body: TAcceptIssueDraftRequest }>, reply) => {
+      const owner = req.person!.personId;
+      const result = await acceptIssueDraft(pool, env.sessionSecret, owner, req.params.id, req.body, ctx.now());
+      if ("error" in result) return fail(reply, result.error.status, result.error.code, result.error.message);
+      if (result.created) {
+        const { issueId, draft } = result.created;
+        // 与其他议题创建路径一致：立即启动预研；初稿存成议题的一份群材料。都不阻塞响应、失败不影响议题本身。
+        research.start(issueId).catch((error) => logEvent({ event: "issue_draft.research_failed", issueId, error: (error as Error)?.message }));
+        await saveDraftMaterial(pool, { personId: owner, role: "ceo", displayName: names().get(owner) ?? owner }, issueId, draft)
+          .catch((error) => logEvent({ event: "issue_draft.material_failed", issueId, error: (error as Error)?.message }));
+      }
+      return { draft: result.view };
+    });
+  app.post("/api/issue-drafts/:id/decline", { preHandler: requireCEO, schema: { params: idParams, response: { 200: IssueDraftResponse } } }, async (req, reply) => {
+    const result = await declineIssueDraft(pool, req.person!.personId, req.params.id, ctx.now());
+    return "error" in result ? fail(reply, result.error.status, result.error.code, result.error.message) : { draft: result.view };
+  });
 
   // 附件挂到这个人在这个页面的主对话（没有就建）；复用 Meeting 材料的受限解析器（PDF/DOCX/Markdown、同一大小/数量/超时限制），API 卷独立。
   app.post(

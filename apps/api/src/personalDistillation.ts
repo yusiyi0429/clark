@@ -69,7 +69,8 @@ export type PersonalDistillation = ReturnType<typeof createPersonalDistillation>
 const fault = (code: string) => Object.assign(new Error(code), { code });
 
 /** 游标之后本人新说的话（Mission 卡页不学，已删除的对话不学）；还没有游标时只取最近 backfillMs 内的。 */
-const pending = (backfillMs: number) => `c.deleted_at IS NULL AND c.scope NOT LIKE 'mission-card:%' AND m.role = 'user'
+// 转议题带过去的那段（carried）与留痕行（trace）是复制品，原话已在首页整理过，不再整理一遍。
+const pending = (backfillMs: number) => `c.deleted_at IS NULL AND c.scope NOT LIKE 'mission-card:%' AND m.role = 'user' AND m.kind = 'message'
   AND (k.through_at IS NULL AND m.created_at >= now() - make_interval(secs => ${Number(backfillMs) / 1000})
     OR (m.created_at, m.conversation_id, m.sequence) > (k.through_at, k.through_conversation, k.through_sequence))`;
 

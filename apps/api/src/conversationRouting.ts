@@ -545,6 +545,12 @@ export function toolProgressLabel(name: string, args: unknown): string | undefin
     case "read_decision_history": return "读取历史决定";
     case "list_materials": case "read_material": return "阅读材料";
     case "read_mission_card": return "读取任务卡";
+    case "read_mission_cards": return "读取 Mission 卡";
+    case "read_progress": return "读取执行进展";
+    case "read_reviews": return "读取复盘";
+    case "read_object_tree": return "沿公司地图查找";
+    case "read_issue_conversation": return "读取议题里的对话";
+    case "propose_issue": return "起草议题初稿";
     case "update_business_object": case "create_business_object": case "run_business_action": case "apply_business_proposal":
     case "edit_material": case "create_material": case "edit_mission_card": case "edit_current_object":
       return "保存修改";
@@ -612,6 +618,14 @@ export function toolResultDetail(name: string, args: unknown, result: unknown): 
     }
     case "get_warmap_overview": return "已读取战场总览";
     case "list_missions": return "已读取战役清单";
+    // 三层取用：读到多少，有几条因权限没读到。
+    case "read_mission_cards": case "read_progress": case "read_reviews": {
+      const count = name === "read_mission_cards" ? `${list("missions").length} 张 Mission 卡`
+        : name === "read_progress" ? `${list("people").length} 人的执行情况`
+        : `${list("monthly").length + list("units").length + list("weekly").length} 份复盘`;
+      const filtered = typeof value.filtered === "number" && value.filtered > 0 ? `，${value.filtered} 条无权查看` : "";
+      return `读到 ${count}${filtered}`;
+    }
     default: return undefined;
   }
 }

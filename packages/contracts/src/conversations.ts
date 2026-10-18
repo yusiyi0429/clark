@@ -70,6 +70,38 @@ export const ConversationAttachmentUploadResponse = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * 三层取用的读取范围（已定设计 5a）：谁（全员 / 本人 / 指定的人，personId）、哪个战场、哪几个月（YYYY-MM，含两端）。
+ * Agent 跨对象读取时发 scope 事件带上它；本人在界面上改了范围，下一轮请求带 scopeOverride，这一轮的读取一律按它。
+ */
+const Month = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
+export const ReadScopeParams = Type.Object(
+  {
+    people: Type.Optional(Type.Union([
+      Type.Literal("all"),
+      Type.Literal("me"),
+      Type.Array(Type.String({ minLength: 1, maxLength: 100 }), { minItems: 1, maxItems: 30, uniqueItems: true }),
+    ])),
+    battlefieldId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    from: Type.Optional(Month),
+    to: Type.Optional(Month),
+  },
+  { additionalProperties: false },
+);
+
+/** 范围标签：label 是「全员 · 7–10 月」这样的短标签；choices 是点开调整时可选的人。 */
+export const ReadScope = Type.Object(
+  {
+    label: Type.String({ minLength: 1, maxLength: 80 }),
+    params: ReadScopeParams,
+    choices: Type.Optional(Type.Object(
+      { people: Type.Array(Type.Object({ id: Type.String(), name: Type.String() }, { additionalProperties: false }), { maxItems: 80 }) },
+      { additionalProperties: false },
+    )),
+  },
+  { additionalProperties: false },
+);
+
 export const ConversationMessageRequest = Type.Object(
   {
     message: Type.String({ minLength: 1, maxLength: 20_000 }),
@@ -82,6 +114,8 @@ export const ConversationMessageRequest = Type.Object(
      * 只能接这个人在这个页面自己的那一轮。
      */
     resumeRunId: Type.Optional(Type.String({ format: "uuid" })),
+    /** 本人在范围标签上改过的读取范围：这一轮三层取用的工具一律按它读。 */
+    scopeOverride: Type.Optional(ReadScopeParams),
   },
   { additionalProperties: false },
 );
@@ -137,6 +171,17 @@ export const ConversationMessage = Type.Object(
     memoryUsed: Type.Optional(Type.Array(Type.String())),
     /** 只在助手回答上：这一轮工具生成的卡（排在回答后面）。 */
     cards: Type.Optional(Type.Array(ConversationCard, { maxItems: 4 })),
+    /** 只在助手回答上：这一轮跨对象读取的范围（最后一次）。 */
+    readScope: Type.Optional(ReadScope),
+    /**
+     * carried：从首页带过来的一段对话（转议题时复制进议题页对话）；trace：留痕行（「已转到议题 X」），点击直达 meta.href。
+     * 普通消息没有这个字段。
+     */
+    kind: Type.Optional(Type.Union([Type.Literal("carried"), Type.Literal("trace")])),
+    meta: Type.Optional(Type.Object(
+      { issueId: Type.Optional(Type.String()), title: Type.Optional(Type.String()), href: Type.Optional(Type.String()) },
+      { additionalProperties: false },
+    )),
   },
   { additionalProperties: false },
 );
@@ -187,6 +232,8 @@ export const ConversationSseEvent = Type.Union([
     },
     { additionalProperties: false },
   ),
+  /** 跨对象读取的范围标签（三层取用）：界面显示成可以点开调整的标签；同一轮后一条取代前一条。 */
+  Type.Object({ ...StreamBase, type: Type.Literal("scope"), label: ReadScope.properties.label, params: ReadScopeParams, choices: ReadScope.properties.choices }, { additionalProperties: false }),
   /** 本轮档位：快答 / 检索问答 / 深度；检索问答与深度档带一句开场说明（notice），界面先显示它和预计用时。 */
   Type.Object(
     {
@@ -296,6 +343,8 @@ export type TConversationAttachmentRef = Static<typeof ConversationAttachmentRef
 export type TConversationAttachmentInfo = Static<typeof ConversationAttachmentInfo>;
 export type TConversationAttachment = Static<typeof ConversationAttachment>;
 export type TConversationAttachmentUploadResponse = Static<typeof ConversationAttachmentUploadResponse>;
+export type TReadScopeParams = Static<typeof ReadScopeParams>;
+export type TReadScope = Static<typeof ReadScope>;
 export type TConversationMessageRequest = Static<typeof ConversationMessageRequest>;
 export type TConversationMessage = Static<typeof ConversationMessage>;
 export type TConversationCard = Static<typeof ConversationCard>;

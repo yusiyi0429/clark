@@ -584,16 +584,17 @@ export type CreateCeoIssueResult =
   | { status: 400; code: string; message: string; fieldErrors?: Record<string, string> };
 
 /**
- * CEO 配置页直建 pending Issue：确定性输入，不走 opaque-action（尚无既有 Card version 可锚）。
- * 战场必须先注册；未填 decisionBy 时为 gray，不自行编造紧急度理由。
+ * CEO 直建 pending Issue：确定性输入，不走 opaque-action（尚无既有 Card version 可锚）。
+ * 给了 battlefieldId 时挂在这个战场下（战场必须先注册）；不给时是全局战略议题（company 级、不关联战场，首页深聊转议题用）。
+ * 未填 decisionBy 时为 gray，不自行编造紧急度理由。db 可以是事务里的连接。
  */
 export async function createCeoIssue(
-  pool: Pool,
+  db: Pool | PoolClient,
   secret: string,
-  input: { title: string; battlefieldId: string; decisionBy?: string },
+  input: { title: string; battlefieldId?: string; decisionBy?: string },
 ): Promise<CreateCeoIssueResult> {
-  const registered = await getRegisteredBattlefieldIds(pool.query.bind(pool));
-  if (!registered.has(input.battlefieldId)) {
+  const q: Query = (sql, params) => db.query(sql, params);
+  if (input.battlefieldId !== undefined && !(await getRegisteredBattlefieldIds(q)).has(input.battlefieldId)) {
     return { status: 400, code: "INVALID_LOCATION", message: "battlefieldId 未注册", fieldErrors: { battlefieldId: "unknown battlefield" } };
   }
   const urgency: IssueUrgency = { level: "gray" };
@@ -604,7 +605,7 @@ export async function createCeoIssue(
     urgency.level = "yellow";
     urgency.decisionBy = input.decisionBy;
   }
-  const inserted = await pool.query<IssueRow>(
+  const inserted = await q(
     `INSERT INTO issues
        (id, version, origin, origin_ref, title, location, urgency, status, research)
      VALUES ($1, 1, 'ceo', $2::jsonb, $3, $4::jsonb, $5::jsonb, 'pending', $6::jsonb)
@@ -613,12 +614,12 @@ export async function createCeoIssue(
       randomUUID(),
       JSON.stringify({ type: "ceo" }),
       input.title,
-      JSON.stringify({ level: "battlefield", battlefieldId: input.battlefieldId }),
+      JSON.stringify(input.battlefieldId !== undefined ? { level: "battlefield", battlefieldId: input.battlefieldId } : { level: "company", relatedBattlefieldIds: [] }),
       JSON.stringify(urgency),
       JSON.stringify({ status: "pending", pendingSince: new Date().toISOString(), runId: null, previousRunIds: [], error: null }),
     ],
   );
-  return { status: 201, card: projectIssueCard(inserted.rows[0], secret) };
+  return { status: 201, card: projectIssueCard(inserted.rows[0] as IssueRow, secret) };
 }
 
 export type BattlefieldMembershipOutcome =
