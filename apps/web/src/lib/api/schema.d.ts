@@ -2750,6 +2750,43 @@ export interface components {
                     detail: string;
                 };
                 memoryUsed?: string[];
+                cards?: ({
+                    /** @constant */
+                    kind: "review";
+                    personalReviewId: string;
+                    href: string;
+                } | {
+                    /** @constant */
+                    kind: "todo_pick";
+                    question: string;
+                    candidates: {
+                        requestId: string;
+                        title: string;
+                        initiatorName: string;
+                        sentAt: string;
+                        href: string;
+                    }[];
+                } | {
+                    /** @constant */
+                    kind: "todo_ask";
+                    requestId: string;
+                    question: string;
+                    href: string;
+                } | {
+                    /** @constant */
+                    kind: "todo_answer";
+                    requestId: string;
+                    href: string;
+                    question: string;
+                    answer: string;
+                    source: "body" | "question";
+                    questionId: string | null;
+                } | {
+                    /** @constant */
+                    kind: "request_draft";
+                    requestId: string;
+                    href: string;
+                })[];
             }[];
         };
         ConversationMessageRequest: {

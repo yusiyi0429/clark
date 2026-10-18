@@ -5,6 +5,8 @@
  * - result 是这一步实际读到了什么（toolResultDetail，系统生成，不由模型写）；
  * - 这一轮结束时还在进行的步骤：正常结束记 done，停止、出错记 stopped。
  * 没有对应步骤名的工具不显示成步骤。
+ * 一个工具里有几步的（对话入口：生成复盘、帮我问问、请同事帮忙，见 conversationEntries.ts）由工具自己报（report），
+ * 按 id 更新；这类步骤停在哪一步就是哪一步（「等你确认」「等你选」留着高亮），只有停止、出错时收成 stopped。
  */
 export type StepStatus = "done" | "active" | "pending" | "stopped";
 export type TurnStep = { id: string; label: string; status: StepStatus; result?: string };
@@ -42,6 +44,7 @@ export function createStepTracker(emit: (step: TurnStep) => void) {
   const steps: TurnStep[] = [];
   const running = new Map<string, number>();
   const calls = new Map<string, TurnStep>();
+  const reported = new Set<string>();
   const send = (step: TurnStep) => emit({ ...step });
   return {
     tool(event: ToolEvent) {
@@ -67,10 +70,24 @@ export function createStepTracker(emit: (step: TurnStep) => void) {
       if (!event.isError && event.detail) step.result = event.detail;
       if (left === 0) { step.status = "done"; send(step); }
     },
-    /** 这一轮结束：还在进行的步骤收尾（stopped：停止或出错）。 */
+    /** 工具自己报的一步：同 id 的后一次取代前一次。 */
+    report(next: TurnStep) {
+      let step = steps.find((item) => item.id === next.id);
+      if (!step) {
+        step = { id: next.id, label: next.label, status: next.status };
+        steps.push(step);
+      }
+      reported.add(step.id);
+      step.label = next.label;
+      step.status = next.status;
+      if (next.result) step.result = next.result;
+      else delete step.result;
+      send(step);
+    },
+    /** 这一轮结束：还在进行的步骤收尾（stopped：停止或出错）。工具自己报的步骤正常结束时保持原样。 */
     finish(stopped: boolean) {
       for (const step of steps) {
-        if (step.status !== "active") continue;
+        if (step.status !== "active" || (!stopped && reported.has(step.id))) continue;
         step.status = stopped ? "stopped" : "done";
         send(step);
       }

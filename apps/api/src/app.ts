@@ -562,7 +562,9 @@ export async function buildApp({
   registerCardRoutes(app, ctx);
   registerConfigRoutes(app, ctx);
   registerRadarRoutes(app, ctx);
-  registerConversationRoutes(app, ctx);
+  // 送达通道的轻量模型调用：请求页和对话里的「帮我问问」「请同事帮忙」共用一份。
+  const deliveryAgent = requestAgent ?? createRequestAgent(pool, env);
+  registerConversationRoutes(app, ctx, deliveryAgent);
   registerMeetingRoutes(app, ctx);
   registerMaterialRoutes(app, ctx, materialAnnotationAgent);
   registerKnowledgeRoutes(app, ctx);
@@ -578,7 +580,7 @@ export async function buildApp({
   registerMissionCardRoutes(app, ctx, missionCardAnnotationAgent, missionCardReviewAgent);
   registerMyRadarRoutes(app, ctx);
   registerMonthlyReviewRoutes(app, ctx);
-  registerRequestRoutes(app, ctx, requestAgent ?? createRequestAgent(pool, env));
+  registerRequestRoutes(app, ctx, deliveryAgent);
   registerPersonalMemoryRoutes(app, ctx);
   registerCollectorRoutes(app, ctx);
 

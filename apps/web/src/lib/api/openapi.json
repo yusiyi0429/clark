@@ -11503,6 +11503,202 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "cards": {
+                  "maxItems": 4,
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "personalReviewId",
+                          "href"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "review",
+                            "type": "string"
+                          },
+                          "personalReviewId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "href": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "question",
+                          "candidates"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "todo_pick",
+                            "type": "string"
+                          },
+                          "question": {
+                            "minLength": 1,
+                            "maxLength": 1000,
+                            "type": "string"
+                          },
+                          "candidates": {
+                            "minItems": 2,
+                            "maxItems": 4,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "requestId",
+                                "title",
+                                "initiatorName",
+                                "sentAt",
+                                "href"
+                              ],
+                              "properties": {
+                                "requestId": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "initiatorName": {
+                                  "type": "string"
+                                },
+                                "sentAt": {
+                                  "type": "string"
+                                },
+                                "href": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "requestId",
+                          "question",
+                          "href"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "todo_ask",
+                            "type": "string"
+                          },
+                          "requestId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "question": {
+                            "minLength": 1,
+                            "maxLength": 1000,
+                            "type": "string"
+                          },
+                          "href": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "requestId",
+                          "href",
+                          "question",
+                          "answer",
+                          "source",
+                          "questionId"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "todo_answer",
+                            "type": "string"
+                          },
+                          "requestId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "href": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "question": {
+                            "minLength": 1,
+                            "maxLength": 1000,
+                            "type": "string"
+                          },
+                          "answer": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "source": {
+                            "anyOf": [
+                              {
+                                "const": "body",
+                                "type": "string"
+                              },
+                              {
+                                "const": "question",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "questionId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "requestId",
+                          "href"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "request_draft",
+                            "type": "string"
+                          },
+                          "requestId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "href": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      }
+                    ]
+                  }
                 }
               }
             }

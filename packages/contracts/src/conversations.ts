@@ -95,6 +95,33 @@ export const ConversationRecoveryNote = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * 回答后面挂的卡（对话里的一句话入口：生成复盘、帮我问问、请同事帮忙）。由服务端按工具结果生成，不由模型写；
+ * 卡上的状态（是否已发出、草稿进度）由界面按 id 读最新的对象，发出仍走各对象自己的 Action。href 是对象页面的地址。
+ */
+export const ConversationCard = Type.Union([
+  /** 复盘草稿：摘要与「打开修改」。 */
+  Type.Object({ kind: Type.Literal("review"), personalReviewId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+  /** 对上不止一件待办：本人点选其中一件，再查有没有人问过、整理问题。 */
+  Type.Object({
+    kind: Type.Literal("todo_pick"),
+    question: Type.String({ minLength: 1, maxLength: 1000 }),
+    candidates: Type.Array(Type.Object({
+      requestId: Type.String({ minLength: 1 }), title: Type.String(), initiatorName: Type.String(), sentAt: Type.String(), href: Type.String({ minLength: 1 }),
+    }, { additionalProperties: false }), { minItems: 2, maxItems: 4 }),
+  }, { additionalProperties: false }),
+  /** 已整理好的问题，等本人点「发送」。 */
+  Type.Object({ kind: Type.Literal("todo_ask"), requestId: Type.String({ minLength: 1 }), question: Type.String({ minLength: 1, maxLength: 1000 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+  /** 说明或已有问答里有答案：答案原文与出处；本人仍可以问。 */
+  Type.Object({
+    kind: Type.Literal("todo_answer"), requestId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }),
+    question: Type.String({ minLength: 1, maxLength: 1000 }), answer: Type.String({ minLength: 1 }),
+    source: Type.Union([Type.Literal("body"), Type.Literal("question")]), questionId: Type.Union([Type.String(), Type.Null()]),
+  }, { additionalProperties: false }),
+  /** 本人发起的请求草稿：收件人、标题、说明与「发送」。 */
+  Type.Object({ kind: Type.Literal("request_draft"), requestId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+]);
+
 export const ConversationMessage = Type.Object(
   {
     sequence: Type.Integer({ minimum: 1 }),
@@ -108,6 +135,8 @@ export const ConversationMessage = Type.Object(
     recoveryNote: Type.Optional(ConversationRecoveryNote),
     /** 只在助手回答上：这一轮实际装进上下文的个人记忆 id。回答里的记忆标记只认这里有的。 */
     memoryUsed: Type.Optional(Type.Array(Type.String())),
+    /** 只在助手回答上：这一轮工具生成的卡（排在回答后面）。 */
+    cards: Type.Optional(Type.Array(ConversationCard, { maxItems: 4 })),
   },
   { additionalProperties: false },
 );
@@ -269,6 +298,7 @@ export type TConversationAttachment = Static<typeof ConversationAttachment>;
 export type TConversationAttachmentUploadResponse = Static<typeof ConversationAttachmentUploadResponse>;
 export type TConversationMessageRequest = Static<typeof ConversationMessageRequest>;
 export type TConversationMessage = Static<typeof ConversationMessage>;
+export type TConversationCard = Static<typeof ConversationCard>;
 export type TConversationHistory = Static<typeof ConversationHistory>;
 export type TConversationRecoveryNote = Static<typeof ConversationRecoveryNote>;
 export type TConversationSseEvent = Static<typeof ConversationSseEvent>;

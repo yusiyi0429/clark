@@ -7,11 +7,13 @@ import type {
   TCardReference,
   TConversationAttachment,
   TConversationAttachmentInfo,
+  TConversationCard,
   TConversationHistory,
   TConversationScope,
   TReferenceSnapshot,
 } from "@warmap/contracts";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { ConversationEntries } from "./conversationEntries.js";
 import type { TurnRecoverySummary } from "./conversationRecovery.js";
 import type { ParsedMaterial } from "./materialParser.js";
 import { roleOf, type SessionRole } from "./memberAccess.js";
@@ -77,6 +79,10 @@ export type ConversationRuntime = {
     personalMemoryTools?: PersonalMemoryTools;
     /** 检索本人历史对话原文（跨所有页面与归档，只读、已绑定本人）；运行时据此提供 search_conversation_history。 */
     searchHistory?: (query: string) => Promise<{ hits: HistoryHit[]; message?: string }>;
+    /** 本人手上没完成的待办（标题、发起人、发出时间、类型）：每轮放进上下文包的 myOpenTodos。 */
+    openTodos?: { title: string; from: string; sentAt: string; kind: string }[];
+    /** 对话里的一句话入口（生成复盘、帮我问问、请同事帮忙），已绑定本人与这一轮；运行时据此提供对应工具。 */
+    entries?: ConversationEntries;
     recentMessages?: { role: "user" | "assistant"; content: string; createdAt: string }[];
     runtimeEntries: unknown[];
     piSessionId: string;
@@ -353,7 +359,7 @@ const MAIN_CONVERSATION_SQL = `SELECT id FROM conversations WHERE ${ACTIVE_CONVE
 export const CONVERSATION_IDLE_RESTART_MS = 12 * 60 * 60 * 1000;
 
 type MessageRow = { sequence: number; role: string; content: string; references_snapshot: unknown; attachments: TConversationAttachment[];
-  run_id: string; created_at: Date; recovery_note: { text?: unknown; detail?: unknown } | null; memory_used: unknown };
+  run_id: string; created_at: Date; recovery_note: { text?: unknown; detail?: unknown } | null; memory_used: unknown; cards?: unknown };
 
 function historyMessage(row: MessageRow): TConversationHistory["messages"][number] {
   const note = row.recovery_note;
@@ -368,13 +374,17 @@ function historyMessage(row: MessageRow): TConversationHistory["messages"][numbe
     ...(note && typeof note.text === "string" && note.text
       ? { recoveryNote: { text: note.text, detail: typeof note.detail === "string" ? note.detail : "" } } : {}),
     ...(Array.isArray(row.memory_used) && row.memory_used.length ? { memoryUsed: row.memory_used.filter((id): id is string => typeof id === "string") } : {}),
+    ...(row.role === "assistant" && Array.isArray(row.cards) && row.cards.length ? { cards: row.cards as TConversationCard[] } : {}),
   };
 }
 
 async function conversationMessages(q: Query, conversationId: string): Promise<TConversationHistory["messages"]> {
   const result = await q(
-    `SELECT m.sequence, m.role, m.content, m.references_snapshot, m.attachments, m.run_id, m.created_at, m.recovery_note, m.memory_used
+    // 这一轮工具生成的卡记在运行记录里（routes/conversations.ts），随回答一起读回。
+    `SELECT m.sequence, m.role, m.content, m.references_snapshot, m.attachments, m.run_id, m.created_at, m.recovery_note, m.memory_used,
+            CASE WHEN m.role = 'assistant' THEN r.input_snapshot -> 'cards' END AS cards
        FROM conversation_messages m
+       LEFT JOIN agent_runs r ON r.id = m.run_id
       WHERE m.conversation_id = $1
       ORDER BY m.sequence`,
     [conversationId],
