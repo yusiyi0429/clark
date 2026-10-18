@@ -445,18 +445,18 @@ describe("战略项与截止日期的确定性校验", () => {
     expect(result.items[1]).toMatchObject({ kind: "todo", dueDate: "2026-06-08" });
   });
 
-  it("D-40：只有改公司方向 / LTO / PO、跨战场调资源的才推给 CEO；只影响本战场打法、计划、执行的降成会上的决定", () => {
+  it("D-40/D-41：改公司方向 / LTO / PO（含 Mission 本月结果目标或成功标准）、跨战场调资源的推给 CEO；只影响本战场打法、计划、执行的降成会上的决定", () => {
     const result = assess([
-      { ...strategic, judgmentKind: "mission_boundary" },
       { ...strategic, judgmentKind: "external_commitment" },
       { ...strategic, judgmentKind: "major_risk" },
+      { ...strategic, judgmentKind: "mission_boundary" },
       { ...strategic, judgmentKind: "resource_allocation" },
       strategic,
     ].map((item) => JSON.parse(JSON.stringify(item))));
     expect(result).toMatchObject({ ok: true, warnings: [] });
     if (!result.ok) return;
     expect(result.items.map((item) => [item.kind, item.judgmentKind])).toEqual([
-      ["decision", null], ["decision", null], ["decision", null], ["strategic", "resource_allocation"], ["strategic", "company_direction"],
+      ["decision", null], ["decision", null], ["strategic", "mission_boundary"], ["strategic", "resource_allocation"], ["strategic", "company_direction"],
     ]);
     expect(result.items[0]).not.toHaveProperty("title");
     expect(result.items[0]).toMatchObject({ text: strategic.text, quote: strategic.quote, review: { status: "pending" } });
