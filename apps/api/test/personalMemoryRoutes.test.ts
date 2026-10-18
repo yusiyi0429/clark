@@ -190,3 +190,56 @@ test('the main agent remembers, corrects and forgets through its own tools with 
         await t.close();
     }
 });
+
+test('「我的记忆」页：按标题、正文、原话搜索；忘掉后能恢复；彻底删除后找不到，被它替代的旧条目变成已忘掉', async () => {
+    const t = await createTestApp();
+    try {
+        const alice = { cookie: await t.loginCookie(), origin: t.publicOrigin }, bob = { cookie: await t.memberCookie(), origin: t.publicOrigin };
+        const style = await seed(t, '协作偏好', '请先给结论。');
+        const channel = await seed(t, '渠道想法', '渠道下沉先做县城样板。');
+        await t.sql(`UPDATE personal_memory_items SET refs = $2::jsonb WHERE id = $1`, [channel, JSON.stringify([{ ref: 'chat:x#1', quote: '我觉得县城最好打', at: new Date().toISOString() }])]);
+        const search = async (q: string) => (await t.app.inject({ method: 'GET', url: `/api/me/memory/personal?status=all&q=${encodeURIComponent(q)}`, headers: alice })).json().items.map((item: { id: string }) => item.id);
+        expect(await search('结论')).toEqual([style]);
+        expect(await search('县城')).toEqual([channel]);
+        expect(await search('最好打')).toEqual([channel]);
+        expect(await search('')).toHaveLength(2);
+        expect(await search('没有这个词')).toEqual([]);
+
+        // 恢复：只有已忘掉的能恢复；别人的 404。
+        expect((await t.app.inject({ method: 'POST', url: `/api/me/memory/personal/items/${style}/restore`, headers: alice })).statusCode).toBe(409);
+        await t.app.inject({ method: 'DELETE', url: `/api/me/memory/personal/items/${style}`, headers: alice });
+        expect((await t.app.inject({ method: 'POST', url: `/api/me/memory/personal/items/${style}/restore`, headers: bob })).statusCode).toBe(404);
+        const restored = await t.app.inject({ method: 'POST', url: `/api/me/memory/personal/items/${style}/restore`, headers: alice });
+        expect(restored.json()).toMatchObject({ id: style, status: 'active' });
+
+        // 彻底删除：别人的 404；删掉后任何状态都查不到；被它替代的旧条目变成已忘掉。
+        const replacement = String((await t.sql(`INSERT INTO personal_memory_items (id, person_id, title, text) VALUES (gen_random_uuid(), $1, '协作偏好', '先讲背景再给结论。') RETURNING id`, [TEST_CEO.personId]))[0].id);
+        await t.sql(`UPDATE personal_memory_items SET status = 'superseded', superseded_by = $2 WHERE id = $1`, [style, replacement]);
+        expect((await t.app.inject({ method: 'DELETE', url: `/api/me/memory/personal/items/${replacement}?purge=1`, headers: bob })).statusCode).toBe(404);
+        expect((await t.app.inject({ method: 'DELETE', url: `/api/me/memory/personal/items/${replacement}?purge=2`, headers: alice })).statusCode).toBe(400);
+        expect((await t.app.inject({ method: 'DELETE', url: `/api/me/memory/personal/items/${replacement}?purge=1`, headers: alice })).statusCode).toBe(204);
+        const all = (await t.app.inject({ method: 'GET', url: '/api/me/memory/personal?status=all', headers: alice })).json().items;
+        expect(all.map((item: { id: string }) => item.id).sort()).toEqual([style, channel].sort());
+        expect(all.find((item: { id: string }) => item.id === style)).toMatchObject({ status: 'forgotten', supersededBy: null });
+        expect((await t.app.inject({ method: 'DELETE', url: `/api/me/memory/personal/items/${replacement}?purge=1`, headers: alice })).statusCode).toBe(404);
+    } finally {
+        await t.close();
+    }
+});
+
+test('列表里 anchor 带上对象现在的标题；查不到的对象不填', async () => {
+    const t = await createTestApp();
+    try {
+        const headers = { cookie: await t.loginCookie(), origin: t.publicOrigin };
+        const [meeting] = await t.sql(`SELECT id::text AS id, title FROM meetings LIMIT 1`);
+        const id = await seed(t, '会上的想法', '这次会先定预算。');
+        const anchors = [{ target: 'topic:预算' }, { target: 'issue:00000000-0000-0000-0000-000000000000' }, ...(meeting ? [{ target: `meeting:${meeting.id}` }] : [])];
+        await t.sql(`UPDATE personal_memory_items SET anchors = $2::jsonb WHERE id = $1`, [id, JSON.stringify(anchors)]);
+        const [item] = (await t.app.inject({ method: 'GET', url: '/api/me/memory/personal', headers })).json().items;
+        expect(item.anchors[0]).toEqual({ target: 'topic:预算' });
+        expect(item.anchors[1]).toEqual({ target: 'issue:00000000-0000-0000-0000-000000000000' });
+        if (meeting) expect(item.anchors[2]).toEqual({ target: `meeting:${meeting.id}`, title: meeting.title });
+    } finally {
+        await t.close();
+    }
+});

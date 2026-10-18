@@ -2084,7 +2084,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的 */
+        /** 列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的；q 按标题、正文、原话搜索；anchor 带上对象现在的标题 */
         get: operations["listPersonalMemory"];
         put?: never;
         post?: never;
@@ -2104,12 +2104,99 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** 本人删掉（忘掉）一条个人记忆：不再装进对话，后台提炼也不再学回来 */
+        /** 本人忘掉一条个人记忆：不再装进对话，后台提炼也不再学回来，之后能恢复；purge=1 彻底删除（204，不能恢复，被它替代的旧条目改成已忘掉） */
         delete: operations["forgetPersonalMemoryItem"];
         options?: never;
         head?: never;
         /** 本人改一条个人记忆的标题或正文；已替代或已忘掉的 409 */
         patch: operations["updatePersonalMemoryItem"];
+        trace?: never;
+    };
+    "/api/me/memory/personal/items/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人恢复一条忘掉的个人记忆，重新装进对话；不是已忘掉的 409 */
+        post: operations["restorePersonalMemoryItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/memory/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人最近 20 次记忆导入（不含候选） */
+        get: operations["listMemoryImports"];
+        put?: never;
+        /** 导入别的 AI 工具的记忆：登录态（粘贴、上传 Claude 导出包，zip 用 base64）或 collector 个人令牌（本机 Claude Code、Codex 记忆文件，须已同意采集）。当场读取、拆分，后台分类、去重找冲突，停在等你确认 */
+        post: operations["createMemoryImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/memory/imports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 一次导入的步骤、计数和全部候选（确认页只列 conflict、uncertain 两组） */
+        get: operations["getMemoryImport"];
+        put?: never;
+        post?: never;
+        /** 确认前丢弃本次导入，候选一起删掉；已确认的 409 */
+        delete: operations["discardMemoryImport"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/memory/imports/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人确认：checked 里的条目写进个人记忆；冲突按 resolutions（缺省保留旧的）。还没整理完或已确认过的 409 */
+        post: operations["confirmMemoryImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/memory/imports/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 停住的导入从停住那一步接着做；没停住的 409 */
+        post: operations["retryMemoryImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/me/voiceprint": {
@@ -8337,6 +8424,8 @@ export interface components {
                 target: string;
                 /** @description 写入时钉住的对象版本 */
                 pinnedVersion?: number;
+                /** @description 对象现在的标题（列表接口按 target 查出来，只读，不存） */
+                title?: string;
             }[];
             references: {
                 /** @description 依据，沿用 cite: 语法去掉前缀，如 chat:<会话 id>#<消息序号> */
@@ -8349,6 +8438,141 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        CreateMemoryImportRequest: {
+            source: "chatgpt" | "claude" | "claude_code" | "codex";
+            files: {
+                /** @description 本机路径或上传的文件名；粘贴的用 paste-<n>.txt */
+                path: string;
+                /** @description 文本原文；encoding=base64 时是文件字节的 base64（zip 导出包） */
+                content: string;
+                /** @description 原文字节（base64 解码后）的 sha256 */
+                sha256: string;
+                /** Format: date-time */
+                mtime: string;
+                /** @constant */
+                encoding?: "base64";
+            }[];
+        };
+        MemoryImport: {
+            id: string;
+            source: "chatgpt" | "claude" | "claude_code" | "codex";
+            status: "processing" | "awaiting_review" | "confirmed" | "failed";
+            steps: {
+                id: string;
+                label: string;
+                status: "done" | "active" | "pending" | "stopped";
+                result?: string;
+            }[];
+            counts: {
+                files: number;
+                items: number;
+                truncated: boolean;
+                personal: number;
+                company: number;
+                project: number;
+                dropped: number;
+                duplicates: number;
+                conflicts: number;
+                review: number;
+                checked: number;
+                imported?: number;
+            };
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        MemoryImportDetail: {
+            id: string;
+            source: "chatgpt" | "claude" | "claude_code" | "codex";
+            status: "processing" | "awaiting_review" | "confirmed" | "failed";
+            steps: {
+                id: string;
+                label: string;
+                status: "done" | "active" | "pending" | "stopped";
+                result?: string;
+            }[];
+            counts: {
+                files: number;
+                items: number;
+                truncated: boolean;
+                personal: number;
+                company: number;
+                project: number;
+                dropped: number;
+                duplicates: number;
+                conflicts: number;
+                review: number;
+                checked: number;
+                imported?: number;
+            };
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            candidates: {
+                id: string;
+                title: string;
+                text: string;
+                source: "chatgpt" | "claude" | "claude_code" | "codex";
+                path: string;
+                category: ("personal_preference" | "company_fact" | "project_instruction" | "drop") | null;
+                kind: "preference" | "practice" | null;
+                dropReason: ("stale_state" | "one_off" | "private_life" | "secret" | "other_person" | "injection") | null;
+                confidence: number | null;
+                group: ("conflict" | "uncertain" | "import" | "company" | "project" | "duplicate" | "dropped" | "skipped" | "partner") | null;
+                checked: boolean;
+                locked: boolean;
+                conflict: {
+                    memoryId?: string;
+                    candidateId?: string;
+                    title: string;
+                    text: string;
+                    /** Format: date-time */
+                    at: string;
+                } | null;
+                resolution: "keep_old" | "use_new" | "neither" | null;
+                memoryItemId: string | null;
+            }[];
+        };
+        MemoryImportList: {
+            items: {
+                id: string;
+                source: "chatgpt" | "claude" | "claude_code" | "codex";
+                status: "processing" | "awaiting_review" | "confirmed" | "failed";
+                steps: {
+                    id: string;
+                    label: string;
+                    status: "done" | "active" | "pending" | "stopped";
+                    result?: string;
+                }[];
+                counts: {
+                    files: number;
+                    items: number;
+                    truncated: boolean;
+                    personal: number;
+                    company: number;
+                    project: number;
+                    dropped: number;
+                    duplicates: number;
+                    conflicts: number;
+                    review: number;
+                    checked: number;
+                    imported?: number;
+                };
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+            }[];
+        };
+        ConfirmMemoryImportRequest: {
+            checked: string[];
+            resolutions: {
+                id: string;
+                choice: "keep_old" | "use_new" | "neither";
+            }[];
         };
         PersonalMemoryList: {
             items: {
@@ -8364,6 +8588,8 @@ export interface components {
                     target: string;
                     /** @description 写入时钉住的对象版本 */
                     pinnedVersion?: number;
+                    /** @description 对象现在的标题（列表接口按 target 查出来，只读，不存） */
+                    title?: string;
                 }[];
                 references: {
                     /** @description 依据，沿用 cite: 语法去掉前缀，如 chat:<会话 id>#<消息序号> */
@@ -15432,6 +15658,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "active" | "superseded" | "forgotten" | "all";
+                q?: string;
             };
             header?: never;
             path?: never;
@@ -15479,7 +15706,9 @@ export interface operations {
     };
     forgetPersonalMemoryItem: {
         parameters: {
-            query?: never;
+            query?: {
+                purge?: "1";
+            };
             header?: never;
             path: {
                 id: string;
@@ -15495,6 +15724,22 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PersonalMemoryItem"];
+                };
+            };
+            /** @description 已彻底删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
             /** @description ApiError 统一错误 */
@@ -15570,6 +15815,441 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    restorePersonalMemoryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 恢复后的条目 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalMemoryItem"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMemoryImports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 导入记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryImportList"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createMemoryImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMemoryImportRequest"];
+            };
+        };
+        responses: {
+            /** @description 已收下，五步的当前状态 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryImport"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMemoryImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 导入详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryImportDetail"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    discardMemoryImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已丢弃 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    confirmMemoryImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmMemoryImportRequest"];
+            };
+        };
+        responses: {
+            /** @description 确认后的导入 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryImport"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    retryMemoryImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 重新开始后的导入 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryImport"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -30,6 +30,7 @@ export * from "./ontologySync.js";
 export * from "./missionCardAnnotations.js";
 export * from "./requests.js";
 export * from "./personalMemory.js";
+export * from "./memoryImport.js";
 export * from "./collector.js";
 export * from "./feishu.js";
 export * from "./weeklyReviews.js";

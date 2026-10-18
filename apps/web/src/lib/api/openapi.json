@@ -8085,7 +8085,7 @@
     "/api/me/memory/personal": {
       "get": {
         "operationId": "listPersonalMemory",
-        "summary": "列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的",
+        "summary": "列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的；q 按标题、正文、原话搜索；anchor 带上对象现在的标题",
         "parameters": [
           {
             "name": "status",
@@ -8099,6 +8099,15 @@
                 "forgotten",
                 "all"
               ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
             }
           }
         ],
@@ -8235,7 +8244,7 @@
       },
       "delete": {
         "operationId": "forgetPersonalMemoryItem",
-        "summary": "本人删掉（忘掉）一条个人记忆：不再装进对话，后台提炼也不再学回来",
+        "summary": "本人忘掉一条个人记忆：不再装进对话，后台提炼也不再学回来，之后能恢复；purge=1 彻底删除（204，不能恢复，被它替代的旧条目改成已忘掉）",
         "parameters": [
           {
             "name": "id",
@@ -8243,6 +8252,17 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "purge",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
             }
           }
         ],
@@ -8257,7 +8277,515 @@
               }
             }
           },
+          "204": {
+            "description": "已彻底删除"
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/memory/personal/items/{id}/restore": {
+      "post": {
+        "operationId": "restorePersonalMemoryItem",
+        "summary": "本人恢复一条忘掉的个人记忆，重新装进对话；不是已忘掉的 409",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "恢复后的条目",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalMemoryItem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/memory/imports": {
+      "post": {
+        "operationId": "createMemoryImport",
+        "summary": "导入别的 AI 工具的记忆：登录态（粘贴、上传 Claude 导出包，zip 用 base64）或 collector 个人令牌（本机 Claude Code、Codex 记忆文件，须已同意采集）。当场读取、拆分，后台分类、去重找冲突，停在等你确认",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMemoryImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "已收下，五步的当前状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryImport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listMemoryImports",
+        "summary": "本人最近 20 次记忆导入（不含候选）",
+        "responses": {
+          "200": {
+            "description": "导入记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryImportList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/memory/imports/{id}": {
+      "get": {
+        "operationId": "getMemoryImport",
+        "summary": "一次导入的步骤、计数和全部候选（确认页只列 conflict、uncertain 两组）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "导入详情",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryImportDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "discardMemoryImport",
+        "summary": "确认前丢弃本次导入，候选一起删掉；已确认的 409",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "已丢弃"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/memory/imports/{id}/confirm": {
+      "post": {
+        "operationId": "confirmMemoryImport",
+        "summary": "本人确认：checked 里的条目写进个人记忆；冲突按 resolutions（缺省保留旧的）。还没整理完或已确认过的 409",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmMemoryImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "确认后的导入",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryImport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/memory/imports/{id}/retry": {
+      "post": {
+        "operationId": "retryMemoryImport",
+        "summary": "停住的导入从停住那一步接着做；没停住的 409",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "重新开始后的导入",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryImport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -47935,6 +48463,10 @@
                   "minimum": 0,
                   "description": "写入时钉住的对象版本",
                   "type": "integer"
+                },
+                "title": {
+                  "description": "对象现在的标题（列表接口按 target 查出来，只读，不存）",
+                  "type": "string"
                 }
               }
             }
@@ -47970,6 +48502,894 @@
           "updatedAt": {
             "format": "date-time",
             "type": "string"
+          }
+        }
+      },
+      "CreateMemoryImportRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "files"
+        ],
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "const": "chatgpt",
+                "type": "string"
+              },
+              {
+                "const": "claude",
+                "type": "string"
+              },
+              {
+                "const": "claude_code",
+                "type": "string"
+              },
+              {
+                "const": "codex",
+                "type": "string"
+              }
+            ]
+          },
+          "files": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "path",
+                "content",
+                "sha256",
+                "mtime"
+              ],
+              "properties": {
+                "path": {
+                  "minLength": 1,
+                  "maxLength": 1000,
+                  "description": "本机路径或上传的文件名；粘贴的用 paste-<n>.txt",
+                  "type": "string"
+                },
+                "content": {
+                  "description": "文本原文；encoding=base64 时是文件字节的 base64（zip 导出包）",
+                  "type": "string"
+                },
+                "sha256": {
+                  "pattern": "^[0-9a-fA-F]{64}$",
+                  "description": "原文字节（base64 解码后）的 sha256",
+                  "type": "string"
+                },
+                "mtime": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MemoryImport": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "status",
+          "steps",
+          "counts",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "const": "chatgpt",
+                "type": "string"
+              },
+              {
+                "const": "claude",
+                "type": "string"
+              },
+              {
+                "const": "claude_code",
+                "type": "string"
+              },
+              {
+                "const": "codex",
+                "type": "string"
+              }
+            ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "processing",
+                "type": "string"
+              },
+              {
+                "const": "awaiting_review",
+                "type": "string"
+              },
+              {
+                "const": "confirmed",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "label",
+                "status"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "done",
+                      "type": "string"
+                    },
+                    {
+                      "const": "active",
+                      "type": "string"
+                    },
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "stopped",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "result": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "counts": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "files",
+              "items",
+              "truncated",
+              "personal",
+              "company",
+              "project",
+              "dropped",
+              "duplicates",
+              "conflicts",
+              "review",
+              "checked"
+            ],
+            "properties": {
+              "files": {
+                "type": "integer"
+              },
+              "items": {
+                "type": "integer"
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "personal": {
+                "type": "integer"
+              },
+              "company": {
+                "type": "integer"
+              },
+              "project": {
+                "type": "integer"
+              },
+              "dropped": {
+                "type": "integer"
+              },
+              "duplicates": {
+                "type": "integer"
+              },
+              "conflicts": {
+                "type": "integer"
+              },
+              "review": {
+                "type": "integer"
+              },
+              "checked": {
+                "type": "integer"
+              },
+              "imported": {
+                "type": "integer"
+              }
+            }
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "MemoryImportDetail": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "status",
+          "steps",
+          "counts",
+          "createdAt",
+          "updatedAt",
+          "candidates"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "const": "chatgpt",
+                "type": "string"
+              },
+              {
+                "const": "claude",
+                "type": "string"
+              },
+              {
+                "const": "claude_code",
+                "type": "string"
+              },
+              {
+                "const": "codex",
+                "type": "string"
+              }
+            ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "processing",
+                "type": "string"
+              },
+              {
+                "const": "awaiting_review",
+                "type": "string"
+              },
+              {
+                "const": "confirmed",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "label",
+                "status"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "done",
+                      "type": "string"
+                    },
+                    {
+                      "const": "active",
+                      "type": "string"
+                    },
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "stopped",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "result": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "counts": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "files",
+              "items",
+              "truncated",
+              "personal",
+              "company",
+              "project",
+              "dropped",
+              "duplicates",
+              "conflicts",
+              "review",
+              "checked"
+            ],
+            "properties": {
+              "files": {
+                "type": "integer"
+              },
+              "items": {
+                "type": "integer"
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "personal": {
+                "type": "integer"
+              },
+              "company": {
+                "type": "integer"
+              },
+              "project": {
+                "type": "integer"
+              },
+              "dropped": {
+                "type": "integer"
+              },
+              "duplicates": {
+                "type": "integer"
+              },
+              "conflicts": {
+                "type": "integer"
+              },
+              "review": {
+                "type": "integer"
+              },
+              "checked": {
+                "type": "integer"
+              },
+              "imported": {
+                "type": "integer"
+              }
+            }
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "title",
+                "text",
+                "source",
+                "path",
+                "category",
+                "kind",
+                "dropReason",
+                "confidence",
+                "group",
+                "checked",
+                "locked",
+                "conflict",
+                "resolution",
+                "memoryItemId"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "source": {
+                  "anyOf": [
+                    {
+                      "const": "chatgpt",
+                      "type": "string"
+                    },
+                    {
+                      "const": "claude",
+                      "type": "string"
+                    },
+                    {
+                      "const": "claude_code",
+                      "type": "string"
+                    },
+                    {
+                      "const": "codex",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "path": {
+                  "type": "string"
+                },
+                "category": {
+                  "anyOf": [
+                    {
+                      "description": "个人偏好（进个人记忆）、公司事实（不进个人记忆）、只对某个项目有效（不导入）、不导入",
+                      "anyOf": [
+                        {
+                          "const": "personal_preference",
+                          "type": "string"
+                        },
+                        {
+                          "const": "company_fact",
+                          "type": "string"
+                        },
+                        {
+                          "const": "project_instruction",
+                          "type": "string"
+                        },
+                        {
+                          "const": "drop",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "preference",
+                      "type": "string"
+                    },
+                    {
+                      "const": "practice",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "dropReason": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "stale_state",
+                          "type": "string"
+                        },
+                        {
+                          "const": "one_off",
+                          "type": "string"
+                        },
+                        {
+                          "const": "private_life",
+                          "type": "string"
+                        },
+                        {
+                          "const": "secret",
+                          "type": "string"
+                        },
+                        {
+                          "const": "other_person",
+                          "type": "string"
+                        },
+                        {
+                          "const": "injection",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "confidence": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "group": {
+                  "anyOf": [
+                    {
+                      "description": "conflict / uncertain 是要本人看的两组；import 默认勾选；partner 是同批冲突里较早的那条，跟着冲突那条一起定",
+                      "anyOf": [
+                        {
+                          "const": "conflict",
+                          "type": "string"
+                        },
+                        {
+                          "const": "uncertain",
+                          "type": "string"
+                        },
+                        {
+                          "const": "import",
+                          "type": "string"
+                        },
+                        {
+                          "const": "company",
+                          "type": "string"
+                        },
+                        {
+                          "const": "project",
+                          "type": "string"
+                        },
+                        {
+                          "const": "duplicate",
+                          "type": "string"
+                        },
+                        {
+                          "const": "dropped",
+                          "type": "string"
+                        },
+                        {
+                          "const": "skipped",
+                          "type": "string"
+                        },
+                        {
+                          "const": "partner",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "checked": {
+                  "type": "boolean"
+                },
+                "locked": {
+                  "type": "boolean"
+                },
+                "conflict": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "title",
+                        "text",
+                        "at"
+                      ],
+                      "properties": {
+                        "memoryId": {
+                          "type": "string"
+                        },
+                        "candidateId": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "resolution": {
+                  "anyOf": [
+                    {
+                      "const": "keep_old",
+                      "type": "string"
+                    },
+                    {
+                      "const": "use_new",
+                      "type": "string"
+                    },
+                    {
+                      "const": "neither",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "memoryItemId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "MemoryImportList": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "source",
+                "status",
+                "steps",
+                "counts",
+                "createdAt",
+                "updatedAt"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "source": {
+                  "anyOf": [
+                    {
+                      "const": "chatgpt",
+                      "type": "string"
+                    },
+                    {
+                      "const": "claude",
+                      "type": "string"
+                    },
+                    {
+                      "const": "claude_code",
+                      "type": "string"
+                    },
+                    {
+                      "const": "codex",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "processing",
+                      "type": "string"
+                    },
+                    {
+                      "const": "awaiting_review",
+                      "type": "string"
+                    },
+                    {
+                      "const": "confirmed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failed",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "label",
+                      "status"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "const": "done",
+                            "type": "string"
+                          },
+                          {
+                            "const": "active",
+                            "type": "string"
+                          },
+                          {
+                            "const": "pending",
+                            "type": "string"
+                          },
+                          {
+                            "const": "stopped",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "result": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "counts": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "files",
+                    "items",
+                    "truncated",
+                    "personal",
+                    "company",
+                    "project",
+                    "dropped",
+                    "duplicates",
+                    "conflicts",
+                    "review",
+                    "checked"
+                  ],
+                  "properties": {
+                    "files": {
+                      "type": "integer"
+                    },
+                    "items": {
+                      "type": "integer"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "personal": {
+                      "type": "integer"
+                    },
+                    "company": {
+                      "type": "integer"
+                    },
+                    "project": {
+                      "type": "integer"
+                    },
+                    "dropped": {
+                      "type": "integer"
+                    },
+                    "duplicates": {
+                      "type": "integer"
+                    },
+                    "conflicts": {
+                      "type": "integer"
+                    },
+                    "review": {
+                      "type": "integer"
+                    },
+                    "checked": {
+                      "type": "integer"
+                    },
+                    "imported": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ConfirmMemoryImportRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "checked",
+          "resolutions"
+        ],
+        "properties": {
+          "checked": {
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "resolutions": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "choice"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "choice": {
+                  "anyOf": [
+                    {
+                      "const": "keep_old",
+                      "type": "string"
+                    },
+                    {
+                      "const": "use_new",
+                      "type": "string"
+                    },
+                    {
+                      "const": "neither",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -48079,6 +49499,10 @@
                         "minimum": 0,
                         "description": "写入时钉住的对象版本",
                         "type": "integer"
+                      },
+                      "title": {
+                        "description": "对象现在的标题（列表接口按 target 查出来，只读，不存）",
+                        "type": "string"
                       }
                     }
                   }

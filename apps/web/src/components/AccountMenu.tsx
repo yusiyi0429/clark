@@ -2,7 +2,7 @@
 
 /**
  * 个人菜单：通知栏左下角点自己的名字（收起成窄条时是头像）弹出。本人能改的设置都收在这里 ——
- * 声纹（已配置时）、雷达、Co-Agent 形象、修改口令、重看首次引导；双身份者还能切换工作台。
+ * 声纹（已配置时）、雷达、我的记忆（成员 /me/memory、CEO /memory）、Co-Agent 形象、修改口令、重看首次引导；双身份者还能切换工作台。
  * CEO 多一项组织配置，管理员多一项管理员视图；最后是退出登录。
  * 声纹、雷达和口令各开一个小弹窗，不离开当前页面。
  */
@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Modal, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { Activity, ArrowLeftRight, ArrowRight, AudioLines, KeyRound, LogOut, PlugZap, Radar, RotateCcw, Settings2, Smile, X } from "lucide-react";
+import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, KeyRound, LogOut, PlugZap, Radar, RotateCcw, Settings2, Smile, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { logout } from "@/lib/logout";
 import { VoiceprintCard } from "@/components/member/VoiceprintCard";
@@ -135,6 +135,12 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                 <Radar size={16} aria-hidden="true" />
                 {radarTitle}
               </Button>
+              {onNavigate ? (
+                <Button variant="ghost" className={m.item} onPress={() => { setOpen(false); onNavigate(account.role === "ceo" ? "/memory" : "/me/memory"); }}>
+                  <Brain size={16} aria-hidden="true" />
+                  我的记忆
+                </Button>
+              ) : null}
               <Button variant="ghost" className={m.item} onPress={() => pick("connection")}>
                 <PlugZap size={16} aria-hidden="true" />连接到外部工具
               </Button>
