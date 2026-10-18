@@ -22,6 +22,7 @@
     "@fastify/multipart": "^10.1.1",
     "@fastify/rate-limit": "^10.2.2",
     "@fastify/type-provider-typebox": "^5.1.0",
+    "@larksuiteoapi/node-sdk": "1.74.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@mozilla/readability": "0.6.0",
     "@sinclair/typebox": "^0.34.52",

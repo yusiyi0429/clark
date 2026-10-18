@@ -37,6 +37,7 @@ import { createJobWorker, exampleJobHandlers } from "./jobs.js";
 import { resolveFeishuEnv } from "./feishu/config.js";
 import { createFeishuClient } from "./feishu/client.js";
 import { feishuTokenJobs } from "./feishu/refresh.js";
+import { feishuEventJobs, startFeishuEventStream } from "./feishu/events.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -217,7 +218,7 @@ const feishuTokens = env.feishu && feishuClient ? feishuTokenJobs({ pool, env: e
 // 公共后台任务（jobs.ts）：每 5 秒领一批；现有各功能的 setInterval 暂不迁移。
 const jobWorker = createJobWorker({
   pool,
-  handlers: { ...exampleJobHandlers, ...feishuTokens?.handlers },
+  handlers: { ...exampleJobHandlers, ...feishuTokens?.handlers, ...(env.feishu ? feishuEventJobs(pool) : {}) },
   recurring: feishuTokens?.recurring ?? [],
 });
 const app = await buildApp({
@@ -234,7 +235,9 @@ const app = await buildApp({
   outlets: outletAdapter,
   feishuClient,
 });
+let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {
+  feishuEvents?.close();
   scheduler.close();
   monthlyScheduler.close();
   monthlyReviewScheduler.close();
@@ -248,4 +251,6 @@ monthlyReviewScheduler.start();
 missionRoundScheduler.start();
 jobWorker.start();
 await app.listen({ port, host: "0.0.0.0" });
+// 飞书长连接：收到事件只落库并排 jobs，3 秒内 ack。
+feishuEvents = env.feishu ? startFeishuEventStream(pool, env.feishu) : undefined;
 console.log(`warmap api listening on :${port} (${join(".", "migrations")} applied, build ${env.buildSha})`);
