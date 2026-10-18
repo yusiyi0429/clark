@@ -21,7 +21,7 @@ export type LocateResult =
   | { status: "one"; todo: OpenTodo }
   | { status: "many"; todos: OpenTodo[]; total: number }
   /** person：本人说到的人（对得上人员目录就是目录里的名字）；nearMisses：这个人发来、但不在说的时间里的待办。 */
-  | { status: "none"; person: string | null; window: TimeWindow | null; nearMisses: OpenTodo[] };
+  | { status: "none"; person: string | null; nearMisses: OpenTodo[] };
 
 /** 点选卡最多列几件。 */
 const MAX_PICK = 4;
@@ -158,8 +158,25 @@ const NUM = "(\\d{1,2}|[一二两三四五六七八九十]{1,3})";
 /**
  * 原话里说的时间（北京时间），前后各放宽一天；说的是一周就是那一周再前后各一天。没说时间返回 null。
  * 认：今天 / 刚才、昨天、前天、大前天、N 天前、（上）周 X、上周、这周、M 月 D 日、D 号、YYYY-MM-DD。
+ * 「上周五」有两种理解（10/18 定）：按日历周往前一周的周五，或最近过去的那个周五（周日说「上周五」常指前天）。
+ * 两种理解落在不同的日子时都返回，由 locateTodo 分别去找；落在同一天只返回一个。
  */
-export function timeWindow(text: string, now: Date): TimeWindow | null {
+export function timeWindows(text: string, now: Date): TimeWindow[] | null {
+  const today = shanghaiDay(now);
+  const lastWeek = /(?<!上)上(?:个)?(?:周|星期|礼拜)([一二三四五六日天])/.exec(text);
+  if (lastWeek) {
+    const weekday = new Date(today).getUTCDay() || 7;
+    const calendar = today - (weekday - 1) * DAY_MS + (WEEKDAYS[lastWeek[1]] - 8) * DAY_MS;
+    // 最近过去的那个周 X（不含今天）。
+    const back = (weekday - WEEKDAYS[lastWeek[1]] + 7) % 7 || 7;
+    const recent = today - back * DAY_MS;
+    return recent === calendar ? [around(calendar, calendar)] : [around(calendar, calendar), around(recent, recent)];
+  }
+  const window = timeWindow(text, now);
+  return window ? [window] : null;
+}
+
+function timeWindow(text: string, now: Date): TimeWindow | null {
   const today = shanghaiDay(now);
   const weekday = new Date(today).getUTCDay() || 7;
   const monday = today - (weekday - 1) * DAY_MS;
@@ -248,16 +265,23 @@ export function locateTodo(input: { message: string; hints?: LocateHints; todos:
   // 不是发起人的人只认字面或同音（模糊同音太容易把「是一」听成人名）；模型摘出的人名对不上任何人时照原样说。
   const outsider = said.size ? null
     : mentionedPeople(spoken, input.people, 2)[0]?.displayName ?? (hintPerson && !NOT_A_NAME.test(hintPerson) ? hintPerson : null);
-  const hintDay = hints.date && /^\d{4}-\d{2}-\d{2}$/.test(hints.date) ? timeWindow(hints.date, now) : null;
-  const window = timeWindow(message, now) ?? hintDay;
+  const hintDay = hints.date && /^\d{4}-\d{2}-\d{2}$/.test(hints.date) ? timeWindows(hints.date, now) : null;
+  const windows = timeWindows(message, now) ?? hintDay;
 
   // 说到了人，但不是任何一件待办的发起人：如实说没有，绝不换成别人发的。
-  if (outsider) return { status: "none", person: outsider, window, nearMisses: [] };
+  if (outsider) return { status: "none", person: outsider, nearMisses: [] };
   const byPerson = said.size ? todos.filter((todo) => said.has(todo.initiatorId)) : todos;
-  const inTime = window ? byPerson.filter((todo) => within(todo, window)) : byPerson;
+  // 时间有两种理解时各找一遍：只有一种找得到就按它往下走；两种找到的不是同一批就交给本人点选。
+  const found = windows ? windows.map((window) => byPerson.filter((todo) => within(todo, window))).filter((list) => list.length) : [byPerson];
+  const key = (list: OpenTodo[]) => list.map((todo) => todo.requestId).sort().join();
+  if (found.length > 1 && key(found[0]) !== key(found[1])) {
+    const union = [...new Map(found.flat().map((todo) => [todo.requestId, todo])).values()].sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime());
+    return { status: "many", todos: union.slice(0, MAX_PICK), total: union.length };
+  }
+  const inTime = found[0] ?? [];
   if (!inTime.length) {
     const person = said.size ? initiators.filter((item) => said.has(item.personId)).map((item) => item.displayName).join("、") : null;
-    return { status: "none", person, window, nearMisses: said.size ? byPerson.slice(0, MAX_PICK) : [] };
+    return { status: "none", person, nearMisses: said.size ? byPerson.slice(0, MAX_PICK) : [] };
   }
   if (inTime.length === 1) return { status: "one", todo: inTime[0] };
   const text = `${message}\n${hints.about ?? ""}`;

@@ -9,7 +9,7 @@ import type { RequestAgent } from "../src/delivery/requestAgent.js";
 import { createTestApp, type TestApp } from "./helpers.js";
 
 /**
- * 「帮我问问」评测集（H11 的雏形）：本人手上有 9 件别人发来的待办，24 句说法覆盖相对时间、昵称、语音错字、
+ * 「帮我问问」评测集（H11 的雏形）：本人手上有 9 件别人发来的待办，30 句说法覆盖相对时间（含「上周五」两种理解）、昵称、语音错字、
  * 两个候选、找不到、已有人问过。每句走完整的工具流程（定位 → 查有没有人问过 → 整理问题），看最后交给本人的是哪张卡。
  * 硬指标：发错人 = 0（定位到一件、但发起人不是本人说的那位）。「查有没有人问过」用确定性替身（问题和已答问题有相同的词就算问过），
  * 真实模型的这一步另做冒烟。现在是 2026-10-18（周日）北京时间 10:00。
@@ -23,6 +23,7 @@ const PEOPLE: [string, string][] = [["liu-minghua", "刘明华"], ["bai-tiantian
 const TODOS: Record<string, [string, string, string, string]> = {
   form: ["tang-jujie", "填备案信息表", "2026-10-17T16:20", "财务在收集备案信息，请在备案信息表里填产品介绍和产品截图。"],
   contract: ["tang-jujie", "补合同扫描件", "2026-10-13T11:00", "法务要归档，请补齐合同扫描件。"],
+  deck: ["tang-jujie", "改路演 PPT", "2026-10-09T17:00", "下周路演用的 PPT 请按新数据改一版。"],
   weekly: ["liu-renhao", "更新周报数据表", "2026-10-17T09:30", "周报数据表里本周的数据请更新。"],
   purchase: ["qin-mengyi", "确认采购清单", "2026-10-15T14:00", "采购清单在共享表格里，请确认数量。"],
   interview: ["yu-siyi", "整理客户访谈记录", "2026-10-16T18:00", "把上周三场客户访谈整理成记录。"],
@@ -39,7 +40,9 @@ type Expect =
   | { found: "preview" | "answered"; todo: keyof typeof TODOS }
   | { found: "choose"; todos: (keyof typeof TODOS)[] }
   | { found: "none" };
-type Case = { say: string; tags: string[]; hints?: { person?: string; about?: string }; expect: Expect };
+/** now 不写就是周日（NOW）。 */
+type Case = { say: string; tags: string[]; hints?: { person?: string; about?: string }; now?: Date; expect: Expect };
+const MONDAY = new Date("2026-10-19T02:00:00Z");
 
 const CASES: Case[] = [
   { say: "昨天巨杰拜托我填的那个表，截图要直接贴进表格还是贴链接，你帮我问问", tags: ["相对时间"], expect: { found: "preview", todo: "form" } },
@@ -66,6 +69,12 @@ const CASES: Case[] = [
   { say: "小王昨天让我填的表，帮我问问格式", tags: ["找不到", "昵称"], expect: { found: "none" } },
   { say: "溪南前天发的海报文案帮我问问", tags: ["找不到", "相对时间"], expect: { found: "none" } },
   { say: "巨杰10月1号发的那个表帮我问问", tags: ["找不到", "相对时间"], expect: { found: "none" } },
+  // 「上周五」两种理解（日历周往前一周的周五 / 最近的周五）：只有一种找得到就定位，两种都找得到就让选。
+  { say: "溪南上周五发的海报文案，尺寸多大，帮我问问", tags: ["上周X", "周日"], expect: { found: "preview", todo: "poster" } },
+  { say: "斯一上周五让我整理的访谈记录，要不要附录音，帮我问问", tags: ["上周X", "周日"], expect: { found: "preview", todo: "interview" } },
+  { say: "巨杰上周五发的东西，帮我问问截止时间", tags: ["上周X", "周日", "两个候选"], expect: { found: "choose", todos: ["deck", "form"] } },
+  { say: "斯一上周五发的报销发票要纸质的吗，帮我问问", tags: ["上周X", "周一"], now: MONDAY, expect: { found: "preview", todo: "invoice" } },
+  { say: "溪南上周五发的海报文案，帮我问问尺寸", tags: ["上周X", "周一", "找不到"], now: MONDAY, expect: { found: "none" } },
   { say: "对，就是那个，帮我问问截图怎么放", tags: ["追问"], hints: { person: "巨杰", about: "备案信息表" }, expect: { found: "preview", todo: "form" } },
 ];
 
@@ -109,7 +118,7 @@ async function ask(item: Case) {
   const entries = createConversationEntries({
     pool: t.pool, agent, secret: "eval", viewer: { personId: VIEWER, role: "member" }, message: item.say,
     names: new Map(PEOPLE), people: PEOPLE.map(([personId, displayName]) => ({ personId, displayName })),
-    directory: PEOPLE.map(([personId, displayName]) => ({ personId, displayName })), now: () => NOW, fingerprint: "eval",
+    directory: PEOPLE.map(([personId, displayName]) => ({ personId, displayName })), now: () => item.now ?? NOW, fingerprint: "eval",
     onStep: () => undefined, onCard: (card) => cards.push(card),
   });
   const result = await entries.askAboutTodo({ question: item.say, ...item.hints });
