@@ -278,9 +278,5 @@ export function createMemoryImports(options: { pool: Pool; personalMemory: Perso
             await running.get(id)?.catch(() => undefined);
             await pool.query(`DELETE FROM memory_imports WHERE id = $1`, [id]);
         },
-        /** 测试用：等后台这一次处理跑完。 */
-        async settled(id: string): Promise<void> {
-            await running.get(id);
-        },
     };
 }

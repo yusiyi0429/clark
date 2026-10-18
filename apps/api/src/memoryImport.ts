@@ -254,8 +254,8 @@ const INJECTION_PATTERNS = [
     /^\s*(system|assistant)\s*[:：]/i, /(导入|整理|读取)(这些|本|此|下面的?)?(记忆|条目|文件|内容)的\s*(AI|模型|助手|agent)/i,
     /\b(mark|label|classify|import)\s+(every|all)\b.*\b(memor|item|entr)/i, /(全部|所有)(条目|记忆)(都)?(标成|标为|设为|当成).*(高置信|偏好|默认勾选)/,
 ];
-export const looksSecret = (text: string) => SECRET_PATTERNS.some(pattern => pattern.test(text));
-export const looksInjection = (text: string) => INJECTION_PATTERNS.some(pattern => pattern.test(text));
+const looksSecret = (text: string) => SECRET_PATTERNS.some(pattern => pattern.test(text));
+const looksInjection = (text: string) => INJECTION_PATTERNS.some(pattern => pattern.test(text));
 
 /** 拆成单条，套上规则：密钥、注入直接分到不导入并锁住；超过 MAX_ITEMS 的截掉（truncated）。 */
 export function splitDocs(docs: ReadDoc[]): { candidates: Candidate[]; truncated: boolean } {

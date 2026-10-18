@@ -79,8 +79,7 @@ export async function uploadFile(file: File): Promise<ImportFile> {
   return { path: file.name, content: text, sha256: await sha256Hex(new TextEncoder().encode(text)), mtime };
 }
 
-/** 确认页：要本人看的两组；其余按组折叠成数字。 */
-export const REVIEW_GROUPS = ["conflict", "uncertain"] as const;
+/** 确认页：要本人看的两组（冲突、没把握）以外，其余按组折叠成数字。 */
 export const FOLDED_GROUPS = [
   { id: "import", label: "导入" }, { id: "skipped", label: "未导入" }, { id: "company", label: "公司" }, { id: "project", label: "项目" },
   { id: "duplicate", label: "重复" }, { id: "dropped", label: "不导入" },

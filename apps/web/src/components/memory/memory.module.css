@@ -68,7 +68,7 @@ a.anchor:hover { text-decoration: underline; text-underline-offset: 3px; }
 .editor { grid-column: 1 / -1; display: grid; gap: 6px; }
 .titleInput, .textInput { width: 100%; box-sizing: border-box; font: inherit; }
 .titleInput { font-size: 15px; font-weight: 600; }
-.textInput { min-height: 72px; field-sizing: content; max-height: 320px; font-size: 14px; line-height: 1.65; resize: vertical; }
+.textInput { min-height: 72px; field-sizing: content; max-height: 320px; font-size: 14px; line-height: 1.65; }
 .editBar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
 .kbd { margin-right: 4px; color: var(--ink-faint); font-size: 12px; }
 
@@ -99,7 +99,7 @@ a.anchor:hover { text-decoration: underline; text-underline-offset: 3px; }
 .pasteBox { position: relative; display: grid; gap: 4px; padding: 10px 10px 6px 14px; border: 1px solid var(--field-border); border-radius: var(--field-radius); background: var(--field-bg); transition: border-color 140ms ease, background .14s ease; }
 .pasteBox:focus-within { border-color: var(--field-border-focus); box-shadow: var(--field-focus-ring); }
 .pasteBox[data-dragging] { border-style: dashed; border-color: var(--onboarding-blue); background: color-mix(in oklab, var(--onboarding-blue) 5%, var(--surface)); }
-.pasteBox textarea { width: 100%; min-height: 140px; max-height: 320px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; outline: none; font: 13px/1.7 var(--font-mono, ui-monospace, monospace); color: var(--ink); resize: vertical; }
+.pasteBox textarea { width: 100%; min-height: 140px; max-height: 320px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; outline: none; font: 13px/1.7 var(--font-mono, ui-monospace, monospace); color: var(--ink); }
 .pasteIcon { position: absolute; top: 50%; left: 50%; translate: -50% -60%; color: var(--ink-faint); opacity: .55; pointer-events: none; }
 .pasteFoot { display: flex; align-items: center; justify-content: space-between; min-height: 30px; }
 .pasteFoot .meta { margin: 0; }
