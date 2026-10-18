@@ -339,9 +339,9 @@ function MaterialSource({ target, objects, label }: { target: Extract<SourceTarg
           {text.currentVersion > text.version ? <span className={d.notice}>这是当时引用的第 {text.version} 版，当前已是第 {text.currentVersion} 版</span> : null}
         </p>
         {text.format === "link" ? (
-          <p className={d.muted}>这是一条外部链接：预审只读了标题和地址，没有读链接里的内容。{text.url ? <a href={text.url} target="_blank" rel="noopener noreferrer">打开链接</a> : null}</p>
+          <p className={d.muted}>外部链接 · 未读取内容{text.url ? <a href={text.url} target="_blank" rel="noopener noreferrer">打开链接</a> : null}</p>
         ) : !text.readable ? (
-          <p className={d.muted}>该版本无可读文字（可能是扫描件或解析失败），无法按段落显示，请下载原件查看。</p>
+          <p className={d.muted}>该版本无可读文字，请下载原件查看</p>
         ) : (
           <>
             {target.paragraph ? (
@@ -352,7 +352,6 @@ function MaterialSource({ target, objects, label }: { target: Extract<SourceTarg
                 </section>
               ) : <p className={d.notice}>引用的第 {target.paragraph} 段在这一版里找不到，下面是这一版全文。</p>
             ) : null}
-            {original ? <p className={d.muted}>以下是从原件提取的文字，排版以原件为准。</p> : null}
             <ol className={d.paragraphs} aria-label={`第 ${text.version} 版全文`}>
               {text.paragraphs.map((paragraph, index) => (
                 <li key={index} data-paragraph={index + 1} data-cited={target.paragraph === index + 1 || undefined}>
@@ -387,7 +386,6 @@ function LegacySource({ meetingId, material }: { meetingId: string; material: Le
   const preview = useMaterialPreview(meetingId, material.id);
   return (
     <div className={d.drawerBody}>
-      <p className={d.drawerMeta}>会前上传的材料，预审读取其全文；此类材料无版本与段落编号。</p>
       <MaterialPane meetingId={meetingId} material={material} preview={preview} />
     </div>
   );
@@ -429,7 +427,7 @@ function DiscussionSource({ target, objects, label }: { target: Extract<SourceTa
   return (
     <>
       <div className={d.drawerBody}>
-        <p className={d.drawerMeta}>{message.authorName ?? "群成员"} · {monthDayTime(message.createdAt)} · 群里的个人发言，不是决定</p>
+        <p className={d.drawerMeta}>{message.authorName ?? "群成员"} · {monthDayTime(message.createdAt)} · 群内个人发言</p>
         {message.quote?.text ? <blockquote className={d.quoteBlock}>{message.quote.text}</blockquote> : null}
         <p className={d.messageText}>{message.content}</p>
       </div>
@@ -452,7 +450,7 @@ function ChangeDetail({ change, label }: { change: TDecisionHistoryChange; label
       <div className={d.drawerBody}>
         <p className={d.drawerMeta}>
           {CHANGE_KIND[change.kind]} · {monthDayTime(change.at)}{change.author ? ` · ${change.author.displayName}` : ""}
-          {change.kind === "discussion" ? " · 群内个人发言，不构成决定" : ""}
+          {change.kind === "discussion" ? " · 群内个人发言" : ""}
         </p>
         {change.stance ? <p className={d.drawerMeta}>发言性质：{change.stance}</p> : null}
         <p className={d.messageText}>{change.text}</p>
@@ -491,7 +489,7 @@ function DetailSource({ target, label, onOpen }: { target: Extract<SourceTarget,
   if (hit?.layer === "change") return <ChangeDetail change={hit.change} label={label} />;
   return (
     <div className={d.drawerBody}>
-      <p className={d.muted}>该依据不在当前议题的历史记录中，暂无法在此打开，可在对话栏询问其来源。</p>
+      <p className={d.muted}>该依据暂无法在此打开</p>
       <p className={d.drawerMeta}>{clip(label, 40)}</p>
     </div>
   );
@@ -535,7 +533,7 @@ export function KnowledgeSource({ file, section, label }: { file: string; sectio
     return (
       <>
         <div className={d.drawerBody}>
-          <p className={d.knowledgeNote} role="alert">{load.message}可以重试，或让天枢把原文和出处找出来。</p>
+          <p className={d.knowledgeNote} role="alert">{load.message}</p>
           <button type="button" className={d.knowledgeRetry} onClick={() => setAttempt((value) => value + 1)}>重试</button>
         </div>
         <footer className={d.drawerFoot}>

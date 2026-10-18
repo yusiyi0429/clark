@@ -13,9 +13,9 @@
  *   这一轮交给模型的是「已有快照 + 最近若干轮的文字」（conversationStream.ts 的 window 模式），存下来的历史不变；同时补起后台压缩。
  * - 任务生命周期：进程内按会话去重；库里一条会话同时只允许一个 running（唯一索引）；running 带租约，进程重启后租约过期即视为失败；
  *   失败按 COMPACTION_RETRY_DELAYS_MS 退避，下一次触发时再试。任何失败都不影响回答。
- * - 压缩只管对话本身的状态（一号位的决定与表态、偏好、没收尾的话题、引用过的对象 id）；正式事实每轮都从本体和上下文包重新读，不进摘要。
+ * - 压缩只管对话本身的状态（本人的想法、立场、没定的问题和理由、偏好与做法、引用过的对象 id）；正式事实每轮都从本体和上下文包重新读，不进摘要。
  *
- * 和「新建对话」/闲置重开的配合：快照按 conversation_id 存，归档的会话不再被换入；闲置重开读的是会话里最近一条 compaction，
+ * 和闲置重开的配合：快照按 conversation_id 存，归档的会话不再被换入；闲置重开读的是会话里最近一条 compaction，
  * 轮前已把就绪的快照换进历史，所以闲置重开拿到的是最新的摘要。
  */
 import { randomUUID } from "node:crypto";
@@ -280,10 +280,10 @@ export function transcriptForSummary(messages: ContextMessage[]): string {
     if (message.role === "user") {
       const text = blockText(message.content);
       const question = questionOf(text);
-      if (!question) { lines.push(`[一号位${at ? ` · ${at}` : ""}]：${clip(text, 4_000)}`); continue; }
+      if (!question) { lines.push(`[本人${at ? ` · ${at}` : ""}]：${clip(text, 4_000)}`); continue; }
       const where = question.currentObject ? ` · 页面：${cardLine(question.currentObject)}` : "";
       const refs = question.references.length ? `\n（引用：${question.references.map(cardLine).join("；")}）` : "";
-      lines.push(`[一号位${at ? ` · ${at}` : ""}${where}]：${question.resumed ? "（点了「继续」）" : ""}${clip(question.message, 4_000)}${refs}`);
+      lines.push(`[本人${at ? ` · ${at}` : ""}${where}]：${question.resumed ? "（点了「继续」）" : ""}${clip(question.message, 4_000)}${refs}`);
     } else if (message.role === "assistant") {
       const text = message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("").trim();
       if (text) lines.push(`[天枢]：${clip(text, 8_000)}`);
@@ -298,43 +298,42 @@ export function transcriptForSummary(messages: ContextMessage[]): string {
   return lines.join("\n\n");
 }
 
-export const COMPACTION_SYSTEM_PROMPT = "你负责整理一号位（集团 CEO）与天枢（一号位的 Agent）之间的长对话，写成一份「对话记忆」。只输出记忆正文，不回答对话里的问题，不调用工具。";
+export const COMPACTION_SYSTEM_PROMPT = "你负责把本人与天枢（本人的 Agent）之间的长对话整理成一份「对话记忆」。只输出记忆正文，不回答对话里的问题，不调用工具。";
 
+/**
+ * 对话记忆的模板（不是 CEO 汇报模板）：只记这个人在对话里的想法、立场、没定的问题和理由、偏好与做法、引用过的对象 id。
+ * 正式事实（目标、进展、指标、议题与会议状态、数字、日期）每轮从本体和上下文包重新读，不进摘要；被折叠的原话可以用 search_conversation_history 找回。
+ */
 export const COMPACTION_INSTRUCTIONS = `请把上面的对话整理成一份「对话记忆」。之后天枢回答时只看得到这份记忆和最近几轮原文，看不到更早的对话。
-战场目标、进展、议题、指标、会议这些正式事实每轮都会从系统实时重新读取，不需要你记；你只记对话本身的状态。
+这份记忆记的是本人这个人在对话里的想法，不是公司事实：目标、进展、指标、议题、会议、数字、日期这些正式事实每轮都会从系统实时重新读取，一律不写；天枢答过的事实问题也不写答案。
 
 用中文，按下面几节写，某节没有内容就写「无」：
 
-## 一号位的决定与表态
-- 一号位明确拍板、同意、否定、要求的事：原话要点、针对哪个对象，按时间先后。
+## 想法与立场
+- 本人提出的想法、明确的立场和拍板，连同本人给的理由；针对哪个对象就写上哪个对象。按时间先后，改过口的只写最新的说法，并注明「之前倾向……，后来改为……」。
 
-## 一号位明确说过的偏好与要求
-- 表达方式、口径、关注点、不要什么（例如「统一成一段话说」）。只写一号位明确说出的，不要从提问内容推断。
+## 还没定的问题
+- 本人在想、还没拿定主意的问题：卡在哪、倾向哪边、各自的理由。也包括本人问了还没答完的、天枢答应了还没做的、等本人确认的事。
 
-## 已形成的结论
-- 天枢给出、一号位没有反对的判断与建议，按话题写。
-- 天枢已经答过的事实问题，保留答案里的关键名称、数字、日期和出处名称（例如融资的轮次、时间、金额、主要投资方），不必逐字。
-- 被一号位推翻或后来更正的说法不写，只写最新版本。
+## 偏好与做法
+- 本人明确说过的表达方式、关注点、不要什么，以及做事的固定方法和步骤。只写本人明确说出的，不要从提问内容推断。
 
-## 还没收尾的话题
-- 一号位问了但没有答完的、天枢答应了还没做的、等一号位确认的（含已经生成、等确认的确认卡）。
-
-## 对话里引用过的对象
-- 类型、名称和 id（议题、会议、战场、战役、确认卡等），id 原样照抄。
+## 引用过的对象
+- 类型、名称和 id（议题、会议、战场、Mission、执行事项、确认卡等），id 原样照抄。
 
 ## 最近在谈什么
-- 一两句：最近的话题和一号位的关注点。
+- 一两句：最近的话题和本人的关注点。
 
 规则：
-- 只根据对话内容写，不补充对话里没有的事实，不自己推算数字。
-- 检索原文、工具的中间结果、页面摘要不要抄进来，只留对后续对话有用的结论和出处名称。
-- 有「之前的对话记忆」时，把它和新的对话合并成一份完整的新记忆：仍然成立的保留，其中的具体名称、数字、日期和 id 不要删减；被新对话更正的以新对话为准。
-- 有「之后几轮一号位的原话」时：那几轮的原文会另外保留给天枢，其中一号位的决定、表态和偏好也写进前两节，其余内容不用写。
+- 只根据本人说过的话写，尽量保留本人的原话要点和措辞；不补充对话里没有的内容，不写天枢自己的分析与建议，除非本人明确认同（认同的写进「想法与立场」，注明是认同天枢的判断）。
+- 检索原文、工具的中间结果、页面摘要不要抄进来。
+- 有「之前的对话记忆」时，把它和新的对话合并成一份完整的新记忆：仍然成立的保留，其中的对象 id 不要删减；被新对话更正的以新对话为准。
+- 有「之后几轮本人的原话」时：那几轮的原文会另外保留给天枢，其中本人的想法、立场、没定的问题和偏好也写进对应几节，其余内容不用写。
 - 不要调用工具，只输出记忆正文，总长不超过 4000 字。`;
 
 export function compactionPrompt(previousSummary: string | undefined, transcript: string, keptQuestions: { text: string; at?: number }[] = []): string {
   const kept = keptQuestions.length
-    ? `<之后几轮一号位的原话>\n${keptQuestions.map((item) => `[一号位${item.at ? ` · ${beijingTime(item.at)}` : ""}]：${item.text}`).join("\n")}\n</之后几轮一号位的原话>\n\n` : "";
+    ? `<之后几轮本人的原话>\n${keptQuestions.map((item) => `[本人${item.at ? ` · ${beijingTime(item.at)}` : ""}]：${item.text}`).join("\n")}\n</之后几轮本人的原话>\n\n` : "";
   return `${previousSummary ? `<之前的对话记忆>\n${previousSummary}\n</之前的对话记忆>\n\n` : ""}<对话>\n${transcript}\n</对话>\n\n${kept}${COMPACTION_INSTRUCTIONS}`;
 }
 
@@ -461,7 +460,7 @@ export function createConversationCompaction(options: ConversationCompactionOpti
 
   const run = async (conversationId: string, trigger: CompactionTrigger) => {
     const row = (await query(
-      // 已归档（「新建对话」）的不做：切回来继续时，那一轮开头会按需补做。
+      // 已归档的不做：067 归档的旧对话不再是当前对话。
       "SELECT id, owner_id, scope, pi_session_id, runtime_entries FROM conversations WHERE id = $1 AND deleted_at IS NULL AND archived_at IS NULL", [conversationId])).rows[0] as
       { id: string; owner_id: string | null; scope: string; pi_session_id: string; runtime_entries: unknown[] } | undefined;
     if (!row) return;

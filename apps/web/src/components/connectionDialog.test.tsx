@@ -43,11 +43,11 @@ describe("个人连接对话框", () => {
     children = tree.props.children as Node[];
     expect(children[0].type).toBe(PersonalTokenForm);
   });
-  it("CEO 版只介绍只读查询，不显示自动同步或每周同步", () => {
+  it("CEO 版不写介绍，不显示自动同步或每周同步", () => {
     const tree = render("ceo");
     const content = JSON.stringify(tree);
-    expect(content).toContain("今天有什么要我拍板");
-    expect(content).toContain("它只能看，拍板、签发、确认仍在天枢里做");
+    expect(content).not.toContain("今天有什么要我拍板");
+    expect(content).not.toContain("它只能看，拍板、签发、确认仍在天枢里做");
     expect(content).not.toContain("每周同步进展");
     expect(content).not.toContain("每周五 18:00 自动同步进展");
     expect(tree.some((node) => node.props.role === "switch")).toBe(false);
@@ -78,7 +78,7 @@ describe("个人连接对话框", () => {
     const tree = render();
     const content = JSON.stringify(tree);
     expect(content).toContain("每周同步进展");
-    expect(content).toContain("同步本周进展");
+    expect(content).not.toContain("连接授权本身不会创建任务");
     expect(content).toContain("codex exec");
     expect(content).toContain("mcp__tianshu__append_progress");
     const copyInstruction = tree.find((node) => node.props.children === "复制指令")!;

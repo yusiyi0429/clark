@@ -4,9 +4,10 @@ import { examples, instance, stubWorld, withWorld } from "./worldFixture.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
-function missionStub(options: { wrongOwner?: boolean; duplicate?: boolean; occupied?: boolean; reject?: boolean } = {}) {
+function missionStub(options: { wrongOwner?: boolean; duplicate?: boolean; occupied?: boolean; reject?: boolean; contractVersion?: string } = {}) {
   const objects = WORLD_MISSION_LINKS.map((link, i) => {
     const object = structuredClone(examples[1][2]);
+    if (options.contractVersion) object.protocol.contract_version = options.contractVersion;
     Object.assign(object.business, { object_id: `<mission-${i + 1}>`, title: link.title });
     object.business.attributes = { responsible: options.wrongOwner ? "someone-else" : instance.people[link.owner], external_refs: [{ system: "other", id: `old-${i}` }] };
     return object;
@@ -75,6 +76,13 @@ describe("Mission 外部引用", () => {
       const { calls } = missionStub({ [option]: true });
       await expect(linkWorldMissions(client)).rejects.toMatchObject({ status: 409, code: "INVALID_STATE" });
       expect(calls.every((call) => call.method === "GET")).toBe(true);
+    });
+  });
+  it("Mission 已绑定 0.3：修订信封声明对象当前契约", async () => {
+    await withWorld(async (client) => {
+      const { calls } = missionStub({ contractVersion: "tkos.world/0.3" });
+      expect(await linkWorldMissions(client)).toHaveLength(3);
+      expect(calls.filter((call) => call.method === "POST").map((call) => call.body.contract_version)).toEqual(Array(6).fill("tkos.world/0.3"));
     });
   });
   it("服务端引用占用 409 如实报错，不重试", async () => {

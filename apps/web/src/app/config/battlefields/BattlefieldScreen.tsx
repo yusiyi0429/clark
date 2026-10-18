@@ -194,19 +194,17 @@ export function BattlefieldScreen({ battlefields, issues, people, initialBattlef
         <button type="button" className={c.back} onClick={() => router.push("/")}>
           <ChevronLeft aria-hidden="true" /> 返回首页
         </button>
-        <span className={c.draft}>配置变更写入业务库并同步 Radar 监测范围</span>
       </nav>
 
       <header className={c.header}>
         <p className={c.eyebrow}>BATTLEFIELD</p>
         <h1 className={c.title}>战场管理</h1>
-        <p className={c.subtitle}>选择战场后管理其关联议题，可以把已有议题加入战场。</p>
       </header>
 
       <div className={b.body}>
         <div className={b.left}>
           <section className={b.listCard}>
-            <CardHead title="战场" desc={`${battlefields.length} 个战场 · 选择后管理关联议题`} icon={<Flag aria-hidden="true" />} />
+            <CardHead title="战场" desc={`${battlefields.length} 个战场`} icon={<Flag aria-hidden="true" />} />
             <div className={b.rows}>
               {battlefields.map((item) => (
                 <div key={item.id} className={b.row} data-selected={item.id === selected?.id || undefined}>
@@ -319,7 +317,7 @@ export function BattlefieldScreen({ battlefields, issues, people, initialBattlef
                 </span>
               </div>
             ) : null}
-            <CardFooter hint="删除战场会解除其议题关联" status={status.list}>
+            <CardFooter status={status.list}>
               <DoneButton onClick={() => router.push("/config")} />
             </CardFooter>
           </section>
@@ -340,11 +338,10 @@ export function BattlefieldScreen({ battlefields, issues, people, initialBattlef
                 </button>
               ))}
             </div>
-            <CardFooter hint="议题可同时关联多个战场" />
           </section>
 
           <section className={b.pickCard}>
-            <CardHead title="添加议题" desc="从已有议题中选择加入本战场" icon={<Plus aria-hidden="true" />} tone="add" />
+            <CardHead title="添加议题" icon={<Plus aria-hidden="true" />} tone="add" />
             <div className={b.pickBody}>
               <p className={b.pickerLabel}>已有议题（{issues.length}）</p>
               <div className={b.rows}>
@@ -363,7 +360,7 @@ export function BattlefieldScreen({ battlefields, issues, people, initialBattlef
                 })}
               </div>
             </div>
-            <CardFooter hint="加入后议题会出现在该战场的关联议题中" status={status.pick}>
+            <CardFooter status={status.pick}>
               <DoneButton onClick={() => router.push("/config")} />
             </CardFooter>
           </section>
@@ -373,12 +370,12 @@ export function BattlefieldScreen({ battlefields, issues, people, initialBattlef
   );
 }
 
-function CardHead({ title, desc, icon, tone }: { title: string; desc: string; icon: ReactNode; tone?: "issue" | "add" }) {
+function CardHead({ title, desc, icon, tone }: { title: string; desc?: string; icon: ReactNode; tone?: "issue" | "add" }) {
   return (
     <>
       <div className={c.cardHead}>
         <h2>{title}</h2>
-        <p>{desc}</p>
+        {desc ? <p>{desc}</p> : null}
       </div>
       <span className={b.iconChip} data-tone={tone}>
         {icon}
@@ -387,11 +384,11 @@ function CardHead({ title, desc, icon, tone }: { title: string; desc: string; ic
   );
 }
 
-function CardFooter({ hint, status, children }: { hint: string; status?: Status; children?: ReactNode }) {
+function CardFooter({ status, children }: { status?: Status; children?: ReactNode }) {
   return (
     <div className={b.cardFooter}>
       <span className={b.footerHint} data-kind={status?.kind} role="status">
-        {status?.message ?? hint}
+        {status?.message}
       </span>
       {children}
     </div>

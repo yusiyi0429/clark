@@ -551,13 +551,5 @@
   .header::before { -webkit-backdrop-filter: none; backdrop-filter: none; background: linear-gradient(180deg, var(--column-surface) 0%, var(--column-surface) 70%, transparent 100%); }
 }
 
-/* 天枢页头左上角那颗很小的「+ 新对话」（ConversationArchive）：低对比度灰色，不加底色，和页头标题互不挤占。 */
-.newKey.newKey {
-  position: absolute;
-  z-index: 3;
-  top: calc(var(--column-header-top) + (var(--column-header-height) - 28px) / 2);
-  left: 12px;
-}
-
 /* 三折叠双屏（600–959）：外壳是两栏 grid，右列根节点留在文档流里会多撑出一行，右页底部空出一截；它的子元素都是浮层，根节点本身不占位置。 */
 @media (min-width: 600px) and (max-width: 959px) { .root { position: fixed; } }

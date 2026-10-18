@@ -10,11 +10,11 @@ export function weeklySyncNotices(reminder: WeeklySyncReminder | null): ActionNo
   if (!reminder) return [];
   return [reminder.reason === "no_connection" ? {
     id: "weekly-sync", tone: "amber", title: "本周进展还没同步",
-    detail: "先把你的 Codex、Claude Code 等工具连上天枢，再让它同步本周进展。每周自动运行需要另外设置。",
+    detail: "",
     buttons: [{ label: "连接你的 Agent", emphasis: true, run: async () => { openConnectionDialog(); return { ok: true, settled: "已打开连接设置" }; } }],
   } : {
     id: "weekly-sync", tone: "amber", title: "本周进展还没同步",
-    detail: "对你的 Agent 说「同步本周进展」，或复制指令发给它。",
+    detail: "",
     buttons: [{ label: "复制同步指令", emphasis: true, run: async () => {
       try { await navigator.clipboard.writeText(SYNC_INSTRUCTION); return { ok: true, settled: "已复制同步指令" }; }
       catch { return { ok: false, error: "复制失败，请在「连接到外部工具」里手动复制" }; }

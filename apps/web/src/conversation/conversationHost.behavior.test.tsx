@@ -173,7 +173,7 @@ describe("任务卡引用进入私聊", () => {
   it("本人准备阶段不提供公开群组，旧群组深链和残留频道选择都留在私聊", () => {
     window.location.search = "?channel=group";
     const { props, render } = setup();
-    Object.assign(props.page!.group!, { canDiscuss: false, agentNote: "仅你可见 · 确认前可修改正文" });
+    Object.assign(props.page!.group!, { canDiscuss: false });
     expect(render()).toContain('data-composer="private"');
     expect(harness.rail!.channel).toBe("agent");
     harness.rail!.onChannel("group");
@@ -201,22 +201,23 @@ describe("右列私聊的历史状态与记录归属", () => {
     expect(html).not.toContain("重试");
   });
 
-  it("页脚写明是当前对象的私聊；切到群组写明是公开讨论", () => {
+  it("页脚只标谁看得到：私聊「仅你可见」，群组「成员可见」，不写说明", () => {
     const { render } = setup();
-    expect(render()).toContain("当前对象 · 仅本人可见");
+    expect(render()).toContain(">仅你可见<");
+    expect(render()).not.toContain("只读：不修改左侧内容");
     expect(render()).toContain('data-conversation-owner="object"');
     harness.rail!.onChannel("group");
     const group = render();
-    expect(group).toContain("公开讨论 · 成员可见");
+    expect(group).toContain(">成员可见<");
     expect(group).toContain('data-conversation-owner="group"');
-    expect(group).not.toContain("仅本人可见");
+    expect(group).not.toContain("仅你可见");
   });
 
-  it("挂在全局 scope 上的二级页（如复盘总览），右列写明是全局对话", () => {
+  it("挂在全局 scope 上的二级页（如复盘总览），右列标成全局对话（data-conversation-owner），页脚同样只写「仅你可见」", () => {
     const { props, render } = setup();
     props.page = { scope: "global", label: "10 月复盘 · LTO 审视" };
     const html = render();
-    expect(html).toContain("全局对话 · 仅本人可见");
+    expect(html).toContain(">仅你可见<");
     expect(html).toContain('data-conversation-owner="global"');
   });
 });

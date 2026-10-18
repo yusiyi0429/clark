@@ -200,21 +200,13 @@ describe("深度讨论与正在进行的对话", () => {
   });
 });
 
-describe("战场页右栏（全局对话）的「+ 新对话」与历史入口", () => {
-  it("全局对话有内容时页头左上角有「+」；对象页的私聊没有；空白对话、有归档时正文里一行「查看历史对话」", () => {
+describe("战场页右栏（全局对话）是一条连续的对话", () => {
+  it("页头没有「+」；空白对话里也没有「查看历史对话」", () => {
     const battlefield = setup({ scope: "global", label: "天枢" });
-    harness.conversation = { messages: [{ sequence: 1, role: "user", content: "问" }], startNew: vi.fn(), archivedCount: 1 };
+    harness.conversation = { messages: [{ sequence: 1, role: "user", content: "问" }] };
     battlefield.render();
-    expect(renderToStaticMarkup(<>{harness.rail!.headerAction as ReactNode}</>)).toContain('title="新对话"');
-
-    harness.conversation = { messages: [], startNew: vi.fn(), archivedCount: 1 };
-    expect(battlefield.render()).toContain("查看历史对话");
-
-    const object = setup({ scope: "issue:issue-1", label: "灯塔续约" });
-    harness.conversation = { messages: [{ sequence: 1, role: "user", content: "问" }], startNew: vi.fn(), archivedCount: 1 };
-    object.render();
     expect(harness.rail!.headerAction).toBeUndefined();
-    harness.conversation = { messages: [], startNew: vi.fn(), archivedCount: 1 };
-    expect(object.render()).not.toContain("查看历史对话");
+    harness.conversation = { messages: [] };
+    expect(battlefield.render()).not.toContain("历史对话");
   });
 });

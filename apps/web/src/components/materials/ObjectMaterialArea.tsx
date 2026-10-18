@@ -231,7 +231,7 @@ export function ObjectMaterialArea({ objectType, objectId, baseTabs, homeTab, gr
       onDecide={(proposalId, decision) => post(`${base}/${material.id}/proposals/${encodeURIComponent(proposalId)}`, { decision })} />}{dialog}</div>
       : groupTab && selected === groupTab.id ? <div className={s.groupList}>
         {materials.length ? <ul>{materials.map((item) => <li key={item.id}><button type="button" onClick={() => choose(item.id)}>{materialTitle(item.fileName)}</button></li>)}</ul>
-          : <p className={s.empty}>暂无群组材料，可通过材料下拉菜单中的「添加材料」上传。</p>}
+          : <p className={s.empty}>暂无群组材料</p>}
       </div> : typeof children === "function" ? children(api) : children}
     {linkOpen ? <LinkDialog onClose={() => setLinkOpen(false)} onSubmit={addLink} /> : null}
   </div>;

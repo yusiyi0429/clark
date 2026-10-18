@@ -33,7 +33,6 @@ export function CoAgentSkinPicker() {
   const level = useSimulatedLevel(pose === "listening");
   return (
     <div className={s.picker}>
-      <p className={s.lead}>会议录音时，它浮在右列顶上；有人被拉进群、它讲来龙去脉时，会出现几秒。换形象只换样子，只在这台电脑上生效。</p>
       <div className={s.poses} role="radiogroup" aria-label="预览姿势">
         {(["listening", "speaking"] as const).map((item) => (
           <label key={item} className={s.pose} data-selected={pose === item || undefined}>

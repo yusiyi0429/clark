@@ -11,8 +11,6 @@ import {
   CardCollection,
   ExecuteActionRequest,
   ConversationHistory,
-  ArchivedConversationList,
-  ConversationSwitchResponse,
   ConversationMessageRequest,
   ConversationSseEvent,
   ConversationAttachment,
@@ -157,6 +155,9 @@ import {
   NotificationList,
   MarkNotificationsSeenRequest,
   VoiceprintStatus,
+  PersonalMemoryItem,
+  PersonalMemoryList,
+  UpdatePersonalMemoryItemRequest,
   DictationResult,
   DictationSessionResponse,
   DictationPolishRequest,
@@ -756,62 +757,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: {
             "200": { description: "SSE 事件流", content: { "text/event-stream": { schema: { $ref: "#/components/schemas/ConversationSseEvent" } } } },
             "400": errorResponse,
-            "401": errorResponse,
-            "404": errorResponse,
-            "409": errorResponse,
-          },
-        },
-      },
-      "/api/conversations/{scope}/new": {
-        post: {
-          operationId: "startNewConversation",
-          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
-          summary: "新建对话：本人在该 scope 的当前对话有内容时归档（不删除），之后的消息进一条空白对话",
-          responses: {
-            "200": { description: "当前对话", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationSwitchResponse" } } } },
-            "401": errorResponse,
-            "404": errorResponse,
-            "409": errorResponse,
-          },
-        },
-      },
-      "/api/conversations/{scope}/archived": {
-        get: {
-          operationId: "listArchivedConversations",
-          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
-          summary: "本人在该 scope 已归档、有内容的历史对话（新的在前）",
-          responses: {
-            "200": { description: "历史对话", content: { "application/json": { schema: { $ref: "#/components/schemas/ArchivedConversationList" } } } },
-            "401": errorResponse,
-            "404": errorResponse,
-          },
-        },
-      },
-      "/api/conversations/{scope}/archived/{id}/messages": {
-        get: {
-          operationId: "getArchivedConversationMessages",
-          parameters: [
-            { name: "scope", in: "path", required: true, schema: { type: "string" } },
-            { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-          ],
-          summary: "只读回看一段历史对话",
-          responses: {
-            "200": { description: "Conversation 历史", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationHistory" } } } },
-            "401": errorResponse,
-            "404": errorResponse,
-          },
-        },
-      },
-      "/api/conversations/{scope}/archived/{id}/restore": {
-        post: {
-          operationId: "restoreArchivedConversation",
-          parameters: [
-            { name: "scope", in: "path", required: true, schema: { type: "string" } },
-            { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-          ],
-          summary: "切回一段历史对话继续：当前对话归档，这一段成为当前对话",
-          responses: {
-            "200": { description: "当前对话", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationSwitchResponse" } } } },
             "401": errorResponse,
             "404": errorResponse,
             "409": errorResponse,
@@ -1636,6 +1581,26 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/me/memory/personal": {
+        get: {
+          operationId: "listPersonalMemory", summary: "列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的",
+          parameters: [{ name: "status", in: "query", required: false, schema: { type: "string", enum: ["active", "superseded", "forgotten", "all"] } }],
+          responses: { "200": { description: "本人个人记忆", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryList" } } } }, "400": errorResponse, "401": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/me/memory/personal/items/{id}": {
+        patch: {
+          operationId: "updatePersonalMemoryItem", summary: "本人改一条个人记忆的标题或正文；已替代或已忘掉的 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/UpdatePersonalMemoryItemRequest" }),
+          responses: { "200": { description: "改后的条目", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryItem" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+        delete: {
+          operationId: "forgetPersonalMemoryItem", summary: "本人删掉（忘掉）一条个人记忆：不再装进对话，后台提炼也不再学回来",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "忘掉后的条目", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryItem" } } } }, "401": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
       "/api/me/voiceprint": {
         get: {
           operationId: "getMyVoiceprint",
@@ -2300,8 +2265,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         PeopleDirectoryResponse: PeopleDirectoryResponse as JsonSchema,
         ExecuteActionRequest: ExecuteActionRequest as JsonSchema,
         ConversationHistory: ConversationHistory as JsonSchema,
-        ArchivedConversationList: ArchivedConversationList as JsonSchema,
-        ConversationSwitchResponse: ConversationSwitchResponse as JsonSchema,
         ConversationMessageRequest: ConversationMessageRequest as JsonSchema,
         ConversationSseEvent: ConversationSseEvent as JsonSchema,
         CreateBattlefieldRequest: CreateBattlefieldRequest as JsonSchema,
@@ -2509,6 +2472,9 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeetingRecording: MeetingRecording as JsonSchema,
         StartMeetingRecordingResponse: StartMeetingRecordingResponse as JsonSchema,
         VoiceprintStatus: VoiceprintStatus as JsonSchema,
+        PersonalMemoryItem: PersonalMemoryItem as JsonSchema,
+        PersonalMemoryList: PersonalMemoryList as JsonSchema,
+        UpdatePersonalMemoryItemRequest: UpdatePersonalMemoryItemRequest as JsonSchema,
         DictationResult: DictationResult as JsonSchema,
         DictationSessionResponse: DictationSessionResponse as JsonSchema,
         DictationPolishRequest: DictationPolishRequest as JsonSchema,

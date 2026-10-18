@@ -176,7 +176,7 @@ export function MeetingClock({
   endedAt,
   ending,
   caption = "会议中",
-  note = "计时仅在本页显示。点击后将会议标记为已结束，随后在「会议记录」中导入妙记或逐字稿；飞书日程不受影响。",
+  note = "",
   onStart,
   onEnd,
 }: {
@@ -189,7 +189,7 @@ export function MeetingClock({
   ending?: boolean;
   /** 会中那颗上的小字：录音中／会议中。 */
   caption?: string;
-  /** 计时弹出那一小块里的说明。 */
+  /** 计时弹出那一小块里录音出的问题；没有就不出现。 */
   note?: string;
   onStart: () => void;
   onEnd: () => void;
@@ -234,7 +234,7 @@ export function MeetingClock({
                 <Popover.Heading className={s.heading}>
                   会议进行中 · <time className={s.time}>{time}</time>
                 </Popover.Heading>
-                <p className={s.note}>{note}</p>
+                {note ? <p className={s.note}>{note}</p> : null}
                 <Button
                   size="sm"
                   variant="secondary"

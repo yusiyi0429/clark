@@ -55,8 +55,8 @@ export function TaskEditForm({ detail, busy, onSave, onCancel }: { detail: Detai
       <TextField><Label>计划开始日期 · 可选</Label><Input type="date" value={draft.startDate} onChange={(event) => set("startDate", event.target.value)} /></TextField>
       <TextField><Label>截止日期 · 可选</Label><Input type="date" value={draft.dueDate} onChange={(event) => set("dueDate", event.target.value)} /></TextField>
     </div>
-    <FormField label="完成标准 · 可选" description="一行一条，验收时逐条对照" value={draft.doneDefinition} onChange={(value) => set("doneDefinition", value)} multiline rows={3} maxLength={500} />
-    <FormField label="这件事的判断 · 可选" description="一句话结论，别人打开这件事先看到它" value={draft.judgment} onChange={(value) => set("judgment", value)} multiline rows={2} maxLength={2000} />
+    <FormField label="完成标准 · 可选" value={draft.doneDefinition} onChange={(value) => set("doneDefinition", value)} multiline rows={3} maxLength={500} />
+    <FormField label="这件事的判断 · 可选" value={draft.judgment} onChange={(value) => set("judgment", value)} multiline rows={2} maxLength={2000} />
     <div className={s.paneRow}>
       <ActionButton intent="secondary" isDisabled={busy} onPress={save}>保存</ActionButton>
       <Button variant="ghost" onPress={onCancel}>取消</Button>

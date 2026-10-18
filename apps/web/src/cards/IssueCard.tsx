@@ -64,12 +64,10 @@ export function mergeMeetingCards(home: Card[], local: Card[]): Card[] {
   return [...merged, ...newer.values()];
 }
 
-/** 结论块的标题与说明：按决定的实际来源写（会后确认回传 / 直接拍板），不一律写「会议结论」（巡检 P1-10）。 */
-export function receiptHeading(receipts: IssuePayload["receipts"]): { title: string; note: string } {
+/** 结论块的标题：按决定的实际来源写（会后确认回传 / 直接拍板），不一律写「会议结论」（巡检 P1-10）。 */
+export function receiptHeading(receipts: IssuePayload["receipts"]): { title: string } {
   const fromMeeting = receipts.filter((receipt) => receipt.source?.kind === "meeting-item").length;
-  if (fromMeeting === receipts.length) return { title: "会议结论", note: "本结论形成于会议，并已回传至议题。" };
-  if (!fromMeeting) return { title: "已形成的决定", note: "本决定由一号位直接作出。" };
-  return { title: "已形成的决定", note: "包括会议回传的结论与一号位直接作出的决定。" };
+  return { title: fromMeeting === receipts.length ? "会议结论" : "已形成的决定" };
 }
 
 const meetingDay = (iso: string) =>
@@ -152,13 +150,6 @@ export function IssueCard({ card, collection = [], onCard, onNavigate, readOnly 
       <header>
         <div>
           <h2 id="issue-discussion-title">{activeReceipts.length ? receiptHeading(activeReceipts).title : meeting ? "提交会议讨论" : "备选方案"}</h2>
-          <p>
-            {activeReceipts.length
-              ? receiptHeading(activeReceipts).note
-              : meeting
-                ? "各方案的取舍与前提，供会上讨论参考，无需在本页选择。"
-                : "各方案的取舍与前提，供决策参考。"}
-          </p>
         </div>
         <span>{activeReceipts.length ? "已记录" : meeting ? `${meetingClock(meeting.payload.scheduledAt)} 上会` : "AI 预研"}</span>
       </header>
@@ -193,12 +184,8 @@ export function IssueCard({ card, collection = [], onCard, onNavigate, readOnly 
           ))}
         </ol>
       ) : (
-        <p className={s.empty}>{RESEARCH_LABEL[payload.research.status] ?? "预研尚未产出"}，备选方案将在预研完成后列出。</p>
+        <p className={s.empty}>{RESEARCH_LABEL[payload.research.status] ?? "预研尚未产出"}</p>
       )}
-      {/* 已形成决定后不再提示「先讨论 / 安排会议」（巡检 P1-10）。 */}
-      {activeReceipts.length ? null : <small>
-        {meeting ? "会议由主持人开启；材料与讨论记录保留在本议题内。" : readOnly ? "可在对话栏与 Agent 或群成员继续讨论。" : "可在对话栏与天枢讨论。"}
-      </small>}
     </section>
   );
 

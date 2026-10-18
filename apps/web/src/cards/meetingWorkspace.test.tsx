@@ -251,13 +251,15 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     expect(cancelled).toContain("已取消 · 9/24");
   });
 
-  it("开完之后录音在转写：会议记录页写明进度，转写失败提示改用妙记", () => {
+  it("开完之后录音在转写：会议记录页只标进度，转写失败只报错、导入按钮就在下面", () => {
     const transcribing = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", recording: { id: "r1", status: "transcribing", error: null } }));
     expect(transcribing).toContain("会议录音");
     expect(transcribing).toContain("正在识别");
-    expect(transcribing).toContain("录音转写中");
+    expect(transcribing).not.toContain("一小时会议约需数分钟");
     const failed = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", recording: { id: "r1", status: "failed", error: "识别服务没有返回结果。" } }));
-    expect(failed).toContain("识别服务没有返回结果。可以改用下面的妙记导入。");
+    expect(failed).toContain("识别服务没有返回结果。");
+    expect(failed).not.toContain("可以改用下面的妙记导入");
+    expect(failed).toContain("导入会议记录");
   });
 
   it("这一刻的一件事随会议状态走", () => {

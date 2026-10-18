@@ -199,7 +199,7 @@ function ReturnDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (r
     <form className={s.returnForm} onSubmit={(event) => { event.preventDefault(); if (reason.trim()) void submit(); }}>
       <TextField value={reason} onChange={setReason} maxLength={200} autoFocus>
         <Label>退回原因</Label>
-        <TextArea rows={3} placeholder="写清是不归你、会上没这么定，还是该找别人。" />
+        <TextArea rows={3} placeholder="比如：会上没这么定" />
       </TextField>
       {error ? <p className={s.error} role="alert">{error}</p> : null}
       <Button variant="primary" type="submit" isDisabled={busy || !reason.trim()}>退回，告诉主持人</Button>

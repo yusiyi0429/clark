@@ -976,74 +976,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/conversations/{scope}/new": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 新建对话：本人在该 scope 的当前对话有内容时归档（不删除），之后的消息进一条空白对话 */
-        post: operations["startNewConversation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/conversations/{scope}/archived": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 本人在该 scope 已归档、有内容的历史对话（新的在前） */
-        get: operations["listArchivedConversations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/conversations/{scope}/archived/{id}/messages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 只读回看一段历史对话 */
-        get: operations["getArchivedConversationMessages"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/conversations/{scope}/archived/{id}/restore": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 切回一段历史对话继续：当前对话归档，这一段成为当前对话 */
-        post: operations["restoreArchivedConversation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/conversations/{scope}/attachments": {
         parameters: {
             query?: never;
@@ -1940,6 +1872,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/memory/personal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的 */
+        get: operations["listPersonalMemory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/memory/personal/items/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 本人删掉（忘掉）一条个人记忆：不再装进对话，后台提炼也不再学回来 */
+        delete: operations["forgetPersonalMemoryItem"];
+        options?: never;
+        head?: never;
+        /** 本人改一条个人记忆的标题或正文；已替代或已忘掉的 409 */
+        patch: operations["updatePersonalMemoryItem"];
+        trace?: never;
+    };
     "/api/me/voiceprint": {
         parameters: {
             query?: never;
@@ -2748,26 +2715,8 @@ export interface components {
                     text: string;
                     detail: string;
                 };
+                memoryUsed?: string[];
             }[];
-            archivedCount?: number;
-        };
-        ArchivedConversationList: {
-            conversations: {
-                /** Format: uuid */
-                id: string;
-                firstQuestion: string;
-                /** Format: date-time */
-                startedAt: string;
-                /** Format: date-time */
-                lastAt: string;
-                /** Format: date-time */
-                archivedAt: string;
-                messageCount: number;
-            }[];
-        };
-        ConversationSwitchResponse: {
-            conversationId: string | null;
-            archived: boolean;
         };
         ConversationMessageRequest: {
             message: string;
@@ -2804,6 +2753,17 @@ export interface components {
             isError?: boolean;
             label?: string;
             detail?: string;
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
+            type: "step";
+            id: string;
+            label: string;
+            status: "done" | "active" | "pending" | "stopped";
+            result?: string;
         } | {
             runId: string;
             /** @description global 或稳定对象 scope */
@@ -7694,6 +7654,64 @@ export interface components {
             updatedAt: string | null;
             configured: boolean;
         };
+        PersonalMemoryItem: {
+            id: string;
+            /** @description 想法、立场、未决问题、理由、偏好与表达方式、做法 */
+            kind: "idea" | "stance" | "open_question" | "reason" | "preference" | "practice";
+            title: string;
+            text: string;
+            status: "active" | "superseded" | "forgotten";
+            supersededBy: string | null;
+            anchors: {
+                /** @description 对象 id（如 issue:<id>）或 topic:<主题> */
+                target: string;
+                /** @description 写入时钉住的对象版本 */
+                pinnedVersion?: number;
+            }[];
+            references: {
+                /** @description 依据，沿用 cite: 语法去掉前缀，如 chat:<会话 id>#<消息序号> */
+                ref: string;
+                quote?: string;
+                /** Format: date-time */
+                at: string;
+            }[];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        PersonalMemoryList: {
+            items: {
+                id: string;
+                /** @description 想法、立场、未决问题、理由、偏好与表达方式、做法 */
+                kind: "idea" | "stance" | "open_question" | "reason" | "preference" | "practice";
+                title: string;
+                text: string;
+                status: "active" | "superseded" | "forgotten";
+                supersededBy: string | null;
+                anchors: {
+                    /** @description 对象 id（如 issue:<id>）或 topic:<主题> */
+                    target: string;
+                    /** @description 写入时钉住的对象版本 */
+                    pinnedVersion?: number;
+                }[];
+                references: {
+                    /** @description 依据，沿用 cite: 语法去掉前缀，如 chat:<会话 id>#<消息序号> */
+                    ref: string;
+                    quote?: string;
+                    /** Format: date-time */
+                    at: string;
+                }[];
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+            }[];
+        };
+        UpdatePersonalMemoryItemRequest: {
+            title?: string;
+            text?: string;
+        };
         DictationResult: {
             text: string;
         };
@@ -10839,186 +10857,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    startNewConversation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                scope: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 当前对话 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConversationSwitchResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    listArchivedConversations: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                scope: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 历史对话 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArchivedConversationList"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    getArchivedConversationMessages: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                scope: string;
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Conversation 历史 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConversationHistory"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    restoreArchivedConversation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                scope: string;
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 当前对话 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConversationSwitchResponse"];
                 };
             };
             /** @description ApiError 统一错误 */
@@ -14304,6 +14142,184 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listPersonalMemory: {
+        parameters: {
+            query?: {
+                status?: "active" | "superseded" | "forgotten" | "all";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本人个人记忆 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalMemoryList"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    forgetPersonalMemoryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 忘掉后的条目 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalMemoryItem"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updatePersonalMemoryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePersonalMemoryItemRequest"];
+            };
+        };
+        responses: {
+            /** @description 改后的条目 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalMemoryItem"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

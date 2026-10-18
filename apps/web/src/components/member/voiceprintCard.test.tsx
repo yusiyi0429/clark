@@ -9,7 +9,8 @@ describe("我的声纹", () => {
     expect(html).toContain("还没录");
     expect(html).toContain("只用于在公司会议录音里认出我的发言；我可以随时删除");
     expect(html).toContain(VOICEPRINT_SCRIPT);
-    expect(html).toContain("由人确认");
+    expect(html).not.toContain("由人确认");
+    expect(html).toContain("15–30 秒");
     const start = html.slice(html.lastIndexOf("<button", html.indexOf("开始录制")), html.indexOf("开始录制"));
     expect(start).toContain("disabled");
   });

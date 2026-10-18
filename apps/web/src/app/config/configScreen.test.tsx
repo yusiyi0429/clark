@@ -19,10 +19,10 @@ describe("配置页渲染", () => {
 
   it("渲染 Top Nav、Page Header 与 Draft Status", () => {
     expect(html).toContain("返回首页");
-    expect(html).toContain("配置变更写入业务库并同步 Radar 监测范围");
+    expect(html).not.toContain("配置变更写入业务库并同步 Radar 监测范围");
     expect(html).toContain("退出登录");
     expect(html).toContain("SETTINGS");
-    expect(html).toContain("创建与管理组织级对象：会议、议题、战场与能力。新建后立刻进入对应的决策流程。");
+    expect(html).not.toContain("创建与管理组织级对象");
   });
 
   it("按设计顺序渲染 LTCO 与四张卡片，议题标题硬限 25 字", () => {
@@ -44,17 +44,14 @@ describe("配置页渲染", () => {
     expect(html).toContain("六个月目标");
     expect(html).toContain("负责人");
     expect(html).toContain("所属分组（可选）");
-    expect(html).toContain("长期目标更新后，下一次月度草案使用新版本");
+    expect(html).not.toContain("长期目标更新后，下一次月度草案使用新版本");
     expect(html).toContain("春节前完成核心业务第一次被真实证明");
     expect(html.match(/max="9999"/g)).toHaveLength(2);
   });
 
-  it("卡片页脚提示与主按钮文案照设计", () => {
-    expect(html).toContain("创建后进入会前预审");
+  it("卡片页脚不写说明，主按钮文案照设计", () => {
+    for (const hint of ["创建后进入会前预审", "议题进入待决策队列", "创建后进入战场管理", "出现在首页公司能力面板"]) expect(html).not.toContain(hint);
     expect(html).toContain("创建并进入会前预审");
-    expect(html).toContain("议题进入待决策队列");
-    expect(html).toContain("创建后进入战场管理");
-    expect(html).toContain("出现在首页公司能力面板");
     expect(html).toContain("管理战场");
     expect(html).toContain("管理能力");
   });

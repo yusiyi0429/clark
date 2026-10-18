@@ -2,7 +2,6 @@
 
 .picker { display: grid; gap: 14px; }
 
-.lead { margin: 0; color: #5d6878; font-size: 13px; line-height: 1.75; }
 
 .poses {
   display: inline-flex;

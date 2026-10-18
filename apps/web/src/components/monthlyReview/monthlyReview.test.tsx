@@ -54,7 +54,7 @@ describe("复盘项页", () => {
     expect(html).toContain("Agent 建议改写");
     expect(html).toContain("第三家延期两周，影响 10 月回款");
     expect(html).toContain("提交复盘");
-    expect(html).toContain("上传你手写的复盘");
+    expect(html).not.toContain("上传你手写的复盘");
   });
 
   it("采用建议走 resolve_suggestion，并带上栏位", async () => {
@@ -144,7 +144,8 @@ describe("个人复盘页", () => {
 
   it("从飞书导入的复盘：标明来源，四栏下的飞书链接可以点开", () => {
     const html = renderToStaticMarkup(<PersonalReviewScreen initialReview={personal} />);
-    expect(html).toContain("个人月度复盘 · 对照自己的 9 月 Mission Card · 从飞书导入");
+    expect(html).toContain("个人月度复盘 · 从飞书导入");
+    expect(html).not.toContain("对照自己的");
     expect(html).not.toContain("草稿：");
     expect(html).toContain(`依据：<a href="${feishu}" target="_blank" rel="noreferrer">${feishu}</a>`);
   });

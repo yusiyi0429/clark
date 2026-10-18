@@ -74,14 +74,14 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("任务卡页头与私人引用", () => {
-  it("header复用会议材料下拉，只提供任务细节与暂未开放的执行拆分", () => {
+  it("header复用会议材料下拉，只提供任务细节；没开放的执行拆分不出现", () => {
     const html = render();
     expect(html).toContain("data-header-tools"); expect(html).toContain("data-material-menu");
     expect(ui.viewMenu).toMatchObject({ selected: "details", label: "任务视图", switchLabel: "切换任务视图" });
     expect(ui.viewMenu!.tabs).toEqual([
       { id: "details", label: "任务细节", title: "任务细节" },
-      { id: "execution", label: "执行拆分", title: "执行拆分 · 下一版本由 Co-Agent 基于当前任务生成", isDisabled: true, hint: "即将开放" },
     ]);
+    expect(html).not.toContain("执行拆分");
     expect(ui.viewMenu!.onAdd).toBeUndefined(); expect(ui.progress).toMatchObject({ compact: true, entry: "member" });
     expect(html).not.toContain("开始汇总"); expect(html).not.toContain("重新开放全部");
   });
@@ -133,7 +133,7 @@ describe("本人确认及稳定版本", () => {
     own(); ui.post.mockResolvedValue({ response: { ok: true }, data: { cards: [savedConfirmation()] } });
     ui.buttons.get("确认我的任务")!.onPress!(); await vi.waitFor(() => expect(ui.post).toHaveBeenCalled()); await settle();
     expect(ui.post).toHaveBeenCalledExactlyOnceWith("/api/mission-cards/{cardId}/owner-confirmation", { params: { path: { cardId: "card" } }, body: { confirmed: true, round: 1, missionVersions: { mission: 1, "mission-two": 7 } } });
-    expect(render()).toContain("取消确认"); expect(group().agentNote).toContain("取消确认后可继续修改"); expect(ui.quote).not.toHaveBeenCalled();
+    expect(render()).toContain("取消确认"); expect(group()).not.toHaveProperty("agentNote"); expect(ui.quote).not.toHaveBeenCalled();
   });
   it("未决修改禁用确认并解释原因；取消只撤销本人确认", async () => {
     expect(own(false, false)).toContain("请先处理 1 条未决修改");
