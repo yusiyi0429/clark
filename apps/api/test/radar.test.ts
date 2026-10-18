@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { Card, type TRadarCandidateSubmission, type TRadarSourceItem } from "@warmap/contracts";
 import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
@@ -480,25 +480,38 @@ describe("Radar scheduled/manual public seam", () => {
         JSON.stringify(anchorList(10)), JSON.stringify(SOURCES),
       ]);
       let calls = 0;
-      const radar = createRadarService({
-        pool,
-        web: threeWebItemsPerAnchor,
-        assessor: {
-          // 模拟已启动后忽略 abort 的模型调用：它们在超时后才返回，也绝不能再启动后续 batch。
-          async assess() {
-            calls += 1;
-            await new Promise((resolve) => setTimeout(resolve, 50));
-            return { candidates: [] };
+      let allStarted!: () => void;
+      const started = new Promise<void>((resolve) => { allStarted = resolve; });
+      // 假时钟：扫描时限与模拟模型耗时只随手动推进而流逝，机器负载不会让时限提前耗尽
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const radar = createRadarService({
+          pool,
+          web: threeWebItemsPerAnchor,
+          assessor: {
+            // 模拟已启动后忽略 abort 的模型调用：它们在超时后才返回，也绝不能再启动后续 batch。
+            async assess() {
+              calls += 1;
+              if (calls === 3) allStarted();
+              await new Promise((resolve) => setTimeout(resolve, 50));
+              return { candidates: [] };
+            },
           },
-        },
-        now: () => NOW,
-        scanTimeoutMs: 20,
-      });
-      const result = await radar.runManual();
-      // 30 条来源 = 6 批，并发 3：超时前只启动了前 3 批，超时后不再启动第 4–6 批
-      expect(calls).toBe(3);
-      expect(result.status).toBe("completed");
-      expect(result.warnings.join(" ")).toContain("本轮有 15 条来源没来得及研判");
+          now: () => NOW,
+          scanTimeoutMs: 20,
+        });
+        const run = radar.runManual();
+        await started;
+        // 先到扫描时限（20ms），再让已启动的 3 批在 50ms 时返回
+        await vi.advanceTimersByTimeAsync(50);
+        const result = await run;
+        // 30 条来源 = 6 批，并发 3：超时前只启动了前 3 批，超时后不再启动第 4–6 批
+        expect(calls).toBe(3);
+        expect(result.status).toBe("completed");
+        expect(result.warnings.join(" ")).toContain("本轮有 15 条来源没来得及研判");
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
@@ -540,42 +553,54 @@ describe("Radar scheduled/manual public seam", () => {
         JSON.stringify(anchorList(10)), JSON.stringify(SOURCES),
       ]);
       let calls = 0;
-      const radar = createRadarService({
-        pool,
-        web: threeWebItemsPerAnchor,
-        assessor: {
-          assess({ sources }, signal) {
-            calls += 1;
-            // 第 1 批及时返回；其余批悬挂到超时，由 abort 信号中断
-            if (calls === 1) {
-              return Promise.resolve({ candidates: sources.map((source) => ({
-                sourceFingerprint: source.sourceFingerprint,
-                anchorId: "anchor-0",
-                summary: "超时前完成的候选",
-                strategicImpact: "待判断",
-                evidenceQuote: "连续原文",
-                unknowns: [],
-                score: { relevance: 4, impact: 3, urgency: 2 },
-                promotion: promotionFixture(),
-              })) });
-            }
-            return new Promise((_resolve, reject) => {
-              signal.addEventListener("abort", () => reject(signal.reason), { once: true });
-            });
+      let allStarted!: () => void;
+      const started = new Promise<void>((resolve) => { allStarted = resolve; });
+      // 假时钟：第 1 批完成、第 4 批补上之前，扫描时限不会因机器负载提前耗尽
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const radar = createRadarService({
+          pool,
+          web: threeWebItemsPerAnchor,
+          assessor: {
+            assess({ sources }, signal) {
+              calls += 1;
+              if (calls === 4) allStarted();
+              // 第 1 批及时返回；其余批悬挂到超时，由 abort 信号中断
+              if (calls === 1) {
+                return Promise.resolve({ candidates: sources.map((source) => ({
+                  sourceFingerprint: source.sourceFingerprint,
+                  anchorId: "anchor-0",
+                  summary: "超时前完成的候选",
+                  strategicImpact: "待判断",
+                  evidenceQuote: "连续原文",
+                  unknowns: [],
+                  score: { relevance: 4, impact: 3, urgency: 2 },
+                  promotion: promotionFixture(),
+                })) });
+              }
+              return new Promise((_resolve, reject) => {
+                signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+              });
+            },
           },
-        },
-        now: () => NOW,
-        scanTimeoutMs: 50,
-      });
-      const result = await radar.runManual();
-      // 6 批并发 3：第 1 批完成后补上第 4 批；超时时第 2–4 批被中断，第 5–6 批从未启动
-      expect(calls).toBe(4);
-      expect(result).toMatchObject({ status: "completed", createdSignals: 5 });
-      expect(result.warnings.join(" ")).toContain("本轮有 25 条来源没来得及研判（扫描超过 0.05 秒上限）");
-      expect(result.warnings.join(" ")).not.toContain("研判失败");
-      expect(Number((await db.query("SELECT count(*) FROM signals")).rows[0].count)).toBe(5);
-      expect((await db.query("SELECT last_run FROM radar_config WHERE id = 'default'")).rows[0].last_run)
-        .toMatchObject({ status: "completed", createdSignals: 5 });
+          now: () => NOW,
+          scanTimeoutMs: 50,
+        });
+        const run = radar.runManual();
+        await started;
+        await vi.advanceTimersByTimeAsync(50);
+        const result = await run;
+        // 6 批并发 3：第 1 批完成后补上第 4 批；超时时第 2–4 批被中断，第 5–6 批从未启动
+        expect(calls).toBe(4);
+        expect(result).toMatchObject({ status: "completed", createdSignals: 5 });
+        expect(result.warnings.join(" ")).toContain("本轮有 25 条来源没来得及研判（扫描超过 0.05 秒上限）");
+        expect(result.warnings.join(" ")).not.toContain("研判失败");
+        expect(Number((await db.query("SELECT count(*) FROM signals")).rows[0].count)).toBe(5);
+        expect((await db.query("SELECT last_run FROM radar_config WHERE id = 'default'")).rows[0].last_run)
+          .toMatchObject({ status: "completed", createdSignals: 5 });
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
