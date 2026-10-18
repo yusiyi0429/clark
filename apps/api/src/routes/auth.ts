@@ -4,6 +4,7 @@ import { LOCK_AFTER_FAILURES, changePasscode, roleOf, verifyCredentials, type Re
 import { sessionClearCookie, sessionSetCookie } from "../session.js";
 import { hasCompletedOnboarding } from "../onboarding.js";
 import { isAllowedOrigin, type AppInstance, type RouteContext } from "./shared.js";
+import { isAdmin } from "./admin.js";
 
 export function registerAuthRoutes(app: AppInstance, ctx: RouteContext): void {
   const { env, q, fail, requirePerson, readSession, now, companyMemory } = ctx;
@@ -90,6 +91,7 @@ export function registerAuthRoutes(app: AppInstance, ctx: RouteContext): void {
       displayName: findPerson(person.personId)?.displayName ?? person.personId,
       role: person.role,
       canSwitchView: person.canSwitchView,
+      ...(isAdmin(ctx, person.personId) ? { admin: true } : {}),
       onboarded: await hasCompletedOnboarding(q, person.personId),
       ...(loginId ? { loginId } : {}),
     };
