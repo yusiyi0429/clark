@@ -34,8 +34,11 @@ describe("对话里生成周复盘", () => {
     const cited = (input: WeeklyReviewDraftInput): TWeeklyReviewBody => {
       const first = weeklyRecords(input)[0];
       const line = (text: string) => (first ? `${text}${link(first)}。` : "缺少记录：这一周没有任何记录。");
-      return { overall: { text: line("状态：绿｜按计划推进"), sources: [] }, progress: { text: line("采集器上线"), sources: [] },
-        issues: { text: line("验收口径没定"), sources: [] }, implications: { text: "无", sources: [] }, actions: { text: line("下周定口径"), sources: [] } };
+      // 没有记录时按 D-33：整段只写缺少记录，但仍套模板（状态行、判断变化、当前处理三选一开头）。
+      const lead = (head: string, text: string) => (first ? line(`${head}｜${text}`) : `${head}｜缺少记录：这一周没有任何记录。`);
+      return { overall: { text: lead("状态：绿", "按计划推进"), sources: [] }, progress: { text: line("采集器上线"), sources: [] },
+        issues: { text: line("验收口径没定"), sources: [] }, implications: { text: lead("仍待验证", "口径定了才知道"), sources: [] },
+        actions: { text: lead("继续推进", "下周定口径"), sources: [] }, nextWeek: { text: line("定验收口径"), sources: [] } };
     };
     let result: Record<string, unknown> | undefined;
     const runtime: ConversationRuntime = { async run(input) {
