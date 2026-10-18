@@ -1227,7 +1227,8 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           focus = resolveFocus({ message: routedMessage, tier: route.tier, triage: route.battlefields, briefs, pinned });
           return unchangedGlobalContext(manager, focusGlobalContext(loaded.value, focus));
         };
-        const personalMemory = input.personalMemory ?? [];
+        // 个人记忆的选取（召回模型）与分诊同时进行，拼上下文包时才等它。
+        const personalMemory = (await input.personalMemory) ?? [];
         const prompt = await withRetrieve(RETRIEVE_SOURCES.contextPack, () => ({ scope: input.scope, references: input.referencesSnapshot?.length ?? 0 }), async () => JSON.stringify({
           currentObject: input.currentObject,
           references: input.referencesSnapshot,

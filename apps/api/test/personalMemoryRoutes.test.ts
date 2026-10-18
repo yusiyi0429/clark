@@ -38,13 +38,13 @@ test('main chat receives the owner\'s relevant personal memory and no longer aft
         const headers = { cookie: await t.loginCookie(), origin: t.publicOrigin };
         const id = await seed(t, '协作偏好', '先给结论。');
         await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '帮我分析一下' } });
-        expect(inputs[0].personalMemory).toMatchObject([{ id, title: '协作偏好', text: '先给结论。' }]);
+        expect(await inputs[0].personalMemory).toMatchObject([{ id, title: '协作偏好', text: '先给结论。' }]);
         // 别人的对话里看不到。
         await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers: { cookie: await t.memberCookie(), origin: t.publicOrigin }, payload: { message: '帮我分析一下' } });
-        expect(inputs[1].personalMemory).toBeUndefined();
+        expect(await inputs[1].personalMemory).toEqual([]);
         await t.app.inject({ method: 'DELETE', url: `/api/me/memory/personal/items/${id}`, headers });
         await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '继续' } });
-        expect(inputs[2].personalMemory).toBeUndefined();
+        expect(await inputs[2].personalMemory).toEqual([]);
     } finally {
         await t.close();
     }
@@ -65,6 +65,29 @@ test('the answer records which personal memory was actually put into context thi
         expect(rows[0]).toEqual({ role: 'user', memory_used: null });
         expect(rows[1].role).toBe('assistant');
         expect([...rows[1].memory_used].sort()).toEqual([style, channel].sort());
+    } finally {
+        await t.close();
+    }
+});
+
+test('the recall model picks alongside the runtime instead of before it, and memory_used records what it picked (memory-recall)', async () => {
+    let release: ((ids: string[]) => void) | undefined;
+    let wanted: string[] = [];
+    const t = await createTestApp({}, { async run(input) {
+        // 运行时开始时召回还没返回：路由没有先等召回、再把这一轮交给运行时（召回与分诊同时跑）。
+        if (!release) throw new Error('recall did not start before the runtime');
+        release(wanted);
+        const memory = await input.personalMemory;
+        return { assistantMessage: `回复：${(memory ?? []).map((item) => item.title).join('、')}`, runtimeEntries: input.runtimeEntries };
+    } }, { personalMemoryRecall: () => new Promise<string[]>((resolve) => { release = resolve; }) });
+    try {
+        const headers = { cookie: await t.loginCookie(), origin: t.publicOrigin };
+        const expansion = await seed(t, '扩编方向还没想好', '还没想好销售扩编往哪个方向扩。');
+        await seed(t, '饮食', '喜欢咖啡。');
+        wanted = [expansion];
+        await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '卖货团队还有什么没定的？' } });
+        const rows = await t.sql("SELECT role, content, memory_used FROM conversation_messages ORDER BY sequence");
+        expect(rows[1]).toEqual({ role: 'assistant', content: '回复：扩编方向还没想好', memory_used: [expansion] });
     } finally {
         await t.close();
     }
@@ -107,7 +130,7 @@ test('forgetting a memory keeps the model context of every conversation of that 
         expect(await t.sql("SELECT scope, runtime_entries, pi_session_id FROM conversations WHERE owner_id = 'person-fixture-001' ORDER BY scope")).toEqual(before);
         await t.app.inject({ method: 'POST', url: '/api/conversations/global/messages', headers, payload: { message: '第二轮' } });
         expect(inputs[1].runtimeEntries).toEqual([{ turn: 1 }]);
-        expect(inputs[1].personalMemory).toBeUndefined();
+        expect(await inputs[1].personalMemory).toEqual([]);
     } finally {
         await t.close();
     }

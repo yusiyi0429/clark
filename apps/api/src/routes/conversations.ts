@@ -192,10 +192,18 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         // 当前页面对象就是这一轮的 anchor：检索时只比对象、不比版本；钉住的版本比现在旧时标「基于旧版本」（R8）。
         const objectRef = object.snapshot?.objectRef;
         const currentObject = objectRef ? { target: `${objectRef.type}:${objectRef.id}`, version: objectRef.version } : undefined;
-        const personalMemory = await ctx.personalMemory.select(owner, req.body.message, { currentObject }, client)
+        // 选取要等召回模型（personalMemoryRecall.ts）：不在这里等，交给运行时与分诊同时进行，拼上下文包时才等它。
+        // 本轮实际装进上下文的个人记忆 id：上下文包里的，加上检索工具返回的；随回答存进 memory_used。
+        // 运行时等的是记完 id 的这个 Promise，模型看到的条目一定已经记下。
+        const memoryUsed = new Set<string>();
+        const personalMemory = ctx.personalMemory.select(owner, req.body.message, { currentObject }, client)
           .then((entries) => entries.map(({ id, title, text, createdAt, basedOnOldVersion }) => ({ id, title, text, createdAt, ...(basedOnOldVersion ? { basedOnOldVersion } : {}) })), (error: unknown) => {
             logEvent({ event: "personal_memory.unavailable", requestId: String(req.id), runId, scope: req.params.scope, errorCode: (error as { code?: string })?.code ?? "PERSONAL_MEMORY_UNAVAILABLE" });
             return [];
+          })
+          .then((entries) => {
+            for (const entry of entries) memoryUsed.add(entry.id);
+            return entries;
           });
         // 主 Agent 记下的条目：依据是本轮这句原话，anchor 是当前页面对象（钉住此刻的版本）。
         const memoryTools = personalMemoryToolsFor(ctx.personalMemory, owner, (event) =>
@@ -203,8 +211,6 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           reference: { ref: `chat:${row.id}#${userSequence}`, quote: req.body.message.slice(0, 500), at: new Date().toISOString() },
           anchors: currentObject ? [{ target: currentObject.target, ...(typeof currentObject.version === "number" ? { pinnedVersion: currentObject.version } : {}) }] : [],
         });
-        // 本轮实际装进上下文的个人记忆 id：上下文包里的，加上检索工具返回的；随回答存进 memory_used。
-        const memoryUsed = new Set(personalMemory.map((entry) => entry.id));
         const personalMemoryTools = { ...memoryTools, search: async (query: string) => {
           const entries = await memoryTools.search(query);
           for (const entry of entries) memoryUsed.add(entry.id);
@@ -384,7 +390,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             message: runtimeMessage,
             currentObject: object.snapshot,
             referencesSnapshot: references.snapshots,
-            ...(personalMemory.length ? { personalMemory } : {}),
+            personalMemory,
             personalMemoryTools,
             // 本人历史对话原文检索（3e）：跨所有页面与归档，只查本人，本轮这条不算。
             searchHistory: (query: string) => searchOwnConversationHistory(q, { personId: owner, query, excludeRunId: runId }),

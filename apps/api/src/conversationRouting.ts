@@ -300,7 +300,7 @@ export function parseTriage(text: string): TriageResult | null {
   }
 }
 
-type ResponsesClientOptions = { baseUrl: string; apiKey: string; modelId: string; fetch?: typeof fetch;
+export type ResponsesClientOptions = { baseUrl: string; apiKey: string; modelId: string; fetch?: typeof fetch;
   /** 快模型（TRIAGE_MODEL，DeepSeek）出错时改用的模型（LIGHT_MODEL，terra）；不给或与 modelId 相同就不重试。 */
   fallbackModelId?: string };
 
@@ -328,7 +328,7 @@ export function fallbackModelFor(options: Pick<ResponsesClientOptions, "modelId"
  * 网宿 Responses 网关上的一次快模型调用（关思考 effort none，流式）：每来一段文字调一次 onText，返回非 undefined 就提前停。
  * key 只放在请求头，不进日志和报错。
  */
-async function streamFastResponse<T>(options: ResponsesClientOptions, request: { instructions: string; input: string; maxOutputTokens: number; signal: AbortSignal },
+export async function streamFastResponse<T>(options: ResponsesClientOptions, request: { instructions: string; input: string; maxOutputTokens: number; signal: AbortSignal },
   onText: (text: string) => T | undefined): Promise<{ text: string; early?: T } | null> {
   const url = `${options.baseUrl.replace(/\/+$/, "").replace(/\/responses$/, "")}/responses`;
   const response = await (options.fetch ?? fetch)(url, {

@@ -254,6 +254,8 @@ export async function createTestApp(
     personalRadarService?: PersonalRadarService;
     /** 个人记忆提炼的模型流；不注入时一律交 noop 候选（测试里不调真实模型）。 */
     personalDistillationStream?: Parameters<typeof buildApp>[0]["personalDistillationStream"];
+    /** 个人记忆的召回模型替身；不注入时不用模型、只按字面重合选（测试里不调真实模型）。 */
+    personalMemoryRecall?: Parameters<typeof buildApp>[0]["personalMemoryRecall"];
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {
@@ -270,7 +272,7 @@ export async function createTestApp(
   client.release();
   const env = { ...testEnv, ...seedOverrides };
   const { monthlyDraftAgent, monthlyNow, recordingDeps, monthlyReviewAgents, monthlyReviewRetryDelayMs, ...restRuntimeOptions } = runtimeOptions;
-  const appRuntimeOptions = { backgroundPreflight: false, personalDistillationStream: noopDistillationStream, ...restRuntimeOptions };
+  const appRuntimeOptions = { backgroundPreflight: false, personalDistillationStream: noopDistillationStream, personalMemoryRecall: null, ...restRuntimeOptions };
   const monthlyPlans = monthlyDraftAgent
     ? createMonthlyPlanService({ pool, companyMemory: loadCompanyMemory(env), agent: monthlyDraftAgent, now: monthlyNow })
     : undefined;
