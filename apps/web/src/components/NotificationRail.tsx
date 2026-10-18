@@ -21,6 +21,7 @@ import { MonthlyReviewNotices } from "./monthlyReview/MonthlyReviewNotices";
 import { PersonalReviewBoard } from "./monthlyReview/PersonalReviewBoard";
 import { useWeeklyReviewBoard, WeeklyReviewBoard } from "./weeklyReview/WeeklyReviewBoard";
 import { RequestNotices } from "./requests/RequestNotices";
+import { HostDecisionNotices } from "./meeting/HostDecisionNotices";
 import { CycleCountdown } from "./CycleCountdown";
 import { RADAR_ORIGIN_LABEL, RadarOriginIcon } from "./OriginTag";
 import { preflightInFlight } from "@/cards/meetingIssueModel";
@@ -291,6 +292,7 @@ export function NotificationRail({
       <div className={n.noticeList}>
         <CycleCountdown />
         {onCard ? <StrategicConfirmCard cards={cards} onCard={onCard} onNavigate={onNavigate} /> : null}
+        <HostDecisionNotices meetingBase="/meetings" onNavigate={onNavigate} />
         <WeeklyReviewBoard onNavigate={onNavigate} state={weeklyReviews} />
         <PersonalReviewBoard onNavigate={onNavigate} />
         <RequestNotices base="/requests" currentHref={currentHref} onNavigate={onNavigate} />

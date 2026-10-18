@@ -1,0 +1,55 @@
+/* 影响卡：沿用传话二级页的阅读面与 token（requests.module.css）；卡面是一张带阴影的卡，前因后果在下面折叠。 */
+.face { display: grid; gap: 14px; min-width: 0; padding: 20px 20px 16px; border: 1px solid var(--hairline); border-radius: var(--onboarding-inset-radius); background: var(--surface); box-shadow: 0 1px 2px rgb(16 24 40 / 4%), 0 8px 24px rgb(16 24 40 / 6%); }
+.face[data-superseded] { opacity: .62; }
+.flags { display: flex; flex-wrap: wrap; gap: 6px; }
+.flag { display: inline-flex; align-items: center; padding: 0 10px; border-radius: var(--onboarding-pill-radius); font-size: 12px; line-height: 22px; font-weight: 600; white-space: nowrap; color: var(--ink-muted); background: color-mix(in oklab, var(--ink) 6%, var(--surface)); }
+.flag[data-tone='agent'] { color: #8a5a00; background: color-mix(in oklab, #f5a524 16%, var(--surface)); }
+.flag[data-tone='fix'] { color: var(--brand-deep); background: color-mix(in oklab, var(--onboarding-blue) 12%, var(--surface)); }
+.correction { margin: 0; padding: 8px 12px; border-left: 3px solid var(--onboarding-blue); border-radius: 0 var(--onboarding-control-radius) var(--onboarding-control-radius) 0; background: color-mix(in oklab, var(--onboarding-blue) 5%, var(--surface)); color: var(--ink); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.impact { margin: 0; color: var(--ink); font-size: 17px; line-height: 1.75; font-weight: 500; overflow-wrap: anywhere; }
+
+/* 要做什么：一行标签 + 动作 + 截止。 */
+.action { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: 10px 12px; border-radius: var(--onboarding-control-radius); background: color-mix(in oklab, var(--onboarding-blue) 6%, var(--surface)); }
+.action[data-kind='know'] { background: color-mix(in oklab, var(--ink) 4%, var(--surface)); }
+.actionLabel { flex: none; color: var(--brand-deep); font-size: 13px; font-weight: 700; }
+.action[data-kind='know'] .actionLabel { color: var(--ink-muted); }
+.actionText { flex: 1 1 240px; min-width: 0; color: var(--ink); font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
+.actionText:empty { display: none; }
+.due { flex: none; margin-left: auto; color: var(--brand-deep); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* 落到的对象：一排小标。 */
+.targets { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.target { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; padding: 3px 10px 3px 8px; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-control-radius); color: var(--ink-muted); font-size: 13px; line-height: 20px; }
+.targetKind { flex: none; color: var(--ink-faint); font-weight: 500; }
+.targetTitle { min-width: 0; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.faceBar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 4px; border-top: 1px solid var(--hairline); }
+
+/* 前因后果：原生 details，收起时只有一行。 */
+.more { min-width: 0; border-bottom: 1px solid var(--hairline); }
+.more > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; color: var(--ink); font-size: 15px; font-weight: 600; cursor: pointer; list-style: none; }
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary svg { color: var(--ink-faint); transition: transform .18s ease; }
+.more[open] > summary svg { transform: rotate(180deg); }
+.more > summary:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; border-radius: 4px; }
+.moreBody { display: grid; gap: 14px; padding: 0 0 18px; }
+.why { margin: 0; color: var(--ink); font-size: 15px; line-height: 1.75; overflow-wrap: anywhere; }
+.facts { display: grid; gap: 6px; margin: 0; }
+.facts > div { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; }
+.facts dt { color: var(--ink-faint); font-size: 13px; line-height: 1.7; }
+.facts dd { margin: 0; color: var(--ink); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.quote { margin: 0; display: grid; gap: 4px; }
+.quote blockquote { margin: 0; padding: 10px 14px; border-left: 3px solid var(--hairline-strong); border-radius: 0 var(--onboarding-control-radius) var(--onboarding-control-radius) 0; background: color-mix(in oklab, var(--ink) 3%, var(--surface)); color: var(--ink); font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.quote figcaption { color: var(--ink-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.askWho { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.agentAvatar { background: color-mix(in oklab, var(--confirmed) 14%, var(--surface)); color: var(--confirmed); }
+.skeleton { height: 220px; border-radius: var(--onboarding-inset-radius); background: linear-gradient(90deg, color-mix(in oklab, var(--ink) 4%, var(--surface)), color-mix(in oklab, var(--ink) 7%, var(--surface)), color-mix(in oklab, var(--ink) 4%, var(--surface))); background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+@media (max-width: 759px) {
+  .face { padding: 16px 14px 14px; }
+  .impact { font-size: 16px; }
+  .due { margin-left: 0; }
+  .faceBar > * { flex: 1; }
+  .facts > div { grid-template-columns: 64px minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .more > summary svg { transition: none; } }
