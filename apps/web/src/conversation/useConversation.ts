@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseSseBlock, splitSse, type ConversationEvent } from "./sse";
 import type { Step, StepStatus } from "@/components/steps/StepList";
+import type { TConversationCard } from "@warmap/contracts";
 import { afterResize, resizing } from "./resizeGate";
 import { useStableCallback } from "./stableCallback";
 
@@ -25,7 +26,9 @@ export type RecoveryNote = { text: string; detail: string };
 export type Message = { sequence: number; role: "user" | "assistant"; content: string; referencesSnapshot?: ReferenceSnapshot[]; attachments?: Attachment[]; createdAt?: string; runId?: string;
   recoveryNote?: RecoveryNote;
   /** 这一轮实际装进上下文的个人记忆 id（服务端随历史给）：回答里的记忆标记只认这些。 */
-  memoryUsed?: string[] };
+  memoryUsed?: string[];
+  /** 这一轮工具生成的卡（生成复盘、帮我问问、请同事帮忙），排在回答后面。 */
+  cards?: TConversationCard[] };
 export type Attachment = { id: string; fileName: string; mimeType: string };
 export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | "aborted";
 /** 历史读取：`ready` 且 0 条 = 真的没有记录；`error` = 没读到（不代表没有记录）。与一轮回答的 `status` 无关。 */
