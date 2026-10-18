@@ -111,7 +111,7 @@ export const THREE_LAYER_RULES = `# 三层取用
 - \`read_progress\`：执行事项的状态与进展、本机采集整理出的进展（含计划外工作）；
 - \`read_reviews\`：月度复盘（个人、战场与能力域，附评论）与周复盘；
 - \`read_object_tree\`：从公司、战场、Mission、Task 或某个人出发，向上（所属）、向下（下属）、向旁边（同级）走。
-people 填「all」（全员）、「me」或人名列表；from、to 是月份（YYYY-MM），不填按 focus。要几个月就一次读完，不按月分多次读。
+people 填「all」（全员）、「me」或人名列表；from、to 是月份（YYYY-MM），不填按 focus。要几个人、几个战场、几个月就一次读完（全员就填 all，不限战场就不填 battlefieldId），不按人、按战场或按月分多次读。
 结果里 filtered 大于 0 表示有这么多条因权限没有读到（进展与复盘：CEO 能看全部，其他人只能看同一战场的）：回答里必须写明有几条没读到、原因是权限，不能猜被过滤的内容；跨战场的可以请本人用「请同事帮忙」直接问对方，或找 CEO。unknownPeople 是没对上人员目录的名字，要说明。引用读到的内容时照抄结果里的 cite 作出处。
 \`scopeOverride\`（有时才出现）是本人在界面上改过的读取范围：这一轮一律按它读，回答开头不复述范围。`;
 
@@ -124,6 +124,8 @@ export function createCompanyMap(deps: CompanyMapDeps) {
     .then((result) => result.rows as Awaited<NonNullable<typeof battlefields>>));
   const nameOf = (id: string) => names.get(id) ?? id;
   let lastLabel: string | undefined;
+  /** 这一轮跨对象读过的总范围：模型按战场、按人分几次读时，范围标签显示合起来的那一个（人取并集，战场不同就不限，月份取首尾）。 */
+  let union: { people: string[] | null; battlefieldId: string | null; from: string; to: string } | undefined;
 
   /** 人名 / personId → personId；对不上的单独列出。 */
   const resolvePeople = (people: ScopeArgs["people"]): { ids: string[] | null; unknown: string[] } => {
@@ -158,10 +160,21 @@ export function createCompanyMap(deps: CompanyMapDeps) {
     const label = scopeLabel({ people: ids, battlefieldName: field?.name ?? null, from, to, viewerId: viewer.personId }, names);
     // 跨对象（不只是本人、或不只一个月、或限定了战场）才发范围标签；一个人也没对上时什么都没读，不发。
     const crossObject = (ids === null || ids.some((id) => id !== viewer.personId) || from !== to || Boolean(field)) && (ids === null || ids.length > 0);
-    if (crossObject && label !== lastLabel && deps.onScope) {
-      lastLabel = label;
-      const params: TReadScopeParams = { people: ids === null ? "all" : ids.length === 1 && ids[0] === viewer.personId ? "me" : ids, ...(field ? { battlefieldId: field.id } : {}), from, to };
-      deps.onScope({ label, params, choices: { people: deps.people.slice(0, 80).map((person) => ({ id: person.personId, name: person.displayName })) } });
+    if (crossObject && deps.onScope) {
+      union = !union ? { people: ids, battlefieldId: field?.id ?? null, from, to } : {
+        people: union.people === null || ids === null ? null : [...new Set([...union.people, ...ids])],
+        battlefieldId: union.battlefieldId === (field?.id ?? null) ? union.battlefieldId : null,
+        from: union.from < from ? union.from : from, to: union.to > to ? union.to : to,
+      };
+      const total = union;
+      const totalField = total.battlefieldId ? fields.find((item) => item.id === total.battlefieldId) : undefined;
+      const totalLabel = scopeLabel({ people: total.people, battlefieldName: totalField?.name ?? null, from: total.from, to: total.to, viewerId: viewer.personId }, names);
+      if (totalLabel !== lastLabel) {
+        lastLabel = totalLabel;
+        const params: TReadScopeParams = { people: total.people === null ? "all" : total.people.length === 1 && total.people[0] === viewer.personId ? "me" : total.people,
+          ...(totalField ? { battlefieldId: totalField.id } : {}), from: total.from, to: total.to };
+        deps.onScope({ label: totalLabel, params, choices: { people: deps.people.slice(0, 80).map((person) => ({ id: person.personId, name: person.displayName })) } });
+      }
     }
     return { people: ids, battlefieldId: field?.id ?? (merged.battlefieldId ? "__unknown__" : null), from, to, unknownPeople: unknown, ...(merged.battlefieldId && !field ? { unknownBattlefield: merged.battlefieldId } : {}), label };
   };

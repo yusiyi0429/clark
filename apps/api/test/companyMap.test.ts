@@ -80,7 +80,8 @@ describe("三层取用的权限与范围标签", () => {
       expect(JSON.stringify(read)).not.toContain("品牌物料");
 
       const reviews = await member.map.readReviews({ people: "all", kind: "weekly" });
-      expect(reviews.weekly).toEqual([]);
+      // 同战场丙已提交的那份看得到；品牌战场丁的那份被过滤。
+      expect((reviews.weekly as { person: string }[]).map((item) => item.person)).toEqual(["丙"]);
       expect(reviews.filtered).toBe(1);
 
       const ceo = mapFor(q, CEO, "ceo");
@@ -101,26 +102,19 @@ describe("三层取用的权限与范围标签", () => {
       await migrate(db);
       const q: Q = (sql, params) => db.query(sql, params);
       await seed(q);
-      const texts = (read: { weekly: unknown[] }) => (read.weekly as { person: string; text: string }[]).map((item) => `${item.person}:${item.text}`).sort();
+      const texts = (read: { weekly: unknown[] }) => (read.weekly as { person: string; text: string }[]).map((item) => `${item.person}:${item.text.replace(/\s+/g, " ")}`).sort();
 
       const ceo = await mapFor(q, CEO, "ceo").map.readReviews({ people: "all", kind: "weekly" });
-      expect(texts(ceo)).toEqual(["丁:本周总体判断
-丁本周推进品牌
-
-关键进展与 Evidence
-物料完成", "丙:本周总体判断
-丙本周写完接口文档"].sort());
+      expect(texts(ceo)).toEqual(["丁:本周总体判断 丁本周推进品牌 关键进展与 Evidence 物料完成", "丙:本周总体判断 丙本周写完接口文档"].sort());
       expect(ceo.filtered).toBe(0);
       expect(JSON.stringify(ceo)).not.toContain("还没提交");
 
       const peer = await mapFor(q, YI, "member").map.readReviews({ people: "all", kind: "weekly" });
-      expect(texts(peer)).toEqual(["丙:本周总体判断
-丙本周写完接口文档"]);
+      expect(texts(peer)).toEqual(["丙:本周总体判断 丙本周写完接口文档"]);
       expect(peer.filtered).toBe(1);
 
       const self = await mapFor(q, BING, "member").map.readReviews({ people: "me", kind: "weekly" });
-      expect(texts(self)).toContain("丙:本周总体判断
-丙还没提交的草稿");
+      expect(texts(self)).toContain("丙:本周总体判断 丙还没提交的草稿");
     });
   }, 60_000);
 
@@ -137,6 +131,13 @@ describe("三层取用的权限与范围标签", () => {
       expect(cards.filtered).toBe(0);
       expect(member.scopes.at(-1)?.label).toBe("全员 · 9–10 月");
       expect(member.scopes.at(-1)?.params).toEqual({ people: "all", from: "2026-09", to: "2026-10" });
+
+      // 按战场分两次读：标签显示合起来的范围。
+      const split = mapFor(q, CEO, "ceo");
+      await split.map.readMissionCards({ people: "all", battlefieldId: "growth", from: "2026-09", to: "2026-10" });
+      await split.map.readMissionCards({ people: "all", battlefieldId: "brand", from: "2026-08", to: "2026-10" });
+      expect(split.scopes.map((scope) => scope.label)).toEqual(["增长战场 · 9–10 月", "全员 · 8–10 月"]);
+      expect(split.scopes.at(-1)?.params).toEqual({ people: "all", from: "2026-08", to: "2026-10" });
 
       // 只读自己、只一个月：页面默认焦点之内，不发标签。
       const quiet = mapFor(q, YI, "member");
