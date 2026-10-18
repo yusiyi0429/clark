@@ -69,6 +69,14 @@ export function ScopeChip({ scope }: { scope: TReadScope }) {
   );
 }
 
+/** 比出处浮层宽一点（放得下人名）；窄屏不超出视口左右各 8px。 */
+const SCOPE_POP_WIDTH = 340;
+function fit(place: { left: number; width: number }): { left: number; width: number } {
+  const viewport = typeof window === "undefined" ? SCOPE_POP_WIDTH + 16 : window.innerWidth;
+  const width = Math.min(Math.max(place.width, SCOPE_POP_WIDTH), viewport - 16);
+  return { width, left: Math.max(8, Math.min(place.left, viewport - width - 8)) };
+}
+
 function ScopePop({ popId, anchor, onClose, children }: { popId: string; anchor: RefObject<HTMLButtonElement | null>; onClose: () => void; children: React.ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<ReturnType<typeof popPosition> | null>(null);
@@ -101,7 +109,7 @@ function ScopePop({ popId, anchor, onClose, children }: { popId: string; anchor:
   }, [anchor, measure, onClose]);
   return createPortal(
     <div ref={box} id={popId} role="dialog" aria-label="读取范围" className={`${c.pop} ${s.pop}`} data-scope-pop=""
-      style={place ? ({ left: place.left, top: place.top, bottom: place.bottom, width: Math.max(place.width, 300) } as CSSProperties) : { visibility: "hidden" }}>
+      style={place ? ({ ...fit(place), top: place.top, bottom: place.bottom } as CSSProperties) : { visibility: "hidden" }}>
       {children}
     </div>,
     document.body,
@@ -140,16 +148,22 @@ export function ScopeEditor({ scope, onApply, onCancel, large = false, now }: {
   const initialPeople = scope.params.people ?? "all";
   const [who, setWho] = useState<"all" | "me" | "some">(initialPeople === "all" || initialPeople === "me" ? initialPeople : "some");
   const [picked, setPicked] = useState<string[]>(Array.isArray(initialPeople) ? initialPeople : []);
+  /** 本人动过「谁」：动过且不是全员时，原来的战场限定不再留着（标签上看不出来的限制不留）。 */
+  const [touched, setTouched] = useState(false);
   const months = useMemo(() => recentMonths(now ?? new Date(), [scope.params.from, scope.params.to]), [now, scope.params.from, scope.params.to]);
   const [from, setFrom] = useState(scope.params.from ?? months[0]);
   const [to, setTo] = useState(scope.params.to ?? months[0]);
   const people: TReadScopeParams["people"] = who === "some" ? picked : who;
   const ordered = from <= to ? { from, to } : { from: to, to: from };
-  const params: TReadScopeParams = { people, ...(scope.params.battlefieldId ? { battlefieldId: scope.params.battlefieldId } : {}), ...ordered };
-  const label = scopeLabelOf(params, names, scope.label);
-  const changed = label !== scope.label || JSON.stringify(params) !== JSON.stringify(scope.params);
+  const keepField = Boolean(scope.params.battlefieldId) && (who === "all" || !touched);
+  const params: TReadScopeParams = { people, ...(keepField ? { battlefieldId: scope.params.battlefieldId } : {}), ...ordered };
+  const label = keepField && who !== "all" ? `${scope.label.split(" · ")[0]} · ${scopeLabelOf({ ...params, battlefieldId: undefined }, names)}` : scopeLabelOf(params, names, scope.label);
+  // 按字段比（读回历史时 jsonb 会重排键的顺序）。
+  const key = (value: TReadScopeParams) => JSON.stringify([value.people ?? "all", value.battlefieldId ?? null, value.from ?? null, value.to ?? null]);
+  const changed = label !== scope.label || key(params) !== key(scope.params);
   const valid = who !== "some" || picked.length > 0;
   const toggle = (id: string) => {
+    setTouched(true);
     setWho("some");
     setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   };
@@ -158,8 +172,8 @@ export function ScopeEditor({ scope, onApply, onCancel, large = false, now }: {
       <div className={s.row}>
         <span className={s.key} aria-hidden>谁</span>
         <div className={s.options} role="group" aria-label="谁">
-          <button type="button" className={s.option} aria-pressed={who === "all"} onClick={() => { setWho("all"); setPicked([]); }}>全员</button>
-          <button type="button" className={s.option} aria-pressed={who === "me"} onClick={() => { setWho("me"); setPicked([]); }}>我</button>
+          <button type="button" className={s.option} aria-pressed={who === "all"} onClick={() => { setTouched(true); setWho("all"); setPicked([]); }}>全员</button>
+          <button type="button" className={s.option} aria-pressed={who === "me"} onClick={() => { setTouched(true); setWho("me"); setPicked([]); }}>我</button>
           {choices.map((person) => (
             <button key={person.id} type="button" className={s.option} aria-pressed={who === "some" && picked.includes(person.id)} onClick={() => toggle(person.id)}>{person.name}</button>
           ))}

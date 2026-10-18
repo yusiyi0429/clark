@@ -48,8 +48,8 @@ input.input { height: 36px; font-weight: 600; }
 .place:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
 
 .done { padding-top: 10px; padding-bottom: 10px; }
-.doneLink { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: #178a6b; font-size: 13px; font-weight: 500; text-decoration: none; }
-.doneLink strong { color: #25282e; font-weight: 600; }
+.doneLink.doneLink { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: #178a6b; font-size: 13px; font-weight: 500; text-decoration: none; }
+.doneLink.doneLink strong { color: #25282e; font-weight: 600; }
 .doneLink svg:last-child { color: #9599a1; transition: transform 140ms ease; }
 .doneLink:hover svg:last-child { transform: translateX(2px); color: #2f6bb4; }
 .doneLink:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; border-radius: 4px; }

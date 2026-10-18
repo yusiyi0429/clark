@@ -112,7 +112,7 @@ export const THREE_LAYER_RULES = `# 三层取用
 - \`read_reviews\`：月度复盘（个人、战场与能力域，附评论）与周复盘；
 - \`read_object_tree\`：从公司、战场、Mission、Task 或某个人出发，向上（所属）、向下（下属）、向旁边（同级）走。
 people 填「all」（全员）、「me」或人名列表；from、to 是月份（YYYY-MM），不填按 focus。要几个人、几个战场、几个月就一次读完（全员就填 all，不限战场就不填 battlefieldId），不按人、按战场或按月分多次读。
-结果里 filtered 大于 0 表示有这么多条因权限没有读到（进展与复盘：CEO 能看全部，其他人只能看同一战场的）：回答里必须写明有几条没读到、原因是权限，不能猜被过滤的内容；跨战场的可以请本人用「请同事帮忙」直接问对方，或找 CEO。unknownPeople 是没对上人员目录的名字，要说明。引用读到的内容时照抄结果里的 cite 作出处。
+结果里 filtered 大于 0 表示有这么多条因权限没有读到（等于 0 时不用提权限）（进展与复盘：CEO 能看全部，其他人只能看同一战场的）：回答里必须写明有几条没读到、原因是权限，不能猜被过滤的内容；跨战场的可以请本人用「请同事帮忙」直接问对方，或找 CEO。unknownPeople 是没对上人员目录的名字，要说明。引用读到的内容时照抄结果里的 cite 作出处。
 \`scopeOverride\`（有时才出现）是本人在界面上改过的读取范围：这一轮一律按它读，回答开头不复述范围。`;
 
 export function createCompanyMap(deps: CompanyMapDeps) {

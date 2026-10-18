@@ -33,6 +33,15 @@ describe("范围标签", () => {
     expect(html).toMatch(/aria-pressed="true"[^>]*>全员</);
     expect(html).toMatch(/<button type="submit"[^>]*disabled=""/);
     expect(html).toContain('value="2026-07"');
+    // 读回历史时 jsonb 会重排键：同一个范围仍算没改。
+    const reordered: TReadScope = { ...SCOPE, params: { to: "2026-10", from: "2026-07", people: "all" } };
+    const same = renderToStaticMarkup(createElement(ScopeEditor, { scope: reordered, onApply: () => undefined, onCancel: () => undefined, now: new Date("2026-10-18T00:00:00Z") }));
+    expect(same).toMatch(/<button type="submit"[^>]*disabled=""/);
+    // 限定了战场又点了人（「词元云集 · 孙铭泽 · 8–10 月」）：打开时原样显示，没改不能点。
+    const field: TReadScope = { ...SCOPE, label: "词元云集 · 孙铭泽 · 8–10 月", params: { people: ["p3"], battlefieldId: "tk", from: "2026-08", to: "2026-10" } };
+    const opened = renderToStaticMarkup(createElement(ScopeEditor, { scope: field, onApply: () => undefined, onCancel: () => undefined, now: new Date("2026-10-18T00:00:00Z") }));
+    expect(visible(opened)).toContain("词元云集 · 孙铭泽 · 8–10 月");
+    expect(opened).toMatch(/<button type="submit"[^>]*disabled=""/);
   });
 });
 
