@@ -3,6 +3,9 @@ import type { Pool } from "pg";
 import type { TScheduleMigrationCandidate, TWorkBasisCandidate } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
 import { inTransaction } from "./collector.js";
+import type { FeishuClient, FeishuDocType } from "./feishu/client.js";
+import type { FeishuEnv } from "./feishu/config.js";
+import { readUserAccessToken } from "./feishu/tokens.js";
 
 /**
  * 上手最后一页的两个清单（前端交互说明 10a、第 7 节 ③ 搬家、第 8 节工作依据清单）。
@@ -22,10 +25,46 @@ export function feishuFallbackTitle(url: string): string {
   return match ? `飞书${FEISHU_KIND[match[1]]} · ${match[2].slice(0, 8)}` : url.replace(/^https?:\/\//, "").slice(0, 80);
 }
 
-type BasisRow = { doc_kind: TWorkBasisCandidate["kind"]; doc_ref: string; title: string; url: string | null; revision: string | null; origin: TWorkBasisCandidate["origin"] };
+type BasisRow = {
+  doc_kind: TWorkBasisCandidate["kind"]; doc_ref: string; title: string; url: string | null; revision: string | null; origin: TWorkBasisCandidate["origin"];
+  revised_at: Date | null; revised_by: string | null;
+};
 const basisKey = (kind: string, ref: string) => `${kind}:${ref}`;
 
-async function basisCandidates(q: Query, personId: string): Promise<BasisRow[]> {
+/** 读飞书文档元数据要的：开放接口和解密本人 user token 的密钥。没配飞书时为空，飞书文档只有兜底标题。 */
+export type FeishuDocReader = { client: Pick<FeishuClient, "getDocMetas">; env: Pick<FeishuEnv, "tokenKey" | "tokenKeyVersion"> };
+const DOC_TYPE: Record<string, FeishuDocType> = { docx: "docx", docs: "doc", wiki: "wiki", sheets: "sheet", base: "bitable" };
+
+/**
+ * 以本人身份读飞书文档的标题、最近修订时间和修订人（drive:drive.metadata:readonly，不读正文），
+ * 修订人按 feishu_identities 换成名字。本人没授权、令牌过期或接口失败时什么都不补，清单照常列出。
+ */
+async function enrichFeishuDocs(q: Query, personId: string, rows: BasisRow[], feishu: FeishuDocReader | undefined, now: Date): Promise<void> {
+  const docs = rows.flatMap((row) => {
+    const match = row.doc_kind === "feishu_doc" && !row.revised_at ? FEISHU.exec(row.doc_ref) : null;
+    return match ? [{ row, token: match[2], type: DOC_TYPE[match[1]] }] : [];
+  });
+  if (!feishu || !docs.length) return;
+  try {
+    const token = await readUserAccessToken(q, feishu.env, personId, now);
+    if (!token) return;
+    const metas = new Map((await feishu.client.getDocMetas(token, docs.slice(0, 200).map(({ token: doc, type }) => ({ token: doc, type })))).map((meta) => [meta.token, meta]));
+    const openIds = [...new Set([...metas.values()].flatMap((meta) => meta.modifiedBy ? [meta.modifiedBy] : []))];
+    const names = new Map(openIds.length ? ((await q("SELECT open_id, name FROM feishu_identities WHERE open_id = ANY($1)", [openIds])).rows as { open_id: string; name: string | null }[])
+      .map((row) => [row.open_id, row.name]) : []);
+    for (const { row, token: docToken } of docs) {
+      const meta = metas.get(docToken);
+      if (!meta) continue;
+      row.title = meta.title || row.title;
+      row.revised_at = meta.modifiedAt;
+      row.revised_by = meta.modifiedBy ? names.get(meta.modifiedBy) ?? null : null;
+    }
+  } catch (cause) {
+    console.warn(`feishu doc metas failed: ${(cause as Error).message}`);
+  }
+}
+
+async function basisCandidates(q: Query, personId: string, feishu: FeishuDocReader | undefined, now: Date): Promise<BasisRow[]> {
   const [materials, docs, confirmed] = await Promise.all([
     q(`SELECT DISTINCT ON (m.id) m.id, m.file_name, m.format, m.url, m.current_version, tm.task_id, m.updated_at
       FROM object_materials m
@@ -35,7 +74,7 @@ async function basisCandidates(q: Query, personId: string): Promise<BasisRow[]> 
       ORDER BY m.id`, [personId]),
     q(`SELECT item_key AS url, max(detail->>'title') AS title, max(read_at) AS read_at FROM local_inventory
       WHERE person_id=$1 AND kind='feishu_doc' GROUP BY item_key ORDER BY max(read_at) DESC NULLS LAST LIMIT 200`, [personId]),
-    q("SELECT doc_kind, doc_ref, title, url, revision FROM work_basis WHERE person_id=$1 ORDER BY confirmed_at", [personId]),
+    q("SELECT doc_kind, doc_ref, title, url, revision, revised_at, revised_by FROM work_basis WHERE person_id=$1 ORDER BY confirmed_at", [personId]),
   ]);
   const rows = new Map<string, BasisRow>();
   // 已确认的保留确认时的标题和修订号；来源按现在还能找到的地方标。
@@ -48,25 +87,27 @@ async function basisCandidates(q: Query, personId: string): Promise<BasisRow[]> 
   const sorted = (materials.rows as { id: string; file_name: string; format: string; url: string | null; current_version: number; task_id: string; updated_at: Date }[])
     .sort((a, b) => b.updated_at.getTime() - a.updated_at.getTime());
   for (const m of sorted) {
-    if (m.format === "link" && m.url) add({ doc_kind: FEISHU.test(m.url) ? "feishu_doc" : "link", doc_ref: m.url, title: m.file_name, url: m.url, revision: null, origin: "task" });
-    else add({ doc_kind: "material", doc_ref: m.id, title: m.file_name, url: `/me/tasks/${m.task_id}`, revision: `v${m.current_version}`, origin: "task" });
+    if (m.format === "link" && m.url) add({ doc_kind: FEISHU.test(m.url) ? "feishu_doc" : "link", doc_ref: m.url, title: m.file_name, url: m.url, revision: null, origin: "task", revised_at: null, revised_by: null });
+    else add({ doc_kind: "material", doc_ref: m.id, title: m.file_name, url: `/me/tasks/${m.task_id}`, revision: `v${m.current_version}`, origin: "task", revised_at: null, revised_by: null });
   }
   for (const doc of docs.rows as { url: string; title: string | null }[])
-    add({ doc_kind: "feishu_doc", doc_ref: doc.url, title: doc.title || feishuFallbackTitle(doc.url), url: doc.url, revision: null, origin: "session" });
-  return [...rows.values()];
+    add({ doc_kind: "feishu_doc", doc_ref: doc.url, title: doc.title || feishuFallbackTitle(doc.url), url: doc.url, revision: null, origin: "session", revised_at: null, revised_by: null });
+  const list = [...rows.values()];
+  await enrichFeishuDocs(q, personId, list, feishu, now);
+  return list;
 }
 
-export async function readWorkBasis(q: Query, personId: string): Promise<TWorkBasisCandidate[]> {
-  const [rows, confirmed] = await Promise.all([basisCandidates(q, personId),
+export async function readWorkBasis(q: Query, personId: string, feishu: FeishuDocReader | undefined, now: Date): Promise<TWorkBasisCandidate[]> {
+  const [rows, confirmed] = await Promise.all([basisCandidates(q, personId, feishu, now),
     q("SELECT doc_kind, doc_ref FROM work_basis WHERE person_id=$1", [personId])]);
   const saved = new Set((confirmed.rows as { doc_kind: string; doc_ref: string }[]).map((row) => basisKey(row.doc_kind, row.doc_ref)));
   return rows.map((row) => ({ key: basisKey(row.doc_kind, row.doc_ref), kind: row.doc_kind, title: row.title, url: row.url, revision: row.revision,
-    origin: row.origin, confirmed: saved.has(basisKey(row.doc_kind, row.doc_ref)) }));
+    origin: row.origin, revisedAt: row.revised_at?.toISOString() ?? null, revisedBy: row.revised_by, confirmed: saved.has(basisKey(row.doc_kind, row.doc_ref)) }));
 }
 
 /** 勾选的入库并记下确认时的修订号；已经入库的保留原来的修订号和确认时间。 */
-export async function saveWorkBasis(pool: Pool, personId: string, keys: string[], now: Date): Promise<ListResult<TWorkBasisCandidate>> {
-  const candidates = await basisCandidates(pool.query.bind(pool), personId);
+export async function saveWorkBasis(pool: Pool, personId: string, keys: string[], feishu: FeishuDocReader | undefined, now: Date): Promise<ListResult<TWorkBasisCandidate>> {
+  const candidates = await basisCandidates(pool.query.bind(pool), personId, feishu, now);
   const byKey = new Map(candidates.map((row) => [basisKey(row.doc_kind, row.doc_ref), row]));
   const unknown = keys.find((key) => !byKey.has(key));
   if (unknown) return { ok: false, message: "清单已经变了，请刷新后再确认" };
@@ -74,14 +115,15 @@ export async function saveWorkBasis(pool: Pool, personId: string, keys: string[]
   await inTransaction(pool, async (q) => {
     for (const [key, row] of byKey) {
       if (chosen.has(key)) {
-        await q(`INSERT INTO work_basis(id,person_id,doc_kind,doc_ref,title,url,revision,confirmed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
-          ON CONFLICT (person_id,doc_kind,doc_ref) DO NOTHING`, [randomUUID(), personId, row.doc_kind, row.doc_ref, row.title.slice(0, 240), row.url, row.revision, now]);
+        await q(`INSERT INTO work_basis(id,person_id,doc_kind,doc_ref,title,url,revision,revised_at,revised_by,confirmed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          ON CONFLICT (person_id,doc_kind,doc_ref) DO NOTHING`, [randomUUID(), personId, row.doc_kind, row.doc_ref, row.title.slice(0, 240), row.url, row.revision,
+          row.revised_at, row.revised_by, now]);
       } else {
         await q("DELETE FROM work_basis WHERE person_id=$1 AND doc_kind=$2 AND doc_ref=$3", [personId, row.doc_kind, row.doc_ref]);
       }
     }
   });
-  return { ok: true, candidates: await readWorkBasis(pool.query.bind(pool), personId) };
+  return { ok: true, candidates: await readWorkBasis(pool.query.bind(pool), personId, feishu, now) };
 }
 
 /** 采集器自己的定时任务（Windows 计划任务、macOS launchd）不算要搬的旧任务。 */

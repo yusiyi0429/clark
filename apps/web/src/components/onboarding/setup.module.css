@@ -35,7 +35,7 @@
 .status[data-state="waiting"] i { animation: breathe 1.6s ease-in-out infinite; }
 .status[data-state="on"] { color: var(--onboarding-ink); }
 .status[data-state="on"] i { background: #34c759; box-shadow: 0 0 0 3px rgb(52 199 89 / 18%); }
-.consent { margin-top: 12px; }
+.consentTop { margin-bottom: 12px; }
 .error { margin: 10px 0 0; color: var(--onboarding-error); font-size: 13px; }
 
 /* 系统切换：iOS 分段控件 */

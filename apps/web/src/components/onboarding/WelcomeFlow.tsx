@@ -117,7 +117,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
   const step = steps[index];
   const collector = useCollectorStatus(step === "collector" || step === "scan");
   const collectorConnected = Boolean(collector?.devices.length);
-  const scanFinished = Boolean(collector) && (!collectorConnected || Boolean(collector?.scannedAt) || scanTimedOut);
+  const scanFinished = Boolean(collector) && (!collectorConnected || !collector?.consent || Boolean(collector?.scannedAt) || scanTimedOut);
   const scanReady = scanFinished && reviewLists !== null;
   const voice = useVoiceprintEnrollment({ initialStatus: data.voiceprint });
   const current = useRef(0);
@@ -141,7 +141,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
   }, [step, voice.phase]);
   useEffect(() => () => { outgoing.current?.remove(); if (outgoingTimer.current) clearTimeout(outgoingTimer.current); }, []);
   useEffect(() => {
-    if (step !== "scan" || !collectorConnected || collector?.scannedAt || scanTimedOut) return;
+    if (step !== "scan" || !collectorConnected || !collector?.consent || collector?.scannedAt || scanTimedOut) return;
     const timer = window.setTimeout(() => setScanTimedOut(true), SCAN_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
   }, [step, collectorConnected, collector?.scannedAt, scanTimedOut]);
@@ -287,11 +287,11 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
             {step === "connect" ? <div className={`${f.glass} ${s.connectPanel}`}>
               <ConnectAgentForm role={data.role} defaultName="我的电脑" actionsTarget={connectDownloaded ? undefined : connectPrimary} onDownloaded={() => setConnectDownloaded(true)} />
             </div> : null}
-            {step === "collector" ? <CollectorInstallPanel token={collectorToken} onToken={setCollectorToken} status={collector} showConsent={data.role === "member"} /> : null}
+            {step === "collector" ? <CollectorInstallPanel token={collectorToken} onToken={setCollectorToken} status={collector} /> : null}
             {step === "scan" ? <ScanProgress steps={scanSteps(collector, reviewLists && { basis: reviewLists.basis.length, schedules: reviewLists.schedules.length }, scanTimedOut)} /> : null}
             {step === "review" && reviewLists ? <ReviewTabs lists={reviewLists} onListsChange={setReviewLists} reviewed={reviewed}
               onReviewedChange={(tab, confirmed) => setReviewed((current) => ({ ...current, [tab]: confirmed }))}
-              localMemoryFiles={collectorConnected ? collector!.inventory.memoryFiles : null} /> : null}
+              localMemoryFiles={collectorConnected && collector!.consent ? collector!.inventory.memoryFiles : null} /> : null}
             {step === "delegation" ? <DelegationPanel /> : null}
             {step === "start" ? <p className={s.summary}>
               <span className={s.summaryItem}>{radarSummaryLine(data.role, radarSaved ?? data.radar)}</span>

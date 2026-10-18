@@ -38977,12 +38977,16 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "receivedAt"
+          "receivedAt",
+          "consent"
         ],
         "properties": {
           "receivedAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "consent": {
+            "type": "boolean"
           }
         }
       },
@@ -39403,11 +39407,15 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
+          "consent",
           "devices",
           "scannedAt",
           "inventory"
         ],
         "properties": {
+          "consent": {
+            "type": "boolean"
+          },
           "devices": {
             "type": "array",
             "items": {
@@ -39491,6 +39499,8 @@
                 "url",
                 "revision",
                 "origin",
+                "revisedAt",
+                "revisedBy",
                 "confirmed"
               ],
               "properties": {
@@ -39547,6 +39557,27 @@
                     },
                     {
                       "const": "session",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "revisedAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "revisedBy": {
+                  "anyOf": [
+                    {
                       "type": "string"
                     },
                     {

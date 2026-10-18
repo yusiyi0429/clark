@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Pool } from "pg";
 import type { TCollectorDevice, TCollectorHeartbeatRequest, TCollectorInventory, TCollectorReportRequest, TCollectorSourceState, TCollectorStatusResponse } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
+import { collectorConsentGranted } from "./collectorDistill.js";
 
 /** 本机采集器的身份：人和令牌都取自 collector 个人令牌，请求体里不带人。 */
 export type CollectorIdentity = { personId: string; tokenId: string };
@@ -24,18 +25,22 @@ const upsertSources = async (q: Query, who: CollectorIdentity, device: TCollecto
   }
 };
 
-/** 心跳可以带上当天的完整盘点（本机清单）；工作段只走上报。 */
+/**
+ * 心跳可以带上当天的完整盘点（本机清单）；工作段只走上报。
+ * 本人同意采集之前（D-18）本机清单一律不收，回给采集器 consent=false，采集器据此不做盘点；同意之后下一次检查才盘点。
+ */
 export async function recordHeartbeat(pool: Pool, who: CollectorIdentity, body: TCollectorHeartbeatRequest, now: Date) {
-  if (!body.inventory) {
+  const consent = await collectorConsentGranted(pool.query.bind(pool), who.personId);
+  const inventory = consent ? body.inventory : undefined;
+  if (!inventory) {
     await upsertSources(pool.query.bind(pool), who, body.device, body.version, body.sources, now);
-    return { receivedAt: now.toISOString() };
+    return { receivedAt: now.toISOString(), consent };
   }
-  const inventory = body.inventory;
   await inTransaction(pool, async (q) => {
     await upsertSources(q, who, body.device, body.version, body.sources, now);
     await upsertInventory(q, who, body.device.id, inventory, now);
   });
-  return { receivedAt: now.toISOString() };
+  return { receivedAt: now.toISOString(), consent };
 }
 
 export async function inTransaction(pool: Pool, work: (q: Query) => Promise<void>) {
@@ -69,7 +74,8 @@ const upsertInventory = async (q: Query, who: CollectorIdentity, deviceId: strin
  * 飞书文档是累计读过的。
  */
 export async function readCollectorStatus(q: Query, personId: string): Promise<TCollectorStatusResponse> {
-  const [devices, scans, counts] = await Promise.all([
+  const [consent, devices, scans, counts] = await Promise.all([
+    collectorConsentGranted(q, personId),
     q(`SELECT device_id, max(device_name) AS name, max(platform) AS platform, max(last_attempt_at) AS last_seen_at
       FROM collector_health WHERE person_id=$1 GROUP BY device_id ORDER BY max(last_attempt_at) DESC`, [personId]),
     q("SELECT max(scanned_at) AS scanned_at FROM collector_scans WHERE person_id=$1", [personId]),
@@ -80,6 +86,7 @@ export async function readCollectorStatus(q: Query, personId: string): Promise<T
   const count = (kind: string) => (counts.rows as { kind: string; n: number }[]).find((row) => row.kind === kind)?.n ?? 0;
   const scannedAt = scans.rows[0]?.scanned_at as Date | null | undefined;
   return {
+    consent,
     devices: (devices.rows as { device_id: string; name: string; platform: string; last_seen_at: Date }[])
       .map((row) => ({ id: row.device_id, name: row.name, platform: row.platform, lastSeenAt: row.last_seen_at.toISOString() })),
     scannedAt: scannedAt ? scannedAt.toISOString() : null,
@@ -106,7 +113,8 @@ export async function recordReport(pool: Pool, who: CollectorIdentity, body: TCo
       accepted += inserted.rows.length;
     }
     await upsertSources(q, who, body.device, body.version, body.sources, now);
-    if (body.inventory) await upsertInventory(q, who, body.device.id, body.inventory, now);
+    // 旧版采集器把本机清单夹在上报里：同样要本人同意过才收（工作段为空的上报不经过路由里的同意检查）。
+    if (body.inventory && await collectorConsentGranted(q, who.personId)) await upsertInventory(q, who, body.device.id, body.inventory, now);
     await client.query("COMMIT");
     return { ok: true, accepted, duplicates: body.items.length - accepted, receivedAt: now.toISOString() };
   } catch (e) { await client.query("ROLLBACK").catch(() => undefined); throw e; }

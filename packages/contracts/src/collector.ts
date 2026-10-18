@@ -22,7 +22,8 @@ export const CollectorSourceState = Type.Object({
 }, { additionalProperties: false });
 
 
-export const CollectorHeartbeatResponse = Type.Object({ receivedAt: Instant }, { additionalProperties: false });
+/** consent：本人是否同意采集（D-18）；没同意时心跳带的本机清单不收，采集器据此不做盘点。 */
+export const CollectorHeartbeatResponse = Type.Object({ receivedAt: Instant, consent: Type.Boolean() }, { additionalProperties: false });
 
 export const CollectorLink = Type.Object({
   url: Type.String({ pattern: "^https?://", maxLength: 500 }),
@@ -104,6 +105,8 @@ export const UpdateCollectorConsentRequest = Type.Object({ granted: Type.Boolean
 
 /** 本人的采集器：连上的设备（收到过心跳或上报）、最近一次完整盘点、盘点到的条数。上手的「安装采集器」和扫描页轮询这里。 */
 export const CollectorStatusResponse = Type.Object({
+  /** 本人是否同意采集：没同意时不收本机清单，扫描页那几步停在「未同意」。 */
+  consent: Type.Boolean(),
   devices: Type.Array(Type.Object({
     id: Type.String(),
     name: Type.String(),

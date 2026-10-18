@@ -333,15 +333,15 @@ def run(mode: str, args: argparse.Namespace) -> int:
     else:
         note_evidence(state, sessions)
 
-    # 4. 今天没发出上报，或者到了每天盘点的时候，就发心跳：带上各来源的信息截至，盘点时带上本机清单。
+    # 4. 今天没发出上报，或者到了每天盘点的时候，就发心跳，带上各来源的信息截至。
+    #    本机清单（定时任务、读过的飞书文档、记忆文件）要天枢回话说本人已经同意采集才盘点、才上传（D-18）；没同意就不碰，下次检查再问。
     take_inventory = inventory_due(state, now)
     if not sent or take_inventory:
         coverage = datetime.fromisoformat(state["watermark"].replace("Z", "+00:00"))
         beat: dict[str, Any] = {"device": device, "version": VERSION, "sources": source_states(status, state, coverage)}
-        if take_inventory:
-            beat["inventory"] = full_inventory(now, args.codex_home, args.claude_home)
-        api.post("/api/collector/heartbeat", beat)
-        if take_inventory:
+        reply = api.post("/api/collector/heartbeat", beat)
+        if take_inventory and reply.get("consent") is True:
+            api.post("/api/collector/heartbeat", {**beat, "inventory": full_inventory(now, args.codex_home, args.claude_home)})
             state["inventory_at"] = iso(now)
     if not args.dry_run:
         save_json(args.state, state)

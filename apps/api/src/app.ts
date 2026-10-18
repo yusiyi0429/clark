@@ -583,7 +583,8 @@ export async function buildApp({
   };
 
   registerAuthRoutes(app, ctx);
-  registerFeishuAuthRoutes(app, ctx, feishuClient ?? (env.feishu ? createFeishuClient(env.feishu) : undefined));
+  const feishuApi = feishuClient ?? (env.feishu ? createFeishuClient(env.feishu) : undefined);
+  registerFeishuAuthRoutes(app, ctx, feishuApi);
   await registerMcpOAuthRoutes(app, ctx);
   registerCardRoutes(app, ctx);
   registerConfigRoutes(app, ctx);
@@ -601,7 +602,7 @@ export async function buildApp({
   registerThreadRoutes(app, ctx);
   registerRecordingRoutes(app, ctx);
   registerMeRoutes(app, ctx);
-  registerOnboardingRoutes(app, ctx);
+  registerOnboardingRoutes(app, ctx, feishuApi && env.feishu ? { client: feishuApi, env: env.feishu } : undefined);
   registerSeenMarkRoutes(app, ctx);
   registerMissionCardRoutes(app, ctx, missionCardAnnotationAgent, missionCardReviewAgent);
   registerMyRadarRoutes(app, ctx);

@@ -76,6 +76,9 @@ function Checklist<T extends { key: string }>({ items, initial, row, save, confi
 }
 
 const ORIGIN: Record<string, string> = { task: "执行事项", session: "会话" };
+/** 飞书文档的最近修订：「10/16 修订 · 修订人」，没有修订人名字时只写日期。 */
+export const revisedLabel = (at: string, by: string | null) =>
+  `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric" }).format(new Date(at)).replace(/月/, "/").replace(/日/, "")} 修订${by ? ` · ${by}` : ""}`;
 const KIND: Record<WorkBasisItem["kind"], string> = { material: "天枢", feishu_doc: "飞书", link: "链接" };
 
 async function putList<T>(path: "/api/me/work-basis" | "/api/me/schedule-migration", keys: string[]): Promise<T[]> {
@@ -123,6 +126,7 @@ export function ReviewTabs({ lists, onListsChange, reviewed, onReviewedChange, l
             <span className={c.rowMeta}>
               <span className={c.chip}>{KIND[item.kind]}</span>
               {item.revision ? <span className={c.chip} data-tone="blue">{item.revision}</span> : null}
+              {item.revisedAt ? <span className={c.chip} data-tone="blue">{revisedLabel(item.revisedAt, item.revisedBy)}</span> : null}
               {item.origin ? <span className={c.chip}>{ORIGIN[item.origin]}</span> : null}
             </span>
           </>} />

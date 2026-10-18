@@ -47,14 +47,25 @@ class FirstCheck(unittest.TestCase):
                 code = tkos_collector.run("check", args)
             return code, json.loads(state_file.read_text(encoding="utf-8"))
 
-    def test_first_check_sends_inventory_with_heartbeat(self):
+    def test_first_check_sends_inventory_once_consent_is_confirmed(self):
         calls = []
-        code, state = self.run_check({}, lambda _api, path, body: calls.append((path, body)) or {})
+        code, state = self.run_check({}, lambda _api, path, body: calls.append((path, body)) or {"consent": True})
         self.assertEqual(code, 0)
-        self.assertEqual([path for path, _ in calls], ["/api/collector/heartbeat"])
-        self.assertEqual(calls[0][1]["inventory"]["scheduledTasks"][0]["name"], "周报")
-        self.assertIn("memoryFiles", calls[0][1]["inventory"])
+        self.assertEqual([path for path, _ in calls], ["/api/collector/heartbeat", "/api/collector/heartbeat"])
+        self.assertNotIn("inventory", calls[0][1])
+        self.assertEqual(calls[1][1]["inventory"]["scheduledTasks"][0]["name"], "周报")
+        self.assertIn("memoryFiles", calls[1][1]["inventory"])
         self.assertIn("inventory_at", state)
+
+    def test_no_inventory_before_consent(self):
+        calls = []
+        with mock.patch.object(tkos_collector, "full_inventory") as inventory:
+            code, state = self.run_check({}, lambda _api, path, body: calls.append((path, body)) or {"consent": False})
+        self.assertEqual(code, 0)
+        inventory.assert_not_called()  # 没同意：连本机盘点都不做
+        self.assertEqual([path for path, _ in calls], ["/api/collector/heartbeat"])
+        self.assertNotIn("inventory", calls[0][1])
+        self.assertNotIn("inventory_at", state)
 
     def test_refused_report_stays_local_and_heartbeat_still_goes(self):
         pending = {"device": {}, "kind": "digest", "windowStart": "a", "windowEnd": "b", "items": [{"clientEventId": "x"}]}

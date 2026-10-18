@@ -7075,6 +7075,7 @@ export interface components {
         CollectorHeartbeatResponse: {
             /** Format: date-time */
             receivedAt: string;
+            consent: boolean;
         };
         CollectorReportRequest: {
             device: {
@@ -7147,6 +7148,7 @@ export interface components {
             granted: boolean;
         };
         CollectorStatusResponse: {
+            consent: boolean;
             devices: {
                 id: string;
                 name: string;
@@ -7169,6 +7171,8 @@ export interface components {
                 url: string | null;
                 revision: string | null;
                 origin: "task" | "session" | null;
+                revisedAt: string | null;
+                revisedBy: string | null;
                 confirmed: boolean;
             }[];
         };

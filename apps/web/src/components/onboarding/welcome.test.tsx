@@ -44,6 +44,7 @@ import { RadarSettingsEditor, type RadarSavedSummary } from "@/components/radar/
 import { ConnectAgentForm } from "@/components/ConnectAgentForm";
 import { CollectorInstallPanel, collectorCommand, scanSteps, type CollectorStatus } from "./CollectorSetup";
 import { DelegationPanel } from "./DelegationPanel";
+import { revisedLabel } from "./ReviewLists";
 import { CollectorConsentSwitch } from "./CollectorConsentSwitch";
 import { browserApi } from "@/lib/api/client";
 
@@ -349,13 +350,13 @@ describe("雷达步骤", () => {
     const tree = renderFlow(member);
     expect(text(tree)).toContain("安装本机采集器");
     const panel = elements(tree).find((element) => element.type === CollectorInstallPanel);
-    expect(panel?.props).toMatchObject({ token: null, status: null, showConsent: true });
+    expect(panel?.props).toMatchObject({ token: null, status: null });
     expect(button(tree, "下一步").props.disabled).toBe(true);
     expect(button(tree, "稍后")).toBeDefined();
     hooks.reset();
     radarEditor(reachRadar(ceo)).onLater!();
     (button(renderFlow(ceo), "稍后").props.onClick as () => void)();
-    expect(elements(renderFlow(ceo)).find((element) => element.type === CollectorInstallPanel)?.props).toMatchObject({ showConsent: false });
+    expect(text(renderFlow(ceo))).toContain("安装本机采集器");
   });
   it("最后一页三个标签都确认之前「完成」不能点；委托授权一步只在配置打开时出现", () => {
     radarEditor(reachRadar(member)).onLater!();
@@ -382,6 +383,7 @@ describe("安装采集器与扫描", () => {
       "curl -fsSL 'https://ts.example/api/collector/install.sh' | sh -s -- --server 'https://ts.example' --token 'tsm_x'");
   });
   const status = (patch: Partial<CollectorStatus> = {}): CollectorStatus => ({
+    consent: true,
     devices: [{ id: "d", name: "工作机", platform: "windows", lastSeenAt: "2026-10-18T02:00:00.000Z" }],
     scannedAt: null, inventory: { scheduledTasks: 3, feishuDocs: 5, memoryFiles: 12 }, ...patch,
   });
@@ -395,5 +397,12 @@ describe("安装采集器与扫描", () => {
     expect(view(scanSteps(status({ devices: [] }), null))).toEqual([
       ["连接采集器", "stopped", "未连接"], ["本机定时任务", "stopped", "未连接"], ["飞书文档", "stopped", "未连接"], ["记忆文件", "stopped", "未连接"], ["整理清单", "active", ""]]);
     expect(view(scanSteps(status(), null, true)).slice(1, 2)).toEqual([["本机定时任务", "stopped", "超时"]]);
+    // 没同意采集：本机清单的三步停在「未同意」，直接整理天枢里已有的。
+    expect(view(scanSteps(status({ consent: false }), null)).slice(1)).toEqual([
+      ["本机定时任务", "stopped", "未同意"], ["飞书文档", "stopped", "未同意"], ["记忆文件", "stopped", "未同意"], ["整理清单", "active", ""]]);
+  });
+  it("飞书文档的修订写成「月/日 修订 · 修订人」", () => {
+    expect(revisedLabel("2026-10-16T08:00:00.000Z", "编辑人")).toBe("10/16 修订 · 编辑人");
+    expect(revisedLabel("2026-10-16T08:00:00.000Z", null)).toBe("10/16 修订");
   });
 });

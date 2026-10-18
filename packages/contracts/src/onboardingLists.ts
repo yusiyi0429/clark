@@ -15,6 +15,9 @@ export const WorkBasisCandidate = Type.Object({
   revision: Type.Union([Type.String(), Type.Null()]),
   /** 从哪里找到的：task 本人执行事项里的材料或链接；session 本机会话里读过；null 只剩已确认的记录。 */
   origin: Type.Union([Type.Literal("task"), Type.Literal("session"), Type.Null()]),
+  /** 飞书文档的最近修订时间与修订人（按本人身份读元数据，不读正文）；读不到或不是飞书文档时为空。已确认的是确认时的那一次。 */
+  revisedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+  revisedBy: Type.Union([Type.String(), Type.Null()]),
   /** 已经入库（本人确认过）。 */
   confirmed: Type.Boolean(),
 }, { additionalProperties: false });

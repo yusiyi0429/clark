@@ -1,10 +1,11 @@
 import { CompleteOnboardingResponse, OnboardingResponse, ScheduleMigrationResponse, UpdateScheduleMigrationRequest, UpdateWorkBasisRequest,
   WorkBasisResponse } from "@warmap/contracts";
 import { completeOnboarding, readOnboarding, resetOnboarding } from "../onboarding.js";
-import { readScheduleMigration, readWorkBasis, saveScheduleMigration, saveWorkBasis } from "../onboardingLists.js";
+import { readScheduleMigration, readWorkBasis, saveScheduleMigration, saveWorkBasis, type FeishuDocReader } from "../onboardingLists.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
-export function registerOnboardingRoutes(app: AppInstance, ctx: RouteContext): void {
+/** feishu：读本人工作依据里飞书文档的标题、修订时间和修订人；没配飞书时为空。 */
+export function registerOnboardingRoutes(app: AppInstance, ctx: RouteContext, feishu?: FeishuDocReader): void {
   const { pool, q, fail, companyMemory, voiceprints, env, now, requirePerson } = ctx;
   app.get(
     "/api/me/onboarding",
@@ -27,9 +28,9 @@ export function registerOnboardingRoutes(app: AppInstance, ctx: RouteContext): v
 
   // 上手最后一页的工作依据清单与搬家清单：候选现算，提交只收勾选的 key。
   app.get("/api/me/work-basis", { preHandler: requirePerson, schema: { response: { 200: WorkBasisResponse } } },
-    async (req) => ({ candidates: await readWorkBasis(q, req.person!.personId) }));
+    async (req) => ({ candidates: await readWorkBasis(q, req.person!.personId, feishu, now()) }));
   app.put("/api/me/work-basis", { preHandler: requirePerson, schema: { body: UpdateWorkBasisRequest, response: { 200: WorkBasisResponse } } }, async (req, reply) => {
-    const saved = await saveWorkBasis(pool, req.person!.personId, req.body.keys, now());
+    const saved = await saveWorkBasis(pool, req.person!.personId, req.body.keys, feishu, now());
     return saved.ok ? { candidates: saved.candidates } : fail(reply, 400, "INVALID_INPUT", saved.message);
   });
   app.get("/api/me/schedule-migration", { preHandler: requirePerson, schema: { response: { 200: ScheduleMigrationResponse } } },

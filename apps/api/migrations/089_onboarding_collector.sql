@@ -12,7 +12,8 @@ CREATE TABLE collector_scans (
   PRIMARY KEY (person_id, device_id)
 );
 
--- 工作依据清单：本人确认在依据的整份文档，记下确认时的修订号（天枢材料是 v 版本号；飞书文档没有读文档的权限时为空）。
+-- 工作依据清单：本人确认在依据的整份文档，记下确认时的修订号。天枢材料的 revision 是 v 版本号；
+-- 飞书文档按本人身份读元数据（drive:drive.metadata:readonly，不读正文），记下确认时的最近修订时间 revised_at 和修订人 revised_by（名字），读不到时为空。
 -- doc_kind：material 天枢里的材料（doc_ref 是材料 id）；feishu_doc 飞书文档、link 其他链接（doc_ref 是地址）。
 CREATE TABLE work_basis (
   id UUID PRIMARY KEY,
@@ -22,6 +23,8 @@ CREATE TABLE work_basis (
   title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 240),
   url TEXT,
   revision TEXT,
+  revised_at TIMESTAMPTZ,
+  revised_by TEXT,
   confirmed_at TIMESTAMPTZ NOT NULL,
   UNIQUE (person_id, doc_kind, doc_ref)
 );

@@ -47,13 +47,11 @@ export function collectorCommand(os: CollectorOs, origin: string, token: string)
 
 const detectOs = (): CollectorOs => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent) ? "macos" : "windows";
 
-export function CollectorInstallPanel({ token, onToken, status, showConsent }: {
+export function CollectorInstallPanel({ token, onToken, status }: {
   /** 本次上手里生成的令牌：留在上手流程里，前后翻页不丢、不重复生成。 */
   token: string | null;
   onToken: (token: string) => void;
   status: CollectorStatus | null;
-  /** 成员才有「上传会话用于整理进展」：整理是对照本人的 Mission 和 Task 做的。 */
-  showConsent: boolean;
 }) {
   const [os, setOs] = useState<CollectorOs>("windows");
   const [busy, setBusy] = useState(false);
@@ -82,7 +80,9 @@ export function CollectorInstallPanel({ token, onToken, status, showConsent }: {
 
   const tokenDone = Boolean(token) || connected;
   const runDone = connected || (Boolean(token) && copied);
+  // 同意开关放在最上面（D-18）：同意之前采集器不盘点本机、不上传会话，先定这一项再装。
   return <div className={`${f.glass} ${c.panel}`}>
+    <div className={c.consentTop}><CollectorConsentSwitch /></div>
     <div className={c.panelHead}>
       <div className={c.segmented} role="group" aria-label="系统">
         <button type="button" aria-pressed={os === "windows"} onClick={() => pickOs("windows")}>Windows</button>
@@ -117,7 +117,6 @@ export function CollectorInstallPanel({ token, onToken, status, showConsent }: {
       </li>
     </ol>
     {error && !connected ? <p className={c.error} role="alert">{error}</p> : null}
-    {showConsent ? <div className={c.consent}><CollectorConsentSwitch /></div> : null}
   </div>;
 }
 
@@ -130,11 +129,13 @@ export type ScanLists = { basis: number; schedules: number };
 export function scanSteps(status: CollectorStatus | null, lists: ScanLists | null, timedOut = false): Step[] {
   const connected = Boolean(status?.devices.length);
   const scanned = Boolean(status?.scannedAt);
-  const stopped = Boolean(status) && (!connected || (!scanned && timedOut));
+  // 没同意采集（D-18）：采集器不盘点本机，这三步直接停在「未同意」。
+  const declined = connected && status?.consent === false;
+  const stopped = Boolean(status) && (!connected || declined || (!scanned && timedOut));
   const inventory = (id: string, label: string, result: string, index: number): Step => ({
     id, label,
-    status: scanned ? "done" : stopped ? "stopped" : connected && index === 0 ? "active" : "pending",
-    ...(scanned ? { result } : stopped ? { result: connected ? "超时" : "未连接" } : {}),
+    status: scanned && !declined ? "done" : stopped ? "stopped" : connected && index === 0 ? "active" : "pending",
+    ...(scanned && !declined ? { result } : stopped ? { result: !connected ? "未连接" : declined ? "未同意" : "超时" } : {}),
   });
   return [
     { id: "connect", label: "连接采集器", status: connected ? "done" : status ? "stopped" : "active", ...(connected ? { result: status!.devices[0].name } : status ? { result: "未连接" } : {}) },
