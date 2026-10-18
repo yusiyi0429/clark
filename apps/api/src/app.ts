@@ -37,6 +37,9 @@ import type { MonthlyPlanService } from "./monthlyDraft.js";
 import type { MonthlyReviewService } from "./monthlyReviewService.js";
 import { logEvent } from "./observability.js";
 import { clientTagFor, enterRequestClient, tracingEnabled } from "./tracing.js";
+import type { FeishuEnv } from "./feishu/config.js";
+import { createFeishuClient, type FeishuClient } from "./feishu/client.js";
+import { registerFeishuAuthRoutes } from "./routes/feishu.js";
 import { ensureMaterialStorage } from "./materialParser.js";
 import {
   createFail,
@@ -155,6 +158,8 @@ export type AppEnv = {
   recordingStorageDir?: string;
   /** 第二个只读实例（词元云集 TK scope）：resolveWorldTkEnv 给出；不设 TKOS_WORLD_TK_INSTANCE 时为空（关闭）。 */
   worldTk?: WorldEnv;
+  /** 飞书企业自建应用（resolveFeishuEnv）；不配时飞书接入关闭。 */
+  feishu?: FeishuEnv;
 } & CompanyMemorySeedEnv & WorldEnv & CompanyEnv;
 
 export async function buildApp({
@@ -185,6 +190,7 @@ export async function buildApp({
   requestAgent,
   webSearch,
   outlets,
+  feishuClient,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
   conversationStallTimeoutMs = CONVERSATION_STALL_TIMEOUT_MS,
   conversationHeartbeatMs = CONVERSATION_HEARTBEAT_MS,
@@ -233,6 +239,8 @@ export async function buildApp({
   webSearch?: WebSearchAdapter;
   /** 发布方级 feed adapter：Radar、预研与全局对话共用同一白名单来源。 */
   outlets?: RadarOutletAdapter;
+  /** 飞书开放接口；缺省按 env.feishu 装配真实客户端（测试注入假实现）。 */
+  feishuClient?: FeishuClient;
   conversationTurnTimeoutMs?: number;
   conversationStallTimeoutMs?: number;
   conversationHeartbeatMs?: number;
@@ -549,6 +557,7 @@ export async function buildApp({
   };
 
   registerAuthRoutes(app, ctx);
+  registerFeishuAuthRoutes(app, ctx, feishuClient ?? (env.feishu ? createFeishuClient(env.feishu) : undefined));
   await registerMcpOAuthRoutes(app, ctx);
   registerCardRoutes(app, ctx);
   registerConfigRoutes(app, ctx);

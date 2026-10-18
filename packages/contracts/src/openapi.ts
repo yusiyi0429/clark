@@ -188,6 +188,8 @@ import {
   MaterialAnnotationView, CreateMaterialAnnotationRequest, CreateMaterialAnnotationResponse, MaterialRemovedView,
   RestoreMaterialRemovedRequest, MaterialEditProposalView, DecideMaterialEditProposalRequest, DecideMaterialAnnotationRequest,
   WeeklyProgressResponse,
+  FeishuAuthConfigResponse,
+  FeishuCodeLoginRequest,
 } from "./index.js";
 
 const errorResponse = {
@@ -290,6 +292,53 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
                 "application/json": { schema: { $ref: "#/components/schemas/SessionResponse" } },
               },
             },
+          },
+        },
+      },
+      "/api/auth/feishu/config": {
+        get: {
+          operationId: "getFeishuAuthConfig", summary: "飞书免登是否可用，以及前端调 requestAccess 需要的 appId",
+          responses: { "200": { description: "飞书配置", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuAuthConfigResponse" } } } } },
+        },
+      },
+      "/api/auth/feishu/start": {
+        get: {
+          operationId: "startFeishuAuth",
+          summary: "浏览器打开：已登录直接跳到 next；否则写 state cookie 后跳飞书授权页。飞书消息里的深链接都指向这里",
+          parameters: [{ name: "next", in: "query", required: false, schema: { type: "string" }, description: "登录后回到的站内路径，只接受以 / 开头的相对路径" }],
+          responses: { "302": { description: "跳到 next 或飞书授权页" }, "404": errorResponse, "429": errorResponse },
+        },
+      },
+      "/api/auth/feishu/callback": {
+        get: {
+          operationId: "completeFeishuAuth",
+          summary: "飞书授权回调：校验 state，换 token，按已关联的人员建会话；关联不到时给出说明页",
+          parameters: [
+            { name: "code", in: "query", required: false, schema: { type: "string" } },
+            { name: "state", in: "query", required: false, schema: { type: "string" } },
+          ],
+          responses: {
+            "200": { description: "已登录并带 Set-Cookie，页面自动跳到 next", content: { "text/html": { schema: { type: "string" } } } },
+            "400": { description: "state 不符或缺 code", content: { "text/html": { schema: { type: "string" } } } },
+            "403": { description: "飞书账号还没有关联天枢人员", content: { "text/html": { schema: { type: "string" } } } },
+            "404": errorResponse,
+            "502": { description: "飞书接口暂时不可用", content: { "text/html": { schema: { type: "string" } } } },
+          },
+        },
+      },
+      "/api/auth/feishu/code": {
+        post: {
+          operationId: "loginWithFeishuCode",
+          summary: "在飞书客户端里打开：用 requestAccess 拿到的 code 换 token 并建会话",
+          requestBody: jsonBody({ $ref: "#/components/schemas/FeishuCodeLoginRequest" }),
+          responses: {
+            "200": { description: "已登录", content: { "application/json": { schema: { $ref: "#/components/schemas/LoginResponse" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+            "429": errorResponse,
+            "502": errorResponse,
           },
         },
       },
@@ -2275,6 +2324,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         LoginRequest: LoginRequest as JsonSchema,
         LoginResponse: LoginResponse as JsonSchema,
         DemoEntryResponse: DemoEntryResponse as JsonSchema,
+        FeishuAuthConfigResponse: FeishuAuthConfigResponse as JsonSchema,
+        FeishuCodeLoginRequest: FeishuCodeLoginRequest as JsonSchema,
         ChangePasscodeRequest: ChangePasscodeRequest as JsonSchema,
         SessionResponse: SessionResponse as JsonSchema,
         PeopleDirectoryResponse: PeopleDirectoryResponse as JsonSchema,

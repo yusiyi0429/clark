@@ -31,6 +31,7 @@ import type { MissionCardAnnotationAgent } from "../src/missionCardAnnotationAge
 import type { MissionCardReviewAgent } from "../src/missionCardReview.js";
 import type { MissionCardDraftAgent } from "../src/missionCardDraftAgent.js";
 import type { RequestAgent } from "../src/delivery/requestAgent.js";
+import type { FeishuClient } from "../src/feishu/client.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 
@@ -212,7 +213,7 @@ const defaultConversationRuntime: ConversationRuntime = {
 };
 
 export async function createTestApp(
-  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "publicOrigin">> = {},
+  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "publicOrigin" | "feishu">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;
@@ -254,6 +255,8 @@ export async function createTestApp(
     personalRadarService?: PersonalRadarService;
     /** 个人记忆提炼的模型流；不注入时一律交 noop 候选（测试里不调真实模型）。 */
     personalDistillationStream?: Parameters<typeof buildApp>[0]["personalDistillationStream"];
+    /** 飞书开放接口替身；配合 seedOverrides.feishu 使用。 */
+    feishuClient?: FeishuClient;
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {

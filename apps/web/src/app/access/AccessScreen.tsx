@@ -8,6 +8,7 @@ import { loginDestination } from "@/lib/access-paths";
 export { landingPath } from "@/lib/access-paths";
 import { PinField, type PinFieldHandle } from "./PinField";
 import { clearLastLogin, readLastLogin, rememberLastLogin, type LastLogin } from "./lastLogin";
+import { feishuAutoLogin, inFeishuClient } from "@/lib/feishuLogin";
 import a from "@/styles/access.module.css";
 
 type Role = "ceo" | "member";
@@ -56,6 +57,21 @@ export function AccessScreen({ nextPath, demoName = null }: { nextPath?: string;
 
   useEffect(() => {
     setLastLogin(readLastLogin());
+  }, []);
+
+  // 在飞书客户端里打开：自动免登；不在飞书里、未配置或失败时照常用 ID + 口令（失败原因写在表单上）。
+  useEffect(() => {
+    if (!inFeishuClient(navigator.userAgent)) return;
+    void run(async () => {
+      const result = await feishuAutoLogin();
+      if (!result) return;
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      await enter(result.role ?? "member", result.onboarded);
+    });
+    // 只在打开锁屏时尝试一次
   }, []);
 
   async function run(task: () => Promise<void>) {

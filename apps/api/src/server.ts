@@ -34,6 +34,11 @@ import { recoverInterruptedOutcome } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
 import { resolveWorldEnv, resolveWorldTkEnv } from "./worldClient.js";
+import { createJobWorker, exampleJobHandlers } from "./jobs.js";
+import { resolveFeishuEnv } from "./feishu/config.js";
+import { createFeishuClient } from "./feishu/client.js";
+import { feishuTokenJobs } from "./feishu/refresh.js";
+import { feishuEventJobs, startFeishuEventStream } from "./feishu/events.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -82,6 +87,8 @@ const env: AppEnv = {
   // 本体公司事实（PR #12）：只读投影在 MEMORY_STORAGE_DIR/company；按人授权的域写在 COMPANY_WORLD_ACCESS_FILE（personId → domain 列表）。个人记忆在数据库里。
   companyStorageDir: process.env.MEMORY_STORAGE_DIR ? `${process.env.MEMORY_STORAGE_DIR}/company` : undefined,
   companyWorldAccessFile: process.env.COMPANY_WORLD_ACCESS_FILE || undefined,
+  // 飞书：FEISHU_APP_ID / FEISHU_APP_SECRET / FEISHU_TOKEN_KEY（/ FEISHU_TOKEN_KEY_VERSION）；都不配时关闭。
+  feishu: resolveFeishuEnv(process.env),
 };
 
 const port = Number(process.env.PORT ?? "4000");
@@ -210,6 +217,15 @@ const recordingService = createMeetingRecordingService({
   companyMemory,
 });
 await recordingService.recoverInterrupted();
+// 飞书（配了才启用）：一个开放接口客户端，免登路由与后台任务共用。
+const feishuClient = env.feishu ? createFeishuClient(env.feishu) : undefined;
+const feishuTokens = env.feishu && feishuClient ? feishuTokenJobs({ pool, env: env.feishu, client: feishuClient, now }) : undefined;
+// 公共后台任务（jobs.ts）：每 5 秒领一批；现有各功能的 setInterval 暂不迁移。
+const jobWorker = createJobWorker({
+  pool,
+  handlers: { ...exampleJobHandlers, ...feishuTokens?.handlers, ...(env.feishu ? feishuEventJobs(pool) : {}) },
+  recurring: feishuTokens?.recurring ?? [],
+});
 const app = await buildApp({
   pool,
   env,
@@ -222,19 +238,26 @@ const app = await buildApp({
   recordingService,
   webSearch: bochaSearch,
   outlets: outletAdapter,
+  feishuClient,
 });
+let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {
+  feishuEvents?.close();
   scheduler.close();
   monthlyScheduler.close();
   monthlyReviewScheduler.close();
   await monthlyReviewService.idle();
   missionRoundScheduler.close();
   collectorHealthScheduler.close();
+  await jobWorker.close();
 });
 scheduler.start();
 monthlyScheduler.start();
 monthlyReviewScheduler.start();
 missionRoundScheduler.start();
 collectorHealthScheduler.start();
+jobWorker.start();
 await app.listen({ port, host: "0.0.0.0" });
+// 飞书长连接：收到事件只落库并排 jobs，3 秒内 ack。
+feishuEvents = env.feishu ? startFeishuEventStream(pool, env.feishu) : undefined;
 console.log(`warmap api listening on :${port} (${join(".", "migrations")} applied, build ${env.buildSha})`);
