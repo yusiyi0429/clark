@@ -6360,6 +6360,275 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/collector/consent": {
+      "get": {
+        "operationId": "getCollectorConsent",
+        "summary": "本人是否同意本机采集（上手流程里的开关读这里）",
+        "responses": {
+          "200": {
+            "description": "同意状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectorConsentResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateCollectorConsent",
+        "summary": "本人同意或撤回本机采集；撤回时清空本人的原文片段，整理结果保留",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCollectorConsentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "同意状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectorConsentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/weekly-reviews/board": {
+      "get": {
+        "operationId": "getWeeklyReviewBoard",
+        "summary": "周复盘名单：看得到的人（本人、同战场、CEO 看全部）这一周的状态；不带 week 取本周",
+        "parameters": [
+          {
+            "name": "week",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "周复盘名单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyReviewBoardResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/weekly-reviews/{weeklyReviewId}": {
+      "get": {
+        "operationId": "getWeeklyReview",
+        "summary": "读一份周复盘：本人、同战场的人、CEO；别人提交前看不到正文；其余 404",
+        "parameters": [
+          {
+            "name": "weeklyReviewId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "周复盘",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeeklyReviewResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/weekly-reviews/actions/execute": {
+      "post": {
+        "operationId": "executeWeeklyReviewAction",
+        "summary": "执行周复盘动作（修改、提交、重新生成）；幂等重放返回当前视图，版本冲突 409 VERSION_CONFLICT",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteWeeklyReviewActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "周复盘的最新视图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecuteWeeklyReviewActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       }
@@ -38679,6 +38948,1254 @@
           "receivedAt": {
             "format": "date-time",
             "type": "string"
+          }
+        }
+      },
+      "CollectorConsentResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "consent"
+        ],
+        "properties": {
+          "consent": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "granted",
+              "updatedAt"
+            ],
+            "properties": {
+              "granted": {
+                "type": "boolean"
+              },
+              "updatedAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "UpdateCollectorConsentRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "granted"
+        ],
+        "properties": {
+          "granted": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WeeklyReviewBoardResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "board"
+        ],
+        "properties": {
+          "board": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "weekStart",
+                  "weekEnd",
+                  "isCurrentWeek",
+                  "counts",
+                  "rows",
+                  "previousWeek",
+                  "nextWeek"
+                ],
+                "properties": {
+                  "weekStart": {
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "type": "string"
+                  },
+                  "weekEnd": {
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "type": "string"
+                  },
+                  "isCurrentWeek": {
+                    "type": "boolean"
+                  },
+                  "counts": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "total",
+                      "submitted"
+                    ],
+                    "properties": {
+                      "total": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "submitted": {
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "rows": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "weeklyReviewId",
+                        "personId",
+                        "personName",
+                        "status",
+                        "origin",
+                        "isSelf",
+                        "href"
+                      ],
+                      "properties": {
+                        "weeklyReviewId": {
+                          "type": "string"
+                        },
+                        "personId": {
+                          "type": "string"
+                        },
+                        "personName": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "drafting",
+                              "type": "string"
+                            },
+                            {
+                              "const": "draft_failed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "draft",
+                              "type": "string"
+                            },
+                            {
+                              "const": "submitted",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "origin": {
+                          "anyOf": [
+                            {
+                              "const": "tianshu",
+                              "type": "string"
+                            },
+                            {
+                              "const": "import",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "isSelf": {
+                          "type": "boolean"
+                        },
+                        "href": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "previousWeek": {
+                    "anyOf": [
+                      {
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "nextWeek": {
+                    "anyOf": [
+                      {
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "WeeklyReviewResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "review"
+        ],
+        "properties": {
+          "review": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "weeklyReviewId",
+              "version",
+              "personId",
+              "personName",
+              "weekStart",
+              "weekEnd",
+              "status",
+              "origin",
+              "importSource",
+              "body",
+              "draftError",
+              "generationSteps",
+              "editedFields",
+              "revisions",
+              "submittedAt",
+              "viewer",
+              "actions"
+            ],
+            "properties": {
+              "weeklyReviewId": {
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "personId": {
+                "type": "string"
+              },
+              "personName": {
+                "type": "string"
+              },
+              "weekStart": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              "weekEnd": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "drafting",
+                    "type": "string"
+                  },
+                  {
+                    "const": "draft_failed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "draft",
+                    "type": "string"
+                  },
+                  {
+                    "const": "submitted",
+                    "type": "string"
+                  }
+                ]
+              },
+              "origin": {
+                "anyOf": [
+                  {
+                    "const": "tianshu",
+                    "type": "string"
+                  },
+                  {
+                    "const": "import",
+                    "type": "string"
+                  }
+                ]
+              },
+              "importSource": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "title",
+                      "url"
+                    ],
+                    "properties": {
+                      "title": {
+                        "type": "string"
+                      },
+                      "url": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "body": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "overall",
+                      "progress",
+                      "issues",
+                      "implications",
+                      "actions"
+                    ],
+                    "properties": {
+                      "overall": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "progress": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "issues": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "implications": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "actions": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "draftError": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "code",
+                      "message",
+                      "at"
+                    ],
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "description": "ISO 8601",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "generationSteps": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "status"
+                  ],
+                  "properties": {
+                    "id": {
+                      "anyOf": [
+                        {
+                          "const": "missions",
+                          "type": "string"
+                        },
+                        {
+                          "const": "progress",
+                          "type": "string"
+                        },
+                        {
+                          "const": "meetings",
+                          "type": "string"
+                        },
+                        {
+                          "const": "collector",
+                          "type": "string"
+                        },
+                        {
+                          "const": "previous",
+                          "type": "string"
+                        },
+                        {
+                          "const": "draft",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "pending",
+                          "type": "string"
+                        },
+                        {
+                          "const": "running",
+                          "type": "string"
+                        },
+                        {
+                          "const": "done",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "editedFields": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "const": "overall",
+                      "type": "string"
+                    },
+                    {
+                      "const": "progress",
+                      "type": "string"
+                    },
+                    {
+                      "const": "issues",
+                      "type": "string"
+                    },
+                    {
+                      "const": "implications",
+                      "type": "string"
+                    },
+                    {
+                      "const": "actions",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "revisions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "at",
+                    "kind",
+                    "byName",
+                    "fields"
+                  ],
+                  "properties": {
+                    "at": {
+                      "description": "ISO 8601",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "generate",
+                          "type": "string"
+                        },
+                        {
+                          "const": "edit",
+                          "type": "string"
+                        },
+                        {
+                          "const": "submit",
+                          "type": "string"
+                        },
+                        {
+                          "const": "import",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "byName": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "const": "overall",
+                            "type": "string"
+                          },
+                          {
+                            "const": "progress",
+                            "type": "string"
+                          },
+                          {
+                            "const": "issues",
+                            "type": "string"
+                          },
+                          {
+                            "const": "implications",
+                            "type": "string"
+                          },
+                          {
+                            "const": "actions",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "submittedAt": {
+                "anyOf": [
+                  {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "viewer": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "isSelf",
+                  "isCeo"
+                ],
+                "properties": {
+                  "isSelf": {
+                    "type": "boolean"
+                  },
+                  "isCeo": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "actionId",
+                    "actionType",
+                    "label"
+                  ],
+                  "properties": {
+                    "actionId": {
+                      "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                      "type": "string"
+                    },
+                    "actionType": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ExecuteWeeklyReviewActionRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actionId"
+        ],
+        "properties": {
+          "actionId": {
+            "type": "string"
+          },
+          "input": {}
+        }
+      },
+      "ExecuteWeeklyReviewActionResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "review"
+        ],
+        "properties": {
+          "review": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "weeklyReviewId",
+              "version",
+              "personId",
+              "personName",
+              "weekStart",
+              "weekEnd",
+              "status",
+              "origin",
+              "importSource",
+              "body",
+              "draftError",
+              "generationSteps",
+              "editedFields",
+              "revisions",
+              "submittedAt",
+              "viewer",
+              "actions"
+            ],
+            "properties": {
+              "weeklyReviewId": {
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "personId": {
+                "type": "string"
+              },
+              "personName": {
+                "type": "string"
+              },
+              "weekStart": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              "weekEnd": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "drafting",
+                    "type": "string"
+                  },
+                  {
+                    "const": "draft_failed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "draft",
+                    "type": "string"
+                  },
+                  {
+                    "const": "submitted",
+                    "type": "string"
+                  }
+                ]
+              },
+              "origin": {
+                "anyOf": [
+                  {
+                    "const": "tianshu",
+                    "type": "string"
+                  },
+                  {
+                    "const": "import",
+                    "type": "string"
+                  }
+                ]
+              },
+              "importSource": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "title",
+                      "url"
+                    ],
+                    "properties": {
+                      "title": {
+                        "type": "string"
+                      },
+                      "url": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "body": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "overall",
+                      "progress",
+                      "issues",
+                      "implications",
+                      "actions"
+                    ],
+                    "properties": {
+                      "overall": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "progress": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "issues": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "implications": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "actions": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "draftError": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "code",
+                      "message",
+                      "at"
+                    ],
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "description": "ISO 8601",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "generationSteps": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "status"
+                  ],
+                  "properties": {
+                    "id": {
+                      "anyOf": [
+                        {
+                          "const": "missions",
+                          "type": "string"
+                        },
+                        {
+                          "const": "progress",
+                          "type": "string"
+                        },
+                        {
+                          "const": "meetings",
+                          "type": "string"
+                        },
+                        {
+                          "const": "collector",
+                          "type": "string"
+                        },
+                        {
+                          "const": "previous",
+                          "type": "string"
+                        },
+                        {
+                          "const": "draft",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "pending",
+                          "type": "string"
+                        },
+                        {
+                          "const": "running",
+                          "type": "string"
+                        },
+                        {
+                          "const": "done",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "editedFields": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "const": "overall",
+                      "type": "string"
+                    },
+                    {
+                      "const": "progress",
+                      "type": "string"
+                    },
+                    {
+                      "const": "issues",
+                      "type": "string"
+                    },
+                    {
+                      "const": "implications",
+                      "type": "string"
+                    },
+                    {
+                      "const": "actions",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "revisions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "at",
+                    "kind",
+                    "byName",
+                    "fields"
+                  ],
+                  "properties": {
+                    "at": {
+                      "description": "ISO 8601",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "generate",
+                          "type": "string"
+                        },
+                        {
+                          "const": "edit",
+                          "type": "string"
+                        },
+                        {
+                          "const": "submit",
+                          "type": "string"
+                        },
+                        {
+                          "const": "import",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "byName": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "const": "overall",
+                            "type": "string"
+                          },
+                          {
+                            "const": "progress",
+                            "type": "string"
+                          },
+                          {
+                            "const": "issues",
+                            "type": "string"
+                          },
+                          {
+                            "const": "implications",
+                            "type": "string"
+                          },
+                          {
+                            "const": "actions",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "submittedAt": {
+                "anyOf": [
+                  {
+                    "description": "ISO 8601",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "viewer": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "isSelf",
+                  "isCeo"
+                ],
+                "properties": {
+                  "isSelf": {
+                    "type": "boolean"
+                  },
+                  "isCeo": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "actionId",
+                    "actionType",
+                    "label"
+                  ],
+                  "properties": {
+                    "actionId": {
+                      "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                      "type": "string"
+                    },
+                    "actionType": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "WeeklyReviewUpdateInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fields"
+        ],
+        "properties": {
+          "fields": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "field",
+                "text"
+              ],
+              "properties": {
+                "field": {
+                  "anyOf": [
+                    {
+                      "const": "overall",
+                      "type": "string"
+                    },
+                    {
+                      "const": "progress",
+                      "type": "string"
+                    },
+                    {
+                      "const": "issues",
+                      "type": "string"
+                    },
+                    {
+                      "const": "implications",
+                      "type": "string"
+                    },
+                    {
+                      "const": "actions",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "text": {
+                  "maxLength": 4000,
+                  "type": "string"
+                },
+                "sources": {
+                  "maxItems": 10,
+                  "type": "array",
+                  "items": {
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "type": "string"
+                  }
+                }
+              }
+            }
           }
         }
       },

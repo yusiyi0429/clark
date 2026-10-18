@@ -362,11 +362,14 @@ describe("跨月工作台与任务卡起草", () => {
 });
 
 describe("个人复盘生成：每周复盘、采集记录与出处", () => {
-  async function seedCollector(t: TestApp, personId: string, startedAt: string, summary: string, source = "codex") {
-    const token = randomUUID(), at = new Date(startedAt);
+  /** 采集记录：原文一段，和服务端整理出的一条进展（复盘只读整理结果）。 */
+  async function seedCollector(t: TestApp, personId: string, startedAt: string, text: string, source = "codex") {
+    const token = randomUUID(), at = new Date(startedAt), item = randomUUID(), ended = new Date(at.getTime() + 3_600_000);
     await t.sql("INSERT INTO personal_tokens(id,person_id,name,client,secret_hash,created_at) VALUES($1,$2,'collector','collector',$3,$4)", [token, personId, randomUUID(), at]);
-    await t.sql(`INSERT INTO collector_items(id,person_id,device_id,token_id,report_kind,client_event_id,source,started_at,ended_at,summary,links,received_at)
-      VALUES($1,$2,'device-test-01',$3,'digest',$4,$5,$6,$7,$8,'[]',$7)`, [randomUUID(), personId, token, randomUUID(), source, at, new Date(at.getTime() + 3_600_000), summary]);
+    await t.sql(`INSERT INTO collector_items(id,person_id,device_id,token_id,report_kind,client_event_id,source,started_at,ended_at,summary,links,received_at,distill_status)
+      VALUES($1,$2,'device-test-01',$3,'digest',$4,$5,$6,$7,'原文：' || $8,'[]',$7,'done')`, [item, personId, token, randomUUID(), source, at, ended, text]);
+    await t.sql(`INSERT INTO collector_progress(id,person_id,source,repo,started_at,ended_at,text,placement,confidence,item_ids,created_at)
+      VALUES($1,$2,$3,'Tianshu-MVP',$4,$5,$6,'pending_replan',0.2,ARRAY[$7::uuid],$5)`, [randomUUID(), personId, source, at, ended, text, item]);
   }
   async function seedProgress(t: TestApp, personId: string, createdAt: string, body: string) {
     const task = randomUUID();
@@ -396,7 +399,7 @@ describe("个人复盘生成：每周复盘、采集记录与出处", () => {
       });
       await f.open(); const id = (await f.board()).rows[0].personalReviewId;
       const input = f.personalCalls.at(-1)!;
-      expect(input.collectorRecords).toEqual([expect.objectContaining({ source: "codex", summary: "写完复盘生成的服务端", label: "09/16 Codex 记录",
+      expect(input.collectorRecords).toEqual([expect.objectContaining({ source: "codex", text: "写完复盘生成的服务端", placement: "pending_replan", repo: "Tianshu-MVP", label: "09/16 Codex 记录",
         cite: expect.stringMatching(/^cite:collector:[0-9a-f-]{36}$/) })]);
       expect(input.weeklyReviews.map((week) => [week.week, week.entries.length])).toEqual([["2026-W36", 0], ["2026-W37", 0], ["2026-W38", 1], ["2026-W39", 0], ["2026-W40", 0]]);
       expect(input.weeklyReviews[2].entries[0]).toMatchObject({ body: "验收材料交给客户", label: "09/15 进展 · 验收材料", cite: expect.stringMatching(/^cite:progress:/) });
@@ -412,6 +415,34 @@ describe("个人复盘生成：每周复盘、采集记录与出处", () => {
       expect(view.selfReview.overall.text).toContain(`[09/16 Codex 记录](cite:${ref(input.collectorRecords[0])})`);
       expect(view.selfReview.overall.sources).toEqual([ref(input.collectorRecords[0]), ref(input.weeklyReviews[2].entries[0]), `mission:mission-${TEST_MEMBER.personId}`]);
       expect(view.selfReview.escalations).toEqual({ text: "无", sources: [] });
+    } finally { await f.close(); }
+  });
+
+  it("已提交的周复盘优先：那一周读周复盘、不再列进展；没有周复盘的周照旧读进展，出处可以引用周复盘", async () => {
+    const f = await fixture([TEST_MEMBER.personId]);
+    try {
+      await seedProgress(f.t, TEST_MEMBER.personId, "2026-09-15T02:00:00Z", "这周的进展被周复盘覆盖");
+      await seedProgress(f.t, TEST_MEMBER.personId, "2026-09-22T02:00:00Z", "下一周的进展");
+      const body = (text: string) => ({ overall: { text, sources: [] }, progress: { text: "验收材料交了", sources: [] }, issues: { text: "无", sources: [] },
+        implications: { text: "无", sources: [] }, actions: { text: "无", sources: [] } });
+      const review = randomUUID();
+      await f.t.sql(`INSERT INTO weekly_reviews(id,person_id,week_start,status,body,submitted_at,created_at,updated_at)
+        VALUES($1,$2,'2026-09-14','submitted',$3::jsonb,$4,$4,$4)`, [review, TEST_MEMBER.personId, JSON.stringify(body("状态：绿｜按计划")), new Date("2026-09-18T08:00:00Z")]);
+      await f.t.sql(`INSERT INTO weekly_reviews(id,person_id,week_start,status,body,created_at,updated_at)
+        VALUES($1,$2,'2026-09-21','draft',$3::jsonb,now(),now())`, [randomUUID(), TEST_MEMBER.personId, JSON.stringify(body("还没提交的草稿"))]);
+      f.generate(async (input) => {
+        const week = input.weeklyReviews.find((item) => item.review)!;
+        return { ...citedReview(input), overall: { text: `按周复盘推进${link(week.review!)}。\n缺少记录：这个月没有采集记录。`, sources: [] } };
+      });
+      await f.open(); const id = (await f.board()).rows[0].personalReviewId;
+      const input = f.personalCalls.at(-1)!;
+      expect(input.weeklyReviews.map((week) => [week.week, Boolean(week.review), week.entries.map((entry) => entry.body)])).toEqual([
+        ["2026-W36", false, []], ["2026-W37", false, []], ["2026-W38", true, []], ["2026-W39", false, ["下一周的进展"]], ["2026-W40", false, []]]);
+      expect(input.weeklyReviews[2].review).toEqual({ cite: `cite:weekly-review:${review}`, label: "09/14 周复盘",
+        text: "本周总体判断\n状态：绿｜按计划\n\n关键进展与 Evidence\n验收材料交了\n\n最重要的问题及 Why\n无\n\n判断变化 / Implication\n无\n\n当前处理\n无" });
+      const view = await f.read(id);
+      expect(view.generationSteps[1]).toEqual({ id: "weekly", label: "读每周复盘", status: "done", result: "5 周里 2 周有记录，1 周有周复盘" });
+      expect(view.selfReview.overall.sources).toEqual([`weekly-review:${review}`]);
     } finally { await f.close(); }
   });
 

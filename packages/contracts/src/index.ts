@@ -32,3 +32,4 @@ export * from "./requests.js";
 export * from "./personalMemory.js";
 export * from "./collector.js";
 export * from "./feishu.js";
+export * from "./weeklyReviews.js";

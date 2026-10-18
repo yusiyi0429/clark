@@ -1,10 +1,15 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { CollectorHeartbeatRequest, CollectorHeartbeatResponse, CollectorReportRequest, CollectorReportResponse } from "@warmap/contracts";
+import { CollectorConsentResponse, CollectorHeartbeatRequest, CollectorHeartbeatResponse, CollectorReportRequest, CollectorReportResponse,
+  UpdateCollectorConsentRequest } from "@warmap/contracts";
 import { recordHeartbeat, recordReport, type CollectorIdentity } from "../collector.js";
+import { collectorConsentGranted, readCollectorConsent, updateCollectorConsent } from "../collectorDistill.js";
 import { authenticatePersonalToken } from "../personalTokens.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
-/** 本机采集器上报：只认 client=collector 的个人令牌；数据一律记在令牌本人名下。鉴权先于请求体校验。 */
+/**
+ * 本机采集器上报：只认 client=collector 的个人令牌；数据一律记在令牌本人名下。鉴权先于请求体校验。
+ * 本人没同意采集（D-02）时工作段一律不收（403，本机留着下次再发），心跳照收。同意开关在 /api/me/collector/consent。
+ */
 export function registerCollectorRoutes(app: AppInstance, ctx: RouteContext): void {
   const { pool, q, fail, companyMemory } = ctx;
   const identities = new WeakMap<FastifyRequest, CollectorIdentity>();
@@ -19,9 +24,17 @@ export function registerCollectorRoutes(app: AppInstance, ctx: RouteContext): vo
     async (req) => recordHeartbeat(q, identities.get(req)!, req.body, ctx.now()));
 
   app.post("/api/collector/reports", { preValidation: requireCollector, schema: { body: CollectorReportRequest, response: { 200: CollectorReportResponse } } }, async (req, reply) => {
+    if (req.body.items.length && !await collectorConsentGranted(q, identities.get(req)!.personId)) {
+      return fail(reply, 403, "COLLECTOR_CONSENT_REQUIRED", "还没有同意采集，请在天枢的上手流程里打开采集");
+    }
     const result = await recordReport(pool, identities.get(req)!, req.body, ctx.now());
     if (!result.ok) return fail(reply, 400, "INVALID_INPUT", result.message);
     const { ok: _ok, ...body } = result;
     return body;
   });
+
+  app.get("/api/me/collector/consent", { preHandler: ctx.requirePerson, schema: { response: { 200: CollectorConsentResponse } } },
+    async (req) => ({ consent: await readCollectorConsent(q, req.person!.personId) }));
+  app.put("/api/me/collector/consent", { preHandler: ctx.requirePerson, schema: { body: UpdateCollectorConsentRequest, response: { 200: CollectorConsentResponse } } },
+    async (req) => ({ consent: await updateCollectorConsent(pool, req.person!.personId, req.body.granted, ctx.now()) }));
 }

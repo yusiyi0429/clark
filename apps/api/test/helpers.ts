@@ -32,6 +32,8 @@ import type { MissionCardReviewAgent } from "../src/missionCardReview.js";
 import type { MissionCardDraftAgent } from "../src/missionCardDraftAgent.js";
 import type { RequestAgent } from "../src/delivery/requestAgent.js";
 import type { FeishuClient } from "../src/feishu/client.js";
+import { createWeeklyReviewService, type WeeklyReviewService } from "../src/weeklyReviewService.js";
+import type { WeeklyReviewAgent } from "../src/weeklyReviewAgent.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 
@@ -190,6 +192,8 @@ export type TestApp = {
   monthlyReviews?: MonthlyReviewService;
   /** 仅当注入 recordingDeps 时存在；测试用它等流水线跑完、模拟重启恢复。 */
   recordings?: MeetingRecordingService;
+  /** 仅当注入 weeklyReviewAgent 时存在：测试用它触发周五定时、等生成跑完。 */
+  weeklyReviews?: WeeklyReviewService;
   restart: (runtime: ConversationRuntime) => Promise<FastifyInstance>;
   close: () => Promise<void>;
 };
@@ -240,6 +244,9 @@ export async function createTestApp(
     /** 月末复盘的假起草、评估、汇总 Agent；与 monthlyDraftAgent 共用 monthlyNow。 */
     monthlyReviewAgents?: MonthlyReviewAgents;
     monthlyReviewRetryDelayMs?: number;
+    /** 周复盘的假 Co-Agent；与月度复盘共用 monthlyNow。people 缺省是名单里能进成员工作台的人。 */
+    weeklyReviewAgent?: WeeklyReviewAgent;
+    weeklyReviewPeople?: () => string[];
     /** 会议录音的假 ffmpeg/TOS/火山；不注入时 app 装配真实依赖（不会被调用）。 */
     recordingDeps?: RecordingDeps;
     /** /api/me/voiceprint 的假 ffmpeg/腾讯云；不注入时按环境变量判断未配置。 */
@@ -274,7 +281,7 @@ export async function createTestApp(
   await seedTestAccess(client);
   client.release();
   const env = { ...testEnv, ...seedOverrides };
-  const { monthlyDraftAgent, monthlyNow, recordingDeps, monthlyReviewAgents, monthlyReviewRetryDelayMs, ...restRuntimeOptions } = runtimeOptions;
+  const { monthlyDraftAgent, monthlyNow, recordingDeps, monthlyReviewAgents, monthlyReviewRetryDelayMs, weeklyReviewAgent, weeklyReviewPeople, ...restRuntimeOptions } = runtimeOptions;
   const appRuntimeOptions = { backgroundPreflight: false, personalDistillationStream: noopDistillationStream, personalMemoryRecall: null, ...restRuntimeOptions };
   const monthlyPlans = monthlyDraftAgent
     ? createMonthlyPlanService({ pool, companyMemory: loadCompanyMemory(env), agent: monthlyDraftAgent, now: monthlyNow })
@@ -287,10 +294,14 @@ export async function createTestApp(
           nextFocus: { text: "缺少材料", sources: [] }, escalations: { text: "", sources: [] },
         } }; } } } })
     : undefined;
+  const weeklyReviews = weeklyReviewAgent
+    ? createWeeklyReviewService({ pool, agent: weeklyReviewAgent, now: monthlyNow, retryDelayMs: 0,
+      people: weeklyReviewPeople ?? (() => loadCompanyMemory(env).searchPeople(undefined).filter((person) => person.roles.includes("dri") || person.roles.includes("participant")).map((person) => person.personId)) })
+    : undefined;
   const recordings = recordingDeps
     ? createMeetingRecordingService({ pool, storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR, companyMemory: loadCompanyMemory(env), deps: recordingDeps })
     : undefined;
-  const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, recordingService: recordings, now: monthlyNow,
+  const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, weeklyReviewService: weeklyReviews, recordingService: recordings, now: monthlyNow,
     threadIntroAgent: { async generate(input) { return { message: `${input.inviter}邀请${input.newcomers.join("、")}加入「${input.title}」，请查看对象进展。` }; } },
     taskAcceptanceAgent: { async draft() { throw new Error("测试里没有模型"); } },
     ...appRuntimeOptions });
@@ -300,6 +311,7 @@ export async function createTestApp(
     pool,
     monthlyPlans,
     monthlyReviews,
+    weeklyReviews,
     recordings,
     publicOrigin: env.publicOrigin,
     env,
@@ -355,6 +367,7 @@ export async function createTestApp(
     },
     close: async () => {
       await monthlyReviews?.idle();
+      await weeklyReviews?.idle();
       await Promise.all(apps.map((instance) => instance.close()));
       await pool.end();
       await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);

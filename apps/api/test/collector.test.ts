@@ -21,6 +21,12 @@ async function token(f: Fixture, cookie: string, client = "collector") {
   expect(created.statusCode).toBe(200);
   return created.json() as { token: string; view: { id: string } };
 }
+/** 本人在天枢同意采集（上手流程的开关走这个接口）。 */
+async function consent(f: Fixture, cookie: string, granted = true) {
+  const response = await call(f, cookie, "PUT", "/api/me/collector/consent", { granted });
+  expect(response.statusCode).toBe(200);
+  return response.json().consent as { granted: boolean; updatedAt: string | null };
+}
 const post = (f: Fixture, url: string, bearer: string | null, payload: unknown) => f.t.app.inject({
   method: "POST", url, headers: bearer ? { authorization: `Bearer ${bearer}` } : {}, payload: payload as Record<string, unknown>,
 });
@@ -39,6 +45,13 @@ describe("本机采集器上报", () => {
       expect(health[1].last_success_at).not.toBeNull();
 
       const items = [item(), item()];
+      // 没同意采集：工作段一律不收（本机留着下次再发），心跳照收。
+      const refused = await post(f, "/api/collector/reports", bearer, report(items));
+      expect(refused.statusCode).toBe(403);
+      expect(refused.json().code).toBe("COLLECTOR_CONSENT_REQUIRED");
+      expect((await post(f, "/api/collector/reports", bearer, report([]))).statusCode).toBe(200);
+      expect((await call(f, f.member, "GET", "/api/me/collector/consent")).json()).toEqual({ consent: { granted: false, updatedAt: null } });
+      expect(await consent(f, f.member)).toMatchObject({ granted: true });
       const inventory = { scheduledTasks: [{ name: "TkosWorldCollector", schedule: "每 30 分钟", command: null }],
         feishuDocs: [{ url: "https://example.feishu.cn/docx/abc", title: null, readAt: "2026-10-10T01:00:00.000Z" }] };
       const first = await post(f, "/api/collector/reports", bearer, report(items, { inventory }));
@@ -78,6 +91,7 @@ describe("本机采集器上报", () => {
     const f = await executionFixture();
     try {
       const member = await token(f, f.member), third = await token(f, f.third);
+      await consent(f, f.member); await consent(f, f.third);
       const shared = item();
       const smuggled = { ...report([{ ...shared, personId: "person-fixture-003" } as never]), personId: "person-fixture-003" };
       expect((await post(f, "/api/collector/reports", member.token, smuggled)).json()).toMatchObject({ accepted: 1 });

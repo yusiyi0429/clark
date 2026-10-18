@@ -36,6 +36,8 @@ import { createPostMeetingAgent } from "./postMeetingAgent.js";
 import type { DriExporter } from "./meetingStore.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
 import type { MonthlyReviewService } from "./monthlyReviewService.js";
+import type { WeeklyReviewService } from "./weeklyReviewService.js";
+import { createWeeklyReviewWorldSync, type WeeklyReviewWorldSync } from "./weeklyReviewWorld.js";
 import { logEvent } from "./observability.js";
 import { clientTagFor, enterRequestClient, tracingEnabled } from "./tracing.js";
 import type { FeishuEnv } from "./feishu/config.js";
@@ -83,6 +85,7 @@ import { registerMonthlyReviewRoutes } from "./routes/monthlyReviews.js";
 import { registerRequestRoutes } from "./routes/requests.js";
 import { createRequestAgent, type RequestAgent } from "./delivery/requestAgent.js";
 import { registerCollectorRoutes } from "./routes/collector.js";
+import { registerWeeklyReviewRoutes } from "./routes/weeklyReviews.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 import { realDictationDeps, type DictationDeps } from "./dictation.js";
@@ -180,6 +183,7 @@ export async function buildApp({
   ontologyUpdater = pendingOntologyUpdater,
   monthlyPlanService,
   monthlyReviewService,
+  weeklyReviewService,
   recordingService,
   voiceprintDeps = realVoiceprintDeps,
   dictationDeps = realDictationDeps,
@@ -222,6 +226,8 @@ export async function buildApp({
   monthlyPlanService?: MonthlyPlanService;
   /** 月末复盘的起草、评估、汇总；缺省时 open 返回 503，其余生成不运行。 */
   monthlyReviewService?: MonthlyReviewService;
+  /** 周复盘生成（周五定时与本人重新生成）；缺省时重新生成返回 503。 */
+  weeklyReviewService?: WeeklyReviewService;
   /** 会议录音流水线；缺省按 env.recordingStorageDir 装配真实 ffmpeg/TOS/火山依赖（server.ts 注入以便启动时恢复）。 */
   recordingService?: MeetingRecordingService;
   /** 本人声纹录入/删除用的 ffmpeg 与腾讯云依赖；缺省为真实实现（测试注入假实现）。 */
@@ -436,6 +442,13 @@ export async function buildApp({
     const unsubscribe = onOutcomeReviewed(pool, worldMeetings.schedule);
     app.addHook("onClose", async () => { unsubscribe(); await worldMeetings.close(); });
   }
+  // 周复盘提交后按关联的 Mission、Task 写进展到本体：同样只在实例配置允许写时启用；不写时提交照常，等配好后补发。
+  let weeklyReviewWorld: WeeklyReviewWorldSync | undefined;
+  if (worldConfigured(env) && world.status().writes) {
+    const sync = createWeeklyReviewWorldSync({ pool, client: new WorldClient(q, env), publicOrigin: env.publicOrigin, names: () => personDisplayNames(companyMemory) });
+    weeklyReviewWorld = sync;
+    app.addHook("onClose", async () => { await sync.close(); });
+  }
   // 每个请求的结构化日志上下文：handler 里补充 action/run 字段，onResponse 统一落一条。
   const requestContext = new WeakMap<FastifyRequest, RequestContext>();
   app.addHook("onResponse", async (req, reply) => {
@@ -537,6 +550,8 @@ export async function buildApp({
     ontologyUpdater,
     monthlyPlanService,
     monthlyReviewService,
+    weeklyReviewService,
+    weeklyReviewWorld,
     recordings,
     voiceprints: voiceprintDeps,
     dictation: dictationDeps,
@@ -592,6 +607,7 @@ export async function buildApp({
   registerRequestRoutes(app, ctx, deliveryAgent);
   registerPersonalMemoryRoutes(app, ctx);
   registerCollectorRoutes(app, ctx);
+  registerWeeklyReviewRoutes(app, ctx);
 
   return app;
 }

@@ -11,6 +11,7 @@ import { monthDayTime } from "@/lib/companyTime";
 import { useRoundNow } from "@/components/missionCards/useRoundNow";
 import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import { ConnectAgentForm } from "@/components/ConnectAgentForm";
+import { CollectorConsentSwitch } from "./CollectorConsentSwitch";
 import { MorningCanvas } from "./MorningCanvas";
 import { CoAgentCapsule } from "./CoAgentCapsule";
 import { OnboardingProgress } from "./OnboardingProgress";
@@ -249,6 +250,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
             </> : null}
             {step === "connect" ? <div className={`${f.glass} ${s.connectPanel}`}>
               <ConnectAgentForm role={data.role} defaultName="我的电脑" actionsTarget={connectDownloaded ? undefined : connectPrimary} onDownloaded={() => setConnectDownloaded(true)} />
+              {data.role === "member" ? <div className={s.consent}><CollectorConsentSwitch /></div> : null}
             </div> : null}
             {step === "start" ? <p className={s.summary}>
               <span className={s.summaryItem}>{radarSummaryLine(data.role, radarSaved ?? data.radar)}</span>
