@@ -46,6 +46,13 @@ async function seed(q: Q) {
     VALUES ($1, $2, '2026-10-05', 'submitted', $3::jsonb, now(), now(), now())`, [randomUUID(), DING, JSON.stringify({
     overall: { text: "丁本周推进品牌", sources: [] }, progress: { text: "物料完成", sources: [] }, issues: { text: "", sources: [] },
     implications: { text: "", sources: [] }, actions: { text: "", sources: [] } })]);
+  // 丙：已提交一份、本周还有一份没提交的草稿（别人看不到草稿正文）。
+  const weekly = (person: string, week: string, status: "submitted" | "draft", text: string) => q(`INSERT INTO weekly_reviews (id, person_id, week_start, status, body, submitted_at, created_at, updated_at)
+    VALUES ($1, $2, $3, $4, $5::jsonb, $6, now(), now())`, [randomUUID(), person, week, status, JSON.stringify({
+    overall: { text, sources: [] }, progress: { text: "", sources: [] }, issues: { text: "", sources: [] }, implications: { text: "", sources: [] }, actions: { text: "", sources: [] } }),
+    status === "submitted" ? new Date() : null]);
+  await weekly(BING, "2026-10-05", "submitted", "丙本周写完接口文档");
+  await weekly(BING, "2026-10-12", "draft", "丙还没提交的草稿");
   return { bingTask, dingTask };
 }
 
@@ -86,6 +93,34 @@ describe("三层取用的权限与范围标签", () => {
       expect(await canReadProgress(q as never, { personId: YI, role: "member" }, { personId: DING, period: "2026-10" })).toBe(false);
       expect(await canReadProgress(q as never, { personId: YI, role: "member" }, { personId: YI, period: "2026-10" })).toBe(true);
       expect(await canReadProgress(q as never, { personId: CEO, role: "ceo" }, { personId: DING, period: "2026-10" })).toBe(true);
+    });
+  }, 60_000);
+
+  it("周复盘正文：已提交的 CEO 能看全部，其他人只看同一战场；没提交的草稿只有本人能看", async () => {
+    await createTestDb(async ({ db }) => {
+      await migrate(db);
+      const q: Q = (sql, params) => db.query(sql, params);
+      await seed(q);
+      const texts = (read: { weekly: unknown[] }) => (read.weekly as { person: string; text: string }[]).map((item) => `${item.person}:${item.text}`).sort();
+
+      const ceo = await mapFor(q, CEO, "ceo").map.readReviews({ people: "all", kind: "weekly" });
+      expect(texts(ceo)).toEqual(["丁:本周总体判断
+丁本周推进品牌
+
+关键进展与 Evidence
+物料完成", "丙:本周总体判断
+丙本周写完接口文档"].sort());
+      expect(ceo.filtered).toBe(0);
+      expect(JSON.stringify(ceo)).not.toContain("还没提交");
+
+      const peer = await mapFor(q, YI, "member").map.readReviews({ people: "all", kind: "weekly" });
+      expect(texts(peer)).toEqual(["丙:本周总体判断
+丙本周写完接口文档"]);
+      expect(peer.filtered).toBe(1);
+
+      const self = await mapFor(q, BING, "member").map.readReviews({ people: "me", kind: "weekly" });
+      expect(texts(self)).toContain("丙:本周总体判断
+丙还没提交的草稿");
     });
   }, 60_000);
 
