@@ -166,10 +166,10 @@ describe("会议页按议题收拢（feedback 15）", () => {
     for (const internal of [ISSUE, MATERIAL, "material:", "decision:", "discussion:", "issue.decide"]) expect(text).not.toContain(internal);
   });
 
-  it("正式版（非演示）不在会议页直接决定：仍由会后结论确认，会前准备操作保留", () => {
+  it("正式版（非演示）不在会议页直接决定：没有决定入口也不写说明，会前准备操作保留", () => {
     const html = render(meeting());
     expect(html).not.toContain(">按此决定<");
-    expect(html).toContain("决定由会后结论确认生效。");
+    expect(html).not.toContain("决定由会后结论确认生效。");
     expect(html).toContain("已阅");
     expect(html).toContain("带到会议");
   });
@@ -231,7 +231,7 @@ describe("会后：会上形成的结论回到议题块里确认", () => {
     expect(html.indexOf('id="outcome-a1"')).toBeGreaterThan(others);
     expect(html.indexOf("华东改为主战场")).toBeGreaterThan(others);
     expect(html).toContain("会上形成的结论");
-    expect(html).toContain("会后候选经一号位确认后才写入决定；未确认的候选不构成决定。");
+    expect(html).not.toContain("未确认的候选不构成决定");
     // 会后目录：纪要 → 议题 → 其他 → 原文。
     expect(html).toContain('aria-label="会后目录"');
   });

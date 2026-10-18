@@ -34,10 +34,10 @@ export function MaterialQuestionsSection({ value }: { value: TPreflightMaterialQ
   );
 }
 
-const DIVERGENCE_GROUPS: { type: TPreflightDivergence["type"]; label: string; hint: string }[] = [
-  { type: "value_tradeoff", label: "价值取舍", hint: "需要一号位选择" },
-  { type: "judgment", label: "判断分歧", hint: "已收敛到哪里、还差什么" },
-  { type: "fact_gap", label: "事实不足", hint: "转监测，不阻塞本次决定" },
+const DIVERGENCE_GROUPS: { type: TPreflightDivergence["type"]; label: string }[] = [
+  { type: "value_tradeoff", label: "价值取舍" },
+  { type: "judgment", label: "判断分歧" },
+  { type: "fact_gap", label: "事实不足" },
 ];
 
 export function DivergencesSection({ value }: { value: TPreflightDivergence[] | undefined }) {
@@ -53,7 +53,7 @@ export function DivergencesSection({ value }: { value: TPreflightDivergence[] | 
         if (!items.length) return null;
         return (
           <div key={group.type} className={s.divergenceGroup}>
-            <small>{group.label} · {group.hint}</small>
+            <small>{group.label}</small>
             {items.map((item) => (
               <article key={item.title} className={s.quoteItem}>
                 <div className={s.entryTitle}><strong>{item.title}</strong></div>

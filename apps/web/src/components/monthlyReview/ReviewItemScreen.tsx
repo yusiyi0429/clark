@@ -114,7 +114,7 @@ export function ReviewItemScreen({ initialItem }: { initialItem: TMonthlyReviewI
     const latest = await browserApi.GET("/api/monthly-review-items/{itemId}", { params: { path: { itemId: item.itemId } } }).then(({ data }) => data?.item).catch(() => undefined);
     const current = latest ?? item;
     if (latest) accept(latest);
-    await perform(current.actions.find((candidate) => candidate.actionType === "monthly-review-item.submit"), undefined, "已提交，Co-Agent 正在做偏差评估，CEO 会看到你的复盘。");
+    await perform(current.actions.find((candidate) => candidate.actionType === "monthly-review-item.submit"), undefined, "已提交");
   };
   const resolve = async (field: TMonthlyReviewField, decision: "adopt" | "dismiss") => {
     if (decision === "adopt" && drafts[field] !== undefined && drafts[field] !== item.selfReview?.[field].text && !(await ask(`「${FIELD_LABELS[field]}」有还没保存的改动，采用建议会替换掉它们。`, "采用建议"))) return;
@@ -133,7 +133,7 @@ export function ReviewItemScreen({ initialItem }: { initialItem: TMonthlyReviewI
   const submitAction = action("monthly-review-item.submit");
 
   return <div className={s.screen}>
-    <DetailFrame title={title} subtitle={`${kind}月度复盘 · 负责人 ${item.ownerName}${item.ownerUnassigned ? "（待指派 · CEO 代复盘）" : ""}${isParticipant && !isOwner ? " · 你参与讨论" : ""}`} onBack={() => workspace.close()}
+    <DetailFrame title={title} subtitle={`${kind}月度复盘 · 负责人 ${item.ownerName}${item.ownerUnassigned ? "（待指派）" : ""}${isParticipant && !isOwner ? " · 你参与讨论" : ""}`} onBack={() => workspace.close()}
       actions={<span className={r.chip} data-tone={tone(item.status)}>{status}</span>}>
       <div className={s.content}>
         <div className={s.document}>
@@ -145,13 +145,13 @@ export function ReviewItemScreen({ initialItem }: { initialItem: TMonthlyReviewI
 
           <section className={r.goal} aria-label="本月目标">
             <h2>{item.subjectType === "battlefield" ? "战场 · " : ""}{month} 月目标</h2>
-            {item.target ? <p>{item.target}</p> : <p className={r.muted}>{month} 月没有签发的目标，按实际推进情况复盘。</p>}
+            {item.target ? <p>{item.target}</p> : <p className={r.muted}>{month} 月没有签发的目标</p>}
             <h2>{item.subjectType === "battlefield" ? "战场 · " : ""}六个月目标</h2>
             <p className={r.muted}>{item.sixMonthOutcome || "未填写"}</p>
           </section>
 
-          {item.status === "waiting" ? <p className={r.muted} role="status">等这里的 Mission 负责人交齐个人复盘（或 CEO 选择不再等）后，Co-Agent 会以他们的复盘为材料自动起草。</p> : null}
-          {item.status === "drafting" ? <div className={r.working} role="status"><span className={r.pulse} aria-hidden />Co-Agent 正在根据本月目标、反馈和 Mission 起草自评，一般一两分钟…</div> : null}
+          {item.status === "waiting" ? <p className={r.muted} role="status">等待个人复盘交齐</p> : null}
+          {item.status === "drafting" ? <div className={r.working} role="status"><span className={r.pulse} aria-hidden />Co-Agent 正在起草自评…</div> : null}
           {item.status === "draft_failed" ? <div className={s.error} role="alert">
             起草没有成功{item.draftError ? `：${item.draftError.message}` : ""}。
             {retryDraft ? <div className={s.inlineActions} style={{ marginTop: 8 }}><Button variant="primary" className={s.primary} isDisabled={pending} onPress={() => void perform(retryDraft, undefined, "已重新开始起草。")}>重新起草</Button></div> : null}
@@ -188,7 +188,6 @@ export function ReviewItemScreen({ initialItem }: { initialItem: TMonthlyReviewI
           </dl> : null}
 
           {editable ? <div className={r.bar}>
-            <p className={`${s.hint} ${r.hint}`}>可以直接改，也可以在右边和天枢聊：上传你手写的复盘（PDF / Word / Markdown），它会按材料给每一栏改写建议，你点「采用」才会写进来。</p>
             {dirtyFields.length ? <Button variant="ghost" className={s.secondary} isDisabled={pending} onPress={() => void save("已保存。")}>保存</Button> : null}
             {submitAction ? <Button variant="primary" className={s.primary} isDisabled={pending} onPress={() => void submit()}>{pending ? "正在提交…" : item.status === "returned" ? "重新提交" : "提交复盘"}</Button> : null}
           </div> : null}
@@ -199,9 +198,9 @@ export function ReviewItemScreen({ initialItem }: { initialItem: TMonthlyReviewI
           {item.assessment.status !== "none" ? <section className={r.section} aria-label="Co-Agent 偏差评估">
             <h2>Co-Agent 偏差评估</h2>
             {item.assessment.status === "running" || item.assessment.status === "pending"
-              ? <div className={r.working} role="status"><span className={r.pulse} aria-hidden />正在对照公司视角的材料做评估…</div>
+              ? <div className={r.working} role="status"><span className={r.pulse} aria-hidden />Co-Agent 正在评估…</div>
               : item.assessment.status === "failed"
-                ? <div className={s.error} role="alert">评估没有成功{item.assessment.error ? `：${item.assessment.error.message}` : ""}。不影响确认。
+                ? <div className={s.error} role="alert">评估没有成功{item.assessment.error ? `：${item.assessment.error.message}` : ""}
                     {retryAssessment ? <div className={s.inlineActions} style={{ marginTop: 8 }}><Button variant="ghost" className={s.secondary} isDisabled={pending} onPress={() => void perform(retryAssessment, undefined, "已重新开始评估。")}>重新评估</Button></div> : null}
                   </div>
                 : item.assessment.result ? <div className={r.assessment}>
@@ -213,10 +212,10 @@ export function ReviewItemScreen({ initialItem }: { initialItem: TMonthlyReviewI
 
           {confirm || giveBack ? <div className={r.bar}>
             {returning !== null ? <div className={r.returnBox}>
-              <label htmlFor="review-return">打回原因（负责人会看到）</label>
+              <label htmlFor="review-return">打回原因</label>
               <textarea id="review-return" value={returning} maxLength={500} autoFocus onChange={(event) => setReturning(event.target.value)} placeholder="例如：差距没有对照目标写清楚" />
               <div className={s.inlineActions}>
-                <Button variant="primary" className={s.decisionPrimary} isDisabled={pending || !returning.trim()} onPress={() => void perform(giveBack, { reason: returning.trim() }, "已打回，负责人会看到原因。").then((ok) => { if (ok) setReturning(null); })}>打回</Button>
+                <Button variant="primary" className={s.decisionPrimary} isDisabled={pending || !returning.trim()} onPress={() => void perform(giveBack, { reason: returning.trim() }, "已打回").then((ok) => { if (ok) setReturning(null); })}>打回</Button>
                 <Button variant="ghost" className={s.secondary} isDisabled={pending} onPress={() => setReturning(null)}>取消</Button>
               </div>
             </div> : <>

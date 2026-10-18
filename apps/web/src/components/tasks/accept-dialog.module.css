@@ -3,7 +3,6 @@
  * 这里只排里面：对照完成标准、交付结果、一句结论、两颗按钮。复选框用 HeroUI 原版（天枢主题里已是品牌蓝）。
  */
 .body { display: grid; gap: 0; min-width: 0; }
-.lead { margin: -6px 0 0; color: #4d5a6c; font-size: 14px; line-height: 1.75; }
 .thinking { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; color: #8a94a6; font-size: 13px; line-height: 1.6; }
 .pulse { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #8a94a6; animation: accept-pulse 1.2s ease-in-out infinite; }
 .block { display: grid; min-width: 0; margin-top: 18px; }

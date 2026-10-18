@@ -39,7 +39,7 @@ const api = vi.hoisted(() => ({ GET: vi.fn(), POST: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ browserApi: api }));
 
 import { MemberRadarScreen } from "./MemberRadarScreen";
-import { DetailHeader } from "@/components/shell/DetailHeader";
+import { DetailFrame } from "@/components/shell/DetailFrame";
 import type { MyRadar } from "./personalRadar";
 
 type Element = ReactElement<Record<string, unknown>>;
@@ -84,7 +84,7 @@ describe("我的雷达的「刷新」", () => {
   it("202 后每 5 秒看一次进度，扫完才刷新页面", async () => {
     api.POST.mockResolvedValue({ response: { status: 202 } });
     const tree = render();
-    expect(elements(tree).some((element) => element.type === DetailHeader)).toBe(true);
+    expect(elements(tree).some((element) => element.type === DetailFrame)).toBe(true);
     await (refreshButton(tree)!.props.onPress as () => Promise<void>)();
     expect(api.POST).toHaveBeenCalledExactlyOnceWith("/api/me/radar/scan");
     const scanning = render();

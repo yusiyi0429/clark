@@ -38,7 +38,6 @@ export function LtcoDecisionScreen({ review }: { review: TMonthlyReviewPayload }
   const [error, setError] = useState("");
   const inFlight = useRef(false);
   const month = monthOf(review.period);
-  const next = monthOf(review.nextPeriod);
   useRegisterDetail(useMemo(() => ({ scope: "global", label: `${month} 月复盘 · 长期目标审视`, mark: "monthly" as const, cards: NO_CARDS }), [month]));
 
   const decide = review.actions.find((candidate) => candidate.actionType === "monthly-review.decide_ltco");
@@ -70,11 +69,11 @@ export function LtcoDecisionScreen({ review }: { review: TMonthlyReviewPayload }
   const windowText = `${windowLabel(review.ltco.window.start)} – ${windowLabel(review.ltco.window.end)}`;
 
   return <div className={s.screen}>
-    <DetailFrame title="长期目标审视" subtitle={`${month} 月复盘 · 窗口 ${windowText} · 下一步：${next} 月目标`} onBack={() => workspace.navigate(`/reviews/${review.period}`)}>
+    <DetailFrame title="长期目标审视" subtitle={`${month} 月复盘 · 窗口 ${windowText}`} onBack={() => workspace.navigate(`/reviews/${review.period}`)}>
       <div className={s.content}><div className={`${s.document} ${r.ltco}`}>
         {error ? <p className={s.error} role="alert">{error}</p> : null}
         {suggestion ? <section className={r.suggestion} aria-label="Co-Agent 建议">
-          <header>Co-Agent 建议：{suggestsChange ? "修订" : "保持不变"}（来自已确认的公司月度复盘）</header>
+          <header>Co-Agent 建议：{suggestsChange ? "修订" : "保持不变"}</header>
           <p>{suggestion.rationale}</p>
         </section> : null}
 
@@ -82,16 +81,14 @@ export function LtcoDecisionScreen({ review }: { review: TMonthlyReviewPayload }
           <label className={r.choice}>
             <input type="radio" name="ltco" value="keep" checked={choice === "keep"} onChange={() => setChoice("keep")} disabled={pending} />
             <strong>保持不变</strong>
-            <span>战略没有变，沿用现在的公司长期目标和各战场长期目标，窗口滑到 {windowText}，直接生成 {next} 月目标草案。</span>
           </label>
           <label className={r.choice}>
             <input type="radio" name="ltco" value="revise" checked={choice === "revise"} onChange={() => setChoice("revise")} disabled={pending} />
             <strong>修订</strong>
-            <span>在下面直接改，新窗口的最后一个月也要覆盖到；Co-Agent 建议改的地方已经预填。只写回改过的，{next} 月目标按新的长期目标拆分。</span>
           </label>
-        </div> : <p className={`${s.readonly} ${s.readonly}`}>公司月度复盘确认后才能审视长期目标。</p>}
+        </div> : <p className={`${s.readonly} ${s.readonly}`}>待公司月度复盘确认</p>}
 
-        <p className={r.window}>长期目标窗口：{windowText}（每月审视时往后滑一个月）</p>
+        <p className={r.window}>长期目标窗口：{windowText}</p>
         <section aria-label="公司长期目标">
           <h2 className={r.label}>公司长期目标</h2>
           {revising
@@ -128,9 +125,8 @@ export function LtcoDecisionScreen({ review }: { review: TMonthlyReviewPayload }
             <Button variant="primary" className={s.primary} isDisabled={pending || nothingChanged || (choice === "revise" && (emptyUnit || clearsLtco))} onPress={() => void submit()}>
               {pending ? "正在确认…" : choice === "keep" ? "保持不变，生成下月目标" : "确认修订，生成下月目标"}
             </Button>
-            <p className={`${s.hint} ${r.hint}`}>确认后 Co-Agent 会带上这次复盘，把长期目标拆成 {next} 月目标起草月度计划，你在计划页协商、签发。</p>
           </div>
-          {nothingChanged ? <p className={s.hint}>还没有改动；不改的话请选「保持不变」。</p> : null}
+          {nothingChanged ? <p className={s.hint}>还没有改动</p> : null}
         </> : null}
         <FeedbackLink />
       </div></div>

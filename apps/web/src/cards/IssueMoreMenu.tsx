@@ -32,8 +32,6 @@ export function moreMenuEntries(card: Pick<Card, "actions">, pendingIssue: boole
   ];
 }
 
-export const DISMISS_NOTE = "移出后不再出现在决策面，可在已处理中恢复。";
-
 /** 菜单项（Popover 里的内容；单独导出便于不开浮层就能校验）。 */
 export function MoreMenuList({ entries, onPick }: { entries: MoreMenuEntry[]; onPick: (id: MoreMenuEntry["id"]) => void }) {
   return (
@@ -57,7 +55,6 @@ export function JoinDialogContent({ options, value, onChange, pending, onCancel,
     <>
       <Modal.Header><Modal.Heading>加入已有会议</Modal.Heading></Modal.Header>
       <Modal.Body>
-        <p className={m.lead}>把这个议题加入一场待开的会议，会上一并讨论。</p>
         <Select aria-label="选择会议" placeholder={options.length ? "选择一场待开的会议" : "暂时没有待开的会议"} value={value} onChange={onChange}
           options={options} disabled={!options.length} />
       </Modal.Body>
@@ -69,14 +66,13 @@ export function JoinDialogContent({ options, value, onChange, pending, onCancel,
   );
 }
 
-/** 「移出议题」确认内容：说明可恢复、必填原因、危险色确认钮；取消是默认焦点。 */
+/** 「移出议题」确认内容：必填原因、危险色确认钮；取消是默认焦点。移出后的提示条写明可在已处理中恢复。 */
 export function DismissDialogContent({ reason, onReason, pending, onCancel, onConfirm }: {
   reason: string; onReason: (value: string) => void; pending: boolean; onCancel: () => void; onConfirm: () => void;
 }) {
   return (
     <>
       <h2 id="issue-dismiss-title" className={m.title}>移出这个议题？</h2>
-      <p className={c.text}>{DISMISS_NOTE}</p>
       <label className={m.field}>
         <span>原因（必填）</span>
         <input value={reason} maxLength={200} required placeholder="例如：已在别处解决" aria-label="移出原因" onChange={(event) => onReason(event.target.value)} />

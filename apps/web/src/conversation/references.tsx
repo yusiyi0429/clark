@@ -195,7 +195,7 @@ export function ReferenceTray({
             </HeroButton>
           </header>
           <h3>{item.title}</h3>
-          <small>v{item.version} · 发送时由服务端生成快照</small>
+          <small>v{item.version}</small>
           <pre>{previewText(item)}</pre>
         </section>
       ) : null}

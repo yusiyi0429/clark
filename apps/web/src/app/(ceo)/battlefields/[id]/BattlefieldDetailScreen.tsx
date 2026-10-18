@@ -8,7 +8,7 @@ import { IssueRow, meetingTimesByIssue } from "@/components/IssueRow";
 import { SegmentedSwitch } from "@/components/SegmentedSwitch";
 import { SourceName } from "@/components/SourceName";
 import { cleanDisplayText } from "@/lib/displayText";
-import { DetailHeader } from "@/components/shell/DetailHeader";
+import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { calendarDate, monthDayTime } from "@/lib/companyTime";
 import w from "@/styles/app-shell.module.css";
@@ -65,26 +65,24 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
   const openMission = (mission: MissionPayload, origin: Element) => navigate(`/missions/${encodeURIComponent(mission.missionId)}`, origin);
 
   return (
-    <>
-      <DetailHeader
-        eyebrow="战场"
-        title={payload.name}
-        extra={
-          <SegmentedSwitch
-            className={`${w.facetSwitch} ${d.viewSwitch}`}
-            label="战场视角"
-            selected={tab}
-            onSelect={pick}
-            segments={[
-              { id: "decisions", label: "决策" },
-              { id: "progress", label: <>{ceoOwns ? <Crown size={15} strokeWidth={1.8} aria-hidden="true" /> : null}战况</>,
-                ariaLabel: ceoOwns ? "战况（一号位为本战场负责人）" : undefined },
-            ]}
-          />
-        }
-        closeLabel="返回全局"
-        onClose={close}
-      />
+    <DetailFrame
+      title={payload.name}
+      subtitle="战场"
+      onBack={close}
+      actions={
+        <SegmentedSwitch
+          data-header-switch=""
+          label="战场视角"
+          selected={tab}
+          onSelect={pick}
+          segments={[
+            { id: "decisions", label: "决策" },
+            { id: "progress", label: <>{ceoOwns ? <Crown size={15} strokeWidth={1.8} aria-hidden="true" /> : null}战况</>,
+              ariaLabel: ceoOwns ? "战况（一号位为本战场负责人）" : undefined },
+          ]}
+        />
+      }
+    >
       <div className={w.expandedScroll}>
         <div className={d.detail} data-tab={tab} data-material-column>
           {ceoOwns ? null : <p className={d.owner}>负责人 · {payload.ownerDisplayName || "待指派"}</p>}
@@ -235,7 +233,7 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
           )}
         </div>
       </div>
-    </>
+    </DetailFrame>
   );
 }
 

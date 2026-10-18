@@ -108,11 +108,11 @@ export function PersonalReviewScreen({ initialReview }: { initialReview: TPerson
     // 保存后 actions 换了新版本：从最新的视图里取提交动作。
     const latest = await browserApi.GET("/api/personal-reviews/{personalReviewId}", { params: { path: { personalReviewId: review.personalReviewId } } }).then(({ data }) => data?.review).catch(() => undefined);
     if (latest) accept(latest);
-    await perform((latest ?? review).actions.find((candidate) => candidate.actionType === "personal-review.submit"), undefined, "已提交。名单上你的名字会变成已提交。");
+    await perform((latest ?? review).actions.find((candidate) => candidate.actionType === "personal-review.submit"), undefined, "已提交");
   };
   const coAgent = async () => {
     if (review.selfReview && !(await ask("Co-Agent 会按你上传的材料重新起草，覆盖现在的草稿。", "重新起草"))) return;
-    await perform(action("personal-review.draft_with_co_agent"), undefined, "已开始起草，一般一两分钟。");
+    await perform(action("personal-review.draft_with_co_agent"), undefined, "已开始起草");
   };
   const skip = async () => {
     if (!(await ask(`不等 ${review.personName} 了，继续？跳过会记在名单上，大家都看得到。`, "不等了，继续"))) return;
@@ -129,7 +129,7 @@ export function PersonalReviewScreen({ initialReview }: { initialReview: TPerson
   const open = review.status !== "submitted" && review.status !== "skipped";
 
   return <div className={s.screen}>
-    <DetailFrame title={title} subtitle={`个人月度复盘 · 对照自己的 ${month} 月 Mission Card${review.draftSource === "import" ? " · 从飞书导入" : review.draftSource ? ` · 草稿：${SOURCE_TEXT[review.draftSource]}` : ""}`} onBack={() => workspace.close()}
+    <DetailFrame title={title} subtitle={`个人月度复盘${review.draftSource === "import" ? " · 从飞书导入" : review.draftSource ? ` · 草稿：${SOURCE_TEXT[review.draftSource]}` : ""}`} onBack={() => workspace.close()}
       actions={<span className={r.chip} data-tone={tone(review.status)}>{personalStatusText(review.status, isSelf)}</span>}>
       <div className={s.content}>
         <div className={s.document}>
@@ -142,38 +142,31 @@ export function PersonalReviewScreen({ initialReview }: { initialReview: TPerson
             <h2>{month} 月 Mission</h2>
             {review.missions.length ? <ol className={r.missions}>
               {review.missions.map((mission) => <li key={mission.id}><strong>{mission.code} {mission.title}</strong><p>{mission.outcome}</p></li>)}
-            </ol> : <p className={r.muted}>这个月没有登记 Mission，按实际推进情况复盘。</p>}
+            </ol> : <p className={r.muted}>这个月没有登记 Mission</p>}
           </section>
 
           {isSelf && open && review.status !== "drafting" && review.status !== "waiting" ? <section className={r.section} aria-label="想改得更好">
-            <h2>{review.selfReview ? "想改得更好" : "起草没有成功，换一种方式"}</h2>
+            <h2>{review.selfReview ? "想改得更好" : "起草没有成功"}</h2>
             <div className={r.paths}>
               <div className={r.path}>
                 <h3>让你的 AI 工具补充改写</h3>
                 {review.toolConnected ? <>
-                  <p>你已把 AI 工具连上天枢。把这句话发给它，它会读你的 Mission、进展、现在的草稿和你手边的周复盘，改写后存回这里：</p>
                   <blockquote className={r.instruction}>{REVIEW_INSTRUCTION}</blockquote>
                   <div className={s.inlineActions}><Button variant="primary" className={s.primary} onPress={() => void copy()}>{copied ? "已复制" : "复制指令"}</Button></div>
                 </> : <>
-                  <p>还没连。授权后，你的 Codex、Claude Code 等就能读你手边的材料帮你补充改写。</p>
-                  <div className={s.inlineActions}><Button variant="primary" className={s.primary} onPress={openConnectionDialog}>授权开始</Button></div>
+                  <div className={s.inlineActions}><Button variant="primary" className={s.primary} onPress={openConnectionDialog}>连接 AI 工具</Button></div>
                 </>}
               </div>
               <div className={r.path}>
                 <h3>上传材料，让 Co-Agent 重新起草</h3>
-                <p>在右边对话里上传你的周复盘或 Period Review（PDF / Word / Markdown），或把草稿直接粘贴发出去；Co-Agent 会按材料重新起草，覆盖现在的草稿。</p>
                 <p className={r.muted}>{review.materialCount ? `已有 ${review.materialCount} 份材料` : "还没有材料"}</p>
                 <div className={s.inlineActions}><Button variant="ghost" className={s.secondary} isDisabled={pending || !draftWithCoAgent} onPress={() => void coAgent()}>按材料重新起草</Button></div>
-              </div>
-              <div className={r.path}>
-                <h3>直接改</h3>
-                <p>在下面四部分里直接改，保存后提交。</p>
               </div>
             </div>
           </section> : null}
 
-          {review.status === "drafting" || review.status === "waiting" ? <div className={r.working} role="status"><span className={r.pulse} aria-hidden />Co-Agent 正在按你的 Mission、执行事项进展{review.materialCount ? "和上传的材料" : ""}起草，一般一两分钟…</div> : null}
-          {review.status === "draft_failed" ? <p className={s.error} role="alert">起草没有成功{review.draftError ? `：${review.draftError.message}` : ""}。可以上传材料后重试，或直接写。</p> : null}
+          {review.status === "drafting" || review.status === "waiting" ? <div className={r.working} role="status"><span className={r.pulse} aria-hidden />Co-Agent 正在起草…</div> : null}
+          {review.status === "draft_failed" ? <p className={s.error} role="alert">起草没有成功{review.draftError ? `：${review.draftError.message}` : ""}</p> : null}
           {review.status === "skipped" && review.skipped ? <p className={r.muted} role="note">{review.skipped.byName} 在 {monthDayTime(review.skipped.at)} 选择不再等这份复盘。</p> : null}
 
           {editable || review.selfReview ? <dl className={s.fields} aria-label="复盘">
@@ -197,13 +190,13 @@ export function PersonalReviewScreen({ initialReview }: { initialReview: TPerson
           </dl> : null}
 
           {editable ? <div className={r.bar}>
-            <p className={`${s.hint} ${r.hint}`}>提交后大家会在名单上看到你已提交，看不到你写的内容；CEO 和你所在战场的负责人会在战场复盘里用到它。</p>
+            <p className={`${s.hint} ${r.hint}`}>CEO 与战场负责人可见</p>
             {dirtyFields.length ? <Button variant="ghost" className={s.secondary} isDisabled={pending} onPress={() => void save("已保存。")}>保存</Button> : null}
             {submitAction || dirtyFields.length ? <Button variant="primary" className={s.primary} isDisabled={pending || (!submitAction && !dirtyFields.length)} onPress={() => void submit()}>{pending ? "正在提交…" : "提交复盘"}</Button> : null}
           </div> : null}
 
           {isCeo && skipAction ? <div className={r.bar}>
-            <p className={`${s.hint} ${r.hint}`}>{review.personName} 还没提交。不想再等，可以跳过这份，流程继续往下走。</p>
+            <p className={`${s.hint} ${r.hint}`}>{review.personName} 还没提交</p>
             <Button variant="ghost" className={s.secondary} isDisabled={pending} onPress={() => void skip()}>不等了，继续</Button>
           </div> : null}
           <FeedbackLink />
