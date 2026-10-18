@@ -76,6 +76,8 @@ import { registerMissionCardRoutes } from "./routes/missionCards.js";
 import { registerMyRadarRoutes } from "./routes/myRadar.js";
 import { registerOntologyRoutes } from "./routes/ontology.js";
 import { registerMonthlyReviewRoutes } from "./routes/monthlyReviews.js";
+import { registerRequestRoutes } from "./routes/requests.js";
+import { createRequestAgent, type RequestAgent } from "./delivery/requestAgent.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 import { realDictationDeps, type DictationDeps } from "./dictation.js";
@@ -179,6 +181,7 @@ export async function buildApp({
   missionCardAnnotationAgent,
   missionCardReviewAgent,
   missionCardDraftAgent,
+  requestAgent,
   webSearch,
   outlets,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
@@ -223,6 +226,8 @@ export async function buildApp({
   missionCardReviewAgent?: MissionCardReviewAgent;
   /** 任务卡起草 Co-Agent；缺省用 heavy 模型槽位（测试注入假实现）。 */
   missionCardDraftAgent?: MissionCardDraftAgent;
+  /** 送达通道（⑨ 传话）的起草、查答案、起草回答；缺省用 light 模型槽位（测试注入假实现）。 */
+  requestAgent?: RequestAgent;
   /** Pi web_search Tool 的真实 Provider；缺失时 Tool 调用如实失败（不伪装已配置）。 */
   webSearch?: WebSearchAdapter;
   /** 发布方级 feed adapter：Radar、预研与全局对话共用同一白名单来源。 */
@@ -563,6 +568,7 @@ export async function buildApp({
   registerMissionCardRoutes(app, ctx, missionCardAnnotationAgent, missionCardReviewAgent);
   registerMyRadarRoutes(app, ctx);
   registerMonthlyReviewRoutes(app, ctx);
+  registerRequestRoutes(app, ctx, requestAgent ?? createRequestAgent(pool, env));
   registerPersonalMemoryRoutes(app, ctx);
 
   return app;

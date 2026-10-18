@@ -1,5 +1,10 @@
 import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import {
+  RequestStep, RequestPerson, RequestRecipientView, RequestQuestionView, RequestClarification, RequestView, RequestResponse,
+  DraftRequestRequest, DraftRequestResponse, RequestListItem, RequestListResponse, PrepareRequestQuestionRequest,
+  PrepareRequestQuestionResponse, DraftRequestAnswerResponse, RequestSendInput, RequestAskInput, RequestAnswerInput, ExecuteRequestActionRequest,
+} from "./requests.js";
+import {
   ActionDescriptor,
   ApiError,
   Card,
@@ -630,6 +635,49 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           operationId: "executePersonalReviewAction", summary: "执行个人复盘动作；幂等重放返回当前视图，版本冲突 409 VERSION_CONFLICT",
           requestBody: jsonBody({ $ref: "#/components/schemas/ExecutePersonalReviewActionRequest" }),
           responses: { "200": { description: "个人复盘与看板的最新视图", content: { "application/json": { schema: { $ref: "#/components/schemas/ExecutePersonalReviewActionResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/requests/draft": {
+        post: {
+          operationId: "draftRequest", summary: "发起人一句话，Agent 起草请求（标题、说明、接收人候选）并自查歧义；带 requestId 时按回答重写同一份草稿",
+          requestBody: jsonBody({ $ref: "#/components/schemas/DraftRequestRequest" }),
+          responses: { "200": { description: "草稿与处理步骤", content: { "application/json": { schema: { $ref: "#/components/schemas/DraftRequestResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/requests/{id}": {
+        get: {
+          operationId: "getRequest", summary: "读一条请求；只有发起人和接收人看得到，打开即把这条请求的通知标为已读",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "请求", content: { "application/json": { schema: { $ref: "#/components/schemas/RequestResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/requests/{id}/questions/prepare": {
+        post: {
+          operationId: "prepareRequestQuestion", summary: "接收人提问前：先在说明和已有问答里找答案，找不到就整理成问题等本人确认；不写库",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/PrepareRequestQuestionRequest" }),
+          responses: { "200": { description: "处理步骤与结果", content: { "application/json": { schema: { $ref: "#/components/schemas/PrepareRequestQuestionResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/requests/{id}/questions/{questionId}/answer-draft": {
+        post: {
+          operationId: "draftRequestAnswer", summary: "发起人的 Agent 起草回答（存为草稿，发起人确认后才发出）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }, { name: "questionId", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "回答草稿", content: { "application/json": { schema: { $ref: "#/components/schemas/DraftRequestAnswerResponse" } } } }, "401": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/requests/actions/execute": {
+        post: {
+          operationId: "executeRequestAction", summary: "request.send / ask / answer / mark_done；send 校验 actionId 里的版本，发出的就是预览那一版",
+          requestBody: jsonBody({ $ref: "#/components/schemas/ExecuteRequestActionRequest" }),
+          responses: { "200": { description: "请求的最新视图", content: { "application/json": { schema: { $ref: "#/components/schemas/RequestResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/me/requests": {
+        get: {
+          operationId: "listMyRequests", summary: "我收到的（inbox）或我发出的（sent）请求，最近 100 条",
+          parameters: [{ name: "box", in: "query", required: true, schema: { type: "string", enum: ["inbox", "sent"] } }],
+          responses: { "200": { description: "请求列表", content: { "application/json": { schema: { $ref: "#/components/schemas/RequestListResponse" } } } }, "400": errorResponse, "401": errorResponse },
         },
       },
       "/api/cards/radar": {
@@ -2434,6 +2482,24 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         OnboardingResponse: OnboardingResponse as JsonSchema,
         CompleteOnboardingResponse: CompleteOnboardingResponse as JsonSchema,
         SeenMarksResponse: SeenMarksResponse as JsonSchema,
+        RequestStep: RequestStep as JsonSchema,
+        RequestPerson: RequestPerson as JsonSchema,
+        RequestRecipientView: RequestRecipientView as JsonSchema,
+        RequestQuestionView: RequestQuestionView as JsonSchema,
+        RequestClarification: RequestClarification as JsonSchema,
+        RequestView: RequestView as JsonSchema,
+        RequestResponse: RequestResponse as JsonSchema,
+        DraftRequestRequest: DraftRequestRequest as JsonSchema,
+        DraftRequestResponse: DraftRequestResponse as JsonSchema,
+        RequestListItem: RequestListItem as JsonSchema,
+        RequestListResponse: RequestListResponse as JsonSchema,
+        PrepareRequestQuestionRequest: PrepareRequestQuestionRequest as JsonSchema,
+        PrepareRequestQuestionResponse: PrepareRequestQuestionResponse as JsonSchema,
+        DraftRequestAnswerResponse: DraftRequestAnswerResponse as JsonSchema,
+        RequestSendInput: RequestSendInput as JsonSchema,
+        RequestAskInput: RequestAskInput as JsonSchema,
+        RequestAnswerInput: RequestAnswerInput as JsonSchema,
+        ExecuteRequestActionRequest: ExecuteRequestActionRequest as JsonSchema,
       },
     },
   };
