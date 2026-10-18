@@ -33,6 +33,7 @@ import { recoverInterruptedOutcome } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
 import { resolveWorldEnv, resolveWorldTkEnv } from "./worldClient.js";
+import { createJobWorker, exampleJobHandlers } from "./jobs.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -205,6 +206,8 @@ const recordingService = createMeetingRecordingService({
   companyMemory,
 });
 await recordingService.recoverInterrupted();
+// 公共后台任务（jobs.ts）：每 5 秒领一批；现有各功能的 setInterval 暂不迁移。
+const jobWorker = createJobWorker({ pool, handlers: { ...exampleJobHandlers } });
 const app = await buildApp({
   pool,
   env,
@@ -224,10 +227,12 @@ app.addHook("onClose", async () => {
   monthlyReviewScheduler.close();
   await monthlyReviewService.idle();
   missionRoundScheduler.close();
+  await jobWorker.close();
 });
 scheduler.start();
 monthlyScheduler.start();
 monthlyReviewScheduler.start();
 missionRoundScheduler.start();
+jobWorker.start();
 await app.listen({ port, host: "0.0.0.0" });
 console.log(`warmap api listening on :${port} (${join(".", "migrations")} applied, build ${env.buildSha})`);
