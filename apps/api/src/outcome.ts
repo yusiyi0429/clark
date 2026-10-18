@@ -194,6 +194,8 @@ export function dropInapplicableFields(item: OutcomeCandidateItem): { candidate:
 }
 
 const OPTIONAL_FIELDS = ["ownerPersonId", "issueId", "judgmentKind", "parentIndex", "title", "brief", "dueDate"] as const;
+/** 推给 CEO 的战略项只认这两类：公司方向 / LTO / PO 的改动，跨战场调资源。 */
+const CEO_STRATEGIC_KINDS = new Set(["company_direction", "resource_allocation"]);
 const PLACEHOLDER_TEXT = new Set(["不适用", "不涉及", "无", "暂无", "没有", "未知", "未指定", "n/a", "na", "none", "null", "-", "—", "/"]);
 
 /** null、空串、「不适用」这类占位、负数下标，都算没填。 */
@@ -304,6 +306,15 @@ export function assessOutcomeCandidate(input: {
       if ((candidate.brief.match(/[。！？!?]/g)?.length ?? 0) > 2) {
         reject("brief 最多两句话");
         continue;
+      }
+      // D-40：只有改公司方向、长期目标（LTO）、周期目标（PO）或跨战场调资源的才推给 CEO；
+      // 其余（包括和战略方向有关、但只影响本战场打法、计划、执行的）降成会上的决定，归主持人确认。
+      if (!CEO_STRATEGIC_KINDS.has(candidate.judgmentKind)) {
+        console.warn(`outcome candidate #${index + 1} strategic(${candidate.judgmentKind}) 不在 CEO 战略范围，改为 decision`);
+        candidate.kind = "decision";
+        delete candidate.title;
+        delete candidate.brief;
+        delete candidate.judgmentKind;
       }
     }
     let parentItemId: string | null = null;
