@@ -199,11 +199,15 @@ export async function revokeOAuthToken(q: Query, clientId: string, token: string
     WHERE t.id=g.id AND c.grant_id=g.id AND g.client_id=$1 AND c.secret_hash=$2 AND t.revoked_at IS NULL AND c.kind=ANY($3::text[])`,
     [clientId, digest(token, pepper), ["access", "refresh"], now]);
 }
-export type McpIdentity = { tokenId: string; personId: string; client: TPersonalTokenClient; scopes?: string[] };
+/** 采集器令牌只能调 /api/collector，不能连 MCP。 */
+export type McpIdentity = { tokenId: string; personId: string; client: Exclude<TPersonalTokenClient, "collector">; scopes?: string[] };
 export async function authenticateMcpToken(q: Query, authorization: string | undefined, pepper: string, now: Date,
   personExists: (id: string) => boolean, resource?: string): Promise<McpIdentity | null> {
   const token = /^Bearer (tso_[A-Za-z0-9_-]{43})$/.exec(authorization ?? "")?.[1];
-  if (!token) return authenticatePersonalToken(q, authorization, pepper, now, personExists);
+  if (!token) {
+    const identity = await authenticatePersonalToken(q, authorization, pepper, now, personExists);
+    return identity && identity.client !== "collector" ? { tokenId: identity.tokenId, personId: identity.personId, client: identity.client } : null;
+  }
   const row = (await q(`SELECT t.id,t.person_id,t.client,c.scopes FROM mcp_oauth_credentials c
     JOIN mcp_oauth_grants g ON g.id=c.grant_id JOIN personal_tokens t ON t.id=g.id
     JOIN member_access a ON a.person_id=t.person_id WHERE c.secret_hash=$1 AND c.kind='access' AND c.expires_at>$2

@@ -78,6 +78,7 @@ import { registerOntologyRoutes } from "./routes/ontology.js";
 import { registerMonthlyReviewRoutes } from "./routes/monthlyReviews.js";
 import { registerRequestRoutes } from "./routes/requests.js";
 import { createRequestAgent, type RequestAgent } from "./delivery/requestAgent.js";
+import { registerCollectorRoutes } from "./routes/collector.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 import { realDictationDeps, type DictationDeps } from "./dictation.js";
@@ -570,6 +571,7 @@ export async function buildApp({
   registerMonthlyReviewRoutes(app, ctx);
   registerRequestRoutes(app, ctx, requestAgent ?? createRequestAgent(pool, env));
   registerPersonalMemoryRoutes(app, ctx);
+  registerCollectorRoutes(app, ctx);
 
   return app;
 }

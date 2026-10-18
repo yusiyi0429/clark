@@ -1580,6 +1580,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/collector/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本机采集器心跳：设备、版本、各来源状态（collector 个人令牌） */
+        post: operations["collectorHeartbeat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collector/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本机采集器上报一段工作与本机清单，按 clientEventId 幂等（collector 个人令牌） */
+        post: operations["collectorReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/tokens/{id}": {
         parameters: {
             query?: never;
@@ -6148,12 +6182,12 @@ export interface components {
                 }[];
             }[];
         };
-        PersonalTokenClient: "codex" | "claude" | "other";
+        PersonalTokenClient: "codex" | "claude" | "other" | "collector";
         PersonalTokenView: {
             /** Format: uuid */
             id: string;
             name: string;
-            client: "codex" | "claude" | "other";
+            client: "codex" | "claude" | "other" | "collector";
             authType?: "personal" | "oauth";
             createdAt: string;
             expiresAt: string | null;
@@ -6661,7 +6695,7 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 name: string;
-                client: "codex" | "claude" | "other";
+                client: "codex" | "claude" | "other" | "collector";
                 authType?: "personal" | "oauth";
                 createdAt: string;
                 expiresAt: string | null;
@@ -6674,7 +6708,7 @@ export interface components {
         };
         CreatePersonalTokenRequest: {
             name: string;
-            client: "codex" | "claude" | "other";
+            client: "codex" | "claude" | "other" | "collector";
             expiresInDays: 30 | 90 | null;
         };
         CreatePersonalTokenResponse: {
@@ -6683,13 +6717,86 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 name: string;
-                client: "codex" | "claude" | "other";
+                client: "codex" | "claude" | "other" | "collector";
                 authType?: "personal" | "oauth";
                 createdAt: string;
                 expiresAt: string | null;
                 lastUsedAt: string | null;
                 lastProgressAt: string | null;
             };
+        };
+        CollectorHeartbeatRequest: {
+            device: {
+                id: string;
+                name: string;
+                platform: "windows" | "macos" | "linux";
+            };
+            version: string;
+            sources: {
+                source: string;
+                status: "ok" | "not_found" | "error";
+                coverageUntil: string | null;
+                lastNewEvidenceAt: string | null;
+                errorCode: string | null;
+            }[];
+        };
+        CollectorHeartbeatResponse: {
+            /** Format: date-time */
+            receivedAt: string;
+        };
+        CollectorReportRequest: {
+            device: {
+                id: string;
+                name: string;
+                platform: "windows" | "macos" | "linux";
+            };
+            version: string;
+            kind: "digest" | "eod" | "catchup";
+            /** Format: date-time */
+            windowStart: string;
+            /** Format: date-time */
+            windowEnd: string;
+            sources: {
+                source: string;
+                status: "ok" | "not_found" | "error";
+                coverageUntil: string | null;
+                lastNewEvidenceAt: string | null;
+                errorCode: string | null;
+            }[];
+            items: {
+                /** Format: uuid */
+                clientEventId: string;
+                source: string;
+                /** Format: date-time */
+                startedAt: string;
+                /** Format: date-time */
+                endedAt: string;
+                summary: string;
+                links: {
+                    url: string;
+                    title?: string;
+                }[];
+                taskHint: string | null;
+            }[];
+            inventory?: {
+                scheduledTasks: {
+                    name: string;
+                    schedule: string | null;
+                    command: string | null;
+                }[];
+                feishuDocs: {
+                    url: string;
+                    title: string | null;
+                    /** Format: date-time */
+                    readAt: string;
+                }[];
+            };
+        };
+        CollectorReportResponse: {
+            accepted: number;
+            duplicates: number;
+            /** Format: date-time */
+            receivedAt: string;
         };
         TaskPerson: {
             personId: string;
@@ -13003,6 +13110,90 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    collectorHeartbeat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectorHeartbeatRequest"];
+            };
+        };
+        responses: {
+            /** @description 已记下 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectorHeartbeatResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    collectorReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectorReportRequest"];
+            };
+        };
+        responses: {
+            /** @description 新记下与重放的条数 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectorReportResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 
-/** other：OpenCode、Cursor 等支持远程 MCP 的其他工具，连接说明给通用步骤。 */
-export const PersonalTokenClient = Type.Union([Type.Literal("codex"), Type.Literal("claude"), Type.Literal("other")]);
+/** other：OpenCode、Cursor 等支持远程 MCP 的其他工具，连接说明给通用步骤。collector：本机采集器，只能调 /api/collector，不能连 MCP。 */
+export const PersonalTokenClient = Type.Union([Type.Literal("codex"), Type.Literal("claude"), Type.Literal("other"), Type.Literal("collector")]);
 export const PersonalTokenView = Type.Object({
   id: Type.String({ format: "uuid" }),
   name: Type.String({ minLength: 1, maxLength: 40 }),
