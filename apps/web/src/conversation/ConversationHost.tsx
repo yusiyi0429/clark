@@ -18,7 +18,7 @@ import { useExitPresence } from "@/lib/motion";
 import { useColumnMode } from "./useColumnMode";
 import { useDeskColumnWidth, useViewportWidth } from "./desk/useDeskLayout";
 import { DESK_MIN_VIEWPORT } from "./desk/deskLayout";
-import { useConversation, type ConversationData } from "./useConversation";
+import { CONVERSATION_SEND, useConversation, type ConversationData } from "./useConversation";
 import { useStableCallback } from "./stableCallback";
 import { useMissionGroup } from "./useMissionGroup";
 import { useThreadGroup } from "./useTaskGroup";
@@ -346,6 +346,19 @@ function RailConversation({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [missionGroup?.reference?.nonce]);
 
+  // 页面上的按钮替本人发一句（个人复盘「提交前核对」）：切到私聊、展开右列，再发出。
+  useEffect(() => {
+    const send = (event: Event) => {
+      const detail = (event as CustomEvent<{ scope: string; text: string }>).detail;
+      if (detail?.scope !== target.scope || !detail.text) return;
+      setChannel("agent");
+      if (column.narrow) ui.setRailMobileOpen(true);
+      else column.setMode("expanded");
+      void data.send(detail.text, []);
+    };
+    window.addEventListener(CONVERSATION_SEND, send);
+    return () => window.removeEventListener(CONVERSATION_SEND, send);
+  }, [target.scope, column, ui, data.send]);
   useEffect(() => {
     if (!ui.prefill) return;
     // 「引用并对话」明确进入私聊；公开频道的输入条不会消费 Agent 的预填内容。

@@ -102,9 +102,74 @@ export const ReadScope = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * Agent 向本人提问（ask_user 工具）：一次 1–4 题，每题 2–4 个选项，recommended 标推荐（每题最多一个）。
+ * 界面一题一页作答，另给「其他」自己写，也可以跳过；提问后这一轮就停，答案作为本人的下一条消息发回来。
+ */
+export const AskOption = Type.Object(
+  {
+    label: Type.String({ minLength: 1, maxLength: 40 }),
+    /** 选项下面一行补充（代价、含义），没有就不写。 */
+    detail: Type.Optional(Type.String({ maxLength: 120 })),
+    recommended: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false },
+);
+const AskQuestionFields = {
+  question: Type.String({ minLength: 1, maxLength: 200 }),
+  options: Type.Array(AskOption, { minItems: 2, maxItems: 4 }),
+};
+/** 工具参数：题目与选项，题号由服务端给。 */
+export const AskUserInput = Type.Object(
+  { questions: Type.Array(Type.Object(AskQuestionFields, { additionalProperties: false }), { minItems: 1, maxItems: 4 }) },
+  { additionalProperties: false },
+);
+export const AskQuestion = Type.Object(
+  { id: Type.String({ minLength: 1, maxLength: 8 }), ...AskQuestionFields },
+  { additionalProperties: false },
+);
+
+/** 本人的作答：每题选一个选项（option 是下标）或自己写（text）；两样都没有就是跳过。 */
+export const AskAnswerInput = Type.Object(
+  {
+    askId: Type.String({ format: "uuid" }),
+    items: Type.Array(Type.Object(
+      {
+        questionId: Type.String({ minLength: 1, maxLength: 8 }),
+        option: Type.Optional(Type.Integer({ minimum: 0, maximum: 3 })),
+        text: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+      },
+      { additionalProperties: false },
+    ), { maxItems: 4 }),
+  },
+  { additionalProperties: false },
+);
+
+/** 存在那条作答消息上的问答记录（服务端按提问卡核对后生成）：界面画成紧凑的问答，不再显示原文。 */
+export const AskAnswerRecord = Type.Object(
+  {
+    askId: Type.String(),
+    items: Type.Array(Type.Object(
+      {
+        questionId: Type.String(),
+        question: Type.String(),
+        kind: Type.Union([Type.Literal("option"), Type.Literal("other"), Type.Literal("skipped")]),
+        /** 选的选项原文，或自己写的；跳过时没有。 */
+        answer: Type.Optional(Type.String()),
+        /** 选的就是推荐的那个。 */
+        recommended: Type.Optional(Type.Boolean()),
+      },
+      { additionalProperties: false },
+    ), { minItems: 1, maxItems: 4 }),
+  },
+  { additionalProperties: false },
+);
+
 export const ConversationMessageRequest = Type.Object(
   {
     message: Type.String({ minLength: 1, maxLength: 20_000 }),
+    /** 回答 Agent 的提问：带了它，这一句的原文由服务端按提问卡和答案重写。 */
+    answers: Type.Optional(AskAnswerInput),
     references: Type.Optional(Type.Array(CardReference, { maxItems: 20 })),
     attachments: Type.Optional(Type.Array(ConversationAttachmentRef, { maxItems: 10 })),
     /** 工单 09：页面左侧正在看的那份材料；必须属于这个 scope 的对象。 */
@@ -156,6 +221,8 @@ export const ConversationCard = Type.Union([
   }, { additionalProperties: false }),
   /** 本人发起的请求草稿：收件人、标题、说明与「发送」。 */
   Type.Object({ kind: Type.Literal("request_draft"), requestId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+  /** Agent 的提问：题目列表与「开始回答」；回答过的按后面那条作答消息显示成「已回答」。 */
+  Type.Object({ kind: Type.Literal("questions"), askId: Type.String({ minLength: 1 }), questions: Type.Array(AskQuestion, { minItems: 1, maxItems: 4 }) }, { additionalProperties: false }),
 ]);
 
 export const ConversationMessage = Type.Object(
@@ -175,6 +242,8 @@ export const ConversationMessage = Type.Object(
     cards: Type.Optional(Type.Array(ConversationCard, { maxItems: 4 })),
     /** 只在助手回答上：这一轮跨对象读取的范围（最后一次）。 */
     readScope: Type.Optional(ReadScope),
+    /** 只在本人的作答消息上：回答 Agent 提问的问答记录。 */
+    answers: Type.Optional(AskAnswerRecord),
     /**
      * carried：从首页带过来的一段对话（转议题时复制进议题页对话）；trace：留痕行（「已转到议题 X」），点击直达 meta.href。
      * 普通消息没有这个字段。
@@ -347,6 +416,10 @@ export type TConversationAttachment = Static<typeof ConversationAttachment>;
 export type TConversationAttachmentUploadResponse = Static<typeof ConversationAttachmentUploadResponse>;
 export type TReadScopeParams = Static<typeof ReadScopeParams>;
 export type TReadScope = Static<typeof ReadScope>;
+export type TAskUserInput = Static<typeof AskUserInput>;
+export type TAskQuestion = Static<typeof AskQuestion>;
+export type TAskAnswerInput = Static<typeof AskAnswerInput>;
+export type TAskAnswerRecord = Static<typeof AskAnswerRecord>;
 export type TConversationMessageRequest = Static<typeof ConversationMessageRequest>;
 export type TConversationMessage = Static<typeof ConversationMessage>;
 export type TConversationCard = Static<typeof ConversationCard>;

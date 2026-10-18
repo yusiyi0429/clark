@@ -67,6 +67,7 @@ import { logEvent } from "./observability.js";
 import { LOCAL_FALLBACK, type CompanyReader } from "./company.js";
 import { THREE_LAYER_RULES } from "./companyMap.js";
 import { ISSUE_SUGGEST_RULES } from "./issueDrafts.js";
+import { ASK_USER_RULES, PERSONAL_REVIEW_CHECK_RULES, makeAskTool } from "./askUser.js";
 
 /** CEO 与 DRI Agent 共用的材料改写规则；能不能直接改按 canEdit（上传者和对象负责人），与 edit_material 是否开放一致。 */
 const MATERIAL_EDITING_RULES = `材料是上述只读边界的例外。一份材料只有上传者和对象负责人（执行事项的推进人、会议主持人、议题的 CEO）能改，list_materials 和 currentObject.viewingMaterial 的 canEdit 表示对方能不能改。对方明确要求「改」「写进去」时：canEdit=true 用 edit_material 直接改；canEdit=false 或没有 edit_material 时不直接改，用 propose_material_edit 把改法交给能改的人，按工具结果告诉对方交给了谁。对方要求新写当前议题、执行事项、会议的群组材料时用 create_material。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由能改的人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。`;
@@ -985,6 +986,8 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           parameters: Type.Object({ issueId: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false }),
           execute: async (_id, args) => textResult(await suggest.readIssueConversation((args as { issueId: string }).issueId)) }),
       ] : [];
+      // 向本人提问（askUser.ts）：问完这一轮就停，答案作为本人的下一条消息发回来。
+      const asking = input.ask ? makeAskTool(input.ask) : undefined;
       const missionCardId = /^mission-card:(.+)$/.exec(input.scope)?.[1];
       const missionCardTools = missionCardId && options.materialPool ? (() => {
         const pool = options.materialPool!;
@@ -1188,9 +1191,11 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         : isCeo ? CEO_SYSTEM_PROMPT
         : driSystemPrompt(input.viewer.displayName);
       // 三层取用、深聊转议题的说明只在有这些工具时拼上（在表达要求之后，快答档裁剪检索条款时不受影响）。
-      const fullPrompt = [basePrompt, ...(layerTools.length ? [THREE_LAYER_RULES] : []), ...(issueTools.length ? [ISSUE_SUGGEST_RULES] : [])].join("\n\n");
+      const fullPrompt = [basePrompt, ...(layerTools.length ? [THREE_LAYER_RULES] : []), ...(issueTools.length ? [ISSUE_SUGGEST_RULES] : []),
+        ...(asking ? [ASK_USER_RULES, ...(input.scope.startsWith("personal-review:") ? [PERSONAL_REVIEW_CHECK_RULES] : [])] : [])].join("\n\n");
       const toolTimeoutMs = options.toolTimeoutMs ?? TOOL_TIMEOUT_MS;
-      const turnTools = [...mcpTools, ...memoryTools, ...entryTools, ...layerTools, ...issueTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...evidenceTools, ...outletFeedTools, searchTool]
+      const turnTools = [...mcpTools, ...memoryTools, ...entryTools, ...layerTools, ...issueTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...evidenceTools, ...outletFeedTools, searchTool,
+        ...(asking ? [asking.tool] : [])]
         .filter((tool) => toolAllowed(tool.name, shape))
         // 生成复盘要等重模型起草（失败还会重试），单独放宽到 REVIEW_TOOL_TIMEOUT_MS。
         .map((tool) => withToolTimeout(tool, tool.name === "generate_review" ? Math.max(toolTimeoutMs, REVIEW_TOOL_TIMEOUT_MS) : toolTimeoutMs));
@@ -1382,7 +1387,8 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         if (searchLimitReached) throw fail(searchBudgetError.message, "search_budget", "SEARCH_BUDGET_EXHAUSTED");
         if (input.signal.aborted) throw fail("Conversation aborted", "aborted");
         const last = [...session.messages].reverse().find((item) => item.role === "assistant");
-        if (!last || last.stopReason !== "stop") {
+        // 停在提问上（ask_user 让这一轮在工具之后结束）：最后一条是带工具调用的回答，照常算这一轮完成。
+        if (!last || (last.stopReason !== "stop" && !(asking?.asked() && last.stopReason === "toolUse"))) {
           const message = last?.errorMessage || `Pi stopped without success: ${last?.stopReason ?? "missing response"}`;
           // 原始报错留在运行记录里；分类决定给一号位怎么说、能不能「继续」。
           const kind = last?.stopReason === "length" ? "length" : last?.stopReason === "aborted" ? "aborted"

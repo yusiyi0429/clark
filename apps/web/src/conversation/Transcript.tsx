@@ -14,6 +14,7 @@ import { QuoteChips } from "./QuoteChips";
 import { pageContextBattlefield, readQuotedMessage } from "./quotes";
 import { createArrivalLog, rehypeArrival, type ArrivalLog } from "./arrival";
 import { parseAnswerOptions } from "./answerOptions";
+import { AnswerRecord } from "./AskPanel";
 import { splitStableBlocks, useSmoothText } from "./smoothText";
 import { CITATION_MARKDOWN, MemoryUsedProvider } from "./citations";
 import { holdOpenLink, remarkCitationMarks } from "./citationMarks";
@@ -123,7 +124,7 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
     && a.role === b.role && a.content === b.content
     && a.recoveryNote?.text === b.recoveryNote?.text && a.recoveryNote?.detail === b.recoveryNote?.detail
     && (a.memoryUsed ?? []).join("|") === (b.memoryUsed ?? []).join("|")
-    && a.readScope?.label === b.readScope?.label && a.kind === b.kind && a.meta?.href === b.meta?.href
+    && a.readScope?.label === b.readScope?.label && a.kind === b.kind && a.meta?.href === b.meta?.href && a.answers?.askId === b.answers?.askId
     && sameList(a.attachments, b.attachments, (item) => item.id)
     && sameList(a.referencesSnapshot, b.referencesSnapshot, (item) => `${item.cardId}@${item.version}`);
 }
@@ -216,11 +217,14 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
       ) : null}
       {battlefield ? <div className={s.pageTag}>战场 · {battlefield}</div> : null}
       {quoted.quotes.length ? <QuoteChips quotes={quoted.quotes} sent /> : null}
-      <div className={s.prose}>
-        <MemoryUsedProvider value={memoryUsed}>
-          <MarkdownBody text={quoted.message} streaming={streaming} />
-        </MemoryUsedProvider>
-      </div>
+      {/* 回答 Agent 提问的那一句：画成紧凑的问答记录，不显示原文。 */}
+      {user && message.answers ? <AnswerRecord record={message.answers} /> : (
+        <div className={s.prose}>
+          <MemoryUsedProvider value={memoryUsed}>
+            <MarkdownBody text={quoted.message} streaming={streaming} />
+          </MemoryUsedProvider>
+        </div>
+      )}
       {/* 这一轮用了备用模型或走过恢复：末尾一行很淡的小字，悬停看具体一点的说明（不写模型名和英文原文）。 */}
       {!user && !streaming && message.recoveryNote?.text ? (
         <p className={s.recoveryNote} title={message.recoveryNote.detail || undefined} data-testid="conversation-recovery-note">{message.recoveryNote.text}</p>

@@ -3365,6 +3365,19 @@ export interface components {
                     kind: "request_draft";
                     requestId: string;
                     href: string;
+                } | {
+                    /** @constant */
+                    kind: "questions";
+                    askId: string;
+                    questions: {
+                        id: string;
+                        question: string;
+                        options: {
+                            label: string;
+                            detail?: string;
+                            recommended?: boolean;
+                        }[];
+                    }[];
                 })[];
                 readScope?: {
                     label: string;
@@ -3381,6 +3394,16 @@ export interface components {
                         }[];
                     };
                 };
+                answers?: {
+                    askId: string;
+                    items: {
+                        questionId: string;
+                        question: string;
+                        kind: "option" | "other" | "skipped";
+                        answer?: string;
+                        recommended?: boolean;
+                    }[];
+                };
                 kind?: "carried" | "trace";
                 meta?: {
                     issueId?: string;
@@ -3391,6 +3414,15 @@ export interface components {
         };
         ConversationMessageRequest: {
             message: string;
+            answers?: {
+                /** Format: uuid */
+                askId: string;
+                items: {
+                    questionId: string;
+                    option?: number;
+                    text?: string;
+                }[];
+            };
             references?: {
                 cardId: string;
                 version: number;
