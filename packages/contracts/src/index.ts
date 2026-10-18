@@ -23,6 +23,7 @@ export * from "./tasks.js";
 export * from "./personalTokens.js";
 export * from "./voiceprint.js";
 export * from "./onboarding.js";
+export * from "./onboardingLists.js";
 export * from "./seenMarks.js";
 export * from "./memberHome.js";
 export * from "./personalRadar.js";

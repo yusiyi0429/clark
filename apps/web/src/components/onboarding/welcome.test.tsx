@@ -44,7 +44,7 @@ import { RadarSettingsEditor, type RadarSavedSummary } from "@/components/radar/
 import { ConnectAgentForm } from "@/components/ConnectAgentForm";
 import { browserApi } from "@/lib/api/client";
 
-const base = { displayName: "测试", companyName: null, voiceprint: { configured: false, enrolled: false, updatedAt: null }, next: { text: "可以开始工作", action: "进入工作台", href: "/me" } };
+const base = { displayName: "测试", companyName: null, delegationStep: false, voiceprint: { configured: false, enrolled: false, updatedAt: null }, next: { text: "可以开始工作", action: "进入工作台", href: "/me" } };
 const member: Extract<OnboardingData, { role: "member" }> = { ...base, role: "member", radar: { configured: false, enabled: false, directions: 0 }, work: { period: "2026-10", planStatus: "none", battlefields: [], missions: [], missionCards: [] } };
 // CEO 的雷达就是公司雷达，不能关闭（enabled 恒为 true）。
 const ceo: Extract<OnboardingData, { role: "ceo" }> = { ...base, role: "ceo", radar: { configured: false, enabled: true, directions: 0 }, company: { sixMonthGoal: "", battlefields: [], capabilities: [], people: [] } };

@@ -1700,6 +1700,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/collector/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人的采集器：连上的设备、最近一次完整盘点、盘点到的条数（上手流程轮询） */
+        get: operations["getCollectorStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collector/install.ps1": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Windows 一行安装命令拉取的安装脚本（不含令牌，令牌由命令参数带入） */
+        get: operations["getCollectorInstallWindows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collector/install.sh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** macOS 一行安装命令拉取的安装脚本（不含令牌，令牌由命令参数带入） */
+        get: operations["getCollectorInstallMacos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collector/files/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 安装脚本下载的采集器文件（tkos_collector.py、collect_sessions.py、sanitize.py） */
+        get: operations["getCollectorFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/work-basis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 工作依据清单：本人在依据的整份文档候选（天枢材料、飞书文档、链接）与已确认的 */
+        get: operations["getWorkBasis"];
+        /** 本人确认工作依据：勾选的入库并记下当时的修订号，候选里没勾的移出 */
+        put: operations["updateWorkBasis"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/schedule-migration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 搬家清单：本机清单里找到的定时任务，以及哪些已经搬进定时任务区 */
+        get: operations["getScheduleMigration"];
+        /** 本人确认搬家：勾选的写进定时任务区，候选里没勾的移出 */
+        put: operations["updateScheduleMigration"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/weekly-reviews/board": {
         parameters: {
             query?: never;
@@ -6947,6 +7051,26 @@ export interface components {
                 lastNewEvidenceAt: string | null;
                 errorCode: string | null;
             }[];
+            inventory?: {
+                scheduledTasks: {
+                    name: string;
+                    schedule: string | null;
+                    command: string | null;
+                }[];
+                feishuDocs: {
+                    url: string;
+                    title: string | null;
+                    /** Format: date-time */
+                    readAt: string;
+                }[];
+                memoryFiles?: {
+                    source: string;
+                    path: string;
+                    bytes: number;
+                    /** Format: date-time */
+                    modifiedAt: string;
+                }[];
+            };
         };
         CollectorHeartbeatResponse: {
             /** Format: date-time */
@@ -6998,6 +7122,13 @@ export interface components {
                     /** Format: date-time */
                     readAt: string;
                 }[];
+                memoryFiles?: {
+                    source: string;
+                    path: string;
+                    bytes: number;
+                    /** Format: date-time */
+                    modifiedAt: string;
+                }[];
             };
         };
         CollectorReportResponse: {
@@ -7014,6 +7145,47 @@ export interface components {
         };
         UpdateCollectorConsentRequest: {
             granted: boolean;
+        };
+        CollectorStatusResponse: {
+            devices: {
+                id: string;
+                name: string;
+                platform: string;
+                /** Format: date-time */
+                lastSeenAt: string;
+            }[];
+            scannedAt: string | null;
+            inventory: {
+                scheduledTasks: number;
+                feishuDocs: number;
+                memoryFiles: number;
+            };
+        };
+        WorkBasisResponse: {
+            candidates: {
+                key: string;
+                kind: "material" | "feishu_doc" | "link";
+                title: string;
+                url: string | null;
+                revision: string | null;
+                confirmed: boolean;
+            }[];
+        };
+        UpdateWorkBasisRequest: {
+            keys: string[];
+        };
+        ScheduleMigrationResponse: {
+            candidates: {
+                key: string;
+                name: string;
+                cadence: string | null;
+                command: string | null;
+                deviceName: string;
+                imported: boolean;
+            }[];
+        };
+        UpdateScheduleMigrationRequest: {
+            keys: string[];
         };
         WeeklyReviewBoardResponse: {
             board: {
@@ -8248,6 +8420,7 @@ export interface components {
                 enabled: boolean;
                 directions: number;
             };
+            delegationStep: boolean;
             /** @constant */
             role: "ceo";
             company: {
@@ -8286,6 +8459,7 @@ export interface components {
                 enabled: boolean;
                 directions: number;
             };
+            delegationStep: boolean;
             /** @constant */
             role: "member";
             work: {
@@ -13847,6 +14021,248 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CollectorConsentResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getCollectorStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 采集器状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectorStatusResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getCollectorInstallWindows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PowerShell 脚本 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+        };
+    };
+    getCollectorInstallMacos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description shell 脚本 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+        };
+    };
+    getCollectorFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Python 源文件 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getWorkBasis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 候选 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkBasisResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updateWorkBasis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWorkBasisRequest"];
+            };
+        };
+        responses: {
+            /** @description 候选 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkBasisResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getScheduleMigration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 候选 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleMigrationResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updateScheduleMigration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateScheduleMigrationRequest"];
+            };
+        };
+        responses: {
+            /** @description 候选 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleMigrationResponse"];
                 };
             };
             /** @description ApiError 统一错误 */

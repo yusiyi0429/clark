@@ -126,6 +126,8 @@ export type AppEnv = {
   demoLoginId?: string;
   /** 引导中的公司名，可空；不从其他资料猜测。 */
   companyName?: string;
+  /** 上手流程显示「授权天枢替你记进本体」这一步（ONBOARDING_DELEGATION_STEP=1）；本体的网页授权页确认之前默认关闭。 */
+  onboardingDelegationStep?: boolean;
   /** 旧配置兼容；正式自动起草不读取文件，人工导入须由 CLI 显式指定路径。 */
   missionCardDraftsDir?: string;
   /** 已知的本月任务（飞书任务卡、本体 Mission 导出），作为起草依据；未配置或文件缺失时照常起草。 */

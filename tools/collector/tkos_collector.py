@@ -30,9 +30,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import collect_sessions as cs  # noqa: E402
 import sanitize  # noqa: E402
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 HOME = Path.home() / ".tkos-world"
 DIGEST_EVERY = timedelta(hours=3)
+INVENTORY_EVERY = timedelta(hours=24)  # 本机清单每天完整盘点一次，随心跳带上；装好后第一次检查就盘点
+FEISHU_LOOKBACK = timedelta(days=30)   # 盘点「读过的飞书文档」往回看 30 天的会话
+MAX_PENDING = 200                      # 天枢还没同意采集时，待发的上报最多留这么多份
 SETTLE = timedelta(minutes=2)       # 正在写的会话行可能晚到，窗口只到「现在减两分钟」
 CATCHUP_DAYS = 7                    # 补跑最多往回 7 天
 MAX_ITEMS = 100                     # 一次上报最多这么多段，多了分几次发
@@ -168,6 +171,51 @@ def scheduled_tasks() -> list[dict[str, Any]]:
              "command": (sanitize.redact_secrets(str(row.get("command") or ""))[:500] or None)} for row in rows if row.get("name")][:200]
 
 
+# ---------- 记忆文件盘点 ----------
+
+def _home_path(path: Path) -> str:
+    try:
+        return "~/" + path.resolve().relative_to(Path.home().resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def memory_files(claude_home: Path, codex_home: Path) -> list[dict[str, Any]]:
+    """Claude Code、Codex 的记忆文件：只盘点路径、大小、修改时间，不读正文（正文等记忆导入时本人同意后再传）。"""
+    patterns = (("claude", claude_home, ("CLAUDE.md", "projects/*/memory/*.md")),
+                ("codex", codex_home, ("AGENTS.md", "memories/**/*")))
+    found: list[dict[str, Any]] = []
+    for source, root, globs in patterns:
+        for pattern in globs:
+            try:
+                paths = sorted(root.glob(pattern))
+            except OSError:
+                continue
+            for path in paths:
+                try:
+                    if not path.is_file():
+                        continue
+                    stat = path.stat()
+                except OSError:
+                    continue
+                shown = _home_path(path)
+                if len(shown) <= 500:
+                    found.append({"source": source, "path": shown, "bytes": stat.st_size,
+                                  "modifiedAt": iso(datetime.fromtimestamp(stat.st_mtime, timezone.utc))})
+    return found[:500]
+
+
+def full_inventory(now: datetime, codex_home: Path, claude_home: Path) -> dict[str, Any]:
+    """一次完整盘点：本机定时任务、近 30 天会话里读过的飞书文档、记忆文件。"""
+    sessions, _status = sessions_in(now - FEISHU_LOOKBACK, now, codex_home, claude_home)
+    return {"scheduledTasks": scheduled_tasks(), "feishuDocs": feishu_docs(sessions), "memoryFiles": memory_files(claude_home, codex_home)}
+
+
+def inventory_due(state: dict[str, Any], now: datetime) -> bool:
+    last = state.get("inventory_at")
+    return not last or now - datetime.fromisoformat(last.replace("Z", "+00:00")) >= INVENTORY_EVERY
+
+
 # ---------- 上报 ----------
 
 class Api:
@@ -200,12 +248,12 @@ def source_states(status: dict[str, str], state: dict[str, Any], coverage: datet
 
 
 def build_reports(kind: str, device: dict[str, str], sessions: list[cs.Session], status: dict[str, str], state: dict[str, Any],
-                  start: datetime, end: datetime, inventory: dict[str, Any]) -> list[dict[str, Any]]:
+                  start: datetime, end: datetime) -> list[dict[str, Any]]:
+    """上报只带工作段；本机清单随心跳走，天枢没同意采集、上报被拒时清单照样送到。"""
     items = [to_item(session, device["id"], start, end) for session in sessions]
     chunks = [items[i:i + MAX_ITEMS] for i in range(0, len(items), MAX_ITEMS)] or [[]]
     return [{"device": device, "version": VERSION, "kind": kind, "windowStart": iso(start), "windowEnd": iso(end),
-             "sources": source_states(status, state, end), "items": chunk,
-             **({"inventory": inventory} if index == 0 else {})} for index, chunk in enumerate(chunks)]
+             "sources": source_states(status, state, end), "items": chunk} for chunk in chunks]
 
 
 def note_evidence(state: dict[str, Any], sessions: list[cs.Session]) -> None:
@@ -229,24 +277,31 @@ def run(mode: str, args: argparse.Namespace) -> int:
     today = datetime.combine(now.date(), time(0), tzinfo=tz)
     eod_at = datetime.combine(now.date(), time.fromisoformat(config.get("eod_time", "20:30")), tzinfo=tz)
 
-    def flush() -> None:
-        """发出待发的上报；发不出去就留着，下次原样重发（client_event_id 不变，服务端按幂等只记一次）。"""
+    def flush() -> bool:
+        """发出待发的上报；发不出去就留着，下次原样重发（client_event_id 不变，服务端按幂等只记一次）。
+        天枢返回 403（本人还没同意采集）时停在这里，内容留在本机，返回 False；其他错误照旧往上抛。"""
         while state.get("pending"):
             report = state["pending"][0]
-            result = api.post("/api/collector/reports", report)
+            try:
+                result = api.post("/api/collector/reports", report)
+            except urllib.error.HTTPError as error:
+                if error.code != 403:
+                    raise
+                print("天枢那边还没同意采集，待发的工作段先留在本机", file=sys.stderr)
+                return False
             state["pending"].pop(0)
             if not args.dry_run:
                 save_json(args.state, state)
             print(f"{report['kind']}：{report['windowStart']}–{report['windowEnd']} 新记 {result.get('accepted')} 段，重放 {result.get('duplicates')} 段")
+        return True
 
-    def send(kind: str, start: datetime, stop: datetime, sessions: list[cs.Session], status: dict[str, str]) -> None:
+    def send(kind: str, start: datetime, stop: datetime, sessions: list[cs.Session], status: dict[str, str]) -> bool:
         note_evidence(state, sessions)
-        inventory = {"scheduledTasks": scheduled_tasks(), "feishuDocs": feishu_docs(sessions)}
-        state["pending"] = build_reports(kind, device, sessions, status, state, start, stop, inventory)
+        state["pending"] = ((state.get("pending") or []) + build_reports(kind, device, sessions, status, state, start, stop))[-MAX_PENDING:]
         state["watermark"] = iso(stop)
         if not args.dry_run:
             save_json(args.state, state)  # 先连同水位线落盘再发：发到一半断了，下次原样重发，不会换 id 重整理
-        flush()
+        return flush()
 
     flush()  # 上次没发完的先发
 
@@ -272,17 +327,22 @@ def run(mode: str, args: argparse.Namespace) -> int:
         state["last_digest_at"] = iso(now)
         if eod_due:
             state["last_eod_date"] = now.date().isoformat()
-        send("eod" if eod_due else "digest", watermark, end, sessions, status)
-        sent = True
+        sent = send("eod" if eod_due else "digest", watermark, end, sessions, status)
     elif not sessions:
         state["watermark"] = iso(end)  # 没有新活动：信息截至推进到现在
     else:
         note_evidence(state, sessions)
 
-    # 4. 今天没发上报就发心跳，带上各来源的信息截至。
-    if not sent:
+    # 4. 今天没发出上报，或者到了每天盘点的时候，就发心跳：带上各来源的信息截至，盘点时带上本机清单。
+    take_inventory = inventory_due(state, now)
+    if not sent or take_inventory:
         coverage = datetime.fromisoformat(state["watermark"].replace("Z", "+00:00"))
-        api.post("/api/collector/heartbeat", {"device": device, "version": VERSION, "sources": source_states(status, state, coverage)})
+        beat: dict[str, Any] = {"device": device, "version": VERSION, "sources": source_states(status, state, coverage)}
+        if take_inventory:
+            beat["inventory"] = full_inventory(now, args.codex_home, args.claude_home)
+        api.post("/api/collector/heartbeat", beat)
+        if take_inventory:
+            state["inventory_at"] = iso(now)
     if not args.dry_run:
         save_json(args.state, state)
     return 0

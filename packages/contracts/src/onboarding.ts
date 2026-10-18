@@ -23,6 +23,8 @@ const common = {
   next: Next,
   voiceprint: VoiceprintStatus,
   radar: RadarSummary,
+  /** 「授权天枢替你记进本体」这一步（10a 第 7 步）：本体的网页授权页确认之前默认隐藏，由 API 的 ONBOARDING_DELEGATION_STEP 打开。 */
+  delegationStep: Type.Boolean(),
 };
 
 /** 按会话角色返回最小投影；成员响应不包含 CEO 公司快照或其他人的 Mission。 */
