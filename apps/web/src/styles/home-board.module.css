@@ -110,3 +110,8 @@
 /* 标题不可打开时（天枢没有战略 / 能力详情页）：同一排版，不放箭头。 */
 .headingStatic{cursor:default}
 
+/* 战场一行右侧：「全局进展」入口（带红线、计划外条数）+ 待决策 / 进展切换。 */
+.toolbarActions{display:flex;align-items:center;gap:10px;min-width:0}
+.progressEntry.progressEntry{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 8px 0 12px;border-radius:999px;color:#2f3d55;font-size:13px;font-weight:600;white-space:nowrap}
+.progressBadge{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:999px;background:#e6eaf0;color:#465064;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.progressBadge[data-tone=red]{background:#fdeceb;color:#b3372f}

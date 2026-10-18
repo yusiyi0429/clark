@@ -66,7 +66,7 @@ export function weeklyReviewText(body: TWeeklyReviewBody): string {
 // ---------- 可见范围 ----------
 
 /** 某月里每个人所在的战场：战场负责人、参与人、这个月 Mission 挂的战场、这个月任务卡所在的战场。 */
-const BATTLEFIELD_MEMBERS = `
+export const BATTLEFIELD_MEMBERS = `
   SELECT b.owner_id AS person_id, b.id AS battlefield_id FROM battlefield_config b WHERE b.owner_id IS NOT NULL
   UNION SELECT p #>> '{}', b.id FROM battlefield_config b, jsonb_array_elements(COALESCE(b.participant_ids, '[]'::jsonb)) p
   UNION SELECT m.owner_id, x #>> '{}' FROM missions m, jsonb_array_elements(m.battlefield_ids) x WHERE m.period = $2

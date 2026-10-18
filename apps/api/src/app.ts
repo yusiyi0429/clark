@@ -91,6 +91,7 @@ import { createRequestAgent, type RequestAgent } from "./delivery/requestAgent.j
 import { registerCollectorRoutes } from "./routes/collector.js";
 import { registerWeeklyReviewRoutes } from "./routes/weeklyReviews.js";
 import { registerAdminRoutes } from "./routes/admin.js";
+import { registerProgressRoutes } from "./routes/progress.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 import { realDictationDeps, type DictationDeps } from "./dictation.js";
@@ -624,6 +625,7 @@ export async function buildApp({
   registerCollectorRoutes(app, ctx);
   registerWeeklyReviewRoutes(app, ctx);
   registerAdminRoutes(app, ctx);
+  registerProgressRoutes(app, ctx);
 
   return app;
 }
