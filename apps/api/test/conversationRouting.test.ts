@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  TIER_GUIDANCE, TIER_SETTINGS, TRIAGE_PROMPT, chartOnly, cleanTopic, createResponsesThinkingTranslator, createResponsesThoughtTranslator, createResponsesTriage, fallbackModelFor, deepNotice, parsePartialTriage, parseTriage, routeTurn, ruleTier, toolProgressLabel, withNotice,
+  TIER_GUIDANCE, TIER_SETTINGS, TRIAGE_PROMPT, chartOnly, cleanTopic, createResponsesThinkingTranslator, createResponsesThoughtTranslator, createResponsesTriage, fallbackModelFor, parsePartialTriage, parseTriage, routeTurn, ruleTier, toolProgressLabel, withNotice,
   type TriageFn,
 } from "../src/conversationRouting.js";
 import { CONVERSATION_WRITING_STYLE, HUMAN_WRITING_STYLE } from "../src/promptStyle.js";
@@ -46,10 +46,11 @@ describe("对话分档：分诊与回落", () => {
     expect(called).toBe(0);
   });
 
-  it("分诊判深度：思考 high、开场说明带判断对象，不写用时", async () => {
+  it("分诊判深度：思考 high，回答开头不加开场白（慢的原因由步骤列表体现）", async () => {
     const route = await routeTurn({ message: D1, signal: signal(), triage: async () => ({ tier: "deep", topic: "Token 工厂赛道格局与集团定位" }) });
     expect(route).toMatchObject({ tier: "deep", source: "model", thinkingLevel: "high", timeoutMs: 180_000 });
-    expect(route.notice).toBe("这个问题涉及Token 工厂赛道格局与集团定位的战略判断，需要更深入地查证和推演。");
+    expect(route.notice).toBeUndefined();
+    expect(TIER_GUIDANCE.deep).toContain("不写开场白");
   });
 
   it("只有很重要的战略问题才走深度：规则判深度时分诊可以降为检索问答，但不降到快答", async () => {
@@ -69,10 +70,10 @@ describe("对话分档：分诊与回落", () => {
     expect(await routeTurn({ message: question, signal: signal(), triage: hanging, timeoutMs: 30 })).toMatchObject({ tier: "grounded", source: "fallback" });
     expect(Date.now() - started).toBeLessThan(1_000);
     expect(await routeTurn({ message: question, signal: signal(), triage: invalid })).toMatchObject({ tier: "grounded", source: "fallback" });
-    // 规则已判深度、分诊挂了：按深度走，开场说明用通用说法。
+    // 规则已判深度、分诊挂了：按深度走，同样没有开场白。
     const deep = await routeTurn({ message: D1, signal: signal(), triage: hanging, timeoutMs: 30 });
     expect(deep).toMatchObject({ tier: "deep", source: "rule" });
-    expect(deep.notice).toBe(deepNotice());
+    expect(deep.notice).toBeUndefined();
     // 没配分诊：规则定不了的走检索问答。
     expect(await routeTurn({ message: question, signal: signal() })).toMatchObject({ tier: "grounded", source: "fallback" });
   });
@@ -134,16 +135,7 @@ describe("对话分档：分诊与回落", () => {
   });
 });
 
-describe("深度档的开场说明", () => {
-  it("正式克制：不称呼、不出现运行环境字眼，只说要做什么，不写用时（用时只在进度行）", () => {
-    for (const notice of [deepNotice(), deepNotice("资本动作背后的逻辑")]) {
-      expect(notice).toMatch(/需要更深入地查证和推演。$/);
-      expect(notice).not.toMatch(/预计|分钟|秒/);
-      expect(notice).not.toMatch(/王总|您好|领导/);
-      expect(notice).not.toMatch(ENVIRONMENT_WORDS);
-    }
-  });
-
+describe("分诊对象与存档写法", () => {
   it("分诊给的判断对象不合规就不用", () => {
     expect(cleanTopic("「资本动作背后的逻辑」")).toBe("资本动作背后的逻辑");
     expect(cleanTopic("王总关心的融资问题")).toBeUndefined();

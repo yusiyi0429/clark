@@ -110,14 +110,14 @@ describe("各档的分段事件顺序", () => {
     expect(result.assistantMessage).toBe("不客气。");
   });
 
-  it("深度档：开场说明带预计用时，查证进度照常；不做中途升级提示", async () => {
+  it("深度档：没有开场白，查证进度照常；不做中途升级提示", async () => {
     const { events } = await runTurn({
       message: "硅基流动和无问芯穹都已经递表了，为什么还要连续大额融资？背后的逻辑是什么？", triageTier: "deep", topic: "资本动作背后的逻辑", escalateAfterMs: 1,
       calls: [{ tool: { id: "s1", name: "web_search", arguments: { query: "硅基流动 融资" } }, delayMs: 20 }, { text: "判断如下。", delayMs: 20 }],
     });
     expect(shape(events)).toEqual(["route:deep", "thinking", "tool:started", "tool:completed", "thinking", "message"]);
-    expect((events[0] as { notice?: string }).notice).toMatch(/需要更深入地查证和推演。$/);
-    expect((events[0] as { notice?: string }).notice).not.toMatch(/预计|分钟/);
+    // 深度档也没有开场白：慢的原因由步骤列表体现。
+    expect((events[0] as { notice?: string }).notice).toBeUndefined();
   });
 
   it("推理摘要：中文要点随思考事件带上；英文摘要不上屏，只报状态", async () => {

@@ -34,7 +34,7 @@ export const TIER_SETTINGS: Record<ConversationTier, TierSettings> = {
 export const TIER_GUIDANCE: Record<ConversationTier, string> = {
   quick: "快答：直接回答，一到三句话；只在需要时读一次看板或企业知识，不做外部检索；修改指令按业务修改规则执行。",
   grounded: "检索问答：回答第一句就是结论，不写开场白，不说要先查什么、怎么查。先查企业知识和看板，内部不足再做外部检索，合计不超过 3 次，证据够了就停；开头一句给结论，篇幅与问题相称。",
-  deep: "深度：这是一个重要的战略问题，界面已经告诉一号位需要更深入地查证和推演，正文不要重复这句。先界定问题和对标层级，查企业知识和看板数值，再针对关键分歧做外部检索，合计不超过 6 次，每次检索词具体到公司和事件，额度留给关键分歧；按「深度分析」的形状写：开头一段给判断，然后用段落写清因果链、关键证据、最有力的反对意见和二阶影响，落到集团和具体战场，最后写需要盯的信号与仍不确定的地方。证据够下判断就动笔，不追求穷尽。",
+  deep: "深度：这是一个重要的战略问题。回答第一句就是判断，不写开场白，不说要先查什么、怎么推演。先界定问题和对标层级，查企业知识和看板数值，再针对关键分歧做外部检索，合计不超过 6 次，每次检索词具体到公司和事件，额度留给关键分歧；按「深度分析」的形状写：开头一段给判断，然后用段落写清因果链、关键证据、最有力的反对意见和二阶影响，落到集团和具体战场，最后写需要盯的信号与仍不确定的地方。证据够下判断就动笔，不追求穷尽。",
 };
 
 /**
@@ -164,11 +164,6 @@ export function cleanTopic(topic: unknown): string | undefined {
   return value;
 }
 
-/** 深度档的开场说明：只陈述接下来要做什么，不写用时（用时只在进度行显示），不写任何未经核实的事实。 */
-export function deepNotice(topic?: string): string {
-  const object = topic ? `${topic}的战略判断` : "集团层面的战略判断";
-  return `这个问题涉及${object}，需要更深入地查证和推演。`;
-}
 
 /** 存进对话记录的回答：开场说明在前，空一行接正文（界面流式时也是这样拼的）。 */
 export function withNotice(notice: string | undefined, body: string): string {
@@ -198,9 +193,9 @@ export function cleanTriageBattlefields(value: unknown): "all" | string[] | unde
 function routeOf(tier: ConversationTier, source: TurnRoute["source"], message: string, topic?: string,
   options: { prefetch?: TurnRoute["prefetch"]; battlefields?: TurnRoute["battlefields"]; visual?: boolean } = {}): TurnRoute {
   const settings = TIER_SETTINGS[tier];
-  // 只有深度档在回答开头写一句为什么慢（已定设计第 0 节）；检索问答档不加开场白（10/18 走查：每条回答开头都多一句「先查企业知识……」），
-  // 查证在进度行和步骤里显示，回答直接给结论。
-  const notice = tier === "deep" ? deepNotice(topic) : undefined;
+  // 各档都不在回答开头加开场白（10/18 走查：每条回答开头都多一句「先查企业知识……」「需要更深入地查证和推演」）：
+  // 慢的原因由进度行与步骤列表体现，回答直接给结论。route.notice 的通路保留（恢复、续写仍按它拼），这里不再产出。
+  const notice: string | undefined = undefined;
   // 只有深度档预取：快答不做外部检索；检索问答档 10/13 起不再让分诊给检索词（分诊更快，第一轮由主答自己查）。
   const prefetch = tier === "deep" ? options.prefetch : undefined;
   return { tier, source, ...settings, ...(notice ? { notice } : {}), ...(prefetch ? { prefetch } : {}),
