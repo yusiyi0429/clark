@@ -128,6 +128,24 @@ export function parseWeeklyReviewDoc(doc: ImportDoc): ImportedWeek[] {
   return [...weeks.values()];
 }
 
+/**
+ * 同一人同一周有几份（例如 RU 一份、Mission 一份）：拼成一份，每段里每份前面加一行来源「来源：文档名」（挂那份的链接），
+ * 只拼有内容的段。只有一份时原样返回。import_source 记第一份（按文档名排序），各份的链接在来源行里。
+ */
+export function mergeImportedWeeks(parts: { doc: ImportDoc; week: ImportedWeek }[]): { doc: ImportDoc; week: ImportedWeek } {
+  if (parts.length === 1) return parts[0];
+  const sorted = [...parts].sort((a, b) => a.doc.title.localeCompare(b.doc.title, "zh-CN"));
+  const body = Object.fromEntries(WEEKLY_REVIEW_FIELDS.map((field) => {
+    const filled = sorted.filter((part) => part.week.body[field].text !== "无");
+    if (!filled.length) return [field, { text: "无", sources: [] }];
+    return [field, {
+      text: filled.map((part) => `来源：${part.doc.title}[飞书原文](${part.doc.url})\n${part.week.body[field].text}`).join("\n"),
+      sources: [...new Set(filled.flatMap((part) => part.week.body[field].sources))].slice(0, 10),
+    }];
+  })) as TWeeklyReviewBody;
+  return { doc: sorted[0].doc, week: { weekStart: sorted[0].week.weekStart, body, lines: sorted.reduce((sum, part) => sum + part.week.lines, 0) } };
+}
+
 /** 写库：已有的周（天枢里生成过或已导入）不动。返回新写入的条数。调用方在事务里调。 */
 export async function writeImportedWeeks(q: Query, rows: { personId: string; doc: ImportDoc; week: ImportedWeek }[], now: Date): Promise<number> {
   let written = 0;

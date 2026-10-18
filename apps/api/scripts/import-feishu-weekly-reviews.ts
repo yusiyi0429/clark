@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Pool } from "pg";
 import { loadPeople } from "../src/companyMemory.js";
-import { parseWeeklyReviewDoc, writeImportedWeeks, type ImportDoc, type ImportedWeek } from "../src/weeklyReviewImport.js";
+import { mergeImportedWeeks, parseWeeklyReviewDoc, writeImportedWeeks, type ImportDoc, type ImportedWeek } from "../src/weeklyReviewImport.js";
 
 /**
  * 10 月历史周复盘一次性导入（D-01）。用本机 lark-cli 以本人身份（--as user）只读飞书知识库，按周拆好写进 weekly_reviews，
@@ -108,13 +108,15 @@ async function main() {
   }
 
   const usable = docs.filter((item) => item.personId && item.weeks.length);
-  const rows = new Map<string, { personId: string; doc: ImportDoc; week: ImportedWeek }>();
+  // 同一人同一周有几份（例如 RU 一份、Mission 一份）：拼成一份，每份前面一行来源。
+  const groups = new Map<string, { personId: string; parts: { doc: ImportDoc; week: ImportedWeek }[] }>();
   for (const item of usable) for (const week of item.weeks) {
     const key = `${item.personId}:${week.weekStart}`;
-    const existing = rows.get(key);
-    // 同一人同一周有两份（例如 RU 一份、Mission 一份）：留内容多的那份，另一份在统计里列出。
-    if (!existing || week.lines > existing.week.lines) rows.set(key, { personId: item.personId!, doc: item.doc, week });
+    const group = groups.get(key) ?? { personId: item.personId!, parts: [] };
+    group.parts.push({ doc: item.doc, week });
+    groups.set(key, group);
   }
+  const rows = new Map([...groups].map(([key, group]) => [key, { personId: group.personId, ...mergeImportedWeeks(group.parts) }]));
   console.log(`找到 ${found.size} 份候选，9/28 以后建的 ${docs.length} 份`);
   for (const item of docs) {
     console.log(`- ${item.candidate.ownerName ?? "?"} → ${item.personId ?? "对不上人"} | ${item.candidate.title} | ${item.candidate.path} | 周：${item.weeks.map((week) => `${week.weekStart}(${week.lines} 行)`).join("、") || "没有 10 月的周"}`);
@@ -122,8 +124,8 @@ async function main() {
   const persons = new Set([...rows.values()].map((row) => row.personId));
   const weeks = [...new Set([...rows.values()].map((row) => row.week.weekStart))].sort();
   console.log(`\n可导入：${persons.size} 人、${rows.size} 份周复盘（${weeks.map((week) => `${week} 周 ${[...rows.values()].filter((row) => row.week.weekStart === week).length} 份`).join("，")}）`);
-  const merged = usable.flatMap((item) => item.weeks.filter((week) => rows.get(`${item.personId}:${week.weekStart}`)?.doc !== item.doc).map((week) => `${item.candidate.title}（${week.weekStart}）`));
-  if (merged.length) console.log(`同一人同一周重复、没有采用：${merged.join("；")}`);
+  const merged = [...groups.values()].filter((group) => group.parts.length > 1);
+  if (merged.length) console.log(`同一人同一周有几份、已拼成一份：${merged.map((group) => `${group.personId} ${group.parts[0].week.weekStart}（${group.parts.map((part) => part.doc.title).join(" + ")}）`).join("；")}`);
   const unmatched = docs.filter((item) => !item.personId);
   if (unmatched.length) console.log(`对不上人：${unmatched.map((item) => `${item.candidate.title}（${item.candidate.ownerName ?? "没有所有者姓名"}）`).join("；")}`);
   if (out) writeFileSync(out, JSON.stringify([...rows.values()].map((row) => ({ personId: row.personId, title: row.doc.title, url: row.doc.url, ...row.week })), null, 2));

@@ -18,6 +18,8 @@
 .details:empty { margin-top: 0; }
 /* 连接外部工具这一步：设置里同一张表单，放在一块玻璃卡里。 */
 .connectPanel { width: min(560px, 100%); margin-inline: auto; padding: 20px 22px; text-align: left; }
+/* 本机采集器授权：和每周同步那一行一样的开关行，跟在表单下面。 */
+.consent { margin-top: 10px; }
 .content[data-step="hello"] { padding-top: 24px; }
 .content[data-step="start"] { padding-top: 24px; }
 .content[data-step="hello"] .description { margin-top: 28px; }

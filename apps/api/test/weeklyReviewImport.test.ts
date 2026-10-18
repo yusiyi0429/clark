@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { migrate } from "../src/migrate.js";
-import { mondayOf, parseWeeklyReviewDoc, weekOfText, writeImportedWeeks, type ImportDoc } from "../src/weeklyReviewImport.js";
+import { mergeImportedWeeks, mondayOf, parseWeeklyReviewDoc, weekOfText, writeImportedWeeks, type ImportDoc } from "../src/weeklyReviewImport.js";
 import { createTestDb } from "./helpers.js";
 
 /** 结构照飞书上几种写法造的样例（内容是编的）：模板 H2、H1 写周、表格两列、加粗段落、一份按周追加。 */
@@ -43,6 +43,22 @@ describe("飞书周复盘解析", () => {
   it("一份按周追加的：按带日期的标题拆成几周；10 月以外的周不要", () => {
     const weeks = parseWeeklyReviewDoc(doc(`# 2026.09.21-09.25\n## 关键进展\n九月的\n# 2026.10.12-10.16\n## 关键进展\n第三周\n# 2026.10.19-10.23\n## 关键进展\n第四周`));
     expect(weeks.map((week) => [week.weekStart, week.body.progress.text])).toEqual([["2026-10-12", text(["第三周"])], ["2026-10-19", text(["第四周"])]]);
+  });
+
+  it("同一人同一周两份：拼成一份，每段里每份前面一行来源（文档名和链接），空段不拼", () => {
+    const ru = { ...doc(`# 2026.10.12-10.16\n## 关键进展\nRU 的进展\n## 当前处理\nRU 的处理`, "B_RU_Weekly_Review"), url: "https://tokenking.feishu.cn/wiki/ru" };
+    const mission = { ...doc(`# 2026.10.12-10.16\n## 关键进展\nMission 的进展`, "A_Mission_Weekly_Review"), url: "https://tokenking.feishu.cn/wiki/mission" };
+    const merged = mergeImportedWeeks([ru, mission].map((item) => ({ doc: item, week: parseWeeklyReviewDoc(item)[0] })));
+    expect(merged.doc.title).toBe("A_Mission_Weekly_Review");
+    expect(merged.week.lines).toBe(3);
+    expect(merged.week.body.progress).toEqual({
+      text: ["来源：A_Mission_Weekly_Review[飞书原文](https://tokenking.feishu.cn/wiki/mission)", "Mission 的进展[飞书原文](https://tokenking.feishu.cn/wiki/mission)",
+        "来源：B_RU_Weekly_Review[飞书原文](https://tokenking.feishu.cn/wiki/ru)", "RU 的进展[飞书原文](https://tokenking.feishu.cn/wiki/ru)"].join("\n"),
+      sources: ["https://tokenking.feishu.cn/wiki/mission", "https://tokenking.feishu.cn/wiki/ru"] });
+    expect(merged.week.body.actions.text).toBe("来源：B_RU_Weekly_Review[飞书原文](https://tokenking.feishu.cn/wiki/ru)\nRU 的处理[飞书原文](https://tokenking.feishu.cn/wiki/ru)");
+    expect(merged.week.body.issues).toEqual({ text: "无", sources: [] });
+    const single = { doc: ru, week: parseWeeklyReviewDoc(ru)[0] };
+    expect(mergeImportedWeeks([single])).toBe(single);
   });
 
   it("写库：已提交（导入），已有的周不覆盖", async () => {
