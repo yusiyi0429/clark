@@ -130,6 +130,7 @@ import {
   CollectorHeartbeatRequest, CollectorHeartbeatResponse, CollectorReportRequest, CollectorReportResponse,
   CollectorConsentResponse, UpdateCollectorConsentRequest,
   WeeklyReviewBoardResponse, WeeklyReviewResponse, ExecuteWeeklyReviewActionRequest, ExecuteWeeklyReviewActionResponse, WeeklyReviewUpdateInput,
+  ProgressOverviewResponse, MyOffPlanResponse, AttachOffPlanRequest,
   OAuthConsentRequest,
   OAuthConsentResponse,
   OAuthConsentDecisionResponse,
@@ -1416,6 +1417,33 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "周复盘的最新视图", content: { "application/json": { schema: { $ref: "#/components/schemas/ExecuteWeeklyReviewActionResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
         },
       },
+      "/api/progress": {
+        get: {
+          operationId: "getProgressOverview", summary: "全局进展：红线（比预期慢、按截止日做不完）、按计划在走、没有 Task 基线的人的进展摘要、计划外工作；CEO 看全部，其他人看同一战场的人",
+          responses: { "200": { description: "全局进展", content: { "application/json": { schema: { $ref: "#/components/schemas/ProgressOverviewResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/me/off-plan": {
+        get: {
+          operationId: "getMyOffPlan", summary: "本人的计划外工作（没处理的、已提出改计划的）与挂靠时可选的本人未完成执行事项",
+          responses: { "200": { description: "本人的计划外", content: { "application/json": { schema: { $ref: "#/components/schemas/MyOffPlanResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/me/off-plan/{id}/attach": {
+        post: {
+          operationId: "attachMyOffPlan", summary: "把一条计划外工作挂到本人的一件执行事项上（同时记成这件事的进展）；已挂过的 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/AttachOffPlanRequest" }),
+          responses: { "200": { description: "本人的计划外", content: { "application/json": { schema: { $ref: "#/components/schemas/MyOffPlanResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/me/off-plan/{id}/replan": {
+        post: {
+          operationId: "proposeMyOffPlanReplan", summary: "对一条计划外工作提出改计划（先只记下来）；重复提出幂等，已挂过的 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "本人的计划外", content: { "application/json": { schema: { $ref: "#/components/schemas/MyOffPlanResponse" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
       "/api/me/tokens/{id}": {
         delete: {
           operationId: "revokePersonalToken", summary: "撤销本人令牌",
@@ -2545,6 +2573,9 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ExecuteWeeklyReviewActionRequest: ExecuteWeeklyReviewActionRequest as JsonSchema,
         ExecuteWeeklyReviewActionResponse: ExecuteWeeklyReviewActionResponse as JsonSchema,
         WeeklyReviewUpdateInput: WeeklyReviewUpdateInput as JsonSchema,
+        ProgressOverviewResponse: ProgressOverviewResponse as JsonSchema,
+        MyOffPlanResponse: MyOffPlanResponse as JsonSchema,
+        AttachOffPlanRequest: AttachOffPlanRequest as JsonSchema,
         TaskPerson: TaskPerson as JsonSchema,
         TaskMissionRef: TaskMissionRef as JsonSchema,
         CreateMyTaskRequest: CreateMyTaskRequest as JsonSchema,

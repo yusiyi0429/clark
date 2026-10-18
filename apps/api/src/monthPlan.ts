@@ -13,7 +13,7 @@ const localDay = (now:Date) => {
   const p = Object.fromEntries(parts.map((part)=>[part.type,part.value]));
   return `${p.year}-${p.month}-${p.day}`;
 };
-function milestoneDate(text:string,period:string):string|null {
+export function milestoneDate(text:string,period:string):string|null {
   const iso = /^(\d{4}-\d{2}-\d{2})(?=$|\D)/.exec(text);
   const short = /^(\d{1,2})\/(\d{1,2})(?=$|\D)/.exec(text);
   const value = iso?.[1] ?? (short ? `${period.slice(0,4)}-${short[1].padStart(2,"0")}-${short[2].padStart(2,"0")}` : null);
