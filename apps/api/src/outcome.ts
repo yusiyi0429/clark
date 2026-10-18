@@ -36,14 +36,31 @@ import {
 } from "./meetingStore.js";
 import { insertNotification } from "./notifications.js";
 import { dispatchMeetingTodo } from "./tasks.js";
+import type { InterpretationContext } from "./meetingContext.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
-/** 按应用的连接池隔离订阅；监听器只排队，确认事务不等待任何 world HTTP。 */
-const reviewListeners = new WeakMap<Pool, (meetingId: string) => void>();
+/**
+ * 按应用的连接池隔离订阅；监听器只排队，确认事务不等待任何 world HTTP。
+ * 会后纪要整理好（ready）和每次逐项处理之后都会通知；同一个池可以有多个监听器（本体会议事件、会后分层确认）。
+ */
+const reviewListeners = new WeakMap<Pool, Set<(meetingId: string) => void>>();
 export function onOutcomeReviewed(pool: Pool, listener: (meetingId: string) => void): () => void {
-  reviewListeners.set(pool, listener);
-  return () => { if (reviewListeners.get(pool) === listener) reviewListeners.delete(pool); };
+  const listeners = reviewListeners.get(pool) ?? new Set();
+  listeners.add(listener);
+  reviewListeners.set(pool, listeners);
+  return () => { listeners.delete(listener); };
+}
+function notifyReviewed(pool: Pool, meetingId: string): void {
+  for (const listener of reviewListeners.get(pool) ?? []) {
+    try { listener(meetingId); } catch (error) { console.warn(`outcome listener failed: ${(error as Error).message}`); }
+  }
+}
+
+/** 解读纪要时对照的公司地图（每个人的 Mission、本月 outcome、长期目标和 LTO）；由 app 按池注册，没注册时不带。 */
+const contextProviders = new WeakMap<Pool, (meetingId: string) => Promise<InterpretationContext | null>>();
+export function setOutcomeContextProvider(pool: Pool, provider: (meetingId: string) => Promise<InterpretationContext | null>): void {
+  contextProviders.set(pool, provider);
 }
 
 /** 抽取输入只读取 Meeting 内嵌结构和关联 Issue，Agent 不能访问业务库。 */
@@ -51,6 +68,8 @@ export type PostMeetingAgentInput = {
   meeting: { id: string; title: string; scheduledAt: string; ceoParticipantId: string; participants: TMeetingParticipant[] };
   transcript: { turns: TTranscriptTurn[] };
   issues: { id: string; title: string; location: unknown; urgency: unknown; research: unknown }[];
+  /** 公司地图：用来判断哪些改动和战略方向有关（推给 CEO），哪些会牵动别人的 Mission。 */
+  context?: InterpretationContext;
 };
 
 export type PostMeetingAgent = {
@@ -419,6 +438,8 @@ export async function runOutcome(
 
   try {
     const issueResult = await q("SELECT id, title, location, urgency, research FROM issues WHERE id = ANY($1::uuid[])", [meeting.issue_ids]);
+    // 公司地图读不到不拦着整理纪要：没有就按原来的输入跑。
+    const context = await contextProviders.get(pool)?.(meetingId).catch(() => null) ?? null;
     const input: PostMeetingAgentInput = {
       meeting: {
         id: meeting.id,
@@ -429,6 +450,7 @@ export async function runOutcome(
       },
       transcript: { turns: meeting.transcript.turns },
       issues: issueResult.rows as IssueSnapshotRow[],
+      ...(context ? { context } : {}),
     };
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(new Error(`Outcome extraction exceeded ${timeoutMs}ms`)), timeoutMs);
@@ -485,7 +507,7 @@ export async function runOutcome(
         [meetingId, assessed.summary, JSON.stringify(assessed.items), JSON.stringify(assessed.warnings), new Date().toISOString(), nextStatus],
       );
       await client.query("COMMIT");
-      if (nextStatus === "reviewed") reviewListeners.get(pool)?.(meetingId);
+      notifyReviewed(pool, meetingId);
     } catch (err) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw err;
@@ -778,7 +800,7 @@ export async function executeConfirmItem(
   });
   if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
   if (ontologyRequest) await applyOntologyUpdate(pool, ontologyUpdater, ontologyRequest);
-  reviewListeners.get(pool)?.(scope.objectId);
+  notifyReviewed(pool, scope.objectId);
   return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
 }
 /** 提交确认后才交给本体更新；失败不改回 pending，只把请求记为 failed。 */
@@ -840,7 +862,7 @@ export async function executeDismissItem(
 
     return commitReview(client, row, state, items, fingerprint, secret);
   });
-  if ("card" in outcome && !outcome.replayed) reviewListeners.get(pool)?.(scope.objectId);
+  if ("card" in outcome && !outcome.replayed) notifyReviewed(pool, scope.objectId);
   return outcome;
 }
 /**

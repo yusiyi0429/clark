@@ -6034,7 +6034,7 @@ export interface components {
             }[];
             importedAt: string;
             source?: {
-                format: "miaoji_markdown" | "warmap_json" | "volc_asr";
+                format: "miaoji_markdown" | "warmap_json" | "volc_asr" | "feishu_minutes";
                 fileName: string;
                 sizeBytes: number;
                 sha256: string;

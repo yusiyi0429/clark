@@ -13,7 +13,9 @@ import type {
   TTranscriptCandidateProjection,
   TMeetingRecordingSummary,
 } from "@warmap/contracts";
+import type { TMeetingMinutesStatus } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
+import { attendeesOf, minutesStatusOf, projectMeetingDecision, type MeetingDecisionRow } from "./meetingDecisionView.js";
 import { computeStaleInputs, type GroupInputVersions } from "./preflightStaleness.js";
 
 export type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
@@ -50,13 +52,24 @@ export type MeetingRow = {
   latest_recording?: TMeetingRecordingSummary | null;
   /** 预审 ready 时现查的群材料版本与讨论游标（随 meetingColumns 带出，用于过期提示）；其他时候为 null。 */
   group_inputs?: GroupInputVersions | null;
+  /** 妙记与实际参会名单（086）。 */
+  feishu_meeting_id?: string | null;
+  minute_token?: string | null;
+  minutes_status?: TMeetingMinutesStatus;
+  attendees_actual?: string[] | null;
+  /** 会后分层确认（meeting_decisions 另表，随 meetingColumns 带出）；`SELECT *` 读出的行没有这一格。 */
+  decisions?: MeetingDecisionRow[];
 };
 
 const MEETING_COLUMNS = [
   "id", "version", "title", "status", "scheduled_at", "ends_at", "ended_at", "lead_dri_id", "ceo_participant_id",
   "participants", "issue_ids", "preflight", "draft", "materials", "transcript", "transcript_candidate", "outcome", "origin_ref", "external_id",
   "request_fingerprint", "action_fingerprints", "created_at", "updated_at",
+  "feishu_meeting_id", "minute_token", "minutes_status", "attendees_actual",
 ];
+/** 会后分层确认不 bump Meeting version（主持人确认走自己的接口），每次读取现查。 */
+const decisionsColumn = (prefix: string) =>
+  `(SELECT COALESCE(jsonb_agg(to_jsonb(d) ORDER BY d.tier DESC, d.ordinal), '[]'::jsonb) FROM meeting_decisions d WHERE d.meeting_id = ${prefix || "meetings."}id) AS decisions`;
 /** 录音状态变化不 bump Meeting version（否则会让进行中的会议 Action 全部失效），所以每次读取现查最近一条。 */
 const latestRecordingColumn = (prefix: string) =>
   `(SELECT jsonb_build_object('id', r.id, 'status', r.status, 'error', r.error) FROM meeting_recordings r WHERE r.meeting_id = ${prefix || "meetings."}id ORDER BY r.created_at DESC LIMIT 1) AS latest_recording`;
@@ -82,7 +95,7 @@ const groupInputsColumn = (prefix: string) => {
     'newDiscussionCount', (SELECT count(*) ${discussions} AND gm.id > COALESCE((${m}preflight #>> '{inputCoverage,evidence,discussionMaxId}')::bigint, 0))
   ) END) AS group_inputs`;
 };
-export const meetingColumns = (prefix = "") => [...MEETING_COLUMNS.map((column) => `${prefix}${column}`), latestRecordingColumn(prefix), groupInputsColumn(prefix)].join(", ");
+export const meetingColumns = (prefix = "") => [...MEETING_COLUMNS.map((column) => `${prefix}${column}`), latestRecordingColumn(prefix), groupInputsColumn(prefix), decisionsColumn(prefix)].join(", ");
 
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type MeetingActionError = { status: number; code: string; message: string; fieldErrors?: Record<string, string> };
@@ -259,6 +272,11 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
       transcriptCandidate: projectTranscriptCandidate(row.transcript_candidate),
       outcome: row.outcome,
       recording: row.latest_recording ?? null,
+      minutesStatus: minutesStatusOf(row),
+      attendees: attendeesOf(row),
+      // 主持人在自己的会议卡上确认；CEO 卡上只有 CEO 自己主持时才能点。
+      decisions: (row.decisions ?? []).map((decision) => projectMeetingDecision(decision, row.participants,
+        decision.tier === "host" && row.lead_dri_id === row.ceo_participant_id)),
     },
     navigation: [{ href: `/meetings/${row.id}`, label: "Meeting" }],
     conversation: { scope: `meeting:${row.id}` },

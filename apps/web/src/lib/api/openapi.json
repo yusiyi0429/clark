@@ -32665,6 +32665,10 @@
                   {
                     "const": "volc_asr",
                     "type": "string"
+                  },
+                  {
+                    "const": "feishu_minutes",
+                    "type": "string"
                   }
                 ]
               },
