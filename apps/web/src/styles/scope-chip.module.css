@@ -51,7 +51,9 @@ button.chip:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
 }
 .option:hover { border-color: #b9c9e6; }
 .option[aria-pressed="true"] { border-color: #2f6bb4; background: #2f6bb4; color: #fff; }
-.option:focus-visible, .select:focus-visible, .ghost:focus-visible, .primary:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
+.option:focus-visible, .ghost:focus-visible, .primary:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
+/* 下拉框和全站输入框一样：聚焦只换边色。 */
+.select:focus { outline: none; border-color: var(--field-border-focus); }
 .months { display: flex; align-items: center; gap: 6px; min-width: 0; color: #9599a1; }
 .select {
   min-width: 0;

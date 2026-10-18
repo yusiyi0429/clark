@@ -28,7 +28,7 @@
   max-height: 200px;
 }
 input.input { height: 36px; font-weight: 600; }
-.input:focus { outline: none; border-color: var(--field-border-focus, #3b6fc9); box-shadow: var(--field-focus-ring, 0 0 0 3px #3b6fc922); }
+.input:focus { outline: none; border-color: var(--field-border-focus); }
 .input[aria-invalid] { border-color: #c4462f99; }
 .places { display: flex; flex-wrap: wrap; gap: 6px; }
 .place {
