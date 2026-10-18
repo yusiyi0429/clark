@@ -266,6 +266,8 @@ export async function createTestApp(
     feishuClient?: FeishuClient;
     /** 个人记忆的召回模型替身；不注入时不用模型、只按字面重合选（测试里不调真实模型）。 */
     personalMemoryRecall?: Parameters<typeof buildApp>[0]["personalMemoryRecall"];
+    /** 记忆导入的分类与去重模型替身；不注入时按测试环境装配（测试里不调真实模型）。 */
+    memoryImportModel?: Parameters<typeof buildApp>[0]["memoryImportModel"];
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {

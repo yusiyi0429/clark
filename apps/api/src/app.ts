@@ -12,6 +12,10 @@ import { createPersonalMemory } from "./personalMemory.js";
 import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
 import { registerPersonalMemoryRoutes } from "./routes/personalMemory.js";
+import { registerMemoryImportRoutes } from "./routes/memoryImports.js";
+import { createMemoryImports } from "./memoryImports.js";
+import { createMemoryImportModel } from "./memoryImportAgent.js";
+import type { MemoryImportModel } from "./memoryImport.js";
 import { globalConversationContext, listConversationMissions } from "./conversationContext.js";
 import { listBattlefieldRows } from "./battlefields.js";
 import { createResponsesThinkingTranslator, createResponsesThoughtTranslator, createResponsesTriage } from "./conversationRouting.js";
@@ -174,6 +178,7 @@ export async function buildApp({
   conversationRuntime,
   personalDistillationStream,
   personalMemoryRecall,
+  memoryImportModel,
   radarService,
   personalRadarService,
   researchService,
@@ -214,6 +219,8 @@ export async function buildApp({
   personalDistillationStream?: Parameters<typeof createPersonalDistillation>[0]["streamSimple"];
   /** 个人记忆的召回模型（测试注入替身，null 表示不用模型、只按字面重合选）；不给时按 PI_BASE_URL 调分诊用的快模型。 */
   personalMemoryRecall?: MemoryRecall | null;
+  /** 记忆导入的分类与去重模型（测试注入替身）；不给时按 PI_BASE_URL 调 MEMORY_IMPORT_MODEL（不配时 LIGHT_MODEL）。 */
+  memoryImportModel?: MemoryImportModel;
   radarService?: RadarService;
   /** 个人雷达扫描队列；缺省为不扫描的桩（server.ts 注入与公司雷达共用博查与发布方 adapter 的真实服务）。 */
   personalRadarService?: PersonalRadarService;
@@ -321,6 +328,10 @@ export async function buildApp({
     ? (env.piBaseUrl && env.piApiKey ? createMemoryRecall({ baseUrl: env.piBaseUrl, apiKey: env.piApiKey, ...memoryRecallModels(env) }) : undefined)
     : personalMemoryRecall ?? undefined;
   const personalMemory = createPersonalMemory({ pool, recall });
+  // 记忆导入（7a-3）：分类与去重用轻模型（MEMORY_IMPORT_MODEL / MEMORY_IMPORT_THINKING，不配时 LIGHT_MODEL、不开思考）。
+  const importModelChoice = agentModel(env.agentModels, "memoryImport", { modelId: env.lightModel });
+  const memoryImports = createMemoryImports({ pool, personalMemory, model: (personId) => memoryImportModel
+    ?? (env.piBaseUrl && env.piApiKey ? createMemoryImportModel({ query: pool.query.bind(pool), baseUrl: env.piBaseUrl, apiKey: env.piApiKey, personId, ...importModelChoice }) : null) });
   const personalDistillation = createPersonalDistillation({ pool, memory: personalMemory, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
     modelId: env.lightModel, streamSimple: personalDistillationStream });
   // 本体只读公司事实（PR #12 的 query_company）：按人授权的域读取；读不到时如实说明并回退本地（company.ts）。
@@ -606,6 +617,7 @@ export async function buildApp({
   registerMonthlyReviewRoutes(app, ctx);
   registerRequestRoutes(app, ctx, deliveryAgent);
   registerPersonalMemoryRoutes(app, ctx);
+  registerMemoryImportRoutes(app, ctx, memoryImports);
   registerCollectorRoutes(app, ctx);
   registerWeeklyReviewRoutes(app, ctx);
 

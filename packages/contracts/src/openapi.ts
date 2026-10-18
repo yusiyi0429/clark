@@ -160,6 +160,11 @@ import {
   VoiceprintStatus,
   PersonalMemoryItem,
   PersonalMemoryList,
+  CreateMemoryImportRequest,
+  MemoryImport,
+  MemoryImportDetail,
+  MemoryImportList,
+  ConfirmMemoryImportRequest,
   UpdatePersonalMemoryItemRequest,
   DictationResult,
   DictationSessionResponse,
@@ -1712,6 +1717,48 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "恢复后的条目", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryItem" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
         },
       },
+      "/api/me/memory/imports": {
+        post: {
+          operationId: "createMemoryImport",
+          summary: "导入别的 AI 工具的记忆：登录态（粘贴、上传 Claude 导出包，zip 用 base64）或 collector 个人令牌（本机 Claude Code、Codex 记忆文件，须已同意采集）。当场读取、拆分，后台分类、去重找冲突，停在等你确认",
+          requestBody: jsonBody({ $ref: "#/components/schemas/CreateMemoryImportRequest" }),
+          responses: {
+            "202": { description: "已收下，五步的当前状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MemoryImport" } } } },
+            "400": errorResponse, "401": errorResponse, "403": errorResponse, "413": errorResponse, "503": errorResponse,
+          },
+        },
+        get: {
+          operationId: "listMemoryImports", summary: "本人最近 20 次记忆导入（不含候选）",
+          responses: { "200": { description: "导入记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MemoryImportList" } } } }, "401": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/me/memory/imports/{id}": {
+        get: {
+          operationId: "getMemoryImport", summary: "一次导入的步骤、计数和全部候选（确认页只列 conflict、uncertain 两组）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "导入详情", content: { "application/json": { schema: { $ref: "#/components/schemas/MemoryImportDetail" } } } }, "401": errorResponse, "404": errorResponse, "503": errorResponse },
+        },
+        delete: {
+          operationId: "discardMemoryImport", summary: "确认前丢弃本次导入，候选一起删掉；已确认的 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "204": { description: "已丢弃" }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/me/memory/imports/{id}/confirm": {
+        post: {
+          operationId: "confirmMemoryImport", summary: "本人确认：checked 里的条目写进个人记忆；冲突按 resolutions（缺省保留旧的）。还没整理完或已确认过的 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ConfirmMemoryImportRequest" }),
+          responses: { "200": { description: "确认后的导入", content: { "application/json": { schema: { $ref: "#/components/schemas/MemoryImport" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/me/memory/imports/{id}/retry": {
+        post: {
+          operationId: "retryMemoryImport", summary: "停住的导入从停住那一步接着做；没停住的 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "重新开始后的导入", content: { "application/json": { schema: { $ref: "#/components/schemas/MemoryImport" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
       "/api/me/voiceprint": {
         get: {
           operationId: "getMyVoiceprint",
@@ -2598,6 +2645,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         StartMeetingRecordingResponse: StartMeetingRecordingResponse as JsonSchema,
         VoiceprintStatus: VoiceprintStatus as JsonSchema,
         PersonalMemoryItem: PersonalMemoryItem as JsonSchema,
+        CreateMemoryImportRequest: CreateMemoryImportRequest as JsonSchema,
+        MemoryImport: MemoryImport as JsonSchema,
+        MemoryImportDetail: MemoryImportDetail as JsonSchema,
+        MemoryImportList: MemoryImportList as JsonSchema,
+        ConfirmMemoryImportRequest: ConfirmMemoryImportRequest as JsonSchema,
         PersonalMemoryList: PersonalMemoryList as JsonSchema,
         UpdatePersonalMemoryItemRequest: UpdatePersonalMemoryItemRequest as JsonSchema,
         DictationResult: DictationResult as JsonSchema,
