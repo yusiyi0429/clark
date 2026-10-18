@@ -117,6 +117,12 @@ export function MemoryImportReview({ importId, onConfirmed, onDiscarded, classNa
     if (on) next.add(id); else next.delete(id);
     return next;
   });
+  // 「导入」写勾上的条数；「公司」（V1 也当本人记忆导入）写勾上的 / 一共的；其余写一共几条。
+  const foldCount = (id: string) => {
+    const items = groups.get(id) ?? [];
+    const on = items.filter((item) => checked?.has(item.id)).length;
+    return id === "import" ? String(on) : id === "company" ? `${on}/${items.length}` : String(items.length);
+  };
   const conflicts = groups.get("conflict") ?? [];
   const uncertain = groups.get("uncertain") ?? [];
   const importCount = (checked ? [...checked].filter((id) => detail.candidates.some((item) => item.id === id && !item.locked && item.group !== "conflict" && item.group !== "partner")).length : 0)
@@ -155,7 +161,7 @@ export function MemoryImportReview({ importId, onConfirmed, onDiscarded, classNa
           <div className={s.folded} role="group" aria-label="其余各组">
             {FOLDED_GROUPS.filter((group) => groups.get(group.id)?.length).map((group) => (
               <button key={group.id} type="button" className={s.foldChip} aria-expanded={open === group.id} onClick={() => setOpen(open === group.id ? null : group.id)}>
-                {group.label}<span>{group.id === "import" ? (groups.get("import") ?? []).filter((item) => checked.has(item.id)).length : groups.get(group.id)!.length}</span>
+                {group.label}<span>{foldCount(group.id)}</span>
                 <ChevronDown size={13} aria-hidden />
               </button>
             ))}

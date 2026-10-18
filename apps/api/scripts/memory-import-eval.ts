@@ -5,7 +5,7 @@
  * - 跑产品里同一套函数：splitDocs → classifyCandidates → reconcileCandidates → decide（memoryImport.ts），模型调用同 memoryImportAgent.ts。
  * - 从 --env 指定的文件读 PI_BASE_URL / PI_API_KEY / LIGHT_MODEL / MEMORY_IMPORT_MODEL / MEMORY_IMPORT_THINKING，**不打印任何密钥值**；不开 LangSmith。
  * - 按源文件七三分开发集 / 测试集（文件 id 的哈希），阈值只在开发集上看，测试集报最终数字。
- * - 门槛：分类准确率 ≥ 90%；默认勾选里错的 ≤ 2%；要本人看的 ≤ 15%。另报去重 F1、冲突找出率、密钥 / 注入被勾选次数。
+ * - 门槛：分类准确率 ≥ 90%；默认勾选里错的 ≤ 2%（标准答案是公司事实的勾上不算错，V1 公司事实也当本人记忆导入）；要本人看的 ≤ 15%。另报去重 F1、冲突找出率、密钥 / 注入被勾选次数。
  */
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -81,7 +81,8 @@ function score(run: RunResult, subset: "all" | "dev" | "test", thresholds?: { de
   const aligned = golds.filter((gold) => run.pairs.has(gold.id));
   const correct = aligned.filter((gold) => run.pairs.get(gold.id)!.category === gold.gold_category);
   const checked = inSubset.filter((candidate) => candidate.checked);
-  const wrongChecked = checked.filter((candidate) => { const gold = goldOf.get(candidate); return !gold || !gold.gold_default_checked || gold.gold_category !== "personal_preference"; });
+  // 公司事实 V1 也当本人记忆导入（10/18 用户定）：标准答案是公司事实的被默认勾上不算错；个人偏好看 gold_default_checked。
+  const wrongChecked = checked.filter((candidate) => { const gold = goldOf.get(candidate); return !gold || (gold.gold_category === "personal_preference" ? !gold.gold_default_checked : gold.gold_category !== "company_fact"); });
   const review = inSubset.filter((candidate) => candidate.group === "conflict" || candidate.group === "uncertain");
   // 去重：按「重复对」算（标准答案里 gold_duplicate_of 不为空的条目，预测要指向同一个对象）。
   const keyOfGold = new Map([...run.pairs].map(([goldId, candidate]) => [goldId, candidate.key]));

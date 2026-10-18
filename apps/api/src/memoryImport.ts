@@ -340,11 +340,12 @@ export async function classifyCandidates(candidates: Candidate[], model: MemoryI
 
 const RECONCILE_BATCH = 40;
 const MAX_EXISTING = 400;
-const isPersonal = (candidate: Candidate) => candidate.category === 'personal_preference' && !candidate.locked;
+/** 会写进本人记忆的两类：个人偏好；公司事实（V1 当本人记忆导入，只有本人能看；10/30 第二版再做管理员确认后转公司知识）。 */
+const isImportable = (candidate: Candidate) => (candidate.category === 'personal_preference' || candidate.category === 'company_fact') && !candidate.locked;
 
 /**
  * 先精确：同批里指纹相同的（同一份 CLAUDE.md 的副本）、和已有记忆正文指纹相同的、以前导入过的（seen：指纹 → 以前那条的 id），记为重复。
- * 再交给模型：个人偏好里和已有记忆、同批更早的条目说的是同一件事（换了说法）的记为重复，说法相反的记为冲突。只核对个人偏好（别的类本来就不进个人记忆）。
+ * 再交给模型：个人偏好、公司事实里和已有记忆、同批更早的条目说的是同一件事（换了说法）的记为重复，说法相反的记为冲突。只核对这两类（别的类不进本人记忆）。
  */
 export async function reconcileCandidates(candidates: Candidate[], existing: ExistingMemory[], model: MemoryImportModel,
     seen: Map<string, string> = new Map()): Promise<void> {
@@ -359,7 +360,7 @@ export async function reconcileCandidates(candidates: Candidate[], existing: Exi
         else if (seen.has(candidate.fingerprint)) candidate.duplicateOf = { key: seen.get(candidate.fingerprint)! };
         if (!first) firstByPrint.set(candidate.fingerprint, candidate);
     }
-    const personal = candidates.filter(candidate => isPersonal(candidate) && !candidate.duplicateOf && (candidate.confidence ?? 0) >= REVIEW_FLOOR);
+    const personal = candidates.filter(candidate => isImportable(candidate) && !candidate.duplicateOf && (candidate.confidence ?? 0) >= REVIEW_FLOOR);
     if (!personal.length) return;
     const directory = [...existing].sort((left, right) => left.createdAt.localeCompare(right.createdAt)).slice(-MAX_EXISTING);
     const memoryHandle = new Map(directory.map((memory, index) => [`M${index + 1}`, memory.id]));
@@ -405,10 +406,11 @@ export function effectiveConfidence(candidate: Candidate): number {
 
 /**
  * 分组与默认勾选（7a-3、导入设计 4.5）：
- * - 只有分到个人偏好、把握 ≥ DEFAULT_CHECK_THRESHOLD、没有冲突、不重复的才默认勾选（import）；
+ * - 分到个人偏好、把握 ≥ DEFAULT_CHECK_THRESHOLD、没有冲突、不重复的默认勾选（import）；
+ * - 公司事实（V1 当本人记忆导入）：同样的把握门槛默认勾选，在 company 组里；有冲突的进 conflict；
  * - 要本人看的两组：有冲突的（conflict，和已有记忆或同批更早的一条说法相反）、没把握的（uncertain：个人偏好把握中等，或在个人偏好和别的类之间摇摆）；
  *   合计不超过本批的 15%、最多 15 条，冲突优先、表达方式类其次，超出的不导入（skipped）；
- * - 其余：公司事实、项目指令、重复、不导入、把握低的个人偏好（skipped），都不勾。
+ * - 其余：把握不够的公司事实、项目指令、重复、不导入、把握低的个人偏好（skipped），都不勾。
  */
 export function decide(candidates: Candidate[], thresholds: { defaultCheck?: number; reviewFloor?: number } = {}): void {
     const DEFAULT_CHECK = thresholds.defaultCheck ?? DEFAULT_CHECK_THRESHOLD, FLOOR = thresholds.reviewFloor ?? REVIEW_FLOOR;
@@ -424,8 +426,12 @@ export function decide(candidates: Candidate[], thresholds: { defaultCheck?: num
             else if (confidence >= DEFAULT_CHECK) candidate.group = 'import';
             else if (confidence >= FLOOR) candidate.group = 'uncertain';
             else candidate.group = 'skipped';
-        } else if (candidate.alternative === 'personal_preference' && confidence < DEFAULT_CHECK && confidence >= FLOOR - 0.1) candidate.group = 'uncertain';
-        else candidate.group = candidate.category === 'company_fact' ? 'company' : 'project';
+        } else if (candidate.category === 'company_fact' && candidate.conflictWith) candidate.group = 'conflict';
+        else if (candidate.alternative === 'personal_preference' && confidence < DEFAULT_CHECK && confidence >= FLOOR - 0.1) candidate.group = 'uncertain';
+        else {
+            candidate.group = candidate.category === 'company_fact' ? 'company' : 'project';
+            if (candidate.group === 'company' && confidence >= DEFAULT_CHECK) candidate.checked = true;
+        }
         if (candidate.group === 'conflict' || candidate.group === 'uncertain') review.push(candidate);
     }
     // 同批冲突：较早的那条跟着冲突那条一起定，不单独勾。
@@ -443,7 +449,7 @@ export function decide(candidates: Candidate[], thresholds: { defaultCheck?: num
         if (extra.group === 'conflict' && extra.conflictWith?.key) { const partner = byKey.get(extra.conflictWith.key); if (partner?.group === 'partner') partner.group = 'skipped'; }
         extra.group = 'skipped';
     }
-    for (const candidate of candidates) candidate.checked = candidate.group === 'import';
+    for (const candidate of candidates) candidate.checked = candidate.group === 'import' || (candidate.group === 'company' && candidate.checked);
 }
 
 export type ImportCounts = {

@@ -16,6 +16,7 @@ import type { PersonalMemory } from './personalMemory.js';
 const STEP_LABELS: [string, string][] = [['read', '读取'], ['split', '拆分'], ['classify', '分类'], ['reconcile', '去重和冲突'], ['confirm', '等你确认']];
 const CATEGORY_SHORT: Record<string, string> = { personal_preference: '偏好', company_fact: '公司', project_instruction: '项目', drop: '不导入' };
 const QUOTE_CHARS = 500;
+export const COMPANY_FACT_TOPIC = 'topic:公司事实';
 
 const fault = (code: string) => Object.assign(new Error(code), { code });
 /** 没配模型时：只做规则能做的（精确去重）；真要用到模型的地方在调用前就报 MEMORY_IMPORT_MODEL_UNAVAILABLE。 */
@@ -117,7 +118,7 @@ export function createMemoryImports(options: { pool: Pool; personalMemory: Perso
             current = 'reconcile';
             await step(row, 'reconcile', 'active');
             const existing = (await personalMemory.list(personId, { status: 'active' })).map(({ id: memoryId, kind, title, text, createdAt }) => ({ id: memoryId, kind, title, text, createdAt }));
-            if (list.some(candidate => candidate.category === 'personal_preference' && !seen.has(candidate.fingerprint)) && !model) throw fault('MEMORY_IMPORT_MODEL_UNAVAILABLE');
+            if (list.some(candidate => (candidate.category === 'personal_preference' || candidate.category === 'company_fact') && !candidate.locked && !seen.has(candidate.fingerprint)) && !model) throw fault('MEMORY_IMPORT_MODEL_UNAVAILABLE');
             await reconcileCandidates(list, existing, model ?? NO_MODEL, new Map([...seen].map(([print, earlier]) => [print, earlier.id])));
             decide(list);
             await save(list);
@@ -221,8 +222,10 @@ export function createMemoryImports(options: { pool: Pool; personalMemory: Perso
                 const checked = new Set(input.checked);
                 const choices = new Map(input.resolutions.map(item => [item.id, item.choice]));
                 const outcome = new Map<string, { checked: boolean; resolution?: TMemoryImportCandidate['resolution']; memoryItemId?: string }>();
+                // 公司事实 V1 当本人记忆导入：放「想法与立场」组（kind idea），钉 topic:公司事实，第二版据此迁到公司知识。
                 const value = (candidate: CandidateRow) => ({
-                    kind: candidate.kind ?? 'preference', title: candidate.title, text: candidate.text,
+                    ...(candidate.category === 'company_fact' ? { kind: 'idea' as const, anchors: [{ target: COMPANY_FACT_TOPIC }] } : { kind: candidate.kind ?? 'preference' }),
+                    title: candidate.title, text: candidate.text,
                     references: [{ ref: `import:${candidate.source}:${row.id}:${candidate.id}`, quote: candidate.text.slice(0, QUOTE_CHARS), at: candidate.mtime.toISOString() }],
                 });
                 const add = async (candidate: CandidateRow, resolution?: TMemoryImportCandidate['resolution']) => {
