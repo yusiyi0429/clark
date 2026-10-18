@@ -6,6 +6,8 @@ import { signActionId } from "../src/actionToken.js";
 import { weeklyGenerationDue } from "../src/weeklyReviewService.js";
 import type { WeeklyReviewDraftInput } from "../src/weeklyReviewGeneration.js";
 import { templateProblem, weeklyRecords } from "../src/weeklyReviewGeneration.js";
+import { citationProblem } from "../src/personalReviewGeneration.js";
+import { WEEKLY_REVIEW_FIELDS } from "../src/weeklyReviews.js";
 import { call, executionFixture, type Fixture } from "./executionFixture.js";
 import { testEnv } from "./helpers.js";
 
@@ -132,6 +134,68 @@ describe("周复盘：公司现行模板（《DRI 周复盘使用说明》）", 
     expect(templateProblem({ ...good, actions: section("先验证 Context，继续推进") })).toContain("当前处理只选一个");
     expect(templateProblem({ ...good, actions: section("继续推进，必要时需要升级处理") })).toContain("当前处理只选一个");
     expect(templateProblem({ ...good, nextWeek: section("长".repeat(2200)) })).toMatch(/^篇幅 \d+ 字，超过 2200 字$/);
+  });
+});
+
+describe("周复盘：缺少记录的段落", () => {
+  /** 没有记录的段落整段不挂出处，但仍套模板：状态行、「仍待验证｜缺少……」、当前处理三选一开头。 */
+  const missingOnly: TWeeklyReviewBody = {
+    overall: { text: "状态：黄｜缺少本周的进展、会议和采集器整理，判断不了在不在轨。", sources: [] },
+    progress: { text: "本周缺少可核对的进展。", sources: [] },
+    issues: { text: "缺少记录：没有会议结论和执行事项进展，最卡的问题判断不了。", sources: [] },
+    implications: { text: "仍待验证｜缺少上周复盘，比不出判断变化。", sources: [] },
+    actions: { text: "责任范围内调整｜缺少执行事项，下周先把做了什么补记进来。", sources: [] },
+    nextWeek: { text: "缺少执行事项，排不出下周重点。", sources: [] },
+  };
+
+  it("完全没有记录的人：草稿照常生成，每一段都是「缺少记录」", async () => {
+    const t = await fixture();
+    try {
+      t.generate((input) => input.personId === THIRD ? missingOnly : cited(input));
+      t.at(FRIDAY_3PM); await t.scheduled();
+      const view = (await t.read(await t.idOf(THIRD), t.f.third)).json().review;
+      expect(view).toMatchObject({ status: "draft", draftError: null });
+      for (const field of WEEKLY_REVIEW_FIELDS) expect(view.body[field]).toEqual(missingOnly[field]);
+    } finally { await t.f.t.close(); }
+  });
+
+  it("一部分段落有记录、一部分没有：有记录的段带出处，没有的段只写缺少记录", async () => {
+    const t = await fixture();
+    try {
+      await seedWeek(t.f);
+      await t.f.t.sql("DELETE FROM meetings");
+      await t.f.t.sql("DELETE FROM weekly_reviews WHERE week_start='2026-10-05'");
+      t.generate((input) => {
+        const body = cited(input);
+        return { ...body, overall: { text: `状态：绿｜按计划推进${link(input.missions[0])}。`, sources: [] },
+          issues: { text: "缺少会议结论，这一周最卡的问题判断不了。", sources: [] }, implications: { text: "仍待验证｜缺少上周复盘，比不出判断变化。", sources: [] } };
+      });
+      t.at(FRIDAY_3PM); await t.scheduled();
+      expect(t.calls.find((item) => item.personId === MEMBER)!.missingRecords).toEqual(["会议结论", "上周复盘"]);
+      const view = (await t.read(await t.idOf(MEMBER))).json().review;
+      expect(view.status).toBe("draft");
+      expect(view.body.overall.sources).toEqual(["mission:execution-one"]);
+      expect(view.body.progress.sources).toEqual(["mission:execution-one"]);
+      expect(view.body.actions.sources).toEqual(["mission:execution-one"]);
+      expect(view.body.issues).toEqual({ text: "缺少会议结论，这一周最卡的问题判断不了。", sources: [] });
+      expect(view.body.implications).toEqual({ text: "仍待验证｜缺少上周复盘，比不出判断变化。", sources: [] });
+    } finally { await t.f.t.close(); }
+  });
+
+  it("有记录的段落：出处核对和原来一样严格", () => {
+    const cite = "cite:mission:execution-one", allowed = new Set([cite]);
+    const body = (overall: string): TWeeklyReviewBody => ({ ...missingOnly, overall: { text: overall, sources: [] } });
+    const check = (review: TWeeklyReviewBody, missing: string[] = ["会议结论"]) => citationProblem(review, allowed, missing, WEEKLY_REVIEW_FIELDS);
+    // 段里挂了出处，其他每一句仍要有出处；带「缺少」字样也不行，只有写明「缺少记录」的那一行照旧放行。
+    expect(check(body(`状态：绿｜按计划推进[M](${cite})。\n缺少人手，进度会慢。`))).toBe("overall 有一句没有出处：缺少人手，进度会慢。");
+    expect(check(body(`状态：绿｜按计划推进[M](${cite})。\n缺少记录：这一周没有会议结论。`))).toBeNull();
+    // 不挂出处、也不是在说缺了什么的段落不收。
+    expect(check(body("状态：绿｜按计划推进。"))).toBe("overall 有一句没有出处：状态：绿｜按计划推进。");
+    expect(check(body("状态：黄｜缺少本周进展。\n本周完成了三件事。"))).toBe("overall 有一句没有出处：状态：黄｜缺少本周进展。");
+    // 输入里什么都不缺时，不能整段写缺少来回避出处。
+    expect(check(missingOnly, [])).toBe("overall 有一句没有出处：状态：黄｜缺少本周的进展、会议和采集器整理，判断不了在不在轨。");
+    // 编造的出处仍然拦下。
+    expect(check(body("状态：绿｜按计划推进[M](cite:mission:other)。"))).toBe("overall 引用了输入里没有的出处 cite:mission:other");
   });
 });
 

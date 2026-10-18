@@ -169,6 +169,10 @@ const linksIn = (text: string) => [...text.matchAll(LINK)].map((match) => match[
 /** 不需要出处的行：如实写的「缺少记录」、待上层决策事项的「无」。 */
 const exempt = (line: string) => line.includes(MISSING_RECORDS) || /^[-*\d.、\s]*无[。.]?$/.test(line.trim());
 
+/** 整段只写缺少记录：这次确实缺了某类记录，这一段不挂任何出处，每一行都在说缺了什么（如「状态：黄｜缺少本周进展……」）。 */
+const missingOnly = (text: string, missing: readonly string[]) => missing.length > 0 && text.includes("缺少") && !linksIn(text).length
+  && text.split("\n").every((line) => !line.trim() || line.includes("缺少") || exempt(line));
+
 /** 正文里的出处地址（cite:… 或网址），按出现顺序。 */
 export const citationsIn = linksIn;
 
@@ -178,6 +182,7 @@ const MONTHLY_FIELDS: readonly TMonthlyReviewField[] = PERSONAL_REVIEW_FIELDS;
 
 /**
  * 出处核对：每一行都要有出处（或是「缺少记录」「无」），出处只能是输入里的记录；缺了哪类记录就必须写「缺少记录」。返回问题描述，没有问题返回 null。
+ * 整段只写缺少记录的段落（missingOnly）整段放行，也算写了「缺少记录」；挂了出处的段落仍逐行核对。
  * fields 缺省是个人复盘的四栏；周复盘传自己的六段。
  */
 export function citationProblem<F extends string = TMonthlyReviewField>(review: Sections<F>, allowed: Set<string>, missing: readonly string[],
@@ -186,10 +191,11 @@ export function citationProblem<F extends string = TMonthlyReviewField>(review: 
     const text = review[field].text;
     const unknown = linksIn(text).find((href) => !allowed.has(href));
     if (unknown) return `${field} 引用了输入里没有的出处 ${unknown}`;
+    if (missingOnly(text, missing)) continue;
     const bare = text.split("\n").find((line) => line.trim() && !linksIn(line).length && !exempt(line));
     if (bare) return `${field} 有一句没有出处：${clip(bare.trim(), 40)}`;
   }
-  if (missing.length && !fields.some((field) => review[field].text.includes(MISSING_RECORDS))) {
+  if (missing.length && !fields.some((field) => review[field].text.includes(MISSING_RECORDS) || missingOnly(review[field].text, missing))) {
     return `缺少${missing.join("、")}，草稿里没有写「${MISSING_RECORDS}」`;
   }
   return null;
