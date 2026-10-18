@@ -27,6 +27,7 @@ describe("飞书周复盘解析", () => {
       issues: { text: text(["同意开关没做"]), sources: [URL] },
       implications: { text: text(["瓶颈转到上手"]), sources: [URL] },
       actions: { text: text(["下周做开关"]), sources: [URL] },
+      nextWeek: { text: "无", sources: [] },
     });
   });
 

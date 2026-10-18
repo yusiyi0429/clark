@@ -1,5 +1,5 @@
 -- 周复盘（D-01）：天枢数据库是主存储，每人每周一份。
--- body 五段（沿用公司周复盘模板：本周总体判断、关键进展与 Evidence、最重要的问题及 Why、判断变化 / Implication、当前处理），
+-- body 六段（沿用公司现行周复盘模板：本周总体判断、关键进展与 Evidence、最重要的问题及 Why、判断变化 / Implication、当前处理、下周重点），
 -- 每段 {text, sources}，正文里每句带出处 [名称](cite:<ref>)。
 -- 状态：drafting（Co-Agent 生成中）→ draft / draft_failed → submitted；origin=import 是 10 月从飞书一次性导入的已提交周复盘。
 -- revisions：修改记录（谁、什么时候、生成 / 修改 / 提交 / 导入、动了哪几段、改之前的原文），最多留 100 条。

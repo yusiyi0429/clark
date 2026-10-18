@@ -5,7 +5,7 @@ import { addDays, WEEKLY_REVIEW_FIELDS } from "./weeklyReviews.js";
 
 /**
  * 10 月历史周复盘一次性导入（D-01 的例外 1）：飞书知识库里每人每周一份（个别一份按周追加）的周复盘文档，
- * 按周拆开、按模板五段归位，写成「已提交（导入）」的周复盘。读取在 scripts/import-feishu-weekly-reviews.ts（lark-cli，用户身份只读）。
+ * 按周拆开、按模板六段归位，写成「已提交（导入）」的周复盘。读取在 scripts/import-feishu-weekly-reviews.ts（lark-cli，用户身份只读）。
  * 这里只放纯解析和写库，方便测试。
  */
 
@@ -13,13 +13,15 @@ export type ImportDoc = { title: string; url: string; markdown: string; editedAt
 export type ImportedWeek = { weekStart: string; body: TWeeklyReviewBody; lines: number };
 
 const YEAR = 2026;
-/** 小节标题里的关键词 → 模板五段；先匹配的优先。 */
+/** 小节标题里的关键词 → 模板六段；先匹配的优先。 */
 const SECTION_KEYWORDS: [TWeeklyReviewField, RegExp][] = [
   ["implications", /判断变化|implication|启示|认知变化|经营判断|关键判断/i],
   ["overall", /总体判断|总体|整体判断|本周状态|状态/],
   ["progress", /进展|成果|evidence|完成|产出|交付/i],
   ["issues", /问题|why|风险|卡点|阻塞/i],
-  ["actions", /当前处理|下周|下一步|计划|处理|行动/],
+  ["actions", /当前处理/],
+  ["nextWeek", /下周|下一步|计划/],
+  ["actions", /处理|行动/],
 ];
 const DATE_RANGE = /(?:(\d{4})\s*[.\-/年])?\s*(\d{1,2})\s*[.\-/月]\s*(\d{1,2})\s*日?\s*[—–\-~至到]+\s*(?:(\d{4})\s*[.\-/年])?\s*(?:(\d{1,2})\s*[.\-/月]\s*)?(\d{1,2})\s*日?/;
 const SINGLE_DATE = /(\d{4})[.\-/年](\d{1,2})[.\-/月](\d{1,2})/;
@@ -82,7 +84,7 @@ export function splitWeeks(doc: ImportDoc): { weekStart: string; text: string }[
   return weekStart ? [{ weekStart, text }] : [];
 }
 
-/** 一周的文字按小节归到五段；每行末尾挂飞书原文作出处；空段写「无」。 */
+/** 一周的文字按小节归到六段；每行末尾挂飞书原文作出处；空段写「无」。 */
 export function sectionsOf(text: string, sourceUrl: string): { body: TWeeklyReviewBody; lines: number } {
   const buckets = Object.fromEntries(WEEKLY_REVIEW_FIELDS.map((field) => [field, [] as string[]])) as Record<TWeeklyReviewField, string[]>;
   let current: TWeeklyReviewField = "overall";

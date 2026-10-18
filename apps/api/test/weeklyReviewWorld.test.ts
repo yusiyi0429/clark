@@ -46,7 +46,7 @@ describe("周复盘提交后写本体", () => {
       await q(`INSERT INTO task_progress(id,task_id,author_id,source,body,links,created_at) VALUES($1,$2,$3,'web','写完','[{"url":"https://github.com/x/pull/7"}]',now())`, [progress, task, PERSON]);
       const body = { overall: { text: "状态：绿｜在轨[Mission](cite:mission:m-renhao)。", sources: [] },
         progress: { text: `- 0.3 写入接好了[10/16 进展 · 接 0.3](cite:progress:${progress})。\n- 没有出处的这行不同步`, sources: [] },
-        issues: { text: "无", sources: [] }, implications: { text: "无", sources: [] }, actions: { text: "无", sources: [] } };
+        issues: { text: "无", sources: [] }, implications: { text: "无", sources: [] }, actions: { text: "无", sources: [] }, nextWeek: { text: "无", sources: [] } };
       await q(`INSERT INTO weekly_reviews(id,person_id,week_start,status,body,submitted_at,world_sync_status,created_at,updated_at)
         VALUES($1,$2,'2026-10-12','submitted',$3::jsonb,'2026-10-16T08:00:00Z','pending',now(),now())`, [review, PERSON, JSON.stringify(body)]);
       const actions: any[] = [];
