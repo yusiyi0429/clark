@@ -5,7 +5,8 @@ import { migrate } from "../src/migrate.js";
 import { createJobWorker } from "../src/jobs.js";
 import { FeishuApiError } from "../src/feishu/client.js";
 import { feishuTokenJobs, refreshPersonToken, scanDueTokens } from "../src/feishu/refresh.js";
-import { loadUserToken, saveAuthorizedToken } from "../src/feishu/tokens.js";
+import { decryptTokenSecret } from "../src/feishu/crypto.js";
+import { saveAuthorizedToken } from "../src/feishu/tokens.js";
 import { createTestDb } from "./helpers.js";
 
 const env = { tokenKey: randomBytes(32), tokenKeyVersion: 1 };
@@ -38,11 +39,12 @@ describe("飞书 token 续期", () => {
       ]);
       expect(outcomes.sort()).toEqual(["refreshed", "skipped"]);
       expect(used).toEqual(["ur-p1"]);
-      const stored = await loadUserToken(pool.query.bind(pool), env, "p1");
-      expect(stored).toMatchObject({ accessToken: "u-new", refreshToken: "ur-new", status: "active" });
-      expect(stored!.accessExpiresAt).toEqual(new Date(at.getTime() + hours(2)));
+      const stored = (await db.query("SELECT ciphertext, status, access_expires_at, authorized_at FROM feishu_user_tokens")).rows[0];
+      expect(decryptTokenSecret(env.tokenKey, "p1", stored.ciphertext)).toEqual({ accessToken: "u-new", refreshToken: "ur-new" });
+      expect(stored.status).toBe("active");
+      expect(stored.access_expires_at).toEqual(new Date(at.getTime() + hours(2)));
       // authorized_at 不因续期重新计时
-      expect((await db.query("SELECT authorized_at FROM feishu_user_tokens")).rows[0].authorized_at).toEqual(T0);
+      expect(stored.authorized_at).toEqual(T0);
     });
   });
 

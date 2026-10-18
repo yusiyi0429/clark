@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { migrate } from "../src/migrate.js";
 import { resolveFeishuEnv } from "../src/feishu/config.js";
 import { decryptTokenSecret, encryptTokenSecret } from "../src/feishu/crypto.js";
-import { loadUserToken, saveAuthorizedToken } from "../src/feishu/tokens.js";
+import { saveAuthorizedToken } from "../src/feishu/tokens.js";
 import { createTestDb } from "./helpers.js";
 
 const key = randomBytes(32);
@@ -28,7 +28,7 @@ describe("飞书令牌加密", () => {
       .toMatchObject({ appId: "cli_x", tokenKeyVersion: 1 });
   });
 
-  it("落库只有密文，读出还原；密钥版本不符时报错", async () => {
+  it("落库只有密文，用同一把钥匙能还原", async () => {
     await createTestDb(async ({ db, pool }) => {
       await migrate(db);
       const q = pool.query.bind(pool);
@@ -39,8 +39,7 @@ describe("飞书令牌加密", () => {
       const row = (await db.query("SELECT * FROM feishu_user_tokens")).rows[0];
       expect(JSON.stringify(row)).not.toMatch(/u-access|ur-refresh/);
       expect(row).toMatchObject({ key_version: 1, status: "active", access_expires_at: new Date("2026-10-18T04:00:00Z"), refresh_expires_at: new Date("2026-10-25T02:00:00Z") });
-      expect(await loadUserToken(q, { tokenKey: key, tokenKeyVersion: 1 }, "person-a")).toMatchObject({ accessToken: "u-access", refreshToken: "ur-refresh" });
-      await expect(loadUserToken(q, { tokenKey: key, tokenKeyVersion: 2 }, "person-a")).rejects.toThrow(/密钥版本不符/);
+      expect(decryptTokenSecret(key, "person-a", row.ciphertext)).toEqual({ accessToken: "u-access", refreshToken: "ur-refresh" });
     });
   });
 });

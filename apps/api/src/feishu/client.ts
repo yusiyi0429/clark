@@ -58,11 +58,10 @@ function data(body: Record<string, unknown>, what: string): Record<string, unkno
   return (body.data ?? {}) as Record<string, unknown>;
 }
 
-export function createFeishuClient({ appId, appSecret, fetch: fetchImpl = fetch, now = () => Date.now() }: {
+export function createFeishuClient({ appId, appSecret, fetch: fetchImpl = fetch }: {
   appId: string;
   appSecret: string;
   fetch?: Fetch;
-  now?: () => number;
 }): FeishuClient {
   let tenant: { token: string; expiresAt: number } | undefined;
 
@@ -78,7 +77,7 @@ export function createFeishuClient({ appId, appSecret, fetch: fetchImpl = fetch,
 
   /** tenant_access_token 有效 2 小时，提前 5 分钟换新。 */
   async function tenantToken(): Promise<string> {
-    if (tenant && tenant.expiresAt > now()) return tenant.token;
+    if (tenant && tenant.expiresAt > Date.now()) return tenant.token;
     const response = await fetchImpl(`${OPEN_API}/auth/v3/tenant_access_token/internal`, {
       method: "POST",
       headers: { "content-type": "application/json; charset=utf-8" },
@@ -89,7 +88,7 @@ export function createFeishuClient({ appId, appSecret, fetch: fetchImpl = fetch,
     if (Number(body.code ?? -1) !== 0 || typeof body.tenant_access_token !== "string") {
       throw new FeishuApiError(Number(body.code ?? 0), `获取 tenant_access_token 失败：${String(body.msg ?? "未知错误")}`);
     }
-    tenant = { token: body.tenant_access_token, expiresAt: now() + (Number(body.expire ?? 7200) - 300) * 1000 };
+    tenant = { token: body.tenant_access_token, expiresAt: Date.now() + (Number(body.expire ?? 7200) - 300) * 1000 };
     return tenant.token;
   }
 

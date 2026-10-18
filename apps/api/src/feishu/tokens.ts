@@ -1,6 +1,6 @@
 import type { Query } from "../meetingStore.js";
 import type { FeishuEnv } from "./config.js";
-import { decryptTokenSecret, encryptTokenSecret } from "./crypto.js";
+import { encryptTokenSecret } from "./crypto.js";
 
 /** 飞书 token 接口（v3）的成功结果，字段已换成驼峰。 */
 export type FeishuUserToken = {
@@ -39,24 +39,4 @@ export async function saveRefreshedToken(q: Query, env: KeyEnv, personId: string
     [personId, env.tokenKeyVersion, ciphertext, token.scope, plusSeconds(now, token.expiresIn),
       token.refreshExpiresIn ? plusSeconds(now, token.refreshExpiresIn) : null, now],
   );
-}
-
-export type StoredFeishuToken = {
-  personId: string;
-  accessToken: string;
-  refreshToken?: string;
-  accessExpiresAt: Date;
-  status: "active" | "reauth_required";
-};
-
-/** 读出并解密本人的 token；没有授权过返回 null。密钥版本对不上时报错，不拿错钥匙硬解。 */
-export async function loadUserToken(q: Query, env: KeyEnv, personId: string): Promise<StoredFeishuToken | null> {
-  const row = (await q(
-    "SELECT key_version, ciphertext, access_expires_at, status FROM feishu_user_tokens WHERE person_id = $1",
-    [personId],
-  )).rows[0] as { key_version: number; ciphertext: string; access_expires_at: Date; status: StoredFeishuToken["status"] } | undefined;
-  if (!row) return null;
-  if (row.key_version !== env.tokenKeyVersion) throw new Error(`飞书令牌密钥版本不符：库里是 ${row.key_version}，当前是 ${env.tokenKeyVersion}`);
-  const secret = decryptTokenSecret(env.tokenKey, personId, row.ciphertext);
-  return { personId, ...secret, accessExpiresAt: row.access_expires_at, status: row.status };
 }
