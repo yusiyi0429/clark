@@ -15,6 +15,7 @@ import { RequestNotices } from "@/components/requests/RequestNotices";
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { logout } from "@/lib/logout";
+import { MemberOffPlan } from "@/components/progress/MemberOffPlan";
 import { MemberTasks } from "./MemberTasks";
 import { MemberHomeWidgets } from "./MemberHomeWidgets";
 import { MemberRadarWidget } from "./MemberRadarWidget";
@@ -90,6 +91,7 @@ function MemberHomeBody({ displayName, home, account }: { displayName: string; h
     {home.work || !home.homeError ? <div className={m.widgetsSlot}><MemberHomeWidgets work={home.work} onNavigate={navigate} onRefresh={home.refresh}
       radar={home.radar ? <MemberRadarWidget radar={home.radar} onNavigate={navigate} /> : undefined} /></div> : null}
     <MemberTasks tasks={home.tasks} error={home.taskError === home.homeError ? null : home.taskError} onNavigate={navigate} />
+    <MemberOffPlan onNavigate={navigate} onAttached={() => void home.refresh()} />
     <div className={m.phoneAccount}><AccountMenu account={account} onNavigate={navigate} /></div>
   </div>;
 }
