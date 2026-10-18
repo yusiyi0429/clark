@@ -7168,6 +7168,7 @@ export interface components {
                 title: string;
                 url: string | null;
                 revision: string | null;
+                origin: "task" | "session" | null;
                 confirmed: boolean;
             }[];
         };

@@ -22,7 +22,7 @@ export function feishuFallbackTitle(url: string): string {
   return match ? `飞书${FEISHU_KIND[match[1]]} · ${match[2].slice(0, 8)}` : url.replace(/^https?:\/\//, "").slice(0, 80);
 }
 
-type BasisRow = { doc_kind: TWorkBasisCandidate["kind"]; doc_ref: string; title: string; url: string | null; revision: string | null };
+type BasisRow = { doc_kind: TWorkBasisCandidate["kind"]; doc_ref: string; title: string; url: string | null; revision: string | null; origin: TWorkBasisCandidate["origin"] };
 const basisKey = (kind: string, ref: string) => `${kind}:${ref}`;
 
 async function basisCandidates(q: Query, personId: string): Promise<BasisRow[]> {
@@ -38,16 +38,21 @@ async function basisCandidates(q: Query, personId: string): Promise<BasisRow[]> 
     q("SELECT doc_kind, doc_ref, title, url, revision FROM work_basis WHERE person_id=$1 ORDER BY confirmed_at", [personId]),
   ]);
   const rows = new Map<string, BasisRow>();
-  const add = (row: BasisRow) => { if (!rows.has(basisKey(row.doc_kind, row.doc_ref))) rows.set(basisKey(row.doc_kind, row.doc_ref), row); };
-  for (const row of confirmed.rows as BasisRow[]) add(row);
+  // 已确认的保留确认时的标题和修订号；来源按现在还能找到的地方标。
+  const add = (row: BasisRow) => {
+    const key = basisKey(row.doc_kind, row.doc_ref), existing = rows.get(key);
+    if (!existing) rows.set(key, row);
+    else if (!existing.origin) existing.origin = row.origin;
+  };
+  for (const row of confirmed.rows as Omit<BasisRow, "origin">[]) add({ ...row, origin: null });
   const sorted = (materials.rows as { id: string; file_name: string; format: string; url: string | null; current_version: number; task_id: string; updated_at: Date }[])
     .sort((a, b) => b.updated_at.getTime() - a.updated_at.getTime());
   for (const m of sorted) {
-    if (m.format === "link" && m.url) add({ doc_kind: FEISHU.test(m.url) ? "feishu_doc" : "link", doc_ref: m.url, title: m.file_name, url: m.url, revision: null });
-    else add({ doc_kind: "material", doc_ref: m.id, title: m.file_name, url: `/me/tasks/${m.task_id}`, revision: `v${m.current_version}` });
+    if (m.format === "link" && m.url) add({ doc_kind: FEISHU.test(m.url) ? "feishu_doc" : "link", doc_ref: m.url, title: m.file_name, url: m.url, revision: null, origin: "task" });
+    else add({ doc_kind: "material", doc_ref: m.id, title: m.file_name, url: `/me/tasks/${m.task_id}`, revision: `v${m.current_version}`, origin: "task" });
   }
   for (const doc of docs.rows as { url: string; title: string | null }[])
-    add({ doc_kind: "feishu_doc", doc_ref: doc.url, title: doc.title || feishuFallbackTitle(doc.url), url: doc.url, revision: null });
+    add({ doc_kind: "feishu_doc", doc_ref: doc.url, title: doc.title || feishuFallbackTitle(doc.url), url: doc.url, revision: null, origin: "session" });
   return [...rows.values()];
 }
 
@@ -56,7 +61,7 @@ export async function readWorkBasis(q: Query, personId: string): Promise<TWorkBa
     q("SELECT doc_kind, doc_ref FROM work_basis WHERE person_id=$1", [personId])]);
   const saved = new Set((confirmed.rows as { doc_kind: string; doc_ref: string }[]).map((row) => basisKey(row.doc_kind, row.doc_ref)));
   return rows.map((row) => ({ key: basisKey(row.doc_kind, row.doc_ref), kind: row.doc_kind, title: row.title, url: row.url, revision: row.revision,
-    confirmed: saved.has(basisKey(row.doc_kind, row.doc_ref)) }));
+    origin: row.origin, confirmed: saved.has(basisKey(row.doc_kind, row.doc_ref)) }));
 }
 
 /** 勾选的入库并记下确认时的修订号；已经入库的保留原来的修订号和确认时间。 */

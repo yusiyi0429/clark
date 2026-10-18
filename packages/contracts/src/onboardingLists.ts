@@ -13,6 +13,8 @@ export const WorkBasisCandidate = Type.Object({
   title: Type.String({ minLength: 1 }),
   url: Type.Union([Type.String(), Type.Null()]),
   revision: Type.Union([Type.String(), Type.Null()]),
+  /** 从哪里找到的：task 本人执行事项里的材料或链接；session 本机会话里读过；null 只剩已确认的记录。 */
+  origin: Type.Union([Type.Literal("task"), Type.Literal("session"), Type.Null()]),
   /** 已经入库（本人确认过）。 */
   confirmed: Type.Boolean(),
 }, { additionalProperties: false });

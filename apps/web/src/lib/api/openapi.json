@@ -39490,6 +39490,7 @@
                 "title",
                 "url",
                 "revision",
+                "origin",
                 "confirmed"
               ],
               "properties": {
@@ -39531,6 +39532,21 @@
                 "revision": {
                   "anyOf": [
                     {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "origin": {
+                  "anyOf": [
+                    {
+                      "const": "task",
+                      "type": "string"
+                    },
+                    {
+                      "const": "session",
                       "type": "string"
                     },
                     {
