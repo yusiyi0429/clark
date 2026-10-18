@@ -1,0 +1,62 @@
+/* 文档变更：沿用传话二级页的阅读面与 token（requests.module.css、impact.module.css）。 */
+.newDoc { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 14px; padding: 16px 18px; border: 1px solid var(--hairline); border-radius: var(--onboarding-inset-radius); background: var(--surface); box-shadow: 0 1px 2px rgb(16 24 40 / 4%), 0 8px 24px rgb(16 24 40 / 6%); }
+.docIcon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--onboarding-control-radius); background: color-mix(in oklab, var(--onboarding-blue) 10%, var(--surface)); color: var(--brand-deep); }
+.newDocMain { display: grid; gap: 2px; min-width: 0; }
+.newDocMain .docLink { font-size: 17px; font-weight: 600; }
+.docLink { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; color: var(--ink); font-size: 15px; font-weight: 500; line-height: 1.5; text-decoration: none; overflow-wrap: anywhere; }
+a.docLink:hover { color: var(--brand-deep); }
+a.docLink svg { flex: none; color: var(--ink-faint); }
+a.docLink:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; border-radius: 4px; }
+.meta { color: var(--ink-faint); font-size: 13px; font-variant-numeric: tabular-nums; }
+.steps { padding: 2px 4px; }
+.steps ol { margin: 0; }
+
+.panel { display: grid; gap: 14px; min-width: 0; }
+.candidates { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--hairline); border-radius: var(--onboarding-inset-radius); background: var(--surface); overflow: hidden; }
+.candidate { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px 16px; padding: 14px 16px; transition: background .14s ease; }
+.candidate + .candidate { border-top: 1px solid var(--hairline); }
+.candidate[data-picked] { background: color-mix(in oklab, var(--onboarding-blue) 4%, var(--surface)); }
+.candidate[data-picked='supersede'] { background: color-mix(in oklab, #f5a524 6%, var(--surface)); }
+.candidateMain { display: grid; gap: 4px; min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.reason { margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+
+/* 每行一对开关：按下的那颗实心，再点一次取消。Agent 建议的那颗边框稍深。 */
+.relations { display: flex; gap: 6px; padding-top: 2px; }
+.relation { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 64px; height: 32px; padding: 0 12px; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-pill-radius); background: var(--surface); color: var(--ink-muted); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: background .14s ease, border-color .14s ease, color .14s ease; }
+.relation:hover:not(:disabled) { border-color: color-mix(in oklab, var(--onboarding-blue) 45%, var(--surface)); color: var(--ink); }
+.relation[data-suggested] { border-color: color-mix(in oklab, var(--onboarding-blue) 40%, var(--hairline-strong)); color: var(--ink); }
+.relation[aria-pressed='true'] { border-color: var(--onboarding-blue); background: var(--onboarding-blue); color: var(--solid-fg); }
+.relation:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
+.relation:disabled { opacity: .5; cursor: default; }
+.outcome { align-self: center; padding: 0 10px; border-radius: var(--onboarding-pill-radius); color: var(--ink-muted); background: color-mix(in oklab, var(--ink) 6%, var(--surface)); font-size: 13px; font-weight: 600; line-height: 24px; white-space: nowrap; }
+.outcome[data-relation='revision'] { color: var(--brand-deep); background: color-mix(in oklab, var(--onboarding-blue) 12%, var(--surface)); }
+.outcome[data-relation='supersede'] { color: #8a5a00; background: color-mix(in oklab, #f5a524 16%, var(--surface)); }
+.inline { grid-column: 1 / -1; display: grid; gap: 10px; }
+
+.terms { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin: 0; padding: 12px 16px; border: 1px solid color-mix(in oklab, #f5a524 30%, var(--hairline)); border-radius: var(--onboarding-inset-radius); background: color-mix(in oklab, #f5a524 4%, var(--surface)); min-width: 0; }
+.termsLegend { float: left; margin-right: 4px; padding: 0; color: #8a5a00; font-size: 13px; font-weight: 700; }
+.field { display: inline-flex; align-items: center; gap: 8px; }
+.check { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; cursor: pointer; }
+.check input { width: 16px; height: 16px; margin: 0; accent-color: var(--onboarding-blue); }
+
+.facts { display: grid; gap: 6px; margin: 0; padding: 12px 16px; border-radius: var(--onboarding-inset-radius); background: color-mix(in oklab, var(--ink) 3%, var(--surface)); }
+.facts > div { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; }
+.facts dt { color: var(--ink-faint); font-size: 13px; line-height: 1.7; }
+.facts dd { margin: 0; color: var(--ink); font-size: 14px; line-height: 1.7; }
+
+.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.confirm { min-width: 104px; }
+.skeleton { height: 260px; border-radius: var(--onboarding-inset-radius); background: color-mix(in oklab, var(--ink) 4%, var(--surface)); }
+
+@media (max-width: 759px) {
+  .candidate { grid-template-columns: minmax(0, 1fr); }
+  .relations { justify-content: stretch; }
+  .relation { flex: 1; }
+  .outcome { justify-self: start; }
+  .terms { display: grid; }
+  .field { justify-content: space-between; }
+  .bar > * { flex: 1; }
+  .newDoc { padding: 14px; }
+}
+@media (prefers-reduced-motion: reduce) { .candidate, .relation { transition: none; } }

@@ -257,11 +257,13 @@ const app = await buildApp({
 // 公共后台任务（jobs.ts）：每 5 秒领一批；现有各功能的 setInterval 暂不迁移。
 // 会后链路：妙记轮询与「妙记生成」事件、分层同步、提醒与代判、影响卡推送与写本体；飞书通知配了飞书才发。
 const followThroughJobs = app.meetingFollowThrough.jobs();
+// 文档变更：群里 @机器人 贴文档链接即发布（im.message.receive_v1），找候选走后台任务。
+const docChangeJobs = app.docChanges.jobs();
 const jobWorker = createJobWorker({
   pool,
   handlers: {
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers,
-    ...(env.feishu ? feishuEventJobs(pool, followThroughJobs.feishuEvents) : {}),
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers,
+    ...(env.feishu ? feishuEventJobs(pool, { ...followThroughJobs.feishuEvents, ...docChangeJobs.feishuEvents }) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },
   recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring],

@@ -128,6 +128,9 @@ export function ReviewTabs({ lists, onListsChange, reviewed, onReviewedChange, l
               {item.revision ? <span className={c.chip} data-tone="blue">{item.revision}</span> : null}
               {item.revisedAt ? <span className={c.chip} data-tone="blue">{revisedLabel(item.revisedAt, item.revisedBy)}</span> : null}
               {item.origin ? <span className={c.chip}>{ORIGIN[item.origin]}</span> : null}
+              {item.supersededBy ? <a className={c.chip} data-tone="amber" href={item.supersededBy.url} target="_blank" rel="noreferrer"
+                onClick={(event) => event.stopPropagation()}>已被取代 → {item.supersededBy.title}</a> : null}
+              {item.keepUntil ? <span className={c.chip} data-tone="amber">用到 {Number(item.keepUntil.slice(5, 7))}/{Number(item.keepUntil.slice(8, 10))}</span> : null}
             </span>
           </>} />
       </div>

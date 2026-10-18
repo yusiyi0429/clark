@@ -3,9 +3,9 @@ import { ActionDescriptor } from "./cards.js";
 
 /**
  * 送达通道（⑨ 传话）：发起人一句话 → Agent 起草并自查歧义 → 预览 → 发出；接收人收到待办卡，卡上问答，完成由人标记。
- * kind 先只用 relay；collection / impact / supplement 留给 ③ 信息收集、影响卡和补充请求。
+ * kind：relay 传话；impact 影响卡；doc_change 文档变更要作者（或旧文档负责人）确认的那一条；collection / supplement 留给 ③ 信息收集和补充请求。
  */
-export const RequestKind = Type.Union([Type.Literal("relay"), Type.Literal("collection"), Type.Literal("impact"), Type.Literal("supplement")]);
+export const RequestKind = Type.Union([Type.Literal("relay"), Type.Literal("collection"), Type.Literal("impact"), Type.Literal("supplement"), Type.Literal("doc_change")]);
 export const RequestStatus = Type.Union([Type.Literal("draft"), Type.Literal("open"), Type.Literal("done")]);
 
 /** Agent 多步处理的一步：做完打勾、当前高亮、没开始置灰；某一步有结果就写在 result 里，流程停在那里。 */

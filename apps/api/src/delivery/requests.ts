@@ -68,8 +68,9 @@ export async function projectRequest(q: Query, row: RequestRow, viewerId: string
   if (isInitiator && draft) actions.push(sign(secret, row, "request.send", "发送"));
   if (mine?.status === "pending" && !draft) {
     // 影响卡上的追问由收卡人自己的 Agent 回答（/api/impact-cards/:id/ask），不发给拍板的人。
-    if (row.kind !== "impact") actions.push(sign(secret, row, "request.ask", "发送", viewerId));
-    actions.push(sign(secret, row, "request.mark_done", row.kind === "impact" ? "知道了" : "标记完成", viewerId));
+    if (row.kind !== "impact" && row.kind !== "doc_change") actions.push(sign(secret, row, "request.ask", "发送", viewerId));
+    // 文档变更的确认卡由确认或回答本身收尾（/api/doc-changes/:id/…），没有「标记完成」。
+    if (row.kind !== "doc_change") actions.push(sign(secret, row, "request.mark_done", row.kind === "impact" ? "知道了" : "标记完成", viewerId));
   }
   if (isInitiator && !draft) for (const question of questions) if (question.answer === null) actions.push(sign(secret, row, "request.answer", "发出回答", question.id));
   return {
@@ -144,8 +145,8 @@ export async function listRequests(q: Query, viewerId: string, box: TRequestBox,
   const rows = (box === "inbox"
     ? await q(`SELECT r.*, rr.status AS my_status, ${aggregates} FROM request_recipients rr JOIN requests r ON r.id = rr.request_id
         WHERE rr.person_id = $1 AND r.status <> 'draft' ORDER BY rr.status = 'pending' DESC, r.sent_at DESC LIMIT 100`, [viewerId])
-    // 影响卡是系统替拍板的人推的，不进他「发出的」。
-    : await q(`SELECT r.*, NULL AS my_status, ${aggregates} FROM requests r WHERE r.initiator_id = $1 AND r.kind <> 'impact'
+    // 影响卡是系统替拍板的人推的，文档变更的确认卡是系统替作者发的，都不进「发出的」。
+    : await q(`SELECT r.*, NULL AS my_status, ${aggregates} FROM requests r WHERE r.initiator_id = $1 AND r.kind NOT IN ('impact', 'doc_change')
         ORDER BY r.status = 'done', r.created_at DESC LIMIT 100`, [viewerId])).rows as (RequestRow & {
     my_status: "pending" | "done" | null; recipient_ids: string[]; done_count: number; open_questions: number; unread: boolean;
   })[];

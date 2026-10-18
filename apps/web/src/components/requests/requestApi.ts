@@ -1,4 +1,7 @@
-import type { TActionDescriptor, TDraftRequestAnswerResponse, TDraftRequestResponse, TPrepareRequestQuestionResponse, TRequestClarification, TRequestView } from "@warmap/contracts";
+import type {
+  TActionDescriptor, TConfirmDocChangeRequest, TDocChangeView, TDocOwnerAnswerRequest, TDraftRequestAnswerResponse, TDraftRequestResponse, TImpactBasisChoiceRequest,
+  TImpactCardView, TPrepareRequestQuestionResponse, TRequestClarification, TRequestView,
+} from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
 /** 送达通道（⑨ 传话）的浏览器端调用：失败统一抛 RequestApiError，文案用服务端给的那句。 */
@@ -42,6 +45,35 @@ export async function runRequestAction(action: TActionDescriptor, input?: unknow
   const result = settle(await browserApi.POST("/api/requests/actions/execute", { body: { actionId: action.actionId, ...(input === undefined ? {} : { input }) } }), "没有成功，请重试");
   changed();
   return result.request;
+}
+
+/** ⑧ 文档变更：作者确认、改问负责人、负责人回答；影响卡上切换或继续用旧版。 */
+export async function readDocChange(requestId: string): Promise<TDocChangeView> {
+  return settle(await browserApi.GET("/api/requests/{id}/doc-change", { params: { path: { id: requestId } } }), "没有读到这次文档变更").docChange;
+}
+
+export async function confirmDocChange(id: string, body: TConfirmDocChangeRequest): Promise<TDocChangeView> {
+  const result = settle(await browserApi.POST("/api/doc-changes/{id}/confirm", { params: { path: { id } }, body }), "没有成功，请重试").docChange;
+  changed();
+  return result;
+}
+
+export async function askDocChangeOwners(id: string): Promise<TDocChangeView> {
+  const result = settle(await browserApi.POST("/api/doc-changes/{id}/ask-owners", { params: { path: { id } } }), "没有成功，请重试").docChange;
+  changed();
+  return result;
+}
+
+export async function answerDocChangeOwner(id: string, body: TDocOwnerAnswerRequest): Promise<TDocChangeView> {
+  const result = settle(await browserApi.POST("/api/doc-changes/{id}/owner-answer", { params: { path: { id } }, body }), "没有成功，请重试").docChange;
+  changed();
+  return result;
+}
+
+export async function chooseImpactBasis(cardId: string, body: TImpactBasisChoiceRequest): Promise<TImpactCardView> {
+  const result = settle(await browserApi.POST("/api/impact-cards/{id}/basis", { params: { path: { id: cardId } }, body }), "没有成功，请重试").card;
+  changed();
+  return result;
 }
 
 export const requestError = (cause: unknown, fallback: string) => cause instanceof RequestApiError ? cause.message : fallback;

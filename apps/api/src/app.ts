@@ -51,6 +51,9 @@ import type { DecisionLayeringAgent } from "./meetingDecisionAgent.js";
 import type { ImpactAgent } from "./impactAgent.js";
 import type { FeishuMinutesApi } from "./feishu/minutes.js";
 import { registerMeetingFollowThroughRoutes } from "./routes/meetingFollowThrough.js";
+import { createDocChangeAgent, type DocChangeAgent } from "./docChangeAgent.js";
+import { createDocChangeService, type DocChangeService } from "./docChanges.js";
+import { registerDocChangeRoutes } from "./routes/docChanges.js";
 import { ensureMaterialStorage } from "./materialParser.js";
 import {
   createFail,
@@ -188,6 +191,8 @@ declare module "fastify" {
   interface FastifyInstance {
     /** 会后链路的服务；server.ts 用它注册后台任务。 */
     meetingFollowThrough: MeetingFollowThrough;
+    /** ⑧ 文档变更；server.ts 用它注册后台任务和群消息事件。 */
+    docChanges: DocChangeService;
   }
 }
 
@@ -224,6 +229,7 @@ export async function buildApp({
   outlets,
   feishuClient,
   meetingFollowThroughAgents,
+  docChangeAgent,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
   conversationStallTimeoutMs = CONVERSATION_STALL_TIMEOUT_MS,
   conversationHeartbeatMs = CONVERSATION_HEARTBEAT_MS,
@@ -282,6 +288,8 @@ export async function buildApp({
   feishuClient?: FeishuClient;
   /** 会后分层、影响分析与妙记接口（测试注入假实现）；缺省用 heavy 模型与真实飞书接口。 */
   meetingFollowThroughAgents?: { layering?: DecisionLayeringAgent; impact?: ImpactAgent; minutesApi?: FeishuMinutesApi };
+  /** 文档变更找候选的 Agent（测试注入假实现）；缺省用快模型。 */
+  docChangeAgent?: DocChangeAgent;
   conversationTurnTimeoutMs?: number;
   conversationStallTimeoutMs?: number;
   conversationHeartbeatMs?: number;
@@ -645,6 +653,16 @@ export async function buildApp({
   registerAdminRoutes(app, ctx);
   registerProgressRoutes(app, ctx);
   registerMeetingFollowThroughRoutes(app, ctx, followThrough);
+  // 文档变更：找候选用快模型；按作者身份读飞书文档元数据（不读正文）；后台任务与群消息事件由 server.ts 按 app.docChanges.jobs() 注册。
+  const isCeo = (personId: string) => companyMemory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false;
+  const docChanges = createDocChangeService({
+    pool, now, names: () => personDisplayNames(companyMemory),
+    agent: docChangeAgent ?? createDocChangeAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.triageModel || env.lightModel }),
+    ...(feishuApi && env.feishu ? { feishu: { client: feishuApi, env: env.feishu } } : {}),
+    pathFor: (personId, requestId) => `${isCeo(personId) ? "" : "/me"}/requests/${requestId}`,
+  });
+  app.decorate("docChanges", docChanges);
+  registerDocChangeRoutes(app, ctx, docChanges);
 
   return app;
 }

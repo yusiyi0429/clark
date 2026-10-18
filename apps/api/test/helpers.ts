@@ -270,6 +270,8 @@ export async function createTestApp(
     memoryImportModel?: Parameters<typeof buildApp>[0]["memoryImportModel"];
     /** 会后分层、影响分析与妙记接口的替身；不注入时用真实装配（只在后台任务里调用，测试不跑 worker）。 */
     meetingFollowThroughAgents?: Parameters<typeof buildApp>[0]["meetingFollowThroughAgents"];
+    /** 文档变更找候选的假 Agent；不注入时用真实装配（只在后台任务里调用）。 */
+    docChangeAgent?: Parameters<typeof buildApp>[0]["docChangeAgent"];
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {

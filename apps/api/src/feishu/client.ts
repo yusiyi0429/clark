@@ -16,8 +16,8 @@ export type FeishuUserInfo = { openId: string; unionId?: string; name?: string }
 export type FeishuReceiveIdType = "open_id" | "union_id" | "user_id" | "chat_id";
 /** 云文档的类型（drive 元数据接口的 doc_type）。 */
 export type FeishuDocType = "doc" | "docx" | "sheet" | "bitable" | "wiki";
-/** 云文档元数据：只有标题、最近修改时间和修改人（open_id），不含正文。 */
-export type FeishuDocMeta = { token: string; type: FeishuDocType; title: string; modifiedAt: Date | null; modifiedBy: string | null };
+/** 云文档元数据：只有标题、最近修改时间、修改人和所有者（open_id），不含正文。 */
+export type FeishuDocMeta = { token: string; type: FeishuDocType; title: string; modifiedAt: Date | null; modifiedBy: string | null; ownerId: string | null };
 
 /** 用到的飞书开放接口；测试注入假实现。 */
 export type FeishuClient = {
@@ -148,6 +148,7 @@ export function createFeishuClient({ appId, appSecret, fetch: fetchImpl = fetch 
           token: meta.doc_token, type: String(meta.doc_type) as FeishuDocType, title: meta.title,
           modifiedAt: Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000) : null,
           modifiedBy: typeof meta.latest_modify_user === "string" && meta.latest_modify_user ? meta.latest_modify_user : null,
+          ownerId: typeof meta.owner_id === "string" && meta.owner_id ? meta.owner_id : null,
         }];
       });
     },

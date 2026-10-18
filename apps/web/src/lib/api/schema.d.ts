@@ -992,6 +992,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/impact-cards/{id}/basis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 文档变更影响卡：切换到新版，或继续用旧版到某天并写理由；更新本人的工作依据清单 */
+        post: operations["chooseImpactCardBasis"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/{id}/doc-change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** kind = doc_change 的请求对应的文档变更；只有作者和被问的旧文档负责人看得到 */
+        get: operations["getRequestDocChange"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/doc-changes/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 作者勾选新文档修订或取代了哪几份（空即都不是），确认后推影响卡 */
+        post: operations["confirmDocChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/doc-changes/{id}/ask-owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 作者确认不了：改问候选旧文档的负责人「你的《A》还有效吗？」 */
+        post: operations["askDocChangeOwners"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/doc-changes/{id}/owner-answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 旧文档负责人回答还有效或已被取代；已被取代时推影响卡 */
+        post: operations["answerDocChangeOwner"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/meeting-decisions": {
         parameters: {
             query?: never;
@@ -7780,6 +7865,11 @@ export interface components {
                 revisedAt: string | null;
                 revisedBy: string | null;
                 confirmed: boolean;
+                supersededBy: {
+                    title: string;
+                    url: string;
+                } | null;
+                keepUntil: string | null;
             }[];
         };
         UpdateWorkBasisRequest: {
@@ -9470,7 +9560,7 @@ export interface components {
         };
         RequestView: {
             id: string;
-            kind: "relay" | "collection" | "impact" | "supplement";
+            kind: "relay" | "collection" | "impact" | "supplement" | "doc_change";
             status: "draft" | "open" | "done";
             version: number;
             title: string;
@@ -9528,7 +9618,7 @@ export interface components {
         RequestResponse: {
             request: {
                 id: string;
-                kind: "relay" | "collection" | "impact" | "supplement";
+                kind: "relay" | "collection" | "impact" | "supplement" | "doc_change";
                 status: "draft" | "open" | "done";
                 version: number;
                 title: string;
@@ -9595,7 +9685,7 @@ export interface components {
         DraftRequestResponse: {
             request: {
                 id: string;
-                kind: "relay" | "collection" | "impact" | "supplement";
+                kind: "relay" | "collection" | "impact" | "supplement" | "doc_change";
                 status: "draft" | "open" | "done";
                 version: number;
                 title: string;
@@ -9658,7 +9748,7 @@ export interface components {
         };
         RequestListItem: {
             id: string;
-            kind: "relay" | "collection" | "impact" | "supplement";
+            kind: "relay" | "collection" | "impact" | "supplement" | "doc_change";
             title: string;
             status: "draft" | "open" | "done";
             initiatorName: string;
@@ -9673,7 +9763,7 @@ export interface components {
         RequestListResponse: {
             items: {
                 id: string;
-                kind: "relay" | "collection" | "impact" | "supplement";
+                kind: "relay" | "collection" | "impact" | "supplement" | "doc_change";
                 title: string;
                 status: "draft" | "open" | "done";
                 initiatorName: string;
@@ -9831,6 +9921,26 @@ export interface components {
                 statement: string;
                 tier: "strategic" | "host";
                 decidedBy: "host" | "ceo" | "agent";
+            } | {
+                /** @constant */
+                kind: "doc_change";
+                id: string;
+                relation: "revision" | "supersede";
+                newDoc: {
+                    title: string;
+                    url: string | null;
+                };
+                oldDoc: {
+                    title: string;
+                    url: string | null;
+                    revision: string | null;
+                    revisedAt: string | null;
+                };
+                authorName: string;
+                decidedByName: string;
+                effectiveOn: string | null;
+                transitionUntil: string | null;
+                keepExisting: boolean | null;
             };
             agentJudged: boolean;
             correction: {
@@ -9845,6 +9955,12 @@ export interface components {
                 component: string | null;
                 patch: string;
                 status: "proposed" | "written" | "confirmed";
+            } | null;
+            basisChoice: {
+                choice: "switch" | "keep";
+                until: string | null;
+                reason: string | null;
+                at: string;
             } | null;
             questions: {
                 id: string;
@@ -9896,6 +10012,26 @@ export interface components {
                     statement: string;
                     tier: "strategic" | "host";
                     decidedBy: "host" | "ceo" | "agent";
+                } | {
+                    /** @constant */
+                    kind: "doc_change";
+                    id: string;
+                    relation: "revision" | "supersede";
+                    newDoc: {
+                        title: string;
+                        url: string | null;
+                    };
+                    oldDoc: {
+                        title: string;
+                        url: string | null;
+                        revision: string | null;
+                        revisedAt: string | null;
+                    };
+                    authorName: string;
+                    decidedByName: string;
+                    effectiveOn: string | null;
+                    transitionUntil: string | null;
+                    keepExisting: boolean | null;
                 };
                 agentJudged: boolean;
                 correction: {
@@ -9910,6 +10046,12 @@ export interface components {
                     component: string | null;
                     patch: string;
                     status: "proposed" | "written" | "confirmed";
+                } | null;
+                basisChoice: {
+                    choice: "switch" | "keep";
+                    until: string | null;
+                    reason: string | null;
+                    at: string;
                 } | null;
                 questions: {
                     id: string;
@@ -9970,6 +10112,26 @@ export interface components {
                     statement: string;
                     tier: "strategic" | "host";
                     decidedBy: "host" | "ceo" | "agent";
+                } | {
+                    /** @constant */
+                    kind: "doc_change";
+                    id: string;
+                    relation: "revision" | "supersede";
+                    newDoc: {
+                        title: string;
+                        url: string | null;
+                    };
+                    oldDoc: {
+                        title: string;
+                        url: string | null;
+                        revision: string | null;
+                        revisedAt: string | null;
+                    };
+                    authorName: string;
+                    decidedByName: string;
+                    effectiveOn: string | null;
+                    transitionUntil: string | null;
+                    keepExisting: boolean | null;
                 };
                 agentJudged: boolean;
                 correction: {
@@ -9985,6 +10147,12 @@ export interface components {
                     patch: string;
                     status: "proposed" | "written" | "confirmed";
                 } | null;
+                basisChoice: {
+                    choice: "switch" | "keep";
+                    until: string | null;
+                    reason: string | null;
+                    at: string;
+                } | null;
                 questions: {
                     id: string;
                     question: string;
@@ -9997,6 +10165,109 @@ export interface components {
         };
         ImpactIrrelevantRequest: {
             reason?: string;
+        };
+        ImpactBasisChoiceRequest: {
+            choice: "switch" | "keep";
+            until?: string;
+            reason?: string;
+        };
+        DocChangeView: {
+            id: string;
+            status: "finding" | "awaiting_author" | "asking_owner" | "confirmed" | "unrelated";
+            newDoc: {
+                title: string;
+                url: string;
+                revisedAt: string | null;
+            };
+            authorName: string;
+            publishedAt: string;
+            candidates: {
+                key: string;
+                kind: "material" | "feishu_doc" | "link";
+                title: string;
+                url: string | null;
+                ownerName: string | null;
+                reason: string;
+                sameDoc: boolean;
+                dependents: number;
+                suggested: "revision" | "supersede";
+                relation: ("revision" | "supersede") | null;
+                ownerAnswer: ("asked" | "valid" | "superseded") | null;
+            }[];
+            effectiveOn: string | null;
+            transitionUntil: string | null;
+            keepExisting: boolean | null;
+            steps: {
+                label: string;
+                status: "done" | "current" | "pending";
+                result: string | null;
+            }[];
+            pushed: number;
+            decidedByName: string | null;
+            viewer: {
+                role: "author" | "owner";
+                canDecide: boolean;
+                canAskOwners: boolean;
+                ownerKeys: string[];
+            };
+        };
+        DocChangeResponse: {
+            docChange: {
+                id: string;
+                status: "finding" | "awaiting_author" | "asking_owner" | "confirmed" | "unrelated";
+                newDoc: {
+                    title: string;
+                    url: string;
+                    revisedAt: string | null;
+                };
+                authorName: string;
+                publishedAt: string;
+                candidates: {
+                    key: string;
+                    kind: "material" | "feishu_doc" | "link";
+                    title: string;
+                    url: string | null;
+                    ownerName: string | null;
+                    reason: string;
+                    sameDoc: boolean;
+                    dependents: number;
+                    suggested: "revision" | "supersede";
+                    relation: ("revision" | "supersede") | null;
+                    ownerAnswer: ("asked" | "valid" | "superseded") | null;
+                }[];
+                effectiveOn: string | null;
+                transitionUntil: string | null;
+                keepExisting: boolean | null;
+                steps: {
+                    label: string;
+                    status: "done" | "current" | "pending";
+                    result: string | null;
+                }[];
+                pushed: number;
+                decidedByName: string | null;
+                viewer: {
+                    role: "author" | "owner";
+                    canDecide: boolean;
+                    canAskOwners: boolean;
+                    ownerKeys: string[];
+                };
+            };
+        };
+        ConfirmDocChangeRequest: {
+            links: {
+                key: string;
+                relation: "revision" | "supersede";
+            }[];
+            effectiveOn?: string | null;
+            transitionUntil?: string | null;
+            keepExisting?: boolean;
+        };
+        DocOwnerAnswerRequest: {
+            key: string;
+            answer: "valid" | "superseded";
+            effectiveOn?: string | null;
+            transitionUntil?: string | null;
+            keepExisting?: boolean;
         };
     };
     responses: never;
@@ -12816,6 +13087,281 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    chooseImpactCardBasis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImpactBasisChoiceRequest"];
+            };
+        };
+        responses: {
+            /** @description 影响卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImpactCardResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getRequestDocChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 文档变更 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocChangeResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    confirmDocChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmDocChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description 文档变更 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocChangeResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    askDocChangeOwners: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 文档变更 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocChangeResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    answerDocChangeOwner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocOwnerAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description 文档变更 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocChangeResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
