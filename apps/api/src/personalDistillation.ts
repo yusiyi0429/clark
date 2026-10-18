@@ -198,11 +198,12 @@ export function createPersonalDistillation(options: {
     await client.query('BEGIN');
     try {
       for (const write of writes) await write();
+      // 游标时间直接取库里那条消息的 created_at（微秒）；经 JS Date 只剩毫秒，最后一条会一直排在游标之后、反复重跑。
       await client.query(`INSERT INTO personal_memory_cursors (person_id, through_at, through_conversation, through_sequence, attempts, next_attempt_at, last_error, updated_at)
-          VALUES ($1, $2, $3, $4, 0, NULL, NULL, now())
+          SELECT $1, m.created_at, m.conversation_id, m.sequence, 0, NULL, NULL, now() FROM conversation_messages m WHERE m.conversation_id = $2 AND m.sequence = $3
           ON CONFLICT (person_id) DO UPDATE SET through_at = EXCLUDED.through_at, through_conversation = EXCLUDED.through_conversation,
             through_sequence = EXCLUDED.through_sequence, attempts = 0, next_attempt_at = NULL, last_error = NULL, updated_at = now()`,
-        [personId, last.created_at, last.conversation_id, last.sequence]);
+        [personId, last.conversation_id, last.sequence]);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');

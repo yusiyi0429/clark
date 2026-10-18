@@ -31,7 +31,7 @@ async function setup(db: import('pg').PoolClient, pool: import('pg').Pool) {
   const memory = createPersonalMemory({ pool });
   const conversations = new Map<string, string>();
   let clock = Date.now() - 2 * 86_400_000;
-  const say = async (scope: string, content: string, options: { owner?: string; role?: 'user' | 'assistant'; runId?: string; at?: Date } = {}) => {
+  const say = async (scope: string, content: string, options: { owner?: string; role?: 'user' | 'assistant'; runId?: string; at?: Date | string } = {}) => {
     const key = `${options.owner ?? 'alice'}|${scope}`;
     if (!conversations.has(key)) {
       const id = randomUUID();
@@ -96,6 +96,37 @@ test('the cursor makes each run see only messages after the last processed one, 
     expect(inputs.map(input => input.messages.map(message => message.content))).toEqual([['第一句想法。', '第二句想法。'], ['第三句想法。']]);
     expect(inputs[1].earlier).toEqual(['第一句想法。', '第二句想法。']);
     expect((await run.cursor('alice')).cursor).toMatchObject({ conversationId: third.conversationId, sequence: third.sequence });
+  });
+});
+
+test('messages in the same millisecond with different microseconds are each learned once (cursor keeps full precision)', async () => {
+  await createTestDb(async ({ db, pool }) => {
+    await migrate(db);
+    const { say, worker } = await setup(db, pool);
+    const at = (micros: string) => new Date(Date.now() - 86_400_000).toISOString().replace(/\.\d{3}Z$/, `.123${micros}Z`);
+    await say('global', '同一毫秒第一句。', { at: at('101') });
+    await say('global', '同一毫秒第二句。', { at: at('202') });
+    await say('global', '同一毫秒第三句。', { at: at('303') });
+    const inputs: string[][] = [];
+    const run = worker((_model, context) => { inputs.push(inputOf(context).messages.map(message => message.content)); return candidate({ items: [] }); }, { idleMs: 0, windowMessages: 2 });
+    expect(await run.processNext('alice')).toBe(true);
+    expect(await run.processNext('alice')).toBe(true);
+    expect(inputs).toEqual([['同一毫秒第一句。', '同一毫秒第二句。'], ['同一毫秒第三句。']]);
+  });
+});
+
+test('after a batch is distilled and nothing new is said, no further model call is made', async () => {
+  await createTestDb(async ({ db, pool }) => {
+    await migrate(db);
+    const { say, worker } = await setup(db, pool);
+    await say('global', '带微秒的一句话。', { at: new Date(Date.now() - 86_400_000).toISOString().replace(/\.\d{3}Z$/, '.456789Z') });
+    let calls = 0;
+    const run = worker(() => { calls++; return candidate({ items: [] }); });
+    expect(await run.processNext()).toBe(true);
+    expect(calls).toBe(1);
+    expect(await run.processNext()).toBe(false);
+    expect(await run.processNext('alice')).toBe(false);
+    expect(calls).toBe(1);
   });
 });
 
