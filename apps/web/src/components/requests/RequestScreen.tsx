@@ -20,6 +20,7 @@ import type { Card } from "@/lib/api/client";
 import { draftAnswer, draftRequest, prepareQuestion, readRequest, requestError, runRequestAction } from "./requestApi";
 import { RequestSteps, runningSteps } from "./RequestSteps";
 import { ImpactCardScreen } from "./ImpactCard";
+import { CollectionScreen } from "@/components/collections/CollectionScreen";
 import s from "./requests.module.css";
 
 const NO_CARDS: Card[] = [];
@@ -41,6 +42,8 @@ export function statusTone(request: Pick<TRequestView, "status">, mine: TRequest
 export function RequestScreen({ initialRequest, base, initialPrompt }: { initialRequest: TRequestView | null; base: string; initialPrompt?: string }) {
   // 影响卡也走送达通道，二级页换成影响卡的样子。
   if (initialRequest?.kind === "impact") return <ImpactCardScreen request={initialRequest} base={base} />;
+  // ③ 信息收集的一轮：待办卡（接收人）或汇总（发起人）。
+  if (initialRequest?.kind === "collection") return <CollectionScreen request={initialRequest} />;
   return <RelayRequestScreen initialRequest={initialRequest} base={base} initialPrompt={initialPrompt} />;
 }
 
@@ -262,7 +265,7 @@ function SentRequest({ request, onChange }: { request: TRequestView; onChange: (
   );
 }
 
-function QuestionThread({ request, busy, perform }: {
+export function QuestionThread({ request, busy, perform }: {
   request: TRequestView; busy: boolean; perform: (action: TActionDescriptor | undefined, input?: unknown) => Promise<boolean>;
 }) {
   const ref = useRef<HTMLElement>(null);
@@ -336,7 +339,7 @@ function AnswerBox({ request, question, busy, perform }: {
 }
 
 /** 接收人提问：定位待办 → 查有没有人问过 → 整理问题 → 等你确认。查到答案就停在第二步。 */
-function AskBox({ request, perform }: { request: TRequestView; perform: (action: TActionDescriptor | undefined, input?: unknown) => Promise<boolean> }) {
+export function AskBox({ request, perform }: { request: TRequestView; perform: (action: TActionDescriptor | undefined, input?: unknown) => Promise<boolean> }) {
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<"idle" | "checking" | "found" | "preview" | "sending">("idle");
   const [result, setResult] = useState<TPrepareRequestQuestionResponse | null>(null);

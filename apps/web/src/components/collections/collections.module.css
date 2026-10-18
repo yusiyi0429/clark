@@ -1,0 +1,128 @@
+/*
+ * ③ 信息收集：草稿卡（对话里）、一轮的二级页（待办卡 / 汇总）、定时任务区。
+ * 外框、按钮、头像、收件人小圆片沿用传话（requests.module.css）；这里只补收集特有的：表头预览、进度、每人状态、表格。
+ * 三种状态的颜色：未填灰、已填未确认琥珀（判断色）、已确认青绿（确认色）。
+ */
+
+/* ---------- 对话里的卡 ---------- */
+.card { display: grid; gap: 12px; min-width: 0; padding: 14px 16px; border: 1px solid #e6e9ee; border-radius: 14px; background: #fbfbfc; color: #25282e; font-size: 14px; line-height: 1.6; }
+.muted { margin: 0; color: #7a7f89; font-size: 13px; }
+.placeholder { height: 64px; border-radius: 8px; background: linear-gradient(90deg, #eef0f3 0%, #f6f7f9 50%, #eef0f3 100%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+.sent { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--confirmed); font-size: 13px; font-weight: 500; }
+.sent strong { color: #25282e; font-weight: 600; }
+.sent time { color: #9599a1; font-weight: 400; font-variant-numeric: tabular-nums; }
+.sentFoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: -4px; }
+.quoted { margin: 0; color: #25282e; font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; }
+
+.draft { overflow: hidden; }
+.draftHead { display: flex; align-items: center; gap: 10px; padding: 16px 16px 4px; }
+.subject { min-width: 0; color: var(--ink); font-size: 19px; line-height: 1.5; font-weight: 600; overflow-wrap: anywhere; }
+/* 表头预览：大家要填的那张表的第一行，像多维表格的列头。 */
+.tablePreview { margin: 8px 16px 14px; overflow-x: auto; border: 1px solid var(--hairline); border-radius: 10px; scrollbar-width: none; }
+.tablePreview [role='row'] { display: flex; min-width: max-content; }
+.tablePreview [role='columnheader'] { flex: none; padding: 8px 12px; border-right: 1px solid var(--hairline); background: color-mix(in oklab, var(--ink) 3%, var(--surface)); color: var(--ink-muted); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.tablePreview [role='columnheader']:last-child { border-right: 0; }
+.tablePreview [role='columnheader'][data-optional] { color: var(--ink-faint); font-weight: 500; }
+.optionRow { align-items: flex-start; }
+@media (min-width: 760px) { .optionRow { align-items: center; } }
+.options { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; min-width: 0; }
+.options > :first-child { flex: 0 1 340px; min-width: 0; }
+.weekly { flex: none; }
+.inset { padding: 0 16px 12px; }
+
+/* ---------- 二级页页头 ---------- */
+.headActions { display: inline-flex; align-items: center; gap: 8px; }
+.status { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: var(--onboarding-pill-radius); font-size: 13px; font-weight: 600; line-height: 20px; white-space: nowrap; color: var(--ink-muted); background: color-mix(in oklab, var(--ink) 6%, var(--surface)); }
+.status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); }
+.status[data-tone='filled'] { color: var(--judgment); background: var(--judgment-wash); }
+.status[data-tone='filled']::before { background: var(--judgment); }
+.status[data-tone='confirmed'] { color: var(--confirmed); background: var(--confirmed-wash); }
+.status[data-tone='confirmed']::before { background: var(--confirmed); }
+.feishu { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: var(--onboarding-pill-radius); color: var(--brand-deep); font-size: 14px; font-weight: 500; text-decoration: none; }
+.feishu:hover { background: var(--wash-hover); }
+
+/* ---------- 接收人：进度 + 自己那一行 ---------- */
+.progress { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 16px; padding: 16px 18px; border: 1px solid var(--hairline); border-radius: var(--onboarding-inset-radius); background: var(--morning-start, var(--surface)); }
+.progress[data-done] { border-color: color-mix(in oklab, var(--confirmed) 24%, var(--surface)); background: var(--confirmed-wash); }
+.progressText { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.progressText small { color: var(--ink-faint); font-size: 13px; }
+.progressText time { color: var(--ink-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.progressText strong { color: var(--ink); font-size: 17px; font-weight: 600; }
+.fraction { font-variant-numeric: tabular-nums; }
+.bigCheck { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--confirmed); color: var(--solid-fg); }
+.meter { grid-column: 1; display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.meter li { flex: 1; height: 4px; border-radius: 2px; background: color-mix(in oklab, var(--ink) 9%, var(--surface)); transition: background .2s ease; }
+.meter li[data-on] { background: var(--onboarding-blue); }
+.progress[data-done] .meter li { background: var(--confirmed); }
+.confirm { grid-row: 1 / span 2; grid-column: 2; }
+.source { justify-self: start; margin-bottom: -8px; }
+.form { display: grid; gap: 16px; min-width: 0; }
+.field { display: grid; gap: 6px; min-width: 0; }
+.fieldLabel { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; font-weight: 600; }
+.optional { color: var(--ink-faint); font-size: 12px; font-weight: 500; }
+.field textarea, .field input { width: 100%; box-sizing: border-box; }
+.field textarea { min-height: 72px; field-sizing: content; max-height: 320px; resize: none; line-height: 1.7; }
+.readValue { margin: 0; padding: 10px 0; border-bottom: 1px solid var(--hairline); color: var(--ink); font-size: 15px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ---------- 发起人：三段计数 + 表格 ---------- */
+.tally { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 16px 18px; border: 1px solid var(--hairline); border-radius: var(--onboarding-inset-radius); background: var(--morning-start, var(--surface)); }
+.tallyItem { display: grid; gap: 2px; }
+.tallyItem strong { color: var(--ink); font-size: 26px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.tallyItem span { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-muted); font-size: 13px; }
+.tallyItem span::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); }
+.tallyItem[data-tone='filled'] span::before { background: var(--judgment); }
+.tallyItem[data-tone='confirmed'] span::before { background: var(--confirmed); }
+.bar { grid-column: 1 / -1; display: flex; gap: 3px; height: 6px; border-radius: 3px; overflow: hidden; background: color-mix(in oklab, var(--ink) 7%, var(--surface)); }
+.bar i { display: block; height: 100%; border-radius: 3px; background: color-mix(in oklab, var(--ink) 18%, var(--surface)); }
+.bar i[data-tone='filled'] { background: var(--judgment); }
+.bar i[data-tone='confirmed'] { background: var(--confirmed); }
+
+.tableWrap { min-width: 0; overflow-x: auto; border: 1px solid var(--hairline); border-radius: var(--onboarding-inset-radius); }
+.table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.6; }
+.table th, .table td { padding: 10px 14px; border-bottom: 1px solid var(--hairline); text-align: left; vertical-align: top; color: var(--ink); }
+.table thead th { position: sticky; top: 0; background: color-mix(in oklab, var(--ink) 3%, var(--surface)); color: var(--ink-muted); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.table tbody tr:last-child th, .table tbody tr:last-child td { border-bottom: 0; }
+.table tbody th { font-weight: 500; white-space: nowrap; }
+.table td { min-width: 120px; max-width: 280px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.table td:nth-child(2) { min-width: 0; white-space: nowrap; }
+.table a { color: var(--brand-deep); text-decoration: underline; text-underline-offset: 3px; }
+.num { font-variant-numeric: tabular-nums; text-align: right; }
+.person { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; font-weight: 500; }
+.when { display: block; margin-top: 2px; color: var(--ink-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.blank { color: var(--ink-faint); }
+.cards { display: none; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.personCard { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--hairline); border-radius: var(--onboarding-inset-radius); background: var(--surface); }
+.personCard header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.personCard dl { display: grid; gap: 8px; margin: 0; }
+.personCard dl:empty { display: none; }
+.personCard dt { color: var(--ink-faint); font-size: 13px; }
+.personCard dd { margin: 2px 0 0; color: var(--ink); font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.personCard a { color: var(--brand-deep); }
+
+/* ---------- 定时任务区 ---------- */
+.group { display: grid; gap: 8px; min-width: 0; }
+.groupHead { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--ink); font-size: 15px; font-weight: 600; }
+.schedules { display: grid; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--hairline); }
+.schedule { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 64px; padding: 10px 8px; border-bottom: 1px solid var(--hairline); }
+.schedule[data-inactive] { opacity: .55; }
+.scheduleIcon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: color-mix(in oklab, var(--onboarding-blue) 10%, var(--surface)); color: var(--brand-deep); }
+.schedule[data-origin='local'] .scheduleIcon, .schedule[data-origin='weekly_review'] .scheduleIcon { background: color-mix(in oklab, var(--ink) 6%, var(--surface)); color: var(--ink-muted); }
+.scheduleMain { display: grid; gap: 2px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+button.scheduleMain { cursor: pointer; border-radius: 8px; }
+button.scheduleMain:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
+.scheduleMain strong { overflow: hidden; color: var(--ink); font-size: 15px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.scheduleMain small { display: flex; flex-wrap: wrap; gap: 0 14px; color: var(--ink-faint); font-size: 13px; font-variant-numeric: tabular-nums; }
+.scheduleSide { display: flex; align-items: center; gap: 8px; }
+
+@keyframes shimmer { to { background-position: -200% 0; } }
+@media (max-width: 759px) {
+  .tableWrap { display: none; }
+  .cards { display: grid; }
+  .progress { grid-template-columns: minmax(0, 1fr); }
+  .confirm { grid-row: auto; grid-column: 1; width: 100%; }
+  .tally { gap: 8px; padding: 14px; }
+  .tallyItem strong { font-size: 22px; }
+  .options { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .placeholder { animation: none; } .meter li { transition: none; } }
+.readValue a { color: var(--brand-deep); text-decoration: underline; text-underline-offset: 3px; }

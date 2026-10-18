@@ -7,7 +7,8 @@
  * - todo_pick：对上几件待办，点一件再查有没有人问过、整理问题（参照 Slack 的消息内选择）；
  * - todo_ask：「问巨杰（备案信息表，昨天 16:20）：……　[发送]」，问题可以改（参照 Superhuman 发送前预览）；
  * - todo_answer：已有人问过的答案原文与出处，仍可以问；
- * - request_draft：本人发起的请求草稿，与请求页同一套收件人、要你定和发送。
+ * - request_draft：本人发起的请求草稿，与请求页同一套收件人、要你定和发送；
+ * - collection_draft：本人发起的信息收集草稿（表头、收件人、截止、每周固定和发送）。
  * 已经发过的（读回历史时）按对象的最新状态显示成「已问」「已发出」。
  */
 import { useEffect, useRef, useState } from "react";
@@ -17,6 +18,7 @@ import type { TConversationCard, TPersonalReviewPayload, TRequestStep, TRequestV
 import { StepList, type Step } from "@/components/steps/StepList";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { DraftRequest } from "@/components/requests/RequestScreen";
+import { CollectionDraftCard } from "@/components/collections/CollectionDraft";
 import { prepareQuestion, readRequest, requestError, runRequestAction } from "@/components/requests/requestApi";
 import { browserApi } from "@/lib/api/client";
 import { relativeDayTime } from "@/lib/companyTime";
@@ -57,6 +59,7 @@ function EntryCard({ card, createdAt }: { card: TConversationCard; createdAt?: s
       </section>
     );
     case "request_draft": return <RequestDraftCard requestId={card.requestId} href={card.href} />;
+    case "collection_draft": return <section className={`${s.card} ${s.bare}`}><CollectionDraftCard collectionId={card.collectionId} /></section>;
   }
 }
 
