@@ -106,6 +106,8 @@ export const ConversationMessage = Type.Object(
     createdAt: Type.String({ format: "date-time" }),
     /** 只在助手回答上、且这一轮走过恢复时才有。 */
     recoveryNote: Type.Optional(ConversationRecoveryNote),
+    /** 只在助手回答上：这一轮实际装进上下文的个人记忆 id。回答里的记忆标记只认这里有的。 */
+    memoryUsed: Type.Optional(Type.Array(Type.String())),
   },
   { additionalProperties: false },
 );
@@ -114,33 +116,7 @@ export const ConversationHistory = Type.Object(
   {
     scope: ConversationScope,
     messages: Type.Array(ConversationMessage),
-    /** 这个人在这个页面已归档、有内容的历史对话条数（当前对话为空时界面据此给一行「查看历史对话」）。 */
-    archivedCount: Type.Optional(Type.Integer({ minimum: 0 })),
   },
-  { additionalProperties: false },
-);
-
-/** 已归档的一段对话：首问原文（前 4000 字，含引用与页面前缀的原样格式；界面解析后取前 20 字作标题）、起止时间与条数。 */
-export const ArchivedConversation = Type.Object(
-  {
-    id: Type.String({ format: "uuid" }),
-    firstQuestion: Type.String(),
-    startedAt: Type.String({ format: "date-time" }),
-    lastAt: Type.String({ format: "date-time" }),
-    archivedAt: Type.String({ format: "date-time" }),
-    messageCount: Type.Integer({ minimum: 1 }),
-  },
-  { additionalProperties: false },
-);
-
-export const ArchivedConversationList = Type.Object(
-  { conversations: Type.Array(ArchivedConversation, { maxItems: 200 }) },
-  { additionalProperties: false },
-);
-
-/** 新建对话 / 切回一段历史对话之后，当前对话是哪一条；archived：原来那条有内容、已归档。 */
-export const ConversationSwitchResponse = Type.Object(
-  { conversationId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]), archived: Type.Boolean() },
   { additionalProperties: false },
 );
 
@@ -164,6 +140,21 @@ export const ConversationSseEvent = Type.Union([
       label: Type.Optional(Type.String()),
       /** 工具结束时这一步实际读到了什么（条数、来源标题、企业知识节名），由系统按工具结果生成。 */
       detail: Type.Optional(Type.String()),
+    },
+    { additionalProperties: false },
+  ),
+  /**
+   * Agent 处理时的当前步骤（服务端在工具开始、结束时映射）：同一 id 的后一条取代前一条。
+   * label 是短动词短语；result 是这一步读到了什么（系统生成），有就直接显示。
+   */
+  Type.Object(
+    {
+      ...StreamBase,
+      type: Type.Literal("step"),
+      id: Type.String(),
+      label: Type.String(),
+      status: Type.Union([Type.Literal("done"), Type.Literal("active"), Type.Literal("pending"), Type.Literal("stopped")]),
+      result: Type.Optional(Type.String()),
     },
     { additionalProperties: false },
   ),
@@ -280,7 +271,4 @@ export type TConversationMessageRequest = Static<typeof ConversationMessageReque
 export type TConversationMessage = Static<typeof ConversationMessage>;
 export type TConversationHistory = Static<typeof ConversationHistory>;
 export type TConversationRecoveryNote = Static<typeof ConversationRecoveryNote>;
-export type TArchivedConversation = Static<typeof ArchivedConversation>;
-export type TArchivedConversationList = Static<typeof ArchivedConversationList>;
-export type TConversationSwitchResponse = Static<typeof ConversationSwitchResponse>;
 export type TConversationSseEvent = Static<typeof ConversationSseEvent>;

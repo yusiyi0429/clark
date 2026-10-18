@@ -78,6 +78,9 @@ const env: AppEnv = {
   materialStorageDir: process.env.MEETING_MATERIAL_STORAGE_DIR,
   conversationAttachmentStorageDir: process.env.CONVERSATION_ATTACHMENT_STORAGE_DIR,
   recordingStorageDir: process.env.MEETING_RECORDING_STORAGE_DIR,
+  // 本体公司事实（PR #12）：只读投影在 MEMORY_STORAGE_DIR/company；按人授权的域写在 COMPANY_WORLD_ACCESS_FILE（personId → domain 列表）。个人记忆在数据库里。
+  companyStorageDir: process.env.MEMORY_STORAGE_DIR ? `${process.env.MEMORY_STORAGE_DIR}/company` : undefined,
+  companyWorldAccessFile: process.env.COMPANY_WORLD_ACCESS_FILE || undefined,
 };
 
 const port = Number(process.env.PORT ?? "4000");

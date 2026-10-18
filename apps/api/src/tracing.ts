@@ -32,7 +32,7 @@ import {
   type Usage,
 } from "@earendil-works/pi-ai";
 import { getApiProvider } from "@earendil-works/pi-ai/compat";
-import { redactSecrets } from "./observability.js";
+import { redactSecretText, redactSecrets } from "./observability.js";
 
 // ───────────────────────────── 命名常量 ─────────────────────────────
 
@@ -61,6 +61,8 @@ export const AGENT_ROLES = {
   threadIntro: "thread-intro",
   /** 对话历史的后台压缩（conversationCompaction.ts）：挂在这段对话同一个 Thread 下，自成一个 Turn。 */
   conversationCompaction: "conversation-compaction",
+  /** 个人记忆的后台提炼（personalDistillation.ts）：按人分业务会话。 */
+  personalMemoryDistillation: "personal-memory-distillation",
 } as const;
 export type AgentRole = (typeof AGENT_ROLES)[keyof typeof AGENT_ROLES] | string;
 
@@ -72,6 +74,12 @@ export const RETRIEVE_SOURCES = {
   webSearch: "web-search",
   outletFeed: "outlet-feed",
   wechatFeed: "wechat-feed",
+  /** 本体只读公司事实（company.ts，query_company）。 */
+  worldCompany: "world-company",
+  /** 本人个人记忆（personalMemory.ts）。 */
+  personalMemory: "personal-memory",
+  /** 本人历史对话原文（conversationHistorySearch.ts）。 */
+  conversationHistory: "conversation-history",
 } as const;
 export type RetrieveSource = (typeof RETRIEVE_SOURCES)[keyof typeof RETRIEVE_SOURCES];
 
@@ -756,8 +764,10 @@ const MESSAGE_CHARS = 32000;
 /** 系统提示可达数万字，单独放宽上限，保证轨迹里能看全。 */
 const SYSTEM_PROMPT_CHARS = 120000;
 
+/** 上报的正文（含个人记忆正文）照原文，只截断长度、去掉夹带的凭证。 */
 function clip(text: string, limit: number): string {
-  return text.length > limit ? `${text.slice(0, limit)}…[+${text.length - limit} chars]` : text;
+  const clean = redactSecretText(text);
+  return clean.length > limit ? `${clean.slice(0, limit)}…[+${clean.length - limit} chars]` : clean;
 }
 
 /** 系统提示按明文上报，便于在轨迹里复盘 Agent 实际看到了什么。 */
@@ -918,6 +928,7 @@ export const CANDIDATE_AGENTS: Record<string, { role: AgentRole; prefix: string 
   "battlefield-judgment": { role: AGENT_ROLES.battlefieldSync, prefix: "bf" },
   "task-acceptance-draft": { role: AGENT_ROLES.taskAcceptanceDraft, prefix: "tsk" },
   "thread-intro": { role: AGENT_ROLES.threadIntro, prefix: "thr" },
+  "personal-memory-distillation": { role: AGENT_ROLES.personalMemoryDistillation, prefix: "pmd" },
 };
 
 export function candidateAgent(kind: string): { role: AgentRole; prefix: string } {

@@ -1,17 +1,18 @@
 "use client";
 
-import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import remend from "remend";
 import { ArrowDown, Paperclip, Quote } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
+import { StepList, StepToggle, type Step } from "@/components/steps/StepList";
 import type { Message, ThinkingStage, TurnProgress, TurnThought } from "./useConversation";
 import { QuoteChips } from "./QuoteChips";
 import { pageContextBattlefield, readQuotedMessage } from "./quotes";
 import { createArrivalLog, rehypeArrival, type ArrivalLog } from "./arrival";
 import { parseAnswerOptions } from "./answerOptions";
 import { splitStableBlocks, useSmoothText } from "./smoothText";
-import { CITATION_MARKDOWN } from "./citations";
+import { CITATION_MARKDOWN, MemoryUsedProvider } from "./citations";
 import { holdOpenLink, remarkCitationMarks } from "./citationMarks";
 import { RichPre, RichSkeleton } from "./richBlocks/RichBlocks";
 import { CONVERSATION_REHYPE_PLUGINS, CONVERSATION_REMARK_PLUGINS, holdOpenMath } from "./richBlocks/markdown";
@@ -101,9 +102,11 @@ const MarkdownBody = memo(function MarkdownBody({ text, streaming }: { text: str
   );
 });
 
+const NO_MEMORY: readonly string[] = [];
+
 /** 已经收起的思考摘要：正文开始以后挂在这条回答的「用时」一行，点开看全文。 */
 type SettledThought = { text: string; seconds: number };
-type TurnProps = { message: Message; ms?: number; streaming?: boolean; thought?: SettledThought };
+type TurnProps = { message: Message; ms?: number; streaming?: boolean; thought?: SettledThought; steps?: Step[] };
 
 const sameList = <T,>(left: T[] | undefined, right: T[] | undefined, id: (item: T) => string) =>
   (left ?? []).map(id).join("|") === (right ?? []).map(id).join("|");
@@ -113,25 +116,34 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
   const a = previous.message, b = next.message;
   return previous.ms === next.ms && Boolean(previous.streaming) === Boolean(next.streaming)
     && previous.thought?.text === next.thought?.text && previous.thought?.seconds === next.thought?.seconds
+    && sameList(previous.steps, next.steps, (step) => `${step.id}:${step.status}:${step.result ?? ""}`)
     && a.role === b.role && a.content === b.content
     && a.recoveryNote?.text === b.recoveryNote?.text && a.recoveryNote?.detail === b.recoveryNote?.detail
+    && (a.memoryUsed ?? []).join("|") === (b.memoryUsed ?? []).join("|")
     && sameList(a.attachments, b.attachments, (item) => item.id)
     && sameList(a.referencesSnapshot, b.referencesSnapshot, (item) => `${item.cardId}@${item.version}`);
 }
 
 /** 一条消息（clark `ConversationTurn`）：不显示角色名，读屏读「你 / 天枢」。 */
-export const ConversationTurn = memo(function ConversationTurn({ message, ms, streaming = false, thought }: TurnProps) {
+export const ConversationTurn = memo(function ConversationTurn({ message, ms, streaming = false, thought, steps }: TurnProps) {
   const user = message.role === "user";
   const [thoughtOpen, setThoughtOpen] = useState(false);
-  const thoughtToggle = thought ? (
-    <button type="button" className={s.thoughtToggle} aria-expanded={thoughtOpen} onClick={() => setThoughtOpen((open) => !open)}
-      data-testid="conversation-thought-toggle">已思考 {thought.seconds} 秒</button>
+  const [stepsOpen, setStepsOpen] = useState(false);
+  const stepsId = useId();
+  const thoughtToggle = thought || steps?.length ? (
+    <>
+      {thought ? <button type="button" className={s.thoughtToggle} aria-expanded={thoughtOpen} onClick={() => setThoughtOpen((open) => !open)}
+        data-testid="conversation-thought-toggle">已思考 {thought.seconds} 秒</button> : null}
+      {steps?.length ? <StepToggle steps={steps} open={stepsOpen} onToggle={() => setStepsOpen((open) => !open)} className={s.thoughtToggle} controls={stepsId} /> : null}
+    </>
   ) : null;
   const attachments = message.attachments ?? [];
   // 回答末尾的选项块（answerOptions）在进 Markdown、remend 与到达淡入之前就拿掉，流式中没写完的也不露出。
   const quoted = useMemo(() => (user ? readQuotedMessage(message.content) : { message: parseAnswerOptions(message.content, streaming).body, quotes: [] }),
     [user, message.content, streaming]);
   const battlefield = user ? pageContextBattlefield(message.content) : null;
+  const memoryKey = streaming ? "" : (message.memoryUsed ?? []).join("|");
+  const memoryUsed = useMemo(() => (memoryKey ? memoryKey.split("|") : NO_MEMORY), [memoryKey]);
   return (
     <article className={user ? s.user : s.assistant} data-chat-role={message.role} aria-label={user ? "你" : "天枢"}
       data-testid={streaming ? "conversation-streaming-turn" : undefined} aria-busy={streaming || undefined}>
@@ -150,6 +162,7 @@ export const ConversationTurn = memo(function ConversationTurn({ message, ms, st
         </div>
       ) : null}
       {thought && thoughtOpen ? <div className={s.thoughtFull} data-testid="conversation-thought-full">{thought.text}</div> : null}
+      {steps?.length && stepsOpen ? <StepList steps={steps} id={stepsId} className={s.settledSteps} /> : null}
       {user && message.referencesSnapshot?.length ? (
         <details className={c.sentReferences}>
           <summary>
@@ -178,7 +191,9 @@ export const ConversationTurn = memo(function ConversationTurn({ message, ms, st
       {battlefield ? <div className={s.pageTag}>战场 · {battlefield}</div> : null}
       {quoted.quotes.length ? <QuoteChips quotes={quoted.quotes} sent /> : null}
       <div className={s.prose}>
-        <MarkdownBody text={quoted.message} streaming={streaming} />
+        <MemoryUsedProvider value={memoryUsed}>
+          <MarkdownBody text={quoted.message} streaming={streaming} />
+        </MemoryUsedProvider>
       </div>
       {/* 这一轮用了备用模型或走过恢复：末尾一行很淡的小字，悬停看具体一点的说明（不写模型名和英文原文）。 */}
       {!user && !streaming && message.recoveryNote?.text ? (
@@ -198,8 +213,10 @@ export const ConversationTurn = memo(function ConversationTurn({ message, ms, st
  * 状态区紧贴在正在写的文字下面，正文第一个字就出现在思考原来的位置；卡先做好就先在下面淡入，正文往下长时把卡往下推。
  * 状态区占的是完成后选项（footer）的位置，卡的位置不变，读回历史时卡不重挂。
  */
-export function ConversationTurns({ messages, partial = "", footer, after, trailing, thought, status }: {
+export function ConversationTurns({ messages, partial = "", footer, after, trailing, thought, steps, status }: {
   messages: Message[]; partial?: string;
+  /** 本轮的步骤（正文开始后才给）：与思考摘要一样，流式中挂在正在写的那条，结束后挂在最后一条回答上。 */
+  steps?: Step[] | null;
   /** 进行中这一轮的状态区（思考、进度、停止）：放在正在写的那条之后、本轮的卡之前。给了就表示这一轮还在进行。 */
   status?: ReactNode;
   /** 本轮的思考摘要（正文开始后才给）：流式中挂在正在写的那条，结束后挂在最后一条回答上。 */
@@ -216,14 +233,15 @@ export function ConversationTurns({ messages, partial = "", footer, after, trail
       {messages.map((message, index) => (
         <Fragment key={`turn-${index}`}>
           <ConversationTurn message={message} ms={message.role === "assistant" ? turnMs(messages, index) : undefined}
-            thought={!partial && thought && index === messages.length - 1 && message.role === "assistant" ? thought : undefined} />
+            thought={!partial && thought && index === messages.length - 1 && message.role === "assistant" ? thought : undefined}
+            steps={!partial && steps?.length && index === messages.length - 1 && message.role === "assistant" ? steps : undefined} />
           {footer?.(index) ?? null}
           {after?.(index) ?? null}
         </Fragment>
       ))}
       {partial || trailing || status ? (
         <Fragment key={`turn-${messages.length}`}>
-          {partial ? <ConversationTurn message={{ sequence: -1, role: "assistant", content: partial }} streaming thought={thought ?? undefined} /> : null}
+          {partial ? <ConversationTurn message={{ sequence: -1, role: "assistant", content: partial }} streaming thought={thought ?? undefined} steps={steps?.length ? steps : undefined} /> : null}
           {/* 与上面 footer 同一个位置（流式中没有选项，这里放状态区）：完成后提案卡仍在同一位置，不重挂。 */}
           {status ?? null}
           {trailing ?? null}
@@ -272,10 +290,12 @@ export function ThinkingStream({ text }: { text: string }) {
  * 回答进行中的一行（clark `ConversationThinking`）：脉冲点、阶段、在查什么 / 思考要点、已用秒数（深度档另附预计用时）、停止。
  * 非深度档中途升级时，上方多一行「这个问题需要更深入的分析，预计还需约 X 秒。」；正文开始后整行淡化。
  */
-export function ConversationThinking({ stage, startedAt, onStop, route, progress, thought }: {
+export function ConversationThinking({ stage, startedAt, onStop, route, progress, steps = [], thought }: {
   stage: ThinkingStage; startedAt: number; onStop: () => void;
   route?: { tier: "quick" | "grounded" | "deep"; expectSeconds: number } | null;
   progress?: TurnProgress;
+  /** 服务端给的步骤：有步骤时替代进度行的单行文字和计数；正文开始后收成一个勾和步数。 */
+  steps?: Step[];
   /** 思考摘要：正文开始前在进度行上方滚动显示，正文开始后收到这条回答的「已思考 N 秒」里。 */
   thought?: TurnThought | null;
 }) {
@@ -287,9 +307,11 @@ export function ConversationThinking({ stage, startedAt, onStop, route, progress
   }, [startedAt]);
   const deep = route?.tier === "deep";
   const escalation = !deep && stage !== "answering" ? progress?.escalation : null;
-  const detail = progressDetail(stage, progress);
+  const stepped = steps.length > 0;
+  const detail = stepped ? null : progressDetail(stage, progress);
+  const answering = stage === "answering";
   return (
-    <div className={s.thinkingGroup} data-stage={stage}>
+    <div className={s.thinkingGroup} data-stage={stage} data-steps={stepped && !answering ? "" : undefined}>
       {escalation ? <p className={s.thinkingNote} data-testid="conversation-escalation" aria-live="polite">{escalation.notice}</p> : null}
       {thought?.text && thought.seconds === null && stage !== "answering" ? <ThinkingStream text={thought.text} /> : null}
       <div className={s.thinking} data-testid="conversation-thinking" data-tier={route?.tier} data-stage={stage}>
@@ -301,6 +323,7 @@ export function ConversationThinking({ stage, startedAt, onStop, route, progress
           停止
         </HeroButton>
       </div>
+      {stepped && !answering ? <StepList steps={steps} /> : null}
     </div>
   );
 }

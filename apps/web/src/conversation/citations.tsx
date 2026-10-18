@@ -10,6 +10,7 @@ import { defaultUrlTransform, type Components } from "react-markdown";
 import { parseSourceRef } from "@/cards/meetingSources";
 import { citationRoute, knownCitation, openCitation, queueCitation, type CitationSurface } from "./citationBridge";
 import { CITE_MARK_PROP, NAMED_SOURCE } from "./citationMarks";
+import { MemoryMark } from "./MemoryMark";
 import s from "@/styles/citations.module.css";
 
 /**
@@ -58,6 +59,8 @@ export function citationLocator(ref: string): string | null {
     case "transcript": return "会议记录";
     case "issue": return "议题";
     case "research": return "议题研究";
+    case "chat": return "原话";
+    case "pmem": return "个人记忆";
     default: return null;
   }
 }
@@ -80,6 +83,13 @@ export function plainText(node: ReactNode): string {
 }
 
 type SurfaceValue = { linked: boolean; surface: CitationSurface; expand?: () => void };
+
+/**
+ * 这条回答里可以显示的记忆标记：本轮实际装进上下文的记忆 id（memoryUsed）。不在里面的 id（模型编的、抄错的）不显示；
+ * 正在写的回答还不知道，先都不显示，写完读回历史再出现。
+ */
+const MemoryUsedContext = createContext<readonly string[]>([]);
+export const MemoryUsedProvider = MemoryUsedContext.Provider;
 const SurfaceContext = createContext<SurfaceValue>({ linked: false, surface: "rail" });
 
 /**
@@ -95,10 +105,14 @@ type AnchorProps = ComponentPropsWithoutRef<"a"> & { node?: unknown; [CITE_MARK_
 
 export function CitationAnchor({ node: _node, href, children, [CITE_MARK_PROP]: mark, ...rest }: AnchorProps) {
   const { linked, surface } = useContext(SurfaceContext);
+  const memoryUsed = useContext(MemoryUsedContext);
+  // 个人记忆（cite:pmem:<id>）：不论在句中哪里，都是记忆小标记，点开看这条记忆、当场修改；不是本轮用到的 id 不显示。
+  const memory = href?.startsWith(CITE_SCHEME) ? parseSourceRef(citationRef(href) ?? "") : null;
+  if (memory?.kind === "pmem") return memoryUsed.includes(memory.id) ? <MemoryMark id={memory.id} /> : null;
   if (mark !== undefined && href) return <CitationMark href={href} title={plainText(children)} />;
   if (!href?.startsWith(CITE_SCHEME)) return <a href={href} {...rest}>{children}</a>;
   const ref = citationRef(href);
-  if (!ref || !linked) return <span className={s.plain} data-cite={ref ? "plain" : "invalid"}>{children}</span>;
+  if (!ref || !linked || citationRoute(ref, surface) === "none") return <span className={s.plain} data-cite={ref ? "plain" : "invalid"}>{children}</span>;
   return <CitationLink citeRef={ref} surface={surface}>{children}</CitationLink>;
 }
 
@@ -125,7 +139,9 @@ export function markTarget(href: string): MarkTarget {
 export function canOpenMark(target: MarkTarget, surface: SurfaceValue): boolean {
   if (target.kind === "url") return true;
   if (target.kind === "named") return false;
-  return surface.linked || citationRoute(target.ref, surface.surface) === "page" || Boolean(surface.expand);
+  const route = citationRoute(target.ref, surface.surface);
+  if (route === "none") return false;
+  return surface.linked || route === "page" || Boolean(surface.expand);
 }
 
 /** 打开原文：放大时直接交给依据导航；平时页面接得住就交给页面，否则先放大、放大后依据面板接着打开。 */
