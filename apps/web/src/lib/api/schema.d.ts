@@ -2050,7 +2050,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的 */
+        /** 列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的；q 按标题、正文、原话搜索；anchor 带上对象现在的标题 */
         get: operations["listPersonalMemory"];
         put?: never;
         post?: never;
@@ -2070,12 +2070,29 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** 本人删掉（忘掉）一条个人记忆：不再装进对话，后台提炼也不再学回来 */
+        /** 本人忘掉一条个人记忆：不再装进对话，后台提炼也不再学回来，之后能恢复；purge=1 彻底删除（204，不能恢复，被它替代的旧条目改成已忘掉） */
         delete: operations["forgetPersonalMemoryItem"];
         options?: never;
         head?: never;
         /** 本人改一条个人记忆的标题或正文；已替代或已忘掉的 409 */
         patch: operations["updatePersonalMemoryItem"];
+        trace?: never;
+    };
+    "/api/me/memory/personal/items/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人恢复一条忘掉的个人记忆，重新装进对话；不是已忘掉的 409 */
+        post: operations["restorePersonalMemoryItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/me/voiceprint": {
@@ -8164,6 +8181,8 @@ export interface components {
                 target: string;
                 /** @description 写入时钉住的对象版本 */
                 pinnedVersion?: number;
+                /** @description 对象现在的标题（列表接口按 target 查出来，只读，不存） */
+                title?: string;
             }[];
             references: {
                 /** @description 依据，沿用 cite: 语法去掉前缀，如 chat:<会话 id>#<消息序号> */
@@ -8191,6 +8210,8 @@ export interface components {
                     target: string;
                     /** @description 写入时钉住的对象版本 */
                     pinnedVersion?: number;
+                    /** @description 对象现在的标题（列表接口按 target 查出来，只读，不存） */
+                    title?: string;
                 }[];
                 references: {
                     /** @description 依据，沿用 cite: 语法去掉前缀，如 chat:<会话 id>#<消息序号> */
@@ -15170,6 +15191,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "active" | "superseded" | "forgotten" | "all";
+                q?: string;
             };
             header?: never;
             path?: never;
@@ -15217,7 +15239,9 @@ export interface operations {
     };
     forgetPersonalMemoryItem: {
         parameters: {
-            query?: never;
+            query?: {
+                purge?: "1";
+            };
             header?: never;
             path: {
                 id: string;
@@ -15233,6 +15257,22 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PersonalMemoryItem"];
+                };
+            };
+            /** @description 已彻底删除 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
             /** @description ApiError 统一错误 */
@@ -15308,6 +15348,73 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    restorePersonalMemoryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 恢复后的条目 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalMemoryItem"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

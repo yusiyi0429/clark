@@ -1681,8 +1681,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       "/api/me/memory/personal": {
         get: {
-          operationId: "listPersonalMemory", summary: "列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的",
-          parameters: [{ name: "status", in: "query", required: false, schema: { type: "string", enum: ["active", "superseded", "forgotten", "all"] } }],
+          operationId: "listPersonalMemory", summary: "列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的；q 按标题、正文、原话搜索；anchor 带上对象现在的标题",
+          parameters: [
+            { name: "status", in: "query", required: false, schema: { type: "string", enum: ["active", "superseded", "forgotten", "all"] } },
+            { name: "q", in: "query", required: false, schema: { type: "string", maxLength: 200 } },
+          ],
           responses: { "200": { description: "本人个人记忆", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryList" } } } }, "400": errorResponse, "401": errorResponse, "503": errorResponse },
         },
       },
@@ -1694,9 +1697,19 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "改后的条目", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryItem" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
         },
         delete: {
-          operationId: "forgetPersonalMemoryItem", summary: "本人删掉（忘掉）一条个人记忆：不再装进对话，后台提炼也不再学回来",
+          operationId: "forgetPersonalMemoryItem", summary: "本人忘掉一条个人记忆：不再装进对话，后台提炼也不再学回来，之后能恢复；purge=1 彻底删除（204，不能恢复，被它替代的旧条目改成已忘掉）",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "purge", in: "query", required: false, schema: { type: "string", enum: ["1"] } },
+          ],
+          responses: { "200": { description: "忘掉后的条目", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryItem" } } } }, "204": { description: "已彻底删除" }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/me/memory/personal/items/{id}/restore": {
+        post: {
+          operationId: "restorePersonalMemoryItem", summary: "本人恢复一条忘掉的个人记忆，重新装进对话；不是已忘掉的 409",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-          responses: { "200": { description: "忘掉后的条目", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryItem" } } } }, "401": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+          responses: { "200": { description: "恢复后的条目", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryItem" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
         },
       },
       "/api/me/voiceprint": {

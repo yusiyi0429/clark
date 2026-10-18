@@ -108,11 +108,32 @@ export function createPersonalMemory({ pool, recall }: { pool: Pool; recall?: Me
         }
     }
     const api = {
-        async list(personId: string, options: { status?: MemoryStatus | 'all' } = {}, connection?: Q): Promise<PersonalItem[]> {
+        /** q：标题、正文、原话（refs）里含这段文字的（不分大小写）。 */
+        async list(personId: string, options: { status?: MemoryStatus | 'all'; q?: string } = {}, connection?: Q): Promise<PersonalItem[]> {
             const status = options.status ?? 'active';
-            const rows = (await (connection ?? pool).query(`SELECT ${ROW} FROM personal_memory_items WHERE person_id = $1 AND ($2::text = 'all' OR status = $2) ORDER BY created_at DESC, id`,
-                [personId, status])).rows;
+            const q = options.q?.trim() ?? '';
+            const rows = (await (connection ?? pool).query(`SELECT ${ROW} FROM personal_memory_items WHERE person_id = $1 AND ($2::text = 'all' OR status = $2)
+                AND ($3::text = '' OR strpos(lower(title || ' ' || text || ' ' || refs::text), lower($3)) > 0) ORDER BY created_at DESC, id`,
+                [personId, status, q])).rows;
             return rows.map(item);
+        },
+        /** 列表展示用：anchor 指向的议题、会议、Mission、执行事项现在叫什么（只读，不存）。查不到的不填。 */
+        async withAnchorTitles(items: PersonalItem[], connection?: Q): Promise<PersonalItem[]> {
+            const ids: Record<string, Set<string>> = { issue: new Set(), meeting: new Set(), task: new Set(), mission: new Set() };
+            for (const entry of items) for (const anchor of entry.anchors) {
+                const [type, id] = [anchor.target.slice(0, anchor.target.indexOf(':')), anchor.target.slice(anchor.target.indexOf(':') + 1)];
+                if (ids[type] && id) ids[type].add(id);
+            }
+            const titles = new Map<string, string>();
+            const read = async (type: string, sql: string) => {
+                if (!ids[type].size) return;
+                for (const row of (await (connection ?? pool).query(sql, [[...ids[type]]])).rows as { id: string; title: string }[]) titles.set(`${type}:${row.id}`, row.title);
+            };
+            await read('issue', `SELECT id::text, title FROM issues WHERE id::text = ANY($1::text[])`);
+            await read('meeting', `SELECT id::text, title FROM meetings WHERE id::text = ANY($1::text[])`);
+            await read('task', `SELECT id::text, title FROM tasks WHERE id::text = ANY($1::text[])`);
+            await read('mission', `SELECT id, title FROM missions WHERE id = ANY($1::text[])`);
+            return items.map(entry => ({ ...entry, anchors: entry.anchors.map(anchor => titles.has(anchor.target) ? { ...anchor, title: titles.get(anchor.target)! } : anchor) }));
         },
         async get(personId: string, id: string, connection?: Q): Promise<PersonalItem | null> {
             const row = (await (connection ?? pool).query(`SELECT ${ROW} FROM personal_memory_items WHERE person_id = $1 AND id::text = $2`, [personId, id])).rows[0];
@@ -149,6 +170,31 @@ export function createPersonalMemory({ pool, recall }: { pool: Pool; recall?: Me
                 WHERE person_id = $1 AND id::text = $2 AND status <> 'forgotten' RETURNING ${ROW}`, [personId, id])).rows[0];
             if (!row) throw fault((await api.get(personId, id, connection)) ? 'PERSONAL_ITEM_NOT_ACTIVE' : 'PERSONAL_ITEM_NOT_FOUND');
             return item(row);
+        },
+        /** 恢复忘掉的一条：重新装进对话。只恢复 forgotten 的，别的状态报 PERSONAL_ITEM_NOT_FORGOTTEN。 */
+        async restore(personId: string, id: string, connection?: Q): Promise<PersonalItem> {
+            const row = (await (connection ?? pool).query(`UPDATE personal_memory_items SET status = 'active', updated_at = now()
+                WHERE person_id = $1 AND id::text = $2 AND status = 'forgotten' RETURNING ${ROW}`, [personId, id])).rows[0];
+            if (!row) throw fault((await api.get(personId, id, connection)) ? 'PERSONAL_ITEM_NOT_FORGOTTEN' : 'PERSONAL_ITEM_NOT_FOUND');
+            return item(row);
+        },
+        /**
+         * 彻底删除：删掉这一行，不能恢复，后台提炼也不再记得它被忘掉过。
+         * 被它替代的旧条目没有了「替代者」，改成 forgotten（不回到现行，免得旧说法重新装进对话；本人可以恢复）。
+         */
+        async purge(personId: string, id: string): Promise<void> {
+            const client = await pool.connect();
+            try {
+                await client.query('BEGIN');
+                const own = (await client.query(`SELECT id FROM personal_memory_items WHERE person_id = $1 AND id::text = $2 FOR UPDATE`, [personId, id])).rows[0];
+                if (!own) throw fault('PERSONAL_ITEM_NOT_FOUND');
+                await client.query(`UPDATE personal_memory_items SET status = 'forgotten', superseded_by = NULL, updated_at = now() WHERE person_id = $1 AND superseded_by = $2`, [personId, own.id]);
+                await client.query(`DELETE FROM personal_memory_items WHERE person_id = $1 AND id = $2`, [personId, own.id]);
+                await client.query('COMMIT');
+            } catch (error) {
+                await client.query('ROLLBACK');
+                throw error;
+            } finally { client.release(); }
         },
         /** 本人在界面上改一条（R7）：原地改标题、正文，只改 active 的。 */
         async edit(personId: string, id: string, input: { title?: string; text?: string }, connection?: Q): Promise<PersonalItem> {
