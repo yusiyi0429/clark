@@ -138,9 +138,47 @@ describe("个人复盘页", () => {
     status: "submitted", draftSource: "import", draftError: null,
     selfReview: { overall: field("CEO Agent 已上线", [feishu]), judgments: field("1. 体验优先"), nextFocus: field("真实使用"), escalations: field("") },
     missions: [{ id: "04-1", code: "04-1", title: "CEO Agent 核心体验", outcome: "可持续使用" }],
+    generationSteps: [], editedFields: [],
     toolConnected: false, materialCount: 0, conversationScope: "personal-review:pr-1", submittedAt: "2026-10-08T02:00:00.000Z", skipped: null,
     viewer: { isSelf: false, isCeo: true }, actions: [],
   };
+  const collector = "cite:collector:5b0c5c43-4a0e-4c43-9a43-0d6a0f3c2c11";
+  const generated: TPersonalReviewPayload = {
+    ...personal, status: "draft", draftSource: "co_agent", submittedAt: null, viewer: { isSelf: true, isCeo: false },
+    selfReview: {
+      overall: field(`复盘生成写完了[09/16 Codex 记录](${collector})。\n缺少记录：这个月没有每周复盘。`, [collector.slice(5)]),
+      judgments: field("我自己改的判断"), nextFocus: field(`接上对话入口[09/16 Codex 记录](${collector})。`, [collector.slice(5)]), escalations: field("无"),
+    },
+    editedFields: ["judgments"],
+    generationSteps: [
+      { id: "missions", label: "读 Mission 卡", status: "done", result: "1 张" }, { id: "weekly", label: "读每周复盘", status: "done", result: "缺少记录" },
+      { id: "collector", label: "读采集记录", status: "done", result: "1 条" }, { id: "draft", label: "起草", status: "done" },
+    ],
+    actions: [act("personal-review.update"), act("personal-review.submit"), { ...act("personal-review.draft_with_co_agent"), label: "重新生成" }],
+  };
+
+  it("生成的草稿：出处显示成小标记、不重复列在依据里；逐段修改；改过的段落有标记；页头可以重新生成", () => {
+    const html = renderToStaticMarkup(<PersonalReviewScreen initialReview={generated} />);
+    expect(html).toContain('aria-label="出处：09/16 Codex 记录"');
+    expect(html).not.toContain("cite:collector");
+    expect(html).not.toContain("依据：");
+    expect(html).toContain("缺少记录：这个月没有每周复盘。");
+    expect(html.match(/>修改</g)).toHaveLength(4);
+    expect(html.match(/你改过/g)).toHaveLength(1);
+    expect(html).toContain("重新生成");
+    expect(html).toContain("<summary>生成过程 · 4 步</summary>");
+    expect(html).toContain("读每周复盘<small>缺少记录</small>");
+    expect(html).not.toContain("<textarea");
+  });
+
+  it("生成中按步骤显示进度，不能再点生成", () => {
+    const steps = generated.generationSteps.map((step, index) => ({ ...step, status: index < 2 ? "done" as const : index === 2 ? "running" as const : "pending" as const, ...(index < 2 ? {} : { result: undefined }) }));
+    const html = renderToStaticMarkup(<PersonalReviewScreen initialReview={{ ...generated, status: "drafting", generationSteps: steps, actions: [] }} />);
+    expect(html).toContain('<li data-state="running">');
+    expect(html).toContain("读 Mission 卡<small>1 张</small>");
+    expect(html).not.toContain("重新生成");
+    expect(html).not.toContain("生成过程");
+  });
 
   it("从飞书导入的复盘：标明来源，四栏下的飞书链接可以点开", () => {
     const html = renderToStaticMarkup(<PersonalReviewScreen initialReview={personal} />);

@@ -111,7 +111,7 @@
 @media (max-width: 959px) { .sources { font-size: 13px; } .rowOwner, .rowAssess, .evidence, .history { font-size: 14px; } }
 @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
 
-/* 个人复盘：本月 Mission 列表（对照基准）与三条起草路径。 */
+/* 个人复盘：本月 Mission 列表（对照基准）与让自己的 AI 工具改写的入口。 */
 .missions { display: grid; gap: 10px; margin: 4px 0 0; padding: 0; list-style: none; }
 .missions li { display: grid; gap: 2px; }
 .missions strong { color: var(--ink); font-size: 14px; font-weight: 600; }
@@ -123,3 +123,30 @@
 .instruction { margin: 0; padding: 10px 12px; border-left: 3px solid color-mix(in oklab, var(--onboarding-blue) 40%, var(--surface)); border-radius: 0 10px 10px 0; background: color-mix(in oklab, var(--onboarding-blue) 5%, var(--surface)); color: var(--ink); font-size: 13px; line-height: 1.7; user-select: all; }
 .muted { color: var(--ink-muted); }
 .window { margin: 0 0 16px; color: var(--ink-muted); font-size: 13px; line-height: 1.6; }
+
+/* 个人复盘生成：页头「生成 / 重新生成」、生成步骤、带出处标记的正文、「你改过」。 */
+.headerActions { display: flex; flex: none; align-items: center; gap: 8px; }
+.generate.generate { gap: 5px; height: 32px; min-height: 32px; min-width: 0; padding: 0 10px; border-radius: 8px; background: transparent; color: var(--brand-deep); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.generate.generate:hover { background: color-mix(in oklab, var(--onboarding-blue) 8%, var(--surface)); }
+.generating { margin: 0 0 24px; }
+.steps { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.6; }
+.steps li { display: flex; align-items: baseline; gap: 8px; color: var(--ink-faint); }
+.steps li[data-state='running'], .steps li[data-state='done'] { color: var(--ink); }
+.steps li[data-state='failed'] { color: var(--onboarding-error); }
+.steps small { margin-left: 8px; color: var(--ink-muted); font-size: 13px; }
+.stepMark { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--hairline-strong); transform: translateY(2px); }
+.steps li[data-state='running'] .stepMark { border-color: var(--onboarding-blue); color: var(--onboarding-blue); }
+.steps li[data-state='running'] .stepMark svg { animation: spin 1s linear infinite; }
+.steps li[data-state='done'] .stepMark { border-color: var(--confirmed); background: var(--confirmed); color: var(--solid-fg); }
+.steps li[data-state='failed'] .stepMark { border-color: var(--onboarding-error); color: var(--onboarding-error); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.process { margin: 0 0 20px; color: var(--ink-muted); font-size: 13px; }
+.process summary { width: fit-content; cursor: pointer; }
+.process .steps { margin-top: 10px; }
+.reviewText { color: var(--ink); line-height: 1.8; }
+.reviewText p { margin: 0 0 6px; white-space: normal; }
+.reviewText p:last-child { margin-bottom: 0; }
+.edited { margin-left: 8px; color: var(--ink-faint); font-size: 12px; font-weight: 500; }
+@media (prefers-reduced-motion: reduce) { .steps li[data-state='running'] .stepMark svg { animation: none; } }
+/* 手机上页头放不下：只留图标（读屏仍读「生成 / 重新生成」）。 */
+@media (max-width: 759px) { .generate.generate { width: 32px; padding: 0; justify-content: center; } .generateLabel { display: none; } }

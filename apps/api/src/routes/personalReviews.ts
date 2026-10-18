@@ -38,7 +38,7 @@ export function registerPersonalReviewRoutes(app: AppInstance, ctx: RouteContext
     if (scope.actionType === "personal-review.draft_with_co_agent" && !ctx.monthlyReviewService) return ctx.fail(reply, 503, "MONTHLY_REVIEW_UNAVAILABLE", "复盘服务未配置");
     ctx.requestContext.set(req, { actionType: scope.actionType, objectRef: `personal-review:${scope.objectId}` });
     const outcome = await executePersonalReviewAction(ctx.pool, req.person!, scope, input,
-      actionFingerprint(secret, req.body.actionId, input), ctx.now(), ctx.conversationAttachmentStorageDir);
+      actionFingerprint(secret, req.body.actionId, input), ctx.now());
     if ("error" in outcome) return ctx.fail(reply, outcome.error.status, outcome.error.code, outcome.error.message);
     if ("conflict" in outcome) return ctx.fail(reply, 409, "VERSION_CONFLICT", "个人复盘已被修改，请重新读取后再试");
     for (const effect of outcome.effects) {

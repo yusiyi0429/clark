@@ -13,6 +13,7 @@ import type { MonthlyReviewAgents, MonthlyReviewDraftInput } from "../src/monthl
 import { executeDraftMissionRound } from "../src/missionRounds.js";
 import type { MissionCardDraftInput } from "../src/missionCardDraftAgent.js";
 import { createTestApp, TEST_CEO, TEST_MEMBER, testEnv, type TestApp } from "./helpers.js";
+import { citedReview } from "./personalReviewFixtures.js";
 
 const START = new Date("2026-09-30T02:00:00Z");
 const selfReview = (text = "已按证据完成，待补充判断"): TMonthlyReviewSelfReview => ({
@@ -24,7 +25,7 @@ async function fixture(owners = [TEST_MEMBER.personId, TEST_CEO.personId] as str
   const dir = await mkdtemp(join(tmpdir(), "personal-review-test-"));
   let now = START;
   const draftCalls: MonthlyReviewDraftInput[] = [], personalCalls: PersonalReviewDraftInput[] = [];
-  let generate: (input: PersonalReviewDraftInput) => Promise<unknown> = async () => selfReview();
+  let generate: (input: PersonalReviewDraftInput) => Promise<unknown> = async (input) => citedReview(input);
   const agents: MonthlyReviewAgents = {
     draft: { async generate(input) { draftCalls.push(input); return { candidate: selfReview("单元原稿") }; } },
     assess: { async generate() { return { candidate: { overall: "符合证据", deviations: [], questions: [] } }; } },
@@ -73,7 +74,7 @@ describe("个人复盘创建、投影和权限", () => {
       expect(await f.read(id)).toMatchObject({ status: "draft_failed", materialCount: 0, draftError: { message: "自动起草失败" } });
       expect(f.personalCalls[0]).toMatchObject({ missions: [{ outcome: "承诺结果" }], attachments: [], messages: [] });
       expect(f.personalCalls).toHaveLength(3);
-      expect((await f.read(id)).actions.some((entry: any) => entry.actionType === "personal-review.draft_with_co_agent")).toBe(false);
+      expect((await f.read(id)).actions).toContainEqual(expect.objectContaining({ actionType: "personal-review.draft_with_co_agent", label: "生成" }));
     } finally { await f.close(); }
   });
 
@@ -166,11 +167,10 @@ describe("个人复盘 Action 和 Co-Agent", () => {
     } finally { await f.close(); }
   });
 
-  it("无材料拒绝，未发送附件和用户消息计数；严格 Agent 校验、失败重试与超时恢复", async () => {
+  it("不需要先传材料，未发送附件和用户消息计数并读给 Co-Agent；严格 Agent 校验、失败重试与超时恢复", async () => {
     const f = await fixture([TEST_MEMBER.personId]);
     try {
       await f.open(); const id = (await f.board()).rows[0].personalReviewId;
-      expect((await f.act(id, "draft_with_co_agent")).statusCode).toBe(400);
       const scope = `personal-review:${id}` as const;
       const conversationId = await ensureMainConversation(f.t.pool, TEST_MEMBER.personId, scope);
       const tempPath = join(f.dir, 'material.txt'); await writeFile(tempPath, '附件实际结果');
@@ -178,7 +178,7 @@ describe("个人复盘 Action 和 Co-Agent", () => {
       await f.t.sql(`INSERT INTO conversation_messages(conversation_id,sequence,role,content,references_snapshot,attachments,run_id)
         VALUES ($1,1,'user','粘贴的个人草稿','[]','[]',$2),($1,2,'assistant','不能计作材料','[]','[]',$2)`, [conversationId, randomUUID()]);
       expect((await f.read(id)).materialCount).toBe(2);
-      expect((await f.read(id)).actions).toContainEqual(expect.objectContaining({ actionType: "personal-review.draft_with_co_agent", label: "按材料重新起草" }));
+      expect((await f.read(id)).actions).toContainEqual(expect.objectContaining({ actionType: "personal-review.draft_with_co_agent", label: "重新生成" }));
       let release!: (value: unknown) => void;
       f.generate(() => new Promise((resolve) => { release = resolve; }));
       expect((await f.act(id, "draft_with_co_agent")).statusCode).toBe(200);
@@ -186,9 +186,9 @@ describe("个人复盘 Action 和 Co-Agent", () => {
       expect((await f.read(id)).status).toBe("drafting");
       expect((await f.act(id, "skip", undefined, f.ceo)).statusCode).toBe(409);
       expect((await f.act(id, "update", { fields })).statusCode).toBe(409);
-      release(selfReview("按材料重写")); await f.t.monthlyReviews!.idle();
-      expect(await f.read(id)).toMatchObject({ status: "draft", draftSource: "co_agent", materialCount: 2,
-        selfReview: { overall: { text: "按材料重写" } } });
+      release(citedReview(f.personalCalls.at(-1)!, "按材料重写")); await f.t.monthlyReviews!.idle();
+      expect(await f.read(id)).toMatchObject({ status: "draft", draftSource: "co_agent", materialCount: 2 });
+      expect((await f.read(id)).selfReview.overall.text).toMatch(/^按材料重写\[/);
       expect(f.personalCalls.at(-1)).toMatchObject({ attachments: [{ extractedText: "附件实际结果" }], messages: [{ content: "粘贴的个人草稿" }],
         missions: [{ outcome: "承诺结果", why: "原因", successEvidence: ["验收证据"], milestones: ["里程碑"], boundaries: "边界" }] });
       f.generate(async () => ({ invented: true })); await f.act(id, "draft_with_co_agent"); await f.t.monthlyReviews!.idle();
@@ -205,7 +205,7 @@ describe("个人复盘 Action 和 Co-Agent", () => {
       while (!releaseStale) await new Promise((resolve) => setTimeout(resolve, 5));
       f.now(new Date(START.getTime() + 11 * 60_000));
       expect(await f.t.monthlyReviews!.recoverInterrupted()).toBe(1);
-      releaseStale(selfReview("过期 run 不应覆盖")); await f.t.monthlyReviews!.idle();
+      releaseStale(citedReview(f.personalCalls.at(-1)!, "过期 run 不应覆盖")); await f.t.monthlyReviews!.idle();
       expect((await f.read(id)).status).toBe("draft_failed");
     } finally { await f.close(); }
   });
@@ -357,6 +357,129 @@ describe("跨月工作台与任务卡起草", () => {
       expect(member.previousCard?.missions).toMatchObject([{ title: "本人承诺", outcome: "承诺结果", success_evidence: ["验收证据"] }]);
       expect(member.previousReview).toEqual(selfReview());
       expect(await f.t.sql("SELECT count(*)::int AS n FROM missions WHERE period='2026-10'")).toEqual([{ n: 2 }]);
+    } finally { await f.close(); }
+  });
+});
+
+describe("个人复盘生成：每周复盘、采集记录与出处", () => {
+  async function seedCollector(t: TestApp, personId: string, startedAt: string, summary: string, source = "codex") {
+    const token = randomUUID(), at = new Date(startedAt);
+    await t.sql("INSERT INTO personal_tokens(id,person_id,name,client,secret_hash,created_at) VALUES($1,$2,'collector','collector',$3,$4)", [token, personId, randomUUID(), at]);
+    await t.sql(`INSERT INTO collector_items(id,person_id,device_id,token_id,report_kind,client_event_id,source,started_at,ended_at,summary,links,received_at)
+      VALUES($1,$2,'device-test-01',$3,'digest',$4,$5,$6,$7,$8,'[]',$7)`, [randomUUID(), personId, token, randomUUID(), source, at, new Date(at.getTime() + 3_600_000), summary]);
+  }
+  async function seedProgress(t: TestApp, personId: string, createdAt: string, body: string) {
+    const task = randomUUID();
+    await t.sql("INSERT INTO tasks(id,title,status,owner_id,created_by,mission_id,step_order) VALUES($1,'验收材料','in_progress',$2,$2,$3,1)", [task, personId, `mission-${personId}`]);
+    await t.sql("INSERT INTO task_progress(id,task_id,author_id,source,body,created_at) VALUES($1,$2,$3,'web',$4,$5)", [randomUUID(), task, personId, body, new Date(createdAt)]);
+  }
+  const link = (record: { label: string; cite: string }) => `[${record.label}](${record.cite})`;
+  const ref = (record: { cite: string }) => record.cite.slice("cite:".length);
+  const generated = async (f: Awaited<ReturnType<typeof fixture>>, id: string) => {
+    expect((await f.act(id, "draft_with_co_agent")).statusCode).toBe(200);
+    await f.t.monthlyReviews!.idle();
+    return f.read(id);
+  };
+
+  it("有采集记录：按周读进展、只读本人当月的采集记录，四步带结果，出处写进正文和 sources", async () => {
+    const f = await fixture([TEST_MEMBER.personId]);
+    try {
+      await seedProgress(f.t, TEST_MEMBER.personId, "2026-09-15T02:00:00Z", "验收材料交给客户");
+      await seedCollector(f.t, TEST_MEMBER.personId, "2026-09-16T03:00:00Z", "写完复盘生成的服务端");
+      await seedCollector(f.t, TEST_MEMBER.personId, "2026-08-31T15:00:00Z", "八月的记录");
+      await seedCollector(f.t, TEST_CEO.personId, "2026-09-16T03:00:00Z", "别人的记录");
+      f.generate(async (input) => {
+        const [record] = input.collectorRecords, [mission] = input.missions, entry = input.weeklyReviews.flatMap((week) => week.entries)[0];
+        return { overall: { text: `复盘生成的服务端写完了${link(record)}，验收材料已交客户${link(entry)}${link(mission)}。`, sources: [] },
+          judgments: { text: `进度按 Mission 推进${link(mission)}。`, sources: [] }, nextFocus: { text: `下月接对话入口${link(record)}。`, sources: [] },
+          escalations: { text: "无", sources: [] } };
+      });
+      await f.open(); const id = (await f.board()).rows[0].personalReviewId;
+      const input = f.personalCalls.at(-1)!;
+      expect(input.collectorRecords).toEqual([expect.objectContaining({ source: "codex", summary: "写完复盘生成的服务端", label: "09/16 Codex 记录",
+        cite: expect.stringMatching(/^cite:collector:[0-9a-f-]{36}$/) })]);
+      expect(input.weeklyReviews.map((week) => [week.week, week.entries.length])).toEqual([["2026-W36", 0], ["2026-W37", 0], ["2026-W38", 1], ["2026-W39", 0], ["2026-W40", 0]]);
+      expect(input.weeklyReviews[2].entries[0]).toMatchObject({ body: "验收材料交给客户", label: "09/15 进展 · 验收材料", cite: expect.stringMatching(/^cite:progress:/) });
+      expect(input.missingRecords).toEqual([]);
+      const view = await f.read(id);
+      expect(Value.Check(PersonalReviewPayload, view)).toBe(true);
+      expect(view.generationSteps).toEqual([
+        { id: "missions", label: "读 Mission 卡", status: "done", result: "1 张" },
+        { id: "weekly", label: "读每周复盘", status: "done", result: "5 周里 1 周有记录" },
+        { id: "collector", label: "读采集记录", status: "done", result: "1 条" },
+        { id: "draft", label: "起草", status: "done" },
+      ]);
+      expect(view.selfReview.overall.text).toContain(`[09/16 Codex 记录](cite:${ref(input.collectorRecords[0])})`);
+      expect(view.selfReview.overall.sources).toEqual([ref(input.collectorRecords[0]), ref(input.weeklyReviews[2].entries[0]), `mission:mission-${TEST_MEMBER.personId}`]);
+      expect(view.selfReview.escalations).toEqual({ text: "无", sources: [] });
+    } finally { await f.close(); }
+  });
+
+  it("没有采集记录：输入标出缺少，步骤写缺少记录；草稿不写「缺少记录」就不收", async () => {
+    const f = await fixture([TEST_MEMBER.personId]);
+    try {
+      f.generate(async (input) => ({ ...citedReview(input), overall: { text: `都完成了${link(input.missions[0])}。`, sources: [] } }));
+      await f.open(); const id = (await f.board()).rows[0].personalReviewId;
+      expect(f.personalCalls.at(-1)).toMatchObject({ collectorRecords: [], missingRecords: ["每周复盘", "采集记录"] });
+      expect(f.personalCalls).toHaveLength(3);
+      const failed = await f.read(id);
+      expect(failed).toMatchObject({ status: "draft_failed", selfReview: null, draftError: { code: "invalid_monthly_review_candidate", message: expect.stringContaining("缺少记录") } });
+      expect(failed.generationSteps.map((step: any) => [step.status, step.result])).toEqual([["done", "1 张"], ["done", "缺少记录"], ["done", "缺少记录"], ["failed", undefined]]);
+      f.generate(async (input) => citedReview(input));
+      const view = await generated(f, id);
+      expect(view.status).toBe("draft");
+      expect(view.selfReview.overall.text).toContain("缺少记录：这个月没有每周复盘、采集记录。");
+      expect(view.generationSteps.at(-1)).toEqual({ id: "draft", label: "起草", status: "done" });
+    } finally { await f.close(); }
+  });
+
+  it("出处正确：引用输入里没有的记录、有一句不带出处都不收；sources 只按正文里的出处生成", async () => {
+    const f = await fixture([TEST_MEMBER.personId]);
+    try {
+      await seedCollector(f.t, TEST_MEMBER.personId, "2026-09-20T03:00:00Z", "接好采集器");
+      await f.open(); const id = (await f.board()).rows[0].personalReviewId;
+      const invented = `cite:collector:${randomUUID()}`;
+      f.generate(async (input) => ({ ...citedReview(input), judgments: { text: `判断有依据[编造的记录](${invented})。`, sources: [] } }));
+      expect(await generated(f, id)).toMatchObject({ status: "draft_failed", draftError: { message: `judgments 引用了输入里没有的出处 ${invented}` } });
+      f.generate(async (input) => ({ ...citedReview(input), nextFocus: { text: `下月重点有依据${link(input.missions[0])}。\n这一句没有依据`, sources: [] } }));
+      expect(await generated(f, id)).toMatchObject({ status: "draft_failed", draftError: { message: "nextFocus 有一句没有出处：这一句没有依据" } });
+      f.generate(async (input) => ({ ...citedReview(input),
+        overall: { text: `采集器接好了${link(input.collectorRecords[0])}${link(input.missions[0])}。\n缺少记录：这个月没有每周复盘。`, sources: ["模型自己写的"] } }));
+      const view = await generated(f, id);
+      expect(view.status).toBe("draft");
+      expect(view.selfReview.overall.sources).toEqual([ref(f.personalCalls.at(-1)!.collectorRecords[0]), `mission:mission-${TEST_MEMBER.personId}`]);
+    } finally { await f.close(); }
+  });
+
+  it("本人改过的段落重新生成时保留，清空的段落和没改的段落重新生成", async () => {
+    const f = await fixture([TEST_MEMBER.personId]);
+    try {
+      await f.open(); const id = (await f.board()).rows[0].personalReviewId;
+      const first = await f.read(id);
+      expect(first.editedFields).toEqual([]);
+      const saved = await f.act(id, "update", { fields: [{ field: "overall", text: "我自己写的总体结果" }, { field: "nextFocus", text: "" },
+        { field: "judgments", text: first.selfReview.judgments.text }] });
+      expect(saved.json().review.editedFields).toEqual(["overall", "nextFocus"]);
+      f.generate(async (input) => citedReview(input, "第二版"));
+      const view = await generated(f, id);
+      expect(view.selfReview.overall).toEqual({ text: "我自己写的总体结果", sources: first.selfReview.overall.sources });
+      expect(view.selfReview.nextFocus.text).toMatch(/^下周期补齐验收\[/);
+      expect(view.selfReview.judgments.text).toMatch(/^交付节奏落后\[/);
+      expect(view.editedFields).toEqual(["overall", "nextFocus"]);
+      expect(view.generationSteps.at(-1)).toEqual({ id: "draft", label: "起草", status: "done", result: "保留你改过的 1 段" });
+    } finally { await f.close(); }
+  });
+
+  it("startPersonalDraft 的 onStep 依次收到四步的变化，最后与写进个人复盘的一致", async () => {
+    const f = await fixture([TEST_MEMBER.personId]);
+    try {
+      await f.open(); const id = (await f.board()).rows[0].personalReviewId;
+      const row = (await f.t.sql("UPDATE personal_reviews SET status='drafting' WHERE id=$1 RETURNING version", [id]))[0];
+      const events: string[] = [];
+      await f.t.monthlyReviews!.startPersonalDraft(id, row.version as number, f.dir, { async generate() { throw new Error("测试里用 fixture 的 Agent"); } },
+        (steps) => events.push(steps.map((step) => step.status[0]).join("")));
+      expect(events).toEqual(["pppp", "rppp", "dppp", "drpp", "ddpp", "ddrp", "dddp", "dddr", "dddd"]);
+      expect((await f.read(id)).generationSteps.map((step: any) => step.status)).toEqual(["done", "done", "done", "done"]);
     } finally { await f.close(); }
   });
 });

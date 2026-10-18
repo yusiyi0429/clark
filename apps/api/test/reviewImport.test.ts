@@ -14,6 +14,7 @@ import type { MonthlyReviewAgents, MonthlyReviewDraftInput, MonthlyReviewSummary
 import { migrate } from "../src/migrate.js";
 import { PERSONAL_REVIEW_DRAFT_PROMPT } from "../src/personalReviewAgent.js";
 import type { PersonalReviewDraftInput } from "../src/personalReviews.js";
+import { citedReview } from "./personalReviewFixtures.js";
 import { createTestApp, createTestDb, TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -133,17 +134,21 @@ describe("reviews:import CLI", () => {
   }, 60_000);
 });
 
-type Calls = { personal: PersonalReviewDraftInput[]; draft: MonthlyReviewDraftInput[]; summarize: MonthlyReviewSummaryInput[]; plan: MonthlyDraftAgentInput[] };
+type Calls = { personal: PersonalReviewDraftInput[]; personalOut: TMonthlyReviewSelfReview[]; draft: MonthlyReviewDraftInput[]; summarize: MonthlyReviewSummaryInput[]; plan: MonthlyDraftAgentInput[] };
 const SUMMARY: TMonthlyReviewSummaryCandidate = {
   overall: "九月方法收敛，交付有差距", judgments: [{ title: "判断 1", body: "依据 1" }], nextFocus: ["补齐交付"],
   ltcoSuggestion: { change: false, proposedLtco: "三年成为行业第一", rationale: "战略没有变化", units: [] },
 };
 
 async function setup(dir: string) {
-  const calls: Calls = { personal: [], draft: [], summarize: [], plan: [] };
+  const calls: Calls = { personal: [], personalOut: [], draft: [], summarize: [], plan: [] };
   const failing = new Set<string>();
   const agents: MonthlyReviewAgents = {
-    personal: { async generate(input) { calls.personal.push(input); return { candidate: coAgentReview(input.importedMaterials.length ? "按材料" : "自动") }; } },
+    personal: { async generate(input) {
+      calls.personal.push(input);
+      calls.personalOut.push(citedReview(input, input.importedMaterials.length ? "按材料" : "自动"));
+      return { candidate: calls.personalOut.at(-1) };
+    } },
     draft: { async generate(input) {
       calls.draft.push(input);
       if (failing.has(input.subject.id)) throw new Error("模型超时");
@@ -221,7 +226,8 @@ describe("导入飞书复盘后的完整流程", () => {
         expect(c.calls.personal).toHaveLength(3);
         expect(c.calls.personal[2]).toMatchObject({ personId: TEST_MEMBER.personId, importedMaterials: MATERIALS });
         expect(PERSONAL_REVIEW_DRAFT_PROMPT).toContain("材料是周复盘与任务卡，不是本人写的月度复盘");
-        expect(await c.personal(TEST_MEMBER.personId)).toMatchObject({ status: "draft", draft_source: "co_agent", self_review: coAgentReview("按材料") });
+        expect(c.calls.personalOut[2].overall.text).toContain("按材料");
+        expect(await c.personal(TEST_MEMBER.personId)).toMatchObject({ status: "draft", draft_source: "co_agent", self_review: c.calls.personalOut[2] });
         const memberReview = (await c.get(c.member, `/api/personal-reviews/${(await c.personal(TEST_MEMBER.personId)).id}`)).review;
         expect(memberReview).toMatchObject({ materialCount: 2, draftSource: "co_agent" });
         // 导入的复盘不走负责人提交：负责人没有复盘项待办
@@ -237,7 +243,7 @@ describe("导入飞书复盘后的完整流程", () => {
         const growthInput = c.calls.draft.find((input) => input.subject.id === "growth")!;
         expect(growthInput.personalReviews).toEqual(expect.arrayContaining([
           expect.objectContaining({ personId: IMPORTED, status: "submitted", selfReview: feishuReview("测试丙") }),
-          expect.objectContaining({ personId: TEST_MEMBER.personId, status: "submitted", selfReview: coAgentReview("按材料") }),
+          expect.objectContaining({ personId: TEST_MEMBER.personId, status: "submitted", selfReview: c.calls.personalOut[2] }),
         ]));
         c.failing.clear();
         const failed = (await c.get(c.ceo, `/api/monthly-review-items/${(await c.item("cap-agents")).id}`)).item;

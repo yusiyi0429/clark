@@ -19405,6 +19405,8 @@
           "draftSource",
           "draftError",
           "selfReview",
+          "generationSteps",
+          "editedFields",
           "missions",
           "toolConnected",
           "materialCount",
@@ -19625,6 +19627,89 @@
               }
             ]
           },
+          "generationSteps": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "label",
+                "status"
+              ],
+              "properties": {
+                "id": {
+                  "anyOf": [
+                    {
+                      "const": "missions",
+                      "type": "string"
+                    },
+                    {
+                      "const": "weekly",
+                      "type": "string"
+                    },
+                    {
+                      "const": "collector",
+                      "type": "string"
+                    },
+                    {
+                      "const": "draft",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "label": {
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "running",
+                      "type": "string"
+                    },
+                    {
+                      "const": "done",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failed",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "result": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "editedFields": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "const": "overall",
+                  "type": "string"
+                },
+                {
+                  "const": "judgments",
+                  "type": "string"
+                },
+                {
+                  "const": "nextFocus",
+                  "type": "string"
+                },
+                {
+                  "const": "escalations",
+                  "type": "string"
+                }
+              ]
+            }
+          },
           "missions": {
             "type": "array",
             "items": {
@@ -19739,6 +19824,63 @@
                 }
               }
             }
+          }
+        }
+      },
+      "PersonalReviewGenerationStep": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "const": "missions",
+                "type": "string"
+              },
+              {
+                "const": "weekly",
+                "type": "string"
+              },
+              {
+                "const": "collector",
+                "type": "string"
+              },
+              {
+                "const": "draft",
+                "type": "string"
+              }
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "pending",
+                "type": "string"
+              },
+              {
+                "const": "running",
+                "type": "string"
+              },
+              {
+                "const": "done",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ]
+          },
+          "result": {
+            "type": "string"
           }
         }
       },
@@ -20261,6 +20403,8 @@
               "draftSource",
               "draftError",
               "selfReview",
+              "generationSteps",
+              "editedFields",
               "missions",
               "toolConnected",
               "materialCount",
@@ -20480,6 +20624,89 @@
                     "type": "null"
                   }
                 ]
+              },
+              "generationSteps": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "status"
+                  ],
+                  "properties": {
+                    "id": {
+                      "anyOf": [
+                        {
+                          "const": "missions",
+                          "type": "string"
+                        },
+                        {
+                          "const": "weekly",
+                          "type": "string"
+                        },
+                        {
+                          "const": "collector",
+                          "type": "string"
+                        },
+                        {
+                          "const": "draft",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "pending",
+                          "type": "string"
+                        },
+                        {
+                          "const": "running",
+                          "type": "string"
+                        },
+                        {
+                          "const": "done",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "editedFields": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "const": "overall",
+                      "type": "string"
+                    },
+                    {
+                      "const": "judgments",
+                      "type": "string"
+                    },
+                    {
+                      "const": "nextFocus",
+                      "type": "string"
+                    },
+                    {
+                      "const": "escalations",
+                      "type": "string"
+                    }
+                  ]
+                }
               },
               "missions": {
                 "type": "array",
@@ -20635,6 +20862,8 @@
               "draftSource",
               "draftError",
               "selfReview",
+              "generationSteps",
+              "editedFields",
               "missions",
               "toolConnected",
               "materialCount",
@@ -20854,6 +21083,89 @@
                     "type": "null"
                   }
                 ]
+              },
+              "generationSteps": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "status"
+                  ],
+                  "properties": {
+                    "id": {
+                      "anyOf": [
+                        {
+                          "const": "missions",
+                          "type": "string"
+                        },
+                        {
+                          "const": "weekly",
+                          "type": "string"
+                        },
+                        {
+                          "const": "collector",
+                          "type": "string"
+                        },
+                        {
+                          "const": "draft",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "pending",
+                          "type": "string"
+                        },
+                        {
+                          "const": "running",
+                          "type": "string"
+                        },
+                        {
+                          "const": "done",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "editedFields": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "const": "overall",
+                      "type": "string"
+                    },
+                    {
+                      "const": "judgments",
+                      "type": "string"
+                    },
+                    {
+                      "const": "nextFocus",
+                      "type": "string"
+                    },
+                    {
+                      "const": "escalations",
+                      "type": "string"
+                    }
+                  ]
+                }
               },
               "missions": {
                 "type": "array",
