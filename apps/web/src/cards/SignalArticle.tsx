@@ -160,7 +160,7 @@ export function SignalArticle({
               ))}
               {reading.excerpt && !reading.fullText && !reading.excerptNote ? (
                 <p className={s.partial}>
-                  以上是来源给出的摘要，没有读到全文。
+                  仅摘要 ·
                   <a href={reading.url} target="_blank" rel="noopener noreferrer">去原网页读全文</a>
                 </p>
               ) : null}
@@ -196,7 +196,7 @@ export function SignalArticle({
           </div>
           {state.dismissed ? (
             <p className={s.hiddenNote} role="status">
-              这条已从阅读列表隐藏；需要时可以恢复。
+              已隐藏
             </p>
           ) : null}
           {error ? (

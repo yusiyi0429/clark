@@ -28,7 +28,6 @@
 .stage { display: grid; gap: 14px; min-width: 0; animation: enter 280ms cubic-bezier(.22, 1, .36, 1) both; }
 @keyframes enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .question { margin: 0; font-size: 22px; font-weight: 600; line-height: 1.4; letter-spacing: -.01em; color: var(--ink, #1c2030); }
-.hint { margin: 0; color: #8a909b; font-size: 13px; line-height: 1.6; }
 .srOnly { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* 第一步：大字号下划线输入，像在纸上写一句话。 */

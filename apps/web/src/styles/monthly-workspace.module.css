@@ -15,13 +15,10 @@
   color:var(--heavy-ink);animation:enter .32s cubic-bezier(.2,.8,.2,1) both;
 }
 .preflight{--accent:69 91 142}.monthly{--accent:150 103 23}
-/* 月度工作区作为面板子节点：页头固定、正文自己滚动、签发条贴底（clark 展开页的层次）。 */
+/* 月度工作区作为面板子节点。 */
 .workspace{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;border-radius:inherit;background:#f7f7f8;color:#1d1d1f}
-/* 页头：clark 月度协商的暖灰渐变（heavy/monthly：115deg #efeeea → #f6f5f2），ContextMark monthly。 */
-.header{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:100px;box-sizing:border-box;padding:25px 26px;flex-shrink:0;border-bottom:1px solid #e7e4dc;background:linear-gradient(115deg,#efeeea,#f6f5f2);-webkit-backdrop-filter:blur(30px) saturate(1.28);backdrop-filter:blur(30px) saturate(1.28);box-shadow:inset 0 1px #fff}
-.identity{display:flex;align-items:center;gap:13px;min-width:0}
-.workspace .eyebrow{display:block;font-size:11px;font-weight:400;color:#77777d;margin-bottom:5px}
-.workspace .header h1{font-size:21px;line-height:1.45;letter-spacing:-.025em;font-weight:600;margin:0}
+/* 页头是 DetailFrame 的标准页头；电脑上阅读页排成一列：页头、正文（自己滚）、签发条贴底。手持（≤959）阅读页整页滚。 */
+@media(min-width:960px){.workspace :global(.ts-detail){display:flex;flex-direction:column;overflow:hidden}}
 .body{flex:1;min-height:0;display:block;padding-bottom:0}
 /* pen 月度计划：结果 Column(fill) + 待办反馈 Column(600)，gap 24，正文整块滚动。 */
 .materials{height:100%;overflow:auto;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) 600px;align-content:start;gap:24px;padding:20px 40px 90px;scrollbar-width:thin;scrollbar-color:#bdc2cb transparent;overscroll-behavior:contain;box-sizing:border-box}
@@ -76,7 +73,6 @@
 .workspace .recipientEdit{flex:none;border:0;background:none;padding:0;font:inherit;color:#0068d9;cursor:pointer}
 .workspace .recipientEdit:hover{text-decoration:underline}
 .workspace .commitInfo span{font-size:12px;color:#5a5a60}
-.workspace .commitInfo small{font-size:11px;color:#6e6e73}
 /* pen：保存计划为次按钮，签发计划为 accent 主按钮（未确认签发时禁用）。 */
 .workspace .save{display:flex;align-items:center;justify-content:center;flex:none;min-height:36px;border:1px solid #d9dde5;border-radius:10px;background:#fff;padding:10px 18px;font-size:13px;font-weight:500;color:#303741;white-space:nowrap;transition:background .14s,border-color .14s}
 .workspace .save:hover:not(:disabled){background:#f7f8fa;border-color:#c4c9d2}
@@ -105,10 +101,10 @@
 .workspace button:focus-visible,.workspace summary:focus-visible{outline:3px solid #007aff70;outline-offset:3px}
 @container(max-width:1240px){.materials{grid-template-columns:minmax(0,1fr);padding:20px 24px 64px}}
 @container(max-width:720px){
-  .header{padding:20px 24px 16px}.materials{padding:24px 20px 64px}
+  .materials{padding:24px 20px 64px}
 }
 @media(max-width:959px){
-  .header{min-height:0;padding:16px}.body{display:block;padding-bottom:0;position:relative}
+  .body{display:block;padding-bottom:0;position:relative}
   .materials{padding:24px 16px 64px}
   .commitArea{gap:10px;padding:12px 16px 14px}.workspace .commitArea>.edit{flex:1 1 100%}.workspace .receipt{margin:0 16px 20px}.workspace .reviewButton{margin-left:auto}.workspace .message{max-width:94%}
 }
@@ -119,19 +115,16 @@
 @keyframes enter{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
 @keyframes leave{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(-10px)}}
 @media(prefers-reduced-motion:reduce){.workspace,.closing{animation:none}.workspace *{transition:none!important;scroll-behavior:auto!important}}
-@media(prefers-reduced-transparency:reduce){.workspace,.header{backdrop-filter:none;background:#f8f9fb}}
+@media(prefers-reduced-transparency:reduce){.workspace{backdrop-filter:none;background:#f8f9fb}}
 @media(prefers-contrast:more){
   .workspace{--heavy-secondary:#424954;--heavy-note:#4c5562;--heavy-separator:#77818c;border-color:#77818c;backdrop-filter:none;background:#f8f9fb}
-  .header{backdrop-filter:none;background:#f1f3f6}
   .workspace textarea,.workspace .reviewButton,.workspace .section{border-color:#737d8b}.workspace .submit:disabled{color:#535c69;border-color:#89929f}
 }
 @media(forced-colors:active){
-  .workspace,.header,.materials{background:Canvas;color:CanvasText;backdrop-filter:none;box-shadow:none}
+  .workspace,.materials{background:Canvas;color:CanvasText;backdrop-filter:none;box-shadow:none}
   .workspace button,.workspace textarea,.workspace .message{border:1px solid ButtonText;box-shadow:none}
   .workspace .submit{background:Highlight;color:HighlightText}
 }
-
-.header>[data-reference-id]{margin-left:auto}
 
 /* 新 Web：月度编辑字段沿用材料页输入控件，不引入第二套表单样式。 */
 .workspace .notes{display:flex;flex-direction:column;gap:3px;min-width:0}
@@ -151,8 +144,5 @@
 .workspace .notes select{display:block;width:100%;box-sizing:border-box;border:1px solid #e1e4e9;border-radius:10px;background:#f5f7fa;font:inherit;font-size:12px;line-height:1.7;padding:7px 10px;color:#5a5a60}
 .workspace .notes select:not(:disabled){border-color:#d9dde5;background:#fff;color:#1d1d1f}
 .workspace .notes select:focus{outline:none;border-color:#3285de;box-shadow:0 0 0 3px #007aff20}
-/* 手机：和其他详情页一样，返回在页头左上角，对象标记让出宽度给标题。 */
-.close .backIcon{display:none}
-@media(max-width:959px){.header{justify-content:flex-start;gap:8px;padding:12px 14px 12px 10px}.header>.close{order:-1}.close .closeIcon{display:none}.close .backIcon{display:block}.identity>[data-context-mark]{display:none}}
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
-@media(max-width:959px){.eyebrow.eyebrow,.workspace .commitInfo.commitInfo>small,.workspace .receipt.receipt>small{font-size:13px}.check.check>span,.workspace .commitInfo.commitInfo>span{font-size:14px}}
+@media(max-width:959px){.workspace .receipt.receipt>small{font-size:13px}.check.check>span,.workspace .commitInfo.commitInfo>span{font-size:14px}}

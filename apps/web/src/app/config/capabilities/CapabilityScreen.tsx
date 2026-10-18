@@ -122,19 +122,17 @@ export function CapabilityScreen({ capabilities, battlefields, people = [] }: TC
         <button type="button" className={c.back} onClick={() => router.push("/config")}>
           <ChevronLeft aria-hidden="true" /> 返回配置
         </button>
-        <span className={c.draft}>配置变更写入业务库并同步 Radar 监测范围</span>
       </nav>
 
       <header className={c.header}>
         <p className={c.eyebrow}>CAPABILITY</p>
         <h1 className={c.title}>能力管理</h1>
-        <p className={c.subtitle}>编辑已登记的组织能力：编号、分组、六个月目标与主要支撑。修改后首页能力面板立即更新。</p>
       </header>
 
       <section className={g.card}>
         <div className={c.cardHead}>
           <h2>能力</h2>
-          <p>{capabilities.length} 项已登记能力 · 点击编辑</p>
+          <p>{capabilities.length} 项</p>
         </div>
         <div className={g.list}>
           {capabilities.map((item) => (
@@ -172,7 +170,7 @@ export function CapabilityScreen({ capabilities, battlefields, people = [] }: TC
               <input value={draft.group} onChange={(event) => setDraft({ ...draft, group: event.target.value })} />
             </label>
             <label className={g.field}>
-              <span>负责人（月末复盘由他提交）</span>
+              <span>负责人</span>
               <Select aria-label="负责人" value={draft.ownerId} onChange={(ownerId) => setDraft({ ...draft, ownerId })}
                 options={[{ value: "", label: "待指派" }, ...people.map((person) => ({ value: person.personId, label: person.displayName }))]} />
             </label>
@@ -181,7 +179,7 @@ export function CapabilityScreen({ capabilities, battlefields, people = [] }: TC
               <textarea value={draft.sixMonthOutcome} onChange={(event) => setDraft({ ...draft, sixMonthOutcome: event.target.value })} />
             </label>
             <div className={g.field}>
-              <span>主要支撑（战略锚点 / 战场）</span>
+              <span>主要支撑</span>
               <div className={g.support} role="group" aria-label="主要支撑">
                 {options.map((option) => (
                   <label key={option.key} className={g.supportRow}>
@@ -203,7 +201,7 @@ export function CapabilityScreen({ capabilities, battlefields, people = [] }: TC
         ) : null}
         <div className={g.footer}>
           <span className={g.footerHint} data-kind={status?.kind} role="status">
-            {status?.message ?? "修改后立即生效，影响首页分组与议题归属显示"}
+            {status?.message}
           </span>
           <button type="button" className={c.primary} onClick={() => router.push("/config")}>
             完成

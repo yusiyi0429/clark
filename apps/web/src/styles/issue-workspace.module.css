@@ -56,10 +56,9 @@
 /* 当前判断：和正文同为 16/400 主墨，不放大字号；靠节标题 600、下方多留的 8px 和下一节前 40px 的留白突出。 */
 .judgment>p{margin:0;font-size:var(--doc-type-body);line-height:var(--doc-lh-body);font-weight:var(--doc-weight-regular);letter-spacing:0;color:var(--doc-ink-1)}.judgment>ul{margin:0;padding-left:20px;font-size:var(--doc-type-body);line-height:var(--doc-lh-body);font-weight:var(--doc-weight-regular);letter-spacing:0;color:var(--doc-ink-1)}.judgment>ul>li+li{margin-top:8px}.judgment strong{font-weight:var(--doc-weight-strong)}.judgment>p+p,.judgment>p+ul,.judgment>ul+p{margin-top:8px}.judgment+.judgment{margin-top:32px}.judgment>button{margin-top:16px}
 .judgment{padding-bottom:8px}.judgment+.discussion{margin-top:40px}
-.discussion{margin-top:32px;border-top:1px solid var(--doc-rule);padding-top:24px}.discussion>header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px}.discussion>header h2{margin:0 0 4px}.discussion>header p{margin:0;color:var(--doc-ink-2);font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta)}
+.discussion{margin-top:32px;border-top:1px solid var(--doc-rule);padding-top:24px}.discussion>header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px}.discussion>header h2{margin:0 0 4px}
 /* 右上角的状态（与你一起想 / 已记录 / 15:00 讨论）是标签：12px、次墨、浅灰底，和「雷达」小标签同一种。 */
 .discussion>header>span{flex:none;margin-top:3px;border-radius:4px;background:var(--doc-tag-wash);color:var(--doc-ink-2);padding:0 6px;font-size:var(--doc-type-tag);line-height:var(--doc-lh-tag);font-weight:var(--doc-weight-regular)}
-.discussion>small{display:block;margin-top:12px;color:var(--doc-ink-2);font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta)}
 /* 01–03：不是按钮，不画框；一条发丝线隔开，编号列和「判断的依据」同宽同色。 */
 .options{list-style:none;margin:0;padding:0}.options li{display:flex;align-items:baseline;padding:8px 0;color:var(--doc-ink-1);font-size:var(--doc-type-body);line-height:var(--doc-lh-body)}.options li+li{border-top:1px solid var(--doc-rule)}.options li>span{flex:none;width:36px;color:var(--doc-ink-3);font-size:var(--doc-type-meta);line-height:var(--doc-lh-meta);font-variant-numeric:tabular-nums}.options li>p{flex:1;min-width:0;margin:0}
 /* 已形成的决定：不画绿框绿底，和 01–03 同一种发丝线列表；勾是次墨。 */

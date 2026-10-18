@@ -107,7 +107,6 @@ export function ThreadMembersMenu({ objectType, objectId, viewerId, members, onC
             <Modal.CloseTrigger aria-label="关闭" />
             <Modal.Header><Modal.Heading>邀请成员</Modal.Heading></Modal.Header>
             <Modal.Body>
-              <p className={s.muted}>新成员可查看此前的全部讨论。可填写邀请原因，Co-Agent 据此向新成员说明背景。</p>
               <div className={s.people} role="group" aria-label="选择同事">{people.map((person) => <label key={person.personId}><input type="checkbox" aria-label={person.displayName} checked={selected.includes(person.personId)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, person.personId] : current.filter((id) => id !== person.personId))} />{person.displayName}</label>)}</div>
               {people.length === 0 ? <p className={s.muted}>暂无可邀请的同事。</p> : null}
               <textarea className={s.note} value={note} maxLength={200} rows={3} placeholder="邀请原因（可选）" aria-label="邀请原因" onChange={(event) => setNote(event.target.value)} />

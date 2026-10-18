@@ -35,7 +35,7 @@ describe("当前流程的任务起草状态", () => {
   });
   it("正在起草保留明确进度，完成后移除起草状态且不提供旧流程操作", () => {
     const html = render({ ...failedPayload, round: { ...failedPayload.round, phase: "drafting", retryDraftAction: null } });
-    expect(html).toContain("Co-Agent 正在起草任务"); expect(html).toContain("完成后，任务正文会在这里更新。"); expect(ui.buttons.has("重试起草")).toBe(false);
+    expect(html).toContain("Co-Agent 正在起草任务"); expect(html).not.toContain("完成后，任务正文会在这里更新。"); expect(ui.buttons.has("重试起草")).toBe(false);
     ui.buttons.clear(); expect(render({ ...personalPayload, round: { ...personalPayload.round, phase: "draft" } })).toBe("");
     expect(ui.buttons.size).toBe(0);
   });

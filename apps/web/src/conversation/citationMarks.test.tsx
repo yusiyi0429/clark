@@ -130,6 +130,27 @@ describe("标记的浮层与打开原文", () => {
     expect(canOpenMark({ kind: "url", url: "https://example.com" }, { linked: false, surface: "rail" })).toBe(true);
   });
 
+  it("原话（cite:chat:）、个人记忆（cite:pmem:）认得：句末是标记，浮层写类别；没有原文页可开，放大时也不交给依据面板", () => {
+    const panel = vi.fn();
+    registerCitationPanel(panel);
+    const html = render("你上个月说过渠道下沉先做县城样板[原话](cite:chat:7d1c0f7e-3c1b-4f4e-9b1e-1c2d3e4f5a6b#12)。", true);
+    expect(marks(html)).toEqual(['data-cite-mark="ref"']);
+    expect(html).toContain('data-cite-ref="chat:7d1c0f7e-3c1b-4f4e-9b1e-1c2d3e4f5a6b#12"');
+    expect(citationLocator("chat:7d1c0f7e-3c1b-4f4e-9b1e-1c2d3e4f5a6b#12")).toBe("原话");
+    expect(citationLocator("pmem:5f0e8c1a-2b3c-4d5e-8f90-a1b2c3d4e5f6")).toBe("个人记忆");
+    for (const href of ["cite:chat:7d1c0f7e-3c1b-4f4e-9b1e-1c2d3e4f5a6b#12", "cite:pmem:5f0e8c1a-2b3c-4d5e-8f90-a1b2c3d4e5f6"]) {
+      const target = markTarget(href);
+      expect(target.kind).toBe("ref");
+      expect(canOpenMark(target, { linked: true, surface: "rail", expand: vi.fn() })).toBe(false);
+      openMark(target, { linked: true, surface: "rail" }, null);
+    }
+    expect(panel).not.toHaveBeenCalled();
+    // 企业知识章节仍是 memory:，不受影响。
+    expect(citationLocator("memory:kd-principles.md#s2")).toBe("企业知识 · 第 2 节");
+    // 句子成分里的原话出处放大时也只是文字，不是点了没反应的按钮。
+    expect(render("据[你 9 月 3 日的原话](cite:chat:c1#3)，先做样板。", true)).toContain('data-cite="plain"');
+  });
+
   it("排着的那一条 2 秒内没放大成就作废", () => {
     openMark(markTarget("cite:memory:a.md#s1"), { linked: false, surface: "sheet", expand: vi.fn() }, null);
     expect(takePendingCitation(Date.now() + 2_500)).toBeNull();

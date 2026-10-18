@@ -6,7 +6,7 @@ import { Button, ToggleButton, ToggleButtonGroup } from "@heroui/react";
 import { RefreshCw, SlidersHorizontal } from "lucide-react";
 import { browserApi, type Card } from "@/lib/api/client";
 import { MenuDialog } from "@/components/AccountMenu";
-import { DetailHeader } from "@/components/shell/DetailHeader";
+import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { SignalStoryView } from "@/cards/SignalStory";
 import { RadarSettingsEditor } from "./RadarSettingsEditor";
@@ -34,14 +34,14 @@ const POLL_MS = 5_000;
 const POLL_LIMIT_MS = 180_000;
 const runKey = (run: PersonalRadarRun | null | undefined) => (run ? `${run.status}:${run.queuedAt ?? run.startedAt ?? ""}` : "");
 
-/** 空态：关着、失败、第一次还没扫完、扫完没有结果、筛选下没有，各说各的。 */
+/** 空态：关着、失败、第一次还没扫完、扫完没有结果、筛选下没有，各写各的状态；只有失败带原因。 */
 function emptyState(radar: MyRadar, hasSignals: boolean, filter: Filter, scanning: boolean) {
   const run = radar.lastRun;
-  if (hasSignals && filter !== "全部") return { kind: "filter" as const, title: "这里暂时没有信号", text: "换一个筛选看看。" };
-  if (!radar.enabled) return { kind: "off" as const, title: RADAR_COPY.off, text: "关着时不再扫描；已经收到的信号仍留在这里。" };
+  if (hasSignals && filter !== "全部") return { kind: "filter" as const, title: "这里暂时没有信号", text: "" };
+  if (!radar.enabled) return { kind: "off" as const, title: RADAR_COPY.off, text: "" };
   if (run?.status === "failed" && !scanning) return { kind: "failed" as const, title: "扫描失败", text: failureReason(run) };
-  if (scanning || !run || scanActive(run)) return { kind: "first" as const, title: RADAR_COPY.firstScan, text: "扫完后会自动出现在这里。" };
-  return { kind: "empty" as const, title: RADAR_COPY.empty, text: "雷达每天按你的方向看一遍；也可以在「设置」里改改方向和来源。" };
+  if (scanning || !run || scanActive(run)) return { kind: "first" as const, title: RADAR_COPY.firstScan, text: "" };
+  return { kind: "empty" as const, title: RADAR_COPY.empty, text: "" };
 }
 
 /**
@@ -140,12 +140,10 @@ export function MemberRadarScreen({ radar, signals }: { radar: MyRadar; signals:
 
   return (
     <>
-      <DetailHeader
-        mark="signal"
-        eyebrow="外部信息 · 只给你看"
+      <DetailFrame
         title="我的雷达"
-        closeLabel="关闭我的雷达"
-        onClose={close}
+        subtitle="外部信息"
+        onBack={close}
         actions={
           <div className={f.headerActions}>
             <Button size="sm" variant="tertiary" aria-label="雷达设置" aria-haspopup="dialog" onPress={() => setSettings({ enable: false })}>
@@ -160,7 +158,7 @@ export function MemberRadarScreen({ radar, signals }: { radar: MyRadar; signals:
             ) : null}
           </div>
         }
-      />
+      >
       <div className={w.expandedScroll}>
         <div className={f.feed} data-testid="member-radar">
           {!radar.enabled && listed.length ? (
@@ -220,7 +218,7 @@ export function MemberRadarScreen({ radar, signals }: { radar: MyRadar; signals:
             <div className={f.empty} data-empty={empty.kind}>
               <div className={`${f.orbit} ${empty.kind === "first" && scanning ? f.spinning : ""}`} aria-hidden="true" />
               <h2>{empty.title}</h2>
-              <p>{empty.text}</p>
+              {empty.text ? <p>{empty.text}</p> : null}
               {empty.kind === "off" ? (
                 <Button className={f.emptyAction} variant="primary" onPress={() => setSettings({ enable: true })}>
                   打开
@@ -234,6 +232,7 @@ export function MemberRadarScreen({ radar, signals }: { radar: MyRadar; signals:
           ) : null}
         </div>
       </div>
+      </DetailFrame>
       {settings ? (
         <MenuDialog title="我的雷达" wide onClose={() => setSettings(null)}>
           <RadarSettingsEditor mode="person" enable={settings.enable} />

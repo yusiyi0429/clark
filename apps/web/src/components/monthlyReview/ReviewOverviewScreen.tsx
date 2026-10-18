@@ -79,11 +79,11 @@ export function ReviewOverviewScreen({ initial }: { initial: TMonthlyReviewRespo
   const itemHref = (itemId: string) => `/reviews/items/${itemId}`;
 
   if (!review) return <div className={s.screen}>
-    <DetailFrame title={title} subtitle="月末复盘" onBack={() => workspace.close()}>
+    <DetailFrame title={title} subtitle="月末复盘" onBack={() => workspace.close()}
+      actions={<span className={r.chip} data-tone="wait">未开始</span>}>
       <div className={s.content}><div className={s.document}>
         {error ? <p className={s.error} role="alert">{error}</p> : null}
-        <p className={`${s.readonly} ${s.readonly}`}>{month} 月复盘还没有开始。月底倒数第 3 天会自动开启；也可以现在开始：每个战场和能力域会各有一项复盘，由负责人的 Agent 先起草，负责人修改后提交给你确认。</p>
-        {open ? <Button variant="primary" className={s.primary} isDisabled={pending} onPress={() => void perform(open, undefined, "复盘已开启，Co-Agent 正在为每个负责人起草自评。")}>{pending ? "正在开启…" : `开始 ${month} 月复盘`}</Button> : null}
+        {open ? <Button variant="primary" className={s.primary} isDisabled={pending} onPress={() => void perform(open, undefined, "复盘已开启")}>{pending ? "正在开启…" : `开始 ${month} 月复盘`}</Button> : null}
       </div></div>
     </DetailFrame>
   </div>;
@@ -109,11 +109,11 @@ export function ReviewOverviewScreen({ initial }: { initial: TMonthlyReviewRespo
     // 保存后版本变了：重新读取，再用最新的确认动作。
     const { data } = await browserApi.GET("/api/monthly-reviews/{period}", { params: { path: { period: view.period } } });
     const latest = data?.review?.actions.find((candidate) => candidate.actionType === "monthly-review.confirm_summary") ?? confirmSummary;
-    if (await perform(latest, undefined, "公司复盘已确认。下一步审视公司长期目标。")) setSummaryDraft(null);
+    if (await perform(latest, undefined, "公司复盘已确认")) setSummaryDraft(null);
   };
 
   return <div className={s.screen}>
-    <DetailFrame title={title} subtitle="月末复盘 · 先复盘，再拆解" onBack={() => workspace.close()}
+    <DetailFrame title={title} subtitle="月末复盘" onBack={() => workspace.close()}
       actions={<span className={r.chip} data-tone={review.status === "closed" ? "done" : "wait"}>{statusText}</span>}>
       <div className={s.content}><div className={s.document}>
         {error || notice ? <div className={r.messages}>
@@ -139,14 +139,14 @@ export function ReviewOverviewScreen({ initial }: { initial: TMonthlyReviewRespo
                   {row.lead ? <span className={r.rowLead}>{row.lead}</span> : null}
                   {row.assessmentStatus === "ready" && row.assessmentOverall ? <span className={r.rowAssess}>Co-Agent：{row.assessmentOverall}{row.deviationCount ? ` · ${row.deviationCount} 处偏差` : ""}</span>
                     : row.assessmentStatus === "running" || row.assessmentStatus === "pending" ? <span className={r.rowAssess}>Co-Agent 正在评估…</span>
-                    : row.assessmentStatus === "failed" ? <span className={r.rowAssess}>评估没有成功，可以打开重试</span> : null}
+                    : row.assessmentStatus === "failed" ? <span className={r.rowAssess}>评估没有成功</span> : null}
                 </Button>
                 {confirm || giveBack ? <span className={r.rowActions}>
                   {confirm ? <Button variant="primary" className={s.decisionPrimary} isDisabled={pending} onPress={() => void perform(confirm, undefined, `已确认 ${row.subjectName}。`)}>确认</Button> : null}
                   {giveBack ? <Button variant="ghost" className={s.secondary} isDisabled={pending} onPress={() => setReturning({ itemId: row.itemId, reason: "" })}>打回</Button> : null}
                 </span> : null}
                 {returning?.itemId === row.itemId && giveBack ? <div className={`${r.returnBox} ${r.rowReturn}`}>
-                  <label htmlFor={`return-${row.itemId}`}>打回原因（负责人会看到）</label>
+                  <label htmlFor={`return-${row.itemId}`}>打回原因</label>
                   <textarea id={`return-${row.itemId}`} value={returning.reason} maxLength={500} autoFocus onChange={(event) => setReturning({ itemId: row.itemId, reason: event.target.value })} />
                   <div className={s.inlineActions}>
                     <Button variant="primary" className={s.decisionPrimary} isDisabled={pending || !returning.reason.trim()} onPress={() => void perform(giveBack, { reason: returning.reason.trim() }, `已打回 ${row.subjectName}。`).then((ok) => { if (ok) setReturning(null); })}>打回</Button>
@@ -190,8 +190,8 @@ export function ReviewOverviewScreen({ initial }: { initial: TMonthlyReviewRespo
                   {review.ltco.suggestion
                     ? <p>{review.ltco.suggestion.change || review.ltco.suggestion.units.length
                         ? `建议修订${review.ltco.suggestion.change ? "公司长期目标" : ""}${review.ltco.suggestion.change && review.ltco.suggestion.units.length ? "和" : ""}${review.ltco.suggestion.units.length ? ` ${review.ltco.suggestion.units.length} 个战场长期目标` : ""}。`
-                        : "建议保持。"}{review.ltco.suggestion.rationale}<span className={s.hint}>（确认公司复盘后，在长期目标审视里逐条决定）</span></p>
-                    : <p className={s.hint}>汇总完成后给出。</p>}
+                        : "建议保持。"}{review.ltco.suggestion.rationale}</p>
+                    : <p className={s.hint}>待汇总</p>}
                   <div className={r.bar}>
                     {confirmSummary ? <Button variant="primary" className={s.primary} isDisabled={pending || summaryInvalid} onPress={() => void confirmCompany()}>确认公司复盘</Button> : null}
                     {summaryDirty ? <Button variant="ghost" className={s.secondary} isDisabled={pending || summaryInvalid} onPress={() => void perform(updateSummary, summaryInput, "已保存。").then((ok) => { if (ok) setSummaryDraft(null); })}>保存</Button> : null}
@@ -206,7 +206,7 @@ export function ReviewOverviewScreen({ initial }: { initial: TMonthlyReviewRespo
         </div> : null}
         {review.status === "closed" && review.ltco.decision ? <section className={r.section} aria-label="长期目标审视">
           <h2>长期目标审视</h2>
-          <p className={s.hint}>{monthDayTime(review.ltco.decision.decidedAt)} {review.ltco.decision.decision === "keep" ? "决定保持不变" : `已修订${review.ltco.decision.ltcoAfter !== review.ltco.decision.ltcoBefore ? "公司长期目标" : ""}${review.ltco.decision.units.length ? `${review.ltco.decision.ltcoAfter !== review.ltco.decision.ltcoBefore ? "和" : ""} ${review.ltco.decision.units.length} 个战场长期目标` : ""}`}。{monthOf(review.nextPeriod)} 月计划草案{review.ltco.decision.planExisted ? "之前已经有了，可以在计划页重新生成" : "已开始生成"}。</p>
+          <p className={s.hint}>{monthDayTime(review.ltco.decision.decidedAt)} {review.ltco.decision.decision === "keep" ? "决定保持不变" : `已修订${review.ltco.decision.ltcoAfter !== review.ltco.decision.ltcoBefore ? "公司长期目标" : ""}${review.ltco.decision.units.length ? `${review.ltco.decision.ltcoAfter !== review.ltco.decision.ltcoBefore ? "和" : ""} ${review.ltco.decision.units.length} 个战场长期目标` : ""}`}。{monthOf(review.nextPeriod)} 月计划草案{review.ltco.decision.planExisted ? "已存在" : "已开始生成"}。</p>
           <div className={r.bar}><Button variant="primary" className={s.primary} onPress={() => workspace.navigate(`/plans/${review.nextPeriod}`)}>查看 {monthOf(review.nextPeriod)} 月计划</Button></div>
         </section> : null}
         <FeedbackLink />

@@ -104,7 +104,6 @@ export function AcceptDialog({ detail, materials, onClose, onDone, onStale, onOp
   const agentWrote = drafting === "agent";
   return <MenuDialog title={`验收「${task.title}」`} wide onClose={onClose}>
     <div className={a.body}>
-      <p className={a.lead}>{agentWrote ? "Agent 对照完成标准逐条查过了。" : ""}你确认之后，这件事才算完成。</p>
       {drafting === "loading" ? <p className={a.thinking} role="status"><span className={a.pulse} aria-hidden />我的 Agent 在对照完成标准</p> : null}
 
       <section className={a.block} aria-label="对照完成标准">
@@ -122,11 +121,11 @@ export function AcceptDialog({ detail, materials, onClose, onDone, onStale, onOp
             {material || check?.evidence ? <p className={a.evidence}>依据：{material ? <button type="button" onClick={() => { onClose(); onOpenMaterial(material.id); }}>{material.fileName}</button> : null}
               {material && check?.evidence ? "，" : ""}{check?.evidence}</p> : null}
           </div>;
-        })}</div> : <p className={a.muted}>没写完成标准，按交付结果和结论验收。</p>}
+        })}</div> : <p className={a.muted}>没写完成标准</p>}
       </section>
 
       {materials.length ? <section className={a.block} aria-label="交付结果">
-        <div className={a.head}><h3>交付结果</h3><span className={a.note}>没选的作为参考材料留下</span></div>
+        <div className={a.head}><h3>交付结果</h3></div>
         <div className={a.deliverables}>{materials.map((material) => <Checkbox key={material.id} className={a.deliverable}
           isSelected={deliverables.has(material.id)} onChange={(selected) => pick(material.id, selected)}>
           <Checkbox.Content className={a.deliverableText}>
@@ -137,7 +136,7 @@ export function AcceptDialog({ detail, materials, onClose, onDone, onStale, onOp
       </section> : null}
 
       <TextField className={a.verdict} value={verdict} onChange={(value) => { touched.current = true; setVerdict(value); }} maxLength={200}>
-        <div className={a.head}><Label className={a.verdictLabel}>一句结论</Label><span className={a.note}>{agentWrote && verdict ? "Agent 起草，可以改" : "可不填"}</span></div>
+        <div className={a.head}><Label className={a.verdictLabel}>一句结论</Label><span className={a.note}>{agentWrote && verdict ? "Agent 起草" : "可不填"}</span></div>
         <TextArea rows={2} placeholder="这件事交付了什么" />
       </TextField>
 

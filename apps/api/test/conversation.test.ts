@@ -43,7 +43,7 @@ describe("Conversation HTTP/SSE public seam", () => {
         headers: { cookie },
       });
       expect(history.statusCode).toBe(200);
-      expect(history.json()).toEqual({ scope: "global", messages: [], archivedCount: 0 });
+      expect(history.json()).toEqual({ scope: "global", messages: [] });
     } finally {
       await t.close();
     }

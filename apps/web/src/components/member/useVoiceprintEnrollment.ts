@@ -220,7 +220,7 @@ export function useVoiceprintEnrollment({
     setStatus(body);
     setClip(null);
     setPhase("idle");
-    setNote("已录好。之后的会议录音里，天枢会用它预填你是哪位说话人。");
+    setNote("已录好");
     return body;
   };
 
@@ -229,7 +229,7 @@ export function useVoiceprintEnrollment({
     const result = await browserApi.DELETE("/api/me/voiceprint").catch(() => null);
     if (!mounted.current) return;
     if (!result?.response.ok) return setError("没删掉，请重试。");
-    setNote("已删除。腾讯云和天枢里都不再保存你的声纹。");
+    setNote("已删除");
     void load();
   };
 

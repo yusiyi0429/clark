@@ -152,17 +152,15 @@ export function CreateTaskScreen() {
             <span className={c.srOnly}>执行事项标题</span>
             <input name="title" className={c.titleInput} value={title} onChange={(event) => change(setTitle, event.target.value)} placeholder="整理 Q3 流失客户名单" maxLength={120} autoFocus autoComplete="off" />
           </label>
-          <p className={c.hint}>用一句短话说清要完成的事，回车继续。</p>
         </> : null}
 
         {current === "mission" ? <>
           <h2 className={c.question}>推进哪个 Mission？</h2>
-          <p className={c.hint}>挂上之后，这件事会出现在那个 Mission 的进展里；不挂就是独立事项。</p>
           <div className={c.link}>
             <div className={c.switchRow}>
               <span className={c.switchText}>
                 <span id="create-task-link">挂在 Mission 下</span>
-                <small>{loading ? "正在读取你的 Mission…" : linked ? "推进下面选中的 Mission" : "现在是独立事项"}</small>
+                {loading ? <small>正在读取你的 Mission…</small> : linked ? null : <small>独立事项</small>}
               </span>
               <button type="button" role="switch" aria-checked={linked} aria-labelledby="create-task-link" className={c.switch} disabled={loading} onClick={toggle} autoFocus><span aria-hidden /></button>
             </div>
@@ -183,7 +181,7 @@ export function CreateTaskScreen() {
             <DateChoice label="截止" value={dueDate} quick={{ value: "", label: "还没想好" }} min={startDate} onChange={(value) => change(setDueDate, value)} />
           </div>
           <label className={c.field}>
-            <span className={c.label}>完成标准<small className={c.optional}>可不填 · 一行一条，验收时逐条对照</small></span>
+            <span className={c.label}>完成标准<small className={c.optional}>可不填</small></span>
             <textarea className={c.input} rows={3} value={doneDefinition} onChange={(event) => change(setDoneDefinition, event.target.value)} placeholder={"例如：一页结论\n支撑结论的依据"} maxLength={500} />
           </label>
         </> : null}
