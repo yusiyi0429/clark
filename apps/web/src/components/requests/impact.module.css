@@ -24,6 +24,18 @@
 .targetTitle { min-width: 0; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .faceBar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 4px; border-top: 1px solid var(--hairline); }
 
+/* 文档变更卡：继续用旧版的那一行（到哪天 + 理由），选过之后的结果。 */
+.keep { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; }
+.keepField { display: inline-flex; align-items: center; gap: 8px; }
+.keepReason { flex: 1 1 200px; min-width: 0; height: 40px; }
+.choice { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-right: auto; color: var(--confirmed); font-size: 14px; font-weight: 600; }
+.choice[data-choice='keep'] { color: #8a5a00; }
+.choice small { color: var(--ink-muted); font-size: 13px; font-weight: 400; }
+.docLink { display: inline-flex; align-items: center; gap: 3px; color: var(--brand-deep); text-decoration: none; }
+.docLink:hover { text-decoration: underline; text-underline-offset: 3px; }
+.docLink svg { flex: none; }
+.factNote { margin-left: 8px; color: var(--ink-faint); font-size: 13px; }
+
 /* 前因后果：原生 details，收起时只有一行。 */
 .more { min-width: 0; border-bottom: 1px solid var(--hairline); }
 .more > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; color: var(--ink); font-size: 15px; font-weight: 600; cursor: pointer; list-style: none; }
@@ -50,6 +62,8 @@
   .impact { font-size: 16px; }
   .due { margin-left: 0; }
   .faceBar > * { flex: 1; }
+  .keep > * { flex: 1 1 100%; }
+  .keepField { justify-content: space-between; }
   .facts > div { grid-template-columns: 64px minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .more > summary svg { transition: none; } }

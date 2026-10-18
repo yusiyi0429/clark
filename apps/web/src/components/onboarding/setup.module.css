@@ -68,6 +68,7 @@
 .rowMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 .chip { display: inline-flex; align-items: center; min-height: 20px; padding: 0 7px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--onboarding-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .chip[data-tone="blue"] { background: #edf4ff; color: #2369d4; }
+.chip[data-tone="amber"] { background: #fff4e0; color: #8a5a00; text-decoration: none; }
 .mono { min-width: 0; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--onboarding-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .empty { display: grid; place-items: center; min-height: 120px; color: var(--onboarding-faint); font-size: 14px; }
 .listFoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--rule); }

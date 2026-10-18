@@ -18,7 +18,7 @@ type Navigate = (href: string, origin?: Element | null) => void;
 /** qa：点开直接落到问答区（有问题等我回答时）。 */
 type Notice = { id: string; title: string; detail: string; tone: "amber" | "neutral"; qa?: boolean };
 
-/** 会后影响卡（kind = impact）：还没处理的、或有更新没看的；单独一组，在请求上面。 */
+/** 影响卡（kind = impact，会后决定或文档变更推来的）：还没处理的、或有更新没看的；单独一组，在请求上面。 */
 export function impactNotices(inbox: TRequestListItem[]): Notice[] {
   return inbox.filter((item) => item.kind === "impact" && (item.myStatus === "pending" || item.unread)).map((item) => ({
     id: item.id, title: item.title, tone: item.unread ? "amber" : "neutral", detail: [item.initiatorName, monthDayTime(item.sentAt)].filter(Boolean).join(" · "),
@@ -78,10 +78,10 @@ export function RequestNotices({ base, currentHref, onNavigate }: { base: string
   return (
     <>
     {impacts.length ? (
-      <HeroCard<"section"> render={(props) => <section {...props} />} className={n.card} data-notice="impacts" aria-label="会后影响">
+      <HeroCard<"section"> render={(props) => <section {...props} />} className={n.card} data-notice="impacts" aria-label="影响">
         <HeroCard.Header<"header"> render={(props) => <header {...props} />} className={n.glassHeader}>
           <span className={`${n.glyph} ${s.glyph}`} aria-hidden="true"><Waypoints size={17} /></span>
-          <span className={n.identity}><strong>会后影响<b className={n.count}>{impacts.length}</b></strong></span>
+          <span className={n.identity}><strong>影响<b className={n.count}>{impacts.length}</b></strong></span>
         </HeroCard.Header>
         <div className={n.tray}>{impacts.map(row)}</div>
       </HeroCard>

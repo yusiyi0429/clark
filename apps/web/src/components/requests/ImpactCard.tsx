@@ -4,16 +4,19 @@
  * 影响卡（会后推给受影响的人，走送达通道 kind = impact）。参照 Linear 的 Inbox 详情：卡面只说和你有什么关系、要你做什么；
  * 前因后果、原话出处、可以问谁收在下面一块（GitHub 的 details 式折叠）；卡下可以直接追问自己的 Agent，问答留在卡上。
  * 「Agent 代判，Host 尚未确认」与更正都是状态标，不另写解释。
+ * 文档变更（⑧）的卡：修订卡「知道了」把依据换到新版；取代卡「切换到新版」或「继续用旧版」（展开到哪天、一句理由），都写回本人的工作依据清单。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Check, ChevronDown, CircleOff, ListTodo, SquareCheck, Target } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Check, ChevronDown, CircleOff, History, ListTodo, SquareCheck, Target } from "lucide-react";
 import { Button } from "ts-design/primitives";
-import type { TImpactCardView, TImpactTarget, TRequestStep, TRequestView } from "@warmap/contracts";
+import type { TImpactCardView, TImpactDocTrigger, TImpactTarget, TRequestStep, TRequestView } from "@warmap/contracts";
 import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { browserApi, type Card } from "@/lib/api/client";
+import { DatePicker } from "@/components/ui/DatePicker";
+import { companyToday } from "@/components/ui/pickerFormat";
 import { monthDayTime } from "@/lib/companyTime";
-import { REQUESTS_CHANGED, RequestApiError, requestError, runRequestAction } from "./requestApi";
+import { REQUESTS_CHANGED, RequestApiError, chooseImpactBasis, requestError, runRequestAction } from "./requestApi";
 import { RequestSteps, runningSteps } from "./RequestSteps";
 import s from "./requests.module.css";
 import i from "./impact.module.css";
@@ -35,8 +38,9 @@ async function settle<T>(promise: Promise<{ data?: T; response: Response; error?
   return result.data;
 }
 
-export function impactStatus(card: Pick<TImpactCardView, "status">, request: Pick<TRequestView, "viewer">): { label: string; tone: "wait" | "done" | "draft" } {
+export function impactStatus(card: Pick<TImpactCardView, "status" | "basisChoice">, request: Pick<TRequestView, "viewer">): { label: string; tone: "wait" | "done" | "draft" } {
   if (card.status === "irrelevant") return { label: "和我无关", tone: "draft" };
+  if (card.basisChoice) return card.basisChoice.choice === "keep" ? { label: `用旧版到 ${dueLabel(card.basisChoice.until ?? "").replace(/前$/, "")}`, tone: "done" } : { label: "已换新版", tone: "done" };
   return request.viewer.myStatus === "done" ? { label: "已知悉", tone: "done" } : { label: "待处理", tone: "wait" };
 }
 
@@ -77,8 +81,20 @@ export function ImpactCardScreen({ request: initialRequest, base }: { request: T
     finally { setBusy(false); }
   };
 
+  const doc = card?.trigger.kind === "doc_change" ? card.trigger : null;
+  const choose = async (body: { choice: "switch" } | { choice: "keep"; until: string; reason: string }) => {
+    if (!card || busy) return;
+    setBusy(true); setError("");
+    try {
+      setCard(await chooseImpactBasis(card.id, body));
+      setRequest({ ...request, actions: [], viewer: { ...request.viewer, myStatus: "done" } });
+    } catch (cause) { setError(requestError(cause, "没有成功，请重试")); }
+    finally { setBusy(false); }
+  };
   const status = card ? impactStatus(card, request) : null;
-  const subtitle = card ? `会后影响 · ${card.trigger.meetingTitle} · ${monthDayTime(request.sentAt)}` : "会后影响";
+  const subtitle = !card ? "" : card.trigger.kind === "doc_change"
+    ? `文档变更 · ${card.trigger.newDoc.title} · ${monthDayTime(request.sentAt)}`
+    : `会后影响 · ${card.trigger.meetingTitle} · ${monthDayTime(request.sentAt)}`;
   return (
     <div className={s.screen}>
       <DetailFrame title={request.title} subtitle={subtitle} onBack={() => workspace.close()}
@@ -88,7 +104,10 @@ export function ImpactCardScreen({ request: initialRequest, base }: { request: T
             {error ? <p className={s.error} role="alert">{error}</p> : null}
             {card ? (
               <>
-                <ImpactFace card={card} actions={card.status === "irrelevant" ? null : (
+                <ImpactFace card={card} actions={card.status === "irrelevant" ? null : doc ? (
+                  <DocChoice card={card} trigger={doc} busy={busy} onChoose={(body) => void choose(body)}
+                    irrelevant={card.status === "delivered" && !card.basisChoice ? () => void irrelevant() : undefined} />
+                ) : (
                   <>
                     {markDone ? <Button variant="primary" className={s.primary} isDisabled={busy} onPress={() => void acknowledge()}><Check size={16} aria-hidden="true" />{markDone.label}</Button> : null}
                     {card.status === "delivered" ? <Button variant="ghost" className={s.ghost} isDisabled={busy} onPress={() => void irrelevant()}><CircleOff size={15} aria-hidden="true" />和我无关</Button> : null}
@@ -141,20 +160,90 @@ export function ImpactFace({ card, actions }: { card: TImpactCardView; actions?:
   );
 }
 
-/** 点开：前因后果、会上定了什么、原话出处、可以问谁。 */
+/**
+ * 文档变更卡的处理键：修订「知道了」；取代「切换到新版」或「继续用旧版」，后者在卡下展开到哪天和一句理由（参照 GitHub 的 review 提交：选项和输入在同一处）。
+ * 选过之后换成一行结果。
+ */
+function DocChoice({ card, trigger, busy, onChoose, irrelevant }: {
+  card: TImpactCardView; trigger: TImpactDocTrigger; busy: boolean;
+  onChoose: (body: { choice: "switch" } | { choice: "keep"; until: string; reason: string }) => void; irrelevant?: () => void;
+}) {
+  const [keeping, setKeeping] = useState(false);
+  const [until, setUntil] = useState(trigger.transitionUntil ?? "");
+  const [reason, setReason] = useState("");
+  if (card.basisChoice) {
+    return (
+      <span className={i.choice} data-choice={card.basisChoice.choice}>
+        {card.basisChoice.choice === "keep" ? <History size={15} aria-hidden="true" /> : <Check size={15} aria-hidden="true" />}
+        {card.basisChoice.choice === "keep" ? `用旧版到 ${dueLabel(card.basisChoice.until ?? "").replace(/前$/, "")}` : "已换到新版"}
+        {card.basisChoice.reason ? <small>{card.basisChoice.reason}</small> : null}
+      </span>
+    );
+  }
+  const ghostIrrelevant = irrelevant ? <Button variant="ghost" className={s.ghost} isDisabled={busy} onPress={irrelevant}><CircleOff size={15} aria-hidden="true" />和我无关</Button> : null;
+  if (trigger.relation === "revision") {
+    return <>{ghostIrrelevant}<Button variant="primary" className={s.primary} isDisabled={busy} onPress={() => onChoose({ choice: "switch" })}><Check size={16} aria-hidden="true" />知道了</Button></>;
+  }
+  return (
+    <>
+      {keeping ? (
+        <div className={i.keep}>
+          <label className={i.keepField}><span className={s.fieldName}>用到</span>
+            <DatePicker label="用旧版到" size="compact" value={until} min={companyToday()} onChange={setUntil} /></label>
+          <input className={i.keepReason} aria-label="理由" placeholder="理由" maxLength={200} value={reason} disabled={busy} onChange={(event) => setReason(event.target.value)} />
+          <Button variant="ghost" className={s.ghost} isDisabled={busy} onPress={() => setKeeping(false)}>取消</Button>
+          <Button variant="primary" className={s.primary} isDisabled={busy || !until || !reason.trim()} onPress={() => onChoose({ choice: "keep", until, reason: reason.trim() })}>
+            <Check size={16} aria-hidden="true" />确定
+          </Button>
+        </div>
+      ) : (
+        <>
+          {ghostIrrelevant}
+          <Button variant="ghost" className={s.ghost} isDisabled={busy} onPress={() => setKeeping(true)}><History size={15} aria-hidden="true" />继续用旧版</Button>
+          <Button variant="primary" className={s.primary} isDisabled={busy} onPress={() => onChoose({ choice: "switch" })}><Check size={16} aria-hidden="true" />切换到新版</Button>
+        </>
+      )}
+    </>
+  );
+}
+
+const DocTitle = ({ title, url }: { title: string; url: string | null }) => url
+  ? <a className={i.docLink} href={url} target="_blank" rel="noreferrer">{title}<ArrowUpRight size={13} aria-hidden="true" /></a> : <>{title}</>;
+
+/** 文档变更：新旧两份、谁发布谁确认、生效与过渡期。 */
+function DocFacts({ trigger }: { trigger: TImpactDocTrigger }) {
+  const day = (value: string | null) => value ? dueLabel(value).replace(/前$/, "") : null;
+  const version = trigger.oldDoc.revision ?? (trigger.oldDoc.revisedAt ? `${monthDayTime(trigger.oldDoc.revisedAt).split(" ")[0]} 的版本` : null);
+  const rows: [string, React.ReactNode][] = [
+    [trigger.relation === "revision" ? "新版本" : "新文档", <DocTitle key="new" title={trigger.newDoc.title} url={trigger.newDoc.url} />],
+    ["你依据的", <><DocTitle key="old" title={trigger.oldDoc.title} url={trigger.oldDoc.url} />{version ? <span className={i.factNote}>{version}</span> : null}</>],
+    ["发布", trigger.authorName],
+    ...(trigger.decidedByName !== trigger.authorName ? [["确认", trigger.decidedByName] as [string, React.ReactNode]] : []),
+    ...(day(trigger.effectiveOn) ? [["生效", day(trigger.effectiveOn)] as [string, React.ReactNode]] : []),
+    ...(day(trigger.transitionUntil) ? [["过渡期到", day(trigger.transitionUntil)] as [string, React.ReactNode]] : []),
+    ...(trigger.keepExisting === null ? [] : [["已有工作", trigger.keepExisting ? "沿用旧版" : "换成新版"] as [string, React.ReactNode]]),
+  ];
+  return <dl className={i.facts}>{rows.map(([term, value]) => <div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}</dl>;
+}
+
+/** 点开：前因后果、会上定了什么（或文档怎么变了）、原话出处、可以问谁。 */
 function ImpactContext({ card, base }: { card: TImpactCardView; base: string }) {
   const workspace = useWorkspace();
-  const decidedBy = card.trigger.decidedBy === "ceo" ? "CEO 确认" : card.trigger.decidedBy === "agent" ? "Agent 代判" : "主持人确认";
+  const trigger = card.trigger;
+  const decidedBy = trigger.kind === "doc_change" ? "" : trigger.decidedBy === "ceo" ? "CEO 确认" : trigger.decidedBy === "agent" ? "Agent 代判" : "主持人确认";
+  const prompt = trigger.kind === "doc_change" ? `关于《${trigger.newDoc.title}》：` : `关于会上定的「${trigger.statement}」：`;
   return (
     <details className={i.more}>
       <summary><span>前因后果</span><ChevronDown size={16} aria-hidden="true" /></summary>
       <div className={i.moreBody}>
         {card.why ? <p className={i.why}>{card.why}</p> : null}
-        <dl className={i.facts}>
-          <div><dt>会上定了</dt><dd>{card.trigger.statement}</dd></div>
-          <div><dt>拍板</dt><dd>{decidedBy}</dd></div>
-          <div><dt>会议</dt><dd>{card.trigger.meetingTitle}</dd></div>
-        </dl>
+        {trigger.kind === "doc_change" ? <DocFacts trigger={trigger} /> : (
+          <dl className={i.facts}>
+            <div><dt>会上定了</dt><dd>{trigger.statement}</dd></div>
+            <div><dt>拍板</dt><dd>{decidedBy}</dd></div>
+            <div><dt>会议</dt><dd>{trigger.meetingTitle}</dd></div>
+          </dl>
+        )}
         {card.sources.map((source) => (
           <figure key={`${source.turnId}:${source.quote}`} className={i.quote}>
             <blockquote>{source.quote}</blockquote>
@@ -166,7 +255,7 @@ function ImpactContext({ card, base }: { card: TImpactCardView; base: string }) 
             <span className={s.fieldName}>可以问</span>
             {card.askWho.map((person) => (
               <button key={person.personId} type="button" className={s.personChip} aria-pressed="false"
-                onClick={(event) => workspace.navigate(`${base}/new?prompt=${encodeURIComponent(`关于会上定的「${card.trigger.statement}」：`)}`, event.currentTarget)}>
+                onClick={(event) => workspace.navigate(`${base}/new?prompt=${encodeURIComponent(prompt)}`, event.currentTarget)}>
                 <span className={s.avatar} aria-hidden="true">{person.displayName.trim().slice(-1)}</span>
                 {person.displayName}
               </button>

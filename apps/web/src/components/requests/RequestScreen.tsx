@@ -20,6 +20,7 @@ import type { Card } from "@/lib/api/client";
 import { draftAnswer, draftRequest, prepareQuestion, readRequest, requestError, runRequestAction } from "./requestApi";
 import { RequestSteps, runningSteps } from "./RequestSteps";
 import { ImpactCardScreen } from "./ImpactCard";
+import { DocChangeScreen } from "./DocChange";
 import s from "./requests.module.css";
 
 const NO_CARDS: Card[] = [];
@@ -41,6 +42,8 @@ export function statusTone(request: Pick<TRequestView, "status">, mine: TRequest
 export function RequestScreen({ initialRequest, base, initialPrompt }: { initialRequest: TRequestView | null; base: string; initialPrompt?: string }) {
   // 影响卡也走送达通道，二级页换成影响卡的样子。
   if (initialRequest?.kind === "impact") return <ImpactCardScreen request={initialRequest} base={base} />;
+  // 文档变更：作者确认修订 / 取代哪份，或旧文档负责人回答还有效吗。
+  if (initialRequest?.kind === "doc_change") return <DocChangeScreen request={initialRequest} />;
   return <RelayRequestScreen initialRequest={initialRequest} base={base} initialPrompt={initialPrompt} />;
 }
 
