@@ -20,6 +20,10 @@ export const WorkBasisCandidate = Type.Object({
   revisedBy: Type.Union([Type.String(), Type.Null()]),
   /** 已经入库（本人确认过）。 */
   confirmed: Type.Boolean(),
+  /** 已被作者确认取代：新文档。 */
+  supersededBy: Type.Union([Type.Object({ title: Type.String({ minLength: 1 }), url: Type.String({ minLength: 1 }) }, { additionalProperties: false }), Type.Null()]),
+  /** 被取代后本人选了继续用旧版到这天（YYYY-MM-DD）。 */
+  keepUntil: Type.Union([Type.String(), Type.Null()]),
 }, { additionalProperties: false });
 export const WorkBasisResponse = Type.Object({ candidates: Type.Array(WorkBasisCandidate) }, { additionalProperties: false });
 export const UpdateWorkBasisRequest = Type.Object({

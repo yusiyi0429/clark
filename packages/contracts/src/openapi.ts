@@ -7,6 +7,7 @@ import {
 } from "./requests.js";
 import { MeetingDecisionView, MeetingDecisionReviewRequest, MeetingDecisionResponse, MyMeetingDecisionsResponse } from "./meetingDecisions.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
+import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
   ActionDescriptor,
   ApiError,
@@ -764,6 +765,44 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/ImpactIrrelevantRequest" }),
           responses: { "200": { description: "影响卡", content: { "application/json": { schema: { $ref: "#/components/schemas/ImpactCardResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/impact-cards/{id}/basis": {
+        post: {
+          operationId: "chooseImpactCardBasis", summary: "文档变更影响卡：切换到新版，或继续用旧版到某天并写理由；更新本人的工作依据清单",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ImpactBasisChoiceRequest" }),
+          responses: { "200": { description: "影响卡", content: { "application/json": { schema: { $ref: "#/components/schemas/ImpactCardResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/requests/{id}/doc-change": {
+        get: {
+          operationId: "getRequestDocChange", summary: "kind = doc_change 的请求对应的文档变更；只有作者和被问的旧文档负责人看得到",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "文档变更", content: { "application/json": { schema: { $ref: "#/components/schemas/DocChangeResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/doc-changes/{id}/confirm": {
+        post: {
+          operationId: "confirmDocChange", summary: "作者勾选新文档修订或取代了哪几份（空即都不是），确认后推影响卡",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ConfirmDocChangeRequest" }),
+          responses: { "200": { description: "文档变更", content: { "application/json": { schema: { $ref: "#/components/schemas/DocChangeResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/doc-changes/{id}/ask-owners": {
+        post: {
+          operationId: "askDocChangeOwners", summary: "作者确认不了：改问候选旧文档的负责人「你的《A》还有效吗？」",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "文档变更", content: { "application/json": { schema: { $ref: "#/components/schemas/DocChangeResponse" } } } }, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/doc-changes/{id}/owner-answer": {
+        post: {
+          operationId: "answerDocChangeOwner", summary: "旧文档负责人回答还有效或已被取代；已被取代时推影响卡",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/DocOwnerAnswerRequest" }),
+          responses: { "200": { description: "文档变更", content: { "application/json": { schema: { $ref: "#/components/schemas/DocChangeResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/me/meeting-decisions": {
@@ -2850,6 +2889,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ImpactAskRequest: ImpactAskRequest as JsonSchema,
         ImpactAskResponse: ImpactAskResponse as JsonSchema,
         ImpactIrrelevantRequest: ImpactIrrelevantRequest as JsonSchema,
+        ImpactBasisChoiceRequest: ImpactBasisChoiceRequest as JsonSchema,
+        DocChangeView: DocChangeView as JsonSchema,
+        DocChangeResponse: DocChangeResponse as JsonSchema,
+        ConfirmDocChangeRequest: ConfirmDocChangeRequest as JsonSchema,
+        DocOwnerAnswerRequest: DocOwnerAnswerRequest as JsonSchema,
       },
     },
   };

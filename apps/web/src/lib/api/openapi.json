@@ -3333,6 +3333,346 @@
         }
       }
     },
+    "/api/impact-cards/{id}/basis": {
+      "post": {
+        "operationId": "chooseImpactCardBasis",
+        "summary": "文档变更影响卡：切换到新版，或继续用旧版到某天并写理由；更新本人的工作依据清单",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImpactBasisChoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "影响卡",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImpactCardResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/requests/{id}/doc-change": {
+      "get": {
+        "operationId": "getRequestDocChange",
+        "summary": "kind = doc_change 的请求对应的文档变更；只有作者和被问的旧文档负责人看得到",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "文档变更",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocChangeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doc-changes/{id}/confirm": {
+      "post": {
+        "operationId": "confirmDocChange",
+        "summary": "作者勾选新文档修订或取代了哪几份（空即都不是），确认后推影响卡",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmDocChangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "文档变更",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocChangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doc-changes/{id}/ask-owners": {
+      "post": {
+        "operationId": "askDocChangeOwners",
+        "summary": "作者确认不了：改问候选旧文档的负责人「你的《A》还有效吗？」",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "文档变更",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocChangeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doc-changes/{id}/owner-answer": {
+      "post": {
+        "operationId": "answerDocChangeOwner",
+        "summary": "旧文档负责人回答还有效或已被取代；已被取代时推影响卡",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocOwnerAnswerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "文档变更",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocChangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/meeting-decisions": {
       "get": {
         "operationId": "listMyMeetingDecisions",
@@ -42457,7 +42797,9 @@
                 "origin",
                 "revisedAt",
                 "revisedBy",
-                "confirmed"
+                "confirmed",
+                "supersededBy",
+                "keepUntil"
               ],
               "properties": {
                 "key": {
@@ -42543,6 +42885,41 @@
                 },
                 "confirmed": {
                   "type": "boolean"
+                },
+                "supersededBy": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "title",
+                        "url"
+                      ],
+                      "properties": {
+                        "title": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "url": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "keepUntil": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -53538,6 +53915,10 @@
               {
                 "const": "supplement",
                 "type": "string"
+              },
+              {
+                "const": "doc_change",
+                "type": "string"
               }
             ]
           },
@@ -53918,6 +54299,10 @@
                   },
                   {
                     "const": "supplement",
+                    "type": "string"
+                  },
+                  {
+                    "const": "doc_change",
                     "type": "string"
                   }
                 ]
@@ -54352,6 +54737,10 @@
                   {
                     "const": "supplement",
                     "type": "string"
+                  },
+                  {
+                    "const": "doc_change",
+                    "type": "string"
                   }
                 ]
               },
@@ -54770,6 +55159,10 @@
               {
                 "const": "supplement",
                 "type": "string"
+              },
+              {
+                "const": "doc_change",
+                "type": "string"
               }
             ]
           },
@@ -54893,6 +55286,10 @@
                     },
                     {
                       "const": "supplement",
+                      "type": "string"
+                    },
+                    {
+                      "const": "doc_change",
                       "type": "string"
                     }
                   ]
@@ -55811,6 +56208,7 @@
           "superseded",
           "confidence",
           "planWrite",
+          "basisChoice",
           "questions",
           "requestId",
           "createdAt"
@@ -56027,72 +56425,222 @@
             }
           },
           "trigger": {
-            "additionalProperties": false,
-            "type": "object",
-            "required": [
-              "kind",
-              "id",
-              "revision",
-              "meetingId",
-              "meetingTitle",
-              "statement",
-              "tier",
-              "decidedBy"
-            ],
-            "properties": {
-              "kind": {
-                "const": "meeting_decision",
-                "type": "string"
-              },
-              "id": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "revision": {
-                "minimum": 0,
-                "type": "integer"
-              },
-              "meetingId": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "meetingTitle": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "statement": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "tier": {
-                "anyOf": [
-                  {
-                    "const": "strategic",
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "id",
+                  "revision",
+                  "meetingId",
+                  "meetingTitle",
+                  "statement",
+                  "tier",
+                  "decidedBy"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "meeting_decision",
                     "type": "string"
                   },
-                  {
-                    "const": "host",
+                  "id": {
+                    "minLength": 1,
                     "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "meetingId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "meetingTitle": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "statement": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "tier": {
+                    "anyOf": [
+                      {
+                        "const": "strategic",
+                        "type": "string"
+                      },
+                      {
+                        "const": "host",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "decidedBy": {
+                    "anyOf": [
+                      {
+                        "const": "host",
+                        "type": "string"
+                      },
+                      {
+                        "const": "ceo",
+                        "type": "string"
+                      },
+                      {
+                        "const": "agent",
+                        "type": "string"
+                      }
+                    ]
                   }
-                ]
+                }
               },
-              "decidedBy": {
-                "anyOf": [
-                  {
-                    "const": "host",
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "id",
+                  "relation",
+                  "newDoc",
+                  "oldDoc",
+                  "authorName",
+                  "decidedByName",
+                  "effectiveOn",
+                  "transitionUntil",
+                  "keepExisting"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "doc_change",
                     "type": "string"
                   },
-                  {
-                    "const": "ceo",
+                  "id": {
+                    "minLength": 1,
                     "type": "string"
                   },
-                  {
-                    "const": "agent",
+                  "relation": {
+                    "anyOf": [
+                      {
+                        "const": "revision",
+                        "type": "string"
+                      },
+                      {
+                        "const": "supersede",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "newDoc": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "title",
+                      "url"
+                    ],
+                    "properties": {
+                      "title": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "url": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "oldDoc": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "title",
+                      "url",
+                      "revision",
+                      "revisedAt"
+                    ],
+                    "properties": {
+                      "title": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "url": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "revision": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "revisedAt": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "authorName": {
+                    "minLength": 1,
                     "type": "string"
+                  },
+                  "decidedByName": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "effectiveOn": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "transitionUntil": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "keepExisting": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
-                ]
+                }
               }
-            }
+            ]
           },
           "agentJudged": {
             "type": "boolean"
@@ -56207,6 +56755,61 @@
               }
             ]
           },
+          "basisChoice": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "choice",
+                  "until",
+                  "reason",
+                  "at"
+                ],
+                "properties": {
+                  "choice": {
+                    "anyOf": [
+                      {
+                        "const": "switch",
+                        "type": "string"
+                      },
+                      {
+                        "const": "keep",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "until": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "at": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "questions": {
             "type": "array",
             "items": {
@@ -56286,6 +56889,7 @@
               "superseded",
               "confidence",
               "planWrite",
+              "basisChoice",
               "questions",
               "requestId",
               "createdAt"
@@ -56502,72 +57106,222 @@
                 }
               },
               "trigger": {
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                  "kind",
-                  "id",
-                  "revision",
-                  "meetingId",
-                  "meetingTitle",
-                  "statement",
-                  "tier",
-                  "decidedBy"
-                ],
-                "properties": {
-                  "kind": {
-                    "const": "meeting_decision",
-                    "type": "string"
-                  },
-                  "id": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "revision": {
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "meetingId": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "meetingTitle": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "statement": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "tier": {
-                    "anyOf": [
-                      {
-                        "const": "strategic",
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "id",
+                      "revision",
+                      "meetingId",
+                      "meetingTitle",
+                      "statement",
+                      "tier",
+                      "decidedBy"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "meeting_decision",
                         "type": "string"
                       },
-                      {
-                        "const": "host",
+                      "id": {
+                        "minLength": 1,
                         "type": "string"
+                      },
+                      "revision": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "meetingId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "meetingTitle": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "statement": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "tier": {
+                        "anyOf": [
+                          {
+                            "const": "strategic",
+                            "type": "string"
+                          },
+                          {
+                            "const": "host",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "decidedBy": {
+                        "anyOf": [
+                          {
+                            "const": "host",
+                            "type": "string"
+                          },
+                          {
+                            "const": "ceo",
+                            "type": "string"
+                          },
+                          {
+                            "const": "agent",
+                            "type": "string"
+                          }
+                        ]
                       }
-                    ]
+                    }
                   },
-                  "decidedBy": {
-                    "anyOf": [
-                      {
-                        "const": "host",
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "id",
+                      "relation",
+                      "newDoc",
+                      "oldDoc",
+                      "authorName",
+                      "decidedByName",
+                      "effectiveOn",
+                      "transitionUntil",
+                      "keepExisting"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "doc_change",
                         "type": "string"
                       },
-                      {
-                        "const": "ceo",
+                      "id": {
+                        "minLength": 1,
                         "type": "string"
                       },
-                      {
-                        "const": "agent",
+                      "relation": {
+                        "anyOf": [
+                          {
+                            "const": "revision",
+                            "type": "string"
+                          },
+                          {
+                            "const": "supersede",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "newDoc": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "title",
+                          "url"
+                        ],
+                        "properties": {
+                          "title": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "url": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "oldDoc": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "title",
+                          "url",
+                          "revision",
+                          "revisedAt"
+                        ],
+                        "properties": {
+                          "title": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "url": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "revision": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "revisedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "authorName": {
+                        "minLength": 1,
                         "type": "string"
+                      },
+                      "decidedByName": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "effectiveOn": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "transitionUntil": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "keepExisting": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
-                    ]
+                    }
                   }
-                }
+                ]
               },
               "agentJudged": {
                 "type": "boolean"
@@ -56674,6 +57428,61 @@
                             "type": "string"
                           }
                         ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "basisChoice": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "choice",
+                      "until",
+                      "reason",
+                      "at"
+                    ],
+                    "properties": {
+                      "choice": {
+                        "anyOf": [
+                          {
+                            "const": "switch",
+                            "type": "string"
+                          },
+                          {
+                            "const": "keep",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "until": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reason": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "at": {
+                        "minLength": 1,
+                        "type": "string"
                       }
                     }
                   },
@@ -56825,6 +57634,7 @@
               "superseded",
               "confidence",
               "planWrite",
+              "basisChoice",
               "questions",
               "requestId",
               "createdAt"
@@ -57041,72 +57851,222 @@
                 }
               },
               "trigger": {
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                  "kind",
-                  "id",
-                  "revision",
-                  "meetingId",
-                  "meetingTitle",
-                  "statement",
-                  "tier",
-                  "decidedBy"
-                ],
-                "properties": {
-                  "kind": {
-                    "const": "meeting_decision",
-                    "type": "string"
-                  },
-                  "id": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "revision": {
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "meetingId": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "meetingTitle": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "statement": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "tier": {
-                    "anyOf": [
-                      {
-                        "const": "strategic",
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "id",
+                      "revision",
+                      "meetingId",
+                      "meetingTitle",
+                      "statement",
+                      "tier",
+                      "decidedBy"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "meeting_decision",
                         "type": "string"
                       },
-                      {
-                        "const": "host",
+                      "id": {
+                        "minLength": 1,
                         "type": "string"
+                      },
+                      "revision": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "meetingId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "meetingTitle": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "statement": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "tier": {
+                        "anyOf": [
+                          {
+                            "const": "strategic",
+                            "type": "string"
+                          },
+                          {
+                            "const": "host",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "decidedBy": {
+                        "anyOf": [
+                          {
+                            "const": "host",
+                            "type": "string"
+                          },
+                          {
+                            "const": "ceo",
+                            "type": "string"
+                          },
+                          {
+                            "const": "agent",
+                            "type": "string"
+                          }
+                        ]
                       }
-                    ]
+                    }
                   },
-                  "decidedBy": {
-                    "anyOf": [
-                      {
-                        "const": "host",
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "id",
+                      "relation",
+                      "newDoc",
+                      "oldDoc",
+                      "authorName",
+                      "decidedByName",
+                      "effectiveOn",
+                      "transitionUntil",
+                      "keepExisting"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "doc_change",
                         "type": "string"
                       },
-                      {
-                        "const": "ceo",
+                      "id": {
+                        "minLength": 1,
                         "type": "string"
                       },
-                      {
-                        "const": "agent",
+                      "relation": {
+                        "anyOf": [
+                          {
+                            "const": "revision",
+                            "type": "string"
+                          },
+                          {
+                            "const": "supersede",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "newDoc": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "title",
+                          "url"
+                        ],
+                        "properties": {
+                          "title": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "url": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "oldDoc": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "title",
+                          "url",
+                          "revision",
+                          "revisedAt"
+                        ],
+                        "properties": {
+                          "title": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "url": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "revision": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "revisedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "authorName": {
+                        "minLength": 1,
                         "type": "string"
+                      },
+                      "decidedByName": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "effectiveOn": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "transitionUntil": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "keepExisting": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
-                    ]
+                    }
                   }
-                }
+                ]
               },
               "agentJudged": {
                 "type": "boolean"
@@ -57221,6 +58181,61 @@
                   }
                 ]
               },
+              "basisChoice": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "choice",
+                      "until",
+                      "reason",
+                      "at"
+                    ],
+                    "properties": {
+                      "choice": {
+                        "anyOf": [
+                          {
+                            "const": "switch",
+                            "type": "string"
+                          },
+                          {
+                            "const": "keep",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "until": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reason": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "at": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "questions": {
                 "type": "array",
                 "items": {
@@ -57283,6 +58298,848 @@
           "reason": {
             "maxLength": 500,
             "type": "string"
+          }
+        }
+      },
+      "ImpactBasisChoiceRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "choice"
+        ],
+        "properties": {
+          "choice": {
+            "anyOf": [
+              {
+                "const": "switch",
+                "type": "string"
+              },
+              {
+                "const": "keep",
+                "type": "string"
+              }
+            ]
+          },
+          "until": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          }
+        }
+      },
+      "DocChangeView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "newDoc",
+          "authorName",
+          "publishedAt",
+          "candidates",
+          "effectiveOn",
+          "transitionUntil",
+          "keepExisting",
+          "steps",
+          "pushed",
+          "decidedByName",
+          "viewer"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "finding",
+                "type": "string"
+              },
+              {
+                "const": "awaiting_author",
+                "type": "string"
+              },
+              {
+                "const": "asking_owner",
+                "type": "string"
+              },
+              {
+                "const": "confirmed",
+                "type": "string"
+              },
+              {
+                "const": "unrelated",
+                "type": "string"
+              }
+            ]
+          },
+          "newDoc": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "title",
+              "url",
+              "revisedAt"
+            ],
+            "properties": {
+              "title": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "url": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "revisedAt": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "authorName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "publishedAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "key",
+                "kind",
+                "title",
+                "url",
+                "ownerName",
+                "reason",
+                "sameDoc",
+                "dependents",
+                "suggested",
+                "relation",
+                "ownerAnswer"
+              ],
+              "properties": {
+                "key": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "material",
+                      "type": "string"
+                    },
+                    {
+                      "const": "feishu_doc",
+                      "type": "string"
+                    },
+                    {
+                      "const": "link",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "url": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "ownerName": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reason": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sameDoc": {
+                  "type": "boolean"
+                },
+                "dependents": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "suggested": {
+                  "anyOf": [
+                    {
+                      "const": "revision",
+                      "type": "string"
+                    },
+                    {
+                      "const": "supersede",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "relation": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "revision",
+                          "type": "string"
+                        },
+                        {
+                          "const": "supersede",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "ownerAnswer": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "asked",
+                          "type": "string"
+                        },
+                        {
+                          "const": "valid",
+                          "type": "string"
+                        },
+                        {
+                          "const": "superseded",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "effectiveOn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transitionUntil": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "keepExisting": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "label",
+                "status",
+                "result"
+              ],
+              "properties": {
+                "label": {
+                  "minLength": 1,
+                  "maxLength": 20,
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "done",
+                      "type": "string"
+                    },
+                    {
+                      "const": "current",
+                      "type": "string"
+                    },
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "result": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "pushed": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "decidedByName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "viewer": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "role",
+              "canDecide",
+              "canAskOwners",
+              "ownerKeys"
+            ],
+            "properties": {
+              "role": {
+                "anyOf": [
+                  {
+                    "const": "author",
+                    "type": "string"
+                  },
+                  {
+                    "const": "owner",
+                    "type": "string"
+                  }
+                ]
+              },
+              "canDecide": {
+                "type": "boolean"
+              },
+              "canAskOwners": {
+                "type": "boolean"
+              },
+              "ownerKeys": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "DocChangeResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "docChange"
+        ],
+        "properties": {
+          "docChange": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "status",
+              "newDoc",
+              "authorName",
+              "publishedAt",
+              "candidates",
+              "effectiveOn",
+              "transitionUntil",
+              "keepExisting",
+              "steps",
+              "pushed",
+              "decidedByName",
+              "viewer"
+            ],
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "finding",
+                    "type": "string"
+                  },
+                  {
+                    "const": "awaiting_author",
+                    "type": "string"
+                  },
+                  {
+                    "const": "asking_owner",
+                    "type": "string"
+                  },
+                  {
+                    "const": "confirmed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "unrelated",
+                    "type": "string"
+                  }
+                ]
+              },
+              "newDoc": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "title",
+                  "url",
+                  "revisedAt"
+                ],
+                "properties": {
+                  "title": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "url": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "revisedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              "authorName": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "publishedAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "key",
+                    "kind",
+                    "title",
+                    "url",
+                    "ownerName",
+                    "reason",
+                    "sameDoc",
+                    "dependents",
+                    "suggested",
+                    "relation",
+                    "ownerAnswer"
+                  ],
+                  "properties": {
+                    "key": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "material",
+                          "type": "string"
+                        },
+                        {
+                          "const": "feishu_doc",
+                          "type": "string"
+                        },
+                        {
+                          "const": "link",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "title": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "url": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "ownerName": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "sameDoc": {
+                      "type": "boolean"
+                    },
+                    "dependents": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "suggested": {
+                      "anyOf": [
+                        {
+                          "const": "revision",
+                          "type": "string"
+                        },
+                        {
+                          "const": "supersede",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "relation": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "const": "revision",
+                              "type": "string"
+                            },
+                            {
+                              "const": "supersede",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "ownerAnswer": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "const": "asked",
+                              "type": "string"
+                            },
+                            {
+                              "const": "valid",
+                              "type": "string"
+                            },
+                            {
+                              "const": "superseded",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "effectiveOn": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "transitionUntil": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "keepExisting": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "label",
+                    "status",
+                    "result"
+                  ],
+                  "properties": {
+                    "label": {
+                      "minLength": 1,
+                      "maxLength": 20,
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "done",
+                          "type": "string"
+                        },
+                        {
+                          "const": "current",
+                          "type": "string"
+                        },
+                        {
+                          "const": "pending",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "pushed": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "decidedByName": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "viewer": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "role",
+                  "canDecide",
+                  "canAskOwners",
+                  "ownerKeys"
+                ],
+                "properties": {
+                  "role": {
+                    "anyOf": [
+                      {
+                        "const": "author",
+                        "type": "string"
+                      },
+                      {
+                        "const": "owner",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "canDecide": {
+                    "type": "boolean"
+                  },
+                  "canAskOwners": {
+                    "type": "boolean"
+                  },
+                  "ownerKeys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ConfirmDocChangeRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "links"
+        ],
+        "properties": {
+          "links": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "key",
+                "relation"
+              ],
+              "properties": {
+                "key": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "relation": {
+                  "anyOf": [
+                    {
+                      "const": "revision",
+                      "type": "string"
+                    },
+                    {
+                      "const": "supersede",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "effectiveOn": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transitionUntil": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "keepExisting": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DocOwnerAnswerRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "answer"
+        ],
+        "properties": {
+          "key": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "const": "valid",
+                "type": "string"
+              },
+              {
+                "const": "superseded",
+                "type": "string"
+              }
+            ]
+          },
+          "effectiveOn": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transitionUntil": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "keepExisting": {
+            "type": "boolean"
           }
         }
       }

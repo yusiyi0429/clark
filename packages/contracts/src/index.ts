@@ -40,3 +40,4 @@ export * from "./progress.js";
 export * from "./issueDrafts.js";
 export * from "./meetingDecisions.js";
 export * from "./impact.js";
+export * from "./docChanges.js";

@@ -28,7 +28,7 @@ const MAX_PICK = 4;
 const DAY_MS = 86_400_000;
 const SHANGHAI_OFFSET_MS = 8 * 3_600_000;
 
-export const TODO_KIND_LABELS: Record<TRequestKind, string> = { relay: "传话", collection: "信息收集", impact: "影响", supplement: "补充请求" };
+export const TODO_KIND_LABELS: Record<TRequestKind, string> = { relay: "传话", collection: "信息收集", impact: "影响", supplement: "补充请求", doc_change: "文档变更" };
 
 /** 本人手上没完成的待办：发给本人、已发出、本人那一行还没标记完成的请求，新的在前。 */
 export async function listOpenTodos(q: Query, personId: string, names: Map<string, string>, limit = 50): Promise<OpenTodo[]> {

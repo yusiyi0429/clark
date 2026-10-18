@@ -111,9 +111,9 @@ describe("上手流程的采集器与两个清单", () => {
       const listed = (await call(f, f.member, "GET", "/api/me/work-basis")).json().candidates;
       expect(listed).toEqual([
         // 执行事项里的材料与链接按最近更新排在前面，之后是采集器盘点到的飞书文档。
-        { key: `feishu_doc:${feishuUrl}`, kind: "feishu_doc", title: "方法论 SSOT", url: feishuUrl, revision: null, origin: "task", revisedAt: null, revisedBy: null, confirmed: false },
-        { key: `material:${material}`, kind: "material", title: "M2 战略解码.md", url: `/me/tasks/${task.id}`, revision: "v7", origin: "task", revisedAt: null, revisedBy: null, confirmed: false },
-        { key: "feishu_doc:https://example.feishu.cn/wiki/WikiToken99", kind: "feishu_doc", title: "飞书知识库 · WikiToke", url: "https://example.feishu.cn/wiki/WikiToken99", revision: null, origin: "session", revisedAt: null, revisedBy: null, confirmed: false },
+        { key: `feishu_doc:${feishuUrl}`, kind: "feishu_doc", title: "方法论 SSOT", url: feishuUrl, revision: null, origin: "task", revisedAt: null, revisedBy: null, confirmed: false, supersededBy: null, keepUntil: null },
+        { key: `material:${material}`, kind: "material", title: "M2 战略解码.md", url: `/me/tasks/${task.id}`, revision: "v7", origin: "task", revisedAt: null, revisedBy: null, confirmed: false, supersededBy: null, keepUntil: null },
+        { key: "feishu_doc:https://example.feishu.cn/wiki/WikiToken99", kind: "feishu_doc", title: "飞书知识库 · WikiToke", url: "https://example.feishu.cn/wiki/WikiToken99", revision: null, origin: "session", revisedAt: null, revisedBy: null, confirmed: false, supersededBy: null, keepUntil: null },
       ]);
       expect((await call(f, f.member, "PUT", "/api/me/work-basis", { keys: ["material:nope"] })).statusCode).toBe(400);
       const saved = await call(f, f.member, "PUT", "/api/me/work-basis", { keys: [`material:${material}`, `feishu_doc:${feishuUrl}`] });
@@ -161,7 +161,7 @@ describe("上手流程的采集器与两个清单", () => {
     const client = {
       getDocMetas: async (token: string, docs: unknown) => {
         asked.push({ token, docs });
-        return [{ token: "AbCdEfGh123", type: "docx" as const, title: "M2 战略解码", modifiedAt: new Date("2026-10-16T08:00:00.000Z"), modifiedBy: "ou_editor" }];
+        return [{ token: "AbCdEfGh123", type: "docx" as const, title: "M2 战略解码", modifiedAt: new Date("2026-10-16T08:00:00.000Z"), modifiedBy: "ou_editor", ownerId: null }];
       },
     } as unknown as FeishuClient;
     const t = await createTestApp({ feishu }, undefined, { feishuClient: client });

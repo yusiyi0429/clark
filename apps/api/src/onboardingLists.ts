@@ -16,7 +16,13 @@ import { readUserAccessToken } from "./feishu/tokens.js";
 
 export type ListResult<T> = { ok: true; candidates: T[] } | { ok: false; message: string };
 
-const FEISHU = /^https:\/\/[A-Za-z0-9.-]*(?:feishu\.cn|larksuite\.com)\/(docx|docs|wiki|sheets|base)\/([A-Za-z0-9_-]+)/;
+export const FEISHU = /^https:\/\/[A-Za-z0-9.-]*(?:feishu\.cn|larksuite\.com)\/(docx|docs|wiki|sheets|base)\/([A-Za-z0-9_-]+)/;
+
+/** 文档身份：飞书文档按 token 认（换了域名、带了参数也是同一份），其他按类型加引用。文档变更里的候选 key 也用它。 */
+export function docKey(kind: string, ref: string): string {
+  const match = kind === "feishu_doc" ? FEISHU.exec(ref) : null;
+  return match ? `feishu:${match[2]}` : `${kind}:${ref}`;
+}
 const FEISHU_KIND: Record<string, string> = { docx: "文档", docs: "文档", wiki: "知识库", sheets: "表格", base: "多维表格" };
 
 /** 飞书文档没有读文档的权限时拿不到标题：用类型加 token 前几位，点开能核对。 */
@@ -98,11 +104,18 @@ async function basisCandidates(q: Query, personId: string, feishu: FeishuDocRead
 }
 
 export async function readWorkBasis(q: Query, personId: string, feishu: FeishuDocReader | undefined, now: Date): Promise<TWorkBasisCandidate[]> {
-  const [rows, confirmed] = await Promise.all([basisCandidates(q, personId, feishu, now),
-    q("SELECT doc_kind, doc_ref FROM work_basis WHERE person_id=$1", [personId])]);
-  const saved = new Set((confirmed.rows as { doc_kind: string; doc_ref: string }[]).map((row) => basisKey(row.doc_kind, row.doc_ref)));
+  const [rows, confirmed, superseded] = await Promise.all([basisCandidates(q, personId, feishu, now),
+    q("SELECT doc_kind, doc_ref, to_char(keep_until, 'YYYY-MM-DD') AS keep_until FROM work_basis WHERE person_id=$1", [personId]),
+    // 文档变更里确认取代了的旧文档：在清单里标出来，带上新文档。
+    q(`SELECT DISTINCT ON (c.key) c.key, d.title, d.doc_ref FROM doc_change_candidates c JOIN doc_changes d ON d.id = c.doc_change_id
+      WHERE c.relation = 'supersede' ORDER BY c.key, d.decided_at DESC NULLS LAST`)]);
+  const saved = new Map((confirmed.rows as { doc_kind: string; doc_ref: string; keep_until: string | null }[]).map((row) => [basisKey(row.doc_kind, row.doc_ref), row.keep_until]));
+  // 同一个链接被整篇改写成另一份（例如 M1-B L3 v6 → M2 战略解码）时不标「被自己取代」。
+  const replaced = new Map((superseded.rows as { key: string; title: string; doc_ref: string }[])
+    .filter((row) => docKey("feishu_doc", row.doc_ref) !== row.key).map((row) => [row.key, { title: row.title, url: row.doc_ref }]));
   return rows.map((row) => ({ key: basisKey(row.doc_kind, row.doc_ref), kind: row.doc_kind, title: row.title, url: row.url, revision: row.revision,
-    origin: row.origin, revisedAt: row.revised_at?.toISOString() ?? null, revisedBy: row.revised_by, confirmed: saved.has(basisKey(row.doc_kind, row.doc_ref)) }));
+    origin: row.origin, revisedAt: row.revised_at?.toISOString() ?? null, revisedBy: row.revised_by, confirmed: saved.has(basisKey(row.doc_kind, row.doc_ref)),
+    supersededBy: replaced.get(docKey(row.doc_kind, row.doc_ref)) ?? null, keepUntil: saved.get(basisKey(row.doc_kind, row.doc_ref)) ?? null }));
 }
 
 /** 勾选的入库并记下确认时的修订号；已经入库的保留原来的修订号和确认时间。 */
