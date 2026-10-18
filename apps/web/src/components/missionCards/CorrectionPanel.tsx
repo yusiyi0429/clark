@@ -49,7 +49,7 @@ function CorrectionNote({ item, label, access, deciderName, controls }: { item: 
         <input id={`reject-${item.id}`} type="text" value={rejecting.note} maxLength={300} autoFocus disabled={controls.busy} aria-describedby={error ? `correction-decision-error-${item.id}` : undefined} onChange={(event) => controls.onRejecting({ id: item.id, note: event.target.value })} />
         <div className={s.inlineActions}><Button variant="ghost" className={s.secondary} isDisabled={controls.busy || !rejecting.note.trim()} aria-label={`确认不采纳：${label}`} onPress={() => controls.onDecide(item, "reject")}>确认不采纳</Button><Button variant="ghost" className={s.secondary} isDisabled={controls.busy} aria-label={`取消不采纳：${label}`} onPress={() => controls.onRejecting(null)}>取消</Button></div>
       </div> : <div className={s.inlineActions}>
-        {access.canApply ? <Button variant="primary" className={s.decisionPrimary} isDisabled={controls.busy || item.stale} aria-label={`采纳：${label}`} aria-describedby={item.stale ? `stale-${item.id}` : undefined} onPress={() => controls.onDecide(item, "apply")}>采纳</Button> : <span className={s.hint}>需要修改时，请从页头退回本人准备。</span>}
+        {access.canApply ? <Button variant="primary" className={s.decisionPrimary} isDisabled={controls.busy || item.stale} aria-label={`采纳：${label}`} aria-describedby={item.stale ? `stale-${item.id}` : undefined} onPress={() => controls.onDecide(item, "apply")}>采纳</Button> : null}
         <Button variant="ghost" className={s.secondary} isDisabled={controls.busy} aria-label={`不采纳：${label}`} onPress={() => controls.onRejecting({ id: item.id, note: "" })}>不采纳</Button>
         {item.stale ? <span id={`stale-${item.id}`} className={s.blocked}>原文已变化</span> : null}
       </div>}
@@ -75,7 +75,7 @@ export function CorrectionPanel({ mission, field, label, items, access, deciderN
       <textarea id={`correction-${key}`} value={draft.text} maxLength={field === "title" ? 200 : 4000} rows={4} autoFocus disabled={controls.busy} aria-describedby={controls.draftError ? errorId : undefined} onChange={(event) => controls.onEdit({ text: event.target.value })} />
       <label htmlFor={`correction-reason-${key}`}>原因</label>
       <input id={`correction-reason-${key}`} type="text" value={draft.reason} maxLength={300} required disabled={controls.busy} onChange={(event) => controls.onEdit({ reason: event.target.value })} />
-      <p className={s.hint}>{access.canApply ? "提交后立即生效，改前改后都会留痕。" : `提交后等${deciderName}处理，正文先不变。`}{field === "milestones" || field === "successEvidence" ? " 每行一条，最多 30 条，每条不超过 500 字。" : ""}</p>
+      {field === "milestones" || field === "successEvidence" ? <p className={s.hint}>每行一条</p> : null}
       {controls.draftError ? <p id={errorId} className={s.proposalError} role="alert">{controls.draftError}</p> : null}
       <div className={s.inlineActions}><Button variant="primary" className={s.primary} isDisabled={controls.busy || !draft.text.trim() || !draft.reason.trim()} aria-label={`提交${verb}：${label}`} onPress={controls.onSubmit}>{controls.busy ? "正在提交…" : "提交"}</Button><Button variant="ghost" className={s.secondary} isDisabled={controls.busy} aria-label={`取消${verb}：${label}`} onPress={controls.onCancel}>取消</Button></div>
     </div> : null}

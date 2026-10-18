@@ -190,7 +190,7 @@ describe("议题工作区", () => {
     const html = render(decided);
     expect(html).toContain("已形成结论");
     expect(html).toContain("已形成的决定");
-    expect(html).toContain("本决定由一号位直接作出。");
+    expect(html).not.toContain("本决定由一号位直接作出。");
     expect(html).not.toContain("会议中形成并回传");
     expect(html).not.toContain("可以先与天枢讨论");
     expect(html).toContain("追加 40% 预算并绑定季度复购考核。");
@@ -333,7 +333,7 @@ describe("议题工作区", () => {
     const html = render(card, [battlefield, meeting]);
     expect(html).not.toContain("选择一场待开的会议");
     expect(html).not.toContain("加入已有会议");
-    expect(html).toContain("可在对话栏与天枢讨论。");
+    expect(html).not.toContain("可在对话栏与天枢讨论。");
     expect(html).not.toContain("下方安排会议");
     expect(html).not.toMatch(/Meeting|scheduled Meeting/);
   });
@@ -361,7 +361,7 @@ describe("议题页的会议与结论来源（巡检 P1-5 / P1-10）", () => {
     const meetingReceipt = { ...base, source: { kind: "meeting-item" as const, meetingId: "m", outcomeItemId: "i" } };
     expect(receiptHeading([meetingReceipt]).title).toBe("会议结论");
     expect(receiptHeading([base]).title).toBe("已形成的决定");
-    expect(receiptHeading([base, meetingReceipt]).note).toBe("包括会议回传的结论与一号位直接作出的决定。");
+    expect(receiptHeading([base, meetingReceipt]).title).toBe("已形成的决定");
   });
 
   it("刚加入的会议从本页集合里取（版本新的那份），不等首页刷新", async () => {

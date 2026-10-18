@@ -5,7 +5,7 @@ import { MonthlyReviewField, MonthlyReviewSelfReview } from "./monthlyReviews.js
 
 /**
  * 个人复盘：月末复盘开启时，被复盘月份每个有 Mission 的人各一份，对照自己的 Mission Card 写四部分
- * （与战场复盘同一结构）。起草有三条路：本人的 AI 工具经个人令牌（MCP）写入、上传材料后由 Co-Agent 起草、本人手写。
+ * （与战场复盘同一结构）。起草有三条路：本人的 AI 工具经个人令牌（MCP）写入、Co-Agent 按 Mission 卡、每周复盘、采集记录和上传的材料生成、本人手写。
  * 全员可见谁交了谁没交（看不到别人写的内容）；全部提交或被 CEO 跳过后，战场 / 能力域复盘项才开始起草。
  */
 
@@ -41,6 +41,20 @@ const GenerationError = Type.Union([
   Type.Null(),
 ]);
 
+/**
+ * Co-Agent 生成个人复盘的一步：读 Mission 卡 → 读每周复盘 → 读采集记录 → 起草。
+ * result 是这一步的结果，如「2 张」「缺少记录」「保留你改过的 1 段」。
+ */
+export const PersonalReviewGenerationStep = Type.Object(
+  {
+    id: Type.Union([Type.Literal("missions"), Type.Literal("weekly"), Type.Literal("collector"), Type.Literal("draft")]),
+    label: Type.String(),
+    status: Type.Union([Type.Literal("pending"), Type.Literal("running"), Type.Literal("done"), Type.Literal("failed")]),
+    result: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
 /** 本人被复盘月份的 Mission 摘要（复盘的对照基准）。 */
 export const PersonalReviewMission = Type.Object(
   { id: Type.String(), code: Type.String(), title: Type.String(), outcome: Type.String() },
@@ -58,11 +72,16 @@ export const PersonalReviewPayload = Type.Object(
     status: PersonalReviewStatus,
     draftSource: PersonalReviewDraftSource,
     draftError: GenerationError,
+    /** 每栏正文里的出处写成 Markdown 链接 [名称](cite:<ref>)，紧跟在它支撑的那一句末尾。 */
     selfReview: Type.Union([MonthlyReviewSelfReview, Type.Null()]),
+    /** 最近一次 Co-Agent 生成的步骤；还没生成过为空。 */
+    generationSteps: Type.Array(PersonalReviewGenerationStep),
+    /** 本人（或本人的 AI 工具）保存过的栏：重新生成时保留，不覆盖。 */
+    editedFields: Type.Array(MonthlyReviewField),
     missions: Type.Array(PersonalReviewMission),
     /** 本人有未撤销、未过期的个人令牌，视为已把 AI 工具连上天枢。 */
     toolConnected: Type.Boolean(),
-    /** 本复盘对话里已上传的材料数；为 0 时不能请 Co-Agent 起草。 */
+    /** 本复盘对话里已上传的材料数（生成时一并读取）。 */
     materialCount: Count,
     conversationScope: Type.String(),
     submittedAt: NullableDateTime,
@@ -146,6 +165,7 @@ export const PersonalReviewUpdateInput = Type.Object(
 export type TPersonalReviewStatus = Static<typeof PersonalReviewStatus>;
 export type TPersonalReviewDraftSource = Static<typeof PersonalReviewDraftSource>;
 export type TPersonalReviewMission = Static<typeof PersonalReviewMission>;
+export type TPersonalReviewGenerationStep = Static<typeof PersonalReviewGenerationStep>;
 export type TPersonalReviewPayload = Static<typeof PersonalReviewPayload>;
 export type TPersonalReviewBoardRow = Static<typeof PersonalReviewBoardRow>;
 export type TPersonalReviewBoard = Static<typeof PersonalReviewBoard>;

@@ -121,7 +121,7 @@ describe("压缩计划：滚动增量、切点落在提问上、带「覆盖到�
     expect(text).toContain('web_search({"query":"硅基流动 融资"})');
     expect(text).toContain("prop-42");
     expect(text).not.toContain("内部推理");
-    expect(text).toMatch(/\[一号位 · 10\/13 16:0\d/);
+    expect(text).toMatch(/\[本人 · 10\/13 16:0\d/);
   });
 });
 
@@ -131,11 +131,23 @@ describe("压缩提示与覆盖范围", () => {
     const plan = planOf(s.entries(), { keepRecentTokens: 10 });
     expect(plan.keptQuestions.map((item) => item.text)).toEqual(["统一成一段话来说，不要分开说"]);
     const prompt = summaryPromptFor({ ...plan, previousSummary: `旧记忆。\n\n${coverageNote({ coveredTurns: 1, lastCoveredAt: Date.parse("2026-10-13T08:00:00Z") })}` });
-    expect(prompt).toContain("<之后几轮一号位的原话>");
+    expect(prompt).toContain("<之后几轮本人的原话>");
     expect(prompt).toContain("统一成一段话来说，不要分开说");
     expect(prompt).toContain("<之前的对话记忆>\n旧记忆。\n</之前的对话记忆>");
     expect(coverageNote(plan)).toMatch(/^（这份对话记忆覆盖到第 3 轮（最后一问在 10\/13 16:\d\d）；之后的对话以原文为准/);
     expect(withoutCoverageNote(`记忆正文\n\n${coverageNote(plan)}`)).toBe("记忆正文");
+  });
+
+  it("压缩写的是这个人的对话记忆：想法与立场、没定的问题和理由、偏好与做法、引用过的对象 id；正式事实不进摘要", () => {
+    const s = session([...turns(3), { q: "我倾向先做县城样板，理由是一线获客太贵", a: "明白。", usage: 70_000 }]);
+    const plan = planOf(s.entries(), { keepRecentTokens: 10 });
+    const prompt = summaryPromptFor(plan);
+    for (const section of ["## 想法与立场", "## 还没定的问题", "## 偏好与做法", "## 引用过的对象"]) expect(prompt).toContain(section);
+    expect(prompt).toMatch(/目标、进展、指标、议题、会议、数字、日期这些正式事实[^。]*一律不写/);
+    expect(prompt).toContain("[本人 · ");
+    expect(prompt).not.toContain("一号位");
+    expect(prompt).not.toContain("已形成的结论");
+    expect(COMPACTION_SYSTEM_PROMPT).not.toContain("CEO");
   });
 });
 
@@ -507,16 +519,6 @@ describe("后台压缩的生命周期（真路由、真库）", () => {
       const call = seen.slice(before).find((item) => !isSummary(item))!;
       expect(textOf(call.context.messages)).toContain("否决了自建 Token 工厂");
       expect((await t.sql("SELECT status FROM conversation_compactions WHERE id <> 'cccccccc-0000-4000-8000-000000000001' ORDER BY started_at LIMIT 1"))[0]).toEqual({ status: "applied" });
-      // 新建对话：旧对话归档，新对话里没有旧快照。
-      const created = await app.inject({ method: "POST", url: "/api/conversations/global/new", headers: { cookie, origin: t.publicOrigin } });
-      expect(created.statusCode).toBe(200);
-      const fresh = seen.length;
-      await ask("新对话的第一问");
-      const freshCall = seen.slice(fresh).find((item) => !isSummary(item))!;
-      expect(textOf(freshCall.context.messages)).not.toContain("否决了自建 Token 工厂");
-      const rows = await t.sql("SELECT DISTINCT conversation_id FROM conversation_compactions");
-      const archived = await t.sql("SELECT id FROM conversations WHERE archived_at IS NOT NULL");
-      expect(rows.map((row) => row.conversation_id)).toEqual(archived.map((row) => row.id));
     } finally { await t.close(); }
   });
 });

@@ -36,8 +36,6 @@
 .sectionTitle.sectionTitle { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--onboarding-ink); font-size: 16px; font-weight: 600; line-height: 1.5; }
 .optional { padding: 1px 8px; border: 1px solid var(--hairline-strong); border-radius: var(--onboarding-pill-radius); color: var(--onboarding-muted); font-size: 12px; font-weight: 400; line-height: 1.5; }
 .sectionHint { flex: none; color: var(--onboarding-faint); font-size: 13px; line-height: 1.5; }
-.sectionNote { margin: -4px 0 0; color: var(--onboarding-faint); font-size: 13px; line-height: 1.65; }
-.sectionNote[data-tone="warn"] { color: var(--judgment); }
 
 /* 公司雷达的自动方向：只读的一列，不做成可点的胶囊。 */
 .automatic { padding: 12px 14px; border-radius: var(--onboarding-inset-radius); background: var(--morning-start); color: var(--onboarding-muted); font-size: 14px; line-height: 1.7; }
@@ -144,7 +142,7 @@
 }
 @media (prefers-contrast: more) {
   .field, .suggestion { border-color: var(--ink-muted); }
-  .sectionHint, .sectionNote, .chipNote, .fieldNote, .hint, .groupNote, .suggestionsLabel { color: var(--onboarding-muted); }
+  .sectionHint, .chipNote, .fieldNote, .hint, .groupNote, .suggestionsLabel { color: var(--onboarding-muted); }
 }
 @media (forced-colors: active) {
   .chip { border: 1px solid CanvasText; }

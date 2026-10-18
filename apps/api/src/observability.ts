@@ -13,7 +13,17 @@ function isSensitive(key: string): boolean {
   return SECRET_KEY.test(normalized) || BULK_KEY.test(normalized);
 }
 
+/**
+ * 正文里夹带的凭证（用户贴进对话、记忆里抄到的密钥）：按常见格式替换。记忆正文、对话正文本身不脱敏（R6），只去掉凭证。
+ * LangSmith 个人/服务 key、OpenAI 式 sk- key、Bearer 头、JWT。
+ */
+const SECRET_TEXT = /\blsv2_[A-Za-z0-9_-]{8,}|\bsk-[A-Za-z0-9_-]{16,}|\bBearer\s+[A-Za-z0-9._~+/-]{16,}=*|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g;
+export function redactSecretText(text: string): string {
+  return text.replace(SECRET_TEXT, REDACTED);
+}
+
 export function redactSecrets(value: unknown): unknown {
+  if (typeof value === "string") return redactSecretText(value);
   if (Array.isArray(value)) return value.map(redactSecrets);
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};

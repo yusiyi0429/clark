@@ -28,6 +28,7 @@ import { createPersonalReviewDraftAgent } from "./personalReviewAgent.js";
 import { createMonthlyReviewAssessAgent, createMonthlyReviewDraftAgent, createMonthlyReviewSummaryAgent } from "./monthlyReviewAgents.js";
 import { createMonthlyReviewScheduler } from "./monthlyReviewScheduler.js";
 import { createMissionRoundScheduler } from "./missionRoundScheduler.js";
+import { createCollectorHealthScheduler } from "./collector.js";
 import { recoverStaleMissionDrafts } from "./missionRounds.js";
 import { recoverInterruptedOutcome } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
@@ -78,6 +79,9 @@ const env: AppEnv = {
   materialStorageDir: process.env.MEETING_MATERIAL_STORAGE_DIR,
   conversationAttachmentStorageDir: process.env.CONVERSATION_ATTACHMENT_STORAGE_DIR,
   recordingStorageDir: process.env.MEETING_RECORDING_STORAGE_DIR,
+  // 本体公司事实（PR #12）：只读投影在 MEMORY_STORAGE_DIR/company；按人授权的域写在 COMPANY_WORLD_ACCESS_FILE（personId → domain 列表）。个人记忆在数据库里。
+  companyStorageDir: process.env.MEMORY_STORAGE_DIR ? `${process.env.MEMORY_STORAGE_DIR}/company` : undefined,
+  companyWorldAccessFile: process.env.COMPANY_WORLD_ACCESS_FILE || undefined,
 };
 
 const port = Number(process.env.PORT ?? "4000");
@@ -184,6 +188,7 @@ const monthlyReviewService = createMonthlyReviewService({
 const monthlyReviewScheduler = createMonthlyReviewScheduler(monthlyReviewService);
 const now = () => new Date();
 const missionRoundScheduler = createMissionRoundScheduler(pool, now);
+const collectorHealthScheduler = createCollectorHealthScheduler(pool, now);
 await recoverStaleMissionDrafts(pool, now());
 // 启动补偿：崩溃中断的 running 扫描标为 failed（不自动重跑）
 await radarService.recoverStaleRuns();
@@ -224,10 +229,12 @@ app.addHook("onClose", async () => {
   monthlyReviewScheduler.close();
   await monthlyReviewService.idle();
   missionRoundScheduler.close();
+  collectorHealthScheduler.close();
 });
 scheduler.start();
 monthlyScheduler.start();
 monthlyReviewScheduler.start();
 missionRoundScheduler.start();
+collectorHealthScheduler.start();
 await app.listen({ port, host: "0.0.0.0" });
 console.log(`warmap api listening on :${port} (${join(".", "migrations")} applied, build ${env.buildSha})`);

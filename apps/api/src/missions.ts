@@ -78,15 +78,17 @@ export async function listMissionRows(q: Query, period?: string, person?: { pers
   return visible;
 }
 
-/** 任务的通用 Card、引用、对话工具也遵守个人卡准备期保密，不能绕过详情权限。 */
+/**
+ * Mission 卡（目标、计划）全员可读（已定设计 5a 第 3 条）；任务的通用 Card、引用、对话工具也遵守个人卡准备期保密：
+ * 本人确认或整轮确定之前只有本人看得到。进展另有权限，不在这里。
+ */
 export async function canReadMission(q: Query, mission: Pick<MissionRow, "personal_mission_card_id">,
   person?: { personId: string; role: "ceo" | "member" }): Promise<boolean> {
   if (!mission.personal_mission_card_id) return true;
-  const row = (await q(`SELECT c.owner_id,c.owner_confirmed_at,r.status,b.owner_id AS battlefield_owner_id FROM personal_mission_cards c
-    JOIN mission_rounds r ON r.id=c.round_id JOIN battlefield_config b ON b.id=r.battlefield_id WHERE c.id=$1`, [mission.personal_mission_card_id])).rows[0];
+  const row = (await q(`SELECT c.owner_id,c.owner_confirmed_at,r.status FROM personal_mission_cards c
+    JOIN mission_rounds r ON r.id=c.round_id WHERE c.id=$1`, [mission.personal_mission_card_id])).rows[0];
   if (!row) return false;
-  if (!person) return !!row.owner_confirmed_at || row.status === "confirmed";
-  return row.owner_id === person.personId || (row.status === "confirmed" || !!row.owner_confirmed_at) && (person.role === "ceo" || row.battlefield_owner_id === person.personId);
+  return row.owner_id === person?.personId || row.status === "confirmed" || !!row.owner_confirmed_at;
 }
 
 export async function getMissionRow(q: Query, id: string): Promise<MissionRow | null> {

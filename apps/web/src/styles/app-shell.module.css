@@ -16,15 +16,6 @@
 .expanded{position:absolute;inset:0;z-index:20;border-radius:22px;background:#f5f5f7;display:flex;flex-direction:column;transform-origin:0 0;overflow:hidden;will-change:transform;container:pane/inline-size}
 /* 从首页打开、页面还没到：空面板透明，加载蒙版（loading-mask.module.css）磨砂的是后面的首页。 */
 .expanded[data-loading]{background:transparent}
-.expandedHeader{display:flex;align-items:center;justify-content:space-between;flex:none;gap:15px;min-height:100px;box-sizing:border-box;padding:25px 27px;background:linear-gradient(145deg,#ffffffa8,#edf1f6a1);border-bottom:1px solid #ffffffbf;-webkit-backdrop-filter:blur(30px) saturate(1.28);backdrop-filter:blur(30px) saturate(1.28);box-shadow:inset 0 1px #fff}
-.expandedIdentity{display:flex;align-items:center;gap:13px;min-width:0;flex:1;flex-wrap:wrap;row-gap:10px}
-.expandedIdentity>div{min-width:0}
-.expandedIdentity>div>span{display:block;margin-bottom:5px;color:#73777f;font-size:11px;letter-spacing:.025em}
-.expandedIdentity>h1{flex:none;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.closeRound{display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;border:0;background:#e7e7eb;color:#6e6e73;transition:background .15s,transform .15s}
-.closeRound:hover{background:#dcdce1}
-.closeRound:active{transform:scale(.95)}
-.closeRound .backIcon{display:none}
 /* 纯触屏：直接打开或刷新详情链接时，外壳把焦点放在返回/关闭键上（给读屏），React Aria 此时还没见过点按、按键盘模式画焦点环 ——
    手机上看起来像按钮卡住了。只在没有悬停、指针是手指的设备上不画这一颗的焦点环。 */
 @media(hover:none) and (pointer:coarse){.shell :global([data-close-view]):focus-visible,.shell :global([data-close-view][data-focus-visible]){outline:none!important;box-shadow:none!important}}
@@ -127,7 +118,6 @@
 .shell{--type-title:20px;--type-body:14px;--type-meta:12px;--type-note:11px;--type-page:24px;--type-reading:16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;font-size:var(--type-body)}
 /* 外壳的通用元素规则用 :where 降到零优先级：组件自己的类选择器总能覆盖（否则按样式表加载顺序时好时坏）。 */
 :where(.shell h2){font-size:var(--type-title);font-weight:600;line-height:1.35}
-.shell .expandedHeader h1{font-size:var(--type-page);font-weight:600;line-height:1.4}
 .shell .sectionIntro{font-size:18px;line-height:1.7}
 .shell .contextNote,.shell .empty{font-size:var(--type-body)}
 .shell .sheetHeader h2{font-size:var(--type-title);line-height:1.55}
@@ -148,12 +138,12 @@
 /* 展开页完全盖住首页、且不在转场 / 动画 / 侧看（peek）中时，把底下的首页藏掉（窄屏本来就 display:none）。否则首页翻转卡的 3D 合成层会让 Chrome 把滚轮命中到底下 inert 的看板，展开页（雷达等）滚轮 / 触控板失效、只能拖滚动条。 */
 .homeSurface[data-covered]{visibility:hidden}
 @media(min-width:1800px){.shell{inset:0;padding:16px;gap:16px;--shell-edge:16px;--layout-gap:16px}}
-@media(max-width:1250px){.shell{inset:0;padding:10px;gap:10px;--shell-edge:10px;--layout-gap:10px;--notice-width:280px;--peek-width:280px}.expandedHeader{padding:18px}.expandedScroll{margin:0 14px;padding-right:5px}}
+@media(max-width:1250px){.shell{inset:0;padding:10px;gap:10px;--shell-edge:10px;--layout-gap:10px;--notice-width:280px;--peek-width:280px}.expandedScroll{margin:0 14px;padding-right:5px}}
 @media(max-width:1000px){.shell{--notice-width:270px;--peek-width:270px;--chat-inset:12px}.noticeToast{max-width:260px}.historySheet .sheetScroll{padding:44px 28px 120px}}
 @media(min-width:1800px){.historyContent{max-width:800px}}
 
-@media(prefers-reduced-transparency:reduce){.shell{background:#f5f5f7}.expandedHeader{background:#f5f5f7;backdrop-filter:none}.sheet{background:#28282a;-webkit-backdrop-filter:none;backdrop-filter:none}}
-@media(prefers-contrast:more){.shell{--map-muted:#454549}.expandedHeader{border-color:#8e8e93}.sheet{background:#202022;border-color:#a1a1a6}.closeRound{outline:1px solid #8e8e93}}
+@media(prefers-reduced-transparency:reduce){.shell{background:#f5f5f7}.sheet{background:#28282a;-webkit-backdrop-filter:none;backdrop-filter:none}}
+@media(prefers-contrast:more){.shell{--map-muted:#454549}.sheet{background:#202022;border-color:#a1a1a6}}
 
 .noticePeekBackdrop{display:none}
 
@@ -182,17 +172,6 @@
  .shell[data-detail-open=true] .notificationArea{display:none}
  .shell[data-detail-open=true] .homeSurface{display:none}
  .expanded{position:absolute;inset:0;border-radius:23px}
- .expandedHeader{min-height:64px;padding:12px 14px 12px 10px;gap:10px}
- /* 页头左上角是返回（DetailHeader 把关闭键换成返回箭头排到最前），对象标记让出宽度给标题。 */
- .expandedHeader>.closeRound{order:-1;width:44px;height:44px;min-width:44px;background:none}
- .closeRound .closeIcon{display:none}
- .closeRound .backIcon{display:block}
- .expandedIdentity>[data-context-mark]{display:none}
- /* 页头右边还有动作（返回总览、管理 Mission…）时，第一行是返回和动作，标题独占第二行，不被挤成一条细柱。 */
- .expandedHeader:has(>.expandedIdentity+:not(.closeRound)){flex-wrap:wrap;row-gap:2px}
- .expandedHeader:has(>.expandedIdentity+:not(.closeRound))>.expandedIdentity{order:1;flex:1 1 100%;padding-left:6px}
- .expandedHeader>:not(.expandedIdentity):not(.closeRound){margin-left:auto}
- .expandedIdentity h1{font-size:18px}
  .historySheet{left:8px;right:8px;bottom:8px;height:calc(100dvh - 42px);border-radius:24px}
  .historySheet .sheetScroll{padding:42px 20px 115px}
  .shell:not([data-detail-open=true]) .historySheet{left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));height:calc(100dvh - 44px - env(safe-area-inset-bottom))}
@@ -218,15 +197,6 @@
 @keyframes entryFadeIn{from{opacity:0}to{opacity:1}}
 @media(prefers-reduced-transparency:reduce){.shell{background:#f5f5f7}}
 
-/* 二级阅读的返回：顶栏标题位让给「返回列表」，负左边距让按钮文字与上一行场景标签对齐。 */
-.backToList{display:inline-flex;align-items:center;gap:4px;margin-left:-11px;padding:9px 15px 9px 10px;border:1px solid #dfe3ea;border-radius:13px;background:#fffffff2;color:#2d323a;font:inherit;font-size:15px;font-weight:600;letter-spacing:-.2px;line-height:1.3;box-shadow:0 1px 2px rgb(28 38 56/.06);transition:background .16s,border-color .16s,box-shadow .16s,color .16s,transform .16s}
-.backToList:hover{background:#fff;border-color:#c4d5ea;color:#2f6bb4;box-shadow:0 4px 12px rgb(28 38 56/.1)}
-.backToList:active{transform:translateY(1px);box-shadow:0 1px 2px rgb(28 38 56/.08)}
-.backToList svg{flex:none;transition:transform .16s}
-.backToList:hover svg{transform:translateX(-2px)}
-@media(max-width:520px){.backToList{font-size:14px;padding:8px 13px 8px 9px}}
-@media(prefers-reduced-motion:reduce){.backToList,.backToList svg{transition:none}.backToList:hover svg,.backToList:active{transform:none}}
-
 /* HeroUI 管输入语义与状态；标记为内容面的触发器按内容排版。 */
 .shell [data-ts-layout="true"]{height:auto;min-width:0;white-space:normal;text-align:left;font-weight:inherit;justify-content:flex-start}
 .referenceRow{display:flex;align-items:center;gap:9px;min-width:0}
@@ -248,19 +218,15 @@
 @media (prefers-reduced-motion: reduce){.shell[data-topic-rail=true]:has([data-desk-shift]) .mainArea{transition:none}}
 /* 转场截的是最终布局：截图那一刻阅读区不能还在滑。 */
 :global(html[data-notice-transition]) .shell .mainArea{transition:none}
-@media (min-width: 960px) and (max-width: 1000px){.shell[data-topic-rail=true] .expandedHeader{padding:22px 20px;gap:10px}.shell[data-topic-rail=true] .expandedScroll{padding-left:18px;padding-right:18px}}
+@media (min-width: 960px) and (max-width: 1000px){.shell[data-topic-rail=true] .expandedScroll{padding-left:18px;padding-right:18px}}
 @media (max-width: 959px){.shell[data-topic-rail=true] :global([data-testid="global-controls"]){display:flex}}
-
-/* 战场视角切换（与卡片正反面对应）。 */
-.facetSwitch{flex:none;margin-left:4px}
-@media(max-width:599px){.facetSwitch{margin-left:0}}
 
 /* 信号阅读：滚动区去掉内边距，由阅读列自己排版（clark workspace.module.css L87-88、L217、L230）。 */
 .expandedScroll[data-radar-reader-layout=true]{margin:0;padding:0;overflow:hidden;display:flex;min-width:0}
 @media(max-width:1100px){.expandedScroll[data-radar-reader-layout=true]{overflow-y:auto;overflow-x:hidden}.expandedScroll[data-radar-reader-layout=true]>div{height:auto;flex:none;grid-template-rows:auto}}
 .expandedScroll[data-radar-reader-layout=true]{flex-direction:column;overflow-y:auto}.expandedScroll[data-radar-reader-layout=true]>section{margin:0 24px}.expandedScroll[data-radar-reader-layout=true]>div{flex:none;min-height:100%}
-/* 放在 DetailFrame 的 .ts-detail 里时由外层滚：内层不能再是滚动容器，否则 overscroll-behavior:contain 把滚轮/触控板吞掉。 */
-:global(.ts-detail)>.expandedScroll[data-radar-reader-layout=true],:global(.ts-detail)>.expandedScroll[data-radar-reader-layout=true]>[data-radar-reader]{overflow:visible;overscroll-behavior:auto;flex:none;height:auto}
+/* 放在 DetailFrame 的 .ts-detail 里时由外层滚（战场、能力、Mission、雷达等页的正文，信号阅读的阅读列）：内层不能再是滚动容器，否则 overscroll-behavior:contain 把滚轮/触控板吞掉。 */
+:global(.ts-detail)>.expandedScroll,:global(.ts-detail)>.expandedScroll[data-radar-reader-layout=true],:global(.ts-detail)>.expandedScroll[data-radar-reader-layout=true]>[data-radar-reader]{overflow:visible;overscroll-behavior:auto;flex:none;height:auto}
 
 /* 手持（≤959）的画布：深藏青、两块极淡的柔光，沉稳不抢眼，浅色通知卡在上面才显得出来（详情仍是浅色面板，四周留 8px 深色边）。 */
 @media(max-width:959px){.shell{background-color:#141c30;background-image:radial-gradient(60% 42% at 90% 4%,rgb(58 80 136/.5) 0%,transparent 72%),radial-gradient(58% 40% at 4% 96%,rgb(48 66 118/.42) 0%,transparent 72%),linear-gradient(180deg,#1b2543 0%,#121a2d 100%);background-position:center;background-size:auto}}
@@ -280,12 +246,6 @@
  .shell[data-detail-open=false] .homeSurface::-webkit-scrollbar{display:none}
  .historySheet,.shell:not([data-detail-open=true]) .historySheet{left:var(--main-start);right:8px}
 }
-/* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
-@media(max-width:959px){.expandedIdentity.expandedIdentity>div>span{font-size:13px}}
-/* 触屏的工作台（pointer:coarse，规范 §1）：战场 / 雷达 / 已处理页头右上角的关闭键 42 → 44（手持时它在左上角、已是 44）。 */
-@media(pointer:coarse){.closeRound{width:44px;height:44px}}
-/* 对话层左上角星标右边那颗很小的「+ 新对话」（ConversationArchive）：低对比度灰色，不是玻璃圆键。 */
-.historySheet .sheetNewKey{position:absolute;z-index:4;top:15px;left:56px}
 
 .m2Entry{display:flex;justify-content:flex-end;padding:8px 16px 0}
 .m2Entry a{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border,rgba(0,0,0,.12));border-radius:12px;color:inherit;font-size:14px;text-decoration:none;background:var(--surface,#fff)}

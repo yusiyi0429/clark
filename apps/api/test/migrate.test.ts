@@ -154,6 +154,12 @@ describe("migration", () => {
         "066_trace_threads.sql",
         "067_conversation_archive.sql",
         "068_conversation_compactions.sql",
+        "069_personal_memory.sql",
+        "070_conversation_memory_used.sql",
+        "073_delivery_requests.sql",
+        "074_request_asked_notification.sql",
+        "075_collector.sql",
+        "077_personal_review_generation.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -161,7 +167,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(68);
+      expect(Number(again.rows[0].count)).toBe(74);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(
@@ -397,6 +403,24 @@ describe("migration", () => {
         ON CONFLICT (conversation_id) WHERE status = 'running' DO NOTHING RETURNING id`, [id]);
       expect((await running("30000000-0000-4000-8000-000000000001")).rowCount).toBe(1);
       expect((await running("30000000-0000-4000-8000-000000000002")).rowCount).toBe(0);
+    });
+  });
+  it("069 个人记忆：只新增表，已有会话的模型历史不动，可重复执行", async () => {
+    await createTestDb(async ({ db }: TestDb) => {
+      const files = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith(".sql") && Number(f.split("_")[0]) <= 68).sort();
+      await db.query("CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, filename TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+      for (const file of files) {
+        await db.query(await readFile(join(MIGRATIONS_DIR, file), "utf8"));
+        await db.query("INSERT INTO schema_migrations (id, filename) VALUES ($1, $2)", [Number(file.split("_")[0]), file]);
+      }
+      await db.query(`INSERT INTO conversations (id, owner_id, scope, pi_session_id, runtime_entries)
+        VALUES ('00000000-0000-4000-8000-000000000001', 'person-a', 'global', '10000000-0000-4000-8000-000000000001', '[{"entry":1}]'::jsonb)`);
+      await migrate(db);
+      await migrate(db);
+      expect((await db.query("SELECT runtime_entries FROM conversations")).rows)
+        .toEqual([{ runtime_entries: [{ entry: 1 }] }]);
+      expect((await db.query("SELECT to_regclass('personal_memory_cursors') IS NOT NULL AS cursors, to_regclass('personal_memory_items') IS NOT NULL AS items")).rows)
+        .toEqual([{ cursors: true, items: true }]);
     });
   });
 });

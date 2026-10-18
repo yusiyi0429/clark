@@ -13,8 +13,10 @@ import {
 } from "@warmap/contracts";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
 import { ltoWindow } from "./monthlyCycle.js";
-import { ensurePersonalReviews, getPersonalReview, personalReviewContext, readPersonalReviewMaterials, recoverStalePersonalReviewDrafts,
+import { ensurePersonalReviews, getPersonalReview, pendingGenerationSteps, recoverStalePersonalReviewDrafts,
   PERSONAL_REVIEW_FIELDS, type PersonalReviewDraftInput, type PersonalReviewDraftRun } from "./personalReviews.js";
+import { allowedCitations, buildPersonalReviewDraftInput, citationProblem, mergeGeneratedReview, withSources,
+  type PersonalReviewStepListener } from "./personalReviewGeneration.js";
 import { listConfirmedDirections, type MonthlyDraftAgentInput } from "./monthlyDraft.js";
 import { companyPeriod, projectMonthlyFeedback, type StoredMonthlyFeedback } from "./monthlyPlans.js";
 import {
@@ -86,7 +88,9 @@ export type MonthlyReviewService = {
   startDraft(itemId: string, runId: string): Promise<void>;
   startAssessment(itemId: string, runId: string): Promise<void>;
   startSummary(reviewId: string, runId: string): Promise<void>;
-  startPersonalDraft(reviewId: string, version: number, storageDir: string, agent: MonthlyReviewAgent<PersonalReviewDraftInput>): Promise<void>;
+  /** onStep：每一步状态变化时收到全部步骤（读 Mission 卡 → 读每周复盘 → 读采集记录 → 起草），同时写进个人复盘。 */
+  startPersonalDraft(reviewId: string, version: number, storageDir: string, agent: MonthlyReviewAgent<PersonalReviewDraftInput>,
+    onStep?: PersonalReviewStepListener): Promise<void>;
   /** 启动恢复：进程重启前没跑完的起草、评估、汇总标为可见 failed，等待手动重试。 */
   recoverInterrupted(): Promise<number>;
   idle(): Promise<void>;
@@ -153,8 +157,9 @@ export function createMonthlyReviewService({
   }
   const startDraft = (itemId: string, runId: string) => runOnce(`draft:${itemId}:${runId}`, () => runDraft(itemId, runId));
   const startSummary = (reviewId: string, runId: string) => track(runSummary(reviewId, runId));
-  const startPersonalDraft = (reviewId: string, version: number, storageDir = personalDraft.storageDir, agent = personalDraft.agent) =>
-    runOnce(`personal:${reviewId}:${version}`, () => runPersonalDraft(reviewId, version, storageDir, agent));
+  const startPersonalDraft = (reviewId: string, version: number, storageDir = personalDraft.storageDir, agent = personalDraft.agent,
+    onStep?: PersonalReviewStepListener) =>
+    runOnce(`personal:${reviewId}:${version}`, () => runPersonalDraft(reviewId, version, storageDir, agent, onStep));
 
   async function comments(itemId: string): Promise<MonthlyReviewMaterials["comments"]> {
     return (await q(`SELECT author_id AS author, body, created_at AS "createdAt" FROM monthly_review_comments
@@ -383,19 +388,42 @@ export function createMonthlyReviewService({
     for (const row of personal.rows) void startPersonalDraft(row.id, row.version).catch(failed);
   }
 
-  async function runPersonalDraft(reviewId: string, version: number, storageDir: string, agent: MonthlyReviewAgent<PersonalReviewDraftInput>): Promise<void> {
+  /**
+   * 个人复盘生成：读 Mission 卡 → 读每周复盘 → 读采集记录 → 起草，每步写进 generation_steps（不改版本，页面轮询即可看到）。
+   * 起草结果逐行核对出处，不合格按失败重试；写回时保留本人改过的段落。
+   */
+  async function runPersonalDraft(reviewId: string, version: number, storageDir: string, agent: MonthlyReviewAgent<PersonalReviewDraftInput>,
+    onStep?: PersonalReviewStepListener): Promise<void> {
     const row = await getPersonalReview(q, reviewId);
     if (!row || row.status !== "drafting" || row.version !== version) return;
+    let steps = pendingGenerationSteps();
+    const publish = async () => {
+      onStep?.(steps.map((step) => ({ ...step })));
+      await q("UPDATE personal_reviews SET generation_steps=$3::jsonb WHERE id=$1 AND version=$2 AND status='drafting'", [reviewId, version, JSON.stringify(steps)]);
+    };
+    const step = async (id: (typeof steps)[number]["id"], status: (typeof steps)[number]["status"], result?: string) => {
+      steps = steps.map((item) => item.id === id ? { ...item, status, ...(result === undefined ? {} : { result }) } : item);
+      await publish();
+    };
     try {
-      const input = { ...await personalReviewContext(q, row), ...await readPersonalReviewMaterials(q, row, storageDir) };
+      await publish();
+      const input = await buildPersonalReviewDraftInput(q, row, storageDir, now(), step);
+      const allowed = allowedCitations(input);
+      await step("draft", "running");
       const candidate = await generateWithRetry(agents.personal ?? agent, input, MonthlyReviewDraftCandidate,
-        async () => { const current = await getPersonalReview(q, reviewId); return current?.status === "drafting" && current.version === version; }, "个人复盘起草");
+        async () => { const current = await getPersonalReview(q, reviewId); return current?.status === "drafting" && current.version === version; }, "个人复盘起草",
+        (output) => { const problem = citationProblem(output as TMonthlyReviewSelfReview, allowed, input.missingRecords); if (problem) throw invalid(problem); });
       if (candidate === null) return;
-      await q(`UPDATE personal_reviews SET status='draft',self_review=$3::jsonb,draft_source='co_agent',draft_error=NULL,
-        version=version+1,updated_at=$4 WHERE id=$1 AND version=$2 AND status='drafting'`, [reviewId, version, JSON.stringify(candidate), now()]);
+      const { selfReview, kept } = mergeGeneratedReview(row.self_review, withSources(candidate as TMonthlyReviewSelfReview), row.edited_fields);
+      steps = steps.map((item) => item.id === "draft" ? { ...item, status: "done", ...(kept.length ? { result: `保留你改过的 ${kept.length} 段` } : {}) } : item);
+      const written = await q(`UPDATE personal_reviews SET status='draft',self_review=$3::jsonb,draft_source='co_agent',draft_error=NULL,generation_steps=$5::jsonb,
+        version=version+1,updated_at=$4 WHERE id=$1 AND version=$2 AND status='drafting'`, [reviewId, version, JSON.stringify(selfReview), now(), JSON.stringify(steps)]);
+      if (written.rowCount) onStep?.(steps.map((item) => ({ ...item })));
     } catch (cause) {
-      await q(`UPDATE personal_reviews SET status='draft_failed',draft_error=$3::jsonb,version=version+1,updated_at=$4
-        WHERE id=$1 AND version=$2 AND status='drafting'`, [reviewId, version, JSON.stringify({ ...failure(cause, "个人复盘起草失败"), at: now().toISOString() }), now()]);
+      steps = steps.map((item) => item.status === "running" ? { ...item, status: "failed" } : item);
+      const failed = await q(`UPDATE personal_reviews SET status='draft_failed',draft_error=$3::jsonb,generation_steps=$5::jsonb,version=version+1,updated_at=$4
+        WHERE id=$1 AND version=$2 AND status='drafting'`, [reviewId, version, JSON.stringify({ ...failure(cause, "个人复盘起草失败"), at: now().toISOString() }), now(), JSON.stringify(steps)]);
+      if (failed.rowCount) onStep?.(steps.map((item) => ({ ...item })));
     }
   }
 

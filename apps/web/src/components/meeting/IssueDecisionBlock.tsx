@@ -195,9 +195,9 @@ export function IssueDecisionBlock(props: IssueBlockProps) {
           {lastEffective ? (
             <>
               <SourceChip sourceRef={lastEffective.ref} issueId={issueId} />
-              {history.data.changes.length ? `之后有 ${history.data.changes.length} 项实际变化，见下方历史。` : "之后未获得执行证据（待补）。"}
+              {history.data.changes.length ? `之后有 ${history.data.changes.length} 项实际变化` : "之后未获得执行证据（待补）。"}
             </>
-          ) : history.data.inactive.length ? "此前的决定已撤回或被替代，不再约束；本次需重新判断。" : "该议题尚无已确认的决定，本次为首次判断。"}
+          ) : history.data.inactive.length ? "此前的决定已撤回或被替代" : "尚无已确认的决定"}
         </p>
       ) : null}
     </section>
@@ -269,7 +269,6 @@ export function IssueDecisionBlock(props: IssueBlockProps) {
           ))}
         </ol>
       ) : <p className={s.empty}>预研尚未给出备选方案。</p>}
-      {!decisionActions.length && status === "pending" ? <p className={s.formNote}>决定由会后结论确认生效。</p> : null}
     </section>
   );
 
@@ -308,7 +307,6 @@ export function IssueDecisionBlock(props: IssueBlockProps) {
         ) : <p className={s.empty}>议题已决定。</p>
       ) : canDecide ? (
         <>
-          {!decide && override ? <p className={s.overrideNote}>预研尚未完成：此时作出的决定将记为「预研未完成时的决定」，需再次确认。</p> : null}
           {draft && draft.optionKey === null ? form : (
             <button type="button" className={s.chooseButton} disabled={pending} onClick={() => choose(null)}>
               {decide ? "自拟决定内容" : "直接填写决定"}
@@ -318,8 +316,8 @@ export function IssueDecisionBlock(props: IssueBlockProps) {
       ) : !card ? (
         <p className={s.empty}>议题信息读取失败，请刷新页面后查看。</p>
       ) : decisionActions.length || payload?.research.status === "running" ? (
-        <p className={s.empty}>{payload?.research.status === "running" ? "预研进行中，完成后可在此决定。" : "当前无法在此决定。"}</p>
-      ) : <p className={s.empty}>尚未决定。决定经会后结论确认后生效。</p>}
+        <p className={s.empty}>{payload?.research.status === "running" ? "预研进行中" : "当前无法在此决定。"}</p>
+      ) : <p className={s.empty}>尚未决定</p>}
       <DecisionFeedback state={state} onRetry={retry} />
     </section>
   );
@@ -372,7 +370,6 @@ export function IssueDecisionBlock(props: IssueBlockProps) {
     <section key="outcome" className={s.issueSection} id={sectionAnchorId(issueId, "outcome")} data-outline-sub={`${outlineKey}:outcome`}>
       <h3 className={s.sectionLabel}>会上形成的结论<span>{outcomeItems.length ? `${outcomeItems.length} 条` : ""}</span></h3>
       {outcomeItems.length ? outcomeItems.map((item) => renderOutcomeItem(item)) : <p className={s.empty}>该会议未抽取到本议题的结论。</p>}
-      <p className={s.formNote}>会后候选经一号位确认后才写入决定；未确认的候选不构成决定。</p>
     </section>
   ) : null;
 
@@ -430,7 +427,6 @@ function DecisionForm({ draft, override, pending, error, onChange, onCancel, onS
         </button>
         <button type="button" className={s.cancelDecision} disabled={pending} onClick={onCancel}>取消</button>
       </div>
-      <p className={s.formNote}>确认后记为该议题的决定，此后仍可撤回。</p>
     </div>
   );
 }

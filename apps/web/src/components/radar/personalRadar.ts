@@ -10,7 +10,7 @@ export type MemberRadarBrief = components["schemas"]["MemberRadarBrief"];
 
 /** 同一个状态在首页小组件、我的雷达页说同一句话（spec §3「统一的范围」）。 */
 export const RADAR_COPY = {
-  off: "雷达已关闭。打开后，我每天按你的方向替你看一遍。",
+  off: "雷达已关闭",
   firstScan: "第一次扫描还没完成，稍等片刻",
   empty: "这段时间没有和你方向相关的新内容",
 } as const;
@@ -52,7 +52,7 @@ export function radarBriefStatus(radar: { lastRun: PersonalRadarRun | null; unre
 export function personalStatusLine(radar: MyRadar, scanning: boolean): string {
   if (scanning || scanActive(radar.lastRun)) return "正在扫描外部信息";
   const run = radar.lastRun;
-  if (!run) return radar.enabled ? "还没有扫描过 · 每天定时扫描一次" : "雷达已关闭";
+  if (!run) return radar.enabled ? "还没有扫描过" : "雷达已关闭";
   const how = run.trigger === "manual" ? "手动刷新" : "定时扫描";
   const when = monthDayTime(runTime(run));
   if (run.status === "failed") return `${how}失败${when ? ` · ${when}` : ""}`;

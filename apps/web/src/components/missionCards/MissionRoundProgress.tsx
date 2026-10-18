@@ -129,10 +129,9 @@ export function MissionRoundProgress({ round, entry, onNavigate, onRefresh, comp
           </Button>
         </li>)}</ul>
         {loading ? <p className={s.muted} role="status">正在读取最新进度…</p> : null}
-        {current.phase === "closed" && current.counts.unreviewed > 0 ? <p className={s.muted}>准备时间已到，仍有 {current.counts.unreviewed} 人未确认。不会代替本人确认。</p> : null}
+        {current.phase === "closed" && current.counts.unreviewed > 0 ? <p className={s.muted}>准备时间已到，{current.counts.unreviewed} 人未确认</p> : null}
         {report ? <section className={s.report} aria-label="Co-Agent 核对报告">
           <h3>{report.status === "completed" ? "Co-Agent 核对报告" : report.status === "failed" ? "Co-Agent 核对未完成" : "Co-Agent 正在统一核对"}</h3>
-          {report.status === "queued" || report.status === "running" ? <p className={s.muted} role="status">核对目标、任务组合、备注和修改依据，完成后交战场 DRI 确认。</p> : null}
           {report.summary ? <p>{report.summary}</p> : null}
           {report.status === "failed" ? <p className={s.muted}>{report.error || "本次核对未完成，原任务和记录已保留。"}</p> : null}
           {report.findings.length ? <ol className={s.findings}>{report.findings.map((item, index) => <li key={`${index}:${item.title}`}><h4><span>{({ question: "待明确", risk: "风险", suggestion: "建议" })[item.kind]}</span>{item.title}</h4><p>{item.body}</p><details><summary>查看依据</summary>{item.sources.map((source, sourceIndex) => { const card = current.cards.find((row) => row.cardId === source.cardId); return <div key={`${sourceIndex}:${source.cardId}`} className={s.source}><span>{card?.ownerName ?? "相关任务"}{source.field ? ` · ${fieldNames[source.field]}` : ""}{source.version ? ` · v${source.version}` : ""}</span>{source.quote ? <blockquote>{source.quote}</blockquote> : null}</div>; })}</details></li>)}</ol> : null}
@@ -146,7 +145,6 @@ export function MissionRoundProgress({ round, entry, onNavigate, onRefresh, comp
           {current.approver && ["reviewing", "confirmed"].includes(current.phase) ? <Button variant="ghost" isDisabled={busy || !!error} onPress={() => { setReturning(!returning); setReturnVersion(current.version); }}>退回相关任务</Button> : null}
         </div> : null}
         {returning && current.approver && ["reviewing", "confirmed"].includes(current.phase) ? <section className={s.returnForm} aria-label="退回相关任务">
-          <p>只退回需要本人继续核对的任务，其他确认保留。</p>
           {current.cards.map((card) => <label key={card.cardId} className={s.choice}><input type="checkbox" checked={selected.includes(card.cardId)} disabled={busy} onChange={(event) => setSelected((values) => event.target.checked ? [...values, card.cardId] : values.filter((id) => id !== card.cardId))} />{card.ownerName}</label>)}
           <textarea aria-label="退回原因" placeholder="说明需要本人明确或修改的内容" rows={3} maxLength={2000} value={reason} disabled={busy} onChange={(event) => setReason(event.target.value)} />
           {returnVersion !== current.version ? <p className={s.muted}>任务版本已变化，输入已保留。<button type="button" disabled={busy} onClick={() => { setReturnVersion(current.version); setSelected((ids) => ids.filter((id) => current.cards.some((card) => card.cardId === id))); }}>已核对最新任务</button></p> : null}

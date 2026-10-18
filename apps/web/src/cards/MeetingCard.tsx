@@ -336,10 +336,9 @@ export function recorderLine(state: RecorderState): string {
   return state.error ?? "没有录音";
 }
 
-/** 计时弹出那一小块里的说明：按下「开完了」会发生什么。 */
+/** 计时弹出那一小块里只放录音出的问题；录音中 / 会议中由计时胶囊上的小字表明。 */
 export function recordingNote(state: RecorderState): string {
-  if (state.status === "recording") return "正在录音。点击后停止录音，并将会议标记为已结束；录音转写完成后，在「会议记录」中确认各位说话人。飞书日程不受影响。";
-  return `${state.error ?? "该会议没有录音。"}点击后将会议标记为已结束，随后在「会议记录」中导入妙记或逐字稿；飞书日程不受影响。`;
+  return state.status === "recording" ? "" : state.error ?? "";
 }
 
 const PREFLIGHT_TAB: MaterialTab = { id: "preflight", label: "AI 预审", title: "AI 预审：会前材料的评审结论" };
@@ -1307,7 +1306,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       {payload.preflight.status === "running" && payload.preflight.entries.length ? (
         <p className={s.runningNotice} role="status">
           <Loader2 size={15} aria-hidden="true" />
-          正在依据最新资料重新预审，深度分析通常需要两至五分钟；完成后本页内容整体替换，期间可继续阅读当前版本。
+          正在按最新资料重新预审
         </p>
       ) : null}
       {payload.preflight.status === "running" ? <PreflightProgress progress={payload.preflight.progress} status="running" /> : null}
@@ -1345,7 +1344,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         <div className={s.judgmentHero} data-checked={coreEntry ? payload.draft.checkedEntryIds.includes(coreEntry.id) || undefined : undefined}>
           <small>{payload.issueIds.length ? "整场判断" : "核心判断"}</small>
           <h2>{coreEntry?.title ?? "会前预审"}</h2>
-          <p>{(coreEntry?.body ?? payload.preflight.brief) || (ended ? "该会议会前未进行预审。" : "预审完成后在此显示整场判断。")}</p>
+          <p>{(coreEntry?.body ?? payload.preflight.brief) || (ended ? "该会议会前未进行预审。" : "尚无会前预审。")}</p>
           {payload.preflight.summary && !singleIssue ? (
             <div className={s.heroSummary}>
               <span><small>最优先动作</small>{payload.preflight.summary.priorityAction}</span>
@@ -1357,11 +1356,11 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         </div>
       ) : !payload.preflight.entries.length ? (
         payload.preflight.status === "running" && payload.preflight.progress?.steps.length ? null
-          : <p className={s.empty}>{payload.preflight.status === "running" ? "会前预审进行中，完成后在下方列出各议题判断。" : "尚无会前预审。"}</p>
+          : <p className={s.empty}>{payload.preflight.status === "running" ? "会前预审进行中" : "尚无会前预审。"}</p>
       ) : null}
       {noCeoQuestion && payload.issueIds.length && !payload.issueIds.some((issueId) => issueStatusOf(issueId) === "pending") ? (
         /* 问题不设下限（feedback 18）：预审认为没有需要当场拍板的事、且议题都已处理时才如实写出；还有待决定议题时不写，免得与「待决定」自相矛盾。 */
-        <p className={s.noQuestion}>本次会议无需当场决策的问题。下列议题仍可查看依据与历史，需要时可直接决定。</p>
+        <p className={s.noQuestion}>本次会议无需当场决策的问题。</p>
       ) : null}
       {payload.preflight.inputCoverage ? (
         <div className={s.coverage}>
@@ -1523,7 +1522,6 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
                 </ul>
               ) : null}
               {supplementError ? <p className={s.error} role="alert">{supplementError}</p> : null}
-              <p className={s.publishReceipt}>没有真实渠道回执时只记录为待外发，不显示已送达。</p>
             </div>
 
             <div className={s.reviewSection}>
@@ -1599,20 +1597,15 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           </header>
           {payload.recording.status === "failed" ? (
             <p className={s.error} role="alert">
-              {payload.recording.error ?? "录音转写失败。"}可以改用下面的妙记导入。
+              {payload.recording.error ?? "录音转写失败。"}
             </p>
-          ) : (
-            <p className={s.entryBody}>录音转写中，完成后自动打开「确认每位说话人是谁」。一小时会议约需数分钟。</p>
-          )}
+          ) : null}
         </section>
       ) : null}
       <section className={s.reviewSection}>
         <header>
           <h3>导入会议记录</h3>
         </header>
-        <p className={s.entryBody}>
-          导入飞书妙记（.md）或逐字稿（.json）。妙记导入后先确认每位说话人是谁，再生成会后事项。
-        </p>
         <div className={s.stageActions}>
           <input
             ref={uploadRef}
@@ -1720,18 +1713,16 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           <p className={s.entryBody}>
             {payload.transcript ? `${payload.transcript.turns.length} 条发言已保存` : "尚未导入逐字稿"}
           </p>
-          <p className={s.publishReceipt}>会后事项从逐字稿整理；会前材料仍可在「材料」里查看。</p>
         </section>
         {actionOf("meeting.replace_transcript") ? (
           <section className={`${s.reviewSection} ${s.dangerSection}`}>
             <header>
               <h3>替换逐字稿 · 危险操作</h3>
             </header>
-            <p className={s.warnings}>替换会让原有的会后候选和处理按钮整体失效，并重新抽取；仅在尚无条目确认生效时可用。</p>
             <input ref={replaceRef} type="file" accept="application/json,.json" aria-label="选择替换用的逐字稿文件" />
             <label className={s.summaryEdit}>
               <input type="checkbox" checked={replaceArmed} onChange={(event) => setReplaceArmed(event.target.checked)} />
-              我确认整份替换当前逐字稿
+              我确认整份替换，现有会后候选随之作废
             </label>
             <div className={s.stageActions}>
               <button type="button" disabled={pending || !replaceArmed} onClick={() => void replaceTranscript()}>

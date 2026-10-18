@@ -102,11 +102,12 @@ describe("我的雷达（/me/radar）", () => {
 
   it("雷达关着：写明关闭并给「打开」；已经收到的信号仍在；不再有刷新", () => {
     const off = render({ ...radar, enabled: false });
-    expect(off).toContain("雷达已关闭。打开后，我每天按你的方向替你看一遍。");
+    expect(off).toContain("雷达已关闭");
+    expect(off).not.toContain("我每天按你的方向替你看一遍");
     expect(off).toContain(">打开<");
     expect(off).not.toContain('aria-label="刷新我的雷达"');
     const kept = render({ ...radar, enabled: false }, list);
-    expect(kept).toContain("雷达已关闭。打开后，我每天按你的方向替你看一遍。");
+    expect(kept).toContain("雷达已关闭");
     expect(kept).toContain("新的一条");
   });
 });
@@ -142,7 +143,7 @@ describe("个人信号阅读（/me/radar/signals/[id]）", () => {
       </WorkspaceTestProvider>,
     );
     expect(html).toContain("恢复到阅读列表");
-    expect(html).toContain("这条已从阅读列表隐藏；需要时可以恢复。");
+    expect(html).toContain(">已隐藏<");
   });
 });
 

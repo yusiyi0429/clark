@@ -1,17 +1,5 @@
 /* 战场二级页（clark `battlefield-detail.module.css` 的分节语言）：小灰标题 + 白底描边的块，发丝线分隔。
    天枢没有健康判断与进度数字：「整体判断」位置放负责人反馈，进展只列有来源的内容。 */
-/* 页头「决策 / 战况」：一整颗胶囊（有底色的轨道，两段等宽并排，选中的一段是轨道里浮起的白色滑块），一眼看出左右二选一。
-   只作用在本页（共用的 SegmentedSwitch 在议题页、会议页是另一种无轨道样式，不动）。
-   位置：页头身份区是「眉题（战场）在上、标题在下」，切换默认按整块居中，会落在眉题与标题之间；这里贴身份区底边（= 标题那一行的底），
-   再按「标题行高 − 胶囊高」的一半抬回，让胶囊与标题字行同一条水平中线。标题行高 = 1.4 × --type-page；胶囊高 36（手机 34）。 */
-.viewSwitch.viewSwitch{display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;padding:3px;border:1px solid #d9dfe7;border-radius:999px;background:#edf0f5;box-shadow:inset 0 1px 2px #1f35560d;align-self:flex-end;margin-bottom:calc((1.4 * var(--type-page, 24px) - 36px) / 2)}
-.viewSwitch.viewSwitch>button{justify-content:center;min-width:64px;height:28px;padding:0 14px;color:#5b6677}
-.viewSwitch.viewSwitch>button:hover{color:#1f2a3d;background:#1f355612}
-.viewSwitch.viewSwitch>button[aria-checked=true],.viewSwitch.viewSwitch>button[aria-checked=true]:hover{background:#fff;color:#1c4f94;box-shadow:0 1px 3px #1f355626,0 0 0 .5px #1f355614}
-@media(max-width:599px){.viewSwitch.viewSwitch{margin-bottom:calc((1.4 * var(--type-page, 24px) - 34px) / 2)}.viewSwitch.viewSwitch>button{min-width:56px;height:26px;padding:0 12px}}
-/* 点触下限（docs/superpowers/specs/2026-10-12-mobile-foldable.md §3.6）：手持与触屏每段 34 高、轨道 3 + 3，整颗 42，热区再外扩到 44 以上。 */
-@media(max-width:959px),(pointer:coarse){.viewSwitch.viewSwitch{margin-bottom:calc((1.4 * var(--type-page, 24px) - 42px) / 2)}.viewSwitch.viewSwitch>button{min-width:64px;height:34px;padding:0 16px;font-size:14px}.viewSwitch.viewSwitch>button::after{inset:-5px 0}}
-@media(prefers-contrast:more){.viewSwitch.viewSwitch{border-color:#777}.viewSwitch.viewSwitch>button{color:#333}}
 
 .detail{display:flex;flex-direction:column;gap:30px;min-width:0;padding-top:4px}
 /* 决策页签内容短（负责人反馈 + 几行议题），白底块不要铺满整个宽列：限宽并水平居中；窄屏自然取满宽（左右留白由外层滚动区给）。战况页签内容多，保持满宽。 */

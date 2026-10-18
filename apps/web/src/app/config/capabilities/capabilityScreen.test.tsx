@@ -33,11 +33,11 @@ describe("能力管理页渲染", () => {
 
   it("渲染 Top Nav、Page Header 与能力列表卡头", () => {
     expect(html).toContain("返回配置");
-    expect(html).toContain("配置变更写入业务库并同步 Radar 监测范围");
+    expect(html).not.toContain("配置变更写入业务库并同步 Radar 监测范围");
     expect(html).toContain("CAPABILITY");
     expect(html).toContain("能力管理");
-    expect(html).toContain("编辑已登记的组织能力：编号、分组、六个月目标与主要支撑。修改后首页能力面板立即更新。");
-    expect(html).toContain("2 项已登记能力 · 点击编辑");
+    expect(html).not.toContain("编辑已登记的组织能力");
+    expect(html).toContain(">2 项<");
   });
 
   it("每行展示编号、名称与「分组 · 负责人 · 六个月目标」，并给出铅笔编辑入口", () => {
@@ -49,15 +49,15 @@ describe("能力管理页渲染", () => {
     expect(html).toContain('aria-label="编辑Agent 安全基线"');
   });
 
-  it("默认不展开编辑弹层，页脚给出提示与完成出口", () => {
+  it("默认不展开编辑弹层，页脚只有完成出口", () => {
     expect(html).not.toContain("编辑能力");
-    expect(html).toContain("修改后立即生效，影响首页分组与议题归属显示");
+    expect(html).not.toContain("修改后立即生效，影响首页分组与议题归属显示");
     expect(html).toContain("完成");
   });
 
   it("空注册表仍渲染页头与页脚，不报错", () => {
     const empty = renderToStaticMarkup(<CapabilityScreen capabilities={[]} battlefields={battlefields} />);
-    expect(empty).toContain("0 项已登记能力 · 点击编辑");
+    expect(empty).toContain(">0 项<");
   });
 });
 

@@ -143,7 +143,7 @@ describe("MeetingCard 材料", () => {
       />,
     );
     expect(held).toContain('aria-label="会议记录：妙记或逐字稿与会后复核"');
-    expect(held).toContain("会后事项从逐字稿整理");
+    expect(held).not.toContain("会后事项从逐字稿整理");
     expect(held).not.toContain("Transcript");
   });
 });

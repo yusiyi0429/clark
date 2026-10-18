@@ -8,7 +8,7 @@ import { Button } from "ts-design/primitives";
 import type { components } from "@/lib/api/schema";
 import { browserApi } from "@/lib/api/client";
 import { monthDayTime } from "@/lib/companyTime";
-import { GUIDE_FILE_NAME, clientName, connectCommands, connectionGuide } from "@/lib/connectionGuide";
+import { GUIDE_FILE_NAME, clientName, connectCommands, connectionGuide, type AgentClient } from "@/lib/connectionGuide";
 import f from "@/components/onboarding/foundation.module.css";
 import s from "@/styles/connection-dialog.module.css";
 import { OAuthConnectForm } from "./OAuthConnectForm";
@@ -92,7 +92,7 @@ export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, rev
   const endpoint = `${origin}/mcp/me`;
   const download = () => {
     if (!created) return;
-    const text = connectionGuide({ role, client: created.view.client, endpoint, token: created.token, expires: expiryText(created.view.expiresAt), weeklySync: createdWeekly });
+    const text = connectionGuide({ role, client: created.view.client as AgentClient, endpoint, token: created.token, expires: expiryText(created.view.expiresAt), weeklySync: createdWeekly });
     const url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url; link.download = GUIDE_FILE_NAME;
@@ -108,7 +108,6 @@ export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, rev
         onSelectionChange={(keys) => { const next = [...keys][0]; if (next === "codex" || next === "claude" || next === "other") setClient(next); }}>
         <ToggleButton id="codex">Codex</ToggleButton><ToggleButton id="claude">Claude Code</ToggleButton><ToggleButton id="other">其他工具</ToggleButton>
       </ToggleButtonGroup>
-      {client === "other" ? <p className={s.muted}>OpenCode、Cursor 等支持远程 MCP 的工具。</p> : null}
     </div>
     <div className={s.choice}><span id="connection-expiry">有效期</span>
       <ToggleButtonGroup className={s.segmented} aria-labelledby="connection-expiry" selectionMode="single" disallowEmptySelection selectedKeys={[String(expiresInDays ?? "never")]}
@@ -116,28 +115,26 @@ export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, rev
         <ToggleButton id="30">30 天</ToggleButton><ToggleButton id="90">90 天</ToggleButton><ToggleButton id="never">不过期</ToggleButton>
       </ToggleButtonGroup>
     </div>
-    <p className={s.muted}>个人令牌到期后需要重新生成并更新工具设置；开启同步不会延长有效期。</p>
     {role === "member" ? <button type="button" role="switch" aria-checked={weeklySync} className={s.switchRow} onClick={() => setWeeklySync(!weeklySync)}>
-      <span className={s.switchText}><strong>每周五 18:00 自动同步进展</strong><span>连接时让 Agent 一并设好定时任务，每周把你的进展写进天枢。</span></span>
+      <span className={s.switchText}><strong>每周五 18:00 自动同步进展</strong></span>
       <span className={f.switch} data-on={weeklySync} aria-hidden="true"><span /></span>
     </button> : null}
     {actionsTarget === undefined ? <Button variant="primary" isDisabled={busy || !name.trim() || activeCount >= 5} onPress={() => void create()}>生成连接说明</Button> : null}
     {actionsTarget ? createPortal(created
       ? <button type="button" className={f.primary} onClick={download}>下载连接说明<Download size={18} aria-hidden="true" /></button>
       : <button type="button" className={f.primary} disabled={busy || !name.trim() || activeCount >= 5} onClick={() => void create()}>{busy ? "正在生成…" : "生成连接说明"}{busy ? null : <ArrowRight size={18} aria-hidden="true" />}</button>, actionsTarget) : null}
-    {activeCount >= 5 ? <p className={s.muted}>最多保留 5 个连接。可以在个人菜单的「连接到外部工具」里撤销不用的再生成。</p> : null}
+    {activeCount >= 5 ? <p className={s.muted}>最多 5 个连接</p> : null}
     {created ? <div className={s.ready} aria-label="连接说明已生成">
       <strong>连接说明已生成</strong>
-      <p>下载后把文件发给你的 {clientName(created.view.client)}，对它说：「按这个文件帮我连上天枢」。它会自己完成设置，连好后删掉文件。</p>
-      {created.view.client === "other" ? <p className={s.muted}>你用的工具要支持远程 MCP（HTTP）；不支持的话，换成 Codex 或 Claude Code。</p> : null}
+      <p>发给 {clientName(created.view.client)}：「按这个文件帮我连上天枢」</p>
       {actionsTarget === undefined ? <Button variant="primary" onPress={download}><Download size={16} aria-hidden />下载连接说明</Button> : null}
-      <p className={s.muted}>文件里有你的连接令牌，只能在这次下载；关掉后要连就重新生成一份。</p>
-      <p role="status" className={connected ? s.connected : s.muted}>{connected ? "✓ 已连上天枢" : "等待你的 Agent 连上…（连上后这里会自动变化）"}</p>
-      <details className={s.manual}><summary>手动设置（熟悉命令行的同事用）</summary>
+      <p className={s.muted}>只能下载这一次</p>
+      <p role="status" className={connected ? s.connected : s.muted}>{connected ? "✓ 已连上天枢" : "等待连接…"}</p>
+      <details className={s.manual}><summary>手动设置</summary>
         <div className={s.manualBody}>
           {commandBlock("令牌", created.token)}
           <p className={s.muted}>连接地址：{endpoint}</p>
-          {connectCommands(created.view.client, endpoint, created.token).map(({ label, value }) => commandBlock(label, value))}
+          {connectCommands(created.view.client as AgentClient, endpoint, created.token).map(({ label, value }) => commandBlock(label, value))}
           {created.view.client === "codex" ? <p className={s.muted}>保存后完全退出并重新打开 Codex。</p> : null}
         </div>
       </details>

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type {
   TActionDescriptor, TMonthlyReviewField, TMonthlyReviewSelfReview, TPersonalReviewBoard,
-  TPersonalReviewDraftSource, TPersonalReviewPayload, TPersonalReviewStatus, TPersonalReviewUpdateInput,
+  TPersonalReviewDraftSource, TPersonalReviewGenerationStep, TPersonalReviewPayload, TPersonalReviewStatus, TPersonalReviewUpdateInput,
 } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
 import type { MemoryPerson } from "./companyMemory.js";
@@ -18,9 +18,14 @@ export type PersonalReviewRow = {
   draft_error: TPersonalReviewPayload["draftError"]; self_review: TMonthlyReviewSelfReview | null;
   submitted_at: Date | null; skipped_by: string | null; skipped_at: Date | null;
   imported_materials: ImportedReviewMaterial[];
+  generation_steps: TPersonalReviewGenerationStep[]; edited_fields: TMonthlyReviewField[];
   action_fingerprints: string[]; created_at: Date; updated_at: Date;
 };
 export const PERSONAL_REVIEW_FIELDS: TMonthlyReviewField[] = ["overall", "judgments", "nextFocus", "escalations"];
+/** Co-Agent 生成个人复盘的四步（personalReviewGeneration.ts）。 */
+const GENERATION_STEP_LABELS: Record<TPersonalReviewGenerationStep["id"], string> = { missions: "读 Mission 卡", weekly: "读每周复盘", collector: "读采集记录", draft: "起草" };
+export const pendingGenerationSteps = (): TPersonalReviewGenerationStep[] =>
+  (Object.keys(GENERATION_STEP_LABELS) as TPersonalReviewGenerationStep["id"][]).map((id) => ({ id, label: GENERATION_STEP_LABELS[id], status: "pending" }));
 const EDITABLE: TPersonalReviewStatus[] = ["waiting", "draft", "draft_failed"];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const terminal = (status: TPersonalReviewStatus) => status === "submitted" || status === "skipped";
@@ -115,7 +120,7 @@ export async function personalReviewContext(q: Query, row: PersonalReviewRow) {
   [new Date(Date.UTC(year, month - 1, 1, -8)), new Date(Date.UTC(year, month, 8, -8)), row.period, row.person_id])).rows;
   return { period: row.period, personId: row.person_id, missions, weeklyProgress };
 }
-export type PersonalReviewDraftInput = Awaited<ReturnType<typeof personalReviewContext>> & Awaited<ReturnType<typeof readPersonalReviewMaterials>>;
+export type { PersonalReviewDraftInput } from "./personalReviewGeneration.js";
 
 export async function projectPersonalReview(q: Query, row: PersonalReviewRow, viewer: ReviewViewer, names: Map<string, string>,
   secret: string, storageDir: string, now: Date): Promise<TPersonalReviewPayload> {
@@ -126,14 +131,15 @@ export async function projectPersonalReview(q: Query, row: PersonalReviewRow, vi
   if (isSelf && EDITABLE.includes(row.status)) {
     actions.push(action(secret, row, "personal-review.update", "保存"));
     if (row.status === "draft") actions.push(action(secret, row, "personal-review.submit", "确认提交"));
-    if (materialCount) actions.push(action(secret, row, "personal-review.draft_with_co_agent", "按材料重新起草"));
+    actions.push(action(secret, row, "personal-review.draft_with_co_agent", row.self_review ? "重新生成" : "生成"));
   }
   if (isCeo && EDITABLE.includes(row.status)) actions.push(action(secret, row, "personal-review.skip", "不等了，继续"));
   const missions = (await q("SELECT id,code,title,outcome FROM missions WHERE period=$1 AND owner_id=$2 ORDER BY code,id", [row.period, row.person_id])).rows as TPersonalReviewPayload["missions"];
   const connected = await q("SELECT 1 FROM personal_tokens WHERE person_id=$1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>$2) LIMIT 1", [row.person_id, now]);
   return { personalReviewId: row.id, monthlyReviewId: row.monthly_review_id, period: row.period, version: row.version,
     personId: row.person_id, personName: names.get(row.person_id) ?? row.person_id, status: row.status,
-    draftSource: row.draft_source, draftError: row.draft_error, selfReview: row.self_review, missions,
+    draftSource: row.draft_source, draftError: row.draft_error, selfReview: row.self_review,
+    generationSteps: row.generation_steps, editedFields: row.edited_fields, missions,
     toolConnected: !!connected.rowCount, materialCount, conversationScope: `personal-review:${row.id}`,
     submittedAt: row.submitted_at?.toISOString() ?? null,
     skipped: row.skipped_by && row.skipped_at ? { byName: names.get(row.skipped_by) ?? row.skipped_by, at: row.skipped_at.toISOString() } : null,
@@ -146,7 +152,7 @@ const error = (status: number, code: string, message: string): PersonalReviewAct
 
 /** 先锁月度复盘再锁个人行，序列化并发交齐判断；重放不再触发 Agent。 */
 export async function executePersonalReviewAction(pool: Pool, viewer: ReviewViewer, scope: ActionScope, input: unknown,
-  fingerprint: string, now: Date, storageDir: string, source: "manual" | "agent_tool" = "manual"): Promise<PersonalReviewActionOutcome> {
+  fingerprint: string, now: Date, source: "manual" | "agent_tool" = "manual"): Promise<PersonalReviewActionOutcome> {
   if (!UUID.test(scope.objectId)) return error(404, "PERSONAL_REVIEW_NOT_FOUND", "个人复盘不存在");
   const client = await pool.connect();
   const q: Query = client.query.bind(client);
@@ -171,8 +177,14 @@ export async function executePersonalReviewAction(pool: Pool, viewer: ReviewView
         const fields = (input as TPersonalReviewUpdateInput).fields;
         if (new Set(fields.map((field) => field.field)).size !== fields.length) return await finish(error(400, "INVALID_INPUT", "同一栏只能更新一次"));
         const selfReview = row.self_review ?? { overall: { text: "", sources: [] }, judgments: { text: "", sources: [] }, nextFocus: { text: "", sources: [] }, escalations: { text: "", sources: [] } };
-        for (const field of fields) selfReview[field.field] = { text: field.text, sources: field.sources ?? selfReview[field.field].sources };
-        await write("status='draft',self_review=$4::jsonb,draft_source=$5,draft_error=NULL", [JSON.stringify(selfReview), source === "agent_tool" ? source : row.draft_source ?? "manual"]);
+        // 本人（或本人的 AI 工具）改过的栏：重新生成时保留。
+        const edited = new Set(row.edited_fields);
+        for (const field of fields) {
+          if (field.text !== selfReview[field.field].text) edited.add(field.field);
+          selfReview[field.field] = { text: field.text, sources: field.sources ?? selfReview[field.field].sources };
+        }
+        await write("status='draft',self_review=$4::jsonb,draft_source=$5,draft_error=NULL,edited_fields=$6::jsonb",
+          [JSON.stringify(selfReview), source === "agent_tool" ? source : row.draft_source ?? "manual", JSON.stringify(PERSONAL_REVIEW_FIELDS.filter((field) => edited.has(field)))]);
         break;
       }
       case "personal-review.submit":
@@ -184,9 +196,7 @@ export async function executePersonalReviewAction(pool: Pool, viewer: ReviewView
         await write("status='skipped',skipped_by=$4,skipped_at=$2", [viewer.personId]);
         break;
       case "personal-review.draft_with_co_agent": {
-        const materials = await readPersonalReviewMaterials(q, row, storageDir);
-        if (!materials.attachments.length && !materials.messages.length && !materials.importedMaterials.length) return await finish(error(400, "PERSONAL_REVIEW_MATERIAL_REQUIRED", "请先上传材料或粘贴草稿"));
-        await write("status='drafting',draft_error=NULL");
+        await write("status='drafting',draft_error=NULL,generation_steps=$4::jsonb", [JSON.stringify(pendingGenerationSteps())]);
         effects.push({ type: "personal_draft", personalReviewId: row.id, version: row.version + 1 });
         break;
       }

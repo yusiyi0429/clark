@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TEST_CEO, createTestApp, type TestApp } from "./helpers.js";
+import { createTestApp, type TestApp } from "./helpers.js";
 import type { ConversationRuntime } from "../src/conversations.js";
 import { CONVERSATION_IDLE_RESTART_MS } from "../src/conversations.js";
 import type { TurnRecoverySummary } from "../src/conversationRecovery.js";
@@ -35,121 +35,25 @@ const send = (t: TestApp, cookie: string, message: string, scope = "global") => 
 const post = (t: TestApp, cookie: string, url: string) => t.app.inject({ method: "POST", url, headers: { cookie, origin: t.publicOrigin } });
 const get = (t: TestApp, cookie: string, url: string) => t.app.inject({ method: "GET", url, headers: { cookie } });
 
-describe("新建对话：当前对话归档，能回看、能切回去继续", () => {
-  it("新建以后界面是一条空白对话；旧消息不删，进历史列表，首问与条数都在", async () => {
+describe("一条连续的对话：没有新建对话与历史对话列表", () => {
+  it("新建、历史列表、回看、切回的接口都不在；同一页面的每一轮都进同一条对话", async () => {
     const runtime = recordingRuntime();
     const t = await createTestApp({}, runtime);
     try {
       const cookie = await t.loginCookie();
       await send(t, cookie, "词元云集的长期目标是什么？");
+      expect((await post(t, cookie, "/api/conversations/global/new")).statusCode).toBe(404);
+      const [row] = await t.sql("SELECT id FROM conversations WHERE scope = 'global'");
+      expect((await get(t, cookie, "/api/conversations/global/archived")).statusCode).toBe(404);
+      expect((await get(t, cookie, `/api/conversations/global/archived/${row.id as string}/messages`)).statusCode).toBe(404);
+      expect((await post(t, cookie, `/api/conversations/global/archived/${row.id as string}/restore`)).statusCode).toBe(404);
       await send(t, cookie, "那本月目标呢");
-      const created = await post(t, cookie, "/api/conversations/global/new");
-      expect(created.statusCode).toBe(200);
-      expect(created.json()).toMatchObject({ archived: true, conversationId: expect.any(String) });
-
+      expect(runtime.inputs.at(-1)?.runtimeEntries).toEqual([{ turn: "词元云集的长期目标是什么？" }]);
       const history = (await get(t, cookie, "/api/conversations/global/messages")).json();
-      expect(history).toMatchObject({ messages: [], archivedCount: 1 });
-
-      // 下一轮进新对话，模型历史从空开始（不带旧对话的会话记录）。
-      await send(t, cookie, "新话题");
-      expect(runtime.inputs.at(-1)?.runtimeEntries).toEqual([]);
-      expect(runtime.inputs.at(-1)?.recentMessages).toEqual([]);
-      const current = (await get(t, cookie, "/api/conversations/global/messages")).json();
-      expect(current.messages.map((message: { content: string }) => message.content)).toEqual(["新话题", "答：新话题"]);
-
-      const rows = await t.sql("SELECT id, archived_at, deleted_at FROM conversations WHERE scope = 'global' ORDER BY created_at, id");
-      expect(rows).toHaveLength(2);
-      expect(rows[0].archived_at).toBeInstanceOf(Date);
-      expect(rows[0].deleted_at).toBeNull();
-      expect(rows[1].archived_at).toBeNull();
-      expect(await t.sql("SELECT count(*)::int AS n FROM conversation_messages WHERE conversation_id = $1", [rows[0].id])).toEqual([{ n: 4 }]);
-
-      const list = (await get(t, cookie, "/api/conversations/global/archived")).json();
-      expect(list.conversations).toEqual([expect.objectContaining({ id: rows[0].id, firstQuestion: "词元云集的长期目标是什么？", messageCount: 4 })]);
-      const replay = await get(t, cookie, `/api/conversations/global/archived/${rows[0].id as string}/messages`);
-      expect(replay.statusCode).toBe(200);
-      expect(replay.json().messages.map((message: { content: string }) => message.content))
-        .toEqual(["词元云集的长期目标是什么？", "答：词元云集的长期目标是什么？", "那本月目标呢", "答：那本月目标呢"]);
+      expect(history).not.toHaveProperty("archivedCount");
+      expect(history.messages).toHaveLength(4);
+      expect(await t.sql("SELECT count(*)::int AS n FROM conversations WHERE scope = 'global'")).toEqual([{ n: 1 }]);
     } finally {
-      await t.close();
-    }
-  });
-
-  it("当前对话还是空的时新建什么都不做；不是自己的、不是归档的、id 不对都 404", async () => {
-    const t = await createTestApp({}, recordingRuntime());
-    try {
-      const cookie = await t.loginCookie();
-      expect((await post(t, cookie, "/api/conversations/global/new")).json()).toEqual({ conversationId: null, archived: false });
-      await send(t, cookie, "第一问");
-      await post(t, cookie, "/api/conversations/global/new");
-      const again = (await post(t, cookie, "/api/conversations/global/new")).json();
-      expect(again.archived).toBe(false);
-      expect(await t.sql("SELECT count(*)::int AS n FROM conversations WHERE scope = 'global'")).toEqual([{ n: 2 }]);
-
-      const [archived] = await t.sql("SELECT id FROM conversations WHERE scope = 'global' AND archived_at IS NOT NULL");
-      const [active] = await t.sql("SELECT id FROM conversations WHERE scope = 'global' AND archived_at IS NULL");
-      expect((await get(t, cookie, `/api/conversations/global/archived/${active.id as string}/messages`)).statusCode).toBe(404);
-      expect((await get(t, cookie, "/api/conversations/global/archived/11111111-1111-4111-8111-111111111111/messages")).statusCode).toBe(404);
-      expect((await get(t, cookie, "/api/conversations/global/archived/not-a-uuid/messages")).statusCode).toBe(400);
-      const member = await t.memberCookie();
-      expect((await get(t, member, `/api/conversations/global/archived/${archived.id as string}/messages`)).statusCode).toBe(404);
-      expect((await post(t, member, `/api/conversations/global/archived/${archived.id as string}/restore`)).statusCode).toBe(404);
-      expect((await get(t, member, "/api/conversations/global/archived")).json()).toEqual({ conversations: [] });
-      expect((await t.app.inject({ method: "POST", url: "/api/conversations/global/new", headers: { origin: t.publicOrigin } })).statusCode).toBe(401);
-    } finally {
-      await t.close();
-    }
-  });
-
-  it("切回一段历史对话：它成为当前对话、接着它的模型历史；刚才那段归档", async () => {
-    const runtime = recordingRuntime();
-    const t = await createTestApp({}, runtime);
-    try {
-      const cookie = await t.loginCookie();
-      await send(t, cookie, "旧话题");
-      await post(t, cookie, "/api/conversations/global/new");
-      await send(t, cookie, "新话题");
-      const [old] = await t.sql("SELECT id FROM conversations WHERE scope = 'global' AND archived_at IS NOT NULL");
-      const restored = await post(t, cookie, `/api/conversations/global/archived/${old.id as string}/restore`);
-      expect(restored.json()).toEqual({ conversationId: old.id, archived: true });
-
-      const history = (await get(t, cookie, "/api/conversations/global/messages")).json();
-      expect(history.messages.map((message: { content: string }) => message.content)).toEqual(["旧话题", "答：旧话题"]);
-      expect(history.archivedCount).toBe(1);
-      await send(t, cookie, "接着旧话题");
-      expect(runtime.inputs.at(-1)?.runtimeEntries).toEqual([{ turn: "旧话题" }]);
-      expect((await get(t, cookie, "/api/conversations/global/archived")).json().conversations)
-        .toEqual([expect.objectContaining({ firstQuestion: "新话题", messageCount: 2 })]);
-    } finally {
-      await t.close();
-    }
-  });
-
-  it("一轮回答还没结束时不新建、不切换（409）", async () => {
-    let started!: () => void;
-    const running = new Promise<void>((resolve) => { started = resolve; });
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    const t = await createTestApp({}, {
-      async run(input) {
-        started();
-        await gate;
-        input.emit({ type: "message", delta: "好" });
-        return { assistantMessage: "好", runtimeEntries: [] };
-      },
-    });
-    try {
-      const cookie = await t.loginCookie();
-      const turn = send(t, cookie, "慢问题");
-      await running;
-      const busy = await post(t, cookie, "/api/conversations/global/new");
-      expect(busy.statusCode).toBe(409);
-      expect(busy.json()).toMatchObject({ code: "TURN_IN_PROGRESS" });
-      release();
-      await turn;
-      expect((await post(t, cookie, "/api/conversations/global/new")).json()).toMatchObject({ archived: true });
-    } finally {
-      release();
       await t.close();
     }
   });

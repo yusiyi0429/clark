@@ -155,7 +155,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
           const scope = { actionType: "personal-review.update", objectType: "personal-review", objectId: review.id, objectVersion: args.version as number };
           const fields = args.fields as TPersonalReviewUpdateInput["fields"];
           const saved = await executePersonalReviewAction(deps.pool, { personId: identity.personId, role: roles.ceo ? "ceo" : "member" }, scope,
-            { fields }, actionFingerprint(deps.pepper, signActionId(deps.pepper, scope), { fields, source: "agent_tool" }), deps.now(), "", "agent_tool");
+            { fields }, actionFingerprint(deps.pepper, signActionId(deps.pepper, scope), { fields, source: "agent_tool" }), deps.now(), "agent_tool");
           if ("error" in saved) { code = saved.error.code; return result(saved.error, true); }
           if ("conflict" in saved) { code = "VERSION_CONFLICT"; return result({ code, message: "个人复盘已变化，请重新读取后重试" }, true); }
           const latest = (await getPersonalReview(deps.q, review.id))!;

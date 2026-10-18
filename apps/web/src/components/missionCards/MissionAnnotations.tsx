@@ -249,7 +249,7 @@ function ResolveNote({ id, onResolve }: { id: string; onResolve: NonNullable<Ann
     locked.current = false; setBusy(false);
     if (failure) setError(failure); else setOpen(false);
   };
-  return <div className={a.resolve}><button type="button" aria-expanded={open} disabled={busy} onClick={() => setOpen(!open)}>保留备注，暂不修改</button>{open ? <div className={a.resolveForm}><label htmlFor={`annotation-resolve-${id}`}>暂不修改的原因</label><textarea id={`annotation-resolve-${id}`} autoFocus rows={2} maxLength={1000} value={reason} disabled={busy} onChange={(event) => setReason(event.target.value)} placeholder="说明为什么保留备注、暂不改正文…" /><small>批注与原因保留供最终审核。</small>{error ? <p role="alert" className={a.error}>{error}</p> : null}<div className={a.options}><button type="button" disabled={busy || !reason.trim()} onClick={() => void resolve()}>{busy ? "保存中…" : "确认保留备注"}</button><button type="button" disabled={busy} onClick={() => setOpen(false)}>取消</button></div></div> : null}</div>;
+  return <div className={a.resolve}><button type="button" aria-expanded={open} disabled={busy} onClick={() => setOpen(!open)}>保留备注，暂不修改</button>{open ? <div className={a.resolveForm}><label htmlFor={`annotation-resolve-${id}`}>暂不修改的原因</label><textarea id={`annotation-resolve-${id}`} autoFocus rows={2} maxLength={1000} value={reason} disabled={busy} onChange={(event) => setReason(event.target.value)} placeholder="说明为什么保留备注、暂不改正文…" />{error ? <p role="alert" className={a.error}>{error}</p> : null}<div className={a.options}><button type="button" disabled={busy || !reason.trim()} onClick={() => void resolve()}>{busy ? "保存中…" : "确认保留备注"}</button><button type="button" disabled={busy} onClick={() => setOpen(false)}>取消</button></div></div> : null}</div>;
 }
 
 function PendingNote({ note, onRetry }: { note: TMissionCardAnnotationView; onRetry: AnnotationControls["onRetry"] }) {
@@ -282,7 +282,7 @@ function Clarification({ note, onAnswer, closedReason }: { note: TMissionCardAnn
     <blockquote>你的批注：{note.body}</blockquote>
     <div className={a.options}>{note.options.map((option) => <button type="button" key={option} disabled={busy || !note.canAnswer} onClick={() => void send(option)}>{option}</button>)}<button type="button" aria-expanded={custom} disabled={busy || !note.canAnswer} onClick={() => setCustom(!custom)}>自己输入</button></div>
     {custom ? <div className={a.customAnswer}><textarea aria-label="补充你的意思" placeholder="写下你希望怎么改…" maxLength={4000} rows={2} autoFocus value={text} disabled={busy || !note.canAnswer} onChange={(event) => setText(event.target.value)} /><button type="button" className={a.save} disabled={!text.trim() || busy || !note.canAnswer} onClick={() => void send(text)}>确认并继续</button></div> : null}
-    {!note.canAnswer ? <small>{closedReason ?? "等待批注者或拍板人明确后继续"}</small> : <small>{busy ? "正在提交…" : "确定后立即修改，原文和记录都会保留"}</small>}
+    {!note.canAnswer ? <small>{closedReason ?? "等待批注者或拍板人明确后继续"}</small>  : busy ? <small>正在提交…</small> : null}
     {error ? <p className={a.error} role="alert">{error}</p> : null}
   </aside>;
 }

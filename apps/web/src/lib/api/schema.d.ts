@@ -771,6 +771,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/requests/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发起人一句话，Agent 起草请求（标题、说明、接收人候选）并自查歧义；带 requestId 时按回答重写同一份草稿 */
+        post: operations["draftRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读一条请求；只有发起人和接收人看得到，打开即把这条请求的通知标为已读 */
+        get: operations["getRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/{id}/questions/prepare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 接收人提问前：先在说明和已有问答里找答案，找不到就整理成问题等本人确认；不写库 */
+        post: operations["prepareRequestQuestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/{id}/questions/{questionId}/answer-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发起人的 Agent 起草回答（存为草稿，发起人确认后才发出） */
+        post: operations["draftRequestAnswer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/actions/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** request.send / ask / answer / mark_done；send 校验 actionId 里的版本，发出的就是预览那一版 */
+        post: operations["executeRequestAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我收到的（inbox）或我发出的（sent）请求，最近 100 条 */
+        get: operations["listMyRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/radar": {
         parameters: {
             query?: never;
@@ -868,74 +970,6 @@ export interface paths {
         put?: never;
         /** 发送消息并通过 SSE 返回 Pi 运行事件 */
         post: operations["sendConversationMessage"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/conversations/{scope}/new": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 新建对话：本人在该 scope 的当前对话有内容时归档（不删除），之后的消息进一条空白对话 */
-        post: operations["startNewConversation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/conversations/{scope}/archived": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 本人在该 scope 已归档、有内容的历史对话（新的在前） */
-        get: operations["listArchivedConversations"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/conversations/{scope}/archived/{id}/messages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 只读回看一段历史对话 */
-        get: operations["getArchivedConversationMessages"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/conversations/{scope}/archived/{id}/restore": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 切回一段历史对话继续：当前对话归档，这一段成为当前对话 */
-        post: operations["restoreArchivedConversation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1546,6 +1580,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/collector/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本机采集器心跳：设备、版本、各来源状态（collector 个人令牌） */
+        post: operations["collectorHeartbeat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collector/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本机采集器上报一段工作与本机清单，按 clientEventId 幂等（collector 个人令牌） */
+        post: operations["collectorReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/tokens/{id}": {
         parameters: {
             query?: never;
@@ -1836,6 +1904,41 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/me/memory/personal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的 */
+        get: operations["listPersonalMemory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/memory/personal/items/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 本人删掉（忘掉）一条个人记忆：不再装进对话，后台提炼也不再学回来 */
+        delete: operations["forgetPersonalMemoryItem"];
+        options?: never;
+        head?: never;
+        /** 本人改一条个人记忆的标题或正文；已替代或已忘掉的 409 */
+        patch: operations["updatePersonalMemoryItem"];
         trace?: never;
     };
     "/api/me/voiceprint": {
@@ -2646,26 +2749,8 @@ export interface components {
                     text: string;
                     detail: string;
                 };
+                memoryUsed?: string[];
             }[];
-            archivedCount?: number;
-        };
-        ArchivedConversationList: {
-            conversations: {
-                /** Format: uuid */
-                id: string;
-                firstQuestion: string;
-                /** Format: date-time */
-                startedAt: string;
-                /** Format: date-time */
-                lastAt: string;
-                /** Format: date-time */
-                archivedAt: string;
-                messageCount: number;
-            }[];
-        };
-        ConversationSwitchResponse: {
-            conversationId: string | null;
-            archived: boolean;
         };
         ConversationMessageRequest: {
             message: string;
@@ -2702,6 +2787,17 @@ export interface components {
             isError?: boolean;
             label?: string;
             detail?: string;
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
+            type: "step";
+            id: string;
+            label: string;
+            status: "done" | "active" | "pending" | "stopped";
+            result?: string;
         } | {
             runId: string;
             /** @description global 或稳定对象 scope */
@@ -3955,6 +4051,13 @@ export interface components {
                     sources: string[];
                 };
             } | null;
+            generationSteps: {
+                id: "missions" | "weekly" | "collector" | "draft";
+                label: string;
+                status: "pending" | "running" | "done" | "failed";
+                result?: string;
+            }[];
+            editedFields: ("overall" | "judgments" | "nextFocus" | "escalations")[];
             missions: {
                 id: string;
                 code: string;
@@ -3981,6 +4084,12 @@ export interface components {
                 label: string;
                 itemId?: string;
             }[];
+        };
+        PersonalReviewGenerationStep: {
+            id: "missions" | "weekly" | "collector" | "draft";
+            label: string;
+            status: "pending" | "running" | "done" | "failed";
+            result?: string;
         };
         PersonalReviewBoard: {
             monthlyReviewId: string;
@@ -4089,6 +4198,13 @@ export interface components {
                         sources: string[];
                     };
                 } | null;
+                generationSteps: {
+                    id: "missions" | "weekly" | "collector" | "draft";
+                    label: string;
+                    status: "pending" | "running" | "done" | "failed";
+                    result?: string;
+                }[];
+                editedFields: ("overall" | "judgments" | "nextFocus" | "escalations")[];
                 missions: {
                     id: string;
                     code: string;
@@ -4155,6 +4271,13 @@ export interface components {
                         sources: string[];
                     };
                 } | null;
+                generationSteps: {
+                    id: "missions" | "weekly" | "collector" | "draft";
+                    label: string;
+                    status: "pending" | "running" | "done" | "failed";
+                    result?: string;
+                }[];
+                editedFields: ("overall" | "judgments" | "nextFocus" | "escalations")[];
                 missions: {
                     id: string;
                     code: string;
@@ -6086,12 +6209,12 @@ export interface components {
                 }[];
             }[];
         };
-        PersonalTokenClient: "codex" | "claude" | "other";
+        PersonalTokenClient: "codex" | "claude" | "other" | "collector";
         PersonalTokenView: {
             /** Format: uuid */
             id: string;
             name: string;
-            client: "codex" | "claude" | "other";
+            client: "codex" | "claude" | "other" | "collector";
             authType?: "personal" | "oauth";
             createdAt: string;
             expiresAt: string | null;
@@ -6599,7 +6722,7 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 name: string;
-                client: "codex" | "claude" | "other";
+                client: "codex" | "claude" | "other" | "collector";
                 authType?: "personal" | "oauth";
                 createdAt: string;
                 expiresAt: string | null;
@@ -6612,7 +6735,7 @@ export interface components {
         };
         CreatePersonalTokenRequest: {
             name: string;
-            client: "codex" | "claude" | "other";
+            client: "codex" | "claude" | "other" | "collector";
             expiresInDays: 30 | 90 | null;
         };
         CreatePersonalTokenResponse: {
@@ -6621,13 +6744,86 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 name: string;
-                client: "codex" | "claude" | "other";
+                client: "codex" | "claude" | "other" | "collector";
                 authType?: "personal" | "oauth";
                 createdAt: string;
                 expiresAt: string | null;
                 lastUsedAt: string | null;
                 lastProgressAt: string | null;
             };
+        };
+        CollectorHeartbeatRequest: {
+            device: {
+                id: string;
+                name: string;
+                platform: "windows" | "macos" | "linux";
+            };
+            version: string;
+            sources: {
+                source: string;
+                status: "ok" | "not_found" | "error";
+                coverageUntil: string | null;
+                lastNewEvidenceAt: string | null;
+                errorCode: string | null;
+            }[];
+        };
+        CollectorHeartbeatResponse: {
+            /** Format: date-time */
+            receivedAt: string;
+        };
+        CollectorReportRequest: {
+            device: {
+                id: string;
+                name: string;
+                platform: "windows" | "macos" | "linux";
+            };
+            version: string;
+            kind: "digest" | "eod" | "catchup";
+            /** Format: date-time */
+            windowStart: string;
+            /** Format: date-time */
+            windowEnd: string;
+            sources: {
+                source: string;
+                status: "ok" | "not_found" | "error";
+                coverageUntil: string | null;
+                lastNewEvidenceAt: string | null;
+                errorCode: string | null;
+            }[];
+            items: {
+                /** Format: uuid */
+                clientEventId: string;
+                source: string;
+                /** Format: date-time */
+                startedAt: string;
+                /** Format: date-time */
+                endedAt: string;
+                summary: string;
+                links: {
+                    url: string;
+                    title?: string;
+                }[];
+                taskHint: string | null;
+            }[];
+            inventory?: {
+                scheduledTasks: {
+                    name: string;
+                    schedule: string | null;
+                    command: string | null;
+                }[];
+                feishuDocs: {
+                    url: string;
+                    title: string | null;
+                    /** Format: date-time */
+                    readAt: string;
+                }[];
+            };
+        };
+        CollectorReportResponse: {
+            accepted: number;
+            duplicates: number;
+            /** Format: date-time */
+            receivedAt: string;
         };
         TaskPerson: {
             personId: string;
@@ -7565,9 +7761,9 @@ export interface components {
         NotificationList: {
             notifications: {
                 id: string;
-                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned";
+                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned" | "request_received" | "request_answered" | "request_done" | "request_asked";
                 text: string;
-                objectType: "task" | "meeting" | "issue";
+                objectType: "task" | "meeting" | "issue" | "request";
                 objectId: string;
                 createdAt: string;
                 readAt: string | null;
@@ -7591,6 +7787,64 @@ export interface components {
             enrolled: boolean;
             updatedAt: string | null;
             configured: boolean;
+        };
+        PersonalMemoryItem: {
+            id: string;
+            /** @description 想法、立场、未决问题、理由、偏好与表达方式、做法 */
+            kind: "idea" | "stance" | "open_question" | "reason" | "preference" | "practice";
+            title: string;
+            text: string;
+            status: "active" | "superseded" | "forgotten";
+            supersededBy: string | null;
+            anchors: {
+                /** @description 对象 id（如 issue:<id>）或 topic:<主题> */
+                target: string;
+                /** @description 写入时钉住的对象版本 */
+                pinnedVersion?: number;
+            }[];
+            references: {
+                /** @description 依据，沿用 cite: 语法去掉前缀，如 chat:<会话 id>#<消息序号> */
+                ref: string;
+                quote?: string;
+                /** Format: date-time */
+                at: string;
+            }[];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        PersonalMemoryList: {
+            items: {
+                id: string;
+                /** @description 想法、立场、未决问题、理由、偏好与表达方式、做法 */
+                kind: "idea" | "stance" | "open_question" | "reason" | "preference" | "practice";
+                title: string;
+                text: string;
+                status: "active" | "superseded" | "forgotten";
+                supersededBy: string | null;
+                anchors: {
+                    /** @description 对象 id（如 issue:<id>）或 topic:<主题> */
+                    target: string;
+                    /** @description 写入时钉住的对象版本 */
+                    pinnedVersion?: number;
+                }[];
+                references: {
+                    /** @description 依据，沿用 cite: 语法去掉前缀，如 chat:<会话 id>#<消息序号> */
+                    ref: string;
+                    quote?: string;
+                    /** Format: date-time */
+                    at: string;
+                }[];
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+            }[];
+        };
+        UpdatePersonalMemoryItemRequest: {
+            title?: string;
+            text?: string;
         };
         DictationResult: {
             text: string;
@@ -7707,6 +7961,290 @@ export interface components {
         };
         SeenMarksResponse: {
             keys: string[];
+        };
+        RequestStep: {
+            label: string;
+            status: "done" | "current" | "pending";
+            result: string | null;
+        };
+        RequestPerson: {
+            personId: string;
+            displayName: string;
+        };
+        RequestRecipientView: {
+            personId: string;
+            displayName: string;
+            status: "pending" | "done";
+            doneByName: string | null;
+            doneAt: string | null;
+        };
+        RequestQuestionView: {
+            id: string;
+            askerId: string;
+            askerName: string;
+            question: string;
+            answer: string | null;
+            answerDraft: string | null;
+            answeredAt: string | null;
+            mergedIntoBody: boolean;
+            createdAt: string;
+        };
+        RequestClarification: {
+            question: string;
+            answer: string | null;
+        };
+        RequestView: {
+            id: string;
+            kind: "relay" | "collection" | "impact" | "supplement";
+            status: "draft" | "open" | "done";
+            version: number;
+            title: string;
+            body: string;
+            prompt: string;
+            initiator: {
+                personId: string;
+                displayName: string;
+            };
+            createdAt: string;
+            sentAt: string | null;
+            recipients: {
+                personId: string;
+                displayName: string;
+                status: "pending" | "done";
+                doneByName: string | null;
+                doneAt: string | null;
+            }[];
+            candidates: {
+                personId: string;
+                displayName: string;
+            }[];
+            directory: {
+                personId: string;
+                displayName: string;
+            }[];
+            clarifications: {
+                question: string;
+                answer: string | null;
+            }[];
+            questions: {
+                id: string;
+                askerId: string;
+                askerName: string;
+                question: string;
+                answer: string | null;
+                answerDraft: string | null;
+                answeredAt: string | null;
+                mergedIntoBody: boolean;
+                createdAt: string;
+            }[];
+            viewer: {
+                isInitiator: boolean;
+                isRecipient: boolean;
+                myStatus: "pending" | "done" | null;
+            };
+            actions: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            }[];
+        };
+        RequestResponse: {
+            request: {
+                id: string;
+                kind: "relay" | "collection" | "impact" | "supplement";
+                status: "draft" | "open" | "done";
+                version: number;
+                title: string;
+                body: string;
+                prompt: string;
+                initiator: {
+                    personId: string;
+                    displayName: string;
+                };
+                createdAt: string;
+                sentAt: string | null;
+                recipients: {
+                    personId: string;
+                    displayName: string;
+                    status: "pending" | "done";
+                    doneByName: string | null;
+                    doneAt: string | null;
+                }[];
+                candidates: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                directory: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                clarifications: {
+                    question: string;
+                    answer: string | null;
+                }[];
+                questions: {
+                    id: string;
+                    askerId: string;
+                    askerName: string;
+                    question: string;
+                    answer: string | null;
+                    answerDraft: string | null;
+                    answeredAt: string | null;
+                    mergedIntoBody: boolean;
+                    createdAt: string;
+                }[];
+                viewer: {
+                    isInitiator: boolean;
+                    isRecipient: boolean;
+                    myStatus: "pending" | "done" | null;
+                };
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+        };
+        DraftRequestRequest: {
+            prompt: string;
+            requestId?: string;
+            clarifications?: {
+                question: string;
+                answer: string | null;
+            }[];
+        };
+        DraftRequestResponse: {
+            request: {
+                id: string;
+                kind: "relay" | "collection" | "impact" | "supplement";
+                status: "draft" | "open" | "done";
+                version: number;
+                title: string;
+                body: string;
+                prompt: string;
+                initiator: {
+                    personId: string;
+                    displayName: string;
+                };
+                createdAt: string;
+                sentAt: string | null;
+                recipients: {
+                    personId: string;
+                    displayName: string;
+                    status: "pending" | "done";
+                    doneByName: string | null;
+                    doneAt: string | null;
+                }[];
+                candidates: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                directory: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                clarifications: {
+                    question: string;
+                    answer: string | null;
+                }[];
+                questions: {
+                    id: string;
+                    askerId: string;
+                    askerName: string;
+                    question: string;
+                    answer: string | null;
+                    answerDraft: string | null;
+                    answeredAt: string | null;
+                    mergedIntoBody: boolean;
+                    createdAt: string;
+                }[];
+                viewer: {
+                    isInitiator: boolean;
+                    isRecipient: boolean;
+                    myStatus: "pending" | "done" | null;
+                };
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+            steps: {
+                label: string;
+                status: "done" | "current" | "pending";
+                result: string | null;
+            }[];
+        };
+        RequestListItem: {
+            id: string;
+            title: string;
+            status: "draft" | "open" | "done";
+            initiatorName: string;
+            createdAt: string;
+            sentAt: string | null;
+            myStatus: "pending" | "done" | null;
+            recipientNames: string[];
+            recipientsDone: number;
+            openQuestions: number;
+            unread: boolean;
+        };
+        RequestListResponse: {
+            items: {
+                id: string;
+                title: string;
+                status: "draft" | "open" | "done";
+                initiatorName: string;
+                createdAt: string;
+                sentAt: string | null;
+                myStatus: "pending" | "done" | null;
+                recipientNames: string[];
+                recipientsDone: number;
+                openQuestions: number;
+                unread: boolean;
+            }[];
+        };
+        PrepareRequestQuestionRequest: {
+            question: string;
+        };
+        PrepareRequestQuestionResponse: {
+            steps: {
+                label: string;
+                status: "done" | "current" | "pending";
+                result: string | null;
+            }[];
+            answer: {
+                source: "body" | "question";
+                text: string;
+                questionId: string | null;
+            } | null;
+            question: string;
+        };
+        DraftRequestAnswerResponse: {
+            steps: {
+                label: string;
+                status: "done" | "current" | "pending";
+                result: string | null;
+            }[];
+            answer: string;
+        };
+        RequestSendInput: {
+            recipientIds: string[];
+        };
+        RequestAskInput: {
+            question: string;
+        };
+        RequestAnswerInput: {
+            answer: string;
+        };
+        ExecuteRequestActionRequest: {
+            actionId: string;
+            input?: unknown;
         };
     };
     responses: never;
@@ -9845,6 +10383,345 @@ export interface operations {
             };
         };
     };
+    draftRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftRequestRequest"];
+            };
+        };
+        responses: {
+            /** @description 草稿与处理步骤 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRequestResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 请求 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    prepareRequestQuestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrepareRequestQuestionRequest"];
+            };
+        };
+        responses: {
+            /** @description 处理步骤与结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrepareRequestQuestionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    draftRequestAnswer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                questionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 回答草稿 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRequestAnswerResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    executeRequestAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecuteRequestActionRequest"];
+            };
+        };
+        responses: {
+            /** @description 请求的最新视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMyRequests: {
+        parameters: {
+            query: {
+                box: "inbox" | "sent";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 请求列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getRadarCard: {
         parameters: {
             query?: never;
@@ -10114,186 +10991,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    startNewConversation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                scope: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 当前对话 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConversationSwitchResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    listArchivedConversations: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                scope: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 历史对话 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArchivedConversationList"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    getArchivedConversationMessages: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                scope: string;
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Conversation 历史 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConversationHistory"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    restoreArchivedConversation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                scope: string;
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 当前对话 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConversationSwitchResponse"];
                 };
             };
             /** @description ApiError 统一错误 */
@@ -12449,6 +13146,90 @@ export interface operations {
             };
         };
     };
+    collectorHeartbeat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectorHeartbeatRequest"];
+            };
+        };
+        responses: {
+            /** @description 已记下 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectorHeartbeatResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    collectorReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectorReportRequest"];
+            };
+        };
+        responses: {
+            /** @description 新记下与重放的条数 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectorReportResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     revokePersonalToken: {
         parameters: {
             query?: never;
@@ -13579,6 +14360,184 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listPersonalMemory: {
+        parameters: {
+            query?: {
+                status?: "active" | "superseded" | "forgotten" | "all";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本人个人记忆 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalMemoryList"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    forgetPersonalMemoryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 忘掉后的条目 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalMemoryItem"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updatePersonalMemoryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePersonalMemoryItemRequest"];
+            };
+        };
+        responses: {
+            /** @description 改后的条目 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalMemoryItem"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

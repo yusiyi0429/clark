@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
+import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
 import type { TPreflightCandidate, TWebSearchInput, TWebSearchResponse, TWebSearchResult } from "@warmap/contracts";
 import { migrate } from "../src/migrate.js";
 import { hashSecret } from "../src/session.js";
@@ -29,6 +30,7 @@ import type { MaterialAnnotationAgent } from "../src/materialAnnotationAgent.js"
 import type { MissionCardAnnotationAgent } from "../src/missionCardAnnotationAgent.js";
 import type { MissionCardReviewAgent } from "../src/missionCardReview.js";
 import type { MissionCardDraftAgent } from "../src/missionCardDraftAgent.js";
+import type { RequestAgent } from "../src/delivery/requestAgent.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 
@@ -191,6 +193,16 @@ export type TestApp = {
   close: () => Promise<void>;
 };
 
+/** 个人记忆提炼的测试模型流：每次只交一份 noop 候选。 */
+export function noopDistillationStream() {
+  const stream = createAssistantMessageEventStream();
+  const message: AssistantMessage = { role: "assistant", api: "openai-responses", provider: "warmap", model: "test",
+    content: [{ type: "toolCall", id: randomUUID(), name: "submit_candidate", arguments: { status: "noop", items: [], clarification: "" } }],
+    stopReason: "toolUse", timestamp: Date.now(), usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
+  queueMicrotask(() => stream.push({ type: "done", reason: "toolUse", message }));
+  return stream;
+}
+
 /** 每个用例一个独立数据库 + 已迁移 schema + 完整 app。可覆盖 CompanyMemory seed 路径。 */
 const defaultConversationRuntime: ConversationRuntime = {
   async run(input) {
@@ -218,6 +230,8 @@ export async function createTestApp(
     missionCardAnnotationAgent?: MissionCardAnnotationAgent;
     missionCardReviewAgent?: MissionCardReviewAgent;
     missionCardDraftAgent?: MissionCardDraftAgent;
+    /** 送达通道的假 Agent；不注入时用真实装配（测试里不会被调用）。 */
+    requestAgent?: RequestAgent;
     driExporter?: DriExporter;
     ontologyUpdater?: OntologyUpdater;
     monthlyDraftAgent?: MonthlyDraftAgent;
@@ -238,6 +252,8 @@ export async function createTestApp(
     /** 公司雷达与个人雷达服务替身；不注入时 app 用未配置的桩。 */
     radarService?: RadarService;
     personalRadarService?: PersonalRadarService;
+    /** 个人记忆提炼的模型流；不注入时一律交 noop 候选（测试里不调真实模型）。 */
+    personalDistillationStream?: Parameters<typeof buildApp>[0]["personalDistillationStream"];
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {
@@ -254,7 +270,7 @@ export async function createTestApp(
   client.release();
   const env = { ...testEnv, ...seedOverrides };
   const { monthlyDraftAgent, monthlyNow, recordingDeps, monthlyReviewAgents, monthlyReviewRetryDelayMs, ...restRuntimeOptions } = runtimeOptions;
-  const appRuntimeOptions = { backgroundPreflight: false, ...restRuntimeOptions };
+  const appRuntimeOptions = { backgroundPreflight: false, personalDistillationStream: noopDistillationStream, ...restRuntimeOptions };
   const monthlyPlans = monthlyDraftAgent
     ? createMonthlyPlanService({ pool, companyMemory: loadCompanyMemory(env), agent: monthlyDraftAgent, now: monthlyNow })
     : undefined;

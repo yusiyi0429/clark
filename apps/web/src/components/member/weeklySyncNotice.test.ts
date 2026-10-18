@@ -19,7 +19,7 @@ describe("周五兜底提醒卡", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { clipboard: { writeText } });
     const [notice] = weeklySyncNotices({ reason: "not_synced" });
-    expect(notice.detail).toContain("同步本周进展");
+    expect(notice.detail).toBe("");
     expect(await notice.buttons[0].run()).toEqual({ ok: true, settled: "已复制同步指令" });
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("append_progress"));
   });

@@ -35,6 +35,9 @@ describe("新写法：正文直接说观点，出处是句末的小标记", () =
     const html = render("两个项目都延期到下旬[《交付周报》](cite:memory:a.md#s1)、[《9 月复盘》](cite:memory:b.md#s2)。");
     expect(marks(html)).toHaveLength(2);
     expect(visible(html)).toBe("两个项目都延期到下旬。");
+    const adjacent = render("采集器装好了一半[10/16 Codex 记录](cite:collector:c1)[10/16 进展 · 采集器安装](cite:progress:p1)[Mission M2](cite:mission:m2)。");
+    expect(marks(adjacent)).toHaveLength(3);
+    expect(visible(adjacent)).toBe("采集器装好了一半。");
   });
 
   it("最新数据、各方意见这类词后面照样是标记（「据」「见」只在单独成词时才算引出语）", () => {
@@ -128,6 +131,27 @@ describe("标记的浮层与打开原文", () => {
     expect(canOpenMark(ref, { linked: false, surface: "sheet" })).toBe(false);
     expect(canOpenMark({ kind: "named" }, { linked: true, surface: "rail" })).toBe(false);
     expect(canOpenMark({ kind: "url", url: "https://example.com" }, { linked: false, surface: "rail" })).toBe(true);
+  });
+
+  it("原话（cite:chat:）、个人记忆（cite:pmem:）认得：句末是标记，浮层写类别；没有原文页可开，放大时也不交给依据面板", () => {
+    const panel = vi.fn();
+    registerCitationPanel(panel);
+    const html = render("你上个月说过渠道下沉先做县城样板[原话](cite:chat:7d1c0f7e-3c1b-4f4e-9b1e-1c2d3e4f5a6b#12)。", true);
+    expect(marks(html)).toEqual(['data-cite-mark="ref"']);
+    expect(html).toContain('data-cite-ref="chat:7d1c0f7e-3c1b-4f4e-9b1e-1c2d3e4f5a6b#12"');
+    expect(citationLocator("chat:7d1c0f7e-3c1b-4f4e-9b1e-1c2d3e4f5a6b#12")).toBe("原话");
+    expect(citationLocator("pmem:5f0e8c1a-2b3c-4d5e-8f90-a1b2c3d4e5f6")).toBe("个人记忆");
+    for (const href of ["cite:chat:7d1c0f7e-3c1b-4f4e-9b1e-1c2d3e4f5a6b#12", "cite:pmem:5f0e8c1a-2b3c-4d5e-8f90-a1b2c3d4e5f6"]) {
+      const target = markTarget(href);
+      expect(target.kind).toBe("ref");
+      expect(canOpenMark(target, { linked: true, surface: "rail", expand: vi.fn() })).toBe(false);
+      openMark(target, { linked: true, surface: "rail" }, null);
+    }
+    expect(panel).not.toHaveBeenCalled();
+    // 企业知识章节仍是 memory:，不受影响。
+    expect(citationLocator("memory:kd-principles.md#s2")).toBe("企业知识 · 第 2 节");
+    // 句子成分里的原话出处放大时也只是文字，不是点了没反应的按钮。
+    expect(render("据[你 9 月 3 日的原话](cite:chat:c1#3)，先做样板。", true)).toContain('data-cite="plain"');
   });
 
   it("排着的那一条 2 秒内没放大成就作废", () => {
