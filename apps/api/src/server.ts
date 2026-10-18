@@ -43,6 +43,7 @@ import { resolveFeishuEnv } from "./feishu/config.js";
 import { createFeishuClient } from "./feishu/client.js";
 import { feishuTokenJobs } from "./feishu/refresh.js";
 import { feishuEventJobs, startFeishuEventStream } from "./feishu/events.js";
+import { feishuNotifyJobs } from "./feishu/notify.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -95,6 +96,8 @@ const env: AppEnv = {
   companyWorldAccessFile: process.env.COMPANY_WORLD_ACCESS_FILE || undefined,
   // 飞书：FEISHU_APP_ID / FEISHU_APP_SECRET / FEISHU_TOKEN_KEY（/ FEISHU_TOKEN_KEY_VERSION）；都不配时关闭。
   feishu: resolveFeishuEnv(process.env),
+  // 影响卡：live（缺省）推送；shadow 只在后台记录，不打扰人。
+  impactCardMode: process.env.IMPACT_CARD_MODE === "shadow" ? "shadow" : "live",
 };
 
 const port = Number(process.env.PORT ?? "4000");
@@ -232,12 +235,6 @@ await recordingService.recoverInterrupted();
 // 飞书（配了才启用）：一个开放接口客户端，免登路由与后台任务共用。
 const feishuClient = env.feishu ? createFeishuClient(env.feishu) : undefined;
 const feishuTokens = env.feishu && feishuClient ? feishuTokenJobs({ pool, env: env.feishu, client: feishuClient, now }) : undefined;
-// 公共后台任务（jobs.ts）：每 5 秒领一批；现有各功能的 setInterval 暂不迁移。
-const jobWorker = createJobWorker({
-  pool,
-  handlers: { ...exampleJobHandlers, ...feishuTokens?.handlers, ...(env.feishu ? feishuEventJobs(pool) : {}) },
-  recurring: feishuTokens?.recurring ?? [],
-});
 const app = await buildApp({
   pool,
   env,
@@ -252,6 +249,18 @@ const app = await buildApp({
   webSearch: bochaSearch,
   outlets: outletAdapter,
   feishuClient,
+});
+// 公共后台任务（jobs.ts）：每 5 秒领一批；现有各功能的 setInterval 暂不迁移。
+// 会后链路：妙记轮询与「妙记生成」事件、分层同步、提醒与代判、影响卡推送与写本体；飞书通知配了飞书才发。
+const followThroughJobs = app.meetingFollowThrough.jobs();
+const jobWorker = createJobWorker({
+  pool,
+  handlers: {
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers,
+    ...(env.feishu ? feishuEventJobs(pool, followThroughJobs.feishuEvents) : {}),
+    ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
+  },
+  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring],
 });
 let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {

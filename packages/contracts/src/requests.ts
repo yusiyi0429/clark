@@ -112,6 +112,7 @@ export const RequestListQuery = Type.Object({ box: RequestBox }, { additionalPro
 export const RequestListItem = Type.Object(
   {
     id: Type.String({ minLength: 1 }),
+    kind: RequestKind,
     title: Type.String({ minLength: 1 }),
     status: RequestStatus,
     initiatorName: Type.String({ minLength: 1 }),

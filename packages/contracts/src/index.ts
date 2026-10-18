@@ -34,3 +34,4 @@ export * from "./collector.js";
 export * from "./feishu.js";
 export * from "./weeklyReviews.js";
 export * from "./meetingDecisions.js";
+export * from "./impact.js";

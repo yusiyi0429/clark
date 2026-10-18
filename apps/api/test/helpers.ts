@@ -266,6 +266,8 @@ export async function createTestApp(
     feishuClient?: FeishuClient;
     /** 个人记忆的召回模型替身；不注入时不用模型、只按字面重合选（测试里不调真实模型）。 */
     personalMemoryRecall?: Parameters<typeof buildApp>[0]["personalMemoryRecall"];
+    /** 会后分层、影响分析与妙记接口的替身；不注入时用真实装配（只在后台任务里调用，测试不跑 worker）。 */
+    meetingFollowThroughAgents?: Parameters<typeof buildApp>[0]["meetingFollowThroughAgents"];
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {

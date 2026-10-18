@@ -43,6 +43,11 @@ import { clientTagFor, enterRequestClient, tracingEnabled } from "./tracing.js";
 import type { FeishuEnv } from "./feishu/config.js";
 import { createFeishuClient, type FeishuClient } from "./feishu/client.js";
 import { registerFeishuAuthRoutes } from "./routes/feishu.js";
+import { createMeetingFollowThrough, type MeetingFollowThrough } from "./meetingFollowThrough.js";
+import type { DecisionLayeringAgent } from "./meetingDecisionAgent.js";
+import type { ImpactAgent } from "./impactAgent.js";
+import type { FeishuMinutesApi } from "./feishu/minutes.js";
+import { registerMeetingFollowThroughRoutes } from "./routes/meetingFollowThrough.js";
 import { ensureMaterialStorage } from "./materialParser.js";
 import {
   createFail,
@@ -166,7 +171,16 @@ export type AppEnv = {
   worldTk?: WorldEnv;
   /** 飞书企业自建应用（resolveFeishuEnv）；不配时飞书接入关闭。 */
   feishu?: FeishuEnv;
+  /** 影响卡：live 推送（缺省；置信度低的仍只记影子）、shadow 只在后台记录（IMPACT_CARD_MODE）。 */
+  impactCardMode?: "live" | "shadow";
 } & CompanyMemorySeedEnv & WorldEnv & CompanyEnv;
+
+declare module "fastify" {
+  interface FastifyInstance {
+    /** 会后链路的服务；server.ts 用它注册后台任务。 */
+    meetingFollowThrough: MeetingFollowThrough;
+  }
+}
 
 export async function buildApp({
   pool,
@@ -199,6 +213,7 @@ export async function buildApp({
   webSearch,
   outlets,
   feishuClient,
+  meetingFollowThroughAgents,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
   conversationStallTimeoutMs = CONVERSATION_STALL_TIMEOUT_MS,
   conversationHeartbeatMs = CONVERSATION_HEARTBEAT_MS,
@@ -253,6 +268,8 @@ export async function buildApp({
   outlets?: RadarOutletAdapter;
   /** 飞书开放接口；缺省按 env.feishu 装配真实客户端（测试注入假实现）。 */
   feishuClient?: FeishuClient;
+  /** 会后分层、影响分析与妙记接口（测试注入假实现）；缺省用 heavy 模型与真实飞书接口。 */
+  meetingFollowThroughAgents?: { layering?: DecisionLayeringAgent; impact?: ImpactAgent; minutesApi?: FeishuMinutesApi };
   conversationTurnTimeoutMs?: number;
   conversationStallTimeoutMs?: number;
   conversationHeartbeatMs?: number;
@@ -442,6 +459,10 @@ export async function buildApp({
     const unsubscribe = onOutcomeReviewed(pool, worldMeetings.schedule);
     app.addHook("onClose", async () => { unsubscribe(); await worldMeetings.close(); });
   }
+  // 会后链路（妙记、分层确认、影响卡）：路由用它的服务；后台任务由 server.ts 的 jobs worker 按 app.meetingFollowThrough.jobs() 注册。
+  const followThrough = createMeetingFollowThrough({ pool, env, companyMemory, world, outcomeAgent: outcome, now, ...meetingFollowThroughAgents });
+  app.decorate("meetingFollowThrough", followThrough);
+  app.addHook("onClose", async () => { followThrough.close(); });
   // 周复盘提交后按关联的 Mission、Task 写进展到本体：同样只在实例配置允许写时启用；不写时提交照常，等配好后补发。
   let weeklyReviewWorld: WeeklyReviewWorldSync | undefined;
   if (worldConfigured(env) && world.status().writes) {
@@ -608,6 +629,7 @@ export async function buildApp({
   registerPersonalMemoryRoutes(app, ctx);
   registerCollectorRoutes(app, ctx);
   registerWeeklyReviewRoutes(app, ctx);
+  registerMeetingFollowThroughRoutes(app, ctx, followThrough);
 
   return app;
 }
