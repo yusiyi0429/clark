@@ -6,7 +6,7 @@ import type { Card } from "@/lib/api/client";
 import { payloadOf, type BattlefieldPayload, type CapabilityPayload, type MissionPayload } from "@/cards/payloads";
 import { capabilitySections, issueRowData } from "@/components/HomeBoard";
 import { IssueRow, meetingTimesByIssue } from "@/components/IssueRow";
-import { DetailHeader } from "@/components/shell/DetailHeader";
+import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import w from "@/styles/app-shell.module.css";
 import c from "@/styles/capability-detail.module.css";
@@ -74,8 +74,7 @@ export function CapabilityDetailScreen({ cards, plan }: { cards: Card[]; plan: C
   const monthlyLabel = plan && PLAN_STATUS[plan.status] ? `本月目标 · ${PLAN_STATUS[plan.status]}` : "本月目标";
 
   return (
-    <>
-      <DetailHeader eyebrow="公司能力 · 能力域" title="公司能力" closeLabel="返回全局" onClose={close} />
+    <DetailFrame title="公司能力" subtitle="能力域" onBack={close}>
       <div className={w.expandedScroll}>
         <div className={c.detail}>
           <section className={c.section} aria-label="议题">
@@ -164,6 +163,6 @@ export function CapabilityDetailScreen({ cards, plan }: { cards: Card[]; plan: C
           </section>
         </div>
       </div>
-    </>
+    </DetailFrame>
   );
 }

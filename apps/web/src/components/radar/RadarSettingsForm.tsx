@@ -15,7 +15,7 @@ type List = "directions" | "sources";
 export const MAX_DIRECTION_CHARS = 40;
 export const MAX_DIRECTIONS = 5;
 const MAX_SOURCES = 10;
-export const DIRECTION_PLACEHOLDER = "用一句话写你想看的，比如「1 号位产品的设计」";
+export const DIRECTION_PLACEHOLDER = "比如「1 号位产品的设计」";
 export const SOURCE_PLACEHOLDER = "粘贴网址，或选常用来源";
 
 /** 服务端给回的设置：成员的本人雷达与 CEO 的公司雷达统一成这一份再交给表单。 */
@@ -176,7 +176,7 @@ export function RadarSettingsForm({
               开启雷达
             </span>
             <span id={`${idPrefix}-switch-note`} className={s.switchNote}>
-              {draft.enabled ? "我每天按你的方向替你看一遍，结果只给你自己看。运营者在后台能看到运行记录。" : "打开后，我每天按你的方向替你看一遍，结果只给你自己看。运营者在后台能看到运行记录。"}
+              仅你可见
             </span>
           </span>
           <span className={f.switch} data-on={draft.enabled} aria-hidden="true">
@@ -290,11 +290,11 @@ function directionsSection({ mode, idPrefix, view, draft, onDraft, errors, direc
         <h3 id={`${idPrefix}-directions`} className={s.sectionTitle}>
           方向
         </h3>
-        <span className={s.sectionHint}>一句话一条，最多 {MAX_DIRECTIONS} 条</span>
+        <span className={s.sectionHint}>最多 {MAX_DIRECTIONS} 条</span>
       </div>
       {mode === "company" && automatic.length ? (
         <div className={s.automatic}>
-          <p className={s.automaticLabel}>按签发的本月目标与会议复议条件自动关注 · 只读</p>
+          <p className={s.automaticLabel}>自动关注 · 只读</p>
           <ul>
             {automatic.slice(0, 3).map((text, index) => (
               <li key={`${index}:${text}`}>{text}</li>
@@ -380,28 +380,18 @@ function sourcesSection({ mode, idPrefix, view, draft, onDraft, errors }: Sectio
     return all;
   }, []);
   const unreadable = draft.sources.length > 0 && draft.sources.every((value) => known[value]?.kind === "unsupported");
-  const note = !view.webSearch
-    ? mode === "person"
-      ? "全网检索暂未开通：现在只能读订阅源；只写方向、不填来源，不会有结果。"
-      : "全网检索暂未开通：现在只读订阅源和公众号，方向用来从中筛选。"
-    : mode === "person"
-      ? "不填时，按你的方向在全网检索。"
-      : "这里只收有订阅源的媒体；全网检索和公众号另行配置。";
   return (
     <section className={s.section} aria-labelledby={`${idPrefix}-sources`}>
       <div className={s.sectionHead}>
         <h3 id={`${idPrefix}-sources`} className={s.sectionTitle}>
-          来源<span className={s.optional}>可不填</span>
+          来源{mode === "company" || view.webSearch ? <span className={s.optional}>可不填</span> : null}
         </h3>
         <span className={s.sectionHint}>最多 {MAX_SOURCES} 个</span>
       </div>
-      <p className={s.sectionNote} data-tone={view.webSearch ? undefined : "warn"}>
-        {note}
-      </p>
       {chipList({ list: "sources", label: "来源", draft, onDraft, errors, baseline: view.sources.map((source) => source.value), known })}
       {unreadable ? (
         <p className={s.warning} role="status">
-          这些来源暂时都读不了，雷达不会有结果
+          这些来源暂时都读不了
         </p>
       ) : null}
       <div className={s.field} data-disabled={full || undefined}>

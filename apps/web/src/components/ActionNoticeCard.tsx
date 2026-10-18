@@ -100,7 +100,7 @@ export function ActionNoticeCard({
                     <span className={n.mark} aria-hidden="true" />
                     <span className={n.itemText}>
                       <span>{notice.title}</span>
-                      <small>{notice.detail}</small>
+                      {notice.detail ? <small>{notice.detail}</small> : null}
                     </span>
                     <ChevronRight size={15} aria-hidden="true" />
                   </HeroButton>
@@ -109,7 +109,7 @@ export function ActionNoticeCard({
                     <span className={n.mark} aria-hidden="true" />
                     <span className={n.itemText}>
                       <span>{notice.title}</span>
-                      <small>{notice.detail}</small>
+                      {notice.detail ? <small>{notice.detail}</small> : null}
                     </span>
                   </div>
                 )}

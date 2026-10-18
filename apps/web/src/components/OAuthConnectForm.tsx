@@ -55,7 +55,7 @@ export function OAuthConnectForm({ role, activeCount = 0, actionsTarget, onCreat
         } else if (data) initial.current = new Set(data.tokens.map((token) => token.id));
       } catch { /* 下一轮恢复，不能把网络错误显示成连接成功。 */ }
       if (!stopped && Date.now() < deadline) timer = setTimeout(() => void tick(), 5_000);
-      else if (!stopped) setStatus("暂未确认连接，请检查工具里的登录状态，或重新复制步骤。");
+      else if (!stopped) setStatus("暂未确认连接");
     };
     void tick();
     return () => { stopped = true; clearTimeout(timer); };
@@ -73,13 +73,13 @@ export function OAuthConnectForm({ role, activeCount = 0, actionsTarget, onCreat
         }
       } catch { /* 步骤仍可复制；网络恢复后再确认连接状态。 */ }
     }
-    try { await navigator.clipboard.writeText(oauthConnectionGuide(role, client, url)); setAttempt((value) => value + 1); setError(""); setStatus("步骤已复制，等待你在工具里完成登录…"); onDownloaded?.();
+    try { await navigator.clipboard.writeText(oauthConnectionGuide(role, client, url)); setAttempt((value) => value + 1); setError(""); setStatus("已复制，等待连接…"); onDownloaded?.();
       // 按钮上显示「已复制」两秒，再回到原样。
       setCopied(true); clearTimeout(copiedTimer.current); copiedTimer.current = setTimeout(() => setCopied(false), 2000); }
     catch { setError("复制失败，请选择下方步骤手动复制"); }
   };
   // Claude Code 注册了 claude-cli:// 链接：新开终端、把步骤填进输入框，用户按回车才发送。本机没注册时点了没反应，所以复制仍是主路径。
-  const launch = () => { setAttempt((value) => value + 1); setError(""); setStatus("已在 Claude Code 中打开，在终端里按回车开始设置。没弹出来就复制上面的步骤。"); onDownloaded?.(); };
+  const launch = () => { setAttempt((value) => value + 1); setError(""); setStatus("已在 Claude Code 中打开"); onDownloaded?.(); };
   const action = actionsTarget === undefined
     ? <Button variant="primary" isDisabled={activeCount >= 5} onPress={() => void copy()}>{copied ? "已复制" : "复制连接步骤"}</Button>
     : actionsTarget ? createPortal(<button type="button" className={f.primary} disabled={activeCount >= 5} onClick={() => void copy()}>{copied ? "已复制" : "复制连接步骤"}</button>, actionsTarget) : null;
@@ -88,15 +88,12 @@ export function OAuthConnectForm({ role, activeCount = 0, actionsTarget, onCreat
       onSelectionChange={(keys) => { const next = [...keys][0]; if (next === "codex" || next === "claude" || next === "other") setClient(next); }}>
       <ToggleButton id="codex">Codex</ToggleButton><ToggleButton id="claude">Claude Code</ToggleButton><ToggleButton id="other">其他工具</ToggleButton>
     </ToggleButtonGroup></div>
-    <p className={s.lead}>添加天枢地址，在浏览器里点“允许连接”就能授权。</p>
-    <p className={s.muted}>可以把下面的步骤交给你的 {clientName(client)} 帮你设置。你会在浏览器里确认账号和权限。</p>
     <div className={s.command}><code>{guide}</code><button type="button" aria-label={copied ? "已复制" : "复制步骤"} title="复制" onClick={() => void copy()}>{copied ? <><Check size={13} aria-hidden />已复制</> : <Copy size={13} aria-hidden />}</button></div>
     {client === "claude" ? <a className={s.launch} href={`claude-cli://open?q=${encodeURIComponent(guide)}`} onClick={launch}><SquareTerminal size={15} aria-hidden />在 Claude Code 中打开</a> : null}
     {action}
-    {role === "member" ? <p className={s.muted}>连接后可以随时让 Agent 同步进展。每周自动同步需要另外设置定时任务。</p> : null}
-    {activeCount >= 5 ? <p className={s.muted}>最多保留 5 个连接，请先撤销不用的连接。</p> : null}
+    {activeCount >= 5 ? <p className={s.muted}>最多 5 个连接</p> : null}
     {connected ? <div role="status" className={s.connected}><AgentPair client={connected} connected />
-      <strong>已连上 {clientName(connected)}</strong><span>现在可以让它读你的事项、帮你写进展。</span></div> : null}
+      <strong>已连上 {clientName(connected)}</strong></div> : null}
     {status ? <p role="status" className={s.muted}>{status}</p> : null}
     {error ? <p role="alert" className={s.error}>{error}</p> : null}
   </div>;

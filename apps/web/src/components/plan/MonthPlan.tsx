@@ -47,7 +47,7 @@ export function LinkedTaskRows({ tasks, viewerId }: { tasks: TTaskView[]; viewer
     <span className={s.taskStatus}>{statusText[task.status]}</span>
   </div>;
   return <div className={s.taskList} aria-label="关联的执行事项">
-    {tasks.length ? tasks.filter(task => task.status !== "done").map(row) : <p className={s.muted}>还没有关联的执行事项。可以在本月计划里加一步。</p>}
+    {tasks.length ? tasks.filter(task => task.status !== "done").map(row) : <p className={s.muted}>还没有关联的执行事项</p>}
     {done.length ? <>
       <button type="button" className={s.doneToggle} aria-expanded={showDone} onClick={() => setShowDone(value => !value)}><ChevronRight size={14} aria-hidden="true" />已完成 {done.length}</button>
       {showDone ? done.map(row) : null}
@@ -260,7 +260,7 @@ export function MonthPlan({ plan, onSaved, onDirtyChange }: { plan: TMonthPlanRe
       </div>
     </div>
     {tipMark && <div className={s.tip} role="status" data-below={tip?.below || undefined} style={{ left: tip?.x, top: tip?.y }}><p><strong>{short(tipMark.date!)}</strong><span>里程碑</span></p><p>{tipMark.text}</p><small>{tipGroup?.title}</small></div>}
-    <p className={s.legend}>{todayDay && <span><i className={s.todayKey} />今天</span>}<span><i data-state="current" />个人任务里程碑</span><span>拖动定日期；日期在本月之外时按月裁切显示</span></p>
+    <p className={s.legend}>{todayDay && <span><i className={s.todayKey} />今天</span>}<span><i data-state="current" />个人任务里程碑</span></p>
     {plan.editable && dirty && <div className={s.saveLine}><Button variant="primary" isDisabled={saving} onPress={() => void save()}>{saving ? "正在保存…" : `保存计划 · 新增 ${changes.added} 步，调整 ${changes.adjusted} 步`}</Button><button type="button" onClick={discard}>放弃改动</button></div>}
     {dialog}
   </section>;

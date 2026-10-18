@@ -133,14 +133,14 @@ describe("Mission 配置页渲染", () => {
     expect(html).toContain("Organization Fact · CEO 确认");
     expect(html).toContain("MISSION SETTINGS");
     expect(html).toContain("Mission 配置");
-    expect(html).toContain("1 条 · 按周期与能力域排序");
+    expect(html).toContain(">1 条<");
     expect(html).toContain("按编号、标题或负责人搜索");
     expect(html).toContain("LHR-A");
   });
 
-  it("默认不展开编辑器，给出选中提示", () => {
+  it("默认不展开编辑器，空态只写「未选择 Mission」", () => {
     expect(html).not.toContain("保存新版本");
-    expect(html).toContain("选择左侧 Mission 后编辑结果承诺与关系。");
+    expect(html).toContain("未选择 Mission");
   });
 
   it("带 missionId 进入时直接展开编辑器：版本、来源、关系选项与页脚都在", () => {
@@ -160,7 +160,7 @@ describe("Mission 配置页渲染", () => {
     expect(editing).toContain("关键依赖");
     expect(editing).toContain("最大风险");
     expect(editing).toContain("边界");
-    expect(editing).toContain("保存后 version +1；历史来源与旧版本保持可追溯。");
+    expect(editing).not.toContain("保存后 version +1");
     expect(editing).toContain("取消");
     expect(editing).toContain("保存新版本");
   });
@@ -187,7 +187,7 @@ describe("Mission 配置页渲染", () => {
     const editing = renderToStaticMarkup(
       <MissionManagementScreen missions={[card, secondCard]} battlefields={battlefields} capabilities={capabilities} people={people} initialMissionId="no-such-mission" />,
     );
-    expect(editing).toContain("选择左侧 Mission 后编辑结果承诺与关系。");
+    expect(editing).toContain("未选择 Mission");
     expect(editing).not.toContain("保存新版本");
     expect(editing).not.toContain('aria-current="true"');
   });
@@ -196,25 +196,26 @@ describe("Mission 配置页渲染", () => {
     const empty = renderToStaticMarkup(
       <MissionManagementScreen missions={[]} battlefields={battlefields} capabilities={capabilities} people={people} />,
     );
-    expect(empty).toContain("0 条 · 按周期与能力域排序");
-    expect(empty).toContain("选择左侧 Mission 后编辑结果承诺与关系。");
+    expect(empty).toContain(">0 条<");
+    expect(empty).toContain("未选择 Mission");
   });
 
-  it("挂在任务卡上的 Mission 在配置里解释锁定原因，不展开可编辑表单", () => {
+  it("挂在任务卡上的 Mission 在配置里不展开可编辑表单，只给「打开任务卡」", () => {
     const locked = { ...card, actions: [], payload: { ...payload, placeholder: true, personalCard: { cardId: "personal-01", roundId: "round-01", status: "draft" } } } as Card;
     const html = renderToStaticMarkup(<MissionManagementScreen missions={[locked]} battlefields={battlefields} capabilities={capabilities} people={people} initialMissionId="lhr-a" />);
     expect(html).toContain("草稿 · 占位");
     expect(html).toContain("月度承诺 · 含待确认草稿");
     expect(html).not.toContain("Organization Fact · CEO 确认");
-    expect(html).toContain("此 Mission 属于个人 Mission Card，需在本轮制定中讨论并统一确认，不能在配置页单独修改。");
+    expect(html).not.toContain("不能在配置页单独修改");
+    expect(html).toContain("打开任务卡");
     expect(html).not.toContain("保存新版本");
     expect(html).not.toContain('value="CEO Agent 架构与质量"');
   });
 
-  it("已确定任务卡继续锁住普通编辑，并说明修订暂未开放", () => {
+  it("已确定任务卡继续锁住普通编辑，给「打开任务卡」去更正", () => {
     const locked = { ...card, actions: [], payload: { ...payload, personalCard: { cardId: "personal-01", roundId: "round-01", status: "confirmed" } } } as Card;
     const html = renderToStaticMarkup(<MissionManagementScreen missions={[locked]} battlefields={battlefields} capabilities={capabilities} people={people} initialMissionId="lhr-a" />);
-    expect(html).toContain("个人 Mission Card 已确定，不能在配置页单独修改；要改字段，请在任务卡上更正。");
+    expect(html).toContain("打开任务卡");
     expect(html).toContain("Organization Fact · CEO 确认");
     expect(html).not.toContain("月度承诺 · 含待确认草稿");
     expect(html).not.toContain("保存新版本");

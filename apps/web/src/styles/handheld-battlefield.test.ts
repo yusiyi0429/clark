@@ -49,9 +49,10 @@ describe("handheld battlefield CSS", () => {
     expect(detail).toContain(".mission{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;width:100%;padding:9px 0 4px;");
   });
 
-  it("keeps the segmented view switch and earlier handheld type floors", () => {
+  it("uses the shared header switch and keeps earlier handheld type floors", () => {
     const detail = css("./battlefield-detail.module.css");
-    expect(detail).toContain("@media(max-width:959px),(pointer:coarse){.viewSwitch.viewSwitch{margin-bottom:calc((1.4 * var(--type-page, 24px) - 42px) / 2)}");
+    // 「决策 / 战况」是标准页头的类型切换（SegmentedSwitch data-header-switch），本页不再另画一套胶囊。
+    expect(detail).not.toContain(".viewSwitch");
     expect(detail).toContain("@media(max-width:959px){.milestones.milestones>li,.mission.mission>small,.note.note{font-size:14px}");
     expect(detail).toContain(".campaignStatus.campaignStatus,.campaignDraft.campaignDraft");
     expect(detail).toContain(".detail[data-tab=decisions]{width:100%;max-width:840px;margin-inline:auto}");

@@ -102,7 +102,6 @@ export function ConversationHistorySheet({ data, label, global, onClose, anchor 
           </CitationSurfaceProvider>
           <ConversationHistoryState data={data} empty={
             <div className={w.chatWelcome}>
-              <p>{global ? "可从当前关注的问题开始讨论。" : `可从「${label}」中待澄清的问题开始讨论。`}</p>
               {global ? <ArchiveEntry data={data} onOpen={archive.show} /> : null}
             </div>
           } />
