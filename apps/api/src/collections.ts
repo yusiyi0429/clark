@@ -461,7 +461,8 @@ function recordFields(row: CollectionRow, entry: EntryRow, weekStart: string, na
 }
 
 /**
- * 和飞书多维表格同步一个收集任务：还没有表就建表（收件人加成可编辑），天枢这边改过的行推上去，
+ * 和飞书多维表格同步一个收集任务：表跟着收集任务走，只有新建的收集第一次同步时建表（收件人加成可编辑）；
+ * 每周固定的后续各轮沿用这张表，每人每轮追加一行、带「周」这一栏（D-46）。天枢这边改过的行推上去，
  * 再把飞书里改过的行读回来（天枢这边没有待推的改动时才覆盖）。失败只记 sync_error，下一分钟再试。
  */
 export async function syncCollection(deps: CollectionDeps, collectionId: string): Promise<void> {

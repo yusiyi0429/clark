@@ -271,6 +271,22 @@ describe("③ 信息收集", () => {
     expect((await sql("SELECT sync_error FROM collections"))[0].sync_error).toBeNull();
   });
 
+  it("每周固定的后续各轮沿用第一轮建的那张表，每人每轮追加一行、带「周」；只有新建的收集才新建表（D-46）", async () => {
+    const { launch, tick, clock, bitable, sql } = await setup();
+    const first = await launch("每周收一下这周的开销");
+    expect(bitable.tables.size).toBe(1);
+    clock.now = new Date(MONDAY_10.getTime() + 7 * 24 * HOUR + 60_000);
+    await tick();
+    expect((await sql("SELECT count(*)::int AS n FROM collection_rounds WHERE collection_id = $1", [first.id]))[0].n).toBe(2);
+    expect(bitable.tables.size).toBe(1);
+    const [table] = [...bitable.tables.values()];
+    expect([...table.rows.values()].map((row) => `${row["填写人"]}·${row["周"]}`).sort())
+      .toEqual(["测试丙·10/19 周", "测试丙·10/26 周", "测试乙·10/19 周", "测试乙·10/26 周"]);
+
+    await launch("收一下这周的开销");
+    expect(bitable.tables.size).toBe(2);
+  });
+
   it("对话入口：判断场景 → 起草收集表 → 等你确认，回答后面挂草稿卡；不支持的场景停在第一步", async () => {
     const { sql } = await setup();
     const steps: EntryStep[] = [];
