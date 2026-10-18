@@ -40,6 +40,7 @@ import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./
 import { resolveWorldEnv, resolveWorldTkEnv } from "./worldClient.js";
 import { createJobWorker, exampleJobHandlers } from "./jobs.js";
 import { resolveFeishuEnv } from "./feishu/config.js";
+import { parseAdminPersonIds } from "./admin.js";
 import { createFeishuClient } from "./feishu/client.js";
 import { feishuTokenJobs } from "./feishu/refresh.js";
 import { feishuEventJobs, startFeishuEventStream } from "./feishu/events.js";
@@ -95,6 +96,8 @@ const env: AppEnv = {
   companyWorldAccessFile: process.env.COMPANY_WORLD_ACCESS_FILE || undefined,
   // 飞书：FEISHU_APP_ID / FEISHU_APP_SECRET / FEISHU_TOKEN_KEY（/ FEISHU_TOKEN_KEY_VERSION）；都不配时关闭。
   feishu: resolveFeishuEnv(process.env),
+  // 管理员视图：TIANSHU_ADMIN_PERSON_IDS（逗号分隔的 personId）；不配时没有人能看。
+  adminPersonIds: parseAdminPersonIds(process.env.TIANSHU_ADMIN_PERSON_IDS),
 };
 
 const port = Number(process.env.PORT ?? "4000");

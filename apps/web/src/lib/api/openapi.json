@@ -6448,6 +6448,102 @@
         }
       }
     },
+    "/api/admin/overview": {
+      "get": {
+        "operationId": "getAdminOverview",
+        "summary": "管理员视图：顶部计数、人 × 来源、失败列表、质量信号；只有运行数据。非管理员 404",
+        "responses": {
+          "200": {
+            "description": "管理员视图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminOverviewResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/actions": {
+      "post": {
+        "operationId": "executeAdminAction",
+        "summary": "管理员操作：给本人发提醒（走送达通道）、标记已接手 / 已解决、重试 dead 的后台任务；都记进 admin_incidents，按 clientId 幂等。非管理员 404",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "操作后的管理员视图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminOverviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/weekly-reviews/board": {
       "get": {
         "operationId": "getWeeklyReviewBoard",
@@ -11789,6 +11885,9 @@
             "type": "boolean"
           },
           "canSwitchView": {
+            "type": "boolean"
+          },
+          "admin": {
             "type": "boolean"
           }
         }
@@ -38995,6 +39094,948 @@
             "type": "boolean"
           }
         }
+      },
+      "AdminOverviewResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "generatedAt",
+          "viewerId",
+          "counters",
+          "people",
+          "issues",
+          "quality"
+        ],
+        "properties": {
+          "generatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "viewerId": {
+            "type": "string"
+          },
+          "counters": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "key",
+                "value",
+                "status"
+              ],
+              "properties": {
+                "key": {
+                  "anyOf": [
+                    {
+                      "const": "collector_gap",
+                      "type": "string"
+                    },
+                    {
+                      "const": "feishu_auth",
+                      "type": "string"
+                    },
+                    {
+                      "const": "meeting_stuck",
+                      "type": "string"
+                    },
+                    {
+                      "const": "delivery_failed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "world_failed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "job_failed",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "value": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "red",
+                      "type": "string"
+                    },
+                    {
+                      "const": "yellow",
+                      "type": "string"
+                    },
+                    {
+                      "const": "green",
+                      "type": "string"
+                    },
+                    {
+                      "const": "none",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "displayName",
+                "collector",
+                "feishu",
+                "world"
+              ],
+              "properties": {
+                "personId": {
+                  "type": "string"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "collector": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "lastSuccessAt",
+                    "acknowledged",
+                    "remindedAt",
+                    "devices"
+                  ],
+                  "properties": {
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "red",
+                          "type": "string"
+                        },
+                        {
+                          "const": "yellow",
+                          "type": "string"
+                        },
+                        {
+                          "const": "green",
+                          "type": "string"
+                        },
+                        {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "lastSuccessAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "acknowledged": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "actorName",
+                            "at"
+                          ],
+                          "properties": {
+                            "actorName": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "remindedAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "devices": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "deviceName",
+                          "platform",
+                          "source",
+                          "version",
+                          "sourceStatus",
+                          "errorCode",
+                          "firstSeenAt",
+                          "lastAttemptAt",
+                          "lastSuccessAt",
+                          "coverageUntil",
+                          "lastNewEvidenceAt"
+                        ],
+                        "properties": {
+                          "deviceName": {
+                            "type": "string"
+                          },
+                          "platform": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "sourceStatus": {
+                            "type": "string"
+                          },
+                          "errorCode": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "firstSeenAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "lastAttemptAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "lastSuccessAt": {
+                            "anyOf": [
+                              {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "coverageUntil": {
+                            "anyOf": [
+                              {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "lastNewEvidenceAt": {
+                            "anyOf": [
+                              {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "feishu": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "lastSuccessAt",
+                    "acknowledged",
+                    "remindedAt",
+                    "tokenStatus",
+                    "authorizedAt",
+                    "refreshExpiresAt",
+                    "reauthReminderAt"
+                  ],
+                  "properties": {
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "red",
+                          "type": "string"
+                        },
+                        {
+                          "const": "yellow",
+                          "type": "string"
+                        },
+                        {
+                          "const": "green",
+                          "type": "string"
+                        },
+                        {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "lastSuccessAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "acknowledged": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "actorName",
+                            "at"
+                          ],
+                          "properties": {
+                            "actorName": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "remindedAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "tokenStatus": {
+                      "anyOf": [
+                        {
+                          "const": "active",
+                          "type": "string"
+                        },
+                        {
+                          "const": "reauth_required",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "authorizedAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "refreshExpiresAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reauthReminderAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "world": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "lastSuccessAt",
+                    "acknowledged",
+                    "remindedAt",
+                    "lastWeek",
+                    "syncStatus",
+                    "failedTargets"
+                  ],
+                  "properties": {
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "red",
+                          "type": "string"
+                        },
+                        {
+                          "const": "yellow",
+                          "type": "string"
+                        },
+                        {
+                          "const": "green",
+                          "type": "string"
+                        },
+                        {
+                          "const": "none",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "lastSuccessAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "acknowledged": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "actorName",
+                            "at"
+                          ],
+                          "properties": {
+                            "actorName": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "remindedAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lastWeek": {
+                      "anyOf": [
+                        {
+                          "format": "date",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "syncStatus": {
+                      "anyOf": [
+                        {
+                          "const": "pending",
+                          "type": "string"
+                        },
+                        {
+                          "const": "done",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "failedTargets": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "subject",
+                "status",
+                "name",
+                "target",
+                "code",
+                "attempts",
+                "at",
+                "retryable",
+                "acknowledged"
+              ],
+              "properties": {
+                "subject": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "id"
+                  ],
+                  "properties": {
+                    "type": {
+                      "anyOf": [
+                        {
+                          "const": "collector",
+                          "type": "string"
+                        },
+                        {
+                          "const": "feishu",
+                          "type": "string"
+                        },
+                        {
+                          "const": "world",
+                          "type": "string"
+                        },
+                        {
+                          "const": "job",
+                          "type": "string"
+                        },
+                        {
+                          "const": "world_write",
+                          "type": "string"
+                        },
+                        {
+                          "const": "quality",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    }
+                  }
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "red",
+                      "type": "string"
+                    },
+                    {
+                      "const": "yellow",
+                      "type": "string"
+                    },
+                    {
+                      "const": "green",
+                      "type": "string"
+                    },
+                    {
+                      "const": "none",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "target": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "code": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "attempts": {
+                  "anyOf": [
+                    {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "acknowledged": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "actorName",
+                        "at"
+                      ],
+                      "properties": {
+                        "actorName": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "quality": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "subject",
+                "signal",
+                "runKind",
+                "personName",
+                "count",
+                "at",
+                "acknowledged"
+              ],
+              "properties": {
+                "subject": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "id"
+                  ],
+                  "properties": {
+                    "type": {
+                      "anyOf": [
+                        {
+                          "const": "collector",
+                          "type": "string"
+                        },
+                        {
+                          "const": "feishu",
+                          "type": "string"
+                        },
+                        {
+                          "const": "world",
+                          "type": "string"
+                        },
+                        {
+                          "const": "job",
+                          "type": "string"
+                        },
+                        {
+                          "const": "world_write",
+                          "type": "string"
+                        },
+                        {
+                          "const": "quality",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    }
+                  }
+                },
+                "signal": {
+                  "type": "string"
+                },
+                "runKind": {
+                  "type": "string"
+                },
+                "personName": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "count": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "acknowledged": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "actorName",
+                        "at"
+                      ],
+                      "properties": {
+                        "actorName": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "AdminActionRequest": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "action",
+              "clientId",
+              "personId",
+              "source",
+              "title",
+              "body"
+            ],
+            "properties": {
+              "action": {
+                "const": "remind",
+                "type": "string"
+              },
+              "clientId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "personId": {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              "source": {
+                "anyOf": [
+                  {
+                    "const": "collector",
+                    "type": "string"
+                  },
+                  {
+                    "const": "feishu",
+                    "type": "string"
+                  },
+                  {
+                    "const": "world",
+                    "type": "string"
+                  }
+                ]
+              },
+              "title": {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              "body": {
+                "minLength": 1,
+                "maxLength": 2000,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "action",
+              "clientId",
+              "subject"
+            ],
+            "properties": {
+              "action": {
+                "anyOf": [
+                  {
+                    "const": "acknowledge",
+                    "type": "string"
+                  },
+                  {
+                    "const": "resolve",
+                    "type": "string"
+                  }
+                ]
+              },
+              "clientId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "subject": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "type",
+                  "id"
+                ],
+                "properties": {
+                  "type": {
+                    "anyOf": [
+                      {
+                        "const": "collector",
+                        "type": "string"
+                      },
+                      {
+                        "const": "feishu",
+                        "type": "string"
+                      },
+                      {
+                        "const": "world",
+                        "type": "string"
+                      },
+                      {
+                        "const": "job",
+                        "type": "string"
+                      },
+                      {
+                        "const": "world_write",
+                        "type": "string"
+                      },
+                      {
+                        "const": "quality",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "id": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "action",
+              "clientId",
+              "subject"
+            ],
+            "properties": {
+              "action": {
+                "const": "retry",
+                "type": "string"
+              },
+              "clientId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "subject": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "type",
+                  "id"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "job",
+                    "type": "string"
+                  },
+                  "id": {
+                    "pattern": "^[0-9]{1,19}$",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        ]
       },
       "WeeklyReviewBoardResponse": {
         "additionalProperties": false,

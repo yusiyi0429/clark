@@ -86,6 +86,7 @@ import { registerRequestRoutes } from "./routes/requests.js";
 import { createRequestAgent, type RequestAgent } from "./delivery/requestAgent.js";
 import { registerCollectorRoutes } from "./routes/collector.js";
 import { registerWeeklyReviewRoutes } from "./routes/weeklyReviews.js";
+import { registerAdminRoutes } from "./routes/admin.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 import { realDictationDeps, type DictationDeps } from "./dictation.js";
@@ -166,6 +167,8 @@ export type AppEnv = {
   worldTk?: WorldEnv;
   /** 飞书企业自建应用（resolveFeishuEnv）；不配时飞书接入关闭。 */
   feishu?: FeishuEnv;
+  /** 管理员（TIANSHU_ADMIN_PERSON_IDS，逗号分隔的 personId）：能看管理员视图；不配时没有人能看。 */
+  adminPersonIds?: string[];
 } & CompanyMemorySeedEnv & WorldEnv & CompanyEnv;
 
 export async function buildApp({
@@ -608,6 +611,7 @@ export async function buildApp({
   registerPersonalMemoryRoutes(app, ctx);
   registerCollectorRoutes(app, ctx);
   registerWeeklyReviewRoutes(app, ctx);
+  registerAdminRoutes(app, ctx);
 
   return app;
 }

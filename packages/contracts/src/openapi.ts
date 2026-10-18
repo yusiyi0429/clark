@@ -129,6 +129,7 @@ import {
   CreatePersonalTokenResponse,
   CollectorHeartbeatRequest, CollectorHeartbeatResponse, CollectorReportRequest, CollectorReportResponse,
   CollectorConsentResponse, UpdateCollectorConsentRequest,
+  AdminOverviewResponse, AdminActionRequest,
   WeeklyReviewBoardResponse, WeeklyReviewResponse, ExecuteWeeklyReviewActionRequest, ExecuteWeeklyReviewActionResponse, WeeklyReviewUpdateInput,
   OAuthConsentRequest,
   OAuthConsentResponse,
@@ -1395,6 +1396,19 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "同意状态", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorConsentResponse" } } } }, "400": errorResponse, "401": errorResponse },
         },
       },
+      "/api/admin/overview": {
+        get: {
+          operationId: "getAdminOverview", summary: "管理员视图：顶部计数、人 × 来源、失败列表、质量信号；只有运行数据。非管理员 404",
+          responses: { "200": { description: "管理员视图", content: { "application/json": { schema: { $ref: "#/components/schemas/AdminOverviewResponse" } } } }, "404": errorResponse },
+        },
+      },
+      "/api/admin/actions": {
+        post: {
+          operationId: "executeAdminAction", summary: "管理员操作：给本人发提醒（走送达通道）、标记已接手 / 已解决、重试 dead 的后台任务；都记进 admin_incidents，按 clientId 幂等。非管理员 404",
+          requestBody: jsonBody({ $ref: "#/components/schemas/AdminActionRequest" }),
+          responses: { "200": { description: "操作后的管理员视图", content: { "application/json": { schema: { $ref: "#/components/schemas/AdminOverviewResponse" } } } }, "400": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
       "/api/weekly-reviews/board": {
         get: {
           operationId: "getWeeklyReviewBoard", summary: "周复盘名单：看得到的人（本人、同战场、CEO 看全部）这一周的状态；不带 week 取本周",
@@ -2540,6 +2554,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         CollectorReportResponse: CollectorReportResponse as JsonSchema,
         CollectorConsentResponse: CollectorConsentResponse as JsonSchema,
         UpdateCollectorConsentRequest: UpdateCollectorConsentRequest as JsonSchema,
+        AdminOverviewResponse: AdminOverviewResponse as JsonSchema,
+        AdminActionRequest: AdminActionRequest as JsonSchema,
         WeeklyReviewBoardResponse: WeeklyReviewBoardResponse as JsonSchema,
         WeeklyReviewResponse: WeeklyReviewResponse as JsonSchema,
         ExecuteWeeklyReviewActionRequest: ExecuteWeeklyReviewActionRequest as JsonSchema,

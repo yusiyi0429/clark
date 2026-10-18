@@ -1700,6 +1700,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 管理员视图：顶部计数、人 × 来源、失败列表、质量信号；只有运行数据。非管理员 404 */
+        get: operations["getAdminOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 管理员操作：给本人发提醒（走送达通道）、标记已接手 / 已解决、重试 dead 的后台任务；都记进 admin_incidents，按 clientId 幂等。非管理员 404 */
+        post: operations["executeAdminAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/weekly-reviews/board": {
         parameters: {
             query?: never;
@@ -2848,6 +2882,7 @@ export interface components {
             loginId?: string;
             onboarded?: boolean;
             canSwitchView?: boolean;
+            admin?: boolean;
         };
         PeopleDirectoryResponse: {
             people: {
@@ -7014,6 +7049,136 @@ export interface components {
         };
         UpdateCollectorConsentRequest: {
             granted: boolean;
+        };
+        AdminOverviewResponse: {
+            /** Format: date-time */
+            generatedAt: string;
+            viewerId: string;
+            counters: {
+                key: "collector_gap" | "feishu_auth" | "meeting_stuck" | "delivery_failed" | "world_failed" | "job_failed";
+                value: number;
+                status: "red" | "yellow" | "green" | "none";
+            }[];
+            people: {
+                personId: string;
+                displayName: string;
+                collector: {
+                    status: "red" | "yellow" | "green" | "none";
+                    lastSuccessAt: string | null;
+                    acknowledged: {
+                        actorName: string;
+                        /** Format: date-time */
+                        at: string;
+                    } | null;
+                    remindedAt: string | null;
+                    devices: {
+                        deviceName: string;
+                        platform: string;
+                        source: string;
+                        version: string;
+                        sourceStatus: string;
+                        errorCode: string | null;
+                        /** Format: date-time */
+                        firstSeenAt: string;
+                        /** Format: date-time */
+                        lastAttemptAt: string;
+                        lastSuccessAt: string | null;
+                        coverageUntil: string | null;
+                        lastNewEvidenceAt: string | null;
+                    }[];
+                };
+                feishu: {
+                    status: "red" | "yellow" | "green" | "none";
+                    lastSuccessAt: string | null;
+                    acknowledged: {
+                        actorName: string;
+                        /** Format: date-time */
+                        at: string;
+                    } | null;
+                    remindedAt: string | null;
+                    tokenStatus: "active" | "reauth_required" | null;
+                    authorizedAt: string | null;
+                    refreshExpiresAt: string | null;
+                    reauthReminderAt: string | null;
+                };
+                world: {
+                    status: "red" | "yellow" | "green" | "none";
+                    lastSuccessAt: string | null;
+                    acknowledged: {
+                        actorName: string;
+                        /** Format: date-time */
+                        at: string;
+                    } | null;
+                    remindedAt: string | null;
+                    lastWeek: string | null;
+                    syncStatus: "pending" | "done" | "failed" | null;
+                    failedTargets: number;
+                };
+            }[];
+            issues: {
+                subject: {
+                    type: "collector" | "feishu" | "world" | "job" | "world_write" | "quality";
+                    id: string;
+                };
+                status: "red" | "yellow" | "green" | "none";
+                name: string;
+                target: string | null;
+                code: string | null;
+                attempts: number | null;
+                /** Format: date-time */
+                at: string;
+                retryable: boolean;
+                acknowledged: {
+                    actorName: string;
+                    /** Format: date-time */
+                    at: string;
+                } | null;
+            }[];
+            quality: {
+                subject: {
+                    type: "collector" | "feishu" | "world" | "job" | "world_write" | "quality";
+                    id: string;
+                };
+                signal: string;
+                runKind: string;
+                personName: string | null;
+                count: number;
+                /** Format: date-time */
+                at: string;
+                acknowledged: {
+                    actorName: string;
+                    /** Format: date-time */
+                    at: string;
+                } | null;
+            }[];
+        };
+        AdminActionRequest: {
+            /** @constant */
+            action: "remind";
+            /** Format: uuid */
+            clientId: string;
+            personId: string;
+            source: "collector" | "feishu" | "world";
+            title: string;
+            body: string;
+        } | {
+            action: "acknowledge" | "resolve";
+            /** Format: uuid */
+            clientId: string;
+            subject: {
+                type: "collector" | "feishu" | "world" | "job" | "world_write" | "quality";
+                id: string;
+            };
+        } | {
+            /** @constant */
+            action: "retry";
+            /** Format: uuid */
+            clientId: string;
+            subject: {
+                /** @constant */
+                type: "job";
+                id: string;
+            };
         };
         WeeklyReviewBoardResponse: {
             board: {
@@ -13860,6 +14025,95 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getAdminOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 管理员视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOverviewResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    executeAdminAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminActionRequest"];
+            };
+        };
+        responses: {
+            /** @description 操作后的管理员视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOverviewResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
