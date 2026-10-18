@@ -268,6 +268,8 @@ export async function createTestApp(
     personalMemoryRecall?: Parameters<typeof buildApp>[0]["personalMemoryRecall"];
     /** 记忆导入的分类与去重模型替身；不注入时按测试环境装配（测试里不调真实模型）。 */
     memoryImportModel?: Parameters<typeof buildApp>[0]["memoryImportModel"];
+    /** 会后分层、影响分析与妙记接口的替身；不注入时用真实装配（只在后台任务里调用，测试不跑 worker）。 */
+    meetingFollowThroughAgents?: Parameters<typeof buildApp>[0]["meetingFollowThroughAgents"];
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {

@@ -445,6 +445,23 @@ describe("战略项与截止日期的确定性校验", () => {
     expect(result.items[1]).toMatchObject({ kind: "todo", dueDate: "2026-06-08" });
   });
 
+  it("D-40/D-41：改公司方向 / LTO / PO（含 Mission 本月结果目标或成功标准）、跨战场调资源的推给 CEO；只影响本战场打法、计划、执行的降成会上的决定", () => {
+    const result = assess([
+      { ...strategic, judgmentKind: "external_commitment" },
+      { ...strategic, judgmentKind: "major_risk" },
+      { ...strategic, judgmentKind: "mission_boundary" },
+      { ...strategic, judgmentKind: "resource_allocation" },
+      strategic,
+    ].map((item) => JSON.parse(JSON.stringify(item))));
+    expect(result).toMatchObject({ ok: true, warnings: [] });
+    if (!result.ok) return;
+    expect(result.items.map((item) => [item.kind, item.judgmentKind])).toEqual([
+      ["decision", null], ["decision", null], ["strategic", "mission_boundary"], ["strategic", "resource_allocation"], ["strategic", "company_direction"],
+    ]);
+    expect(result.items[0]).not.toHaveProperty("title");
+    expect(result.items[0]).toMatchObject({ text: strategic.text, quote: strategic.quote, review: { status: "pending" } });
+  });
+
   it("缺字段、日期不存在、说明超过两句、引文不在 turn 里的条目进入 warnings", () => {
     const result = assess([
       { ...strategic, title: undefined },
@@ -485,6 +502,25 @@ describe("战略项与截止日期的确定性校验", () => {
       expect(warn).toHaveBeenCalledTimes(2);
       expect(String(warn.mock.calls[0][0])).toContain("brief(占位), judgmentKind, parentIndex, title");
       expect(String(warn.mock.calls[1][0])).toContain("dueDate");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("D-42：负责人只对决定和待办生效；战略项带了对不上的负责人时整条保留、负责人为空", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const result = assess([
+        { ...strategic, ownerPersonId: LEAD },
+        { ...CANDIDATE.items[1], ownerPersonId: OWNER },
+      ]);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toMatchObject({ kind: "strategic", title: strategic.title, judgmentKind: "company_direction", ownerPersonId: null });
+      expect(String(warn.mock.calls[0][0])).toContain("#1 (strategic) 丢掉不适用的字段: ownerPersonId");
+      // 待办照旧：负责人对不上就拒收
+      expect(result.warnings.map((warning) => warning.reason)).toEqual([`owner 无法由该 turn 确定: ${OWNER}`]);
     } finally {
       warn.mockRestore();
     }

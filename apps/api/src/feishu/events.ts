@@ -4,8 +4,12 @@ import type { JobHandler } from "../jobs.js";
 import type { FeishuEnv } from "./config.js";
 
 export const FEISHU_EVENT_KIND = "feishu.event";
-/** 长连接订阅的事件；开发者后台「事件与回调」里也要勾上同样的事件。业务处理留给后续，这里只接入、落库、去重。 */
-export const FEISHU_SUBSCRIBED_EVENTS = ["im.message.receive_v1"] as const;
+/**
+ * 长连接订阅的事件；开发者后台「事件与回调」里也要勾上同样的事件。这里只接入、落库、去重，业务处理按事件类型交给 jobs 里注册的处理函数。
+ * minutes.minute.generated_v1（妙记生成）是用户身份事件，要主持人授权 minutes:minutes.basic:read 之一；收不到时靠会议链路每 5 分钟的轮询兜底。
+ */
+export const FEISHU_SUBSCRIBED_EVENTS = ["im.message.receive_v1", "minutes.minute.generated_v1"] as const;
+export type FeishuEventHandlers = Record<string, (payload: Record<string, unknown>) => Promise<void>>;
 
 /** 至少投递一次：消息类按 message_id，其余按 event_id（1.0 版事件是 uuid）去重。 */
 export function feishuEventDedupeKey(data: Record<string, unknown>): string | null {
@@ -37,11 +41,19 @@ export async function recordFeishuEvent(pool: Pool, eventType: string, data: Rec
   return result.rows.length ? "recorded" : "duplicate";
 }
 
-/** 事件的后续处理：目前只标记已处理，具体业务（消息里的文档链接等）留给后续。 */
-export function feishuEventJobs(pool: Pool): Record<string, JobHandler> {
+/**
+ * 事件的后续处理：有注册处理函数的事件类型先交给它（妙记生成 → 会议链路），处理完标记已处理；
+ * 处理函数抛错时不标记，交给 jobs 退避重试。没注册的类型（消息里的文档链接等）只标记，留给后续。
+ */
+export function feishuEventJobs(pool: Pool, handlers: FeishuEventHandlers = {}): Record<string, JobHandler> {
   return {
     [FEISHU_EVENT_KIND]: async (payload) => {
-      await pool.query("UPDATE feishu_events SET processed_at = now() WHERE id = $1 AND processed_at IS NULL", [(payload as { feishuEventId?: unknown }).feishuEventId]);
+      const id = (payload as { feishuEventId?: unknown }).feishuEventId;
+      const event = (await pool.query("SELECT event_type, payload, processed_at FROM feishu_events WHERE id = $1", [id])).rows[0] as
+        { event_type: string; payload: Record<string, unknown>; processed_at: Date | null } | undefined;
+      if (!event || event.processed_at) return;
+      await handlers[event.event_type]?.(event.payload);
+      await pool.query("UPDATE feishu_events SET processed_at = now() WHERE id = $1 AND processed_at IS NULL", [id]);
     },
   };
 }

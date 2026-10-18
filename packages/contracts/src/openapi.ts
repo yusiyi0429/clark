@@ -5,6 +5,8 @@ import {
   DraftRequestRequest, DraftRequestResponse, RequestListItem, RequestListResponse, PrepareRequestQuestionRequest,
   PrepareRequestQuestionResponse, DraftRequestAnswerResponse, RequestSendInput, RequestAskInput, RequestAnswerInput, ExecuteRequestActionRequest,
 } from "./requests.js";
+import { MeetingDecisionView, MeetingDecisionReviewRequest, MeetingDecisionResponse, MyMeetingDecisionsResponse } from "./meetingDecisions.js";
+import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import {
   ActionDescriptor,
   ApiError,
@@ -739,6 +741,43 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           operationId: "listMyRequests", summary: "我收到的（inbox）或我发出的（sent）请求，最近 100 条",
           parameters: [{ name: "box", in: "query", required: true, schema: { type: "string", enum: ["inbox", "sent"] } }],
           responses: { "200": { description: "请求列表", content: { "application/json": { schema: { $ref: "#/components/schemas/RequestListResponse" } } } }, "400": errorResponse, "401": errorResponse },
+        },
+      },
+      "/api/requests/{id}/impact": {
+        get: {
+          operationId: "getRequestImpactCard", summary: "kind = impact 的请求对应的影响卡；只有收卡的人看得到",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "影响卡", content: { "application/json": { schema: { $ref: "#/components/schemas/ImpactCardResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/impact-cards/{id}/ask": {
+        post: {
+          operationId: "askImpactCard", summary: "在影响卡上追问：Agent 结合这条决定和本人手上的事回答，问答留在卡上",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ImpactAskRequest" }),
+          responses: { "200": { description: "处理步骤与带回答的影响卡", content: { "application/json": { schema: { $ref: "#/components/schemas/ImpactAskResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/impact-cards/{id}/irrelevant": {
+        post: {
+          operationId: "markImpactCardIrrelevant", summary: "「和我无关」：卡收起，反馈回流成质量信号；重复点幂等",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ImpactIrrelevantRequest" }),
+          responses: { "200": { description: "影响卡", content: { "application/json": { schema: { $ref: "#/components/schemas/ImpactCardResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/me/meeting-decisions": {
+        get: {
+          operationId: "listMyMeetingDecisions", summary: "我主持的会里还没确认的「会上定了 X」，按会议分组",
+          responses: { "200": { description: "待确认的会后决定", content: { "application/json": { schema: { $ref: "#/components/schemas/MyMeetingDecisionsResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/decisions/{decisionId}/review": {
+        post: {
+          operationId: "reviewMeetingDecision", summary: "主持人确认一条会后决定：对 / 改一下 / 其实没定；Agent 代判之后改判会给已收卡的人出更正卡",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }, { name: "decisionId", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingDecisionReviewRequest" }),
+          responses: { "200": { description: "这条决定的最新状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingDecisionResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/cards/radar": {
@@ -2802,6 +2841,15 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         RequestAskInput: RequestAskInput as JsonSchema,
         RequestAnswerInput: RequestAnswerInput as JsonSchema,
         ExecuteRequestActionRequest: ExecuteRequestActionRequest as JsonSchema,
+        MeetingDecisionView: MeetingDecisionView as JsonSchema,
+        MeetingDecisionReviewRequest: MeetingDecisionReviewRequest as JsonSchema,
+        MeetingDecisionResponse: MeetingDecisionResponse as JsonSchema,
+        MyMeetingDecisionsResponse: MyMeetingDecisionsResponse as JsonSchema,
+        ImpactCardView: ImpactCardView as JsonSchema,
+        ImpactCardResponse: ImpactCardResponse as JsonSchema,
+        ImpactAskRequest: ImpactAskRequest as JsonSchema,
+        ImpactAskResponse: ImpactAskResponse as JsonSchema,
+        ImpactIrrelevantRequest: ImpactIrrelevantRequest as JsonSchema,
       },
     },
   };

@@ -43,4 +43,24 @@ describe("飞书长连接事件", () => {
       expect((await db.query("SELECT count(*)::int AS n FROM feishu_events WHERE processed_at IS NOT NULL")).rows[0].n).toBe(2);
     });
   });
+
+  it("按事件类型交给注册的处理函数（妙记生成 → 会议链路）；处理失败不标记、交给 jobs 重试", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      const minuteEvent = { schema: "2.0", event_id: "ev-minute", event_type: "minutes.minute.generated_v1", minute_token: "obcn1" };
+      expect(await recordFeishuEvent(pool, "minutes.minute.generated_v1", minuteEvent)).toBe("recorded");
+      const seen: unknown[] = [];
+      let fail = true;
+      const handlers = { "minutes.minute.generated_v1": async (payload: Record<string, unknown>) => { seen.push(payload.minute_token); if (fail) throw new Error("not ready"); } };
+      let at = new Date();
+      const worker = createJobWorker({ pool, handlers: feishuEventJobs(pool, handlers), now: () => at });
+      await worker.tick();
+      expect((await db.query("SELECT processed_at FROM feishu_events")).rows[0].processed_at).toBeNull();
+      fail = false;
+      at = new Date(at.getTime() + 2 * 60_000);
+      await worker.tick();
+      expect(seen).toEqual(["obcn1", "obcn1"]);
+      expect((await db.query("SELECT processed_at FROM feishu_events")).rows[0].processed_at).not.toBeNull();
+    });
+  });
 });

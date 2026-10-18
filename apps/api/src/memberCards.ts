@@ -25,6 +25,8 @@ export function projectMemberMeetingCard(row: MeetingRow, secret: string, viewer
 export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string): TCard {
   const payload = card.payload as TMeetingCardPayload;
   const isHost = payload.leadDriId === viewerId;
+  // 原文和完整纪要只给实际参会的人（飞书参会名单，中途加入的也算；拿不到时是手填的参会人）和 CEO；其他人只看已确认的决定和待办。
+  const attended = isHost || Boolean(viewerId && payload.attendees?.personIds.includes(viewerId));
   return { ...card, payload: {
     status: payload.status, scheduledAt: payload.scheduledAt, endsAt: payload.endsAt, endedAt: payload.endedAt,
     hasEnded: payload.hasEnded,
@@ -34,9 +36,19 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
     materials: payload.materials,
     preflight: { status: payload.preflight.status, brief: payload.preflight.brief,
       readiness: payload.preflight.readiness ?? null, summary: payload.preflight.summary ?? null },
-    outcome: payload.outcome ? { items: payload.outcome.items
-      .filter((item) => (item.kind === "decision" || item.kind === "todo") && item.review?.status === "confirmed")
-      .map((item) => ({ id: item.id, kind: item.kind, text: item.text, ownerPersonId: item.ownerPersonId })) } : null,
+    outcome: payload.outcome ? {
+      ...(attended ? { summary: payload.outcome.summary, status: payload.outcome.status } : {}),
+      items: payload.outcome.items
+        .filter((item) => (item.kind === "decision" || item.kind === "todo") && item.review?.status === "confirmed")
+        .map((item) => ({ id: item.id, kind: item.kind, text: item.text, ownerPersonId: item.ownerPersonId })) } : null,
+    minutesStatus: payload.minutesStatus ?? "none",
+    attended,
+    ...(attended ? {
+      // 原文只在已有逐字稿时带上（会前没有这一格）。
+      ...(payload.transcript ? { transcript: payload.transcript } : {}),
+      // 主持人确认 host 条目；战略项给 CEO，这里只看不点。
+      decisions: (payload.decisions ?? []).map((decision) => ({ ...decision, canReview: isHost && decision.tier === "host" })),
+    } : {}),
   },
     actions: isHost ? card.actions.filter((action) => ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate"].includes(action.actionType)) : [],
     navigation: [{ href: `/me/meetings/${card.objectRef.id}`, label: "会议" }] };

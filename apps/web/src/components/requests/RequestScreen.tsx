@@ -19,6 +19,7 @@ import { REMARK_PLUGINS } from "@/lib/markdown";
 import type { Card } from "@/lib/api/client";
 import { draftAnswer, draftRequest, prepareQuestion, readRequest, requestError, runRequestAction } from "./requestApi";
 import { RequestSteps, runningSteps } from "./RequestSteps";
+import { ImpactCardScreen } from "./ImpactCard";
 import s from "./requests.module.css";
 
 const NO_CARDS: Card[] = [];
@@ -37,7 +38,13 @@ export function statusTone(request: Pick<TRequestView, "status">, mine: TRequest
   return { label: "进行中", tone: "wait" };
 }
 
-export function RequestScreen({ initialRequest, base }: { initialRequest: TRequestView | null; base: string }) {
+export function RequestScreen({ initialRequest, base, initialPrompt }: { initialRequest: TRequestView | null; base: string; initialPrompt?: string }) {
+  // 影响卡也走送达通道，二级页换成影响卡的样子。
+  if (initialRequest?.kind === "impact") return <ImpactCardScreen request={initialRequest} base={base} />;
+  return <RelayRequestScreen initialRequest={initialRequest} base={base} initialPrompt={initialPrompt} />;
+}
+
+function RelayRequestScreen({ initialRequest, base, initialPrompt }: { initialRequest: TRequestView | null; base: string; initialPrompt?: string }) {
   const workspace = useWorkspace();
   const [request, setRequest] = useState(initialRequest);
   const sent = request !== null && request.status !== "draft";
@@ -69,7 +76,7 @@ export function RequestScreen({ initialRequest, base }: { initialRequest: TReque
         <div className={s.content}>
           {sent
             ? <SentRequest request={request} onChange={setRequest} />
-            : <DraftRequest request={request} onChange={setRequest} onSent={(next) => {
+            : <DraftRequest request={request} initialPrompt={initialPrompt} onChange={setRequest} onSent={(next) => {
               setRequest(next);
               workspace.showToast(`已发给 ${next.recipients.map((person) => person.displayName).join("、")}`);
               if (!initialRequest) workspace.navigate(`${base}/${encodeURIComponent(next.id)}`);
@@ -83,10 +90,12 @@ export function RequestScreen({ initialRequest, base }: { initialRequest: TReque
 /* ---------- 发起人：起草 → 要你定 → 预览 → 发送 ---------- */
 
 /** compact：对话里的草稿卡（conversation/EntryCards）用，原话已在对话里，不显示起草框；改了「要你定」的回答时在那一组下面给「按回答重写」。 */
-export function DraftRequest({ request, onChange, onSent, compact = false }: {
+export function DraftRequest({ request, onChange, onSent, compact = false, initialPrompt }: {
   request: TRequestView | null; onChange: (next: TRequestView) => void; onSent: (next: TRequestView) => void; compact?: boolean;
+  /** 从影响卡「可以问」进来时带上的开头。 */
+  initialPrompt?: string;
 }) {
-  const [prompt, setPrompt] = useState(request?.prompt ?? "");
+  const [prompt, setPrompt] = useState(request?.prompt ?? initialPrompt ?? "");
   const [steps, setSteps] = useState<TRequestStep[] | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>(() => Object.fromEntries((request?.clarifications ?? []).map((item) => [item.question, item.answer ?? ""])));
   const [chosen, setChosen] = useState<string[]>(() => request?.candidates.map((person) => person.personId) ?? []);

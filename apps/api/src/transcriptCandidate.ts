@@ -204,8 +204,9 @@ export async function executeConfirmTranscriptCandidate(
     const added = [...usedPersonIds].filter((personId) => !existingIds.has(personId)).map((personId) => projectPerson(personById.get(personId)!));
     const participants = [...row.participants, ...added];
 
-    // 录音识别的 offset 相对录音开始时刻（绝对事实，不随改期漂移）；妙记相对锁内最新 scheduledAt
-    const anchorIso = candidate.source.format === "volc_asr" && candidate.source.timeAnchor ? candidate.source.timeAnchor : row.scheduled_at.toISOString();
+    // 录音识别与飞书妙记的 offset 相对实际开始时刻（绝对事实，不随改期漂移）；上传的妙记 Markdown 相对锁内最新 scheduledAt
+    const absolute = candidate.source.format === "volc_asr" || candidate.source.format === "feishu_minutes";
+    const anchorIso = absolute && candidate.source.timeAnchor ? candidate.source.timeAnchor : row.scheduled_at.toISOString();
     const anchor = Date.parse(anchorIso);
     const turns: TTranscriptTurn[] = candidate.turns.map((turn, index) => ({
       id: `turn-${String(index + 1).padStart(4, "0")}`,

@@ -38,9 +38,16 @@ import { Select } from "@/components/ui/Select";
 import { groupPreflight } from "./preflightOutline";
 import { attributeEntries, groupOutcomeByIssue, ISSUE_STATUS_LABEL, outcomeIssueId, preflightInFlight, preflightStatusText, speakerLabel, type PreflightEntry } from "./meetingIssueModel";
 import { buildHistoryIndex, outcomeAnchorId, type SourceContext, type SourceMaterial } from "./meetingSources";
+import { MeetingDecisions } from "@/components/meeting/MeetingDecisions";
 import s from "@/styles/meeting-workspace.module.css";
 
 export { MaterialPane, materialMeta, previewKind, type MaterialMeta, type MaterialPreview } from "@/components/meeting/meetingMaterialPreview";
+
+/** 成员视角的会议卡：实际参会的人才带完整纪要摘要（服务端按飞书参会名单裁剪）。 */
+export function memberOutcomeSummary(payload: { outcome?: unknown }): string | null {
+  const summary = (payload.outcome as { summary?: unknown } | null | undefined)?.summary;
+  return typeof summary === "string" && summary.trim() ? summary : null;
+}
 
 
 const ITEM_LABEL: Record<string, string> = {
@@ -450,6 +457,7 @@ export function meetingNow(payload: MeetingPayload, ended: boolean): string {
   if (ended && payload.transcriptCandidate) return "会议记录待确认说话人";
   if (ended && recordingInFlight(payload.recording)) return "录音转写中";
   if (ended && payload.recording?.status === "failed") return "录音转写失败，可导入妙记";
+  if (ended && payload.minutesStatus === "waiting") return "妙记生成中";
   if (ended) return "待导入会议记录";
   return preflightStatusText(payload.preflight);
 }
@@ -1557,12 +1565,20 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   );
 
   const statusNow = memberReadOnly && ended
-    ? outcomeItems.length ? "会后结论已确认" : "会议已结束"
+    ? outcomeItems.length ? "会后结论已确认" : payload.minutesStatus === "waiting" ? "妙记生成中" : "会议已结束"
     : phase === "live" ? recorderLine(recorder.state) : meetingNow(payload, ended);
 
   const recordView =
     memberReadOnly && !(isHost && payload.status === "scheduled") ? (
       <section className={s.review}>
+        {/* 实际参会的人能看完整纪要和「会上定了」；主持人在这里确认。 */}
+        {memberOutcomeSummary(source) ? (
+          <section className={s.reviewSection} data-outline="summary">
+            <header><h3>会议纪要</h3></header>
+            <p className={s.entryBody}>{memberOutcomeSummary(source)}</p>
+          </section>
+        ) : null}
+        <MeetingDecisions decisions={payload.decisions ?? []} />
         <section className={s.reviewSection}>
           <header><h3>会后结论</h3></header>
           {outcomeItems.length ? (
@@ -1605,6 +1621,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       <section className={s.reviewSection}>
         <header>
           <h3>导入会议记录</h3>
+          {payload.minutesStatus === "waiting" ? <span>飞书妙记生成中</span> : null}
         </header>
         <div className={s.stageActions}>
           <input
@@ -1642,6 +1659,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
               </header>
               <p className={s.entryBody}>{payload.outcome.summary || "抽取尚未产出摘要。"}</p>
             </section>
+            <MeetingDecisions decisions={payload.decisions ?? []} />
             {payload.outcome.error ? (
               <p className={s.error} role="alert" title={payload.outcome.error.code}>
                 {payload.outcome.error.message}

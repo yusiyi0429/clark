@@ -38,3 +38,5 @@ export * from "./weeklyReviews.js";
 export * from "./admin.js";
 export * from "./progress.js";
 export * from "./issueDrafts.js";
+export * from "./meetingDecisions.js";
+export * from "./impact.js";

@@ -941,6 +941,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/requests/{id}/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** kind = impact 的请求对应的影响卡；只有收卡的人看得到 */
+        get: operations["getRequestImpactCard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/impact-cards/{id}/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 在影响卡上追问：Agent 结合这条决定和本人手上的事回答，问答留在卡上 */
+        post: operations["askImpactCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/impact-cards/{id}/irrelevant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 「和我无关」：卡收起，反馈回流成质量信号；重复点幂等 */
+        post: operations["markImpactCardIrrelevant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/meeting-decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我主持的会里还没确认的「会上定了 X」，按会议分组 */
+        get: operations["listMyMeetingDecisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/decisions/{decisionId}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 主持人确认一条会后决定：对 / 改一下 / 其实没定；Agent 代判之后改判会给已收卡的人出更正卡 */
+        post: operations["reviewMeetingDecision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/radar": {
         parameters: {
             query?: never;
@@ -6497,7 +6582,7 @@ export interface components {
             }[];
             importedAt: string;
             source?: {
-                format: "miaoji_markdown" | "warmap_json" | "volc_asr";
+                format: "miaoji_markdown" | "warmap_json" | "volc_asr" | "feishu_minutes";
                 fileName: string;
                 sizeBytes: number;
                 sha256: string;
@@ -9541,6 +9626,7 @@ export interface components {
         };
         RequestListItem: {
             id: string;
+            kind: "relay" | "collection" | "impact" | "supplement";
             title: string;
             status: "draft" | "open" | "done";
             initiatorName: string;
@@ -9555,6 +9641,7 @@ export interface components {
         RequestListResponse: {
             items: {
                 id: string;
+                kind: "relay" | "collection" | "impact" | "supplement";
                 title: string;
                 status: "draft" | "open" | "done";
                 initiatorName: string;
@@ -9603,6 +9690,281 @@ export interface components {
         ExecuteRequestActionRequest: {
             actionId: string;
             input?: unknown;
+        };
+        MeetingDecisionView: {
+            id: string;
+            meetingId: string;
+            tier: "strategic" | "host";
+            ordinal: number;
+            statement: string;
+            originalStatement: string;
+            quote: string | null;
+            speakerName: string | null;
+            recommendation: "confirmed" | "not_decided";
+            why: string | null;
+            status: "pending" | "confirmed" | "edited" | "not_decided" | "rejected" | "agent_judged";
+            revision: number;
+            reviewerName: string | null;
+            reviewedAt: string | null;
+            dueAt: string | null;
+            canReview: boolean;
+        };
+        MeetingDecisionReviewRequest: {
+            verdict: "confirmed" | "edited" | "not_decided";
+            statement?: string;
+        };
+        MeetingDecisionResponse: {
+            decision: {
+                id: string;
+                meetingId: string;
+                tier: "strategic" | "host";
+                ordinal: number;
+                statement: string;
+                originalStatement: string;
+                quote: string | null;
+                speakerName: string | null;
+                recommendation: "confirmed" | "not_decided";
+                why: string | null;
+                status: "pending" | "confirmed" | "edited" | "not_decided" | "rejected" | "agent_judged";
+                revision: number;
+                reviewerName: string | null;
+                reviewedAt: string | null;
+                dueAt: string | null;
+                canReview: boolean;
+            };
+        };
+        MyMeetingDecisionsResponse: {
+            groups: {
+                meetingId: string;
+                meetingTitle: string;
+                scheduledAt: string;
+                dueAt: string | null;
+                decisions: {
+                    id: string;
+                    meetingId: string;
+                    tier: "strategic" | "host";
+                    ordinal: number;
+                    statement: string;
+                    originalStatement: string;
+                    quote: string | null;
+                    speakerName: string | null;
+                    recommendation: "confirmed" | "not_decided";
+                    why: string | null;
+                    status: "pending" | "confirmed" | "edited" | "not_decided" | "rejected" | "agent_judged";
+                    revision: number;
+                    reviewerName: string | null;
+                    reviewedAt: string | null;
+                    dueAt: string | null;
+                    canReview: boolean;
+                }[];
+            }[];
+        };
+        ImpactCardView: {
+            id: string;
+            status: "shadow" | "delivered" | "irrelevant";
+            title: string;
+            impact: string;
+            action: {
+                kind: "do" | "know";
+                text: string;
+                due: string | null;
+            };
+            targets: {
+                type: "task" | "mission" | "acceptance";
+                id: string;
+                index?: number;
+                title: string;
+            }[];
+            why: string;
+            sources: {
+                meetingId: string;
+                meetingTitle: string;
+                turnId: string | null;
+                speakerName: string | null;
+                quote: string;
+                at: string | null;
+            }[];
+            askWho: {
+                personId: string;
+                displayName: string;
+                role: "host" | "ceo" | "author";
+            }[];
+            trigger: {
+                /** @constant */
+                kind: "meeting_decision";
+                id: string;
+                revision: number;
+                meetingId: string;
+                meetingTitle: string;
+                statement: string;
+                tier: "strategic" | "host";
+                decidedBy: "host" | "ceo" | "agent";
+            };
+            agentJudged: boolean;
+            correction: {
+                of: string;
+                note: string;
+            } | null;
+            superseded: boolean;
+            confidence: "high" | "medium" | "low";
+            planWrite: {
+                kind: "activity" | "formal";
+                objectRef: string;
+                component: string | null;
+                patch: string;
+                status: "proposed" | "written" | "confirmed";
+            } | null;
+            questions: {
+                id: string;
+                question: string;
+                answer: string | null;
+                createdAt: string;
+            }[];
+            requestId: string | null;
+            createdAt: string;
+        };
+        ImpactCardResponse: {
+            card: {
+                id: string;
+                status: "shadow" | "delivered" | "irrelevant";
+                title: string;
+                impact: string;
+                action: {
+                    kind: "do" | "know";
+                    text: string;
+                    due: string | null;
+                };
+                targets: {
+                    type: "task" | "mission" | "acceptance";
+                    id: string;
+                    index?: number;
+                    title: string;
+                }[];
+                why: string;
+                sources: {
+                    meetingId: string;
+                    meetingTitle: string;
+                    turnId: string | null;
+                    speakerName: string | null;
+                    quote: string;
+                    at: string | null;
+                }[];
+                askWho: {
+                    personId: string;
+                    displayName: string;
+                    role: "host" | "ceo" | "author";
+                }[];
+                trigger: {
+                    /** @constant */
+                    kind: "meeting_decision";
+                    id: string;
+                    revision: number;
+                    meetingId: string;
+                    meetingTitle: string;
+                    statement: string;
+                    tier: "strategic" | "host";
+                    decidedBy: "host" | "ceo" | "agent";
+                };
+                agentJudged: boolean;
+                correction: {
+                    of: string;
+                    note: string;
+                } | null;
+                superseded: boolean;
+                confidence: "high" | "medium" | "low";
+                planWrite: {
+                    kind: "activity" | "formal";
+                    objectRef: string;
+                    component: string | null;
+                    patch: string;
+                    status: "proposed" | "written" | "confirmed";
+                } | null;
+                questions: {
+                    id: string;
+                    question: string;
+                    answer: string | null;
+                    createdAt: string;
+                }[];
+                requestId: string | null;
+                createdAt: string;
+            };
+        };
+        ImpactAskRequest: {
+            question: string;
+        };
+        ImpactAskResponse: {
+            steps: {
+                label: string;
+                status: "done" | "current" | "pending";
+                result: string | null;
+            }[];
+            card: {
+                id: string;
+                status: "shadow" | "delivered" | "irrelevant";
+                title: string;
+                impact: string;
+                action: {
+                    kind: "do" | "know";
+                    text: string;
+                    due: string | null;
+                };
+                targets: {
+                    type: "task" | "mission" | "acceptance";
+                    id: string;
+                    index?: number;
+                    title: string;
+                }[];
+                why: string;
+                sources: {
+                    meetingId: string;
+                    meetingTitle: string;
+                    turnId: string | null;
+                    speakerName: string | null;
+                    quote: string;
+                    at: string | null;
+                }[];
+                askWho: {
+                    personId: string;
+                    displayName: string;
+                    role: "host" | "ceo" | "author";
+                }[];
+                trigger: {
+                    /** @constant */
+                    kind: "meeting_decision";
+                    id: string;
+                    revision: number;
+                    meetingId: string;
+                    meetingTitle: string;
+                    statement: string;
+                    tier: "strategic" | "host";
+                    decidedBy: "host" | "ceo" | "agent";
+                };
+                agentJudged: boolean;
+                correction: {
+                    of: string;
+                    note: string;
+                } | null;
+                superseded: boolean;
+                confidence: "high" | "medium" | "low";
+                planWrite: {
+                    kind: "activity" | "formal";
+                    objectRef: string;
+                    component: string | null;
+                    patch: string;
+                    status: "proposed" | "written" | "confirmed";
+                } | null;
+                questions: {
+                    id: string;
+                    question: string;
+                    answer: string | null;
+                    createdAt: string;
+                }[];
+                requestId: string | null;
+                createdAt: string;
+            };
+        };
+        ImpactIrrelevantRequest: {
+            reason?: string;
         };
     };
     responses: never;
@@ -12267,6 +12629,253 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getRequestImpactCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 影响卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImpactCardResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    askImpactCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImpactAskRequest"];
+            };
+        };
+        responses: {
+            /** @description 处理步骤与带回答的影响卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImpactAskResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    markImpactCardIrrelevant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImpactIrrelevantRequest"];
+            };
+        };
+        responses: {
+            /** @description 影响卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImpactCardResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMyMeetingDecisions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 待确认的会后决定 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyMeetingDecisionsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    reviewMeetingDecision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                decisionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingDecisionReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description 这条决定的最新状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingDecisionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

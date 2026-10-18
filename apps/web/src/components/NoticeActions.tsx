@@ -28,6 +28,8 @@ export interface NoticeReason {
   fieldLabel: string;
   placeholder: string;
   submitLabel: string;
+  /** 填写区展开时预先填好的内容（「改一下」从原说法改起）。 */
+  initial?: string;
   run: (reason: string) => Promise<NoticeOutcome>;
 }
 
@@ -45,7 +47,7 @@ export function NoticeActions({
   onSettled: (text?: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(reason?.initial ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const root = useRef<HTMLDivElement>(null);
@@ -99,7 +101,7 @@ export function NoticeActions({
             <Button variant="ghost" size="sm" onPress={close}>
               取消
             </Button>
-            <Button variant="ghost" size="sm" data-emphasis isDisabled={busy || !text.trim()} onPress={() => void apply(() => reason.run(text.trim()))}>
+            <Button variant="ghost" size="sm" data-emphasis isDisabled={busy || !text.trim() || text.trim() === reason.initial?.trim()} onPress={() => void apply(() => reason.run(text.trim()))}>
               {reason.submitLabel}
             </Button>
           </div>
