@@ -7,8 +7,11 @@ import type { FeishuEnv } from "./config.js";
 import { FeishuApiError, type FeishuClient } from "./client.js";
 import { saveAuthorizedToken } from "./tokens.js";
 
-/** offline_access 才会返回 refresh token；其余用户权限随后续功能加进来。 */
-export const FEISHU_OAUTH_SCOPE = "offline_access";
+/**
+ * offline_access 才会返回 refresh token；drive:drive.metadata:readonly 用来读本人工作依据里飞书文档的标题、修订时间和修订人（不读正文）。
+ * 其余用户权限随后续功能加进来；在开发者后台开通的清单见 .scratch/tianshu-v1/飞书开发者后台配置清单.md。
+ */
+export const FEISHU_OAUTH_SCOPE = "offline_access drive:drive.metadata:readonly";
 export const FEISHU_STATE_COOKIE = "feishu_oauth";
 const STATE_MAX_AGE_SECONDS = 600;
 const STATE_COOKIE_PATH = "/api/auth/feishu";

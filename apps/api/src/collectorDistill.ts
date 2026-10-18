@@ -99,14 +99,18 @@ export async function readCollectorConsent(q: Query, personId: string): Promise<
   return { granted: row?.granted ?? false, updatedAt: row?.updated_at.toISOString() ?? null };
 }
 
-/** 同意或撤回；撤回时在同一事务里清空本人的全部原文（整理结果保留）。 */
+/** 同意或撤回；撤回时在同一事务里清空本人的全部原文和本机清单（整理结果、已确认的工作依据和搬过来的定时任务保留）。 */
 export async function updateCollectorConsent(pool: Pool, personId: string, granted: boolean, now: Date): Promise<TCollectorConsent> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     await client.query(`INSERT INTO collector_consents (person_id, granted, updated_at) VALUES ($1, $2, $3)
       ON CONFLICT (person_id) DO UPDATE SET granted=EXCLUDED.granted, updated_at=EXCLUDED.updated_at`, [personId, granted, now]);
-    if (!granted) await client.query("UPDATE collector_items SET summary=NULL, raw_purged_at=$2 WHERE person_id=$1 AND summary IS NOT NULL", [personId, now]);
+    if (!granted) {
+      await client.query("UPDATE collector_items SET summary=NULL, raw_purged_at=$2 WHERE person_id=$1 AND summary IS NOT NULL", [personId, now]);
+      await client.query("DELETE FROM local_inventory WHERE person_id=$1", [personId]);
+      await client.query("DELETE FROM collector_scans WHERE person_id=$1", [personId]);
+    }
     await client.query("COMMIT");
     return { granted, updatedAt: now.toISOString() };
   } catch (cause) { await client.query("ROLLBACK").catch(() => undefined); throw cause; }

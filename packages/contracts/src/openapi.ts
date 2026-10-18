@@ -128,8 +128,9 @@ import {
   CreatePersonalTokenRequest,
   CreatePersonalTokenResponse,
   CollectorHeartbeatRequest, CollectorHeartbeatResponse, CollectorReportRequest, CollectorReportResponse,
-  CollectorConsentResponse, UpdateCollectorConsentRequest,
   AdminOverviewResponse, AdminActionRequest,
+  CollectorConsentResponse, UpdateCollectorConsentRequest, CollectorStatusResponse,
+  WorkBasisResponse, UpdateWorkBasisRequest, ScheduleMigrationResponse, UpdateScheduleMigrationRequest,
   WeeklyReviewBoardResponse, WeeklyReviewResponse, ExecuteWeeklyReviewActionRequest, ExecuteWeeklyReviewActionResponse, WeeklyReviewUpdateInput,
   ProgressOverviewResponse, MyOffPlanResponse, AttachOffPlanRequest,
   OAuthConsentRequest,
@@ -1415,6 +1416,53 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "操作后的管理员视图", content: { "application/json": { schema: { $ref: "#/components/schemas/AdminOverviewResponse" } } } }, "400": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
+      "/api/me/collector/status": {
+        get: {
+          operationId: "getCollectorStatus", summary: "本人的采集器：连上的设备、最近一次完整盘点、盘点到的条数（上手流程轮询）",
+          responses: { "200": { description: "采集器状态", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorStatusResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/collector/install.ps1": {
+        get: {
+          operationId: "getCollectorInstallWindows", summary: "Windows 一行安装命令拉取的安装脚本（不含令牌，令牌由命令参数带入）",
+          responses: { "200": { description: "PowerShell 脚本", content: { "text/plain": { schema: { type: "string" } } } } },
+        },
+      },
+      "/api/collector/install.sh": {
+        get: {
+          operationId: "getCollectorInstallMacos", summary: "macOS 一行安装命令拉取的安装脚本（不含令牌，令牌由命令参数带入）",
+          responses: { "200": { description: "shell 脚本", content: { "text/plain": { schema: { type: "string" } } } } },
+        },
+      },
+      "/api/collector/files/{name}": {
+        get: {
+          operationId: "getCollectorFile", summary: "安装脚本下载的采集器文件（tkos_collector.py、collect_sessions.py、sanitize.py）",
+          parameters: [{ name: "name", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Python 源文件", content: { "text/plain": { schema: { type: "string" } } } }, "404": errorResponse },
+        },
+      },
+      "/api/me/work-basis": {
+        get: {
+          operationId: "getWorkBasis", summary: "工作依据清单：本人在依据的整份文档候选（天枢材料、飞书文档、链接）与已确认的",
+          responses: { "200": { description: "候选", content: { "application/json": { schema: { $ref: "#/components/schemas/WorkBasisResponse" } } } }, "401": errorResponse },
+        },
+        put: {
+          operationId: "updateWorkBasis", summary: "本人确认工作依据：勾选的入库并记下当时的修订号，候选里没勾的移出",
+          requestBody: jsonBody({ $ref: "#/components/schemas/UpdateWorkBasisRequest" }),
+          responses: { "200": { description: "候选", content: { "application/json": { schema: { $ref: "#/components/schemas/WorkBasisResponse" } } } }, "400": errorResponse, "401": errorResponse },
+        },
+      },
+      "/api/me/schedule-migration": {
+        get: {
+          operationId: "getScheduleMigration", summary: "搬家清单：本机清单里找到的定时任务，以及哪些已经搬进定时任务区",
+          responses: { "200": { description: "候选", content: { "application/json": { schema: { $ref: "#/components/schemas/ScheduleMigrationResponse" } } } }, "401": errorResponse },
+        },
+        put: {
+          operationId: "updateScheduleMigration", summary: "本人确认搬家：勾选的写进定时任务区，候选里没勾的移出",
+          requestBody: jsonBody({ $ref: "#/components/schemas/UpdateScheduleMigrationRequest" }),
+          responses: { "200": { description: "候选", content: { "application/json": { schema: { $ref: "#/components/schemas/ScheduleMigrationResponse" } } } }, "400": errorResponse, "401": errorResponse },
+        },
+      },
       "/api/weekly-reviews/board": {
         get: {
           operationId: "getWeeklyReviewBoard", summary: "周复盘名单：看得到的人（本人、同战场、CEO 看全部）这一周的状态；不带 week 取本周",
@@ -2644,6 +2692,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         UpdateCollectorConsentRequest: UpdateCollectorConsentRequest as JsonSchema,
         AdminOverviewResponse: AdminOverviewResponse as JsonSchema,
         AdminActionRequest: AdminActionRequest as JsonSchema,
+        CollectorStatusResponse: CollectorStatusResponse as JsonSchema,
+        WorkBasisResponse: WorkBasisResponse as JsonSchema,
+        UpdateWorkBasisRequest: UpdateWorkBasisRequest as JsonSchema,
+        ScheduleMigrationResponse: ScheduleMigrationResponse as JsonSchema,
+        UpdateScheduleMigrationRequest: UpdateScheduleMigrationRequest as JsonSchema,
         WeeklyReviewBoardResponse: WeeklyReviewBoardResponse as JsonSchema,
         WeeklyReviewResponse: WeeklyReviewResponse as JsonSchema,
         ExecuteWeeklyReviewActionRequest: ExecuteWeeklyReviewActionRequest as JsonSchema,

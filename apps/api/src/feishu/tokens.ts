@@ -1,6 +1,6 @@
 import type { Query } from "../meetingStore.js";
 import type { FeishuEnv } from "./config.js";
-import { encryptTokenSecret } from "./crypto.js";
+import { decryptTokenSecret, encryptTokenSecret } from "./crypto.js";
 
 /** 飞书 token 接口（v3）的成功结果，字段已换成驼峰。 */
 export type FeishuUserToken = {
@@ -39,4 +39,15 @@ export async function saveRefreshedToken(q: Query, env: KeyEnv, personId: string
     [personId, env.tokenKeyVersion, ciphertext, token.scope, plusSeconds(now, token.expiresIn),
       token.refreshExpiresIn ? plusSeconds(now, token.refreshExpiresIn) : null, now],
   );
+}
+
+/**
+ * 读本人当前可用的 user access token：只在授权有效、没过期、密钥版本对得上时给出，否则 null（续期交给后台任务）。
+ * 明文只在调用方内存里用一次，不落库、不进日志。
+ */
+export async function readUserAccessToken(q: Query, env: KeyEnv, personId: string, now: Date): Promise<string | null> {
+  const row = (await q("SELECT key_version, ciphertext, access_expires_at, status FROM feishu_user_tokens WHERE person_id = $1", [personId]))
+    .rows[0] as { key_version: number; ciphertext: string; access_expires_at: Date; status: string } | undefined;
+  if (!row || row.status !== "active" || row.key_version !== env.tokenKeyVersion || row.access_expires_at.getTime() <= now.getTime()) return null;
+  return decryptTokenSecret(env.tokenKey, personId, row.ciphertext).accessToken;
 }

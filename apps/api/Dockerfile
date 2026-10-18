@@ -9,6 +9,7 @@ WORKDIR /repo
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
 COPY packages/contracts packages/contracts
 COPY apps/api apps/api
+COPY tools/collector tools/collector
 RUN pnpm_config_registry=$NPM_CONFIG_REGISTRY pnpm install --frozen-lockfile
 
 ENV NODE_ENV=production

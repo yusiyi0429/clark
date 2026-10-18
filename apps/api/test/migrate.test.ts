@@ -164,6 +164,7 @@ describe("migration", () => {
         "080_feishu.sql",
         "083_weekly_reviews.sql",
         "084_collector_distill.sql",
+        "089_onboarding_collector.sql",
         "090_memory_imports.sql",
         "093_off_plan_resolution.sql",
         "095_admin_incidents.sql",

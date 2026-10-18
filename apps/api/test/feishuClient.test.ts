@@ -27,6 +27,21 @@ describe("飞书开放接口客户端", () => {
     });
   });
 
+  it("文档元数据：以本人 token 调 drive 批量元数据接口，只取标题、修订时间和修订人", async () => {
+    const { calls, fetchImpl } = mockFetch(() => ({ code: 0, data: {
+      metas: [{ doc_token: "doxA", doc_type: "docx", title: "M2 战略解码", latest_modify_user: "ou_x", latest_modify_time: "1792137600", owner_id: "ou_o" }],
+      failed_list: [{ token: "doxB", code: 970005 }] } }));
+    const client = createFeishuClient({ appId: "cli_x", appSecret: "secret", fetch: fetchImpl });
+    expect(await client.getDocMetas("u-me", [{ token: "doxA", type: "docx" }, { token: "doxB", type: "wiki" }])).toEqual([
+      { token: "doxA", type: "docx", title: "M2 战略解码", modifiedAt: new Date(1792137600 * 1000), modifiedBy: "ou_x" }]);
+    expect(calls[0].url).toBe("https://open.feishu.cn/open-apis/drive/v1/metas/batch_query?user_id_type=open_id");
+    expect(new Headers(calls[0].init!.headers).get("authorization")).toBe("Bearer u-me");
+    expect(JSON.parse(String(calls[0].init!.body))).toEqual({
+      request_docs: [{ doc_token: "doxA", doc_type: "docx" }, { doc_token: "doxB", doc_type: "wiki" }], with_url: false });
+    expect(await client.getDocMetas("u-me", [])).toEqual([]);
+    expect(calls).toHaveLength(1);
+  });
+
   it("code 换 token：成功时字段换成驼峰；没给 offline_access 时没有 refresh token", async () => {
     const { calls, fetchImpl } = mockFetch(() => ({ code: 0, access_token: "u-1", expires_in: 7200, scope: "auth:user.id:read", token_type: "Bearer" }));
     const client = createFeishuClient({ appId: "cli_x", appSecret: "secret", fetch: fetchImpl });

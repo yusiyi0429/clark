@@ -66,6 +66,7 @@ const env: AppEnv = {
   companyMemorySeedDir: requiredEnv("COMPANY_MEMORY_SEED_DIR"),
   companyPeopleSeed: requiredEnv("COMPANY_PEOPLE_SEED"),
   companyName: process.env.COMPANY_NAME,
+  onboardingDelegationStep: process.env.ONBOARDING_DELEGATION_STEP === "1",
   missionCardDraftsDir: process.env.MISSION_CARD_DRAFTS_DIR,
   missionCardKnownMissionsFile: process.env.MISSION_CARD_KNOWN_MISSIONS_FILE,
   piBaseUrl: requiredEnv("PI_BASE_URL"),

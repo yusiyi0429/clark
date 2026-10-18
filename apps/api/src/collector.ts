@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { Pool } from "pg";
-import type { TCollectorDevice, TCollectorHeartbeatRequest, TCollectorInventory, TCollectorReportRequest, TCollectorSourceState } from "@warmap/contracts";
+import type { TCollectorDevice, TCollectorHeartbeatRequest, TCollectorInventory, TCollectorReportRequest, TCollectorSourceState, TCollectorStatusResponse } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
+import { collectorConsentGranted } from "./collectorDistill.js";
 
 /** 本机采集器的身份：人和令牌都取自 collector 个人令牌，请求体里不带人。 */
 export type CollectorIdentity = { personId: string; tokenId: string };
@@ -22,9 +25,33 @@ const upsertSources = async (q: Query, who: CollectorIdentity, device: TCollecto
   }
 };
 
-export async function recordHeartbeat(q: Query, who: CollectorIdentity, body: TCollectorHeartbeatRequest, now: Date) {
-  await upsertSources(q, who, body.device, body.version, body.sources, now);
-  return { receivedAt: now.toISOString() };
+/**
+ * 心跳可以带上当天的完整盘点（本机清单）；工作段只走上报。
+ * 本人同意采集之前（D-18）本机清单一律不收，回给采集器 consent=false，采集器据此不做盘点；同意之后下一次检查才盘点。
+ */
+export async function recordHeartbeat(pool: Pool, who: CollectorIdentity, body: TCollectorHeartbeatRequest, now: Date) {
+  const consent = await collectorConsentGranted(pool.query.bind(pool), who.personId);
+  const inventory = consent ? body.inventory : undefined;
+  if (!inventory) {
+    await upsertSources(pool.query.bind(pool), who, body.device, body.version, body.sources, now);
+    return { receivedAt: now.toISOString(), consent };
+  }
+  await inTransaction(pool, async (q) => {
+    await upsertSources(q, who, body.device, body.version, body.sources, now);
+    await upsertInventory(q, who, body.device.id, inventory, now);
+  });
+  return { receivedAt: now.toISOString(), consent };
+}
+
+export async function inTransaction(pool: Pool, work: (q: Query) => Promise<void>) {
+  const client = await pool.connect();
+  const q: Query = (sql, params) => client.query(sql, params);
+  try {
+    await client.query("BEGIN");
+    await work(q);
+    await client.query("COMMIT");
+  } catch (e) { await client.query("ROLLBACK").catch(() => undefined); throw e; }
+  finally { client.release(); }
 }
 
 const upsertInventory = async (q: Query, who: CollectorIdentity, deviceId: string, inventory: TCollectorInventory, now: Date) => {
@@ -35,7 +62,37 @@ const upsertInventory = async (q: Query, who: CollectorIdentity, deviceId: strin
     await q(sql, [who.personId, deviceId, "scheduled_task", task.name, JSON.stringify({ schedule: task.schedule, command: task.command }), null, now]);
   for (const doc of inventory.feishuDocs)
     await q(sql, [who.personId, deviceId, "feishu_doc", doc.url, JSON.stringify({ title: doc.title }), doc.readAt, now]);
+  for (const file of inventory.memoryFiles ?? [])
+    await q(sql, [who.personId, deviceId, "memory_file", file.path, JSON.stringify({ source: file.source, bytes: file.bytes, modifiedAt: file.modifiedAt }), null, now]);
+  // 每份清单都是这台设备当时的完整盘点：定时任务、记忆文件以最近一次为准（last_seen_at 早于 scanned_at 的已经不在本机）。
+  await q(`INSERT INTO collector_scans(person_id,device_id,scanned_at) VALUES($1,$2,$3)
+    ON CONFLICT (person_id,device_id) DO UPDATE SET scanned_at=EXCLUDED.scanned_at`, [who.personId, deviceId, now]);
 };
+
+/**
+ * 本人的采集器状态：设备取自心跳与上报（collector_health），盘点数只算每台设备最近一次盘点里还在的定时任务、记忆文件；
+ * 飞书文档是累计读过的。
+ */
+export async function readCollectorStatus(q: Query, personId: string): Promise<TCollectorStatusResponse> {
+  const [consent, devices, scans, counts] = await Promise.all([
+    collectorConsentGranted(q, personId),
+    q(`SELECT device_id, max(device_name) AS name, max(platform) AS platform, max(last_attempt_at) AS last_seen_at
+      FROM collector_health WHERE person_id=$1 GROUP BY device_id ORDER BY max(last_attempt_at) DESC`, [personId]),
+    q("SELECT max(scanned_at) AS scanned_at FROM collector_scans WHERE person_id=$1", [personId]),
+    q(`SELECT i.kind, count(DISTINCT i.item_key)::int AS n FROM local_inventory i
+      LEFT JOIN collector_scans s ON s.person_id=i.person_id AND s.device_id=i.device_id
+      WHERE i.person_id=$1 AND (i.kind='feishu_doc' OR i.last_seen_at >= s.scanned_at) GROUP BY i.kind`, [personId]),
+  ]);
+  const count = (kind: string) => (counts.rows as { kind: string; n: number }[]).find((row) => row.kind === kind)?.n ?? 0;
+  const scannedAt = scans.rows[0]?.scanned_at as Date | null | undefined;
+  return {
+    consent,
+    devices: (devices.rows as { device_id: string; name: string; platform: string; last_seen_at: Date }[])
+      .map((row) => ({ id: row.device_id, name: row.name, platform: row.platform, lastSeenAt: row.last_seen_at.toISOString() })),
+    scannedAt: scannedAt ? scannedAt.toISOString() : null,
+    inventory: { scheduledTasks: count("scheduled_task"), feishuDocs: count("feishu_doc"), memoryFiles: count("memory_file") },
+  };
+}
 
 export type ReportResult = { ok: true; accepted: number; duplicates: number; receivedAt: string } | { ok: false; message: string };
 
@@ -56,7 +113,8 @@ export async function recordReport(pool: Pool, who: CollectorIdentity, body: TCo
       accepted += inserted.rows.length;
     }
     await upsertSources(q, who, body.device, body.version, body.sources, now);
-    if (body.inventory) await upsertInventory(q, who, body.device.id, body.inventory, now);
+    // 旧版采集器把本机清单夹在上报里：同样要本人同意过才收（工作段为空的上报不经过路由里的同意检查）。
+    if (body.inventory && await collectorConsentGranted(q, who.personId)) await upsertInventory(q, who, body.device.id, body.inventory, now);
     await client.query("COMMIT");
     return { ok: true, accepted, duplicates: body.items.length - accepted, receivedAt: now.toISOString() };
   } catch (e) { await client.query("ROLLBACK").catch(() => undefined); throw e; }
@@ -110,4 +168,14 @@ export function createCollectorHealthScheduler(pool: Pool, now = () => new Date(
       timer = undefined;
     },
   };
+}
+
+/** 一行安装命令拉取的文件：两个安装脚本和安装脚本再下载的三个 Python 文件，都在仓库的 tools/collector 下，不含任何令牌。 */
+const COLLECTOR_DIR = join(import.meta.dirname, "..", "..", "..", "tools", "collector");
+export const COLLECTOR_FILES = ["install-windows.ps1", "install-macos.sh", "tkos_collector.py", "collect_sessions.py", "sanitize.py"] as const;
+export type CollectorFileName = typeof COLLECTOR_FILES[number];
+
+export async function readCollectorFile(name: CollectorFileName, dir = COLLECTOR_DIR): Promise<string> {
+  // PowerShell 从字符串建脚本块时不认 BOM；统一去掉，也统一成 LF。
+  return (await readFile(join(dir, name), "utf8")).replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
 }

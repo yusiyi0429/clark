@@ -14,6 +14,10 @@ export class FeishuApiError extends Error {
 
 export type FeishuUserInfo = { openId: string; unionId?: string; name?: string };
 export type FeishuReceiveIdType = "open_id" | "union_id" | "user_id" | "chat_id";
+/** 云文档的类型（drive 元数据接口的 doc_type）。 */
+export type FeishuDocType = "doc" | "docx" | "sheet" | "bitable" | "wiki";
+/** 云文档元数据：只有标题、最近修改时间和修改人（open_id），不含正文。 */
+export type FeishuDocMeta = { token: string; type: FeishuDocType; title: string; modifiedAt: Date | null; modifiedBy: string | null };
 
 /** 用到的飞书开放接口；测试注入假实现。 */
 export type FeishuClient = {
@@ -26,6 +30,8 @@ export type FeishuClient = {
   getUserInfo(userAccessToken: string): Promise<FeishuUserInfo>;
   /** 以机器人身份发消息（tenant_access_token）。content 是消息体对象，发送时序列化。 */
   sendMessage(receiveIdType: FeishuReceiveIdType, receiveId: string, msgType: "text" | "interactive", content: object): Promise<{ messageId: string }>;
+  /** 以本人身份读云文档元数据（drive:drive.metadata:readonly）；读不到的（没权限、已删）不出现在结果里。一次最多 200 份。 */
+  getDocMetas(userAccessToken: string, docs: { token: string; type: FeishuDocType }[]): Promise<FeishuDocMeta[]>;
 };
 
 type Fetch = typeof fetch;
@@ -125,6 +131,25 @@ export function createFeishuClient({ appId, appSecret, fetch: fetchImpl = fetch 
       });
       const sent = data(await readJson(response), "发送飞书消息");
       return { messageId: String(sent.message_id ?? "") };
+    },
+    async getDocMetas(userAccessToken, docs) {
+      if (!docs.length) return [];
+      const response = await fetchImpl(`${OPEN_API}/drive/v1/metas/batch_query?user_id_type=open_id`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${userAccessToken}`, "content-type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ request_docs: docs.slice(0, 200).map((doc) => ({ doc_token: doc.token, doc_type: doc.type })), with_url: false }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      const metas = data(await readJson(response), "读取飞书文档元数据").metas;
+      return (Array.isArray(metas) ? metas : []).flatMap((meta: Record<string, unknown>) => {
+        if (typeof meta.doc_token !== "string" || typeof meta.title !== "string") return [];
+        const seconds = Number(meta.latest_modify_time);
+        return [{
+          token: meta.doc_token, type: String(meta.doc_type) as FeishuDocType, title: meta.title,
+          modifiedAt: Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000) : null,
+          modifiedBy: typeof meta.latest_modify_user === "string" && meta.latest_modify_user ? meta.latest_modify_user : null,
+        }];
+      });
     },
   };
 }

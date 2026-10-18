@@ -6544,6 +6544,256 @@
         }
       }
     },
+    "/api/me/collector/status": {
+      "get": {
+        "operationId": "getCollectorStatus",
+        "summary": "本人的采集器：连上的设备、最近一次完整盘点、盘点到的条数（上手流程轮询）",
+        "responses": {
+          "200": {
+            "description": "采集器状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectorStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/collector/install.ps1": {
+      "get": {
+        "operationId": "getCollectorInstallWindows",
+        "summary": "Windows 一行安装命令拉取的安装脚本（不含令牌，令牌由命令参数带入）",
+        "responses": {
+          "200": {
+            "description": "PowerShell 脚本",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/collector/install.sh": {
+      "get": {
+        "operationId": "getCollectorInstallMacos",
+        "summary": "macOS 一行安装命令拉取的安装脚本（不含令牌，令牌由命令参数带入）",
+        "responses": {
+          "200": {
+            "description": "shell 脚本",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/collector/files/{name}": {
+      "get": {
+        "operationId": "getCollectorFile",
+        "summary": "安装脚本下载的采集器文件（tkos_collector.py、collect_sessions.py、sanitize.py）",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Python 源文件",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/work-basis": {
+      "get": {
+        "operationId": "getWorkBasis",
+        "summary": "工作依据清单：本人在依据的整份文档候选（天枢材料、飞书文档、链接）与已确认的",
+        "responses": {
+          "200": {
+            "description": "候选",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkBasisResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateWorkBasis",
+        "summary": "本人确认工作依据：勾选的入库并记下当时的修订号，候选里没勾的移出",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWorkBasisRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "候选",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkBasisResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/schedule-migration": {
+      "get": {
+        "operationId": "getScheduleMigration",
+        "summary": "搬家清单：本机清单里找到的定时任务，以及哪些已经搬进定时任务区",
+        "responses": {
+          "200": {
+            "description": "候选",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleMigrationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateScheduleMigration",
+        "summary": "本人确认搬家：勾选的写进定时任务区，候选里没勾的移出",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateScheduleMigrationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "候选",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleMigrationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/weekly-reviews/board": {
       "get": {
         "operationId": "getWeeklyReviewBoard",
@@ -39439,6 +39689,126 @@
                 }
               }
             }
+          },
+          "inventory": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "scheduledTasks",
+              "feishuDocs"
+            ],
+            "properties": {
+              "scheduledTasks": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "schedule",
+                    "command"
+                  ],
+                  "properties": {
+                    "name": {
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    "schedule": {
+                      "anyOf": [
+                        {
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "command": {
+                      "anyOf": [
+                        {
+                          "maxLength": 500,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "feishuDocs": {
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "url",
+                    "title",
+                    "readAt"
+                  ],
+                  "properties": {
+                    "url": {
+                      "pattern": "^https://",
+                      "maxLength": 500,
+                      "type": "string"
+                    },
+                    "title": {
+                      "anyOf": [
+                        {
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "readAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "memoryFiles": {
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "source",
+                    "path",
+                    "bytes",
+                    "modifiedAt"
+                  ],
+                  "properties": {
+                    "source": {
+                      "pattern": "^[a-z0-9_-]{1,32}$",
+                      "type": "string"
+                    },
+                    "path": {
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "modifiedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -39446,12 +39816,16 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "receivedAt"
+          "receivedAt",
+          "consent"
         ],
         "properties": {
           "receivedAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "consent": {
+            "type": "boolean"
           }
         }
       },
@@ -39757,6 +40131,39 @@
                       ]
                     },
                     "readAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "memoryFiles": {
+                "maxItems": 500,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "source",
+                    "path",
+                    "bytes",
+                    "modifiedAt"
+                  ],
+                  "properties": {
+                    "source": {
+                      "pattern": "^[a-z0-9_-]{1,32}$",
+                      "type": "string"
+                    },
+                    "path": {
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "modifiedAt": {
                       "format": "date-time",
                       "type": "string"
                     }
@@ -40776,6 +41183,293 @@
             }
           }
         ]
+      },
+      "CollectorStatusResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "consent",
+          "devices",
+          "scannedAt",
+          "inventory"
+        ],
+        "properties": {
+          "consent": {
+            "type": "boolean"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "platform",
+                "lastSeenAt"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "platform": {
+                  "type": "string"
+                },
+                "lastSeenAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "scannedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inventory": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "scheduledTasks",
+              "feishuDocs",
+              "memoryFiles"
+            ],
+            "properties": {
+              "scheduledTasks": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "feishuDocs": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "memoryFiles": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "WorkBasisResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "candidates"
+        ],
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "key",
+                "kind",
+                "title",
+                "url",
+                "revision",
+                "origin",
+                "revisedAt",
+                "revisedBy",
+                "confirmed"
+              ],
+              "properties": {
+                "key": {
+                  "minLength": 1,
+                  "maxLength": 520,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "material",
+                      "type": "string"
+                    },
+                    {
+                      "const": "feishu_doc",
+                      "type": "string"
+                    },
+                    {
+                      "const": "link",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "url": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "revision": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "origin": {
+                  "anyOf": [
+                    {
+                      "const": "task",
+                      "type": "string"
+                    },
+                    {
+                      "const": "session",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "revisedAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "revisedBy": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "confirmed": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "UpdateWorkBasisRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "keys"
+        ],
+        "properties": {
+          "keys": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 520,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ScheduleMigrationResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "candidates"
+        ],
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "key",
+                "name",
+                "cadence",
+                "command",
+                "deviceName",
+                "imported"
+              ],
+              "properties": {
+                "key": {
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "cadence": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "command": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "deviceName": {
+                  "type": "string"
+                },
+                "imported": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "UpdateScheduleMigrationRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "keys"
+        ],
+        "properties": {
+          "keys": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 300,
+              "type": "string"
+            }
+          }
+        }
       },
       "WeeklyReviewBoardResponse": {
         "additionalProperties": false,
@@ -50907,6 +51601,7 @@
               "next",
               "voiceprint",
               "radar",
+              "delegationStep",
               "role",
               "company"
             ],
@@ -50991,6 +51686,9 @@
                     "type": "integer"
                   }
                 }
+              },
+              "delegationStep": {
+                "type": "boolean"
               },
               "role": {
                 "const": "ceo",
@@ -51090,6 +51788,7 @@
               "next",
               "voiceprint",
               "radar",
+              "delegationStep",
               "role",
               "work"
             ],
@@ -51174,6 +51873,9 @@
                     "type": "integer"
                   }
                 }
+              },
+              "delegationStep": {
+                "type": "boolean"
               },
               "role": {
                 "const": "member",

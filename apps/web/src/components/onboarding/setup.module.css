@@ -1,0 +1,91 @@
+/*
+ * 上手流程后半段：安装采集器、后台扫描、最后一页三个清单、委托授权。
+ * 参照 macOS 设置助理与 Raycast 的上手页：编号步骤做完换成勾，当前一步亮、没轮到的淡；状态靠圆点颜色，不写说明句。
+ */
+.panel { width: min(600px, 100%); margin-inline: auto; padding: 20px 22px; text-align: left; }
+.panelHead { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-bottom: 8px; }
+
+/* 安装采集器的三步 */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; }
+.steps > li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; column-gap: 12px; row-gap: 10px; min-height: 52px; padding: 10px 0; }
+.steps > li + li { border-top: 1px solid var(--rule); }
+.marker { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--onboarding-faint); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 18%, transparent);
+  transition: background var(--onboarding-feedback), color var(--onboarding-feedback), box-shadow var(--onboarding-feedback); }
+.steps > li[data-state="current"] .marker { color: var(--onboarding-blue); box-shadow: inset 0 0 0 1.5px var(--onboarding-blue); }
+.steps > li[data-state="done"] .marker { color: #fff; background: var(--onboarding-blue); box-shadow: none; }
+.stepLabel { min-width: 0; font-size: 15px; font-weight: 500; color: var(--onboarding-ink); }
+.steps > li[data-state="pending"] .stepLabel { color: var(--onboarding-faint); }
+.stepValue { font-size: 14px; color: var(--onboarding-muted); font-variant-numeric: tabular-nums; }
+.action { min-height: 36px; padding: 0 16px; border: 0; border-radius: var(--onboarding-pill-radius); background: var(--onboarding-blue); color: #fff; font: 600 14px/1 var(--font-sans); cursor: pointer; transition: background var(--onboarding-feedback); }
+.action:hover:not(:disabled) { background: var(--onboarding-pressed); }
+.action:disabled { opacity: .5; cursor: default; }
+.action:focus-visible, .ghost:focus-visible, .copy:focus-visible, .tab:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 3px; }
+.ghost { min-height: 32px; padding: 0 10px; border: 0; border-radius: var(--onboarding-inset-radius); background: transparent; color: var(--onboarding-muted); font: 13px var(--font-sans); cursor: pointer; }
+.ghost:hover { color: var(--onboarding-ink); background: var(--wash-hover); }
+
+.command { grid-column: 2 / -1; display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 10px 10px 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.command code { flex: 1; min-width: 0; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--onboarding-ink); overflow-wrap: anywhere; white-space: pre-wrap; user-select: all; }
+.copy { flex: none; display: inline-flex; align-items: center; gap: 4px; min-height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: #fff; color: var(--onboarding-blue); font: 500 12px var(--font-sans); cursor: pointer; box-shadow: 0 1px 2px #1c2a4214, 0 0 0 .5px #1c2a420f; }
+.copy[data-copied="true"] { color: #1f8f4e; }
+
+/* 连接状态点：灰色呼吸是在等，绿色是已连接 */
+.status { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--onboarding-muted); }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 28%, transparent); }
+.status[data-state="waiting"] i { animation: breathe 1.6s ease-in-out infinite; }
+.status[data-state="on"] { color: var(--onboarding-ink); }
+.status[data-state="on"] i { background: #34c759; box-shadow: 0 0 0 3px rgb(52 199 89 / 18%); }
+.consentTop { margin-bottom: 12px; }
+.error { margin: 10px 0 0; color: var(--onboarding-error); font-size: 13px; }
+
+/* 系统切换：iOS 分段控件 */
+.segmented { display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.segmented button { min-height: 28px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: var(--onboarding-muted); font: 500 13px var(--font-sans); cursor: pointer; }
+.segmented button[aria-pressed="true"] { background: #fff; color: var(--onboarding-ink); box-shadow: 0 1px 2px #1c2a4214, 0 0 0 .5px #1c2a420f; }
+
+/* 扫描：沿用对话里的步骤列表，放大一号 */
+.scan { width: min(360px, 100%); margin-inline: auto; padding: 20px 24px; }
+.scan ol { margin: 0; }
+.scan li { height: 36px; font-size: 15px; }
+.scan li > span:first-child { width: 22px; }
+
+/* 最后一页：三个标签 */
+.tabs { display: flex; width: min(600px, 100%); margin: 0 auto 12px; padding: 3px; gap: 2px; border-radius: 12px; background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.tab { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 8px; border: 0; border-radius: 9px; background: transparent; color: var(--onboarding-muted); font: 500 14px var(--font-sans); white-space: nowrap; cursor: pointer; }
+.tab[aria-selected="true"] { background: #fff; color: var(--onboarding-ink); font-weight: 600; box-shadow: 0 1px 2px #1c2a4214, 0 0 0 .5px #1c2a420f; }
+.tabMark { display: grid; place-items: center; flex: none; width: 18px; height: 18px; border-radius: 50%; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--onboarding-muted); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.tab[data-done="true"] .tabMark { color: #fff; background: var(--onboarding-blue); }
+
+.list { list-style: none; margin: 0; padding: 0; max-height: min(46svh, 420px); overflow-y: auto; overscroll-behavior: contain; }
+.list > li + li { border-top: 1px solid var(--rule); }
+.row { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: start; gap: 12px; padding: 12px 2px; cursor: pointer; }
+.row input[type="checkbox"] { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--onboarding-blue); cursor: pointer; }
+.row input[type="checkbox"]:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 3px; }
+.rowMain { display: grid; gap: 4px; min-width: 0; }
+.rowTitle { min-width: 0; font-size: 15px; line-height: 1.5; color: var(--onboarding-ink); overflow-wrap: anywhere; }
+.rowTitle a { color: inherit; text-decoration: none; }
+.rowTitle a:hover { color: var(--onboarding-blue); }
+.rowMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.chip { display: inline-flex; align-items: center; min-height: 20px; padding: 0 7px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--onboarding-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip[data-tone="blue"] { background: #edf4ff; color: #2369d4; }
+.mono { min-width: 0; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--onboarding-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.empty { display: grid; place-items: center; min-height: 120px; color: var(--onboarding-faint); font-size: 14px; }
+.listFoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--rule); }
+.count { font-size: 13px; color: var(--onboarding-muted); font-variant-numeric: tabular-nums; }
+.done { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 4px; color: var(--onboarding-blue); font: 600 14px var(--font-sans); }
+.stat { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 12px 2px; font-size: 15px; }
+.stat strong { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* 委托授权 */
+.scopes { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 16px; padding: 0; list-style: none; }
+.scopes li { padding: 6px 12px; border-radius: var(--onboarding-pill-radius); background: color-mix(in srgb, var(--ink) 6%, transparent); font-size: 14px; }
+.delegationFoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+@keyframes breathe { 50% { opacity: .35; transform: scale(.8); } }
+@media (max-width: 759px) {
+  .panel, .scan { padding: 16px; }
+  .steps > li { grid-template-columns: 26px minmax(0, 1fr) auto; column-gap: 10px; }
+  .list { max-height: none; overflow: visible; }
+  .tab { font-size: 13px; gap: 4px; padding: 0 4px; }
+}
+@media (prefers-reduced-motion: reduce) { .status[data-state="waiting"] i { animation: none; } .marker { transition: none; } }
