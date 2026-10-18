@@ -9,7 +9,7 @@ import multipart from "@fastify/multipart";
 import { loadCompanyMemory, type CompanyMemorySeedEnv } from "./companyMemory.js";
 import { createCompanyMemory as createCompanyReader, type CompanyEnv } from "./company.js";
 import { createPersonalMemory } from "./personalMemory.js";
-import { createMemoryRecall, type MemoryRecall } from "./personalMemoryRecall.js";
+import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
 import { registerPersonalMemoryRoutes } from "./routes/personalMemory.js";
 import { globalConversationContext, listConversationMissions } from "./conversationContext.js";
@@ -143,6 +143,8 @@ export type AppEnv = {
   conversationThinking?: string;
   /** 对话每轮分档的快模型分诊；不配时用 lightModel（关思考）。 */
   triageModel?: string;
+  /** 个人记忆召回的快模型（MEMORY_RECALL_MODEL）；不配时依次用 triageModel、lightModel（personalMemoryRecall.ts）。 */
+  memoryRecallModel?: string;
   /** 会前预审模型；不配时用 heavyModel（10/13：预审从 light 换到 Sol 档并打开思考）。 */
   preflightModel?: string;
   /** 会前预审思考强度（off / low / medium / high / xhigh）；不配时 high。 */
@@ -300,9 +302,9 @@ export async function buildApp({
     return snapshot ? ontologyToolResult(snapshot, companyPeriod(now()), query) : null;
   } : undefined;
   const tierModels = conversationTierModels({ defaultModel: env.heavyModel, conversationModel: env.conversationModel });
-  // 个人记忆（PR #12）：只有本人可见，不写进本体；后台按对话提炼。每轮由分诊用的快模型从本人的记忆目录里挑相关条目（personalMemoryRecall.ts）。
+  // 个人记忆（PR #12）：只有本人可见，不写进本体；后台按对话提炼。每轮由快模型（MEMORY_RECALL_MODEL，与分诊分开配）从本人的记忆目录里挑相关条目（personalMemoryRecall.ts）。
   const recall = personalMemoryRecall === undefined
-    ? (env.piBaseUrl && env.piApiKey ? createMemoryRecall({ baseUrl: env.piBaseUrl, apiKey: env.piApiKey, ...fastModels }) : undefined)
+    ? (env.piBaseUrl && env.piApiKey ? createMemoryRecall({ baseUrl: env.piBaseUrl, apiKey: env.piApiKey, ...memoryRecallModels(env) }) : undefined)
     : personalMemoryRecall ?? undefined;
   const personalMemory = createPersonalMemory({ pool, recall });
   const personalDistillation = createPersonalDistillation({ pool, memory: personalMemory, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,

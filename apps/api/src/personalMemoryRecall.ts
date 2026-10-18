@@ -2,7 +2,7 @@ import { fallbackModelFor, streamFastResponse, type ResponsesClientOptions } fro
 import type { MemoryKind } from './personalMemory.js';
 
 /**
- * 个人记忆的召回：每轮让快模型（分诊用的那个）读一遍本人现行记忆的目录（编号、日期、类别、标题、正文开头），挑出这一轮用得上的条目。
+ * 个人记忆的召回：每轮让快模型（MEMORY_RECALL_MODEL，见 memoryRecallModels）读一遍本人现行记忆的目录（编号、日期、类别、标题、正文开头），挑出这一轮用得上的条目。
  * 字面重合认不出换说法、上位概念和跨话题相关（10/18 冒烟：「还有哪些没定」对不上「还没想好……扩编」）。
  * 实验（.scratch/memory-recall/结论.md）：300 条记忆、79 条查询，召回率 0.69 → 0.94–0.96，精确率 0.25 → 0.88–0.94，干扰问题误召回 100% → 0%；
  * 目录约 1.5 万 token，旧条目在前、新条目追加在末尾，前缀可被网关缓存；挑选与分诊同时跑。约 500 条以上要换分层目录或向量预筛（见结论）。
@@ -13,6 +13,14 @@ export type MemoryRecall = (input: { message: string; items: RecallCandidate[] }
 
 /** 一轮最多挑几条（偏好类常驻，不占这个数）：实验里 8 条时上位概念类问题（「渠道这块我的思路」）召回 0.82–0.84，放到 12 条升到 0.91–0.92，精确率只降 0.02–0.04。 */
 export const RECALL_LIMIT = 12;
+/**
+ * 召回用哪个快模型：MEMORY_RECALL_MODEL，没配时依次退回 TRIAGE_MODEL、LIGHT_MODEL；出错时换 LIGHT_MODEL 再挑一次。
+ * 与分诊分开配：推荐 deepseek-v4.1-flash（实验 300 条召回 0.96、P90 约 1.7 秒），分诊模型不受影响。
+ */
+export function memoryRecallModels(env: { memoryRecallModel?: string; triageModel?: string; lightModel: string }): { modelId: string; fallbackModelId: string } {
+    return { modelId: env.memoryRecallModel || env.triageModel || env.lightModel, fallbackModelId: env.lightModel };
+}
+
 /** 整次召回的时限：主回答拼上下文包时会等它；分诊本身最多 5 秒，300 条时 terra 的 P90 约 3.8 秒、DeepSeek 约 1.6 秒。 */
 export const RECALL_TIMEOUT_MS = 6_000;
 const SNIPPET_CHARS = 60;

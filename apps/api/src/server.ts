@@ -67,6 +67,8 @@ const env: AppEnv = {
   // 一号位对话主答与分诊（可选）：不配时主答用 heavy 槽位、分诊用 light 槽位。
   conversationModel: process.env.CONVERSATION_MODEL || undefined,
   triageModel: process.env.TRIAGE_MODEL || undefined,
+  // 个人记忆召回的快模型（可选）：不配时依次用 TRIAGE_MODEL、LIGHT_MODEL。
+  memoryRecallModel: process.env.MEMORY_RECALL_MODEL || undefined,
   conversationApi: process.env.CONVERSATION_API || undefined,
   conversationBaseUrl: process.env.CONVERSATION_BASE_URL || undefined,
   conversationThinking: process.env.CONVERSATION_THINKING || undefined,

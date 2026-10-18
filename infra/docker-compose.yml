@@ -98,6 +98,8 @@ services:
       LIGHT_MODEL: ${LIGHT_MODEL:?LIGHT_MODEL required}
       HEAVY_MODEL: ${HEAVY_MODEL:?HEAVY_MODEL required}
       COMPACTION_MODEL: ${COMPACTION_MODEL:?COMPACTION_MODEL required}
+      # 个人记忆召回的快模型（可选）：不配时依次用 TRIAGE_MODEL、LIGHT_MODEL。
+      MEMORY_RECALL_MODEL: ${MEMORY_RECALL_MODEL:-}
       # Radar Provider 可选：缺失时 Radar Card 如实显示未配置。
       # 唯一 Web Search Provider 为博查；公众号只经内网 MCP sidecar，账号级、非关键词替代。
       BOCHA_API_KEY: ${BOCHA_API_KEY:-}
