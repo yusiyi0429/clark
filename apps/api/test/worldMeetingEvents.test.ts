@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { WorldClient } from "../src/worldClient.js";
+import { WorldClient, worldRef } from "../src/worldClient.js";
 import { createWorldMeetingService, meetingEventAction, selectMeetingSubjects } from "../src/worldMeetingEvents.js";
 import { emptyDraft, emptyPreflight } from "../src/meetingStore.js";
 import { executeConfirmItem, executeDismissItem, onOutcomeReviewed, pendingOntologyUpdater, pendingOutcome } from "../src/outcome.js";
@@ -37,9 +37,13 @@ const scope = (id: string, version: number, itemId = "one") => ({ objectType: "m
 
 describe("world 会议事件", () => {
   it("§4 会议事件使用 content、多主体、+08:00 与首主体声明", async () => {
-    const action = meetingEventAction({ id: "1", version: 1, scheduledAt: "2026-09-29T07:19:05Z", text: examples[4][0].params.content.text }, ["<mission-1>@3", "<period-goal-1>@1"], "https://example.com/tianshu");
+    const subjects = [{ object_id: "<mission-1>", version: 3 }, { object_id: "<period-goal-1>", version: 1 }].map((head) => ({ ...head, contract_version: examples[4][0].contract_version }));
+    const action = meetingEventAction({ id: "1", version: 1, scheduledAt: "2026-09-29T07:19:05Z", text: examples[4][0].params.content.text }, subjects, "https://example.com/tianshu");
     expect(action.params).toEqual({ ...examples[4][0].params, content: { ...examples[4][0].params.content, artifacts: ["https://example.com/tianshu/meetings/1"] } });
+    expect(action.contract_version).toBe(examples[4][0].contract_version);
     expect(action.idempotency_key).toBe("tianshu:meeting:1");
+    const upgraded = meetingEventAction({ id: "1", version: 1, scheduledAt: "2026-09-29T07:19:05Z", text: "x" }, subjects.map((head) => ({ ...head, contract_version: "tkos.world/0.3" as const })), "https://example.com");
+    expect(upgraded.contract_version).toBe("tkos.world/0.3");
   });
   it("主体选择：多个已链接 Mission 去重；无关联或均未链接时回落单元", async () => {
     await withWorld(async (client) => {
@@ -54,10 +58,11 @@ describe("world 会议事件", () => {
         const id = decodeURIComponent(url.pathname.split("/").at(-1)!);
         return projection(id === "<mission-1>" ? mission : id === "<mission-2>" ? other : examples[1][0].items[0]);
       });
-      expect(await selectMeetingSubjects(client, ["a", "a", "b", "missing"])).toEqual(["<mission-1>@3", "<mission-2>@3"]);
+      const refs = async (codes: string[]) => (await selectMeetingSubjects(client, codes)).map(worldRef);
+      expect(await refs(["a", "a", "b", "missing"])).toEqual(["<mission-1>@3", "<mission-2>@3"]);
       expect(calls.some((call) => call.url.searchParams.get("external_id") === "capability:05")).toBe(false);
-      expect(await selectMeetingSubjects(client, [])).toEqual(["<unit:eo>@2"]);
-      expect(await selectMeetingSubjects(client, ["missing"])).toEqual(["<unit:eo>@2"]);
+      expect(await refs([])).toEqual(["<unit:eo>@2"]);
+      expect(await refs(["missing"])).toEqual(["<unit:eo>@2"]);
     });
   });
   it("确认前不发；最后一项确认提交后推已确认结论，排除摘要与忽略项", async () => {
@@ -144,6 +149,33 @@ describe("world 会议事件", () => {
         restarted.schedule(id); await restarted.idle();
         expect(calls.filter((call) => call.url.pathname === "/v1/actions")).toHaveLength(3);
       } finally { await restarted.close(); }
+    });
+  });
+  it("scope 原地升到 0.3：排队中的会议按单元当前契约重建，拿到回执", async () => {
+    await withWorld(async (client, { pool }) => {
+      const id = await seedMeeting(pool);
+      let upgraded = false;
+      const unit = () => ({ ...examples[1][0].items[0], contract_version: upgraded ? "tkos.world/0.3" : "tkos.world/0.2" });
+      const calls = stubWorld(({ url, body }) => {
+        if (url.pathname === "/v1/world/objects") return { items: [unit()], next_cursor: null };
+        if (url.pathname.startsWith("/v1/world/objects/")) return projection(unit());
+        if (!upgraded) throw new Error("lost response");
+        if (body.contract_version !== "tkos.world/0.3") return Response.json({ error: { code: "PROTOCOL_WRITE_DISABLED", message: "Protocol writes are disabled by the current server-side registry." } }, { status: 409 });
+        return url.pathname.endsWith("/prepare") ? { expected_versions: [] } : examples[4][1];
+      });
+      const service = createWorldMeetingService(pool, client, testEnv.publicOrigin, now);
+      try {
+        service.schedule(id); await service.idle();
+        expect((await pool.query("SELECT status,error_code FROM world_meeting_events")).rows).toEqual([{ status: "pending", error_code: "NETWORK_ERROR" }]);
+        upgraded = true;
+        service.retry(); await service.idle();
+        const writes = calls.filter((call) => call.method === "POST").slice(1);
+        expect(writes.map((call) => [call.url.pathname, call.body.contract_version])).toEqual([
+          ["/v1/actions/prepare", "tkos.world/0.2"], ["/v1/actions/prepare", "tkos.world/0.3"], ["/v1/actions", "tkos.world/0.3"],
+        ]);
+        expect(writes.at(-1)!.body).toMatchObject({ idempotency_key: `tianshu:meeting:${id}`, params: { category: "meeting", subject_refs: ["<unit:eo>@2"] } });
+        expect((await pool.query("SELECT status,event_id,error_code FROM world_meeting_events")).rows).toEqual([{ status: "committed", event_id: "<event-15>", error_code: null }]);
+      } finally { await service.close(); }
     });
   });
   it("403 留可见失败，不被后台轮询重试", async () => {

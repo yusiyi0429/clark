@@ -14,7 +14,7 @@ describe("world 0.2 client / ledger", () => {
         return url.searchParams.has("cursor") ? examples[1][1] : { items: [], next_cursor: "opaque:+/=" };
       });
       const head = await client.byExternalRef("mission:demo-<run>");
-      expect(head).toMatchObject({ object_id: "<mission-1>", revision_id: "<revision-9>", object_version: 2, version: 2, lifecycle: { status: "draft" } });
+      expect(head).toMatchObject({ object_id: "<mission-1>", revision_id: "<revision-9>", object_version: 2, version: 2, lifecycle: { status: "draft" }, contract_version: "tkos.world/0.2" });
       const listed = await client.listObjects({ domain_id: "<domain:eo>", type: "Mission", limit: 5 });
       expect(listed).toEqual(examples[1][1].items);
       expect(calls.at(-1)!.url.searchParams.get("cursor")).toBe("opaque:+/=");
@@ -77,6 +77,66 @@ describe("world 0.2 client / ledger", () => {
       expect(reads).toBe(2);
       expect(calls.filter((call) => call.url.pathname === "/v1/actions").map((call) => call.body.target.expected_version)).toEqual([1, 2]);
       expect((await pool.query("SELECT status,error_code FROM world_sync_ledger ORDER BY id")).rows).toEqual([{ status: "failed", error_code: code }, { status: "committed", error_code: null }]);
+    });
+  });
+
+  // world-02 于 2026-10-15 原地升到 0.3；没切的信封在 prepare/commit 被拒且服务端不留记录。
+  const upgradedWorld = (code: string, versions: { reads: number }) => stubWorld(({ url, body }) => {
+    if (url.pathname.startsWith("/v1/world/objects/")) {
+      const object = structuredClone(examples[1][2]);
+      object.protocol.contract_version = ++versions.reads === 1 ? "tkos.world/0.2" : "tkos.world/0.3";
+      return object;
+    }
+    if (body.contract_version !== "tkos.world/0.3") return Response.json({ error: { code, message: "protocol" } }, { status: 409 });
+    return url.pathname.endsWith("/prepare") ? examples[2][1] : examples[2][3];
+  });
+  const buildFromHead = (client: WorldClient) => async () => {
+    const head = await client.getHead("<mission-1>");
+    return { ...examples[2][0], contract_version: head.contract_version, target: worldTarget(head) };
+  };
+
+  it.each(["PROTOCOL_WRITE_DISABLED", "PROTOCOL_BINDING_CONFLICT"])("scope 升级后 409 %s：按对象当前契约重建一次", async (code) => {
+    await withWorld(async (client, { pool }) => {
+      const versions = { reads: 0 };
+      const calls = upgradedWorld(code, versions);
+      expect(await client.write(examples[2][0].idempotency_key, buildFromHead(client))).toEqual(examples[2][3]);
+      expect(versions.reads).toBe(2);
+      expect(calls.filter((call) => call.method === "POST").map((call) => [call.url.pathname, call.body.contract_version])).toEqual([
+        ["/v1/actions/prepare", "tkos.world/0.2"], ["/v1/actions/prepare", "tkos.world/0.3"], ["/v1/actions", "tkos.world/0.3"],
+      ]);
+      expect((await pool.query("SELECT status,error_code FROM world_sync_ledger ORDER BY id")).rows).toEqual([{ status: "failed", error_code: code }, { status: "committed", error_code: null }]);
+    });
+  });
+
+  it("升级前 prepare 过、commit 回包丢失的旧信封：升级后重放被拒即按新契约重建", async () => {
+    await withWorld(async (client, { pool }) => {
+      const versions = { reads: 0 };
+      let lost = true;
+      stubWorld(({ url }) => {
+        if (url.pathname.startsWith("/v1/world/objects/")) { versions.reads++; return examples[1][2]; }
+        if (url.pathname.endsWith("/prepare")) return examples[2][1];
+        if (lost) { lost = false; throw new Error("fetch failed"); }
+        return examples[2][3];
+      });
+      await expect(client.write(examples[2][0].idempotency_key, buildFromHead(client))).rejects.toMatchObject({ code: "NETWORK_ERROR" });
+      const calls = upgradedWorld("PROTOCOL_WRITE_DISABLED", versions);
+      const restarted = new WorldClient(pool.query.bind(pool), worldEnv, instance);
+      expect(await restarted.write(examples[2][0].idempotency_key, buildFromHead(restarted))).toEqual(examples[2][3]);
+      expect(calls.filter((call) => call.method === "POST").map((call) => [call.url.pathname, call.body.contract_version])).toEqual([
+        ["/v1/actions", "tkos.world/0.2"], ["/v1/actions/prepare", "tkos.world/0.3"], ["/v1/actions", "tkos.world/0.3"],
+      ]);
+      expect((await pool.query("SELECT status,error_code FROM world_sync_ledger ORDER BY id")).rows.map((row) => row.error_code)).toEqual(["NETWORK_ERROR", "PROTOCOL_WRITE_DISABLED", null]);
+    });
+  });
+
+  it("上次以协议拒绝失败的请求不再原样重发，直接按当前对象重建", async () => {
+    await withWorld(async (client, { pool }) => {
+      stubWorld(() => Response.json({ error: { code: "PROTOCOL_WRITE_DISABLED", message: "protocol" } }, { status: 409 }));
+      await expect(client.write(examples[2][0].idempotency_key, async () => examples[2][0])).rejects.toMatchObject({ code: "PROTOCOL_WRITE_DISABLED" });
+      const calls = upgradedWorld("PROTOCOL_WRITE_DISABLED", { reads: 1 });
+      expect(await client.write(examples[2][0].idempotency_key, buildFromHead(client))).toEqual(examples[2][3]);
+      expect(calls.filter((call) => call.method === "POST").map((call) => call.body.contract_version)).toEqual(["tkos.world/0.3", "tkos.world/0.3"]);
+      expect((await pool.query("SELECT status FROM world_sync_ledger ORDER BY id")).rows.at(-1)).toEqual({ status: "committed" });
     });
   });
 

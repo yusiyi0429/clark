@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 import { getMeetingRow, type MeetingRow, type Query } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
-import { requestDigest, WorldClient, WorldError, worldErrorCode, worldRef, type WorldAction } from "./worldClient.js";
+import { requestDigest, WorldClient, WorldError, worldErrorCode, worldRef, type WorldAction, type WorldHead } from "./worldClient.js";
 import { createWorldMissionLookup } from "./worldMissions.js";
 
 export async function isEoMeeting(q: Query, meeting: Pick<MeetingRow, "lead_dri_id">): Promise<boolean> {
@@ -9,17 +9,17 @@ export async function isEoMeeting(q: Query, meeting: Pick<MeetingRow, "lead_dri_
   return result.rows.some((row) => row.owner_id && row.owner_id === meeting.lead_dri_id);
 }
 
-export async function selectMeetingSubjects(client: WorldClient, missionCodes: string[]): Promise<string[]> {
+export async function selectMeetingSubjects(client: WorldClient, missionCodes: string[]): Promise<WorldHead[]> {
   const lookup = createWorldMissionLookup(client);
-  const refs = new Set<string>();
+  const subjects = new Map<string, WorldHead>();
   for (const code of new Set(missionCodes)) {
     const mission = await lookup(code);
-    if (mission) refs.add(worldRef(mission));
+    if (mission) subjects.set(worldRef(mission), mission);
   }
-  if (refs.size) return [...refs];
+  if (subjects.size) return [...subjects.values()];
   const unit = await client.byExternalRef("capability:05");
   if (!unit || unit.object_type !== "ResponsibilityUnit") throw new WorldError(409, "INVALID_STATE", "capability:05 未查回 E&O 责任单元");
-  return [worldRef(unit)];
+  return [unit];
 }
 
 type MeetingSnapshot = { id: string; version: number; scheduledAt: string; text: string };
@@ -28,10 +28,12 @@ type MeetingDelivery = {
   content_digest: string; status: "pending" | "committed" | "failed"; event_id: string | null;
 };
 
-export function meetingEventAction(snapshot: MeetingSnapshot, subjects: string[], publicOrigin: string, originalEventId?: string): WorldAction {
+export function meetingEventAction(snapshot: MeetingSnapshot, subjectHeads: Pick<WorldHead, "object_id" | "version" | "contract_version">[], publicOrigin: string, originalEventId?: string): WorldAction {
   const occurredAt = new Date(new Date(snapshot.scheduledAt).getTime() + 8 * 60 * 60_000).toISOString().replace(/\.\d{3}Z$/, "+08:00");
+  const subjects = subjectHeads.map(worldRef);
   return {
-    action_type: "world_record_event", contract_version: "tkos.world/0.2", target: null, expected_versions: [],
+    // 记外部事件没有目标；scope 整体切换契约，按首主体当前绑定的契约声明。
+    action_type: "world_record_event", contract_version: subjectHeads[0].contract_version, target: null, expected_versions: [],
     idempotency_key: `tianshu:meeting:${snapshot.id}${originalEventId ? `:correction:${snapshot.version}` : ""}`,
     reason: "天枢同步会议纪要",
     params: {
