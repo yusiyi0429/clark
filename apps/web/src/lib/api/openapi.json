@@ -12273,6 +12273,29 @@
                         "type": "object",
                         "required": [
                           "kind",
+                          "weeklyReviewId",
+                          "href"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "weekly_review",
+                            "type": "string"
+                          },
+                          "weeklyReviewId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "href": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
                           "question",
                           "candidates"
                         ],

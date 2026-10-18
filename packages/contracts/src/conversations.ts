@@ -136,6 +136,8 @@ export const ConversationRecoveryNote = Type.Object(
 export const ConversationCard = Type.Union([
   /** 复盘草稿：摘要与「打开修改」。 */
   Type.Object({ kind: Type.Literal("review"), personalReviewId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+  /** 周复盘草稿：摘要与「打开修改」。 */
+  Type.Object({ kind: Type.Literal("weekly_review"), weeklyReviewId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
   /** 对上不止一件待办：本人点选其中一件，再查有没有人问过、整理问题。 */
   Type.Object({
     kind: Type.Literal("todo_pick"),

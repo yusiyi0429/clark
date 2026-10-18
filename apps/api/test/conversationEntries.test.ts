@@ -219,7 +219,7 @@ describe("一句话生成复盘", () => {
     [TEST_MEMBER.personId]);
   }
 
-  it("四步实时显示，重新生成保留本人改过的段落，草稿卡挂在回答后面；周复盘如实说还没接上", async () => {
+  it("四步实时显示，重新生成保留本人改过的段落，草稿卡挂在回答后面；没配周复盘生成服务时如实说生成不了", async () => {
     const { t, say, member, personalCalls } = await setup({ reviews: true });
     await seedMission(t);
     await t.monthlyReviews!.open("2026-09");
@@ -252,7 +252,7 @@ describe("一句话生成复盘", () => {
     expect((after.self_review as { overall: { text: string } }).overall.text).toContain("第 2 稿");
 
     const weekly = await say("帮我写这周复盘", (entries) => entries.generateReview({ kind: "weekly" }));
-    expect(weekly.result).toMatchObject({ generated: false });
+    expect(weekly.result).toMatchObject({ generated: false, reason: "周复盘生成服务没有配置" });
     expect(weekly.cards).toEqual([]);
   });
 

@@ -72,7 +72,7 @@ import { ISSUE_SUGGEST_RULES } from "./issueDrafts.js";
 const MATERIAL_EDITING_RULES = `材料是上述只读边界的例外。一份材料只有上传者和对象负责人（执行事项的推进人、会议主持人、议题的 CEO）能改，list_materials 和 currentObject.viewingMaterial 的 canEdit 表示对方能不能改。对方明确要求「改」「写进去」时：canEdit=true 用 edit_material 直接改；canEdit=false 或没有 edit_material 时不直接改，用 propose_material_edit 把改法交给能改的人，按工具结果告诉对方交给了谁。对方要求新写当前议题、执行事项、会议的群组材料时用 create_material。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由能改的人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。`;
 
 /** 每轮上下文包里的「我手上没完成的待办」（CEO 与 DRI 共用）。 */
-const OPEN_TODOS_CONTEXT = `\`myOpenTodos\`（有时才出现）是别人发给本人、本人还没完成的待办（标题、发起人、发出时间、类型），新的在前。本人说「那个表」「巨杰拜托我的事」这类话时，先在这里对照是哪一件。`;
+const OPEN_TODOS_CONTEXT = `\`myOpenTodos\`（有时才出现）是别人发给本人、本人还没完成的待办（标题、发起人、发出时间、类型），新的在前，只用来理解本人说的「那个表」「巨杰拜托我的事」指什么。本人要你替他问某件待办的发起人时，不管这里对得上几件，都直接调用 ask_about_todo：定位由系统做，对上不止一件时界面会出点选卡让本人选。不要自己用文字反问是哪一件，也不要替本人挑一件。`;
 
 /** 对话里的三个一句话入口：只读边界的例外（CEO 与 DRI 共用），细则写在各自的工具说明里。 */
 const ENTRY_RULES = `三件事是例外，它们只产出草稿或预览，发出、提交仍由本人在卡上点：本人要生成或重新生成自己的复盘时用 generate_review；本人要你替他问某件待办的发起人时用 ask_about_todo；本人要请同事做事、补材料时用 request_help。不能声称已经发出或提交。`;
@@ -900,7 +900,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         defineTool({
           name: "generate_review",
           label: "生成复盘",
-          description: "本人要生成或重新生成自己的复盘时调用（例如「生成我的 10 月复盘」「帮我写这周复盘」）。kind=monthly 是月度个人复盘，period 写本人说的月份（如 10 或 2026-10，没说就不填，取当前在收的那一期）；kind=weekly 是周复盘。生成要一到几分钟，按读 Mission 卡、读每周复盘、读采集记录、起草四步走，本人改过的段落原样保留。按返回的 note 回答。",
+          description: "本人要生成或重新生成自己的复盘时调用（例如「生成我的 10 月复盘」「帮我写这周复盘」）。kind=monthly 是月度个人复盘，period 写本人说的月份（如 10 或 2026-10，没说就不填，取当前在收的那一期），按读 Mission 卡、读每周复盘、读采集记录、起草四步走；kind=weekly 是本周的周复盘（例如「帮我写这周复盘」），按读 Mission 卡、读进展、读会议结论、读采集记录、读上周复盘、起草六步走。生成要一到几分钟，本人改过的段落原样保留，完成后界面在回答下面附卡。按返回的 note 回答。",
           parameters: Type.Object({
             kind: Type.Union([Type.Literal("monthly"), Type.Literal("weekly")]),
             period: Type.Optional(Type.String({ maxLength: 20 })),

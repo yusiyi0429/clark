@@ -2952,6 +2952,11 @@ export interface components {
                     href: string;
                 } | {
                     /** @constant */
+                    kind: "weekly_review";
+                    weeklyReviewId: string;
+                    href: string;
+                } | {
+                    /** @constant */
                     kind: "todo_pick";
                     question: string;
                     candidates: {

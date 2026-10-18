@@ -13,6 +13,7 @@ export function withoutSupersededCards(messages: Message[]): (Message["cards"] |
   const seen = new Set<string>();
   // 帮我问问的卡每张是一次单独的提问，都留着。
   const keyOf = (card: NonNullable<Message["cards"]>[number]) => card.kind === "review" ? `review:${card.personalReviewId}`
+    : card.kind === "weekly_review" ? `weekly:${card.weeklyReviewId}`
     : card.kind === "request_draft" ? `request:${card.requestId}` : null;
   return [...messages].reverse().map((message) => {
     if (message.role !== "assistant" || !message.cards?.length) return undefined;
