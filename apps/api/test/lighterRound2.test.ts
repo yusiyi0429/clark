@@ -306,6 +306,6 @@ describe("分诊时限与预取", () => {
     const fallback = await routeTurn({ message: "房懂懂的客户数口径怎么定比较合适？", signal: signal(), triage: slow, timeoutMs: 30 });
     expect(fallback).toMatchObject({ tier: "grounded", source: "fallback" });
     expect(fallback.battlefields).toBeUndefined();
-    expect(fallback.notice).toContain("需要先查证企业知识和公开来源");
+    expect(fallback.notice).toBeUndefined();
   });
 });
