@@ -34,6 +34,7 @@ import { personDisplayNames } from "./people.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
 import { resolveWorldEnv, resolveWorldTkEnv } from "./worldClient.js";
 import { createJobWorker, exampleJobHandlers } from "./jobs.js";
+import { resolveFeishuEnv } from "./feishu/config.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -79,6 +80,8 @@ const env: AppEnv = {
   materialStorageDir: process.env.MEETING_MATERIAL_STORAGE_DIR,
   conversationAttachmentStorageDir: process.env.CONVERSATION_ATTACHMENT_STORAGE_DIR,
   recordingStorageDir: process.env.MEETING_RECORDING_STORAGE_DIR,
+  // 飞书：FEISHU_APP_ID / FEISHU_APP_SECRET / FEISHU_TOKEN_KEY（/ FEISHU_TOKEN_KEY_VERSION）；都不配时关闭。
+  feishu: resolveFeishuEnv(process.env),
 };
 
 const port = Number(process.env.PORT ?? "4000");
