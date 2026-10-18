@@ -1,0 +1,89 @@
+/*
+ * 跨对象读取的范围标签（conversation/ScopeChip.tsx）：挂在回答的「用时」一行和进行中的步骤上方。
+ * 一个很小的胶囊：人形图标 + 「全员 · 7–10 月」+ 下拉箭头；和那一行同字号、同灰，悬停才亮一点。
+ * 点开的浮层沿用出处浮层（citations.module.css 的 .pop / .sheet），里面是谁、月份和「重新读」。
+ */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid #ffffff24;
+  border-radius: 999px;
+  background: #ffffff0a;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+button.chip { cursor: pointer; }
+button.chip:hover:not(:disabled), button.chip[aria-expanded="true"] { border-color: #a9caff66; color: #d7e5ff; background: #a9caff14; }
+button.chip:disabled { cursor: default; }
+button.chip:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
+.text { overflow: hidden; text-overflow: ellipsis; }
+.chevron { flex: none; opacity: .7; }
+:global([data-tone=light]) .chip { border-color: #1d1d1f1f; background: #1d1d1f05; }
+:global([data-tone=light]) button.chip:hover:not(:disabled), :global([data-tone=light]) button.chip[aria-expanded="true"] { border-color: #2f6bb466; color: #2f6bb4; background: #2f6bb40d; }
+/* 进行中：挂在步骤列表上方。 */
+.live { margin: 6px 0 4px; font-size: 12px; color: #a5a5af; }
+:global([data-tone=light]) .live { color: #7a7f89; }
+
+.pop { padding: 12px 14px; }
+.editor { display: grid; gap: 12px; font-size: 13px; line-height: 1.5; color: #25282e; }
+.row { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: start; gap: 8px; min-width: 0; }
+.key { padding: 3px 0 0; color: #7a7f89; font-size: 12px; }
+.options { display: flex; flex-wrap: wrap; gap: 6px; max-height: 132px; overflow: auto; }
+.option {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid #e3e6eb;
+  border-radius: 999px;
+  background: #fff;
+  color: #3f4754;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.option:hover { border-color: #b9c9e6; }
+.option[aria-pressed="true"] { border-color: #2f6bb4; background: #2f6bb4; color: #fff; }
+.option:focus-visible, .select:focus-visible, .ghost:focus-visible, .primary:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
+.months { display: flex; align-items: center; gap: 6px; min-width: 0; color: #9599a1; }
+.select {
+  min-width: 0;
+  flex: 1 1 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--field-border, #dfe3e8);
+  border-radius: 8px;
+  background: var(--field-bg, #fff);
+  color: #25282e;
+  font: inherit;
+  font-size: 12px;
+}
+.foot { display: flex; align-items: center; gap: 6px; padding-top: 2px; }
+.preview { flex: 1 1 auto; min-width: 0; overflow: hidden; color: #7a7f89; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.ghost, .primary { flex: none; height: 28px; padding: 0 12px; border: 0; border-radius: 8px; font: inherit; font-size: 12px; cursor: pointer; transition: background-color 140ms ease, opacity 140ms ease; }
+.ghost { background: none; color: #7a7f89; }
+.ghost:hover { background: #1d1d1f0a; color: #3f4754; }
+.primary { background: #2f6bb4; color: #fff; }
+.primary:hover:not(:disabled) { background: #285d9e; }
+.primary:disabled { opacity: .4; cursor: default; }
+
+/* 手机：底部升起，控件放大到 44 的热区。 */
+.sheet { padding-top: 26px; }
+.sheetClose { position: absolute; top: 8px; right: 8px; }
+.large { gap: 16px; font-size: 15px; }
+.large .row { grid-template-columns: 44px minmax(0, 1fr); }
+.large .key { padding-top: 10px; font-size: 13px; }
+.large .options { max-height: 40vh; gap: 8px; }
+.large .option { height: 40px; padding: 0 14px; font-size: 15px; }
+.large .select { height: 44px; font-size: 16px; }
+.large .foot { gap: 8px; }
+.large .preview { font-size: 13px; }
+.large .ghost, .large .primary { height: 44px; padding: 0 18px; font-size: 15px; }
+@media (prefers-reduced-motion: reduce) { .chip, .option { transition: none; } }

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseSseBlock, splitSse, type ConversationEvent } from "./sse";
 import type { Step, StepStatus } from "@/components/steps/StepList";
-import type { TConversationCard } from "@warmap/contracts";
+import type { TConversationCard, TReadScope, TReadScopeParams } from "@warmap/contracts";
 import { afterResize, resizing } from "./resizeGate";
 import { useStableCallback } from "./stableCallback";
 
@@ -28,7 +28,12 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   /** 这一轮实际装进上下文的个人记忆 id（服务端随历史给）：回答里的记忆标记只认这些。 */
   memoryUsed?: string[];
   /** 这一轮工具生成的卡（生成复盘、帮我问问、请同事帮忙），排在回答后面。 */
-  cards?: TConversationCard[] };
+  cards?: TConversationCard[];
+  /** 这一轮跨对象读取的范围（三层取用），回答上显示成可以点开调整的范围标签。 */
+  readScope?: TReadScope;
+  /** carried：转议题时从首页带过来的一段；trace：首页留痕行「已转到议题 X」，meta.href 直达。 */
+  kind?: "carried" | "trace";
+  meta?: { issueId?: string; title?: string; href?: string } };
 export type Attachment = { id: string; fileName: string; mimeType: string };
 export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | "aborted";
 /** 历史读取：`ready` 且 0 条 = 真的没有记录；`error` = 没读到（不代表没有记录）。与一轮回答的 `status` 无关。 */
@@ -78,6 +83,9 @@ export function pendingUserMessage(sequence: number, content: string, references
     ...(snapshots.length ? { referencesSnapshot: snapshots } : {}),
     ...(attachments.length ? { attachments } : {}) };
 }
+
+/** 别处改了这条对话的记录（转议题后首页多了留痕行）：detail.scope 是这条对话，收到就安静地重读历史。 */
+export const CONVERSATION_RELOAD = "conversation-reload";
 
 /** 一句话发出 / 这一轮结束（成功、失败、停止都算）：detail.scope 是这条对话。 */
 export const CONVERSATION_TURN_SENT = "conversation-turn-sent";
@@ -195,6 +203,8 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   const [progress, setProgress] = useState<TurnProgress>({ label: null, checked: 0 });
   /** Agent 处理时的步骤（服务端 step 事件，按 id 取代）；有步骤时进度行的单行文字和计数由步骤列表替代。 */
   const [steps, setSteps] = useState<Step[]>([]);
+  /** 本轮跨对象读取的范围（服务端 scope 事件，后一条取代前一条）；发下一句、换 scope 时清空。 */
+  const [readScope, setReadScope] = useState<TReadScope | null>(null);
   /** 本轮（或刚结束那一轮）的思考摘要；换 scope、发下一句时清空。 */
   const [thought, setThought] = useState<TurnThought | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -339,6 +349,16 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
     };
   }, [loadHistory]);
 
+  // 别处改了这条对话的记录（转议题后首页多了留痕行）：安静地重读。
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.addEventListener !== "function") return;
+    const onReload = (event: Event) => {
+      if ((event as CustomEvent<{ scope?: string }>).detail?.scope === scope) void loadHistory("quiet");
+    };
+    window.addEventListener(CONVERSATION_RELOAD, onReload);
+    return () => window.removeEventListener(CONVERSATION_RELOAD, onReload);
+  }, [loadHistory, scope]);
+
   /** 只重读历史：输入草稿、待发附件、已显示的消息和正在流式的回答都不动。 */
   const retryHistory = useCallback(() => {
     void loadHistory("show");
@@ -392,7 +412,7 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
    * 没来得及存就在本地补一条；能接着来的给出「继续」/「重新回答」（resume）。
    * options.resumeRunId：接着那一轮没完成的回答（「继续」按钮），这一句不带页面前缀。
    */
-  async function send(message: string, references: SentCardRef[], options: { resumeRunId?: string } = {}): Promise<boolean> {
+  async function send(message: string, references: SentCardRef[], options: { resumeRunId?: string; scopeOverride?: TReadScopeParams } = {}): Promise<boolean> {
     const input = message.trim();
     if (!input || status === "streaming") return false;
     const text = messageContext && !options.resumeRunId ? `${messageContext}
@@ -414,6 +434,7 @@ ${input}` : input;
     setRoute(null);
     setProgress({ label: null, checked: 0 });
     setSteps([]);
+    setReadScope(null);
     setThought(null);
     setStatus("streaming");
     const attachmentRefs = attachments.map((attachment) => ({ id: attachment.id }));
@@ -448,7 +469,8 @@ ${input}` : input;
           headers: { accept: "text/event-stream", "content-type": "application/json" },
           body: JSON.stringify({ message: text, references: references.map(({ cardId, version }) => ({ cardId, version })), attachments: attachmentRefs,
             ...(viewingMaterial ? { viewingMaterialId: viewingMaterial.id } : {}),
-            ...(options.resumeRunId ? { resumeRunId: options.resumeRunId } : {}) }),
+            ...(options.resumeRunId ? { resumeRunId: options.resumeRunId } : {}),
+            ...(options.scopeOverride ? { scopeOverride: options.scopeOverride } : {}) }),
           signal: controller.signal,
         });
       } catch (cause) {
@@ -528,6 +550,8 @@ ${input}` : input;
             const step: Step = { id: event.id, label: event.label, status: (event.status ?? "active") as StepStatus, ...(event.result ? { result: event.result } : {}) };
             setSteps((current) => current.some((item) => item.id === step.id) ? current.map((item) => (item.id === step.id ? step : item)) : [...current, step]);
           }
+          if (event.type === "scope" && event.label && event.params && live())
+            setReadScope({ label: event.label, params: event.params, ...(event.choices ? { choices: event.choices } : {}) });
           if (event.type === "tool" && event.phase === "started") runningTools += 1;
           if (event.type === "tool" && event.phase === "completed") runningTools = Math.max(0, runningTools - 1);
           if (event.type === "tool" && event.phase === "completed" && runningTools === 0 && live())
@@ -637,10 +661,16 @@ ${input}` : input;
     return send(RESUME_TEXT[recoveryState.mode], [], { resumeRunId: recoveryState.runId });
   }
 
+  /** 范围标签改过范围：照原意按新范围重读一遍（这一句作为本人的原话发出，请求带上 scopeOverride）。 */
+  function rescope(params: TReadScopeParams, label: string): Promise<boolean> {
+    return send(`按「${label}」重新读`, [], { scopeOverride: params });
+  }
+
   const stop = useCallback(() => abortRef.current?.abort(), []);
   // 交给输入条（memo）的回调身份不变：流式中整棵对话树每帧重画，输入条不跟着重画。
   const stableSend = useStableCallback(send);
   const stableUpload = useStableCallback(uploadFiles);
+  const stableRescope = useStableCallback(rescope);
   const removeAttachment = useCallback((id: string) => setAttachments((current) => current.filter((item) => item.id !== id)), []);
 
   return {
@@ -657,6 +687,8 @@ ${input}` : input;
     route,
     progress,
     steps,
+    readScope,
+    rescope: stableRescope,
     thought,
     error,
     /** 这一轮没完成、能接着来时的那个按钮（「继续」从断点续写 / 「重新回答」用已查到的材料重答）；回答进行中没有。 */

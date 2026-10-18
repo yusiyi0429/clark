@@ -1,0 +1,64 @@
+/*
+ * 转议题建议卡（conversation/IssueSuggestCard.tsx）：外框沿用回答后面的卡（entry-cards.module.css 的 .card），
+ * 按钮与状态小标沿用请求页（requests.module.css）。标题一行，为什么现在要议两行，再一行数字，最后三个选项。
+ */
+.head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.icon { flex: none; color: #2f6bb4; }
+.title { margin: 0; min-width: 0; color: #25282e; font-size: 15px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.why { display: -webkit-box; margin: 0; overflow: hidden; color: #3f4754; font-size: 14px; line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; color: #7a7f89; font-size: 13px; font-variant-numeric: tabular-nums; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.editor { display: grid; gap: 10px; min-width: 0; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field > span { color: #7a7f89; font-size: 12px; }
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid var(--field-border, #dfe3e8);
+  border-radius: 10px;
+  background: #fff;
+  color: #25282e;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+  field-sizing: content;
+  max-height: 200px;
+}
+input.input { height: 36px; font-weight: 600; }
+.input:focus { outline: none; border-color: var(--field-border-focus, #3b6fc9); box-shadow: var(--field-focus-ring, 0 0 0 3px #3b6fc922); }
+.input[aria-invalid] { border-color: #c4462f99; }
+.places { display: flex; flex-wrap: wrap; gap: 6px; }
+.place {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #e3e6eb;
+  border-radius: 999px;
+  background: #fff;
+  color: #3f4754;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.place:hover { border-color: #b9c9e6; }
+.place[aria-checked="true"] { border-color: #2f6bb4; background: #2f6bb4; color: #fff; }
+.place:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
+
+.done { padding-top: 10px; padding-bottom: 10px; }
+.doneLink { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: #178a6b; font-size: 13px; font-weight: 500; text-decoration: none; }
+.doneLink strong { color: #25282e; font-weight: 600; }
+.doneLink svg:last-child { color: #9599a1; transition: transform 140ms ease; }
+.doneLink:hover svg:last-child { transform: translateX(2px); color: #2f6bb4; }
+.doneLink:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; border-radius: 4px; }
+.declined { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.declined .title { color: #7a7f89; font-weight: 500; font-size: 14px; }
+
+@media (max-width: 959px) {
+  .place { min-height: 40px; font-size: 14px; }
+  .input { font-size: 16px; }
+  input.input { height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .place, .doneLink svg:last-child { transition: none; } }

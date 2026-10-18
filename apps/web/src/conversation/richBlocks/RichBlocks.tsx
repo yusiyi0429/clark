@@ -15,6 +15,7 @@ import { expandRoute, useRichStreamOpen, useRichSurface } from "./surface";
 import { Roadmap } from "./Roadmap";
 import { Visual, VisualFallback } from "./Visual";
 import { VISUAL_SHEET_MIN_SCALE } from "./visualSandbox";
+import { IssueSuggestCard, parseIssueSuggest } from "../IssueSuggestCard";
 import "katex/dist/katex.min.css";
 import r from "@/styles/rich-blocks.module.css";
 
@@ -52,6 +53,7 @@ export function RichPre({ node, children, ...rest }: PreProps) {
   const code = node?.children?.find((child) => child.type === "element" && child.tagName === "code");
   const language = codeLanguage(code);
   const plain = <pre {...rest}>{children}</pre>;
+  if (language === "issue-suggest") return <IssueSuggestBlock source={hastText(code).trim()} />;
   if (!isRichLanguage(language)) return plain;
   return <RichCode language={language} source={hastText(code).trim()} fallback={plain} />;
 }
@@ -72,6 +74,14 @@ function RichCode({ language, source, fallback }: { language: RichLanguage; sour
     </div>
   );
   return <>{fallback}</>;
+}
+
+/** 转议题建议卡（```issue-suggest，服务端写在回答末尾）：还没收全时画骨架，读不出就不显示。 */
+function IssueSuggestBlock({ source }: { source: string }) {
+  const open = useRichStreamOpen();
+  const draftId = parseIssueSuggest(source);
+  if (draftId) return <IssueSuggestCard draftId={draftId} />;
+  return open ? <RichSkeleton title="议题建议" /> : null;
 }
 
 /** 没收全的块（含没写完的公式）：标题 + 「正在生成…」，两道浅灰占位。 */
