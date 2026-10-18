@@ -35,6 +35,8 @@ import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./
 import { resolveWorldEnv, resolveWorldTkEnv } from "./worldClient.js";
 import { createJobWorker, exampleJobHandlers } from "./jobs.js";
 import { resolveFeishuEnv } from "./feishu/config.js";
+import { createFeishuClient } from "./feishu/client.js";
+import { feishuTokenJobs } from "./feishu/refresh.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -209,8 +211,15 @@ const recordingService = createMeetingRecordingService({
   companyMemory,
 });
 await recordingService.recoverInterrupted();
+// 飞书（配了才启用）：一个开放接口客户端，免登路由与后台任务共用。
+const feishuClient = env.feishu ? createFeishuClient(env.feishu) : undefined;
+const feishuTokens = env.feishu && feishuClient ? feishuTokenJobs({ pool, env: env.feishu, client: feishuClient, now }) : undefined;
 // 公共后台任务（jobs.ts）：每 5 秒领一批；现有各功能的 setInterval 暂不迁移。
-const jobWorker = createJobWorker({ pool, handlers: { ...exampleJobHandlers } });
+const jobWorker = createJobWorker({
+  pool,
+  handlers: { ...exampleJobHandlers, ...feishuTokens?.handlers },
+  recurring: feishuTokens?.recurring ?? [],
+});
 const app = await buildApp({
   pool,
   env,
@@ -223,6 +232,7 @@ const app = await buildApp({
   recordingService,
   webSearch: bochaSearch,
   outlets: outletAdapter,
+  feishuClient,
 });
 app.addHook("onClose", async () => {
   scheduler.close();
