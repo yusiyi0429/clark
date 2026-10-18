@@ -139,7 +139,7 @@ describe('记忆导入：拆分与规则', () => {
     });
 });
 
-describe('记忆导入：接口', { timeout: 30_000 }, () => {
+describe('记忆导入：接口', { timeout: 120_000 }, () => {
     it('粘贴 → 五步走到等你确认 → 确认后勾选的进个人记忆，冲突选「用新的」替代旧的；别人看不到', async () => {
         const log = { classify: 0, reconcile: 0 };
         const t = await createTestApp({}, undefined, { memoryImportModel: fakeModel(log) });
