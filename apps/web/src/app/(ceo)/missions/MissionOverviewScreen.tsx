@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@heroui/react";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
-import { DetailHeader } from "@/components/shell/DetailHeader";
+import { DetailFrame } from "@/components/shell/DetailFrame";
 import { ArrowRight, ChevronRight } from "lucide-react";
 import type { MissionPayload } from "@/cards/payloads";
 import type { Card } from "@/lib/api/client";
@@ -102,22 +102,18 @@ export function MissionOverviewScreen({
   const statLabel = filters.period === latest ? "本月 Mission" : `${filters.period} Mission`;
 
   return (
-    <>
-      <DetailHeader
-        eyebrow="月度承诺 · Mission"
-        title="Mission 总览"
-        actions={
-          <Button size="sm" variant="secondary" onPress={() => navigate("/config/missions")}>
-            管理 Mission
-          </Button>
-        }
-        closeLabel="返回全局"
-        onClose={close}
-      />
+    <DetailFrame
+      title="Mission 总览"
+      subtitle="月度承诺"
+      onBack={close}
+      actions={
+        <Button size="sm" variant="secondary" onPress={() => navigate("/config/missions")}>
+          管理 Mission
+        </Button>
+      }
+    >
       <div className={w.expandedScroll}>
         <div className={m.content}>
-          <p className={m.intro}>查看本月负责人的结果承诺与讨论草稿，以及每条 Mission 与战场、能力域和本月目标的关系。</p>
-
           <div className={m.summary} data-testid="mission-summary">
             <Stat value={stats.missions} label={statLabel} />
             <Stat value={stats.owners} label="负责人" tone="owner" />
@@ -144,7 +140,7 @@ export function MissionOverviewScreen({
               <div className={m.listHead}>
                 <div>
                   <h2 className={m.listTitle}>本月 Mission</h2>
-                  <p className={m.listMeta}>{filtered.length} 条 · 按能力域与编号排序</p>
+                  <p className={m.listMeta}>{filtered.length} 条</p>
                 </div>
                 <span className={m.scope}>{filters.period || latest}</span>
               </div>
@@ -166,7 +162,7 @@ export function MissionOverviewScreen({
                 {filtered.length ? null : <p className={m.empty}>当前筛选没有 Mission。</p>}
               </div>
               <div className={m.footer}>
-                <span className={m.footerHint}>共 {filtered.length} 条 Mission · 执行进度留在负责人流程</span>
+                <span className={m.footerHint}>共 {filtered.length} 条 Mission</span>
                 <button type="button" className={m.primary} onClick={() => navigate("/config/missions")}>
                   编辑 Mission 配置
                   <ArrowRight aria-hidden="true" />
@@ -176,7 +172,7 @@ export function MissionOverviewScreen({
           </div>
         </div>
       </div>
-    </>
+    </DetailFrame>
   );
 }
 

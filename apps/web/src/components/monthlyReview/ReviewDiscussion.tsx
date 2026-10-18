@@ -41,7 +41,7 @@ export function ReviewDiscussion({ itemId, comments, participantNames, canCommen
 
   return <section className={r.section} aria-label="讨论与补充">
     <h2>讨论与补充</h2>
-    <p className={s.hint}>{participantNames.length ? `${participantNames.join("、")}（本单元 Mission 负责人）和 CEO 都能看到、都能补充。` : "CEO 和负责人都能看到、都能补充。"}正文只由负责人修改。</p>
+    <p className={s.hint}>{participantNames.length ? `${participantNames.join("、")}、CEO 可见` : "CEO 与负责人可见"}</p>
     {comments.length ? <ol className={r.comments}>
       {comments.map((comment) => <li key={comment.id} className={r.comment} data-mine={comment.authorId === viewerId || undefined}>
         <header><strong>{comment.authorName}</strong><time dateTime={comment.createdAt}>{monthDayTime(comment.createdAt)}</time></header>

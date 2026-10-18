@@ -81,7 +81,7 @@ export function PersonalReviewBoard({ onNavigate }: { onNavigate: Navigate }) {
       <ContextMark kind="monthly" className={n.glyph} />
       <span className={n.identity}>
         <strong>{month} 月个人复盘<b className={`${n.count} ${b.ratio}`} aria-label={`已交 ${done} / ${board.counts.total}`}>{done}/{board.counts.total}</b></strong>
-        <small>{board.complete ? "已交齐，进入战场复盘" : "交齐后进入战场复盘，再到 CEO 出下月任务卡"}</small>
+        {board.complete ? <small>已交齐</small> : null}
       </span>
     </HeroCard.Header>
     <div className={n.tray}>
@@ -112,17 +112,14 @@ function SelfBlock({ row, mine, month, copied, onCopy, onNavigate }: {
 }) {
   const open = (from: Element | null) => row.href && onNavigate(row.href, from);
   const connected = mine?.toolConnected ?? false;
-  const title = row.status === "draft" ? `Co-Agent 已起草你的 ${month} 月复盘，确认后提交`
-    : row.status === "draft_failed" ? "起草没有成功，可以上传材料重试或直接写"
+  const title = row.status === "draft" ? `Co-Agent 已起草你的 ${month} 月复盘`
+    : row.status === "draft_failed" ? "起草没有成功"
       : `Co-Agent 正在起草你的 ${month} 月复盘`;
-  const detail = row.status === "draft" ? (connected ? "看一遍改好后提交；也可以复制指令让你的 AI 读手边的周复盘补充改写。没交的名字大家都看得到" : "看一遍改好后提交；想让你的 AI 帮忙补充，先授权。没交的名字大家都看得到")
-    : row.status === "draft_failed" ? "按天枢里的 Mission 和进展没能起草，上传你的复盘材料再试"
-      : "按你的 Mission 和执行事项进展起草，一般一两分钟";
   return <div className={a.push}>
     <div className={a.openRow}>
       <button type="button" className={n.item} data-tone="amber" onClick={(event) => open((event.target as Element).closest("[data-notice]"))} aria-label={`打开我的复盘：${title}`}>
         <span className={n.mark} aria-hidden="true" />
-        <span className={n.itemText}><span>{title}</span><small>{detail}</small></span>
+        <span className={n.itemText}><span>{title}</span></span>
         <ChevronRight size={15} aria-hidden="true" />
       </button>
     </div>
@@ -131,7 +128,7 @@ function SelfBlock({ row, mine, month, copied, onCopy, onNavigate }: {
         <button type="button" data-emphasis="" onClick={(event) => open((event.target as Element).closest("[data-notice]"))}>{row.status === "draft" ? "去确认提交" : "上传材料重试"}</button>
         {connected
           ? <button type="button" onClick={onCopy}>{copied ? "已复制，发给你的 AI" : "复制给 AI 的指令"}</button>
-          : <button type="button" onClick={openConnectionDialog}>授权开始</button>}
+          : <button type="button" onClick={openConnectionDialog}>连接 AI 工具</button>}
       </div>
     </div> : null}
   </div>;

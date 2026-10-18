@@ -149,7 +149,7 @@ export const ConversationTurn = memo(function ConversationTurn({ message, ms, st
       data-testid={streaming ? "conversation-streaming-turn" : undefined} aria-busy={streaming || undefined}>
       {!user && ms !== undefined ? (
         <div className={s.meta}>
-          <span title="本轮处理的实际用时，包含模型生成、检索与服务等待">用时 {seconds(ms)}</span>
+          <span>用时 {seconds(ms)}</span>
           {thoughtToggle}
         </div>
       ) : !user && thoughtToggle ? (

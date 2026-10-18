@@ -2,9 +2,9 @@
 
 import { useMemo } from "react";
 import { Button } from "@heroui/react";
-import { ChevronLeft, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
-import { DetailHeader } from "@/components/shell/DetailHeader";
+import { DetailFrame } from "@/components/shell/DetailFrame";
 import type { Card } from "@/lib/api/client";
 import type { MissionPayload } from "@/cards/payloads";
 import { MissionStatus, missionStatusLabel } from "@/components/MissionStatus";
@@ -26,25 +26,17 @@ export function MissionDetailScreen({ mission, planStatus, card }: { mission: Mi
   const status = missionStatusLabel(mission) || (planStatus === "已签发" ? "生效中" : "");
   useRegisterDetail({ scope: `mission:${mission.missionId}`, label: mission.title, mark: null, cards });
   return (
-    <>
-      <DetailHeader
-        eyebrow={`Mission ${mission.code} · ${mission.period}${status ? ` · ${status}` : ""}`}
-        title={mission.title}
-        actions={
-          <div className={m.headerActions}>
-            <Button size="sm" variant="tertiary" onPress={() => navigate("/missions")}>
-              <ChevronLeft size={15} aria-hidden="true" />
-              返回总览
-            </Button>
-            {!mission.personalCard ? <Button size="sm" variant="secondary" onPress={() => navigate(`/config/missions?missionId=${mission.missionId}`)}>
-              <Pencil size={14} aria-hidden="true" />
-              编辑 Mission
-            </Button> : null}
-          </div>
-        }
-        closeLabel="返回全局"
-        onClose={close}
-      />
+    <DetailFrame
+      title={mission.title}
+      subtitle={`Mission ${mission.code} · ${mission.period}${status ? ` · ${status}` : ""}`}
+      onBack={close}
+      actions={
+        !mission.personalCard ? <Button size="sm" variant="secondary" onPress={() => navigate(`/config/missions?missionId=${mission.missionId}`)}>
+          <Pencil size={14} aria-hidden="true" />
+          编辑 Mission
+        </Button> : undefined
+      }
+    >
       <div className={w.expandedScroll}>
         <div className={m.content}>
           <p className={m.owner}>唯一负责人 · {mission.ownerDisplayName || "待指派"}</p>
@@ -95,15 +87,13 @@ export function MissionDetailScreen({ mission, planStatus, card }: { mission: Mi
                   {mission.sourceTitle} · 修订 revision {mission.sourceRevision}
                   <br />
                   {mission.sourceRef}
-                  <br />
-                  {mission.personalCard && mission.personalCard.status !== "confirmed" ? "讨论草稿，待本轮统一确认；外部文档更新不会自动覆盖当前草稿" : "外部文档更新不会自动覆盖当前正式版本"}
                 </p>
               </section>
             </div>
           </div>
         </div>
       </div>
-    </>
+    </DetailFrame>
   );
 }
 

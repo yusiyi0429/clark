@@ -96,9 +96,7 @@ export function ConversationHistorySheet({ data, label, global, onClose, anchor 
             </RichSurfaceProvider>
           </CitationSurfaceProvider>
           <ConversationHistoryState data={data} empty={
-            <div className={w.chatWelcome}>
-              <p>{global ? "可从当前关注的问题开始讨论。" : `可从「${label}」中待澄清的问题开始讨论。`}</p>
-            </div>
+            <div className={w.chatWelcome} />
           } />
           {data.error && !data.streaming ? <ConversationNotice text={data.error} action={data.recovery} /> : null}
           {notice ? <ConversationNotice text={notice} /> : null}

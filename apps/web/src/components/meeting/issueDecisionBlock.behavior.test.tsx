@@ -183,7 +183,7 @@ describe("议题块里表达决定（feedback 15）：只走原生 issue.decide�
     const html = renderToStaticMarkup(<IssueDecisionBlock {...props(pendingCard)} decisionActions={[]} />);
     expect(html).not.toContain("按此决定");
     expect(html).not.toContain("自拟决定内容");
-    expect(html).toContain("决定由会后结论确认生效");
+    expect(html).not.toContain("决定由会后结论确认生效");
   });
 });
 

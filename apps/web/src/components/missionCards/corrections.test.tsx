@@ -74,7 +74,7 @@ describe("字段下方的内联编辑", () => {
     expect(html).toContain("申请更正：战役结果");
     expect(html).toContain(">与团队完成共同核验</textarea>");
     expect(html).toContain('<label for="correction-reason-mission-outcome">原因</label><input id="correction-reason-mission-outcome" type="text" maxLength="300" required="" value=""/>');
-    expect(html).toContain("提交后等刘明华处理，正文先不变。");
+    expect(html).not.toContain("提交后等刘明华处理，正文先不变。");
     expect(ui.buttons.get("提交申请更正：战役结果")?.isDisabled).toBe(true);
     render(payload(open), controls({ draft: { ...draft, reason: "   " } }));
     expect(ui.buttons.get("提交申请更正：战役结果")?.isDisabled).toBe(true);
@@ -89,7 +89,7 @@ describe("字段下方的内联编辑", () => {
   it("本人申请列表字段一行一条，正式正文等待退回本人修改", () => {
     const html = render(payload(open), controls({ draft: { ...draft, field: "milestones", text: "待定 · 团队核对\n10/20 · 试用" } }));
     expect(html).toContain("申请更正：里程碑");
-    expect(html).toContain("正文先不变");
+    expect(html).not.toContain("正文先不变");
     expect(html).not.toContain("立即生效");
     expect(html).toContain("每行一条");
     expect(html).toContain(">待定 · 团队核对\n10/20 · 试用</textarea>");
@@ -148,7 +148,7 @@ describe("待处理与已处理的申请", () => {
     const html = render(payload(decider, [fix()]), props);
     expect(html).not.toContain("等刘明华处理");
     expect(ui.buttons.has("采纳：战役结果")).toBe(false);
-    expect(html).toContain("请从页头退回本人准备");
+    expect(html).not.toContain("请从页头退回本人准备");
     ui.buttons.get("不采纳：战役结果")!.onPress!();
     expect(props.corrections.onRejecting).toHaveBeenCalledWith({ id: "fix-1", note: "" });
     expect(props.corrections.onDecide).not.toHaveBeenCalled();

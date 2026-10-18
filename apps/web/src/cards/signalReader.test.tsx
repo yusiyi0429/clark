@@ -82,7 +82,8 @@ describe("Signal 阅读", () => {
     expect(html).toContain(">对公司的影响<");
     expect(html).toContain("战略锚点 · 企业 Agent 监管");
     expect(html).toContain('aria-label="原文"');
-    expect(html).toContain("以上是来源给出的摘要，没有读到全文");
+    expect(html).toContain("仅摘要 ·");
+    expect(html).not.toContain("以上是来源给出的摘要");
   });
 
   it("原文：点进来就是全文，不再要按钮展开；出处行末一个低调的原文链接", () => {

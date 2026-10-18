@@ -27,6 +27,6 @@ export function MissionDraftStatus({ payload, pending, onAction }: Props) {
   const retry = round.approver && round.phase === "draft" && failures.length ? round.retryDraftAction : null;
   return <section className={s.workflow} aria-label="任务起草状态"><div className={s.draftStatus} role="status" aria-live="polite">
     <div className={s.draftStatusTop}><p className={s.draftStatusTitle}>{drafting ? "Co-Agent 正在起草任务" : "任务起草未完成"}</p>{retry ? <Button variant="ghost" className={s.textAction} isDisabled={pending} onPress={() => onAction(retry)}>重试起草</Button> : null}</div>
-    {drafting ? <p className={s.hint}>完成后，任务正文会在这里更新。</p> : <>{failures.map((failure) => <div key={failure.ownerId} className={s.draftFailure}><p className={s.draftFailureOwner}>{failure.ownerName}</p><DraftFailureReason message={failure.message} /></div>)}<p className={s.hint}>{retry ? "重试会为未完成的任务卡重新起草。" : `等待${round.deciderName}重试起草。`}</p></>}
+    {drafting ? null : <>{failures.map((failure) => <div key={failure.ownerId} className={s.draftFailure}><p className={s.draftFailureOwner}>{failure.ownerName}</p><DraftFailureReason message={failure.message} /></div>)}{retry ? null : <p className={s.hint}>{`等待${round.deciderName}重试起草。`}</p>}</>}
   </div></section>;
 }

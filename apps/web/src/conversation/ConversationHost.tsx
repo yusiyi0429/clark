@@ -172,8 +172,7 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, subject, ui 
   const scopeQuotes = useMemo(() => ui.quotes.filter((item) => item.source?.scope === target.scope), [ui.quotes, target.scope]);
 
   if (rail && !ui.historyOpen) {
-    return <RailConversation data={data} target={target} agentTitle={agentTitle} subject={subject} ui={ui} references={global ? [] : items}
-      viewingMaterialFormat={viewingMaterial?.format} onDiscussGlobal={discussGlobal} />;
+    return <RailConversation data={data} target={target} agentTitle={agentTitle} subject={subject} ui={ui} references={global ? [] : items} onDiscussGlobal={discussGlobal} />;
   }
 
   return (
@@ -227,7 +226,6 @@ function RailConversation({
   subject,
   ui,
   references,
-  viewingMaterialFormat,
   onDiscussGlobal,
 }: {
   data: ConversationData;
@@ -236,7 +234,6 @@ function RailConversation({
   subject: string | null;
   ui: ConversationUiState;
   references: Card[];
-  viewingMaterialFormat?: string;
   onDiscussGlobal: () => void;
 }) {
   const column = useColumnMode();
@@ -365,9 +362,8 @@ function RailConversation({
   // 划词引用（B4）：只在私聊正文里，引用进这条右列对话。
   const selection = useSelectionQuote(scroll.scrollRef, { within: "[data-chat-role]" });
 
-  // 页脚先写这条线归谁（全局对话 / 当前对象），再写谁看得到、能做什么：私聊与公开讨论不混。
+  // 页脚只标谁看得到：私聊「仅你可见」，群组「成员可见」。
   const owner = conversationOwner(target.scope, target.label);
-  const privateNote = personalContext ? personalContext.agentNote ?? "仅本人可见 · 当前可讨论，修改权限以任务状态为准" : target.scope.startsWith("monthly-review-item:") ? "仅本人可见 · Agent 仅提出改写建议，点击「采用」后写入左侧" : data.viewingMaterialEditable ? `仅本人可见 · 可让 Agent 修改这份${viewingMaterialFormat === "html" ? " HTML" : viewingMaterialFormat === "markdown" ? " Markdown" : "材料"}；其他业务仍只读` : /^(issue|task):/.test(target.scope) ? "仅本人可见 · 可让 Agent 修改或新建 Markdown 材料；其他业务只读" : "仅本人可见 · 只读：不修改左侧内容，不形成决定";
 
   return (
     <>
@@ -410,7 +406,7 @@ function RailConversation({
         </div>
         {/* ↓ 按右列 panel 定位，底边贴着输入条上沿（--conversation-composer-height，D3）；Agent 输出中是三点。 */}
         <JumpToLatest visible={!scroll.atBottom} onJump={scroll.jumpToLatest} streaming={channel === "agent" && data.streaming} className={cs.latestJump} />
-        {channel === "group" || privateNote ? <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`} data-conversation-owner={channel === "group" ? "group" : owner.global ? "global" : "object"}>{channel === "group" ? threadGroup && thread.left ? "已退出该群组" : `公开讨论 · 成员可见：${members.map((member) => member.displayName).join("、")}、Co-Agent` : `${owner.short} · ${privateNote}`}</p> : null}
+        <p className={`${cs.footnote} ${target.group ? groupStyles.groupFootnote : ""}`} data-conversation-owner={channel === "group" ? "group" : owner.global ? "global" : "object"}>{channel === "group" ? threadGroup && thread.left ? "已退出该群组" : "成员可见" : "仅你可见"}</p>
       </ConversationColumn>
       {channel === "group" && target.group ? <MissionGroupComposer cardId={taskGroup?.taskId ?? otherThread?.objectId ?? missionGroup!.cardId} taskId={taskGroup?.taskId ?? otherThread?.objectId} viewerId={target.group.viewerId} phase={threadGroup ? "open" : missionGroup!.phase} channels={channels} channel={channel} onChannel={setChannel} narrow={column.narrow} mobileOpen={ui.railMobileOpen} onMobileOpen={ui.setRailMobileOpen} onHeightChange={setComposerHeight} reference={missionGroup?.reference ?? null} onRemoveReference={missionGroup?.onRemoveReference ?? (() => {})} busy={threadGroup ? thread.sending : group.sending} readOnly={thread.left} error={threadGroup ? thread.error : group.error} onSend={threadGroup ? (body) => thread.send(body) : group.send} /> : <ColumnComposer
         data={data}
