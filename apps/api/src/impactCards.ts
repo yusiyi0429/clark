@@ -93,7 +93,7 @@ export async function insertImpactCards(client: PoolClient, input: {
 }
 
 export function projectImpactCard(row: ImpactCardRow, ctx: {
-  decision: MeetingDecisionRow; meetingTitle: string; ceoId: string; superseded: boolean;
+  decision: MeetingDecisionRow; meetingTitle: string; superseded: boolean;
   questions: { id: string; question: string; answer: string | null; created_at: Date }[];
 }): TImpactCardView {
   const decidedBy = ctx.decision.tier === "strategic" ? "ceo" : ctx.decision.status === "agent_judged" ? "agent" : "host";
@@ -117,12 +117,12 @@ export function projectImpactCard(row: ImpactCardRow, ctx: {
 async function viewOf(q: Query, row: ImpactCardRow): Promise<TImpactCardView | null> {
   const decision = (await q("SELECT * FROM meeting_decisions WHERE id = $1", [row.trigger_id])).rows[0] as MeetingDecisionRow | undefined;
   if (!decision) return null;
-  const meeting = (await q("SELECT title, ceo_participant_id FROM meetings WHERE id = $1", [decision.meeting_id])).rows[0] as { title: string; ceo_participant_id: string };
+  const meeting = (await q("SELECT title FROM meetings WHERE id = $1", [decision.meeting_id])).rows[0] as { title: string };
   const superseded = Boolean((await q("SELECT 1 FROM impact_cards WHERE correction_of = $1 LIMIT 1", [row.id])).rowCount);
   const questions = row.request_id
     ? (await q("SELECT id::text, question, answer, created_at FROM request_questions WHERE request_id = $1 ORDER BY created_at, id", [row.request_id])).rows
     : [];
-  return projectImpactCard(row, { decision, meetingTitle: meeting.title, ceoId: meeting.ceo_participant_id, superseded, questions: questions as never });
+  return projectImpactCard(row, { decision, meetingTitle: meeting.title, superseded, questions: questions as never });
 }
 
 /** 收卡的人读自己的卡（按请求 id）：打开即把这条请求的通知标为已读。 */

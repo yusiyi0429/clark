@@ -44,7 +44,8 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
     minutesStatus: payload.minutesStatus ?? "none",
     attended,
     ...(attended ? {
-      transcript: payload.transcript,
+      // 原文只在已有逐字稿时带上（会前没有这一格）。
+      ...(payload.transcript ? { transcript: payload.transcript } : {}),
       // 主持人确认 host 条目；战略项给 CEO，这里只看不点。
       decisions: (payload.decisions ?? []).map((decision) => ({ ...decision, canReview: isHost && decision.tier === "host" })),
     } : {}),

@@ -50,6 +50,22 @@ export type MeetingDecisionDeps = {
 export type ReviewInput = { verdict: "confirmed" | "edited" | "not_decided"; statement?: string };
 export type ReviewResult = { decision: TMeetingDecisionView } | { error: { status: number; code: string; message: string } };
 
+/** 分层 Agent 的候选 → 主持人要确认的几行：只认这场会里可挑的条目，同一条目不进两行，最多 5 行（评测脚本也用它）。 */
+export function selectHostDecisions(items: TMeetingOutcomeItem[], candidate: Awaited<ReturnType<DecisionLayeringAgent["layer"]>>) {
+  const pickable = new Map(items.filter((item) => PICKABLE_KINDS.has(item.kind)).map((item) => [item.id, item]));
+  const used = new Set<string>();
+  const rows: { statement: string; itemIds: string[]; primary: TMeetingOutcomeItem; recommendation: "confirmed" | "not_decided"; why: string }[] = [];
+  for (const decision of candidate.decisions) {
+    const ids = [...new Set(decision.itemIds)].filter((id) => pickable.has(id) && !used.has(id));
+    if (!ids.length || !decision.statement.trim()) continue;
+    ids.forEach((id) => used.add(id));
+    const primary = ids.map((id) => pickable.get(id)!).find((item) => item.kind === "decision") ?? pickable.get(ids[0])!;
+    rows.push({ statement: decision.statement.trim(), itemIds: ids, primary, recommendation: decision.recommendation, why: decision.recommendationReason.trim() });
+    if (rows.length >= MAX_HOST_DECISIONS) break;
+  }
+  return rows;
+}
+
 const iso = (value: Date | string) => new Date(value).toISOString();
 const realDate = (value: string | null) => {
   if (!value) return null;
@@ -102,22 +118,6 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     }
   }
 
-  /** 分层 Agent 的候选 → 主持人要确认的几行：只认这场会里可挑的条目，同一条目不进两行。 */
-  function hostRows(items: TMeetingOutcomeItem[], candidate: Awaited<ReturnType<DecisionLayeringAgent["layer"]>>) {
-    const pickable = new Map(items.filter((item) => PICKABLE_KINDS.has(item.kind)).map((item) => [item.id, item]));
-    const used = new Set<string>();
-    const rows: { statement: string; itemIds: string[]; primary: TMeetingOutcomeItem; recommendation: "confirmed" | "not_decided"; why: string }[] = [];
-    for (const decision of candidate.decisions) {
-      const ids = [...new Set(decision.itemIds)].filter((id) => pickable.has(id) && !used.has(id));
-      if (!ids.length || !decision.statement.trim()) continue;
-      ids.forEach((id) => used.add(id));
-      const primary = ids.map((id) => pickable.get(id)!).find((item) => item.kind === "decision") ?? pickable.get(ids[0])!;
-      rows.push({ statement: decision.statement.trim(), itemIds: ids, primary, recommendation: decision.recommendation, why: decision.recommendationReason.trim() });
-      if (rows.length >= MAX_HOST_DECISIONS) break;
-    }
-    return rows;
-  }
-
   /**
    * 纪要整理好或会议条目有人处理过之后调用（幂等）：同步战略项；这一次纪要还没分过层的，调分层 Agent 挑主持人要确认的几条。
    * 纪要重新整理过（换了逐字稿）且上一版主持人条目都还没动过，换成新的一版。
@@ -130,7 +130,9 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     const layeredRun = (await q("SELECT decisions_run_id FROM meetings WHERE id = $1", [meetingId])).rows[0]?.decisions_run_id as string | null;
     const needsLayering = Boolean(runId) && layeredRun !== runId;
     let candidate: Awaited<ReturnType<DecisionLayeringAgent["layer"]>> | null = null;
-    if (needsLayering) {
+    // 纪要里没有可挑的条目（决定、待办等）就不用调模型：这一版记为分过层、主持人没有要确认的。
+    if (needsLayering && !items.some((item) => PICKABLE_KINDS.has(item.kind))) candidate = { decisions: [] };
+    else if (needsLayering) {
       const nameMap = new Map(meeting.participants.map((person) => [person.personId, person.displayName]));
       const lookup = (id: string | null) => (id ? nameMap.get(id) ?? names().get(id) ?? id : null);
       const attendees = meeting.attendees_actual ?? meeting.participants.map((person) => person.personId);
@@ -159,7 +161,7 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
         if (untouched) {
           await client.query("DELETE FROM meeting_decisions WHERE meeting_id = $1 AND tier = 'host'", [meetingId]);
           const at = now();
-          for (const [index, row] of hostRows(locked.outcome.items, candidate).entries()) {
+          for (const [index, row] of selectHostDecisions(locked.outcome.items, candidate).entries()) {
             await client.query(
               `INSERT INTO meeting_decisions (id, meeting_id, tier, ordinal, statement, item_ids, turn_id, quote, speaker_id, recommendation, why, next_remind_at, due_at)
                VALUES ($1, $2, 'host', $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12)`,
@@ -335,7 +337,9 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
         const previousStatement = previous.find((card) => card.statement)?.statement ?? null;
         const analysis = await impact.analyze({
           today: shanghaiDate(now()),
-          decision: { statement, decidedBy, meeting: { title: meeting.title, date: shanghaiDate(meeting.scheduled_at), host: lookup(meeting.lead_dri_id)! },
+          // 战略项是提给 CEO 的问题，CEO 确认即同意：按「CEO 同意：…」交给影响分析。
+          decision: { statement: decision.tier === "strategic" ? `CEO 同意：${statement}${decision.why ? `（${decision.why}）` : ""}` : statement,
+            decidedBy, meeting: { title: meeting.title, date: shanghaiDate(meeting.scheduled_at), host: lookup(meeting.lead_dri_id)! },
             quote: decision.quote, speaker: lookup(decision.speaker_id), why: decision.why },
           ...(previousStatement && previousStatement !== statement ? { previous: { statement: previousStatement } } : {}),
           relatedItems: items.map((item) => ({ kind: item.kind, text: item.text, owner: lookup(item.ownerPersonId), dueDate: item.dueDate ?? null })),

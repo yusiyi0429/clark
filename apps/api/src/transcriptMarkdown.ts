@@ -59,7 +59,8 @@ const FEISHU_START = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})\s*(CST|UTC\+0?8:?
 export function parseFeishuTranscriptText(text: string): TranscriptParseResult & { startedAt?: string | null } {
   const source = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   const lines = source.split(/\r?\n/);
-  const start = FEISHU_START.exec(lines.find((line) => line.trim()) ?? "");
+  // 开会时刻在开头几行里（前面可能还有一行标题）。
+  const start = lines.slice(0, 6).map((line) => FEISHU_START.exec(line.trim())).find(Boolean) ?? null;
   const startedAt = start ? new Date(`${start[1]}T${start[2]}+08:00`).toISOString() : null;
   const raw: RawTurn[] = [];
   let current: RawTurn | null = null;
