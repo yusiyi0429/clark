@@ -8,6 +8,8 @@ import type { MonthlyReviewService } from "./monthlyReviewService.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { executePersonalReviewAction, getCurrentPersonalReview, getPersonalReview, pendingGenerationSteps, personalReviewHref, type PersonalReviewRow } from "./personalReviews.js";
 import type { WeeklyReviewService } from "./weeklyReviewService.js";
+import type { CollectionAgent } from "./collectionAgent.js";
+import { deadlineLabel, draftCollection, type CollectionDeps } from "./collections.js";
 import { getWeeklyReviewRow, weeklyReviewHref, weeklyReviewText } from "./weeklyReviews.js";
 
 /**
@@ -15,6 +17,7 @@ import { getWeeklyReviewRow, weeklyReviewHref, weeklyReviewText } from "./weekly
  * - 生成复盘：复用个人复盘生成服务，四步（读 Mission 卡 → 读每周复盘 → 读采集记录 → 起草）实时显示成步骤，本人改过的段落保留；
  * - 帮我问问：定位待办（todoLocator.ts，确定性规则）→ 查有没有人问过 → 整理问题 → 等你确认，复用送达服务；
  * - 请同事帮忙：送达服务的起草流程（起草请求 → 查歧义 → 等你确认）。
+ * - 发起信息收集（③）：判断场景 → 起草收集表 → 等你确认，草稿卡上点「发送」才发出。
  * 处理中的每一步经 onStep 发给界面；结果卡经 onCard 挂在这一轮回答后面。发出、提交都由本人在卡上点，这里一律不发。
  * 交给模型的结果只有它说话要用的事实（不带 actionId），说法要求写在 note 里。
  */
@@ -23,6 +26,7 @@ export type ConversationEntries = {
   askAboutTodo(args: { question: string; person?: string; date?: string; about?: string }): Promise<Record<string, unknown>>;
   requestHelp(args: { prompt: string; requestId?: string; answers?: string[] }): Promise<Record<string, unknown>>;
   generateReview(args: { kind: "monthly" | "weekly"; period?: string }): Promise<Record<string, unknown>>;
+  startCollection(args: { prompt: string; collectionId?: string }): Promise<Record<string, unknown>>;
 };
 export type EntryDeps = {
   pool: Pool;
@@ -41,6 +45,8 @@ export type EntryDeps = {
   reviews?: MonthlyReviewService;
   /** 周复盘生成（weeklyReviewService.generateFor）；没配置时如实说不可用。 */
   weeklyReviews?: WeeklyReviewService;
+  /** ③ 信息收集的起草；没配置时如实说不可用。 */
+  collections?: { agent: CollectionAgent; deps: CollectionDeps };
   /** 这一次调用的幂等键（复盘的「重新生成」动作按它去重）。 */
   fingerprint: string;
   onStep: (step: EntryStep) => void;
@@ -51,6 +57,7 @@ const KEEP_ALIVE_MS = 30_000;
 
 const ASK_STEPS = [["todo-locate", "定位待办"], ["todo-check", "查有没有人问过"], ["todo-organize", "整理问题"], ["todo-confirm", "等你确认"]] as const;
 const REQUEST_STEPS: Record<string, string> = { 起草请求: "request-draft", 查歧义: "request-clarify", 等你确认: "request-confirm" };
+const COLLECTION_STEPS: Record<string, string> = { 判断场景: "collection-scenario", 起草收集表: "collection-draft", 等你确认: "collection-confirm" };
 const REVIEW_STATUS: Record<TPersonalReviewGenerationStep["status"] | TWeeklyReviewGenerationStep["status"], EntryStep["status"]> = { pending: "pending", running: "active", done: "done", failed: "stopped" };
 
 const short = (at: Date) => {
@@ -203,6 +210,28 @@ export function createConversationEntries(deps: EntryDeps): ConversationEntries 
         note: open.length
           ? "草稿和要本人定的问题都在回答下面的卡里，没定之前发不出去。回答一句话说起草了什么、还有几处要本人定（可以在卡里填，也可以直接在对话里回答），不逐条复述问题；本人在对话里回答后，带上 requestId 和按 questionsForYou 顺序写的 answers 再调用一次重写。不要说已经发出。"
           : "草稿已放在回答下面，本人在卡上确认收件人、点「发送」才发出。回答一句话说明发给谁、请对方做什么；收件人没定下来时请本人在卡上选。不要说已经发出。",
+      };
+    },
+
+    async startCollection(args) {
+      if (!deps.collections) return { drafted: false, reason: "信息收集没有配置", note: "如实告诉本人这次起草不了。" };
+      for (const [label, id] of Object.entries(COLLECTION_STEPS)) step(id, label, label === "判断场景" ? "active" : "pending");
+      const result = await draftCollection(deps.pool, deps.collections.agent, { prompt: args.prompt, ...(args.collectionId ? { collectionId: args.collectionId } : {}) },
+        { viewerId: deps.viewer.personId, names: deps.names, people: deps.people, secret: deps.secret, now: deps.now() });
+      if ("error" in result) {
+        if (result.steps) relay(result.steps, (label) => COLLECTION_STEPS[label] ?? `collection-${label}`);
+        else step("collection-scenario", "判断场景", "stopped");
+        return result.error.code === "COLLECTION_SCENARIO_UNSUPPORTED"
+          ? { drafted: false, reason: "只能收每周开销和每周进展两类", note: "如实告诉本人天枢里的信息收集只做这两类（财务每周开销、方法部门每周进展），这次说的不在里面，没有起草。不教本人怎么改说法。" }
+          : { drafted: false, reason: result.error.message, note: "如实告诉本人没起草成和原因。" };
+      }
+      relay(result.steps, (label) => COLLECTION_STEPS[label] ?? `collection-${label}`);
+      const view = result.collection;
+      deps.onCard({ kind: "collection_draft", collectionId: view.id });
+      return {
+        drafted: true, collectionId: view.id, title: view.title, fields: view.fields.map((field) => field.label),
+        suggestedRecipients: view.candidates.map((person) => person.displayName), deadline: deadlineLabel(new Date(view.deadlineAt)), weekly: view.weekly,
+        note: "收集表草稿已放在回答下面的卡里：收件人、截止、每周固定都能在卡上改，本人点「发送」才发出。回答一句话说收什么、发给谁、什么时候截止；收件人没定下来时请本人在卡上选。本人在对话里要改时，带上 collectionId 和新的原话再调用一次。不要说已经发出。",
       };
     },
 

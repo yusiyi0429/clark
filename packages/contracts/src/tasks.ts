@@ -365,6 +365,8 @@ export const NotificationKind = Type.Union([
   Type.Literal("request_answered"),
   Type.Literal("request_done"),
   Type.Literal("request_asked"),
+  /** ③ 信息收集：截止前固定时间提醒还没确认的人；objectType=request（kind = collection 的那一轮）。 */
+  Type.Literal("collection_reminder"),
 ]);
 
 /** 通知只指向对象；text 在读取时按对象当前状态组合。 */

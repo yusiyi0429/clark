@@ -8,6 +8,10 @@ import {
 import { MeetingDecisionView, MeetingDecisionReviewRequest, MeetingDecisionResponse, MyMeetingDecisionsResponse } from "./meetingDecisions.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import {
+  CollectionField, CollectionEntryView, CollectionRoundView, CollectionView, CollectionResponse, DraftCollectionRequest, DraftCollectionResponse,
+  CollectionSendInput, CollectionSaveInput, ExecuteCollectionActionRequest, ScheduleItem, ScheduleListResponse,
+} from "./collections.js";
+import {
   ActionDescriptor,
   ApiError,
   Card,
@@ -764,6 +768,40 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/ImpactIrrelevantRequest" }),
           responses: { "200": { description: "影响卡", content: { "application/json": { schema: { $ref: "#/components/schemas/ImpactCardResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/collections/draft": {
+        post: {
+          operationId: "draftCollection", summary: "③ 信息收集：发起人一句话，Agent 起草收什么、发给谁、截止；带 collectionId 时按改过的原话重写同一份草稿",
+          requestBody: jsonBody({ $ref: "#/components/schemas/DraftCollectionRequest" }),
+          responses: { "200": { description: "草稿与处理步骤", content: { "application/json": { schema: { $ref: "#/components/schemas/DraftCollectionResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse, "422": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/collections/{id}": {
+        get: {
+          operationId: "getCollection", summary: "收集任务：草稿或最近一轮的汇总；只有发起人看得到",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "收集任务", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectionResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/requests/{id}/collection": {
+        get: {
+          operationId: "getRequestCollection", summary: "kind = collection 的请求对应的那一轮：发起人看汇总和每人状态，接收人只看自己那一行",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "这一轮", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectionResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/collections/actions/execute": {
+        post: {
+          operationId: "executeCollectionAction", summary: "collection.send / save / confirm / stop；send 校验 actionId 里的版本，发出的就是预览那一版",
+          requestBody: jsonBody({ $ref: "#/components/schemas/ExecuteCollectionActionRequest" }),
+          responses: { "200": { description: "收集任务的最新视图", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectionResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/me/schedules": {
+        get: {
+          operationId: "listMySchedules", summary: "设置里的定时任务区：每周固定的收集任务、每周五起草周复盘、上手时搬过来的本机定时任务",
+          responses: { "200": { description: "定时任务", content: { "application/json": { schema: { $ref: "#/components/schemas/ScheduleListResponse" } } } }, "401": errorResponse },
         },
       },
       "/api/me/meeting-decisions": {
@@ -2850,6 +2888,18 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ImpactAskRequest: ImpactAskRequest as JsonSchema,
         ImpactAskResponse: ImpactAskResponse as JsonSchema,
         ImpactIrrelevantRequest: ImpactIrrelevantRequest as JsonSchema,
+        CollectionField: CollectionField as JsonSchema,
+        CollectionEntryView: CollectionEntryView as JsonSchema,
+        CollectionRoundView: CollectionRoundView as JsonSchema,
+        CollectionView: CollectionView as JsonSchema,
+        CollectionResponse: CollectionResponse as JsonSchema,
+        DraftCollectionRequest: DraftCollectionRequest as JsonSchema,
+        DraftCollectionResponse: DraftCollectionResponse as JsonSchema,
+        CollectionSendInput: CollectionSendInput as JsonSchema,
+        CollectionSaveInput: CollectionSaveInput as JsonSchema,
+        ExecuteCollectionActionRequest: ExecuteCollectionActionRequest as JsonSchema,
+        ScheduleItem: ScheduleItem as JsonSchema,
+        ScheduleListResponse: ScheduleListResponse as JsonSchema,
       },
     },
   };

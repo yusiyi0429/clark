@@ -63,13 +63,17 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
     case "request_received":
       // 影响卡：会上定的事影响到你手上的事。
       if (row.request_kind === "impact") return `会后影响你：${row.request_title ?? ""}`;
+      if (row.request_kind === "collection") return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}请你填：${row.request_title ?? ""}`;
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}请你：${row.request_title ?? ""}`;
     case "request_answered":
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}回答了你的问题：${row.request_title ?? ""}`;
     case "request_asked":
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}问你：${row.request_title ?? ""}`;
     case "request_done":
+      if (row.request_kind === "collection") return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}确认了：${row.request_title ?? ""}`;
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}完成了：${row.request_title ?? ""}`;
+    case "collection_reminder":
+      return `截止前提醒：${row.request_title ?? ""}`;
   }
 }
 

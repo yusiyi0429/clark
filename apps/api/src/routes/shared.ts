@@ -32,6 +32,8 @@ import type { AppEnv } from "../app.js";
 import type { WorldReader } from "../worldReader.js";
 import type { PersonalMemory } from "../personalMemory.js";
 import type { PersonalDistillation } from "../personalDistillation.js";
+import type { CollectionAgent } from "../collectionAgent.js";
+import type { CollectionDeps } from "../collections.js";
 
 export type AppInstance = FastifyInstance<
   RawServerDefault,
@@ -85,6 +87,8 @@ export type RouteContext = {
   weeklyReviewService?: WeeklyReviewService;
   /** 周复盘提交后写本体；本体没配或不写时为空，提交照常，world_sync_status 留 pending。 */
   weeklyReviewWorld?: WeeklyReviewWorldSync;
+  /** ③ 信息收集：起草 Agent 与服务依赖（路由和对话入口共用）。 */
+  collections: { agent: CollectionAgent; deps: CollectionDeps };
   recordings: MeetingRecordingService;
   voiceprints: VoiceprintDeps;
   dictation: DictationDeps;

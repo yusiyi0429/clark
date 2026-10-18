@@ -156,6 +156,8 @@ export const ConversationCard = Type.Union([
   }, { additionalProperties: false }),
   /** 本人发起的请求草稿：收件人、标题、说明与「发送」。 */
   Type.Object({ kind: Type.Literal("request_draft"), requestId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+  /** 本人发起的信息收集草稿：收什么、发给谁、截止、每周固定与「发送」。 */
+  Type.Object({ kind: Type.Literal("collection_draft"), collectionId: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
 ]);
 
 export const ConversationMessage = Type.Object(

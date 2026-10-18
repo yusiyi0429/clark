@@ -992,6 +992,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/collections/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** ③ 信息收集：发起人一句话，Agent 起草收什么、发给谁、截止；带 collectionId 时按改过的原话重写同一份草稿 */
+        post: operations["draftCollection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collections/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 收集任务：草稿或最近一轮的汇总；只有发起人看得到 */
+        get: operations["getCollection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/requests/{id}/collection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** kind = collection 的请求对应的那一轮：发起人看汇总和每人状态，接收人只看自己那一行 */
+        get: operations["getRequestCollection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/collections/actions/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** collection.send / save / confirm / stop；send 校验 actionId 里的版本，发出的就是预览那一版 */
+        post: operations["executeCollectionAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 设置里的定时任务区：每周固定的收集任务、每周五起草周复盘、上手时搬过来的本机定时任务 */
+        get: operations["listMySchedules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/meeting-decisions": {
         parameters: {
             query?: never;
@@ -3365,6 +3450,10 @@ export interface components {
                     kind: "request_draft";
                     requestId: string;
                     href: string;
+                } | {
+                    /** @constant */
+                    kind: "collection_draft";
+                    collectionId: string;
                 })[];
                 readScope?: {
                     label: string;
@@ -9063,7 +9152,7 @@ export interface components {
         NotificationList: {
             notifications: {
                 id: string;
-                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned" | "request_received" | "request_answered" | "request_done" | "request_asked";
+                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned" | "request_received" | "request_answered" | "request_done" | "request_asked" | "collection_reminder";
                 text: string;
                 objectType: "task" | "meeting" | "issue" | "request";
                 objectId: string;
@@ -9637,6 +9726,10 @@ export interface components {
             recipientsDone: number;
             openQuestions: number;
             unread: boolean;
+            fieldsFilled?: {
+                filled: number;
+                required: number;
+            };
         };
         RequestListResponse: {
             items: {
@@ -9652,6 +9745,10 @@ export interface components {
                 recipientsDone: number;
                 openQuestions: number;
                 unread: boolean;
+                fieldsFilled?: {
+                    filled: number;
+                    required: number;
+                };
             }[];
         };
         PrepareRequestQuestionRequest: {
@@ -9965,6 +10062,294 @@ export interface components {
         };
         ImpactIrrelevantRequest: {
             reason?: string;
+        };
+        CollectionField: {
+            key: string;
+            label: string;
+            kind: "text" | "number" | "link";
+            required: boolean;
+        };
+        CollectionEntryView: {
+            personId: string;
+            displayName: string;
+            values: {
+                [key: string]: string;
+            };
+            filled: number;
+            required: number;
+            status: "empty" | "filled" | "confirmed";
+            draftFrom: "weekly_review" | null;
+            confirmedAt: string | null;
+            updatedAt: string | null;
+        };
+        CollectionRoundView: {
+            requestId: string;
+            weekStart: string;
+            deadlineAt: string;
+            remindedAt: string | null;
+        };
+        CollectionView: {
+            id: string;
+            status: "draft" | "active" | "stopped";
+            version: number;
+            scenario: "expense" | "method_progress";
+            title: string;
+            prompt: string;
+            fields: {
+                key: string;
+                label: string;
+                kind: "text" | "number" | "link";
+                required: boolean;
+            }[];
+            initiator: {
+                personId: string;
+                displayName: string;
+            };
+            weekly: boolean;
+            deadlineAt: string;
+            table: {
+                url: string;
+            } | null;
+            candidates: {
+                personId: string;
+                displayName: string;
+            }[];
+            directory: {
+                personId: string;
+                displayName: string;
+            }[];
+            round: {
+                requestId: string;
+                weekStart: string;
+                deadlineAt: string;
+                remindedAt: string | null;
+            } | null;
+            entries: {
+                personId: string;
+                displayName: string;
+                values: {
+                    [key: string]: string;
+                };
+                filled: number;
+                required: number;
+                status: "empty" | "filled" | "confirmed";
+                draftFrom: "weekly_review" | null;
+                confirmedAt: string | null;
+                updatedAt: string | null;
+            }[];
+            counts: {
+                total: number;
+                filled: number;
+                confirmed: number;
+            };
+            viewer: {
+                isInitiator: boolean;
+                isRecipient: boolean;
+            };
+            actions: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            }[];
+        };
+        CollectionResponse: {
+            collection: {
+                id: string;
+                status: "draft" | "active" | "stopped";
+                version: number;
+                scenario: "expense" | "method_progress";
+                title: string;
+                prompt: string;
+                fields: {
+                    key: string;
+                    label: string;
+                    kind: "text" | "number" | "link";
+                    required: boolean;
+                }[];
+                initiator: {
+                    personId: string;
+                    displayName: string;
+                };
+                weekly: boolean;
+                deadlineAt: string;
+                table: {
+                    url: string;
+                } | null;
+                candidates: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                directory: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                round: {
+                    requestId: string;
+                    weekStart: string;
+                    deadlineAt: string;
+                    remindedAt: string | null;
+                } | null;
+                entries: {
+                    personId: string;
+                    displayName: string;
+                    values: {
+                        [key: string]: string;
+                    };
+                    filled: number;
+                    required: number;
+                    status: "empty" | "filled" | "confirmed";
+                    draftFrom: "weekly_review" | null;
+                    confirmedAt: string | null;
+                    updatedAt: string | null;
+                }[];
+                counts: {
+                    total: number;
+                    filled: number;
+                    confirmed: number;
+                };
+                viewer: {
+                    isInitiator: boolean;
+                    isRecipient: boolean;
+                };
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+        };
+        DraftCollectionRequest: {
+            prompt: string;
+            collectionId?: string;
+        };
+        DraftCollectionResponse: {
+            collection: {
+                id: string;
+                status: "draft" | "active" | "stopped";
+                version: number;
+                scenario: "expense" | "method_progress";
+                title: string;
+                prompt: string;
+                fields: {
+                    key: string;
+                    label: string;
+                    kind: "text" | "number" | "link";
+                    required: boolean;
+                }[];
+                initiator: {
+                    personId: string;
+                    displayName: string;
+                };
+                weekly: boolean;
+                deadlineAt: string;
+                table: {
+                    url: string;
+                } | null;
+                candidates: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                directory: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                round: {
+                    requestId: string;
+                    weekStart: string;
+                    deadlineAt: string;
+                    remindedAt: string | null;
+                } | null;
+                entries: {
+                    personId: string;
+                    displayName: string;
+                    values: {
+                        [key: string]: string;
+                    };
+                    filled: number;
+                    required: number;
+                    status: "empty" | "filled" | "confirmed";
+                    draftFrom: "weekly_review" | null;
+                    confirmedAt: string | null;
+                    updatedAt: string | null;
+                }[];
+                counts: {
+                    total: number;
+                    filled: number;
+                    confirmed: number;
+                };
+                viewer: {
+                    isInitiator: boolean;
+                    isRecipient: boolean;
+                };
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            };
+            steps: {
+                label: string;
+                status: "done" | "current" | "pending";
+                result: string | null;
+            }[];
+        };
+        CollectionSendInput: {
+            recipientIds: string[];
+            deadlineAt: string;
+            weekly: boolean;
+        };
+        CollectionSaveInput: {
+            values: {
+                [key: string]: string;
+            };
+        };
+        ExecuteCollectionActionRequest: {
+            actionId: string;
+            input?: unknown;
+        };
+        ScheduleItem: {
+            id: string;
+            category: "collect" | "other";
+            origin: "collection" | "weekly_review" | "local";
+            name: string;
+            cadence: string | null;
+            nextRunAt: string | null;
+            active: boolean;
+            href: string | null;
+            deviceName: string | null;
+            actions: {
+                /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                actionId: string;
+                actionType: string;
+                label: string;
+                itemId?: string;
+            }[];
+        };
+        ScheduleListResponse: {
+            items: {
+                id: string;
+                category: "collect" | "other";
+                origin: "collection" | "weekly_review" | "local";
+                name: string;
+                cadence: string | null;
+                nextRunAt: string | null;
+                active: boolean;
+                href: string | null;
+                deviceName: string | null;
+                actions: {
+                    /** @description HMAC 签名的确定性动作令牌，Web 不解析 */
+                    actionId: string;
+                    actionType: string;
+                    label: string;
+                    itemId?: string;
+                }[];
+            }[];
         };
     };
     responses: never;
@@ -12784,6 +13169,262 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    draftCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftCollectionRequest"];
+            };
+        };
+        responses: {
+            /** @description 草稿与处理步骤 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftCollectionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 收集任务 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getRequestCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 这一轮 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    executeCollectionAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecuteCollectionActionRequest"];
+            };
+        };
+        responses: {
+            /** @description 收集任务的最新视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMySchedules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 定时任务 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
