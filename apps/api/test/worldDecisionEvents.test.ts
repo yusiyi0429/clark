@@ -1,7 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Query } from "../src/meetingStore.js";
+import { emptyDraft, emptyPreflight, type Query } from "../src/meetingStore.js";
+import { executeConfirmItem, pendingOntologyUpdater, pendingOutcome } from "../src/outcome.js";
 import { createDecisionWorldSync, type DecisionEventInput } from "../src/worldDecisionEvents.js";
-import { projection, stubWorld, withWorld } from "./worldFixture.js";
+import { examples, projection, stubWorld, withWorld, worldEnv } from "./worldFixture.js";
+import { createTestApp, TEST_CEO, TEST_MEMBER, testEnv } from "./helpers.js";
 
 // 方案 A：一条会后决定记一条本体事件；受影响的 Task 在 Mission 执行计划里有组件时指到组件；改判记 correction。
 const TASK = "11111111-2222-4333-8444-555555555555";
@@ -76,5 +79,45 @@ describe("会后决定写本体（方案 A）", () => {
       expect(await sync.record(input({ targets: [] }))).toEqual({ status: "skipped" });
       expect(calls.filter((call) => call.method === "POST")).toEqual([]);
     });
+  });
+
+  it("受影响的对象对不上、但主持人是 E&O 负责人的会：退回 E&O 责任单元", async () => {
+    await withWorld(async (client, db) => {
+      await db.pool.query(`INSERT INTO capability_config (id, version, name, "group", six_month_outcome, code, owner_id)
+        VALUES ('eo-test', 1, 'E&O', 'test', '', '05', 'person-fixture-002')`);
+      const calls = stubWorld((call) => {
+        if (call.url.pathname === "/v1/world/objects") return call.url.searchParams.get("external_id") === "capability:05" ? examples[1][0] : { items: [], next_cursor: null };
+        if (call.url.pathname.startsWith("/v1/world/objects/")) return projection(examples[1][0].items[0]);
+        if (call.url.pathname === "/v1/actions/prepare") return { expected_versions: [] };
+        if (call.url.pathname === "/v1/actions") return { receipt_id: "r1", status: "committed", result: { event_id: "ev-eo" } };
+        throw new Error(`unexpected ${call.url.pathname}`);
+      });
+      const sync = createDecisionWorldSync({ q: (sql, params) => db.pool.query(sql, params), client, publicOrigin: "https://tianshu.test", now: () => new Date("2026-10-13T09:00:00+08:00") });
+      expect(await sync.record(input({ targets: [], decision: { ...input().decision, decidedBy: "host" } }))).toEqual({ status: "committed", eventId: "ev-eo" });
+      const body = calls.filter((call) => call.url.pathname === "/v1/actions").at(-1)!.body;
+      expect(body.params.subject_refs).toEqual(["<unit:eo>@2"]);
+      expect(body.params.content.text.split("\n")[0]).toBe("Host 已确认");
+    });
+  });
+
+  it("整场会的会议事件已停用：会议条目确认后不再写本体（只有生效的会后决定按条写）", async () => {
+    const calls = stubWorld(() => ({ items: [], next_cursor: null }));
+    const t = await createTestApp(worldEnv);
+    try {
+      const id = randomUUID();
+      const item = { id: "one", kind: "ceoJudgment", text: "确认结论", turnId: "turn-1", quote: "确认结论", speakerId: TEST_CEO.personId, ownerPersonId: null, issueId: null,
+        judgmentKind: "external_commitment", parentItemId: null, review: { status: "pending", effectRef: null } };
+      await t.pool.query(`INSERT INTO meetings (id,version,title,status,scheduled_at,ends_at,lead_dri_id,ceo_participant_id,participants,issue_ids,preflight,draft,outcome,origin_ref)
+        VALUES ($1,1,'E&O 周会','held','2026-09-29T15:19:05+08:00','2026-09-29T16:19:05+08:00',$2,$3,'[]','[]',$4::jsonb,$5::jsonb,$6::jsonb,'{"type":"manual"}')`,
+        [id, TEST_MEMBER.personId, TEST_CEO.personId, JSON.stringify(emptyPreflight()), JSON.stringify(emptyDraft()),
+          JSON.stringify({ ...pendingOutcome(), status: "ready", summary: "x", items: [item] })]);
+      const result = await executeConfirmItem(t.pool, pendingOntologyUpdater, testEnv.sessionSecret,
+        { objectType: "meeting", objectId: id, objectVersion: 1, actionType: "meeting.confirm_item", itemId: "one" }, "world-stopped-confirm");
+      expect("card" in result).toBe(true);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(calls.filter((call) => call.method === "POST")).toEqual([]);
+      expect((await t.pool.query("SELECT count(*)::int AS n FROM world_meeting_events")).rows[0].n).toBe(0);
+      expect((await t.app.inject({ method: "GET", url: "/healthz" })).json().dependencies.world).toBe(true);
+    } finally { await t.close(); }
   });
 });

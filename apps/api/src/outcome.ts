@@ -231,7 +231,7 @@ export function dropPlaceholderFields(input: unknown): { candidate: unknown; dro
  * owner 只能来自“我来”的 speaker 或引文中明确点名的人、CEO 判断只认 CEO turn 和五类权限、
  * 战略议题可引用任何人但标题/说明/五类权限缺一不可、todo 的 dueDate 是真实日期、
  * 不适用于该类型的可选字段、填了「不适用」/null/-1 这类占位的可选字段直接丢掉（只记日志）、
- * issueId 属 Meeting。任一项不合格的候选进入 warnings，不进入可审阅 items。
+ * 不属于这场会的 issueId 当没填（条目保留、不关联议题）。其余任一项不合格的候选进入 warnings，不进入可审阅 items。
  */
 export function assessOutcomeCandidate(input: {
   candidate: unknown;
@@ -333,9 +333,10 @@ export function assessOutcomeCandidate(input: {
         continue;
       }
     }
+    // 结构化提交要求每个字段都填，没挂议题的会里模型常把会议 id 填进 issueId：不属于这场会的 issueId 当没填，条目保留、不关联议题。
     if (candidate.issueId !== undefined && !issueIds.has(candidate.issueId)) {
-      reject(`issueId 不属于该 Meeting: ${candidate.issueId}`);
-      continue;
+      console.warn(`outcome candidate #${index + 1} (${candidate.kind}) issueId 不属于该 Meeting，当没填: ${candidate.issueId}`);
+      delete candidate.issueId;
     }
     const id = `item-${index + 1}`;
     if (candidate.kind === "decision") decisionItemIdByIndex.set(index, id);

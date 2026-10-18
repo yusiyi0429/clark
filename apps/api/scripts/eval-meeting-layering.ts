@@ -89,12 +89,9 @@ async function runMeeting(id: string) {
     meeting: { id, title: meta.title, scheduledAt: new Date(meta.start_time.replace(" ", "T") + ":00+08:00").toISOString(), ceoParticipantId: CEO.personId, participants: unique },
     transcript: { turns }, issues: [], context,
   }, AbortSignal.timeout(600_000));
-  // 已知问题（线上同样存在，待用户定修法）：结构化提交要求每个字段都填，没有关联议题的会里模型把会议 id 填进 issueId，
-  // 校验按「issueId 不属于该会」整条丢掉。评测为了看分层质量，先把这种 issueId 去掉（这场会没有议题）。
-  const candidate = generated.candidate as { items?: Record<string, unknown>[] };
-  const stripped = candidate.items?.filter((item) => item.issueId !== undefined).length ?? 0;
-  for (const item of candidate.items ?? []) delete item.issueId;
-  const assessed = assessOutcomeCandidate({ candidate, turns, participants: unique, ceoParticipantId: CEO.personId, issueIds: [] });
+  // 评测的会都没有关联议题：模型填进 issueId 的值由线上校验当没填（这里只计数，不再预先处理）。
+  const stripped = (generated.candidate as { items?: Record<string, unknown>[] }).items?.filter((item) => item.issueId !== undefined).length ?? 0;
+  const assessed = assessOutcomeCandidate({ candidate: generated.candidate, turns, participants: unique, ceoParticipantId: CEO.personId, issueIds: [] });
   if (!assessed.ok) throw new Error(`${id} 抽取候选不合格：${assessed.message}`);
   const t1 = clock();
   const items: TMeetingOutcomeItem[] = assessed.items;
@@ -191,8 +188,8 @@ if (WITH_IMPACT) {
 }
 
 const lines = ["# 会后分层评测（初跑）", "", `模型：${model.modelId}（思考 ${model.thinkingLevel}）；纪要目录只读；${new Date().toISOString()}`, "",
-  "去掉的 issueId：没有关联议题的会里模型填进 issueId 的会议 id（见脚本注释，线上待修）。", "",
-  "| 会 | 类型 | 发言段 | 抽取条目 | 去掉的 issueId | 校验丢弃 | 战略→CEO | 主持人条目 | 其中推荐「其实没定」 | 影响卡 | 抽取 s | 分层 s | 影响 s |", "|-|-|-|-|-|-|-|-|-|-|-|-|-|"];
+  "issueId 当没填：没有关联议题的会里，模型填进 issueId、被校验当没填的条数。", "",
+  "| 会 | 类型 | 发言段 | 抽取条目 | issueId 当没填 | 校验丢弃 | 战略→CEO | 主持人条目 | 其中推荐「其实没定」 | 影响卡 | 抽取 s | 分层 s | 影响 s |", "|-|-|-|-|-|-|-|-|-|-|-|-|-|"];
 for (const result of results) {
   lines.push(`| ${result.id} ${result.title} | ${result.type} | ${result.turns} | ${result.items.length} | ${result.strippedIssueIds} | ${result.warnings.length} | ${result.items.filter((item) => item.kind === "strategic").length} | ${result.hostRows.length} | ${result.hostRows.filter((row) => row.recommendation === "not_decided").length} | ${result.impacts.reduce((sum, item) => sum + item.cards.length, 0)} | ${Math.round(result.timings.extractMs / 1000)} | ${Math.round(result.timings.layerMs / 1000)} | ${Math.round(result.timings.impactMs / 1000)} |`);
 }

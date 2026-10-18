@@ -1,5 +1,4 @@
 import type { Query } from "./meetingStore.js";
-import { isEoMeeting, selectMeetingSubjects } from "./worldMeetingEvents.js";
 import { WorldClient, WorldError, worldErrorCode, worldRef, type WorldAction, type WorldHead } from "./worldClient.js";
 
 /**
@@ -27,6 +26,19 @@ const DECIDED_BY = { host: "Host 已确认", ceo: "CEO 已确认", agent: "Agent
 const shanghai = (at: Date) => new Date(at.getTime() + 8 * 3_600_000).toISOString().replace(/\.\d{3}Z$/, "+08:00");
 
 type ObjectBlocks = { business: { blocks?: { id: string; components?: { id?: string }[] }[] } };
+
+/** 主持人是 E&O（能力域 05）负责人的会。 */
+export async function isEoMeeting(q: Query, meeting: { lead_dri_id: string }): Promise<boolean> {
+  const result = await q("SELECT owner_id FROM capability_config WHERE code = '05'");
+  return result.rows.some((row) => row.owner_id && row.owner_id === meeting.lead_dri_id);
+}
+
+/** E&O 责任单元（外部引用 capability:05）。 */
+async function eoUnit(client: WorldClient): Promise<WorldHead> {
+  const unit = await client.byExternalRef("capability:05");
+  if (!unit || unit.object_type !== "ResponsibilityUnit") throw new WorldError(409, "INVALID_STATE", "capability:05 未查回 E&O 责任单元");
+  return unit;
+}
 
 export function createDecisionWorldSync({ q, client, publicOrigin, now = () => new Date() }: { q: Query; client: WorldClient; publicOrigin: string; now?: () => Date }) {
   const origin = publicOrigin.replace(/\/+$/, "");
@@ -60,7 +72,7 @@ export function createDecisionWorldSync({ q, client, publicOrigin, now = () => n
     }
     if (scene) return { refs: [...new Set(refs)], scene };
     if (!await isEoMeeting(q, { lead_dri_id: input.meeting.leadDriId })) return null;
-    const [unit] = await selectMeetingSubjects(client, []);
+    const unit = await eoUnit(client);
     return { refs: [worldRef(unit)], scene: unit };
   }
 

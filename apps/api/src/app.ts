@@ -27,11 +27,10 @@ import { resumeResearch, type ResearchService } from "./research.js";
 import { resumePreflights, type PreflightAgent } from "./meetingPreflight.js";
 import { createPreflightAgent, createPreflightThoughtTranslator, preflightThinkingLevel } from "./preflightAgent.js";
 import { agentModel, type AgentModelEnv } from "./agentModels.js";
-import { onOutcomeReviewed, pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } from "./outcome.js";
+import { pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } from "./outcome.js";
 import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { createWorldReader, mergeWorldGoalsIntoContext, ontologyToolResult, type OntologyQuery } from "./worldReader.js";
-import { createWorldMeetingService } from "./worldMeetingEvents.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
 import type { DriExporter } from "./meetingStore.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
@@ -453,13 +452,8 @@ export async function buildApp({
     await runtime.close?.();
   });
   const q = pool.query.bind(pool);
-  // 写回只在实例配置允许时启用（MVP 原配置照旧；演示范围第 1 期只读，不写本体）。
-  if (worldConfigured(env) && world.status().writes) {
-    const worldMeetings = createWorldMeetingService(pool, new WorldClient(q, env), env.publicOrigin, now);
-    const unsubscribe = onOutcomeReviewed(pool, worldMeetings.schedule);
-    app.addHook("onClose", async () => { unsubscribe(); await worldMeetings.close(); });
-  }
   // 会后链路（妙记、分层确认、影响卡）：路由用它的服务；后台任务由 server.ts 的 jobs worker 按 app.meetingFollowThrough.jobs() 注册。
+  // 写本体只按方案 A 一条决定记一条事件（实例配置允许写时）；原来「整场会记一条事件」已停用。
   const followThrough = createMeetingFollowThrough({ pool, env, companyMemory, world, outcomeAgent: outcome, now, ...meetingFollowThroughAgents });
   app.decorate("meetingFollowThrough", followThrough);
   app.addHook("onClose", async () => { followThrough.close(); });
