@@ -14,11 +14,11 @@ import { weekRange } from "./weeklyProgress.js";
  * 别人只在提交后看得到正文。修改、提交、重新生成只有本人能做；每次改动记一条修改记录。
  */
 
-export const WEEKLY_REVIEW_FIELDS: TWeeklyReviewField[] = ["overall", "progress", "issues", "implications", "actions"];
+export const WEEKLY_REVIEW_FIELDS: TWeeklyReviewField[] = ["overall", "progress", "issues", "implications", "actions", "nextWeek"];
 /** 提交前必须写的段。 */
-export const WEEKLY_REVIEW_REQUIRED: TWeeklyReviewField[] = ["overall", "progress"];
+export const WEEKLY_REVIEW_REQUIRED: TWeeklyReviewField[] = ["overall", "progress", "actions"];
 export const WEEKLY_REVIEW_FIELD_LABELS: Record<TWeeklyReviewField, string> = {
-  overall: "本周总体判断", progress: "关键进展与 Evidence", issues: "最重要的问题及 Why", implications: "判断变化 / Implication", actions: "当前处理",
+  overall: "本周总体判断", progress: "关键进展与 Evidence", issues: "最重要的问题及 Why", implications: "判断变化 / Implication", actions: "当前处理", nextWeek: "下周重点",
 };
 type StepId = TWeeklyReviewGenerationStep["id"];
 const STEP_LABELS: Record<StepId, string> = {
@@ -57,7 +57,7 @@ export const weekPeriod = (weekStart: string): string => addDays(weekStart, 4).s
 /** 这一周在上海时间的起止 [start, end)。 */
 export const weekWindow = (weekStart: string) => ({ start: new Date(`${weekStart}T00:00:00+08:00`), end: new Date(`${addDays(weekStart, 7)}T00:00:00+08:00`) });
 
-/** 五段正文拼成一段文字（月度复盘读周复盘、对话里引用周复盘时用）。 */
+/** 六段正文拼成一段文字（月度复盘读周复盘、对话里引用周复盘时用）。 */
 export function weeklyReviewText(body: TWeeklyReviewBody): string {
   return WEEKLY_REVIEW_FIELDS.filter((field) => body[field]?.text.trim())
     .map((field) => `${WEEKLY_REVIEW_FIELD_LABELS[field]}\n${body[field].text.trim()}`).join("\n\n");

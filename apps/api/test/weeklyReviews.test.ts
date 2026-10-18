@@ -5,7 +5,7 @@ import { WeeklyReviewBoard, WeeklyReviewPayload, type TWeeklyReviewBody } from "
 import { signActionId } from "../src/actionToken.js";
 import { weeklyGenerationDue } from "../src/weeklyReviewService.js";
 import type { WeeklyReviewDraftInput } from "../src/weeklyReviewGeneration.js";
-import { weeklyRecords } from "../src/weeklyReviewGeneration.js";
+import { templateProblem, weeklyRecords } from "../src/weeklyReviewGeneration.js";
 import { call, executionFixture, type Fixture } from "./executionFixture.js";
 import { testEnv } from "./helpers.js";
 
@@ -14,14 +14,15 @@ const WEEK = "2026-10-12";
 const FRIDAY_3PM = new Date("2026-10-16T07:00:00Z");
 const link = (record: { label: string; cite: string }) => `[${record.label}](${record.cite})`;
 
-/** 合格草稿：每段挂第一条记录的出处；缺了哪类就在 overall 写一行「缺少记录」。 */
+/** 合格草稿（按公司模板）：每段挂第一条记录的出处，没有记录的句子写「缺少记录」；缺了哪类就在 overall 写一行「缺少记录」。 */
 function cited(input: WeeklyReviewDraftInput, prefix = "按计划推进"): TWeeklyReviewBody {
   const first = weeklyRecords(input)[0];
-  const line = (text: string) => first ? `${text}${link(first)}。` : "缺少记录：这一周没有任何记录。";
+  const line = (text: string) => first ? `${text}${link(first)}。` : `${text}，缺少记录。`;
   const missing = input.missingRecords.length && first ? `\n缺少记录：这一周没有${input.missingRecords.join("、")}。` : "";
   return {
     overall: { text: `${line(`状态：绿｜${prefix}`)}${missing}`, sources: [] }, progress: { text: line("采集器上线"), sources: [] },
-    issues: { text: line("验收口径没定"), sources: [] }, implications: { text: "无", sources: [] }, actions: { text: line("下周定口径"), sources: [] },
+    issues: { text: line("验收口径没定"), sources: [] }, implications: { text: line("「装机是瓶颈」仍待验证"), sources: [] },
+    actions: { text: line("继续推进｜口径定了就能验收"), sources: [] }, nextWeek: { text: line("定验收口径"), sources: [] },
   };
 }
 
@@ -61,7 +62,7 @@ async function seedWeek(f: Fixture) {
   await f.t.sql(`INSERT INTO weekly_reviews(id,person_id,week_start,status,origin,body,submitted_at,created_at,updated_at)
     VALUES($1,$2,'2026-10-05','submitted','import',$3::jsonb,now(),now(),now())`, [previous, MEMBER, JSON.stringify({
     overall: { text: "状态：黄｜采集器还没装", sources: [] }, progress: { text: "写完安装包", sources: [] }, issues: { text: "无", sources: [] },
-    implications: { text: "无", sources: [] }, actions: { text: "下周装机", sources: [] } })]);
+    implications: { text: "无", sources: [] }, actions: { text: "继续推进", sources: [] }, nextWeek: { text: "下周装机", sources: [] } })]);
   return { task, previous };
 }
 
@@ -102,8 +103,8 @@ describe("周复盘：周五 15:00 生成", () => {
         ["读 Mission 卡", "done", "2 张"], ["读 Mission 与 Task 进展", "done", "1 条进展，1 件执行事项"], ["读会议结论", "done", "1 场"],
         ["读采集记录", "done", "1 条"], ["读上周复盘", "done", "10/05"], ["起草", "done", undefined]]);
       expect(view.body.overall.sources).toEqual(["mission:execution-one"]);
-      expect(view.revisions).toEqual([{ at: FRIDAY_3PM.toISOString(), kind: "generate", byName: "Co-Agent", fields: ["overall", "progress", "issues", "implications", "actions"] }]);
-      expect((await t.read(await t.idOf(THIRD), t.f.third)).json().review.body.overall.text).toBe("缺少记录：这一周没有任何记录。");
+      expect(view.revisions).toEqual([{ at: FRIDAY_3PM.toISOString(), kind: "generate", byName: "Co-Agent", fields: ["overall", "progress", "issues", "implications", "actions", "nextWeek"] }]);
+      expect((await t.read(await t.idOf(THIRD), t.f.third)).json().review.body.overall.text).toBe("状态：绿｜按计划推进，缺少记录。");
 
       // 编造出处、有一句没出处、该写「缺少记录」没写：都不收，三次后失败可见。
       t.generate((input) => ({ ...cited(input), issues: { text: `有依据[编造](cite:progress:${randomUUID()})。`, sources: [] } }));
@@ -111,6 +112,26 @@ describe("周复盘：周五 15:00 生成", () => {
       await t.f.t.weeklyReviews!.idle();
       expect((await t.read(id)).json().review).toMatchObject({ status: "draft_failed", draftError: { code: "invalid_weekly_review_candidate", message: expect.stringContaining("引用了输入里没有的出处") } });
     } finally { await t.f.t.close(); }
+  });
+});
+
+describe("周复盘：公司现行模板（《DRI 周复盘使用说明》）", () => {
+  const section = (text: string) => ({ text, sources: [] });
+  const good: TWeeklyReviewBody = {
+    overall: section("状态：黄｜功能可用，稳定独立运行仍未被证明[R](cite:r)。"), progress: section("- 4 次真实运行 1 次独立完成[R](cite:r)。"),
+    issues: section("瓶颈在 Context 准备[R](cite:r)。"), implications: section("「功能 Ready 即可独立运行」被削弱[R](cite:r)。"),
+    actions: section("责任范围内调整｜先验证 Context × Workflow[R](cite:r)。"), nextWeek: section("跑通一条完整运行链[R](cite:r)。"),
+  };
+  it("状态行、进展 1–3 条、问题 1–2 条、判断变化的说法、当前处理三选一、篇幅", () => {
+    expect(templateProblem(good)).toBeNull();
+    expect(templateProblem({ ...good, overall: section("功能可用[R](cite:r)。") })).toContain("状态：绿 / 黄 / 红");
+    expect(templateProblem({ ...good, progress: section("a\nb\nc\nd") })).toBe("关键进展与 Evidence 最多 3 条");
+    expect(templateProblem({ ...good, progress: section("a\nb\nc\n缺少记录：没有验收证据") })).toBeNull();
+    expect(templateProblem({ ...good, issues: section("a\nb\nc") })).toBe("最重要的问题及 Why 最多 2 条");
+    expect(templateProblem({ ...good, implications: section("判断有变化") })).toContain("被验证 / 被削弱");
+    expect(templateProblem({ ...good, actions: section("先验证 Context，继续推进") })).toContain("当前处理只选一个");
+    expect(templateProblem({ ...good, actions: section("继续推进，必要时需要升级处理") })).toContain("当前处理只选一个");
+    expect(templateProblem({ ...good, nextWeek: section("长".repeat(2200)) })).toMatch(/^篇幅 \d+ 字，超过 2200 字$/);
   });
 });
 
@@ -137,7 +158,7 @@ describe("周复盘：本人逐段修改、重新生成保留改过的段、提�
       expect(second.body.issues.text).toBe("我自己写的问题");
       expect(second.body.overall.text).toMatch(/^状态：绿｜第二版\[/);
       expect(second.generationSteps.at(-1)).toEqual({ id: "draft", label: "起草", status: "done", result: "保留你改过的 1 段" });
-      expect(second.revisions[0]).toMatchObject({ kind: "generate", fields: ["overall", "progress", "implications", "actions"] });
+      expect(second.revisions[0]).toMatchObject({ kind: "generate", fields: ["overall", "progress", "implications", "actions", "nextWeek"] });
 
       await t.act(id, "update", { fields: [{ field: "progress", text: "" }] });
       const incomplete = await t.act(id, "submit");

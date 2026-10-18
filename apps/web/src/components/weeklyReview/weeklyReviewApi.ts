@@ -2,17 +2,18 @@ import type { TExecuteWeeklyReviewActionResponse, TWeeklyReviewField, TWeeklyRev
 import { browserApi } from "@/lib/api/client";
 import { ReviewActionError, type ReviewAction } from "@/components/monthlyReview/reviewApi";
 
-/** 五段沿用公司周复盘模板。 */
-export const WEEKLY_FIELDS: TWeeklyReviewField[] = ["overall", "progress", "issues", "implications", "actions"];
+/** 六段沿用公司现行周复盘模板（《DRI 周复盘使用说明》）。 */
+export const WEEKLY_FIELDS: TWeeklyReviewField[] = ["overall", "progress", "issues", "implications", "actions", "nextWeek"];
 export const WEEKLY_FIELD_LABELS: Record<TWeeklyReviewField, string> = {
-  overall: "本周总体判断", progress: "关键进展与 Evidence", issues: "最重要的问题及 Why", implications: "判断变化 / Implication", actions: "当前处理",
+  overall: "本周总体判断", progress: "关键进展与 Evidence", issues: "最重要的问题及 Why", implications: "判断变化 / Implication", actions: "当前处理", nextWeek: "下周重点",
 };
 export const WEEKLY_FIELD_HINTS: Record<TWeeklyReviewField, string> = {
   overall: "状态：绿 / 黄 / 红｜一句话",
-  progress: "这周真正推进的结果，一条一行",
-  issues: "最卡的一两个问题和原因",
-  implications: "和上周比，判断变了什么",
-  actions: "已经在做或下一步要做的处理",
+  progress: "1–3 条真实结果和 Evidence",
+  issues: "1–2 条问题和真正原因",
+  implications: "被验证 / 被削弱 / 被否定 / 仍待验证 / 无重大判断变化",
+  actions: "继续推进 / 责任范围内调整 / 需要升级处理｜一句话原因",
+  nextWeek: "下周最该推进的 1–3 件事",
 };
 
 /** 周的写法：10/12–10/18。 */

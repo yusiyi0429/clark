@@ -7072,6 +7072,10 @@ export interface components {
                         text: string;
                         sources: string[];
                     };
+                    nextWeek: {
+                        text: string;
+                        sources: string[];
+                    };
                 } | null;
                 draftError: {
                     code: string;
@@ -7085,13 +7089,13 @@ export interface components {
                     status: "pending" | "running" | "done" | "failed";
                     result?: string;
                 }[];
-                editedFields: ("overall" | "progress" | "issues" | "implications" | "actions")[];
+                editedFields: ("overall" | "progress" | "issues" | "implications" | "actions" | "nextWeek")[];
                 revisions: {
                     /** @description ISO 8601 */
                     at: string;
                     kind: "generate" | "edit" | "submit" | "import";
                     byName: string;
-                    fields: ("overall" | "progress" | "issues" | "implications" | "actions")[];
+                    fields: ("overall" | "progress" | "issues" | "implications" | "actions" | "nextWeek")[];
                 }[];
                 submittedAt: string | null;
                 viewer: {
@@ -7146,6 +7150,10 @@ export interface components {
                         text: string;
                         sources: string[];
                     };
+                    nextWeek: {
+                        text: string;
+                        sources: string[];
+                    };
                 } | null;
                 draftError: {
                     code: string;
@@ -7159,13 +7167,13 @@ export interface components {
                     status: "pending" | "running" | "done" | "failed";
                     result?: string;
                 }[];
-                editedFields: ("overall" | "progress" | "issues" | "implications" | "actions")[];
+                editedFields: ("overall" | "progress" | "issues" | "implications" | "actions" | "nextWeek")[];
                 revisions: {
                     /** @description ISO 8601 */
                     at: string;
                     kind: "generate" | "edit" | "submit" | "import";
                     byName: string;
-                    fields: ("overall" | "progress" | "issues" | "implications" | "actions")[];
+                    fields: ("overall" | "progress" | "issues" | "implications" | "actions" | "nextWeek")[];
                 }[];
                 submittedAt: string | null;
                 viewer: {
@@ -7183,7 +7191,7 @@ export interface components {
         };
         WeeklyReviewUpdateInput: {
             fields: {
-                field: "overall" | "progress" | "issues" | "implications" | "actions";
+                field: "overall" | "progress" | "issues" | "implications" | "actions" | "nextWeek";
                 text: string;
                 sources?: string[];
             }[];

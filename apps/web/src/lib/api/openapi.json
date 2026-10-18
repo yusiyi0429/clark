@@ -39259,7 +39259,8 @@
                       "progress",
                       "issues",
                       "implications",
-                      "actions"
+                      "actions",
+                      "nextWeek"
                     ],
                     "properties": {
                       "overall": {
@@ -39355,6 +39356,29 @@
                         }
                       },
                       "actions": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "nextWeek": {
                         "additionalProperties": false,
                         "type": "object",
                         "required": [
@@ -39503,6 +39527,10 @@
                     {
                       "const": "actions",
                       "type": "string"
+                    },
+                    {
+                      "const": "nextWeek",
+                      "type": "string"
                     }
                   ]
                 }
@@ -39568,6 +39596,10 @@
                           },
                           {
                             "const": "actions",
+                            "type": "string"
+                          },
+                          {
+                            "const": "nextWeek",
                             "type": "string"
                           }
                         ]
@@ -39763,7 +39795,8 @@
                       "progress",
                       "issues",
                       "implications",
-                      "actions"
+                      "actions",
+                      "nextWeek"
                     ],
                     "properties": {
                       "overall": {
@@ -39859,6 +39892,29 @@
                         }
                       },
                       "actions": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "text",
+                          "sources"
+                        ],
+                        "properties": {
+                          "text": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sources": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "nextWeek": {
                         "additionalProperties": false,
                         "type": "object",
                         "required": [
@@ -40007,6 +40063,10 @@
                     {
                       "const": "actions",
                       "type": "string"
+                    },
+                    {
+                      "const": "nextWeek",
+                      "type": "string"
                     }
                   ]
                 }
@@ -40072,6 +40132,10 @@
                           },
                           {
                             "const": "actions",
+                            "type": "string"
+                          },
+                          {
+                            "const": "nextWeek",
                             "type": "string"
                           }
                         ]
@@ -40147,7 +40211,7 @@
         "properties": {
           "fields": {
             "minItems": 1,
-            "maxItems": 5,
+            "maxItems": 6,
             "type": "array",
             "items": {
               "additionalProperties": false,
@@ -40177,6 +40241,10 @@
                     },
                     {
                       "const": "actions",
+                      "type": "string"
+                    },
+                    {
+                      "const": "nextWeek",
                       "type": "string"
                     }
                   ]

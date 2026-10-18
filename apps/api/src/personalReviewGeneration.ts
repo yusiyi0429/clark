@@ -172,13 +172,13 @@ const exempt = (line: string) => line.includes(MISSING_RECORDS) || /^[-*\d.、\s
 /** 正文里的出处地址（cite:… 或网址），按出现顺序。 */
 export const citationsIn = linksIn;
 
-/** 段落化的复盘：个人复盘四栏、周复盘五段，每段 {text, sources}。 */
+/** 段落化的复盘：个人复盘四栏、周复盘六段，每段 {text, sources}。 */
 type Sections<F extends string> = Record<F, { text: string; sources: string[] }>;
 const MONTHLY_FIELDS: readonly TMonthlyReviewField[] = PERSONAL_REVIEW_FIELDS;
 
 /**
  * 出处核对：每一行都要有出处（或是「缺少记录」「无」），出处只能是输入里的记录；缺了哪类记录就必须写「缺少记录」。返回问题描述，没有问题返回 null。
- * fields 缺省是个人复盘的四栏；周复盘传自己的五段。
+ * fields 缺省是个人复盘的四栏；周复盘传自己的六段。
  */
 export function citationProblem<F extends string = TMonthlyReviewField>(review: Sections<F>, allowed: Set<string>, missing: readonly string[],
   fields: readonly F[] = MONTHLY_FIELDS as readonly string[] as readonly F[]): string | null {

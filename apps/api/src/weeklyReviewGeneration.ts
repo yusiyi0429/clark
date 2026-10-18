@@ -42,6 +42,28 @@ const day = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/S
 const clip = (text: string, max: number) => text.length > max ? `${text.slice(0, max - 1)}…` : text;
 const shortDay = (iso: string) => iso.slice(5).replace("-", "/");
 
+export const CURRENT_HANDLING = ["继续推进", "责任范围内调整", "需要升级处理"] as const;
+export const JUDGMENT_CHANGES = ["被验证", "被削弱", "被否定", "仍待验证", "无重大判断变化"] as const;
+/** 正文篇幅上限（去掉出处标记后的字数）：模板要求 1,500 字左右，超过这么多就退回重写。 */
+export const WEEKLY_REVIEW_MAX_CHARS = 2200;
+const plainText = (text: string) => text.replace(/\[([^\]\n]+)\]\(([^()\s]+)\)/g, "");
+const contentLines = (text: string) => text.split("\n").map((line) => line.trim()).filter((line) => line && !line.includes(MISSING_RECORDS) && !/^[-*\d.、\s]*无[。.]?$/.test(line));
+
+/** 公司现行模板（《DRI 周复盘使用说明》）的格式核对；返回问题描述，没有问题返回 null。 */
+export function templateProblem(body: TWeeklyReviewBody): string | null {
+  const status = plainText(body.overall.text).split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+  if (!/^状态[:：]\s*[绿黄红]\s*[｜|]/.test(status)) return "本周总体判断第一行要写「状态：绿 / 黄 / 红｜一句话判断」";
+  if (contentLines(body.progress.text).length > 3) return "关键进展与 Evidence 最多 3 条";
+  if (contentLines(body.issues.text).length > 2) return "最重要的问题及 Why 最多 2 条";
+  if (!JUDGMENT_CHANGES.some((word) => body.implications.text.includes(word))) return `判断变化要写明${JUDGMENT_CHANGES.join(" / ")}`;
+  const handling = plainText(body.actions.text).trim().replace(/^[-*\d.、\s]+/, "");
+  if (!CURRENT_HANDLING.some((word) => handling.startsWith(word)) || CURRENT_HANDLING.filter((word) => handling.includes(word)).length > 1) {
+    return `当前处理只选一个：${CURRENT_HANDLING.join(" / ")}，写在开头`;
+  }
+  const length = Object.values(body).reduce((sum, section) => sum + plainText(section.text).length, 0);
+  return length > WEEKLY_REVIEW_MAX_CHARS ? `篇幅 ${length} 字，超过 ${WEEKLY_REVIEW_MAX_CHARS} 字` : null;
+}
+
 export function weeklyRecords(input: WeeklyReviewDraftInput): Cited[] {
   return [...input.missions, ...input.tasks, ...input.progress, ...input.meetings, ...input.collectorRecords,
     ...(input.previousReview ? [input.previousReview] : [])];

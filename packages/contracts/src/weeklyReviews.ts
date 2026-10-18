@@ -12,23 +12,28 @@ const DateTime = Type.String({ description: "ISO 8601" });
 const NullableDateTime = Type.Union([DateTime, Type.Null()]);
 const Day = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
 
-/** 五段沿用公司周复盘模板：本周总体判断、关键进展与 Evidence、最重要的问题及 Why、判断变化 / Implication、当前处理。 */
+/**
+ * 六段沿用公司现行周复盘模板（白田田《DRI 周复盘使用说明》）：本周总体判断（状态：绿 / 黄 / 红｜一句话）、关键进展与 Evidence（1–3 条）、
+ * 最重要的问题及 Why（1–2 条）、判断变化 / Implication（被验证 / 被削弱 / 被否定 / 仍待验证 / 无重大判断变化）、
+ * 当前处理（继续推进 / 责任范围内调整 / 需要升级处理，三选一加一句原因）、下周重点。日期段是这份周复盘的周一到周日。
+ */
 export const WeeklyReviewField = Type.Union([
   Type.Literal("overall"),
   Type.Literal("progress"),
   Type.Literal("issues"),
   Type.Literal("implications"),
   Type.Literal("actions"),
+  Type.Literal("nextWeek"),
 ]);
 const Section = Type.Object(
   { text: Type.String({ maxLength: 4000 }), sources: Type.Array(Type.String({ minLength: 1, maxLength: 500 }), { maxItems: 10 }) },
   { additionalProperties: false },
 );
 export const WeeklyReviewBody = Type.Object(
-  { overall: Section, progress: Section, issues: Section, implications: Section, actions: Section },
+  { overall: Section, progress: Section, issues: Section, implications: Section, actions: Section, nextWeek: Section },
   { additionalProperties: false },
 );
-/** Co-Agent 提交的候选：五段 text + sources（sources 由服务端按正文里的出处重算）。 */
+/** Co-Agent 提交的候选：六段 text + sources（sources 由服务端按正文里的出处重算）。 */
 export const WeeklyReviewDraftCandidate = WeeklyReviewBody;
 
 export const WeeklyReviewStatus = Type.Union([
@@ -139,7 +144,7 @@ export const WeeklyReviewUpdateInput = Type.Object(
     fields: Type.Array(
       Type.Object({ field: WeeklyReviewField, text: Type.String({ maxLength: 4000 }),
         sources: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 500 }), { maxItems: 10 })) }, { additionalProperties: false }),
-      { minItems: 1, maxItems: 5 },
+      { minItems: 1, maxItems: 6 },
     ),
   },
   { additionalProperties: false },

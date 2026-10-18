@@ -4,7 +4,7 @@ import { WeeklyReviewDraftCandidate, type TWeeklyReviewBody, type TWeeklyReviewF
 import type { Query } from "./meetingStore.js";
 import { citationProblem, mergeGeneratedReview, withSources } from "./personalReviewGeneration.js";
 import type { WeeklyReviewAgent } from "./weeklyReviewAgent.js";
-import { allowedWeeklyCitations, buildWeeklyReviewDraftInput } from "./weeklyReviewGeneration.js";
+import { allowedWeeklyCitations, buildWeeklyReviewDraftInput, templateProblem } from "./weeklyReviewGeneration.js";
 import {
   appendRevision, ensureWeeklyReviewDrafts, getWeeklyReviewRow, pendingWeeklySteps, recoverStaleWeeklyDrafts, requestWeeklyReviewDraft,
   WEEKLY_REVIEW_FIELDS, weekStartOf, type WeeklyReviewRow,
@@ -17,7 +17,7 @@ import {
  * 与其他后台任务一样是进程内 setInterval（createWeeklyReviewScheduler，每分钟一次）。
  *
  * 生成：读 Mission 卡 → 读 Mission 与 Task 进展 → 读会议结论 → 读采集记录 → 读上周复盘 → 起草，每步写进 generation_steps（页面轮询可见），
- * 同时回调 onStep。起草结果逐行核对出处（与个人复盘同一套 citationProblem），不合格重试，三次都不合格记失败；写回时保留本人改过的段落。
+ * 同时回调 onStep。起草结果逐行核对出处（与个人复盘同一套 citationProblem）和模板格式（templateProblem），不合格重试，三次都不合格记失败；写回时保留本人改过的段落。
  *
  * 对话入口（由对话工作流接，不在这里改 piConversationRuntime / routes/conversations）：
  *   const { weeklyReviewId, done } = await ctx.weeklyReviewService.generateFor(personId, { onStep });
@@ -86,7 +86,7 @@ export function createWeeklyReviewService({ pool, agent, people, now = () => new
         try {
           const generated = (await agent.generate(input)).candidate;
           if (!Value.Check(WeeklyReviewDraftCandidate, generated)) throw Object.assign(new Error("周复盘起草结果不符合严格 schema"), { code: INVALID });
-          const problem = citationProblem(generated, allowed, input.missingRecords, WEEKLY_REVIEW_FIELDS);
+          const problem = citationProblem(generated, allowed, input.missingRecords, WEEKLY_REVIEW_FIELDS) ?? templateProblem(generated);
           if (problem) throw Object.assign(new Error(problem), { code: INVALID });
           candidate = generated;
         } catch (error) {
