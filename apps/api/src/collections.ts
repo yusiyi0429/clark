@@ -128,7 +128,7 @@ function entryView(fields: TCollectionField[], row: EntryRow, names: Map<string,
   return {
     personId: row.person_id, displayName: nameOf(names, row.person_id), values: row.values, filled, required,
     status: row.confirmed_at ? "confirmed" : filled === required ? "filled" : "empty", draftFrom: row.draft_from,
-    confirmedAt: row.confirmed_at?.toISOString() ?? null, updatedAt: row.last_edit_at?.toISOString() ?? null,
+    confirmedAt: row.confirmed_at?.toISOString() ?? null,
   };
 }
 
@@ -149,13 +149,13 @@ async function project(q: Query, row: CollectionRow, round: RoundRow | null, dep
     actions.push(sign(deps.secret, { ...scope, actionType: "collection.save" }, "保存"), sign(deps.secret, { ...scope, actionType: "collection.confirm" }, "确认完成"));
   }
   return {
-    id: row.id, status: row.status, version: row.version, scenario: row.scenario, title: row.title, prompt: row.prompt, fields: row.fields,
+    id: row.id, status: row.status, version: row.version, scenario: row.scenario, title: row.title, fields: row.fields,
     initiator: { personId: row.initiator_id, displayName: nameOf(deps.names, row.initiator_id) }, weekly: row.weekly,
     deadlineAt: (round?.deadline_at ?? row.deadline_at).toISOString(),
     table: row.bitable?.url ? { url: row.bitable.url } : null,
     candidates: draft ? row.recipient_ids.map((personId) => ({ personId, displayName: nameOf(deps.names, personId) })) : [],
     directory: draft && isInitiator ? deps.people.filter((person) => person.personId !== deps.viewerId) : [],
-    round: round ? { requestId: round.request_id, weekStart: round.week_start, deadlineAt: round.deadline_at.toISOString(), remindedAt: round.reminded_at?.toISOString() ?? null } : null,
+    round: round ? { requestId: round.request_id, weekStart: round.week_start, deadlineAt: round.deadline_at.toISOString() } : null,
     entries: shown.map((entry) => entryView(row.fields, entry, deps.names)),
     counts: { total: views.length, filled: views.filter((entry) => entry.status !== "empty").length, confirmed: views.filter((entry) => entry.status === "confirmed").length },
     viewer: { isInitiator, isRecipient: Boolean(mine) },

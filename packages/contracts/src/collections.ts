@@ -37,7 +37,6 @@ export const CollectionEntryView = Type.Object(
     /** 草稿的来源：weekly_review = 本人这周已提交的周复盘。 */
     draftFrom: Type.Union([Type.Literal("weekly_review"), Type.Null()]),
     confirmedAt: Type.Union([Type.String(), Type.Null()]),
-    updatedAt: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -48,7 +47,6 @@ export const CollectionRoundView = Type.Object(
     /** 这一轮所在周的周一（YYYY-MM-DD，上海时间）。 */
     weekStart: Type.String({ minLength: 10, maxLength: 10 }),
     deadlineAt: Type.String({ minLength: 1 }),
-    remindedAt: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -61,7 +59,6 @@ export const CollectionView = Type.Object(
     version: Type.Integer({ minimum: 1 }),
     scenario: CollectionScenario,
     title: Type.String({ minLength: 1 }),
-    prompt: Type.String({ minLength: 1 }),
     fields: Type.Array(CollectionField, { minItems: 1, maxItems: 10 }),
     initiator: RequestPerson,
     weekly: Type.Boolean(),

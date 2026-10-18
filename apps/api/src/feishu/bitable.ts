@@ -4,7 +4,8 @@ import { FeishuApiError } from "./client.js";
 /**
  * 飞书多维表格的适配层（③ 信息收集：大家共填一张表）。天枢这边存一份镜像（collection_entries），
  * 后台同步时经这里建表、写行、读回飞书里的改动。
- * - live：以发起人本人的身份（user access token）调开放接口；要在飞书后台开通的权限见 BITABLE_SCOPES。
+ * - live：以发起人本人的身份（user access token）调开放接口；要在飞书后台开通的用户身份权限（scope 名以后台为准，上线前核对）：
+ *   base:app:create、base:table:create、base:record:create、base:record:update、base:record:retrieve、docs:permission.member:create。
  * - mock：进程内的假表，不调飞书（权限没开通前、测试里用）；没有可打开的链接。
  */
 export type BitableTable = { appToken: string; tableId: string; url: string | null };
@@ -20,9 +21,6 @@ export type BitableAdapter = {
   upsertRecord(input: { accessToken: string; table: BitableTable; recordId: string | null; fields: Record<string, BitableCell> }): Promise<string>;
   listRecords(input: { accessToken: string; table: BitableTable }): Promise<BitableRecord[]>;
 };
-
-/** live 模式要在飞书后台开通的用户身份权限（scope 名以后台为准，上线前核对）。 */
-export const BITABLE_SCOPES = ["base:app:create", "base:table:create", "base:record:create", "base:record:update", "base:record:retrieve", "docs:permission.member:create"];
 
 const OPEN_API = "https://open.feishu.cn/open-apis";
 const TIMEOUT_MS = 10_000;

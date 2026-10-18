@@ -57686,8 +57686,7 @@
           "required",
           "status",
           "draftFrom",
-          "confirmedAt",
-          "updatedAt"
+          "confirmedAt"
         ],
         "properties": {
           "personId": {
@@ -57750,16 +57749,6 @@
                 "type": "null"
               }
             ]
-          },
-          "updatedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         }
       },
@@ -57769,8 +57758,7 @@
         "required": [
           "requestId",
           "weekStart",
-          "deadlineAt",
-          "remindedAt"
+          "deadlineAt"
         ],
         "properties": {
           "requestId": {
@@ -57785,16 +57773,6 @@
           "deadlineAt": {
             "minLength": 1,
             "type": "string"
-          },
-          "remindedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         }
       },
@@ -57807,7 +57785,6 @@
           "version",
           "scenario",
           "title",
-          "prompt",
           "fields",
           "initiator",
           "weekly",
@@ -57859,10 +57836,6 @@
             ]
           },
           "title": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "prompt": {
             "minLength": 1,
             "type": "string"
           },
@@ -58007,8 +57980,7 @@
                 "required": [
                   "requestId",
                   "weekStart",
-                  "deadlineAt",
-                  "remindedAt"
+                  "deadlineAt"
                 ],
                 "properties": {
                   "requestId": {
@@ -58023,16 +57995,6 @@
                   "deadlineAt": {
                     "minLength": 1,
                     "type": "string"
-                  },
-                  "remindedAt": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
                   }
                 }
               },
@@ -58054,8 +58016,7 @@
                 "required",
                 "status",
                 "draftFrom",
-                "confirmedAt",
-                "updatedAt"
+                "confirmedAt"
               ],
               "properties": {
                 "personId": {
@@ -58110,16 +58071,6 @@
                   ]
                 },
                 "confirmedAt": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "updatedAt": {
                   "anyOf": [
                     {
                       "type": "string"
@@ -58216,7 +58167,6 @@
               "version",
               "scenario",
               "title",
-              "prompt",
               "fields",
               "initiator",
               "weekly",
@@ -58268,10 +58218,6 @@
                 ]
               },
               "title": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "prompt": {
                 "minLength": 1,
                 "type": "string"
               },
@@ -58416,8 +58362,7 @@
                     "required": [
                       "requestId",
                       "weekStart",
-                      "deadlineAt",
-                      "remindedAt"
+                      "deadlineAt"
                     ],
                     "properties": {
                       "requestId": {
@@ -58432,16 +58377,6 @@
                       "deadlineAt": {
                         "minLength": 1,
                         "type": "string"
-                      },
-                      "remindedAt": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
                       }
                     }
                   },
@@ -58463,8 +58398,7 @@
                     "required",
                     "status",
                     "draftFrom",
-                    "confirmedAt",
-                    "updatedAt"
+                    "confirmedAt"
                   ],
                   "properties": {
                     "personId": {
@@ -58519,16 +58453,6 @@
                       ]
                     },
                     "confirmedAt": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "updatedAt": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -58646,7 +58570,6 @@
               "version",
               "scenario",
               "title",
-              "prompt",
               "fields",
               "initiator",
               "weekly",
@@ -58698,10 +58621,6 @@
                 ]
               },
               "title": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "prompt": {
                 "minLength": 1,
                 "type": "string"
               },
@@ -58846,8 +58765,7 @@
                     "required": [
                       "requestId",
                       "weekStart",
-                      "deadlineAt",
-                      "remindedAt"
+                      "deadlineAt"
                     ],
                     "properties": {
                       "requestId": {
@@ -58862,16 +58780,6 @@
                       "deadlineAt": {
                         "minLength": 1,
                         "type": "string"
-                      },
-                      "remindedAt": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
                       }
                     }
                   },
@@ -58893,8 +58801,7 @@
                     "required",
                     "status",
                     "draftFrom",
-                    "confirmedAt",
-                    "updatedAt"
+                    "confirmedAt"
                   ],
                   "properties": {
                     "personId": {
@@ -58949,16 +58856,6 @@
                       ]
                     },
                     "confirmedAt": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "updatedAt": {
                       "anyOf": [
                         {
                           "type": "string"

@@ -10080,13 +10080,11 @@ export interface components {
             status: "empty" | "filled" | "confirmed";
             draftFrom: "weekly_review" | null;
             confirmedAt: string | null;
-            updatedAt: string | null;
         };
         CollectionRoundView: {
             requestId: string;
             weekStart: string;
             deadlineAt: string;
-            remindedAt: string | null;
         };
         CollectionView: {
             id: string;
@@ -10094,7 +10092,6 @@ export interface components {
             version: number;
             scenario: "expense" | "method_progress";
             title: string;
-            prompt: string;
             fields: {
                 key: string;
                 label: string;
@@ -10122,7 +10119,6 @@ export interface components {
                 requestId: string;
                 weekStart: string;
                 deadlineAt: string;
-                remindedAt: string | null;
             } | null;
             entries: {
                 personId: string;
@@ -10135,7 +10131,6 @@ export interface components {
                 status: "empty" | "filled" | "confirmed";
                 draftFrom: "weekly_review" | null;
                 confirmedAt: string | null;
-                updatedAt: string | null;
             }[];
             counts: {
                 total: number;
@@ -10161,7 +10156,6 @@ export interface components {
                 version: number;
                 scenario: "expense" | "method_progress";
                 title: string;
-                prompt: string;
                 fields: {
                     key: string;
                     label: string;
@@ -10189,7 +10183,6 @@ export interface components {
                     requestId: string;
                     weekStart: string;
                     deadlineAt: string;
-                    remindedAt: string | null;
                 } | null;
                 entries: {
                     personId: string;
@@ -10202,7 +10195,6 @@ export interface components {
                     status: "empty" | "filled" | "confirmed";
                     draftFrom: "weekly_review" | null;
                     confirmedAt: string | null;
-                    updatedAt: string | null;
                 }[];
                 counts: {
                     total: number;
@@ -10233,7 +10225,6 @@ export interface components {
                 version: number;
                 scenario: "expense" | "method_progress";
                 title: string;
-                prompt: string;
                 fields: {
                     key: string;
                     label: string;
@@ -10261,7 +10252,6 @@ export interface components {
                     requestId: string;
                     weekStart: string;
                     deadlineAt: string;
-                    remindedAt: string | null;
                 } | null;
                 entries: {
                     personId: string;
@@ -10274,7 +10264,6 @@ export interface components {
                     status: "empty" | "filled" | "confirmed";
                     draftFrom: "weekly_review" | null;
                     confirmedAt: string | null;
-                    updatedAt: string | null;
                 }[];
                 counts: {
                     total: number;
