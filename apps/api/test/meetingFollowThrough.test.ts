@@ -507,6 +507,25 @@ describe("战略项与截止日期的确定性校验", () => {
     }
   });
 
+  it("D-42：负责人只对决定和待办生效；战略项带了对不上的负责人时整条保留、负责人为空", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const result = assess([
+        { ...strategic, ownerPersonId: LEAD },
+        { ...CANDIDATE.items[1], ownerPersonId: OWNER },
+      ]);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toMatchObject({ kind: "strategic", title: strategic.title, judgmentKind: "company_direction", ownerPersonId: null });
+      expect(String(warn.mock.calls[0][0])).toContain("#1 (strategic) 丢掉不适用的字段: ownerPersonId");
+      // 待办照旧：负责人对不上就拒收
+      expect(result.warnings.map((warning) => warning.reason)).toEqual([`owner 无法由该 turn 确定: ${OWNER}`]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("decision 顺手带了 judgmentKind 和 parentIndex：去掉这两个字段，作为主决定保留", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     try {

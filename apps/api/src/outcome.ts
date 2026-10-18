@@ -171,8 +171,9 @@ export type OutcomeAssessment =
 
 type OutcomeCandidateItem = TPostMeetingCandidate["items"][number];
 
-/** 各可选字段只适用于哪些类型（parentIndex 用于 reopenWhen 与子决定）。 */
+/** 各可选字段只适用于哪些类型（parentIndex 用于 reopenWhen 与子决定；负责人只对决定和待办生效，D-42）。 */
 const FIELD_KINDS: ReadonlyArray<[keyof OutcomeCandidateItem, ReadonlyArray<OutcomeCandidateItem["kind"]>]> = [
+  ["ownerPersonId", ["decision", "todo"]],
   ["judgmentKind", ["ceoJudgment", "strategic"]],
   ["parentIndex", ["reopenWhen", "decision"]],
   ["title", ["strategic"]],
