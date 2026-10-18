@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseSseBlock, splitSse, type ConversationEvent } from "./sse";
 import type { Step, StepStatus } from "@/components/steps/StepList";
-import type { TConversationCard, TReadScope, TReadScopeParams } from "@warmap/contracts";
+import type { TAskAnswerInput, TAskAnswerRecord, TConversationCard, TReadScope, TReadScopeParams } from "@warmap/contracts";
 import { afterResize, resizing } from "./resizeGate";
 import { useStableCallback } from "./stableCallback";
 
@@ -31,6 +31,8 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   cards?: TConversationCard[];
   /** 这一轮跨对象读取的范围（三层取用），回答上显示成可以点开调整的范围标签。 */
   readScope?: TReadScope;
+  /** 回答 Agent 提问的那一句：问答记录（界面画成紧凑的问答，不显示原文）。 */
+  answers?: TAskAnswerRecord;
   /** carried：转议题时从首页带过来的一段；trace：首页留痕行「已转到议题 X」，meta.href 直达。 */
   kind?: "carried" | "trace";
   meta?: { issueId?: string; title?: string; href?: string } };
@@ -86,6 +88,9 @@ export function pendingUserMessage(sequence: number, content: string, references
 
 /** 别处改了这条对话的记录（转议题后首页多了留痕行）：detail.scope 是这条对话，收到就安静地重读历史。 */
 export const CONVERSATION_RELOAD = "conversation-reload";
+
+/** 页面替本人发一句（个人复盘的「提交前核对」）：detail.scope 是这条对话，detail.text 是这一句；右列打开私聊并发出。 */
+export const CONVERSATION_SEND = "conversation-send";
 
 /** 一句话发出 / 这一轮结束（成功、失败、停止都算）：detail.scope 是这条对话。 */
 export const CONVERSATION_TURN_SENT = "conversation-turn-sent";
@@ -170,7 +175,8 @@ export function withPendingTurn(loaded: Message[], pending: Message | string | n
   const turn = typeof pending === "string" ? { sequence: 0, role: "user" as const, content: pending } : pending;
   for (let index = loaded.length - 1; index >= 0; index--) {
     if (loaded[index].role !== "user") continue;
-    if (loaded[index].content === turn.content) return loaded;
+    // 作答那一句的原文由服务端重写：按回答的是哪组提问认。
+    if (loaded[index].content === turn.content || (turn.answers && loaded[index].answers?.askId === turn.answers.askId)) return loaded;
     break;
   }
   return [...loaded, { ...turn, sequence: (loaded.at(-1)?.sequence ?? 0) + 1 }];
@@ -411,11 +417,13 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
    * 这一轮不管怎么结束（出错、断线、超时、停止），已经写出的正文和思考都留在界面上：服务端存了就用读回的，
    * 没来得及存就在本地补一条；能接着来的给出「继续」/「重新回答」（resume）。
    * options.resumeRunId：接着那一轮没完成的回答（「继续」按钮），这一句不带页面前缀。
+   * options.answers：回答 Agent 的提问（AskPanel）；record 只用来先画出问答记录，原文由服务端按提问卡重写。
    */
-  async function send(message: string, references: SentCardRef[], options: { resumeRunId?: string; scopeOverride?: TReadScopeParams } = {}): Promise<boolean> {
+  async function send(message: string, references: SentCardRef[], options: { resumeRunId?: string; scopeOverride?: TReadScopeParams;
+    answers?: { input: TAskAnswerInput; record: TAskAnswerRecord } } = {}): Promise<boolean> {
     const input = message.trim();
     if (!input || status === "streaming") return false;
-    const text = messageContext && !options.resumeRunId ? `${messageContext}
+    const text = messageContext && !options.resumeRunId && !options.answers ? `${messageContext}
 
 ${input}` : input;
     const controller = new AbortController();
@@ -439,7 +447,7 @@ ${input}` : input;
     setStatus("streaming");
     const attachmentRefs = attachments.map((attachment) => ({ id: attachment.id }));
     // 乐观渲染：引用的卡片、附的材料随这句一起立刻画出来，不等回答结束读回历史。
-    const turn = pendingUserMessage(0, text, references, attachments);
+    const turn = { ...pendingUserMessage(0, text, references, attachments), ...(options.answers ? { answers: options.answers.record } : {}) };
     pendingTurn.current = turn;
     setMessages((current) => [...current, { ...turn, sequence: current.length + 1 }]);
     // 页面上跟着这条对话走的部分（月度计划逐段意见）：发出与这一轮结束时各通知一次，各自重读。
@@ -470,6 +478,7 @@ ${input}` : input;
           body: JSON.stringify({ message: text, references: references.map(({ cardId, version }) => ({ cardId, version })), attachments: attachmentRefs,
             ...(viewingMaterial ? { viewingMaterialId: viewingMaterial.id } : {}),
             ...(options.resumeRunId ? { resumeRunId: options.resumeRunId } : {}),
+            ...(options.answers ? { answers: options.answers.input } : {}),
             ...(options.scopeOverride ? { scopeOverride: options.scopeOverride } : {}) }),
           signal: controller.signal,
         });

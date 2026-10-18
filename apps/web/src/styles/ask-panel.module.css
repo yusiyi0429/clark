@@ -1,0 +1,70 @@
+/*
+ * Agent 的提问（conversation/AskPanel）：对话里的提问卡沿用回答卡的外框（entry-cards），弹窗沿用通用弹窗（account-menu 的 dialog / wide）。
+ * 一题一页：上面进度（分段条 + 第几题），中间问题和选项，底下上一题 / 跳过 / 下一题（最后一题是提交）。
+ * 选项一行一个，左边数字键，推荐的带「推荐」；选中是蓝色描边和勾。触屏上每行至少 52px。
+ */
+
+/* 对话里的提问卡。 */
+.list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; counter-reset: ask; }
+.list li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; color: #25282e; font-size: 15px; line-height: 1.6; counter-increment: ask; }
+.list li::before { content: counter(ask); color: #9599a1; font-size: 13px; font-variant-numeric: tabular-nums; line-height: 24px; }
+.start.start { min-height: 40px; padding: 8px 16px 8px 18px; gap: 6px; border-radius: var(--onboarding-pill-radius); background: var(--onboarding-blue); color: var(--solid-fg); font-size: 15px; font-weight: 600; }
+.start.start[data-disabled] { opacity: .38; }
+
+/* 弹窗。 */
+.dialog.dialog { gap: 18px; padding: 18px 22px 20px; }
+.head { display: flex; align-items: center; gap: 12px; min-height: 34px; }
+.progress { display: flex; flex: 1; gap: 4px; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.progress li { flex: 1; min-width: 0; }
+.segment { display: block; width: 100%; height: 20px; padding: 8px 0; border: 0; background: none; cursor: pointer; }
+.segment::before { content: ""; display: block; height: 4px; border-radius: 2px; background: #e6e9ee; transition: background .16s ease; }
+.segment[data-answered]::before { background: color-mix(in oklab, var(--onboarding-blue) 45%, #fff); }
+.segment[aria-current='step']::before { background: var(--onboarding-blue); }
+.segment:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; border-radius: 4px; }
+.count { flex: none; color: #7a7f89; font-size: 13px; font-variant-numeric: tabular-nums; }
+.spacer { flex: 1; }
+
+.page { display: grid; gap: 14px; min-width: 0; animation: pageIn 180ms cubic-bezier(.22, 1, .36, 1) both; }
+.page[data-back] { animation-name: pageBack; }
+.question { margin: 0; color: #1d1d1f; font-size: 19px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.options { display: grid; gap: 8px; }
+.option { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; min-height: 52px; box-sizing: border-box; padding: 10px 14px 10px 12px; border: 1px solid #e1e5eb; border-radius: 12px; background: #fff; color: #25282e; font: inherit; text-align: left; cursor: pointer; transition: border-color .14s ease, background .14s ease, box-shadow .14s ease; }
+@media (hover: hover) { .option:hover { border-color: #b9c9e6; background: #f7f9fd; } }
+.option:focus-visible { outline: none; border-color: var(--onboarding-blue); box-shadow: 0 0 0 3px color-mix(in oklab, var(--onboarding-blue) 22%, transparent); }
+.option[aria-checked='true'] { border-color: var(--onboarding-blue); background: color-mix(in oklab, var(--onboarding-blue) 7%, #fff); }
+.key { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid #dfe3e8; border-radius: 7px; background: #f6f7f9; color: #6b7280; font: 600 12px/1 var(--font-mono, ui-monospace, monospace); }
+.option[aria-checked='true'] .key { border-color: var(--onboarding-blue); background: var(--onboarding-blue); color: #fff; }
+.optionText { display: grid; gap: 2px; min-width: 0; }
+.optionText > span { font-size: 15px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+.optionText small { color: #7a7f89; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.trail { display: inline-flex; align-items: center; gap: 8px; color: var(--onboarding-blue); }
+.recommended { padding: 0 8px; border-radius: var(--onboarding-pill-radius); background: color-mix(in oklab, var(--confirmed) 10%, #fff); color: var(--confirmed); font-size: 12px; font-weight: 600; line-height: 22px; white-space: nowrap; }
+.other { display: grid; gap: 8px; }
+.otherInput { width: 100%; min-height: 76px; max-height: 220px; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--onboarding-blue); border-radius: 12px; background: #fff; color: #25282e; font: inherit; font-size: 15px; line-height: 1.65; resize: none; field-sizing: content; box-shadow: 0 0 0 3px color-mix(in oklab, var(--onboarding-blue) 16%, transparent); }
+.otherInput:focus { outline: none; }
+
+.foot { display: flex; align-items: center; gap: 8px; }
+.foot .spacer { min-width: 0; }
+.back.back, .skip.skip { min-height: 40px; padding: 8px 12px; gap: 4px; border-radius: var(--onboarding-control-radius); color: #6b7280; font-size: 14px; font-weight: 500; }
+.next.next { min-height: 40px; padding: 8px 18px; gap: 6px; border-radius: var(--onboarding-pill-radius); background: var(--onboarding-blue); color: var(--solid-fg); font-size: 15px; font-weight: 600; }
+
+/* 作答那一句：紧凑的问答记录（在本人的气泡里，颜色随气泡）。 */
+.record { display: grid; gap: 8px; margin: 2px 0; }
+.record div { display: grid; gap: 1px; min-width: 0; }
+.record dt { opacity: .62; font-size: 13px; line-height: 1.55; }
+.record dd { margin: 0; font-size: 15px; font-weight: 500; line-height: 1.6; }
+.record dd[data-kind='skipped'] { opacity: .5; font-weight: 400; }
+.record .recommended { margin-left: 8px; vertical-align: 1px; }
+
+@keyframes pageIn { from { opacity: 0; transform: translateX(14px); } }
+@keyframes pageBack { from { opacity: 0; transform: translateX(-14px); } }
+
+@media (max-width: 759px) {
+  .dialog.dialog { padding: 14px 16px 16px; gap: 14px; }
+  .question { font-size: 18px; }
+  .option { min-height: 56px; }
+}
+@media (hover: none), (pointer: coarse) {
+  .back.back, .skip.skip, .next.next, .start.start { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .page { animation: none; } .segment::before, .option { transition: none; } }

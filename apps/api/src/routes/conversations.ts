@@ -7,6 +7,7 @@ import {
   ConversationScope,
   IssueDraftResponse,
   type TAcceptIssueDraftRequest,
+  type TAskAnswerRecord,
   type TConversationAttachment,
   type TConversationCard,
   type TConversationMessageRequest,
@@ -38,6 +39,7 @@ import { personalMemoryToolsFor, unknownMemoryMarks } from "../personalMemory.js
 import { searchOwnConversationHistory } from "../conversationHistorySearch.js";
 import { createStepTracker } from "../conversationSteps.js";
 import { createConversationEntries, openTodoContext } from "../conversationEntries.js";
+import { loadAsk, readAnswers, type AskUser, type QuestionsCard } from "../askUser.js";
 import type { RequestAgent } from "../delivery/requestAgent.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
 import { createCompanyMap, defaultFocus, scopeLabel } from "../companyMap.js";
@@ -156,6 +158,18 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           // 那一轮记了有没有写出正文（存档里开头可能只有开场说明，不能当作正文）。
           resume = resumeInstruction(snapshot.message, snapshot.partial === false ? undefined : written.rows[0]?.content, snapshot.route?.tier);
         }
+        // 回答 Agent 的提问（askUser.ts）：只能答这条对话里的提问卡，一张卡只答一次。这一句的原文按卡和答案重写
+        // （下面存档、个人记忆、交给运行时的都是它），问答记录存在这条消息上。
+        let answerRecord: TAskAnswerRecord | undefined;
+        if (req.body.answers) {
+          const asked = await loadAsk(client.query.bind(client), row.id, req.body.answers.askId);
+          if (!asked) return fail(reply, 404, "ASK_NOT_FOUND", "这组提问找不到了，可以直接回复。");
+          if (asked.answered) return fail(reply, 409, "ASK_ANSWERED", "这组提问已经回答过了。");
+          const read = readAnswers(asked.card, req.body.answers);
+          if ("error" in read) return fail(reply, 400, "ASK_ANSWER_INVALID", read.error);
+          answerRecord = read.record;
+          req.body.message = read.text;
+        }
         // 附件：只信服务端 sidecar（客户端只能传 id）；原件不进入 Runtime，只拼接有界抽取文本。
         let attachments: TConversationAttachment[] = [];
         if (req.body.attachments?.length) {
@@ -199,9 +213,10 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           : { runtimeEntries: row.runtime_entries };
         await client.query(
           `INSERT INTO conversation_messages
-             (conversation_id, sequence, role, content, references_snapshot, attachments, run_id)
-           VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6)`,
-          [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId],
+             (conversation_id, sequence, role, content, references_snapshot, attachments, run_id, meta)
+           VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6, $7::jsonb)`,
+          [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId,
+            answerRecord ? JSON.stringify({ answers: answerRecord }) : null],
         );
         // 个人记忆：任何页面都读本人的记忆；后台提炼按游标增量跑（personalDistillation.ts），这里不排任务。
         // 「记住」「忘掉」「改成」由主 Agent 调工具完成，不在主回答之前同步跑提炼：记忆改动失败只是工具报错，不替换回答、不动上下文（3c）。
@@ -339,6 +354,13 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           reviews: ctx.monthlyReviewService, weeklyReviews: ctx.weeklyReviewService, fingerprint: `conversation:${runId}`,
           onStep: (step) => steps.report(step), onCard: (card) => { if (cards.length < 4) cards.push(card); },
         });
+        // Agent 向本人提问：提问卡和上面的卡一样随运行记录存下、挂在回答后面；「等你回答」这一步留着高亮。
+        const ask: AskUser = (questions) => {
+          const card: QuestionsCard = { kind: "questions", askId: randomUUID(), questions: questions.map((question, index) => ({ id: `q${index + 1}`, ...question })) };
+          cards.push(card);
+          steps.report({ id: "ask", label: "等你回答", status: "active", result: `${questions.length} 个问题` });
+          return card;
+        };
 
         // 三层取用（companyMap.ts）：页面只决定默认焦点；跨对象读取时发范围标签，同时记成「定范围」这一步。
         const now = ctx.now();
@@ -457,6 +479,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
             searchHistory: (query: string) => searchOwnConversationHistory(q, { personId: owner, query, excludeRunId: runId }),
             openTodos,
             entries,
+            ask,
             companyMap,
             focus,
             ...(req.body.scopeOverride ? { scopeOverride: req.body.scopeOverride } : {}),

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Pool, QueryResult } from "pg";
 import type { Usage } from "@earendil-works/pi-ai";
 import type {
+  TAskAnswerRecord,
   TCardReference,
   TConversationAttachment,
   TConversationAttachmentInfo,
@@ -15,6 +16,7 @@ import type {
   TReferenceSnapshot,
 } from "@warmap/contracts";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { AskUser } from "./askUser.js";
 import type { ConversationEntries } from "./conversationEntries.js";
 import type { CompanyMap, ReadFocus } from "./companyMap.js";
 import type { IssueSuggest, IssueSuggestContext } from "./issueDrafts.js";
@@ -90,6 +92,8 @@ export type ConversationRuntime = {
     openTodos?: { title: string; from: string; sentAt: string; kind: string }[];
     /** 对话里的一句话入口（生成复盘、帮我问问、请同事帮忙），已绑定本人与这一轮；运行时据此提供对应工具。 */
     entries?: ConversationEntries;
+    /** 向本人提问（askUser.ts）：登记一张提问卡挂在这一轮回答后面；运行时据此提供 ask_user，问完这一轮就停。 */
+    ask?: AskUser;
     recentMessages?: { role: "user" | "assistant"; content: string; createdAt: string }[];
     /** 三层取用（companyMap.ts）：已绑定本人与这一轮，运行时据此提供 read_mission_cards / read_progress / read_reviews / read_object_tree。 */
     companyMap?: CompanyMap;
@@ -382,7 +386,7 @@ export const CONVERSATION_IDLE_RESTART_MS = 12 * 60 * 60 * 1000;
 
 type MessageRow = { sequence: number; role: string; content: string; references_snapshot: unknown; attachments: TConversationAttachment[];
   run_id: string; created_at: Date; recovery_note: { text?: unknown; detail?: unknown } | null; memory_used: unknown; cards?: unknown;
-  read_scope?: unknown; kind?: string; meta?: { issueId?: unknown; title?: unknown; href?: unknown } | null };
+  read_scope?: unknown; kind?: string; meta?: { issueId?: unknown; title?: unknown; href?: unknown; answers?: unknown } | null };
 
 function historyMessage(row: MessageRow): TConversationHistory["messages"][number] {
   const note = row.recovery_note;
@@ -399,6 +403,8 @@ function historyMessage(row: MessageRow): TConversationHistory["messages"][numbe
     ...(Array.isArray(row.memory_used) && row.memory_used.length ? { memoryUsed: row.memory_used.filter((id): id is string => typeof id === "string") } : {}),
     ...(row.role === "assistant" && Array.isArray(row.cards) && row.cards.length ? { cards: row.cards as TConversationCard[] } : {}),
     ...(row.role === "assistant" && row.read_scope && typeof row.read_scope === "object" ? { readScope: row.read_scope as TReadScope } : {}),
+    // 回答 Agent 提问的那条：问答记录存在 meta.answers（routes/conversations.ts 按提问卡核对后写入）。
+    ...(row.role === "user" && row.meta?.answers && typeof row.meta.answers === "object" ? { answers: row.meta.answers as TAskAnswerRecord } : {}),
     ...(row.kind === "carried" || row.kind === "trace" ? { kind: row.kind } : {}),
     ...(row.kind === "trace" && row.meta ? { meta: Object.fromEntries((["issueId", "title", "href"] as const)
       .flatMap((key) => (typeof row.meta?.[key] === "string" ? [[key, row.meta[key]]] : []))) } : {}),
