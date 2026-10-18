@@ -33,8 +33,8 @@ export const TIER_SETTINGS: Record<ConversationTier, TierSettings> = {
 /** 每轮放进上下文包的回答档位说明（answerMode）：控制查证范围和篇幅，不规定格式模板。 */
 export const TIER_GUIDANCE: Record<ConversationTier, string> = {
   quick: "快答：直接回答，一到三句话；只在需要时读一次看板或企业知识，不做外部检索；修改指令按业务修改规则执行。",
-  grounded: "检索问答：界面会先用一句话说明要查证什么，正文不要重复这句、也不要再写开场白。先查企业知识和看板，内部不足再做外部检索，合计不超过 3 次，证据够了就停；开头一句给结论，篇幅与问题相称。",
-  deep: "深度：这是一个重要的战略问题，界面已经告诉一号位需要更深入地查证和推演，正文不要重复这句。先界定问题和对标层级，查企业知识和看板数值，再针对关键分歧做外部检索，合计不超过 6 次，每次检索词具体到公司和事件，额度留给关键分歧；按「深度分析」的形状写：开头一段给判断，然后用段落写清因果链、关键证据、最有力的反对意见和二阶影响，落到集团和具体战场，最后写需要盯的信号与仍不确定的地方。证据够下判断就动笔，不追求穷尽。",
+  grounded: "检索问答：回答第一句就是结论，不写开场白，不说要先查什么、怎么查。先查企业知识和看板，内部不足再做外部检索，合计不超过 3 次，证据够了就停；开头一句给结论，篇幅与问题相称。",
+  deep: "深度：这是一个重要的战略问题。回答第一句就是判断，不写开场白，不说要先查什么、怎么推演。先界定问题和对标层级，查企业知识和看板数值，再针对关键分歧做外部检索，合计不超过 6 次，每次检索词具体到公司和事件，额度留给关键分歧；按「深度分析」的形状写：开头一段给判断，然后用段落写清因果链、关键证据、最有力的反对意见和二阶影响，落到集团和具体战场，最后写需要盯的信号与仍不确定的地方。证据够下判断就动笔，不追求穷尽。",
 };
 
 /**
@@ -164,21 +164,6 @@ export function cleanTopic(topic: unknown): string | undefined {
   return value;
 }
 
-/** 深度档的开场说明：只陈述接下来要做什么，不写用时（用时只在进度行显示），不写任何未经核实的事实。 */
-export function deepNotice(topic?: string): string {
-  const object = topic ? `${topic}的战略判断` : "集团层面的战略判断";
-  return `这个问题涉及${object}，需要更深入地查证和推演。`;
-}
-
-/**
- * 检索问答档的开场说明：一句话说明要查证什么（对象来自分诊，与深度档同一次调用，不多叫模型），分诊没给对象时用通用说法。
- * 只说接下来查什么，不写用时（用时只在进度行显示），不写任何未经核实的事实。
- */
-export function groundedNotice(topic?: string): string {
-  return topic
-    ? `需要先核实${topic}的相关信息：先查企业知识，不足部分再查公开来源。`
-    : "需要先查证企业知识和公开来源再作答。";
-}
 
 /** 存进对话记录的回答：开场说明在前，空一行接正文（界面流式时也是这样拼的）。 */
 export function withNotice(notice: string | undefined, body: string): string {
@@ -206,9 +191,11 @@ export function cleanTriageBattlefields(value: unknown): "all" | string[] | unde
 }
 
 function routeOf(tier: ConversationTier, source: TurnRoute["source"], message: string, topic?: string,
-  options: { groundedOpening?: boolean; prefetch?: TurnRoute["prefetch"]; battlefields?: TurnRoute["battlefields"]; visual?: boolean } = {}): TurnRoute {
+  options: { prefetch?: TurnRoute["prefetch"]; battlefields?: TurnRoute["battlefields"]; visual?: boolean } = {}): TurnRoute {
   const settings = TIER_SETTINGS[tier];
-  const notice = tier === "deep" ? deepNotice(topic) : tier === "grounded" && options.groundedOpening !== false ? groundedNotice(topic) : undefined;
+  // 各档都不在回答开头加开场白（10/18 走查：每条回答开头都多一句「先查企业知识……」「需要更深入地查证和推演」）：
+  // 慢的原因由进度行与步骤列表体现，回答直接给结论。route.notice 的通路保留（恢复、续写仍按它拼），这里不再产出。
+  const notice: string | undefined = undefined;
   // 只有深度档预取：快答不做外部检索；检索问答档 10/13 起不再让分诊给检索词（分诊更快，第一轮由主答自己查）。
   const prefetch = tier === "deep" ? options.prefetch : undefined;
   return { tier, source, ...settings, ...(notice ? { notice } : {}), ...(prefetch ? { prefetch } : {}),
@@ -236,7 +223,7 @@ export async function routeTurn(input: { message: string; previousUserMessage?: 
   const chart = chartOnly(input.message);
   const explicitDeep = EXPLICIT_DEEP.test(coreText(input.message)) || (!chart && priorityDeep(input.message));
   // 没配快模型分诊（没有网关的环境）：只按规则分档，检索问答档不加开场句，回答与原来一致；配了分诊但这次失败或超时，仍用通用开场句。
-  if (!input.triage || input.signal.aborted) return routeOf(rule ?? "grounded", rule ? "rule" : "fallback", input.message, undefined, { groundedOpening: false, ...(chart ? { visual: true } : {}) });
+  if (!input.triage || input.signal.aborted) return routeOf(rule ?? "grounded", rule ? "rule" : "fallback", input.message, undefined, { ...(chart ? { visual: true } : {}) });
   const controller = new AbortController();
   const onAbort = () => controller.abort();
   input.signal.addEventListener("abort", onAbort, { once: true });
@@ -545,6 +532,12 @@ export function toolProgressLabel(name: string, args: unknown): string | undefin
     case "read_decision_history": return "读取历史决定";
     case "list_materials": case "read_material": return "阅读材料";
     case "read_mission_card": return "读取任务卡";
+    case "read_mission_cards": return "读取 Mission 卡";
+    case "read_progress": return "读取执行进展";
+    case "read_reviews": return "读取复盘";
+    case "read_object_tree": return "沿公司地图查找";
+    case "read_issue_conversation": return "读取议题里的对话";
+    case "propose_issue": return "起草议题初稿";
     case "update_business_object": case "create_business_object": case "run_business_action": case "apply_business_proposal":
     case "edit_material": case "create_material": case "edit_mission_card": case "edit_current_object":
       return "保存修改";
@@ -612,6 +605,14 @@ export function toolResultDetail(name: string, args: unknown, result: unknown): 
     }
     case "get_warmap_overview": return "已读取战场总览";
     case "list_missions": return "已读取战役清单";
+    // 三层取用：读到多少，有几条因权限没读到。
+    case "read_mission_cards": case "read_progress": case "read_reviews": {
+      const count = name === "read_mission_cards" ? `${list("missions").length} 张 Mission 卡`
+        : name === "read_progress" ? `${list("people").length} 人的执行情况`
+        : `${list("monthly").length + list("units").length + list("weekly").length} 份复盘`;
+      const filtered = typeof value.filtered === "number" && value.filtered > 0 ? `，${value.filtered} 条无权查看` : "";
+      return `读到 ${count}${filtered}`;
+    }
     default: return undefined;
   }
 }

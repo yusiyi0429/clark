@@ -166,6 +166,7 @@ describe("migration", () => {
         "084_collector_distill.sql",
         "089_onboarding_collector.sql",
         "090_memory_imports.sql",
+        "092_issue_drafts_and_message_kind.sql",
         "093_off_plan_resolution.sql",
         "095_admin_incidents.sql",
       ]);
@@ -175,7 +176,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(82);
+      expect(Number(again.rows[0].count)).toBe(83);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(

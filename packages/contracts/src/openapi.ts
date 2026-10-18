@@ -1,4 +1,5 @@
 import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
+import { AcceptIssueDraftRequest, IssueDraftResponse } from "./issueDrafts.js";
 import {
   RequestStep, RequestPerson, RequestRecipientView, RequestQuestionView, RequestClarification, RequestView, RequestResponse,
   DraftRequestRequest, DraftRequestResponse, RequestListItem, RequestListResponse, PrepareRequestQuestionRequest,
@@ -821,6 +822,28 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "404": errorResponse,
             "409": errorResponse,
           },
+        },
+      },
+      "/api/issue-drafts/{id}": {
+        get: {
+          operationId: "getIssueDraft", summary: "CEO 读首页对话里的一条转议题建议（初稿、能对上的议题、可挂的战场）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "转议题建议", content: { "application/json": { schema: { $ref: "#/components/schemas/IssueDraftResponse" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/issue-drafts/{id}/accept": {
+        post: {
+          operationId: "acceptIssueDraft", summary: "开议题（按确认后的初稿与位置新建）或接到已有议题；相关那段首页对话带进议题页，首页留一行留痕；重放返回原结果",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/AcceptIssueDraftRequest" }),
+          responses: { "200": { description: "转议题建议的最新视图", content: { "application/json": { schema: { $ref: "#/components/schemas/IssueDraftResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/issue-drafts/{id}/decline": {
+        post: {
+          operationId: "declineIssueDraft", summary: "不用：这个话题之后不再建议转议题",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "转议题建议的最新视图", content: { "application/json": { schema: { $ref: "#/components/schemas/IssueDraftResponse" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/conversations/{scope}/attachments": {
@@ -2517,6 +2540,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ConversationHistory: ConversationHistory as JsonSchema,
         ConversationMessageRequest: ConversationMessageRequest as JsonSchema,
         ConversationSseEvent: ConversationSseEvent as JsonSchema,
+        IssueDraftResponse: IssueDraftResponse as JsonSchema,
+        AcceptIssueDraftRequest: AcceptIssueDraftRequest as JsonSchema,
         CreateBattlefieldRequest: CreateBattlefieldRequest as JsonSchema,
         PatchBattlefieldRequest: PatchBattlefieldRequest as JsonSchema,
         CreateCapabilityRequest: CreateCapabilityRequest as JsonSchema,

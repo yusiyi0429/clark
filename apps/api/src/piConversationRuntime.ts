@@ -65,12 +65,14 @@ import { MISSION_CARD_WRITING_RULES } from "./missionCardWritingRules.js";
 import { AGENT_ROLES, RETRIEVE_SOURCES, annotateTurn, preview, traceTools, tracedStreamSimple, tracingEnabled, withAgent, withRetrieve } from "./tracing.js";
 import { logEvent } from "./observability.js";
 import { LOCAL_FALLBACK, type CompanyReader } from "./company.js";
+import { THREE_LAYER_RULES } from "./companyMap.js";
+import { ISSUE_SUGGEST_RULES } from "./issueDrafts.js";
 
 /** CEO 与 DRI Agent 共用的材料改写规则；能不能直接改按 canEdit（上传者和对象负责人），与 edit_material 是否开放一致。 */
 const MATERIAL_EDITING_RULES = `材料是上述只读边界的例外。一份材料只有上传者和对象负责人（执行事项的推进人、会议主持人、议题的 CEO）能改，list_materials 和 currentObject.viewingMaterial 的 canEdit 表示对方能不能改。对方明确要求「改」「写进去」时：canEdit=true 用 edit_material 直接改；canEdit=false 或没有 edit_material 时不直接改，用 propose_material_edit 把改法交给能改的人，按工具结果告诉对方交给了谁。对方要求新写当前议题、执行事项、会议的群组材料时用 create_material。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由能改的人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。`;
 
 /** 每轮上下文包里的「我手上没完成的待办」（CEO 与 DRI 共用）。 */
-const OPEN_TODOS_CONTEXT = `\`myOpenTodos\`（有时才出现）是别人发给本人、本人还没完成的待办（标题、发起人、发出时间、类型），新的在前。本人说「那个表」「巨杰拜托我的事」这类话时，先在这里对照是哪一件。`;
+const OPEN_TODOS_CONTEXT = `\`myOpenTodos\`（有时才出现）是别人发给本人、本人还没完成的待办（标题、发起人、发出时间、类型），新的在前，只用来理解本人说的「那个表」「巨杰拜托我的事」指什么。本人要你替他问某件待办的发起人时，不管这里对得上几件，都直接调用 ask_about_todo：定位由系统做，对上不止一件时界面会出点选卡让本人选。不要自己用文字反问是哪一件，也不要替本人挑一件。`;
 
 /** 对话里的三个一句话入口：只读边界的例外（CEO 与 DRI 共用），细则写在各自的工具说明里。 */
 const ENTRY_RULES = `三件事是例外，它们只产出草稿或预览，发出、提交仍由本人在卡上点：本人要生成或重新生成自己的复盘时用 generate_review；本人要你替他问某件待办的发起人时用 ask_about_todo；本人要请同事做事、补材料时用 request_help。不能声称已经发出或提交。`;
@@ -168,7 +170,7 @@ ${personalCard ? "当前任务卡正文也是上述边界的例外：审核中�
 
 # 工具
 
-${personalCard ? "当前任务卡的正文、公开意见和轮次已放在 currentObject；只根据这份授权资料讨论个人承诺。不能查询或推测其他人的任务卡，也不能把私聊变为公开意见。" : "- `list_missions`：按 period、battlefieldId、capabilityId 或 ownerId 查询当前 Mission；问某个战场、能力或 DRI 有哪些 Mission 时必须调用它。"}
+${personalCard ? "当前任务卡的正文、公开意见和轮次已放在 currentObject；讨论个人承诺以这份授权资料为准。别人的 Mission 卡和执行情况只能用三层取用的工具读，不推测，也不能把私聊变为公开意见。" : "- `list_missions`：按 period、battlefieldId、capabilityId 或 ownerId 查询当前 Mission；问某个战场、能力或 DRI 有哪些 Mission 时必须调用它。"}
 - \`list_sections\`：企业知识章节目录，先看目录再决定读哪里。
 - \`search_sections\`：在企业知识内按关键词定位相关章节。
 - \`get_passages\`：读取指定章节的段落正文。
@@ -435,6 +437,14 @@ export function seedIdleRestart(
 const COMPACTION_MAX_TOKENS = 12_000;
 
 /** 这条会话最近一轮主答是不是 Claude（Anthropic 协议）；一条会话里混着几个档位时按最近那一轮算。 */
+/** 工具出错的类别（质量信号用）：超时、检索到上限、工具自己给的错误码，其余记 TOOL_ERROR。 */
+export function toolErrorCode(result: unknown): string {
+  const text = typeof result === "string" ? result : JSON.stringify(result ?? "");
+  if (/秒没有返回|timed? ?out/i.test(text)) return "TOOL_TIMEOUT";
+  if (/检索已到上限|SEARCH_BUDGET_EXHAUSTED/.test(text)) return "SEARCH_LIMIT";
+  return /code\\?"\s*:\s*\\?"([A-Z][A-Z0-9_]{2,})/.exec(text)?.[1] ?? "TOOL_ERROR";
+}
+
 export function latestAnswerIsClaude(entries: ReturnType<SessionManager["getBranch"]>): boolean {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
@@ -890,7 +900,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         defineTool({
           name: "generate_review",
           label: "生成复盘",
-          description: "本人要生成或重新生成自己的复盘时调用（例如「生成我的 10 月复盘」「帮我写这周复盘」）。kind=monthly 是月度个人复盘，period 写本人说的月份（如 10 或 2026-10，没说就不填，取当前在收的那一期）；kind=weekly 是周复盘。生成要一到几分钟，按读 Mission 卡、读每周复盘、读采集记录、起草四步走，本人改过的段落原样保留。按返回的 note 回答。",
+          description: "本人要生成或重新生成自己的复盘时调用（例如「生成我的 10 月复盘」「帮我写这周复盘」）。kind=monthly 是月度个人复盘，period 写本人说的月份（如 10 或 2026-10，没说就不填，取当前在收的那一期），按读 Mission 卡、读每周复盘、读采集记录、起草四步走；kind=weekly 是本周的周复盘（例如「帮我写这周复盘」），按读 Mission 卡、读进展、读会议结论、读采集记录、读上周复盘、起草六步走。生成要一到几分钟，本人改过的段落原样保留，完成后界面在回答下面附卡。按返回的 note 回答。",
           parameters: Type.Object({
             kind: Type.Union([Type.Literal("monthly"), Type.Literal("weekly")]),
             period: Type.Optional(Type.String({ maxLength: 20 })),
@@ -920,6 +930,60 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           }, { additionalProperties: false }),
           execute: async (_id, args) => textResult(await entries.requestHelp(args as { prompt: string; requestId?: string; answers?: string[] })),
         }),
+      ] : [];
+      // 三层取用（companyMap.ts）：每个页面同一套，页面只决定默认焦点；权限在仓储层判，看不到的只记 filtered 条数。
+      const map = input.companyMap;
+      const People = Type.Optional(Type.Union([Type.Literal("all"), Type.Literal("me"), Type.Array(Type.String({ minLength: 1, maxLength: 40 }), { minItems: 1, maxItems: 30 })]));
+      const Month = (description: string) => Type.Optional(Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$", description }));
+      const scopeParams = {
+        people: People,
+        battlefieldId: Type.Optional(Type.String({ minLength: 1, maxLength: 100, description: "战场 id 或名称" })),
+        from: Month("起始月份 YYYY-MM"),
+        to: Month("结束月份 YYYY-MM（含）"),
+      };
+      const layerTools = map ? [
+        defineTool({ name: "read_mission_cards", label: "读 Mission 卡",
+          description: "读 Mission 卡（目标、计划：结果、时间边界、里程碑、成功证据、关键路径、风险、依赖），全员可读。people：all 全员、me 本人，或人名列表；from/to 是月份；不填按 focus。",
+          parameters: Type.Object(scopeParams, { additionalProperties: false }),
+          execute: async (_id, args) => textResult(await map.readMissionCards(args as Parameters<typeof map.readMissionCards>[0])) }),
+        defineTool({ name: "read_progress", label: "读进展",
+          description: "读执行情况：执行事项的状态与进展记录（带产出链接）、本机采集整理出的进展（含计划外：待挂靠 / 待改计划）。CEO 能看全部，其他人只能看同一战场的；看不到的记在 filtered。taskId 只读一件执行事项。",
+          parameters: Type.Object({ ...scopeParams, taskId: Type.Optional(Type.String({ maxLength: 64 })) }, { additionalProperties: false }),
+          execute: async (_id, args) => textResult(await map.readProgress(args as Parameters<typeof map.readProgress>[0])) }),
+        defineTool({ name: "read_reviews", label: "读复盘",
+          description: "读复盘：月度个人复盘、战场与能力域复盘（附评论，含 CEO 反馈）、周复盘。kind：monthly、weekly 或 all（缺省）；不填月份时读最近三个月。可见范围同进展。",
+          parameters: Type.Object({ ...scopeParams, kind: Type.Optional(Type.Union([Type.Literal("monthly"), Type.Literal("weekly"), Type.Literal("all")])) }, { additionalProperties: false }),
+          execute: async (_id, args) => textResult(await map.readReviews(args as Parameters<typeof map.readReviews>[0])) }),
+        defineTool({ name: "read_object_tree", label: "沿公司地图走",
+          description: "从一个对象出发沿公司地图走一步：from 写 company、battlefield:<id 或名称>、mission:<id>、task:<id>、person:<姓名>，不填从当前页面对象出发；direction：up 所属、down 下属、side 同级。period 是月份（缺省按 focus）。",
+          parameters: Type.Object({
+            from: Type.Optional(Type.String({ maxLength: 160 })),
+            direction: Type.Union([Type.Literal("up"), Type.Literal("down"), Type.Literal("side")]),
+            period: Month("月份 YYYY-MM"),
+          }, { additionalProperties: false }),
+          execute: async (_id, args) => textResult(await map.readObjectTree(args as Parameters<typeof map.readObjectTree>[0])) }),
+      ] : [];
+      // 一号位深聊转议题（issueDrafts.ts，只在 CEO 首页）。
+      const suggest = input.issueSuggest;
+      const issueTools = suggest ? [
+        defineTool({ name: "propose_issue", label: "起草议题",
+          description: "建议把首页里深聊的这件事转成议题接着聊，同时起草议题初稿。只在三个条件同时满足时调用（规则见「深聊转议题」）。按返回的 note 回答。",
+          parameters: Type.Object({
+            topic: Type.String({ minLength: 1, maxLength: 40 }),
+            turns: Type.Integer({ minimum: 1, maximum: 50 }),
+            title: Type.String({ minLength: 1, maxLength: 25 }),
+            whyNow: Type.String({ minLength: 1, maxLength: 1000 }),
+            formedIdeas: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 500 }), { maxItems: 8 })),
+            options: Type.Optional(Type.Array(Type.Object({ label: Type.String({ minLength: 1, maxLength: 60 }), tradeoff: Type.Optional(Type.String({ maxLength: 500 })) }, { additionalProperties: false }), { maxItems: 5 })),
+            openQuestions: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { maxItems: 8 })),
+            matchIssueId: Type.Optional(Type.String({ maxLength: 64 })),
+            battlefieldId: Type.Optional(Type.String({ maxLength: 100, description: "战场 id；跨战场或公司层面写 company" })),
+          }, { additionalProperties: false }),
+          execute: async (_id, args) => textResult(await suggest.propose(args as Parameters<typeof suggest.propose>[0])) }),
+        defineTool({ name: "read_issue_conversation", label: "读议题对话",
+          description: "读一号位在某个议题页里的对话聊到哪了（最近十几条，含从首页带过去的那段）和议题状态。issueId 取自 issueThreads 或 list_pending_issues。",
+          parameters: Type.Object({ issueId: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false }),
+          execute: async (_id, args) => textResult(await suggest.readIssueConversation((args as { issueId: string }).issueId)) }),
       ] : [];
       const missionCardId = /^mission-card:(.+)$/.exec(input.scope)?.[1];
       const missionCardTools = missionCardId && options.materialPool ? (() => {
@@ -1105,6 +1169,10 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         appendRecentMessages(manager, input.recentMessages ?? [], modelId, definitionOf(modelId).api, providerOf(modelId));
         input.emit({ type: "warning", code: "RUNTIME_RECREATED", message: warning! });
       }
+      // 从别的对话带进来、模型还没见过的那一段（转议题时复制进议题页）：接在历史末尾，这一轮的提问接在它后面。
+      if (!recreated && !idleRestart && input.carriedOver?.length) {
+        appendRecentMessages(manager, input.carriedOver, modelId, definitionOf(modelId).api, providerOf(modelId));
+      }
       if (idleRestart) {
         seedIdleRestart(manager, idleSummary, input.recentMessages ?? [], modelId, definitionOf(modelId).api, providerOf(modelId));
         logEvent({ event: "conversation.idle_restart", runId: input.runId, scope: input.scope, previousEntries: input.runtimeEntries.length,
@@ -1116,11 +1184,13 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const prefetching = route.prefetch ? prefetch(route.prefetch) : Promise.resolve(undefined);
       // 系统提示与工具按档位、修改意图、本轮意图与页面裁剪（conversationPrompt.ts）。
       const shape = { tier: route.tier, writeIntent: route.writeIntent, anthropic, intents: promptIntents(routedMessage, route), materials: materialTools.length > 0 };
-      const fullPrompt = personalCard ? `${isCeo ? SYSTEM_PROMPT : driSystemPrompt(input.viewer.displayName, true)}\n\n${MISSION_CARD_EDITING_PROMPT}`
+      const basePrompt = personalCard ? `${isCeo ? SYSTEM_PROMPT : driSystemPrompt(input.viewer.displayName, true)}\n\n${MISSION_CARD_EDITING_PROMPT}`
         : isCeo ? CEO_SYSTEM_PROMPT
         : driSystemPrompt(input.viewer.displayName);
+      // 三层取用、深聊转议题的说明只在有这些工具时拼上（在表达要求之后，快答档裁剪检索条款时不受影响）。
+      const fullPrompt = [basePrompt, ...(layerTools.length ? [THREE_LAYER_RULES] : []), ...(issueTools.length ? [ISSUE_SUGGEST_RULES] : [])].join("\n\n");
       const toolTimeoutMs = options.toolTimeoutMs ?? TOOL_TIMEOUT_MS;
-      const turnTools = [...mcpTools, ...memoryTools, ...entryTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...evidenceTools, ...outletFeedTools, searchTool]
+      const turnTools = [...mcpTools, ...memoryTools, ...entryTools, ...layerTools, ...issueTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...evidenceTools, ...outletFeedTools, searchTool]
         .filter((tool) => toolAllowed(tool.name, shape))
         // 生成复盘要等重模型起草（失败还会重试），单独放宽到 REVIEW_TOOL_TIMEOUT_MS。
         .map((tool) => withToolTimeout(tool, tool.name === "generate_review" ? Math.max(toolTimeoutMs, REVIEW_TOOL_TIMEOUT_MS) : toolTimeoutMs));
@@ -1213,7 +1283,8 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           // 查证进度：这一步实际读到了什么，由系统按工具结果生成。
           const detail = event.isError ? undefined : toolResultDetail(event.toolName, toolArgs.get(event.toolCallId), event.result);
           toolArgs.delete(event.toolCallId);
-          input.emit({ type: "tool", phase: "completed", toolCallId: event.toolCallId, name: event.toolName, isError: event.isError, ...(detail ? { detail } : {}) });
+          input.emit({ type: "tool", phase: "completed", toolCallId: event.toolCallId, name: event.toolName, isError: event.isError, ...(detail ? { detail } : {}),
+            ...(event.isError ? { errorCode: toolErrorCode(event.result) } : {}) });
         } else if (event.type === "message_end" && event.message.role === "assistant") {
           if (event.message.stopReason !== "error" && event.message.stopReason !== "aborted") pendingText = "";
           escalation.assistantToolCalls(event.message.content.flatMap((block) => (block.type === "toolCall" ? [block.name] : [])));
@@ -1284,6 +1355,10 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           references: input.referencesSnapshot,
           ...(personalMemory.length ? { personalMemory } : {}),
           ...(input.openTodos?.length ? { myOpenTodos: input.openTodos } : {}),
+          ...(input.focus ? { focus: input.focus } : {}),
+          ...(input.scopeOverride ? { scopeOverride: input.scopeOverride } : {}),
+          ...(input.issueContext?.issueThreads.length ? { issueThreads: input.issueContext.issueThreads } : {}),
+          ...(input.issueContext?.declinedIssueTopics.length ? { declinedIssueTopics: input.issueContext.declinedIssueTopics } : {}),
           // 看板与预取的企业知识：内部写法先换成正式中文叫法（currentObject、references 留原文，修改类工具要按原文比对）。
           globalContext: formalTermsDeep(await scopedGlobal()),
           ...(prefetched ? { prefetched: formalTermsDeep(prefetched) } : {}),

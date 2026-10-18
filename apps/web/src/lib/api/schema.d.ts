@@ -1044,6 +1044,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/issue-drafts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** CEO 读首页对话里的一条转议题建议（初稿、能对上的议题、可挂的战场） */
+        get: operations["getIssueDraft"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/issue-drafts/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 开议题（按确认后的初稿与位置新建）或接到已有议题；相关那段首页对话带进议题页，首页留一行留痕；重放返回原结果 */
+        post: operations["acceptIssueDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/issue-drafts/{id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 不用：这个话题之后不再建议转议题 */
+        post: operations["declineIssueDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{scope}/attachments": {
         parameters: {
             query?: never;
@@ -3195,6 +3246,11 @@ export interface components {
                     href: string;
                 } | {
                     /** @constant */
+                    kind: "weekly_review";
+                    weeklyReviewId: string;
+                    href: string;
+                } | {
+                    /** @constant */
                     kind: "todo_pick";
                     question: string;
                     candidates: {
@@ -3225,6 +3281,27 @@ export interface components {
                     requestId: string;
                     href: string;
                 })[];
+                readScope?: {
+                    label: string;
+                    params: {
+                        people?: "all" | "me" | string[];
+                        battlefieldId?: string;
+                        from?: string;
+                        to?: string;
+                    };
+                    choices?: {
+                        people: {
+                            id: string;
+                            name: string;
+                        }[];
+                    };
+                };
+                kind?: "carried" | "trace";
+                meta?: {
+                    issueId?: string;
+                    title?: string;
+                    href?: string;
+                };
             }[];
         };
         ConversationMessageRequest: {
@@ -3240,6 +3317,12 @@ export interface components {
             viewingMaterialId?: string;
             /** Format: uuid */
             resumeRunId?: string;
+            scopeOverride?: {
+                people?: "all" | "me" | string[];
+                battlefieldId?: string;
+                from?: string;
+                to?: string;
+            };
         };
         ConversationSseEvent: {
             runId: string;
@@ -3273,6 +3356,26 @@ export interface components {
             label: string;
             status: "done" | "active" | "pending" | "stopped";
             result?: string;
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
+            type: "scope";
+            label: string;
+            params: {
+                people?: "all" | "me" | string[];
+                battlefieldId?: string;
+                from?: string;
+                to?: string;
+            };
+            choices?: {
+                people: {
+                    id: string;
+                    name: string;
+                }[];
+            };
         } | {
             runId: string;
             /** @description global 或稳定对象 scope */
@@ -3369,6 +3472,72 @@ export interface components {
                 text: string;
                 detail: string;
             };
+        };
+        IssueDraftResponse: {
+            draft: {
+                id: string;
+                status: "proposed" | "accepted" | "declined";
+                draft: {
+                    title: string;
+                    whyNow: string;
+                    formedIdeas: string[];
+                    options: {
+                        label: string;
+                        tradeoff: string;
+                    }[];
+                    openQuestions: string[];
+                };
+                suggestedLocation: ({
+                    /** @constant */
+                    level: "battlefield";
+                    battlefieldId: string;
+                } | {
+                    /** @constant */
+                    level: "company";
+                }) | null;
+                matchedIssue: {
+                    id: string;
+                    title: string;
+                    href: string;
+                } | null;
+                issue: {
+                    id: string;
+                    title: string;
+                    href: string;
+                } | null;
+                battlefields: {
+                    id: string;
+                    name: string;
+                }[];
+                turns: number;
+            };
+        };
+        AcceptIssueDraftRequest: {
+            /** @constant */
+            mode: "new";
+            draft: {
+                title: string;
+                whyNow: string;
+                formedIdeas: string[];
+                options: {
+                    label: string;
+                    tradeoff: string;
+                }[];
+                openQuestions: string[];
+            };
+            location: {
+                /** @constant */
+                level: "battlefield";
+                battlefieldId: string;
+            } | {
+                /** @constant */
+                level: "company";
+            };
+        } | {
+            /** @constant */
+            mode: "existing";
+            /** Format: uuid */
+            issueId: string;
         };
         CreateBattlefieldRequest: {
             code: string;
@@ -12380,6 +12549,184 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getIssueDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 转议题建议 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueDraftResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    acceptIssueDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptIssueDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description 转议题建议的最新视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueDraftResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    declineIssueDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 转议题建议的最新视图 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueDraftResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

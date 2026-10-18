@@ -19,4 +19,11 @@ describe("回答后面的卡", () => {
     ];
     expect(withoutSupersededCards(messages)).toEqual([undefined, [], undefined, [ask("t1")], undefined, [draft("r1")], undefined, [ask("t1")]]);
   });
+
+  it("同一份周复盘再生成后只在最新那张卡上操作", () => {
+    const weekly = { kind: "weekly_review" as const, weeklyReviewId: "w1", href: "/me/weekly-reviews/w1" };
+    const messages: Message[] = [{ sequence: 1, role: "user", content: "帮我写这周复盘" }, reply(2, [weekly]),
+      { sequence: 3, role: "user", content: "再生成一次" }, reply(4, [weekly])];
+    expect(withoutSupersededCards(messages)).toEqual([undefined, [], undefined, [weekly]]);
+  });
 });

@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Check, ChevronRight } from "lucide-react";
 import { Button } from "ts-design/primitives";
-import type { TConversationCard, TPersonalReviewPayload, TRequestStep, TRequestView } from "@warmap/contracts";
+import type { TConversationCard, TPersonalReviewPayload, TRequestStep, TRequestView, TWeeklyReviewPayload } from "@warmap/contracts";
 import { StepList, type Step } from "@/components/steps/StepList";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { DraftRequest } from "@/components/requests/RequestScreen";
@@ -47,6 +47,7 @@ export function EntryCards({ cards, createdAt }: { cards: TConversationCard[]; c
 function EntryCard({ card, createdAt }: { card: TConversationCard; createdAt?: string }) {
   switch (card.kind) {
     case "review": return <ReviewCard id={card.personalReviewId} href={card.href} />;
+    case "weekly_review": return <WeeklyReviewCard id={card.weeklyReviewId} href={card.href} />;
     case "todo_pick": return <PickCard card={card} createdAt={createdAt} />;
     case "todo_ask": return <section className={s.card} aria-label="提问预览"><AskFlow requestId={card.requestId} href={card.href} question={card.question} createdAt={createdAt} /></section>;
     case "todo_answer": return (
@@ -228,8 +229,55 @@ const REVIEW_STATUS: Partial<Record<TPersonalReviewPayload["status"], { label: s
 };
 const LINK = /\[([^\]\n]+)\]\(([^()\s]+)\)/g;
 /** 摘要：总体结果的前几行，出处标记去掉（卡上不展开出处，打开复盘页再看）。 */
-const summaryOf = (review: TPersonalReviewPayload) => (review.selfReview?.overall.text ?? "").replace(LINK, "").replace(/[ \t]+([。，；])/g, "$1")
+const leadLines = (text: string) => text.replace(LINK, "").replace(/[ \t]+([。，；])/g, "$1")
   .split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 3);
+const summaryOf = (review: TPersonalReviewPayload) => leadLines(review.selfReview?.overall.text ?? "");
+
+const WEEKLY_STATUS: Record<TWeeklyReviewPayload["status"], { label: string; tone: "wait" | "done" | "draft" | "error" }> = {
+  drafting: { label: "生成中", tone: "wait" }, draft: { label: "草稿", tone: "draft" }, draft_failed: { label: "没生成成", tone: "error" }, submitted: { label: "已提交", tone: "done" },
+};
+const day = (value: string) => `${Number(value.slice(5, 7))}/${Number(value.slice(8))}`;
+
+/** 周复盘草稿：本周总体判断的前几行与「打开修改」；生成中按步骤显示（别处点了重新生成时每几秒读一次）。 */
+function WeeklyReviewCard({ id, href }: { id: string; href: string }) {
+  const { navigate } = useWorkspace();
+  const [review, setReview] = useState<TWeeklyReviewPayload | null>(null);
+  const [failed, setFailed] = useState(false);
+  const drafting = review?.status === "drafting";
+  useEffect(() => {
+    let live = true;
+    const load = async () => {
+      const { data } = await browserApi.GET("/api/weekly-reviews/{weeklyReviewId}", { params: { path: { weeklyReviewId: id } } });
+      if (!live) return;
+      if (data) setReview(data.review); else setFailed(true);
+    };
+    void load().catch(() => { if (live) setFailed(true); });
+    const timer = drafting ? window.setInterval(() => void load().catch(() => undefined), 3000) : undefined;
+    return () => { live = false; if (timer) window.clearInterval(timer); };
+  }, [id, drafting]);
+  if (failed) return <section className={s.card}><p className={s.muted}>周复盘已不可见</p></section>;
+  if (!review) return <section className={s.card}><div className={s.placeholder} aria-busy="true" /></section>;
+  const status = WEEKLY_STATUS[review.status];
+  const lines = leadLines(review.body?.overall.text ?? "");
+  const kept = review.generationSteps.find((step) => step.id === "draft")?.result;
+  const editable = review.status === "draft" || review.status === "draft_failed";
+  return (
+    <section className={s.card} aria-label="周复盘草稿" data-testid="weekly-review-card">
+      <header className={s.head}>
+        <h3>{day(review.weekStart)}–{day(review.weekEnd)} 周复盘</h3>
+        <span className={r.chip} data-tone={status.tone === "error" ? undefined : status.tone} data-error={status.tone === "error" ? "" : undefined}>{status.label}</span>
+      </header>
+      {drafting ? <StepList className={s.steps} steps={review.generationSteps.map((step) => ({ id: step.id, label: step.label,
+        status: step.status === "running" ? "active" : step.status === "failed" ? "stopped" : step.status, ...(step.result ? { result: step.result } : {}) }))} /> : null}
+      {!drafting && lines.length ? <div className={s.summary}>{lines.map((line, index) => <p key={index}>{line}</p>)}</div> : null}
+      {review.status === "draft_failed" && review.draftError ? <p className={r.error}>{review.draftError.message}</p> : null}
+      <footer className={s.foot}>
+        {kept && !drafting ? <span className={r.tag} data-tone="done">{kept}</span> : <span />}
+        <Button variant="primary" className={r.primary} onPress={() => navigate(href)}>{editable ? "打开修改" : "打开"}<ChevronRight size={16} aria-hidden="true" /></Button>
+      </footer>
+    </section>
+  );
+}
 
 function ReviewCard({ id, href }: { id: string; href: string }) {
   const { navigate } = useWorkspace();

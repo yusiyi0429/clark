@@ -1,5 +1,5 @@
 import type { Pool } from "pg";
-import type { TConversationCard, TPersonalReviewGenerationStep, TRequestPerson, TRequestStep } from "@warmap/contracts";
+import type { TConversationCard, TPersonalReviewGenerationStep, TRequestPerson, TRequestStep, TWeeklyReviewGenerationStep } from "@warmap/contracts";
 import { draftRequest, getRequestRow, prepareQuestion } from "./delivery/requests.js";
 import type { RequestAgent } from "./delivery/requestAgent.js";
 import { listOpenTodos, locateTodo, TODO_KIND_LABELS, type OpenTodo, type TodoPerson } from "./delivery/todoLocator.js";
@@ -7,6 +7,8 @@ import type { Query } from "./meetingStore.js";
 import type { MonthlyReviewService } from "./monthlyReviewService.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { executePersonalReviewAction, getCurrentPersonalReview, getPersonalReview, pendingGenerationSteps, personalReviewHref, type PersonalReviewRow } from "./personalReviews.js";
+import type { WeeklyReviewService } from "./weeklyReviewService.js";
+import { getWeeklyReviewRow, weeklyReviewHref, weeklyReviewText } from "./weeklyReviews.js";
 
 /**
  * 对话里的三个一句话入口（交给主 Agent 的工具，见 piConversationRuntime.ts）：
@@ -37,6 +39,8 @@ export type EntryDeps = {
   now: () => Date;
   /** 个人复盘生成；没配置时生成复盘如实说不可用。 */
   reviews?: MonthlyReviewService;
+  /** 周复盘生成（weeklyReviewService.generateFor）；没配置时如实说不可用。 */
+  weeklyReviews?: WeeklyReviewService;
   /** 这一次调用的幂等键（复盘的「重新生成」动作按它去重）。 */
   fingerprint: string;
   onStep: (step: EntryStep) => void;
@@ -47,7 +51,7 @@ const KEEP_ALIVE_MS = 30_000;
 
 const ASK_STEPS = [["todo-locate", "定位待办"], ["todo-check", "查有没有人问过"], ["todo-organize", "整理问题"], ["todo-confirm", "等你确认"]] as const;
 const REQUEST_STEPS: Record<string, string> = { 起草请求: "request-draft", 查歧义: "request-clarify", 等你确认: "request-confirm" };
-const REVIEW_STATUS: Record<TPersonalReviewGenerationStep["status"], EntryStep["status"]> = { pending: "pending", running: "active", done: "done", failed: "stopped" };
+const REVIEW_STATUS: Record<TPersonalReviewGenerationStep["status"] | TWeeklyReviewGenerationStep["status"], EntryStep["status"]> = { pending: "pending", running: "active", done: "done", failed: "stopped" };
 
 const short = (at: Date) => {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
@@ -85,6 +89,43 @@ export function createConversationEntries(deps: EntryDeps): ConversationEntries 
   };
   const askStepId = (label: string) => ASK_STEPS.find(([, name]) => name === label)?.[0] ?? `todo-${label}`;
   const pendingAfter = (index: number) => { for (const [id, label] of ASK_STEPS.slice(index)) step(id, label, "pending"); };
+
+  /** 本周周复盘：六步（读 Mission 卡 → 读进展 → 读会议结论 → 读采集记录 → 读上周复盘 → 起草）实时显示，完成后挂周复盘卡；本人改过的段落保留。 */
+  async function generateWeekly(): Promise<Record<string, unknown>> {
+    if (!deps.weeklyReviews) return { generated: false, reason: "周复盘生成服务没有配置", note: "如实告诉本人这次生成不了。" };
+    let current: TWeeklyReviewGenerationStep[] = [];
+    const show = (steps: TWeeklyReviewGenerationStep[]) => {
+      current = steps;
+      for (const item of steps) step(`weekly-${item.id}`, item.label, REVIEW_STATUS[item.status], item.result);
+    };
+    const keepAlive = setInterval(() => {
+      const running = current.find((item) => item.status === "running");
+      if (running) step(`weekly-${running.id}`, running.label, "active", running.result);
+    }, KEEP_ALIVE_MS);
+    (keepAlive as { unref?: () => void }).unref?.();
+    let id: string;
+    try {
+      const started = await deps.weeklyReviews.generateFor(deps.viewer.personId, { onStep: show });
+      id = started.weeklyReviewId;
+      if (started.status === "drafting") {
+        const row = await getWeeklyReviewRow(q, id);
+        if (row?.generation_steps.length && !current.length) show(row.generation_steps);
+      }
+      await started.done;
+    } finally { clearInterval(keepAlive); }
+    const row = await getWeeklyReviewRow(q, id);
+    if (!row) return { generated: false, reason: "这一周的周复盘找不到了", note: "如实告诉本人没生成成。" };
+    deps.onCard({ kind: "weekly_review", weeklyReviewId: row.id, href: weeklyReviewHref(row.id, isCeo) });
+    if (row.generation_steps.length) show(row.generation_steps);
+    const week = `${Number(row.week_start.slice(5, 7))}/${Number(row.week_start.slice(8))} 这一周`;
+    if (row.status === "submitted") return { generated: false, week, reason: `${week}的周复盘已经提交，不能再重新生成`, note: "如实告诉本人原因，界面已附周复盘卡。" };
+    if (row.status !== "draft" || !row.body) return { generated: false, week, reason: row.draft_error?.message ?? "这次没有生成成", note: "如实告诉本人没生成成和原因，可以在卡上打开周复盘页重试。" };
+    const missing = row.generation_steps.filter((item) => item.result === "缺少记录").map((item) => item.label.replace(/^读/, ""));
+    return {
+      generated: true, week, draft: plain(weeklyReviewText(row.body)).slice(0, 800), keptYourEdits: row.edited_fields.length, ...(missing.length ? { missingRecords: missing } : {}),
+      note: "周复盘草稿已生成，界面在回答下面附了周复盘卡（摘要和「打开修改」）。回答用一两句话说草稿的要点；keptYourEdits 大于 0 时说明本人改过的段落原样保留；有 missingRecords 时说明缺了哪类记录。不复述全文，不说已经提交。",
+    };
+  }
 
   return {
     async askAboutTodo(args) {
@@ -166,10 +207,7 @@ export function createConversationEntries(deps: EntryDeps): ConversationEntries 
     },
 
     async generateReview(args) {
-      if (args.kind === "weekly") {
-        // 周复盘生成服务（feat/weekly-review）合入后在这里接，界面的步骤和卡与月度复盘一样。
-        return { generated: false, reason: "周复盘的生成还没上线，现在能生成的是月度个人复盘", note: "如实告诉本人周复盘还不能在这里生成。" };
-      }
+      if (args.kind === "weekly") return generateWeekly();
       if (!deps.reviews) return { generated: false, reason: "复盘生成服务没有配置", note: "如实告诉本人这次生成不了。" };
       const period = reviewPeriod(args.period, deps.now());
       const row = period

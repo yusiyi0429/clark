@@ -3483,6 +3483,220 @@
         }
       }
     },
+    "/api/issue-drafts/{id}": {
+      "get": {
+        "operationId": "getIssueDraft",
+        "summary": "CEO 读首页对话里的一条转议题建议（初稿、能对上的议题、可挂的战场）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "转议题建议",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueDraftResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/issue-drafts/{id}/accept": {
+      "post": {
+        "operationId": "acceptIssueDraft",
+        "summary": "开议题（按确认后的初稿与位置新建）或接到已有议题；相关那段首页对话带进议题页，首页留一行留痕；重放返回原结果",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptIssueDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "转议题建议的最新视图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueDraftResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/issue-drafts/{id}/decline": {
+      "post": {
+        "operationId": "declineIssueDraft",
+        "summary": "不用：这个话题之后不再建议转议题",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "转议题建议的最新视图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueDraftResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{scope}/attachments": {
       "post": {
         "operationId": "uploadConversationAttachments",
@@ -13148,6 +13362,29 @@
                         "type": "object",
                         "required": [
                           "kind",
+                          "weeklyReviewId",
+                          "href"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "weekly_review",
+                            "type": "string"
+                          },
+                          "weeklyReviewId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "href": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
                           "question",
                           "candidates"
                         ],
@@ -13310,6 +13547,119 @@
                       }
                     ]
                   }
+                },
+                "readScope": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "label",
+                    "params"
+                  ],
+                  "properties": {
+                    "label": {
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "type": "string"
+                    },
+                    "params": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "properties": {
+                        "people": {
+                          "anyOf": [
+                            {
+                              "const": "all",
+                              "type": "string"
+                            },
+                            {
+                              "const": "me",
+                              "type": "string"
+                            },
+                            {
+                              "minItems": 1,
+                              "maxItems": 30,
+                              "uniqueItems": true,
+                              "type": "array",
+                              "items": {
+                                "minLength": 1,
+                                "maxLength": 100,
+                                "type": "string"
+                              }
+                            }
+                          ]
+                        },
+                        "battlefieldId": {
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "type": "string"
+                        },
+                        "from": {
+                          "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                          "type": "string"
+                        },
+                        "to": {
+                          "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "choices": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "people"
+                      ],
+                      "properties": {
+                        "people": {
+                          "maxItems": 80,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "carried",
+                      "type": "string"
+                    },
+                    {
+                      "const": "trace",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "meta": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "properties": {
+                    "issueId": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "href": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -13374,6 +13724,48 @@
           "resumeRunId": {
             "format": "uuid",
             "type": "string"
+          },
+          "scopeOverride": {
+            "additionalProperties": false,
+            "type": "object",
+            "properties": {
+              "people": {
+                "anyOf": [
+                  {
+                    "const": "all",
+                    "type": "string"
+                  },
+                  {
+                    "const": "me",
+                    "type": "string"
+                  },
+                  {
+                    "minItems": 1,
+                    "maxItems": 30,
+                    "uniqueItems": true,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    }
+                  }
+                ]
+              },
+              "battlefieldId": {
+                "minLength": 1,
+                "maxLength": 100,
+                "type": "string"
+              },
+              "from": {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              "to": {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -13526,6 +13918,112 @@
               },
               "result": {
                 "type": "string"
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "runId",
+              "scope",
+              "sequence",
+              "type",
+              "label",
+              "params"
+            ],
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "scope": {
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "description": "global 或稳定对象 scope",
+                "type": "string"
+              },
+              "sequence": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "scope",
+                "type": "string"
+              },
+              "label": {
+                "minLength": 1,
+                "maxLength": 80,
+                "type": "string"
+              },
+              "params": {
+                "additionalProperties": false,
+                "type": "object",
+                "properties": {
+                  "people": {
+                    "anyOf": [
+                      {
+                        "const": "all",
+                        "type": "string"
+                      },
+                      {
+                        "const": "me",
+                        "type": "string"
+                      },
+                      {
+                        "minItems": 1,
+                        "maxItems": 30,
+                        "uniqueItems": true,
+                        "type": "array",
+                        "items": {
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  },
+                  "battlefieldId": {
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "from": {
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "type": "string"
+                  },
+                  "to": {
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "type": "string"
+                  }
+                }
+              },
+              "choices": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "people"
+                ],
+                "properties": {
+                  "people": {
+                    "maxItems": 80,
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
               }
             }
           },
@@ -13996,6 +14494,371 @@
                     "type": "string"
                   }
                 }
+              }
+            }
+          }
+        ]
+      },
+      "IssueDraftResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "draft"
+        ],
+        "properties": {
+          "draft": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "status",
+              "draft",
+              "suggestedLocation",
+              "matchedIssue",
+              "issue",
+              "battlefields",
+              "turns"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "proposed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "accepted",
+                    "type": "string"
+                  },
+                  {
+                    "const": "declined",
+                    "type": "string"
+                  }
+                ]
+              },
+              "draft": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "title",
+                  "whyNow",
+                  "formedIdeas",
+                  "options",
+                  "openQuestions"
+                ],
+                "properties": {
+                  "title": {
+                    "minLength": 1,
+                    "maxLength": 25,
+                    "type": "string"
+                  },
+                  "whyNow": {
+                    "minLength": 1,
+                    "maxLength": 1000,
+                    "type": "string"
+                  },
+                  "formedIdeas": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "type": "string"
+                    }
+                  },
+                  "options": {
+                    "maxItems": 5,
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "label",
+                        "tradeoff"
+                      ],
+                      "properties": {
+                        "label": {
+                          "minLength": 1,
+                          "maxLength": 60,
+                          "type": "string"
+                        },
+                        "tradeoff": {
+                          "maxLength": 500,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "openQuestions": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "suggestedLocation": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "level",
+                          "battlefieldId"
+                        ],
+                        "properties": {
+                          "level": {
+                            "const": "battlefield",
+                            "type": "string"
+                          },
+                          "battlefieldId": {
+                            "minLength": 1,
+                            "maxLength": 100,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "level"
+                        ],
+                        "properties": {
+                          "level": {
+                            "const": "company",
+                            "type": "string"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "matchedIssue": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "title",
+                      "href"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "href": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "issue": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "title",
+                      "href"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "href": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "battlefields": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "turns": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "AcceptIssueDraftRequest": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "mode",
+              "draft",
+              "location"
+            ],
+            "properties": {
+              "mode": {
+                "const": "new",
+                "type": "string"
+              },
+              "draft": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "title",
+                  "whyNow",
+                  "formedIdeas",
+                  "options",
+                  "openQuestions"
+                ],
+                "properties": {
+                  "title": {
+                    "minLength": 1,
+                    "maxLength": 25,
+                    "type": "string"
+                  },
+                  "whyNow": {
+                    "minLength": 1,
+                    "maxLength": 1000,
+                    "type": "string"
+                  },
+                  "formedIdeas": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "type": "string"
+                    }
+                  },
+                  "options": {
+                    "maxItems": 5,
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "label",
+                        "tradeoff"
+                      ],
+                      "properties": {
+                        "label": {
+                          "minLength": 1,
+                          "maxLength": 60,
+                          "type": "string"
+                        },
+                        "tradeoff": {
+                          "maxLength": 500,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "openQuestions": {
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "location": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "level",
+                      "battlefieldId"
+                    ],
+                    "properties": {
+                      "level": {
+                        "const": "battlefield",
+                        "type": "string"
+                      },
+                      "battlefieldId": {
+                        "minLength": 1,
+                        "maxLength": 100,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "level"
+                    ],
+                    "properties": {
+                      "level": {
+                        "const": "company",
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "mode",
+              "issueId"
+            ],
+            "properties": {
+              "mode": {
+                "const": "existing",
+                "type": "string"
+              },
+              "issueId": {
+                "format": "uuid",
+                "type": "string"
               }
             }
           }

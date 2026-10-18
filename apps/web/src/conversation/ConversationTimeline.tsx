@@ -5,6 +5,7 @@ import { ConversationStatusSlot, ConversationThinking, ConversationTurns } from 
 import { AnswerOptions } from "./AnswerOptionRow";
 import { EntryCards } from "./EntryCards";
 import { parseAnswerOptions } from "./answerOptions";
+import { RescopeContext } from "./ScopeChip";
 import type { ConversationData, Message } from "./useConversation";
 
 /** 同一份请求草稿、同一份复盘只在最近的那张卡上操作：后面的回答又出了它的卡（如按回答重写），前面那张不再显示。 */
@@ -12,6 +13,7 @@ export function withoutSupersededCards(messages: Message[]): (Message["cards"] |
   const seen = new Set<string>();
   // 帮我问问的卡每张是一次单独的提问，都留着。
   const keyOf = (card: NonNullable<Message["cards"]>[number]) => card.kind === "review" ? `review:${card.personalReviewId}`
+    : card.kind === "weekly_review" ? `weekly:${card.weeklyReviewId}`
     : card.kind === "request_draft" ? `request:${card.requestId}` : null;
   return [...messages].reverse().map((message) => {
     if (message.role !== "assistant" || !message.cards?.length) return undefined;
@@ -42,10 +44,14 @@ export function ConversationTimeline({ data }: { data: ConversationData }) {
   // 状态区：回答进行中一直占着位置。
   const status = data.streaming ? (
     <ConversationStatusSlot>
-      {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={data.thought} /> : null}
+      {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={data.thought} readScope={data.readScope} /> : null}
     </ConversationStatusSlot>
   ) : null;
+  // 范围标签改范围后按新范围重读：回答进行中不能点。
+  const rescope = useMemo(() => ({ rescope: (params: Parameters<typeof data.rescope>[0], label: string) => void data.rescope(params, label), busy: data.streaming }),
+    [data.rescope, data.streaming]);
   return (
+    <RescopeContext.Provider value={rescope}>
     <ConversationTurns messages={data.messages} partial={data.streaming ? data.partial : ""} status={status}
       thought={data.thought?.seconds != null ? { text: data.thought.text, seconds: data.thought.seconds } : null}
       steps={!data.thinking || data.stage === "answering" ? data.steps : null}
@@ -54,5 +60,6 @@ export function ConversationTimeline({ data }: { data: ConversationData }) {
         const cards = latestCards[index];
         return cards?.length ? <EntryCards cards={cards} createdAt={data.messages[index].createdAt} /> : null;
       }} />
+    </RescopeContext.Provider>
   );
 }
