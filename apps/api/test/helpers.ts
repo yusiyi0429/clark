@@ -257,6 +257,8 @@ export async function createTestApp(
     personalDistillationStream?: Parameters<typeof buildApp>[0]["personalDistillationStream"];
     /** 飞书开放接口替身；配合 seedOverrides.feishu 使用。 */
     feishuClient?: FeishuClient;
+    /** 个人记忆的召回模型替身；不注入时不用模型、只按字面重合选（测试里不调真实模型）。 */
+    personalMemoryRecall?: Parameters<typeof buildApp>[0]["personalMemoryRecall"];
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {
@@ -273,7 +275,7 @@ export async function createTestApp(
   client.release();
   const env = { ...testEnv, ...seedOverrides };
   const { monthlyDraftAgent, monthlyNow, recordingDeps, monthlyReviewAgents, monthlyReviewRetryDelayMs, ...restRuntimeOptions } = runtimeOptions;
-  const appRuntimeOptions = { backgroundPreflight: false, personalDistillationStream: noopDistillationStream, ...restRuntimeOptions };
+  const appRuntimeOptions = { backgroundPreflight: false, personalDistillationStream: noopDistillationStream, personalMemoryRecall: null, ...restRuntimeOptions };
   const monthlyPlans = monthlyDraftAgent
     ? createMonthlyPlanService({ pool, companyMemory: loadCompanyMemory(env), agent: monthlyDraftAgent, now: monthlyNow })
     : undefined;

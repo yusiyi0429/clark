@@ -49,6 +49,16 @@ export function dayLabel(iso: string | null | undefined, now = new Date()): stri
   return `${day.slice(0, 4) === today.slice(0, 4) ? "" : `${year} 年 `}${month} 月 ${dayOfMonth} 日`;
 }
 
+/** 「今天 16:20」「昨天 16:20」，再早的写「10/15 16:20」：对话卡里说某件待办是什么时候发的。 */
+export function relativeDayTime(iso: string | null | undefined, now = new Date()): string {
+  const date = valid(iso);
+  if (!date) return "";
+  const day = companyDay(date);
+  if (day === companyDay(now)) return `今天 ${clock(date)}`;
+  if (day === companyDay(new Date(now.getTime() - 86_400_000))) return `昨天 ${clock(date)}`;
+  return monthDayTime(iso);
+}
+
 /** 「10 月 18 日 16:40」：验收记录上的时间。 */
 export function monthDayClock(iso: string | null | undefined): string {
   const date = valid(iso);

@@ -5,6 +5,7 @@ import {
   ConversationMessageRequest,
   ConversationScope,
   type TConversationAttachment,
+  type TConversationCard,
   type TConversationMessageRequest,
   type TConversationScope,
 } from "@warmap/contracts";
@@ -22,7 +23,6 @@ import {
 import { AGENT_ROLES, anonUserId, conversationScope, conversationThreadId, conversationTurnId, preview, tracedTurn } from "../tracing.js";
 import { MAX_MATERIAL_FILES, MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch } from "../materialParser.js";
 import { logEvent } from "../observability.js";
-import { personDisplayNames } from "../people.js";
 import { getIssueRow } from "../issues.js";
 import { getMeetingRow } from "../meetingStore.js";
 import { projectMemberIssueCard, projectMemberMeetingCard } from "../memberCards.js";
@@ -33,9 +33,12 @@ import { ConversationTurnError, recoveryNote, resumeInstruction, shortFailureRea
 import { personalMemoryToolsFor, unknownMemoryMarks } from "../personalMemory.js";
 import { searchOwnConversationHistory } from "../conversationHistorySearch.js";
 import { createStepTracker } from "../conversationSteps.js";
+import { createConversationEntries, openTodoContext } from "../conversationEntries.js";
+import type { RequestAgent } from "../delivery/requestAgent.js";
+import { isRealPerson, personDisplayNames } from "../people.js";
 import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
 
-export function registerConversationRoutes(app: AppInstance, ctx: RouteContext): void {
+export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, deliveryAgent: RequestAgent): void {
   const { pool, q, env, fail, requirePerson, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, conversationStallTimeoutMs, conversationHeartbeatMs, conversationCompaction } = ctx;
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
@@ -192,10 +195,18 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         // 当前页面对象就是这一轮的 anchor：检索时只比对象、不比版本；钉住的版本比现在旧时标「基于旧版本」（R8）。
         const objectRef = object.snapshot?.objectRef;
         const currentObject = objectRef ? { target: `${objectRef.type}:${objectRef.id}`, version: objectRef.version } : undefined;
-        const personalMemory = await ctx.personalMemory.select(owner, req.body.message, { currentObject }, client)
+        // 选取要等召回模型（personalMemoryRecall.ts）：不在这里等，交给运行时与分诊同时进行，拼上下文包时才等它。
+        // 本轮实际装进上下文的个人记忆 id：上下文包里的，加上检索工具返回的；随回答存进 memory_used。
+        // 运行时等的是记完 id 的这个 Promise，模型看到的条目一定已经记下。
+        const memoryUsed = new Set<string>();
+        const personalMemory = ctx.personalMemory.select(owner, req.body.message, { currentObject }, client)
           .then((entries) => entries.map(({ id, title, text, createdAt, basedOnOldVersion }) => ({ id, title, text, createdAt, ...(basedOnOldVersion ? { basedOnOldVersion } : {}) })), (error: unknown) => {
             logEvent({ event: "personal_memory.unavailable", requestId: String(req.id), runId, scope: req.params.scope, errorCode: (error as { code?: string })?.code ?? "PERSONAL_MEMORY_UNAVAILABLE" });
             return [];
+          })
+          .then((entries) => {
+            for (const entry of entries) memoryUsed.add(entry.id);
+            return entries;
           });
         // 主 Agent 记下的条目：依据是本轮这句原话，anchor 是当前页面对象（钉住此刻的版本）。
         const memoryTools = personalMemoryToolsFor(ctx.personalMemory, owner, (event) =>
@@ -203,14 +214,15 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           reference: { ref: `chat:${row.id}#${userSequence}`, quote: req.body.message.slice(0, 500), at: new Date().toISOString() },
           anchors: currentObject ? [{ target: currentObject.target, ...(typeof currentObject.version === "number" ? { pinnedVersion: currentObject.version } : {}) }] : [],
         });
-        // 本轮实际装进上下文的个人记忆 id：上下文包里的，加上检索工具返回的；随回答存进 memory_used。
-        const memoryUsed = new Set(personalMemory.map((entry) => entry.id));
         const personalMemoryTools = { ...memoryTools, search: async (query: string) => {
           const entries = await memoryTools.search(query);
           for (const entry of entries) memoryUsed.add(entry.id);
           return entries;
         } };
         const memoryUsedJson = () => (memoryUsed.size ? JSON.stringify([...memoryUsed]) : null);
+        // 本人手上没完成的待办，每轮带进上下文（条数少，只有标题、发起人、时间、类型）；读不到不影响这一轮。
+        const names = personDisplayNames(companyMemory);
+        const openTodos = await openTodoContext(q, owner, names).catch(() => []);
         const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
           `SELECT role, content, created_at
              FROM conversation_messages
@@ -296,6 +308,15 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         };
         // 当前步骤（已定设计第 6 节第 2 条）：工具开始、结束映射成 step 事件；整轮的步骤随运行记录存下。
         const steps = createStepTracker((step) => emit({ type: "step", ...step }));
+        // 对话里的一句话入口（生成复盘、帮我问问、请同事帮忙）：步骤实时报给界面，结果卡随这一轮的运行记录存下、挂在回答后面。
+        const cards: TConversationCard[] = [];
+        const directory = companyMemory.searchPeople(undefined).filter(isRealPerson).map(({ personId, displayName }) => ({ personId, displayName }));
+        const entries = createConversationEntries({
+          pool, agent: deliveryAgent, secret: env.sessionSecret, viewer: { personId: owner, role: person.role },
+          message: resume ? resume.question : req.body.message, names, people: directory, directory, now: ctx.now,
+          reviews: ctx.monthlyReviewService, fingerprint: `conversation:${runId}`,
+          onStep: (step) => steps.report(step), onCard: (card) => { if (cards.length < 4) cards.push(card); },
+        });
 
         // 整轮卡住检测（最后一道）：模型调用自己的卡住会就地恢复并发 recovery 事件；这里只在连恢复都没有进展时停下。
         const stall = setInterval(() => {
@@ -318,7 +339,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           return JSON.stringify({ route: { tier: routeTier ?? null, model: routeModel ?? null, recoveries,
             ...(summary ? { recovery: { originalModel: summary.originalModel, fallbackModel: summary.fallbackModel ?? null, reasons: summary.reasons,
               actions: summary.actions, retries: summary.retries } } : {}) },
-            ...(partial === undefined ? {} : { partial }), steps: steps.list(), ...(signals.length ? { qualitySignals: signals } : {}) });
+            ...(partial === undefined ? {} : { partial }), steps: steps.list(), ...(cards.length ? { cards } : {}), ...(signals.length ? { qualitySignals: signals } : {}) });
         };
         let recoverySummary: TurnRecoverySummary | undefined;
         /**
@@ -380,14 +401,16 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           }, () => runtime.run({
             scope: req.params.scope,
             runId,
-            viewer: { personId: owner, displayName: personDisplayNames(companyMemory).get(owner) ?? owner, role: person.role },
+            viewer: { personId: owner, displayName: names.get(owner) ?? owner, role: person.role },
             message: runtimeMessage,
             currentObject: object.snapshot,
             referencesSnapshot: references.snapshots,
-            ...(personalMemory.length ? { personalMemory } : {}),
+            personalMemory,
             personalMemoryTools,
             // 本人历史对话原文检索（3e）：跨所有页面与归档，只查本人，本轮这条不算。
             searchHistory: (query: string) => searchOwnConversationHistory(q, { personId: owner, query, excludeRunId: runId }),
+            openTodos,
+            entries,
             recentMessages: recent.rows.reverse().map((message) => ({
               role: message.role,
               content: message.content,

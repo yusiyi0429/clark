@@ -9,6 +9,7 @@ import multipart from "@fastify/multipart";
 import { loadCompanyMemory, type CompanyMemorySeedEnv } from "./companyMemory.js";
 import { createCompanyMemory as createCompanyReader, type CompanyEnv } from "./company.js";
 import { createPersonalMemory } from "./personalMemory.js";
+import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
 import { registerPersonalMemoryRoutes } from "./routes/personalMemory.js";
 import { globalConversationContext, listConversationMissions } from "./conversationContext.js";
@@ -145,6 +146,8 @@ export type AppEnv = {
   conversationThinking?: string;
   /** 对话每轮分档的快模型分诊；不配时用 lightModel（关思考）。 */
   triageModel?: string;
+  /** 个人记忆召回的快模型（MEMORY_RECALL_MODEL）；不配时依次用 triageModel、lightModel（personalMemoryRecall.ts）。 */
+  memoryRecallModel?: string;
   /** 会前预审模型；不配时用 heavyModel（10/13：预审从 light 换到 Sol 档并打开思考）。 */
   preflightModel?: string;
   /** 会前预审思考强度（off / low / medium / high / xhigh）；不配时 high。 */
@@ -167,6 +170,7 @@ export async function buildApp({
   env,
   conversationRuntime,
   personalDistillationStream,
+  personalMemoryRecall,
   radarService,
   personalRadarService,
   researchService,
@@ -204,6 +208,8 @@ export async function buildApp({
   conversationRuntime?: ConversationRuntime;
   /** 个人记忆提炼用的模型流（测试注入假实现）；不给时按 PI_BASE_URL 调 light 模型。 */
   personalDistillationStream?: Parameters<typeof createPersonalDistillation>[0]["streamSimple"];
+  /** 个人记忆的召回模型（测试注入替身，null 表示不用模型、只按字面重合选）；不给时按 PI_BASE_URL 调分诊用的快模型。 */
+  personalMemoryRecall?: MemoryRecall | null;
   radarService?: RadarService;
   /** 个人雷达扫描队列；缺省为不扫描的桩（server.ts 注入与公司雷达共用博查与发布方 adapter 的真实服务）。 */
   personalRadarService?: PersonalRadarService;
@@ -304,8 +310,11 @@ export async function buildApp({
     return snapshot ? ontologyToolResult(snapshot, companyPeriod(now()), query) : null;
   } : undefined;
   const tierModels = conversationTierModels({ defaultModel: env.heavyModel, conversationModel: env.conversationModel });
-  // 个人记忆（PR #12）：只有本人可见，不写进本体；后台按对话提炼。
-  const personalMemory = createPersonalMemory({ pool });
+  // 个人记忆（PR #12）：只有本人可见，不写进本体；后台按对话提炼。每轮由快模型（MEMORY_RECALL_MODEL，与分诊分开配）从本人的记忆目录里挑相关条目（personalMemoryRecall.ts）。
+  const recall = personalMemoryRecall === undefined
+    ? (env.piBaseUrl && env.piApiKey ? createMemoryRecall({ baseUrl: env.piBaseUrl, apiKey: env.piApiKey, ...memoryRecallModels(env) }) : undefined)
+    : personalMemoryRecall ?? undefined;
+  const personalMemory = createPersonalMemory({ pool, recall });
   const personalDistillation = createPersonalDistillation({ pool, memory: personalMemory, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
     modelId: env.lightModel, streamSimple: personalDistillationStream });
   // 本体只读公司事实（PR #12 的 query_company）：按人授权的域读取；读不到时如实说明并回退本地（company.ts）。
@@ -562,7 +571,9 @@ export async function buildApp({
   registerCardRoutes(app, ctx);
   registerConfigRoutes(app, ctx);
   registerRadarRoutes(app, ctx);
-  registerConversationRoutes(app, ctx);
+  // 送达通道的轻量模型调用：请求页和对话里的「帮我问问」「请同事帮忙」共用一份。
+  const deliveryAgent = requestAgent ?? createRequestAgent(pool, env);
+  registerConversationRoutes(app, ctx, deliveryAgent);
   registerMeetingRoutes(app, ctx);
   registerMaterialRoutes(app, ctx, materialAnnotationAgent);
   registerKnowledgeRoutes(app, ctx);
@@ -578,7 +589,7 @@ export async function buildApp({
   registerMissionCardRoutes(app, ctx, missionCardAnnotationAgent, missionCardReviewAgent);
   registerMyRadarRoutes(app, ctx);
   registerMonthlyReviewRoutes(app, ctx);
-  registerRequestRoutes(app, ctx, requestAgent ?? createRequestAgent(pool, env));
+  registerRequestRoutes(app, ctx, deliveryAgent);
   registerPersonalMemoryRoutes(app, ctx);
   registerCollectorRoutes(app, ctx);
 

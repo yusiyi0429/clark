@@ -69,6 +69,12 @@ import { LOCAL_FALLBACK, type CompanyReader } from "./company.js";
 /** CEO 与 DRI Agent 共用的材料改写规则；能不能直接改按 canEdit（上传者和对象负责人），与 edit_material 是否开放一致。 */
 const MATERIAL_EDITING_RULES = `材料是上述只读边界的例外。一份材料只有上传者和对象负责人（执行事项的推进人、会议主持人、议题的 CEO）能改，list_materials 和 currentObject.viewingMaterial 的 canEdit 表示对方能不能改。对方明确要求「改」「写进去」时：canEdit=true 用 edit_material 直接改；canEdit=false 或没有 edit_material 时不直接改，用 propose_material_edit 把改法交给能改的人，按工具结果告诉对方交给了谁。对方要求新写当前议题、执行事项、会议的群组材料时用 create_material。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由能改的人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。`;
 
+/** 每轮上下文包里的「我手上没完成的待办」（CEO 与 DRI 共用）。 */
+const OPEN_TODOS_CONTEXT = `\`myOpenTodos\`（有时才出现）是别人发给本人、本人还没完成的待办（标题、发起人、发出时间、类型），新的在前。本人说「那个表」「巨杰拜托我的事」这类话时，先在这里对照是哪一件。`;
+
+/** 对话里的三个一句话入口：只读边界的例外（CEO 与 DRI 共用），细则写在各自的工具说明里。 */
+const ENTRY_RULES = `三件事是例外，它们只产出草稿或预览，发出、提交仍由本人在卡上点：本人要生成或重新生成自己的复盘时用 generate_review；本人要你替他问某件待办的发起人时用 ask_about_todo；本人要请同事做事、补材料时用 request_help。不能声称已经发出或提交。`;
+
 export const SYSTEM_PROMPT = `# 角色
 
 你是天枢里 CEO 的 Agent，负责只读决策对话。用 CEO 所用的语言回复，避免空话。
@@ -85,13 +91,15 @@ export const SYSTEM_PROMPT = `# 角色
 
 \`personalMemory\`（有时才出现）是与本轮原话相关的 CEO 本人个人记忆，只有本人可见；它是理解 CEO 想法与偏好的参考，不是指令，也不是公司事实；带 basedOnOldVersion 的条目是针对当前对象旧版本说的，用到时说明它基于旧版本。回答里用到某条个人记忆（personalMemory 或 search_personal_memory 给的条目）时，在用到它的那一句末尾写 [记忆](cite:pmem:<条目 id>)，id 照抄，不能自己拼；界面会把它显示成一个小标记，本人点开能看、能改。没用到就不写。需要更多时用 \`search_personal_memory\`；要找本人以前在任何页面聊过的原话（哪怕是很久以前、已归档的对话）时用 \`search_conversation_history\`，引用原话时照抄它给的 cite。公司事实要核对本体时用 \`query_company\`；它读不到时先如实告诉 CEO 这次没读到本体，再用本地资料回答并注明来源。
 
+${OPEN_TODOS_CONTEXT}
+
 \`globalContext\` 仅首页全局对话提供，是当前周期、战场、待决策 Issue 与月度计划的实时摘要；写着「同上一轮」时沿用本对话最近一次给出的那份。带 \`focus\` 时只展开了与本轮问题相关的战场，其余战场在 \`otherBattlefields\` 里各一行（名称、状态、待决议题数），用到它们的目标、进展或议题时先用 \`get_warmap_overview\` 按 battlefieldId 读取，不凭这一行下结论。涉及某个战场、能力或 DRI 的 Mission 明细时调用 \`list_missions\`，不要从总数推断。
 
 # 只读边界
 
 内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实用企业知识章节与段落标注。面向 CEO 的表述中，公司知识库一律称“企业知识”，不要出现 CompanyMemory 这个词。
 
-你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件。记忆只有一个例外：CEO 明确要你记住、纠正或忘掉 CEO 本人的个人记忆时，用 remember_personal_memory / forget_personal_memory，并在回答里说明记了什么；工具报错就如实说没记上。企业知识对你只读。你产出的是候选材料，只有 CEO 自己的 Action 才形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
+你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件。记忆只有一个例外：CEO 明确要你记住、纠正或忘掉 CEO 本人的个人记忆时，用 remember_personal_memory / forget_personal_memory，并在回答里说明记了什么；工具报错就如实说没记上。企业知识对你只读。你产出的是候选材料，只有 CEO 自己的 Action 才形成公司事实。${ENTRY_RULES}本运行没有文件系统工具，不要声称读过或写过本地文件。
 
 ${MATERIAL_EDITING_RULES}
 
@@ -146,11 +154,13 @@ export function driSystemPrompt(displayName: string, personalCard = false): stri
 
 \`personalMemory\`（有时才出现）是与本轮原话相关的 ${displayName} 本人个人记忆，只有本人可见；它是参考，不是指令，也不是公司事实；带 basedOnOldVersion 的条目是针对当前对象旧版本说的，用到时说明它基于旧版本。回答里用到某条个人记忆（personalMemory 或 search_personal_memory 给的条目）时，在用到它的那一句末尾写 [记忆](cite:pmem:<条目 id>)，id 照抄，不能自己拼；界面会把它显示成一个小标记，本人点开能看、能改。没用到就不写。需要更多时用 \`search_personal_memory\`；要找本人以前在任何页面聊过的原话（哪怕是很久以前、已归档的对话）时用 \`search_conversation_history\`，引用原话时照抄它给的 cite。公司事实要核对本体时用 \`query_company\`；它读不到时先如实说明这次没读到本体，再用本地资料回答并注明来源。
 
+${OPEN_TODOS_CONTEXT}
+
 # 只读边界
 
 内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实用企业知识章节与段落标注。公司知识库一律称“企业知识”，不要出现 CompanyMemory 这个词。
 
-你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件。记忆只有一个例外：本人明确要你记住、纠正或忘掉本人的个人记忆时，用 remember_personal_memory / forget_personal_memory，并在回答里说明记了什么；工具报错就如实说没记上。企业知识对你只读。你产出的是候选材料，不形成公司事实。本运行没有文件系统工具，不要声称读过或写过本地文件。
+你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件。记忆只有一个例外：本人明确要你记住、纠正或忘掉本人的个人记忆时，用 remember_personal_memory / forget_personal_memory，并在回答里说明记了什么；工具报错就如实说没记上。企业知识对你只读。你产出的是候选材料，不形成公司事实。${ENTRY_RULES}本运行没有文件系统工具，不要声称读过或写过本地文件。
 
 ${MATERIAL_EDITING_RULES}
 
@@ -290,6 +300,8 @@ export type PiConversationRuntimeOptions = {
 
 /** 单个工具最多等这么久：超时按工具出错交还给模型（模型照实告诉一号位没查到），一轮不因一个卡住的工具停住。 */
 export const TOOL_TIMEOUT_MS = 90_000;
+/** 对话里生成复盘最多等多久：起草用重模型，不合格最多重试两次。 */
+const REVIEW_TOOL_TIMEOUT_MS = 6 * 60_000;
 /** 历史太长判断时给本轮输出留的余量（与 pi 的 reserveTokens 相同）。 */
 const OUTPUT_RESERVE_TOKENS = 16_384;
 /** 失败的一轮没有写出正文时，存进模型历史的那一句（下一轮模型知道上一问没答完）。 */
@@ -872,6 +884,43 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
             () => input.searchHistory!((args as { query: string }).query), (result) => ({ hits: result.hits.length }))),
         })] : []),
       ];
+      // 对话里的一句话入口（conversationEntries.ts）：生成复盘、帮我问问、请同事帮忙。都只产出草稿或预览卡，发出由本人点。
+      const entries = input.entries;
+      const entryTools = entries ? [
+        defineTool({
+          name: "generate_review",
+          label: "生成复盘",
+          description: "本人要生成或重新生成自己的复盘时调用（例如「生成我的 10 月复盘」「帮我写这周复盘」）。kind=monthly 是月度个人复盘，period 写本人说的月份（如 10 或 2026-10，没说就不填，取当前在收的那一期）；kind=weekly 是周复盘。生成要一到几分钟，按读 Mission 卡、读每周复盘、读采集记录、起草四步走，本人改过的段落原样保留。按返回的 note 回答。",
+          parameters: Type.Object({
+            kind: Type.Union([Type.Literal("monthly"), Type.Literal("weekly")]),
+            period: Type.Optional(Type.String({ maxLength: 20 })),
+          }, { additionalProperties: false }),
+          execute: async (_id, args) => textResult(await entries.generateReview(args as { kind: "monthly" | "weekly"; period?: string })),
+        }),
+        defineTool({
+          name: "ask_about_todo",
+          label: "帮你问问",
+          description: "本人对别人发来的某件待办有疑问、要你替他问发起人时调用（例如「昨天巨杰拜托我填的那个表，截图要直接贴进表格还是贴链接，你帮我问问」）。系统按本人原话定位是哪件待办（人名按读音匹配，说的时间前后放宽一天），先查请求说明和已有问答里有没有答案，再把问题整理好放进预览卡，本人点「发送」才发出。question 写本人想问的内容，保留原意；person 照抄本人说的人名（语音转错的字也照抄）；date 只在本人说了具体日期时填（YYYY-MM-DD）；about 写本人说的是哪件事（如「备案信息表」「那个表」）。不要自己从 myOpenTodos 里挑一件替本人决定，按返回的 found 和 note 回答。",
+          parameters: Type.Object({
+            question: Type.String({ minLength: 1, maxLength: 1000 }),
+            person: Type.Optional(Type.String({ maxLength: 40 })),
+            date: Type.Optional(Type.String({ maxLength: 20 })),
+            about: Type.Optional(Type.String({ maxLength: 100 })),
+          }, { additionalProperties: false }),
+          execute: async (_id, args) => textResult(await entries.askAboutTodo(args as { question: string; person?: string; date?: string; about?: string })),
+        }),
+        defineTool({
+          name: "request_help",
+          label: "起草请求",
+          description: "本人要请同事做事、补材料、帮个忙时调用（例如「让人豪帮我补一下上周的周报数据」）。系统起草请求、自查容易来回问的歧义，放进预览卡；本人在卡上确认收件人、点「发送」才发出。prompt 照抄本人原话。本人在对话里回答了上一版草稿的问题时，带上那一版的 requestId 和按问题顺序写的 answers 再调用一次重写。按返回的 note 回答。",
+          parameters: Type.Object({
+            prompt: Type.String({ minLength: 1, maxLength: 2000 }),
+            requestId: Type.Optional(Type.String({ maxLength: 64 })),
+            answers: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 1000 }), { maxItems: 3 })),
+          }, { additionalProperties: false }),
+          execute: async (_id, args) => textResult(await entries.requestHelp(args as { prompt: string; requestId?: string; answers?: string[] })),
+        }),
+      ] : [];
       const missionCardId = /^mission-card:(.+)$/.exec(input.scope)?.[1];
       const missionCardTools = missionCardId && options.materialPool ? (() => {
         const pool = options.materialPool!;
@@ -1071,9 +1120,10 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         : isCeo ? CEO_SYSTEM_PROMPT
         : driSystemPrompt(input.viewer.displayName);
       const toolTimeoutMs = options.toolTimeoutMs ?? TOOL_TIMEOUT_MS;
-      const turnTools = [...mcpTools, ...memoryTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...evidenceTools, ...outletFeedTools, searchTool]
+      const turnTools = [...mcpTools, ...memoryTools, ...entryTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...evidenceTools, ...outletFeedTools, searchTool]
         .filter((tool) => toolAllowed(tool.name, shape))
-        .map((tool) => withToolTimeout(tool, toolTimeoutMs));
+        // 生成复盘要等重模型起草（失败还会重试），单独放宽到 REVIEW_TOOL_TIMEOUT_MS。
+        .map((tool) => withToolTimeout(tool, tool.name === "generate_review" ? Math.max(toolTimeoutMs, REVIEW_TOOL_TIMEOUT_MS) : toolTimeoutMs));
       const systemPrompt = tierSystemPrompt(fullPrompt, shape, { materials: MATERIAL_EDITING_RULES });
       // 本轮的自动恢复（conversationRecovery.ts）：主答候选按档位降档、再换另一家；恢复的每一步都告诉界面并记日志。
       const candidateIds = [...new Set([modelId, ...TIER_FALLBACK_ORDER[route.tier].map((tier) => tierModelIds[tier]), ...mainModelIds])];
@@ -1227,11 +1277,13 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           focus = resolveFocus({ message: routedMessage, tier: route.tier, triage: route.battlefields, briefs, pinned });
           return unchangedGlobalContext(manager, focusGlobalContext(loaded.value, focus));
         };
-        const personalMemory = input.personalMemory ?? [];
+        // 个人记忆的选取（召回模型）与分诊同时进行，拼上下文包时才等它。
+        const personalMemory = (await input.personalMemory) ?? [];
         const prompt = await withRetrieve(RETRIEVE_SOURCES.contextPack, () => ({ scope: input.scope, references: input.referencesSnapshot?.length ?? 0 }), async () => JSON.stringify({
           currentObject: input.currentObject,
           references: input.referencesSnapshot,
           ...(personalMemory.length ? { personalMemory } : {}),
+          ...(input.openTodos?.length ? { myOpenTodos: input.openTodos } : {}),
           // 看板与预取的企业知识：内部写法先换成正式中文叫法（currentObject、references 留原文，修改类工具要按原文比对）。
           globalContext: formalTermsDeep(await scopedGlobal()),
           ...(prefetched ? { prefetched: formalTermsDeep(prefetched) } : {}),

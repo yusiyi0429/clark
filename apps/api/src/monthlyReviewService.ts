@@ -88,8 +88,11 @@ export type MonthlyReviewService = {
   startDraft(itemId: string, runId: string): Promise<void>;
   startAssessment(itemId: string, runId: string): Promise<void>;
   startSummary(reviewId: string, runId: string): Promise<void>;
-  /** onStep：每一步状态变化时收到全部步骤（读 Mission 卡 → 读每周复盘 → 读采集记录 → 起草），同时写进个人复盘。 */
-  startPersonalDraft(reviewId: string, version: number, storageDir: string, agent: MonthlyReviewAgent<PersonalReviewDraftInput>,
+  /**
+   * onStep：每一步状态变化时收到全部步骤（读 Mission 卡 → 读每周复盘 → 读采集记录 → 起草），同时写进个人复盘。
+   * storageDir、agent 不给时用创建服务时配置的那一份。
+   */
+  startPersonalDraft(reviewId: string, version: number, storageDir?: string, agent?: MonthlyReviewAgent<PersonalReviewDraftInput>,
     onStep?: PersonalReviewStepListener): Promise<void>;
   /** 启动恢复：进程重启前没跑完的起草、评估、汇总标为可见 failed，等待手动重试。 */
   recoverInterrupted(): Promise<number>;

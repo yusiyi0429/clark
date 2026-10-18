@@ -82,7 +82,10 @@ export function RequestScreen({ initialRequest, base }: { initialRequest: TReque
 
 /* ---------- 发起人：起草 → 要你定 → 预览 → 发送 ---------- */
 
-function DraftRequest({ request, onChange, onSent }: { request: TRequestView | null; onChange: (next: TRequestView) => void; onSent: (next: TRequestView) => void }) {
+/** compact：对话里的草稿卡（conversation/EntryCards）用，原话已在对话里，不显示起草框；改了「要你定」的回答时在那一组下面给「按回答重写」。 */
+export function DraftRequest({ request, onChange, onSent, compact = false }: {
+  request: TRequestView | null; onChange: (next: TRequestView) => void; onSent: (next: TRequestView) => void; compact?: boolean;
+}) {
   const [prompt, setPrompt] = useState(request?.prompt ?? "");
   const [steps, setSteps] = useState<TRequestStep[] | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>(() => Object.fromEntries((request?.clarifications ?? []).map((item) => [item.question, item.answer ?? ""])));
@@ -91,7 +94,7 @@ function DraftRequest({ request, onChange, onSent }: { request: TRequestView | n
   const [busy, setBusy] = useState<"draft" | "send" | null>(null);
   const [error, setError] = useState("");
   const promptRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { if (!request) promptRef.current?.focus(); }, [request]);
+  useEffect(() => { if (!request && !compact) promptRef.current?.focus(); }, [request, compact]);
 
   const clarifications = request?.clarifications ?? [];
   const unanswered = clarifications.filter((item) => !answers[item.question]?.trim()).length;
@@ -128,7 +131,7 @@ function DraftRequest({ request, onChange, onSent }: { request: TRequestView | n
 
   return (
     <div className={s.stack}>
-      <section className={s.composer} data-compact={request ? "" : undefined}>
+      {compact ? null : <section className={s.composer} data-compact={request ? "" : undefined}>
         <textarea ref={promptRef} aria-label="请谁做什么" placeholder="请谁做什么" rows={request ? 2 : 4} maxLength={2000} value={prompt} disabled={busy !== null}
           onChange={(event) => setPrompt(event.target.value)}
           onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void draft(); } }} />
@@ -138,7 +141,7 @@ function DraftRequest({ request, onChange, onSent }: { request: TRequestView | n
             <Sparkles size={16} aria-hidden="true" />{request ? "按回答重写" : "起草"}
           </Button>
         </div>
-      </section>
+      </section>}
 
       {steps ? <RequestSteps steps={steps} label="起草步骤" /> : null}
       {error ? <p className={s.error} role="alert">{error}</p> : null}
@@ -159,6 +162,13 @@ function DraftRequest({ request, onChange, onSent }: { request: TRequestView | n
               </li>
             ))}
           </ol>
+          {compact && stale ? (
+            <div className={s.replyBar}>
+              <Button variant="primary" className={s.primary} isDisabled={busy !== null} onPress={() => void draft()}>
+                <Sparkles size={16} aria-hidden="true" />{busy === "draft" ? "重写中" : "按回答重写"}
+              </Button>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
