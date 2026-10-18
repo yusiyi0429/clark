@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import type { Card } from "@/lib/api/client";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
-const { DISMISS_NOTE, DismissDialogContent, IssueMoreMenu, JoinDialogContent, MoreMenuList, moreMenuEntries } = await import("./IssueMoreMenu");
+const { DismissDialogContent, IssueMoreMenu, JoinDialogContent, MoreMenuList, moreMenuEntries } = await import("./IssueMoreMenu");
 
 /** 议题页页头「更多 ⋯」：加入已有会议…、移出议题…（一号位视角，没有「安排一场会议」）。 */
 type El = { type?: unknown; props?: Record<string, unknown> };
@@ -83,11 +83,10 @@ describe("加入已有会议弹层", () => {
 describe("移出议题确认", () => {
   const props = { onReason: () => undefined, onCancel: () => undefined, onConfirm: () => undefined };
 
-  it("说明移出后不再出现在决策面、可在已处理中恢复；原因输入框必填", () => {
-    expect(DISMISS_NOTE).toBe("移出后不再出现在决策面，可在已处理中恢复。");
+  it("只问一句「移出这个议题？」，不写说明；原因输入框必填", () => {
     const html = renderToStaticMarkup(<>{DismissDialogContent({ ...props, reason: "", pending: false })}</>);
     expect(html).toContain("移出这个议题？");
-    expect(html).toContain("移出后不再出现在决策面，可在已处理中恢复。");
+    expect(html).not.toContain("移出后不再出现在决策面");
     expect(html).toContain("原因（必填）");
     expect(html).toMatch(/<input[^>]*required=""/);
   });

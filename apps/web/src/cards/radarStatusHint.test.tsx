@@ -59,12 +59,12 @@ const render = (collection: Card[]) =>
 
 /** clark 雷达展开页：页头、筛选 / 排序、可见的状态行、一竖列信号。 */
 describe("雷达信号列表", () => {
-  it("页头：外部信息 · 雷达 + 雷达信号，圆形关闭回到全局", () => {
+  it("标准页头：返回 + 外部信息 + 雷达信号", () => {
     const html = render([]);
-    expect(html).toContain("外部信息 · 雷达");
+    expect(html).toContain('class="ts-detail-header"');
+    expect(html).toContain('<p class="ts-eyebrow">外部信息</p>');
     expect(html).toContain(">雷达信号<");
-    expect(html).toContain('aria-label="返回全局"');
-    expect(html).toContain('data-context-mark="signal"');
+    expect(html).toContain("data-close-view");
   });
 
   it("工具条：全部 / 未读 / 收藏，按时间 / 按重要程度，监测范围与发现更多", () => {
@@ -85,7 +85,7 @@ describe("雷达信号列表", () => {
   it("演示模式仍能刷新和设置，并如实显示扫描失败，不宣称每日自动调度", () => {
     expect(render([])).toContain("查看监测范围");
     expect(render([])).toContain("发现更多");
-    expect(radarStatusLine({ ...payload, lastRun: null } as unknown as RadarPayload, false, false)).toBe("尚未扫描 · 点击「发现更多」开始");
+    expect(radarStatusLine({ ...payload, lastRun: null } as unknown as RadarPayload, false)).toBe("尚未扫描");
     expect(radarScanStatusLine({ trigger: "manual", status: "failed", companyDay: "2026-09-22", createdSignals: 0, warnings: ["提供方不可用"] })).toBe("扫描未完成 · 新增 0 条信号");
     expect(radarScanStatusLine({ trigger: "manual", status: "completed", companyDay: "2026-09-22", createdSignals: 2, warnings: [] })).toBe("刷新完成 · 新增 2 条信号");
   });
@@ -108,7 +108,8 @@ describe("雷达信号列表", () => {
   });
 
   it("没有信号时的空态是大白话，不出现「本体」这类内部用语", () => {
-    expect(render([])).toContain("暂无信号，点击「发现更多」开始扫描");
+    expect(render([])).toContain(">暂无信号<");
+    expect(render([])).not.toContain("点击「发现更多」");
     expect(render([])).not.toContain("本体");
   });
 });

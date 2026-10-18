@@ -2505,6 +2505,416 @@
         }
       }
     },
+    "/api/requests/draft": {
+      "post": {
+        "operationId": "draftRequest",
+        "summary": "发起人一句话，Agent 起草请求（标题、说明、接收人候选）并自查歧义；带 requestId 时按回答重写同一份草稿",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftRequestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "草稿与处理步骤",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftRequestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/requests/{id}": {
+      "get": {
+        "operationId": "getRequest",
+        "summary": "读一条请求；只有发起人和接收人看得到，打开即把这条请求的通知标为已读",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "请求",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/requests/{id}/questions/prepare": {
+      "post": {
+        "operationId": "prepareRequestQuestion",
+        "summary": "接收人提问前：先在说明和已有问答里找答案，找不到就整理成问题等本人确认；不写库",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareRequestQuestionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "处理步骤与结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrepareRequestQuestionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/requests/{id}/questions/{questionId}/answer-draft": {
+      "post": {
+        "operationId": "draftRequestAnswer",
+        "summary": "发起人的 Agent 起草回答（存为草稿，发起人确认后才发出）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "questionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "回答草稿",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftRequestAnswerResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/requests/actions/execute": {
+      "post": {
+        "operationId": "executeRequestAction",
+        "summary": "request.send / ask / answer / mark_done；send 校验 actionId 里的版本，发出的就是预览那一版",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteRequestActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "请求的最新视图",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/requests": {
+      "get": {
+        "operationId": "listMyRequests",
+        "summary": "我收到的（inbox）或我发出的（sent）请求，最近 100 条",
+        "parameters": [
+          {
+            "name": "box",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "inbox",
+                "sent"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "请求列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cards/radar": {
       "get": {
         "operationId": "getRadarCard",
@@ -2812,236 +3222,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/conversations/{scope}/new": {
-      "post": {
-        "operationId": "startNewConversation",
-        "parameters": [
-          {
-            "name": "scope",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "新建对话：本人在该 scope 的当前对话有内容时归档（不删除），之后的消息进一条空白对话",
-        "responses": {
-          "200": {
-            "description": "当前对话",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationSwitchResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/conversations/{scope}/archived": {
-      "get": {
-        "operationId": "listArchivedConversations",
-        "parameters": [
-          {
-            "name": "scope",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "本人在该 scope 已归档、有内容的历史对话（新的在前）",
-        "responses": {
-          "200": {
-            "description": "历史对话",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ArchivedConversationList"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/conversations/{scope}/archived/{id}/messages": {
-      "get": {
-        "operationId": "getArchivedConversationMessages",
-        "parameters": [
-          {
-            "name": "scope",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "summary": "只读回看一段历史对话",
-        "responses": {
-          "200": {
-            "description": "Conversation 历史",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationHistory"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/conversations/{scope}/archived/{id}/restore": {
-      "post": {
-        "operationId": "restoreArchivedConversation",
-        "parameters": [
-          {
-            "name": "scope",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "summary": "切回一段历史对话继续：当前对话归档，这一段成为当前对话",
-        "responses": {
-          "200": {
-            "description": "当前对话",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationSwitchResponse"
                 }
               }
             }
@@ -7313,6 +7493,224 @@
         }
       }
     },
+    "/api/me/memory/personal": {
+      "get": {
+        "operationId": "listPersonalMemory",
+        "summary": "列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "superseded",
+                "forgotten",
+                "all"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "本人个人记忆",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalMemoryList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/memory/personal/items/{id}": {
+      "patch": {
+        "operationId": "updatePersonalMemoryItem",
+        "summary": "本人改一条个人记忆的标题或正文；已替代或已忘掉的 409",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePersonalMemoryItemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "改后的条目",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalMemoryItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "forgetPersonalMemoryItem",
+        "summary": "本人删掉（忘掉）一条个人记忆：不再装进对话，后台提炼也不再学回来",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "忘掉后的条目",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalMemoryItem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/voiceprint": {
       "get": {
         "operationId": "getMyVoiceprint",
@@ -11099,87 +11497,15 @@
                       "type": "string"
                     }
                   }
+                },
+                "memoryUsed": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               }
             }
-          },
-          "archivedCount": {
-            "minimum": 0,
-            "type": "integer"
-          }
-        }
-      },
-      "ArchivedConversationList": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "conversations"
-        ],
-        "properties": {
-          "conversations": {
-            "maxItems": 200,
-            "type": "array",
-            "items": {
-              "additionalProperties": false,
-              "type": "object",
-              "required": [
-                "id",
-                "firstQuestion",
-                "startedAt",
-                "lastAt",
-                "archivedAt",
-                "messageCount"
-              ],
-              "properties": {
-                "id": {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                "firstQuestion": {
-                  "type": "string"
-                },
-                "startedAt": {
-                  "format": "date-time",
-                  "type": "string"
-                },
-                "lastAt": {
-                  "format": "date-time",
-                  "type": "string"
-                },
-                "archivedAt": {
-                  "format": "date-time",
-                  "type": "string"
-                },
-                "messageCount": {
-                  "minimum": 1,
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        }
-      },
-      "ConversationSwitchResponse": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "conversationId",
-          "archived"
-        ],
-        "properties": {
-          "conversationId": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "archived": {
-            "type": "boolean"
           }
         }
       },
@@ -11332,6 +11658,66 @@
                 "type": "string"
               },
               "detail": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "runId",
+              "scope",
+              "sequence",
+              "type",
+              "id",
+              "label",
+              "status"
+            ],
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "scope": {
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+                "description": "global 或稳定对象 scope",
+                "type": "string"
+              },
+              "sequence": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "step",
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "done",
+                    "type": "string"
+                  },
+                  {
+                    "const": "active",
+                    "type": "string"
+                  },
+                  {
+                    "const": "pending",
+                    "type": "string"
+                  },
+                  {
+                    "const": "stopped",
+                    "type": "string"
+                  }
+                ]
+              },
+              "result": {
                 "type": "string"
               }
             }
@@ -44176,6 +44562,22 @@
                     {
                       "const": "issue_assigned",
                       "type": "string"
+                    },
+                    {
+                      "const": "request_received",
+                      "type": "string"
+                    },
+                    {
+                      "const": "request_answered",
+                      "type": "string"
+                    },
+                    {
+                      "const": "request_done",
+                      "type": "string"
+                    },
+                    {
+                      "const": "request_asked",
+                      "type": "string"
                     }
                   ]
                 },
@@ -44195,6 +44597,10 @@
                     },
                     {
                       "const": "issue",
+                      "type": "string"
+                    },
+                    {
+                      "const": "request",
                       "type": "string"
                     }
                   ]
@@ -44354,6 +44760,305 @@
           },
           "configured": {
             "type": "boolean"
+          }
+        }
+      },
+      "PersonalMemoryItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "text",
+          "status",
+          "supersededBy",
+          "anchors",
+          "references",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "想法、立场、未决问题、理由、偏好与表达方式、做法",
+            "anyOf": [
+              {
+                "const": "idea",
+                "type": "string"
+              },
+              {
+                "const": "stance",
+                "type": "string"
+              },
+              {
+                "const": "open_question",
+                "type": "string"
+              },
+              {
+                "const": "reason",
+                "type": "string"
+              },
+              {
+                "const": "preference",
+                "type": "string"
+              },
+              {
+                "const": "practice",
+                "type": "string"
+              }
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "active",
+                "type": "string"
+              },
+              {
+                "const": "superseded",
+                "type": "string"
+              },
+              {
+                "const": "forgotten",
+                "type": "string"
+              }
+            ]
+          },
+          "supersededBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "anchors": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "target"
+              ],
+              "properties": {
+                "target": {
+                  "description": "对象 id（如 issue:<id>）或 topic:<主题>",
+                  "type": "string"
+                },
+                "pinnedVersion": {
+                  "minimum": 0,
+                  "description": "写入时钉住的对象版本",
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "ref",
+                "at"
+              ],
+              "properties": {
+                "ref": {
+                  "description": "依据，沿用 cite: 语法去掉前缀，如 chat:<会话 id>#<消息序号>",
+                  "type": "string"
+                },
+                "quote": {
+                  "type": "string"
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "PersonalMemoryList": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "kind",
+                "title",
+                "text",
+                "status",
+                "supersededBy",
+                "anchors",
+                "references",
+                "createdAt",
+                "updatedAt"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "description": "想法、立场、未决问题、理由、偏好与表达方式、做法",
+                  "anyOf": [
+                    {
+                      "const": "idea",
+                      "type": "string"
+                    },
+                    {
+                      "const": "stance",
+                      "type": "string"
+                    },
+                    {
+                      "const": "open_question",
+                      "type": "string"
+                    },
+                    {
+                      "const": "reason",
+                      "type": "string"
+                    },
+                    {
+                      "const": "preference",
+                      "type": "string"
+                    },
+                    {
+                      "const": "practice",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "active",
+                      "type": "string"
+                    },
+                    {
+                      "const": "superseded",
+                      "type": "string"
+                    },
+                    {
+                      "const": "forgotten",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "supersededBy": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "anchors": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "target"
+                    ],
+                    "properties": {
+                      "target": {
+                        "description": "对象 id（如 issue:<id>）或 topic:<主题>",
+                        "type": "string"
+                      },
+                      "pinnedVersion": {
+                        "minimum": 0,
+                        "description": "写入时钉住的对象版本",
+                        "type": "integer"
+                      }
+                    }
+                  }
+                },
+                "references": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "ref",
+                      "at"
+                    ],
+                    "properties": {
+                      "ref": {
+                        "description": "依据，沿用 cite: 语法去掉前缀，如 chat:<会话 id>#<消息序号>",
+                        "type": "string"
+                      },
+                      "quote": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "format": "date-time",
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "UpdatePersonalMemoryItemRequest": {
+        "additionalProperties": false,
+        "minProperties": 1,
+        "type": "object",
+        "properties": {
+          "title": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "text": {
+            "minLength": 1,
+            "maxLength": 4000,
+            "type": "string"
           }
         }
       },
@@ -44954,6 +45659,1896 @@
               "type": "string"
             }
           }
+        }
+      },
+      "RequestStep": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "label",
+          "status",
+          "result"
+        ],
+        "properties": {
+          "label": {
+            "minLength": 1,
+            "maxLength": 20,
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "done",
+                "type": "string"
+              },
+              {
+                "const": "current",
+                "type": "string"
+              },
+              {
+                "const": "pending",
+                "type": "string"
+              }
+            ]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "RequestPerson": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "personId",
+          "displayName"
+        ],
+        "properties": {
+          "personId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "displayName": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "RequestRecipientView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "personId",
+          "displayName",
+          "status",
+          "doneByName",
+          "doneAt"
+        ],
+        "properties": {
+          "personId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "displayName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "pending",
+                "type": "string"
+              },
+              {
+                "const": "done",
+                "type": "string"
+              }
+            ]
+          },
+          "doneByName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "doneAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "RequestQuestionView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "askerId",
+          "askerName",
+          "question",
+          "answer",
+          "answerDraft",
+          "answeredAt",
+          "mergedIntoBody",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "askerId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "askerName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "question": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "answerDraft": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "answeredAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mergedIntoBody": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "RequestClarification": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question",
+          "answer"
+        ],
+        "properties": {
+          "question": {
+            "minLength": 1,
+            "maxLength": 300,
+            "type": "string"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "RequestView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "version",
+          "title",
+          "body",
+          "prompt",
+          "initiator",
+          "createdAt",
+          "sentAt",
+          "recipients",
+          "candidates",
+          "directory",
+          "clarifications",
+          "questions",
+          "viewer",
+          "actions"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "relay",
+                "type": "string"
+              },
+              {
+                "const": "collection",
+                "type": "string"
+              },
+              {
+                "const": "impact",
+                "type": "string"
+              },
+              {
+                "const": "supplement",
+                "type": "string"
+              }
+            ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "draft",
+                "type": "string"
+              },
+              {
+                "const": "open",
+                "type": "string"
+              },
+              {
+                "const": "done",
+                "type": "string"
+              }
+            ]
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "body": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "prompt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "initiator": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "displayName"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "displayName": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          "createdAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sentAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recipients": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "displayName",
+                "status",
+                "doneByName",
+                "doneAt"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "displayName": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "done",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "doneByName": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "doneAt": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "displayName"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "displayName": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "directory": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "displayName"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "displayName": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "clarifications": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "question",
+                "answer"
+              ],
+              "properties": {
+                "question": {
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                "answer": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 1000,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "askerId",
+                "askerName",
+                "question",
+                "answer",
+                "answerDraft",
+                "answeredAt",
+                "mergedIntoBody",
+                "createdAt"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "askerId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "askerName": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "question": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "answer": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "answerDraft": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "answeredAt": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "mergedIntoBody": {
+                  "type": "boolean"
+                },
+                "createdAt": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "viewer": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "isInitiator",
+              "isRecipient",
+              "myStatus"
+            ],
+            "properties": {
+              "isInitiator": {
+                "type": "boolean"
+              },
+              "isRecipient": {
+                "type": "boolean"
+              },
+              "myStatus": {
+                "anyOf": [
+                  {
+                    "const": "pending",
+                    "type": "string"
+                  },
+                  {
+                    "const": "done",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "actionId",
+                "actionType",
+                "label"
+              ],
+              "properties": {
+                "actionId": {
+                  "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                  "type": "string"
+                },
+                "actionType": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "itemId": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "RequestResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request"
+        ],
+        "properties": {
+          "request": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "status",
+              "version",
+              "title",
+              "body",
+              "prompt",
+              "initiator",
+              "createdAt",
+              "sentAt",
+              "recipients",
+              "candidates",
+              "directory",
+              "clarifications",
+              "questions",
+              "viewer",
+              "actions"
+            ],
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "relay",
+                    "type": "string"
+                  },
+                  {
+                    "const": "collection",
+                    "type": "string"
+                  },
+                  {
+                    "const": "impact",
+                    "type": "string"
+                  },
+                  {
+                    "const": "supplement",
+                    "type": "string"
+                  }
+                ]
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "draft",
+                    "type": "string"
+                  },
+                  {
+                    "const": "open",
+                    "type": "string"
+                  },
+                  {
+                    "const": "done",
+                    "type": "string"
+                  }
+                ]
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "title": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "body": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "prompt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "initiator": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "displayName"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              "createdAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "sentAt": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "recipients": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName",
+                    "status",
+                    "doneByName",
+                    "doneAt"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "pending",
+                          "type": "string"
+                        },
+                        {
+                          "const": "done",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "doneByName": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "doneAt": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "directory": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "clarifications": {
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "question",
+                    "answer"
+                  ],
+                  "properties": {
+                    "question": {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    "answer": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "maxLength": 1000,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "questions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "askerId",
+                    "askerName",
+                    "question",
+                    "answer",
+                    "answerDraft",
+                    "answeredAt",
+                    "mergedIntoBody",
+                    "createdAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "askerId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "askerName": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "question": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "answer": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "answerDraft": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "answeredAt": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "mergedIntoBody": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "viewer": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "isInitiator",
+                  "isRecipient",
+                  "myStatus"
+                ],
+                "properties": {
+                  "isInitiator": {
+                    "type": "boolean"
+                  },
+                  "isRecipient": {
+                    "type": "boolean"
+                  },
+                  "myStatus": {
+                    "anyOf": [
+                      {
+                        "const": "pending",
+                        "type": "string"
+                      },
+                      {
+                        "const": "done",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "actionId",
+                    "actionType",
+                    "label"
+                  ],
+                  "properties": {
+                    "actionId": {
+                      "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                      "type": "string"
+                    },
+                    "actionType": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "DraftRequestRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "requestId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "clarifications": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "question",
+                "answer"
+              ],
+              "properties": {
+                "question": {
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                "answer": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 1000,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "DraftRequestResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request",
+          "steps"
+        ],
+        "properties": {
+          "request": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "status",
+              "version",
+              "title",
+              "body",
+              "prompt",
+              "initiator",
+              "createdAt",
+              "sentAt",
+              "recipients",
+              "candidates",
+              "directory",
+              "clarifications",
+              "questions",
+              "viewer",
+              "actions"
+            ],
+            "properties": {
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "relay",
+                    "type": "string"
+                  },
+                  {
+                    "const": "collection",
+                    "type": "string"
+                  },
+                  {
+                    "const": "impact",
+                    "type": "string"
+                  },
+                  {
+                    "const": "supplement",
+                    "type": "string"
+                  }
+                ]
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "draft",
+                    "type": "string"
+                  },
+                  {
+                    "const": "open",
+                    "type": "string"
+                  },
+                  {
+                    "const": "done",
+                    "type": "string"
+                  }
+                ]
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "title": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "body": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "prompt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "initiator": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "displayName"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              "createdAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "sentAt": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "recipients": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName",
+                    "status",
+                    "doneByName",
+                    "doneAt"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "pending",
+                          "type": "string"
+                        },
+                        {
+                          "const": "done",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "doneByName": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "doneAt": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "directory": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "clarifications": {
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "question",
+                    "answer"
+                  ],
+                  "properties": {
+                    "question": {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    "answer": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "maxLength": 1000,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "questions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "askerId",
+                    "askerName",
+                    "question",
+                    "answer",
+                    "answerDraft",
+                    "answeredAt",
+                    "mergedIntoBody",
+                    "createdAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "askerId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "askerName": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "question": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "answer": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "answerDraft": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "answeredAt": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "mergedIntoBody": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "viewer": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "isInitiator",
+                  "isRecipient",
+                  "myStatus"
+                ],
+                "properties": {
+                  "isInitiator": {
+                    "type": "boolean"
+                  },
+                  "isRecipient": {
+                    "type": "boolean"
+                  },
+                  "myStatus": {
+                    "anyOf": [
+                      {
+                        "const": "pending",
+                        "type": "string"
+                      },
+                      {
+                        "const": "done",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "actionId",
+                    "actionType",
+                    "label"
+                  ],
+                  "properties": {
+                    "actionId": {
+                      "description": "HMAC 签名的确定性动作令牌，Web 不解析",
+                      "type": "string"
+                    },
+                    "actionType": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "itemId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "label",
+                "status",
+                "result"
+              ],
+              "properties": {
+                "label": {
+                  "minLength": 1,
+                  "maxLength": 20,
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "done",
+                      "type": "string"
+                    },
+                    {
+                      "const": "current",
+                      "type": "string"
+                    },
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "result": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "RequestListItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status",
+          "initiatorName",
+          "createdAt",
+          "sentAt",
+          "myStatus",
+          "recipientNames",
+          "recipientsDone",
+          "openQuestions",
+          "unread"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "draft",
+                "type": "string"
+              },
+              {
+                "const": "open",
+                "type": "string"
+              },
+              {
+                "const": "done",
+                "type": "string"
+              }
+            ]
+          },
+          "initiatorName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "createdAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sentAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "myStatus": {
+            "anyOf": [
+              {
+                "const": "pending",
+                "type": "string"
+              },
+              {
+                "const": "done",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recipientNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "recipientsDone": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "openQuestions": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unread": {
+            "type": "boolean"
+          }
+        }
+      },
+      "RequestListResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "title",
+                "status",
+                "initiatorName",
+                "createdAt",
+                "sentAt",
+                "myStatus",
+                "recipientNames",
+                "recipientsDone",
+                "openQuestions",
+                "unread"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "draft",
+                      "type": "string"
+                    },
+                    {
+                      "const": "open",
+                      "type": "string"
+                    },
+                    {
+                      "const": "done",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "initiatorName": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "createdAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sentAt": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "myStatus": {
+                  "anyOf": [
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "done",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "recipientNames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "recipientsDone": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "openQuestions": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "unread": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PrepareRequestQuestionRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "properties": {
+          "question": {
+            "minLength": 1,
+            "maxLength": 1000,
+            "type": "string"
+          }
+        }
+      },
+      "PrepareRequestQuestionResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "steps",
+          "answer",
+          "question"
+        ],
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "label",
+                "status",
+                "result"
+              ],
+              "properties": {
+                "label": {
+                  "minLength": 1,
+                  "maxLength": 20,
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "done",
+                      "type": "string"
+                    },
+                    {
+                      "const": "current",
+                      "type": "string"
+                    },
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "result": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "source",
+                  "text",
+                  "questionId"
+                ],
+                "properties": {
+                  "source": {
+                    "anyOf": [
+                      {
+                        "const": "body",
+                        "type": "string"
+                      },
+                      {
+                        "const": "question",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "text": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "questionId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "question": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "DraftRequestAnswerResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "steps",
+          "answer"
+        ],
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "label",
+                "status",
+                "result"
+              ],
+              "properties": {
+                "label": {
+                  "minLength": 1,
+                  "maxLength": 20,
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "done",
+                      "type": "string"
+                    },
+                    {
+                      "const": "current",
+                      "type": "string"
+                    },
+                    {
+                      "const": "pending",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "result": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "answer": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "RequestSendInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "recipientIds"
+        ],
+        "properties": {
+          "recipientIds": {
+            "minItems": 1,
+            "maxItems": 30,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RequestAskInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "properties": {
+          "question": {
+            "minLength": 1,
+            "maxLength": 1000,
+            "type": "string"
+          }
+        }
+      },
+      "RequestAnswerInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "answer"
+        ],
+        "properties": {
+          "answer": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "type": "string"
+          }
+        }
+      },
+      "ExecuteRequestActionRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actionId"
+        ],
+        "properties": {
+          "actionId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "input": {}
         }
       }
     }

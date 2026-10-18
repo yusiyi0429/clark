@@ -7,7 +7,6 @@ import type {
   TCardReference,
   TConversationAttachment,
   TConversationAttachmentInfo,
-  TArchivedConversationList,
   TConversationHistory,
   TConversationScope,
   TReferenceSnapshot,
@@ -27,6 +26,7 @@ import { getPersonalMissionCard } from "./personalMissionCards.js";
 import { canReadTask, getTaskView } from "./tasks.js";
 import type { MemoryPerson } from "./companyMemory.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
+import type { HistoryHit } from "./conversationHistorySearch.js";
 
 export type ConversationRuntimeEvent =
   | { type: "message"; delta: string }
@@ -46,6 +46,14 @@ export type ConversationRuntimeEvent =
   | { type: "recovery"; reason: string; action: "retry" | "fallback" | "trim" | "continue" | "skip"; attempt: number; notice: string }
   | { type: "usage"; input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number };
 
+export type PersonalMemoryEntry = { id: string; title: string; text: string };
+export type PersonalMemoryTools = {
+  search(query: string): Promise<PersonalMemoryEntry[]>;
+  /** 新记一条；replaces 给出时是纠正：旧条目被新说法替代。 */
+  remember(input: { kind?: "idea" | "stance" | "open_question" | "reason" | "preference" | "practice"; title: string; text: string; topic?: string; replaces?: string }): Promise<PersonalMemoryEntry>;
+  forget(input: { id: string }): Promise<{ id: string }>;
+};
+
 export type ConversationRuntime = {
   promptHash?: string;
   modelSlot?: string;
@@ -59,6 +67,12 @@ export type ConversationRuntime = {
     currentObject: TReferenceSnapshot | null;
     runId?: string;
     referencesSnapshot: TReferenceSnapshot[];
+    /** 与本轮原话相关的本人个人记忆（只有本人可见）；放进上下文包的 personalMemory。 */
+    personalMemory?: { id: string; title: string; text: string; createdAt?: string; basedOnOldVersion?: boolean }[];
+    /** 本人个人记忆的检索与「记住 / 改成 / 忘掉」，已绑定本人；运行时据此给主 Agent 提供工具。失败时抛错，只作为工具报错。 */
+    personalMemoryTools?: PersonalMemoryTools;
+    /** 检索本人历史对话原文（跨所有页面与归档，只读、已绑定本人）；运行时据此提供 search_conversation_history。 */
+    searchHistory?: (query: string) => Promise<{ hits: HistoryHit[]; message?: string }>;
     recentMessages?: { role: "user" | "assistant"; content: string; createdAt: string }[];
     runtimeEntries: unknown[];
     piSessionId: string;
@@ -322,8 +336,8 @@ export async function resolveReferenceSnapshots(
 }
 
 /**
- * 这个人在这个页面的当前对话：最早的未删除、未归档行（028 已把多余会话并进它；「新建对话」把旧的归档，067）。
- * 同一时刻只有一条：新建、切回都在「人 × scope」锁里先归档旧的再放出新的。
+ * 这个人在这个页面的当前对话：最早的未删除、未归档行（028 已把多余会话并进它）。
+ * 一条连续的对话，界面上没有新建与历史列表；067 归档过的旧对话不再显示，原话仍可由 search_conversation_history 检索。
  */
 export const ACTIVE_CONVERSATION_WHERE = "owner_id = $1 AND scope = $2 AND deleted_at IS NULL AND archived_at IS NULL";
 const MAIN_CONVERSATION_SQL = `SELECT id FROM conversations WHERE ${ACTIVE_CONVERSATION_WHERE} ORDER BY created_at ASC, id ASC LIMIT 1`;
@@ -335,7 +349,7 @@ const MAIN_CONVERSATION_SQL = `SELECT id FROM conversations WHERE ${ACTIVE_CONVE
 export const CONVERSATION_IDLE_RESTART_MS = 12 * 60 * 60 * 1000;
 
 type MessageRow = { sequence: number; role: string; content: string; references_snapshot: unknown; attachments: TConversationAttachment[];
-  run_id: string; created_at: Date; recovery_note: { text?: unknown; detail?: unknown } | null };
+  run_id: string; created_at: Date; recovery_note: { text?: unknown; detail?: unknown } | null; memory_used: unknown };
 
 function historyMessage(row: MessageRow): TConversationHistory["messages"][number] {
   const note = row.recovery_note;
@@ -349,12 +363,13 @@ function historyMessage(row: MessageRow): TConversationHistory["messages"][numbe
     createdAt: row.created_at.toISOString(),
     ...(note && typeof note.text === "string" && note.text
       ? { recoveryNote: { text: note.text, detail: typeof note.detail === "string" ? note.detail : "" } } : {}),
+    ...(Array.isArray(row.memory_used) && row.memory_used.length ? { memoryUsed: row.memory_used.filter((id): id is string => typeof id === "string") } : {}),
   };
 }
 
 async function conversationMessages(q: Query, conversationId: string): Promise<TConversationHistory["messages"]> {
   const result = await q(
-    `SELECT m.sequence, m.role, m.content, m.references_snapshot, m.attachments, m.run_id, m.created_at, m.recovery_note
+    `SELECT m.sequence, m.role, m.content, m.references_snapshot, m.attachments, m.run_id, m.created_at, m.recovery_note, m.memory_used
        FROM conversation_messages m
       WHERE m.conversation_id = $1
       ORDER BY m.sequence`,
@@ -363,122 +378,10 @@ async function conversationMessages(q: Query, conversationId: string): Promise<T
   return (result.rows as MessageRow[]).map(historyMessage);
 }
 
-/** 已归档、有内容的历史对话（空的归档不算：界面上没有可看的）。 */
-const ARCHIVED_WITH_MESSAGES = `FROM conversations c
-  WHERE c.owner_id = $1 AND c.scope = $2 AND c.deleted_at IS NULL AND c.archived_at IS NOT NULL
-    AND EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id)`;
-
 export async function getConversationHistory(q: Query, owner: string, scope: TConversationScope): Promise<TConversationHistory> {
   const conversation = await q(MAIN_CONVERSATION_SQL, [owner, scope]);
   const conversationId = conversation.rows[0]?.id as string | undefined;
-  const archived = Number((await q(`SELECT count(*)::int AS count ${ARCHIVED_WITH_MESSAGES}`, [owner, scope])).rows[0]?.count ?? 0);
-  return { scope, messages: conversationId ? await conversationMessages(q, conversationId) : [], archivedCount: archived };
-}
-
-/** 历史对话列表：新归档的在前；首问取第一条用户消息（前 4000 字，带着引用与页面前缀，界面解析后再截标题）。 */
-export async function listArchivedConversations(q: Query, owner: string, scope: TConversationScope): Promise<TArchivedConversationList> {
-  const result = await q(
-    `SELECT c.id, c.archived_at,
-            (SELECT left(m.content, 4000) FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user' ORDER BY m.sequence LIMIT 1) AS first_question,
-            (SELECT min(m.created_at) FROM conversation_messages m WHERE m.conversation_id = c.id) AS started_at,
-            (SELECT max(m.created_at) FROM conversation_messages m WHERE m.conversation_id = c.id) AS last_at,
-            (SELECT count(*)::int FROM conversation_messages m WHERE m.conversation_id = c.id) AS message_count
-       ${ARCHIVED_WITH_MESSAGES}
-      ORDER BY c.archived_at DESC, c.id DESC
-      LIMIT 200`,
-    [owner, scope],
-  );
-  return {
-    conversations: result.rows.map((row) => ({
-      id: row.id as string,
-      firstQuestion: (row.first_question as string | null) ?? "",
-      startedAt: (row.started_at as Date).toISOString(),
-      lastAt: (row.last_at as Date).toISOString(),
-      archivedAt: (row.archived_at as Date).toISOString(),
-      messageCount: row.message_count as number,
-    })),
-  };
-}
-
-/** 只读回看一段历史对话：只认这个人在这个页面自己归档的那一条。 */
-export async function getArchivedConversationHistory(q: Query, owner: string, scope: TConversationScope, id: string): Promise<TConversationHistory | null> {
-  if (!SESSION_ID_PATTERN.test(id)) return null;
-  const found = await q(
-    "SELECT id FROM conversations WHERE id = $3 AND owner_id = $1 AND scope = $2 AND deleted_at IS NULL AND archived_at IS NOT NULL",
-    [owner, scope, id],
-  );
-  if (!found.rows[0]) return null;
-  return { scope, messages: await conversationMessages(q, id) };
-}
-
-export type ConversationSwitch =
-  | { status: "ok"; conversationId: string | null; archived: boolean }
-  | { status: "busy" }
-  | { status: "not_found" };
-
-/**
- * 在「人 × scope」锁里切换当前对话（锁与轮次同一键空间：有一轮回答还没结束就不切，返回 busy）。
- * - 新建（target 不给）：当前对话有内容就归档、建一条空白的；当前对话本来就是空的（或还没有）就不动。
- * - 切回（target 给了）：那一条必须是这个人在这个页面归档的；当前对话（有没有内容都一样）归档，那一条放出来。
- * 只改 archived_at，不删任何行。
- */
-export async function switchConversation(pool: Pool, owner: string, scope: TConversationScope, target?: string): Promise<ConversationSwitch> {
-  if (target !== undefined && !SESSION_ID_PATTERN.test(target)) return { status: "not_found" };
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const locked = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_xact_lock(hashtext($1)) AS locked", [`${owner}|${scope}`]);
-    if (!locked.rows[0]?.locked) {
-      await client.query("ROLLBACK");
-      return { status: "busy" };
-    }
-    if (target !== undefined) {
-      const found = await client.query(
-        "SELECT id FROM conversations WHERE id = $3 AND owner_id = $1 AND scope = $2 AND deleted_at IS NULL AND archived_at IS NOT NULL FOR UPDATE",
-        [owner, scope, target],
-      );
-      if (!found.rows[0]) {
-        await client.query("ROLLBACK");
-        return { status: "not_found" };
-      }
-    }
-    const current = await client.query<{ id: string; has_messages: boolean }>(
-      `SELECT c.id, EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id) AS has_messages
-         FROM conversations c
-        WHERE c.owner_id = $1 AND c.scope = $2 AND c.deleted_at IS NULL AND c.archived_at IS NULL
-        ORDER BY c.created_at ASC, c.id ASC FOR UPDATE OF c`,
-      [owner, scope],
-    );
-    let archived = false;
-    let conversationId: string | null;
-    if (target === undefined && !current.rows.some((row) => row.has_messages)) {
-      // 当前对话还是空的（或还没有）：已经是一条空白对话，不再多建一条。
-      conversationId = current.rows[0]?.id ?? null;
-    } else {
-      // 当前的先归档（防御：万一有多条未归档的，一并归档），再放出目标或新建一条。
-      if (current.rows.length) {
-        await client.query("UPDATE conversations SET archived_at = now() WHERE id = ANY($1::uuid[])", [current.rows.map((row) => row.id)]);
-        archived = current.rows.some((row) => row.has_messages);
-      }
-      if (target !== undefined) {
-        await client.query("UPDATE conversations SET archived_at = NULL WHERE id = $1", [target]);
-        conversationId = target;
-      } else {
-        conversationId = randomUUID();
-        await client.query(
-          "INSERT INTO conversations (id, owner_id, scope, pi_session_id) VALUES ($1, $2, $3, $4)",
-          [conversationId, owner, scope, randomUUID()],
-        );
-      }
-    }
-    await client.query("COMMIT");
-    return { status: "ok", conversationId, archived };
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw error;
-  } finally {
-    client.release();
-  }
+  return { scope, messages: conversationId ? await conversationMessages(q, conversationId) : [] };
 }
 
 /**

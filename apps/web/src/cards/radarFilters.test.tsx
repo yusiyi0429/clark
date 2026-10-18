@@ -186,11 +186,13 @@ describe("切换排序不改变筛选，清空筛选恢复全部", () => {
     expect(radarFilterSummary(none.filters)).toBe("已读 · 已收藏 · 发布于 2026-10-09 至 2026-10-09");
     const html = render(signals, none);
     expect(html).toContain("当前筛选条件排除了全部信号");
-    expect(html).toContain("7 条信号都不满足「已读 · 已收藏 · 发布于 2026-10-09 至 2026-10-09」。清空筛选即可恢复全部信号。");
+    expect(html).toContain("7 条信号都不满足「已读 · 已收藏 · 发布于 2026-10-09 至 2026-10-09」");
+    expect(html).not.toContain("清空筛选即可恢复");
+    expect(html).toContain("清空筛选");
     expect(html).not.toContain("还没有信号");
 
     const empty = render([], none);
-    expect(empty).toContain("暂无信号，点击「发现更多」开始扫描");
+    expect(empty).toContain(">暂无信号<");
     expect(empty).not.toContain("当前筛选条件排除了全部信号");
   });
 });

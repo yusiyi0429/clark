@@ -99,20 +99,23 @@ export type WorldIdentity = {
   display_name: string; auth_epoch: number; assignments: Record<string, unknown>[];
 };
 export type WorldExternalRef = { system: string; id: string; url?: string | null };
+/** scope 原地升级会改对象绑定的契约；写入信封按被写对象当前的契约声明，不写死。 */
+export type WorldContractVersion = "tkos.world/0.2" | "tkos.world/0.3";
 export type WorldHead = {
   object_id: string; object_type: string; title: string; revision_id: string;
   object_version: number; version: number; domain_id?: string;
-  external_refs?: WorldExternalRef[]; lifecycle: unknown;
+  external_refs?: WorldExternalRef[]; lifecycle: unknown; contract_version: WorldContractVersion;
 };
 export type WorldObject = {
-  business: Omit<WorldHead, "lifecycle"> & { attributes: { responsible?: string; external_refs?: WorldExternalRef[] } };
+  business: Omit<WorldHead, "lifecycle" | "contract_version"> & { attributes: { responsible?: string; external_refs?: WorldExternalRef[] } };
   records: { lifecycle: unknown };
+  protocol: { contract_version: WorldContractVersion };
 };
-export const worldRef = (head: WorldHead): string => `${head.object_id}@${head.version}`;
+export const worldRef = (head: Pick<WorldHead, "object_id" | "version">): string => `${head.object_id}@${head.version}`;
 export const worldTarget = (head: WorldHead) => ({ object_id: head.object_id, revision_id: head.revision_id, expected_version: head.object_version });
 export type WorldAction = {
   action_type: string;
-  contract_version: "tkos.world/0.2";
+  contract_version: WorldContractVersion;
   target: ReturnType<typeof worldTarget> | null;
   expected_versions: unknown[];
   idempotency_key: string;
@@ -126,6 +129,8 @@ export class WorldError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
 }
 export const worldErrorCode = (error: unknown): string => error instanceof WorldError ? error.code : "WORLD_SYNC_FAILED";
+/** 服务端在记下任何东西之前就拒的错误：版本过期，以及 scope 原地升级后旧契约的信封。同键按当前对象重建请求不会撞幂等冲突。 */
+const REBUILD_CODES = new Set(["VERSION_CONFLICT", "STALE_DEPENDENCY", "PROTOCOL_WRITE_DISABLED", "PROTOCOL_BINDING_CONFLICT"]);
 /** JSONB 读回会重排对象键，摘要按键排序，数组顺序保持不变。 */
 export const requestDigest = (value: unknown): string => createHash("sha256").update(JSON.stringify(value, (_key, entry) =>
   entry && typeof entry === "object" && !Array.isArray(entry)
@@ -221,7 +226,7 @@ export class WorldClient {
   async getObject(id: string): Promise<WorldObject> { return this.request(`/v1/world/objects/${encodeURIComponent(id)}`); }
   async getHead(id: string): Promise<WorldHead> {
     const object = await this.getObject(id);
-    return { ...object.business, external_refs: object.business.attributes.external_refs, lifecycle: object.records.lifecycle };
+    return { ...object.business, external_refs: object.business.attributes.external_refs, lifecycle: object.records.lifecycle, contract_version: object.protocol.contract_version };
   }
   async byExternalRef(id: string): Promise<WorldHead | null> {
     const items = await this.listObjects({ external_system: "tianshu", external_id: id });
@@ -238,7 +243,7 @@ export class WorldClient {
     if (key.length < 16 || key.length > 128) throw new WorldError(422, "INVALID_REQUEST", "幂等键必须为 16–128 字符");
     const saved = await this.q("SELECT request_body, prepared, error_code FROM world_sync_ledger WHERE instance = $1 AND idempotency_key = $2 ORDER BY id DESC LIMIT 1", [this.instance, key]);
     const previous = saved.rows[0];
-    const stale = previous?.error_code === "VERSION_CONFLICT" || previous?.error_code === "STALE_DEPENDENCY";
+    const stale = REBUILD_CODES.has(previous?.error_code);
     let body: WorldAction = previous && !stale ? previous.request_body : await build();
     let preparedReplay = !stale && previous?.prepared === true;
     for (let attempt = 0; ; attempt++) {
@@ -263,7 +268,7 @@ export class WorldClient {
         const code = worldErrorCode(error);
         await this.q("UPDATE world_sync_ledger SET status = $2, error_code = $3 WHERE id = $1", [id, code === "NETWORK_ERROR" ? "network_error" : "failed", code]);
         logEvent({ event: "world.write", actionType: body.action_type, status: "failed", errorCode: code });
-        if (attempt === 0 && (code === "VERSION_CONFLICT" || code === "STALE_DEPENDENCY")) { body = await build(); preparedReplay = false; continue; }
+        if (attempt === 0 && REBUILD_CODES.has(code)) { body = await build(); preparedReplay = false; continue; }
         throw error;
       }
     }

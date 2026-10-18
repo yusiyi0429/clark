@@ -41,16 +41,16 @@ export function memberNoticeGroups(
       detail: `会后分给你 · ${monthDayTime(item.createdAt)}`,
       tone: "amber",
       onOpen: (from) => handlers.openTask?.(item.objectId, from),
-      buttons: [{ label: "接下", emphasis: true, run: () => seen(item.id, "已接下，在你的执行事项里") }],
+      buttons: [{ label: "接下", emphasis: true, run: () => seen(item.id, "已接下") }],
       reason: {
         label: "退回",
         fieldLabel: "退回的原因",
-        placeholder: "写清是不归你、会上没这么定，还是该找别人。",
+        placeholder: "比如：会上没这么定",
         submitLabel: "退回，告诉主持人",
         run: async (reason) => {
           const result = await handlers.returnTask(item.objectId, reason);
           if (!result.ok) return result;
-          return seen(item.id, "已退回，主持人会收到提醒");
+          return seen(item.id, "已退回");
         },
       },
     }));

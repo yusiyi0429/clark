@@ -26,8 +26,8 @@ describe("点触下限：手持与触屏 44，鼠标的电脑不变", () => {
     const segmented = css("./segmented-switch.module.css");
     expect(segmented).not.toContain("height: 28px");
     expect(segmented).toContain(`${TOUCH} {\n  .segment { position: relative; height: 36px; }\n  .segment::after { content: ''; position: absolute; inset: -4px 0; }\n}`);
-    // 战场页「决策 / 战况」胶囊：每段 34、轨道 3 + 3。
-    expect(css("./battlefield-detail.module.css")).toContain(`${TOUCH_MIN}{.viewSwitch.viewSwitch{margin-bottom:calc((1.4 * var(--type-page, 24px) - 42px) / 2)}.viewSwitch.viewSwitch>button{min-width:64px;height:34px`);
+    // 战场页「决策 / 战况」也是这颗分段切换，不另设尺寸。
+    expect(css("./battlefield-detail.module.css")).not.toContain(".viewSwitch");
   });
 
   it("个人胶囊是 44 高", () => {
@@ -41,8 +41,9 @@ describe("点触下限：手持与触屏 44，鼠标的电脑不变", () => {
     expect(css("./conversation-column.module.css")).toContain(".close.close { top: 6px; right: 6px; width: 44px; min-width: 44px; height: 44px; }");
   });
 
-  it("战场 / 雷达 / 已处理页头的返回（手持左上角）44×44", () => {
-    expect(css("./app-shell.module.css")).toContain(".expandedHeader>.closeRound{order:-1;width:44px;height:44px;min-width:44px;background:none}");
+  it("战场 / 雷达 / 已处理页头的返回（手持左上角）44×44：用标准页头的返回，不再有旧的大页头", () => {
+    expect(css("./header-capsule.module.css")).toContain("width: var(--touch-hit, 32px);");
+    expect(css("./app-shell.module.css")).not.toContain(".expandedHeader");
   });
 });
 
@@ -94,7 +95,8 @@ describe("实测补漏：对话层、会后页、三屏触屏", () => {
 
   it("触屏的工作台（pointer:coarse）：窄条圆钮、页头关闭键、个人胶囊、议题行补到 44；鼠标的电脑不进这些查询", () => {
     expect(css("./notice-strip.module.css")).toContain("@media(pointer:coarse){.strip button{width:44px;height:44px}}");
-    expect(css("./app-shell.module.css")).toContain("@media(pointer:coarse){.closeRound{width:44px;height:44px}}");
+    expect(css("./header-capsule.module.css")).toContain("min-height: var(--touch-hit, 32px);");
+    expect(css("./app-shell.module.css")).not.toContain(".closeRound");
     expect(css("./account-menu.module.css")).toMatch(/@media \(pointer: coarse\) \{\s*\.chip\.chip \{ height: 44px; min-height: 44px;/);
     expect(css("./battlefield-detail.module.css")).toContain("@media(pointer:coarse){.box div[data-urgency]>button:not([data-reference-id]){height:auto;min-height:44px}}");
   });

@@ -28,6 +28,8 @@ import type { MissionCardDraftAgent } from "../missionCardDraftAgent.js";
 import type { TaskAcceptanceAgent } from "../taskAcceptanceDraft.js";
 import type { AppEnv } from "../app.js";
 import type { WorldReader } from "../worldReader.js";
+import type { PersonalMemory } from "../personalMemory.js";
+import type { PersonalDistillation } from "../personalDistillation.js";
 
 export type AppInstance = FastifyInstance<
   RawServerDefault,
@@ -63,6 +65,10 @@ export type RouteContext = {
   q: Query;
   env: AppEnv;
   companyMemory: CompanyMemoryRepository;
+  /** 本人私有的个人记忆（只有本人可见，不写进本体）。 */
+  personalMemory: PersonalMemory;
+  /** 个人记忆的后台提炼队列。 */
+  personalDistillation: PersonalDistillation;
   preflight: PreflightAgent;
   outcome: PostMeetingAgent;
   runtime: ConversationRuntime;

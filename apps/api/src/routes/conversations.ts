@@ -13,10 +13,7 @@ import {
   CONVERSATION_IDLE_RESTART_MS,
   conversationAttachmentInfo,
   ensureMainConversation,
-  getArchivedConversationHistory,
   getConversationHistory,
-  listArchivedConversations,
-  switchConversation,
   getScopeObject,
   loadConversationAttachments,
   resolveReferenceSnapshots,
@@ -33,13 +30,15 @@ import { isActiveMember } from "../threads.js";
 import { getObjectMaterial } from "../objectMaterials.js";
 import { withNotice } from "../conversationRouting.js";
 import { ConversationTurnError, recoveryNote, resumeInstruction, shortFailureReason, turnFailureCopy, type TurnFailureKind, type TurnRecoverySummary } from "../conversationRecovery.js";
+import { personalMemoryToolsFor, unknownMemoryMarks } from "../personalMemory.js";
+import { searchOwnConversationHistory } from "../conversationHistorySearch.js";
+import { createStepTracker } from "../conversationSteps.js";
 import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
 
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext): void {
   const { pool, q, env, fail, requirePerson, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, conversationStallTimeoutMs, conversationHeartbeatMs, conversationCompaction } = ctx;
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
-  const archivedParams = Type.Object({ scope: ConversationScope, id: Type.String({ format: "uuid" }) }, { additionalProperties: false });
   // 我的 Agent 按「人 × 页面」私有；任务卡 scope 始终复查对象成员及当前拍板权。
   const scopeObjectFor = async (person: SessionPerson, scope: TConversationScope) => {
     if (person.role !== "ceo" && (scope.startsWith("issue:") || scope.startsWith("meeting:"))) {
@@ -66,58 +65,6 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
       const object = await scopeObjectFor(req.person!, req.params.scope);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
       return getConversationHistory(q, req.person!.personId, req.params.scope);
-    },
-  );
-
-  /**
-   * 新建对话：当前对话有内容就归档（不删除，能回看、能切回去继续），之后的消息进一条空白对话。
-   * 一轮回答还没结束时不切（409）。当前对话本来就是空的就什么都不做。
-   */
-  app.post(
-    "/api/conversations/:scope/new",
-    { preHandler: requirePerson, schema: { params: conversationParams } },
-    async (req, reply) => {
-      if (!await conversationScopeVisible(req.person!, req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      const result = await switchConversation(pool, req.person!.personId, req.params.scope);
-      if (result.status === "busy") return fail(reply, 409, "TURN_IN_PROGRESS", "上一轮回答还没结束，请等它写完或点「停止」后再新建对话。");
-      if (result.status !== "ok") return fail(reply, 404, "CONVERSATION_NOT_FOUND", "对话不存在");
-      logEvent({ event: "conversation.new", requestId: String(req.id), scope: req.params.scope, archived: result.archived });
-      return { conversationId: result.conversationId, archived: result.archived };
-    },
-  );
-
-  /** 历史对话列表（新归档的在前），只有本人在这个页面归档、有内容的。 */
-  app.get(
-    "/api/conversations/:scope/archived",
-    { preHandler: requirePerson, schema: { params: conversationParams } },
-    async (req, reply) => {
-      if (!await conversationScopeVisible(req.person!, req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      return listArchivedConversations(q, req.person!.personId, req.params.scope);
-    },
-  );
-
-  /** 只读回看一段历史对话。 */
-  app.get(
-    "/api/conversations/:scope/archived/:id/messages",
-    { preHandler: requirePerson, schema: { params: archivedParams } },
-    async (req, reply) => {
-      if (!await conversationScopeVisible(req.person!, req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      const history = await getArchivedConversationHistory(q, req.person!.personId, req.params.scope, req.params.id);
-      return history ?? fail(reply, 404, "CONVERSATION_NOT_FOUND", "这段历史对话找不到了");
-    },
-  );
-
-  /** 切回一段历史对话继续：当前对话归档，这一段成为当前对话。 */
-  app.post(
-    "/api/conversations/:scope/archived/:id/restore",
-    { preHandler: requirePerson, schema: { params: archivedParams } },
-    async (req, reply) => {
-      if (!await conversationScopeVisible(req.person!, req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      const result = await switchConversation(pool, req.person!.personId, req.params.scope, req.params.id);
-      if (result.status === "busy") return fail(reply, 409, "TURN_IN_PROGRESS", "上一轮回答还没结束，请等它写完或点「停止」后再切换。");
-      if (result.status !== "ok") return fail(reply, 404, "CONVERSATION_NOT_FOUND", "这段历史对话找不到了");
-      logEvent({ event: "conversation.restore", requestId: String(req.id), scope: req.params.scope, archived: result.archived });
-      return { conversationId: result.conversationId, archived: result.archived };
     },
   );
 
@@ -240,6 +187,30 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
            VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6)`,
           [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId],
         );
+        // 个人记忆：任何页面都读本人的记忆；后台提炼按游标增量跑（personalDistillation.ts），这里不排任务。
+        // 「记住」「忘掉」「改成」由主 Agent 调工具完成，不在主回答之前同步跑提炼：记忆改动失败只是工具报错，不替换回答、不动上下文（3c）。
+        // 当前页面对象就是这一轮的 anchor：检索时只比对象、不比版本；钉住的版本比现在旧时标「基于旧版本」（R8）。
+        const objectRef = object.snapshot?.objectRef;
+        const currentObject = objectRef ? { target: `${objectRef.type}:${objectRef.id}`, version: objectRef.version } : undefined;
+        const personalMemory = await ctx.personalMemory.select(owner, req.body.message, { currentObject }, client)
+          .then((entries) => entries.map(({ id, title, text, createdAt, basedOnOldVersion }) => ({ id, title, text, createdAt, ...(basedOnOldVersion ? { basedOnOldVersion } : {}) })), (error: unknown) => {
+            logEvent({ event: "personal_memory.unavailable", requestId: String(req.id), runId, scope: req.params.scope, errorCode: (error as { code?: string })?.code ?? "PERSONAL_MEMORY_UNAVAILABLE" });
+            return [];
+          });
+        // 主 Agent 记下的条目：依据是本轮这句原话，anchor 是当前页面对象（钉住此刻的版本）。
+        const memoryTools = personalMemoryToolsFor(ctx.personalMemory, owner, (event) =>
+          logEvent({ ...event, requestId: String(req.id), runId, scope: req.params.scope }), {
+          reference: { ref: `chat:${row.id}#${userSequence}`, quote: req.body.message.slice(0, 500), at: new Date().toISOString() },
+          anchors: currentObject ? [{ target: currentObject.target, ...(typeof currentObject.version === "number" ? { pinnedVersion: currentObject.version } : {}) }] : [],
+        });
+        // 本轮实际装进上下文的个人记忆 id：上下文包里的，加上检索工具返回的；随回答存进 memory_used。
+        const memoryUsed = new Set(personalMemory.map((entry) => entry.id));
+        const personalMemoryTools = { ...memoryTools, search: async (query: string) => {
+          const entries = await memoryTools.search(query);
+          for (const entry of entries) memoryUsed.add(entry.id);
+          return entries;
+        } };
+        const memoryUsedJson = () => (memoryUsed.size ? JSON.stringify([...memoryUsed]) : null);
         const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
           `SELECT role, content, created_at
              FROM conversation_messages
@@ -316,10 +287,15 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             // 界面只用它显示档位；时限统一是绝对上限。
             event = { ...event, timeoutMs: conversationTurnTimeoutMs };
           }
-          if (reply.raw.destroyed) return;
-          const data = { ...event, runId, scope: req.params.scope, sequence: ++eventSequence };
-          reply.raw.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(data)}\n\n`);
+          if (!reply.raw.destroyed) {
+            const data = { ...event, runId, scope: req.params.scope, sequence: ++eventSequence };
+            reply.raw.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(data)}\n\n`);
+          }
+          // 连接断了也照样记步骤：运行记录里要有完整的步骤。
+          if (event.type === "tool") steps.tool(event as Parameters<typeof steps.tool>[0]);
         };
+        // 当前步骤（已定设计第 6 节第 2 条）：工具开始、结束映射成 step 事件；整轮的步骤随运行记录存下。
+        const steps = createStepTracker((step) => emit({ type: "step", ...step }));
 
         // 整轮卡住检测（最后一道）：模型调用自己的卡住会就地恢复并发 recovery 事件；这里只在连恢复都没有进展时停下。
         const stall = setInterval(() => {
@@ -328,10 +304,22 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         }, Math.min(5_000, Math.max(5, Math.floor(conversationStallTimeoutMs / 4))));
         stall.unref();
         /** 运行记录里这一轮的档位与恢复：原模型、备用模型、触发原因、各类恢复次数、合计重试次数（没有恢复过就没有 recovery）。 */
-        const routeSnapshot = (partial?: boolean, summary?: TurnRecoverySummary) => JSON.stringify({ route: { tier: routeTier ?? null, model: routeModel ?? null, recoveries,
-          ...(summary ? { recovery: { originalModel: summary.originalModel, fallbackModel: summary.fallbackModel ?? null, reasons: summary.reasons,
-            actions: summary.actions, retries: summary.retries } } : {}) },
-          ...(partial === undefined ? {} : { partial }) });
+        /**
+         * 质量信号：回答里的记忆标记指向不在本轮 memory_used 里的 id（界面不显示这种标记）。记日志并随运行记录存下，之后进管理员视图。
+         */
+        const qualitySignals = (text: string) => {
+          const unknown = unknownMemoryMarks(text, memoryUsed);
+          if (!unknown.length) return [];
+          logEvent({ event: "conversation.quality_signal", signal: "memory_mark_unknown_id", requestId: String(req.id), runId, scope: req.params.scope, count: unknown.length });
+          return [{ signal: "memory_mark_unknown_id", ids: unknown }];
+        };
+        const routeSnapshot = (partial: boolean | undefined, summary: TurnRecoverySummary | undefined, text: string) => {
+          const signals = qualitySignals(text);
+          return JSON.stringify({ route: { tier: routeTier ?? null, model: routeModel ?? null, recoveries,
+            ...(summary ? { recovery: { originalModel: summary.originalModel, fallbackModel: summary.fallbackModel ?? null, reasons: summary.reasons,
+              actions: summary.actions, retries: summary.retries } } : {}) },
+            ...(partial === undefined ? {} : { partial }), steps: steps.list(), ...(signals.length ? { qualitySignals: signals } : {}) });
+        };
         let recoverySummary: TurnRecoverySummary | undefined;
         /**
          * 这一轮没完成（出错、超时、卡住、一号位停止或关掉页面）：已写出的部分连同开场说明存成这一轮的回答，末尾一行说明；
@@ -339,6 +327,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
          */
         const settleFailure = async (kind: TurnFailureKind, raw: string, cause?: unknown) => {
           const partial = streamedBody.trim().length > 0;
+          steps.finish(true);
           const copy = turnFailureCopy(kind, { partial, recoveries, stallSeconds: Math.max(1, Math.round(conversationStallTimeoutMs / 1000)), capMinutes: Math.max(1, Math.round(conversationTurnTimeoutMs / 60_000)) });
           const stopped = kind === "aborted";
           const note = stopped
@@ -350,9 +339,9 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           if (partial || !stopped) {
             const content = withNotice(notice, partial ? `${streamedBody.trimEnd()}\n\n${note}` : note);
             saved = await client.query(
-              `INSERT INTO conversation_messages (conversation_id, sequence, role, content, references_snapshot, run_id)
-               VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4)`,
-              [row.id, userSequence + 1, content, runId],
+              `INSERT INTO conversation_messages (conversation_id, sequence, role, content, references_snapshot, run_id, memory_used)
+               VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4, $5::jsonb)`,
+              [row.id, userSequence + 1, content, runId, memoryUsedJson()],
             ).then(() => true, () => false);
           }
           const entries = (cause as { runtimeEntries?: unknown })?.runtimeEntries;
@@ -366,7 +355,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           recoverySummary = (cause as { details?: { recoverySummary?: TurnRecoverySummary } })?.details?.recoverySummary;
           await client.query(
             "UPDATE agent_runs SET status = $2, error = $3, usage = $4::jsonb, input_snapshot = input_snapshot || $5::jsonb, completed_at = now() WHERE id = $1",
-            [runId, stopped || abort.signal.aborted ? "aborted" : "failed", raw, JSON.stringify(runUsage), routeSnapshot(partial && saved, recoverySummary)],
+            [runId, stopped || abort.signal.aborted ? "aborted" : "failed", raw, JSON.stringify(runUsage), routeSnapshot(partial && saved, recoverySummary, streamedBody)],
           ).catch(() => undefined);
           runStatus = stopped || abort.signal.aborted ? "aborted" : "failed";
           runError = raw;
@@ -395,6 +384,10 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             message: runtimeMessage,
             currentObject: object.snapshot,
             referencesSnapshot: references.snapshots,
+            ...(personalMemory.length ? { personalMemory } : {}),
+            personalMemoryTools,
+            // 本人历史对话原文检索（3e）：跨所有页面与归档，只查本人，本轮这条不算。
+            searchHistory: (query: string) => searchOwnConversationHistory(q, { personId: owner, query, excludeRunId: runId }),
             recentMessages: recent.rows.reverse().map((message) => ({
               role: message.role,
               content: message.content,
@@ -420,13 +413,14 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           } else {
             // 这一轮走过恢复（用了备用模型、重试、续写、精简历史）：回答末尾一行很淡的说明，随消息存下。
             recoverySummary = result.recoverySummary;
+            steps.finish(false);
             const note = recoveryNote(recoverySummary);
             await client.query("BEGIN");
             await client.query(
               `INSERT INTO conversation_messages
-                 (conversation_id, sequence, role, content, references_snapshot, run_id, recovery_note)
-               VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4, $5::jsonb)`,
-              [row.id, userSequence + 1, result.assistantMessage, runId, note ? JSON.stringify(note) : null],
+                 (conversation_id, sequence, role, content, references_snapshot, run_id, recovery_note, memory_used)
+               VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4, $5::jsonb, $6::jsonb)`,
+              [row.id, userSequence + 1, result.assistantMessage, runId, note ? JSON.stringify(note) : null, memoryUsedJson()],
             );
             await client.query(
               `UPDATE conversations
@@ -448,7 +442,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
               `UPDATE agent_runs
                   SET status = 'succeeded', candidate_output = $2::jsonb, usage = $3::jsonb, input_snapshot = input_snapshot || $4::jsonb, completed_at = now()
                 WHERE id = $1`,
-              [runId, JSON.stringify({ assistantMessage: result.assistantMessage }), JSON.stringify(runUsage), routeSnapshot(undefined, recoverySummary)],
+              [runId, JSON.stringify({ assistantMessage: result.assistantMessage }), JSON.stringify(runUsage), routeSnapshot(undefined, recoverySummary, result.assistantMessage)],
             );
             await client.query("COMMIT");
             if (prepared.snapshotId) await conversationCompaction?.markApplied(client.query.bind(client), prepared.snapshotId);

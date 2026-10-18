@@ -281,7 +281,7 @@ export function PasscodeForm({ loginId, onDone }: { loginId?: string; onDone: ()
   if (done) {
     return (
       <div className={m.form}>
-        <p className={m.done}>口令已改好。这台电脑继续登录着，其他设备需要用新口令重新登录。</p>
+        <p className={m.done}>口令已改好</p>
         <div className={m.formActions}>
           <Button variant="ghost" className={m.primary} onPress={onDone}>
             好的

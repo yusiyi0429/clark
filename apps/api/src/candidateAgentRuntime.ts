@@ -76,6 +76,8 @@ export type CandidateAgentOptions<T extends TSchema> = {
   /** 只读辅助工具（如 CompanyMemory MCP）：与 submit_candidate 一同进入工具白名单。 */
   extraTools?: ReturnType<typeof defineTool<any>>[];
   signal?: AbortSignal;
+  /** 本次运行最多调用模型几次；不给时不限。 */
+  maxModelCalls?: number;
   /**
    * 打开思考（模型注册为 reasoning，thinkingLevel 映射到 reasoning.effort）。不给时关闭，与原来一致。
    * Claude 走 Anthropic 协议的 adaptive + output_config.effort；Sonnet / Opus 5.5 不能关思考，off 按 effort low 发。
@@ -147,6 +149,15 @@ async function runCandidateAgentUntraced<T extends TSchema>(options: CandidateAg
       streamSimple: tracedStreamSimple(options.streamSimple),
       models: [definition],
     });
+    // 模型调用次数上限（PR #12）：结构化提交反复不合规时不无限重试。
+    if (options.maxModelCalls !== undefined) {
+      const stream = modelRuntime.streamSimple.bind(modelRuntime);
+      let modelCalls = 0;
+      modelRuntime.streamSimple = (providerModel, context, streamOptions) => {
+        if (++modelCalls > options.maxModelCalls!) throw new Error("CANDIDATE_MODEL_BUDGET_EXHAUSTED");
+        return stream(providerModel, context, streamOptions);
+      };
+    }
     await modelRuntime.setRuntimeApiKey(provider, options.apiKey);
     const model = modelRuntime.getModel(provider, options.modelId);
     if (!model) throw new Error(`Pi model not found: ${provider}/${options.modelId}`);

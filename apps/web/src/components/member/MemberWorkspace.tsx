@@ -10,6 +10,7 @@ import { RailClock } from "@/components/NotificationRail";
 import { MissionCardNoticeGroup } from "@/components/missionCards/MissionCardNoticeGroup";
 import { MonthlyReviewNotices } from "@/components/monthlyReview/MonthlyReviewNotices";
 import { PersonalReviewBoard } from "@/components/monthlyReview/PersonalReviewBoard";
+import { RequestNotices } from "@/components/requests/RequestNotices";
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { logout } from "@/lib/logout";
@@ -53,6 +54,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
             <ActionNoticeCard id="weekly-sync" title="每周同步" subtitle="把本周进展写进天枢" mark="meeting" notices={weeklySyncNotices(home.weeklySync)} onSettled={() => undefined} />
             <MemberMeetingSchedule meetings={home.meetings} onNavigate={api.navigate} />
             <PersonalReviewBoard onNavigate={api.navigate} />
+            <RequestNotices base="/me/requests" currentHref={currentHref} onNavigate={api.navigate} />
             <MonthlyReviewNotices onNavigate={api.navigate} />
             {home.rounds.map((round) => <MissionCardNoticeGroup key={round.roundId} round={round} entry="member" currentHref={currentHref} onNavigate={api.navigate} onRefresh={home.refresh} />)}
             <ActionNoticeCard id="assigned" title="分给你的事与邀请" subtitle="会后分派与协作邀请" mark="meeting" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).assigned} onSettled={home.settle} />

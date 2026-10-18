@@ -1,5 +1,8 @@
 export type ConversationEvent = {
-  type: "message" | "tool" | "usage" | "compaction" | "warning" | "error" | "done" | "route" | "thinking" | "escalation" | "recovery";
+  type: "message" | "tool" | "step" | "usage" | "compaction" | "warning" | "error" | "done" | "route" | "thinking" | "escalation" | "recovery";
+  /** step：步骤 id（同一 id 的后一条取代前一条）；label 是步骤名，status 是 done / active / pending / stopped，result 是这一步读到了什么。 */
+  id?: string;
+  result?: string;
   /** 这一轮的标识（服务端每个事件都带）：「继续」按它接上这一轮。 */
   runId?: string;
   message?: string;

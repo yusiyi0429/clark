@@ -70,7 +70,7 @@ describe("Co-Agent 统一核对报告", () => {
   });
   it.each(["queued", "running"] as const)("%s 清楚标示统一核对尚在执行，不给出假完成结论", (status) => {
     const html = progress({ ...personalPayload.round, phase: "reviewing", coAgentReview: { ...report, status, summary: "", findings: [] } });
-    expect(html).toContain("Co-Agent 正在统一核对"); expect(html).toContain("完成后交战场 DRI 确认");
+    expect(html).toContain("Co-Agent 正在统一核对"); expect(html).not.toContain("完成后交战场 DRI 确认");
     expect(html).not.toContain(report.summary); expect(html).not.toContain("确认任务组合</button>");
   });
   it("失败保留真实错误和可授权重试，未完成前不会出现组合确认", () => {

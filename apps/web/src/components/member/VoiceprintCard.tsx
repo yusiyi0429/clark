@@ -17,6 +17,8 @@ export { VOICEPRINT_SCRIPT } from "./useVoiceprintEnrollment";
 
 export function VoiceprintCard() {
   const { status, consent, setConsent, phase, seconds, error, note, recording, tooShort, start, stop, save, remove } = useVoiceprintEnrollment();
+  // 服务器没配声纹识别：个人菜单本就不给入口；万一打开了，也不出任何说明。
+  if (status && !status.configured) return null;
 
   return (
     <section className={s.card} aria-labelledby="voiceprint-title">
@@ -26,70 +28,63 @@ export function VoiceprintCard() {
           {status?.enrolled ? `已录好${status.updatedAt ? ` · ${monthDayTime(status.updatedAt)}` : ""}` : "还没录"}
         </span>
       </header>
-      <p className={s.lead}>开会录音后，天枢用声纹认出哪段话是你说的，预填到会议记录的「确认每位说话人是谁」里，由人确认。</p>
-      {status && !status.configured ? (
-        <p className={s.note}>声纹识别还没开通（服务器还没配腾讯云），暂时不能录入。</p>
-      ) : (
+      {!status?.enrolled || phase !== "idle" ? (
         <>
-          {!status?.enrolled || phase !== "idle" ? (
-            <>
-              <Checkbox className={s.consent} isSelected={consent} onChange={setConsent} isDisabled={recording || phase === "saving"}>
-                <Checkbox.Control>
-                  <Checkbox.Indicator />
-                </Checkbox.Control>
-                <Label>{VOICEPRINT_CONSENT}</Label>
-              </Checkbox>
-              <blockquote className={s.script} aria-label="请朗读这段文字">
-                {VOICEPRINT_SCRIPT}
-              </blockquote>
-              <p className={s.hint}>在安静的地方、用平时开会的那只麦克风，正常语速读完这段（{MIN_SECONDS}–{MAX_SECONDS} 秒）。</p>
-            </>
-          ) : null}
-          <div className={s.actions}>
-            {recording ? (
-              <Button variant="ghost" size="sm" data-emphasis onPress={stop}>
-                <Square size={14} aria-hidden="true" />
-                停止 · {seconds} 秒
-              </Button>
-            ) : phase === "recorded" ? (
-              <>
-                <Button variant="ghost" size="sm" data-emphasis isDisabled={tooShort} onPress={() => void save()}>
-                  {tooShort ? `太短了（${seconds} 秒）` : "保存声纹"}
-                </Button>
-                <Button variant="ghost" size="sm" onPress={() => void start()}>
-                  重录
-                </Button>
-              </>
-            ) : phase === "saving" ? (
-              <Button variant="ghost" size="sm" isDisabled>
-                保存中…
-              </Button>
-            ) : status?.enrolled ? (
-              <>
-                <Button variant="ghost" size="sm" onPress={() => void start()} isDisabled={!consent}>
-                  重新录制
-                </Button>
-                <Button variant="ghost" size="sm" onPress={() => void remove()}>
-                  删除我的声纹
-                </Button>
-              </>
-            ) : (
-              <Button variant="ghost" size="sm" data-emphasis isDisabled={!consent} onPress={() => void start()}>
-                <Mic size={14} aria-hidden="true" />
-                开始录制
-              </Button>
-            )}
-          </div>
-          {status?.enrolled && phase === "idle" ? (
-            <Checkbox className={s.consent} isSelected={consent} onChange={setConsent}>
-              <Checkbox.Control>
-                <Checkbox.Indicator />
-              </Checkbox.Control>
-              <Label>重新录制前再确认一次：同意天枢保存我的声纹特征，只用于认出我的会议发言。</Label>
-            </Checkbox>
-          ) : null}
+          <Checkbox className={s.consent} isSelected={consent} onChange={setConsent} isDisabled={recording || phase === "saving"}>
+            <Checkbox.Control>
+              <Checkbox.Indicator />
+            </Checkbox.Control>
+            <Label>{VOICEPRINT_CONSENT}</Label>
+          </Checkbox>
+          <blockquote className={s.script} aria-label="请朗读这段文字">
+            {VOICEPRINT_SCRIPT}
+          </blockquote>
+          <p className={s.hint}>{MIN_SECONDS}–{MAX_SECONDS} 秒</p>
         </>
-      )}
+      ) : null}
+      <div className={s.actions}>
+        {recording ? (
+          <Button variant="ghost" size="sm" data-emphasis onPress={stop}>
+            <Square size={14} aria-hidden="true" />
+            停止 · {seconds} 秒
+          </Button>
+        ) : phase === "recorded" ? (
+          <>
+            <Button variant="ghost" size="sm" data-emphasis isDisabled={tooShort} onPress={() => void save()}>
+              {tooShort ? `太短了（${seconds} 秒）` : "保存声纹"}
+            </Button>
+            <Button variant="ghost" size="sm" onPress={() => void start()}>
+              重录
+            </Button>
+          </>
+        ) : phase === "saving" ? (
+          <Button variant="ghost" size="sm" isDisabled>
+            保存中…
+          </Button>
+        ) : status?.enrolled ? (
+          <>
+            <Button variant="ghost" size="sm" onPress={() => void start()} isDisabled={!consent}>
+              重新录制
+            </Button>
+            <Button variant="ghost" size="sm" onPress={() => void remove()}>
+              删除我的声纹
+            </Button>
+          </>
+        ) : (
+          <Button variant="ghost" size="sm" data-emphasis isDisabled={!consent} onPress={() => void start()}>
+            <Mic size={14} aria-hidden="true" />
+            开始录制
+          </Button>
+        )}
+      </div>
+      {status?.enrolled && phase === "idle" ? (
+        <Checkbox className={s.consent} isSelected={consent} onChange={setConsent}>
+          <Checkbox.Control>
+            <Checkbox.Indicator />
+          </Checkbox.Control>
+          <Label>重新录制前再确认一次：同意天枢保存我的声纹特征，只用于认出我的会议发言。</Label>
+        </Checkbox>
+      ) : null}
       {error ? (
         <p className={s.error} role="alert">
           {error}

@@ -7,6 +7,10 @@ import { RadarSources, type TApiError, type TRadarSources } from "@warmap/contra
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
 import { loadCompanyMemory, type CompanyMemorySeedEnv } from "./companyMemory.js";
+import { createCompanyMemory as createCompanyReader, type CompanyEnv } from "./company.js";
+import { createPersonalMemory } from "./personalMemory.js";
+import { createPersonalDistillation } from "./personalDistillation.js";
+import { registerPersonalMemoryRoutes } from "./routes/personalMemory.js";
 import { globalConversationContext, listConversationMissions } from "./conversationContext.js";
 import { listBattlefieldRows } from "./battlefields.js";
 import { createResponsesThinkingTranslator, createResponsesThoughtTranslator, createResponsesTriage } from "./conversationRouting.js";
@@ -72,6 +76,8 @@ import { registerMissionCardRoutes } from "./routes/missionCards.js";
 import { registerMyRadarRoutes } from "./routes/myRadar.js";
 import { registerOntologyRoutes } from "./routes/ontology.js";
 import { registerMonthlyReviewRoutes } from "./routes/monthlyReviews.js";
+import { registerRequestRoutes } from "./routes/requests.js";
+import { createRequestAgent, type RequestAgent } from "./delivery/requestAgent.js";
 import { registerCollectorRoutes } from "./routes/collector.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
@@ -149,12 +155,13 @@ export type AppEnv = {
   recordingStorageDir?: string;
   /** 第二个只读实例（词元云集 TK scope）：resolveWorldTkEnv 给出；不设 TKOS_WORLD_TK_INSTANCE 时为空（关闭）。 */
   worldTk?: WorldEnv;
-} & CompanyMemorySeedEnv & WorldEnv;
+} & CompanyMemorySeedEnv & WorldEnv & CompanyEnv;
 
 export async function buildApp({
   pool,
   env,
   conversationRuntime,
+  personalDistillationStream,
   radarService,
   personalRadarService,
   researchService,
@@ -175,6 +182,7 @@ export async function buildApp({
   missionCardAnnotationAgent,
   missionCardReviewAgent,
   missionCardDraftAgent,
+  requestAgent,
   webSearch,
   outlets,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
@@ -188,6 +196,8 @@ export async function buildApp({
   pool: Pool;
   env: AppEnv;
   conversationRuntime?: ConversationRuntime;
+  /** 个人记忆提炼用的模型流（测试注入假实现）；不给时按 PI_BASE_URL 调 light 模型。 */
+  personalDistillationStream?: Parameters<typeof createPersonalDistillation>[0]["streamSimple"];
   radarService?: RadarService;
   /** 个人雷达扫描队列；缺省为不扫描的桩（server.ts 注入与公司雷达共用博查与发布方 adapter 的真实服务）。 */
   personalRadarService?: PersonalRadarService;
@@ -217,6 +227,8 @@ export async function buildApp({
   missionCardReviewAgent?: MissionCardReviewAgent;
   /** 任务卡起草 Co-Agent；缺省用 heavy 模型槽位（测试注入假实现）。 */
   missionCardDraftAgent?: MissionCardDraftAgent;
+  /** 送达通道（⑨ 传话）的起草、查答案、起草回答；缺省用 light 模型槽位（测试注入假实现）。 */
+  requestAgent?: RequestAgent;
   /** Pi web_search Tool 的真实 Provider；缺失时 Tool 调用如实失败（不伪装已配置）。 */
   webSearch?: WebSearchAdapter;
   /** 发布方级 feed adapter：Radar、预研与全局对话共用同一白名单来源。 */
@@ -284,8 +296,15 @@ export async function buildApp({
     return snapshot ? ontologyToolResult(snapshot, companyPeriod(now()), query) : null;
   } : undefined;
   const tierModels = conversationTierModels({ defaultModel: env.heavyModel, conversationModel: env.conversationModel });
+  // 个人记忆（PR #12）：只有本人可见，不写进本体；后台按对话提炼。
+  const personalMemory = createPersonalMemory({ pool });
+  const personalDistillation = createPersonalDistillation({ pool, memory: personalMemory, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
+    modelId: env.lightModel, streamSimple: personalDistillationStream });
+  // 本体只读公司事实（PR #12 的 query_company）：按人授权的域读取；读不到时如实说明并回退本地（company.ts）。
+  const companyReader = createCompanyReader(env);
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
     companyMemory,
+    company: companyReader,
     materialPool: pool,
     missionCardSecret: env.sessionSecret,
     now,
@@ -479,6 +498,9 @@ export async function buildApp({
     })();
   });
 
+  personalDistillation.start();
+  app.addHook("onClose", async () => personalDistillation.close());
+
   const ctx: RouteContext = {
     world,
     worldTk,
@@ -486,6 +508,8 @@ export async function buildApp({
     q,
     env,
     companyMemory,
+    personalMemory,
+    personalDistillation,
     preflight,
     outcome,
     runtime,
@@ -545,6 +569,8 @@ export async function buildApp({
   registerMissionCardRoutes(app, ctx, missionCardAnnotationAgent, missionCardReviewAgent);
   registerMyRadarRoutes(app, ctx);
   registerMonthlyReviewRoutes(app, ctx);
+  registerRequestRoutes(app, ctx, requestAgent ?? createRequestAgent(pool, env));
+  registerPersonalMemoryRoutes(app, ctx);
   registerCollectorRoutes(app, ctx);
 
   return app;

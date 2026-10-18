@@ -58,7 +58,7 @@ export function MemberTasks({ tasks, error, onNavigate }: {
           最新进展 · {({ web: "网页", codex: "Codex", claude: "Claude Code", github: "GitHub", other: "外部工具" })[task.latestProgress.source]} · {monthDayTime(task.latestProgress.createdAt)}
         </p> : null}
       </Card>;
-    })}</div> : tasks.length ? null : <p className={s.empty}>暂无执行事项。你可以开启一件事，会后分派也会显示在这里。</p>}
+    })}</div> : tasks.length ? null : <p className={s.empty}>还没有执行事项</p>}
     {done.length ? <div className={s.doneGroup}>
       <button type="button" className={s.doneToggle} aria-expanded={showDone} onClick={() => setShowDone((value) => !value)}>
         <ChevronRight size={14} aria-hidden />已完成 {done.length}

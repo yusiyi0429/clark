@@ -177,11 +177,11 @@ describe("对话记录", () => {
     expect(html).toContain("正在快速查证");
   });
 
-  it("历史层：全局欢迎语与对象欢迎语不同", () => {
+  it("历史层：空对话不写欢迎语，全局空态只留历史入口", () => {
     const global = renderToStaticMarkup(<ConversationHistorySheet data={data()} label="公司全局" global onClose={noop} />);
-    expect(global).toContain("可从当前关注的问题开始讨论。");
+    expect(global).not.toContain("可从当前关注的问题开始讨论。");
     const topic = renderToStaticMarkup(<ConversationHistorySheet data={data({ scope: "issue:1" })} label="灯塔" global={false} onClose={noop} />);
-    expect(topic).toContain("可从「灯塔」中待澄清的问题开始讨论。");
+    expect(topic).not.toContain("待澄清的问题开始讨论");
   });
 
   it("历史层记录归属写在 data-conversation-owner 上；不再写「… · 仅你可见」", () => {
@@ -210,7 +210,7 @@ describe("对话记录", () => {
     expect(failed).not.toContain("你最想弄清的地方开始");
     const empty = sheet({});
     expect(empty).toContain('data-empty="true"');
-    expect(empty).toContain("可从「灯塔」中待澄清的问题开始讨论。");
+    expect(empty).not.toContain("待澄清的问题开始讨论");
     expect(empty).not.toContain("正在载入对话记录");
     expect(empty).not.toContain("重试");
   });

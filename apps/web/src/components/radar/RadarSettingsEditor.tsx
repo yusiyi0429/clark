@@ -26,7 +26,7 @@ type ApiError = components["schemas"]["ApiError"];
 export type RadarSavedSummary = { enabled: boolean; directions: number; sources: number };
 
 const EMPTY_DRAFT: RadarDraft = { enabled: false, directions: [], sources: [], directionText: "", sourceText: "", editing: null };
-const SCAN_FAILED = "扫描没能开始，稍后可以在「我的雷达」里刷新";
+const SCAN_FAILED = "扫描没能开始";
 
 const fromPerson = (data: MyRadar): RadarSettingsView => ({
   enabled: data.enabled,

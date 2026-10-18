@@ -100,7 +100,6 @@
 .choice:has(input:checked) { border-color: var(--onboarding-blue); background: color-mix(in oklab, var(--onboarding-blue) 5%, var(--surface)); }
 .choice input { margin: 5px 0 0; accent-color: var(--onboarding-blue); width: 18px; height: 18px; }
 .choice strong { color: var(--ink); font-size: 15px; font-weight: 600; }
-.choice span { grid-column: 2; color: var(--ink-muted); font-size: 14px; line-height: 1.7; }
 .choice textarea { grid-column: 1 / -1; width: 100%; min-height: 140px; }
 
 @media (max-width: 759px) {

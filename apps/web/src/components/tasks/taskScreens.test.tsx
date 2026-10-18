@@ -96,14 +96,15 @@ describe("成员首页执行事项", () => {
 });
 
 describe("执行事项封面", () => {
-  it("新建后打开的封面：身份区、完成标准、三张入口卡和一行「写一条进展」；页头有状态、低调的验收和 ⋯", () => {
+  it("新建后打开的封面：身份区、完成标准、三张入口卡和一行「写一条进展」；页头有状态、低调的验收和 ⋯；没接入的「让 Agent 推进」不出现", () => {
     const html = screen(detail("owner"));
     const text = visible(html);
     expect(text).toContain("上线验证"); expect(text).toContain("灯塔客户 · 你在推进"); expect(text).toContain("事项 task-1");
-    expect(text).toContain("让 Agent 推进"); expect(text).toContain("Agent 执行接入后可用"); expect(html).toContain('aria-disabled="true"');
+    expect(text).not.toContain("让 Agent 推进"); expect(text).not.toContain("Agent 执行接入后可用");
     expect(text).toContain("10 月 12 日前完成 · 计划 10 月 1 日开始 · 参与：孙铭泽、林晓"); expect(text).toContain("邀请协作");
     expect(text).toContain("完成标准"); expect(text).toContain("留下结论"); expect(text).toContain("附上依据");
-    for (const entry of ["上传文件", "粘贴链接", "起草文档", "文件也可以直接拖进这一页。", "写一条进展"]) expect(text).toContain(entry);
+    for (const entry of ["上传文件", "粘贴链接", "起草文档", "写一条进展"]) expect(text).toContain(entry);
+    expect(text).not.toContain("文件也可以直接拖进这一页。");
     expect(statusOf(html)).toBe("未启动");
     expect(html).toMatch(/<button[^>]*variant="ghost"[^>]*>.*?验收<\/button>/);
     expect(html).toContain('aria-label="更多"');
@@ -112,7 +113,7 @@ describe("执行事项封面", () => {
   });
   it("没写完成标准：推进人可以直接去写，协作者只看到还没写", () => {
     const empty = { standards: [], task: task("task-1", { doneDefinition: null }) };
-    expect(visible(screen(detail("owner", empty)))).toContain("还没写完成标准，验收时会逐条对照。写完成标准");
+    expect(visible(screen(detail("owner", empty)))).toContain("还没写完成标准。写完成标准");
     const collaborator = screen(detail("collaborator", empty));
     expect(visible(collaborator)).toContain("还没写完成标准。"); expect(collaborator).not.toMatch(/>写完成标准<\/button>/);
   });
@@ -201,7 +202,7 @@ describe("执行事项新建与邀请", () => {
   });
   it("邀请弹层只展示详情提供的可邀请同事，并说明加入群聊", () => {
     const html = renderToStaticMarkup(<CollaboratorsDialog taskId="task-1" options={detail("owner").collaboratorOptions} isOpen onClose={vi.fn()} onAdded={vi.fn()} />);
-    expect(html).toContain("白田田"); expect(html).toContain("协作成员可查看任务资料"); expect(html).toContain("加入协作与群聊");
+    expect(html).toContain("白田田"); expect(html).not.toContain("协作成员可查看任务资料"); expect(html).toContain("加入协作与群聊");
     expect(html).not.toContain("孙铭泽");
   });
 });
