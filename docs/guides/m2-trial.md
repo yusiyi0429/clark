@@ -16,6 +16,17 @@ M2 是同站点 `/m2/` 的独立应用。主站入口、发布脚本、备份与
 
 模型默认走 TokenHub 的 HTTPS 域名 `https://tokenhub.corp.tokenkingos.com/api/openai/v1`（2026-10-16 起替换原 IP 加端口的 HTTP 地址）。程序只接受 HTTPS。发布人需核对容器内能解析并访问该域名；可通过 M2_MODEL_BASE 显式配置其他团队核对过的 HTTPS 地址。不能把个人钥匙串或 Codex agent.token 复制到服务器。
 
+## 模型与开关
+
+- `M2_MODEL`、`M2_CHAT_MODEL`（容器内为 `DECODING_MODEL`、`DECODING_CHAT_MODEL`）缺省都是 `wangsu/claude-sonnet-5-5`。前者用于拆解生成，后者用于 Nexus 群聊和私人 Agent。Claude 在 TokenHub 上只走 Messages 接口，程序按 TokenHub 地址自动改用 `/api/anthropic/v1/messages`，不用另配地址；同一个 `M2_MODEL_KEY` 即可。
+- Messages 流断开时，`.runtime/stream-breaks.jsonl`（在 `m2_state` 卷里）记一行诊断：时间、模型、请求编号、持续时间、字节数、最后 15 个事件的类型名和原因，不含模型输出和密钥。需要排查时从卷里导出。
+- `M2_CASCADE=off` 关闭下级对齐：上级卡片修订后，Nexus 不再按技能对照下级并出修订卡。缺省开启。
+- 技能随镜像固定为 `apps/m2/skill`（tkos-decoding 3.1.5，指纹 `01a9b1723261`）。新一轮从本体生成时，私有 seed 里的 `source-manifest.json` 要用 10/17 版本体选择清单（各单元 10 月 PO、Mission、Task 标为参考答案，不进入生成）。只阅读和协作已有计划时不受影响。
+
+## 从已上线版本升级
+
+已有 `m2_state` 卷直接沿用，不重新导入。升级前先备份 `m2_state`，并记下当前 m2、web 镜像标签。新版本会在状态里增加下级对齐队列、Activity 生成记录等字段；回退到旧镜像时如果读取异常，用这次备份恢复 `m2_state`。
+
 ## 部署
 
 使用原 Compose 参数和现行火山 override，额外加入 `-f infra/m2.override.yml`。该文件增加独立 m2 服务和卷，并让 edge 使用 Caddyfile.m2；默认旧栈不启用 M2。

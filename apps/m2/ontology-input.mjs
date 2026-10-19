@@ -8,6 +8,9 @@ export const testPolicy = Object.freeze({
 
 const baselineKinds = new Set(['strategy', 'lto', 'organization']);
 const historicalKinds = new Set(['review', 'state', 'resource', 'dependency', 'decision']);
+// 2026-10-17 陈溪南: this period's POs (PeriodGoal, draft or committed) and their Missions/Tasks/Activities are reference answers
+// kept for benchmarking; none of them enters generation, whatever kind a manifest gives them.
+// 'intent' marks other dated material about this month's direction (e.g. a PCO paragraph inside a 现状 event).
 const validDate = value => typeof value === 'string' && /(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
 
 export function selectFacts(facts, policy = testPolicy) {
@@ -21,11 +24,13 @@ export function selectFacts(facts, policy = testPolicy) {
     const hold = reason => pending.push({ id: fact.id, reason });
     if (!fact.sourceRef || !fact.text?.trim()) { hold('缺少来源或正文'); continue; }
     if (fact.isAnswer || policy.excludedTypes.includes(fact.sourceType)) { reject('已有周期目标或下级拆解答案'); continue; }
+    // 于斯一 marks each unit's month plan with this prefix when recording (agreed 2026-10-19); it is a reference answer.
+    if (/^\s*【10 月计划】/.test(fact.text || '')) { reject('本月计划（【10 月计划】）是参考答案'); continue; }
     if (fact.mixedAnswer) { hold('正文夹带人工答案，须先拆成独立事实再选择'); continue; }
     if (fact.conflict) { hold('来源存在实质冲突，需要有效决定'); continue; }
     if (baselineKinds.has(fact.kind)) {
       if (fact.baselineSelected !== true) { hold('未明确选择有效基线版本'); continue; }
-    } else if (historicalKinds.has(fact.kind)) {
+    } else if (historicalKinds.has(fact.kind) || fact.kind === 'intent') {
       // recordedAt/modifiedAt/as_of alone cannot prove when a fact was true.
       if (!validDate(fact.factThrough) || !fact.dateEvidence) { hold('缺少事实截至日期及其依据'); continue; }
       // A later fact enters only when someone approved that specific item by id (recorded in the manifest).

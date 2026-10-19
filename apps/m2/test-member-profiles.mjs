@@ -13,5 +13,5 @@ test('九位已确认成员：共享可见范围不随关闭本人筛选扩大�
  assert.ok(canPreviewRevise({id:'bf01-m1-t1',level:'task'},'member-02',p));
  assert.equal(canPreviewRevise({id:'method-m3',level:'mission'},'member-02',p),false);
  assert.equal(canPreviewRevise({id:'bf01',level:'po'},'member-02',p),false);
- assert.deepEqual(defaultExpanded(units,memberProfiles['member-01']),[]);
+ assert.deepEqual(defaultExpanded(units,memberProfiles['member-01']),units.map(u=>u.id));
 });

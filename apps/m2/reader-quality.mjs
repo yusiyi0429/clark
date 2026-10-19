@@ -8,10 +8,11 @@ export function visibleLength(value){
 export function readerPolicy(rules=''){
  const row=label=>rules.split('\n').find(line=>line.startsWith('| '+label+' |'))||'';
  const numbers=label=>[...row(label).matchAll(/(\d+)字/g)].map(m=>Number(m[1]));
- const title=numbers('Card短标题、分点短标题')[0],result=numbers('成果描述／工作结果／预期产出')[0];
+ // One number governs both; a second number, when the skill gives one, governs point headings (2.0.6: Card 20, point 12).
+ const [title,heading=title]=numbers('Card短标题、分点短标题'),result=numbers('成果描述／工作结果／预期产出')[0];
  const [field,point]=numbers('存在必要性、责任边界、核心路径、关键取舍、约束与依赖');
  const [checks,checkPoint]=numbers('验收标准'),summary=numbers('上级Plan中的下级成果摘要')[0];
- return [title,result,field,point,checks,checkPoint,summary].every(n=>Number.isInteger(n)&&n>0)?{title,result,field,point,checks,checkPoint,summary}:null;
+ return [title,result,field,point,checks,checkPoint,summary].every(n=>Number.isInteger(n)&&n>0)?{title,heading,result,field,point,checks,checkPoint,summary}:null;
 }
 export function readerQuality(unit,policy){
  if(!policy)return [];
@@ -37,7 +38,7 @@ export function readerQuality(unit,policy){
     if(length>max)add(`${field}[${i}]`,length,max);
     const match=String(p).match(/^\s*\*\*([^\n]+?[：:])\*\*(.+)$/s);
     if(!match||match[2].includes('**'))add(`${field}[${i}]`,length,max,'分点应为加粗短标题加普通正文');
-    else if(visibleLength(match[1].replace(/[：:]$/,''))>policy.title)add(`${field}[${i}].heading`,visibleLength(match[1].replace(/[：:]$/,'')),policy.title);
+    else if(visibleLength(match[1].replace(/[：:]$/,''))>(policy.heading??policy.title))add(`${field}[${i}].heading`,visibleLength(match[1].replace(/[：:]$/,'')),policy.heading??policy.title);
    });
   }
   for(const field of ['missions','tasks','activities'])for(const [i,child]of (node[field]||[]).entries())visit(child,`${path}.${field}[${i}]`,`${cardReference} / ${{missions:'Mission',tasks:'Task',activities:'Activity'}[field]} ${String(i+1).padStart(2,'0')}`,{missions:'mission',tasks:'task',activities:'activity'}[field]);

@@ -1,4 +1,4 @@
-import {canRead,currentVersion,cardStatus,mayRevise} from './governance.mjs';
+import {canRead,currentVersion,cardStatus,mayRevise,confirmationSlots} from './governance.mjs';
 import {memberProfiles} from './member-profiles.mjs';
 const name=id=>memberProfiles[id]?.name||id;
 const fail=message=>{throw Object.assign(Error(message),{status:403});};
@@ -25,5 +25,26 @@ export function privateAgentContext(state,actor,requested={},sourceFallback=[]){
  const rawSources=(state.round?.input?.sources||sourceFallback).filter(s=>['company','organization'].includes(s.key)||allowedScopes.has(s.key)).sort((a,b)=>Number(allowedScopes.has(b.key))-Number(allowedScopes.has(a.key)));
  let budget=24000;
  const sources=rawSources.map(s=>{const raw=String(s.content||s.response?.data?.document?.content||'');const content=raw.slice(0,Math.min(6000,budget));budget-=content.length;return {title:s.title,key:s.key,revision:s.revision,content,truncated:content.length<raw.length};}).filter(s=>s.content);
- return {view,member:{id:actor.id,name:actor.name||name(actor.id),ceo:actor.ceo,unitDri:actor.unitDri,missionDri:actor.missionDri},page:{cards:pageCards.map(project),ancestors,clientVersion:requested.selection?.version,staleClient:!!selection&&requested.selection?.version!==undefined&&selection.version!==requested.selection.version},privateHistory,groupChat,annotations,sources,limits:{privateHistory:20,groupChat:30,annotations:40,backgroundCharacters:24000},round:state.round?.number||6};
+ // Where confirmations stand across everything this member can see, whatever page is open:
+ // "which ones have I confirmed / are waiting on me" must not depend on the current page.
+ const progress=confirmationProgress(state,actor,readable);
+ return {view,progress,member:{id:actor.id,name:actor.name||name(actor.id),ceo:actor.ceo,unitDri:actor.unitDri,missionDri:actor.missionDri},page:{cards:pageCards.map(project),ancestors,clientVersion:requested.selection?.version,staleClient:!!selection&&requested.selection?.version!==undefined&&selection.version!==requested.selection.version},privateHistory,groupChat,annotations,sources,limits:{privateHistory:20,groupChat:30,annotations:40,backgroundCharacters:24000},round:state.round?.number||6};
+}
+
+export function confirmationProgress(state,actor,readable){
+ const confirmable=readable.filter(c=>confirmationSlots(c).length);
+ const unitTitle=c=>currentVersion(state.cards[c.unit||c.id]||c).content.title;
+ const label=c=>{const v=currentVersion(c);return {title:v.content.title,level:c.level,domain:c.level==='po'?undefined:unitTitle(c),version:v.number,status:cardStatus(c)};};
+ const mine=c=>confirmationSlots(c).filter(slot=>slot==='ceo'?actor.ceo===true:slot==='unitDri'?(actor.unitDri||[]).includes(c.unit||c.id):(actor.missionDri||[]).includes(c.id));
+ const signedBy=c=>currentVersion(c).signatures.map(s=>name(s.actorId));
+ const counts={};for(const c of confirmable){const level=counts[c.level]??={};const st=cardStatus(c);level[st]=(level[st]||0)+1;}
+ const cap=list=>list.slice(0,30);
+ const scopes=new Set(readable.filter(c=>!c.parentId).map(c=>c.id));
+ return {
+  counts,
+  confirmedByMe:cap(confirmable.filter(c=>currentVersion(c).signatures.some(s=>s.actorId===actor.id)).map(c=>({...label(c),signedBy:signedBy(c)}))),
+  waitingForMe:cap(confirmable.filter(c=>!c.upstreamChange&&mine(c).some(slot=>!currentVersion(c).signatures.some(s=>s.slot===slot))).map(c=>({...label(c),otherSideConfirmed:currentVersion(c).signatures.length>0,signedBy:signedBy(c)}))),
+  waitingForOthers:cap(confirmable.filter(c=>cardStatus(c)==='待另一方确认'&&currentVersion(c).signatures.some(s=>s.actorId===actor.id)).map(label)),
+  recentConsensus:state.messages.filter(m=>m.kind==='notice'&&scopes.has(m.scope)&&/达成共识/.test(m.text)).slice(-10).map(m=>({text:m.text,createdAt:m.createdAt})),
+ };
 }

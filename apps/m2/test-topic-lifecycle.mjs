@@ -37,7 +37,8 @@ test('旧公开意见无需改写状态即可显示，私聊和机器发言不�
  const before=JSON.stringify(s),p=sharedProjection(s,actor);assert.equal(p.nexus.bf01.topics.length,1);assert.equal(p.nexus.bf01.topics[0].status,'pending');assert.equal(JSON.stringify(s),before);
 });
 test('模型总结替换种子不重复，未总结的话题不丢，旧已处理来源不会重开共识',()=>{
- const records=[{id:'a',channel:'group',author:'甲',text:'意见一'},{id:'b',channel:'group',author:'乙',text:'意见二'}];
+ // Two field comments = two seeded topics (plain follow-up lines would join the live one).
+ const records=[{id:'a',channel:'group',author:'甲',text:'意见一',cardId:'bf01',version:1,block:'result'},{id:'b',channel:'group',author:'乙',text:'意见二',cardId:'bf01',version:1,block:'checks'}];
  const seeded=materializeTopics([],records);
  const merged=mergeTopics(seeded,[{title:'合并总结',status:'agreement',sourceIds:['b'],quotes:[{id:'b',text:'意见二'}],anchor:seeded[0].anchor}]);
  assert.equal(merged.length,1);assert.equal(materializeTopics(merged,records).length,1);assert.equal(materializeTopics(merged,records)[0].status,'agreement');

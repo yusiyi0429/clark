@@ -22,6 +22,6 @@ export default function RevisionOverlay({revision,canvas,view}){
  },[revision,canvas,view]);
  if(!revision)return null;
  const failed=revision.phase==='failed',done=revision.phase==='done',Icon=failed?AlertCircle:done?Check:Sparkles;
- const label=failed?'修订未保存，请重试':done?`CoAgent 已更新 · v${revision.version}`:revision.phase==='presenting'?'CoAgent 正在更新画布':'CoAgent 正在修改';
- return createPortal(<><span className="sr-only" role="status" aria-live="polite">{label}</span>{rects.map((rect,i)=><div key={i} className={`ai-revision-overlay ${revision.phase}`} style={rect} data-revision-card={revision.cardId} data-revision-phase={revision.phase} aria-label={label}><span className="ai-revision-sweep"/><span className="ai-revision-label"><Icon size={14}/>{label}</span></div>)}</>,document.body);
+ const label=failed?'修订未保存，请重试':done?`Nexus 已更新 · v${revision.version}`:revision.phase==='presenting'?'Nexus 正在更新':'Nexus 正在修改';
+ return createPortal(<><span className="sr-only" role="status" aria-live="polite">{label}</span>{rects.map((rect,i)=><div key={i} className={`ai-revision-overlay ${revision.phase}`} style={rect} data-revision-card={revision.cardId} data-revision-phase={revision.phase} aria-label={label}><span className="ai-revision-dots" aria-hidden="true"/><span className="ai-revision-label"><Icon size={14}/>{label}</span></div>)}</>,document.body);
 }

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,stat,unlink,rmdir,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,stat,unlink,rmdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createCollaborationState,applyAction,currentVersion,cardStatus} from './governance.mjs';
@@ -69,18 +69,57 @@ test('持久化、单进程锁和并发版本冲突：不会覆盖别人修订',
   store=await openCollaborationStore(path,seed());await assert.rejects(openCollaborationStore(path,seed()),{code:'EEXIST'});
   const results=await Promise.allSettled(['A','B'].map(title=>store.apply(dri,{type:'revise',cardId:'bf01',baseVersion:1,patch:{title}})));
   assert.equal(results.filter(x=>x.status==='fulfilled').length,1);assert.equal(results.find(x=>x.status==='rejected').reason.status,409);
-  const snapshot=store.snapshot();snapshot.cards.bf01.title='篡改';assert.equal(store.snapshot().cards.bf01.title,'PO');
+  const snapshot=store.snapshot();assert.throws(()=>{snapshot.cards.bf01.title='篡改';},TypeError);assert.equal(store.snapshot().cards.bf01.title,'PO');
   await store.close();store=null;store=await openCollaborationStore(path,seed());assert.equal(currentVersion(store.snapshot().cards.bf01).number,2);
   assert.equal(JSON.parse(await readFile(path)).audit.length,1);assert.equal((await stat(path)).mode&0o777,0o600);
  }finally{if(store)await store.close();await unlink(path).catch(()=>{});await rmdir(dir);}
 });
-test('Store read() shares one frozen state; snapshot() stays a private copy',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'m2-store-read-'));const store=await openCollaborationStore(join(dir,'state.json'),seed());
- try{
-  const live=store.read();assert.equal(store.read(),live);assert.ok(Object.isFrozen(live.cards.bf01.versions[0].content));
-  assert.throws(()=>{live.cards.bf01.versions.push({});},TypeError);
-  const copy=store.snapshot();copy.cards.bf01.versions.push({});assert.equal(store.read().cards.bf01.versions.length,1);
-  const returned=await store.transact(s=>{s.sequence=(s.sequence||0)+1;return s;});returned.cards.bf01.versions.push({});
-  assert.notEqual(store.read(),live);assert.equal(store.read().cards.bf01.versions.length,1);assert.ok(Object.isFrozen(store.read()));
- }finally{await store.close();await rm(dir,{recursive:true,force:true});}
+test('协作通知：接受修订后群里 @ 需重签的人和下级负责人；双方确认后公告达成共识；同卡不同字段的建议保留',async()=>{
+ const {queueProposals}=await import('./nexus-memory.mjs');
+ const dri={id:'member-05',visibleUnits:['eo'],unitDri:['eo'],missionDri:[]},owner={id:'member-06',visibleUnits:['eo'],unitDri:[],missionDri:['eo-m2']};
+ let s=createCollaborationState([{id:'eo',level:'po',title:'E&O',owner:'刘人豪',children:[{id:'eo-m2',unit:'eo',level:'mission',title:'受控上下文复用',owner:'于斯一',result:'旧成果',checks:['旧验收'],children:[{id:'eo-m2-t1',unit:'eo',level:'task',title:'T',owner:'孙铭泽',children:[]}]}]}]);
+ s=applyAction(s,owner,{type:'comment',cardId:'eo-m2',block:'checks',text:'建议改验收'});
+ queueProposals(s,'eo',[{cardId:'eo-m2',baseVersion:1,sourceIds:[s.comments[0].id],patch:{checks:['新验收']},reason:'r1'},{cardId:'eo-m2',baseVersion:1,sourceIds:[s.comments[0].id],patch:{result:'新成果'},reason:'r2'}]);
+ const [p1,p2]=s.proposals;
+ s=applyAction(s,owner,{type:'acceptProposal',cardId:'eo-m2',proposalId:p1.id,patch:{checks:['负责人改过的验收']}});
+ assert.deepEqual(currentVersion(s.cards['eo-m2']).content.checks,['负责人改过的验收']);
+ assert.equal(s.proposals.find(p=>p.id===p1.id).edited,true);
+ // Different field: still pending, carried to v2.
+ assert.equal(s.proposals.find(p=>p.id===p2.id).status,'pending');assert.equal(s.proposals.find(p=>p.id===p2.id).baseVersion,2);
+ const notice=s.messages.filter(m=>m.kind==='notice').at(-1).text;
+ assert.match(notice,/于斯一接受了 Nexus 对「受控上下文复用」的修订，已更新到 v2/);assert.match(notice,/@刘人豪/);assert.match(notice,/正在按拆解规则对照下级 1 张卡/);assert.doesNotMatch(notice,/@于斯一/);
+ s=applyAction(s,owner,{type:'confirm',cardId:'eo-m2',slot:'missionDri',baseVersion:2});
+ s=applyAction(s,dri,{type:'confirm',cardId:'eo-m2',slot:'unitDri',baseVersion:2});
+ assert.match(s.messages.at(-1).text,/达成共识/);
+ // Only the author can delete a comment.
+ assert.throws(()=>applyAction(s,dri,{type:'deleteComment',cardId:'eo-m2',commentId:s.comments[0].id}),/只能删除自己的批注/);
+ s=applyAction(s,owner,{type:'deleteComment',cardId:'eo-m2',commentId:s.comments[0].id});assert.equal(s.comments.length,0);
+});
+test('上级修订后，下级负责人自己修订这张卡就算核对过；只看不改要点“核对完”',()=>{
+ let s=applyAction(seed(),dri,{type:'revise',cardId:'bf01',baseVersion:1,patch:{title:'PO 新版'}});
+ assert.equal(cardStatus(s.cards['bf01-m1']),'上级有调整 · 待核对');
+ s=applyAction(s,owner,{type:'revise',cardId:'bf01-m1',baseVersion:1,patch:{title:'Mission 跟着改'}});
+ assert.equal(s.cards['bf01-m1'].upstreamChange,undefined);
+ let t=applyAction(seed(),dri,{type:'revise',cardId:'bf01',baseVersion:1,patch:{title:'PO 新版'}});
+ t=applyAction(t,owner,{type:'acknowledgeImpact',cardId:'bf01-m1',baseVersion:1});
+ assert.equal(t.cards['bf01-m1'].upstreamChange,undefined);
+});
+import {answersNexus} from './governance.mjs';
+import {directQuestion} from './nexus-participation.mjs';
+test('Nexus 刚问过某人，那人接着说的第一句就算在回答 Nexus，要马上处理',()=>{
+ const t=n=>`2026-10-19T02:0${n}:00Z`;
+ const s={messages:[{id:'n1',channel:'group',scope:'bf01',author:'Nexus',text:'刘明华，您希望在哪个节点前预留多长返工缓冲？',createdAt:t(1)}]};
+ assert.equal(answersNexus(s,'bf01','member-01',t(2)),true);
+ assert.equal(answersNexus(s,'bf01','member-03',t(2)),false,'问的是刘明华，孙铭泽说话不算回答');
+ s.messages.push({id:'m1',channel:'group',scope:'bf01',author:'member-01',text:'至少 3 天吧？',createdAt:t(2)});
+ assert.equal(answersNexus(s,'bf01','member-01',t(3)),false,'已经回答过了');
+ assert.equal(directQuestion({text:'至少 3 天吧？',answersNexus:true}),true);
+ const later=applyAction({...seed(),messages:[{id:'n2',channel:'group',scope:'bf01',author:'Nexus',text:'请确认是否按 10/26 改？',createdAt:new Date().toISOString()}]},dri,{type:'message',cardId:'bf01',general:true,text:'可以，按 10/26'});
+ assert.equal(later.messages.at(-1).answersNexus,true);
+});
+test('接受修订卡后，它依据的话题在纪要里标为已定',()=>{
+ let s=seed();s.nexus={bf01:{topics:[{id:'t1',title:'试点范围',status:'discussing',stage:'有方案',sourceIds:['c1','m2']},{id:'t2',title:'别的事',status:'discussing',sourceIds:['m9']}]}};
+ s.proposals=[{id:'p1',scope:'bf01',cardId:'bf01',baseVersion:1,status:'pending',patch:{title:'新标题'},sourceIds:['c1'],reason:'按批注',createdAt:new Date().toISOString()}];
+ s=applyAction(s,dri,{type:'acceptProposal',cardId:'bf01',proposalId:'p1'});
+ assert.deepEqual(s.nexus.bf01.topics.map(t=>[t.id,t.status,t.stage]),[['t1','agreement','已定'],['t2','discussing',undefined]]);
 });

@@ -16,7 +16,11 @@ services:
       M2_INTERNAL_TOKEN: ${M2_INTERNAL_TOKEN:?M2_INTERNAL_TOKEN required}
       DECODING_API_BASE: ${M2_MODEL_BASE:-https://tokenhub.corp.tokenkingos.com/api/openai/v1}
       DECODING_API_KEY: ${M2_MODEL_KEY:?M2_MODEL_KEY required}
-      DECODING_MODEL: ${M2_MODEL:-wangsu/gpt-6.1-sol}
+      # Claude on TokenHub goes through the Messages API; the program derives that endpoint from the TokenHub base.
+      DECODING_MODEL: ${M2_MODEL:-wangsu/claude-sonnet-5-5}
+      DECODING_CHAT_MODEL: ${M2_CHAT_MODEL:-wangsu/claude-sonnet-5-5}
+      # off stops downstream alignment (Nexus re-checks lower cards after an upper card changes).
+      DECODING_CASCADE: ${M2_CASCADE:-on}
       TKOS_WORLD_PRODUCT_TOKEN: ${M2_WORLD_READ_TOKEN:-}
     volumes:
       - ${M2_SEED_DIR:?M2_SEED_DIR required}:/var/lib/m2/seed:ro

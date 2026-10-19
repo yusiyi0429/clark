@@ -12,7 +12,10 @@ test('标题移除日期与类型前缀；分点保留原文；旧摘要不套�
  assert.equal(readerView({...node,result:'持续应用'},{x:view}),null);
 });
 test('日期易读；仅移除重复候选前缀，不移除条件候选；PO汇总保持子项来源',()=>{
- assert.equal(formatPlanDate('2026-10-10—2026-10-23'),'2026 10 10 至 2026 10 23');
+ assert.equal(formatPlanDate('2026-10-10—2026-10-23'),'2026.10.10 – 10.23');
+ assert.equal(formatPlanDate('2026-10-01—2026-10-31'),'2026.10.1 – 10.31');
+ assert.equal(formatPlanDate('2026-12-28—2027-01-05'),'2026.12.28 – 2027.1.5');
+ assert.equal(formatPlanDate('2026-10-16'),'2026.10.16');
  assert.equal(cleanCandidatePrefix('候选：首次使用'),'首次使用');
  assert.equal(cleanCandidatePrefix('条件候选：外部窗口未确认'),'条件候选：外部窗口未确认');
  const node={level:'po',children:[{dependencies:'供应商通道未确认；未满足则调用受阻',milestones:['通道验收，2026-10-28 完成'],humanView:{milestones:['通道验收']}}]};
