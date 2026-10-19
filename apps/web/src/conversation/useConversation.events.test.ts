@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("react", () => ({ useCallback: (callback: unknown) => callback, useEffect: () => {},
   useRef: (current: unknown) => ({ current }), useState: (initial: unknown) => [initial, vi.fn()] }));
-import { useConversation } from "./useConversation";
+import { failureCopy, useConversation } from "./useConversation";
 
 const dispatch = vi.fn();
 /** 每一轮都有的「发出 / 结束」通知单独记，下面只看业务刷新事件。 */
@@ -24,6 +24,19 @@ function streamedTool(name: string, phase = "completed", isError = false) {
     read = true; return { done: false, value: new TextEncoder().encode(text) };
   } }) } };
 }
+
+describe("Anchor（页面聚焦的卡）随每一句发出", () => {
+  it("请求体带 anchorSelection；ANCHOR_NOT_FOUND 在服务端接下之前失败，返回 false 让输入条保留原文", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ code: "ANCHOR_NOT_FOUND", message: "Anchor not found" }) })
+      .mockResolvedValue({ ok: true, json: async () => ({ messages: [] }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const anchor = { cardId: "mission-card:card-01", version: 3 };
+    expect(await useConversation("mission-card:card-01", null, undefined, anchor).send("这张卡还差什么", [])).toBe(false);
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!;
+    expect(JSON.parse(post[1].body)).toMatchObject({ message: "这张卡还差什么", references: [], anchorSelection: anchor });
+    expect(failureCopy("ANCHOR_NOT_FOUND", "Anchor not found")).toBe("当前页面上的卡已不存在或看不到，请刷新后再发。");
+  });
+});
 
 describe("任务卡私聊工具完成后同步正文与批注", () => {
   it.each(["edit_mission_card", "edit_my_mission_card", "ask_mission_card_question"])("%s 成功完成即发送当前卡的刷新事件", async (tool) => {

@@ -50,7 +50,7 @@ export function BattlefieldDetailScreen({ battlefield, cards, initialTab }: { ba
   const groups = useMemo(() => missionsByOwner(cards, payload.battlefieldId), [cards, payload.battlefieldId]);
   const missions = groups.flatMap((group) => group.missions);
   const evidenceCount = missions.reduce((sum, mission) => sum + mission.successEvidence.length, 0);
-  useRegisterDetail({ scope: "global", label: payload.name, mark: null, cards: issueCards });
+  useRegisterDetail({ scope: "global", label: payload.name, mark: null, cards: issueCards, anchor: battlefield });
 
   function pick(next: BattlefieldTab) {
     setTab(next);

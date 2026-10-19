@@ -12,6 +12,7 @@ const harness = vi.hoisted(() => ({
   privateSend: vi.fn().mockResolvedValue(true), groupSend: vi.fn().mockResolvedValue(true),
   column: { mode: "strip" as "strip" | "expanded", narrow: false, setMode: vi.fn() },
   conversation: {} as Record<string, unknown>,
+  anchor: undefined as { cardId: string; version: number } | undefined,
   sheet: null as { onQuote?: (text: string) => void; onClose: () => void; composerRef?: unknown; notice?: string | null } | null,
   dock: null as { dockRef?: unknown; onRestoreQuotes?: unknown; keyboard: boolean; onKeyboardChange: (keyboard: boolean) => void;
     onDictationError?: (error: string | null) => void; wide?: boolean; onWideExit?: () => void } | null,
@@ -42,8 +43,9 @@ vi.mock("react", async (importOriginal) => {
     },
   };
 });
-vi.mock("./useConversation", () => ({ CONVERSATION_SEND: "conversation-send", useConversation: (scope: string) => ({ scope, messages: [], streaming: false,
-  attachments: [], error: null, historyStatus: "ready", historyError: null, retryHistory: vi.fn(), send: harness.privateSend, ...harness.conversation }) }));
+vi.mock("./useConversation", () => ({ CONVERSATION_SEND: "conversation-send", useConversation: (scope: string, _material: unknown, _context: unknown,
+  anchor: { cardId: string; version: number } | undefined) => { harness.anchor = anchor; return { scope, messages: [], streaming: false,
+  attachments: [], error: null, historyStatus: "ready", historyError: null, retryHistory: vi.fn(), send: harness.privateSend, ...harness.conversation }; } }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("./useMissionGroup", () => ({ useMissionGroup: () => ({ view: { members: [], entries: [] }, send: harness.groupSend }) }));
 vi.mock("./useTaskGroup", () => ({ useThreadGroup: () => ({ view: { members: [], messages: [] }, catchUp: null }) }));
@@ -83,7 +85,7 @@ import { ConversationHost, type ConversationUiState } from "./ConversationHost";
 
 beforeEach(() => {
   harness.states = []; harness.refs = []; harness.dependencies = [];
-  harness.column.narrow = false; harness.column.mode = "strip"; harness.conversation = {};
+  harness.column.narrow = false; harness.column.mode = "strip"; harness.conversation = {}; harness.anchor = undefined;
   harness.viewport = 1440; harness.sheet = null; harness.dock = null; harness.jumps = []; harness.selected = null; harness.toolbar = null; harness.selectionOptions = null;
   vi.clearAllMocks();
   vi.stubGlobal("document", { querySelectorAll: () => [] });
@@ -114,6 +116,24 @@ function setup() {
 }
 
 describe("任务卡引用进入私聊", () => {
+  it("本页对应这条对话的卡作为 Anchor（cardId + version）发出，改看全局对话时不带", () => {
+    const { props, ui, render } = setup();
+    props.page!.cards = [{ id: "issue:other", version: 2, conversation: { scope: "issue:other" } },
+      { id: "mission-card:card-01", version: 4, conversation: { scope: "mission-card:card-01" } }] as NonNullable<typeof props.page>["cards"];
+    render();
+    expect(harness.anchor).toEqual({ cardId: "mission-card:card-01", version: 4 });
+    ui.globalView = true; render();
+    expect(harness.anchor).toBeUndefined();
+  });
+
+  it("页面登记的 anchor（战场页，scope 仍是 global）优先于按 scope 找卡", () => {
+    const { props, render } = setup();
+    props.page = { scope: "global", label: "增长战场", cards: [{ id: "issue:1", version: 1, conversation: { scope: "issue:1" } }],
+      anchor: { id: "battlefield:growth", version: 7 } } as NonNullable<typeof props.page>;
+    render();
+    expect(harness.anchor).toEqual({ cardId: "battlefield:growth", version: 7 });
+  });
+
   it.each([false, true])("从公开事项群组引用并对话，切回 Co-Agent 且不公开发送（窄屏：%s）", async (narrow) => {
     harness.column.narrow = narrow;
     const { ui, render } = setup();
