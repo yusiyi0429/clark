@@ -21,6 +21,7 @@ const STEP_LABELS: [RegExp, string][] = [
   [/^read_progress$/, "读进展"],
   [/^read_reviews$/, "读复盘"],
   [/^read_object_tree$/, "沿公司地图走"],
+  [/^read_anchor$/, "读当前页面"],
   [/^read_issue_conversation$/, "读议题对话"],
   [/^propose_issue$/, "起草议题"],
   [/^list_pending_issues$/, "读待决策议题"],

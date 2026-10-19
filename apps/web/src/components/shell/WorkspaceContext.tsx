@@ -13,6 +13,8 @@ export type DetailInfo = {
   /** 窄条「当前工作区」标记；只有会议与月度材料显示（clark 同）。 */
   mark: ContextMarkKind | null;
   cards: Card[];
+  /** 页面聚焦的卡；对话 scope 仍是 global 的页面用，如战场详情。 */
+  anchor?: Card;
   group?: DetailGroup;
   /** Visible conversation context for native scopes which remain global (battlefield). */
   messageContext?: string;
@@ -53,9 +55,9 @@ export function useWorkspace(): WorkspaceApi {
 /** 详情页挂载时登记自己，卸载时撤销。 */
 export function useRegisterDetail(info: DetailInfo) {
   const { registerDetail } = useWorkspace();
-  const { scope, label, mark, cards, group, messageContext } = info;
+  const { scope, label, mark, cards, anchor, group, messageContext } = info;
   useLayoutEffect(() => {
-    registerDetail({ scope, label, mark, cards, group, messageContext });
-  }, [registerDetail, scope, label, mark, cards, group, messageContext]);
+    registerDetail({ scope, label, mark, cards, anchor, group, messageContext });
+  }, [registerDetail, scope, label, mark, cards, anchor, group, messageContext]);
   useLayoutEffect(() => () => registerDetail(null), [registerDetail]);
 }

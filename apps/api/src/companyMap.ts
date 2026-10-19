@@ -74,7 +74,10 @@ export function scopeLabel(input: { people: string[] | null; battlefieldName?: s
   return `${scopeWho} · ${months}`;
 }
 
-/** 页面默认焦点：首页 CEO 看全员，其他人看自己；对象页按对象定人、战场和月份。 */
+/**
+ * 默认焦点：scope 是场景锚点聚焦的对象（页面对象，或首页上本人选中的卡；没有聚焦时是页面 scope）。
+ * 首页 CEO 看全员，其他人看自己；对象按对象定人、战场和月份。路由按它给三层取用当默认参数，同时写进 anchor.range 给模型看。
+ */
 export function defaultFocus(scope: string, snapshot: TReferenceSnapshot | null, viewer: ProgressViewer, now: Date): ReadFocus {
   const period = companyPeriod(now);
   if (scope === "global") return { people: viewer.role === "ceo" ? "all" : "me", period };
@@ -96,6 +99,7 @@ export function defaultFocus(scope: string, snapshot: TReferenceSnapshot | null,
     return { people: "all", ...(subject.type === "battlefield" ? { battlefieldId: subject.id } : {}), object, period: payload.period ?? period };
   }
   if (scope.startsWith("personal-review:")) return { people: "me", object, period: payload.period ?? period };
+  if (scope.startsWith("battlefield:")) return { people: viewer.role === "ceo" ? "all" : "me", battlefieldId: scope.slice("battlefield:".length), object, period };
   if (scope.startsWith("issue:")) {
     const location = payload.location ?? {};
     return { people: "all", ...(location.level === "battlefield" ? { battlefieldId: location.battlefieldId } : {}), object, period };
@@ -106,12 +110,12 @@ export function defaultFocus(scope: string, snapshot: TReferenceSnapshot | null,
 /** 工具说明（CEO 与 DRI 共用，拼在各自系统提示后面）。 */
 export const THREE_LAYER_RULES = `# 三层取用
 
-页面只是默认焦点，不是边界。\`focus\` 是本页的默认读取范围（谁、哪个战场、哪个月）。问到当前对象以外的人、Mission、执行情况或复盘时，用同一套工具沿公司地图读，不凭印象说：
+页面只是默认焦点，不是边界。\`anchor.range\` 是本页的默认读取范围（谁、哪个战场、哪个月），由 anchor 聚焦的对象决定。问到当前对象以外的人、Mission、执行情况或复盘时，用同一套工具沿公司地图读，不凭印象说：
 - \`read_mission_cards\`：Mission 卡（目标、计划），全员可读；
 - \`read_progress\`：执行事项的状态与进展、本机采集整理出的进展（含计划外工作）；
 - \`read_reviews\`：月度复盘（个人、战场与能力域，附评论）与周复盘；
 - \`read_object_tree\`：从公司、战场、Mission、Task 或某个人出发，向上（所属）、向下（下属）、向旁边（同级）走。
-people 填「all」（全员）、「me」或人名列表；from、to 是月份（YYYY-MM），不填按 focus。要几个人、几个战场、几个月就一次读完（全员就填 all，不限战场就不填 battlefieldId），不按人、按战场或按月分多次读。
+people 填「all」（全员）、「me」或人名列表；from、to 是月份（YYYY-MM），不填按 anchor.range。要几个人、几个战场、几个月就一次读完（全员就填 all，不限战场就不填 battlefieldId），不按人、按战场或按月分多次读。
 结果里 filtered 大于 0 表示有这么多条因权限没有读到（等于 0 时不用提权限）（进展与复盘：CEO 能看全部，其他人只能看同一战场的）：回答里必须写明有几条没读到、原因是权限，不能猜被过滤的内容；跨战场的可以请本人用「请同事帮忙」直接问对方，或找 CEO。unknownPeople 是没对上人员目录的名字，要说明。引用读到的内容时照抄结果里的 cite 作出处。
 \`scopeOverride\`（有时才出现）是本人在界面上改过的读取范围：这一轮一律按它读，回答开头不复述范围。`;
 

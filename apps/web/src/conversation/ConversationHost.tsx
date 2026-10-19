@@ -37,7 +37,8 @@ import w from "@/styles/app-shell.module.css";
 /** 对话层退场时长：与 app-shell.module.css 里 historySink 的时长一致。 */
 export const SHEET_EXIT_MS = 220;
 
-export type ConversationTarget = { scope: string; label: string; group?: DetailGroup; messageContext?: string };
+/** cards / anchor 来自详情页登记（DetailInfo），用来定这条对话的 Anchor；全局对话没有。 */
+export type ConversationTarget = { scope: string; label: string; group?: DetailGroup; messageContext?: string; cards?: Card[]; anchor?: Card };
 const GLOBAL: ConversationTarget = { scope: "global", label: "天枢" };
 /** 没有引用上下文时的空列表：身份固定，输入条（memo）不因它重画。 */
 const NO_CARDS: Card[] = [];
@@ -116,7 +117,9 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, subject, ui 
     window.addEventListener("viewing-material-changed", changed);
     return () => window.removeEventListener("viewing-material-changed", changed);
   }, [target.scope]);
-  const data = useConversation(target.scope, viewingMaterial, target.messageContext);
+  // Anchor：页面登记的聚焦卡（战场页），否则是本页卡里对应这条对话的那张；在二级页改看全局对话（GLOBAL）时不带。
+  const anchor = target.anchor ?? target.cards?.find((card) => card.conversation?.scope === target.scope || card.id === target.scope);
+  const data = useConversation(target.scope, viewingMaterial, target.messageContext, anchor ? { cardId: anchor.id, version: anchor.version } : undefined);
   useEffect(() => {
     const refreshObject = (event: Event) => {
       if ((event as CustomEvent<{ scope: string }>).detail?.scope === target.scope) router.refresh();

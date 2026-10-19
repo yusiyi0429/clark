@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { parseSseBlock, splitSse, type ConversationEvent } from "./sse";
 import type { Step, StepStatus } from "@/components/steps/StepList";
 import type { TAskAnswerInput, TAskAnswerRecord, TConversationCard, TReadScope, TReadScopeParams } from "@warmap/contracts";
+import type { components } from "@/lib/api/schema";
 import { afterResize, resizing } from "./resizeGate";
 import { useStableCallback } from "./stableCallback";
 
@@ -74,6 +75,8 @@ export function withNotice(notice: string | undefined, body: string): string {
   return body ? `${notice}\n\n${body}` : notice;
 }
 export type CardRef = { cardId: string; version: number };
+/** 页面聚焦的卡（Anchor）：每一句都带上，服务端按它确定「这张卡」指的是什么；与批注引用分开。 */
+export type AnchorSelection = NonNullable<components["schemas"]["ConversationMessageRequest"]["anchorSelection"]>;
 /** 发送时带上卡片的类型与标题：只用来在乐观渲染的那条提问上先画出「引用了 N 张卡片」，请求里仍只发 cardId / version。 */
 export type SentCardRef = CardRef & { kind?: string; title?: string };
 
@@ -122,6 +125,8 @@ export function failureCopy(code: string | undefined, fallback?: string): string
       return "批注的卡片已更新，请重新批注后再发。";
     case "REFERENCE_NOT_FOUND":
       return "批注的卡片已不存在，请移除后再发。";
+    case "ANCHOR_NOT_FOUND":
+      return "当前页面上的卡已不存在或看不到，请刷新后再发。";
     case "ATTACHMENT_NOT_FOUND":
       return "附件已失效，请重新上传。";
     case "RESUME_NOT_FOUND":
@@ -196,7 +201,8 @@ class TurnError extends Error {
   }
 }
 
-export function useConversation(scope: string, viewingMaterial: { id: string; editable: boolean } | null = null, messageContext?: string) {
+export function useConversation(scope: string, viewingMaterial: { id: string; editable: boolean } | null = null, messageContext?: string,
+  anchorSelection?: AnchorSelection) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<ConversationStatus>("idle");
   const [partial, setPartial] = useState("");
@@ -477,6 +483,7 @@ ${input}` : input;
           headers: { accept: "text/event-stream", "content-type": "application/json" },
           body: JSON.stringify({ message: text, references: references.map(({ cardId, version }) => ({ cardId, version })), attachments: attachmentRefs,
             ...(viewingMaterial ? { viewingMaterialId: viewingMaterial.id } : {}),
+            ...(anchorSelection ? { anchorSelection } : {}),
             ...(options.resumeRunId ? { resumeRunId: options.resumeRunId } : {}),
             ...(options.answers ? { answers: options.answers.input } : {}),
             ...(options.scopeOverride ? { scopeOverride: options.scopeOverride } : {}) }),
