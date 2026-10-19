@@ -6,7 +6,19 @@ import { WorldClient, WorldError, worldErrorCode, worldTarget, type WorldAction,
 type SignedPlan = { id: string; period: string; confirmed_at: Date };
 
 const shanghai = (at: Date) => new Date(at.getTime() + 8 * 3_600_000).toISOString().replace(/\.\d{3}Z$/, "+08:00");
-const lifecycleStatus = (head: WorldHead): string | undefined => (head.lifecycle as { status?: string } | null)?.status;
+const lifecycleOf = (head: WorldHead) => (head.lifecycle ?? {}) as { status?: string; event_id?: string };
+
+/**
+ * 只代确认 CEO 签发时的那一版：已承诺期间正式内容不能改，推出「已承诺」的承诺事件记在签发之前，当前版本就是签发时的那一版。
+ * 签发之后才承诺（含退回后重新承诺）的不代确认，交 CEO 本人。
+ */
+async function committedBeforeSign(client: WorldClient, goal: WorldHead, signedAt: Date): Promise<boolean> {
+  const eventId = lifecycleOf(goal).event_id;
+  if (!eventId) return false;
+  const read = await client.getEvents(goal.object_id);
+  const commit = (read.events ?? read.items ?? []).find((event) => event.event_id === eventId);
+  return typeof commit?.recorded_at === "string" && new Date(commit.recorded_at).getTime() <= signedAt.getTime();
+}
 
 /** 一个目标版本一个键：同一版本只试一次，网络失败按这个键重放；目标重新承诺（版本变了）才再试。 */
 export const periodGoalKey = (planId: string, goal: Pick<WorldHead, "object_id" | "object_version">) =>
@@ -26,9 +38,10 @@ export function periodGoalConfirmAction(goal: WorldHead, plan: SignedPlan, princ
 }
 
 /**
- * 已签发的月度计划 → 本体同周期、company / E&O 域里「已承诺」的周期目标，代 CEO 确认（CEO 取人员名单里 ceo 角色的人）。
- * 签发后立即跑一次；本体晚于签发才承诺的目标由定时补跑接上。结果看 world_sync_ledger：成功或失败（委托没登记 / 失效等）的版本不再自动重试，
- * 失败照台账进管理员视图的失败列表；网络失败下一轮按原幂等键重放。
+ * 最近一份已签发的月度计划（只代确认当月）→ 本体同周期、各单元「已承诺」、承诺在签发之前的周期目标，
+ * 代 CEO 确认（CEO 取人员名单里 ceo 角色的人）。签发后立即跑一次，另定时补跑（签发时本体不通、部署前已签发）。
+ * 结果看 world_sync_ledger：成功或失败（委托没登记 / 失效、版本对不上等）的版本不再自动重试，失败照台账进管理员视图的失败列表；
+ * 网络失败下一轮按原幂等键重放。
  */
 export function createWorldPeriodGoalService(pool: Pool, client: WorldClient, ceoId: () => string | undefined, intervalMs = 10 * 60_000) {
   const q: Query = pool.query.bind(pool);
@@ -39,29 +52,34 @@ export function createWorldPeriodGoalService(pool: Pool, client: WorldClient, ce
     tail = tail.then(run).catch((error) => logEvent({ event: "world.period_goal", status: "failed", errorCode: worldErrorCode(error) }));
   };
   async function sync() {
-    const plans = (await q("SELECT id, period, confirmed_at FROM monthly_plans WHERE status = 'confirmed' AND confirmed_at IS NOT NULL ORDER BY period")).rows as SignedPlan[];
-    if (!plans.length) return;
+    const plan = (await q("SELECT id, period, confirmed_at FROM monthly_plans WHERE status = 'confirmed' AND confirmed_at IS NOT NULL ORDER BY period DESC LIMIT 1")).rows[0] as SignedPlan | undefined;
+    if (!plan) return;
     const ceo = ceoId();
     const principal = ceo ? client.config.people[ceo] : undefined;
     if (!principal) throw new WorldError(409, "INVALID_STATE", "人员名单里的 CEO 没有对应的本体主体");
-    const domains = new Set([client.config.domains.company, client.config.domains.eo]);
-    for (const plan of plans) {
-      const goals = (await client.listObjects({ type: "PeriodGoal", period: plan.period }))
-        .filter((goal) => goal.domain_id && domains.has(goal.domain_id) && lifecycleStatus(goal) === "committed");
-      for (const listed of goals) {
-        const key = periodGoalKey(plan.id, listed);
-        const last = (await q("SELECT status FROM world_sync_ledger WHERE instance = $1 AND idempotency_key = $2 ORDER BY id DESC LIMIT 1", [client.instance, key])).rows[0];
-        if (last?.status === "committed" || last?.status === "failed") continue;
-        try {
-          await client.write(key, async () => {
-            const head = await client.getHead(listed.object_id);
-            if (lifecycleStatus(head) !== "committed") throw new WorldError(409, "INVALID_STATE", `周期目标 ${head.object_id} 不在已承诺状态`);
-            return periodGoalConfirmAction(head, plan, principal, key);
-          });
-          logEvent({ event: "world.period_goal", objectRef: `period-goal:${listed.object_id}`, status: "committed" });
-        } catch (error) {
-          logEvent({ event: "world.period_goal", objectRef: `period-goal:${listed.object_id}`, status: "failed", errorCode: worldErrorCode(error) });
+    // 不按域筛：委托没覆盖的域由本体拒（403），如实记失败。
+    const goals = (await client.listObjects({ type: "PeriodGoal", period: plan.period }))
+      .filter((goal) => lifecycleOf(goal).status === "committed");
+    for (const listed of goals) {
+      const key = periodGoalKey(plan.id, listed);
+      const last = (await q("SELECT status FROM world_sync_ledger WHERE instance = $1 AND idempotency_key = $2 ORDER BY id DESC LIMIT 1", [client.instance, key])).rows[0];
+      if (last?.status === "committed" || last?.status === "failed") continue;
+      try {
+        if (!await committedBeforeSign(client, listed, plan.confirmed_at)) {
+          logEvent({ event: "world.period_goal", objectRef: `period-goal:${listed.object_id}`, status: "skipped", errorCode: "COMMITTED_AFTER_SIGN" });
+          continue;
         }
+        await client.write(key, async () => {
+          // 版本过期时 WorldClient 会重取再写；目标已不是签发时那一版就停，不确认新版本。
+          const head = await client.getHead(listed.object_id);
+          if (lifecycleOf(head).status !== "committed" || head.object_version !== listed.object_version) {
+            throw new WorldError(409, "INVALID_STATE", `周期目标 ${head.object_id} 已不是签发时已承诺的那一版`);
+          }
+          return periodGoalConfirmAction(head, plan, principal, key);
+        });
+        logEvent({ event: "world.period_goal", objectRef: `period-goal:${listed.object_id}`, status: "committed" });
+      } catch (error) {
+        logEvent({ event: "world.period_goal", objectRef: `period-goal:${listed.object_id}`, status: "failed", errorCode: worldErrorCode(error) });
       }
     }
   }
