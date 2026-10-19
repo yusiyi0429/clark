@@ -52,11 +52,11 @@ describe("会议页：这场会挂到哪、写进本体没有、不写进本体"
     expect(toggle.props).toMatchObject({ "aria-checked": false });
 
     const excluded = world({ excluded: true, excludedBy: "林晓", status: "withdrawn" });
-    api.put.mockResolvedValue({ data: { world: excluded }, response: { ok: true, status: 200 } });
+    api.put.mockResolvedValue({ data: { world: excluded, decisions: [] }, response: { ok: true, status: 200 } });
     const onChange = vi.fn();
     hooks.index = 0;
     (nodes(MeetingWorldBar({ meetingId: "m1", world: world(), onChange })).find((node) => node.props?.role === "switch")!.props!.onClick as () => void)();
-    await vi.waitFor(() => expect(onChange).toHaveBeenCalledWith(excluded));
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalledWith({ world: excluded, decisions: [] }));
     expect(api.put).toHaveBeenCalledWith("/api/meetings/{id}/world-excluded", { params: { path: { id: "m1" } }, body: { excluded: true } });
 
     const after = render(excluded);
@@ -84,7 +84,7 @@ describe("会议页：这场会挂到哪、写进本体没有、不写进本体"
     (picker.find((node) => node.props?.["aria-pressed"] === false)!.props!.onClick as () => void)();
     expect(render(view).some((node) => node.type === "button" && text(node) === "恢复自动")).toBe(true);
 
-    api.put.mockResolvedValue({ data: { world: world({ anchors: [MISSION, unit], edited: true }) }, response: { ok: true, status: 200 } });
+    api.put.mockResolvedValue({ data: { world: world({ anchors: [MISSION, unit], edited: true }), decisions: [] }, response: { ok: true, status: 200 } });
     (render(view).find((node) => node.type === "button" && text(node) === "保存")!.props!.onClick as () => void)();
     await vi.waitFor(() => expect(api.put).toHaveBeenCalledWith("/api/meetings/{id}/world-anchors",
       { params: { path: { id: "m1" } }, body: { anchors: [{ kind: "mission", id: "m-v2" }, { kind: "unit", id: "agents" }] } }));

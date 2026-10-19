@@ -1,6 +1,6 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { MeetingOutcomeState, StoredTranscript, TranscriptCandidateProjection } from "./transcript.js";
-import { MeetingAttendees, MeetingDecisionView, MeetingMinutesStatus, MeetingWorldView } from "./meetingDecisions.js";
+import { MeetingAttendees, MeetingDecisionView, MeetingMinutesStatus } from "./meetingDecisions.js";
 
 export const MeetingStatus = Type.Union([
   Type.Literal("scheduled"),
@@ -524,8 +524,6 @@ export const MeetingCardPayload = Type.Object(
     attendees: Type.Optional(MeetingAttendees),
     /** 会后分层确认的「会上定了 X」。 */
     decisions: Type.Optional(Type.Array(MeetingDecisionView)),
-    /** 这场会在本体里：挂点、不写进本体、写入状态。 */
-    world: Type.Optional(MeetingWorldView),
   },
   { additionalProperties: false },
 );

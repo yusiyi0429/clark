@@ -1,4 +1,4 @@
-import type { TMeetingDecisionView, TMeetingDecisionVerdict, TMeetingWorldView, TWorldAnchor } from "@warmap/contracts";
+import type { TMeetingDecisionView, TMeetingDecisionVerdict, TMeetingWorldResponse, TWorldAnchor } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
 /** 会后「会上定了」：主持人确认之后，通知栏和会议页互相提醒重读。 */
@@ -27,11 +27,17 @@ export const decisionStatusLabel = (decision: Pick<TMeetingDecisionView, "status
   agent_judged: decision.recommendation === "confirmed" ? "Agent 代判 · 定了" : "Agent 代判 · 没定",
 }[decision.status]);
 
-async function settleWorld(promise: Promise<{ data?: { world: TMeetingWorldView }; error?: unknown; response: Response }>): Promise<TMeetingWorldView> {
+async function settleWorld(promise: Promise<{ data?: TMeetingWorldResponse; error?: unknown; response: Response }>): Promise<TMeetingWorldResponse> {
   const { data, error, response } = await promise;
   if (response.status === 401) { window.location.assign("/access"); throw new Error("登录已过期"); }
   if (!response.ok || !data) throw new Error((error as { message?: string } | undefined)?.message ?? "没有成功，请重试");
-  return data.world;
+  return data;
+}
+
+/** 会议页单独取：这场会在本体里、每条生效的决定落到哪；看不到（没参会）时为 null。 */
+export async function getMeetingWorld(meetingId: string): Promise<TMeetingWorldResponse | null> {
+  const { data, response } = await browserApi.GET("/api/meetings/{id}/world", { params: { path: { id: meetingId } } });
+  return response.ok && data ? data : null;
 }
 
 /** 会议入本体：标不写进本体（或取消）。 */

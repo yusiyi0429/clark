@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
-import { MeetingWorldView, type TPostMeetingCandidate, type TWorldAnchor } from "@warmap/contracts";
+import { MeetingWorldResponse, type TMeetingWorldResponse, type TPostMeetingCandidate, type TWorldAnchor } from "@warmap/contracts";
 import { createTestApp, preflightCandidate, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
 import type { PostMeetingAgent } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
@@ -107,8 +107,9 @@ function serviceFor(t: TestApp, fake: ReturnType<typeof fakeWorld>) {
     context: () => meetingInterpretationContext(t.pool.query.bind(t.pool), clock, personDisplayNames(peopleDirectory)) });
 }
 
-const memberCard = async (t: TestApp, cookie: string, meetingId: string) =>
-  (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${meetingId}`, headers: { cookie } })).json().payload;
+/** 会议页单独取的「这场会在本体里」（不进会议卡）。 */
+const worldOf = async (t: TestApp, cookie: string, meetingId: string): Promise<TMeetingWorldResponse> =>
+  (await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/world`, headers: { cookie } })).json();
 const MISSION: TWorldAnchor = { kind: "mission", id: "m-v2", title: "接口全量切到 v2" };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -141,20 +142,20 @@ describe("会议入本体", () => {
       expect(fake.decisions).toHaveLength(1);
       expect(fake.decisions[0]).toMatchObject({ meetingEventId: "mev-1", fallback: { refs: ["obj:mission:m-v2@1"] }, decision: { id: first.id, decidedBy: "host" } });
 
-      // 主持人：落点和写入状态都看得到，能改。
-      const hostView = await memberCard(t, host, meetingId);
-      expect(Value.Check(MeetingWorldView, hostView.world)).toBe(true);
+      // 主持人：落点和写入状态都看得到，能改；没定的那条不列。
+      const hostView = await worldOf(t, host, meetingId);
+      expect(Value.Check(MeetingWorldResponse, hostView)).toBe(true);
       expect(hostView.world).toMatchObject({ excluded: false, status: "committed", anchors: [MISSION], edited: false, canEdit: true });
-      const confirmed = hostView.decisions.find((d: { id: string }) => d.id === first.id);
-      expect(confirmed).toMatchObject({ world: "committed", anchors: [{ kind: "task", title: "渠道看板接到 v2" }] });
-      expect(hostView.decisions.find((d: { id: string }) => d.id === second.id)).toMatchObject({ world: null, anchors: [] });
+      expect(hostView.decisions).toEqual([{ id: first.id, world: "committed", anchors: [expect.objectContaining({ kind: "task", title: "渠道看板接到 v2" })] }]);
       // 参会人：只看落点。
-      const ownerView = await memberCard(t, owner, meetingId);
+      const ownerView = await worldOf(t, owner, meetingId);
       expect(ownerView.world).toMatchObject({ status: null, at: null, canEdit: false, anchors: [MISSION] });
-      expect(ownerView.decisions.find((d: { id: string }) => d.id === first.id)).toMatchObject({ world: null, anchors: [{ kind: "task" }] });
-      // CEO 卡：看得到状态。
+      expect(ownerView.decisions).toEqual([{ id: first.id, world: null, anchors: [expect.objectContaining({ kind: "task" })] }]);
+      // CEO：看得到状态；会议卡本身不带这些（读会议保持轻）。
+      expect((await worldOf(t, ceo, meetingId)).world).toMatchObject({ status: "committed", canEdit: true });
       const ceoCard = (await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie: ceo } })).json().cards[0];
-      expect(ceoCard.payload.world).toMatchObject({ status: "committed", canEdit: true });
+      expect(ceoCard.payload).not.toHaveProperty("world");
+      expect(ceoCard.payload.decisions[0]).not.toHaveProperty("anchors");
 
       // 再跑一次同步：内容没变，不重写。
       await service.syncWorld(meetingId);
@@ -191,7 +192,7 @@ describe("会议入本体", () => {
       expect(fake.meetings[1]).toMatchObject({ supersedesEventId: "mev-1", anchors: { used: [MISSION] } });
       expect(fake.meetings[1].text).toContain("1. 是否整体撤出东南亚市场（CEO 已确认）");
       expect(fake.decisions.at(-1)).toMatchObject({ meetingEventId: "mev-2", decision: { decidedBy: "ceo" } });
-      const strategic = (await memberCard(t, host, meetingId)).decisions.find((d: { tier: string }) => d.tier === "strategic");
+      const strategic = (await worldOf(t, host, meetingId)).decisions.find((d) => d.id === id);
       expect(strategic).toMatchObject({ world: "fallback", anchors: [MISSION] });
     } finally {
       await t.close();
@@ -222,9 +223,9 @@ describe("会议入本体", () => {
       expect(fake.meetings.at(-1)).toMatchObject({ digest: "withdrawn", supersedesEventId: "mev-1" });
       expect(fake.meetings.at(-1)!.text.split("\n")[0]).toBe("撤回：测试乙标为不写进本体");
       expect(fake.decisions.at(-1)).toMatchObject({ withdrawnBy: "测试乙", supersedesEventId: "dev-1", variant: ":dev-1" });
-      const off = await memberCard(t, host, meetingId);
+      const off = await worldOf(t, host, meetingId);
       expect(off.world).toMatchObject({ excluded: true, status: "withdrawn" });
-      expect(off.decisions.find((d: { id: string }) => d.id === first.id).world).toBe("off");
+      expect(off.decisions.find((d) => d.id === first.id)!.world).toBe("off");
 
       // CEO 取消：会议事件和决定事件各记一条恢复（更正撤回的那条）。
       expect((await put(ceo, false)).json().world).toMatchObject({ excluded: false, excludedBy: null });
@@ -233,7 +234,7 @@ describe("会议入本体", () => {
       expect(fake.meetings.at(-1)!.digest).not.toBe("withdrawn");
       expect(fake.decisions.at(-1)).toMatchObject({ supersedesEventId: "dev-2", variant: ":dev-2" });
       expect(fake.decisions.at(-1)!.withdrawnBy).toBeUndefined();
-      expect((await memberCard(t, host, meetingId)).world.status).toBe("committed");
+      expect((await worldOf(t, host, meetingId)).world.status).toBe("committed");
     } finally {
       await t.close();
     }

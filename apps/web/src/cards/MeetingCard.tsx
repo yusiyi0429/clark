@@ -1578,7 +1578,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
             <p className={s.entryBody}>{memberOutcomeSummary(source)}</p>
           </section>
         ) : null}
-        <MeetingDecisions decisions={payload.decisions ?? []} meetingId={meetingId} world={payload.world} />
+        <MeetingDecisions decisions={payload.decisions ?? []} meetingId={meetingId} />
         <section className={s.reviewSection}>
           <header><h3>会后结论</h3></header>
           {outcomeItems.length ? (
@@ -1659,7 +1659,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
               </header>
               <p className={s.entryBody}>{payload.outcome.summary || "抽取尚未产出摘要。"}</p>
             </section>
-            <MeetingDecisions decisions={payload.decisions ?? []} meetingId={meetingId} world={payload.world} />
+            <MeetingDecisions decisions={payload.decisions ?? []} meetingId={meetingId} />
             {payload.outcome.error ? (
               <p className={s.error} role="alert" title={payload.outcome.error.code}>
                 {payload.outcome.error.message}

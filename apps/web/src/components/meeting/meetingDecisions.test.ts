@@ -7,7 +7,7 @@ import { impactNotices, requestNotices } from "../requests/RequestNotices";
 const decision = (overrides: Partial<TMeetingDecisionView> = {}): TMeetingDecisionView => ({
   id: "d1", meetingId: "m1", tier: "host", ordinal: 1, statement: "接口统一改成 v2，月底前切换", originalStatement: "接口统一改成 v2，月底前切换",
   quote: "接口统一改成 v2", speakerName: "林晓", recommendation: "confirmed", why: null, status: "pending", revision: 0,
-  reviewerName: null, reviewedAt: null, dueAt: "2026-10-21T08:00:00.000Z", canReview: true, anchors: [], world: null, ...overrides,
+  reviewerName: null, reviewedAt: null, dueAt: "2026-10-21T08:00:00.000Z", canReview: true, ...overrides,
 });
 
 describe("会上定了：通知栏置顶", () => {

@@ -857,6 +857,13 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "这条决定的最新状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingDecisionResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
+      "/api/meetings/{id}/world": {
+        get: {
+          operationId: "getMeetingWorld", summary: "这场会在本体里：挂点、写入状态（主持人和 CEO）、每条生效的决定落到哪；参会人只看挂点和落点",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "这场会在本体里", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingWorldResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
       "/api/meetings/{id}/world-excluded": {
         put: {
           operationId: "setMeetingWorldExcluded", summary: "主持人或 CEO 把会议标成不写进本体（或取消）；已经写进去的在本体里记撤回更正",

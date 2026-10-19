@@ -5,7 +5,7 @@
  * 主持人和 CEO 能「改」挂点（本月 Mission、责任单元，可恢复自动）、开关不写进本体；参会人只看挂点。
  */
 import { useEffect, useMemo, useState } from "react";
-import type { TMeetingWorldView, TWorldAnchor } from "@warmap/contracts";
+import type { TMeetingWorldResponse, TMeetingWorldView, TWorldAnchor } from "@warmap/contracts";
 import { monthDayTime } from "@/lib/companyTime";
 import { listMeetingWorldAnchorOptions, setMeetingWorldAnchors, setMeetingWorldExcluded } from "./meetingDecisionApi";
 import { WorldAnchors, type AnchorTone } from "./WorldAnchors";
@@ -28,7 +28,7 @@ function statusPill(world: TMeetingWorldView): { text: string; tone: string } | 
 type AnchorKey = Pick<TWorldAnchor, "kind" | "id">;
 const sameAnchor = (a: AnchorKey, b: AnchorKey) => a.kind === b.kind && a.id === b.id;
 
-export function MeetingWorldBar({ meetingId, world: initial, onChange }: { meetingId: string; world: TMeetingWorldView; onChange: (world: TMeetingWorldView) => void }) {
+export function MeetingWorldBar({ meetingId, world: initial, onChange }: { meetingId: string; world: TMeetingWorldView; onChange: (next: TMeetingWorldResponse) => void }) {
   const [world, setWorld] = useState(initial);
   useEffect(() => setWorld(initial), [initial]);
   const [picking, setPicking] = useState(false);
@@ -38,11 +38,11 @@ export function MeetingWorldBar({ meetingId, world: initial, onChange }: { meeti
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const settle = async (work: () => Promise<TMeetingWorldView>) => {
+  const settle = async (work: () => Promise<TMeetingWorldResponse>) => {
     setBusy(true); setError("");
     try {
       const next = await work();
-      setWorld(next); onChange(next); setPicking(false);
+      setWorld(next.world); onChange(next); setPicking(false);
     } catch (cause) { setError((cause as Error).message); }
     finally { setBusy(false); }
   };

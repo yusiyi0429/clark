@@ -1,6 +1,6 @@
 [
-  {"name": "W1-主持人会议页-挂点与已记", "login": "lin", "path": "/me/meetings/2738a286-3d59-4d77-9049-de48c637c12f", "script": "document.querySelector('[data-outline=decisions]')?.scrollIntoView({block:'start'});"},
-  {"name": "W2-主持人会议页-改挂点", "login": "lin", "path": "/me/meetings/2738a286-3d59-4d77-9049-de48c637c12f", "script": "const sec=document.querySelector('[data-outline=decisions]'); [...sec.querySelectorAll('button')].find(b=>b.textContent.trim()==='改')?.click(); await new Promise(r=>setTimeout(r,1500)); sec.scrollIntoView({block:'start'});"},
-  {"name": "W3-参会人会议页-只看落点", "login": "chen", "path": "/me/meetings/2738a286-3d59-4d77-9049-de48c637c12f", "script": "document.querySelector('[data-outline=decisions]')?.scrollIntoView({block:'start'});"},
+  {"name": "W1-主持人会议页-挂点与已记", "login": "lin", "path": "/me/meetings/caea282a-3c03-4d8e-b76f-2fa51ac70d94", "script": "document.querySelector('[data-outline=decisions]')?.scrollIntoView({block:'start'});"},
+  {"name": "W2-主持人会议页-改挂点", "login": "lin", "path": "/me/meetings/caea282a-3c03-4d8e-b76f-2fa51ac70d94", "script": "const sec=document.querySelector('[data-outline=decisions]'); [...sec.querySelectorAll('button')].find(b=>b.textContent.trim()==='改')?.click(); await new Promise(r=>setTimeout(r,1500)); sec.scrollIntoView({block:'start'});"},
+  {"name": "W3-参会人会议页-只看落点", "login": "chen", "path": "/me/meetings/caea282a-3c03-4d8e-b76f-2fa51ac70d94", "script": "document.querySelector('[data-outline=decisions]')?.scrollIntoView({block:'start'});"},
   {"name": "W4-主持人首页-代判留在待办", "login": "lin", "path": "/me"}
 ]

@@ -4,10 +4,11 @@
  * 会议页「会上定了」：分层后的几条（战略项给 CEO、其余给主持人），每条一句、带原话和状态。
  * 主持人在这里三选一：对 / 改一下 / 其实没定；已经办过的（包括 Agent 代判的）可以改判。
  * 头部一条是这场会在本体里挂到哪、写了没有、不写进本体开关；生效的每条下面是它落到的对象和写入状态（回流设计稿 3.1、3.2）。
+ * 这些单独取（GET /api/meetings/:id/world，不进会议卡）：打开时取一次，办完一条后再取（影响卡在后台推，过几秒再取一次）。
  */
-import { useEffect, useRef, useState } from "react";
-import type { TMeetingDecisionView, TMeetingDecisionVerdict, TMeetingDecisionWorld, TMeetingWorldView } from "@warmap/contracts";
-import { MEETING_DECISIONS_CHANGED, decisionStatusLabel, reviewMeetingDecision } from "./meetingDecisionApi";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { TMeetingDecisionView, TMeetingDecisionVerdict, TMeetingDecisionWorld, TMeetingDecisionWorldItem, TMeetingWorldResponse } from "@warmap/contracts";
+import { MEETING_DECISIONS_CHANGED, decisionStatusLabel, getMeetingWorld, reviewMeetingDecision } from "./meetingDecisionApi";
 import { MeetingWorldBar } from "./MeetingWorldBar";
 import { WorldAnchors, type AnchorTone } from "./WorldAnchors";
 import s from "@/styles/meeting-workspace.module.css";
@@ -20,20 +21,28 @@ const tone = (decision: TMeetingDecisionView) =>
   decision.status === "pending" ? "wait" : off(decision) ? "off" : decision.status === "agent_judged" ? "agent" : "done";
 const ANCHOR_TONE: Record<TMeetingDecisionWorld, AnchorTone> = { waiting: "wait", committed: "ok", fallback: "miss", skipped: "miss", failed: "fail", off: "off" };
 
-export function MeetingDecisions({ decisions: initial, meetingId, world: initialWorld }: { decisions: TMeetingDecisionView[]; meetingId?: string; world?: TMeetingWorldView }) {
+const RELOAD_AFTER_MS = 5_000;
+
+export function MeetingDecisions({ decisions: initial, meetingId }: { decisions: TMeetingDecisionView[]; meetingId?: string }) {
   const [decisions, setDecisions] = useState(initial);
   useEffect(() => setDecisions(initial), [initial]);
-  const [world, setWorld] = useState(initialWorld);
-  useEffect(() => setWorld(initialWorld), [initialWorld]);
+  const [detail, setDetail] = useState<TMeetingWorldResponse | null>(null);
+  const load = useCallback(() => {
+    if (meetingId) void getMeetingWorld(meetingId).then(setDetail, () => undefined);
+  }, [meetingId]);
+  useEffect(() => { load(); }, [load]);
+  // 办完一条：马上取一次，影响卡推完后再取一次。
+  const reload = useCallback(() => { load(); window.setTimeout(load, RELOAD_AFTER_MS); }, [load]);
   // 通知栏上办完的也换到这里。
   useEffect(() => {
     const changed = (event: Event) => {
       const next = (event as CustomEvent<{ decision?: TMeetingDecisionView }>).detail?.decision;
-      if (next) setDecisions((current) => current.map((item) => (item.id === next.id ? next : item)));
+      if (next) { setDecisions((current) => current.map((item) => (item.id === next.id ? next : item))); reload(); }
     };
     window.addEventListener(MEETING_DECISIONS_CHANGED, changed);
     return () => window.removeEventListener(MEETING_DECISIONS_CHANGED, changed);
-  }, []);
+  }, [reload]);
+  const world = detail?.world;
   if (!decisions.length && !world) return null;
   const pending = decisions.filter((item) => item.status === "pending").length;
   return (
@@ -42,12 +51,12 @@ export function MeetingDecisions({ decisions: initial, meetingId, world: initial
         <h3 id="meeting-decisions">会上定了</h3>
         <span className={s.count}>{pending ? `${pending} 条待确认` : `${decisions.length} 条`}</span>
       </header>
-      {world && meetingId ? <MeetingWorldBar meetingId={meetingId} world={world} onChange={setWorld} /> : null}
+      {world && meetingId ? <MeetingWorldBar meetingId={meetingId} world={world} onChange={setDetail} /> : null}
       {decisions.length ? (
         <ol className={d.list}>
           {decisions.map((decision, index) => (
-            <DecisionRow key={decision.id} number={index + 1} decision={decision} excluded={world?.excluded ?? false}
-              onChange={(next) => setDecisions((current) => current.map((item) => (item.id === next.id ? next : item)))} />
+            <DecisionRow key={decision.id} number={index + 1} decision={decision} world={detail?.decisions.find((item) => item.id === decision.id)}
+              excluded={world?.excluded ?? false} onChange={(next) => setDecisions((current) => current.map((item) => (item.id === next.id ? next : item)))} />
           ))}
         </ol>
       ) : null}
@@ -55,7 +64,9 @@ export function MeetingDecisions({ decisions: initial, meetingId, world: initial
   );
 }
 
-function DecisionRow({ number, decision, excluded, onChange }: { number: number; decision: TMeetingDecisionView; excluded: boolean; onChange: (next: TMeetingDecisionView) => void }) {
+function DecisionRow({ number, decision, world, excluded, onChange }: {
+  number: number; decision: TMeetingDecisionView; world?: TMeetingDecisionWorldItem; excluded: boolean; onChange: (next: TMeetingDecisionView) => void;
+}) {
   const open = decision.status === "pending" || decision.status === "agent_judged";
   const [choosing, setChoosing] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -97,7 +108,7 @@ function DecisionRow({ number, decision, excluded, onChange }: { number: number;
         )}
         {decision.status === "edited" && !editing ? <p className={d.was}>原：{decision.originalStatement}</p> : null}
         {decision.quote ? <p className={d.quote}>「{decision.quote}」{decision.speakerName ? <span> — {decision.speakerName}</span> : null}</p> : null}
-        {!editing ? <WorldAnchors anchors={decision.anchors} tone={decision.world ? ANCHOR_TONE[excluded ? "off" : decision.world] : undefined} /> : null}
+        {!editing && world ? <WorldAnchors anchors={world.anchors} tone={world.world ? ANCHOR_TONE[excluded ? "off" : world.world] : undefined} /> : null}
         {showChoices ? (
           <div className={d.actions}>
             <button type="button" className={d.primary} disabled={busy} onClick={() => void review("confirmed")}>对</button>

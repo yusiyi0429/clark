@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import type { TImpactAskWho, TImpactSource, TImpactTarget, TMeetingDecisionView, TMeetingOutcomeItem, TMeetingWorldView, TMyMeetingDecisionGroup, TWorldAnchor } from "@warmap/contracts";
+import type { TImpactAskWho, TImpactSource, TImpactTarget, TMeetingDecisionView, TMeetingOutcomeItem, TMeetingWorldResponse, TMyMeetingDecisionGroup, TWorldAnchor } from "@warmap/contracts";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { feishuNotifier, type FeishuNotify } from "./feishu/notify.js";
 import type { ImpactAgent, TImpactAnalysisCandidate } from "./impactAgent.js";
@@ -8,8 +8,9 @@ import { insertImpactCards, type ImpactCardRow, type NewImpactCard } from "./imp
 import { enqueueJob, type JobHandler, type RecurringJob } from "./jobs.js";
 import { impactCandidates, type ImpactCandidate, type InterpretationContext } from "./meetingContext.js";
 import { transcriptLines, type DecisionLayeringAgent } from "./meetingDecisionAgent.js";
-import { decisionEffective, decisionStatement, decisionWorldContext, meetingWorldView, projectMeetingDecision, type MeetingDecisionRow } from "./meetingDecisionView.js";
+import { attendeesOf, decisionEffective, decisionStatement, projectMeetingDecision, type MeetingDecisionRow } from "./meetingDecisionView.js";
 import { getMeetingRow, meetingColumns, UUID_PATTERN, type MeetingRow, type Query } from "./meetingStore.js";
+import { meetingAnchorGroups, meetingWorldDetail } from "./meetingWorld.js";
 import { logEvent } from "./observability.js";
 import { personDisplayNames } from "./people.js";
 import { addWorkday, nextWorkdayAt, shanghaiDate, shanghaiLabel } from "./workdays.js";
@@ -55,7 +56,7 @@ export type MeetingDecisionDeps = {
 
 export type ReviewInput = { verdict: "confirmed" | "edited" | "not_decided"; statement?: string };
 export type ReviewResult = { decision: TMeetingDecisionView } | { error: { status: number; code: string; message: string } };
-export type WorldResult = { world: TMeetingWorldView } | { error: { status: number; code: string; message: string } };
+export type WorldResult = TMeetingWorldResponse | { error: { status: number; code: string; message: string } };
 const NOT_FOUND = { error: { status: 404, code: "MEETING_NOT_FOUND", message: "会议不存在" } } as const;
 
 /** 分层 Agent 的候选 → 主持人要确认的几行：只认这场会里可挑的条目，同一条目不进两行，最多 5 行（评测脚本也用它）。 */
@@ -198,12 +199,10 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
   }
 
   async function view(decisionId: string, viewerId: string): Promise<TMeetingDecisionView | null> {
-    const meetingId = (await q("SELECT meeting_id FROM meeting_decisions WHERE id = $1", [decisionId])).rows[0]?.meeting_id as string | undefined;
-    const meeting = meetingId ? await getMeetingRow(q, meetingId) : null;
-    const row = meeting?.decisions?.find((decision) => decision.id === decisionId);
-    if (!meeting || !row) return null;
-    return projectMeetingDecision(row, meeting.participants, row.tier === "host" && meeting.lead_dri_id === viewerId,
-      decisionWorldContext(meeting, canManageWorld(meeting, viewerId)));
+    const row = (await q("SELECT * FROM meeting_decisions WHERE id = $1", [decisionId])).rows[0] as MeetingDecisionRow | undefined;
+    if (!row) return null;
+    const meeting = await getMeetingRow(q, row.meeting_id);
+    return meeting ? projectMeetingDecision(row, meeting.participants, row.tier === "host" && meeting.lead_dri_id === viewerId) : null;
   }
 
   /**
@@ -493,7 +492,7 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     const meeting = await getMeetingRow(q, meetingId);
     if (!meeting) return;
     const rows = await rowsOf(q, meetingId);
-    const resolve = () => (deps.meetingWorld ? deps.meetingWorld.resolve(meeting.world_anchor_groups ?? []) : Promise.resolve(null));
+    const resolve = async () => (deps.meetingWorld ? deps.meetingWorld.resolve(await meetingAnchorGroups(q, meeting, rows)) : null);
 
     if (meeting.world_excluded) {
       const by = meeting.world_excluded_by ?? "主持人";
@@ -531,11 +530,13 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     for (const row of rows.filter((item) => item.world_status === "pending")) await writeDecision(row, meeting, { meetingEventId, fallback: anchors });
   }
 
-  /** 这场会在本体里的视图（主持人和 CEO）。 */
+  /** 这场会在本体里：主持人和 CEO 看全部、能改；实际参会的人只看挂点和落点；别人 404。 */
   async function worldView(meetingId: string, viewerId: string): Promise<WorldResult> {
     const meeting = await getMeetingRow(q, meetingId);
-    if (!meeting || !canManageWorld(meeting, viewerId)) return NOT_FOUND;
-    return { world: meetingWorldView(meeting, { canEdit: true, showStatus: true }) };
+    if (!meeting) return NOT_FOUND;
+    const manage = canManageWorld(meeting, viewerId);
+    if (!manage && !attendeesOf(meeting).personIds.includes(viewerId)) return NOT_FOUND;
+    return meetingWorldDetail(q, meeting, meeting.decisions ?? [], { canEdit: manage, showStatus: manage });
   }
 
   /** 标不写进本体（或取消）。取消时之前跳过、撤回的重新排队写。 */
@@ -595,15 +596,15 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
   /** 我主持的会里还没确认的主持人条目（通知栏置顶）：待确认的，和 Agent 代判了、我还没点过的。 */
   async function listMine(viewerId: string): Promise<TMyMeetingDecisionGroup[]> {
     const rows = (await q(
-      `SELECT d.*, m.title AS meeting_title, m.scheduled_at AS meeting_at, m.participants, m.world_excluded FROM meeting_decisions d JOIN meetings m ON m.id = d.meeting_id
+      `SELECT d.*, m.title AS meeting_title, m.scheduled_at AS meeting_at, m.participants FROM meeting_decisions d JOIN meetings m ON m.id = d.meeting_id
         WHERE d.tier = 'host' AND d.status IN ('pending', 'agent_judged') AND m.lead_dri_id = $1 ORDER BY m.scheduled_at, d.ordinal`,
       [viewerId],
-    )).rows as (MeetingDecisionRow & { meeting_title: string; meeting_at: Date; participants: MeetingRow["participants"]; world_excluded: boolean })[];
+    )).rows as (MeetingDecisionRow & { meeting_title: string; meeting_at: Date; participants: MeetingRow["participants"] })[];
     const groups = new Map<string, TMyMeetingDecisionGroup>();
     for (const row of rows) {
       const group = groups.get(row.meeting_id) ?? { meetingId: row.meeting_id, meetingTitle: row.meeting_title, scheduledAt: iso(row.meeting_at),
         dueAt: row.due_at ? iso(row.due_at) : null, decisions: [] };
-      group.decisions.push(projectMeetingDecision(row, row.participants, true, { excluded: row.world_excluded, meetingAnchors: [], showStatus: true }));
+      group.decisions.push(projectMeetingDecision(row, row.participants, true));
       groups.set(row.meeting_id, group);
     }
     return [...groups.values()];

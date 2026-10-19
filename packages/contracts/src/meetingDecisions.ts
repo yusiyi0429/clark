@@ -66,10 +66,6 @@ export const MeetingDecisionView = Type.Object(
     dueAt: Type.Union([Type.String(), Type.Null()]),
     /** 看的人能不能在这里确认（主持人确认 host 条目）。 */
     canReview: Type.Boolean(),
-    /** 生效的决定落到的对象（受影响的 Mission、Task；挂到会议挂点上时是会议的挂点）；没生效时为空。 */
-    anchors: Type.Array(WorldAnchor),
-    /** 写进本体的状态；没生效、或看的人不是主持人和 CEO 时为 null。 */
-    world: Type.Union([MeetingDecisionWorld, Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -98,7 +94,13 @@ export const MeetingWorldView = Type.Object(
   },
   { additionalProperties: false },
 );
-export const MeetingWorldResponse = Type.Object({ world: MeetingWorldView }, { additionalProperties: false });
+/** 一条生效的决定在本体里：落到的对象（受影响的 Mission、Task；挂到会议挂点上时是会议的挂点）和写入状态（不是主持人和 CEO 时为 null）。 */
+export const MeetingDecisionWorldItem = Type.Object(
+  { id: Type.String({ minLength: 1 }), anchors: Type.Array(WorldAnchor), world: Type.Union([MeetingDecisionWorld, Type.Null()]) },
+  { additionalProperties: false },
+);
+/** 会议页单独取（不进会议卡）：这场会在本体里，和每条生效的决定落到哪。 */
+export const MeetingWorldResponse = Type.Object({ world: MeetingWorldView, decisions: Type.Array(MeetingDecisionWorldItem) }, { additionalProperties: false });
 export const MeetingWorldExcludedRequest = Type.Object({ excluded: Type.Boolean() }, { additionalProperties: false });
 /** 改挂点：只能挑 Mission 和责任单元；null 回到自动（决定影响到的 Mission，都没有挂主持人的单元）。 */
 export const MeetingWorldAnchorsRequest = Type.Object(
@@ -153,4 +155,5 @@ export type TMeetingDecisionWorld = Static<typeof MeetingDecisionWorld>;
 export type TMeetingWorldStatus = Static<typeof MeetingWorldStatus>;
 export type TMeetingWorldView = Static<typeof MeetingWorldView>;
 export type TMeetingWorldResponse = Static<typeof MeetingWorldResponse>;
+export type TMeetingDecisionWorldItem = Static<typeof MeetingDecisionWorldItem>;
 export type TMeetingWorldAnchorsRequest = Static<typeof MeetingWorldAnchorsRequest>;

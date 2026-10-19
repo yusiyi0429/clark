@@ -4077,6 +4077,54 @@
         }
       }
     },
+    "/api/meetings/{id}/world": {
+      "get": {
+        "operationId": "getMeetingWorld",
+        "summary": "这场会在本体里：挂点、写入状态（主持人和 CEO）、每条生效的决定落到哪；参会人只看挂点和落点",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "这场会在本体里",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingWorldResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/meetings/{id}/world-excluded": {
       "put": {
         "operationId": "setMeetingWorldExcluded",
@@ -56355,9 +56403,7 @@
           "reviewerName",
           "reviewedAt",
           "dueAt",
-          "canReview",
-          "anchors",
-          "world"
+          "canReview"
         ],
         "properties": {
           "id": {
@@ -56498,83 +56544,6 @@
           },
           "canReview": {
             "type": "boolean"
-          },
-          "anchors": {
-            "type": "array",
-            "items": {
-              "additionalProperties": false,
-              "type": "object",
-              "required": [
-                "kind",
-                "id",
-                "title"
-              ],
-              "properties": {
-                "kind": {
-                  "anyOf": [
-                    {
-                      "const": "mission",
-                      "type": "string"
-                    },
-                    {
-                      "const": "task",
-                      "type": "string"
-                    },
-                    {
-                      "const": "unit",
-                      "type": "string"
-                    },
-                    {
-                      "const": "company",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "id": {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "title": {
-                  "minLength": 1,
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "world": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "const": "waiting",
-                    "type": "string"
-                  },
-                  {
-                    "const": "committed",
-                    "type": "string"
-                  },
-                  {
-                    "const": "fallback",
-                    "type": "string"
-                  },
-                  {
-                    "const": "skipped",
-                    "type": "string"
-                  },
-                  {
-                    "const": "failed",
-                    "type": "string"
-                  },
-                  {
-                    "const": "off",
-                    "type": "string"
-                  }
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         }
       },
@@ -56634,9 +56603,7 @@
               "reviewerName",
               "reviewedAt",
               "dueAt",
-              "canReview",
-              "anchors",
-              "world"
+              "canReview"
             ],
             "properties": {
               "id": {
@@ -56777,83 +56744,6 @@
               },
               "canReview": {
                 "type": "boolean"
-              },
-              "anchors": {
-                "type": "array",
-                "items": {
-                  "additionalProperties": false,
-                  "type": "object",
-                  "required": [
-                    "kind",
-                    "id",
-                    "title"
-                  ],
-                  "properties": {
-                    "kind": {
-                      "anyOf": [
-                        {
-                          "const": "mission",
-                          "type": "string"
-                        },
-                        {
-                          "const": "task",
-                          "type": "string"
-                        },
-                        {
-                          "const": "unit",
-                          "type": "string"
-                        },
-                        {
-                          "const": "company",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "id": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "title": {
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  }
-                }
-              },
-              "world": {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "const": "waiting",
-                        "type": "string"
-                      },
-                      {
-                        "const": "committed",
-                        "type": "string"
-                      },
-                      {
-                        "const": "fallback",
-                        "type": "string"
-                      },
-                      {
-                        "const": "skipped",
-                        "type": "string"
-                      },
-                      {
-                        "const": "failed",
-                        "type": "string"
-                      },
-                      {
-                        "const": "off",
-                        "type": "string"
-                      }
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
               }
             }
           }
@@ -56922,9 +56812,7 @@
                       "reviewerName",
                       "reviewedAt",
                       "dueAt",
-                      "canReview",
-                      "anchors",
-                      "world"
+                      "canReview"
                     ],
                     "properties": {
                       "id": {
@@ -57065,83 +56953,6 @@
                       },
                       "canReview": {
                         "type": "boolean"
-                      },
-                      "anchors": {
-                        "type": "array",
-                        "items": {
-                          "additionalProperties": false,
-                          "type": "object",
-                          "required": [
-                            "kind",
-                            "id",
-                            "title"
-                          ],
-                          "properties": {
-                            "kind": {
-                              "anyOf": [
-                                {
-                                  "const": "mission",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "task",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "unit",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "company",
-                                  "type": "string"
-                                }
-                              ]
-                            },
-                            "id": {
-                              "minLength": 1,
-                              "type": "string"
-                            },
-                            "title": {
-                              "minLength": 1,
-                              "type": "string"
-                            }
-                          }
-                        }
-                      },
-                      "world": {
-                        "anyOf": [
-                          {
-                            "anyOf": [
-                              {
-                                "const": "waiting",
-                                "type": "string"
-                              },
-                              {
-                                "const": "committed",
-                                "type": "string"
-                              },
-                              {
-                                "const": "fallback",
-                                "type": "string"
-                              },
-                              {
-                                "const": "skipped",
-                                "type": "string"
-                              },
-                              {
-                                "const": "failed",
-                                "type": "string"
-                              },
-                              {
-                                "const": "off",
-                                "type": "string"
-                              }
-                            ]
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
                       }
                     }
                   }
@@ -57155,7 +56966,8 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "world"
+          "world",
+          "decisions"
         ],
         "properties": {
           "world": {
@@ -57272,6 +57084,101 @@
               },
               "canEdit": {
                 "type": "boolean"
+              }
+            }
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "anchors",
+                "world"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "anchors": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "id",
+                      "title"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "anyOf": [
+                          {
+                            "const": "mission",
+                            "type": "string"
+                          },
+                          {
+                            "const": "task",
+                            "type": "string"
+                          },
+                          {
+                            "const": "unit",
+                            "type": "string"
+                          },
+                          {
+                            "const": "company",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "title": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "world": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "waiting",
+                          "type": "string"
+                        },
+                        {
+                          "const": "committed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "fallback",
+                          "type": "string"
+                        },
+                        {
+                          "const": "skipped",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "off",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
               }
             }
           }

@@ -24,7 +24,13 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
     return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
   });
 
-  // 会议入本体：主持人和 CEO 标不写进本体、改挂点（别人一律 404）。
+  // 会议入本体：会议页单独取挂点、写入状态和每条决定的落点（不进会议卡，读会议保持轻）。
+  app.get("/api/meetings/:id/world", { preHandler: ctx.requirePerson, schema: { params: idParams, response: { 200: MeetingWorldResponse } } }, async (req, reply) => {
+    const result = await followThrough.decisions.worldView(req.params.id, req.person!.personId);
+    return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
+  });
+
+  // 主持人和 CEO 标不写进本体、改挂点（别人一律 404）。
   app.put("/api/meetings/:id/world-excluded", {
     preHandler: ctx.requirePerson, schema: { params: idParams, body: MeetingWorldExcludedRequest, response: { 200: MeetingWorldResponse } },
   }, async (req, reply) => {

@@ -1196,6 +1196,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meetings/{id}/world": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 这场会在本体里：挂点、写入状态（主持人和 CEO）、每条生效的决定落到哪；参会人只看挂点和落点 */
+        get: operations["getMeetingWorld"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings/{id}/world-excluded": {
         parameters: {
             query?: never;
@@ -9983,12 +10000,6 @@ export interface components {
             reviewedAt: string | null;
             dueAt: string | null;
             canReview: boolean;
-            anchors: {
-                kind: "mission" | "task" | "unit" | "company";
-                id: string;
-                title: string;
-            }[];
-            world: ("waiting" | "committed" | "fallback" | "skipped" | "failed" | "off") | null;
         };
         MeetingDecisionReviewRequest: {
             verdict: "confirmed" | "edited" | "not_decided";
@@ -10012,12 +10023,6 @@ export interface components {
                 reviewedAt: string | null;
                 dueAt: string | null;
                 canReview: boolean;
-                anchors: {
-                    kind: "mission" | "task" | "unit" | "company";
-                    id: string;
-                    title: string;
-                }[];
-                world: ("waiting" | "committed" | "fallback" | "skipped" | "failed" | "off") | null;
             };
         };
         MyMeetingDecisionsResponse: {
@@ -10043,12 +10048,6 @@ export interface components {
                     reviewedAt: string | null;
                     dueAt: string | null;
                     canReview: boolean;
-                    anchors: {
-                        kind: "mission" | "task" | "unit" | "company";
-                        id: string;
-                        title: string;
-                    }[];
-                    world: ("waiting" | "committed" | "fallback" | "skipped" | "failed" | "off") | null;
                 }[];
             }[];
         };
@@ -10066,6 +10065,15 @@ export interface components {
                 edited: boolean;
                 canEdit: boolean;
             };
+            decisions: {
+                id: string;
+                anchors: {
+                    kind: "mission" | "task" | "unit" | "company";
+                    id: string;
+                    title: string;
+                }[];
+                world: ("waiting" | "committed" | "fallback" | "skipped" | "failed" | "off") | null;
+            }[];
         };
         MeetingWorldExcludedRequest: {
             excluded: boolean;
@@ -14189,6 +14197,46 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMeetingWorld: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 这场会在本体里 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingWorldResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
