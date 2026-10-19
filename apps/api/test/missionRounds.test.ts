@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { MissionRoundSummary, type TCard, type TMissionRoundSummary } from "@warmap/contracts";
 import { actionFingerprint, signActionId, verifyActionId, type ActionScope } from "../src/actionToken.js";
-import type { MemoryPerson } from "../src/companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "../src/peopleDirectory.js";
 import { migrate } from "../src/migrate.js";
 import {
   canApprove, missionCardMembers, getMissionRoundCard, listMissionRoundCards,

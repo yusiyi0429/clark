@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { createAssistantMessageEventStream, type AssistantMessage, type Context } from "@earendil-works/pi-ai";
 import { AskAnswerRecord, ConversationCard, ConversationSseEvent, type TAskUserInput, type TConversationCard } from "@warmap/contracts";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import type { ConversationRuntime } from "../src/conversations.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import { createTestApp, testEnv, type TestApp } from "./helpers.js";
@@ -133,7 +133,7 @@ function stream(final: AssistantMessage) {
 describe("运行时：ask_user 让这一轮停在提问上", () => {
   it("调用后不再请求模型、照常算完成；下一轮作答接在工具结果后面", async () => {
     const contexts: Context[] = [];
-    const runtime = await createPiConversationRuntime({ companyMemory: loadCompanyMemory(testEnv),
+    const runtime = await createPiConversationRuntime({ peopleDirectory: loadPeopleDirectory(testEnv),
       baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
       streamSimple: (_model, context) => {
         contexts.push({ systemPrompt: context.systemPrompt, tools: context.tools, messages: structuredClone(context.messages) });

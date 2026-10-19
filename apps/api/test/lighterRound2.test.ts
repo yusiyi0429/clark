@@ -6,7 +6,7 @@ import {
   type Context,
   type Model,
 } from "@earendil-works/pi-ai";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { MATERIAL_EDITING_RULES, SYSTEM_PROMPT, createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import type { ConversationRuntimeEvent } from "../src/conversations.js";
 import { RICH_BLOCK_BRIEF, promptIntents, tierSystemPrompt, type PromptShape } from "../src/conversationPrompt.js";
@@ -87,7 +87,7 @@ const lastUserText = (context: Context) => {
 async function conversation(options: { triage?: TriageFn; respond?: (model: Model<any>, context: Context, index: number) => AssistantMessageEventStream }) {
   const seen: { model: Model<any>; context: Context }[] = [];
   const runtime = await createPiConversationRuntime({
-    companyMemory: loadCompanyMemory(testEnv), baseUrl: "https://gw.invalid/v2/llm/responses", apiKey: "test-key",
+    peopleDirectory: loadPeopleDirectory(testEnv), baseUrl: "https://gw.invalid/v2/llm/responses", apiKey: "test-key",
     modelId: TIERS.quick, tierModels: TIERS, compactionModelId: "fake-compaction", triage: options.triage,
     globalContext: async () => structuredClone(CONTEXT), listBattlefields: async () => BRIEFS,
     streamSimple: (model, context) => {

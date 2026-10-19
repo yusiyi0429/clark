@@ -49,9 +49,9 @@ describe("交给模型的资料：内部写法换成正式中文叫法", () => {
     }
   });
 
-  it("对话运行时在企业知识、本体、看板总览、战役与议题清单和上下文包进模型前都换一遍；读材料、读业务对象不换（修改要按原文比对）", () => {
+  it("对话运行时在本体、看板总览、战役与议题清单和上下文包进模型前都换一遍；读材料、读业务对象不换（修改要按原文比对）", () => {
     const source = readFileSync(new URL("../src/piConversationRuntime.ts", import.meta.url), "utf8");
-    for (const wired of ["formalTerms(plainKnowledgeText(item.text))", "JSON.stringify(formalTermsDeep(value))", "JSON.stringify(formalTermsDeep(overview))",
+    for (const wired of ["JSON.stringify(formalTermsDeep(value))", "JSON.stringify(formalTermsDeep(overview))",
       "JSON.stringify(formalTermsDeep({ missions }))", "JSON.stringify(formalTermsDeep({ issues }))", "globalContext: formalTermsDeep(await scopedGlobal())"]) {
       expect(source).toContain(wired);
     }

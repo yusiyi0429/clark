@@ -32,7 +32,7 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
   app.post("/api/impact-cards/:id/ask", { preHandler: ctx.requirePerson, schema: { params: idParams, body: ImpactAskRequest, response: { 200: ImpactAskResponse } } }, async (req, reply) => {
     ctx.requestContext.set(req, { actionType: "impact_card.ask", objectRef: `impact_card:${req.params.id}` });
     const result = await askImpactCard(ctx.q, followThrough.impact, { cardId: req.params.id, viewerId: req.person!.personId, question: req.body.question.trim(),
-      now: ctx.now(), names: personDisplayNames(ctx.companyMemory), context: followThrough.context });
+      now: ctx.now(), names: personDisplayNames(ctx.peopleDirectory), context: followThrough.context });
     if (!result) return ctx.fail(reply, 404, "IMPACT_CARD_NOT_FOUND", "影响卡不存在或不可见");
     return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
   });

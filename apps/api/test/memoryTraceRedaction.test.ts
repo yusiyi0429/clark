@@ -8,7 +8,7 @@ import { createAssistantMessageEventStream, type AssistantMessage } from "@earen
 import { redactSecrets } from "../src/observability.js";
 import { AGENT_ROLES, configureTracing, newThreadId, resetTracing, tracedTurn, type TraceClientLike } from "../src/tracing.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { createPersonalMemory } from "../src/personalMemory.js";
 import { createPersonalDistillation } from "../src/personalDistillation.js";
 import { migrate } from "../src/migrate.js";
@@ -46,7 +46,7 @@ test("a main conversation turn traces the personal memory body and tool results,
   const fake = fakeClient();
   configureTracing({ enabled: true, client: fake.client, salt: "test-salt" });
   let calls = 0;
-  const runtime = await createPiConversationRuntime({ companyMemory: loadCompanyMemory(testEnv), baseUrl: "https://provider.invalid/v1", apiKey: "test-key", modelId: "fake-light",
+  const runtime = await createPiConversationRuntime({ peopleDirectory: loadPeopleDirectory(testEnv), baseUrl: "https://provider.invalid/v1", apiKey: "test-key", modelId: "fake-light",
     streamSimple: () => ++calls === 1
       ? reply([{ type: "toolCall", id: "p1", name: "search_personal_memory", arguments: { query: "结论" } }], "toolUse")
       : reply([{ type: "text", text: "按你的习惯先给结论。" }], "stop") });

@@ -96,7 +96,7 @@ export async function getMissionRow(q: Query, id: string): Promise<MissionRow | 
   return result.rowCount === 1 ? (result.rows[0] as MissionRow) : null;
 }
 
-/** Mission 正面：关系显示名由投影现查，owner displayName 只在投影时从企业知识解析。 */
+/** Mission 正面：关系显示名由投影现查，owner displayName 只在投影时从人员目录解析。 */
 export function projectMissionCard(row: MissionRow, secret: string, ownerNames: Map<string, string>): TCard {
   const scope: ActionScope = { actionType: "mission.edit", objectType: "mission", objectId: row.id, objectVersion: row.version };
   const payload: TMissionCardPayload = {
@@ -212,7 +212,7 @@ export async function registerMission(q: Query, input: TCreateMissionRequest): P
   return { ok: true, id };
 }
 
-/** 关系校验：owner 命中企业知识，capability/battlefield 命中注册表。返回首个不合法字段。 */
+/** 关系校验：owner 命中人员目录，capability/battlefield 命中注册表。返回首个不合法字段。 */
 export type MissionRelationError = { status: 400; code: "INVALID_OWNER" | "INVALID_CAPABILITY" | "INVALID_BATTLEFIELD"; message: string };
 
 export async function validateMissionRelations(

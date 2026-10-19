@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { createAssistantMessageEventStream, type AssistantMessage, type Context } from "@earendil-works/pi-ai";
 import { Card, LoginResponse } from "@warmap/contracts";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import { TEST_CEO, TEST_LOGIN, createTestApp, preflightCandidate, testEnv } from "./helpers.js";
 
@@ -211,23 +211,8 @@ describe("CEO login → real Card journey", () => {
     const t = await createTestApp();
     const { app } = t;
     try {
-      const noToken = await app.inject({ method: "POST", url: "/mcp/company-memory" });
+      const noToken = await app.inject({ method: "POST", url: "/api/dri/issues" });
       expect(noToken.statusCode).toBe(401);
-
-      const wrongToken = await app.inject({
-        method: "POST",
-        url: "/mcp/company-memory",
-        headers: { authorization: `Bearer ${t.env.driServiceToken}` },
-      });
-      expect(wrongToken.statusCode).toBe(401);
-
-      const mcp = await app.inject({
-        method: "POST",
-        url: "/mcp/company-memory",
-        headers: { authorization: `Bearer ${t.env.mcpServiceToken}` },
-      });
-      // Ticket 03 起 MCP 已是真实实现：非 MCP 客户端请求（无 Accept/JSON-RPC）由协议层拒绝（非 501 stub）
-      expect(mcp.statusCode).toBe(406);
 
       // CEO cookie 不能访问服务边界
       const cookie = await t.loginCookie();
@@ -254,7 +239,7 @@ describe("CEO login → real Card journey", () => {
       return fakeStream(assistantMessage([{ type: "text", text }], "stop"));
     };
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv),
+      peopleDirectory: loadPeopleDirectory(testEnv),
       baseUrl: "https://provider.invalid/v1/responses",
       apiKey: "test-key",
       modelId: "fake-light",

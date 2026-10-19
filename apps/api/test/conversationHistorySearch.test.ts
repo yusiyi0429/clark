@@ -42,13 +42,13 @@ test("finds the owner's original words across scopes and archived conversations,
 
 test("the Pi runtime exposes search_conversation_history and returns the cite to the model (3e)", async () => {
   const { createPiConversationRuntime } = await import("../src/piConversationRuntime.js");
-  const { loadCompanyMemory } = await import("../src/companyMemory.js");
+  const { loadPeopleDirectory } = await import("../src/peopleDirectory.js");
   const { testEnv } = await import("./helpers.js");
   const { createAssistantMessageEventStream } = await import("@earendil-works/pi-ai");
   const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
   let calls = 0;
   let toolResult = "";
-  const runtime = await createPiConversationRuntime({ companyMemory: loadCompanyMemory(testEnv), baseUrl: "https://provider.invalid/v1", apiKey: "test-key", modelId: "fake-light",
+  const runtime = await createPiConversationRuntime({ peopleDirectory: loadPeopleDirectory(testEnv), baseUrl: "https://provider.invalid/v1", apiKey: "test-key", modelId: "fake-light",
     streamSimple: (_model, context) => {
       calls++;
       if (calls === 1) expect(context.tools?.map((tool) => tool.name)).toContain("search_conversation_history");

@@ -66,10 +66,10 @@ export function registerMonthlyReviewRoutes(app: AppInstance, ctx: RouteContext)
   registerPersonalReviewRoutes(app, ctx);
   const secret = ctx.env.sessionSecret;
   const reviewView = async (row: MonthlyReviewRow): Promise<TMonthlyReviewPayload> =>
-    projectMonthlyReview(row, await listMonthlyReviewItems(ctx.q, row.id), personDisplayNames(ctx.companyMemory), await readLtco(ctx.q), secret,
+    projectMonthlyReview(row, await listMonthlyReviewItems(ctx.q, row.id), personDisplayNames(ctx.peopleDirectory), await readLtco(ctx.q), secret,
       await listMonthlyReviewUnits(ctx.q));
   const itemView = async (row: NonNullable<Awaited<ReturnType<typeof getMonthlyReviewItem>>>, person: ReviewViewer) => {
-    const people = personDisplayNames(ctx.companyMemory);
+    const people = personDisplayNames(ctx.peopleDirectory);
     return projectMonthlyReviewItem(row, person, people, secret, await monthlyReviewParticipantIds(ctx.q, row),
       await listMonthlyReviewComments(ctx.q, row.id, people));
   };
@@ -99,7 +99,7 @@ export function registerMonthlyReviewRoutes(app: AppInstance, ctx: RouteContext)
       response: { 200: CreateMonthlyReviewCommentResponse } },
   }, async (req, reply) => {
     const result = await createMonthlyReviewComment(ctx.pool, req.params.itemId, req.person!, req.body.clientId,
-      req.body.body.trim(), ctx.now(), personDisplayNames(ctx.companyMemory));
+      req.body.body.trim(), ctx.now(), personDisplayNames(ctx.peopleDirectory));
     if ("status" in result) return ctx.fail(reply, result.status, result.code, result.message);
     return result;
   });

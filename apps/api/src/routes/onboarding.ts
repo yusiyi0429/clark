@@ -6,11 +6,11 @@ import type { AppInstance, RouteContext } from "./shared.js";
 
 /** feishu：读本人工作依据里飞书文档的标题、修订时间和修订人；没配飞书时为空。 */
 export function registerOnboardingRoutes(app: AppInstance, ctx: RouteContext, feishu?: FeishuDocReader): void {
-  const { pool, q, fail, companyMemory, voiceprints, env, now, requirePerson } = ctx;
+  const { pool, q, fail, peopleDirectory, voiceprints, env, now, requirePerson } = ctx;
   app.get(
     "/api/me/onboarding",
     { preHandler: requirePerson, schema: { response: { 200: OnboardingResponse } } },
-    async (req) => readOnboarding({ q, companyMemory, voiceprints, person: req.person!, companyName: env.companyName, now: now(), secret: env.sessionSecret,
+    async (req) => readOnboarding({ q, peopleDirectory, voiceprints, person: req.person!, companyName: env.companyName, now: now(), secret: env.sessionSecret,
       delegationStep: env.onboardingDelegationStep === true }),
   );
   app.post(

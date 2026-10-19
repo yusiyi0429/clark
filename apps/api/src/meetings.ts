@@ -7,7 +7,7 @@ import type {
   TSupplementRequest,
 } from "@warmap/contracts";
 import type { ActionScope } from "./actionToken.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import { getIssueRow, projectIssueCard } from "./issues.js";
 import type { ParsedMaterial } from "./materialParser.js";
 import { replaceMeetingMaterials } from "./meetingMaterials.js";
@@ -34,10 +34,10 @@ import {
 } from "./meetingStore.js";
 
 function resolveParticipants(
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   input: { leadDriId: string; ceoParticipantId: string; participants: string[] },
 ): { participants: TMeetingParticipant[]; ceo: TMeetingParticipant; lead: TMeetingParticipant } | { error: MeetingActionError } {
-  const byId = new Map(companyMemory.searchPeople(undefined).map((person) => [person.personId, person]));
+  const byId = new Map(peopleDirectory.searchPeople(undefined).map((person) => [person.personId, person]));
   const ids = unique([input.ceoParticipantId, input.leadDriId, ...input.participants]);
   const missing = ids.filter((id) => !byId.has(id));
   if (missing.length > 0) {
@@ -62,11 +62,11 @@ function resolveParticipants(
   };
 }
 
-function scheduleMeetingIntro(pool: Pool, companyMemory: CompanyMemoryRepository, agent: ThreadIntroAgent | undefined,
+function scheduleMeetingIntro(pool: Pool, peopleDirectory: PeopleDirectory, agent: ThreadIntroAgent | undefined,
   meetingId: string, inviterId: string, newcomers: string[], existingIds: string[]): void {
   if (!agent || !newcomers.length) return;
   setImmediate(() => { void (async () => {
-    const input = await threadIntroInput(pool.query.bind(pool), companyMemory, { objectType: "meeting", objectId: meetingId }, inviterId, newcomers);
+    const input = await threadIntroInput(pool.query.bind(pool), peopleDirectory, { objectType: "meeting", objectId: meetingId }, inviterId, newcomers);
     await postThreadIntro(pool, agent, input, existingIds);
   })().catch(() => undefined); });
 }
@@ -105,7 +105,7 @@ function validateDraft(draft: TMeetingDraft, row: MeetingRow): MeetingActionErro
 }
 export async function executeCreateMeeting(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   scope: ActionScope,
@@ -121,7 +121,7 @@ export async function executeCreateMeeting(
   if (!scheduledAt) return { error: { status: 400, code: "INVALID_INPUT", message: "scheduledAt 不是可解析时间", fieldErrors: { scheduledAt: "unparsable" } } };
   const endsAt = resolveEndsAt(scheduledAt, input.endsAt);
   if (!(endsAt instanceof Date)) return { error: endsAt };
-  const resolved = resolveParticipants(companyMemory, input);
+  const resolved = resolveParticipants(peopleDirectory, input);
   if ("error" in resolved) return { error: resolved.error };
   const issueIds = unique([scope.objectId, ...input.issueIds]);
   if (!(await issuesExist(pool.query.bind(pool), issueIds))) {
@@ -182,9 +182,9 @@ export async function executeCreateMeeting(
   }
 
   if (isNew) {
-    scheduleMeetingIntro(pool, companyMemory, introAgent, created.id, created.lead_dri_id,
+    scheduleMeetingIntro(pool, peopleDirectory, introAgent, created.id, created.lead_dri_id,
       created.participants.map((person) => person.personId).filter((id) => id !== created.lead_dri_id), [created.lead_dri_id]);
-    await startPreflight(pool, companyMemory, preflightAgent, created.id);
+    await startPreflight(pool, peopleDirectory, preflightAgent, created.id);
   }
   const row = await getMeetingRow(pool.query.bind(pool), created.id);
   return { card: projectMeetingCard(row ?? created, secret) };
@@ -197,7 +197,7 @@ export async function executeCreateMeeting(
  */
 export async function createConfigMeeting(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   input: { title: string; scheduledAt: string; endsAt?: string; leadDriId: string; issueIds?: string[]; materials?: ParsedMaterial[]; materialStorageDir: string },
@@ -207,9 +207,9 @@ export async function createConfigMeeting(
   if (!scheduledAt) return { error: { status: 400, code: "INVALID_INPUT", message: "scheduledAt 不是可解析时间", fieldErrors: { scheduledAt: "unparsable" } } };
   const endsAt = resolveEndsAt(scheduledAt, input.endsAt);
   if (!(endsAt instanceof Date)) return { error: endsAt };
-  const ceo = companyMemory.searchPeople(undefined).find((person) => person.roles.includes("ceo"));
+  const ceo = peopleDirectory.searchPeople(undefined).find((person) => person.roles.includes("ceo"));
   if (!ceo) return { error: { status: 400, code: "INVALID_CEO", message: "company-people.v1 中没有 ceo 角色", fieldErrors: { leadDriId: "ceo missing" } } };
-  const resolved = resolveParticipants(companyMemory, { leadDriId: input.leadDriId, ceoParticipantId: ceo.personId, participants: [] });
+  const resolved = resolveParticipants(peopleDirectory, { leadDriId: input.leadDriId, ceoParticipantId: ceo.personId, participants: [] });
   if ("error" in resolved) return resolved;
   const issueIds = unique(input.issueIds ?? []);
   if (!(await issuesExist(pool.query.bind(pool), issueIds))) {
@@ -239,20 +239,20 @@ export async function createConfigMeeting(
   const memberClient = await pool.connect();
   try { await syncMeetingMembers(memberClient, created.id, resolved.participants.map((person) => person.personId)); }
   finally { memberClient.release(); }
-  scheduleMeetingIntro(pool, companyMemory, introAgent, created.id, created.lead_dri_id,
+  scheduleMeetingIntro(pool, peopleDirectory, introAgent, created.id, created.lead_dri_id,
     created.participants.map((person) => person.personId).filter((id) => id !== created.lead_dri_id), [created.lead_dri_id]);
   if (input.materials?.length) {
     const stored = await replaceMeetingMaterials(pool, secret, created.id, input.materials, input.materialStorageDir);
     if ("error" in stored) return stored;
   }
-  await startPreflight(pool, companyMemory, preflightAgent, created.id);
+  await startPreflight(pool, peopleDirectory, preflightAgent, created.id);
   const row = await getMeetingRow(pool.query.bind(pool), created.id);
   return { card: projectMeetingCard(row ?? created, secret) };
 }
 
 export async function executeJoinMeeting(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   scope: ActionScope,
@@ -279,7 +279,7 @@ export async function executeJoinMeeting(
   });
   // 关联 Issue 变化后会前材料随之重建；重放/无变化不重跑
   if (!("error" in outcome) && !outcome.conflict && !outcome.replayed) {
-    await startPreflight(pool, companyMemory, preflightAgent, input.meetingId);
+    await startPreflight(pool, peopleDirectory, preflightAgent, input.meetingId);
     return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), input.meetingId))!, secret) };
   }
   return outcome;
@@ -323,7 +323,7 @@ export async function executeUpdateDraft(
  */
 export async function executeEditMeetingDetails(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   secret: string,
   scope: ActionScope,
   input: { title?: string; scheduledAt?: string; endsAt?: string; leadDriId?: string },
@@ -348,7 +348,7 @@ export async function executeEditMeetingDetails(
     if (input.leadDriId !== undefined && input.leadDriId !== row.lead_dri_id) {
       // 保留原参会人（含原主持，换主持不等于把人移出会议），新主持由 resolveParticipants 去重并排在 ceo 之后。
       const attendees = row.participants.map((participant) => participant.personId).filter((id) => id !== row.ceo_participant_id);
-      const resolved = resolveParticipants(companyMemory, { leadDriId: input.leadDriId, ceoParticipantId: row.ceo_participant_id, participants: attendees });
+      const resolved = resolveParticipants(peopleDirectory, { leadDriId: input.leadDriId, ceoParticipantId: row.ceo_participant_id, participants: attendees });
       if ("error" in resolved) return { error: resolved.error };
       participants = resolved.participants;
     }
@@ -372,7 +372,7 @@ export async function executeEditMeetingDetails(
     const result = await commit(client, updated, secret);
     if (participants) {
       const existingIds = row.participants.map((person) => person.personId);
-      scheduleMeetingIntro(pool, companyMemory, introAgent, row.id, row.lead_dri_id,
+      scheduleMeetingIntro(pool, peopleDirectory, introAgent, row.id, row.lead_dri_id,
         participants.map((person) => person.personId).filter((id) => !existingIds.includes(id)), existingIds);
     }
     return result;
@@ -381,14 +381,14 @@ export async function executeEditMeetingDetails(
 
 export async function executeRequestSupplement(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   exporter: DriExporter | undefined,
   secret: string,
   scope: ActionScope,
   input: { entryId?: string; targetDriId: string; text: string },
   fingerprint: string,
 ): Promise<MeetingActionOutcome> {
-  const target = companyMemory.searchPeople(undefined).find((person) => person.personId === input.targetDriId);
+  const target = peopleDirectory.searchPeople(undefined).find((person) => person.personId === input.targetDriId);
   if (!target) return { error: { status: 400, code: "INVALID_PARTICIPANT", message: "targetDriId 不在 company-people.v1 人员目录中", fieldErrors: { targetDriId: "unknown personId" } } };
   if (!target.roles.includes("dri")) return { error: { status: 400, code: "INVALID_TARGET_DRI", message: "targetDriId 必须具有 dri 角色", fieldErrors: { targetDriId: "role dri required" } } };
 
@@ -539,7 +539,7 @@ function meetingRequestFingerprint(body: {
 /** DRI 服务导入 Meeting 元数据：稳定 Person 目录 + 已存在 Issue，重复导入返回原对象。 */
 export async function importDriMeeting(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   body: {
@@ -551,7 +551,7 @@ export async function importDriMeeting(
   if (!scheduledAt) return { status: 400, code: "INVALID_INPUT", message: "scheduledAt 不是可解析时间", fieldErrors: { scheduledAt: "unparsable" } };
   const endsAt = resolveEndsAt(scheduledAt, body.endsAt);
   if (!(endsAt instanceof Date)) return { status: 400, code: endsAt.code, message: endsAt.message, fieldErrors: endsAt.fieldErrors };
-  const resolved = resolveParticipants(companyMemory, body);
+  const resolved = resolveParticipants(peopleDirectory, body);
   if ("error" in resolved) return { status: 400, code: resolved.error.code, message: resolved.error.message, fieldErrors: resolved.error.fieldErrors };
   const issueIds = unique(body.issueIds);
   if (!(await issuesExist(pool.query.bind(pool), issueIds))) {
@@ -616,8 +616,8 @@ export async function importDriMeeting(
       ? { status: 200, card: projectMeetingCard(existing, secret) }
       : { status: 409, code: "DRI_MEETING_EXTERNAL_ID_CONFLICT", message: "同一 externalId 已存在且内容不同" };
   }
-  scheduleMeetingIntro(pool, companyMemory, introAgent, meetingId, resolved.lead.personId,
+  scheduleMeetingIntro(pool, peopleDirectory, introAgent, meetingId, resolved.lead.personId,
     resolved.participants.map((person) => person.personId).filter((id) => id !== resolved.lead.personId), [resolved.lead.personId]);
-  await startPreflight(pool, companyMemory, preflightAgent, meetingId);
+  await startPreflight(pool, peopleDirectory, preflightAgent, meetingId);
   return { status: 201, card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), meetingId))!, secret) };
 }

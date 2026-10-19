@@ -1,9 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Type } from "@sinclair/typebox";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
-  COMPANY_MEMORY_TOOLS,
   MonthlyReviewField,
   MissionCardField,
   SearchPeopleInput,
@@ -27,11 +24,9 @@ import {
   type Model,
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { plainKnowledgeText, type CompanyMemoryRepository } from "./companyMemory.js";
-import { formalTerms, formalTermsDeep } from "./formalTerms.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
+import { formalTermsDeep } from "./formalTerms.js";
 import type { ConversationRuntime } from "./conversations.js";
-import { makeMemoryTools } from "./memoryTools.js";
-import { createCompanyMemoryMcpServer } from "./mcpCompanyMemory.js";
 import { CONVERSATION_WRITING_STYLE } from "./promptStyle.js";
 import {
   TIER_GUIDANCE, TIER_SETTINGS, cleanThought, createEscalationWatch, hasWriteIntent, latestSummaryHeading, routeTurn, thinkingHeadline, toolProgressLabel, toolResultDetail, withNotice,
@@ -50,7 +45,7 @@ import {
 import { unavailableWebSearchAdapter, type WebSearchAdapter } from "./webSearch.js";
 import type { Pool } from "pg";
 import { createObjectMaterial, editObjectMaterial, listObjectMaterials, readObjectMaterial, ObjectMaterialError } from "./objectMaterials.js";
-import { personDisplayNames } from "./people.js";
+import { isRealPerson, personDisplayNames } from "./people.js";
 import { collectMeetingEvidence, collectObjectEvidence } from "./meetingEvidence.js";
 import { issueDecisionHistory, meetingDecisionHistory } from "./issueDecisionHistory.js";
 import { withBeijingTimes } from "./agentTime.js";
@@ -172,9 +167,7 @@ ${personalCard ? "当前任务卡正文也是上述边界的例外：审核中�
 # 工具
 
 ${personalCard ? "当前任务卡的正文、公开意见和轮次已放在 currentObject；讨论个人承诺以这份授权资料为准。别人的 Mission 卡和执行情况只能用三层取用的工具读，不推测，也不能把私聊变为公开意见。" : "- `list_missions`：按 period、battlefieldId、capabilityId 或 ownerId 查询当前 Mission；问某个战场、能力或 DRI 有哪些 Mission 时必须调用它。"}
-- \`list_sections\`：企业知识章节目录，先看目录再决定读哪里。
-- \`search_sections\`：在企业知识内按关键词定位相关章节。
-- \`get_passages\`：读取指定章节的段落正文。
+- \`query_company\`：只读查询本人被授权读取的本体公司事实。
 - \`search_people\`：稳定人员目录，把姓名解析为 personId。
 - \`read_outlet_feed\`：读取当前 Radar 已启用的 BBC、彭博、路透、金融时报、CNBC、经济学人等发布方媒体窗口内最新条目。它不是全文、历史库或全网关键词检索。
 - \`web_search\`：检索公开来源，仅在内部材料不足时使用。
@@ -189,7 +182,7 @@ ${personalCard ? "当前任务卡的正文、公开意见和轮次已放在 curr
 
 web_search 直接返回来源标题、URL 与摘要，本运行最多 8 次，达到上限会中止本轮并报错。把额度用在关键分歧上，证据够了就停。博查摘要只能用于发现线索，不能当作最终证据。本运行没有读取网页原文的工具，所以引用外部事实时必须给出标题与 URL，并用一句陈述交代依据为摘要、未查阅原文。
 
-不要把全部企业知识章节拼接进上下文，按章节目录定位后只读需要的段落。搜不到就明说，不编造。工具报错或超时时，用一句话说清没读到什么、为什么，并给出下一步（例如稍后重试，或在依据面板直接打开原文），不要沉默，也不要凭印象补原文。材料重复或没有新增时换检索方向。搜索次数只是行为记录，不代表回答质量。
+搜不到就明说，不编造。工具报错或超时时，用一句话说清没读到什么、为什么，并给出下一步（例如稍后重试，或在依据面板直接打开原文），不要沉默，也不要凭印象补原文。材料重复或没有新增时换检索方向。搜索次数只是行为记录，不代表回答质量。
 
 没有来源、样本或可复核计算时，不给竞争重叠率、成功概率和置信度写精确百分比；可以使用定性等级，并说明判断依据。
 
@@ -246,7 +239,7 @@ export type PendingIssueSummary = {
 };
 
 export type PiConversationRuntimeOptions = {
-  companyMemory: CompanyMemoryRepository;
+  peopleDirectory: PeopleDirectory;
   materialPool?: Pool;
   missionCardSecret?: string;
   now?: () => Date;
@@ -467,9 +460,6 @@ const SEARCH_REFUSALS_BEFORE_ABORT = 8;
 const SEARCH_LIMIT_NOTICE = `本轮检索已到上限（${SEARCH_LIMIT} 次），这是最后一次检索结果。请不要再调用 web_search，基于已检索到的结果和内部材料作答，并在回答中如实说明本轮检索已到上限、哪些点未能进一步核实。`;
 const SEARCH_LIMIT_REFUSAL = `本轮检索已到上限（${SEARCH_LIMIT} 次），这次没有执行检索。请停止调用 web_search，基于已检索到的结果和内部材料作答，并在回答中如实说明本轮检索已到上限、哪些点未能进一步核实。`;
 
-/** 企业知识只读工具的单次超时（巡检 P0-2）。 */
-export const MEMORY_TOOL_TIMEOUT_MS = 20_000;
-
 /** Claude（Anthropic 协议）主答模型所在的 provider；GPT 与压缩模型在 "warmap"。 */
 const ANTHROPIC_PROVIDER = "warmap-anthropic";
 
@@ -518,38 +508,11 @@ function cachedResourceLoader(prompt: string): ResourceLoader {
 }
 
 export async function createPiConversationRuntime(options: PiConversationRuntimeOptions): Promise<ConversationRuntime> {
-  const server = createCompanyMemoryMcpServer(options.companyMemory);
-  const client = new Client({ name: "warmap-pi", version: "0.1.0" });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await server.connect(serverTransport);
-  await client.connect(clientTransport);
-
-  const call = async (name: string, args: Record<string, unknown>) => {
-    let result: Awaited<ReturnType<typeof client.callTool>>;
-    try {
-      // 企业知识是本机只读查询，正常毫秒级返回；单独设短超时，卡住时让 Agent 当轮说清楚原因，而不是拖到整轮 180 秒。
-      result = await client.callTool({ name, arguments: args }, undefined, { timeout: MEMORY_TOOL_TIMEOUT_MS });
-    } catch (cause) {
-      const timedOut = /timed? ?out/i.test(String((cause as Error)?.message)) || (cause as { code?: number })?.code === -32001;
-      throw new Error(timedOut
-        ? `企业知识 ${MEMORY_TOOL_TIMEOUT_MS / 1000} 秒内没有返回（${name}）。请直接告诉用户这次没读到企业知识原文，可以在依据面板里直接打开原文，或稍后重试。`
-        : `企业知识读取失败（${name}）：${(cause as Error)?.message ?? "未知原因"}。请直接告诉用户这次没读到，不要编造原文。`);
-    }
-    const rawContent = Array.isArray(result.content)
-      ? result.content as { type?: string; text?: string }[]
-      : [];
-    const content = rawContent
-      .filter((item): item is { type: "text"; text: string } => item.type === "text" && typeof item.text === "string")
-      // 回答里不要出现 wiki / docx 标识、revision 号：交给模型前就去掉这些后台括注；内部英文类型名、带编号的代号换成正式中文叫法（formalTerms.ts）。
-      .map((item) => ({ type: "text" as const, text: name === "search_people" ? item.text : formalTerms(plainKnowledgeText(item.text)) }));
-    if (result.isError) throw new Error(content.map((item) => item.text).join("\n") || `${name} failed`);
-    return { content, details: {} };
-  };
-  const mcpTools = [
-    ...makeMemoryTools(call),
+  const peopleTools = [
     defineTool({ name: "search_people", label: "查询人员", description: "查询稳定人员目录", parameters: SearchPeopleInput,
       execute: async (_id, args) => withRetrieve(RETRIEVE_SOURCES.peopleDirectory, () => ({ hasQuery: Boolean((args as { query?: unknown }).query) }),
-        () => call("search_people", args), (result) => ({ blocks: result.content.length })) }),
+        async () => ({ content: [{ type: "text" as const, text: JSON.stringify({ people: options.peopleDirectory.searchPeople((args as { query?: string }).query).filter(isRealPerson) }) }], details: {} }),
+        (result) => ({ blocks: result.content.length })) }),
   ];
   const listPendingIssues = options.listPendingIssues;
   const boardTools = (viewer?: { personId: string; role: "ceo" | "member" }) => [
@@ -771,7 +734,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         },
       });
       /**
-       * 服务端预取：企业知识（先找相关章节，再读最相关一节的段落）与公开来源并行，最多等 PREFETCH_BUDGET_MS。
+       * 服务端预取：本体公司事实（本人授权范围）与公开来源并行，最多等 PREFETCH_BUDGET_MS。
        * 每一项照常发查证进度事件（界面上与模型自己查的一样显示）；公开来源计入本轮检索额度。失败或超时的项不放进上下文。
        */
       const prefetch = async (terms: NonNullable<TurnRoute["prefetch"]>) => {
@@ -790,14 +753,11 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
             throw cause;
           }
         };
-        const parse = (result: { content: { text: string }[] }) => { try { return JSON.parse(result.content.map((item) => item.text).join("")) as Record<string, unknown>; } catch { return {}; } };
-        const knowledge = terms.memory.map((query) => step("search_sections", { query }, async () => {
-          const found = parse(await call("search_sections", { query, limit: 3 }));
-          const sections = Array.isArray(found.results) ? found.results as { id?: string; section?: { id?: string } }[] : [];
-          const top = sections[0]?.id ?? sections[0]?.section?.id;
-          const passages = top ? parse(await call("get_passages", { sectionId: top, query, limit: 3 })) : null;
-          return { query, results: sections, ...(passages ? { passages } : {}) };
-        }));
+        const company = options.company;
+        const knowledge = company ? terms.memory.map((query) => step("query_company", { query }, async () => {
+          const view = await company.read({ personId: input.viewer.personId, role: input.viewer.role }, { query }, input.signal);
+          return { query, status: view.status, entries: view.entries.map(({ title, text }) => ({ title, text })), ...(view.message ? { message: view.message } : {}) };
+        })) : [];
         const web = terms.web.filter(() => searchCount < SEARCH_LIMIT).map((query) => {
           searchCount += 1;
           return step("web_search", { query }, () => searchForModel({ query }).then((value) => ({ query, ...value })));
@@ -808,9 +768,9 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         ])));
         const [knowledgeResults, webResults] = await Promise.all([settled(knowledge), settled(web)]);
         const pick = <T>(items: ({ ok: true; value: T } | { ok: false })[]) => items.flatMap((item) => (item.ok ? [item.value] : []));
-        const value = { knowledge: pick(knowledgeResults), web: pick(webResults) };
-        if (!value.knowledge.length && !value.web.length) return undefined;
-        return { note: "这是本轮开始前按这个问题预先检索到的企业知识与公开来源（与工具返回的格式相同，可以照样引用）。先用它们，够用就不要重复检索同样的内容；不够再自己查。", ...value };
+        const value = { company: pick(knowledgeResults), web: pick(webResults) };
+        if (!value.company.length && !value.web.length) return undefined;
+        return { note: "这是本轮开始前按这个问题预先读到的本体公司事实与公开来源（与工具返回的格式相同，可以照样引用）。先用它们，够用就不要重复检索同样的内容；不够再自己查。", ...value };
       };
       const outletFeedTools = options.outletFeed ? [defineTool({
         name: "read_outlet_feed",
@@ -1001,7 +961,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const missionCardId = /^mission-card:(.+)$/.exec(input.scope)?.[1];
       const missionCardTools = missionCardId && options.materialPool ? (() => {
         const pool = options.materialPool!;
-        const people = options.companyMemory.searchPeople(undefined);
+        const people = options.peopleDirectory.searchPeople(undefined);
         const secret = options.missionCardSecret ?? "";
         const now = options.now ?? (() => new Date());
         const result = (value: unknown, isError = false) => {
@@ -1050,7 +1010,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         const ref = { objectType: materialScope[1] as "issue" | "task" | "meeting", objectId: materialScope[2] };
         const pool = options.materialPool!;
         const q = pool.query.bind(pool);
-        const names = personDisplayNames(options.companyMemory);
+        const names = personDisplayNames(options.peopleDirectory);
         const viewer = input.viewer;
         // 对话守同一道门：能改这里至少一份材料的人才有 edit_material；不能改的人只能提议，提议交给能改的人。
         const canEditSome = await listObjectMaterials(q, ref, viewer, names).then((list) => list.materials.some((m) => m.canEdit),
@@ -1124,7 +1084,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const evidenceTools = isCeo && !personalCard && options.materialPool ? (() => {
         const pool = options.materialPool!;
         const q = pool.query.bind(pool);
-        const names = personDisplayNames(options.companyMemory);
+        const names = personDisplayNames(options.peopleDirectory);
         const target = Type.Object({ type: Type.Union([Type.Literal("meeting"), Type.Literal("issue")]), id: Type.String({ minLength: 1, maxLength: 100 }) }, { additionalProperties: false });
         const result = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value });
         const clip = (text: string | null) => (text && text.length > 20_000 ? `${text.slice(0, 20_000)}
@@ -1193,7 +1153,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       }
       // 档位先告诉路由层（整轮时限）和界面（预计用时；深度档带一段开场说明，界面立刻显示，也写进这条回答的开头）。
       input.emit({ type: "route", tier: route.tier, source: route.source, expectSeconds: route.expectSeconds, timeoutMs: route.timeoutMs, model: modelId, ...(route.notice ? { notice: route.notice } : {}) });
-      // 分诊给了检索词：与会话装配同时，先替主答查好企业知识和公开来源，结果放进第一轮上下文，省掉一两轮工具往返。
+      // 分诊给了检索词：与会话装配同时，先替主答查好本体公司事实和公开来源，结果放进第一轮上下文，省掉一两轮工具往返。
       const prefetching = route.prefetch ? prefetch(route.prefetch) : Promise.resolve(undefined);
       // 系统提示与工具按档位、修改意图、本轮意图与页面裁剪（conversationPrompt.ts）。
       const shape = { tier: route.tier, writeIntent: route.writeIntent, anthropic, intents: promptIntents(routedMessage, route), materials: materialTools.length > 0 };
@@ -1204,7 +1164,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const fullPrompt = [basePrompt, ...(layerTools.length ? [THREE_LAYER_RULES] : []), ...(issueTools.length ? [ISSUE_SUGGEST_RULES] : []),
         ...(asking ? [ASK_USER_RULES, ...(input.scope.startsWith("personal-review:") ? [PERSONAL_REVIEW_CHECK_RULES] : [])] : [])].join("\n\n");
       const toolTimeoutMs = options.toolTimeoutMs ?? TOOL_TIMEOUT_MS;
-      const turnTools = [...mcpTools, ...memoryTools, ...entryTools, ...layerTools, ...issueTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...evidenceTools, ...outletFeedTools, searchTool,
+      const turnTools = [...peopleTools, ...memoryTools, ...entryTools, ...layerTools, ...issueTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...evidenceTools, ...outletFeedTools, searchTool,
         ...(asking ? [asking.tool] : [])]
         .filter((tool) => toolAllowed(tool.name, shape))
         // 生成复盘要等重模型起草（失败还会重试），单独放宽到 REVIEW_TOOL_TIMEOUT_MS。
@@ -1225,7 +1185,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         modelRuntime,
         resourceLoader: cachedResourceLoader(systemPrompt),
         customTools: traceTools(turnTools),
-        tools: [...new Set([...COMPANY_MEMORY_TOOLS, ...turnTools.map((tool) => tool.name)])],
+        tools: [...new Set(turnTools.map((tool) => tool.name))],
         sessionManager: manager,
         settingsManager: settings,
         thinkingLevel,
@@ -1374,7 +1334,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           ...(input.scopeOverride ? { scopeOverride: input.scopeOverride } : {}),
           ...(input.issueContext?.issueThreads.length ? { issueThreads: input.issueContext.issueThreads } : {}),
           ...(input.issueContext?.declinedIssueTopics.length ? { declinedIssueTopics: input.issueContext.declinedIssueTopics } : {}),
-          // 看板与预取的企业知识：内部写法先换成正式中文叫法（currentObject、references 留原文，修改类工具要按原文比对）。
+          // 看板与预取的本体公司事实：内部写法先换成正式中文叫法（currentObject、references 留原文，修改类工具要按原文比对）。
           globalContext: formalTermsDeep(await scopedGlobal()),
           ...(prefetched ? { prefetched: formalTermsDeep(prefetched) } : {}),
           answerMode: TIER_GUIDANCE[route.tier],
@@ -1444,9 +1404,6 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         session.dispose();
       }
     },
-    async close() {
-      await client.close();
-      await server.close();
-    },
+    async close() {},
   };
 }

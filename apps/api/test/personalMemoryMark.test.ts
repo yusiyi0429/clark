@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { createAssistantMessageEventStream, type Context } from "@earendil-works/pi-ai";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import { testEnv } from "./helpers.js";
 
@@ -9,7 +9,7 @@ import { testEnv } from "./helpers.js";
 it("both the CEO and member agents are told to mark used personal memory as [记忆](cite:pmem:<id>) with the id copied", async () => {
   const contexts: Context[] = [];
   const runtime = await createPiConversationRuntime({
-    companyMemory: loadCompanyMemory(testEnv), baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
+    peopleDirectory: loadPeopleDirectory(testEnv), baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
     streamSimple: (_model, context) => {
       contexts.push(context);
       const events = createAssistantMessageEventStream();

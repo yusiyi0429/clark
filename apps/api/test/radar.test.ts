@@ -9,7 +9,7 @@ import { createBochaRadarWebAdapter, createWechatMcpAdapter } from "../src/radar
 import { createBochaWebSearchAdapter } from "../src/webSearch.js";
 import { createRadarAgentAssessor } from "../src/radarAgent.js";
 import { createRadarScheduler } from "../src/radarScheduler.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 import { projectSignalCard, shortSignalTitle } from "../src/signals.js";
 import { migrate } from "../src/migrate.js";
 import { createTestDb, seedTestAccess, testEnv, TEST_LOGIN } from "./helpers.js";
@@ -995,7 +995,7 @@ describe("strict Radar Candidate Tool to Signal persistence", () => {
         },
         assessor: await createRadarAgentAssessor({
           query: pool.query.bind(pool),
-          companyMemory: loadCompanyMemory(testEnv),
+          company: createCompanyContext(testEnv),
           baseUrl: "https://provider.invalid/v1/responses",
           apiKey: "test-key",
           modelId: "fake-light",
@@ -1287,7 +1287,7 @@ describe("publisher outlet Signal persistence", () => {
         },
         assessor: await createRadarAgentAssessor({
           query: pool.query.bind(pool),
-          companyMemory: loadCompanyMemory(testEnv),
+          company: createCompanyContext(testEnv),
           baseUrl: "https://provider.invalid/v1/responses",
           apiKey: "test-key",
           modelId: "fake-light",

@@ -8,7 +8,8 @@ import {
   type TMonthlyPlanFeedback,
   type TMonthlyPlanTodo,
 } from "@warmap/contracts";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
+import { readCompanyContext, type CompanyContext } from "./companyContext.js";
 import { getRegisteredBattlefieldIds, findUnregisteredBattlefieldId } from "./battlefields.js";
 import { getRegisteredCapabilityIds, findUnregisteredCapabilityId } from "./capabilities.js";
 import { companyPeriod, getMonthlyPlanRow, projectMonthlyFeedback, type MonthlyPlanRow, type StoredMonthlyFeedback } from "./monthlyPlans.js";
@@ -20,7 +21,7 @@ const MONTHLY_DRAFT_FAILED = "monthly_draft_failed";
 const INVALID_MONTHLY_DRAFT = "invalid_monthly_candidate";
 const MONTHLY_DRAFT_INTERRUPTED = "monthly_draft_interrupted";
 
-/** Draft Agent 只读输入：已确认方向、上月复盘、DRI 反馈与相关 CompanyMemory 段落。 */
+/** Draft Agent 只读输入：已确认方向、上月复盘、DRI 反馈与相关本体公司事实。 */
 export type MonthlyDraftAgentInput = {
   period: string;
   confirmedDirections: { issueId: string; title: string; decisionText: string; optionId: string | null }[];
@@ -40,7 +41,9 @@ export type MonthlyDraftAgentInput = {
   ltco: string;
   /** 按 sortOrder 的战场长期配置（含战略锚点）：本月战场结果的长期约束，不作为当月结果原样复制。 */
   battlefields: { battlefieldId: string; code: string; name: string; sixMonthOutcome: string; missionAnchors: TMissionAnchor[] }[];
-  companyMemory: { sectionId: string; title: string; sourceRef: string; passages: { id: string; text: string; sourceRef: string }[] }[];
+  /** 本体公司事实（标题与正文）；companyStatus 不是 ready 时这次没读到本体。 */
+  companyMemory: { title: string; text: string }[];
+  companyStatus: string;
 };
 
 export type MonthlyDraftAgent = {
@@ -103,12 +106,14 @@ export async function listConfirmedDirections(q: Query): Promise<MonthlyDraftAge
 export function createMonthlyPlanService({
   pool,
   agent,
-  companyMemory,
+  peopleDirectory,
+  company,
   now = () => new Date(),
 }: {
   pool: Pool;
   agent: MonthlyDraftAgent;
-  companyMemory: CompanyMemoryRepository;
+  peopleDirectory: PeopleDirectory;
+  company: CompanyContext;
   now?: () => Date;
 }): MonthlyPlanService {
   const q = pool.query.bind(pool);
@@ -142,20 +147,9 @@ export function createMonthlyPlanService({
         }
       : null;
 
-    // 按已确认方向标题检索相关 CompanyMemory 段落，只读注入，不开放业务库遍历
-    const memory: MonthlyDraftAgentInput["companyMemory"] = [];
-    for (const direction of confirmedDirections.slice(0, 5)) {
-      for (const match of companyMemory.searchSections(direction.title, 2)) {
-        if (memory.some((section) => section.sectionId === match.id)) continue;
-        const passages = companyMemory.getPassages(match.id, undefined, 2);
-        memory.push({
-          sectionId: match.id,
-          title: match.title,
-          sourceRef: match.sourceRef,
-          passages: passages.passages.map((passage) => ({ id: passage.id, text: passage.text, sourceRef: passage.sourceRef })),
-        });
-      }
-    }
+    // 按已确认方向标题读相关本体公司事实，只读注入，不开放业务库遍历
+    const companyView = await readCompanyContext(company, confirmedDirections.slice(0, 5).map((direction) => direction.title).join(" "));
+    const memory: MonthlyDraftAgentInput["companyMemory"] = companyView.entries.map(({ title, text }) => ({ title, text }));
 
     return {
       period: row.period,
@@ -186,6 +180,7 @@ export function createMonthlyPlanService({
         },
       ),
       companyMemory: memory.slice(0, 6),
+      companyStatus: companyView.status,
     };
   }
 
@@ -199,7 +194,7 @@ export function createMonthlyPlanService({
         throw Object.assign(new Error("MonthlyDraft candidate 不符合严格 schema"), { code: INVALID_MONTHLY_DRAFT });
       }
       const candidate = generated.candidate as TMonthlyDraftCandidate;
-      const people = new Set(companyMemory.searchPeople(undefined).map((person) => person.personId));
+      const people = new Set(peopleDirectory.searchPeople(undefined).map((person) => person.personId));
       const badOwner = candidate.todos.find((todo) => !people.has(todo.ownerId));
       if (badOwner) {
         throw Object.assign(new Error(`todo ownerId 不在 company-people.v1: ${badOwner.ownerId}`), { code: INVALID_MONTHLY_DRAFT });

@@ -16,7 +16,7 @@ import { importTranscript } from "../outcome.js";
 import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 
 export function registerDriRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, env, fail, requireServiceToken, companyMemory, preflight, outcome, research, respondTranscriptImport, maxTranscriptBytes } = ctx;
+  const { pool, q, env, fail, requireServiceToken, peopleDirectory, preflight, outcome, research, respondTranscriptImport, maxTranscriptBytes } = ctx;
 
   app.post(
     "/api/dri/meetings/:id/transcript",
@@ -30,7 +30,7 @@ export function registerDriRoutes(app: AppInstance, ctx: RouteContext): void {
     // 服务身份用 onRequest：未鉴权调用先得到 401，而不是从 400 推断字段
     { onRequest: requireServiceToken(env.driServiceToken), schema: { body: DriIssueImportRequest } },
     async (req, reply) => {
-      const result = await importDriIssue(pool, companyMemory, req.body, env.sessionSecret);
+      const result = await importDriIssue(pool, peopleDirectory, req.body, env.sessionSecret);
       if ("code" in result) {
         return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
       }
@@ -45,7 +45,7 @@ export function registerDriRoutes(app: AppInstance, ctx: RouteContext): void {
     "/api/dri/meetings",
     { onRequest: requireServiceToken(env.driServiceToken), schema: { body: DriMeetingImportRequest } },
     async (req, reply) => {
-      const result = await importDriMeeting(pool, companyMemory, preflight, env.sessionSecret, req.body, ctx.threadIntroAgent);
+      const result = await importDriMeeting(pool, peopleDirectory, preflight, env.sessionSecret, req.body, ctx.threadIntroAgent);
       if ("code" in result) {
         return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
       }
@@ -57,7 +57,7 @@ export function registerDriRoutes(app: AppInstance, ctx: RouteContext): void {
     "/api/dri/monthly-feedback",
     { onRequest: requireServiceToken(env.driServiceToken), schema: { body: DriMonthlyPlanFeedbackRequest } },
     async (req, reply) => {
-      const result = await appendDriMonthlyFeedback(pool, companyMemory, req.body, env.sessionSecret);
+      const result = await appendDriMonthlyFeedback(pool, peopleDirectory, req.body, env.sessionSecret);
       if ("code" in result) {
         return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
       }
@@ -68,7 +68,7 @@ export function registerDriRoutes(app: AppInstance, ctx: RouteContext): void {
     "/api/dri/todo-feedback",
     { onRequest: requireServiceToken(env.driServiceToken), schema: { body: DriMonthlyPlanTodoFeedbackRequest } },
     async (req, reply) => {
-      const result = await appendDriMonthlyFeedback(pool, companyMemory, req.body, env.sessionSecret);
+      const result = await appendDriMonthlyFeedback(pool, peopleDirectory, req.body, env.sessionSecret);
       if ("code" in result) {
         return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
       }

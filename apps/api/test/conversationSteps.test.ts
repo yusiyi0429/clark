@@ -19,10 +19,10 @@ describe("当前步骤：工具开始、结束映射成 step 事件，存进运�
     const t = await createTestApp({}, { async run(input) {
       tool(input.emit, "started", "a", "read_mission_card");
       tool(input.emit, "completed", "a", "read_mission_card");
-      tool(input.emit, "started", "b", "search_sections");
-      tool(input.emit, "started", "c", "get_passages");
-      tool(input.emit, "completed", "b", "search_sections", { detail: "企业知识里找到 2 处相关：《经营原则》" });
-      tool(input.emit, "completed", "c", "get_passages", { detail: "已读企业知识《经营原则》" });
+      tool(input.emit, "started", "b", "query_company");
+      tool(input.emit, "started", "c", "read_ontology");
+      tool(input.emit, "completed", "b", "query_company", { detail: "本体里找到 2 条：《经营原则》" });
+      tool(input.emit, "completed", "c", "read_ontology", { detail: "读到本体《经营原则》" });
       tool(input.emit, "started", "d", "some_unmapped_tool");
       tool(input.emit, "completed", "d", "some_unmapped_tool");
       tool(input.emit, "started", "e", "read_mission_card");
@@ -39,15 +39,15 @@ describe("当前步骤：工具开始、结束映射成 step 事件，存进运�
       expect(steps.map(({ id, label, status, result }) => ({ id, label, status, ...(result ? { result } : {}) }))).toEqual([
         { id: "s1", label: "读 Mission 卡", status: "active" },
         { id: "s1", label: "读 Mission 卡", status: "done" },
-        { id: "s2", label: "查企业知识", status: "active" },
-        { id: "s2", label: "查企业知识", status: "done", result: "已读企业知识《经营原则》" },
+        { id: "s2", label: "查本体", status: "active" },
+        { id: "s2", label: "查本体", status: "done", result: "读到本体《经营原则》" },
         { id: "s1", label: "读 Mission 卡", status: "active" },
         { id: "s1", label: "读 Mission 卡", status: "done" },
       ]);
       const [run] = await t.sql("SELECT input_snapshot->'steps' AS steps FROM agent_runs WHERE kind = 'conversation'");
       expect(run.steps).toEqual([
         { id: "s1", label: "读 Mission 卡", status: "done" },
-        { id: "s2", label: "查企业知识", status: "done", result: "已读企业知识《经营原则》" },
+        { id: "s2", label: "查本体", status: "done", result: "读到本体《经营原则》" },
       ]);
     } finally {
       await t.close();

@@ -18,7 +18,7 @@ import {
 } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
 import { battlefieldSetOf, getRegisteredBattlefieldIds, normalizeBattlefieldSet } from "./battlefields.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import { issueNatureOf } from "./dataOrigin.js";
 import { withSupplementaryEvidence } from "./radarDedupe.js";
 import { revokeEffect } from "./effects.js";
@@ -486,11 +486,11 @@ export type DriImportResult =
  */
 export async function importDriIssue(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   body: TDriIssueImportRequest,
   secret: string,
 ): Promise<DriImportResult> {
-  if (!companyMemory.searchPeople(undefined).some((person) => person.personId === body.submitterPersonId)) {
+  if (!peopleDirectory.searchPeople(undefined).some((person) => person.personId === body.submitterPersonId)) {
     return { status: 400, code: "INVALID_SUBMITTER", message: "提交人不在 company-people.v1 人员目录中", fieldErrors: { submitterPersonId: "unknown personId" } };
   }
   const location = normalizeLocation(body.location);

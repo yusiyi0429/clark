@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
 import { Value } from "@sinclair/typebox/value";
 import { CreateMissionRequest, type TCreateMissionRequest } from "@warmap/contracts";
-import { loadPeople } from "../src/companyMemory.js";
+import { loadPeople } from "../src/peopleDirectory.js";
 
 /**
  * 一次性把飞书里的个人 Mission Card 导入 missions（2026-09 上线前：9 月个人卡只在飞书里）。

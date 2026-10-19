@@ -8,7 +8,7 @@ import { insertNotification } from "./notifications.js";
 import { listTaskProgress } from "./taskProgress.js";
 import { postThreadIntro, type ThreadIntroAgent } from "./threadIntro.js";
 import { postCoAgentMessage, threadIntroInput, type ThreadRef } from "./threads.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 
 type TaskRow = {
   id: string; version: number; title: string; status: TTaskView["status"]; created_by: TTaskView["source"];
@@ -356,7 +356,7 @@ export async function putMyTaskNote(pool: Pool, viewerId: string, taskId: string
     ON CONFLICT(task_id,person_id) DO UPDATE SET note=EXCLUDED.note,updated_at=now()`,[taskId,viewerId,note]);
   return { myNote:note };
 }
-export async function addTaskCollaborators(pool: Pool, ownerId: string, taskId: string, names: Map<string,string>, input: TAddTaskCollaboratorsRequest, invitable: Set<string>, intro?: { agent: ThreadIntroAgent; companyMemory: CompanyMemoryRepository }): Promise<TaskResult> {
+export async function addTaskCollaborators(pool: Pool, ownerId: string, taskId: string, names: Map<string,string>, input: TAddTaskCollaboratorsRequest, invitable: Set<string>, intro?: { agent: ThreadIntroAgent; peopleDirectory: PeopleDirectory }): Promise<TaskResult> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -381,7 +381,7 @@ export async function addTaskCollaborators(pool: Pool, ownerId: string, taskId: 
     if (ids.length && intro) {
       const ref = { objectType: "task" as const, objectId: taskId };
       setImmediate(() => { void (async () => {
-        const context = await threadIntroInput(pool.query.bind(pool), intro.companyMemory, ref, ownerId, ids);
+        const context = await threadIntroInput(pool.query.bind(pool), intro.peopleDirectory, ref, ownerId, ids);
         await postThreadIntro(pool, intro.agent, context, [ownerId, ...row.collaborators]);
       })().catch(() => undefined); });
     }

@@ -69,7 +69,6 @@ export type AgentRole = (typeof AGENT_ROLES)[keyof typeof AGENT_ROLES] | string;
 /** 真实检索来源：run 名为 `retrieve:<source>`。 */
 export const RETRIEVE_SOURCES = {
   contextPack: "context-pack",
-  companyMemory: "company-memory",
   peopleDirectory: "people-directory",
   webSearch: "web-search",
   outletFeed: "outlet-feed",
@@ -572,7 +571,7 @@ export async function withRetrieve<T>(source: RetrieveSource, inputs: () => unkn
   });
 }
 
-/** 同步检索（本机企业知识）。 */
+/** 同步检索。 */
 export function withRetrieveSync<T>(source: RetrieveSource, inputs: () => unknown, fn: () => T, summarize?: (result: T) => unknown): T {
   const store = storage.getStore();
   if (!store) return fn();

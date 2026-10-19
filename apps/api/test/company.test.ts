@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import examples from './fixtures/world-02.json' with { type: 'json' };
 import { createAssistantMessageEventStream, type AssistantMessage } from '@earendil-works/pi-ai';
 import { createPiConversationRuntime } from '../src/piConversationRuntime.js';
-import { loadCompanyMemory } from '../src/companyMemory.js';
+import { loadPeopleDirectory } from '../src/peopleDirectory.js';
 import { testEnv } from './helpers.js';
 
 import { createCompanyMemory } from '../src/company.js';
@@ -71,13 +71,14 @@ describe('World company public read boundary', () => {
     const toolResults: string[] = [];
     const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
     const runtime = await createPiConversationRuntime({
-      company: t.company, companyMemory: loadCompanyMemory(testEnv),
+      company: t.company, peopleDirectory: loadPeopleDirectory(testEnv),
       baseUrl: 'https://provider.invalid/v1', apiKey: 'test-key', modelId: 'fake-light',
       streamSimple: (_model, context) => {
         calls++;
         const tools = context.tools?.map((tool) => tool.name) ?? [];
         expect(tools).toContain('query_company');
-        expect(tools).toContain('search_sections');
+        expect(tools).toContain('search_people');
+        expect(tools).not.toContain('search_sections');
         if (calls > 1) toolResults.push(JSON.stringify(context.messages.findLast((item) => item.role === 'toolResult')));
         const content: AssistantMessage['content'] = calls === 1 ? [{ type: 'toolCall', id: 'company-call', name: 'query_company', arguments: {} }]
           : [{ type: 'text', text: '这是一份草稿。' }];

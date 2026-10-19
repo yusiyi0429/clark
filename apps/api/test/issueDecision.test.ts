@@ -14,7 +14,7 @@ import type { ConversationRuntime } from "../src/conversations.js";
 import type { AssistantMessage, AssistantMessageEventStream, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { createResearchAgentRunner } from "../src/researchAgent.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 
 const RESEARCH_DOC: TResearchDoc = {
   summary: "渠道政策调整需要 CEO 决定投入节奏",
@@ -1028,7 +1028,7 @@ describe("strict ResearchDoc candidate tool", () => {
     const contexts: Context[] = [];
     const runner = createResearchAgentRunner({
       query: db.query.bind(db),
-      companyMemory: loadCompanyMemory(testEnv),
+      company: createCompanyContext(testEnv),
       baseUrl: "https://provider.invalid/v1/responses",
       apiKey: "test-key",
       modelId: "fake-heavy",
@@ -1056,12 +1056,8 @@ describe("strict ResearchDoc candidate tool", () => {
       expect(run.rows).toHaveLength(1);
       expect(run.rows[0]).toMatchObject({ kind: "issue-research", model_slot: "heavy", status: "succeeded" });
       expect(run.rows[0].candidate_output).toEqual(RESEARCH_DOC);
-      // CompanyMemory 段落真实注入模型输入，且只携带 id/text/sourceRef
-      const passages = (run.rows[0].input_snapshot as { companyMemoryPassages: { id: string; text: string; sourceRef: string }[] }).companyMemoryPassages;
-      expect(passages.length).toBeGreaterThan(0);
-      for (const passage of passages) {
-        expect(Object.keys(passage).sort()).toEqual(["id", "sourceRef", "text"]);
-      }
+      // 本体公司事实注入模型输入；测试环境没配本体与后台授权人员，如实标出没读到，不用本地资料补
+      expect((run.rows[0].input_snapshot as { company: unknown }).company).toMatchObject({ status: "coverage_unavailable", entries: [] });
     });
   });
 

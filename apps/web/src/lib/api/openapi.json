@@ -31569,7 +31569,8 @@
             "required": [
               "piRuntime",
               "modelSlots",
-              "companyMemoryMcp",
+              "peopleDirectory",
+              "companyConfigured",
               "search",
               "wechat",
               "outlets",
@@ -31584,7 +31585,10 @@
               "modelSlots": {
                 "type": "boolean"
               },
-              "companyMemoryMcp": {
+              "peopleDirectory": {
+                "type": "boolean"
+              },
+              "companyConfigured": {
                 "type": "boolean"
               },
               "search": {

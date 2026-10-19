@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TEST_CEO, TEST_MEMBER, createTestApp } from "./helpers.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { assignLegacyConversations, type ConversationRuntime } from "../src/conversations.js";
 
 type Viewer = Parameters<ConversationRuntime["run"]>[0]["viewer"];
@@ -143,7 +143,7 @@ describe("我的 Agent 按人私有", () => {
       await t.sql(
         "INSERT INTO conversation_messages (conversation_id, sequence, role, content, run_id) VALUES ('44444444-4444-4444-8444-444444444444', 1, 'user', '旧问题', '66666666-6666-4666-8666-666666666666')",
       );
-      await assignLegacyConversations((text, params) => t.sql(text, params) as never, loadCompanyMemory(t.env));
+      await assignLegacyConversations((text, params) => t.sql(text, params) as never, loadPeopleDirectory(t.env));
       expect(await t.sql("SELECT owner_id FROM conversations")).toEqual([{ owner_id: TEST_CEO.personId }]);
 
       const history = async (cookie: string) => (await t.app.inject({

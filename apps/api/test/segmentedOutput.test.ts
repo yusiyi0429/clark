@@ -4,7 +4,7 @@ import {
   type AssistantMessage,
   type AssistantMessageEventStream,
 } from "@earendil-works/pi-ai";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import type { ConversationRuntimeEvent } from "../src/conversations.js";
 import {
@@ -59,7 +59,7 @@ async function runTurn(options: { message: string; calls: Parameters<typeof mode
   translateThought?: ThoughtTranslator }) {
   let call = 0;
   const runtime = await createPiConversationRuntime({
-    companyMemory: loadCompanyMemory(testEnv),
+    peopleDirectory: loadPeopleDirectory(testEnv),
     baseUrl: "https://provider.invalid/v1/responses",
     apiKey: "test-key",
     modelId: "fake-light",
@@ -195,9 +195,9 @@ describe("中途升级提示", () => {
     watch.assistantToolCalls(["web_search", "web_search", "web_search"]);
     watch.assistantToolCalls(["get_warmap_overview"]);
     expect(fired).toHaveLength(0);
-    watch.assistantToolCalls(["search_sections"]);
+    watch.assistantToolCalls(["query_company"]);
     expect(fired).toHaveLength(0);
-    watch.assistantToolCalls(["get_passages"]);
+    watch.assistantToolCalls(["read_outlet_feed"]);
     expect(fired).toEqual([expect.objectContaining({ reason: "retrieval" })]);
     watch.assistantToolCalls(["web_search"]);
     expect(fired).toHaveLength(1);
@@ -259,12 +259,12 @@ describe("查证进度与思考要点（系统生成）", () => {
     // 看不懂的外文标题跳过，取第一个中文或拉丁字母标题。
     expect(toolResultDetail("web_search", { query: "Fireworks pricing" }, { details: { results: [{ title: "قیمت گذاری را درک" }, { title: "Fireworks AI 定价说明" }] } }))
       .toBe("「Fireworks pricing」找到 2 条公开来源，如《Fireworks AI 定价说明》");
-    expect(toolResultDetail("get_passages", { sectionId: "a.md#s1" }, { content: [{ type: "text", text: JSON.stringify({ section: { id: "a.md#s1", title: "集团经营上下文" }, passages: [] }) }], details: {} }))
-      .toBe("已读企业知识《集团经营上下文》");
-    expect(toolResultDetail("search_sections", { query: "融资" }, { content: [{ type: "text", text: JSON.stringify({ results: [{ title: "资本动作" }, { title: "赛道" }, { title: "资本动作" }] }) }] }))
-      .toBe("企业知识里找到 3 处相关：《资本动作》《赛道》");
+    expect(toolResultDetail("query_company", { query: "融资" }, { details: { status: "ready", entries: [{ title: "资本动作" }, { title: "赛道" }, { title: "资本动作" }] } }))
+      .toBe("本体里找到 3 条：《资本动作》《赛道》");
+    expect(toolResultDetail("query_company", { query: "融资" }, { details: { status: "empty", entries: [] } })).toBe("本体里没有找到相关公司事实");
+    expect(toolResultDetail("query_company", { query: "融资" }, { details: { status: "unavailable", entries: [] } })).toBe("这次没读到本体");
     expect(toolResultDetail("list_pending_issues", {}, { details: { issues: [{}, {}] } })).toBe("待决策议题 2 项");
-    expect(toolResultDetail("get_passages", {}, { content: [{ type: "text", text: "不是 JSON" }] })).toBeUndefined();
+    expect(toolResultDetail("query_company", {}, { content: [{ type: "text", text: "不是 JSON" }] })).toBeUndefined();
     expect(toolResultDetail("edit_material", {}, { details: { ok: true } })).toBeUndefined();
   });
 

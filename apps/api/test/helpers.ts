@@ -13,7 +13,8 @@ import type { ResearchService } from "../src/research.js";
 import type { PreflightAgent } from "../src/meetingPreflight.js";
 import type { DriExporter } from "../src/meetingStore.js";
 import { createMonthlyPlanService, type MonthlyDraftAgent, type MonthlyPlanService } from "../src/monthlyDraft.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 import { createMonthlyReviewService, type MonthlyReviewAgents, type MonthlyReviewService } from "../src/monthlyReviewService.js";
 import type { OntologyUpdater, PostMeetingAgent } from "../src/outcome.js";
 import type { WebSearchAdapter } from "../src/webSearch.js";
@@ -73,7 +74,7 @@ export function preflightCandidate(sourceRefs: string[]): TPreflightCandidate {
       entry("next_step", "下一阶段建议", "提交人先补齐推荐路径与后果"),
       question("leader_lens", "华南转化依据", "华南转化率来自哪几家客户，样本够不够支撑整笔预算调整？", []),
     ],
-    basis: "依据关联 Issue、ResearchDoc 与 CompanyMemory，只形成候选材料",
+    basis: "依据关联 Issue、ResearchDoc 与本体公司事实，只形成候选材料",
     brief: "材料可进入讨论，但关键证据仍需补足",
     summary: { criticalIssue: "缺少推荐路径的验证依据", priorityAction: "补齐选择后果与推翻条件" },
   };
@@ -108,15 +109,12 @@ export async function createTestDb(fn: (t: TestDb) => Promise<void>): Promise<vo
 }
 
 const FIXTURE_PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people.json", import.meta.url));
-const FIXTURE_MEMORY_DIR = fileURLToPath(new URL("./fixtures/company-memory", import.meta.url));
 
 export const testEnv: AppEnv = {
   sessionSecret: "test-session-secret",
   sessionMaxAgeSeconds: 60 * 60 * 8,
   publicOrigin: "https://warmap.local",
   driServiceToken: "dri-token-test",
-  mcpServiceToken: "mcp-token-test",
-  companyMemorySeedDir: FIXTURE_MEMORY_DIR,
   companyPeopleSeed: FIXTURE_PEOPLE_SEED,
   piBaseUrl: "https://provider.invalid/v1/responses",
   piApiKey: "test-key",
@@ -208,7 +206,7 @@ export function noopDistillationStream() {
   return stream;
 }
 
-/** 每个用例一个独立数据库 + 已迁移 schema + 完整 app。可覆盖 CompanyMemory seed 路径。 */
+/** 每个用例一个独立数据库 + 已迁移 schema + 完整 app。可覆盖人员 seed 路径。 */
 const defaultConversationRuntime: ConversationRuntime = {
   async run(input) {
     input.emit({ type: "message", delta: "test reply" });
@@ -217,7 +215,7 @@ const defaultConversationRuntime: ConversationRuntime = {
 };
 
 export async function createTestApp(
-  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "worldInstanceLocalFile" | "publicOrigin" | "feishu" | "adminPersonIds" | "onboardingDelegationStep">> = {},
+  seedOverrides: Partial<Pick<AppEnv, "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "worldInstanceLocalFile" | "publicOrigin" | "feishu" | "adminPersonIds" | "onboardingDelegationStep">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;
@@ -293,10 +291,10 @@ export async function createTestApp(
   const { monthlyDraftAgent, monthlyNow, recordingDeps, monthlyReviewAgents, monthlyReviewRetryDelayMs, weeklyReviewAgent, weeklyReviewPeople, ...restRuntimeOptions } = runtimeOptions;
   const appRuntimeOptions = { backgroundPreflight: false, personalDistillationStream: noopDistillationStream, personalMemoryRecall: null, ...restRuntimeOptions };
   const monthlyPlans = monthlyDraftAgent
-    ? createMonthlyPlanService({ pool, companyMemory: loadCompanyMemory(env), agent: monthlyDraftAgent, now: monthlyNow })
+    ? createMonthlyPlanService({ pool, peopleDirectory: loadPeopleDirectory(env), company: createCompanyContext(env), agent: monthlyDraftAgent, now: monthlyNow })
     : undefined;
   const monthlyReviews = monthlyReviewAgents
-    ? createMonthlyReviewService({ pool, companyMemory: loadCompanyMemory(env), agents: monthlyReviewAgents, now: monthlyNow, retryDelayMs: monthlyReviewRetryDelayMs,
+    ? createMonthlyReviewService({ pool, peopleDirectory: loadPeopleDirectory(env), company: createCompanyContext(env), agents: monthlyReviewAgents, now: monthlyNow, retryDelayMs: monthlyReviewRetryDelayMs,
       personalDraft: { storageDir: env.conversationAttachmentStorageDir ?? DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR,
         agent: monthlyReviewAgents.personal ?? { async generate() { return { candidate: {
           overall: { text: "缺少材料", sources: [] }, judgments: { text: "缺少材料", sources: [] },
@@ -305,10 +303,10 @@ export async function createTestApp(
     : undefined;
   const weeklyReviews = weeklyReviewAgent
     ? createWeeklyReviewService({ pool, agent: weeklyReviewAgent, now: monthlyNow, retryDelayMs: 0,
-      people: weeklyReviewPeople ?? (() => loadCompanyMemory(env).searchPeople(undefined).filter((person) => person.roles.includes("dri") || person.roles.includes("participant")).map((person) => person.personId)) })
+      people: weeklyReviewPeople ?? (() => loadPeopleDirectory(env).searchPeople(undefined).filter((person) => person.roles.includes("dri") || person.roles.includes("participant")).map((person) => person.personId)) })
     : undefined;
   const recordings = recordingDeps
-    ? createMeetingRecordingService({ pool, storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR, companyMemory: loadCompanyMemory(env), deps: recordingDeps })
+    ? createMeetingRecordingService({ pool, storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR, peopleDirectory: loadPeopleDirectory(env), deps: recordingDeps })
     : undefined;
   const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, weeklyReviewService: weeklyReviews, recordingService: recordings, now: monthlyNow,
     threadIntroAgent: { async generate(input) { return { message: `${input.inviter}邀请${input.newcomers.join("、")}加入「${input.title}」，请查看对象进展。` }; } },

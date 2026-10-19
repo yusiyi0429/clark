@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAssistantMessageEventStream, type AssistantMessage, type Context, type Model, type SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { clampMaxTokensToContext } from "@earendil-works/pi-ai/api/simple-options";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import {
   COMPACTION_SYSTEM_PROMPT, HISTORY_WINDOW_ENTRY, applySnapshot, branchOf, coverageNote, estimateTextTokens, historyTokens, lastTurnWindowed, planCompaction,
   summaryPromptFor, transcriptForSummary, withoutCoverageNote, type CompactionPlan, type StoredSnapshot,
@@ -305,7 +305,7 @@ const isSummary = (seen: Seen) => seen.context.systemPrompt === COMPACTION_SYSTE
 async function piRuntime(answer: (seen: Seen) => Reply, extra: Partial<Parameters<typeof createPiConversationRuntime>[0]> = {}) {
   const seen: Seen[] = [];
   const runtime = await createPiConversationRuntime({
-    companyMemory: loadCompanyMemory(testEnv), baseUrl: "https://gw.invalid/v2/llm/responses", apiKey: "test-key",
+    peopleDirectory: loadPeopleDirectory(testEnv), baseUrl: "https://gw.invalid/v2/llm/responses", apiKey: "test-key",
     modelId: TIERS.quick, tierModels: TIERS, compactionModelId: "fake-compaction", recoverySleep: async () => undefined,
     streamSimple: (model, context, options) => {
       const call = { model: model.id, context, options };

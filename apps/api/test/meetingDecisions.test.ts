@@ -9,7 +9,7 @@ import type { DecisionLayeringAgent, DecisionLayeringInput } from "../src/meetin
 import type { ImpactAgent, ImpactAnalysisInput } from "../src/impactAgent.js";
 import { createMeetingDecisionService } from "../src/meetingDecisions.js";
 import { meetingInterpretationContext } from "../src/meetingContext.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { personDisplayNames } from "../src/people.js";
 import type { FeishuNotice } from "../src/feishu/notify.js";
 import type { DecisionEventInput, DecisionWorldSync } from "../src/worldDecisionEvents.js";
@@ -216,7 +216,7 @@ describe("会后分层确认与影响卡", () => {
     const t = await newApp();
     try {
       const { meetingId } = await readyMeeting(t);
-      const companyMemory = loadCompanyMemory(t.env);
+      const peopleDirectory = loadPeopleDirectory(t.env);
       let clock = new Date("2026-06-05T16:00:00+08:00"); // 周五
       const notices: { notice: FeishuNotice; key: string }[] = [];
       const events: DecisionEventInput[] = [];
@@ -226,8 +226,8 @@ describe("会后分层确认与影响卡", () => {
       };
       const impact = fakeImpact();
       const service = createMeetingDecisionService({
-        pool: t.pool, companyMemory, layering: fakeLayering(), impact, world, now: () => clock,
-        context: () => meetingInterpretationContext(t.pool.query.bind(t.pool), clock, personDisplayNames(companyMemory)),
+        pool: t.pool, peopleDirectory, layering: fakeLayering(), impact, world, now: () => clock,
+        context: () => meetingInterpretationContext(t.pool.query.bind(t.pool), clock, personDisplayNames(peopleDirectory)),
         notify: async (notice, key) => { notices.push({ notice, key }); },
       });
       await service.sync(meetingId);

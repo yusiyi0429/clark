@@ -5,7 +5,7 @@ import type {
   TPersonalReviewDraftSource, TPersonalReviewGenerationStep, TPersonalReviewPayload, TPersonalReviewStatus, TPersonalReviewUpdateInput,
 } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import { listConversationAttachments } from "./conversations.js";
 import type { Query } from "./meetingStore.js";
 import { advanceMonthlyReviewIfReady, type MonthlyReviewActionError, type MonthlyReviewEffect, type ReviewViewer } from "./monthlyReviews.js";

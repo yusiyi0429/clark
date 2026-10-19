@@ -27,12 +27,12 @@ import { AGENT_ROLES, anonUserId, randomTurnSuffix, stableThreadId, tracedTurn, 
 
 // 成员工作台：普通视图对象，不走 Card/Action 签名（spec §3.5）。
 export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, fail, requirePerson, companyMemory, voiceprints, dictation, dictationRealtime, dictationPolish, materialMultipartLimitError } = ctx;
+  const { pool, q, fail, requirePerson, peopleDirectory, voiceprints, dictation, dictationRealtime, dictationPolish, materialMultipartLimitError } = ctx;
   // 实时听写签发的每人每分钟上限：每个 app 实例一份计数
   const realtimeSessionLimiter = createSessionRateLimiter();
 
-  const names = () => personDisplayNames(companyMemory);
-  const invitable = () => new Set(companyMemory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId));
+  const names = () => personDisplayNames(peopleDirectory);
+  const invitable = () => new Set(peopleDirectory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId));
   const requireMember: Guard = async (req, reply) => {
     await requirePerson(req, reply);
     if (reply.sent) return reply;
@@ -48,7 +48,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   app.get("/api/me/home", { preHandler: requireMember, schema: { response: { 200: MeHomeResponse } } }, async (req) => {
     const [myTasks, { work }, radar, weeklySync] = await Promise.all([
       listMyTasks(q, req.person!.personId, names()),
-      readMemberWork(q, companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, ctx.now()),
+      readMemberWork(q, peopleDirectory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, ctx.now()),
       readMemberRadarBrief(q, req.person!, ctx.now()),
       readWeeklySyncReminder(q, req.person!.personId, ctx.now()),
     ]);
@@ -68,7 +68,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     await revokePersonalToken(q, req.person!.personId, req.params.id) ? reply.code(204).send() : fail(reply, 404, "TOKEN_NOT_FOUND", "令牌不存在"));
 
   app.get("/api/me/battlefields/:id", { preHandler: requireMember, schema: { params: idParams, response: { 200: MemberBattlefieldResponse } } }, async (req, reply) => {
-    const detail = await readMemberBattlefield(q, companyMemory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, req.params.id, ctx.now());
+    const detail = await readMemberBattlefield(q, peopleDirectory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, req.params.id, ctx.now());
     return detail ?? fail(reply, 404, "BATTLEFIELD_NOT_FOUND", "战场不存在");
   });
 
@@ -125,7 +125,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   });
   app.post("/api/me/tasks/:id/collaborators", { preHandler: requireMember,
     schema: { params: idParams, body: AddTaskCollaboratorsRequest } }, async (req, reply) =>
-    respondTask(reply, await addTaskCollaborators(pool, req.person!.personId, req.params.id, names(), req.body, invitable(), { agent: ctx.threadIntroAgent, companyMemory })));
+    respondTask(reply, await addTaskCollaborators(pool, req.person!.personId, req.params.id, names(), req.body, invitable(), { agent: ctx.threadIntroAgent, peopleDirectory })));
   const planQuery = Type.Object({ period: Type.Optional(Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" })) }, { additionalProperties: false });
   app.get("/api/me/plan", { preHandler: requireMember, schema: { querystring: planQuery, response: { 200: MonthPlanResponse } } }, async (req) =>
     readMonthPlan(q, req.person!.personId, req.query.period ?? companyPeriod(ctx.now()), names(), ctx.now()));
@@ -136,7 +136,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   });
 
   app.get("/api/me/notifications", { preHandler: requireMember }, async (req) => ({
-    notifications: await listMyNotifications(q, companyMemory, req.person!.personId),
+    notifications: await listMyNotifications(q, peopleDirectory, req.person!.personId),
   }));
 
   app.get("/api/me/threads/unread", { preHandler: requireMember, schema: { response: { 200: UnreadThreadsResponse } } }, async (req) =>

@@ -15,7 +15,7 @@ import type {
   TReadScopeParams,
   TReferenceSnapshot,
 } from "@warmap/contracts";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import type { AskUser } from "./askUser.js";
 import type { ConversationEntries } from "./conversationEntries.js";
 import type { CompanyMap, ReadFocus } from "./companyMap.js";
@@ -32,7 +32,7 @@ import { canReadMonthlyReviewItem, getMonthlyReviewItem } from "./monthlyReviews
 import { getSignalCard } from "./signals.js";
 import { getPersonalMissionCard } from "./personalMissionCards.js";
 import { canReadTask, getTaskView } from "./tasks.js";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
 import type { HistoryHit } from "./conversationHistorySearch.js";
 
@@ -147,7 +147,7 @@ type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
  * 旧对话归属：按人私有之前的会话没有 owner（都是 CEO 与天枢的对话），归到人员目录里的 CEO；目录里没有 CEO 就跳过。
  * 启动时在迁移之后执行（server.ts），可重复执行。
  */
-export async function assignLegacyConversations(q: Query, companyMemory: CompanyMemoryRepository): Promise<void> {
+export async function assignLegacyConversations(q: Query, companyMemory: PeopleDirectory): Promise<void> {
   const ceo = companyMemory.searchPeople(undefined).find((person) => roleOf(person) === "ceo");
   if (ceo) await q("UPDATE conversations SET owner_id = $1 WHERE owner_id IS NULL", [ceo.personId]);
 }

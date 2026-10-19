@@ -4,7 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import { TaskView } from "@warmap/contracts";
 import { call,executionFixture,newTask } from "./executionFixture.js";
 import { getScopeObject } from "../src/conversations.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 
 describe("执行事项",()=>{
   it("自建幂等、归属校验、步骤与版本冲突",async()=>{
@@ -31,7 +31,7 @@ describe("执行事项",()=>{
       expect(stale.statusCode).toBe(409); expect(stale.json().latestTask.version).toBe(2);
       const context=await getScopeObject(async(sql,params)=>{ const rows=await f.t.sql(sql,params); return {rows,rowCount:rows.length} as never; },
         `task:${first.json().id}`,f.t.env.sessionSecret,{person:{personId:"person-fixture-002",role:"member"},
-          people:loadCompanyMemory(f.t.env).searchPeople(undefined),now:new Date("2026-10-10T02:00:00Z")});
+          people:loadPeopleDirectory(f.t.env).searchPeople(undefined),now:new Date("2026-10-10T02:00:00Z")});
       expect(context.snapshot?.payload).toMatchObject({task:{id:first.json().id},mission:{title:"验证",battlefield_name:"增长战场"},monthOutcome:"本月目标"});
       expect((await call(f,f.ceo,"PATCH",`/api/me/tasks/${second.id}`,{version:1,status:"in_progress"})).statusCode).toBe(403);
     } finally { await f.t.close(); }

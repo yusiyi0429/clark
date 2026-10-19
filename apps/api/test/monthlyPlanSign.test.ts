@@ -8,7 +8,7 @@ import {
   MonthlyPlanCardPayload,
   type TMonthlyDraftCandidate,
 } from "@warmap/contracts";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { type MonthlyDraftAgent, type MonthlyDraftAgentInput } from "../src/monthlyDraft.js";
 import { createTestApp, testEnv, type TestApp } from "./helpers.js";
 import { loadWorldInstance } from "../src/worldClient.js";
@@ -654,8 +654,8 @@ describe("MonthlyPlan signing boundaries", () => {
       const plan = await card(t, cookie, planId);
       expect(JSON.stringify(plan.payload)).not.toMatch(/percent|progress|mission/i);
 
-      // CompanyMemory 只读：没有写入入口，签发不改变人员目录
-      const memory = loadCompanyMemory(testEnv);
+      // 人员目录只读：没有写入入口，签发不改变人员目录
+      const memory = loadPeopleDirectory(testEnv);
       const peopleBefore = memory.searchPeople(undefined).map((person) => person.personId).sort();
       expect(Object.keys(memory).every((key) => /^(list|search|get)/.test(key))).toBe(true);
       expect((await t.app.inject({ method: "GET", url: "/api/cards/battlefields", headers: { cookie } })).statusCode).toBe(200);

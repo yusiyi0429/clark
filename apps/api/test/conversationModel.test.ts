@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { conversationModelApi, conversationModelDefinition, gatewayRoot, parseTierThinking } from "../src/conversationModel.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import { testEnv } from "./helpers.js";
@@ -64,7 +64,7 @@ describe("对话 runtime 切到 Claude 时的真实请求", () => {
       return options.reply ? options.reply() : anthropicReply("好的，已收到。");
     }) as typeof fetch;
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv),
+      peopleDirectory: loadPeopleDirectory(testEnv),
       baseUrl: "https://gw.invalid/v2/llm/responses",
       apiKey: "test-key",
       modelId: options.modelId,

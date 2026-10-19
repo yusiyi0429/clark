@@ -163,7 +163,7 @@ describe("档位设置与进度文案", () => {
 
   it("进度只写在查什么，不写工具名", () => {
     expect(toolProgressLabel("web_search", { query: "硅基流动 递表" })).toBe("检索公开来源「硅基流动 递表」");
-    expect(toolProgressLabel("get_passages", {})).toBe("阅读企业知识原文");
+    expect(toolProgressLabel("query_company", { query: "词元云集" })).toBe("查询本体公司事实「词元云集」");
     expect(toolProgressLabel("unknown_tool", {})).toBeUndefined();
   });
 });

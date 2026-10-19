@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
 import { buildApp } from "../src/app.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import { loadWorldInstance, resolveWorldEnv, resolveWorldTkEnv, WorldClient, type WorldInstance } from "../src/worldClient.js";
 import {
@@ -485,7 +485,7 @@ describe("对话：按需工具 read_ontology（不进每轮上下文包）", ()
     const prompts: string[] = [];
     const queries: unknown[] = [];
     let calls = 0;
-    const runtime = await createPiConversationRuntime({ companyMemory: loadCompanyMemory(testEnv),
+    const runtime = await createPiConversationRuntime({ peopleDirectory: loadPeopleDirectory(testEnv),
       baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
       globalContext: async () => ({ period: "2026-10", battlefields: [] }),
       readOntology: async (query) => { queries.push(query); return { source: "本体", company: { title: "投资组合", ref: "c@1" } }; },

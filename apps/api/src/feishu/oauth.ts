@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import type { CompanyMemoryRepository } from "../companyMemory.js";
+import type { PeopleDirectory } from "../peopleDirectory.js";
 import type { Query } from "../meetingStore.js";
 import { roleOf, type SessionRole } from "../memberAccess.js";
 import { hasCompletedOnboarding } from "../onboarding.js";
@@ -71,12 +71,12 @@ const CODE_ERRORS = new Set([20003, 20004, 20024, 20065, 20071]);
  * 否则明确告诉用户还没关联。找到人后写入加密的 user token。
  */
 export async function completeFeishuLogin({
-  q, env, client, companyMemory, code, redirectUri, sessionPersonId, now,
+  q, env, client, peopleDirectory, code, redirectUri, sessionPersonId, now,
 }: {
   q: Query;
   env: Pick<FeishuEnv, "tokenKey" | "tokenKeyVersion">;
   client: FeishuClient;
-  companyMemory: CompanyMemoryRepository;
+  peopleDirectory: PeopleDirectory;
   code: string;
   redirectUri?: string;
   /** 浏览器里已有的天枢会话（没有就是 undefined）。 */
@@ -108,7 +108,7 @@ export async function completeFeishuLogin({
     return { kind: "not_linked", message: "这个飞书账号还没有关联天枢人员。请先在浏览器里用天枢 ID 和口令登录，再从飞书消息里的链接打开一次完成关联；或联系管理员。" };
   }
 
-  const person = companyMemory.searchPeople(undefined).find((p) => p.personId === personId);
+  const person = peopleDirectory.searchPeople(undefined).find((p) => p.personId === personId);
   const access = (await q("SELECT session_version FROM member_access WHERE person_id = $1", [personId])).rows[0] as { session_version: number } | undefined;
   if (!person || !access) return { kind: "no_access", message: "关联的天枢账号还没有开通，请联系管理员" };
 

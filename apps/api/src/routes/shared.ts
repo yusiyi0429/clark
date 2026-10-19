@@ -7,7 +7,8 @@ import type { Pool } from "pg";
 import type { TApiError, TCardCollection } from "@warmap/contracts";
 import { SESSION_COOKIE, parseCookies, readSessionToken } from "../session.js";
 import { canSwitchView, canUseMemberView, currentSessionVersion, roleOf, type SessionRole } from "../memberAccess.js";
-import type { CompanyMemoryRepository } from "../companyMemory.js";
+import type { PeopleDirectory } from "../peopleDirectory.js";
+import type { CompanyContext } from "../companyContext.js";
 import type { ConversationRuntime } from "../conversations.js";
 import type { ConversationCompaction } from "../conversationCompaction.js";
 import type { DriExporter, MeetingActionOutcome, Query } from "../meetingStore.js";
@@ -69,7 +70,10 @@ export type RouteContext = {
   pool: Pool;
   q: Query;
   env: AppEnv;
-  companyMemory: CompanyMemoryRepository;
+  /** 人员目录：登录、会话角色、本人隔离、人名解析只看它。 */
+  peopleDirectory: PeopleDirectory;
+  /** 后台起草读本体公司事实的入口（只读）。 */
+  company: CompanyContext;
   /** 本人私有的个人记忆（只有本人可见，不写进本体）。 */
   personalMemory: PersonalMemory;
   /** 个人记忆的后台提炼队列。 */
@@ -159,11 +163,11 @@ export function materialMultipartLimitError(
 }
 
 /** 读会话：签名与有效期之外，人要还在 seed 里，凭据版本要与库里一致（口令重置后旧会话立即失效）。 */
-export function createReadSession(env: AppEnv, q: Query, companyMemory: CompanyMemoryRepository) {
+export function createReadSession(env: AppEnv, q: Query, peopleDirectory: PeopleDirectory) {
   return async function readSession(req: FastifyRequest): Promise<SessionPerson | null> {
     const claims = readSessionToken(env.sessionSecret, parseCookies(req.headers.cookie)[SESSION_COOKIE]);
     if (!claims) return null;
-    const person = companyMemory.searchPeople(undefined).find((p) => p.personId === claims.pid);
+    const person = peopleDirectory.searchPeople(undefined).find((p) => p.personId === claims.pid);
     if (!person) return null;
     if ((await currentSessionVersion(q, person.personId)) !== claims.v) return null;
     const role = claims.view ?? roleOf(person);

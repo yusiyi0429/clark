@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Client } from "langsmith";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import { configureTracing, flushTracing } from "../src/tracing.js";
 import { createTestApp, testEnv } from "../test/helpers.js";
@@ -65,7 +65,7 @@ configureTracing({
 });
 
 const runtime = await createPiConversationRuntime({
-  companyMemory: loadCompanyMemory(testEnv),
+  peopleDirectory: loadPeopleDirectory(testEnv),
   baseUrl: process.env.PI_BASE_URL!,
   apiKey: process.env.PI_API_KEY!,
   modelId: process.env.LIGHT_MODEL!,

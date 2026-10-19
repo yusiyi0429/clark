@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 import { agentModel, type AgentModelEnv } from "./agentModels.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import type { FeishuEnv } from "./feishu/config.js";
 import { type FeishuEventHandlers } from "./feishu/events.js";
 import { createFeishuMinutesApi, type FeishuMinutesApi } from "./feishu/minutes.js";
@@ -46,10 +46,10 @@ export type MeetingFollowThrough = {
   close(): void;
 };
 
-export function createMeetingFollowThrough({ pool, env, companyMemory, world, outcomeAgent, layering, impact, minutesApi, now = () => new Date() }: {
+export function createMeetingFollowThrough({ pool, env, peopleDirectory, world, outcomeAgent, layering, impact, minutesApi, now = () => new Date() }: {
   pool: Pool;
   env: MeetingFollowThroughEnv;
-  companyMemory: CompanyMemoryRepository;
+  peopleDirectory: PeopleDirectory;
   world: WorldReader;
   outcomeAgent: PostMeetingAgent;
   /** 测试注入假实现；缺省用 heavy 模型（OUTCOME_MODEL / OUTCOME_THINKING 同一套配置）。 */
@@ -63,14 +63,14 @@ export function createMeetingFollowThrough({ pool, env, companyMemory, world, ou
   const agentOptions = { query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, ...model };
   const layeringAgent = layering ?? createDecisionLayeringAgent(agentOptions);
   const impactAgent = impact ?? createImpactAgent({ ...agentOptions, answerModelId: env.triageModel || env.lightModel });
-  const context = async () => meetingInterpretationContext(q, now(), personDisplayNames(companyMemory),
+  const context = async () => meetingInterpretationContext(q, now(), personDisplayNames(peopleDirectory),
     world.enabled ? await world.snapshot(2_000).catch(() => null) : null);
   setOutcomeContextProvider(pool, () => context());
   const notify = env.feishu ? feishuNotifier(q) : undefined;
   const worldSync = worldConfigured(env) && world.status().writes ? createDecisionWorldSync({ q, client: new WorldClient(q, env), publicOrigin: env.publicOrigin, now }) : undefined;
-  const decisions = createMeetingDecisionService({ pool, companyMemory, layering: layeringAgent, impact: impactAgent, context, notify, world: worldSync,
+  const decisions = createMeetingDecisionService({ pool, peopleDirectory, layering: layeringAgent, impact: impactAgent, context, notify, world: worldSync,
     impactMode: env.impactCardMode ?? "live", now });
-  const minutes = createMeetingMinutesService({ pool, companyMemory, outcomeAgent, secret: env.sessionSecret, now,
+  const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now,
     ...(env.feishu ? { feishu: { env: env.feishu, api: minutesApi ?? createFeishuMinutesApi() } } : {}) });
   const unsubscribe = onOutcomeReviewed(pool, (meetingId) => {
     enqueueDecisionSync(q, meetingId).catch((error) => console.warn(`meeting decisions sync enqueue failed: ${(error as Error).message}`));

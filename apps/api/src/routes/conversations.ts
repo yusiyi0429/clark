@@ -47,7 +47,7 @@ import { acceptIssueDraft, createIssueSuggest, declineIssueDraft, getIssueDraftV
 import { idParams, type AppInstance, type RouteContext, type SessionPerson } from "./shared.js";
 
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, deliveryAgent: RequestAgent): void {
-  const { pool, q, env, fail, requirePerson, requireCEO, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, conversationStallTimeoutMs, conversationHeartbeatMs, conversationCompaction, research } = ctx;
+  const { pool, q, env, fail, requirePerson, requireCEO, requestContext, runtime, peopleDirectory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, conversationStallTimeoutMs, conversationHeartbeatMs, conversationCompaction, research } = ctx;
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
   // 我的 Agent 按「人 × 页面」私有；任务卡 scope 始终复查对象成员及当前拍板权。
@@ -63,7 +63,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         objectRef: card.objectRef, payload: card.payload } };
     }
     return person.role === "ceo" || scope === "global" || scope.startsWith("mission-card:") || scope.startsWith("task:") || scope.startsWith("monthly-review-item:") || scope.startsWith("personal-review:")
-      ? getScopeObject(q, scope, env.sessionSecret, { person, people: companyMemory.searchPeople(undefined), now: ctx.now() })
+      ? getScopeObject(q, scope, env.sessionSecret, { person, people: peopleDirectory.searchPeople(undefined), now: ctx.now() })
       : { snapshot: null, visible: false };
   };
   const conversationScopeVisible = async (person: SessionPerson, scope: TConversationScope) =>
@@ -92,7 +92,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         const [objectType, objectId] = req.params.scope.split(":", 2);
         if (objectType !== "issue" && objectType !== "task" && objectType !== "meeting") return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在");
         try {
-          const names = personDisplayNames(companyMemory);
+          const names = personDisplayNames(peopleDirectory);
           const material = await getObjectMaterial(q, { objectType, objectId }, req.body.viewingMaterialId,
             { personId: owner, role: person.role, displayName: names.get(owner) ?? owner }, names);
           if (object.snapshot) Object.assign(object.snapshot, { viewingMaterial: {
@@ -249,7 +249,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         } };
         const memoryUsedJson = () => (memoryUsed.size ? JSON.stringify([...memoryUsed]) : null);
         // 本人手上没完成的待办，每轮带进上下文（条数少，只有标题、发起人、时间、类型）；读不到不影响这一轮。
-        const names = personDisplayNames(companyMemory);
+        const names = personDisplayNames(peopleDirectory);
         const openTodos = await openTodoContext(q, owner, names).catch(() => []);
         const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
           `SELECT role, content, created_at
@@ -347,7 +347,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         const steps = createStepTracker((step) => emit({ type: "step", ...step }));
         // 对话里的一句话入口（生成复盘、帮我问问、请同事帮忙）：步骤实时报给界面，结果卡随这一轮的运行记录存下、挂在回答后面。
         const cards: TConversationCard[] = [];
-        const directory = companyMemory.searchPeople(undefined).filter(isRealPerson).map(({ personId, displayName }) => ({ personId, displayName }));
+        const directory = peopleDirectory.searchPeople(undefined).filter(isRealPerson).map(({ personId, displayName }) => ({ personId, displayName }));
         const entries = createConversationEntries({
           pool, agent: deliveryAgent, secret: env.sessionSecret, viewer: { personId: owner, role: person.role },
           message: resume ? resume.question : req.body.message, names, people: directory, directory, now: ctx.now,
@@ -627,7 +627,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   );
 
   // 一号位深聊转议题（issueDrafts.ts）：建议卡读取、开议题 / 接到议题、不用。只有 CEO。
-  const names = () => personDisplayNames(companyMemory);
+  const names = () => personDisplayNames(peopleDirectory);
   app.get("/api/issue-drafts/:id", { preHandler: requireCEO, schema: { params: idParams, response: { 200: IssueDraftResponse } } }, async (req, reply) => {
     const view = await getIssueDraftView(q, req.person!.personId, req.params.id);
     return view ? { draft: view } : fail(reply, 404, "ISSUE_DRAFT_NOT_FOUND", "这条建议不存在");

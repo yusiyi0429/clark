@@ -18,9 +18,9 @@ const OBJECT_TYPES = new Set(["collection", "collection-round"]);
 export function registerCollectionRoutes(app: AppInstance, ctx: RouteContext): void {
   const secret = ctx.env.sessionSecret;
   const { agent, deps } = ctx.collections;
-  const people = (): TRequestPerson[] => ctx.companyMemory.searchPeople(undefined).filter(isRealPerson)
+  const people = (): TRequestPerson[] => ctx.peopleDirectory.searchPeople(undefined).filter(isRealPerson)
     .map((person) => ({ personId: person.personId, displayName: person.displayName }));
-  const viewDeps = (viewerId: string) => ({ viewerId, names: personDisplayNames(ctx.companyMemory), people: people(), secret });
+  const viewDeps = (viewerId: string) => ({ viewerId, names: personDisplayNames(ctx.peopleDirectory), people: people(), secret });
   const failed = (reply: Parameters<RouteContext["fail"]>[0], result: CollectionError) => ctx.fail(reply, result.error.status, result.error.code, result.error.message);
   const notFound = (reply: Parameters<RouteContext["fail"]>[0]) => ctx.fail(reply, 404, "COLLECTION_NOT_FOUND", "收集任务不存在或不可见");
 
@@ -59,7 +59,7 @@ export function registerCollectionRoutes(app: AppInstance, ctx: RouteContext): v
   });
 
   app.get("/api/me/schedules", { preHandler: ctx.requirePerson, schema: { response: { 200: ScheduleListResponse } } }, async (req) => {
-    const person = ctx.companyMemory.searchPeople(undefined).find((item) => item.personId === req.person!.personId);
+    const person = ctx.peopleDirectory.searchPeople(undefined).find((item) => item.personId === req.person!.personId);
     return { items: await listSchedules(ctx.q, { personId: req.person!.personId, isCeo: req.person!.role === "ceo", weeklyReviews: person ? canUseMemberView(person) : false },
       secret, ctx.now()) };
   });

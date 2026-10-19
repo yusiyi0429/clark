@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import type { TNotificationKind, TNotificationView } from "@warmap/contracts";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import type { Query } from "./meetingStore.js";
 import { personDisplayNames } from "./people.js";
 
@@ -81,7 +81,7 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
 }
 
 /** 我的通知：未读在前，最近 50 条。 */
-export async function listMyNotifications(q: Query, companyMemory: CompanyMemoryRepository, personId: string): Promise<TNotificationView[]> {
+export async function listMyNotifications(q: Query, peopleDirectory: PeopleDirectory, personId: string): Promise<TNotificationView[]> {
   const result = await q(
     `SELECT n.id::text, n.kind, n.object_type, n.object_id, n.item_id, n.actor_id, n.created_at, n.read_at,
             t.title AS task_title, t.return_reason, m.title AS meeting_title, i.title AS issue_title, i.assignments AS issue_assignments, r.title AS request_title, r.kind AS request_kind,
@@ -97,7 +97,7 @@ export async function listMyNotifications(q: Query, companyMemory: CompanyMemory
       LIMIT 50`,
     [personId],
   );
-  const names = personDisplayNames(companyMemory);
+  const names = personDisplayNames(peopleDirectory);
   return (result.rows as NotificationRow[]).map((row) => ({
     id: row.id,
     kind: row.kind,
