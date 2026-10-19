@@ -1,0 +1,28 @@
+# 本地准生产 override：叠加在 infra/docker-compose.yml 之上，web/api/edge 与线上同一 Dockerfile、同一 Caddyfile。
+# tls 服务替代火山宿主机 Nginx（mkcert 证书，参数同 infra/host-nginx/tk.tokenkingos.com.conf）；公众号 sidecar 用 profile 关掉。
+# 用法见 infra/local/README.md（up.sh / down.sh 已带好全部 -f 与 --env-file）。
+name: warmap-local
+
+services:
+  wechat:
+    profiles: ["wechat"]
+
+  api:
+    environment:
+      COMPANY_PEOPLE_SEED: ${COMPANY_PEOPLE_SEED:-/repo/seed/company-people.example.json}
+    depends_on:
+      wechat:
+        condition: service_started
+        required: false
+
+  tls:
+    restart: unless-stopped
+    mem_limit: 64m
+    image: nginx:stable
+    ports:
+      - "127.0.0.1:${LOCAL_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./local/nginx/tk.local.test.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./local/certs:/etc/nginx/certs:ro
+    depends_on:
+      - edge

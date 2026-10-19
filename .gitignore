@@ -46,3 +46,7 @@ apps/web-manual-preview/
 # M2 private trial state and imported plans
 **/.runtime/
 seed/m2/
+
+# 本地准生产（infra/local）：真实 env 与 mkcert 证书只留本机
+!infra/local/.env.local.example
+infra/local/certs/
