@@ -1,0 +1,7 @@
+[
+  {"name": "05-主持人会议页-处理后", "login": "lin", "path": "/me/meetings/b96f38b3-4fb3-4925-86f5-9cdca35fe335", "script": "document.querySelector('[data-outline=decisions]')?.scrollIntoView({block:'start'});"},
+  {"name": "06-受影响的人首页-会后影响", "login": "chen", "path": "/me"},
+  {"name": "07-影响卡-主持人确认", "login": "chen", "path": "/me/requests/6e5d02a7-38cd-45ad-9463-673566c0c410", "script": "document.querySelector('details')?.setAttribute('open','');"},
+  {"name": "08-影响卡-Agent代判", "login": "chen", "path": "/me/requests/676d7b69-9f25-4e15-835d-3b0f22f4401a"},
+  {"name": "11-CEO会议页-战略项", "login": "zhou", "path": "/meetings/b96f38b3-4fb3-4925-86f5-9cdca35fe335", "script": "document.querySelector('[data-outline=decisions]')?.scrollIntoView({block:'start'});"}
+]
