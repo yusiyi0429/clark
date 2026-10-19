@@ -7,7 +7,7 @@ import { impactNotices, requestNotices } from "../requests/RequestNotices";
 const decision = (overrides: Partial<TMeetingDecisionView> = {}): TMeetingDecisionView => ({
   id: "d1", meetingId: "m1", tier: "host", ordinal: 1, statement: "接口统一改成 v2，月底前切换", originalStatement: "接口统一改成 v2，月底前切换",
   quote: "接口统一改成 v2", speakerName: "林晓", recommendation: "confirmed", why: null, status: "pending", revision: 0,
-  reviewerName: null, reviewedAt: null, dueAt: "2026-10-21T08:00:00.000Z", canReview: true, ...overrides,
+  reviewerName: null, reviewedAt: null, dueAt: "2026-10-21T08:00:00.000Z", canReview: true, anchors: [], world: null, ...overrides,
 });
 
 describe("会上定了：通知栏置顶", () => {
@@ -29,10 +29,19 @@ describe("会上定了：通知栏置顶", () => {
     expect(navigate).toHaveBeenCalledWith("/me/meetings/m1", null);
   });
 
-  it("状态标：代判写明「Agent 代判，Host 尚未确认」，战略项写 CEO", () => {
-    expect(decisionStatusLabel({ status: "agent_judged", tier: "host" })).toBe("Agent 代判，Host 尚未确认");
-    expect(decisionStatusLabel({ status: "pending", tier: "strategic" })).toBe("待 CEO 确认");
-    expect(decisionStatusLabel({ status: "rejected", tier: "strategic" })).toBe("CEO 不同意");
+  it("状态标：代判分「定了」「没定」，战略项写 CEO", () => {
+    expect(decisionStatusLabel({ status: "agent_judged", tier: "host", recommendation: "confirmed" })).toBe("Agent 代判 · 定了");
+    expect(decisionStatusLabel({ status: "agent_judged", tier: "host", recommendation: "not_decided" })).toBe("Agent 代判 · 没定");
+    expect(decisionStatusLabel({ status: "pending", tier: "strategic", recommendation: "confirmed" })).toBe("待 CEO 确认");
+    expect(decisionStatusLabel({ status: "rejected", tier: "strategic", recommendation: "confirmed" })).toBe("CEO 不同意");
+  });
+
+  it("代判过、主持人还没点的留在置顶里，写明代判成了什么", () => {
+    const groups: TMyMeetingDecisionGroup[] = [{ meetingId: "m1", meetingTitle: "co-agent 交互评审", scheduledAt: "2026-10-20T06:00:00.000Z", dueAt: null,
+      decisions: [decision({ status: "agent_judged" }), decision({ id: "d2", status: "agent_judged", recommendation: "not_decided" })] }];
+    const notices = hostDecisionNotices(groups, "/me/meetings", vi.fn(), vi.fn(async () => ({ ok: true as const })));
+    expect(notices.map((notice) => notice.detail)).toEqual(["co-agent 交互评审 · Agent 代判 · 定了", "co-agent 交互评审 · Agent 代判 · 没定"]);
+    expect(notices[0].buttons.map((button) => button.label)).toEqual(["对", "其实没定"]);
   });
 });
 

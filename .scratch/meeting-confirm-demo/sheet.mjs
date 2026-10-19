@@ -4,8 +4,8 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-const [width, outFile] = process.argv.slice(2);
-const dir = resolve("shots");
+const [width, outFile, shotsDir = "shots", heading = "会后确认"] = process.argv.slice(2);
+const dir = resolve(shotsDir);
 const files = readdirSync(dir).filter((f) => f.endsWith(`-${width}.png`)).sort();
 const mobile = Number(width) < 768;
 const cols = mobile ? 5 : 2;
@@ -14,7 +14,7 @@ body{margin:0;padding:32px;background:#eef0f4;font:15px "Microsoft YaHei",sans-s
 h1{font-size:22px;margin:0 0 20px} .g{display:grid;grid-template-columns:repeat(${cols},1fr);gap:24px}
 figure{margin:0;background:#fff;border-radius:12px;padding:12px;box-shadow:0 1px 3px #0002}
 figcaption{font-weight:600;margin:0 0 8px} img{width:100%;border-radius:8px;display:block;border:1px solid #dde}
-</style><h1>会后确认 · ${width} 宽 · 演示环境（脱敏样例「co-agent 交互评审」）</h1><div class="g">${files.map((f) =>
+</style><h1>${heading} · ${width} 宽 · 演示环境（脱敏样例「co-agent 交互评审」）</h1><div class="g">${files.map((f) =>
   `<figure><figcaption>${f.replace(`-${width}.png`, "").replace(/^(\d+)-/, "$1 · ").replace(/-/g, " · ")}</figcaption><img src="data:image/png;base64,${readFileSync(join(dir, f)).toString("base64")}"></figure>`).join("")}</div>`;
 const page = join(tmpdir(), `sheet-${width}.html`);
 writeFileSync(page, html);

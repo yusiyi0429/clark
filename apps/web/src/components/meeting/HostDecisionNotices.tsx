@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 通知栏置顶「会上定了」：我主持的会里还没确认的几条（每场最多 5 条）。参照飞书审批卡：在卡上直接办——
+ * 通知栏置顶「会上定了」：我主持的会里还没确认的几条（每场最多 5 条），和 Agent 代判了、我还没点过的。参照飞书审批卡：在卡上直接办——
  * 「对」「其实没定」一点就办，「改一下」展开填写区、从原说法改起。办完原位写一行回执再淡出（ActionNoticeCard）。
  */
 import { useCallback, useEffect, useState } from "react";
@@ -10,7 +10,7 @@ import { browserApi } from "@/lib/api/client";
 import { monthDayTime } from "@/lib/companyTime";
 import { ActionNoticeCard, type ActionNotice } from "@/components/ActionNoticeCard";
 import type { NoticeOutcome } from "@/components/NoticeActions";
-import { MEETING_DECISIONS_CHANGED, reviewMeetingDecision } from "./meetingDecisionApi";
+import { MEETING_DECISIONS_CHANGED, decisionStatusLabel, reviewMeetingDecision } from "./meetingDecisionApi";
 
 type Navigate = (href: string, origin?: Element | null) => void;
 
@@ -19,7 +19,9 @@ export function hostDecisionNotices(groups: TMyMeetingDecisionGroup[], meetingBa
   return groups.flatMap((group) => group.decisions.map<ActionNotice>((decision) => ({
     id: decision.id,
     title: decision.statement,
-    detail: [group.meetingTitle, decision.dueAt ? `${monthDayTime(decision.dueAt)} 前` : null, decision.recommendation === "not_decided" ? "Agent 判断没定" : null].filter(Boolean).join(" · "),
+    // 代判过的留在这里直到主持人点过：写明代判成了什么；待确认的写截止时间。
+    detail: (decision.status === "agent_judged" ? [group.meetingTitle, decisionStatusLabel(decision)]
+      : [group.meetingTitle, decision.dueAt ? `${monthDayTime(decision.dueAt)} 前` : null, decision.recommendation === "not_decided" ? "Agent 判断没定" : null]).filter(Boolean).join(" · "),
     tone: "amber",
     onOpen: (from) => onNavigate(`${meetingBase}/${group.meetingId}`, from),
     buttons: [

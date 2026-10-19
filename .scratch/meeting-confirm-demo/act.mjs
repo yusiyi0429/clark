@@ -1,5 +1,7 @@
 // 演示推进：以某人身份调接口。node act.mjs <步骤>
-const ORIGIN = "http://localhost:3828", API = "http://127.0.0.1:4828", M = "b96f38b3-4fb3-4925-86f5-9cdca35fe335";
+const ORIGIN = "http://localhost:3828", API = "http://127.0.0.1:4828";
+// 这场会的 id 从演示服务的控制口取（每次启动重建库，id 会变）。
+const M = (await (await fetch("http://127.0.0.1:4829/")).json()).meetingId;
 const cookies = {};
 async function as(login) {
   if (!cookies[login]) {

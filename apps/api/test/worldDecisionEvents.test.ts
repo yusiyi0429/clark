@@ -20,7 +20,7 @@ function input(overrides: Partial<DecisionEventInput> = {}): DecisionEventInput 
     decision: { id: "d1d1d1d1-0000-4000-8000-000000000001", revision: 0, statement: "接口统一改成 v2，月底前切换", decidedBy: "agent", quote: "接口统一改成 v2", speaker: "测试乙" },
     meeting: { id: "m1m1m1m1-0000-4000-8000-000000000001", title: "接口切换会", scheduledAt: new Date("2026-10-12T10:00:00+08:00"), leadDriId: "person-fixture-002" },
     targets: [{ type: "task", id: TASK }],
-    supersedesEventId: null, correctionNote: null, withdrawn: false,
+    supersedesEventId: null, correctionNote: null, withdrawn: false, meetingEventId: null, fallback: null,
     ...overrides,
   };
 }
@@ -40,7 +40,7 @@ describe("会后决定写本体（方案 A）", () => {
         throw new Error(`unexpected ${call.url.pathname}`);
       });
       const sync = createDecisionWorldSync({ q, client, publicOrigin: "https://tianshu.test/", now: () => new Date("2026-10-13T09:00:00+08:00") });
-      expect(await sync.record(input())).toEqual({ status: "committed", eventId: "ev-1" });
+      expect(await sync.record(input())).toEqual({ status: "committed", eventId: "ev-1", fallback: false });
       const first = calls.filter((call) => call.url.pathname === "/v1/actions").at(-1)!.body;
       expect(first).toMatchObject({
         action_type: "world_record_event", contract_version: "tkos.world/0.3", target: null,
@@ -59,7 +59,7 @@ describe("会后决定写本体（方案 A）", () => {
 
       const corrected = await sync.record(input({ decision: { ...input().decision, revision: 1, decidedBy: "host", statement: "接口统一改成 v2，下月 15 日前切换" },
         supersedesEventId: "ev-1", correctionNote: "测试乙把「接口统一改成 v2，月底前切换」改为「接口统一改成 v2，下月 15 日前切换」" }));
-      expect(corrected).toEqual({ status: "committed", eventId: "ev-2" });
+      expect(corrected).toEqual({ status: "committed", eventId: "ev-2", fallback: false });
       const second = calls.filter((call) => call.url.pathname === "/v1/actions").at(-1)!.body;
       expect(second.params).toMatchObject({ category: "correction", supersedes_event_id: "ev-1" });
       expect(second.params.content.text.split("\n").slice(0, 3)).toEqual(["Host 已确认", "会上定了：接口统一改成 v2，下月 15 日前切换",
@@ -93,10 +93,38 @@ describe("会后决定写本体（方案 A）", () => {
         throw new Error(`unexpected ${call.url.pathname}`);
       });
       const sync = createDecisionWorldSync({ q: (sql, params) => db.pool.query(sql, params), client, publicOrigin: "https://tianshu.test", now: () => new Date("2026-10-13T09:00:00+08:00") });
-      expect(await sync.record(input({ targets: [], decision: { ...input().decision, decidedBy: "host" } }))).toEqual({ status: "committed", eventId: "ev-eo" });
+      expect(await sync.record(input({ targets: [], decision: { ...input().decision, decidedBy: "host" } }))).toEqual({ status: "committed", eventId: "ev-eo", fallback: false });
       const body = calls.filter((call) => call.url.pathname === "/v1/actions").at(-1)!.body;
       expect(body.params.subject_refs).toEqual(["<unit:eo>@2"]);
       expect(body.params.content.text.split("\n")[0]).toBe("Host 已确认");
+    });
+  });
+
+  it("有会议事件时指回它；受影响的对象对不上时挂到会议的挂点上；撤回另起幂等键", async () => {
+    await withWorld(async (client, db) => {
+      let events = 0;
+      const calls = stubWorld((call) => {
+        if (call.url.pathname === "/v1/world/objects") return { items: [], next_cursor: null };
+        if (call.url.pathname.startsWith("/v1/world/objects/")) return projection(examples[1][0].items[0]);
+        if (call.url.pathname === "/v1/actions/prepare") return { expected_versions: [] };
+        if (call.url.pathname === "/v1/actions") return { receipt_id: `r${++events}`, status: "committed", result: { event_id: `ev-${events}` } };
+        throw new Error(`unexpected ${call.url.pathname}`);
+      });
+      const sync = createDecisionWorldSync({ q: (sql, params) => db.pool.query(sql, params), client, publicOrigin: "https://tianshu.test", now: () => new Date("2026-10-13T09:00:00+08:00") });
+      const fallback = { refs: ["<unit:eo>@2"], sceneId: "<unit:eo>" };
+      expect(await sync.record(input({ targets: [], meetingEventId: "ev-meeting", fallback }))).toEqual({ status: "committed", eventId: "ev-1", fallback: true });
+      const first = calls.filter((call) => call.url.pathname === "/v1/actions").at(-1)!.body;
+      expect(first.params.subject_refs).toEqual(["<unit:eo>@2"]);
+      expect(first.params.content.refs).toEqual(["event:ev-meeting"]);
+
+      // 会议标了不写进本体：同一版记一条撤回，幂等键加后缀，不重放上一次的回执。
+      expect(await sync.record(input({ targets: [], fallback, supersedesEventId: "ev-1", withdrawn: true, withdrawnBy: "测试乙", variant: ":ev-1" })))
+        .toEqual({ status: "committed", eventId: "ev-2", fallback: true });
+      const withdrawal = calls.filter((call) => call.url.pathname === "/v1/actions").at(-1)!.body;
+      expect(withdrawal.idempotency_key).toBe("tianshu:meeting-decision:d1d1d1d1-0000-4000-8000-000000000001:0:ev-1");
+      expect(withdrawal.params).toMatchObject({ category: "correction", supersedes_event_id: "ev-1" });
+      expect(withdrawal.params.content.text.split("\n")[0]).toBe("撤回：测试乙标为不写进本体");
+      expect(withdrawal.params.content).not.toHaveProperty("refs");
     });
   });
 

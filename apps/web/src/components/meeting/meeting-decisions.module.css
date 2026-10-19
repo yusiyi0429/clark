@@ -12,9 +12,10 @@
 .status[data-tone='agent'] { background: #fff4de; color: #8a5a00; }
 .status[data-tone='done'] { background: #e9f7ef; color: #1c7a43; }
 .status[data-tone='off'] { background: #f3f4f6; color: #6b7280; }
+.status[data-tone='fail'] { background: #fde8ec; color: #be123c; }
 .hint { color: #8a5a00; font-size: 12px; }
 .statement { margin: 0; color: #111827; font-size: 15px; line-height: 1.7; font-weight: 500; overflow-wrap: anywhere; }
-.row[data-status='not_decided'] .statement, .row[data-status='rejected'] .statement { color: #6b7280; text-decoration: line-through; text-decoration-color: #c5cad3; }
+.row[data-off] .statement { color: #6b7280; text-decoration: line-through; text-decoration-color: #c5cad3; }
 .was { margin: 0; color: #6b7280; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .quote { margin: 0; color: #4f5866; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .quote span { color: #8a93a2; }
@@ -29,6 +30,44 @@
 .primary:focus-visible, .ghost:focus-visible, .link:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; }
 .edit { display: grid; gap: 8px; }
 .edit textarea { width: 100%; min-height: 64px; field-sizing: content; max-height: 200px; font-size: 15px; line-height: 1.6; }
+
+
+/* 落点（回流设计稿 2）：类型 名称 + 写入状态点；样子同影响卡的「落到」一排。 */
+.anchors { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.anchor { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; padding: 2px 10px 2px 8px; border: 1px solid #dfe3e8; border-radius: 12px; background: #fff; color: #4f5866; font-size: 13px; line-height: 20px; }
+.anchor svg { flex: none; }
+.anchorKind { flex: none; color: #8a93a2; }
+.anchorTitle { min-width: 0; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anchorDot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #b8bfca; }
+.anchor[data-tone='ok'] .anchorDot { background: #1c9a55; }
+.anchor[data-tone='miss'] .anchorDot { background: #e0a100; }
+.anchor[data-tone='fail'] .anchorDot { background: #be123c; }
+.anchor[data-tone='off'] { opacity: .55; }
+.anchor[data-tone='off'] .anchorTitle { text-decoration: line-through; }
+.anchorRemove { flex: none; margin-right: -4px; padding: 0 2px; border: 0; background: none; color: #8a93a2; font: inherit; font-size: 15px; line-height: 1; cursor: pointer; }
+.anchorEdit { min-height: 26px; padding: 0 10px; border: 1px dashed #b9c9e6; border-radius: 12px; background: transparent; color: #1f5fd6; font: inherit; font-size: 13px; cursor: pointer; }
+
+/* 头部一条：挂到 + 状态 + 不写进本体。 */
+.worldBar { display: grid; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: #f6f7f9; }
+.worldLine { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+.worldLabel { flex: none; color: #8a93a2; font-size: 12px; }
+.worldEnd { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.switchRow { display: inline-flex; align-items: center; gap: 8px; padding: 2px 0; border: 0; background: none; color: #4f5866; font: inherit; font-size: 13px; cursor: pointer; }
+.switchRow:disabled { opacity: .5; cursor: default; }
+.switchRow:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; border-radius: 6px; }
+.switch { position: relative; flex: none; width: 34px; height: 20px; border-radius: 999px; background: #cfd4dc; transition: background-color .15s ease; }
+.switch > span { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(16 24 40 / 20%); transition: transform .15s ease; }
+.switch[data-on='true'] { background: #4f5866; }
+.switch[data-on='true'] > span { transform: translateX(14px); }
+.picker { display: grid; gap: 8px; padding: 10px; border: 1px solid #e3e6eb; border-radius: 12px; background: #fff; }
+.picker input { height: 34px; padding: 0 10px; border: 1px solid #dfe3e8; border-radius: 10px; font: inherit; font-size: 14px; }
+.pickList { display: grid; gap: 2px; max-height: 240px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.pickOption { display: flex; width: 100%; padding: 4px; border: 1px solid transparent; border-radius: 10px; background: none; text-align: left; cursor: pointer; }
+.pickOption:hover { background: #f4f6fa; }
+.pickOption[aria-pressed='true'] { border-color: #9fb6e3; background: #eef3fd; }
+.spacer { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) { .switch, .switch > span { transition: none; } }
 
 @media (max-width: 759px) {
   .row { grid-template-columns: 20px minmax(0, 1fr); gap: 10px; }

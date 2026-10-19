@@ -1,6 +1,7 @@
 /**
  * 会后确认演示（给人豪看「主持人确认 → 影响卡 → 代判 → 更正卡」）：一次性库 → 迁移 → 账号 → Mission/Task → 一场会、逐字稿、分层。
- * 模型输出用脱敏样例 S001 在真实模型上跑出来的结果回放（replay-S001.json），确定、可复现；不连本体、不连飞书，什么都不往外写。
+ * 模型输出用脱敏样例 S001 在真实模型上跑出来的结果回放（replay-S001.json），确定、可复现；不连飞书，什么都不往外写。
+ * 本体换成本机 127.0.0.1:4830 的假本体（两个 Mission、Agents 单元、公司），写进来的事件只记在内存里，控制口 /events 能看；不连 world-02。
  * 后台任务（分层同步、往下推影响卡、提醒与代判）照常跑：在页面上点「对 / 改一下 / 其实没定」会真的推卡。
  * 另开 127.0.0.1:4829 的本机控制口，演示时把某条推到「满一个工作日没确认 → Agent 代判」：GET /judge?ordinal=2
  *   cd apps/api && node node_modules/tsx/dist/cli.mjs ../../.scratch/meeting-confirm-demo/server.mts
@@ -51,12 +52,13 @@ for (const [personId, loginId] of Object.entries(LOGINS)) {
 
 // 本月 Mission 与各人手上的 Task（脱敏样例）：影响卡要落到「哪个 Mission / 哪个 Task 的哪条验收」。
 const period = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 7);
-await pool.query("INSERT INTO capability_config(id,version,code,name,six_month_outcome) VALUES ('method',1,'01','方法','流程沉淀成可复用的方法') ON CONFLICT DO NOTHING");
+// 林晓负责 Agents 单元（会议对不上 Mission 时挂这里）。
+await pool.query("INSERT INTO capability_config(id,version,code,name,six_month_outcome,owner_id) VALUES ('agents',1,'07','Agents','co-agent 成为团队每天在用的工作方式','smoke-pm') ON CONFLICT DO NOTHING");
 const missionIds = new Map<string, string>();
 for (const person of candidates) for (const mission of person.missions) {
   missionIds.set(mission.code, mission.id);
   await pool.query(`INSERT INTO missions (id, version, code, period, title, owner_id, capability_id, battlefield_ids, outcome, milestones, source_ref, source_document_id, source_revision, source_title)
-    VALUES ($1, 1, $2, $3, $4, $5, 'method', '["growth"]', $6, '[]', 'demo://meeting-confirm', 'meeting-confirm-demo', 1, '会后确认演示')`,
+    VALUES ($1, 1, $2, $3, $4, $5, 'agents', '["growth"]', $6, '[]', 'demo://meeting-confirm', 'meeting-confirm-demo', 1, '会后确认演示')`,
   [mission.id, mission.code, period, mission.title, person.personId, mission.outcome]);
 }
 const taskIds = new Map<string, string>();
@@ -87,7 +89,44 @@ const impact: ImpactAgent = {
   },
 };
 
+// 假本体：按外部引用（tianshu）和类型列对象，prepare / commit 一律成功，事件记在内存里。
+const WORLD_PORT = 4830;
+const head = (id: string, type: string, title: string, ref?: string) => ({ object_id: id, object_type: type, title, revision_id: `${id}-r3`, object_version: 3, version: 3,
+  domain_id: "demo", external_refs: ref ? [{ system: "tianshu", id: ref }] : [], lifecycle: { status: "active" }, contract_version: "tkos.world/0.3" });
+const worldObjects = [
+  head("w-mission-pm", "Mission", "Co-agent 第一版交互定稿", "mission:pm-202610"),
+  head("w-mission-pilot", "Mission", "B 端试点上线", "mission:pilot-202610"),
+  head("w-unit-agents", "ResponsibilityUnit", "Agents", "capability:07"),
+  head("w-company", "Company", "词元云集"),
+];
+const worldEvents: unknown[] = [];
+createServer(async (req, res) => {
+  const url = new URL(req.url ?? "/", `http://127.0.0.1:${WORLD_PORT}`);
+  const send = (status: number, body: unknown) => res.writeHead(status, { "content-type": "application/json; charset=utf-8" }).end(JSON.stringify(body));
+  let raw = "";
+  for await (const chunk of req) raw += chunk;
+  if (url.pathname === "/v1/health") return send(200, { ok: true });
+  if (url.pathname === "/v1/world/objects") {
+    const ext = url.searchParams.get("external_id"), type = url.searchParams.get("type");
+    return send(200, { items: worldObjects.filter((o) => (ext ? o.external_refs.some((r) => r.id === ext) : true) && (type ? o.object_type === type : true) && (ext || type)), next_cursor: null });
+  }
+  const one = url.pathname.match(/^\/v1\/world\/objects\/([^/]+)$/);
+  if (one) {
+    const found = worldObjects.find((o) => o.object_id === decodeURIComponent(one[1]));
+    return found ? send(200, { business: { ...found, attributes: { external_refs: found.external_refs }, blocks: [] }, records: { lifecycle: found.lifecycle }, protocol: { contract_version: found.contract_version } })
+      : send(404, { error: { code: "NOT_FOUND", message: "no object" } });
+  }
+  if (url.pathname === "/v1/actions/prepare") return send(200, { expected_versions: [] });
+  if (url.pathname === "/v1/actions") {
+    const body = JSON.parse(raw);
+    worldEvents.push({ at: new Date().toISOString(), idempotency_key: body.idempotency_key, ...body.params });
+    return send(200, { receipt_id: `r${worldEvents.length}`, status: "committed", result: { event_id: `ev-${worldEvents.length}` } });
+  }
+  return send(404, { error: { code: "NOT_FOUND", message: url.pathname } });
+}).listen(WORLD_PORT, "127.0.0.1");
+
 const env: AppEnv = {
+  worldApiUrl: `http://127.0.0.1:${WORLD_PORT}`, worldAgentToken: "demo-stub-world-token",
   sessionSecret: "meeting-confirm-demo-session", sessionMaxAgeSeconds: 60 * 60 * 12, publicOrigin: ORIGIN, extraOrigins: ["http://127.0.0.1:3828"],
   driServiceToken: "meeting-confirm-demo-dri", mcpServiceToken: "meeting-confirm-demo-mcp",
   companyMemorySeedDir: fileURLToPath(new URL("../../apps/api/test/fixtures/company-memory", import.meta.url)),
@@ -148,6 +187,10 @@ worker.start();
 createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://127.0.0.1:${CONTROL_PORT}`);
   try {
+    if (url.pathname === "/events") {
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" }).end(JSON.stringify(worldEvents, null, 2));
+      return;
+    }
     if (url.pathname === "/judge") {
       const ordinal = Number(url.searchParams.get("ordinal"));
       await pool.query("UPDATE meeting_decisions SET due_at = now() - interval '1 minute' WHERE meeting_id = $1 AND tier = 'host' AND ordinal = $2 AND status = 'pending'", [meetingId, ordinal]);

@@ -15,6 +15,7 @@ import { onOutcomeReviewed, setOutcomeContextProvider, type PostMeetingAgent } f
 import { personDisplayNames } from "./people.js";
 import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
 import { createDecisionWorldSync } from "./worldDecisionEvents.js";
+import { createMeetingEventWorld } from "./worldMeetingEvent.js";
 import type { WorldReader } from "./worldReader.js";
 
 /**
@@ -67,9 +68,12 @@ export function createMeetingFollowThrough({ pool, env, peopleDirectory, world, 
     world.enabled ? await world.snapshot(2_000).catch(() => null) : null);
   setOutcomeContextProvider(pool, () => context());
   const notify = env.feishu ? feishuNotifier(q) : undefined;
-  const worldSync = worldConfigured(env) && world.status().writes ? createDecisionWorldSync({ q, client: new WorldClient(q, env), publicOrigin: env.publicOrigin, now }) : undefined;
+  // 本体可写时：一条决定一条事件，一场会一条会议事件（挂点、摘要、会上定了）。
+  const worldClient = worldConfigured(env) && world.status().writes ? new WorldClient(q, env) : undefined;
+  const worldSync = worldClient ? createDecisionWorldSync({ q, client: worldClient, publicOrigin: env.publicOrigin, now }) : undefined;
+  const meetingWorld = worldClient ? createMeetingEventWorld({ q, client: worldClient, publicOrigin: env.publicOrigin, now }) : undefined;
   const decisions = createMeetingDecisionService({ pool, peopleDirectory, layering: layeringAgent, impact: impactAgent, context, notify, world: worldSync,
-    impactMode: env.impactCardMode ?? "live", now });
+    meetingWorld, impactMode: env.impactCardMode ?? "live", now });
   const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now,
     ...(env.feishu ? { feishu: { env: env.feishu, api: minutesApi ?? createFeishuMinutesApi() } } : {}) });
   const unsubscribe = onOutcomeReviewed(pool, (meetingId) => {

@@ -46,8 +46,10 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
     ...(attended ? {
       // 原文只在已有逐字稿时带上（会前没有这一格）。
       ...(payload.transcript ? { transcript: payload.transcript } : {}),
-      // 主持人确认 host 条目；战略项给 CEO，这里只看不点。
-      decisions: (payload.decisions ?? []).map((decision) => ({ ...decision, canReview: isHost && decision.tier === "host" })),
+      // 主持人确认 host 条目；战略项给 CEO，这里只看不点。落点人人可见，写入状态只给主持人。
+      decisions: (payload.decisions ?? []).map((decision) => ({ ...decision, canReview: isHost && decision.tier === "host", world: isHost ? decision.world : null })),
+      // 主持人能改挂点、开关不写进本体。
+      ...(payload.world ? { world: { ...payload.world, canEdit: isHost, status: isHost ? payload.world.status : null, at: isHost ? payload.world.at : null } } : {}),
     } : {}),
   },
     actions: isHost ? card.actions.filter((action) => ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate"].includes(action.actionType)) : [],

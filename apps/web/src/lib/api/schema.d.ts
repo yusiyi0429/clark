@@ -1196,6 +1196,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meetings/{id}/world-excluded": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 主持人或 CEO 把会议标成不写进本体（或取消）；已经写进去的在本体里记撤回更正 */
+        put: operations["setMeetingWorldExcluded"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/world-anchors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 主持人或 CEO 改会议挂到的 Mission、责任单元；null 回到自动 */
+        put: operations["setMeetingWorldAnchors"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/world-anchor-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 改挂点时可选的对象：本月 Mission 和责任单元 */
+        get: operations["listMeetingWorldAnchorOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/radar": {
         parameters: {
             query?: never;
@@ -9932,6 +9983,12 @@ export interface components {
             reviewedAt: string | null;
             dueAt: string | null;
             canReview: boolean;
+            anchors: {
+                kind: "mission" | "task" | "unit" | "company";
+                id: string;
+                title: string;
+            }[];
+            world: ("waiting" | "committed" | "fallback" | "skipped" | "failed" | "off") | null;
         };
         MeetingDecisionReviewRequest: {
             verdict: "confirmed" | "edited" | "not_decided";
@@ -9955,6 +10012,12 @@ export interface components {
                 reviewedAt: string | null;
                 dueAt: string | null;
                 canReview: boolean;
+                anchors: {
+                    kind: "mission" | "task" | "unit" | "company";
+                    id: string;
+                    title: string;
+                }[];
+                world: ("waiting" | "committed" | "fallback" | "skipped" | "failed" | "off") | null;
             };
         };
         MyMeetingDecisionsResponse: {
@@ -9980,7 +10043,44 @@ export interface components {
                     reviewedAt: string | null;
                     dueAt: string | null;
                     canReview: boolean;
+                    anchors: {
+                        kind: "mission" | "task" | "unit" | "company";
+                        id: string;
+                        title: string;
+                    }[];
+                    world: ("waiting" | "committed" | "fallback" | "skipped" | "failed" | "off") | null;
                 }[];
+            }[];
+        };
+        MeetingWorldResponse: {
+            world: {
+                excluded: boolean;
+                excludedBy: string | null;
+                status: ("none" | "committed" | "withdrawn" | "skipped" | "failed") | null;
+                at: string | null;
+                anchors: {
+                    kind: "mission" | "task" | "unit" | "company";
+                    id: string;
+                    title: string;
+                }[];
+                edited: boolean;
+                canEdit: boolean;
+            };
+        };
+        MeetingWorldExcludedRequest: {
+            excluded: boolean;
+        };
+        MeetingWorldAnchorsRequest: {
+            anchors: {
+                kind: "mission" | "unit";
+                id: string;
+            }[] | null;
+        };
+        MeetingWorldAnchorOptionsResponse: {
+            options: {
+                kind: "mission" | "task" | "unit" | "company";
+                id: string;
+                title: string;
             }[];
         };
         ImpactCardView: {
@@ -14089,6 +14189,152 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    setMeetingWorldExcluded: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingWorldExcludedRequest"];
+            };
+        };
+        responses: {
+            /** @description 这场会在本体里的最新状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingWorldResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    setMeetingWorldAnchors: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingWorldAnchorsRequest"];
+            };
+        };
+        responses: {
+            /** @description 这场会在本体里的最新状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingWorldResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMeetingWorldAnchorOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 可选的挂点 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingWorldAnchorOptionsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

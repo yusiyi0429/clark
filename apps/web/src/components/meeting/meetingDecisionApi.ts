@@ -1,4 +1,4 @@
-import type { TMeetingDecisionView, TMeetingDecisionVerdict } from "@warmap/contracts";
+import type { TMeetingDecisionView, TMeetingDecisionVerdict, TMeetingWorldView, TWorldAnchor } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
 /** 会后「会上定了」：主持人确认之后，通知栏和会议页互相提醒重读。 */
@@ -17,11 +17,33 @@ export async function reviewMeetingDecision(meetingId: string, decisionId: strin
   return data.decision;
 }
 
-export const decisionStatusLabel = (decision: Pick<TMeetingDecisionView, "status" | "tier">): string => ({
+/** 代判拆成两种：定了（已往下推）、没定（什么都没推）。 */
+export const decisionStatusLabel = (decision: Pick<TMeetingDecisionView, "status" | "tier" | "recommendation">): string => ({
   pending: decision.tier === "strategic" ? "待 CEO 确认" : "待确认",
   confirmed: decision.tier === "strategic" ? "CEO 已确认" : "已确认",
   edited: "已改",
   not_decided: "其实没定",
   rejected: "CEO 不同意",
-  agent_judged: "Agent 代判，Host 尚未确认",
+  agent_judged: decision.recommendation === "confirmed" ? "Agent 代判 · 定了" : "Agent 代判 · 没定",
 }[decision.status]);
+
+async function settleWorld(promise: Promise<{ data?: { world: TMeetingWorldView }; error?: unknown; response: Response }>): Promise<TMeetingWorldView> {
+  const { data, error, response } = await promise;
+  if (response.status === 401) { window.location.assign("/access"); throw new Error("登录已过期"); }
+  if (!response.ok || !data) throw new Error((error as { message?: string } | undefined)?.message ?? "没有成功，请重试");
+  return data.world;
+}
+
+/** 会议入本体：标不写进本体（或取消）。 */
+export const setMeetingWorldExcluded = (meetingId: string, excluded: boolean) =>
+  settleWorld(browserApi.PUT("/api/meetings/{id}/world-excluded", { params: { path: { id: meetingId } }, body: { excluded } }));
+
+/** 会议入本体：改挂点；null 回到自动。 */
+export const setMeetingWorldAnchors = (meetingId: string, anchors: { kind: "mission" | "unit"; id: string }[] | null) =>
+  settleWorld(browserApi.PUT("/api/meetings/{id}/world-anchors", { params: { path: { id: meetingId } }, body: { anchors } }));
+
+export async function listMeetingWorldAnchorOptions(meetingId: string): Promise<TWorldAnchor[]> {
+  const { data, response } = await browserApi.GET("/api/meetings/{id}/world-anchor-options", { params: { path: { id: meetingId } } });
+  if (!response.ok || !data) throw new Error("没有读到可选的对象");
+  return data.options;
+}

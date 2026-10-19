@@ -1,7 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import {
   ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingDecisionResponse, MeetingDecisionReviewRequest,
-  MyMeetingDecisionsResponse,
+  MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldExcludedRequest, MeetingWorldResponse, MyMeetingDecisionsResponse,
 } from "@warmap/contracts";
 import { askImpactCard, markImpactCardIrrelevant, readImpactCardByRequest } from "../impactCards.js";
 import type { MeetingFollowThrough } from "../meetingFollowThrough.js";
@@ -21,6 +21,30 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
   }, async (req, reply) => {
     ctx.requestContext.set(req, { actionType: "meeting_decision.review", objectRef: `meeting_decision:${req.params.decisionId}` });
     const result = await followThrough.decisions.review(req.params.id, req.params.decisionId, req.person!.personId, req.body);
+    return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
+  });
+
+  // 会议入本体：主持人和 CEO 标不写进本体、改挂点（别人一律 404）。
+  app.put("/api/meetings/:id/world-excluded", {
+    preHandler: ctx.requirePerson, schema: { params: idParams, body: MeetingWorldExcludedRequest, response: { 200: MeetingWorldResponse } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "meeting.world_excluded", objectRef: `meeting:${req.params.id}` });
+    const result = await followThrough.decisions.setExcluded(req.params.id, req.person!.personId, req.body.excluded);
+    return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
+  });
+
+  app.put("/api/meetings/:id/world-anchors", {
+    preHandler: ctx.requirePerson, schema: { params: idParams, body: MeetingWorldAnchorsRequest, response: { 200: MeetingWorldResponse } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "meeting.world_anchors", objectRef: `meeting:${req.params.id}` });
+    const result = await followThrough.decisions.setAnchors(req.params.id, req.person!.personId, req.body.anchors);
+    return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
+  });
+
+  app.get("/api/meetings/:id/world-anchor-options", {
+    preHandler: ctx.requirePerson, schema: { params: idParams, response: { 200: MeetingWorldAnchorOptionsResponse } },
+  }, async (req, reply) => {
+    const result = await followThrough.decisions.listAnchorOptions(req.params.id, req.person!.personId);
     return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
   });
 

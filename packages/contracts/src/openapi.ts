@@ -5,7 +5,7 @@ import {
   DraftRequestRequest, DraftRequestResponse, RequestListItem, RequestListResponse, PrepareRequestQuestionRequest,
   PrepareRequestQuestionResponse, DraftRequestAnswerResponse, RequestSendInput, RequestAskInput, RequestAnswerInput, ExecuteRequestActionRequest,
 } from "./requests.js";
-import { MeetingDecisionView, MeetingDecisionReviewRequest, MeetingDecisionResponse, MyMeetingDecisionsResponse } from "./meetingDecisions.js";
+import { MeetingDecisionView, MeetingDecisionReviewRequest, MeetingDecisionResponse, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldExcludedRequest, MeetingWorldResponse, MyMeetingDecisionsResponse } from "./meetingDecisions.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
@@ -855,6 +855,29 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }, { name: "decisionId", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/MeetingDecisionReviewRequest" }),
           responses: { "200": { description: "这条决定的最新状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingDecisionResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/world-excluded": {
+        put: {
+          operationId: "setMeetingWorldExcluded", summary: "主持人或 CEO 把会议标成不写进本体（或取消）；已经写进去的在本体里记撤回更正",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingWorldExcludedRequest" }),
+          responses: { "200": { description: "这场会在本体里的最新状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingWorldResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/world-anchors": {
+        put: {
+          operationId: "setMeetingWorldAnchors", summary: "主持人或 CEO 改会议挂到的 Mission、责任单元；null 回到自动",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingWorldAnchorsRequest" }),
+          responses: { "200": { description: "这场会在本体里的最新状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingWorldResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/world-anchor-options": {
+        get: {
+          operationId: "listMeetingWorldAnchorOptions", summary: "改挂点时可选的对象：本月 Mission 和责任单元",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "可选的挂点", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingWorldAnchorOptionsResponse" } } } }, "401": errorResponse, "404": errorResponse },
         },
       },
       "/api/cards/radar": {
@@ -2922,6 +2945,10 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeetingDecisionReviewRequest: MeetingDecisionReviewRequest as JsonSchema,
         MeetingDecisionResponse: MeetingDecisionResponse as JsonSchema,
         MyMeetingDecisionsResponse: MyMeetingDecisionsResponse as JsonSchema,
+        MeetingWorldResponse: MeetingWorldResponse as JsonSchema,
+        MeetingWorldExcludedRequest: MeetingWorldExcludedRequest as JsonSchema,
+        MeetingWorldAnchorsRequest: MeetingWorldAnchorsRequest as JsonSchema,
+        MeetingWorldAnchorOptionsResponse: MeetingWorldAnchorOptionsResponse as JsonSchema,
         ImpactCardView: ImpactCardView as JsonSchema,
         ImpactCardResponse: ImpactCardResponse as JsonSchema,
         ImpactAskRequest: ImpactAskRequest as JsonSchema,

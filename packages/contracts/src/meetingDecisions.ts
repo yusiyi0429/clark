@@ -27,6 +27,22 @@ export const MeetingDecisionStatus = Type.Union([
 ]);
 export const MeetingDecisionRecommendation = Type.Union([Type.Literal("confirmed"), Type.Literal("not_decided")]);
 
+/**
+ * 落点：写进本体时挂到的对象（9 个对象里的 Mission / Task / 责任单元 / 公司）。id 是天枢里的 id（公司是 company）。
+ */
+export const WorldAnchorKind = Type.Union([Type.Literal("mission"), Type.Literal("task"), Type.Literal("unit"), Type.Literal("company")]);
+export const WorldAnchor = Type.Object(
+  { kind: WorldAnchorKind, id: Type.String({ minLength: 1 }), title: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+/**
+ * 一条决定写进本体的状态（只给主持人和 CEO）：waiting 等写，committed 已记，fallback 对不上受影响的对象、挂到了会议的挂点上，
+ * skipped 没写（本体里没有对应对象），failed 写入失败，off 这场会标了不写进本体。
+ */
+export const MeetingDecisionWorld = Type.Union([
+  Type.Literal("waiting"), Type.Literal("committed"), Type.Literal("fallback"), Type.Literal("skipped"), Type.Literal("failed"), Type.Literal("off"),
+]);
+
 export const MeetingDecisionView = Type.Object(
   {
     id: Type.String({ minLength: 1 }),
@@ -50,9 +66,52 @@ export const MeetingDecisionView = Type.Object(
     dueAt: Type.Union([Type.String(), Type.Null()]),
     /** 看的人能不能在这里确认（主持人确认 host 条目）。 */
     canReview: Type.Boolean(),
+    /** 生效的决定落到的对象（受影响的 Mission、Task；挂到会议挂点上时是会议的挂点）；没生效时为空。 */
+    anchors: Type.Array(WorldAnchor),
+    /** 写进本体的状态；没生效、或看的人不是主持人和 CEO 时为 null。 */
+    world: Type.Union([MeetingDecisionWorld, Type.Null()]),
   },
   { additionalProperties: false },
 );
+
+/**
+ * 这场会在本体里（会议事件）：挂点、是否不写进本体、写入状态。
+ * status：none 还没写 / committed 已记 / withdrawn 已撤回（标了不写进本体）/ skipped 没写 / failed 写入失败；只给主持人和 CEO，其他人为 null。
+ */
+export const MeetingWorldStatus = Type.Union([
+  Type.Literal("none"), Type.Literal("committed"), Type.Literal("withdrawn"), Type.Literal("skipped"), Type.Literal("failed"),
+]);
+export const MeetingWorldView = Type.Object(
+  {
+    excluded: Type.Boolean(),
+    /** 谁标的不写进本体（名字）。 */
+    excludedBy: Type.Union([Type.String(), Type.Null()]),
+    status: Type.Union([MeetingWorldStatus, Type.Null()]),
+    /** 最近一次写进本体的时刻。 */
+    at: Type.Union([Type.String(), Type.Null()]),
+    /** 已写入时是写进去的挂点，否则是现在会挂的。 */
+    anchors: Type.Array(WorldAnchor),
+    /** 主持人或 CEO 改过挂点。 */
+    edited: Type.Boolean(),
+    /** 看的人能不能改挂点、开关不写进本体（主持人和 CEO）。 */
+    canEdit: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+export const MeetingWorldResponse = Type.Object({ world: MeetingWorldView }, { additionalProperties: false });
+export const MeetingWorldExcludedRequest = Type.Object({ excluded: Type.Boolean() }, { additionalProperties: false });
+/** 改挂点：只能挑 Mission 和责任单元；null 回到自动（决定影响到的 Mission，都没有挂主持人的单元）。 */
+export const MeetingWorldAnchorsRequest = Type.Object(
+  {
+    anchors: Type.Union([
+      Type.Array(Type.Object({ kind: Type.Union([Type.Literal("mission"), Type.Literal("unit")]), id: Type.String({ minLength: 1, maxLength: 200 }) },
+        { additionalProperties: false }), { minItems: 1, maxItems: 10 }),
+      Type.Null(),
+    ]),
+  },
+  { additionalProperties: false },
+);
+export const MeetingWorldAnchorOptionsResponse = Type.Object({ options: Type.Array(WorldAnchor) }, { additionalProperties: false });
 
 export const MeetingDecisionVerdict = Type.Union([Type.Literal("confirmed"), Type.Literal("edited"), Type.Literal("not_decided")]);
 export const MeetingDecisionReviewRequest = Type.Object(
@@ -89,3 +148,9 @@ export type TMeetingDecisionReviewRequest = Static<typeof MeetingDecisionReviewR
 export type TMeetingDecisionResponse = Static<typeof MeetingDecisionResponse>;
 export type TMyMeetingDecisionGroup = Static<typeof MyMeetingDecisionGroup>;
 export type TMyMeetingDecisionsResponse = Static<typeof MyMeetingDecisionsResponse>;
+export type TWorldAnchor = Static<typeof WorldAnchor>;
+export type TMeetingDecisionWorld = Static<typeof MeetingDecisionWorld>;
+export type TMeetingWorldStatus = Static<typeof MeetingWorldStatus>;
+export type TMeetingWorldView = Static<typeof MeetingWorldView>;
+export type TMeetingWorldResponse = Static<typeof MeetingWorldResponse>;
+export type TMeetingWorldAnchorsRequest = Static<typeof MeetingWorldAnchorsRequest>;
