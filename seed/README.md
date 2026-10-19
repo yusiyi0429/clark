@@ -4,7 +4,7 @@ API 启动和人工导入读取的受控文件。Compose 部署时整个 `seed/`
 
 | 路径 | 用途 | 对应变量或命令 |
 | --- | --- | --- |
-| `memory/CompanyMemory.md` | CompanyMemory 的唯一内容来源：`## 标题` 切章、空行切段，`<Content>` 包装行与标题前前言自动忽略。缺失、空目录或没有 `## ` 章节时 API 启动失败 | `COMPANY_MEMORY_SEED_DIR`（本地 `../../seed/memory`，Compose 固定 `/repo/seed/memory`） |
+| `memory/CompanyMemory.md` | 旧企业知识。API 不再加载，也不作为任何公司事实来源（公司事实只认本体，ADR-0027）；只作为 Company 投影该覆盖哪些目录的参考 | 无 |
 | `company-people.example.json` | `company-people.v1` 人员名单示例，**只用于本地联调** | `COMPANY_PEOPLE_SEED` |
 | `company-people.json` | 生产真实名单，由项目授权人放在部署机，不进 Git | Compose 固定 `/repo/seed/company-people.json` |
 | `placeholders/` | 本月个人卡讨论候选（`mission-card-drafts.v1`） | `MISSION_CARD_DRAFTS_DIR` |

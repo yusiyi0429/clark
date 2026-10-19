@@ -7,7 +7,7 @@ ADR 保留决策依据，被替代的部分只作历史参考。当前产品术�
 | [0001](0001-warmap-is-a-ceo-decision-cockpit.md) | 原始决策驾驶舱 | 单 CEO 与不承担执行事项的限制由 0020 推翻 |
 | [0002](0002-use-typed-cards-not-a-layout-dsl.md) | 类型化 Card | 有效，不建设布局 DSL |
 | [0003](0003-confirm-meeting-outcomes-item-by-item.md) | 会后逐项确认 | 有效 |
-| [0004](0004-company-memory-is-read-only-to-warmap.md) | 只读 Company Memory | 有效；本体公司事实另经 `query_company` 只读读取，见[当前架构](../architecture/README.md#公司事实与个人记忆) |
+| [0004](0004-company-memory-is-read-only-to-warmap.md) | 只读 Company Memory | 由 0027 取代 |
 | [0005](0005-radar-auto-promotes-qualified-signals.md) | 雷达自动升级 | 仅公司雷达 |
 | [0006](0006-ceo-may-decide-without-completed-research.md) | 预研未完成时决定 | 有效，须明确确认 |
 | [0007](0007-import-only-structured-transcripts.md) | 逐字稿输入 | 标准契约有效；“不做录音、ASR”已不是现状 |
@@ -16,7 +16,7 @@ ADR 保留决策依据，被替代的部分只作历史参考。当前产品术�
 | [0010](0010-runtime-does-not-own-business-memory.md) | Runtime 不拥有业务记忆 | 有效 |
 | [0011](0011-use-openai-agents-api-as-runtime.md) | OpenAI Agents API | 由 0012 替代 |
 | [0012](0012-use-pi-sdk-as-agent-runtime.md) | Pi SDK | 主 API 的 Agent Runtime |
-| [0013](0013-expose-company-memory-as-read-only-mcp.md) | CompanyMemory 只读 MCP | 有效，`/mcp/company-memory` 仍在服务 |
+| [0013](0013-expose-company-memory-as-read-only-mcp.md) | CompanyMemory 只读 MCP | 由 0027 取代，`/mcp/company-memory` 已删除 |
 | [0014](0014-use-fastify-typebox-and-generated-openapi-client.md) | Fastify、TypeBox 与生成客户端 | 有效 |
 | [0015](0015-isolate-production-pi-runtime.md) | 生产 Runtime 隔离 | 有效 |
 | [0016](0016-rebuild-web-without-legacy-migration.md) | 新建 `apps/web` | 历史迁移依据，旧 `frontend/` 已删除 |
@@ -30,5 +30,6 @@ ADR 保留决策依据，被替代的部分只作历史参考。当前产品术�
 | [0024](0024-month-end-review-starts-the-monthly-plan.md) | 月末复盘与下月计划 | 有效 |
 | [0025](0025-mission-card-owner-self-review.md) | 本人审核 | 准备阶段可见性与汇总方式由任务卡契约替代 |
 | [0026](0026-draft-mission-cards-on-plan-sign.md) | 签发即起草 | 有效 |
+| [0027](0027-company-facts-only-from-world.md) | 公司事实只认本体、人员目录独立 | 有效，取代 0004、0013 |
 
 新增 ADR 沿用下一个编号，被替代时在原文开头写明替代关系，不删除原文。

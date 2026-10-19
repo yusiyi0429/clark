@@ -41,7 +41,7 @@ curl --fail https://tk.tokenkingos.com/api/healthz
 
 - `/healthz` 由 Web 返回，`/api/healthz` 由 API 返回，两者的 `buildSha` 都应等于本次发布的提交。
 - 在受控 Shell 里提供 `PUBLIC_ORIGIN`、`CEO_LOGIN_ID`、`CEO_PASSCODE` 后执行 `bash infra/staging/smoke.sh`；加 `--dry-run` 只打印步骤、不发请求。
-- 未授权访问 `/mcp/me` 应被拒绝；CompanyMemory MCP（`POST /mcp/company-memory`）仍在服务，不带 `COMPANY_MEMORY_MCP_TOKEN` 时返回 401。
+- 未授权访问 `/mcp/me` 应返回 401。CompanyMemory MCP（`/mcp/company-memory`）已退役（ADR-0027），`infra/.env` 里的 `COMPANY_MEMORY_MCP_TOKEN` 可以删掉。
 - `bash infra/caddy/verify.sh` 用本地替身检查 Caddy 分流、SSE 与 multipart，不代表真实 TLS、登录或外部服务通过。
 - 飞书、本体、博查、录音、LangSmith 是否生效，以健康接口与实际调用为准；对应变量缺失时能力如实显示未配置。
 
