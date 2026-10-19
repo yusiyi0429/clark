@@ -38,7 +38,7 @@ export function periodGoalConfirmAction(goal: WorldHead, plan: SignedPlan, princ
 }
 
 /**
- * 最近一份已签发的月度计划（只代确认当月）→ 本体同周期、company / E&O 域里「已承诺」、承诺在签发之前的周期目标，
+ * 最近一份已签发的月度计划（只代确认当月）→ 本体同周期、各单元「已承诺」、承诺在签发之前的周期目标，
  * 代 CEO 确认（CEO 取人员名单里 ceo 角色的人）。签发后立即跑一次，另定时补跑（签发时本体不通、部署前已签发）。
  * 结果看 world_sync_ledger：成功或失败（委托没登记 / 失效、版本对不上等）的版本不再自动重试，失败照台账进管理员视图的失败列表；
  * 网络失败下一轮按原幂等键重放。
@@ -57,9 +57,9 @@ export function createWorldPeriodGoalService(pool: Pool, client: WorldClient, ce
     const ceo = ceoId();
     const principal = ceo ? client.config.people[ceo] : undefined;
     if (!principal) throw new WorldError(409, "INVALID_STATE", "人员名单里的 CEO 没有对应的本体主体");
-    const domains = new Set([client.config.domains.company, client.config.domains.eo]);
+    // 不按域筛：委托没覆盖的域由本体拒（403），如实记失败。
     const goals = (await client.listObjects({ type: "PeriodGoal", period: plan.period }))
-      .filter((goal) => goal.domain_id && domains.has(goal.domain_id) && lifecycleOf(goal).status === "committed");
+      .filter((goal) => lifecycleOf(goal).status === "committed");
     for (const listed of goals) {
       const key = periodGoalKey(plan.id, listed);
       const last = (await q("SELECT status FROM world_sync_ledger WHERE instance = $1 AND idempotency_key = $2 ORDER BY id DESC LIMIT 1", [client.instance, key])).rows[0];

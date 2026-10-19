@@ -57,7 +57,7 @@ describe("world 代 CEO 确认周期目标（0.3）", () => {
     expect(action.params).not.toHaveProperty("declaration");
   });
 
-  it("已签发计划补记：只确认 company / E&O 域里已承诺的目标，代名单里的 CEO；重跑不再写", async () => {
+  it("已签发计划补记：各单元已承诺的目标都代名单里的 CEO 确认，草稿不碰；重跑不再写", async () => {
     await withWorld(async (client, { pool }) => {
       const planId = await seedPlan(pool);
       const goals = [
@@ -69,15 +69,16 @@ describe("world 代 CEO 确认周期目标（0.3）", () => {
       const service = createWorldPeriodGoalService(pool, client, ceo, 60_000);
       await service.idle();
       const commits = actionsOf(calls);
-      expect(commits).toHaveLength(1);
-      expect(commits[0].body).toMatchObject({ contract_version: "tkos.world/0.3", target: { object_id: "<period-goal-1>" } });
+      expect(commits.map((call) => call.body.target.object_id)).toEqual(["<period-goal-1>", "<period-goal-other>"]);
+      expect(commits[0].body).toMatchObject({ contract_version: "tkos.world/0.3" });
       expect(commits[0].body.params.on_behalf_of).toEqual({
         principal_id: instance.people["liu-minghua"], external_record_id: `tianshu:plan-sign:${planId}`, external_confirmed_at: "2026-10-08T21:22:05+08:00",
       });
-      expect((await pool.query("SELECT action_type, status FROM world_sync_ledger")).rows).toEqual([{ action_type: "world_confirm_period_goal", status: "committed" }]);
+      expect((await pool.query("SELECT action_type, status FROM world_sync_ledger ORDER BY id")).rows)
+        .toEqual([{ action_type: "world_confirm_period_goal", status: "committed" }, { action_type: "world_confirm_period_goal", status: "committed" }]);
       service.schedule();
       await service.idle();
-      expect(actionsOf(calls)).toHaveLength(1);
+      expect(actionsOf(calls)).toHaveLength(2);
       await service.close();
     });
   });
@@ -115,6 +116,22 @@ describe("world 代 CEO 确认周期目标（0.3）", () => {
       service.schedule();
       await service.idle();
       expect(actionsOf(calls)).toHaveLength(1);
+      await service.close();
+    });
+  });
+
+  it("委托没覆盖的域：那个单元的目标如实记失败，其他单元照常确认", async () => {
+    await withWorld(async (client, { pool }) => {
+      await seedPlan(pool);
+      const calls = worldHttp([goal(), goal({ object_id: "<period-goal-other>", domain_id: "<domain:agents>" })],
+        (body) => body.target.object_id === "<period-goal-other>" ? forbidden() : { receipt_id: "<receipt-18>", status: "committed", result: { event_id: "<event-20>" } });
+      const service = createWorldPeriodGoalService(pool, client, ceo, 60_000);
+      await service.idle();
+      expect(actionsOf(calls)).toHaveLength(2);
+      expect((await pool.query("SELECT target_ref, status, error_code FROM world_sync_ledger ORDER BY id")).rows).toEqual([
+        { target_ref: "<period-goal-1>", status: "committed", error_code: null },
+        { target_ref: "<period-goal-other>", status: "failed", error_code: "FORBIDDEN" },
+      ]);
       await service.close();
     });
   });
