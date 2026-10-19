@@ -1,6 +1,6 @@
 import type { TMemberWork, TPersonalMissionCardPayload } from "@warmap/contracts";
 import { listBattlefieldRows } from "./battlefields.js";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import type { Query } from "./meetingStore.js";
 import { companyPeriod, type MonthlyPlanRow } from "./monthlyPlans.js";
 import type { MissionRoundPerson } from "./missionRounds.js";

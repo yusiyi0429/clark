@@ -6,8 +6,8 @@ import { Value } from "@sinclair/typebox/value";
 import type { Pool, PoolClient } from "pg";
 import { CreateMissionRequest, type TCard, type TMissionCardField, type TMissionRoundConfirmInput, type TMissionRoundDecideInput, type TMissionRoundPhase, type TMissionRoundSummary } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
-import type { MemoryPerson } from "./companyMemory.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
+import { readCompanyContext, type CompanyContext } from "./companyContext.js";
 import { MissionCardDraftCandidate, type MissionCardDraftAgent, type MissionCardDraftCandidateValue, type MissionCardDraftInput } from "./missionCardDraftAgent.js";
 import type { MeetingActionOutcome, Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
@@ -663,7 +663,7 @@ async function readKnownMissions(file: string | undefined, period: string): Prom
 /** 真实历史只用于模型依据；失败保留原始错误与空卡，绝不填入旧月正文或演示文件。全部成功后由系统交给本人。 */
 export async function completeMissionRoundDraft(
   pool: Pool, people: MemoryPerson[], roundId: string, agent: MissionCardDraftAgent,
-  memory: CompanyMemoryRepository | undefined, now: () => Date, knownMissionsFile?: string,
+  memory: CompanyContext | undefined, now: () => Date, knownMissionsFile?: string,
 ): Promise<void> {
   const q: Query = (sql, params) => pool.query(sql, params);
   const row = await getMissionRoundRow(q, roundId);
@@ -687,7 +687,7 @@ export async function completeMissionRoundDraft(
             OR (m.personal_mission_card_id IS NULL AND m.battlefield_ids @> jsonb_build_array($1::text) AND NOT EXISTS (SELECT 1 FROM personal_mission_cards c JOIN mission_rounds r ON r.id=c.round_id WHERE r.battlefield_id=$1 AND r.period=$2 AND c.owner_id=$3)))
         ORDER BY m.code`,
       [row.battlefield_id, previousPeriod(row.period), owner.owner_id])).rows as PreviousMission[];
-      const matches = memory?.searchSections(`${battlefield.name} ${names.get(owner.owner_id) ?? owner.owner_id}`, 3) ?? [];
+      const matches = memory ? (await readCompanyContext(memory, `${battlefield.name} ${names.get(owner.owner_id) ?? owner.owner_id}`)).entries : [];
       const input: MissionCardDraftInput = {
         period: row.period,
         battlefield: { id: row.battlefield_id, code: battlefield.code, name: battlefield.name, sixMonthOutcome: battlefield.six_month_outcome, missionAnchors: battlefield.mission_anchors },
@@ -696,8 +696,7 @@ export async function completeMissionRoundDraft(
         previousCard: previous.length ? { missions: previous } : null,
         previousReview: (await q("SELECT self_review FROM personal_reviews WHERE person_id=$1 AND period=$2 AND status='submitted' ORDER BY submitted_at DESC LIMIT 1",
           [owner.owner_id, previousPeriod(row.period)])).rows[0]?.self_review ?? null, capabilities,
-        companyMemory: matches.map((match) => ({ title: match.title, sourceRef: match.sourceRef,
-          passages: memory!.getPassages(match.id, undefined, 2).passages.map((passage) => ({ text: passage.text, sourceRef: passage.sourceRef })) })),
+        companyMemory: matches.slice(0, 3).map(({ title, text }) => ({ title, text })),
         knownMissions: known.filter((item) => item.personId === owner.owner_id)
           .map((item) => ({ kind: item.kind, title: item.title ?? null, sourceRef: item.sourceRef ?? null, markdown: item.markdown })),
       };
@@ -800,7 +799,7 @@ async function insertDraftingRound(client: PoolClient, people: MemoryPerson[], b
 
 /** 后台逐人起草；中途异常时保留卡并标出未完成的人，由战场 DRI 重试。 */
 function draftInBackground(pool: Pool, people: MemoryPerson[], roundId: string, attemptId: string, now: () => Date,
-  agent: MissionCardDraftAgent, memory?: CompanyMemoryRepository, knownMissionsFile?: string): void {
+  agent: MissionCardDraftAgent, memory?: CompanyContext, knownMissionsFile?: string): void {
   void completeMissionRoundDraft(pool, people, roundId, agent, memory, now, knownMissionsFile).catch(async (error) => {
     await recoverDraftRound(pool, roundId, (error as Error).message || String(error), now(), attemptId).catch((recovery) =>
       console.error(`mission card draft recovery ${roundId} failed: ${String(recovery)}`));
@@ -813,7 +812,7 @@ function draftInBackground(pool: Pool, people: MemoryPerson[], roundId: string, 
  * 已有轮次或参与者为空的战场跳过；各战场分别提交，起草在后台进行，起草完成后自动交给本人。
  */
 export async function startSignedMissionDrafts(pool: Pool, people: MemoryPerson[], period: string, now: () => Date,
-  agent: MissionCardDraftAgent, memory?: CompanyMemoryRepository, knownMissionsFile?: string): Promise<void> {
+  agent: MissionCardDraftAgent, memory?: CompanyContext, knownMissionsFile?: string): Promise<void> {
   const plan = (await pool.query<{ battlefields: { battlefieldId: string; outcome: string }[] }>(
     "SELECT battlefields FROM monthly_plans WHERE period=$1 AND status='confirmed'", [period])).rows[0];
   for (const { battlefieldId } of (plan?.battlefields ?? []).filter((item) => item.outcome.trim())) {
@@ -839,7 +838,7 @@ export async function startSignedMissionDrafts(pool: Pool, people: MemoryPerson[
 /** 战场 DRI 的起草动作：重试起草失败的人；本月还没有轮次时也从这里起草。签发后的系统起草见 startSignedMissionDrafts。 */
 export async function executeDraftMissionRound(
   pool: Pool, people: MemoryPerson[], secret: string, person: MissionRoundPerson, scope: ActionScope,
-  fingerprint: string, now: () => Date, knownMissionsFile?: string, agent?: MissionCardDraftAgent, memory?: CompanyMemoryRepository,
+  fingerprint: string, now: () => Date, knownMissionsFile?: string, agent?: MissionCardDraftAgent, memory?: CompanyContext,
 ): Promise<MeetingActionOutcome> {
   const match = /^(.*):(\d{4}-(?:0[1-9]|1[0-2]))$/.exec(scope.objectId);
   if (!match || scope.objectVersion !== 1) return failure(404, "UNKNOWN_ACTION", "无效的整理草稿入口");

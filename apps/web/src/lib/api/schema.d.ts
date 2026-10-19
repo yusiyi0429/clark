@@ -3588,6 +3588,10 @@ export interface components {
         };
         ConversationMessageRequest: {
             message: string;
+            anchorSelection?: {
+                cardId: string;
+                version: number;
+            };
             answers?: {
                 /** Format: uuid */
                 askId: string;
@@ -6124,7 +6128,8 @@ export interface components {
             dependencies: {
                 piRuntime: boolean;
                 modelSlots: boolean;
-                companyMemoryMcp: boolean;
+                peopleDirectory: boolean;
+                companyConfigured: boolean;
                 search: boolean;
                 wechat: boolean;
                 outlets: boolean;

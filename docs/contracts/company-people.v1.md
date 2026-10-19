@@ -1,6 +1,6 @@
 # company-people.v1
 
-CompanyMemory MCP 的最小稳定人员目录契约。真实人员 seed 是 Meeting、Transcript、DRI import 和 MonthlyPlan owner 的前置输入，不得从显示姓名临时生成 personId。
+人员目录（`peopleDirectory.ts`）的最小稳定契约；登录、会话角色、本人隔离和人名解析只看它（ADR-0027）。真实人员 seed 是 Meeting、Transcript、DRI import 和 MonthlyPlan owner 的前置输入，不得从显示姓名临时生成 personId。
 
 ```json
 {
@@ -22,4 +22,4 @@ CompanyMemory MCP 的最小稳定人员目录契约。真实人员 seed 是 Meet
 - `roles` 至少一项；MVP 只需要识别 CEO、DRI 和普通 participant。
 - 战场归属不放在 Person 中；todo 和 feedback 自己携带可选 battlefieldId。
 - 当前真实人员内容由项目授权人提供，不使用演示人名填充 production。
-- CompanyMemory MCP 的 `search_people` 读取该契约；未来迁移数据库时保持返回结构不变。
+- 对话运行时的 `search_people` 读取该契约；未来迁移数据库时保持返回结构不变。

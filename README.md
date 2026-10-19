@@ -12,7 +12,7 @@
 | `packages/contracts` | TypeBox schema 与 OpenAPI 生成入口 |
 | `infra` | Compose、Caddy、宿主机 Nginx 模板、备份恢复、发布脚本（`infra/staging`）和本地准生产环境（`infra/local`） |
 | `tools/collector` | 成员本机采集器（Python），向 API 上报本机清单与心跳 |
-| `seed` | 人员目录示例、CompanyMemory 资料、导入文件与占位草稿；真实名单不进 Git |
+| `seed` | 人员目录示例、导入文件与占位草稿（旧企业知识只作目录参考，不再加载）；真实名单不进 Git |
 | `docs` | 文档导航、指南、架构、契约、ADR 与历史方案 |
 
 项目规则见根目录 [CLAUDE.md](CLAUDE.md)，领域术语见 [CONTEXT.md](CONTEXT.md)。
@@ -27,7 +27,7 @@ pnpm --filter @warmap/contracts build
 cp .env.example apps/api/.env   # 已有 apps/api/.env 时不要覆盖
 ```
 
-填好 `apps/api/.env` 的数据库、鉴权、CompanyMemory、人员目录与模型配置后，分别在两个终端启动：
+填好 `apps/api/.env` 的数据库、鉴权、人员目录与模型配置后，分别在两个终端启动：
 
 ```bash
 cd apps/api && pnpm exec tsx watch --env-file=.env src/server.ts

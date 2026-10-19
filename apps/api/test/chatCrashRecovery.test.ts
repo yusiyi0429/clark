@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createAssistantMessageEventStream, type AssistantMessage, type Context, type Model, type SimpleStreamOptions } from "@earendil-works/pi-ai";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { IDLE_RESTART_MESSAGE_CHARS, createPiConversationRuntime, latestAnswerIsClaude, latestCompactionSummary, seedIdleRestart } from "../src/piConversationRuntime.js";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { ConversationRuntimeEvent } from "../src/conversations.js";
@@ -45,7 +45,7 @@ type Seen = { model: string; context: Context; options?: SimpleStreamOptions };
 async function harness(respond: (seen: Seen, index: number) => Step, extra: Partial<Parameters<typeof createPiConversationRuntime>[0]> = {}) {
   const seen: Seen[] = [];
   const runtime = await createPiConversationRuntime({
-    companyMemory: loadCompanyMemory(testEnv), baseUrl: "https://gw.invalid/v2/llm/responses", apiKey: "test-key",
+    peopleDirectory: loadPeopleDirectory(testEnv), baseUrl: "https://gw.invalid/v2/llm/responses", apiKey: "test-key",
     modelId: TIERS.quick, tierModels: TIERS, compactionModelId: "fake-compaction", recoverySleep: async () => undefined,
     streamSimple: (model, context, options) => {
       seen.push({ model: model.id, context, options });

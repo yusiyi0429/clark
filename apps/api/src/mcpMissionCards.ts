@@ -1,5 +1,5 @@
 import type { TPersonalMissionCardPayload } from "@warmap/contracts";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import type { Query } from "./meetingStore.js";
 import { canApprove, missionCardWriteProblem, type MissionRoundPerson } from "./missionRounds.js";
 import { getPersonalMissionCard, visiblePersonalMissionCard } from "./personalMissionCards.js";

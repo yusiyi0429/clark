@@ -1,7 +1,7 @@
 import type { TOnboardingResponse, TMissionRoundSummary, TSessionRole } from "@warmap/contracts";
 import { listBattlefieldRows } from "./battlefields.js";
 import { listCapabilityRows } from "./capabilities.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import type { Query } from "./meetingStore.js";
 import { companyPeriod, type MonthlyPlanRow } from "./monthlyPlans.js";
 import { getStrategyConfig } from "./strategy.js";
@@ -80,9 +80,9 @@ async function ceoNext(q: Query, plan: Plan | undefined, period: string, now: Da
 }
 
 /** 引导只读取持久事实；角色边界、月份、目标状态与下一步都由服务端决定。 */
-export async function readOnboarding({ q, companyMemory, voiceprints, person, companyName, now, secret, delegationStep = false }: {
+export async function readOnboarding({ q, peopleDirectory, voiceprints, person, companyName, now, secret, delegationStep = false }: {
   q: Query;
-  companyMemory: CompanyMemoryRepository;
+  peopleDirectory: PeopleDirectory;
   voiceprints: VoiceprintDeps;
   person: { personId: string; role: TSessionRole };
   companyName?: string;
@@ -92,7 +92,7 @@ export async function readOnboarding({ q, companyMemory, voiceprints, person, co
   delegationStep?: boolean;
 }): Promise<TOnboardingResponse> {
   const period = companyPeriod(now);
-  const people = companyMemory.searchPeople(undefined);
+  const people = peopleDirectory.searchPeople(undefined);
   const [voiceprint, battlefields, plans, radar] = await Promise.all([
     voiceprintStatus(q, voiceprints, person.personId),
     listBattlefieldRows(q),

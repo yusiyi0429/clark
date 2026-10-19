@@ -10,10 +10,10 @@ import { idParams, type AppInstance, type RouteContext } from "./shared.js";
  * 只读、无副作用；CEO 视角，群讨论与材料按原生成员与材料权限过滤。
  */
 export function registerDecisionHistoryRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { q, fail, requireCEO, companyMemory } = ctx;
+  const { q, fail, requireCEO, peopleDirectory } = ctx;
   const context = (personId: string): { viewer: MaterialViewer; options: DecisionHistoryOptions } => {
-    const names = personDisplayNames(companyMemory);
-    const ceo = companyMemory.searchPeople(undefined).find((person) => person.roles.includes("ceo"));
+    const names = personDisplayNames(peopleDirectory);
+    const ceo = peopleDirectory.searchPeople(undefined).find((person) => person.roles.includes("ceo"));
     return {
       viewer: { personId, role: "ceo", displayName: names.get(personId) ?? personId },
       options: { names, ceo: ceo ? { personId: ceo.personId, displayName: ceo.displayName } : null },

@@ -4,7 +4,7 @@ import type {
   TCreateMissionCardAnnotationRequest, TMissionCardAnnotationView, TMissionCardAnnotationsResponse,
   TMissionCardField, TPersonalMissionCardPayload, TMissionCardRevisionView,
 } from "@warmap/contracts";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import type { Query } from "./meetingStore.js";
 import { canApprove, missionCardWriteProblem, writeMissionFields, type MissionRoundPerson } from "./missionRounds.js";
 import { fieldText, getPersonalMissionCard, normalizedProposal, proposalProblem, visiblePersonalMissionCard } from "./personalMissionCards.js";

@@ -15,7 +15,7 @@ import {
   type TPreflightCandidate,
 } from "@warmap/contracts";
 import type { ActionScope } from "./actionToken.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import { issueDecisionHistory } from "./issueDecisionHistory.js";
 import { collectMeetingEvidence, evidenceVersions, parseGroupMaterialRef, type MeetingEvidence } from "./meetingEvidence.js";
 import type { MaterialViewer } from "./objectMaterials.js";
@@ -117,7 +117,7 @@ export type PreflightAgentInput = {
   battlefieldDecisions: BattlefieldDecision[];
 };
 
-/** 预审运行时的回调：过程事件（思考、企业知识查阅、候选写作）。 */
+/** 预审运行时的回调：过程事件（思考、候选写作）。 */
 export type PreflightAgentHooks = { onEvent?: (event: CandidateAgentEvent) => void };
 
 export type PreflightAgent = {
@@ -135,7 +135,7 @@ export type PreflightAgent = {
 };
 export async function executeRunPreflight(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   scope: ActionScope,
@@ -149,12 +149,12 @@ export async function executeRunPreflight(
     return commit(client, updated, secret);
   });
   if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
-  await startPreflight(pool, companyMemory, preflightAgent, scope.objectId);
+  await startPreflight(pool, peopleDirectory, preflightAgent, scope.objectId);
   return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
 }
 async function executeExplicitPreflight(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   scope: ActionScope,
@@ -179,27 +179,27 @@ async function executeExplicitPreflight(
     return commit(client, updated, secret);
   });
   if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
-  await startPreflight(pool, companyMemory, preflightAgent, scope.objectId);
+  await startPreflight(pool, peopleDirectory, preflightAgent, scope.objectId);
   return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
 }
 
 export const executeRetryPreflight = (
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   scope: ActionScope,
   fingerprint: string,
-) => executeExplicitPreflight(pool, companyMemory, preflightAgent, secret, scope, fingerprint, "failed");
+) => executeExplicitPreflight(pool, peopleDirectory, preflightAgent, secret, scope, fingerprint, "failed");
 
 export const executeRegeneratePreflight = (
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   secret: string,
   scope: ActionScope,
   fingerprint: string,
-) => executeExplicitPreflight(pool, companyMemory, preflightAgent, secret, scope, fingerprint, "ready");
+) => executeExplicitPreflight(pool, peopleDirectory, preflightAgent, secret, scope, fingerprint, "ready");
 type IssueSnapshotRow = { id: string; title: string; location: unknown; urgency: unknown; research: unknown; origin_ref?: unknown };
 
 type CandidateEntry = TPreflightCandidate["entries"][number];
@@ -322,16 +322,10 @@ export function mergeDuplicateQuestions(entries: CandidateEntry[]): { entries: C
  * sourceRef 白名单校验与规范化：未知来源返回 bad；群材料段落锚点超出本次输入实际给出的段落时去掉锚点，
  * 保留可核对的版本引用，不因为锚点数字整份预审失败。
  */
-function normalizeSourceRefs(refs: string[], allowed: Set<string>, paragraphCounts: Map<string, number>, aliases?: Map<string, string>): { refs: string[]; bad?: string } {
+function normalizeSourceRefs(refs: string[], allowed: Set<string>, paragraphCounts: Map<string, number>): { refs: string[]; bad?: string } {
   const out: string[] = [];
   for (const ref of refs) {
     if (allowed.has(ref)) { out.push(ref); continue; }
-    // 企业知识按节标题或 MCP 返回的 sourceRef 写的（memory:<文件>#<节标题>），换成节 ID；10/13 实测 Sonnet 偶尔这样写，原来整份预审失败。
-    const alias = aliases?.get(ref);
-    if (alias) { out.push(alias); continue; }
-    // 企业知识只到节（memory:<文件>#s<n>）；模型照群材料的样子多写了段落（#p<n>）时退回到这一节，不让整份预审失败。
-    const memorySection = /^(memory:.+)#p\d+$/.exec(ref)?.[1];
-    if (memorySection && allowed.has(memorySection)) { out.push(memorySection); continue; }
     const parsed = parseGroupMaterialRef(ref);
     const base = parsed ? `material:${parsed.id}@v${parsed.version}` : "";
     if (!parsed || !allowed.has(base)) return { refs, bad: ref };
@@ -366,15 +360,15 @@ function groupMaterialInputs(evidence: MeetingEvidence): PreflightGroupMaterialI
  */
 export async function startPreflight(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   meetingId: string,
   options: { timeoutMs?: number } = {},
 ): Promise<void> {
-  if (!preflightAgent.background) return runPreflight(pool, companyMemory, preflightAgent, meetingId, options);
+  if (!preflightAgent.background) return runPreflight(pool, peopleDirectory, preflightAgent, meetingId, options);
   let started!: () => void;
   const marked = new Promise<void>((resolve) => { started = resolve; });
-  void runPreflight(pool, companyMemory, preflightAgent, meetingId, { ...options, onRunning: () => started() })
+  void runPreflight(pool, peopleDirectory, preflightAgent, meetingId, { ...options, onRunning: () => started() })
     .catch((error: unknown) => {
       console.error(JSON.stringify({ ts: new Date().toISOString(), event: "preflight.background_failed", meetingId, message: (error as Error)?.message }));
     })
@@ -383,9 +377,9 @@ export async function startPreflight(
 }
 
 /** 来源列表只留白名单内的（规范化后），一条都不剩返回 null。新增的两类（待决题、分歧）不因个别引用整份失败。 */
-function keepValidRefs(refs: string[], allowed: Set<string>, paragraphCounts: Map<string, number>, aliases?: Map<string, string>): string[] | null {
+function keepValidRefs(refs: string[], allowed: Set<string>, paragraphCounts: Map<string, number>): string[] | null {
   const kept = refs.flatMap((ref) => {
-    const checked = normalizeSourceRefs([ref], allowed, paragraphCounts, aliases);
+    const checked = normalizeSourceRefs([ref], allowed, paragraphCounts);
     return checked.bad ? [] : checked.refs;
   });
   return kept.length ? [...new Set(kept)].slice(0, 10) : null;
@@ -394,7 +388,7 @@ function keepValidRefs(refs: string[], allowed: Set<string>, paragraphCounts: Ma
 /** 运行一次会前预审：严格候选校验失败可见，Agent 失败不自动重试。过程逐步写进 preflight.progress。 */
 export async function runPreflight(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   preflightAgent: PreflightAgent,
   meetingId: string,
   { timeoutMs = preflightAgent.timeoutMs ?? PREFLIGHT_TIMEOUT_MS, onRunning }: { timeoutMs?: number; onRunning?: () => void } = {},
@@ -450,7 +444,7 @@ export async function runPreflight(
     const foundMeetings = await relatedMeetingsForPreflight(q, meeting, scope);
     const battlefieldDecisions = await battlefieldDecisionsForPreflight(q, meeting.issue_ids, scope);
     // 群材料最新版、群讨论与旧会前材料：按会议 CEO 参会人的原生权限读取（与 Chat 同一份）。
-    const names = personDisplayNames(companyMemory);
+    const names = personDisplayNames(peopleDirectory);
     const viewer: MaterialViewer = { personId: meeting.ceo_participant_id, role: "ceo",
       displayName: names.get(meeting.ceo_participant_id) ?? meeting.ceo_participant_id };
     const evidence = await collectMeetingEvidence(q, meeting.id, viewer, { names });
@@ -503,12 +497,6 @@ export async function runPreflight(
       for (const entry of [...history.effective, ...history.inactive]) for (const ref of [entry.ref, ...entry.sourceRefs]) allowedSourceRefs.add(ref);
       for (const change of history.changes) allowedSourceRefs.add(change.ref);
       for (const item of history.pending) allowedSourceRefs.add(item.ref);
-    }
-    const memoryAliases = new Map<string, string>();
-    for (const section of companyMemory.listSections()) {
-      allowedSourceRefs.add(`memory:${section.id}`);
-      memoryAliases.set(`memory:${section.id.split("#")[0]}#${section.title}`, `memory:${section.id}`);
-      memoryAliases.set(`memory:${section.sourceRef}`, `memory:${section.id}`);
     }
     for (const related of relatedMeetings) for (const ref of related.sourceRefs) allowedSourceRefs.add(ref);
     for (const decision of battlefieldDecisions) allowedSourceRefs.add(decision.ref);
@@ -596,7 +584,7 @@ export async function runPreflight(
     }
     const normalized: CandidateEntry[] = [];
     for (const entry of generated.candidate.entries) {
-      const checked = normalizeSourceRefs(entry.sourceRefs, allowedSourceRefs, paragraphCounts, memoryAliases);
+      const checked = normalizeSourceRefs(entry.sourceRefs, allowedSourceRefs, paragraphCounts);
       if (checked.bad) {
         await fail(INVALID_SOURCE_REF, `Preflight sourceRef 不在允许来源内: ${checked.bad}`);
         return;
@@ -606,12 +594,12 @@ export async function runPreflight(
     // 材料自带待决题与开放分歧：引用同样走白名单；个别引用不合规只去掉那一条引用，一条都不剩时去掉这一项。
     const rawQuestions = generated.candidate.materialQuestions;
     const questionItems = rawQuestions?.items.flatMap((item) => {
-      const refs = keepValidRefs(item.sourceRefs, allowedSourceRefs, paragraphCounts, memoryAliases);
+      const refs = keepValidRefs(item.sourceRefs, allowedSourceRefs, paragraphCounts);
       return refs ? [{ ...item, sourceRefs: refs.slice(0, 6) }] : [];
     });
     const materialQuestions: TPreflightMaterialQuestions | undefined = questionItems ? { total: questionItems.length, items: questionItems } : undefined;
     const divergences: TPreflightDivergence[] | undefined = generated.candidate.divergences?.flatMap((item) => {
-      const refs = keepValidRefs(item.sourceRefs, allowedSourceRefs, paragraphCounts, memoryAliases);
+      const refs = keepValidRefs(item.sourceRefs, allowedSourceRefs, paragraphCounts);
       return refs ? [{ ...item, sourceRefs: refs }] : [];
     });
     // 同一疑问不在会议问题与一号位追问里重复出现：确定性合并，来源并入保留项。
@@ -687,12 +675,12 @@ export async function recoverInterruptedPreflight(
  * 启动后补跑（巡检 P1-17）：还没开的会里，预审从没跑过（pending，例如新场次导入的会）或被重启打断的，按顺序在后台重跑一次。
  * 只在真实 Agent（background=true）下由 app 调用；一场失败不影响下一场，失败照常显示为可重试。
  */
-export async function resumePreflights(pool: Pool, companyMemory: CompanyMemoryRepository, preflightAgent: PreflightAgent): Promise<number> {
+export async function resumePreflights(pool: Pool, peopleDirectory: PeopleDirectory, preflightAgent: PreflightAgent): Promise<number> {
   const rows = (await pool.query<{ id: string }>(
     `SELECT id FROM meetings
       WHERE status = 'scheduled'
         AND (preflight->>'status' = 'pending' OR (preflight->>'status' = 'failed' AND preflight->'error'->>'code' = $1))
       ORDER BY scheduled_at, id`, [PREFLIGHT_INTERRUPTED])).rows;
-  for (const row of rows) await runPreflight(pool, companyMemory, preflightAgent, row.id).catch(() => undefined);
+  for (const row of rows) await runPreflight(pool, peopleDirectory, preflightAgent, row.id).catch(() => undefined);
   return rows.length;
 }

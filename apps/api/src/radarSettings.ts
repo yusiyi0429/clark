@@ -18,7 +18,7 @@ import {
   type TRadarSources,
   type TSessionRole,
 } from "@warmap/contracts";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import type { TrendingSince } from "./githubTrending.js";
 import type { Query } from "./meetingStore.js";
 import { readMemberWork } from "./memberWork.js";

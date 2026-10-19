@@ -11,7 +11,8 @@ import {
   type TMonthlyReviewSubjectType,
   type TMonthlyReviewSummaryCandidate,
 } from "@warmap/contracts";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
+import { readCompanyContext, type CompanyContext } from "./companyContext.js";
 import { ltoWindow } from "./monthlyCycle.js";
 import { ensurePersonalReviews, getPersonalReview, pendingGenerationSteps, recoverStalePersonalReviewDrafts,
   PERSONAL_REVIEW_FIELDS, type PersonalReviewDraftInput, type PersonalReviewDraftRun } from "./personalReviews.js";
@@ -46,7 +47,9 @@ export type MonthlyReviewMaterials = {
   weeklyProgress: { date: string; missionTitle: string; taskTitle: string; author: string; body: string }[];
   personalReviews: { personId: string; status: string; selfReview: TMonthlyReviewSelfReview | null; note: string | null }[];
   comments: { author: string; body: string; createdAt: string }[];
-  companyMemory: { sectionId: string; title: string; passageId: string; text: string; sourceRef: string }[];
+  /** 本体公司事实（标题与正文）；companyStatus 不是 ready 时这次没读到本体。 */
+  companyMemory: { title: string; text: string }[];
+  companyStatus: string;
 };
 export type MonthlyReviewDraftInput = { period: string; subject: Subject; target: string | null } & MonthlyReviewMaterials;
 export type MonthlyReviewAssessInput = MonthlyReviewDraftInput & {
@@ -125,14 +128,16 @@ function invalid(message: string): Error {
 export function createMonthlyReviewService({
   pool,
   agents,
-  companyMemory,
+  peopleDirectory,
+  company,
   now = () => new Date(),
   retryDelayMs = 1500,
   personalDraft,
 }: {
   pool: Pool;
   agents: MonthlyReviewAgents;
-  companyMemory: CompanyMemoryRepository;
+  peopleDirectory: PeopleDirectory;
+  company: CompanyContext;
   now?: () => Date;
   retryDelayMs?: number;
   personalDraft: { storageDir: string; agent: MonthlyReviewAgent<PersonalReviewDraftInput> };
@@ -216,12 +221,8 @@ export function createMonthlyReviewService({
       WHERE p.created_at >= $1 AND p.created_at < $2 AND m.period = $3 AND
         ${battlefield ? "m.battlefield_ids @> jsonb_build_array($4::text)" : "m.capability_id = $4"}
       ORDER BY p.created_at DESC, p.id DESC LIMIT 60`, [start, end, item.period, item.subject_id])).rows as MonthlyReviewMaterials["weeklyProgress"];
-    const memory: MonthlyReviewMaterials["companyMemory"] = [];
-    for (const section of companyMemory.searchSections(item.subject_name, 4)) {
-      for (const passage of companyMemory.getPassages(section.id, item.subject_name, 4).passages) {
-        if (memory.length < 4) memory.push({ sectionId: section.id, title: section.title, passageId: passage.id, text: passage.text, sourceRef: passage.sourceRef });
-      }
-    }
+    const companyView = await readCompanyContext(company, item.subject_name);
+    const memory: MonthlyReviewMaterials["companyMemory"] = companyView.entries.slice(0, 4).map(({ title, text }) => ({ title, text }));
     return {
       period: item.period,
       subject: { type: item.subject_type, id: item.subject_id, code: item.subject_code, name: item.subject_name, sixMonthOutcome: item.six_month_outcome },
@@ -238,6 +239,7 @@ export function createMonthlyReviewService({
       [item.review_id, item.subject_id])).rows.map((row) => ({ ...row, selfReview: row.status === "submitted" ? row.selfReview : null })) as MonthlyReviewMaterials["personalReviews"],
       comments: await comments(item.id),
       companyMemory: memory,
+      companyStatus: companyView.status,
     };
   }
 
@@ -371,7 +373,7 @@ export function createMonthlyReviewService({
   }
 
   async function open(period: string): Promise<{ created: boolean; reviewId: string }> {
-    const creation = await createMonthlyReview(pool, period, now(), companyMemory.searchPeople(undefined));
+    const creation = await createMonthlyReview(pool, period, now(), peopleDirectory.searchPeople(undefined));
     startPersonalRuns(creation.personalRuns);
     // 每项独立起草，失败互不影响
     for (const run of creation.itemRuns) {
@@ -440,7 +442,7 @@ export function createMonthlyReviewService({
       const current = at ?? now();
       await recoverStalePersonalReviewDrafts(q, current);
       const collecting = (await q("SELECT id FROM monthly_reviews WHERE status='collecting' ORDER BY period")).rows;
-      for (const review of collecting) startPersonalRuns(await ensurePersonalReviews(pool, review.id, companyMemory.searchPeople(undefined), current));
+      for (const review of collecting) startPersonalRuns(await ensurePersonalReviews(pool, review.id, peopleDirectory.searchPeople(undefined), current));
       await resumeDrafts();
       const period = companyPeriod(current);
       const { day, lastDay } = companyDay(current);

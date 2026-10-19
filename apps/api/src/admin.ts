@@ -5,7 +5,7 @@ import type {
   TAdminQualitySignal, TAdminStatus, TAdminSubjectType,
 } from "@warmap/contracts";
 import { collectorHealthOf, workdayHours } from "./collector.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import type { Query } from "./meetingStore.js";
 import { insertNotification } from "./notifications.js";
 import { isRealPerson } from "./people.js";
@@ -61,12 +61,12 @@ type FeishuRow = { person_id: string; status: "active" | "reauth_required"; auth
 type WeeklyRow = { person_id: string; week_start: string; submitted_at: Date; world_sync_status: "pending" | "done" | "failed"; failed_targets: number; last_done_at: Date | null };
 
 /** 名单：能用天枢的真人（CEO、DRI、参与人），不含会议纪要一类的记录账号。 */
-function adminPeople(companyMemory: CompanyMemoryRepository) {
-  return companyMemory.searchPeople(undefined)
+function adminPeople(peopleDirectory: PeopleDirectory) {
+  return peopleDirectory.searchPeople(undefined)
     .filter((person) => isRealPerson(person) && person.roles.some((role) => role === "ceo" || role === "dri" || role === "participant"));
 }
 
-async function readPeople(q: Query, companyMemory: CompanyMemoryRepository, marks: MarkIndex, names: Map<string, string>, now: Date): Promise<TAdminPersonRow[]> {
+async function readPeople(q: Query, peopleDirectory: PeopleDirectory, marks: MarkIndex, names: Map<string, string>, now: Date): Promise<TAdminPersonRow[]> {
   const [collector, feishu, weekly] = await Promise.all([
     q(`SELECT person_id, device_name, platform, source, collector_version, source_status, error_code,
         first_seen_at, last_attempt_at, last_success_at, coverage_until, last_new_evidence_at
@@ -86,7 +86,7 @@ async function readPeople(q: Query, companyMemory: CompanyMemoryRepository, mark
   const markOf = (type: TAdminSubjectType, id: string, status: TAdminStatus) =>
     status === "red" || status === "yellow" ? acknowledged(marks, names, type, id) : null;
 
-  const rows = adminPeople(companyMemory).map((person): TAdminPersonRow & { since: number } => {
+  const rows = adminPeople(peopleDirectory).map((person): TAdminPersonRow & { since: number } => {
     const id = person.personId;
     // 采集器：多台设备、多个来源里最近一次成功同步；从没成功过的按首次出现算断档时长。
     const devices = devicesOf.get(id) ?? [];
@@ -208,10 +208,10 @@ function counters(people: TAdminPersonRow[], issues: TAdminIssue[]): TAdminCount
   ];
 }
 
-export async function readAdminOverview(q: Query, companyMemory: CompanyMemoryRepository, names: Map<string, string>, viewerId: string, now: Date): Promise<TAdminOverviewResponse> {
+export async function readAdminOverview(q: Query, peopleDirectory: PeopleDirectory, names: Map<string, string>, viewerId: string, now: Date): Promise<TAdminOverviewResponse> {
   const marks = await readMarks(q);
   const [people, issues, quality] = await Promise.all([
-    readPeople(q, companyMemory, marks, names, now), readIssues(q, marks, names), readQuality(q, marks, names, now),
+    readPeople(q, peopleDirectory, marks, names, now), readIssues(q, marks, names), readQuality(q, marks, names, now),
   ]);
   return { generatedAt: now.toISOString(), viewerId, counters: counters(people, issues), people, issues, quality };
 }
@@ -224,7 +224,7 @@ export type AdminActionError = { status: number; code: string; message: string }
  * - acknowledge / resolve：只记一行；
  * - retry：只对 dead 的后台任务，回到 pending、次数清零、马上可领。
  */
-export async function executeAdminAction(pool: Pool, companyMemory: CompanyMemoryRepository, actorId: string, input: TAdminActionRequest): Promise<AdminActionError | null> {
+export async function executeAdminAction(pool: Pool, peopleDirectory: PeopleDirectory, actorId: string, input: TAdminActionRequest): Promise<AdminActionError | null> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -241,7 +241,7 @@ export async function executeAdminAction(pool: Pool, companyMemory: CompanyMemor
     let error: AdminActionError | null = null;
     if (input.action === "remind") {
       if (input.personId === actorId) error = { status: 400, code: "INVALID_RECIPIENT", message: "不能提醒自己" };
-      else if (!adminPeople(companyMemory).some((person) => person.personId === input.personId)) error = { status: 400, code: "INVALID_RECIPIENT", message: "这个人不在名单里" };
+      else if (!adminPeople(peopleDirectory).some((person) => person.personId === input.personId)) error = { status: 400, code: "INVALID_RECIPIENT", message: "这个人不在名单里" };
       else {
         const requestId = randomUUID();
         const title = input.title.trim(), body = input.body.trim();

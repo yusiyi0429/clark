@@ -6,7 +6,6 @@ import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPrefligh
 import { isDuplicateQuestion, mergeDuplicateQuestions, preflightStructureError } from "../src/meetingPreflight.js";
 import { createObjectMaterial, editObjectMaterial, type MaterialViewer } from "../src/objectMaterials.js";
 import { collectMeetingEvidence } from "../src/meetingEvidence.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
 
 const CEO: MaterialViewer = { personId: "person-fixture-001", role: "ceo", displayName: "测试甲" };
 const MEMBER: MaterialViewer = { personId: "person-fixture-002", role: "member", displayName: "测试乙" };
@@ -240,29 +239,6 @@ describe("feedback 12：预审与 Chat 读同一份最新群材料和群讨论",
       const ok = await regenerate(t, cookie, meetingId);
       expect(ok.payload.preflight.status).toBe("ready");
       expect(ok.payload.preflight.entries[0].sourceRefs).toEqual([`material:${created.id}@v2#p3`, `material:${created.id}@v2`]);
-
-      // 企业知识只到节：模型多写的段落锚点（真实模型出现过 memory:kd-company.md#s1#p2）退回到节，不让整份预审失败。
-      const section = loadCompanyMemory(t.env).listSections()[0].id;
-      agent.build = (input) => {
-        const candidate = preflightCandidate([`meeting:${input.meeting.id}`]);
-        candidate.entries[0].sourceRefs = [`memory:${section}#p2`, `material:${created.id}@v2`];
-        return candidate;
-      };
-      const memoryRef = await regenerate(t, cookie, meetingId);
-      expect(memoryRef.payload.preflight.status).toBe("ready");
-      expect(memoryRef.payload.preflight.entries[0].sourceRefs).toEqual([`memory:${section}`, `material:${created.id}@v2`]);
-      expect(memoryRef.payload.preflight.entries[0].sourceRefs).not.toContain(`memory:${section}#p2`);
-
-      // 按节标题写的企业知识引用（10/13 Sonnet 实测写过 memory:<文件>#<节标题>）换成节 ID；标题对不上的仍按未知来源拒收（见下面旧版本一例）。
-      const first = loadCompanyMemory(t.env).listSections()[0];
-      agent.build = (input) => {
-        const candidate = preflightCandidate([`meeting:${input.meeting.id}`]);
-        candidate.entries[0].sourceRefs = [`memory:${first.id.split("#")[0]}#${first.title}`];
-        return candidate;
-      };
-      const byTitle = await regenerate(t, cookie, meetingId);
-      expect(byTitle.payload.preflight.status).toBe("ready");
-      expect(byTitle.payload.preflight.entries[0].sourceRefs).toEqual([`memory:${first.id}`]);
 
       agent.build = (input) => {
         const candidate = preflightCandidate([`meeting:${input.meeting.id}`]);

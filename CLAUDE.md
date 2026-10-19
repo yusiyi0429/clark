@@ -59,7 +59,7 @@
 
 - 根目录使用 pnpm workspace；目标应用为 `apps/web` 与 `apps/api`，共享契约位于 `packages/contracts`。
 - `apps/web` 只负责页面、组件、样式、展示态和 API 客户端，不保存业务数据，不实现状态迁移、模型调用、调度或数据库访问。
-- `apps/api` 负责业务对象、Card 投影、Action、Pi Runtime、CompanyMemory MCP、外部集成、鉴权、调度和持久化。
+- `apps/api` 负责业务对象、Card 投影、Action、Pi Runtime、人员目录与本体公司事实读取、外部集成、鉴权、调度和持久化。
 - `packages/contracts` 只保存 TypeBox schema 与 OpenAPI 生成入口，不依赖 React、Fastify 运行实例、Pi 或数据库实现。
 - Web 客户端类型由 OpenAPI 生成，生成文件不得手工修改；契约变化先改 schema，再重新生成。
 - 旧 `frontend/` 已在 Ticket 18 随 cutover 整体删除，未迁移其业务逻辑、数据或 localStorage；像素级视觉与交互基线为根目录 `UpgradeDesign.pen`，源码恢复依赖根仓库 Git 历史。

@@ -35,7 +35,7 @@ import { projectMemberMeetingCardFromCard } from "../memberCards.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, env, fail, requirePerson, requestContext, companyMemory, preflight, driExporter, ontologyUpdater, outcome, monthlyPlanService, research, invalidInput, respond } = ctx;
+  const { pool, q, env, fail, requirePerson, requestContext, peopleDirectory, preflight, driExporter, ontologyUpdater, outcome, monthlyPlanService, research, invalidInput, respond } = ctx;
 
   app.post(
     "/api/actions/execute",
@@ -66,11 +66,11 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       // Ticket 09：Issue 侧 Meeting Action 先于 Ticket 08 的通用 Issue Action 分派
       if (scope.actionType === "issue.create_meeting") {
         if (!Value.Check(CreateMeetingRequest, input)) return invalidInput(reply, CreateMeetingRequest, input);
-        return respond(reply, await executeCreateMeeting(pool, companyMemory, preflight, env.sessionSecret, scope, input, fingerprint, ctx.threadIntroAgent));
+        return respond(reply, await executeCreateMeeting(pool, peopleDirectory, preflight, env.sessionSecret, scope, input, fingerprint, ctx.threadIntroAgent));
       }
       if (scope.actionType === "issue.join_meeting") {
         if (!Value.Check(JoinMeetingRequest, input)) return invalidInput(reply, JoinMeetingRequest, input);
-        return respond(reply, await executeJoinMeeting(pool, companyMemory, preflight, env.sessionSecret, scope, input, fingerprint));
+        return respond(reply, await executeJoinMeeting(pool, peopleDirectory, preflight, env.sessionSecret, scope, input, fingerprint));
       }
       if (scope.actionType === "meeting.update_draft") {
         if (!Value.Check(UpdateMeetingDraftRequest, input)) return invalidInput(reply, UpdateMeetingDraftRequest, input);
@@ -78,23 +78,23 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       }
       if (scope.actionType === "meeting.edit_details") {
         if (!Value.Check(EditMeetingDetailsRequest, input)) return invalidInput(reply, EditMeetingDetailsRequest, input);
-        return respond(reply, await executeEditMeetingDetails(pool, companyMemory, env.sessionSecret, scope, input, fingerprint, ctx.threadIntroAgent));
+        return respond(reply, await executeEditMeetingDetails(pool, peopleDirectory, env.sessionSecret, scope, input, fingerprint, ctx.threadIntroAgent));
       }
       if (scope.actionType === "meeting.reschedule") {
         if (!Value.Check(EditMeetingDetailsRequest, input)) return invalidInput(reply, EditMeetingDetailsRequest, input);
         if (!input.scheduledAt || Object.keys(input).some((key) => key !== "scheduledAt" && key !== "endsAt"))
           return fail(reply, 400, "INVALID_INPUT", "重新安排只接受开始和结束时间，且必须填写开始时间");
-        return respondMeeting(await executeEditMeetingDetails(pool, companyMemory, env.sessionSecret, scope, input, fingerprint, undefined, { hostId, futureOnly: true, now: ctx.now() }));
+        return respondMeeting(await executeEditMeetingDetails(pool, peopleDirectory, env.sessionSecret, scope, input, fingerprint, undefined, { hostId, futureOnly: true, now: ctx.now() }));
       }
       if (scope.actionType === "meeting.request_supplement") {
         if (!Value.Check(RequestSupplementRequest, input)) return invalidInput(reply, RequestSupplementRequest, input);
-        return respond(reply, await executeRequestSupplement(pool, companyMemory, driExporter, env.sessionSecret, scope, input, fingerprint));
+        return respond(reply, await executeRequestSupplement(pool, peopleDirectory, driExporter, env.sessionSecret, scope, input, fingerprint));
       }
       if (scope.actionType === "meeting.edit_materials") {
         return respond(reply, await executeEditMaterials(pool, env.sessionSecret, scope, fingerprint));
       }
       if (scope.actionType === "meeting.run_preflight") {
-        return respond(reply, await executeRunPreflight(pool, companyMemory, preflight, env.sessionSecret, scope, fingerprint));
+        return respond(reply, await executeRunPreflight(pool, peopleDirectory, preflight, env.sessionSecret, scope, fingerprint));
       }
       if (scope.actionType === "meeting.cancel") {
         return respond(reply, await executeCancelMeeting(pool, env.sessionSecret, scope, fingerprint));
@@ -108,10 +108,10 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
           : { ...result, latestCard: projectMemberMeetingCardFromCard(result.latestCard, viewerId) });
       }
       if (scope.actionType === "meeting.retry_preflight") {
-        return respond(reply, await executeRetryPreflight(pool, companyMemory, preflight, env.sessionSecret, scope, fingerprint));
+        return respond(reply, await executeRetryPreflight(pool, peopleDirectory, preflight, env.sessionSecret, scope, fingerprint));
       }
       if (scope.actionType === "meeting.regenerate_preflight") {
-        return respond(reply, await executeRegeneratePreflight(pool, companyMemory, preflight, env.sessionSecret, scope, fingerprint));
+        return respond(reply, await executeRegeneratePreflight(pool, peopleDirectory, preflight, env.sessionSecret, scope, fingerprint));
       }
       // Ticket 10：Transcript 替换是危险 Action，要求二次确认
       if (scope.actionType === "meeting.replace_transcript") {
@@ -124,7 +124,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       // Ticket 27：妙记 Markdown 候选确认/清除；speakerMappings 是确认 Action 的全部输入
       if (scope.actionType === "meeting.confirm_transcript_candidate") {
         if (!Value.Check(ConfirmTranscriptCandidateRequest, input)) return invalidInput(reply, ConfirmTranscriptCandidateRequest, input);
-        return respondMeeting(await executeConfirmTranscriptCandidate(pool, companyMemory, outcome, env.sessionSecret, scope, input, fingerprint, hostId));
+        return respondMeeting(await executeConfirmTranscriptCandidate(pool, peopleDirectory, outcome, env.sessionSecret, scope, input, fingerprint, hostId));
       }
       if (scope.actionType === "meeting.discard_transcript_candidate") {
         const discardInput = input ?? {};
@@ -152,7 +152,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
         if (!Value.Check(UpdateMonthlyPlanDraftRequest, monthlyInput)) {
           return invalidInput(reply, UpdateMonthlyPlanDraftRequest, monthlyInput);
         }
-        return respond(reply, await executeUpdateMonthlyPlanDraft(pool, companyMemory, env.sessionSecret, scope, monthlyInput as TUpdateMonthlyPlanDraftRequest, fingerprint));
+        return respond(reply, await executeUpdateMonthlyPlanDraft(pool, peopleDirectory, env.sessionSecret, scope, monthlyInput as TUpdateMonthlyPlanDraftRequest, fingerprint));
       }
       if (scope.actionType === "monthly-plan.retry_draft") {
         const result = await executeRetryMonthlyPlanDraft(pool, env.sessionSecret, scope, fingerprint);
@@ -166,10 +166,10 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       if (scope.actionType === "monthly-plan.sign") {
         const signInput = input ?? {};
         if (!Value.Check(SignMonthlyPlanRequest, signInput)) return invalidInput(reply, SignMonthlyPlanRequest, signInput);
-        const result = await executeSignMonthlyPlan(pool, companyMemory, env.sessionSecret, scope, fingerprint);
+        const result = await executeSignMonthlyPlan(pool, peopleDirectory, env.sessionSecret, scope, fingerprint);
         // 签发已提交：由系统为各战场参与者起草任务卡；重放不再启动，已有轮次的战场跳过。起草没能开始也不影响签发结果。
-        if ("card" in result && !result.replayed) await startSignedMissionDrafts(pool, companyMemory.searchPeople(undefined), (result.card.payload as { period: string }).period,
-          ctx.now, ctx.missionCardDraftAgent, companyMemory, env.missionCardKnownMissionsFile).catch((error) => console.error("mission card drafts did not start", error));
+        if ("card" in result && !result.replayed) await startSignedMissionDrafts(pool, peopleDirectory.searchPeople(undefined), (result.card.payload as { period: string }).period,
+          ctx.now, ctx.missionCardDraftAgent, ctx.company, env.missionCardKnownMissionsFile).catch((error) => console.error("mission card drafts did not start", error));
         // 签发即代 CEO 确认本体同周期的周期目标；后台发送，不影响签发结果。
         if ("card" in result && !result.replayed) ctx.worldPeriodGoals?.schedule();
         return respond(reply, result);
@@ -177,13 +177,13 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
 
       if (scope.actionType === "mission.edit") {
         if (!Value.Check(MissionEditInput, input)) return invalidInput(reply, MissionEditInput, input);
-        return respond(reply, await executeEditMission(pool, env.sessionSecret, personDisplayNames(companyMemory), scope, input, fingerprint, req.person!));
+        return respond(reply, await executeEditMission(pool, env.sessionSecret, personDisplayNames(peopleDirectory), scope, input, fingerprint, req.person!));
       }
 
       if (scope.objectType === "issue") {
         // 指派主责只能指给公司名单里的真人；操作人的显示名也从同一份名单取。
         const people = scope.actionType === "issue.assign"
-          ? { actorId: req.person!.personId, people: new Map(companyMemory.searchPeople(undefined)
+          ? { actorId: req.person!.personId, people: new Map(peopleDirectory.searchPeople(undefined)
             .filter((person) => isRealPerson(person) || person.personId === req.person!.personId).map((person) => [person.personId, person.displayName])) }
           : undefined;
         const result = await executeIssueAction(pool, env.sessionSecret, scope, fingerprint, req.body.input, people);

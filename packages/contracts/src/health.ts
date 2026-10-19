@@ -5,7 +5,10 @@ export const HealthDependencies = Type.Object(
   {
     piRuntime: Type.Boolean(),
     modelSlots: Type.Boolean(),
-    companyMemoryMcp: Type.Boolean(),
+    /** 人员目录已装载（登录、角色、人名只看它）。 */
+    peopleDirectory: Type.Boolean(),
+    /** 本体公司事实读取是否配全（本体地址与凭证、按人授权文件）；只看配置，不影响 status。 */
+    companyConfigured: Type.Boolean(),
     search: Type.Boolean(),
     wechat: Type.Boolean(),
     outlets: Type.Boolean(),

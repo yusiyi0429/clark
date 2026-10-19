@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { createAssistantMessageEventStream, type AssistantMessage, type Context } from "@earendil-works/pi-ai";
 import type { TRadarScanResponse, TRadarSourceItem } from "@warmap/contracts";
 import { buildApp } from "../src/app.js";
-import { loadCompanyMemory, type MemoryPerson } from "../src/companyMemory.js";
+import { loadPeopleDirectory, type DirectoryPerson as MemoryPerson } from "../src/peopleDirectory.js";
 import { migrate } from "../src/migrate.js";
 import { createPersonalRadarJudge } from "../src/personalRadarAgent.js";
 import { createPersonalRadarService, type PersonalRadarJudge, type PersonalRadarJudgeInput } from "../src/personalRadar.js";
@@ -133,7 +133,7 @@ const repo = (name: string, starsInPeriod: number | null, description: string | 
 function service(pool: Pool, deps: { web?: RadarWebAdapter; outlets?: RadarOutletAdapter; judge?: PersonalRadarJudge; trending?: GithubTrendingReader; articleText?: ArticleFetcher; scanTimeoutMs?: number; now?: () => Date }) {
   return createPersonalRadarService({
     pool,
-    companyMemory: memory,
+    peopleDirectory: memory,
     web: deps.web ?? fakeWeb(() => []),
     outlets: deps.outlets ?? fakeOutlets(),
     judge: deps.judge ?? acceptAll(),
@@ -842,7 +842,7 @@ describe("接口排队到扫描完成", () => {
       await migrate(db);
       await seedTestAccess(db);
       const radar = createPersonalRadarService({
-        pool, companyMemory: loadCompanyMemory(testEnv),
+        pool, peopleDirectory: loadPeopleDirectory(testEnv),
         web: fakeWeb(() => [webItem("https://example.com/flow")]), outlets: fakeOutlets(), judge: acceptAll(), now: () => NOW,
       });
       const app = await buildApp({

@@ -77,7 +77,7 @@ _Avoid_: 本地按钮成功态、会后行动分派
 _Avoid_: 工作日、浏览器本地日期
 
 **Person**:
-CompanyMemory 人员目录中具有稳定 personId 的人。显示姓名和角色可以变化，业务引用始终使用 personId。
+人员目录（company-people.v1）中具有稳定 personId 的人。显示姓名和角色可以变化，业务引用始终使用 personId。
 _Avoid_: 由姓名临时生成的身份、自由文本参与人
 
 **Monthly Plan**:
@@ -157,7 +157,7 @@ _Avoid_: 通用页面 DSL、独立业务对象
 _Avoid_: 对话指令、前端业务回调、Agent 工具调用
 
 **Agent Runtime**:
-Pi SDK 在 TypeScript API 服务中提供 agent loop、Tool 调用、Session 和上下文压缩。生产 Runtime 不加载用户级 Pi 配置，只显式开放场景 Prompt、Web Search 和只读 CompanyMemory MCP；它不拥有 Conversation 原文、业务对象或 Company Memory。
+Pi SDK 在 TypeScript API 服务中提供 agent loop、Tool 调用、Session 和上下文压缩。生产 Runtime 不加载用户级 Pi 配置，只显式开放场景 Prompt、Web Search 和只读的本体公司事实、人员目录；它不拥有 Conversation 原文、业务对象或公司事实。
 _Avoid_: 业务数据库、组织 Action 执行器、四层记忆的唯一事实源
 
 **Four-layer Memory**:
@@ -169,7 +169,7 @@ _Avoid_: Runtime 自有数据库、单一超长 Prompt、把四层都交给 Agen
 _Avoid_: 跨所有页面共享的聊天历史、自然语言命令入口、Runtime 唯一持有的历史
 
 **Company Memory**:
-Agent 通过只读 CompanyMemory MCP 按目录和相关段落读取的公司认知底座。CEO WarMap 当前不把单次决定或对话直接写回；同一 MCP 预留给未来 DRI Agent 和 CoAgent 复用。
+已退役（ADR-0027）。公司事实只认本体：对话按本人授权、后台服务按 `COMPANY_SYSTEM_PERSON_ID` 的授权只读读取本体投影；读不到时如实说没读到，不用本地企业知识兜底。`seed/memory/CompanyMemory.md` 不再加载。
 _Avoid_: WarMap 业务对象库、自动接收所有新产出的知识库
 
 **Memory Update Proposal**:

@@ -1,9 +1,7 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { Type } from "@sinclair/typebox";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
-  COMPANY_MEMORY_TOOLS,
   MonthlyReviewField,
   MissionCardField,
   SearchPeopleInput,
@@ -27,11 +25,9 @@ import {
   type Model,
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { plainKnowledgeText, type CompanyMemoryRepository } from "./companyMemory.js";
-import { formalTerms, formalTermsDeep } from "./formalTerms.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
+import { formalTermsDeep } from "./formalTerms.js";
 import type { ConversationRuntime } from "./conversations.js";
-import { makeMemoryTools } from "./memoryTools.js";
-import { createCompanyMemoryMcpServer } from "./mcpCompanyMemory.js";
 import { CONVERSATION_WRITING_STYLE } from "./promptStyle.js";
 import {
   TIER_GUIDANCE, TIER_SETTINGS, cleanThought, createEscalationWatch, hasWriteIntent, latestSummaryHeading, routeTurn, thinkingHeadline, toolProgressLabel, toolResultDetail, withNotice,
@@ -50,7 +46,7 @@ import {
 import { unavailableWebSearchAdapter, type WebSearchAdapter } from "./webSearch.js";
 import type { Pool } from "pg";
 import { createObjectMaterial, editObjectMaterial, listObjectMaterials, readObjectMaterial, ObjectMaterialError } from "./objectMaterials.js";
-import { personDisplayNames } from "./people.js";
+import { isRealPerson, personDisplayNames } from "./people.js";
 import { collectMeetingEvidence, collectObjectEvidence } from "./meetingEvidence.js";
 import { issueDecisionHistory, meetingDecisionHistory } from "./issueDecisionHistory.js";
 import { withBeijingTimes } from "./agentTime.js";
@@ -64,10 +60,14 @@ import { readMissionCardForAgent } from "./mcpMissionCards.js";
 import { MISSION_CARD_WRITING_RULES } from "./missionCardWritingRules.js";
 import { AGENT_ROLES, RETRIEVE_SOURCES, annotateTurn, preview, traceTools, tracedStreamSimple, tracingEnabled, withAgent, withRetrieve } from "./tracing.js";
 import { logEvent } from "./observability.js";
-import { LOCAL_FALLBACK, type CompanyReader } from "./company.js";
+import type { CompanyReader } from "./company.js";
 import { THREE_LAYER_RULES } from "./companyMap.js";
+import { composeTurnContext, withTurnContext, type ProviderTurn } from "./turnContext.js";
 import { ISSUE_SUGGEST_RULES } from "./issueDrafts.js";
 import { ASK_USER_RULES, PERSONAL_REVIEW_CHECK_RULES, makeAskTool } from "./askUser.js";
+
+/** 场景锚点（PR #12 Anchor 层）在系统提示里的说明：CEO 与 DRI 共用。 */
+const ANCHOR_CONTEXT = `\`anchor\` 是本人当前所在的页面（scene）与聚焦的卡（focus，句柄 A1…），items 是页面上可见项的摘要目录；要看某一项的完整内容或下一页目录时用 \`read_anchor\`（handle 或 cursor），展开结果或 focus 带 changed 时说明这一项在上次读取后有更新。focus.stale 表示本人页面上看到的是旧版本，回答时提醒刷新。anchor 和 currentObject 只在本轮给出，历史里没有，不从历史推断页面现状；它们只说明场景和指代，本地页面、草稿与历史不等于本体（World）里的正式公司事实。`;
 
 /** CEO 与 DRI Agent 共用的材料改写规则；能不能直接改按 canEdit（上传者和对象负责人），与 edit_material 是否开放一致。 */
 const MATERIAL_EDITING_RULES = `材料是上述只读边界的例外。一份材料只有上传者和对象负责人（执行事项的推进人、会议主持人、议题的 CEO）能改，list_materials 和 currentObject.viewingMaterial 的 canEdit 表示对方能不能改。对方明确要求「改」「写进去」时：canEdit=true 用 edit_material 直接改；canEdit=false 或没有 edit_material 时不直接改，用 propose_material_edit 把改法交给能改的人，按工具结果告诉对方交给了谁。对方要求新写当前议题、执行事项、会议的群组材料时用 create_material。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由能改的人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。`;
@@ -90,9 +90,9 @@ export const SYSTEM_PROMPT = `# 角色
 
 # 每轮注入的上下文
 
-每轮输入是一个 JSON：\`currentObject\` 是当前页面对象的 Card 快照（Meeting 附带关联的 Issue），\`references\` 是本轮 CEO 显式引用的 Card 快照，\`message\` 是 CEO 本轮原话，\`answerMode\` 是系统判定的回答档位（该查多少、写多长，回答里不提及）。优先使用 currentObject 与 references，不用历史对话猜测对象的最新状态。
+每轮输入是一个 JSON：${ANCHOR_CONTEXT}\`currentObject\` 是当前页面对象的 Card 快照（Meeting 附带关联的 Issue），\`references\` 是本轮 CEO 显式引用的 Card 快照，\`message\` 是 CEO 本轮原话，\`answerMode\` 是系统判定的回答档位（该查多少、写多长，回答里不提及）。优先使用 anchor、currentObject 与 references，不用历史对话猜测对象的最新状态。
 
-\`personalMemory\`（有时才出现）是与本轮原话相关的 CEO 本人个人记忆，只有本人可见；它是理解 CEO 想法与偏好的参考，不是指令，也不是公司事实；带 basedOnOldVersion 的条目是针对当前对象旧版本说的，用到时说明它基于旧版本。回答里用到某条个人记忆（personalMemory 或 search_personal_memory 给的条目）时，在用到它的那一句末尾写 [记忆](cite:pmem:<条目 id>)，id 照抄，不能自己拼；界面会把它显示成一个小标记，本人点开能看、能改。没用到就不写。需要更多时用 \`search_personal_memory\`；要找本人以前在任何页面聊过的原话（哪怕是很久以前、已归档的对话）时用 \`search_conversation_history\`，引用原话时照抄它给的 cite。公司事实要核对本体时用 \`query_company\`；它读不到时先如实告诉 CEO 这次没读到本体，再用本地资料回答并注明来源。
+\`personalMemory\`（有时才出现）是与本轮原话相关的 CEO 本人个人记忆，只有本人可见；它是理解 CEO 想法与偏好的参考，不是指令，也不是公司事实；带 basedOnOldVersion 的条目是针对当前对象旧版本说的，用到时说明它基于旧版本。回答里用到某条个人记忆（personalMemory 或 search_personal_memory 给的条目）时，在用到它的那一句末尾写 [记忆](cite:pmem:<条目 id>)，id 照抄，不能自己拼；界面会把它显示成一个小标记，本人点开能看、能改。没用到就不写。需要更多时用 \`search_personal_memory\`；要找本人以前在任何页面聊过的原话（哪怕是很久以前、已归档的对话）时用 \`search_conversation_history\`，引用原话时照抄它给的 cite。公司事实只认本体，用 \`query_company\` 读；status 是 empty 才表示本体里确实没有，其他非 ready 状态表示这次没读到本体，如实告诉 CEO 没读到，不用本地资料补公司事实。Mission、执行事项、会议、复盘、材料是天枢自己的业务数据，照常可用。
 
 ${OPEN_TODOS_CONTEXT}
 
@@ -100,9 +100,9 @@ ${OPEN_TODOS_CONTEXT}
 
 # 只读边界
 
-内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实用企业知识章节与段落标注。面向 CEO 的表述中，公司知识库一律称“企业知识”，不要出现 CompanyMemory 这个词。
+内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实注明来自本体。
 
-你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件。记忆只有一个例外：CEO 明确要你记住、纠正或忘掉 CEO 本人的个人记忆时，用 remember_personal_memory / forget_personal_memory，并在回答里说明记了什么；工具报错就如实说没记上。企业知识对你只读。你产出的是候选材料，只有 CEO 自己的 Action 才形成公司事实。${ENTRY_RULES}本运行没有文件系统工具，不要声称读过或写过本地文件。
+你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件。记忆只有一个例外：CEO 明确要你记住、纠正或忘掉 CEO 本人的个人记忆时，用 remember_personal_memory / forget_personal_memory，并在回答里说明记了什么；工具报错就如实说没记上。本体公司事实对你只读。你产出的是候选材料，只有 CEO 自己的 Action 才形成公司事实。${ENTRY_RULES}本运行没有文件系统工具，不要声称读过或写过本地文件。
 
 ${MATERIAL_EDITING_RULES}
 
@@ -116,7 +116,7 @@ ${MATERIAL_EDITING_RULES}
 
 纯推理、写作润色、加工已有材料和 CEO 明确要求不用查时直接回答。具体公司、产品、人物、政策或市场的现状，数字、价格、规模、融资和财报，“最新”“近期”等时效问题，以及没有把握的外部事实，必须检索。
 
-先内后外：公司内部事实先查企业知识与实时看板，按章节目录定位后只读需要的段落。CEO 问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源，只有它返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search：彼此不依赖的检索放在同一步里一起发出，额度用在关键分歧上，证据够了就停，不把检索计划写进回答。
+先内后外：公司内部事实先查本体公司事实与实时看板。CEO 问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源，只有它返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search：彼此不依赖的检索放在同一步里一起发出，额度用在关键分歧上，证据够了就停，不把检索计划写进回答。
 
 web_search 直接返回来源标题、URL 与摘要（本运行最多 8 次），摘要只能用于发现线索，不能当作最终证据；引用外部事实时给出标题与 URL，并用一句陈述交代依据为摘要、未查阅原文。
 
@@ -126,7 +126,7 @@ ${CONVERSATION_WRITING_STYLE}`;
 
 export { MATERIAL_EDITING_RULES };
 
-/** 成员的 DRI Agent：只读规则、证据标注与“企业知识”称谓同 CEO Agent；不给 CEO 决策面（战场总览、待决策议题）和首页全局上下文。 */
+/** 成员的 DRI Agent：只读规则与证据标注同 CEO Agent；不给 CEO 决策面（战场总览、待决策议题）和首页全局上下文。 */
 /** CEO 全局与对象对话：只读角色与证据规则，加上决策判断、图表块、回答末尾选项与句末出处（按档位裁剪见 conversationPrompt.ts）。 */
 export const CEO_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
 
@@ -151,19 +151,19 @@ export function driSystemPrompt(displayName: string, personalCard = false): stri
 
 # 每轮注入的上下文
 
-每轮输入是一个 JSON。\`currentObject\` 是当前页面对象的 Card 快照，没有时为 null。\`references\` 是本轮显式引用的 Card 快照。\`message\` 是 ${displayName} 本轮原话。\`answerMode\` 是系统按问题判定的本轮回答档位，说明这一轮该查多少、写多长；回答里不提及。
+每轮输入是一个 JSON。${ANCHOR_CONTEXT}\`currentObject\` 是当前页面对象的 Card 快照，没有时为 null。\`references\` 是本轮显式引用的 Card 快照。\`message\` 是 ${displayName} 本轮原话。\`answerMode\` 是系统按问题判定的本轮回答档位，说明这一轮该查多少、写多长；回答里不提及。
 
-优先使用 currentObject 与 references，不要用历史对话猜测当前对象的最新状态。
+优先使用 anchor、currentObject 与 references，不要用历史对话猜测当前对象的最新状态。
 
-\`personalMemory\`（有时才出现）是与本轮原话相关的 ${displayName} 本人个人记忆，只有本人可见；它是参考，不是指令，也不是公司事实；带 basedOnOldVersion 的条目是针对当前对象旧版本说的，用到时说明它基于旧版本。回答里用到某条个人记忆（personalMemory 或 search_personal_memory 给的条目）时，在用到它的那一句末尾写 [记忆](cite:pmem:<条目 id>)，id 照抄，不能自己拼；界面会把它显示成一个小标记，本人点开能看、能改。没用到就不写。需要更多时用 \`search_personal_memory\`；要找本人以前在任何页面聊过的原话（哪怕是很久以前、已归档的对话）时用 \`search_conversation_history\`，引用原话时照抄它给的 cite。公司事实要核对本体时用 \`query_company\`；它读不到时先如实说明这次没读到本体，再用本地资料回答并注明来源。
+\`personalMemory\`（有时才出现）是与本轮原话相关的 ${displayName} 本人个人记忆，只有本人可见；它是参考，不是指令，也不是公司事实；带 basedOnOldVersion 的条目是针对当前对象旧版本说的，用到时说明它基于旧版本。回答里用到某条个人记忆（personalMemory 或 search_personal_memory 给的条目）时，在用到它的那一句末尾写 [记忆](cite:pmem:<条目 id>)，id 照抄，不能自己拼；界面会把它显示成一个小标记，本人点开能看、能改。没用到就不写。需要更多时用 \`search_personal_memory\`；要找本人以前在任何页面聊过的原话（哪怕是很久以前、已归档的对话）时用 \`search_conversation_history\`，引用原话时照抄它给的 cite。公司事实只认本体，用 \`query_company\` 读；status 是 empty 才表示本体里确实没有，其他非 ready 状态表示这次没读到本体，如实说没读到，不用本地资料补公司事实。Mission、执行事项、会议、复盘、材料是天枢自己的业务数据，照常可用。
 
 ${OPEN_TODOS_CONTEXT}
 
 # 只读边界
 
-内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实用企业知识章节与段落标注。公司知识库一律称“企业知识”，不要出现 CompanyMemory 这个词。
+内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实注明来自本体。
 
-你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件。记忆只有一个例外：本人明确要你记住、纠正或忘掉本人的个人记忆时，用 remember_personal_memory / forget_personal_memory，并在回答里说明记了什么；工具报错就如实说没记上。企业知识对你只读。你产出的是候选材料，不形成公司事实。${ENTRY_RULES}本运行没有文件系统工具，不要声称读过或写过本地文件。
+你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件。记忆只有一个例外：本人明确要你记住、纠正或忘掉本人的个人记忆时，用 remember_personal_memory / forget_personal_memory，并在回答里说明记了什么；工具报错就如实说没记上。本体公司事实对你只读。你产出的是候选材料，不形成公司事实。${ENTRY_RULES}本运行没有文件系统工具，不要声称读过或写过本地文件。
 
 ${MATERIAL_EDITING_RULES}
 
@@ -172,9 +172,7 @@ ${personalCard ? "当前任务卡正文也是上述边界的例外：审核中�
 # 工具
 
 ${personalCard ? "当前任务卡的正文、公开意见和轮次已放在 currentObject；讨论个人承诺以这份授权资料为准。别人的 Mission 卡和执行情况只能用三层取用的工具读，不推测，也不能把私聊变为公开意见。" : "- `list_missions`：按 period、battlefieldId、capabilityId 或 ownerId 查询当前 Mission；问某个战场、能力或 DRI 有哪些 Mission 时必须调用它。"}
-- \`list_sections\`：企业知识章节目录，先看目录再决定读哪里。
-- \`search_sections\`：在企业知识内按关键词定位相关章节。
-- \`get_passages\`：读取指定章节的段落正文。
+- \`query_company\`：只读查询本人被授权读取的本体公司事实。
 - \`search_people\`：稳定人员目录，把姓名解析为 personId。
 - \`read_outlet_feed\`：读取当前 Radar 已启用的 BBC、彭博、路透、金融时报、CNBC、经济学人等发布方媒体窗口内最新条目。它不是全文、历史库或全网关键词检索。
 - \`web_search\`：检索公开来源，仅在内部材料不足时使用。
@@ -185,11 +183,11 @@ ${personalCard ? "当前任务卡的正文、公开意见和轮次已放在 curr
 
 以下问题必须检索：具体公司、产品、人物、政策或市场的现状；数字、价格、规模、融资和财报；“最新”“现在”“近期”等时效问题；以及你没有把握的外部事实。
 
-顺序是先内后外。公司内部事实先查企业知识与${personalCard ? "当前卡资料" : " Mission 列表"}。问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源；该工具返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search。存在多个独立信息需求时，先定好最多 4 项证据问题；彼此不依赖的检索放在同一步里一起发出，不要查完一项再查下一项；除非被追问，不要把检索计划写进回答。
+顺序是先内后外。公司内部事实先查本体公司事实与${personalCard ? "当前卡资料" : " Mission 列表"}。问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源；该工具返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search。存在多个独立信息需求时，先定好最多 4 项证据问题；彼此不依赖的检索放在同一步里一起发出，不要查完一项再查下一项；除非被追问，不要把检索计划写进回答。
 
 web_search 直接返回来源标题、URL 与摘要，本运行最多 8 次，达到上限会中止本轮并报错。把额度用在关键分歧上，证据够了就停。博查摘要只能用于发现线索，不能当作最终证据。本运行没有读取网页原文的工具，所以引用外部事实时必须给出标题与 URL，并用一句陈述交代依据为摘要、未查阅原文。
 
-不要把全部企业知识章节拼接进上下文，按章节目录定位后只读需要的段落。搜不到就明说，不编造。工具报错或超时时，用一句话说清没读到什么、为什么，并给出下一步（例如稍后重试，或在依据面板直接打开原文），不要沉默，也不要凭印象补原文。材料重复或没有新增时换检索方向。搜索次数只是行为记录，不代表回答质量。
+搜不到就明说，不编造。工具报错或超时时，用一句话说清没读到什么、为什么，并给出下一步（例如稍后重试，或在依据面板直接打开原文），不要沉默，也不要凭印象补原文。材料重复或没有新增时换检索方向。搜索次数只是行为记录，不代表回答质量。
 
 没有来源、样本或可复核计算时，不给竞争重叠率、成功概率和置信度写精确百分比；可以使用定性等级，并说明判断依据。
 
@@ -246,7 +244,7 @@ export type PendingIssueSummary = {
 };
 
 export type PiConversationRuntimeOptions = {
-  companyMemory: CompanyMemoryRepository;
+  peopleDirectory: PeopleDirectory;
   materialPool?: Pool;
   missionCardSecret?: string;
   now?: () => Date;
@@ -467,9 +465,6 @@ const SEARCH_REFUSALS_BEFORE_ABORT = 8;
 const SEARCH_LIMIT_NOTICE = `本轮检索已到上限（${SEARCH_LIMIT} 次），这是最后一次检索结果。请不要再调用 web_search，基于已检索到的结果和内部材料作答，并在回答中如实说明本轮检索已到上限、哪些点未能进一步核实。`;
 const SEARCH_LIMIT_REFUSAL = `本轮检索已到上限（${SEARCH_LIMIT} 次），这次没有执行检索。请停止调用 web_search，基于已检索到的结果和内部材料作答，并在回答中如实说明本轮检索已到上限、哪些点未能进一步核实。`;
 
-/** 企业知识只读工具的单次超时（巡检 P0-2）。 */
-export const MEMORY_TOOL_TIMEOUT_MS = 20_000;
-
 /** Claude（Anthropic 协议）主答模型所在的 provider；GPT 与压缩模型在 "warmap"。 */
 const ANTHROPIC_PROVIDER = "warmap-anthropic";
 
@@ -505,6 +500,28 @@ function unchangedGlobalContext(manager: SessionManager, context: Record<string,
   return context;
 }
 
+/**
+ * 场景锚点在 Pi 历史里只记轻量引用（场景、聚焦卡与目录各项的 id@版本，不含正文；模型看不到这条）。
+ * 和上一轮（最近一次压缩之后）的引用一样就不再记：同一页面连续追问只记一次。
+ */
+export const ANCHOR_REF_ENTRY = "warmap.anchor-ref";
+function recordAnchorRef(manager: SessionManager, ref: { scene: string; focus: string | null; items: string[] }): void {
+  // entries 存在 jsonb 里，读回来键的顺序会变，所以按固定顺序的 key 比较。
+  const key = JSON.stringify([ref.scene, ref.focus, ref.items]);
+  const branch = manager.getBranch();
+  for (let index = branch.length - 1; index >= 0; index -= 1) {
+    const entry = branch[index];
+    if (entry.type === "compaction") break;
+    if (entry.type === "custom" && entry.customType === ANCHOR_REF_ENTRY) {
+      if ((entry.data as { key?: unknown } | undefined)?.key === key) return;
+      break;
+    }
+  }
+  manager.appendCustomEntry(ANCHOR_REF_ENTRY, { ref, key });
+}
+/** read_anchor 的结果在历史里只留这句（和卡片引用，放在 details 里，模型看不到）；本轮发给模型时换回正文。 */
+const ANCHOR_RESULT_MARKER = "（本轮临时展开的页面内容，历史里不保留正文；要再看请重新用 read_anchor。）";
+
 /** 同一份系统提示复用同一个 resource loader（按档位拼出来的提示只有少数几种）。 */
 const resourceLoaders = new Map<string, ResourceLoader>();
 function cachedResourceLoader(prompt: string): ResourceLoader {
@@ -518,38 +535,11 @@ function cachedResourceLoader(prompt: string): ResourceLoader {
 }
 
 export async function createPiConversationRuntime(options: PiConversationRuntimeOptions): Promise<ConversationRuntime> {
-  const server = createCompanyMemoryMcpServer(options.companyMemory);
-  const client = new Client({ name: "warmap-pi", version: "0.1.0" });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await server.connect(serverTransport);
-  await client.connect(clientTransport);
-
-  const call = async (name: string, args: Record<string, unknown>) => {
-    let result: Awaited<ReturnType<typeof client.callTool>>;
-    try {
-      // 企业知识是本机只读查询，正常毫秒级返回；单独设短超时，卡住时让 Agent 当轮说清楚原因，而不是拖到整轮 180 秒。
-      result = await client.callTool({ name, arguments: args }, undefined, { timeout: MEMORY_TOOL_TIMEOUT_MS });
-    } catch (cause) {
-      const timedOut = /timed? ?out/i.test(String((cause as Error)?.message)) || (cause as { code?: number })?.code === -32001;
-      throw new Error(timedOut
-        ? `企业知识 ${MEMORY_TOOL_TIMEOUT_MS / 1000} 秒内没有返回（${name}）。请直接告诉用户这次没读到企业知识原文，可以在依据面板里直接打开原文，或稍后重试。`
-        : `企业知识读取失败（${name}）：${(cause as Error)?.message ?? "未知原因"}。请直接告诉用户这次没读到，不要编造原文。`);
-    }
-    const rawContent = Array.isArray(result.content)
-      ? result.content as { type?: string; text?: string }[]
-      : [];
-    const content = rawContent
-      .filter((item): item is { type: "text"; text: string } => item.type === "text" && typeof item.text === "string")
-      // 回答里不要出现 wiki / docx 标识、revision 号：交给模型前就去掉这些后台括注；内部英文类型名、带编号的代号换成正式中文叫法（formalTerms.ts）。
-      .map((item) => ({ type: "text" as const, text: name === "search_people" ? item.text : formalTerms(plainKnowledgeText(item.text)) }));
-    if (result.isError) throw new Error(content.map((item) => item.text).join("\n") || `${name} failed`);
-    return { content, details: {} };
-  };
-  const mcpTools = [
-    ...makeMemoryTools(call),
+  const peopleTools = [
     defineTool({ name: "search_people", label: "查询人员", description: "查询稳定人员目录", parameters: SearchPeopleInput,
       execute: async (_id, args) => withRetrieve(RETRIEVE_SOURCES.peopleDirectory, () => ({ hasQuery: Boolean((args as { query?: unknown }).query) }),
-        () => call("search_people", args), (result) => ({ blocks: result.content.length })) }),
+        async () => ({ content: [{ type: "text" as const, text: JSON.stringify({ people: options.peopleDirectory.searchPeople((args as { query?: string }).query).filter(isRealPerson) }) }], details: {} }),
+        (result) => ({ blocks: result.content.length })) }),
   ];
   const listPendingIssues = options.listPendingIssues;
   const boardTools = (viewer?: { personId: string; role: "ceo" | "member" }) => [
@@ -563,9 +553,9 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       }, { additionalProperties: false }),
       execute: async (_id, args) => {
         const result = await options.readOntology!(args as { part?: "company" | "strategy" | "battlefields"; battlefieldId?: string });
-        // 本体读不到（用户 2026-10-16 决定）：先如实告诉用户，再回退本地资料作答，并多记一条日志。
+        // 本体读不到（D-48）：如实说没读到，不用本地资料补公司事实，并多记一条日志。
         if (!result) logEvent({ event: "world.ontology_unavailable", tool: "read_ontology", part: (args as { part?: string }).part ?? "all" });
-        const value = result ?? { available: false, note: `本体暂时读不到。${LOCAL_FALLBACK}` };
+        const value = result ?? { available: false, note: '这次没有读到本体：如实告诉用户没读到，不要用本地资料补公司事实，也不要说成本体里没有。' };
         return { content: [{ type: "text" as const, text: JSON.stringify(formalTermsDeep(value)) }], details: value };
       },
     })] : []),
@@ -630,7 +620,9 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
   // pi 只在模型的协议与 provider 声明的协议一致时才走 provider 的 streamSimple，所以 Responses 与 Anthropic 协议各注册一个 provider，
   // 两边都经过这层包装（10/13 之前 Claude 走 pi 内建实现，追踪和这层都不生效）。
   // 最外层是自动恢复（conversationRecovery.ts）：一次调用出错就地重试、换备用模型或从断点续写，每次尝试各自经过历史整理与追踪。
-  const streamSimple = recoveringStream(conversationStreamSimple(tracedStreamSimple(options.streamSimple)), options.recoverySleep ? { sleep: options.recoverySleep } : {});
+  // 再外面一层是场景锚点的临时注入（turnContext.ts）：每次请求在这里把本轮的锚点正文换进 Context.messages 的副本，不进 Pi 历史。
+  const turnStore = new AsyncLocalStorage<ProviderTurn>();
+  const streamSimple = withTurnContext(turnStore, recoveringStream(conversationStreamSimple(tracedStreamSimple(options.streamSimple)), options.recoverySleep ? { sleep: options.recoverySleep } : {}));
   const responsesDefinitions = mainModelDefinitions.filter((item) => item.api !== "anthropic-messages");
   const anthropicDefinitions = [...mainModelDefinitions.filter((item) => item.api === "anthropic-messages")];
   modelRuntime.registerProvider("warmap", {
@@ -771,7 +763,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         },
       });
       /**
-       * 服务端预取：企业知识（先找相关章节，再读最相关一节的段落）与公开来源并行，最多等 PREFETCH_BUDGET_MS。
+       * 服务端预取：本体公司事实（本人授权范围）与公开来源并行，最多等 PREFETCH_BUDGET_MS。
        * 每一项照常发查证进度事件（界面上与模型自己查的一样显示）；公开来源计入本轮检索额度。失败或超时的项不放进上下文。
        */
       const prefetch = async (terms: NonNullable<TurnRoute["prefetch"]>) => {
@@ -790,14 +782,11 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
             throw cause;
           }
         };
-        const parse = (result: { content: { text: string }[] }) => { try { return JSON.parse(result.content.map((item) => item.text).join("")) as Record<string, unknown>; } catch { return {}; } };
-        const knowledge = terms.memory.map((query) => step("search_sections", { query }, async () => {
-          const found = parse(await call("search_sections", { query, limit: 3 }));
-          const sections = Array.isArray(found.results) ? found.results as { id?: string; section?: { id?: string } }[] : [];
-          const top = sections[0]?.id ?? sections[0]?.section?.id;
-          const passages = top ? parse(await call("get_passages", { sectionId: top, query, limit: 3 })) : null;
-          return { query, results: sections, ...(passages ? { passages } : {}) };
-        }));
+        const company = options.company;
+        const knowledge = company ? terms.memory.map((query) => step("query_company", { query }, async () => {
+          const view = await company.read({ personId: input.viewer.personId, role: input.viewer.role }, { query }, input.signal);
+          return { query, status: view.status, entries: view.entries.map(({ title, text }) => ({ title, text })), ...(view.message ? { message: view.message } : {}) };
+        })) : [];
         const web = terms.web.filter(() => searchCount < SEARCH_LIMIT).map((query) => {
           searchCount += 1;
           return step("web_search", { query }, () => searchForModel({ query }).then((value) => ({ query, ...value })));
@@ -808,9 +797,9 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         ])));
         const [knowledgeResults, webResults] = await Promise.all([settled(knowledge), settled(web)]);
         const pick = <T>(items: ({ ok: true; value: T } | { ok: false })[]) => items.flatMap((item) => (item.ok ? [item.value] : []));
-        const value = { knowledge: pick(knowledgeResults), web: pick(webResults) };
-        if (!value.knowledge.length && !value.web.length) return undefined;
-        return { note: "这是本轮开始前按这个问题预先检索到的企业知识与公开来源（与工具返回的格式相同，可以照样引用）。先用它们，够用就不要重复检索同样的内容；不够再自己查。", ...value };
+        const value = { company: pick(knowledgeResults), web: pick(webResults) };
+        if (!value.company.length && !value.web.length) return undefined;
+        return { note: "这是本轮开始前按这个问题预先读到的本体公司事实与公开来源（与工具返回的格式相同，可以照样引用）。先用它们，够用就不要重复检索同样的内容；不够再自己查。", ...value };
       };
       const outletFeedTools = options.outletFeed ? [defineTool({
         name: "read_outlet_feed",
@@ -845,7 +834,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           execute: async (_id, args) => {
             const request = args as { query?: string; cursor?: string };
             const saved = request.cursor ? companyCursors.get(request.cursor) : undefined;
-            if (request.cursor && !saved) return textResult({ status: "unavailable", entries: [], message: `分页位置不属于本轮，请重新查询。${LOCAL_FALLBACK}` });
+            if (request.cursor && !saved) return textResult({ status: "unavailable", entries: [], message: '分页位置不属于本轮，请重新查询。' });
             const query = saved ? saved.query : request.query;
             const view = await withRetrieve(RETRIEVE_SOURCES.worldCompany, () => ({ hasQuery: Boolean(query), page: Boolean(saved) }),
               () => options.company!.read({ personId: input.viewer.personId, role: input.viewer.role }, { query, cursor: saved?.cursor }, input.signal),
@@ -942,6 +931,21 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           execute: async (_id, args) => textResult(await entries.startCollection(args as { prompt: string; collectionId?: string })),
         }),
       ] : [];
+      // 场景锚点（PR #12）：展开本轮页面项或下一页目录；每次都按本人当前权限和版本重读（sceneAnchor.ts）。
+      // 展开的正文只在本轮临时给模型（anchorResults，provider 边界换进去）；Pi 历史里只留一句说明，卡片引用放在 details。
+      const anchor = input.anchor;
+      const anchorResults: ProviderTurn["toolResults"] = new Map();
+      const anchorTools = anchor ? [defineTool({ name: "read_anchor", label: "展开当前页面",
+        description: "展开 anchor 里的页面项（handle，如 A1）或下一页目录（cursor）；只描述本地页面状态，不代表本体（World）公司事实。",
+        parameters: Type.Object({ handle: Type.Optional(Type.String({ maxLength: 20 })), cursor: Type.Optional(Type.String({ maxLength: 100 })) }, { additionalProperties: false }),
+        execute: async (toolCallId, args) => {
+          const request = args as { handle?: string; cursor?: string };
+          const value = await anchor.read(request);
+          anchorResults.set(toolCallId, { toolName: "read_anchor", content: [{ type: "text", text: JSON.stringify(value) }] });
+          const ref = request.handle ? anchor.refOf(request.handle) : undefined;
+          return { content: [{ type: "text" as const, text: ANCHOR_RESULT_MARKER }], details: ref ? { anchorRef: ref } : {} };
+        },
+      })] : [];
       // 三层取用（companyMap.ts）：每个页面同一套，页面只决定默认焦点；权限在仓储层判，看不到的只记 filtered 条数。
       const map = input.companyMap;
       const People = Type.Optional(Type.Union([Type.Literal("all"), Type.Literal("me"), Type.Array(Type.String({ minLength: 1, maxLength: 40 }), { minItems: 1, maxItems: 30 })]));
@@ -954,7 +958,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       };
       const layerTools = map ? [
         defineTool({ name: "read_mission_cards", label: "读 Mission 卡",
-          description: "读 Mission 卡（目标、计划：结果、时间边界、里程碑、成功证据、关键路径、风险、依赖），全员可读。people：all 全员、me 本人，或人名列表；from/to 是月份；不填按 focus。",
+          description: "读 Mission 卡（目标、计划：结果、时间边界、里程碑、成功证据、关键路径、风险、依赖），全员可读。people：all 全员、me 本人，或人名列表；from/to 是月份；不填按 anchor.range。",
           parameters: Type.Object(scopeParams, { additionalProperties: false }),
           execute: async (_id, args) => textResult(await map.readMissionCards(args as Parameters<typeof map.readMissionCards>[0])) }),
         defineTool({ name: "read_progress", label: "读进展",
@@ -966,7 +970,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           parameters: Type.Object({ ...scopeParams, kind: Type.Optional(Type.Union([Type.Literal("monthly"), Type.Literal("weekly"), Type.Literal("all")])) }, { additionalProperties: false }),
           execute: async (_id, args) => textResult(await map.readReviews(args as Parameters<typeof map.readReviews>[0])) }),
         defineTool({ name: "read_object_tree", label: "沿公司地图走",
-          description: "从一个对象出发沿公司地图走一步：from 写 company、battlefield:<id 或名称>、mission:<id>、task:<id>、person:<姓名>，不填从当前页面对象出发；direction：up 所属、down 下属、side 同级。period 是月份（缺省按 focus）。",
+          description: "从一个对象出发沿公司地图走一步：from 写 company、battlefield:<id 或名称>、mission:<id>、task:<id>、person:<姓名>，不填从 anchor 聚焦的对象出发；direction：up 所属、down 下属、side 同级。period 是月份（缺省按 anchor.period）。",
           parameters: Type.Object({
             from: Type.Optional(Type.String({ maxLength: 160 })),
             direction: Type.Union([Type.Literal("up"), Type.Literal("down"), Type.Literal("side")]),
@@ -1001,7 +1005,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const missionCardId = /^mission-card:(.+)$/.exec(input.scope)?.[1];
       const missionCardTools = missionCardId && options.materialPool ? (() => {
         const pool = options.materialPool!;
-        const people = options.companyMemory.searchPeople(undefined);
+        const people = options.peopleDirectory.searchPeople(undefined);
         const secret = options.missionCardSecret ?? "";
         const now = options.now ?? (() => new Date());
         const result = (value: unknown, isError = false) => {
@@ -1050,7 +1054,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         const ref = { objectType: materialScope[1] as "issue" | "task" | "meeting", objectId: materialScope[2] };
         const pool = options.materialPool!;
         const q = pool.query.bind(pool);
-        const names = personDisplayNames(options.companyMemory);
+        const names = personDisplayNames(options.peopleDirectory);
         const viewer = input.viewer;
         // 对话守同一道门：能改这里至少一份材料的人才有 edit_material；不能改的人只能提议，提议交给能改的人。
         const canEditSome = await listObjectMaterials(q, ref, viewer, names).then((list) => list.materials.some((m) => m.canEdit),
@@ -1124,7 +1128,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const evidenceTools = isCeo && !personalCard && options.materialPool ? (() => {
         const pool = options.materialPool!;
         const q = pool.query.bind(pool);
-        const names = personDisplayNames(options.companyMemory);
+        const names = personDisplayNames(options.peopleDirectory);
         const target = Type.Object({ type: Type.Union([Type.Literal("meeting"), Type.Literal("issue")]), id: Type.String({ minLength: 1, maxLength: 100 }) }, { additionalProperties: false });
         const result = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value) }], details: value });
         const clip = (text: string | null) => (text && text.length > 20_000 ? `${text.slice(0, 20_000)}
@@ -1193,7 +1197,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       }
       // 档位先告诉路由层（整轮时限）和界面（预计用时；深度档带一段开场说明，界面立刻显示，也写进这条回答的开头）。
       input.emit({ type: "route", tier: route.tier, source: route.source, expectSeconds: route.expectSeconds, timeoutMs: route.timeoutMs, model: modelId, ...(route.notice ? { notice: route.notice } : {}) });
-      // 分诊给了检索词：与会话装配同时，先替主答查好企业知识和公开来源，结果放进第一轮上下文，省掉一两轮工具往返。
+      // 分诊给了检索词：与会话装配同时，先替主答查好本体公司事实和公开来源，结果放进第一轮上下文，省掉一两轮工具往返。
       const prefetching = route.prefetch ? prefetch(route.prefetch) : Promise.resolve(undefined);
       // 系统提示与工具按档位、修改意图、本轮意图与页面裁剪（conversationPrompt.ts）。
       const shape = { tier: route.tier, writeIntent: route.writeIntent, anthropic, intents: promptIntents(routedMessage, route), materials: materialTools.length > 0 };
@@ -1204,7 +1208,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const fullPrompt = [basePrompt, ...(layerTools.length ? [THREE_LAYER_RULES] : []), ...(issueTools.length ? [ISSUE_SUGGEST_RULES] : []),
         ...(asking ? [ASK_USER_RULES, ...(input.scope.startsWith("personal-review:") ? [PERSONAL_REVIEW_CHECK_RULES] : [])] : [])].join("\n\n");
       const toolTimeoutMs = options.toolTimeoutMs ?? TOOL_TIMEOUT_MS;
-      const turnTools = [...mcpTools, ...memoryTools, ...entryTools, ...layerTools, ...issueTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...evidenceTools, ...outletFeedTools, searchTool,
+      const turnTools = [...anchorTools, ...peopleTools, ...memoryTools, ...entryTools, ...layerTools, ...issueTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...evidenceTools, ...outletFeedTools, searchTool,
         ...(asking ? [asking.tool] : [])]
         .filter((tool) => toolAllowed(tool.name, shape))
         // 生成复盘要等重模型起草（失败还会重试），单独放宽到 REVIEW_TOOL_TIMEOUT_MS。
@@ -1225,7 +1229,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         modelRuntime,
         resourceLoader: cachedResourceLoader(systemPrompt),
         customTools: traceTools(turnTools),
-        tools: [...new Set([...COMPANY_MEMORY_TOOLS, ...turnTools.map((tool) => tool.name)])],
+        tools: [...new Set(turnTools.map((tool) => tool.name))],
         sessionManager: manager,
         settingsManager: settings,
         thinkingLevel,
@@ -1365,26 +1369,31 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         };
         // 个人记忆的选取（召回模型）与分诊同时进行，拼上下文包时才等它。
         const personalMemory = (await input.personalMemory) ?? [];
-        const prompt = await withRetrieve(RETRIEVE_SOURCES.contextPack, () => ({ scope: input.scope, references: input.referencesSnapshot?.length ?? 0 }), async () => JSON.stringify({
-          currentObject: input.currentObject,
-          references: input.referencesSnapshot,
-          ...(personalMemory.length ? { personalMemory } : {}),
-          ...(input.openTodos?.length ? { myOpenTodos: input.openTodos } : {}),
-          ...(input.focus ? { focus: input.focus } : {}),
-          ...(input.scopeOverride ? { scopeOverride: input.scopeOverride } : {}),
-          ...(input.issueContext?.issueThreads.length ? { issueThreads: input.issueContext.issueThreads } : {}),
-          ...(input.issueContext?.declinedIssueTopics.length ? { declinedIssueTopics: input.issueContext.declinedIssueTopics } : {}),
-          // 看板与预取的企业知识：内部写法先换成正式中文叫法（currentObject、references 留原文，修改类工具要按原文比对）。
-          globalContext: formalTermsDeep(await scopedGlobal()),
-          ...(prefetched ? { prefetched: formalTermsDeep(prefetched) } : {}),
-          answerMode: TIER_GUIDANCE[route.tier],
-          ...(input.resume ? { resume: input.resume.instruction } : {}),
-          message: input.message,
-        }), (packed) => ({ chars: packed.length, currentObject: Boolean(input.currentObject), references: input.referencesSnapshot?.length ?? 0,
+        // 场景锚点（PR #12 临时注入）：存进 Pi 历史的那条（prompt）不带锚点与页面对象正文，历史里另记轻量引用；
+        // 发给模型的那条（live）带上，由 provider 边界换进本次请求的副本。
+        if (anchor) recordAnchorRef(manager, anchor.ref);
+        let live = "";
+        const prompt = await withRetrieve(RETRIEVE_SOURCES.contextPack, () => ({ scope: input.scope, references: input.referencesSnapshot?.length ?? 0 }), async () => {
+          const parts = {
+            references: input.referencesSnapshot,
+            personalMemory: personalMemory.length ? personalMemory : undefined,
+            myOpenTodos: input.openTodos?.length ? input.openTodos : undefined,
+            scopeOverride: input.scopeOverride,
+            issueThreads: input.issueContext?.issueThreads.length ? input.issueContext.issueThreads : undefined,
+            declinedIssueTopics: input.issueContext?.declinedIssueTopics.length ? input.issueContext.declinedIssueTopics : undefined,
+            // 看板与预取的本体公司事实：内部写法先换成正式中文叫法（currentObject、references 留原文，修改类工具要按原文比对）。
+            globalContext: formalTermsDeep(await scopedGlobal()),
+            prefetched: prefetched ? formalTermsDeep(prefetched) : undefined,
+            answerMode: TIER_GUIDANCE[route.tier],
+            resume: input.resume?.instruction,
+          };
+          live = composeTurnContext({ anchor: anchor?.view, message: input.message, parts: { currentObject: input.currentObject, ...parts } });
+          return composeTurnContext({ message: input.message, parts });
+        }, (packed) => ({ chars: live.length, persistedChars: packed.length, anchorItems: anchor?.view.items.length ?? 0, currentObject: Boolean(input.currentObject), references: input.referencesSnapshot?.length ?? 0,
           globalContext: Boolean(globalLoad), prefetched: Boolean(prefetched), ...(focus ? { focus: focus === "all" ? "all" : focus.join(",") || "none" } : {}) }));
         // 硬阈值兜底（永远不当场压缩）：历史超过 HARD_HISTORY_TOKENS，或加上本轮上下文包会装不下这个模型，
         // 这一轮交给模型的是「已有压缩摘要 + 最近若干轮的文字」（window 模式，存下来的历史不变）；后台压缩路由层已经补起。
-        const historyLimit = Math.min(options.hardHistoryTokens ?? HARD_HISTORY_TOKENS, model.contextWindow - OUTPUT_RESERVE_TOKENS - estimateTextTokens(prompt));
+        const historyLimit = Math.min(options.hardHistoryTokens ?? HARD_HISTORY_TOKENS, model.contextWindow - OUTPUT_RESERVE_TOKENS - estimateTextTokens(live));
         if (history.tokens > historyLimit) {
           recovery.history = "window";
           manager.appendCustomEntry(HISTORY_WINDOW_ENTRY, { tokens: history.tokens, source: history.source, limit: historyLimit });
@@ -1393,7 +1402,20 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         }
         session.setThinkingLevel(thinkingLevel);
         promptSent = true;
-        await turnRecovery.run(recovery, () => session.prompt(prompt, { expandPromptTemplates: false, source: "rpc" }));
+        // 「继续」：上一轮 read_anchor 展开过的卡按历史里的引用重新读（读不到或版本变了照实标出），本轮发给模型时换回正文。
+        const resumed: ProviderTurn["resumed"] = new Map();
+        if (input.resume && anchor) {
+          const branch = manager.getBranch();
+          let lastUser = branch.length - 1;
+          while (lastUser >= 0 && !(branch[lastUser].type === "message" && (branch[lastUser] as { message: { role: string } }).message.role === "user")) lastUser -= 1;
+          for (const entry of branch.slice(lastUser + 1)) {
+            if (entry.type !== "message" || entry.message.role !== "toolResult" || entry.message.toolName !== "read_anchor") continue;
+            const ref = (entry.message.details as { anchorRef?: { cardId: string; version: number } } | undefined)?.anchorRef;
+            if (ref) resumed.set(entry.message.toolCallId, { toolName: "read_anchor", content: [{ type: "text", text: JSON.stringify(await anchor.readRef(ref)) }] });
+          }
+        }
+        const turn: ProviderTurn = { systemPrompt, prompt, live, toolResults: anchorResults, resumed };
+        await turnStore.run(turn, () => turnRecovery.run(recovery, () => session.prompt(prompt, { expandPromptTemplates: false, source: "rpc" })));
         if (searchLimitReached) throw fail(searchBudgetError.message, "search_budget", "SEARCH_BUDGET_EXHAUSTED");
         if (input.signal.aborted) throw fail("Conversation aborted", "aborted");
         const last = [...session.messages].reverse().find((item) => item.role === "assistant");
@@ -1444,9 +1466,6 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         session.dispose();
       }
     },
-    async close() {
-      await client.close();
-      await server.close();
-    },
+    async close() {},
   };
 }

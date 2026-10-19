@@ -12,7 +12,7 @@ const ACTIONS = ["weekly-review.update", "weekly-review.submit", "weekly-review.
 /** 周复盘：名单、单份、本人的修改 / 提交 / 重新生成。可见范围在仓储层（weeklyReviews.ts）判。 */
 export function registerWeeklyReviewRoutes(app: AppInstance, ctx: RouteContext): void {
   const secret = ctx.env.sessionSecret;
-  const names = () => personDisplayNames(ctx.companyMemory);
+  const names = () => personDisplayNames(ctx.peopleDirectory);
 
   app.get("/api/weekly-reviews/board", {
     preHandler: ctx.requirePerson,

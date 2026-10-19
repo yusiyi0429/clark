@@ -15,7 +15,7 @@
 ## 2. 准备 env
 
 1. `cp infra/local/.env.local.example infra/local/.env.local`
-2. 把 `POSTGRES_PASSWORD`、`SESSION_SECRET`、`DRI_SERVICE_TOKEN`、`COMPANY_MEMORY_MCP_TOKEN` 各换成 `openssl rand -base64 32` 生成的值。
+2. 把 `POSTGRES_PASSWORD`、`SESSION_SECRET`、`DRI_SERVICE_TOKEN` 各换成 `openssl rand -base64 32` 生成的值。
 3. 模型网关填测试 key 和模型名；不想外呼就把 `PI_BASE_URL` 写成 `http://127.0.0.1:9/v1`。
 4. 本体只填测试 scope，或留空；博查、LangSmith 不需要就留空。
 5. 443 被占用时：`LOCAL_HTTPS_PORT=8443`，`PUBLIC_DOMAIN=tk.local.test:8443`，下文的地址都带上 `:8443`。

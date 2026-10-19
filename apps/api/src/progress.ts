@@ -4,7 +4,7 @@ import type {
   TMyOffPlanResponse, TOffPlanItem, TProgressArtifact, TProgressMissionRef, TProgressOnTrack, TProgressOverview, TProgressPerson,
   TProgressPersonSummary, TProgressRedLine, TProgressSlowReason, TProgressTask,
 } from "@warmap/contracts";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import type { Query } from "./meetingStore.js";
 import { milestoneDate } from "./monthPlan.js";
 import { companyPeriod } from "./monthlyPlans.js";

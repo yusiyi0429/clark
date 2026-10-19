@@ -14762,6 +14762,25 @@
             "maxLength": 20000,
             "type": "string"
           },
+          "anchorSelection": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "cardId",
+              "version"
+            ],
+            "properties": {
+              "cardId": {
+                "minLength": 1,
+                "maxLength": 256,
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            }
+          },
           "answers": {
             "additionalProperties": false,
             "type": "object",
@@ -31569,7 +31588,8 @@
             "required": [
               "piRuntime",
               "modelSlots",
-              "companyMemoryMcp",
+              "peopleDirectory",
+              "companyConfigured",
               "search",
               "wechat",
               "outlets",
@@ -31584,7 +31604,10 @@
               "modelSlots": {
                 "type": "boolean"
               },
-              "companyMemoryMcp": {
+              "peopleDirectory": {
+                "type": "boolean"
+              },
+              "companyConfigured": {
                 "type": "boolean"
               },
               "search": {

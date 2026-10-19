@@ -52,7 +52,6 @@ describe("个人令牌与执行事项 MCP", () => {
       const stale = await invoke(9, "update_status", { itemId: task.id, status: "done", version: 2 });
       expect(JSON.parse(stale.content[0].text).currentVersion).toBe(3);
       expect((await f.t.app.inject({ method: "GET", url: "/api/me/tokens", headers: { authorization: `Bearer ${token}` } })).statusCode).toBe(401);
-      expect((await f.t.app.inject({ method: "POST", url: "/mcp/company-memory", headers: { authorization: `Bearer ${token}` }, payload: rpc(10, "tools/list") })).statusCode).toBe(401);
       expect((await call(f, f.member, "DELETE", `/api/me/tokens/${view.id}`)).statusCode).toBe(204);
       expect((await send(11, "tools/list")).statusCode).toBe(401);
       expect((await call(f, f.member, "GET", "/api/me/tokens")).json().tokens).toEqual([]);

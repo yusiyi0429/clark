@@ -13,8 +13,8 @@ const input: MissionCardDraftInput = {
   battlefield: { id: "product", code: "01", name: "产品闭环", sixMonthOutcome: "双身份下的产品工作闭环可复用", missionAnchors: ["可复核的界面与权限证据"] },
   plan: { companyOutcome: "业务判断和真实结果可复核", monthOutcome: "验证 CEO 与 DRI 共用身份时的界面与权限闭环", signedAt: "2026-09-30T02:00:00Z" },
   previousCard: null, previousReview: null, capabilities: [{ code: "product", name: "产品验证" }],
-  companyMemory: [{ title: "双身份评审试点", sourceRef: "wiki://product-proof", passages: [{ sourceRef: "wiki://product-proof#trial",
-    text: "当前已出现双身份界面与权限分界，需要建立真实任务卡里的可复核评审机制。Demo、手册、Workshop是可能的观察载体，但验收应判断真实环境的判断、行为和结果；交付时间、阈值和资源尚未确定。" }] }],
+  companyMemory: [{ title: "双身份评审试点",
+    text: "当前已出现双身份界面与权限分界，需要建立真实任务卡里的可复核评审机制。Demo、手册、Workshop是可能的观察载体，但验收应判断真实环境的判断、行为和结果；交付时间、阈值和资源尚未确定。" }],
   knownMissions: [],
 };
 const mission: MissionCardDraftCandidateValue["missions"][number] = {
@@ -44,7 +44,7 @@ function review(candidate: MissionCardDraftCandidateValue): Static<typeof Missio
     tradeoffs: { passed: true, excerpt: m.tradeoffs, reason: "识别范围、验证深度与速度的主动取舍及代价，需要决策的缺口明确待确认。", correction: null },
     plan: { passed: true, excerpt: m.keyPath, reason: "路径停留在从现状到机制成立与复用的主逻辑，没有下钻Activity。", correction: null },
     milestone: { passed: true, excerpt: m.milestones[0], reason: "里程碑是战役状态且无无依据日期。", correction: null },
-    grounding: { passed: true, excerpt: m.basis, reason: "对照签发目标和wiki://product-proof#trial，具体时间、阈值与资源没有依据而明确待确认。", correction: null },
+    grounding: { passed: true, excerpt: m.basis, reason: "对照签发目标和双身份评审试点，具体时间、阈值与资源没有依据而明确待确认。", correction: null },
     scope: { passed: true, excerpt: m.keyPath, reason: "这是一场必要战役，没有强凑第二Mission或Task全景。", correction: null },
   } })) };
 }
@@ -101,7 +101,7 @@ describe("TKOS Mission Card 起草与内容质量门槛", () => {
       expect(contexts[0].systemPrompt).toContain("不能把 signedAt 当交付日");
       expect(contexts[0].systemPrompt).not.toContain("日期开头");
       expect(contexts[1].systemPrompt).toContain("独立内容审阅");
-      expect(JSON.stringify(contexts[1].messages)).toContain("wiki://product-proof#trial");
+      expect(JSON.stringify(contexts[1].messages)).toContain("双身份评审试点");
       const rows = (await db.query("SELECT id,kind,input_snapshot,candidate_output FROM agent_runs ORDER BY started_at,id")).rows;
       expect(rows).toHaveLength(2);
       const assessment = rows.find((row) => row.kind === "mission-card-draft-check");

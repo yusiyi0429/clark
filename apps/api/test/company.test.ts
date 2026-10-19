@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import examples from './fixtures/world-02.json' with { type: 'json' };
 import { createAssistantMessageEventStream, type AssistantMessage } from '@earendil-works/pi-ai';
 import { createPiConversationRuntime } from '../src/piConversationRuntime.js';
-import { loadCompanyMemory } from '../src/companyMemory.js';
+import { loadPeopleDirectory } from '../src/peopleDirectory.js';
 import { testEnv } from './helpers.js';
 
 import { createCompanyMemory } from '../src/company.js';
@@ -65,19 +65,20 @@ describe('World company public read boundary', () => {
     } finally { await t.close(); }
   });
 
-  // 主对话里的 query_company：与 main 已有的看板、企业知识工具并存；本体读不到时工具结果要求先如实说明、再回退本地。
+  // 主对话里的 query_company：本体读不到时工具结果要求如实说没读到，不用本地资料补公司事实（D-48）。
   const runCompanyTurn = async (t: Awaited<ReturnType<typeof setup>>) => {
     let calls = 0;
     const toolResults: string[] = [];
     const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
     const runtime = await createPiConversationRuntime({
-      company: t.company, companyMemory: loadCompanyMemory(testEnv),
+      company: t.company, peopleDirectory: loadPeopleDirectory(testEnv),
       baseUrl: 'https://provider.invalid/v1', apiKey: 'test-key', modelId: 'fake-light',
       streamSimple: (_model, context) => {
         calls++;
         const tools = context.tools?.map((tool) => tool.name) ?? [];
         expect(tools).toContain('query_company');
-        expect(tools).toContain('search_sections');
+        expect(tools).toContain('search_people');
+        expect(tools).not.toContain('search_sections');
         if (calls > 1) toolResults.push(JSON.stringify(context.messages.findLast((item) => item.role === 'toolResult')));
         const content: AssistantMessage['content'] = calls === 1 ? [{ type: 'toolCall', id: 'company-call', name: 'query_company', arguments: {} }]
           : [{ type: 'text', text: '这是一份草稿。' }];
@@ -103,14 +104,14 @@ describe('World company public read boundary', () => {
     } finally { await t.close(); }
   });
 
-  it('when World is unreadable the tool tells the agent to say so first, then answer from local data', async () => {
+  it('when World is unreadable the tool says so and forbids filling company facts from local data', async () => {
     const t = await setup();
     try {
       t.fail();
       const [text] = await runCompanyTurn(t);
       expect(text).toContain('unavailable');
-      expect(text).toContain('如实告诉用户这次没有读到本体');
-      expect(text).toContain('本地资料');
+      expect(text).toContain('这次没有读到本体');
+      expect(text).toContain('不要用本地资料补公司事实');
     } finally { await t.close(); }
   });
 

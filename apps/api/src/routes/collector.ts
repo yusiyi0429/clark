@@ -12,11 +12,11 @@ import type { AppInstance, RouteContext } from "./shared.js";
  * 本人没同意采集（D-02）时工作段一律不收（403，本机留着下次再发），心跳照收。同意开关在 /api/me/collector/consent。
  */
 export function registerCollectorRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, fail, companyMemory } = ctx;
+  const { pool, q, fail, peopleDirectory } = ctx;
   const identities = new WeakMap<FastifyRequest, CollectorIdentity>();
   const requireCollector = async (req: FastifyRequest, reply: FastifyReply) => {
     const identity = await authenticatePersonalToken(q, req.headers.authorization, ctx.env.sessionSecret, ctx.now(),
-      (personId) => companyMemory.searchPeople(undefined).some((person) => person.personId === personId));
+      (personId) => peopleDirectory.searchPeople(undefined).some((person) => person.personId === personId));
     if (!identity || identity.client !== "collector") return fail(reply, 401, "UNAUTHORIZED", "采集器令牌无效，请在天枢重新生成采集器令牌");
     identities.set(req, { personId: identity.personId, tokenId: identity.tokenId });
   };

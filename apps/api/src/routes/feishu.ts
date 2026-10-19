@@ -34,7 +34,7 @@ const OUTCOME_STATUS: Record<Exclude<FeishuLoginOutcome["kind"], "ok">, { status
  * 两条路都复用 sessionSetCookie 建会话。未配置飞书应用时只有 /config（enabled=false），其余 404。
  */
 export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, client: FeishuClient | undefined): void {
-  const { env, q, fail, readSession, companyMemory, now } = ctx;
+  const { env, q, fail, readSession, peopleDirectory, now } = ctx;
   const feishu = env.feishu;
   const perIp = { rateLimit: { max: 20, timeWindow: "1 minute" } };
   const redirectUri = `${env.publicOrigin}/api/auth/feishu/callback`;
@@ -71,7 +71,7 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
       if (!req.query.code) return reply.status(400).send(failurePage(req.query.error ? "你取消了飞书授权。" : "飞书没有返回授权码，请重新打开天枢。"));
       const session = await readSession(req);
       const outcome = await completeFeishuLogin({
-        q, env: feishu, client, companyMemory, code: req.query.code, redirectUri, sessionPersonId: session?.personId, now: now(),
+        q, env: feishu, client, peopleDirectory, code: req.query.code, redirectUri, sessionPersonId: session?.personId, now: now(),
       });
       if (outcome.kind !== "ok") return reply.status(outcome.kind === "code_invalid" ? 400 : OUTCOME_STATUS[outcome.kind].status).send(failurePage(outcome.message));
       reply.header("set-cookie", [clearOAuthStateCookie(), sessionCookie(outcome)]);
@@ -86,7 +86,7 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
     async (req, reply) => {
       if (!isAllowedOrigin(env, req.headers.origin)) return fail(reply, 403, "ORIGIN_MISMATCH", "Origin 不符");
       const session = await readSession(req);
-      const outcome = await completeFeishuLogin({ q, env: feishu, client, companyMemory, code: req.body.code, sessionPersonId: session?.personId, now: now() });
+      const outcome = await completeFeishuLogin({ q, env: feishu, client, peopleDirectory, code: req.body.code, sessionPersonId: session?.personId, now: now() });
       if (outcome.kind !== "ok") return fail(reply, OUTCOME_STATUS[outcome.kind].status, OUTCOME_STATUS[outcome.kind].code, outcome.message);
       reply.header("set-cookie", sessionCookie(outcome));
       return { authenticated: true, mustChangePasscode: false, role: outcome.role, onboarded: outcome.onboarded };

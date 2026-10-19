@@ -6,8 +6,8 @@ import type { Pool } from "pg";
 import { RadarSources, type TApiError, type TRadarSources } from "@warmap/contracts";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
-import { loadCompanyMemory, type CompanyMemorySeedEnv } from "./companyMemory.js";
-import { createCompanyMemory as createCompanyReader, type CompanyEnv } from "./company.js";
+import { loadPeopleDirectory, type PeopleDirectoryEnv } from "./peopleDirectory.js";
+import { createCompanyContext, type CompanyContextEnv } from "./companyContext.js";
 import { createPersonalMemory } from "./personalMemory.js";
 import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
@@ -76,7 +76,6 @@ import { registerConfigRoutes } from "./routes/config.js";
 import { registerRadarRoutes } from "./routes/radar.js";
 import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerMeetingRoutes } from "./routes/meetings.js";
-import { registerKnowledgeRoutes } from "./routes/knowledge.js";
 import { registerMaterialRoutes } from "./routes/materials.js";
 import type { MaterialAnnotationAgent } from "./materialAnnotationAgent.js";
 import type { MissionCardAnnotationAgent } from "./missionCardAnnotationAgent.js";
@@ -154,7 +153,6 @@ export type AppEnv = {
   missionCardKnownMissionsFile?: string;
   driServiceToken: string;
   ontologyServiceToken?: string;
-  mcpServiceToken: string;
   buildSha: string;
   piBaseUrl: string;
   piApiKey: string;
@@ -194,7 +192,7 @@ export type AppEnv = {
   impactCardMode?: "live" | "shadow";
   /** ③ 信息收集的飞书多维表格：live 以发起人身份调开放接口（要先在飞书后台开通 base 权限，见 feishu/bitable.ts）；缺省 mock，不调飞书（FEISHU_BITABLE_MODE）。 */
   collectionBitable?: "live" | "mock";
-} & CompanyMemorySeedEnv & WorldEnv & CompanyEnv;
+} & PeopleDirectoryEnv & WorldEnv & CompanyContextEnv;
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -322,13 +320,15 @@ export async function buildApp({
   // 材料上传与修订按本应用的业务时钟记时间（演示场次＝资料截至时间），与回执、计划修订同一时钟。
   setMaterialClock(pool, now);
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
-  const companyMemory = loadCompanyMemory(env);
+  const peopleDirectory = loadPeopleDirectory(env);
+  // 本体只读公司事实（company.ts）：对话按本人授权读；后台服务按 COMPANY_SYSTEM_PERSON_ID 的授权读。读不到时如实说没读到，不用本地资料兜底。
+  const company = createCompanyContext(env);
   // 分诊与思考翻译用的快模型（TRIAGE_MODEL，不配时 LIGHT_MODEL）；TRIAGE_MODEL 出错时退回 LIGHT_MODEL 再试一次。
   const fastModels = { modelId: env.triageModel || env.lightModel, fallbackModelId: env.lightModel };
   // 真实预审 Agent 在后台跑：建会、加入会议、重试预审的接口写完就返回（巡检 P1-5/6）；注入的测试替身保持同步，除非自己声明 background。
   const preflight: PreflightAgent = preflightAgent ?? { ...await createPreflightAgent({
     query: pool.query.bind(pool),
-    companyMemory,
+    company,
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     // 预审换 Sol 档并打开思考（PREFLIGHT_MODEL / PREFLIGHT_THINKING 可改）；英文思考小标题由快模型译成中文要点。
@@ -358,7 +358,7 @@ export async function buildApp({
   const world = createWorldReader({ q: pool.query.bind(pool), env });
   // 第二个只读实例（TK scope，写死只读）：默认关闭；开了也只做健康探测和快照缓存，还没接进战场卡与 read_ontology。
   const worldTk = env.worldTk ? createWorldReader({ q: pool.query.bind(pool), env: env.worldTk }) : undefined;
-  const baseGlobalContext = () => globalConversationContext(pool.query.bind(pool), now(), personDisplayNames(companyMemory));
+  const baseGlobalContext = () => globalConversationContext(pool.query.bind(pool), now(), personDisplayNames(peopleDirectory));
   // 每轮上下文包不加本体摘要（对话质量诊断 §4-G：上下文包每轮整包进历史）；只把战场长期目标换成本体版本（字数不增），本体内容经按需工具 read_ontology 读。
   const globalContext = async () => {
     const context = await baseGlobalContext();
@@ -381,11 +381,9 @@ export async function buildApp({
     ?? (env.piBaseUrl && env.piApiKey ? createMemoryImportModel({ query: pool.query.bind(pool), baseUrl: env.piBaseUrl, apiKey: env.piApiKey, personId, ...importModelChoice }) : null) });
   const personalDistillation = createPersonalDistillation({ pool, memory: personalMemory, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
     modelId: env.lightModel, streamSimple: personalDistillationStream });
-  // 本体只读公司事实（PR #12 的 query_company）：按人授权的域读取；读不到时如实说明并回退本地（company.ts）。
-  const companyReader = createCompanyReader(env);
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
-    companyMemory,
-    company: companyReader,
+    peopleDirectory,
+    company: company.company,
     materialPool: pool,
     missionCardSecret: env.sessionSecret,
     now,
@@ -473,7 +471,7 @@ export async function buildApp({
         await resumeResearch(pool.query.bind(pool), research, { concurrency: 3, stopped: () => closing }).catch(() => app.log.error("research resume failed"));
       }
       if (preflight.background && !closing) {
-        await resumePreflights(pool, companyMemory, preflight).catch(() => app.log.error("preflight resume failed"));
+        await resumePreflights(pool, peopleDirectory, preflight).catch(() => app.log.error("preflight resume failed"));
       }
     })();
   });
@@ -496,7 +494,7 @@ export async function buildApp({
   const q = pool.query.bind(pool);
   // 会后链路（妙记、分层确认、影响卡）：路由用它的服务；后台任务由 server.ts 的 jobs worker 按 app.meetingFollowThrough.jobs() 注册。
   // 写本体只按方案 A 一条决定记一条事件（实例配置允许写时）；原来「整场会记一条事件」已停用。
-  const followThrough = createMeetingFollowThrough({ pool, env, companyMemory, world, outcomeAgent: outcome, now, ...meetingFollowThroughAgents });
+  const followThrough = createMeetingFollowThrough({ pool, env, peopleDirectory, world, outcomeAgent: outcome, now, ...meetingFollowThroughAgents });
   app.decorate("meetingFollowThrough", followThrough);
   // ③ 信息收集：路由、对话入口和后台任务共用一份依赖；飞书通知配了飞书才发。
   const collectionDeps: CollectionDeps = {
@@ -504,8 +502,8 @@ export async function buildApp({
     bitable: bitable ?? (env.collectionBitable === "live" && env.feishu ? createFeishuBitable() : createMockBitable()),
     feishu: env.feishu,
     notify: env.feishu ? feishuNotifier(q) : undefined,
-    isCeo: (personId) => companyMemory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false,
-    names: () => personDisplayNames(companyMemory),
+    isCeo: (personId) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false,
+    names: () => personDisplayNames(peopleDirectory),
     now,
   };
   app.decorate("collectionJobs", collectionJobs(collectionDeps));
@@ -513,7 +511,7 @@ export async function buildApp({
   // 周复盘提交后按关联的 Mission、Task 写进展到本体：同样只在实例配置允许写时启用；不写时提交照常，等配好后补发。
   let weeklyReviewWorld: WeeklyReviewWorldSync | undefined;
   if (worldConfigured(env) && world.status().writes) {
-    const sync = createWeeklyReviewWorldSync({ pool, client: new WorldClient(q, env), publicOrigin: env.publicOrigin, names: () => personDisplayNames(companyMemory) });
+    const sync = createWeeklyReviewWorldSync({ pool, client: new WorldClient(q, env), publicOrigin: env.publicOrigin, names: () => personDisplayNames(peopleDirectory) });
     weeklyReviewWorld = sync;
     app.addHook("onClose", async () => { await sync.close(); });
   }
@@ -521,7 +519,7 @@ export async function buildApp({
   let worldPeriodGoals: WorldPeriodGoalService | undefined;
   if (worldConfigured(env) && world.status().writes) {
     const service = createWorldPeriodGoalService(pool, new WorldClient(q, env),
-      () => companyMemory.searchPeople(undefined).find((person) => person.roles.includes("ceo"))?.personId);
+      () => peopleDirectory.searchPeople(undefined).find((person) => person.roles.includes("ceo"))?.personId);
     worldPeriodGoals = service;
     app.addHook("onClose", async () => { await service.close(); });
   }
@@ -556,12 +554,12 @@ export async function buildApp({
   await ensureMaterialStorage(conversationAttachmentStorageDir);
   const recordingStorageDir = env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR;
   await ensureMaterialStorage(recordingStorageDir);
-  const recordings = recordingService ?? createMeetingRecordingService({ pool, storageDir: recordingStorageDir, companyMemory });
+  const recordings = recordingService ?? createMeetingRecordingService({ pool, storageDir: recordingStorageDir, peopleDirectory });
   // 关闭时只停轮询：在途的识别停在 transcribing，下次启动 recoverInterrupted 接着轮询
   app.addHook("onClose", async () => recordings.close());
 
   const fail = createFail(requestContext);
-  const readSession = createReadSession(env, q, companyMemory);
+  const readSession = createReadSession(env, q, peopleDirectory);
   const requirePerson = createRequirePerson(env, readSession, fail);
   const requireCEO = createRequireCEO(requirePerson, fail);
   const requireServiceToken = createRequireServiceToken(fail);
@@ -613,7 +611,8 @@ export async function buildApp({
     pool,
     q,
     env,
-    companyMemory,
+    peopleDirectory,
+    company,
     personalMemory,
     personalDistillation,
     preflight,
@@ -670,7 +669,6 @@ export async function buildApp({
   registerConversationRoutes(app, ctx, deliveryAgent);
   registerMeetingRoutes(app, ctx);
   registerMaterialRoutes(app, ctx, materialAnnotationAgent);
-  registerKnowledgeRoutes(app, ctx);
   registerActionRoutes(app, ctx);
   registerDriRoutes(app, ctx);
   registerOntologyRoutes(app, ctx);
@@ -693,9 +691,9 @@ export async function buildApp({
   registerProgressRoutes(app, ctx);
   registerMeetingFollowThroughRoutes(app, ctx, followThrough);
   // 文档变更：找候选用快模型；按作者身份读飞书文档元数据（不读正文）；后台任务与群消息事件由 server.ts 按 app.docChanges.jobs() 注册。
-  const isCeo = (personId: string) => companyMemory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false;
+  const isCeo = (personId: string) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false;
   const docChanges = createDocChangeService({
-    pool, now, names: () => personDisplayNames(companyMemory),
+    pool, now, names: () => personDisplayNames(peopleDirectory),
     agent: docChangeAgent ?? createDocChangeAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.triageModel || env.lightModel }),
     ...(feishuApi && env.feishu ? { feishu: { client: feishuApi, env: env.feishu } } : {}),
     pathFor: (personId, requestId) => `${isCeo(personId) ? "" : "/me"}/requests/${requestId}`,

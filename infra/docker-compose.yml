@@ -94,13 +94,13 @@ services:
       # 不单独给时沿用主实例地址（空串不会回退，所以在这里补上缺省）。
       TKOS_WORLD_TK_API_URL: ${TKOS_WORLD_TK_API_URL:-${TKOS_WORLD_API_URL:-}}
       TKOS_WORLD_TK_TOKEN_FILE: ${TKOS_WORLD_TK_TOKEN_FILE:-}
-      # 本体公司事实按人授权的域（容器内路径，如 /repo/seed/company-world-access.json）；留空时 query_company 如实回报读不到。
+      # 本体公司事实按人授权的域（容器内路径，如 /repo/seed/company-world-access.json）；留空时 query_company 如实回报读不到，不用本地资料兜底。
       COMPANY_WORLD_ACCESS_FILE: ${COMPANY_WORLD_ACCESS_FILE:-}
       # 公司事实只读投影目录（写在 <目录>/company，可重建）；留空用容器内 /tmp，填写时须是 uid 1000 可写的路径。
       MEMORY_STORAGE_DIR: ${MEMORY_STORAGE_DIR:-}
-      COMPANY_MEMORY_MCP_TOKEN: ${COMPANY_MEMORY_MCP_TOKEN:?COMPANY_MEMORY_MCP_TOKEN required}
-      # 单一来源：seed/memory/ CompanyMemory Markdown 目录 + 真实人员名单，均只读挂载；生产可换 host 路径并同步覆盖
-      COMPANY_MEMORY_SEED_DIR: /repo/seed/memory
+      # 后台服务读本体公司事实时用这个 personId 的授权（须在 COMPANY_WORLD_ACCESS_FILE 里有域）；留空时这些服务如实说没读到本体。
+      COMPANY_SYSTEM_PERSON_ID: ${COMPANY_SYSTEM_PERSON_ID:-}
+      # 真实人员名单只读挂载；生产可换 host 路径并同步覆盖
       COMPANY_PEOPLE_SEED: /repo/seed/company-people.json
       MISSION_CARD_DRAFTS_DIR: ${MISSION_CARD_DRAFTS_DIR:-/repo/seed/placeholders}
       MISSION_CARD_KNOWN_MISSIONS_FILE: ${MISSION_CARD_KNOWN_MISSIONS_FILE:-/repo/seed/imports/2026-10-known-missions.json}

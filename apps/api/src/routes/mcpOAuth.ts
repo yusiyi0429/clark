@@ -58,7 +58,7 @@ export async function registerMcpOAuthRoutes(app: AppInstance, ctx: RouteContext
     oauth.post("/api/mcp-oauth/token", { bodyLimit: 16_384, config: { rateLimit: { max: 120, timeWindow: "1 minute" } } }, async (req, reply) => {
       cors(reply);
       return exchangeOAuthToken(ctx.pool, issuer, ctx.env.sessionSecret, params(req.body), ctx.now(),
-        (id) => ctx.companyMemory.searchPeople(undefined).some((person) => person.personId === id));
+        (id) => ctx.peopleDirectory.searchPeople(undefined).some((person) => person.personId === id));
     });
     oauth.post("/api/mcp-oauth/revoke", { bodyLimit: 16_384, config: { rateLimit: { max: 120, timeWindow: "1 minute" } } }, async (req, reply) => {
       cors(reply); const input = params(req.body);

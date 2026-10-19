@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import type { TMonthlyReviewSelfReview, TMonthlyReviewSummaryCandidate } from "@warmap/contracts";
-import { loadPeople } from "../src/companyMemory.js";
+import { loadPeople } from "../src/peopleDirectory.js";
 import type { MonthlyDraftAgent, MonthlyDraftAgentInput } from "../src/monthlyDraft.js";
 import { importMonthlyReviews, ReviewImportFile, type TReviewImportFile } from "../src/monthlyReviewImport.js";
 import type { MonthlyReviewAgents, MonthlyReviewDraftInput, MonthlyReviewSummaryInput } from "../src/monthlyReviewService.js";

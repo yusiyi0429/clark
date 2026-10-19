@@ -12,7 +12,7 @@ import type {
   TWarmapTranscript,
 } from "@warmap/contracts";
 import type { ActionScope } from "./actionToken.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import {
   appendFingerprint,
   commit,
@@ -87,7 +87,7 @@ export function buildTranscriptCandidate(
 /** 上传 Markdown 只生成候选并 bump version：不改 status、不跑 Outcome。 */
 export async function createTranscriptCandidate(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   secret: string,
   meetingId: string,
   file: { fileName: string; buffer: Buffer },
@@ -108,7 +108,7 @@ export async function createTranscriptCandidate(
     parserVersion: TRANSCRIPT_PARSER_VERSION,
     timeAnchor: meeting.scheduled_at.toISOString(),
   };
-  const candidate = buildTranscriptCandidate(parsed.transcript.turns, companyMemory.searchPeople(undefined), source);
+  const candidate = buildTranscriptCandidate(parsed.transcript.turns, peopleDirectory.searchPeople(undefined), source);
   const saved = await saveTranscriptCandidate(pool, meetingId, candidate, hostId);
   return "row" in saved ? { status: 200, card: projectMeetingCard(saved.row, secret) } : saved;
 }
@@ -164,7 +164,7 @@ export async function saveTranscriptCandidate(
  */
 export async function executeConfirmTranscriptCandidate(
   pool: Pool,
-  companyMemory: CompanyMemoryRepository,
+  peopleDirectory: PeopleDirectory,
   outcomeAgent: PostMeetingAgent,
   secret: string,
   scope: ActionScope,
@@ -172,7 +172,7 @@ export async function executeConfirmTranscriptCandidate(
   fingerprint: string,
   hostId?: string,
 ): Promise<MeetingActionOutcome> {
-  const personById = new Map(companyMemory.searchPeople(undefined).map((person) => [person.personId, person]));
+  const personById = new Map(peopleDirectory.searchPeople(undefined).map((person) => [person.personId, person]));
   const outcome = await withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
     if (row.status !== "scheduled") {
       return { error: { status: 409, code: "MEETING_NOT_SCHEDULED", message: "只有 scheduled Meeting 可以确认会议记录" } };

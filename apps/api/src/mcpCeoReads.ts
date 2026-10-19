@@ -1,6 +1,6 @@
 import type { TMeetingCardPayload, TResearchDoc, TWeeklyProgressResponse } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import { getIssueRow, listPendingIssueCards, projectIssueCard } from "./issues.js";
 import { issueOriginFields } from "./dataOrigin.js";
 import { getMeetingRow, hasPendingStrategicItem, listMeetingRows, projectMeetingCard } from "./meetingStore.js";

@@ -13,17 +13,17 @@ const NoInput = Type.Object({}, { additionalProperties: false });
 export function registerPersonalReviewRoutes(app: AppInstance, ctx: RouteContext): void {
   const secret = ctx.env.sessionSecret;
   const agent = createPersonalReviewDraftAgent({ query: ctx.q, baseUrl: ctx.env.piBaseUrl, apiKey: ctx.env.piApiKey, modelId: ctx.env.heavyModel,
-    personName: (personId) => personDisplayNames(ctx.companyMemory).get(personId) });
+    personName: (personId) => personDisplayNames(ctx.peopleDirectory).get(personId) });
   app.get("/api/monthly-cycle", { preHandler: ctx.requirePerson, schema: { response: { 200: MonthlyCycleResponse } } },
     async () => ({ cycle: await readMonthlyCycle(ctx.q, ctx.now()) }));
   app.get("/api/personal-reviews/board", { preHandler: ctx.requirePerson, schema: { response: { 200: PersonalReviewBoardResponse } } },
-    async (req) => ({ board: await readPersonalReviewBoard(ctx.q, req.person!, personDisplayNames(ctx.companyMemory), secret) }));
+    async (req) => ({ board: await readPersonalReviewBoard(ctx.q, req.person!, personDisplayNames(ctx.peopleDirectory), secret) }));
   app.get("/api/personal-reviews/:personalReviewId", {
     preHandler: ctx.requirePerson, schema: { params: Type.Object({ personalReviewId: Type.String() }), response: { 200: PersonalReviewResponse } },
   }, async (req, reply) => {
     const row = await getPersonalReview(ctx.q, req.params.personalReviewId);
     if (!row || row.person_id !== req.person!.personId && req.person!.role !== "ceo") return ctx.fail(reply, 404, "PERSONAL_REVIEW_NOT_FOUND", "个人复盘不存在或不可见");
-    return { review: await projectPersonalReview(ctx.q, row, req.person!, personDisplayNames(ctx.companyMemory), secret, ctx.conversationAttachmentStorageDir, ctx.now()) };
+    return { review: await projectPersonalReview(ctx.q, row, req.person!, personDisplayNames(ctx.peopleDirectory), secret, ctx.conversationAttachmentStorageDir, ctx.now()) };
   });
   app.post("/api/personal-reviews/actions/execute", { preHandler: ctx.requirePerson,
     schema: { body: ExecutePersonalReviewActionRequest, response: { 200: ExecutePersonalReviewActionResponse } },
@@ -48,7 +48,7 @@ export function registerPersonalReviewRoutes(app: AppInstance, ctx: RouteContext
       if (effect.type === "summary") void ctx.monthlyReviewService?.startSummary(effect.reviewId, effect.runId).catch(failed);
     }
     const row = (await getPersonalReview(ctx.q, scope.objectId))!;
-    const names = personDisplayNames(ctx.companyMemory);
+    const names = personDisplayNames(ctx.peopleDirectory);
     return { review: await projectPersonalReview(ctx.q, row, req.person!, names, secret, ctx.conversationAttachmentStorageDir, ctx.now()),
       board: (await readPersonalReviewBoard(ctx.q, req.person!, names, secret, row.monthly_review_id))! };
   });

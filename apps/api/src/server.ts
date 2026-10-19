@@ -14,7 +14,8 @@ import { createBochaRadarWebAdapter, createWechatMcpAdapter } from "./radarSourc
 import { createOutletFeedAdapter } from "./outletSources.js";
 import { createBochaWebSearchAdapter } from "./webSearch.js";
 import { recoverInterruptedResearch } from "./issues.js";
-import { loadCompanyMemory } from "./companyMemory.js";
+import { loadPeopleDirectory } from "./peopleDirectory.js";
+import { createCompanyContext } from "./companyContext.js";
 import { assignLegacyConversations } from "./conversations.js";
 import { createResearchService } from "./research.js";
 import { createResearchAgentRunner, researchTimeoutMs } from "./researchAgent.js";
@@ -63,8 +64,6 @@ const env: AppEnv = {
   ...resolveWorldEnv(process.env),
   // 第二个只读实例（词元云集 TK scope）：TKOS_WORLD_TK_INSTANCE=tk 加 TKOS_WORLD_TK_TOKEN_FILE；不设就关闭。
   worldTk: resolveWorldTkEnv(process.env),
-  mcpServiceToken: requiredEnv("COMPANY_MEMORY_MCP_TOKEN"),
-  companyMemorySeedDir: requiredEnv("COMPANY_MEMORY_SEED_DIR"),
   companyPeopleSeed: requiredEnv("COMPANY_PEOPLE_SEED"),
   companyName: process.env.COMPANY_NAME,
   onboardingDelegationStep: process.env.ONBOARDING_DELEGATION_STEP === "1",
@@ -96,6 +95,8 @@ const env: AppEnv = {
   // 本体公司事实（PR #12）：只读投影在 MEMORY_STORAGE_DIR/company；按人授权的域写在 COMPANY_WORLD_ACCESS_FILE（personId → domain 列表）。个人记忆在数据库里。
   companyStorageDir: process.env.MEMORY_STORAGE_DIR ? `${process.env.MEMORY_STORAGE_DIR}/company` : undefined,
   companyWorldAccessFile: process.env.COMPANY_WORLD_ACCESS_FILE || undefined,
+  // 后台服务（雷达、预审、预研、月度起草与复盘、任务卡起草）读本体公司事实时用谁的授权；不配时这些服务如实说没读到本体。
+  companySystemPersonId: process.env.COMPANY_SYSTEM_PERSON_ID || undefined,
   // 飞书：FEISHU_APP_ID / FEISHU_APP_SECRET / FEISHU_TOKEN_KEY（/ FEISHU_TOKEN_KEY_VERSION）；都不配时关闭。
   feishu: resolveFeishuEnv(process.env),
   // 管理员视图：TIANSHU_ADMIN_PERSON_IDS（逗号分隔的 personId）；不配时没有人能看。
@@ -116,8 +117,9 @@ try {
   client.release();
 }
 
-const companyMemory = loadCompanyMemory(env);
-await assignLegacyConversations(pool.query.bind(pool), companyMemory);
+const peopleDirectory = loadPeopleDirectory(env);
+const company = createCompanyContext(env);
+await assignLegacyConversations(pool.query.bind(pool), peopleDirectory);
 const outletAdapter = createOutletFeedAdapter({});
 // 雷达与对话 web_search 共用一个博查实例：同一 BOCHA_API_KEY 的请求间隔与 429 重试只在一处生效
 const bochaSearch = createBochaWebSearchAdapter({ apiKey: process.env.BOCHA_API_KEY });
@@ -131,7 +133,7 @@ const researchService = createResearchService({
   researchTimeoutMs: researchTimeoutMs(researchModel),
   runner: createResearchAgentRunner({
     query: pool.query.bind(pool),
-    companyMemory,
+    company,
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     ...researchModel,
@@ -152,7 +154,7 @@ const radarService = createRadarService({
   articleText,
   assessor: await createRadarAgentAssessor({
     query: pool.query.bind(pool),
-    companyMemory,
+    company,
     baseUrl: env.piBaseUrl,
     apiKey: env.piApiKey,
     // RADAR_MODEL / RADAR_THINKING 可改，不配时 LIGHT_MODEL、不开思考
@@ -166,7 +168,7 @@ const radarService = createRadarService({
 // 个人雷达（ADR-0021）与公司雷达共用博查（同一请求间隔）和发布方 feed adapter；判定用轻模型
 const personalRadarService = createPersonalRadarService({
   pool,
-  companyMemory,
+  peopleDirectory,
   web: radarWeb,
   outlets: outletAdapter,
   judge: createPersonalRadarJudge({
@@ -175,7 +177,7 @@ const personalRadarService = createPersonalRadarService({
     apiKey: env.piApiKey,
     // PERSONAL_RADAR_MODEL / PERSONAL_RADAR_THINKING 可改，不配时跟公司雷达
     ...agentModel(env.agentModels, "personalRadar", { modelId: env.lightModel }),
-    personName: (personId) => personDisplayNames(companyMemory).get(personId),
+    personName: (personId) => personDisplayNames(peopleDirectory).get(personId),
   }),
   // 02b：GitHub Trending 没有订阅源、检索也限定不了站点，直接读榜单页面
   trending: createGithubTrendingReader(),
@@ -185,7 +187,8 @@ const personalRadarService = createPersonalRadarService({
 const scheduler = createRadarScheduler(radarService, 60_000, () => personalRadarService.runScheduled());
 const monthlyPlanService = createMonthlyPlanService({
   pool,
-  companyMemory,
+  peopleDirectory,
+  company,
   agent: createMonthlyDraftAgent({
     query: pool.query.bind(pool),
     baseUrl: env.piBaseUrl,
@@ -197,9 +200,10 @@ const monthlyScheduler = createMonthlyPlanScheduler(monthlyPlanService);
 const reviewAgentOptions = { query: pool.query.bind(pool), baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.heavyModel };
 const monthlyReviewService = createMonthlyReviewService({
   pool,
-  companyMemory,
+  peopleDirectory,
+  company,
   personalDraft: { storageDir: env.conversationAttachmentStorageDir ?? DEFAULT_CONVERSATION_ATTACHMENT_STORAGE_DIR,
-    agent: createPersonalReviewDraftAgent({ ...reviewAgentOptions, personName: (personId) => personDisplayNames(companyMemory).get(personId) }) },
+    agent: createPersonalReviewDraftAgent({ ...reviewAgentOptions, personName: (personId) => personDisplayNames(peopleDirectory).get(personId) }) },
   agents: {
     draft: createMonthlyReviewDraftAgent(reviewAgentOptions),
     assess: createMonthlyReviewAssessAgent(reviewAgentOptions),
@@ -209,7 +213,7 @@ const monthlyReviewService = createMonthlyReviewService({
 const monthlyReviewScheduler = createMonthlyReviewScheduler(monthlyReviewService);
 // 周复盘（D-01）：每周五 15:00（上海时间）给成员工作台里的每个人生成本周草稿；与个人复盘同一个 heavy 模型槽位。
 const weeklyReviewService = createWeeklyReviewService({ pool, agent: createWeeklyReviewDraftAgent(reviewAgentOptions),
-  people: () => companyMemory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId) });
+  people: () => peopleDirectory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId) });
 const weeklyReviewScheduler = createWeeklyReviewScheduler(weeklyReviewService);
 // 采集器原文整理（D-02）：同一个 heavy 模型，每 5 分钟整理一次，原文 14 天后清空。TODO(jobs)：jobs 合入后迁成周期任务。
 const collectorDistillScheduler = createCollectorDistillScheduler(pool, createCollectorDistillAgent(reviewAgentOptions));
@@ -234,7 +238,7 @@ await recoverInterruptedOutcome(pool.query.bind(pool));
 const recordingService = createMeetingRecordingService({
   pool,
   storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR,
-  companyMemory,
+  peopleDirectory,
 });
 await recordingService.recoverInterrupted();
 // 飞书（配了才启用）：一个开放接口客户端，免登路由与后台任务共用。

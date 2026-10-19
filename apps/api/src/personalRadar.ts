@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { TPersonalRadarJudgeSubmission, TPersonalRadarRun, TRadarDirection, TRadarSourceItem } from "@warmap/contracts";
 import { fetchArticles, fullTextKeepsQuotes, type ArticleFetcher } from "./articleText.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import type { GithubTrendingReader, TrendingRepo, TrendingSince } from "./githubTrending.js";
 import { roleOf } from "./memberAccess.js";
 import type { Query } from "./meetingStore.js";
@@ -133,7 +133,7 @@ export async function requestManualScan(q: Query, personId: string, at: Date): P
 
 export function createPersonalRadarService({
   pool,
-  companyMemory,
+  peopleDirectory,
   web,
   outlets,
   judge,
@@ -143,7 +143,7 @@ export function createPersonalRadarService({
   scanTimeoutMs = SCAN_TIMEOUT_MS,
 }: {
   pool: Pool;
-  companyMemory: Pick<CompanyMemoryRepository, "searchPeople">;
+  peopleDirectory: Pick<PeopleDirectory, "searchPeople">;
   /** 与公司雷达共用的博查 adapter：从不传 domains（博查实测忽略 site:）。 */
   web: RadarWebAdapter;
   /** 与公司雷达共用的发布方 feed adapter，直接用目录 id 调用。 */
@@ -448,7 +448,7 @@ export function createPersonalRadarService({
         [now()],
       );
       // 只扫还在 seed 里的成员；CEO 的雷达是公司雷达
-      const members = new Set(companyMemory.searchPeople(undefined).filter((person) => roleOf(person) === "member").map((person) => person.personId));
+      const members = new Set(peopleDirectory.searchPeople(undefined).filter((person) => roleOf(person) === "member").map((person) => person.personId));
       for (const { person_id } of due.rows as { person_id: string }[]) if (members.has(person_id)) enqueue(person_id, "scheduled");
     },
     async recoverStaleRuns() {

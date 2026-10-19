@@ -14,7 +14,7 @@ const IMPORT_BODY_LIMIT = 48 * 1024 * 1024;
  * GET 看步骤和候选，POST confirm 本人确认，POST retry 从停住的那一步接着做，DELETE 丢弃（确认前）。只操作本人的导入，别人的一律 404。
  */
 export function registerMemoryImportRoutes(app: AppInstance, ctx: RouteContext, imports: MemoryImports): void {
-    const { q, fail, requirePerson, companyMemory } = ctx;
+    const { q, fail, requirePerson, peopleDirectory } = ctx;
     const owners = new WeakMap<FastifyRequest, { personId: string; via: 'session' | 'collector' }>();
     const params = Type.Object({ id: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false });
     async function respond<T>(reply: FastifyReply, action: () => Promise<T>) {
@@ -38,7 +38,7 @@ export function registerMemoryImportRoutes(app: AppInstance, ctx: RouteContext, 
     const requireOwner = async (req: FastifyRequest, reply: FastifyReply) => {
         if (/^Bearer\s/i.test(req.headers.authorization ?? '')) {
             const identity = await authenticatePersonalToken(q, req.headers.authorization, ctx.env.sessionSecret, ctx.now(),
-                (personId) => companyMemory.searchPeople(undefined).some((person) => person.personId === personId));
+                (personId) => peopleDirectory.searchPeople(undefined).some((person) => person.personId === personId));
             if (!identity || identity.client !== 'collector') return fail(reply, 401, 'UNAUTHORIZED', '采集器令牌无效，请在天枢重新生成采集器令牌');
             if (!await collectorConsentGranted(q, identity.personId)) return fail(reply, 403, 'COLLECTOR_CONSENT_REQUIRED', '还没有同意采集，请在天枢的上手流程里打开采集');
             owners.set(req, { personId: identity.personId, via: 'collector' });

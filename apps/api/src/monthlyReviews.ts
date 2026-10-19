@@ -25,7 +25,7 @@ import type {
   TMonthlyReviewUpdateSummaryInput,
 } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import { ltoWindow } from "./monthlyCycle.js";
 import { redraftPlanAfterReview } from "./monthlyPlans.js";
 import { ensurePersonalReviewsInTransaction, personalReviewHref, type PersonalReviewDraftRun, type PersonalReviewRow } from "./personalReviews.js";

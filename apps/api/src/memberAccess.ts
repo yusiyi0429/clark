@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import type { Query } from "./meetingStore.js";
 import { hashSecret, verifySecret } from "./session.js";
 

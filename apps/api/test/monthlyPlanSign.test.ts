@@ -8,7 +8,7 @@ import {
   MonthlyPlanCardPayload,
   type TMonthlyDraftCandidate,
 } from "@warmap/contracts";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { type MonthlyDraftAgent, type MonthlyDraftAgentInput } from "../src/monthlyDraft.js";
 import { createTestApp, testEnv, type TestApp } from "./helpers.js";
 import { loadWorldInstance } from "../src/worldClient.js";
@@ -348,12 +348,14 @@ describe("MonthlyPlan signing projections", () => {
     writeFileSync(localFile, JSON.stringify({ people: { "person-fixture-001": "principal-ceo" } }));
     const goal = {
       object_id: "goal-eo", object_type: "PeriodGoal", title: "E&O 本月", revision_id: "rev-1", object_version: 3, version: 2,
-      domain_id: world.domains.eo, external_refs: [], lifecycle: { status: "committed", display_name: "已承诺" },
+      domain_id: world.domains.eo, external_refs: [], lifecycle: { status: "committed", display_name: "已承诺", event_id: "commit-1" },
     };
     const commits: any[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
       const path = new URL(url).pathname;
       if (path === "/v1/world/objects") return Response.json({ items: [goal], next_cursor: null });
+      // 承诺在签发之前。
+      if (path.endsWith("/events")) return Response.json({ object_id: goal.object_id, events: [{ event_id: "commit-1", kind: "commit", recorded_at: "2026-01-01T00:00:00Z" }] });
       if (path.startsWith("/v1/world/objects/")) return Response.json({ business: { ...goal, attributes: { external_refs: [] } }, records: { lifecycle: goal.lifecycle }, protocol: { contract_version: "tkos.world/0.3" } });
       if (path.endsWith("/prepare")) return Response.json({ expected_versions: [] });
       if (path === "/v1/actions") {
@@ -654,8 +656,8 @@ describe("MonthlyPlan signing boundaries", () => {
       const plan = await card(t, cookie, planId);
       expect(JSON.stringify(plan.payload)).not.toMatch(/percent|progress|mission/i);
 
-      // CompanyMemory 只读：没有写入入口，签发不改变人员目录
-      const memory = loadCompanyMemory(testEnv);
+      // 人员目录只读：没有写入入口，签发不改变人员目录
+      const memory = loadPeopleDirectory(testEnv);
       const peopleBefore = memory.searchPeople(undefined).map((person) => person.personId).sort();
       expect(Object.keys(memory).every((key) => /^(list|search|get)/.test(key))).toBe(true);
       expect((await t.app.inject({ method: "GET", url: "/api/cards/battlefields", headers: { cookie } })).statusCode).toBe(200);

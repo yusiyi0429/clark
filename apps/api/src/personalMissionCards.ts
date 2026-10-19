@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { TCard, TCreateMissionCardFeedbackRequest, TMissionCardCorrectionView, TMissionCardFeedbackView, TMissionCardField, TMissionCardGroupView, TMissionCardPayload, TMissionRoundSummary, TPersonalMissionCardMission, TPersonalMissionCardPayload, TThreadMember, TSetMissionCardOwnerConfirmationRequest } from "@warmap/contracts";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import type { Query } from "./meetingStore.js";
 import { canApprove, closeIfDue, correctionPeriodClosed, draftTrail, getMissionRoundRow, missionCardWriteProblem, pendingMissionCardAnnotations, projectMissionRoundCard, type MissionRoundPerson, type MissionRoundRow } from "./missionRounds.js";
 import { fieldText, getMissionRow, projectMissionCard } from "./missions.js";

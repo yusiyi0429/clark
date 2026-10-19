@@ -1,7 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { Static } from "@sinclair/typebox";
 import { HealthResponse } from "@warmap/contracts";
-import { createCompanyMemoryMcpSession } from "../mcpCompanyMemory.js";
 import { createMeMcpSession } from "../mcpMe.js";
 import { authenticateMcpToken, MCP_WRITE_TOOLS, oauthUrls } from "../mcpOAuth.js";
 import { personDisplayNames } from "../people.js";
@@ -9,7 +8,7 @@ import type { AppInstance, RouteContext } from "./shared.js";
 import { worldConfigured } from "../worldClient.js";
 
 export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { q, env, runtime, companyMemory, radar, recordings, voiceprints, requireServiceToken } = ctx;
+  const { q, env, runtime, peopleDirectory, radar, recordings, voiceprints } = ctx;
 
   const healthz = async (): Promise<Static<typeof HealthResponse>> => {
     let database = true;
@@ -22,7 +21,9 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void 
       // 启动不变量：任一为 false 时 API 不可能对外服务；字段来自已装配对象而非环境名。
       piRuntime: Boolean(runtime),
       modelSlots: Boolean(env.lightModel && env.heavyModel && env.compactionModel),
-      companyMemoryMcp: Boolean(companyMemory),
+      peopleDirectory: Boolean(peopleDirectory),
+      // 本体公司事实读取是否配全（本体地址与凭证、按人授权文件）；只看配置，不发起外部调用，不影响 status。
+      companyConfigured: worldConfigured(env) && Boolean(env.companyWorldAccessFile),
       // Provider 可选项：安装时就能诚实区分，不发起外部调用。
       search: radar.providerStatus.web,
       wechat: radar.providerStatus.wechat,
@@ -34,7 +35,7 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void 
       world: worldConfigured(env),
     };
     const status: Static<typeof HealthResponse>["status"] =
-      database && dependencies.piRuntime && dependencies.modelSlots && dependencies.companyMemoryMcp ? "ok" : "degraded";
+      database && dependencies.piRuntime && dependencies.modelSlots && dependencies.peopleDirectory ? "ok" : "degraded";
     // 本体连通状态（启动时只读探测的结果，不含凭证与地址）；不影响 status。完全没配本体时不带这一项（与原响应一致）。
     return { status, api: true, database, buildSha: env.buildSha, dependencies, ...(ctx.world && (env.worldApiUrl || env.worldAgentToken || env.worldTokenError) ? { world: ctx.world.status() } : {}),
       ...(ctx.worldTk && env.worldTk && (env.worldTk.worldApiUrl || env.worldTk.worldAgentToken || env.worldTk.worldTokenError) ? { worldTk: ctx.worldTk.status() } : {}) };
@@ -42,22 +43,8 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void 
   app.get("/healthz", { schema: { response: { 200: HealthResponse } } }, healthz);
   app.get("/api/healthz", { schema: { response: { 200: HealthResponse } } }, healthz);
 
-  // CompanyMemory MCP：独立服务凭据，只读（ADR-0004/0013）；GET/DELETE 会话协商由无状态 transport 拒绝。
-  app.post(
-    "/mcp/company-memory",
-    { preHandler: requireServiceToken(env.mcpServiceToken) },
-    async (req, reply) => {
-      reply.hijack();
-      const { server, transport } = await createCompanyMemoryMcpSession(companyMemory);
-      reply.raw.on("close", () => {
-        void server.close();
-      });
-      await transport.handleRequest(req.raw, reply.raw, req.body);
-    },
-  );
-
   const meMcp = async (req: FastifyRequest, reply: FastifyReply) => {
-    const findPerson = (personId: string) => companyMemory.searchPeople(undefined).find((person) => person.personId === personId);
+    const findPerson = (personId: string) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId);
     const urls = oauthUrls(env.publicOrigin);
     const identity = await authenticateMcpToken(q, req.headers.authorization, env.sessionSecret, ctx.now(), (personId) => !!findPerson(personId), urls.resource);
     if (!identity) {
@@ -71,8 +58,8 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void 
     }
     reply.hijack();
     const { server, transport } = await createMeMcpSession({ pool: ctx.pool, q, pepper: env.sessionSecret, now: ctx.now,
-      names: () => personDisplayNames(companyMemory), findPerson, initialPerson: findPerson(identity.personId)!, authorization: req.headers.authorization,
-      people: () => companyMemory.searchPeople(undefined), publicOrigin: env.publicOrigin });
+      names: () => personDisplayNames(peopleDirectory), findPerson, initialPerson: findPerson(identity.personId)!, authorization: req.headers.authorization,
+      people: () => peopleDirectory.searchPeople(undefined), publicOrigin: env.publicOrigin });
     reply.raw.on("close", () => { void server.close(); });
     await transport.handleRequest(req.raw, reply.raw, req.body);
   };

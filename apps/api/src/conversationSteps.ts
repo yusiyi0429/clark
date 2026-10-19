@@ -1,7 +1,7 @@
 /**
  * 对话里 Agent 处理时的「当前步骤」（已定设计第 6 节第 2 条）：服务端在工具开始、结束时把它映射成步骤，
  * 发 `{type:"step", id, label, status, result?}` 给界面，整轮的步骤存进 agent_runs，可以回看。
- * - label 是短动词短语（「查企业知识」「读 Mission 卡」），同一类工具并成一步，再次用到时这一步重新变成当前步骤；
+ * - label 是短动词短语（「查本体」「读 Mission 卡」），同一类工具并成一步，再次用到时这一步重新变成当前步骤；
  * - result 是这一步实际读到了什么（toolResultDetail，系统生成，不由模型写）；
  * - 这一轮结束时还在进行的步骤：正常结束记 done，停止、出错记 stopped。
  * 没有对应步骤名的工具不显示成步骤。
@@ -12,7 +12,6 @@ export type StepStatus = "done" | "active" | "pending" | "stopped";
 export type TurnStep = { id: string; label: string; status: StepStatus; result?: string };
 
 const STEP_LABELS: [RegExp, string][] = [
-  [/^(list_sections|search_sections|get_passages)$/, "查企业知识"],
   [/^web_search$/, "查公开来源"],
   [/^read_outlet_feed$/, "读发布方报道"],
   [/^search_people$/, "查人员"],
@@ -22,6 +21,7 @@ const STEP_LABELS: [RegExp, string][] = [
   [/^read_progress$/, "读进展"],
   [/^read_reviews$/, "读复盘"],
   [/^read_object_tree$/, "沿公司地图走"],
+  [/^read_anchor$/, "读当前页面"],
   [/^read_issue_conversation$/, "读议题对话"],
   [/^propose_issue$/, "起草议题"],
   [/^list_pending_issues$/, "读待决策议题"],

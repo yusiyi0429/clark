@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
 import { Value } from "@sinclair/typebox/value";
-import { loadPeople } from "../src/companyMemory.js";
+import { loadPeople } from "../src/peopleDirectory.js";
 
 /**
  * 把飞书里写完的月度复盘导入天枢（2026-10 首轮上线：9 月复盘在飞书「业务域」里）。前提：missions:import 已导入该月 Mission。

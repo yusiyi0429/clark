@@ -1,15 +1,11 @@
 import { createHash } from "node:crypto";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { QueryResult } from "pg";
 import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { PreflightCandidate, PreflightMaterialQuestions, type TPreflightMaterialQuestions } from "@warmap/contracts";
 import { runCandidateAgent, type CandidateThinkingLevel } from "./candidateAgentRuntime.js";
-import { makeMemoryTools } from "./memoryTools.js";
-import { createCompanyMemoryMcpServer } from "./mcpCompanyMemory.js";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import { companyProse, readCompanyContext, type CompanyContext } from "./companyContext.js";
 import type { PreflightAgent, PreflightAgentHooks, PreflightAgentInput } from "./meetingPreflight.js";
 import { REPORT_HISTORY_CHECK, REPORT_MATERIAL_QUESTIONS, type ThoughtTranslator } from "./preflightProgress.js";
 import {
@@ -25,7 +21,7 @@ import { HUMAN_WRITING_STYLE } from "./promptStyle.js";
 import { fallbackModelFor, THOUGHT_RETRY_MIN_MS } from "./conversationRouting.js";
 
 /**
- * advisor-review 的后端场景版本：方法固化在 Prompt；公司事实只从当前输入和 CompanyMemory MCP 读取。
+ * advisor-review 的后端场景版本：方法固化在 Prompt；公司事实只从当前输入（含服务端读好的本体公司事实 company）读取。
  * Judge/路由过程不进入 candidate，CEO 只看到结论与依据。
  * v3（feedback 18/12/9）：取消问题数量下限；群材料最新版、群讨论与有效历史分层进入输入；CEO 级问题必须说明为什么现在、为什么需要 CEO、选项与影响。
  * v4（10/13 会前预审改进）：近期会议按同一战场 / 单元找（不只共享议题）；材料自带的待决题逐条判断；
@@ -46,7 +42,7 @@ export const PREFLIGHT_PROMPT = `CEO WarMap Advisor Preflight v4
 - 本次材料的方向与历史决定（含近期会议的会后决定）不一致或可能冲突时，写清那条决定是什么（引用其 ref）、之后发生了什么变化（引用来源）、为什么现在需要重新判断；只是待确认的会后方向时，写明它尚待确认。
 
 先还原材料任务：分别用平实的书面语写清材料目的和本次评审目的（正文不写「用白话说」这类提示语）；primaryRole 只能从 schema 九类选择，secondaryRole 最多一个；判断 maturity、读者下一动作和本材料当前不负责什么。Meeting 标题和 Issue 决策问题只能作为系统推导的目的线索，不能冒充提交人明确目的。
-随后调用企业知识只读工具（list_sections、search_sections、get_passages），把战略、商业模式和当前经营状态的核心判断绑定到实际章节；不要只做通用材料点评。正文中提及公司知识库时一律称“企业知识”，不要出现 CompanyMemory。
+随后阅读输入 company 里的本体公司事实，把战略、商业模式和当前经营状态的核心判断绑定到实际内容；不要只做通用材料点评。company.status 不是 ready 时，这次没读到本体：在 basis 里写明缺少本体公司事实，相关判断标“待核实”，不凭印象补公司事实；status 是 empty 才表示本体里确实没有。
 评审时依次检查：当前要产生什么结果；事实、判断、假设、提案和决定是否混淆；最关键判断、取舍与推翻条件；重大战略主张为什么尚不稳及需要什么证据；Owner 是否已给出选项、推荐和后果。发现 Owner 未形成判断时指出缺口，不要代替 Owner 完成整套方案。合作对象正在向自身业务的同一层延伸（既合作又竞争）时要点明重叠在哪里、对合作方式意味着什么。企业或媒体自行披露的速度、成本、增长数字只能写成“企业披露、待核验”，不能当作事实或合作依据；研究建议不能写成已决定，研究不构成投资或采购结论。
 静默检查材料目的、中心叙事、方法与项目范围、阶段/交付/报价映射、输出层级和商业可读性；这些内部检查名称不得写入 candidate。
 
@@ -69,7 +65,7 @@ export const PREFLIGHT_PROMPT = `CEO WarMap Advisor Preflight v4
 - 没有真实分歧就不写，不为凑类别编造；每处分歧带 sourceRefs。
 
 工作顺序（每一步交出的阶段性结论会先显示在会议页上）：
-1. 读材料、近期会议与历史决定，查企业知识。
+1. 读材料、近期会议与历史决定，以及输入里的本体公司事实。
 2. 调用 ${REPORT_MATERIAL_QUESTIONS}，按上文要求交出材料自带待决题的逐条判断（没有自带待决题时 total 写 0、items 为空数组）。
 3. 有近期会议的会后决定（confirmedDecisions、pendingDecisions）或同战场决定（battlefieldDecisions）时，调用 ${REPORT_HISTORY_CHECK}，交出本次材料与这些决定的对照：每条写 ref（那条决定的引用）、relation（consistent 一致、tension 存在张力、conflict 冲突）和 note（一句话写依据）。只写与本次判断相关的决定，其余不写。
 4. 最后调用 submit_candidate 提交一次严格候选；materialQuestions 已在第 2 步交出时可以省略，交出的判断以第 2 步为准。
@@ -80,15 +76,15 @@ submit_candidate 的要求：
 - readiness 只能是 ready、revise、blocked；材料不全时如实给 revise 或 blocked。
 - entries 只允许七类：${PREFLIGHT_ENTRY_KINDS.join("、")}。
 - ${PREFLIGHT_EXACTLY_ONE_KINDS.join("、")} 恰好 1 条；${PREFLIGHT_AT_MOST_ONE_KINDS.join("、")} 最多 1 条，与战略无关的同步会可以不写；positive_signal、risk_calibration、next_step 按材料实际情况给，可以没有，不为凑类别编造。每条简短直给。
-- 每条 entry 必须给非空 sourceRefs。只可使用输入显式出现的 issue:<id>、research:<id>、material:<id>、material:<id>@v<版本>（可带 #p<n>）、discussion:<id>、decision:<id>、feedback:<id>、fact:<id>、signal:<id>、meeting:<id>、transcript:<id>、outcome:<id>、outcome:<会议id>#<条目id>，以及通过 MCP 查到的 memory:<sectionId>。
+- 每条 entry 必须给非空 sourceRefs。只可使用输入显式出现的 issue:<id>、research:<id>、material:<id>、material:<id>@v<版本>（可带 #p<n>）、discussion:<id>、decision:<id>、feedback:<id>、fact:<id>、signal:<id>、meeting:<id>、transcript:<id>、outcome:<id>、outcome:<会议id>#<条目id>；本体公司事实只作判断上下文，没有引用写法，不编造来源。
 - basis 说明本轮实际使用的输入与证据边界，写明读了哪些群材料版本、对照了哪几场近期会议、有没有群讨论和历史决定；basis 与 taskDefinition 是给一号位看的正文，材料写《文件名》第 N 版，会议写日期和会名，不写任何引用写法（meeting:<id>、material:<id>@v<版本> 等只放 sourceRefs），也不写输入字段名（decisionHistory、groupMaterials、relatedMeetings 等）。
 - brief 是一句核心判断：这次会只需要定哪一件事，现有材料支持到哪一步。summary 只写“最关键的一处问题”和“最优先的一个动作”，priorityAction 写清这是需要一号位作出选择，还是先补材料。
 - 无来源事实标“待核实”；缺输入标“待补”；不得声称已批准、确认、分派、签发或形成组织事实。
 - 会议关联的议题仍待决定时，不写“本次会议没有需要 CEO 拍板/决定的问题”之类的话：没有 meeting_question 只说明预审没有发现议题之外的额外取舍，议题本身仍待 CEO 在会上决定，brief 和 summary 要与此一致。
 
 写法与依据范围：
-- 依据以本次议题所在战场和集团整体的资料为主：不要把别的战场（别家公司）的复盘、会议纪要或指标当作这个议题的依据；确需对比时写明是哪个战场的资料。用企业知识时先看章节标题属于哪个战场。材料本身提出的跨战场问题（如是否在另一战场的项目里验证、是否向另一战场的业务延伸）属于本次判断范围，要写明涉及哪个战场、对它有什么影响。
-- 材料或企业知识里自带的来源说明（如“AI 整理”“AI 生成”“整理稿”之类）界面已有来源标签，不要在 brief、summary 和各条 entry 正文里复述，也不要据此反复质疑材料本身；需要说明时只在一条相关 entry 里简短提一次。缺的是事实就写缺什么事实。
+- 依据以本次议题所在战场和集团整体的资料为主：不要把别的战场（别家公司）的复盘、会议纪要或指标当作这个议题的依据；确需对比时写明是哪个战场的资料。用本体公司事实时先看它属于哪个战场。材料本身提出的跨战场问题（如是否在另一战场的项目里验证、是否向另一战场的业务延伸）属于本次判断范围，要写明涉及哪个战场、对它有什么影响。
+- 材料或本体公司事实里自带的来源说明（如“AI 整理”“AI 生成”“整理稿”之类）界面已有来源标签，不要在 brief、summary 和各条 entry 正文里复述，也不要据此反复质疑材料本身；需要说明时只在一条相关 entry 里简短提一次。缺的是事实就写缺什么事实。
 - 提到公司一律用中文名（如 AIDC、词元云集、房懂懂），不用内部简称或代号（如 TK、FDD）；对一号位不使用 LTO、PO 缩写，写长期目标、本月目标；长期目标不要称为「半年目标」。
 
 ${HUMAN_WRITING_STYLE}`;
@@ -123,7 +119,7 @@ export function preflightThinkingLevel(value: string | undefined): CandidateThin
 
 export async function createPreflightAgent(options: {
   query: (sql: string, params?: unknown[]) => Promise<QueryResult>;
-  companyMemory: CompanyMemoryRepository;
+  company: CompanyContext;
   baseUrl: string;
   apiKey: string;
   modelId: string;
@@ -132,22 +128,6 @@ export async function createPreflightAgent(options: {
   timeoutMs?: number;
   translateThought?: ThoughtTranslator;
 }): Promise<PreflightAgent> {
-  const server = createCompanyMemoryMcpServer(options.companyMemory);
-  const client = new Client({ name: "warmap-advisor-preflight", version: "1.0.0" });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await server.connect(serverTransport);
-  await client.connect(clientTransport);
-
-  const call = async (name: string, args: Record<string, unknown>) => {
-    const result = await client.callTool({ name, arguments: args });
-    const raw = Array.isArray(result.content) ? result.content as { type?: string; text?: string }[] : [];
-    const content = raw
-      .filter((item): item is { type: "text"; text: string } => item.type === "text" && typeof item.text === "string")
-      .map((item) => ({ type: "text" as const, text: item.text }));
-    if (result.isError) throw new Error(content.map((item) => item.text).join("\n") || `${name} failed`);
-    return { content, details: {} };
-  };
-  const memoryTools = makeMemoryTools(call);
   const thinkingLevel = options.thinkingLevel ?? PREFLIGHT_DEFAULT_THINKING;
   const thinking = thinkingLevel !== "off";
   const modelSlot = thinking ? "heavy" as const : "light" as const;
@@ -185,7 +165,7 @@ export async function createPreflightAgent(options: {
         query: options.query,
         kind: "meeting_preflight",
         objectRef: { type: "meeting", id: input.meeting.id },
-        input,
+        input: { ...input, company: companyProse(await readCompanyContext(options.company, undefined, signal)) },
         prompt: PREFLIGHT_PROMPT,
         schema: PreflightCandidate,
         baseUrl: options.baseUrl,
@@ -194,7 +174,7 @@ export async function createPreflightAgent(options: {
         modelSlot,
         thinkingLevel,
         ...(thinking ? { maxTokens: PREFLIGHT_THINKING_MAX_TOKENS } : {}),
-        extraTools: [...memoryTools, ...interimTools],
+        extraTools: interimTools,
         signal,
         onEvent: hooks?.onEvent,
       });

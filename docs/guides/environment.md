@@ -28,8 +28,6 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | `SESSION_SECRET` | 登录会话签名，随机长字符串 |
 | `PUBLIC_ORIGIN` | 浏览器访问来源。Compose 由 `PUBLIC_DOMAIN` 拼成 `https://…` |
 | `DRI_SERVICE_TOKEN` | DRI 导入导出的机器令牌，与会话密钥分开 |
-| `COMPANY_MEMORY_MCP_TOKEN` | CompanyMemory MCP（`/mcp/company-memory`）的服务令牌 |
-| `COMPANY_MEMORY_SEED_DIR` | `CompanyMemory.md` 所在目录。本地 `../../seed/memory`，Compose 固定 `/repo/seed/memory` |
 | `COMPANY_PEOPLE_SEED` | `company-people.v1` 人员名单。本地可用示例，生产必须是授权的真实名单；Compose 固定 `/repo/seed/company-people.json` |
 | `PI_BASE_URL`、`PI_API_KEY` | OpenAI-compatible Responses 端点与凭据 |
 | `LIGHT_MODEL`、`HEAVY_MODEL`、`COMPACTION_MODEL` | 三个模型槽位，必须显式配置，不互相回退 |
@@ -55,7 +53,8 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | | `TKOS_WORLD_INSTANCE` | `mvp`；可选 `demo`、`formal`、`tk`，对应 `apps/api/config/world-instance*.json` |
 | | `TKOS_WORLD_INSTANCE_LOCAL_FILE` | 只合并人员对应（people），其余以仓库实例配置为准 |
 | | `TKOS_WORLD_TK_INSTANCE`、`TKOS_WORLD_TK_API_URL`、`TKOS_WORLD_TK_TOKEN_FILE` | 第二个只读实例，只接受 `tk`；不填就关闭。地址缺省沿用主实例，凭证只从文件读 |
-| 公司事实与记忆 | `COMPANY_WORLD_ACCESS_FILE` | 按人授权的本体域，JSON `{"<personId>":["<domain_id>"]}`。不填时 `query_company` 回报读不到，Agent 改用本地 CompanyMemory 并注明来源 |
+| 公司事实与记忆 | `COMPANY_WORLD_ACCESS_FILE` | 按人授权的本体域，JSON `{"<personId>":["<domain_id>"]}`。公司事实只认本体：不填或读不到时如实说没读到，不用本地资料兜底 |
+| | `COMPANY_SYSTEM_PERSON_ID` | 后台服务（雷达、会前预审、预研、月度起草与复盘、任务卡起草）读本体用谁的授权；这个 personId 要在授权文件里有域。不填时这些服务如实说没读到本体 |
 | | `MEMORY_STORAGE_DIR` | 本体公司事实的只读投影写在 `<目录>/company`，可重建；不填用 `/tmp/warmap-company`。个人记忆存数据库，不在这里 |
 | | `MEMORY_RECALL_MODEL` | 每轮从本人记忆目录挑相关条目的快模型；不填依次用 `TRIAGE_MODEL`、`LIGHT_MODEL` |
 | 对话模型 | `CONVERSATION_MODEL`、`CONVERSATION_API`、`CONVERSATION_BASE_URL`、`CONVERSATION_THINKING` | 一号位主答；不配时按档位选模型（快答用 `HEAVY_MODEL`，检索问答与深度档用 `conversationModel.ts` 内置的模型），配一个 id 时三档都用它。协议按模型 id 推断（`claude-*` 走 Anthropic 协议），`CONVERSATION_API` 只能是 `openai-responses` 或 `anthropic-messages` |
@@ -100,4 +99,4 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 openssl rand -base64 32
 ```
 
-`SESSION_SECRET`、`DRI_SERVICE_TOKEN`、`COMPANY_MEMORY_MCP_TOKEN`、`FEISHU_TOKEN_KEY` 各用不同的值，不同环境不得复用。
+`SESSION_SECRET`、`DRI_SERVICE_TOKEN`、`FEISHU_TOKEN_KEY` 各用不同的值，不同环境不得复用。

@@ -10,10 +10,12 @@ const CEO: MaterialViewer = { personId: TEST_CEO.personId, role: "ceo", displayN
 
 // 出处（10/14）：正文直接陈述，出处写成句末的 [名称](地址)，前端显示成小标记；内部依据 cite:<ref>，带网址的写网址，都没有写 cite:source。
 describe("回答里的出处", () => {
-  it("写法：Markdown 链接，内部依据 cite:<ref>（企业知识、群材料段落、群讨论、历史决定、议题研究、会议），带网址写网址，都没有写 cite:source", () => {
+  it("写法：Markdown 链接，内部依据 cite:<ref>（群材料段落、群讨论、历史决定、议题研究、会议），带网址写网址，都没有写 cite:source", () => {
     expect(CITATION_SCHEME).toBe("cite:");
     expect(NAMED_SOURCE_REF).toBe("source");
-    for (const text of ["[资料名称](地址)", "cite:<引用标记>", "cite:memory:<章节 id>", "#p<段号>", "read_group_evidence", "read_decision_history",
+    // 旧企业知识已退役（ADR-0027），不再教模型写 memory: 引用
+    expect(SOURCE_CITATION_RULES).not.toContain("memory:");
+    for (const text of ["[资料名称](地址)", "cite:<引用标记>", "#p<段号>", "read_group_evidence", "read_decision_history",
       "cite:research:<议题 id>", "cite:issue:<议题 id>", "cite:meeting:<会议 id>", "不能自己拼、不能猜", "出处带网址的写原网址", "cite:source", "名称里不写内部编号"]) {
       expect(SOURCE_CITATION_RULES).toContain(text);
     }

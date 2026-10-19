@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type { TImpactAskWho, TImpactSource, TImpactTarget, TMeetingDecisionView, TMeetingOutcomeItem, TMyMeetingDecisionGroup } from "@warmap/contracts";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import { feishuNotifier, type FeishuNotify } from "./feishu/notify.js";
 import type { ImpactAgent, TImpactAnalysisCandidate } from "./impactAgent.js";
 import { insertImpactCards, type ImpactCardRow, type NewImpactCard } from "./impactCards.js";
@@ -33,7 +33,7 @@ const PICKABLE_KINDS = new Set(["decision", "todo", "ceoJudgment", "reopenWhen"]
 
 export type MeetingDecisionDeps = {
   pool: Pool;
-  companyMemory: CompanyMemoryRepository;
+  peopleDirectory: PeopleDirectory;
   layering: DecisionLayeringAgent;
   impact: ImpactAgent;
   /** 解读与影响分析用的公司地图。 */
@@ -74,11 +74,11 @@ const realDate = (value: string | null) => {
 };
 
 export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
-  const { pool, companyMemory, layering, impact } = deps;
+  const { pool, peopleDirectory, layering, impact } = deps;
   const q: Query = pool.query.bind(pool);
   const now = deps.now ?? (() => new Date());
-  const names = () => personDisplayNames(companyMemory);
-  const isCeo = (personId: string) => companyMemory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false;
+  const names = () => personDisplayNames(peopleDirectory);
+  const isCeo = (personId: string) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false;
   const pathFor = (personId: string, kind: "request" | "meeting", id: string) =>
     `${isCeo(personId) ? "" : "/me"}/${kind === "request" ? "requests" : "meetings"}/${id}`;
   const enqueue = (client: Query, kind: string, key: string, payload: unknown) => enqueueJob(client, { kind, dedupeKey: `${kind}:${key}`, payload });

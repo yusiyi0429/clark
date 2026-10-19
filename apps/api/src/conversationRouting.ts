@@ -32,14 +32,14 @@ export const TIER_SETTINGS: Record<ConversationTier, TierSettings> = {
 
 /** 每轮放进上下文包的回答档位说明（answerMode）：控制查证范围和篇幅，不规定格式模板。 */
 export const TIER_GUIDANCE: Record<ConversationTier, string> = {
-  quick: "快答：直接回答，一到三句话；只在需要时读一次看板或企业知识，不做外部检索；修改指令按业务修改规则执行。",
-  grounded: "检索问答：回答第一句就是结论，不写开场白，不说要先查什么、怎么查。先查企业知识和看板，内部不足再做外部检索，合计不超过 3 次，证据够了就停；开头一句给结论，篇幅与问题相称。",
-  deep: "深度：这是一个重要的战略问题。回答第一句就是判断，不写开场白，不说要先查什么、怎么推演。先界定问题和对标层级，查企业知识和看板数值，再针对关键分歧做外部检索，合计不超过 6 次，每次检索词具体到公司和事件，额度留给关键分歧；按「深度分析」的形状写：开头一段给判断，然后用段落写清因果链、关键证据、最有力的反对意见和二阶影响，落到集团和具体战场，最后写需要盯的信号与仍不确定的地方。证据够下判断就动笔，不追求穷尽。",
+  quick: "快答：直接回答，一到三句话；只在需要时读一次看板或本体公司事实，不做外部检索；修改指令按业务修改规则执行。",
+  grounded: "检索问答：回答第一句就是结论，不写开场白，不说要先查什么、怎么查。先查本体公司事实和看板，内部不足再做外部检索，合计不超过 3 次，证据够了就停；开头一句给结论，篇幅与问题相称。",
+  deep: "深度：这是一个重要的战略问题。回答第一句就是判断，不写开场白，不说要先查什么、怎么推演。先界定问题和对标层级，查本体公司事实和看板数值，再针对关键分歧做外部检索，合计不超过 6 次，每次检索词具体到公司和事件，额度留给关键分歧；按「深度分析」的形状写：开头一段给判断，然后用段落写清因果链、关键证据、最有力的反对意见和二阶影响，落到集团和具体战场，最后写需要盯的信号与仍不确定的地方。证据够下判断就动笔，不追求穷尽。",
 };
 
 /**
  * 分诊结果。battlefields 是这句提问涉及的战场（all、战场 id 数组；空数组表示不针对任何战场），上下文包据此筛选（conversationFocus.ts）。
- * 只有深度档带预取检索词（memory：企业知识，web：公开来源），服务端据此在主答第一轮之前并行预取；检索问答档不再给，分诊输出更短、更快。
+ * 只有深度档带预取检索词（memory：本体公司事实，web：公开来源），服务端据此在主答第一轮之前并行预取；检索问答档不再给，分诊输出更短、更快。
  */
 export type TriageResult = { tier: ConversationTier; topic?: string; battlefields?: "all" | string[]; memory?: string[]; web?: string[];
   /** 这一轮适不适合出图（时间线、路线图、指标对比、图示：路线图、排期、阶段、节奏、差距、组织、因果链、矩阵、流程）；没给按 false。 */
@@ -171,7 +171,7 @@ export function withNotice(notice: string | undefined, body: string): string {
   return body ? [notice, body].join(String.fromCharCode(10, 10)) : notice;
 }
 
-/** 预取检索词：每个 2–40 字、去重，企业知识最多 2 个、公开来源最多 3 个；不合规的丢掉。 */
+/** 预取检索词：每个 2–40 字、去重，本体公司事实最多 2 个、公开来源最多 3 个；不合规的丢掉。 */
 export function cleanPrefetch(result: Pick<TriageResult, "memory" | "web"> | null | undefined): { memory: string[]; web: string[] } | undefined {
   const clean = (list: unknown, max: number) => [...new Set((Array.isArray(list) ? list : [])
     .filter((item): item is string => typeof item === "string")
@@ -256,7 +256,7 @@ export async function routeTurn(input: { message: string; previousUserMessage?: 
 export const TRIAGE_PROMPT = `判断一号位这句提问应该走哪一档回答、涉及哪些战场，只输出一行 JSON，不输出其他文字：{"tier":"quick|grounded|deep","visual":false,"topic":"…","battlefields":["…"],"memory":["…"],"web":["…"]}
 
 - quick：寒暄致谢；明确的修改、选择、确认指令；只问本系统里的状态、名单、日期、数量、定义（例如某个战场的长期目标是什么、待决策的议题有几个）。
-- grounded：需要查企业知识或公开来源才能答准的问题，包括具体公司、产品、市场、政策、数字的现状，以及一般的分析、建议和写作。大多数问题属于这一档。
+- grounded：需要查本体公司事实或公开来源才能答准的问题，包括具体公司、产品、市场、政策、数字的现状，以及一般的分析、建议和写作。大多数问题属于这一档。
 - deep：只给很重要的战略问题：涉及集团或某个战场的方向与定位、竞争格局与对标、商业模式与盈利性、资本动作背后的逻辑、对未来走势的预判，需要多来源查证和推演才能下判断。以下两类即使没有「战略」「集团」字样也是 deep：几个战场之间的比较、排序、取舍（例如「几个战场里哪个最该本月介入」「两个战场哪个更急」）；要在几件事之间下优先级判断的问题（「最需要」「优先」「介入」「哪个更重要」「先抓哪件」）。只看一个战场的状态、复盘、进展（例如「看看房懂懂上月复盘后的情况」）是 grounded；把某件事变成议题、改某个字段是 quick，即使句子里有「战略」「核心」。其余拿不准时选 grounded。
 - 只要一张图或表：主要诉求是画、做、列一张图、表或矩阵（路线图、对比矩阵、因果链、组织关系、时间线等），又没有明确要求深入分析、判断或给建议的，最高写 grounded，即使涉及几个战场的对比（例如「把三个战场按机会和风险做个对比矩阵」是 grounded）。同时要图表又要判断的（例如「画个对比矩阵并告诉我先投哪个」「列个时间线，说说哪个最需要介入、为什么」）仍按上面的规则写 deep。
 
@@ -267,7 +267,7 @@ topic：tier 为 deep 时，用 6 到 24 个字的名词短语概括要判断的
 battlefields：这句提问涉及的战场，从输入的战场清单里取 id 写成数组（例如 ["tk"]）；问集团整体、几个战场之间的比较或排序、所有战场，或判断不出时写 "all"；只问外部公司、市场的公开事实，与哪个战场都无关时写 []。没有战场清单时写 "all"。
 
 memory 与 web 只在 tier 为 deep 时写，是回答前先替主答查好的检索词；quick 和 grounded 不写这两项：
-- memory：在企业知识里查的关键词，最多 2 个，每个 2 到 12 个字（例如「词元云集 商业模式」）；问题与集团自身无关时写空数组。
+- memory：在本体公司事实里查的关键词，最多 2 个，每个 2 到 12 个字（例如「词元云集 商业模式」）；问题与集团自身无关时写空数组。
 - web：在公开来源检索的查询词，最多 3 个，每个具体到公司、事件和年份（例如「硅基流动 C轮 融资 2026」）；只需要内部资料就能答的写空数组。`;
 
 /** 从分诊模型的输出里取第一段 JSON。 */
@@ -518,9 +518,7 @@ export function toolProgressLabel(name: string, args: unknown): string | undefin
   switch (name) {
     case "web_search": return `检索公开来源${quoted(value.query)}`;
     case "read_outlet_feed": return "读取发布方媒体的最新报道";
-    case "list_sections": return "查看企业知识目录";
-    case "search_sections": return `查找企业知识${quoted(value.query)}`;
-    case "get_passages": return "阅读企业知识原文";
+    case "query_company": return `查询本体公司事实${quoted(value.query)}`;
     case "search_people": return "查询人员目录";
     case "get_warmap_overview": return "读取战场总览";
     case "list_missions": return "读取战役清单";
@@ -536,6 +534,7 @@ export function toolProgressLabel(name: string, args: unknown): string | undefin
     case "read_progress": return "读取执行进展";
     case "read_reviews": return "读取复盘";
     case "read_object_tree": return "沿公司地图查找";
+    case "read_anchor": return "展开当前页面";
     case "read_issue_conversation": return "读取议题里的对话";
     case "propose_issue": return "起草议题初稿";
     case "update_business_object": case "create_business_object": case "run_business_action": case "apply_business_proposal":
@@ -549,7 +548,7 @@ export function toolProgressLabel(name: string, args: unknown): string | undefin
 /** 进度行只显示中文或拉丁字母的标题（检索结果里偶尔夹着其他文字的页面，标题看不懂就不显示）。 */
 const READABLE_TITLE = /^[\p{Script=Han}\p{Script=Latin}\p{N}\p{P}\p{S}\s]+$/u;
 
-/** 工具结果里取一个短标题（外部来源标题、企业知识节名），只用于进度行。 */
+/** 工具结果里取一个短标题（外部来源标题、本体对象名），只用于进度行。 */
 function shortTitle(value: unknown, max = 24): string | undefined {
   if (typeof value !== "string") return undefined;
   const text = value.replace(/\s+/g, " ").trim();
@@ -557,7 +556,7 @@ function shortTitle(value: unknown, max = 24): string | undefined {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
-/** 工具结果的结构化部分：自定义工具放在 details，企业知识工具是 content 里的一段 JSON。 */
+/** 工具结果的结构化部分：自定义工具放在 details，否则是 content 里的一段 JSON。 */
 function resultValue(result: unknown): Record<string, unknown> {
   const value = (result && typeof result === "object" ? result : {}) as { details?: unknown; content?: unknown };
   if (value.details && typeof value.details === "object" && Object.keys(value.details).length) return value.details as Record<string, unknown>;
@@ -566,7 +565,7 @@ function resultValue(result: unknown): Record<string, unknown> {
 }
 
 /**
- * 工具结束时给界面的一行查证进度：这一步实际读到了什么（条数、来源标题、企业知识节名）。
+ * 工具结束时给界面的一行查证进度：这一步实际读到了什么（条数、来源标题、本体对象名）。
  * 由系统按工具结果生成，不由模型来写；没有可说的就返回 undefined，界面保留开始时那一行。
  */
 export function toolResultDetail(name: string, args: unknown, result: unknown): string | undefined {
@@ -582,18 +581,11 @@ export function toolResultDetail(name: string, args: unknown, result: unknown): 
       const head = titles(results, 1).map((title) => `《${title}》`).join("");
       return `${q ? `「${q}」` : ""}找到 ${results.length} 条公开来源${head ? `，如${head}` : ""}`;
     }
-    case "search_sections": {
-      const results = list("results");
-      if (!results.length) return "企业知识里没有找到相关章节";
-      return `企业知识里找到 ${results.length} 处相关：${titles(results).map((title) => `《${title}》`).join("")}`;
-    }
-    case "get_passages": {
-      const title = shortTitle((value.section as { title?: unknown } | undefined)?.title);
-      return title ? `已读企业知识《${title}》` : undefined;
-    }
-    case "list_sections": {
-      const sections = list("sections");
-      return sections.length ? `企业知识共 ${sections.length} 节` : undefined;
+    case "query_company": {
+      if (value.status !== "ready" && value.status !== "empty") return typeof value.status === "string" ? "这次没读到本体" : undefined;
+      const entries = list("entries");
+      if (!entries.length) return "本体里没有找到相关公司事实";
+      return `本体里找到 ${entries.length} 条：${titles(entries).map((title) => `《${title}》`).join("")}`;
     }
     case "read_outlet_feed": {
       const items = list("items");
@@ -644,7 +636,7 @@ export const ESCALATION = {
 };
 
 /** 检索类工具：连续多轮调用它们算「还在查」。 */
-const RETRIEVAL_TOOLS = new Set(["web_search", "search_sections", "get_passages", "list_sections", "read_outlet_feed"]);
+const RETRIEVAL_TOOLS = new Set(["web_search", "query_company", "read_outlet_feed"]);
 
 /** 预计还需多少秒：按升级后的整轮估计减去已用时间，取整到 10 秒，至少 20 秒，不超过整轮时限剩下的时间。 */
 export function escalationSeconds(tier: "quick" | "grounded", elapsedMs: number, timeoutMs: number): number {

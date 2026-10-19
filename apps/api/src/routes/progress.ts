@@ -8,13 +8,13 @@ const OffPlanParams = Type.Object({ id: Type.String({ minLength: 1 }) }, { addit
 
 /** 全局进展与本人的计划外。可见范围在仓储层（progress.ts）判：CEO 看全部，其他人看同一战场的人。 */
 export function registerProgressRoutes(app: AppInstance, ctx: RouteContext): void {
-  const names = () => personDisplayNames(ctx.companyMemory);
+  const names = () => personDisplayNames(ctx.peopleDirectory);
   const mine = (personId: string) => readMyOffPlan(ctx.q, personId, names(), ctx.now());
 
   app.get("/api/progress", {
     preHandler: ctx.requirePerson,
     schema: { response: { 200: ProgressOverviewResponse } },
-  }, async (req) => ({ progress: await readProgressOverview(ctx.q, req.person!, ctx.companyMemory.searchPeople(undefined), ctx.now()) }));
+  }, async (req) => ({ progress: await readProgressOverview(ctx.q, req.person!, ctx.peopleDirectory.searchPeople(undefined), ctx.now()) }));
 
   app.get("/api/me/off-plan", {
     preHandler: ctx.requirePerson,

@@ -7,8 +7,8 @@ import { isAllowedOrigin, type AppInstance, type RouteContext } from "./shared.j
 import { isAdmin } from "./admin.js";
 
 export function registerAuthRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { env, q, fail, requirePerson, readSession, now, companyMemory } = ctx;
-  const findPerson = (personId: string) => companyMemory.searchPeople(undefined).find((p) => p.personId === personId);
+  const { env, q, fail, requirePerson, readSession, now, peopleDirectory } = ctx;
+  const findPerson = (personId: string) => peopleDirectory.searchPeople(undefined).find((p) => p.personId === personId);
   // 按 IP 的频率上限只挡刷接口；防猜口令靠按 ID 锁定（办公室共用出口 IP 时不互相误伤）。
   const perIp = { rateLimit: { max: 20, timeWindow: "1 minute" } };
 

@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Pool } from "pg";
-import { loadPeople } from "../src/companyMemory.js";
+import { loadPeople } from "../src/peopleDirectory.js";
 import { mergeImportedWeeks, parseWeeklyReviewDoc, writeImportedWeeks, type ImportDoc, type ImportedWeek } from "../src/weeklyReviewImport.js";
 
 /**

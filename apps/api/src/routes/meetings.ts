@@ -13,7 +13,7 @@ import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 import { registerDecisionHistoryRoutes } from "./decisionHistory.js";
 
 export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, env, companyMemory, fail, requireCEO, requirePerson, outcome, materialStorageDir, materialMultipartLimitError, respond, respondTranscriptImport, maxTranscriptBytes } = ctx;
+  const { pool, q, env, peopleDirectory, fail, requireCEO, requirePerson, outcome, materialStorageDir, materialMultipartLimitError, respond, respondTranscriptImport, maxTranscriptBytes } = ctx;
   // 议题有效历史（H05）只读接口：GET /api/issues/:id/history、GET /api/meetings/:id/history
   registerDecisionHistoryRoutes(app, ctx);
 
@@ -70,7 +70,7 @@ export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void
         }
         throw err;
       }
-      const result = await createTranscriptCandidate(pool, companyMemory, env.sessionSecret, req.params.id, file, hostId);
+      const result = await createTranscriptCandidate(pool, peopleDirectory, env.sessionSecret, req.params.id, file, hostId);
       if (result.status === 200) return { cards: [hostId === undefined ? result.card : projectMemberMeetingCardFromCard(result.card, hostId)] };
       return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
     },

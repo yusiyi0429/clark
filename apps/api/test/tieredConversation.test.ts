@@ -7,7 +7,7 @@ import {
   type Model,
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { GLOBAL_CONTEXT_UNCHANGED, SYSTEM_PROMPT, createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import { ANSWER_OPTIONS_RULES, DECISION_JUDGEMENT_RULES } from "../src/decisionJudgement.js";
 import { RICH_BLOCK_RULES } from "../src/richBlocks.js";
@@ -71,7 +71,10 @@ async function conversation(options: { tierModels?: Partial<typeof TIERS>; trans
   triage?: Parameters<typeof createPiConversationRuntime>[0]["triage"]; search?: ReturnType<typeof createFakeWebSearchAdapter>; globalContext?: () => Promise<Record<string, unknown>> }) {
   const seen: Seen[] = [];
   const runtime = await createPiConversationRuntime({
-    companyMemory: loadCompanyMemory(testEnv), baseUrl: "https://gw.invalid/v2/llm/responses", apiKey: "test-key",
+    peopleDirectory: loadPeopleDirectory(testEnv), baseUrl: "https://gw.invalid/v2/llm/responses", apiKey: "test-key",
+    company: { async read(_viewer, request) { return { status: "ready", entries: [{ handle: "company:tk:v1:0", title: "词元云集", text: `## 词元云集
+
+查询：${request.query ?? ""}` }] }; } },
     modelId: TIERS.quick, tierModels: options.tierModels ?? TIERS, compactionModelId: "fake-compaction",
     translateThinking: options.translateThinking, triage: options.triage, search: options.search, globalContext: options.globalContext,
     streamSimple: (model, context, streamOptions) => {
@@ -143,7 +146,7 @@ describe("按档位选主答模型", () => {
     } finally { await first.runtime.close?.(); }
     const seen: string[] = [];
     const later = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv), baseUrl: "https://gw.invalid/v2/llm/responses", apiKey: "test-key", modelId: TIERS.quick,
+      peopleDirectory: loadPeopleDirectory(testEnv), baseUrl: "https://gw.invalid/v2/llm/responses", apiKey: "test-key", modelId: TIERS.quick,
       tierModels: { quick: TIERS.quick, grounded: "claude-opus-5-5", deep: "claude-sonnet-5-5" }, compactionModelId: "fake-compaction",
       streamSimple: (model) => { seen.push(model.id); return reply(model, { text: "好" }); },
     });
@@ -271,14 +274,14 @@ describe("减负：预取、检索结果瘦身、全局摘要不重复", () => {
       expect(search.calls.map((call) => call.query)).toEqual(["硅基流动 融资 2026"]);
       const prefetchEvents = events.filter((event) => event.type === "tool" && event.toolCallId.startsWith("prefetch-"));
       expect(prefetchEvents.map((event) => event.type === "tool" && `${event.name}:${event.phase}`).sort())
-        .toEqual(["search_sections:completed", "search_sections:started", "web_search:completed", "web_search:started"]);
+        .toEqual(["query_company:completed", "query_company:started", "web_search:completed", "web_search:started"]);
       const firstPrompt = JSON.parse(lastUserText(chat.seen[0].context));
       expect(firstPrompt.prefetched.web[0]).toMatchObject({ query: "硅基流动 融资 2026" });
       // 检索结果瘦身：最多 8 条、每条摘要 500 字、不带图片地址
       expect(firstPrompt.prefetched.web[0].results).toHaveLength(8);
       expect(firstPrompt.prefetched.web[0].results[0].excerpt.length).toBeLessThanOrEqual(501);
       expect(firstPrompt.prefetched.web[0].results[0]).not.toHaveProperty("imageUrl");
-      expect(firstPrompt.prefetched.knowledge[0]).toMatchObject({ query: "词元云集" });
+      expect(firstPrompt.prefetched.company[0]).toMatchObject({ query: "词元云集", status: "ready", entries: [{ title: "词元云集" }] });
     } finally { await chat.runtime.close?.(); }
   });
 

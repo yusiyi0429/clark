@@ -72,7 +72,6 @@ describe.skipIf(!hasDocker)("Compose deployment boundaries", () => {
     "PUBLIC_DOMAIN=staging.example.com",
     "SESSION_SECRET=dummy-session",
     "DRI_SERVICE_TOKEN=dummy-dri",
-    "COMPANY_MEMORY_MCP_TOKEN=dummy-mcp",
     "PI_BASE_URL=https://provider.example.com/v1",
     "PI_API_KEY=dummy-key",
     "LIGHT_MODEL=light",

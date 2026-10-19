@@ -15,10 +15,11 @@ import type {
   TReadScopeParams,
   TReferenceSnapshot,
 } from "@warmap/contracts";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import type { AskUser } from "./askUser.js";
 import type { ConversationEntries } from "./conversationEntries.js";
-import type { CompanyMap, ReadFocus } from "./companyMap.js";
+import type { CompanyMap } from "./companyMap.js";
+import type { ConversationAnchor } from "./conversationAnchor.js";
 import type { IssueSuggest, IssueSuggestContext } from "./issueDrafts.js";
 import type { TurnRecoverySummary } from "./conversationRecovery.js";
 import type { ParsedMaterial } from "./materialParser.js";
@@ -32,7 +33,7 @@ import { canReadMonthlyReviewItem, getMonthlyReviewItem } from "./monthlyReviews
 import { getSignalCard } from "./signals.js";
 import { getPersonalMissionCard } from "./personalMissionCards.js";
 import { canReadTask, getTaskView } from "./tasks.js";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
 import type { HistoryHit } from "./conversationHistorySearch.js";
 
@@ -97,8 +98,11 @@ export type ConversationRuntime = {
     recentMessages?: { role: "user" | "assistant"; content: string; createdAt: string }[];
     /** 三层取用（companyMap.ts）：已绑定本人与这一轮，运行时据此提供 read_mission_cards / read_progress / read_reviews / read_object_tree。 */
     companyMap?: CompanyMap;
-    /** 本页的默认读取焦点（页面只决定默认焦点，不是边界）：放进上下文包的 focus。 */
-    focus?: ReadFocus & { label: string };
+    /**
+     * 场景锚点（PR #12 Anchor 层）：本人在哪个页面、聚焦哪张卡，连同三层取用的默认读取范围（range、period）；
+     * 放进上下文包的 anchor，运行时据此提供 read_anchor。页面只决定默认焦点，不是边界。
+     */
+    anchor?: ConversationAnchor;
     /** 本人在范围标签上改过的读取范围：放进上下文包，这一轮的读取一律按它。 */
     scopeOverride?: TReadScopeParams;
     /** 一号位深聊转议题（只在 CEO 首页，issueDrafts.ts）：运行时据此提供 propose_issue、read_issue_conversation。 */
@@ -147,7 +151,7 @@ type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
  * 旧对话归属：按人私有之前的会话没有 owner（都是 CEO 与天枢的对话），归到人员目录里的 CEO；目录里没有 CEO 就跳过。
  * 启动时在迁移之后执行（server.ts），可重复执行。
  */
-export async function assignLegacyConversations(q: Query, companyMemory: CompanyMemoryRepository): Promise<void> {
+export async function assignLegacyConversations(q: Query, companyMemory: PeopleDirectory): Promise<void> {
   const ceo = companyMemory.searchPeople(undefined).find((person) => roleOf(person) === "ceo");
   if (ceo) await q("UPDATE conversations SET owner_id = $1 WHERE owner_id IS NULL", [ceo.personId]);
 }

@@ -5,7 +5,7 @@ import type { TPostMeetingCandidate } from "@warmap/contracts";
 import { createTestApp, preflightCandidate, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
 import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { saveAuthorizedToken } from "../src/feishu/tokens.js";
 import type { FeishuMinuteInfo, FeishuMinutesApi } from "../src/feishu/minutes.js";
 import { createMeetingMinutesService, meetingMinutesReply, minuteFromEvent } from "../src/meetingMinutes.js";
@@ -109,12 +109,12 @@ describe("会开完后自动拿妙记", () => {
       await authorize(t, HOST, "ou_host", "测试乙", clock);
       await authorize(t, OWNER, "ou_owner", "测试丙", clock);
       const api = fakeMinutesApi();
-      const minutes = createMeetingMinutesService({ pool: t.pool, companyMemory: loadCompanyMemory(t.env), outcomeAgent: outcome, secret: t.env.sessionSecret,
+      const minutes = createMeetingMinutesService({ pool: t.pool, peopleDirectory: loadPeopleDirectory(t.env), outcomeAgent: outcome, secret: t.env.sessionSecret,
         feishu: { env: feishuEnv, api }, now: () => clock });
 
       // 开完了、妙记还没生成：waiting。
       const emptyApi = { ...api, async listMinutes() { return []; } };
-      await createMeetingMinutesService({ pool: t.pool, companyMemory: loadCompanyMemory(t.env), outcomeAgent: outcome, secret: t.env.sessionSecret,
+      await createMeetingMinutesService({ pool: t.pool, peopleDirectory: loadPeopleDirectory(t.env), outcomeAgent: outcome, secret: t.env.sessionSecret,
         feishu: { env: feishuEnv, api: emptyApi }, now: () => clock }).tick();
       expect(await meetingMinutesReply(t.pool.query.bind(t.pool), meetingId)).toEqual({ status: "waiting", reply: "飞书妙记还在生成，生成后会自动整理纪要。" });
       const ceo = await t.loginCookie();
@@ -151,7 +151,7 @@ describe("会开完后自动拿妙记", () => {
       const clock = new Date("2026-06-01T11:10:00+08:00");
       await authorize(t, HOST, "ou_host", "测试乙", clock);
       const api = fakeMinutesApi(`${TRANSCRIPT}\nSpeaker 1 00:03:00.000\n我补充一句。\n`);
-      const minutes = createMeetingMinutesService({ pool: t.pool, companyMemory: loadCompanyMemory(t.env), outcomeAgent: outcome, secret: t.env.sessionSecret,
+      const minutes = createMeetingMinutesService({ pool: t.pool, peopleDirectory: loadPeopleDirectory(t.env), outcomeAgent: outcome, secret: t.env.sessionSecret,
         feishu: { env: feishuEnv, api: { ...api, async listMinutes() { return []; } } }, now: () => clock });
       await minutes.tick();
       await minutes.onMinuteGenerated({ event_id: "ev1", minute_token: "obcn_minute_1" });
@@ -174,7 +174,7 @@ describe("会开完后自动拿妙记", () => {
     try {
       const meetingId = await scheduledMeeting(t);
       const clock = new Date("2026-06-01T11:10:00+08:00");
-      await createMeetingMinutesService({ pool: t.pool, companyMemory: loadCompanyMemory(t.env), outcomeAgent: outcome, secret: t.env.sessionSecret, now: () => clock }).tick();
+      await createMeetingMinutesService({ pool: t.pool, peopleDirectory: loadPeopleDirectory(t.env), outcomeAgent: outcome, secret: t.env.sessionSecret, now: () => clock }).tick();
       expect(await meetingMinutesReply(t.pool.query.bind(t.pool), meetingId)).toEqual({ status: "manual", reply: "这场会的妙记没能自动拿到，主持人可以在会议页上传妙记。" });
       const host = await t.memberCookie();
       const boundary = "----minutes-test";

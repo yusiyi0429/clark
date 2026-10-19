@@ -62,7 +62,7 @@ API 把业务对象投影为固定类型的 Card，带展示数据、导航、�
 
 ### 个人 MCP 与采集器
 
-`/mcp/me` 使用 OAuth 或个人令牌，能力受本人权限约束，授权流程见 [MCP 指南](../guides/mcp-oauth.md)。CompanyMemory MCP（`/mcp/company-memory`）用 `COMPANY_MEMORY_MCP_TOKEN` 只读提供公司资料。采集器用 `collector` 类个人令牌上报心跳，本人同意后才上传本机清单，原文由后台整理、14 天后清空。
+`/mcp/me` 使用 OAuth 或个人令牌，能力受本人权限约束，授权流程见 [MCP 指南](../guides/mcp-oauth.md)。采集器用 `collector` 类个人令牌上报心跳，本人同意后才上传本机清单，原文由后台整理、14 天后清空。
 
 ### 飞书
 
@@ -74,8 +74,8 @@ API 把业务对象投影为固定类型的 Card，带展示数据、导航、�
 
 ## 公司事实与个人记忆
 
-- **CompanyMemory**：`seed/memory/CompanyMemory.md` 加人员目录，由 `companyMemory.ts` 加载，供 Agent 与 `/mcp/company-memory` 只读使用（ADR-0004、0013）。
-- **本体公司事实**：`query_company` 工具按本人在 `COMPANY_WORLD_ACCESS_FILE` 中被授权的域读取本体正文（`company.ts`、`companyWorld.ts`），投影写在 `MEMORY_STORAGE_DIR/company`，可重建。读不到时如实说明，再用本地资料回答并注明来源。服务令牌不扩大任何人的可见范围。
+- **人员目录**：`company-people.v1`，由 `peopleDirectory.ts` 加载；登录、会话角色、本人隔离、人名解析只看它，不从本体推导登录权限（ADR-0027）。
+- **本体公司事实**：`query_company` 工具按本人在 `COMPANY_WORLD_ACCESS_FILE` 中被授权的域读取本体正文（`company.ts`、`companyWorld.ts`），投影写在 `MEMORY_STORAGE_DIR/company`，可重建。后台服务（雷达、会前预审、预研、月度起草与复盘、任务卡起草）经 `companyContext.ts` 按 `COMPANY_SYSTEM_PERSON_ID` 的授权读取。读不到时如实说没读到，不用本地资料兜底；`empty` 才表示本体里确实没有。服务令牌不扩大任何人的可见范围（ADR-0027）。
 - **个人记忆**：存数据库，只有本人可见。后台从本人的对话中提炼（新增、替代、遗忘），每轮用 `MEMORY_RECALL_MODEL` 从本人记忆目录里挑相关条目；回答里用到时带记忆标记。本人可在记忆页查看、修改、删除、恢复，也可导入资料并逐条确认（`personalMemory*.ts`、`personalDistillation.ts`、`memoryImport*.ts`）。
 
 ## 观测

@@ -17,8 +17,8 @@ const ACTION_INPUTS = { "request.send": RequestSendInput, "request.ask": Request
 /** 送达通道（⑨ 传话）：CEO 和成员都能发起、接收；看得到的范围在 delivery/requests.ts 里按发起人与接收人判断。 */
 export function registerRequestRoutes(app: AppInstance, ctx: RouteContext, agent: RequestAgent): void {
   const secret = ctx.env.sessionSecret;
-  const names = () => personDisplayNames(ctx.companyMemory);
-  const people = (): TRequestPerson[] => ctx.companyMemory.searchPeople(undefined).filter(isRealPerson)
+  const names = () => personDisplayNames(ctx.peopleDirectory);
+  const people = (): TRequestPerson[] => ctx.peopleDirectory.searchPeople(undefined).filter(isRealPerson)
     .map((person) => ({ personId: person.personId, displayName: person.displayName }));
   const failed = (reply: Parameters<RouteContext["fail"]>[0], result: RequestError) => ctx.fail(reply, result.error.status, result.error.code, result.error.message);
 

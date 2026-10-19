@@ -9,13 +9,13 @@ import {
 } from "@earendil-works/pi-ai";
 import { runCandidateAgent } from "../src/candidateAgentRuntime.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { createArkChat, type DictationPolishDeps } from "../src/dictationPolish.js";
-import { makeMemoryTools } from "../src/memoryTools.js";
 import { migrate } from "../src/migrate.js";
 import {
   AGENT_ROLES,
   CLIENT_TAGS,
+  RETRIEVE_SOURCES,
   METADATA_KEYS,
   RUN_NAME_PATTERN,
   annotateTurn,
@@ -122,11 +122,11 @@ describe("LangSmith 命名", () => {
     expect(runNames.agent(AGENT_ROLES.preflight)).toBe("agent:preflight-agent");
     expect(runNames.model("pi", "GPT-5.6-Terra")).toBe("model:pi/gpt-5.6-terra");
     expect(runNames.tool("web_search")).toBe("tool:web_search");
-    expect(runNames.retrieve("company-memory")).toBe("retrieve:company-memory");
+    expect(runNames.retrieve("world-company")).toBe("retrieve:world-company");
     expect(runNames.agent("会前 预审")).toBe("agent:unknown");
     for (const name of [
       runNames.turn("conv-1a2b3c4d-t12", 1), runNames.agent(AGENT_ROLES.ceoAgent), runNames.agent(AGENT_ROLES.dictationPolish),
-      runNames.model("ark", "deepseek-v4-1-flash-260910"), runNames.tool("search_sections"), runNames.retrieve("web-search"),
+      runNames.model("ark", "deepseek-v4-1-flash-260910"), runNames.tool("query_company"), runNames.retrieve("web-search"),
     ]) expect(name).toMatch(RUN_NAME_PATTERN);
     for (const role of Object.values(AGENT_ROLES)) expect(runNames.agent(role)).toMatch(RUN_NAME_PATTERN);
   });
@@ -186,17 +186,18 @@ describe("candidate Agent 的 Span 树", { timeout: 30_000 }, () => {
     configureTracing({ enabled: true, client: fake.client, project: "test-project", salt: "test-salt" });
     await createTestDb(async ({ db }) => {
       await migrate(db);
-      const memoryTools = makeMemoryTools(async () => ({ content: [{ type: "text", text: "章节目录" }], details: {} }));
+      const companyTools = [defineTool({ name: "query_company", label: "查询本体公司事实", description: "只读查询本体公司事实", parameters: Type.Object({}),
+        execute: async () => withRetrieve(RETRIEVE_SOURCES.worldCompany, () => ({ hasQuery: false }), async () => ({ content: [{ type: "text" as const, text: "公司事实" }], details: {} })) })];
       let call = 0;
       await runCandidateAgent({
         query: db.query.bind(db), kind: "issue-research", objectRef: { type: "issue", id: "0d9e1f2a-1111-4222-8333-444455556666" },
         personId: TEST_CEO.personId, personName: "测试甲",
         input: { question: "比较供应链" }, prompt: "只提交候选。", schema: Candidate,
-        baseUrl: "https://provider.invalid/v1", apiKey: "k", modelId: "fake-heavy", extraTools: memoryTools,
+        baseUrl: "https://provider.invalid/v1", apiKey: "k", modelId: "fake-heavy", extraTools: companyTools,
         streamSimple: () => {
           call += 1;
           return call === 1
-            ? stream(assistant([{ type: "toolCall", id: "t1", name: "list_sections", arguments: {} }], "toolUse"))
+            ? stream(assistant([{ type: "toolCall", id: "t1", name: "query_company", arguments: {} }], "toolUse"))
             : stream(assistant([{ type: "text", text: "提交" }, { type: "toolCall", id: "s1", name: "submit_candidate", arguments: { summary: "选择合作" } }], "toolUse", noUsage));
         },
       });
@@ -214,7 +215,7 @@ describe("candidate Agent 的 Span 树", { timeout: 30_000 }, () => {
       expect(agent).toMatchObject({ name: "agent:research-agent", run_type: "chain" });
       expect(agent.extra.metadata).toMatchObject({ agent_role: "research-agent", ls_agent_type: "root" });
       const steps = childrenOf(runs, agent).map((run) => run.name);
-      expect(steps).toEqual(["model:pi/fake-heavy", "tool:list_sections", "model:pi/fake-heavy", "tool:submit_candidate"]);
+      expect(steps).toEqual(["model:pi/fake-heavy", "tool:query_company", "model:pi/fake-heavy", "tool:submit_candidate"]);
 
       const [firstModel, secondModel] = byName(runs, "model:pi/fake-heavy").sort((a, b) => a.dotted_order.localeCompare(b.dotted_order));
       expect(firstModel.run_type).toBe("llm");
@@ -228,11 +229,11 @@ describe("candidate Agent 的 Span 树", { timeout: 30_000 }, () => {
       expect(secondModel.events).toEqual([expect.objectContaining({ name: "new_token" })]);
       expect(Date.parse(secondModel.events[0].time)).toBeGreaterThanOrEqual(Date.parse(secondModel.start_time ?? 0) || 0);
 
-      const [tool] = byName(runs, "tool:list_sections");
+      const [tool] = byName(runs, "tool:query_company");
       expect(tool).toMatchObject({ run_type: "tool" });
-      expect(tool.extra.metadata.ls_tool_name).toBe("list_sections");
+      expect(tool.extra.metadata.ls_tool_name).toBe("query_company");
       const [retrieve] = childrenOf(runs, tool);
-      expect(retrieve).toMatchObject({ name: "retrieve:company-memory", run_type: "retriever" });
+      expect(retrieve).toMatchObject({ name: "retrieve:world-company", run_type: "retriever" });
 
       for (const run of runs) {
         expect(run.name).toMatch(RUN_NAME_PATTERN);
@@ -346,11 +347,11 @@ describe("对话与听写的 Span 树（经过 HTTP 路由）", { timeout: 30_00
     configureTracing({ enabled: true, client: fake.client, salt: "s" });
     let call = 0;
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv), baseUrl: "https://provider.invalid/v1/responses", apiKey: "k", modelId: "fake-light",
+      peopleDirectory: loadPeopleDirectory(testEnv), baseUrl: "https://provider.invalid/v1/responses", apiKey: "k", modelId: "fake-light",
       streamSimple: (_model, _context: Context) => {
         call += 1;
         return call % 2 === 1
-          ? stream(assistant([{ type: "toolCall", id: `t${call}`, name: "list_sections", arguments: {} }], "toolUse"))
+          ? stream(assistant([{ type: "toolCall", id: `t${call}`, name: "search_people", arguments: {} }], "toolUse"))
           : stream(assistant([{ type: "text", text: "答案" }], "stop"));
       },
     });
@@ -378,8 +379,8 @@ describe("对话与听写的 Span 树（经过 HTTP 路由）", { timeout: 30_00
         const [agent] = childrenOf(runs, root);
         expect(agent).toMatchObject({ name: "agent:ceo-agent" });
         expect(agent.extra.metadata.ls_agent_type).toBe("root");
-        expect(childrenOf(runs, agent).map((run) => run.name)).toEqual(["retrieve:context-pack", "model:pi/fake-light", "tool:list_sections", "model:pi/fake-light"]);
-        expect(childrenOf(runs, byName(childrenOf(runs, agent), "tool:list_sections")[0]).map((run) => run.name)).toEqual(["retrieve:company-memory"]);
+        expect(childrenOf(runs, agent).map((run) => run.name)).toEqual(["retrieve:context-pack", "model:pi/fake-light", "tool:search_people", "model:pi/fake-light"]);
+        expect(childrenOf(runs, byName(childrenOf(runs, agent), "tool:search_people")[0]).map((run) => run.name)).toEqual(["retrieve:people-directory"]);
       }
       expectWhitelistedMetadata([...fake.creates, ...fake.updates]);
       for (const run of runs) expect(Object.values(run.extra.metadata)).not.toContain(TEST_CEO.personId);

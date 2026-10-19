@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Pool } from "pg";
 import type { TMeetingMinutesStatus, TPersonResult, TTranscriptSource } from "@warmap/contracts";
-import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
 import type { FeishuEnv } from "./feishu/config.js";
 import { FeishuApiError } from "./feishu/client.js";
 import { activeUserAccessToken, type FeishuMinuteInfo, type FeishuMinutesApi } from "./feishu/minutes.js";
@@ -32,7 +32,7 @@ const MATCH_WINDOW_MS = 3 * 60 * 60_000;
 
 export type MeetingMinutesDeps = {
   pool: Pool;
-  companyMemory: CompanyMemoryRepository;
+  peopleDirectory: PeopleDirectory;
   outcomeAgent: PostMeetingAgent;
   secret: string;
   /** 飞书没配时为空：开完的会直接记 manual。 */
@@ -66,7 +66,7 @@ export function minuteFromEvent(payload: Record<string, unknown>): { minuteToken
 }
 
 export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
-  const { pool, companyMemory, outcomeAgent, secret, feishu } = deps;
+  const { pool, peopleDirectory, outcomeAgent, secret, feishu } = deps;
   const now = deps.now ?? (() => new Date());
   const q: Query = pool.query.bind(pool);
 
@@ -120,7 +120,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
 
   /** 说话人对人：人员目录的显示名之外，再认飞书账号的名字。 */
   async function peopleWithFeishuNames(): Promise<TPersonResult[]> {
-    const people = companyMemory.searchPeople(undefined);
+    const people = peopleDirectory.searchPeople(undefined);
     const aliases = (await q("SELECT person_id, name FROM feishu_identities WHERE name IS NOT NULL")).rows as { person_id: string; name: string }[];
     const extra = aliases.flatMap((alias) => {
       const person = people.find((candidate) => candidate.personId === alias.person_id);
@@ -176,7 +176,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     // 说话人都唯一对上、且不重复时直接确认；否则留给主持人在会议页确认说话人。
     const ids = candidate.speakers.map((speaker) => speaker.suggestedPersonId);
     if (ids.every(Boolean) && new Set(ids).size === ids.length) {
-      await executeConfirmTranscriptCandidate(pool, companyMemory, outcomeAgent, secret,
+      await executeConfirmTranscriptCandidate(pool, peopleDirectory, outcomeAgent, secret,
         { actionType: "meeting.confirm_transcript_candidate", objectType: "meeting", objectId: meeting.id, objectVersion: saved.row.version },
         { speakerMappings: candidate.speakers.map((speaker) => ({ speakerName: speaker.speakerName, personId: speaker.suggestedPersonId! })), confirmAddParticipants: true },
         `feishu-minutes:${minute.token}`);

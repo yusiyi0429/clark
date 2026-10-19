@@ -5,7 +5,7 @@ import {
   type Context,
 } from "@earendil-works/pi-ai";
 import { createResearchAgentRunner, scopeMemoryMatches } from "../src/researchAgent.js";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { createCompanyContext } from "../src/companyContext.js";
 import { migrate } from "../src/migrate.js";
 import { createTestDb, testEnv } from "./helpers.js";
 import type { RadarOutletAdapter } from "../src/radar.js";
@@ -103,7 +103,7 @@ describe("issue pre-research publisher feed", () => {
       const outlets = fakeOutletAdapter();
       const runner = createResearchAgentRunner({
         query: db.query.bind(db),
-        companyMemory: loadCompanyMemory(testEnv),
+        company: createCompanyContext(testEnv),
         baseUrl: "https://provider.invalid/v1/responses",
         apiKey: "test-key",
         modelId: "fake-heavy",
@@ -138,7 +138,7 @@ describe("issue pre-research publisher feed", () => {
       const outlets = fakeOutletAdapter();
       const runner = createResearchAgentRunner({
         query: db.query.bind(db),
-        companyMemory: loadCompanyMemory(testEnv),
+        company: createCompanyContext(testEnv),
         baseUrl: "https://provider.invalid/v1/responses",
         apiKey: "test-key",
         modelId: "fake-heavy",

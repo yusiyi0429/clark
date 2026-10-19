@@ -9,7 +9,7 @@ import type { AppInstance, RouteContext } from "./shared.js";
 
 // 通用群组：只有未退出的成员能读能发；非成员（含 CEO）一律 404，不暴露群是否存在。加人、退出、Co-Agent 同步消息在 2b。
 export function registerThreadRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { q, fail, requirePerson, companyMemory, pool } = ctx;
+  const { q, fail, requirePerson, peopleDirectory, pool } = ctx;
   const threadParams = Type.Object({ objectType: ThreadObjectType, objectId: ThreadObjectId }, { additionalProperties: false });
   const afterQuery = Type.Object({ after: Type.Optional(Type.Integer({ minimum: 0 })) }, { additionalProperties: false });
 
@@ -20,8 +20,8 @@ export function registerThreadRoutes(app: AppInstance, ctx: RouteContext): void 
       const me = req.person!.personId;
       if (!await isActiveMember(q, req.params, me)) return fail(reply, 404, "THREAD_NOT_FOUND", "群组不存在");
       const [members, messages, read] = await Promise.all([
-        listMembers(q, companyMemory, req.params),
-        listMessages(q, companyMemory, req.params),
+        listMembers(q, peopleDirectory, req.params),
+        listMessages(q, peopleDirectory, req.params),
         readState(q, req.params, me),
       ]);
       return { members, messages, ...read };
@@ -34,7 +34,7 @@ export function registerThreadRoutes(app: AppInstance, ctx: RouteContext): void 
     { preHandler: requirePerson, schema: { params: threadParams, querystring: afterQuery } },
     async (req, reply) => {
       if (!await isActiveMember(q, req.params, req.person!.personId)) return fail(reply, 404, "THREAD_NOT_FOUND", "群组不存在");
-      return { messages: await listMessages(q, companyMemory, req.params, req.query.after) };
+      return { messages: await listMessages(q, peopleDirectory, req.params, req.query.after) };
     },
   );
 
@@ -44,7 +44,7 @@ export function registerThreadRoutes(app: AppInstance, ctx: RouteContext): void 
     async (req, reply) => {
       const me = req.person!.personId;
       if (!await isActiveMember(q, req.params, me)) return fail(reply, 404, "THREAD_NOT_FOUND", "群组不存在");
-      return reply.code(201).send(await postMessage(q, companyMemory, req.params, me, req.body));
+      return reply.code(201).send(await postMessage(q, peopleDirectory, req.params, me, req.body));
     },
   );
 
@@ -62,7 +62,7 @@ export function registerThreadRoutes(app: AppInstance, ctx: RouteContext): void 
   const canManage = async (ref: { objectType: "issue" | "meeting" | "task" | "signal"; objectId: string }, personId: string) => {
     if (await isActiveMember(q, ref, personId)) return true;
     if (ref.objectType !== "issue") return false;
-    const ceo = companyMemory.searchPeople(undefined).some((person) => person.personId === personId && person.roles.includes("ceo"));
+    const ceo = peopleDirectory.searchPeople(undefined).some((person) => person.personId === personId && person.roles.includes("ceo"));
     if (!ceo) return false;
     return (await q("SELECT 1 FROM issues WHERE id::text=$1", [ref.objectId])).rowCount === 1;
   };
@@ -70,9 +70,9 @@ export function registerThreadRoutes(app: AppInstance, ctx: RouteContext): void 
   app.get("/api/threads/:objectType/:objectId/candidates", { preHandler: requirePerson, schema: { params: threadParams } }, async (req, reply) => {
     if (!await canManage(req.params, req.person!.personId)) return fail(reply, 404, "THREAD_NOT_FOUND", "群组不存在");
     if (req.params.objectType === "signal") return fail(reply, 404, "THREAD_NOT_FOUND", "群组不存在");
-    const current = new Set((await listMembers(q, companyMemory, req.params)).map((person) => person.personId));
+    const current = new Set((await listMembers(q, peopleDirectory, req.params)).map((person) => person.personId));
     if (req.params.objectType === "issue") current.add(req.person!.personId);
-    return { people: companyMemory.searchPeople(undefined).filter((person) => isRealPerson(person) && !current.has(person.personId)
+    return { people: peopleDirectory.searchPeople(undefined).filter((person) => isRealPerson(person) && !current.has(person.personId)
       && (req.params.objectType !== "task" || canUseMemberView(person)))
       .map((person) => ({ personId: person.personId, displayName: person.displayName })) };
   });
@@ -81,7 +81,7 @@ export function registerThreadRoutes(app: AppInstance, ctx: RouteContext): void 
     const ref = req.params;
     const inviterId = req.person!.personId;
     if (ref.objectType === "signal" || !await canManage(ref, inviterId)) return fail(reply, 404, "THREAD_NOT_FOUND", "群组不存在");
-    const directory = new Map(companyMemory.searchPeople(undefined).map((person) => [person.personId, person]));
+    const directory = new Map(peopleDirectory.searchPeople(undefined).map((person) => [person.personId, person]));
     const ids = [...new Set(req.body.personIds)];
     if (ref.objectType === "issue" && ids.every((id) => id === inviterId))
       return fail(reply, 400, "PERSON_NOT_AVAILABLE", "请选择其他人加入议题群");
@@ -133,11 +133,11 @@ export function registerThreadRoutes(app: AppInstance, ctx: RouteContext): void 
     finally { client.release(); }
     if (added.length) {
       setImmediate(() => { void (async () => {
-        const input = await threadIntroInput(q, companyMemory, ref, inviterId, added, req.body.note);
+        const input = await threadIntroInput(q, peopleDirectory, ref, inviterId, added, req.body.note);
         await postThreadIntro(pool, ctx.threadIntroAgent, input, existing);
       })().catch((error) => app.log.error(error)); });
     }
-    return { members: await listMembers(q, companyMemory, ref) };
+    return { members: await listMembers(q, peopleDirectory, ref) };
   });
 
   app.post("/api/threads/:objectType/:objectId/leave", { preHandler: requirePerson, schema: { params: threadParams } }, async (req, reply) => {
@@ -145,7 +145,7 @@ export function registerThreadRoutes(app: AppInstance, ctx: RouteContext): void 
     const me = req.person!.personId;
     if (!await isActiveMember(q, ref, me)) return fail(reply, 404, "THREAD_NOT_FOUND", "群组不存在");
     const owner = ref.objectType === "issue"
-      ? companyMemory.searchPeople(undefined).some((person) => person.personId === me && person.roles.includes("ceo"))
+      ? peopleDirectory.searchPeople(undefined).some((person) => person.personId === me && person.roles.includes("ceo"))
       : ref.objectType === "meeting" ? (await q("SELECT lead_dri_id FROM meetings WHERE id::text=$1", [ref.objectId])).rows[0]?.lead_dri_id === me
       : ref.objectType === "task" ? (await q("SELECT owner_id FROM tasks WHERE id::text=$1", [ref.objectId])).rows[0]?.owner_id === me : false;
     if (owner) return fail(reply, 409, "THREAD_OWNER_CANNOT_LEAVE", "群主不能退出");

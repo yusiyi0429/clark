@@ -8,7 +8,7 @@ import type { Pool } from "pg";
 import type { Query } from "./meetingStore.js";
 import { authenticateMcpToken, MCP_WRITE_TOOLS, oauthUrls } from "./mcpOAuth.js";
 import { canUseMemberView } from "./memberAccess.js";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import { companyProgress, getIssue, getMeeting, listPending } from "./mcpCeoReads.js";
 import { readMissionCardForAgent } from "./mcpMissionCards.js";
 import { applyMissionCardRevision } from "./missionCardAnnotations.js";

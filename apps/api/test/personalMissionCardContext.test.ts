@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createAssistantMessageEventStream, type Context } from "@earendil-works/pi-ai";
-import { loadCompanyMemory } from "../src/companyMemory.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import { getPersonalMissionCard } from "../src/personalMissionCards.js";
 import { migrate } from "../src/migrate.js";
@@ -11,7 +11,7 @@ describe("Personal card context boundaries", () => {
   it("does not offer the unscoped Mission tool to a member's card Agent while preserving CEO access", async () => {
     const contexts: Context[] = [];
     const runtime = await createPiConversationRuntime({
-      companyMemory: loadCompanyMemory(testEnv), baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
+      peopleDirectory: loadPeopleDirectory(testEnv), baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
       listMissions: async () => [{ id: 'invisible-other-owner' }],
       streamSimple: (_model, context) => {
         contexts.push(context);

@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { Type, type Static } from "@sinclair/typebox";
 import { MonthlyPlanPeriod, MonthlyReviewSelfReview, type TMonthlyPlanBattlefield, type TMonthlyPlanCapability, type TMonthlyReviewItemStatus,
   type TMonthlyReviewSelfReview } from "@warmap/contracts";
-import type { MemoryPerson } from "./companyMemory.js";
+import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import type { Query } from "./meetingStore.js";
 import { createMonthlyReviewInTransaction } from "./monthlyReviews.js";
 import { startUnitReviewsIfComplete, type PersonalReviewRow } from "./personalReviews.js";
