@@ -26,7 +26,7 @@ claude mcp login tianshu
 
 ## 部署
 
-API 启动自动应用 `055_mcp_oauth.sql`，既有个人令牌保持有效。更新 API、Web 和 Caddy；Caddy 新增 `/.well-known/oauth-*` 到 API 的分流。宿主 Nginx 仍转发整个域名到 Caddy。
+API 启动应用尚未执行的迁移，其中包含 `055_mcp_oauth.sql`。既有个人令牌保持有效。更新 API、Web 和 Caddy；Caddy 新增 `/.well-known/oauth-*` 到 API 的分流。宿主 Nginx 仍转发整个域名到 Caddy。
 
 `PUBLIC_ORIGIN` 必须是用户实际访问的 HTTPS origin；本地开发可使用 HTTP 的 `localhost`、`127.0.0.1` 或 `::1`。连接页面优先使用 API 返回的 canonical MCP URL，确保 OAuth 的 resource 与发现元数据一致。Next 开发环境会代理 `/api/*`、`/mcp/*` 和 `/.well-known/*`。
 
@@ -52,4 +52,4 @@ API 启动自动应用 `055_mcp_oauth.sql`，既有个人令牌保持有效。�
 
 `apps/api/test/mcpOAuth.test.ts` 覆盖发现、注册、PKCE、浏览器确认、拒绝授权、身份和 scope 隔离、读取/写入、过期、刷新轮换与重放、口令重置、撤销、连接数量限制，以及官方 MCP SDK 客户端的完整授权和续期。
 
-前端覆盖默认 OAuth / PAT 备用切换、无秘密的连接说明，以及两种身份登录后返回授权页。浏览器验收使用隔离测试数据库，检查桌面和 390px 手机授权页，并走通真实登录、授权回调与首次 MCP 调用。
+前端覆盖默认 OAuth / PAT 备用切换、无秘密的连接说明，以及两种身份登录后返回授权页。历史浏览器验收使用隔离测试数据库，检查桌面和 390px 手机授权页，并走通真实登录、授权回调与首次 MCP 调用。

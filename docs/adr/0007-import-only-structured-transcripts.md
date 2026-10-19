@@ -1,5 +1,7 @@
 # MVP 只导入结构化逐字稿
 
+标准逐字稿契约继续有效。现在另有妙记 Markdown 转换和会议录音转写（火山 ASR、腾讯声纹），见[当前架构](../architecture/README.md#会议)。下文“不建设录音、ASR”只记录最初范围。
+
 Meeting 只接受 `warmap-transcript.v1`，所有 speakerId 必须匹配已有 participant，任一字段不兼容就整份解析失败。MVP 不建设录音、ASR、通用格式转换或说话人猜测/别名词典，从而让会后决定、负责人和 CEO 判断都建立在明确身份的发言段上。
 
 ## 受限的妙记 Markdown 例外

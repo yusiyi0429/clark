@@ -1,5 +1,7 @@
 # Mission 升为第七个核心实体
 
+本文保留实体提升的决策。挂卡 Mission 的编辑、本人确认与更正权限以[任务卡契约](../contracts/mission-card-preparation-review.v0.1.md)为准；“七个实体”是当时范围，不是当前完整的数据表清单。
+
 Mission 从 `BattlefieldConfig` 内嵌的只读值对象升为版本化 Organization Fact，WarMap 的核心实体从六个变为七个：Signal、Issue、Meeting、MeetingOutcome、MonthlyPlan、Conversation 与 Mission。Mission 承载一个周期的结果承诺（Outcome）、唯一 DRI、一个主要能力域、零到多个战场、成功证据、关键里程碑、关键依赖、风险、边界与来源元数据，通过 `period` 承接同周期 MonthlyPlan 的 PCO；Mission 不保存 Task、Activity、执行状态或完成率。
 
 > 2026-09-27 修订：[ADR-0022](./0022-persist-monthly-mission-card-rounds.md) 引入本月 Mission Card 制定轮次。挂在个人卡上的 Mission 可以先以草稿入库，整轮确认前属于候选，不是已生效的 Organization Fact；月度计划签发不代替个人承诺确认。

@@ -49,7 +49,7 @@ sudo -E bash release.sh prepare 57e51cdd8fc57b849d980fa7a256f7a5b9ce1103 /tmp/so
 sudo -E bash release.sh switch  57e51cdd8fc57b849d980fa7a256f7a5b9ce1103
 ```
 
-- `infra/.env` 需先有 `M2_SEED_DIR`、`M2_INTERNAL_TOKEN`、`M2_MODEL_KEY`（及可选 `M2_WORLD_READ_TOKEN`），见 `m2-trial.md`。
+- `infra/.env` 需先有 `M2_SEED_DIR`、`M2_INTERNAL_TOKEN`、`M2_MODEL_KEY`（及可选 `M2_WORLD_READ_TOKEN`），见 [`docs/guides/m2-trial.md`](../../docs/guides/m2-trial.md)。
 - `m2.override.yml` 的构建目录写的是 `..`，在主机上会指向旧代码；`release.pin.yml` 把它改成 `releases/<短SHA>`，所以不要绕过脚本直接 `compose build m2`。
 - 切换时额外核对 m2 容器 healthy、`/m2/api/session` 不再是 404；已有 `m2_state` 卷时先打包到回退目录。
 - 回退会停掉 m2 容器（保留 `m2_state` 卷与私有 seed）、恢复原 infra 和 Caddyfile、重建 edge。

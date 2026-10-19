@@ -1,10 +1,8 @@
 # M2 内部试用发布
 
-## 当前项目部署记录
+## 部署边界
 
-天枢域名为 `tk.tokenkingos.com`，主机记录为 tokenhub-prod-app-01（115.191.26.230），目录 `/srv/tokenhub/apps/tianshu`。宿主机 Nginx 将整个域名转给回环 3130，Caddy 在站内分流。记录出自原 staging/runbook.md 的 2026-09-29 实际发布说明；正式执行前核对现网，不能依据下面遗留的旧 mvp 域名说明切站。
-
-10/8 交接记录说明发布脚本在另一台 Windows 电脑。本次已通过飞书向孙铭泽确认现行方式、访问交接与执行人；在收到交接前不宣称现网已验证或已发布。
+M2 是同站点 `/m2/` 的独立应用。主站入口、发布脚本、备份与回滚见[部署指南](deployment.md)；现网主机、目录与 compose 组合以 [`infra/staging/release.md`](../../infra/staging/release.md) 为准。执行前核对现网域名、主机、目录和当前部署人，仓库记录不能替代现网验证。
 
 ## 发布输入
 
@@ -14,7 +12,7 @@
    导出包含旧轮归档及人工记录，禁止打印内容或上传到 Git；snapshot-receipt.json 记录原文件哈希。
 3. 核对旧版实际人员 seed 的稳定 personId，再建立 accounts.json。使用 accounts.example.json 的结构；每个账号与成员编号唯一。不要根据重名、职责名称或工作台视角猜测。配置文件由发布人回读核对九位成员，包括兼任职责者。
 4. 将私有数据目录通过受控渠道交接到服务器，归 uid/gid 1000，目录 0700，文件 0600。
-5. 在服务器受限 env 中配置：M2_SEED_DIR（私有目录）、M2_INTERNAL_TOKEN（随机至少32字符）、M2_MODEL_KEY（服务端模型凭据），以及可选 M2_WORLD_READ_TOKEN（产品专用只读凭证）。模型沿用本次 demo 的明确模型；修改模型或技能属于另一轮验证，不混入本次接入。
+5. 在服务器受限的 `infra/.env` 中配置：M2_SEED_DIR（私有目录）、M2_INTERNAL_TOKEN（随机至少32字符）、M2_MODEL_KEY（服务端模型凭据），以及可选 M2_WORLD_READ_TOKEN（产品专用只读凭证）。模型沿用本次 demo 的明确模型；修改模型或技能属于另一轮验证，不混入本次接入。
 
 模型默认走 TokenHub 的 HTTPS 域名 `https://tokenhub.corp.tokenkingos.com/api/openai/v1`（2026-10-16 起替换原 IP 加端口的 HTTP 地址）。程序只接受 HTTPS。发布人需核对容器内能解析并访问该域名；可通过 M2_MODEL_BASE 显式配置其他团队核对过的 HTTPS 地址。不能把个人钥匙串或 Codex agent.token 复制到服务器。
 
@@ -22,9 +20,20 @@
 
 使用原 Compose 参数和现行火山 override，额外加入 `-f infra/m2.override.yml`。该文件增加独立 m2 服务和卷，并让 edge 使用 Caddyfile.m2；默认旧栈不启用 M2。
 
-先运行 `docker compose ... config --quiet`，避免打印展开后的密钥。备份旧栈以及已有 m2_state，再构建 M2 和 Web，启动 M2，确认健康，再更新 Web 和 edge。API 无代码改动，无新数据库迁移。上线地址为 `https://tk.tokenkingos.com/m2/`。
+先在仓库根目录运行 `docker compose -f infra/docker-compose.yml -f infra/volcano.override.yml -f infra/m2.override.yml --env-file infra/.env config --quiet`（现网按 `infra/compose-files` 带全部 `-f`），避免打印展开后的密钥。用 `release.sh` 发布时按 [release.md](../../infra/staging/release.md) 的「M2 内部试用」一节执行。备份旧栈以及已有 m2_state，再构建 M2 和 Web，启动 M2，确认健康，再更新 Web 和 edge。API 无代码改动，无新数据库迁移。上线地址为 `https://tk.tokenkingos.com/m2/`。
 
 原本体选择清单针对截至 10/9 的事实。这次导出的第13轮也沿用该时点输入。“实时读取”表示重新核对这些来源，不表示自动纳入10/10后的进展。资料或组织责任变化时按来源校验停止，由负责人重新审查清单。
+
+## 本地运行
+
+M2 读取进程环境，不自动加载 env 文件。准备私有 seed 与账号映射（结构见 `apps/m2/accounts.example.json`）后，在 `apps/m2` 目录导出所需变量再启动：`M2_SEED_DIR`、`M2_ACCOUNT_MAP_FILE`、`M2_INTERNAL_TOKEN`、`M2_AUTH_API_URL`（本地 API 为 `http://127.0.0.1:4000/api/auth/session`），模型用 `DECODING_API_BASE`、`DECODING_API_KEY`、`DECODING_MODEL`，本体只读用 `TKOS_WORLD_PRODUCT_TOKEN`。端口取 `PORT`，缺省 4333；不要和 API 共用同一个 `PORT` 值。
+
+```bash
+pnpm --filter @warmap/m2 build
+pnpm --filter @warmap/m2 start
+```
+
+先登录主应用，再访问 `http://localhost:3100/m2/`。Web 开发代理把 `/m2/*` 转到 `M2_SERVER_URL`（缺省 `http://localhost:4333`）。M2 每次请求仍向 API 校验会话。
 
 ## 验收
 
