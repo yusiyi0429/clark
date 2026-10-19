@@ -86,6 +86,18 @@ services:
       ONTOLOGY_SERVICE_TOKEN: ${ONTOLOGY_SERVICE_TOKEN:-}
       TKOS_WORLD_API_URL: ${TKOS_WORLD_API_URL:-}
       TKOS_WORLD_AGENT_TOKEN: ${TKOS_WORLD_AGENT_TOKEN:-}
+      # 本体可选项（worldClient.ts）：实例名缺省 mvp；凭证文件、本地人员补充文件与 TK 只读实例都写容器内路径（放进只读挂载的 /repo/seed）。
+      TKOS_WORLD_INSTANCE: ${TKOS_WORLD_INSTANCE:-}
+      TKOS_WORLD_AGENT_TOKEN_FILE: ${TKOS_WORLD_AGENT_TOKEN_FILE:-}
+      TKOS_WORLD_INSTANCE_LOCAL_FILE: ${TKOS_WORLD_INSTANCE_LOCAL_FILE:-}
+      TKOS_WORLD_TK_INSTANCE: ${TKOS_WORLD_TK_INSTANCE:-}
+      # 不单独给时沿用主实例地址（空串不会回退，所以在这里补上缺省）。
+      TKOS_WORLD_TK_API_URL: ${TKOS_WORLD_TK_API_URL:-${TKOS_WORLD_API_URL:-}}
+      TKOS_WORLD_TK_TOKEN_FILE: ${TKOS_WORLD_TK_TOKEN_FILE:-}
+      # 本体公司事实按人授权的域（容器内路径，如 /repo/seed/company-world-access.json）；留空时 query_company 如实回报读不到。
+      COMPANY_WORLD_ACCESS_FILE: ${COMPANY_WORLD_ACCESS_FILE:-}
+      # 公司事实只读投影目录（写在 <目录>/company，可重建）；留空用容器内 /tmp，填写时须是 uid 1000 可写的路径。
+      MEMORY_STORAGE_DIR: ${MEMORY_STORAGE_DIR:-}
       COMPANY_MEMORY_MCP_TOKEN: ${COMPANY_MEMORY_MCP_TOKEN:?COMPANY_MEMORY_MCP_TOKEN required}
       # 单一来源：seed/memory/ CompanyMemory Markdown 目录 + 真实人员名单，均只读挂载；生产可换 host 路径并同步覆盖
       COMPANY_MEMORY_SEED_DIR: /repo/seed/memory
@@ -101,6 +113,25 @@ services:
       COMPACTION_MODEL: ${COMPACTION_MODEL:?COMPACTION_MODEL required}
       # 个人记忆召回的快模型（可选）：不配时依次用 TRIAGE_MODEL、LIGHT_MODEL。
       MEMORY_RECALL_MODEL: ${MEMORY_RECALL_MODEL:-}
+      # 一号位对话与分诊（可选）：不配时主答用 HEAVY_MODEL、分诊用 LIGHT_MODEL（conversationModel.ts）。
+      CONVERSATION_MODEL: ${CONVERSATION_MODEL:-}
+      CONVERSATION_API: ${CONVERSATION_API:-}
+      CONVERSATION_BASE_URL: ${CONVERSATION_BASE_URL:-}
+      CONVERSATION_THINKING: ${CONVERSATION_THINKING:-}
+      TRIAGE_MODEL: ${TRIAGE_MODEL:-}
+      # 各候选 Agent 的模型与思考强度（可选，agentModels.ts）；不配时沿用 HEAVY/LIGHT 槽位。
+      PREFLIGHT_MODEL: ${PREFLIGHT_MODEL:-}
+      PREFLIGHT_THINKING: ${PREFLIGHT_THINKING:-}
+      RESEARCH_MODEL: ${RESEARCH_MODEL:-}
+      RESEARCH_THINKING: ${RESEARCH_THINKING:-}
+      OUTCOME_MODEL: ${OUTCOME_MODEL:-}
+      OUTCOME_THINKING: ${OUTCOME_THINKING:-}
+      RADAR_MODEL: ${RADAR_MODEL:-}
+      RADAR_THINKING: ${RADAR_THINKING:-}
+      PERSONAL_RADAR_MODEL: ${PERSONAL_RADAR_MODEL:-}
+      PERSONAL_RADAR_THINKING: ${PERSONAL_RADAR_THINKING:-}
+      MEMORY_IMPORT_MODEL: ${MEMORY_IMPORT_MODEL:-}
+      MEMORY_IMPORT_THINKING: ${MEMORY_IMPORT_THINKING:-}
       # Radar Provider 可选：缺失时 Radar Card 如实显示未配置。
       # 唯一 Web Search Provider 为博查；公众号只经内网 MCP sidecar，账号级、非关键词替代。
       BOCHA_API_KEY: ${BOCHA_API_KEY:-}
@@ -130,6 +161,20 @@ services:
       BUILD_SHA: ${BUILD_SHA:-dev}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-warmap}
+      # 只有 LANGSMITH_TRACING=true 且有 key 才上报（tracing.ts）；留空即不上报。
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-}
+      LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-}
+      TRACE_ANON_SALT: ${TRACE_ANON_SALT:-}
+      # 飞书企业自建应用：前三项都留空＝关闭；只填一部分 API 启动失败（feishu/config.ts）。版本空串会被判非法，缺省 1。
+      FEISHU_APP_ID: ${FEISHU_APP_ID:-}
+      FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
+      FEISHU_TOKEN_KEY: ${FEISHU_TOKEN_KEY:-}
+      FEISHU_TOKEN_KEY_VERSION: ${FEISHU_TOKEN_KEY_VERSION:-1}
+      # 采集表：live 才写真实多维表格，其余为 mock。影响卡：shadow 只在后台记录，其余为 live。
+      FEISHU_BITABLE_MODE: ${FEISHU_BITABLE_MODE:-}
+      IMPACT_CARD_MODE: ${IMPACT_CARD_MODE:-}
+      # 管理员视图：逗号分隔的 personId；留空时没有人能看。
+      TIANSHU_ADMIN_PERSON_IDS: ${TIANSHU_ADMIN_PERSON_IDS:-}
       MEETING_MATERIAL_STORAGE_DIR: /var/lib/warmap/meeting_materials
       CONVERSATION_ATTACHMENT_STORAGE_DIR: /var/lib/warmap/conversation_attachments
       MEETING_RECORDING_STORAGE_DIR: /var/lib/warmap/meeting_recordings
