@@ -23,19 +23,25 @@ export const MODEL_PROFILES={
 };
 const run=promisify(execFile);
 // Messages API stream: text deltas become the answer; stop_reason max_tokens counts as cut off.
-async function messagesResponse(response,onDelta){
+// A Messages stream that ends without message_stop is logged with what the provider needs to trace it: request id,
+// seconds from open to break, bytes received and the last events (Decoding Skill 2026-10-19, for TokenHub / 王创峰).
+const streamBreakLog=process.env.DECODING_STREAM_LOG||new URL('.runtime/stream-breaks.jsonl',import.meta.url);
+async function logStreamBreak(entry){try{const {appendFile}=await import('node:fs/promises');const {dirname}=await import('node:path');const {fileURLToPath}=await import('node:url');const file=typeof streamBreakLog==='string'?streamBreakLog:fileURLToPath(streamBreakLog);await mkdir(dirname(file),{recursive:true});await appendFile(file,JSON.stringify({at:new Date().toISOString(),...entry})+'\n');}catch{}}
+async function messagesResponse(response,onDelta,trace={}){
  if(!response.headers?.get?.('content-type')?.includes('text/event-stream')){const r=await response.json();const answer=(r.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('');if(answer&&onDelta)await onDelta(answer);return {id:r.id,usage:r.usage,answer,stop:r.stop_reason};}
- const reader=response.body.getReader(),decoder=new TextDecoder();let pending='',answer='',usage={},id,stop;
+ const reader=response.body.getReader(),decoder=new TextDecoder(),opened=Date.now(),events=[];let pending='',answer='',usage={},id,stop,bytes=0,failure=null;
+ const requestId=response.headers?.get?.('request-id')||response.headers?.get?.('x-request-id')||null;
+ const broke=reason=>logStreamBreak({model:trace.model,requestId,messageId:id||null,seconds:+((Date.now()-opened)/1000).toFixed(1),bytes,lastEvents:events.slice(-15),reason});
  const consume=async line=>{
   if(!line.startsWith('data:'))return;const text=line.slice(5).trim();if(!text)return;
-  const e=JSON.parse(text);if(e.type==='error')throw Error('模型流式响应失败，未应用内容');
+  const e=JSON.parse(text);events.push(e.type);if(e.type==='error'){failure=e.error?.type||'error';throw Error('模型流式响应失败，未应用内容');}
   if(e.type==='message_start'){id=e.message?.id;usage={...usage,...e.message?.usage};}
   if(e.type==='content_block_delta'&&e.delta?.type==='text_delta'){answer+=e.delta.text;if(onDelta)await onDelta(e.delta.text);}
   if(e.type==='message_delta'){stop=e.delta?.stop_reason||stop;usage={...usage,...e.usage};}
  };
- try{while(true){const {done,value}=await reader.read();pending+=decoder.decode(value,{stream:!done});let index;while((index=pending.indexOf('\n'))>=0){await consume(pending.slice(0,index).trim());pending=pending.slice(index+1);}if(done)break;}
- if(pending)await consume(pending.trim());}finally{await reader.cancel().catch(()=>{});}
- if(!stop)throw Error('模型响应提前结束，未应用内容');
+ try{while(true){const {done,value}=await reader.read();bytes+=value?.byteLength||0;pending+=decoder.decode(value,{stream:!done});let index;while((index=pending.indexOf('\n'))>=0){await consume(pending.slice(0,index).trim());pending=pending.slice(index+1);}if(done)break;}
+ if(pending)await consume(pending.trim());}catch(error){await broke(failure?`error event: ${failure}`:`read failed: ${error.message}`);throw error;}finally{await reader.cancel().catch(()=>{});}
+ if(!stop){await broke('ended without message_stop');throw Error('模型响应提前结束，未应用内容');}
  return {id,usage,answer,stop};
 }
 // Claude may wrap JSON in a code fence; callers parse the object itself.
@@ -95,7 +101,7 @@ export async function createModelGateway({env=process.env,readSecretFile=readFil
   const limit=maxTokens||(thinking?32000:json?4000:2400);
   const response=await transport(messagesEndpoint,{method:'POST',redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),headers:{Authorization:`Bearer ${key}`,'anthropic-version':'2023-06-01','Content-Type':'application/json'},body:JSON.stringify({model,max_tokens:limit,stream:true,...(system?{system}:{}),messages:turns,...(thinking?{thinking:{type:'adaptive'},output_config:{effort:reasoningEffort||'high'}}:{})})});
   if(!response.ok){const e=Error(`模型接口返回 ${response.status}，未修改任何卡片。`);e.status=502;e.providerStatus=response.status;await recordModelRun({channel:'model-failure',model,failure:{httpStatus:response.status}}).catch(()=>{});throw e;}
-  const r=await messagesResponse(response,onDelta),usage={prompt_tokens:r.usage?.input_tokens,completion_tokens:r.usage?.output_tokens,...r.usage};
+  const r=await messagesResponse(response,onDelta,{model}),usage={prompt_tokens:r.usage?.input_tokens,completion_tokens:r.usage?.output_tokens,...r.usage};
   if(!r.answer||r.stop==='max_tokens'){const e=Error('模型输出不完整，未应用修改。');e.status=502;e.code='MODEL_OUTPUT_INCOMPLETE';e.partialAnswer=r.answer||'';e.diagnostics={model,finishReason:r.stop||'empty',usage,reasoningEffort:thinking?reasoningEffort:'disabled',maxTokens:limit};await recordModelRun({channel:'model-failure',model,usage,providerRequestId:r.id,failure:e.diagnostics});throw e;}
   return {answer:json?bareJson(r.answer):r.answer,usage,providerRequestId:r.id,model,durationMs:Date.now()-startedAt};
  }
