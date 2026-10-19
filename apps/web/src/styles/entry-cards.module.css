@@ -1,0 +1,51 @@
+/*
+ * 对话回答后面挂的卡（conversation/EntryCards）：与富内容块同一套外框（浅色、14 圆角、细描边），宽度与正文栏同宽。
+ * 卡里的按钮、头像、状态小标、步骤沿用请求页（requests.module.css）与对话步骤（StepList）。
+ * 回答底边距 34px：卡往上收 18px，读起来跟在这条回答后面。
+ */
+.cards { display: grid; gap: 12px; margin: -18px 0 34px; }
+.card { display: grid; gap: 12px; min-width: 0; padding: 14px 16px; border: 1px solid #e6e9ee; border-radius: 14px; background: #fbfbfc; color: #25282e; font-size: 14px; line-height: 1.6; }
+.card.bare { padding: 0; border: 0; background: none; }
+.card.bare > div { max-width: none; }
+.placeholder { height: 64px; border-radius: 8px; background: linear-gradient(90deg, #eef0f3 0%, #f6f7f9 50%, #eef0f3 100%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+.muted { margin: 0; color: #7a7f89; font-size: 13px; }
+
+.flow { display: grid; gap: 10px; min-width: 0; }
+.question { width: 100%; min-height: 0; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--field-border, #dfe3e8); border-radius: 10px; background: #fff; color: #25282e; font: inherit; font-size: 15px; line-height: 1.65; resize: none; field-sizing: content; max-height: 200px; }
+.question:focus { outline: none; border-color: var(--field-border-focus, #3b6fc9); box-shadow: var(--field-focus-ring, 0 0 0 3px #3b6fc922); }
+.done { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: #178a6b; font-size: 13px; font-weight: 500; }
+.done strong { color: #25282e; font-weight: 600; }
+.done time { color: #9599a1; font-weight: 400; font-variant-numeric: tabular-nums; }
+.quoted { margin: 0; color: #25282e; font-size: 15px; line-height: 1.7; overflow-wrap: anywhere; }
+.reply { margin: 0; padding: 8px 12px; border-left: 3px solid #178a6b; background: #178a6b0d; border-radius: 0 8px 8px 0; color: #25282e; overflow-wrap: anywhere; }
+.reply span { display: block; color: #7a7f89; font-size: 12px; }
+.source { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; color: #4b515b; font-size: 13px; }
+.source span { color: #9599a1; }
+
+.picks { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.pick { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 1px solid #e6e9ee; border-radius: 10px; background: #fff; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: border-color .14s ease, background .14s ease; }
+.pick:hover:not(:disabled) { border-color: #b9c9e6; background: #f7f9fd; }
+.pick:focus-visible { outline: 2px solid #3b6fc9; outline-offset: 2px; }
+.pick:disabled { cursor: default; color: inherit; opacity: 1; }
+.pick > span:first-child { font-size: 10px; letter-spacing: -.04em; }
+.pick[aria-pressed='true'] { border-color: #b9c9e6; background: #f7f9fd; }
+.pickText { display: grid; gap: 1px; min-width: 0; }
+.pickText strong { overflow: hidden; color: #25282e; font-size: 15px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.pickText small { color: #7a7f89; font-size: 13px; }
+.chevron { color: #9599a1; }
+.steps { margin: 0; }
+
+.head { display: flex; align-items: center; gap: 10px; }
+.head h3 { margin: 0; color: #25282e; font-size: 15px; font-weight: 600; line-height: 1.5; }
+.head [data-error]::before { background: var(--onboarding-error, #c4462f); }
+.summary { display: grid; gap: 4px; color: #3f4754; font-size: 14px; line-height: 1.7; }
+.summary p { display: -webkit-box; margin: 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+@keyframes shimmer { to { background-position: -200% 0; } }
+@media (max-width: 599px) {
+  .cards { margin-top: -14px; }
+  .card { padding: 12px 14px; }
+  .pick { padding: 10px; gap: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .placeholder { animation: none; } }

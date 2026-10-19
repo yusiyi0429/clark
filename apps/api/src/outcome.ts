@@ -36,14 +36,31 @@ import {
 } from "./meetingStore.js";
 import { insertNotification } from "./notifications.js";
 import { dispatchMeetingTodo } from "./tasks.js";
+import type { InterpretationContext } from "./meetingContext.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
-/** 按应用的连接池隔离订阅；监听器只排队，确认事务不等待任何 world HTTP。 */
-const reviewListeners = new WeakMap<Pool, (meetingId: string) => void>();
+/**
+ * 按应用的连接池隔离订阅；监听器只排队，确认事务不等待任何 world HTTP。
+ * 会后纪要整理好（ready）和每次逐项处理之后都会通知；同一个池可以有多个监听器（本体会议事件、会后分层确认）。
+ */
+const reviewListeners = new WeakMap<Pool, Set<(meetingId: string) => void>>();
 export function onOutcomeReviewed(pool: Pool, listener: (meetingId: string) => void): () => void {
-  reviewListeners.set(pool, listener);
-  return () => { if (reviewListeners.get(pool) === listener) reviewListeners.delete(pool); };
+  const listeners = reviewListeners.get(pool) ?? new Set();
+  listeners.add(listener);
+  reviewListeners.set(pool, listeners);
+  return () => { listeners.delete(listener); };
+}
+function notifyReviewed(pool: Pool, meetingId: string): void {
+  for (const listener of reviewListeners.get(pool) ?? []) {
+    try { listener(meetingId); } catch (error) { console.warn(`outcome listener failed: ${(error as Error).message}`); }
+  }
+}
+
+/** 解读纪要时对照的公司地图（每个人的 Mission、本月 outcome、长期目标和 LTO）；由 app 按池注册，没注册时不带。 */
+const contextProviders = new WeakMap<Pool, (meetingId: string) => Promise<InterpretationContext | null>>();
+export function setOutcomeContextProvider(pool: Pool, provider: (meetingId: string) => Promise<InterpretationContext | null>): void {
+  contextProviders.set(pool, provider);
 }
 
 /** 抽取输入只读取 Meeting 内嵌结构和关联 Issue，Agent 不能访问业务库。 */
@@ -51,6 +68,8 @@ export type PostMeetingAgentInput = {
   meeting: { id: string; title: string; scheduledAt: string; ceoParticipantId: string; participants: TMeetingParticipant[] };
   transcript: { turns: TTranscriptTurn[] };
   issues: { id: string; title: string; location: unknown; urgency: unknown; research: unknown }[];
+  /** 公司地图：用来判断哪些改动和战略方向有关（推给 CEO），哪些会牵动别人的 Mission。 */
+  context?: InterpretationContext;
 };
 
 export type PostMeetingAgent = {
@@ -152,8 +171,9 @@ export type OutcomeAssessment =
 
 type OutcomeCandidateItem = TPostMeetingCandidate["items"][number];
 
-/** 各可选字段只适用于哪些类型（parentIndex 用于 reopenWhen 与子决定）。 */
+/** 各可选字段只适用于哪些类型（parentIndex 用于 reopenWhen 与子决定；负责人只对决定和待办生效，D-42）。 */
 const FIELD_KINDS: ReadonlyArray<[keyof OutcomeCandidateItem, ReadonlyArray<OutcomeCandidateItem["kind"]>]> = [
+  ["ownerPersonId", ["decision", "todo"]],
   ["judgmentKind", ["ceoJudgment", "strategic"]],
   ["parentIndex", ["reopenWhen", "decision"]],
   ["title", ["strategic"]],
@@ -175,6 +195,8 @@ export function dropInapplicableFields(item: OutcomeCandidateItem): { candidate:
 }
 
 const OPTIONAL_FIELDS = ["ownerPersonId", "issueId", "judgmentKind", "parentIndex", "title", "brief", "dueDate"] as const;
+/** 推给 CEO 的战略项只认这三类：公司方向 / LTO / PO 的改动，Mission 本月结果目标或成功标准的改动（算改 PO），跨战场调资源。 */
+const CEO_STRATEGIC_KINDS = new Set(["company_direction", "mission_boundary", "resource_allocation"]);
 const PLACEHOLDER_TEXT = new Set(["不适用", "不涉及", "无", "暂无", "没有", "未知", "未指定", "n/a", "na", "none", "null", "-", "—", "/"]);
 
 /** null、空串、「不适用」这类占位、负数下标，都算没填。 */
@@ -212,7 +234,7 @@ export function dropPlaceholderFields(input: unknown): { candidate: unknown; dro
  * owner 只能来自“我来”的 speaker 或引文中明确点名的人、CEO 判断只认 CEO turn 和五类权限、
  * 战略议题可引用任何人但标题/说明/五类权限缺一不可、todo 的 dueDate 是真实日期、
  * 不适用于该类型的可选字段、填了「不适用」/null/-1 这类占位的可选字段直接丢掉（只记日志）、
- * issueId 属 Meeting。任一项不合格的候选进入 warnings，不进入可审阅 items。
+ * 不属于这场会的 issueId 当没填（条目保留、不关联议题）。其余任一项不合格的候选进入 warnings，不进入可审阅 items。
  */
 export function assessOutcomeCandidate(input: {
   candidate: unknown;
@@ -286,6 +308,15 @@ export function assessOutcomeCandidate(input: {
         reject("brief 最多两句话");
         continue;
       }
+      // D-40/D-41：只有改公司方向、长期目标（LTO）、周期目标（PO，含 Mission 的本月结果目标或成功标准）或跨战场调资源的才推给 CEO；
+      // 其余（包括和战略方向有关、但只影响本战场打法、计划、执行的）降成会上的决定，归主持人确认。
+      if (!CEO_STRATEGIC_KINDS.has(candidate.judgmentKind)) {
+        console.warn(`outcome candidate #${index + 1} strategic(${candidate.judgmentKind}) 不在 CEO 战略范围，改为 decision`);
+        candidate.kind = "decision";
+        delete candidate.title;
+        delete candidate.brief;
+        delete candidate.judgmentKind;
+      }
     }
     let parentItemId: string | null = null;
     if (candidate.kind === "reopenWhen") {
@@ -314,9 +345,10 @@ export function assessOutcomeCandidate(input: {
         continue;
       }
     }
+    // 结构化提交要求每个字段都填，没挂议题的会里模型常把会议 id 填进 issueId：不属于这场会的 issueId 当没填，条目保留、不关联议题。
     if (candidate.issueId !== undefined && !issueIds.has(candidate.issueId)) {
-      reject(`issueId 不属于该 Meeting: ${candidate.issueId}`);
-      continue;
+      console.warn(`outcome candidate #${index + 1} (${candidate.kind}) issueId 不属于该 Meeting，当没填: ${candidate.issueId}`);
+      delete candidate.issueId;
     }
     const id = `item-${index + 1}`;
     if (candidate.kind === "decision") decisionItemIdByIndex.set(index, id);
@@ -419,6 +451,8 @@ export async function runOutcome(
 
   try {
     const issueResult = await q("SELECT id, title, location, urgency, research FROM issues WHERE id = ANY($1::uuid[])", [meeting.issue_ids]);
+    // 公司地图读不到不拦着整理纪要：没有就按原来的输入跑。
+    const context = await contextProviders.get(pool)?.(meetingId).catch(() => null) ?? null;
     const input: PostMeetingAgentInput = {
       meeting: {
         id: meeting.id,
@@ -429,6 +463,7 @@ export async function runOutcome(
       },
       transcript: { turns: meeting.transcript.turns },
       issues: issueResult.rows as IssueSnapshotRow[],
+      ...(context ? { context } : {}),
     };
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(new Error(`Outcome extraction exceeded ${timeoutMs}ms`)), timeoutMs);
@@ -485,7 +520,7 @@ export async function runOutcome(
         [meetingId, assessed.summary, JSON.stringify(assessed.items), JSON.stringify(assessed.warnings), new Date().toISOString(), nextStatus],
       );
       await client.query("COMMIT");
-      if (nextStatus === "reviewed") reviewListeners.get(pool)?.(meetingId);
+      notifyReviewed(pool, meetingId);
     } catch (err) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw err;
@@ -778,7 +813,7 @@ export async function executeConfirmItem(
   });
   if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
   if (ontologyRequest) await applyOntologyUpdate(pool, ontologyUpdater, ontologyRequest);
-  reviewListeners.get(pool)?.(scope.objectId);
+  notifyReviewed(pool, scope.objectId);
   return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
 }
 /** 提交确认后才交给本体更新；失败不改回 pending，只把请求记为 failed。 */
@@ -840,7 +875,7 @@ export async function executeDismissItem(
 
     return commitReview(client, row, state, items, fingerprint, secret);
   });
-  if ("card" in outcome && !outcome.replayed) reviewListeners.get(pool)?.(scope.objectId);
+  if ("card" in outcome && !outcome.replayed) notifyReviewed(pool, scope.objectId);
   return outcome;
 }
 /**

@@ -80,7 +80,7 @@ async function ceoNext(q: Query, plan: Plan | undefined, period: string, now: Da
 }
 
 /** 引导只读取持久事实；角色边界、月份、目标状态与下一步都由服务端决定。 */
-export async function readOnboarding({ q, companyMemory, voiceprints, person, companyName, now, secret }: {
+export async function readOnboarding({ q, companyMemory, voiceprints, person, companyName, now, secret, delegationStep = false }: {
   q: Query;
   companyMemory: CompanyMemoryRepository;
   voiceprints: VoiceprintDeps;
@@ -88,6 +88,8 @@ export async function readOnboarding({ q, companyMemory, voiceprints, person, co
   companyName?: string;
   now: Date;
   secret: string;
+  /** 「授权天枢替你记进本体」这一步是否显示（ONBOARDING_DELEGATION_STEP）。 */
+  delegationStep?: boolean;
 }): Promise<TOnboardingResponse> {
   const period = companyPeriod(now);
   const people = companyMemory.searchPeople(undefined);
@@ -103,6 +105,7 @@ export async function readOnboarding({ q, companyMemory, voiceprints, person, co
     companyName: companyName?.trim() || null,
     voiceprint,
     radar,
+    delegationStep,
   };
   if (person.role === "ceo") {
     const [strategy, capabilities, rounds] = await Promise.all([

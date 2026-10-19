@@ -1,9 +1,17 @@
 import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
+import { AcceptIssueDraftRequest, IssueDraftResponse } from "./issueDrafts.js";
 import {
   RequestStep, RequestPerson, RequestRecipientView, RequestQuestionView, RequestClarification, RequestView, RequestResponse,
   DraftRequestRequest, DraftRequestResponse, RequestListItem, RequestListResponse, PrepareRequestQuestionRequest,
   PrepareRequestQuestionResponse, DraftRequestAnswerResponse, RequestSendInput, RequestAskInput, RequestAnswerInput, ExecuteRequestActionRequest,
 } from "./requests.js";
+import { MeetingDecisionView, MeetingDecisionReviewRequest, MeetingDecisionResponse, MyMeetingDecisionsResponse } from "./meetingDecisions.js";
+import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
+import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
+import {
+  CollectionField, CollectionEntryView, CollectionRoundView, CollectionView, CollectionResponse, DraftCollectionRequest, DraftCollectionResponse,
+  CollectionSendInput, CollectionSaveInput, ExecuteCollectionActionRequest, ScheduleItem, ScheduleListResponse,
+} from "./collections.js";
 import {
   ActionDescriptor,
   ApiError,
@@ -128,6 +136,11 @@ import {
   CreatePersonalTokenRequest,
   CreatePersonalTokenResponse,
   CollectorHeartbeatRequest, CollectorHeartbeatResponse, CollectorReportRequest, CollectorReportResponse,
+  AdminOverviewResponse, AdminActionRequest,
+  CollectorConsentResponse, UpdateCollectorConsentRequest, CollectorStatusResponse,
+  WorkBasisResponse, UpdateWorkBasisRequest, ScheduleMigrationResponse, UpdateScheduleMigrationRequest,
+  WeeklyReviewBoardResponse, WeeklyReviewResponse, ExecuteWeeklyReviewActionRequest, ExecuteWeeklyReviewActionResponse, WeeklyReviewUpdateInput,
+  ProgressOverviewResponse, MyOffPlanResponse, AttachOffPlanRequest,
   OAuthConsentRequest,
   OAuthConsentResponse,
   OAuthConsentDecisionResponse,
@@ -158,6 +171,11 @@ import {
   VoiceprintStatus,
   PersonalMemoryItem,
   PersonalMemoryList,
+  CreateMemoryImportRequest,
+  MemoryImport,
+  MemoryImportDetail,
+  MemoryImportList,
+  ConfirmMemoryImportRequest,
   UpdatePersonalMemoryItemRequest,
   DictationResult,
   DictationSessionResponse,
@@ -188,6 +206,8 @@ import {
   MaterialAnnotationView, CreateMaterialAnnotationRequest, CreateMaterialAnnotationResponse, MaterialRemovedView,
   RestoreMaterialRemovedRequest, MaterialEditProposalView, DecideMaterialEditProposalRequest, DecideMaterialAnnotationRequest,
   WeeklyProgressResponse,
+  FeishuAuthConfigResponse,
+  FeishuCodeLoginRequest,
 } from "./index.js";
 
 const errorResponse = {
@@ -290,6 +310,53 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
                 "application/json": { schema: { $ref: "#/components/schemas/SessionResponse" } },
               },
             },
+          },
+        },
+      },
+      "/api/auth/feishu/config": {
+        get: {
+          operationId: "getFeishuAuthConfig", summary: "飞书免登是否可用，以及前端调 requestAccess 需要的 appId",
+          responses: { "200": { description: "飞书配置", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuAuthConfigResponse" } } } } },
+        },
+      },
+      "/api/auth/feishu/start": {
+        get: {
+          operationId: "startFeishuAuth",
+          summary: "浏览器打开：已登录直接跳到 next；否则写 state cookie 后跳飞书授权页。飞书消息里的深链接都指向这里",
+          parameters: [{ name: "next", in: "query", required: false, schema: { type: "string" }, description: "登录后回到的站内路径，只接受以 / 开头的相对路径" }],
+          responses: { "302": { description: "跳到 next 或飞书授权页" }, "404": errorResponse, "429": errorResponse },
+        },
+      },
+      "/api/auth/feishu/callback": {
+        get: {
+          operationId: "completeFeishuAuth",
+          summary: "飞书授权回调：校验 state，换 token，按已关联的人员建会话；关联不到时给出说明页",
+          parameters: [
+            { name: "code", in: "query", required: false, schema: { type: "string" } },
+            { name: "state", in: "query", required: false, schema: { type: "string" } },
+          ],
+          responses: {
+            "200": { description: "已登录并带 Set-Cookie，页面自动跳到 next", content: { "text/html": { schema: { type: "string" } } } },
+            "400": { description: "state 不符或缺 code", content: { "text/html": { schema: { type: "string" } } } },
+            "403": { description: "飞书账号还没有关联天枢人员", content: { "text/html": { schema: { type: "string" } } } },
+            "404": errorResponse,
+            "502": { description: "飞书接口暂时不可用", content: { "text/html": { schema: { type: "string" } } } },
+          },
+        },
+      },
+      "/api/auth/feishu/code": {
+        post: {
+          operationId: "loginWithFeishuCode",
+          summary: "在飞书客户端里打开：用 requestAccess 拿到的 code 换 token 并建会话",
+          requestBody: jsonBody({ $ref: "#/components/schemas/FeishuCodeLoginRequest" }),
+          responses: {
+            "200": { description: "已登录", content: { "application/json": { schema: { $ref: "#/components/schemas/LoginResponse" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+            "429": errorResponse,
+            "502": errorResponse,
           },
         },
       },
@@ -681,6 +748,115 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "请求列表", content: { "application/json": { schema: { $ref: "#/components/schemas/RequestListResponse" } } } }, "400": errorResponse, "401": errorResponse },
         },
       },
+      "/api/requests/{id}/impact": {
+        get: {
+          operationId: "getRequestImpactCard", summary: "kind = impact 的请求对应的影响卡；只有收卡的人看得到",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "影响卡", content: { "application/json": { schema: { $ref: "#/components/schemas/ImpactCardResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/impact-cards/{id}/ask": {
+        post: {
+          operationId: "askImpactCard", summary: "在影响卡上追问：Agent 结合这条决定和本人手上的事回答，问答留在卡上",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ImpactAskRequest" }),
+          responses: { "200": { description: "处理步骤与带回答的影响卡", content: { "application/json": { schema: { $ref: "#/components/schemas/ImpactAskResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/impact-cards/{id}/irrelevant": {
+        post: {
+          operationId: "markImpactCardIrrelevant", summary: "「和我无关」：卡收起，反馈回流成质量信号；重复点幂等",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ImpactIrrelevantRequest" }),
+          responses: { "200": { description: "影响卡", content: { "application/json": { schema: { $ref: "#/components/schemas/ImpactCardResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/impact-cards/{id}/basis": {
+        post: {
+          operationId: "chooseImpactCardBasis", summary: "文档变更影响卡：切换到新版，或继续用旧版到某天并写理由；更新本人的工作依据清单",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ImpactBasisChoiceRequest" }),
+          responses: { "200": { description: "影响卡", content: { "application/json": { schema: { $ref: "#/components/schemas/ImpactCardResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/requests/{id}/doc-change": {
+        get: {
+          operationId: "getRequestDocChange", summary: "kind = doc_change 的请求对应的文档变更；只有作者和被问的旧文档负责人看得到",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "文档变更", content: { "application/json": { schema: { $ref: "#/components/schemas/DocChangeResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/doc-changes/{id}/confirm": {
+        post: {
+          operationId: "confirmDocChange", summary: "作者勾选新文档修订或取代了哪几份（空即都不是），确认后推影响卡",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ConfirmDocChangeRequest" }),
+          responses: { "200": { description: "文档变更", content: { "application/json": { schema: { $ref: "#/components/schemas/DocChangeResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/doc-changes/{id}/ask-owners": {
+        post: {
+          operationId: "askDocChangeOwners", summary: "作者确认不了：改问候选旧文档的负责人「你的《A》还有效吗？」",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "文档变更", content: { "application/json": { schema: { $ref: "#/components/schemas/DocChangeResponse" } } } }, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/doc-changes/{id}/owner-answer": {
+        post: {
+          operationId: "answerDocChangeOwner", summary: "旧文档负责人回答还有效或已被取代；已被取代时推影响卡",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/DocOwnerAnswerRequest" }),
+          responses: { "200": { description: "文档变更", content: { "application/json": { schema: { $ref: "#/components/schemas/DocChangeResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/collections/draft": {
+        post: {
+          operationId: "draftCollection", summary: "③ 信息收集：发起人一句话，Agent 起草收什么、发给谁、截止；带 collectionId 时按改过的原话重写同一份草稿",
+          requestBody: jsonBody({ $ref: "#/components/schemas/DraftCollectionRequest" }),
+          responses: { "200": { description: "草稿与处理步骤", content: { "application/json": { schema: { $ref: "#/components/schemas/DraftCollectionResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse, "422": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/collections/{id}": {
+        get: {
+          operationId: "getCollection", summary: "收集任务：草稿或最近一轮的汇总；只有发起人看得到",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "收集任务", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectionResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/requests/{id}/collection": {
+        get: {
+          operationId: "getRequestCollection", summary: "kind = collection 的请求对应的那一轮：发起人看汇总和每人状态，接收人只看自己那一行",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "这一轮", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectionResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/collections/actions/execute": {
+        post: {
+          operationId: "executeCollectionAction", summary: "collection.send / save / confirm / stop；send 校验 actionId 里的版本，发出的就是预览那一版",
+          requestBody: jsonBody({ $ref: "#/components/schemas/ExecuteCollectionActionRequest" }),
+          responses: { "200": { description: "收集任务的最新视图", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectionResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/me/schedules": {
+        get: {
+          operationId: "listMySchedules", summary: "设置里的定时任务区：每周固定的收集任务、每周五起草周复盘、上手时搬过来的本机定时任务",
+          responses: { "200": { description: "定时任务", content: { "application/json": { schema: { $ref: "#/components/schemas/ScheduleListResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/me/meeting-decisions": {
+        get: {
+          operationId: "listMyMeetingDecisions", summary: "我主持的会里还没确认的「会上定了 X」，按会议分组",
+          responses: { "200": { description: "待确认的会后决定", content: { "application/json": { schema: { $ref: "#/components/schemas/MyMeetingDecisionsResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/decisions/{decisionId}/review": {
+        post: {
+          operationId: "reviewMeetingDecision", summary: "主持人确认一条会后决定：对 / 改一下 / 其实没定；Agent 代判之后改判会给已收卡的人出更正卡",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }, { name: "decisionId", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingDecisionReviewRequest" }),
+          responses: { "200": { description: "这条决定的最新状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingDecisionResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
       "/api/cards/radar": {
         get: {
           operationId: "getRadarCard",
@@ -762,6 +938,28 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "404": errorResponse,
             "409": errorResponse,
           },
+        },
+      },
+      "/api/issue-drafts/{id}": {
+        get: {
+          operationId: "getIssueDraft", summary: "CEO 读首页对话里的一条转议题建议（初稿、能对上的议题、可挂的战场）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "转议题建议", content: { "application/json": { schema: { $ref: "#/components/schemas/IssueDraftResponse" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/issue-drafts/{id}/accept": {
+        post: {
+          operationId: "acceptIssueDraft", summary: "开议题（按确认后的初稿与位置新建）或接到已有议题；相关那段首页对话带进议题页，首页留一行留痕；重放返回原结果",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/AcceptIssueDraftRequest" }),
+          responses: { "200": { description: "转议题建议的最新视图", content: { "application/json": { schema: { $ref: "#/components/schemas/IssueDraftResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/issue-drafts/{id}/decline": {
+        post: {
+          operationId: "declineIssueDraft", summary: "不用：这个话题之后不再建议转议题",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "转议题建议的最新视图", content: { "application/json": { schema: { $ref: "#/components/schemas/IssueDraftResponse" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/conversations/{scope}/attachments": {
@@ -1330,7 +1528,126 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         post: {
           operationId: "collectorReport", summary: "本机采集器上报一段工作与本机清单，按 clientEventId 幂等（collector 个人令牌）",
           requestBody: jsonBody({ $ref: "#/components/schemas/CollectorReportRequest" }),
-          responses: { "200": { description: "新记下与重放的条数", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorReportResponse" } } } }, "400": errorResponse, "401": errorResponse },
+          responses: { "200": { description: "新记下与重放的条数", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorReportResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse },
+        },
+      },
+      "/api/me/collector/consent": {
+        get: {
+          operationId: "getCollectorConsent", summary: "本人是否同意本机采集（上手流程里的开关读这里）",
+          responses: { "200": { description: "同意状态", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorConsentResponse" } } } }, "401": errorResponse },
+        },
+        put: {
+          operationId: "updateCollectorConsent", summary: "本人同意或撤回本机采集；撤回时清空本人的原文片段，整理结果保留",
+          requestBody: jsonBody({ $ref: "#/components/schemas/UpdateCollectorConsentRequest" }),
+          responses: { "200": { description: "同意状态", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorConsentResponse" } } } }, "400": errorResponse, "401": errorResponse },
+        },
+      },
+      "/api/admin/overview": {
+        get: {
+          operationId: "getAdminOverview", summary: "管理员视图：顶部计数、人 × 来源、失败列表、质量信号；只有运行数据。非管理员 404",
+          responses: { "200": { description: "管理员视图", content: { "application/json": { schema: { $ref: "#/components/schemas/AdminOverviewResponse" } } } }, "404": errorResponse },
+        },
+      },
+      "/api/admin/actions": {
+        post: {
+          operationId: "executeAdminAction", summary: "管理员操作：给本人发提醒（走送达通道）、标记已接手 / 已解决、重试 dead 的后台任务；都记进 admin_incidents，按 clientId 幂等。非管理员 404",
+          requestBody: jsonBody({ $ref: "#/components/schemas/AdminActionRequest" }),
+          responses: { "200": { description: "操作后的管理员视图", content: { "application/json": { schema: { $ref: "#/components/schemas/AdminOverviewResponse" } } } }, "400": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/me/collector/status": {
+        get: {
+          operationId: "getCollectorStatus", summary: "本人的采集器：连上的设备、最近一次完整盘点、盘点到的条数（上手流程轮询）",
+          responses: { "200": { description: "采集器状态", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorStatusResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/collector/install.ps1": {
+        get: {
+          operationId: "getCollectorInstallWindows", summary: "Windows 一行安装命令拉取的安装脚本（不含令牌，令牌由命令参数带入）",
+          responses: { "200": { description: "PowerShell 脚本", content: { "text/plain": { schema: { type: "string" } } } } },
+        },
+      },
+      "/api/collector/install.sh": {
+        get: {
+          operationId: "getCollectorInstallMacos", summary: "macOS 一行安装命令拉取的安装脚本（不含令牌，令牌由命令参数带入）",
+          responses: { "200": { description: "shell 脚本", content: { "text/plain": { schema: { type: "string" } } } } },
+        },
+      },
+      "/api/collector/files/{name}": {
+        get: {
+          operationId: "getCollectorFile", summary: "安装脚本下载的采集器文件（tkos_collector.py、collect_sessions.py、sanitize.py）",
+          parameters: [{ name: "name", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "Python 源文件", content: { "text/plain": { schema: { type: "string" } } } }, "404": errorResponse },
+        },
+      },
+      "/api/me/work-basis": {
+        get: {
+          operationId: "getWorkBasis", summary: "工作依据清单：本人在依据的整份文档候选（天枢材料、飞书文档、链接）与已确认的",
+          responses: { "200": { description: "候选", content: { "application/json": { schema: { $ref: "#/components/schemas/WorkBasisResponse" } } } }, "401": errorResponse },
+        },
+        put: {
+          operationId: "updateWorkBasis", summary: "本人确认工作依据：勾选的入库并记下当时的修订号，候选里没勾的移出",
+          requestBody: jsonBody({ $ref: "#/components/schemas/UpdateWorkBasisRequest" }),
+          responses: { "200": { description: "候选", content: { "application/json": { schema: { $ref: "#/components/schemas/WorkBasisResponse" } } } }, "400": errorResponse, "401": errorResponse },
+        },
+      },
+      "/api/me/schedule-migration": {
+        get: {
+          operationId: "getScheduleMigration", summary: "搬家清单：本机清单里找到的定时任务，以及哪些已经搬进定时任务区",
+          responses: { "200": { description: "候选", content: { "application/json": { schema: { $ref: "#/components/schemas/ScheduleMigrationResponse" } } } }, "401": errorResponse },
+        },
+        put: {
+          operationId: "updateScheduleMigration", summary: "本人确认搬家：勾选的写进定时任务区，候选里没勾的移出",
+          requestBody: jsonBody({ $ref: "#/components/schemas/UpdateScheduleMigrationRequest" }),
+          responses: { "200": { description: "候选", content: { "application/json": { schema: { $ref: "#/components/schemas/ScheduleMigrationResponse" } } } }, "400": errorResponse, "401": errorResponse },
+        },
+      },
+      "/api/weekly-reviews/board": {
+        get: {
+          operationId: "getWeeklyReviewBoard", summary: "周复盘名单：看得到的人（本人、同战场、CEO 看全部）这一周的状态；不带 week 取本周",
+          parameters: [{ name: "week", in: "query", required: false, schema: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" } }],
+          responses: { "200": { description: "周复盘名单", content: { "application/json": { schema: { $ref: "#/components/schemas/WeeklyReviewBoardResponse" } } } }, "400": errorResponse, "401": errorResponse },
+        },
+      },
+      "/api/weekly-reviews/{weeklyReviewId}": {
+        get: {
+          operationId: "getWeeklyReview", summary: "读一份周复盘：本人、同战场的人、CEO；别人提交前看不到正文；其余 404",
+          parameters: [{ name: "weeklyReviewId", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "周复盘", content: { "application/json": { schema: { $ref: "#/components/schemas/WeeklyReviewResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/weekly-reviews/actions/execute": {
+        post: {
+          operationId: "executeWeeklyReviewAction", summary: "执行周复盘动作（修改、提交、重新生成）；幂等重放返回当前视图，版本冲突 409 VERSION_CONFLICT",
+          requestBody: jsonBody({ $ref: "#/components/schemas/ExecuteWeeklyReviewActionRequest" }),
+          responses: { "200": { description: "周复盘的最新视图", content: { "application/json": { schema: { $ref: "#/components/schemas/ExecuteWeeklyReviewActionResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/progress": {
+        get: {
+          operationId: "getProgressOverview", summary: "全局进展：红线（比预期慢、按截止日做不完）、按计划在走、没有 Task 基线的人的进展摘要、计划外工作；CEO 看全部，其他人看同一战场的人",
+          responses: { "200": { description: "全局进展", content: { "application/json": { schema: { $ref: "#/components/schemas/ProgressOverviewResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/me/off-plan": {
+        get: {
+          operationId: "getMyOffPlan", summary: "本人的计划外工作（没处理的、已提出改计划的）与挂靠时可选的本人未完成执行事项",
+          responses: { "200": { description: "本人的计划外", content: { "application/json": { schema: { $ref: "#/components/schemas/MyOffPlanResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/me/off-plan/{id}/attach": {
+        post: {
+          operationId: "attachMyOffPlan", summary: "把一条计划外工作挂到本人的一件执行事项上（同时记成这件事的进展）；已挂过的 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/AttachOffPlanRequest" }),
+          responses: { "200": { description: "本人的计划外", content: { "application/json": { schema: { $ref: "#/components/schemas/MyOffPlanResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/me/off-plan/{id}/replan": {
+        post: {
+          operationId: "proposeMyOffPlanReplan", summary: "对一条计划外工作提出改计划（先只记下来）；重复提出幂等，已挂过的 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "本人的计划外", content: { "application/json": { schema: { $ref: "#/components/schemas/MyOffPlanResponse" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/me/tokens/{id}": {
@@ -1598,8 +1915,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       "/api/me/memory/personal": {
         get: {
-          operationId: "listPersonalMemory", summary: "列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的",
-          parameters: [{ name: "status", in: "query", required: false, schema: { type: "string", enum: ["active", "superseded", "forgotten", "all"] } }],
+          operationId: "listPersonalMemory", summary: "列出本人的个人记忆（只有本人可见）；status 缺省 active，all 含已替代与已忘掉的；q 按标题、正文、原话搜索；anchor 带上对象现在的标题",
+          parameters: [
+            { name: "status", in: "query", required: false, schema: { type: "string", enum: ["active", "superseded", "forgotten", "all"] } },
+            { name: "q", in: "query", required: false, schema: { type: "string", maxLength: 200 } },
+          ],
           responses: { "200": { description: "本人个人记忆", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryList" } } } }, "400": errorResponse, "401": errorResponse, "503": errorResponse },
         },
       },
@@ -1611,9 +1931,61 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "改后的条目", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryItem" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
         },
         delete: {
-          operationId: "forgetPersonalMemoryItem", summary: "本人删掉（忘掉）一条个人记忆：不再装进对话，后台提炼也不再学回来",
+          operationId: "forgetPersonalMemoryItem", summary: "本人忘掉一条个人记忆：不再装进对话，后台提炼也不再学回来，之后能恢复；purge=1 彻底删除（204，不能恢复，被它替代的旧条目改成已忘掉）",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "purge", in: "query", required: false, schema: { type: "string", enum: ["1"] } },
+          ],
+          responses: { "200": { description: "忘掉后的条目", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryItem" } } } }, "204": { description: "已彻底删除" }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/me/memory/personal/items/{id}/restore": {
+        post: {
+          operationId: "restorePersonalMemoryItem", summary: "本人恢复一条忘掉的个人记忆，重新装进对话；不是已忘掉的 409",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-          responses: { "200": { description: "忘掉后的条目", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryItem" } } } }, "401": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+          responses: { "200": { description: "恢复后的条目", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryItem" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/me/memory/imports": {
+        post: {
+          operationId: "createMemoryImport",
+          summary: "导入别的 AI 工具的记忆：登录态（粘贴、上传 Claude 导出包，zip 用 base64）或 collector 个人令牌（本机 Claude Code、Codex 记忆文件，须已同意采集）。当场读取、拆分，后台分类、去重找冲突，停在等你确认",
+          requestBody: jsonBody({ $ref: "#/components/schemas/CreateMemoryImportRequest" }),
+          responses: {
+            "202": { description: "已收下，五步的当前状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MemoryImport" } } } },
+            "400": errorResponse, "401": errorResponse, "403": errorResponse, "413": errorResponse, "503": errorResponse,
+          },
+        },
+        get: {
+          operationId: "listMemoryImports", summary: "本人最近 20 次记忆导入（不含候选）",
+          responses: { "200": { description: "导入记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MemoryImportList" } } } }, "401": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/me/memory/imports/{id}": {
+        get: {
+          operationId: "getMemoryImport", summary: "一次导入的步骤、计数和全部候选（确认页只列 conflict、uncertain 两组）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "导入详情", content: { "application/json": { schema: { $ref: "#/components/schemas/MemoryImportDetail" } } } }, "401": errorResponse, "404": errorResponse, "503": errorResponse },
+        },
+        delete: {
+          operationId: "discardMemoryImport", summary: "确认前丢弃本次导入，候选一起删掉；已确认的 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "204": { description: "已丢弃" }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/me/memory/imports/{id}/confirm": {
+        post: {
+          operationId: "confirmMemoryImport", summary: "本人确认：checked 里的条目写进个人记忆；冲突按 resolutions（缺省保留旧的）。还没整理完或已确认过的 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ConfirmMemoryImportRequest" }),
+          responses: { "200": { description: "确认后的导入", content: { "application/json": { schema: { $ref: "#/components/schemas/MemoryImport" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/me/memory/imports/{id}/retry": {
+        post: {
+          operationId: "retryMemoryImport", summary: "停住的导入从停住那一步接着做；没停住的 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "重新开始后的导入", content: { "application/json": { schema: { $ref: "#/components/schemas/MemoryImport" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
         },
       },
       "/api/me/voiceprint": {
@@ -2275,6 +2647,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         LoginRequest: LoginRequest as JsonSchema,
         LoginResponse: LoginResponse as JsonSchema,
         DemoEntryResponse: DemoEntryResponse as JsonSchema,
+        FeishuAuthConfigResponse: FeishuAuthConfigResponse as JsonSchema,
+        FeishuCodeLoginRequest: FeishuCodeLoginRequest as JsonSchema,
         ChangePasscodeRequest: ChangePasscodeRequest as JsonSchema,
         SessionResponse: SessionResponse as JsonSchema,
         PeopleDirectoryResponse: PeopleDirectoryResponse as JsonSchema,
@@ -2282,6 +2656,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ConversationHistory: ConversationHistory as JsonSchema,
         ConversationMessageRequest: ConversationMessageRequest as JsonSchema,
         ConversationSseEvent: ConversationSseEvent as JsonSchema,
+        IssueDraftResponse: IssueDraftResponse as JsonSchema,
+        AcceptIssueDraftRequest: AcceptIssueDraftRequest as JsonSchema,
         CreateBattlefieldRequest: CreateBattlefieldRequest as JsonSchema,
         PatchBattlefieldRequest: PatchBattlefieldRequest as JsonSchema,
         CreateCapabilityRequest: CreateCapabilityRequest as JsonSchema,
@@ -2453,6 +2829,23 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         CollectorHeartbeatResponse: CollectorHeartbeatResponse as JsonSchema,
         CollectorReportRequest: CollectorReportRequest as JsonSchema,
         CollectorReportResponse: CollectorReportResponse as JsonSchema,
+        CollectorConsentResponse: CollectorConsentResponse as JsonSchema,
+        UpdateCollectorConsentRequest: UpdateCollectorConsentRequest as JsonSchema,
+        AdminOverviewResponse: AdminOverviewResponse as JsonSchema,
+        AdminActionRequest: AdminActionRequest as JsonSchema,
+        CollectorStatusResponse: CollectorStatusResponse as JsonSchema,
+        WorkBasisResponse: WorkBasisResponse as JsonSchema,
+        UpdateWorkBasisRequest: UpdateWorkBasisRequest as JsonSchema,
+        ScheduleMigrationResponse: ScheduleMigrationResponse as JsonSchema,
+        UpdateScheduleMigrationRequest: UpdateScheduleMigrationRequest as JsonSchema,
+        WeeklyReviewBoardResponse: WeeklyReviewBoardResponse as JsonSchema,
+        WeeklyReviewResponse: WeeklyReviewResponse as JsonSchema,
+        ExecuteWeeklyReviewActionRequest: ExecuteWeeklyReviewActionRequest as JsonSchema,
+        ExecuteWeeklyReviewActionResponse: ExecuteWeeklyReviewActionResponse as JsonSchema,
+        WeeklyReviewUpdateInput: WeeklyReviewUpdateInput as JsonSchema,
+        ProgressOverviewResponse: ProgressOverviewResponse as JsonSchema,
+        MyOffPlanResponse: MyOffPlanResponse as JsonSchema,
+        AttachOffPlanRequest: AttachOffPlanRequest as JsonSchema,
         TaskPerson: TaskPerson as JsonSchema,
         TaskMissionRef: TaskMissionRef as JsonSchema,
         CreateMyTaskRequest: CreateMyTaskRequest as JsonSchema,
@@ -2493,6 +2886,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         StartMeetingRecordingResponse: StartMeetingRecordingResponse as JsonSchema,
         VoiceprintStatus: VoiceprintStatus as JsonSchema,
         PersonalMemoryItem: PersonalMemoryItem as JsonSchema,
+        CreateMemoryImportRequest: CreateMemoryImportRequest as JsonSchema,
+        MemoryImport: MemoryImport as JsonSchema,
+        MemoryImportDetail: MemoryImportDetail as JsonSchema,
+        MemoryImportList: MemoryImportList as JsonSchema,
+        ConfirmMemoryImportRequest: ConfirmMemoryImportRequest as JsonSchema,
         PersonalMemoryList: PersonalMemoryList as JsonSchema,
         UpdatePersonalMemoryItemRequest: UpdatePersonalMemoryItemRequest as JsonSchema,
         DictationResult: DictationResult as JsonSchema,
@@ -2520,6 +2918,32 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         RequestAskInput: RequestAskInput as JsonSchema,
         RequestAnswerInput: RequestAnswerInput as JsonSchema,
         ExecuteRequestActionRequest: ExecuteRequestActionRequest as JsonSchema,
+        MeetingDecisionView: MeetingDecisionView as JsonSchema,
+        MeetingDecisionReviewRequest: MeetingDecisionReviewRequest as JsonSchema,
+        MeetingDecisionResponse: MeetingDecisionResponse as JsonSchema,
+        MyMeetingDecisionsResponse: MyMeetingDecisionsResponse as JsonSchema,
+        ImpactCardView: ImpactCardView as JsonSchema,
+        ImpactCardResponse: ImpactCardResponse as JsonSchema,
+        ImpactAskRequest: ImpactAskRequest as JsonSchema,
+        ImpactAskResponse: ImpactAskResponse as JsonSchema,
+        ImpactIrrelevantRequest: ImpactIrrelevantRequest as JsonSchema,
+        ImpactBasisChoiceRequest: ImpactBasisChoiceRequest as JsonSchema,
+        DocChangeView: DocChangeView as JsonSchema,
+        DocChangeResponse: DocChangeResponse as JsonSchema,
+        ConfirmDocChangeRequest: ConfirmDocChangeRequest as JsonSchema,
+        DocOwnerAnswerRequest: DocOwnerAnswerRequest as JsonSchema,
+        CollectionField: CollectionField as JsonSchema,
+        CollectionEntryView: CollectionEntryView as JsonSchema,
+        CollectionRoundView: CollectionRoundView as JsonSchema,
+        CollectionView: CollectionView as JsonSchema,
+        CollectionResponse: CollectionResponse as JsonSchema,
+        DraftCollectionRequest: DraftCollectionRequest as JsonSchema,
+        DraftCollectionResponse: DraftCollectionResponse as JsonSchema,
+        CollectionSendInput: CollectionSendInput as JsonSchema,
+        CollectionSaveInput: CollectionSaveInput as JsonSchema,
+        ExecuteCollectionActionRequest: ExecuteCollectionActionRequest as JsonSchema,
+        ScheduleItem: ScheduleItem as JsonSchema,
+        ScheduleListResponse: ScheduleListResponse as JsonSchema,
       },
     },
   };

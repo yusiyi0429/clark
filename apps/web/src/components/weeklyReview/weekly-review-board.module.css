@@ -1,0 +1,6 @@
+/* 周复盘名单：页头副标题是周，两边是上一周、下一周。名单行沿用个人复盘看板（personal-review-board.module.css）。 */
+.week { display: inline-flex; align-items: center; gap: 2px; margin-left: -4px; }
+.week button { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; color: inherit; }
+.week button:hover { background: rgb(255 255 255 / 16%); }
+.week button:disabled { visibility: hidden; }
+.week button:focus-visible { outline: 2px solid rgb(255 255 255 / 70%); outline-offset: 1px; }

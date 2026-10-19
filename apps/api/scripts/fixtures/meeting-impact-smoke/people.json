@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "company-people.v1",
+  "people": [
+    { "personId": "smoke-ceo", "displayName": "周明远", "roles": ["ceo", "dri"] },
+    { "personId": "smoke-pm", "displayName": "林晓", "roles": ["dri", "participant"] },
+    { "personId": "smoke-fe", "displayName": "陈一凡", "roles": ["participant"] },
+    { "personId": "smoke-be", "displayName": "吴桐", "roles": ["participant"] },
+    { "personId": "smoke-pilot", "displayName": "许诺", "roles": ["dri", "participant"] },
+    { "personId": "smoke-ops", "displayName": "郑可", "roles": ["participant"] }
+  ]
+}

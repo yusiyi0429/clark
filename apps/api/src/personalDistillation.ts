@@ -69,7 +69,8 @@ export type PersonalDistillation = ReturnType<typeof createPersonalDistillation>
 const fault = (code: string) => Object.assign(new Error(code), { code });
 
 /** 游标之后本人新说的话（Mission 卡页不学，已删除的对话不学）；还没有游标时只取最近 backfillMs 内的。 */
-const pending = (backfillMs: number) => `c.deleted_at IS NULL AND c.scope NOT LIKE 'mission-card:%' AND m.role = 'user'
+// 转议题带过去的那段（carried）与留痕行（trace）是复制品，原话已在首页整理过，不再整理一遍。
+const pending = (backfillMs: number) => `c.deleted_at IS NULL AND c.scope NOT LIKE 'mission-card:%' AND m.role = 'user' AND m.kind = 'message'
   AND (k.through_at IS NULL AND m.created_at >= now() - make_interval(secs => ${Number(backfillMs) / 1000})
     OR (m.created_at, m.conversation_id, m.sequence) > (k.through_at, k.through_conversation, k.through_sequence))`;
 
@@ -198,11 +199,12 @@ export function createPersonalDistillation(options: {
     await client.query('BEGIN');
     try {
       for (const write of writes) await write();
+      // 游标时间直接取库里那条消息的 created_at（微秒）；经 JS Date 只剩毫秒，最后一条会一直排在游标之后、反复重跑。
       await client.query(`INSERT INTO personal_memory_cursors (person_id, through_at, through_conversation, through_sequence, attempts, next_attempt_at, last_error, updated_at)
-          VALUES ($1, $2, $3, $4, 0, NULL, NULL, now())
+          SELECT $1, m.created_at, m.conversation_id, m.sequence, 0, NULL, NULL, now() FROM conversation_messages m WHERE m.conversation_id = $2 AND m.sequence = $3
           ON CONFLICT (person_id) DO UPDATE SET through_at = EXCLUDED.through_at, through_conversation = EXCLUDED.through_conversation,
             through_sequence = EXCLUDED.through_sequence, attempts = 0, next_attempt_at = NULL, last_error = NULL, updated_at = now()`,
-        [personId, last.created_at, last.conversation_id, last.sequence]);
+        [personId, last.conversation_id, last.sequence]);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');

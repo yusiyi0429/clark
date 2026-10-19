@@ -9,8 +9,13 @@ import multipart from "@fastify/multipart";
 import { loadCompanyMemory, type CompanyMemorySeedEnv } from "./companyMemory.js";
 import { createCompanyMemory as createCompanyReader, type CompanyEnv } from "./company.js";
 import { createPersonalMemory } from "./personalMemory.js";
+import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
 import { registerPersonalMemoryRoutes } from "./routes/personalMemory.js";
+import { registerMemoryImportRoutes } from "./routes/memoryImports.js";
+import { createMemoryImports } from "./memoryImports.js";
+import { createMemoryImportModel } from "./memoryImportAgent.js";
+import type { MemoryImportModel } from "./memoryImport.js";
 import { globalConversationContext, listConversationMissions } from "./conversationContext.js";
 import { listBattlefieldRows } from "./battlefields.js";
 import { createResponsesThinkingTranslator, createResponsesThoughtTranslator, createResponsesTriage } from "./conversationRouting.js";
@@ -26,17 +31,29 @@ import { resumeResearch, type ResearchService } from "./research.js";
 import { resumePreflights, type PreflightAgent } from "./meetingPreflight.js";
 import { createPreflightAgent, createPreflightThoughtTranslator, preflightThinkingLevel } from "./preflightAgent.js";
 import { agentModel, type AgentModelEnv } from "./agentModels.js";
-import { onOutcomeReviewed, pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } from "./outcome.js";
+import { pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } from "./outcome.js";
 import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { createWorldReader, mergeWorldGoalsIntoContext, ontologyToolResult, type OntologyQuery } from "./worldReader.js";
-import { createWorldMeetingService } from "./worldMeetingEvents.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
 import type { DriExporter } from "./meetingStore.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
 import type { MonthlyReviewService } from "./monthlyReviewService.js";
+import type { WeeklyReviewService } from "./weeklyReviewService.js";
+import { createWeeklyReviewWorldSync, type WeeklyReviewWorldSync } from "./weeklyReviewWorld.js";
 import { logEvent } from "./observability.js";
 import { clientTagFor, enterRequestClient, tracingEnabled } from "./tracing.js";
+import type { FeishuEnv } from "./feishu/config.js";
+import { createFeishuClient, type FeishuClient } from "./feishu/client.js";
+import { registerFeishuAuthRoutes } from "./routes/feishu.js";
+import { createMeetingFollowThrough, type MeetingFollowThrough } from "./meetingFollowThrough.js";
+import type { DecisionLayeringAgent } from "./meetingDecisionAgent.js";
+import type { ImpactAgent } from "./impactAgent.js";
+import type { FeishuMinutesApi } from "./feishu/minutes.js";
+import { registerMeetingFollowThroughRoutes } from "./routes/meetingFollowThrough.js";
+import { createDocChangeAgent, type DocChangeAgent } from "./docChangeAgent.js";
+import { createDocChangeService, type DocChangeService } from "./docChanges.js";
+import { registerDocChangeRoutes } from "./routes/docChanges.js";
 import { ensureMaterialStorage } from "./materialParser.js";
 import {
   createFail,
@@ -78,7 +95,16 @@ import { registerOntologyRoutes } from "./routes/ontology.js";
 import { registerMonthlyReviewRoutes } from "./routes/monthlyReviews.js";
 import { registerRequestRoutes } from "./routes/requests.js";
 import { createRequestAgent, type RequestAgent } from "./delivery/requestAgent.js";
+import { createCollectionAgent, type CollectionAgent } from "./collectionAgent.js";
+import { collectionJobs, type CollectionDeps } from "./collections.js";
+import { createFeishuBitable, createMockBitable, type BitableAdapter } from "./feishu/bitable.js";
+import { feishuNotifier } from "./feishu/notify.js";
+import { registerCollectionRoutes } from "./routes/collections.js";
+import type { JobHandler, RecurringJob } from "./jobs.js";
 import { registerCollectorRoutes } from "./routes/collector.js";
+import { registerWeeklyReviewRoutes } from "./routes/weeklyReviews.js";
+import { registerAdminRoutes } from "./routes/admin.js";
+import { registerProgressRoutes } from "./routes/progress.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 import { realDictationDeps, type DictationDeps } from "./dictation.js";
@@ -119,6 +145,8 @@ export type AppEnv = {
   demoLoginId?: string;
   /** 引导中的公司名，可空；不从其他资料猜测。 */
   companyName?: string;
+  /** 上手流程显示「授权天枢替你记进本体」这一步（ONBOARDING_DELEGATION_STEP=1）；本体的网页授权页确认之前默认关闭。 */
+  onboardingDelegationStep?: boolean;
   /** 旧配置兼容；正式自动起草不读取文件，人工导入须由 CLI 显式指定路径。 */
   missionCardDraftsDir?: string;
   /** 已知的本月任务（飞书任务卡、本体 Mission 导出），作为起草依据；未配置或文件缺失时照常起草。 */
@@ -142,6 +170,8 @@ export type AppEnv = {
   conversationThinking?: string;
   /** 对话每轮分档的快模型分诊；不配时用 lightModel（关思考）。 */
   triageModel?: string;
+  /** 个人记忆召回的快模型（MEMORY_RECALL_MODEL）；不配时依次用 triageModel、lightModel（personalMemoryRecall.ts）。 */
+  memoryRecallModel?: string;
   /** 会前预审模型；不配时用 heavyModel（10/13：预审从 light 换到 Sol 档并打开思考）。 */
   preflightModel?: string;
   /** 会前预审思考强度（off / low / medium / high / xhigh）；不配时 high。 */
@@ -155,13 +185,34 @@ export type AppEnv = {
   recordingStorageDir?: string;
   /** 第二个只读实例（词元云集 TK scope）：resolveWorldTkEnv 给出；不设 TKOS_WORLD_TK_INSTANCE 时为空（关闭）。 */
   worldTk?: WorldEnv;
+  /** 飞书企业自建应用（resolveFeishuEnv）；不配时飞书接入关闭。 */
+  feishu?: FeishuEnv;
+  /** 管理员（TIANSHU_ADMIN_PERSON_IDS，逗号分隔的 personId）：能看管理员视图；不配时没有人能看。 */
+  adminPersonIds?: string[];
+  /** 影响卡：live 推送（缺省；置信度低的仍只记影子）、shadow 只在后台记录（IMPACT_CARD_MODE）。 */
+  impactCardMode?: "live" | "shadow";
+  /** ③ 信息收集的飞书多维表格：live 以发起人身份调开放接口（要先在飞书后台开通 base 权限，见 feishu/bitable.ts）；缺省 mock，不调飞书（FEISHU_BITABLE_MODE）。 */
+  collectionBitable?: "live" | "mock";
 } & CompanyMemorySeedEnv & WorldEnv & CompanyEnv;
+
+declare module "fastify" {
+  interface FastifyInstance {
+    /** 会后链路的服务；server.ts 用它注册后台任务。 */
+    meetingFollowThrough: MeetingFollowThrough;
+    /** ⑧ 文档变更；server.ts 用它注册后台任务和群消息事件。 */
+    docChanges: DocChangeService;
+    /** ③ 信息收集的后台任务（每分钟 collection.tick）；server.ts 注册给 jobs worker。 */
+    collectionJobs: { handlers: Record<string, JobHandler>; recurring: RecurringJob[] };
+  }
+}
 
 export async function buildApp({
   pool,
   env,
   conversationRuntime,
   personalDistillationStream,
+  personalMemoryRecall,
+  memoryImportModel,
   radarService,
   personalRadarService,
   researchService,
@@ -171,6 +222,7 @@ export async function buildApp({
   ontologyUpdater = pendingOntologyUpdater,
   monthlyPlanService,
   monthlyReviewService,
+  weeklyReviewService,
   recordingService,
   voiceprintDeps = realVoiceprintDeps,
   dictationDeps = realDictationDeps,
@@ -183,8 +235,13 @@ export async function buildApp({
   missionCardReviewAgent,
   missionCardDraftAgent,
   requestAgent,
+  collectionAgent,
+  bitable,
   webSearch,
   outlets,
+  feishuClient,
+  meetingFollowThroughAgents,
+  docChangeAgent,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
   conversationStallTimeoutMs = CONVERSATION_STALL_TIMEOUT_MS,
   conversationHeartbeatMs = CONVERSATION_HEARTBEAT_MS,
@@ -198,6 +255,10 @@ export async function buildApp({
   conversationRuntime?: ConversationRuntime;
   /** 个人记忆提炼用的模型流（测试注入假实现）；不给时按 PI_BASE_URL 调 light 模型。 */
   personalDistillationStream?: Parameters<typeof createPersonalDistillation>[0]["streamSimple"];
+  /** 个人记忆的召回模型（测试注入替身，null 表示不用模型、只按字面重合选）；不给时按 PI_BASE_URL 调分诊用的快模型。 */
+  personalMemoryRecall?: MemoryRecall | null;
+  /** 记忆导入的分类与去重模型（测试注入替身）；不给时按 PI_BASE_URL 调 MEMORY_IMPORT_MODEL（不配时 LIGHT_MODEL）。 */
+  memoryImportModel?: MemoryImportModel;
   radarService?: RadarService;
   /** 个人雷达扫描队列；缺省为不扫描的桩（server.ts 注入与公司雷达共用博查与发布方 adapter 的真实服务）。 */
   personalRadarService?: PersonalRadarService;
@@ -210,6 +271,8 @@ export async function buildApp({
   monthlyPlanService?: MonthlyPlanService;
   /** 月末复盘的起草、评估、汇总；缺省时 open 返回 503，其余生成不运行。 */
   monthlyReviewService?: MonthlyReviewService;
+  /** 周复盘生成（周五定时与本人重新生成）；缺省时重新生成返回 503。 */
+  weeklyReviewService?: WeeklyReviewService;
   /** 会议录音流水线；缺省按 env.recordingStorageDir 装配真实 ffmpeg/TOS/火山依赖（server.ts 注入以便启动时恢复）。 */
   recordingService?: MeetingRecordingService;
   /** 本人声纹录入/删除用的 ffmpeg 与腾讯云依赖；缺省为真实实现（测试注入假实现）。 */
@@ -229,10 +292,20 @@ export async function buildApp({
   missionCardDraftAgent?: MissionCardDraftAgent;
   /** 送达通道（⑨ 传话）的起草、查答案、起草回答；缺省用 light 模型槽位（测试注入假实现）。 */
   requestAgent?: RequestAgent;
+  /** ③ 信息收集的起草；缺省用 light 模型槽位（测试注入假实现）。 */
+  collectionAgent?: CollectionAgent;
+  /** ③ 信息收集的飞书多维表格适配层；缺省按 env.collectionBitable 装配（测试注入假表）。 */
+  bitable?: BitableAdapter;
   /** Pi web_search Tool 的真实 Provider；缺失时 Tool 调用如实失败（不伪装已配置）。 */
   webSearch?: WebSearchAdapter;
   /** 发布方级 feed adapter：Radar、预研与全局对话共用同一白名单来源。 */
   outlets?: RadarOutletAdapter;
+  /** 飞书开放接口；缺省按 env.feishu 装配真实客户端（测试注入假实现）。 */
+  feishuClient?: FeishuClient;
+  /** 会后分层、影响分析与妙记接口（测试注入假实现）；缺省用 heavy 模型与真实飞书接口。 */
+  meetingFollowThroughAgents?: { layering?: DecisionLayeringAgent; impact?: ImpactAgent; minutesApi?: FeishuMinutesApi };
+  /** 文档变更找候选的 Agent（测试注入假实现）；缺省用快模型。 */
+  docChangeAgent?: DocChangeAgent;
   conversationTurnTimeoutMs?: number;
   conversationStallTimeoutMs?: number;
   conversationHeartbeatMs?: number;
@@ -296,8 +369,15 @@ export async function buildApp({
     return snapshot ? ontologyToolResult(snapshot, companyPeriod(now()), query) : null;
   } : undefined;
   const tierModels = conversationTierModels({ defaultModel: env.heavyModel, conversationModel: env.conversationModel });
-  // 个人记忆（PR #12）：只有本人可见，不写进本体；后台按对话提炼。
-  const personalMemory = createPersonalMemory({ pool });
+  // 个人记忆（PR #12）：只有本人可见，不写进本体；后台按对话提炼。每轮由快模型（MEMORY_RECALL_MODEL，与分诊分开配）从本人的记忆目录里挑相关条目（personalMemoryRecall.ts）。
+  const recall = personalMemoryRecall === undefined
+    ? (env.piBaseUrl && env.piApiKey ? createMemoryRecall({ baseUrl: env.piBaseUrl, apiKey: env.piApiKey, ...memoryRecallModels(env) }) : undefined)
+    : personalMemoryRecall ?? undefined;
+  const personalMemory = createPersonalMemory({ pool, recall });
+  // 记忆导入（7a-3）：分类与去重用轻模型（MEMORY_IMPORT_MODEL / MEMORY_IMPORT_THINKING，不配时 LIGHT_MODEL、不开思考）。
+  const importModelChoice = agentModel(env.agentModels, "memoryImport", { modelId: env.lightModel });
+  const memoryImports = createMemoryImports({ pool, personalMemory, model: (personId) => memoryImportModel
+    ?? (env.piBaseUrl && env.piApiKey ? createMemoryImportModel({ query: pool.query.bind(pool), baseUrl: env.piBaseUrl, apiKey: env.piApiKey, personId, ...importModelChoice }) : null) });
   const personalDistillation = createPersonalDistillation({ pool, memory: personalMemory, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
     modelId: env.lightModel, streamSimple: personalDistillationStream });
   // 本体只读公司事实（PR #12 的 query_company）：按人授权的域读取；读不到时如实说明并回退本地（company.ts）。
@@ -413,11 +493,28 @@ export async function buildApp({
     await runtime.close?.();
   });
   const q = pool.query.bind(pool);
-  // 写回只在实例配置允许时启用（MVP 原配置照旧；演示范围第 1 期只读，不写本体）。
+  // 会后链路（妙记、分层确认、影响卡）：路由用它的服务；后台任务由 server.ts 的 jobs worker 按 app.meetingFollowThrough.jobs() 注册。
+  // 写本体只按方案 A 一条决定记一条事件（实例配置允许写时）；原来「整场会记一条事件」已停用。
+  const followThrough = createMeetingFollowThrough({ pool, env, companyMemory, world, outcomeAgent: outcome, now, ...meetingFollowThroughAgents });
+  app.decorate("meetingFollowThrough", followThrough);
+  // ③ 信息收集：路由、对话入口和后台任务共用一份依赖；飞书通知配了飞书才发。
+  const collectionDeps: CollectionDeps = {
+    pool,
+    bitable: bitable ?? (env.collectionBitable === "live" && env.feishu ? createFeishuBitable() : createMockBitable()),
+    feishu: env.feishu,
+    notify: env.feishu ? feishuNotifier(q) : undefined,
+    isCeo: (personId) => companyMemory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false,
+    names: () => personDisplayNames(companyMemory),
+    now,
+  };
+  app.decorate("collectionJobs", collectionJobs(collectionDeps));
+  app.addHook("onClose", async () => { followThrough.close(); });
+  // 周复盘提交后按关联的 Mission、Task 写进展到本体：同样只在实例配置允许写时启用；不写时提交照常，等配好后补发。
+  let weeklyReviewWorld: WeeklyReviewWorldSync | undefined;
   if (worldConfigured(env) && world.status().writes) {
-    const worldMeetings = createWorldMeetingService(pool, new WorldClient(q, env), env.publicOrigin, now);
-    const unsubscribe = onOutcomeReviewed(pool, worldMeetings.schedule);
-    app.addHook("onClose", async () => { unsubscribe(); await worldMeetings.close(); });
+    const sync = createWeeklyReviewWorldSync({ pool, client: new WorldClient(q, env), publicOrigin: env.publicOrigin, names: () => personDisplayNames(companyMemory) });
+    weeklyReviewWorld = sync;
+    app.addHook("onClose", async () => { await sync.close(); });
   }
   // 每个请求的结构化日志上下文：handler 里补充 action/run 字段，onResponse 统一落一条。
   const requestContext = new WeakMap<FastifyRequest, RequestContext>();
@@ -520,6 +617,9 @@ export async function buildApp({
     ontologyUpdater,
     monthlyPlanService,
     monthlyReviewService,
+    weeklyReviewService,
+    weeklyReviewWorld,
+    collections: { agent: collectionAgent ?? createCollectionAgent(pool, env), deps: collectionDeps },
     recordings,
     voiceprints: voiceprintDeps,
     dictation: dictationDeps,
@@ -549,11 +649,15 @@ export async function buildApp({
   };
 
   registerAuthRoutes(app, ctx);
+  const feishuApi = feishuClient ?? (env.feishu ? createFeishuClient(env.feishu) : undefined);
+  registerFeishuAuthRoutes(app, ctx, feishuApi);
   await registerMcpOAuthRoutes(app, ctx);
   registerCardRoutes(app, ctx);
   registerConfigRoutes(app, ctx);
   registerRadarRoutes(app, ctx);
-  registerConversationRoutes(app, ctx);
+  // 送达通道的轻量模型调用：请求页和对话里的「帮我问问」「请同事帮忙」共用一份。
+  const deliveryAgent = requestAgent ?? createRequestAgent(pool, env);
+  registerConversationRoutes(app, ctx, deliveryAgent);
   registerMeetingRoutes(app, ctx);
   registerMaterialRoutes(app, ctx, materialAnnotationAgent);
   registerKnowledgeRoutes(app, ctx);
@@ -564,14 +668,30 @@ export async function buildApp({
   registerThreadRoutes(app, ctx);
   registerRecordingRoutes(app, ctx);
   registerMeRoutes(app, ctx);
-  registerOnboardingRoutes(app, ctx);
+  registerOnboardingRoutes(app, ctx, feishuApi && env.feishu ? { client: feishuApi, env: env.feishu } : undefined);
   registerSeenMarkRoutes(app, ctx);
   registerMissionCardRoutes(app, ctx, missionCardAnnotationAgent, missionCardReviewAgent);
   registerMyRadarRoutes(app, ctx);
   registerMonthlyReviewRoutes(app, ctx);
-  registerRequestRoutes(app, ctx, requestAgent ?? createRequestAgent(pool, env));
+  registerRequestRoutes(app, ctx, deliveryAgent);
+  registerCollectionRoutes(app, ctx);
   registerPersonalMemoryRoutes(app, ctx);
+  registerMemoryImportRoutes(app, ctx, memoryImports);
   registerCollectorRoutes(app, ctx);
+  registerWeeklyReviewRoutes(app, ctx);
+  registerAdminRoutes(app, ctx);
+  registerProgressRoutes(app, ctx);
+  registerMeetingFollowThroughRoutes(app, ctx, followThrough);
+  // 文档变更：找候选用快模型；按作者身份读飞书文档元数据（不读正文）；后台任务与群消息事件由 server.ts 按 app.docChanges.jobs() 注册。
+  const isCeo = (personId: string) => companyMemory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false;
+  const docChanges = createDocChangeService({
+    pool, now, names: () => personDisplayNames(companyMemory),
+    agent: docChangeAgent ?? createDocChangeAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.triageModel || env.lightModel }),
+    ...(feishuApi && env.feishu ? { feishu: { client: feishuApi, env: env.feishu } } : {}),
+    pathFor: (personId, requestId) => `${isCeo(personId) ? "" : "/me"}/requests/${requestId}`,
+  });
+  app.decorate("docChanges", docChanges);
+  registerDocChangeRoutes(app, ctx, docChanges);
 
   return app;
 }

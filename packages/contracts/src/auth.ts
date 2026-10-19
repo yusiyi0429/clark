@@ -36,6 +36,8 @@ export const SessionResponse = Type.Object(
     onboarded: Type.Optional(Type.Boolean()),
     /** 同时是 CEO 和 DRI 的人可以在两种工作台之间切换；role 是当前视角。 */
     canSwitchView: Type.Optional(Type.Boolean()),
+    /** 管理员（TIANSHU_ADMIN_PERSON_IDS）才有，为 true：个人菜单里多一项「管理员」。 */
+    admin: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );

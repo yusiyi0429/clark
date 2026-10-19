@@ -78,3 +78,40 @@ test('anchors match the current object regardless of version and mark ideas base
         expect(await memory.select('alice', '这个怎么看？', { currentObject: { target: 'issue:i9', version: 1 } })).toEqual([]);
     });
 });
+
+test('with a recall model, a paraphrased question still brings back the right item; preferences stay, unpicked practices do not (memory-recall)', async () => {
+    await createTestDb(async ({ pool, db }) => {
+        await migrate(db);
+        const asked: { message: string; titles: string[] }[] = [];
+        let picked: (items: { id: string; title: string }[]) => string[] = () => [];
+        const memory = createPersonalMemory({ pool, recall: async ({ message, items }) => { asked.push({ message, titles: items.map(item => item.title) }); return picked(items); } });
+        const style = await memory.add('alice', { kind: 'preference', title: '先给结论', text: '回答先给结论，再给依据。' });
+        await memory.add('alice', { kind: 'practice', title: '周会先数后事', text: '周会先过 15 分钟数据看板。' });
+        const expansion = await memory.add('alice', { kind: 'open_question', title: '扩编方向还没想好', text: '还没想好销售扩编往哪个方向扩：补县城地推还是加电销。' });
+        const gone = await memory.add('alice', { kind: 'idea', title: '已忘的想法', text: '周末去徒步。' });
+        await memory.forget('alice', gone.id);
+        picked = (items) => items.filter(item => item.title === '扩编方向还没想好').map(item => item.id);
+        // 「拿不定主意」「卖货团队招人」和条目没有一个二字词重合，字面重合选不出它。
+        const question = '卖货团队要不要多招人，我还有什么拿不定主意的？';
+        expect((await createPersonalMemory({ pool }).select('alice', question)).map(item => item.id)).not.toContain(expansion.id);
+        expect((await memory.select('alice', question)).map(item => item.id)).toEqual([expansion.id, style.id]);
+        // 模型只看到偏好类以外的现行条目（偏好常驻，已忘的不进目录）。
+        expect(asked[0]).toEqual({ message: question, titles: ['扩编方向还没想好', '周会先数后事'] });
+        // 与个人想法无关的问题：模型返回空，只剩常驻的偏好，做法类不再兜底带上。
+        picked = () => [];
+        expect((await memory.select('alice', 'Python 里怎么给列表去重？')).map(item => item.id)).toEqual([style.id]);
+    });
+});
+
+test('items pinned on the current object always come first under recall, and a failed recall falls back to word overlap (memory-recall, R8)', async () => {
+    await createTestDb(async ({ pool, db }) => {
+        await migrate(db);
+        let fail = false;
+        const memory = createPersonalMemory({ pool, recall: async () => { if (fail) throw Object.assign(new Error('down'), { code: 'PERSONAL_MEMORY_RECALL_TIMEOUT' }); return []; } });
+        const pinned = await memory.add('alice', { title: '对议题的判断', text: '预算应该砍一半。', anchors: [{ target: 'issue:i1', pinnedVersion: 2 }] });
+        const hiking = await memory.add('alice', { title: '兴趣', text: '周末喜欢徒步。' });
+        expect(await memory.select('alice', '这个怎么看？', { currentObject: { target: 'issue:i1', version: 5 } })).toMatchObject([{ id: pinned.id, basedOnOldVersion: true }]);
+        fail = true;
+        expect((await memory.select('alice', '周末徒步去哪')).map(item => item.id)).toEqual([hiking.id]);
+    });
+});

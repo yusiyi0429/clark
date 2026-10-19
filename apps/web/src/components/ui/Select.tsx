@@ -60,6 +60,9 @@ export function Select({ options, value, onChange, label, placeholder = "请选�
       <SelectValue className={p.value} />
       <ChevronDown size={15} strokeWidth={2} aria-hidden className={p.chevron} />
     </Button>
+    {/* React Aria 靠「关着时也渲染一份」的选项建集合（Popover 会，ModalOverlay 不会）：手持再放一个永远不打开的 Popover，
+        否则集合为空，触发器只显示占位、sheet 打不开、隐藏的原生下拉没有选项。 */}
+    {handheld ? <Popover isOpen={false}>{list}</Popover> : null}
     {handheld
       ? <ModalOverlay className={p.overlay} isDismissable>
         <Modal className={p.sheet}>

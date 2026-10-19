@@ -1,5 +1,10 @@
+import type { TReadScopeParams } from "@warmap/contracts";
+
 export type ConversationEvent = {
-  type: "message" | "tool" | "step" | "usage" | "compaction" | "warning" | "error" | "done" | "route" | "thinking" | "escalation" | "recovery";
+  type: "message" | "tool" | "step" | "usage" | "compaction" | "warning" | "error" | "done" | "route" | "thinking" | "escalation" | "recovery" | "scope";
+  /** scope：跨对象读取的范围（三层取用）：params 是读取范围，choices 是点开调整时可选的人；label 复用下面的 label。 */
+  params?: TReadScopeParams;
+  choices?: { people: { id: string; name: string }[] };
   /** step：步骤 id（同一 id 的后一条取代前一条）；label 是步骤名，status 是 done / active / pending / stopped，result 是这一步读到了什么。 */
   id?: string;
   result?: string;

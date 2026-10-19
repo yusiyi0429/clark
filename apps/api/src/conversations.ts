@@ -4,14 +4,22 @@ import { join } from "node:path";
 import type { Pool, QueryResult } from "pg";
 import type { Usage } from "@earendil-works/pi-ai";
 import type {
+  TAskAnswerRecord,
   TCardReference,
   TConversationAttachment,
   TConversationAttachmentInfo,
+  TConversationCard,
   TConversationHistory,
   TConversationScope,
+  TReadScope,
+  TReadScopeParams,
   TReferenceSnapshot,
 } from "@warmap/contracts";
 import type { CompanyMemoryRepository } from "./companyMemory.js";
+import type { AskUser } from "./askUser.js";
+import type { ConversationEntries } from "./conversationEntries.js";
+import type { CompanyMap, ReadFocus } from "./companyMap.js";
+import type { IssueSuggest, IssueSuggestContext } from "./issueDrafts.js";
 import type { TurnRecoverySummary } from "./conversationRecovery.js";
 import type { ParsedMaterial } from "./materialParser.js";
 import { roleOf, type SessionRole } from "./memberAccess.js";
@@ -32,7 +40,8 @@ export type ConversationRuntimeEvent =
   | { type: "message"; delta: string }
   | { type: "warning"; code: "RUNTIME_RECREATED"; message: string }
   | { type: "compaction"; phase: "started" | "completed" }
-  | { type: "tool"; phase: "started" | "completed"; toolCallId: string; name: string; isError?: boolean; label?: string; detail?: string }
+  /** errorCode：工具出错的类别（只在出错时有，路由层记成质量信号，不发给界面）。 */
+  | { type: "tool"; phase: "started" | "completed"; toolCallId: string; name: string; isError?: boolean; label?: string; detail?: string; errorCode?: string }
   /** 本轮档位（conversationRouting.ts）：路由层据此设整轮时限，界面据此显示预计用时；深度档带开场说明。 */
   | { type: "route"; tier: "quick" | "grounded" | "deep"; source: "rule" | "model" | "fallback"; expectSeconds: number; timeoutMs: number; notice?: string; model?: string }
   /**
@@ -44,9 +53,12 @@ export type ConversationRuntimeEvent =
   | { type: "escalation"; reason: "slow" | "retrieval"; expectSeconds: number; notice: string }
   /** 上游出错后正在自动恢复（conversationRecovery.ts）：notice 是给进度行的一句中文。 */
   | { type: "recovery"; reason: string; action: "retry" | "fallback" | "trim" | "continue" | "skip"; attempt: number; notice: string }
-  | { type: "usage"; input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number };
+  | { type: "usage"; input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number }
+  /** 跨对象读取的范围标签（三层取用，companyMap.ts）：界面显示成可以点开调整的标签。 */
+  | ({ type: "scope" } & TReadScope);
 
 export type PersonalMemoryEntry = { id: string; title: string; text: string };
+export type PersonalMemoryContext = PersonalMemoryEntry & { createdAt?: string; basedOnOldVersion?: boolean };
 export type PersonalMemoryTools = {
   search(query: string): Promise<PersonalMemoryEntry[]>;
   /** 新记一条；replaces 给出时是纠正：旧条目被新说法替代。 */
@@ -67,13 +79,37 @@ export type ConversationRuntime = {
     currentObject: TReferenceSnapshot | null;
     runId?: string;
     referencesSnapshot: TReferenceSnapshot[];
-    /** 与本轮原话相关的本人个人记忆（只有本人可见）；放进上下文包的 personalMemory。 */
-    personalMemory?: { id: string; title: string; text: string; createdAt?: string; basedOnOldVersion?: boolean }[];
+    /**
+     * 与本轮原话相关的本人个人记忆（只有本人可见）；放进上下文包的 personalMemory。
+     * 路由交来的是还在选的 Promise（召回模型与分诊同时跑），运行时拼上下文包时才等它。
+     */
+    personalMemory?: PersonalMemoryContext[] | Promise<PersonalMemoryContext[]>;
     /** 本人个人记忆的检索与「记住 / 改成 / 忘掉」，已绑定本人；运行时据此给主 Agent 提供工具。失败时抛错，只作为工具报错。 */
     personalMemoryTools?: PersonalMemoryTools;
     /** 检索本人历史对话原文（跨所有页面与归档，只读、已绑定本人）；运行时据此提供 search_conversation_history。 */
     searchHistory?: (query: string) => Promise<{ hits: HistoryHit[]; message?: string }>;
+    /** 本人手上没完成的待办（标题、发起人、发出时间、类型）：每轮放进上下文包的 myOpenTodos。 */
+    openTodos?: { title: string; from: string; sentAt: string; kind: string }[];
+    /** 对话里的一句话入口（生成复盘、帮我问问、请同事帮忙），已绑定本人与这一轮；运行时据此提供对应工具。 */
+    entries?: ConversationEntries;
+    /** 向本人提问（askUser.ts）：登记一张提问卡挂在这一轮回答后面；运行时据此提供 ask_user，问完这一轮就停。 */
+    ask?: AskUser;
     recentMessages?: { role: "user" | "assistant"; content: string; createdAt: string }[];
+    /** 三层取用（companyMap.ts）：已绑定本人与这一轮，运行时据此提供 read_mission_cards / read_progress / read_reviews / read_object_tree。 */
+    companyMap?: CompanyMap;
+    /** 本页的默认读取焦点（页面只决定默认焦点，不是边界）：放进上下文包的 focus。 */
+    focus?: ReadFocus & { label: string };
+    /** 本人在范围标签上改过的读取范围：放进上下文包，这一轮的读取一律按它。 */
+    scopeOverride?: TReadScopeParams;
+    /** 一号位深聊转议题（只在 CEO 首页，issueDrafts.ts）：运行时据此提供 propose_issue、read_issue_conversation。 */
+    issueSuggest?: IssueSuggest;
+    /** 首页上下文包里的已转议题与拒绝过的话题。 */
+    issueContext?: IssueSuggestContext;
+    /**
+     * 模型还没见过的、从别的对话带进来的消息（转议题时复制进议题页的那一段）：运行时在这一轮之前接进模型历史。
+     * 模型历史重建或闲置重开时它们已经在 recentMessages 里，不再重复接。
+     */
+    carriedOver?: { role: "user" | "assistant"; content: string; createdAt: string }[];
     runtimeEntries: unknown[];
     piSessionId: string;
     signal: AbortSignal;
@@ -349,7 +385,8 @@ const MAIN_CONVERSATION_SQL = `SELECT id FROM conversations WHERE ${ACTIVE_CONVE
 export const CONVERSATION_IDLE_RESTART_MS = 12 * 60 * 60 * 1000;
 
 type MessageRow = { sequence: number; role: string; content: string; references_snapshot: unknown; attachments: TConversationAttachment[];
-  run_id: string; created_at: Date; recovery_note: { text?: unknown; detail?: unknown } | null; memory_used: unknown };
+  run_id: string; created_at: Date; recovery_note: { text?: unknown; detail?: unknown } | null; memory_used: unknown; cards?: unknown;
+  read_scope?: unknown; kind?: string; meta?: { issueId?: unknown; title?: unknown; href?: unknown; answers?: unknown } | null };
 
 function historyMessage(row: MessageRow): TConversationHistory["messages"][number] {
   const note = row.recovery_note;
@@ -364,13 +401,24 @@ function historyMessage(row: MessageRow): TConversationHistory["messages"][numbe
     ...(note && typeof note.text === "string" && note.text
       ? { recoveryNote: { text: note.text, detail: typeof note.detail === "string" ? note.detail : "" } } : {}),
     ...(Array.isArray(row.memory_used) && row.memory_used.length ? { memoryUsed: row.memory_used.filter((id): id is string => typeof id === "string") } : {}),
+    ...(row.role === "assistant" && Array.isArray(row.cards) && row.cards.length ? { cards: row.cards as TConversationCard[] } : {}),
+    ...(row.role === "assistant" && row.read_scope && typeof row.read_scope === "object" ? { readScope: row.read_scope as TReadScope } : {}),
+    // 回答 Agent 提问的那条：问答记录存在 meta.answers（routes/conversations.ts 按提问卡核对后写入）。
+    ...(row.role === "user" && row.meta?.answers && typeof row.meta.answers === "object" ? { answers: row.meta.answers as TAskAnswerRecord } : {}),
+    ...(row.kind === "carried" || row.kind === "trace" ? { kind: row.kind } : {}),
+    ...(row.kind === "trace" && row.meta ? { meta: Object.fromEntries((["issueId", "title", "href"] as const)
+      .flatMap((key) => (typeof row.meta?.[key] === "string" ? [[key, row.meta[key]]] : []))) } : {}),
   };
 }
 
 async function conversationMessages(q: Query, conversationId: string): Promise<TConversationHistory["messages"]> {
   const result = await q(
-    `SELECT m.sequence, m.role, m.content, m.references_snapshot, m.attachments, m.run_id, m.created_at, m.recovery_note, m.memory_used
+    // 这一轮工具生成的卡记在运行记录里（routes/conversations.ts），随回答一起读回。
+    `SELECT m.sequence, m.role, m.content, m.references_snapshot, m.attachments, m.run_id, m.created_at, m.recovery_note, m.memory_used, m.kind, m.meta,
+            CASE WHEN m.role = 'assistant' AND m.kind = 'message' THEN r.input_snapshot -> 'cards' END AS cards,
+            CASE WHEN m.role = 'assistant' AND m.kind = 'message' THEN r.input_snapshot -> 'readScope' END AS read_scope
        FROM conversation_messages m
+       LEFT JOIN agent_runs r ON r.id = m.run_id
       WHERE m.conversation_id = $1
       ORDER BY m.sequence`,
     [conversationId],

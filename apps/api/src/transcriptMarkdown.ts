@@ -46,6 +46,57 @@ function classifyHeader(line: string): HeaderMatch {
   return { kind: "none" };
 }
 
+export const FEISHU_TRANSCRIPT_PARSER_VERSION = "feishu-minutes-txt.v1";
+/** 发言头只认「姓名 hh:mm:ss(.mmm)」：姓名不超过 40 字、不带句读，免得把正文里「定在 10:30:00」当成发言头。 */
+const FEISHU_HEADER = /^([^，。？！,.?!：:]{1,40}?)\s+(\d{1,2}):(\d{2}):(\d{2})(?:\.\d{1,3})?\s*$/;
+const FEISHU_START = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})\s*(CST|UTC\+0?8:?0{0,2})?\b/;
+
+/**
+ * 飞书妙记开放接口导出的逐字稿（txt）：第一行「2026-10-12 09:20:02 CST|26min 25s」，然后是关键词，
+ * 之后每段「姓名 hh:mm:ss.mmm」加正文。第一段发言之前的内容不要；超过上限时把相邻同一人的发言并成一段（引文仍在同一段里连续）。
+ * startedAt：第一行的开会时刻（按北京时间）；没有就是 null。
+ */
+export function parseFeishuTranscriptText(text: string): TranscriptParseResult & { startedAt?: string | null } {
+  const source = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  const lines = source.split(/\r?\n/);
+  // 开会时刻在开头几行里（前面可能还有一行标题）。
+  const start = lines.slice(0, 6).map((line) => FEISHU_START.exec(line.trim())).find(Boolean) ?? null;
+  const startedAt = start ? new Date(`${start[1]}T${start[2]}+08:00`).toISOString() : null;
+  const raw: RawTurn[] = [];
+  let current: RawTurn | null = null;
+  for (const [index, line] of lines.entries()) {
+    const match = FEISHU_HEADER.exec(line);
+    const speakerName = match?.[1].trim() ?? "";
+    if (match && speakerName && !/^\d{4}-\d{2}-\d{2}$/.test(speakerName) && Number(match[3]) < 60 && Number(match[4]) < 60) {
+      const offsetSeconds = Number(match[2]) * 3600 + Number(match[3]) * 60 + Number(match[4]);
+      if (current) raw.push(current);
+      current = { speakerName, offsetSeconds, body: [], line: index + 1 };
+      continue;
+    }
+    if (current) current.body.push(line);
+  }
+  if (current) raw.push(current);
+  let turns: ParsedTranscriptTurn[] = raw
+    .map((turn) => ({ speakerName: turn.speakerName, offsetSeconds: turn.offsetSeconds, text: turn.body.join("\n").trim() }))
+    .filter((turn) => turn.text);
+  if (turns.length > MAX_TRANSCRIPT_TURNS) {
+    const merged: ParsedTranscriptTurn[] = [];
+    for (const turn of turns) {
+      const last = merged.at(-1);
+      if (last && last.speakerName === turn.speakerName && last.text.length + turn.text.length < MAX_TURN_TEXT_LENGTH) last.text += `\n${turn.text}`;
+      else merged.push({ ...turn });
+    }
+    turns = merged;
+  }
+  if (!turns.length) return { ...fail("EMPTY_TRANSCRIPT", "妙记逐字稿没有可解析的发言段", null), startedAt };
+  if (turns.length > MAX_TRANSCRIPT_TURNS) return { ...fail("TOO_MANY_TURNS", `逐字稿最多 ${MAX_TRANSCRIPT_TURNS} 个发言段`, null), startedAt };
+  for (const [index, turn] of turns.entries()) {
+    if (turn.text.length > MAX_TURN_TEXT_LENGTH) return { ...fail("TURN_TEXT_TOO_LONG", `发言段正文超过 ${MAX_TURN_TEXT_LENGTH} 字符`, null), startedAt };
+    if (index > 0 && turn.offsetSeconds < turns[index - 1].offsetSeconds) return { ...fail("TURN_TIME_OUT_OF_ORDER", "发言段相对时间出现倒序", null), startedAt };
+  }
+  return { ok: true, transcript: { turns }, startedAt };
+}
+
 export function parseMiaojiMarkdown(input: string | Buffer): TranscriptParseResult {
   let text: string;
   if (typeof input === "string") {

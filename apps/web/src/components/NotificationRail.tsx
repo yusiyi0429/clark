@@ -19,7 +19,9 @@ import { MissionCardNoticeGroup } from "./missionCards/MissionCardNoticeGroup";
 import { roundStatusText } from "./missionCards/roundStatusText";
 import { MonthlyReviewNotices } from "./monthlyReview/MonthlyReviewNotices";
 import { PersonalReviewBoard } from "./monthlyReview/PersonalReviewBoard";
+import { useWeeklyReviewBoard, WeeklyReviewBoard } from "./weeklyReview/WeeklyReviewBoard";
 import { RequestNotices } from "./requests/RequestNotices";
+import { HostDecisionNotices } from "./meeting/HostDecisionNotices";
 import { CycleCountdown } from "./CycleCountdown";
 import { RADAR_ORIGIN_LABEL, RadarOriginIcon } from "./OriginTag";
 import { preflightInFlight } from "@/cards/meetingIssueModel";
@@ -245,6 +247,7 @@ export function NotificationRail({
   const groups = railGroups(cards, new Date(), viewerId);
   const rail = useRef<HTMLElement>(null);
   const positions = useRef(new Map<string, number>());
+  const weeklyReviews = useWeeklyReviewBoard();
   const strategic = pendingStrategicItems(cards).length;
   const layoutKey = [`strategic:${strategic}`, ...groups.map((group) => `${group.kind}:${group.items.length}`)].join("|");
 
@@ -289,6 +292,8 @@ export function NotificationRail({
       <div className={n.noticeList}>
         <CycleCountdown />
         {onCard ? <StrategicConfirmCard cards={cards} onCard={onCard} onNavigate={onNavigate} /> : null}
+        <HostDecisionNotices meetingBase="/meetings" onNavigate={onNavigate} />
+        <WeeklyReviewBoard onNavigate={onNavigate} state={weeklyReviews} />
         <PersonalReviewBoard onNavigate={onNavigate} />
         <RequestNotices base="/requests" currentHref={currentHref} onNavigate={onNavigate} />
         <MonthlyReviewNotices onNavigate={onNavigate} ceo />

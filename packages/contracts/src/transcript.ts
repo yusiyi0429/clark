@@ -30,6 +30,8 @@ export const TranscriptSourceFormat = Type.Union([
   Type.Literal("warmap_json"),
   /** 会议录音经火山录音文件识别（说话人分离）生成；fileName/sizeBytes/sha256 指规整后的 mp3。 */
   Type.Literal("volc_asr"),
+  /** 飞书妙记开放接口导出的逐字稿（txt，带说话人和时间戳）；timeAnchor 是妙记记下的会议开始时刻。 */
+  Type.Literal("feishu_minutes"),
 ]);
 
 export const TranscriptSource = Type.Object(

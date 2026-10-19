@@ -1,0 +1,52 @@
+import { Type, type Static } from "@sinclair/typebox";
+
+/**
+ * 上手最后一页的两个清单（前端交互说明 10a 第 4 步）：工作依据清单、搬家清单。
+ * 候选由服务端按本人的数据现算，提交时只传勾选的 key，服务端再算一遍候选、只认候选里的 key。
+ */
+
+/** material：天枢里的材料（修订号 vN）；feishu_doc：飞书文档；link：其他链接。修订号拿不到时为空。 */
+export const WorkBasisDocKind = Type.Union([Type.Literal("material"), Type.Literal("feishu_doc"), Type.Literal("link")]);
+export const WorkBasisCandidate = Type.Object({
+  key: Type.String({ minLength: 1, maxLength: 520 }),
+  kind: WorkBasisDocKind,
+  title: Type.String({ minLength: 1 }),
+  url: Type.Union([Type.String(), Type.Null()]),
+  revision: Type.Union([Type.String(), Type.Null()]),
+  /** 从哪里找到的：task 本人执行事项里的材料或链接；session 本机会话里读过；null 只剩已确认的记录。 */
+  origin: Type.Union([Type.Literal("task"), Type.Literal("session"), Type.Null()]),
+  /** 飞书文档的最近修订时间与修订人（按本人身份读元数据，不读正文）；读不到或不是飞书文档时为空。已确认的是确认时的那一次。 */
+  revisedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+  revisedBy: Type.Union([Type.String(), Type.Null()]),
+  /** 已经入库（本人确认过）。 */
+  confirmed: Type.Boolean(),
+  /** 已被作者确认取代：新文档。 */
+  supersededBy: Type.Union([Type.Object({ title: Type.String({ minLength: 1 }), url: Type.String({ minLength: 1 }) }, { additionalProperties: false }), Type.Null()]),
+  /** 被取代后本人选了继续用旧版到这天（YYYY-MM-DD）。 */
+  keepUntil: Type.Union([Type.String(), Type.Null()]),
+}, { additionalProperties: false });
+export const WorkBasisResponse = Type.Object({ candidates: Type.Array(WorkBasisCandidate) }, { additionalProperties: false });
+export const UpdateWorkBasisRequest = Type.Object({
+  keys: Type.Array(Type.String({ minLength: 1, maxLength: 520 }), { maxItems: 500 }),
+}, { additionalProperties: false });
+
+/** 本机清单里找到的定时任务；imported：已经搬进定时任务区。 */
+export const ScheduleMigrationCandidate = Type.Object({
+  key: Type.String({ minLength: 1, maxLength: 300 }),
+  name: Type.String({ minLength: 1 }),
+  cadence: Type.Union([Type.String(), Type.Null()]),
+  command: Type.Union([Type.String(), Type.Null()]),
+  deviceName: Type.String(),
+  imported: Type.Boolean(),
+}, { additionalProperties: false });
+export const ScheduleMigrationResponse = Type.Object({ candidates: Type.Array(ScheduleMigrationCandidate) }, { additionalProperties: false });
+export const UpdateScheduleMigrationRequest = Type.Object({
+  keys: Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { maxItems: 500 }),
+}, { additionalProperties: false });
+
+export type TWorkBasisCandidate = Static<typeof WorkBasisCandidate>;
+export type TWorkBasisResponse = Static<typeof WorkBasisResponse>;
+export type TUpdateWorkBasisRequest = Static<typeof UpdateWorkBasisRequest>;
+export type TScheduleMigrationCandidate = Static<typeof ScheduleMigrationCandidate>;
+export type TScheduleMigrationResponse = Static<typeof ScheduleMigrationResponse>;
+export type TUpdateScheduleMigrationRequest = Static<typeof UpdateScheduleMigrationRequest>;

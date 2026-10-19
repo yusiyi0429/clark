@@ -132,3 +132,20 @@
 
 /* 这一轮用了备用模型或走过恢复：回答末尾一行很淡的 12px 小字，悬停看说明。 */
 .recoveryNote{width:fit-content;margin:12px 0 0;font-size:12px;line-height:1.5;color:#a5a5af;cursor:default}
+
+/* 转议题之后首页的留痕行：居中一行浅灰小字，像聊天里的系统消息；点击直达议题页。 */
+.trace{display:flex;justify-content:center;margin:-8px 0 32px;font-size:12px;line-height:1.5;color:#a5a5af}
+.trace a{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border:1px solid #ffffff1f;border-radius:999px;color:inherit;text-decoration:none;transition:color 140ms ease,border-color 140ms ease}
+.trace a:hover{color:#d7e5ff;border-color:#a9caff66}
+.trace a:focus-visible{outline:2px solid #3a83f788;outline-offset:2px}
+:global([data-tone=light]) .trace{color:#7a7f89}
+:global([data-tone=light]) .trace a{border-color:#1d1d1f1f}
+:global([data-tone=light]) .trace a:hover{color:#2f6bb4;border-color:#2f6bb466}
+/* 从首页带过来的那一段：开头一行很淡的「首页 · 10月18日」，两边细线。 */
+.carried{display:flex;align-items:center;gap:10px;margin:0 0 20px;font-size:12px;line-height:1.5;color:#8b8f97}
+.carried::before,.carried::after{content:"";flex:1 1 0;height:1px;background:#ffffff1a}
+:global([data-tone=light]) .carried::before,:global([data-tone=light]) .carried::after{background:#1d1d1f14}
+/* 进行中：范围标签在进度行之下、步骤之上。 */
+.liveScope{margin:2px 0 6px;font-size:12px;color:#a5a5af}
+:global([data-tone=light]) .liveScope{color:#7a7f89}
+@media(max-width:959px){.trace,.carried,.liveScope{font-size:13px}.trace a{min-height:32px}}

@@ -50,3 +50,9 @@ seed/m2/
 # 本地准生产（infra/local）：真实 env 与 mkcert 证书只留本机
 !infra/local/.env.local.example
 infra/local/certs/
+
+# 会后链路评测：真实会议纪要的抽取结果与标注表只留本机；界面自查截图只留本机
+.scratch/meeting-impact/eval/
+.scratch/meeting-impact/evidence/**/*.png
+.scratch/meeting-impact/smoke/
+.scratch/meeting-impact/verify/

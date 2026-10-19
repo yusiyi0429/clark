@@ -70,9 +70,106 @@ export const ConversationAttachmentUploadResponse = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * 三层取用的读取范围（已定设计 5a）：谁（全员 / 本人 / 指定的人，personId）、哪个战场、哪几个月（YYYY-MM，含两端）。
+ * Agent 跨对象读取时发 scope 事件带上它；本人在界面上改了范围，下一轮请求带 scopeOverride，这一轮的读取一律按它。
+ */
+const Month = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
+export const ReadScopeParams = Type.Object(
+  {
+    people: Type.Optional(Type.Union([
+      Type.Literal("all"),
+      Type.Literal("me"),
+      Type.Array(Type.String({ minLength: 1, maxLength: 100 }), { minItems: 1, maxItems: 30, uniqueItems: true }),
+    ])),
+    battlefieldId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    from: Type.Optional(Month),
+    to: Type.Optional(Month),
+  },
+  { additionalProperties: false },
+);
+
+/** 范围标签：label 是「全员 · 7–10 月」这样的短标签；choices 是点开调整时可选的人。 */
+export const ReadScope = Type.Object(
+  {
+    label: Type.String({ minLength: 1, maxLength: 80 }),
+    params: ReadScopeParams,
+    choices: Type.Optional(Type.Object(
+      { people: Type.Array(Type.Object({ id: Type.String(), name: Type.String() }, { additionalProperties: false }), { maxItems: 80 }) },
+      { additionalProperties: false },
+    )),
+  },
+  { additionalProperties: false },
+);
+
+/**
+ * Agent 向本人提问（ask_user 工具）：一次 1–4 题，每题 2–4 个选项，recommended 标推荐（每题最多一个）。
+ * 界面一题一页作答，另给「其他」自己写，也可以跳过；提问后这一轮就停，答案作为本人的下一条消息发回来。
+ */
+export const AskOption = Type.Object(
+  {
+    label: Type.String({ minLength: 1, maxLength: 40 }),
+    /** 选项下面一行补充（代价、含义），没有就不写。 */
+    detail: Type.Optional(Type.String({ maxLength: 120 })),
+    recommended: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false },
+);
+const AskQuestionFields = {
+  question: Type.String({ minLength: 1, maxLength: 200 }),
+  options: Type.Array(AskOption, { minItems: 2, maxItems: 4 }),
+};
+/** 工具参数：题目与选项，题号由服务端给。 */
+export const AskUserInput = Type.Object(
+  { questions: Type.Array(Type.Object(AskQuestionFields, { additionalProperties: false }), { minItems: 1, maxItems: 4 }) },
+  { additionalProperties: false },
+);
+export const AskQuestion = Type.Object(
+  { id: Type.String({ minLength: 1, maxLength: 8 }), ...AskQuestionFields },
+  { additionalProperties: false },
+);
+
+/** 本人的作答：每题选一个选项（option 是下标）或自己写（text）；两样都没有就是跳过。 */
+export const AskAnswerInput = Type.Object(
+  {
+    askId: Type.String({ format: "uuid" }),
+    items: Type.Array(Type.Object(
+      {
+        questionId: Type.String({ minLength: 1, maxLength: 8 }),
+        option: Type.Optional(Type.Integer({ minimum: 0, maximum: 3 })),
+        text: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+      },
+      { additionalProperties: false },
+    ), { maxItems: 4 }),
+  },
+  { additionalProperties: false },
+);
+
+/** 存在那条作答消息上的问答记录（服务端按提问卡核对后生成）：界面画成紧凑的问答，不再显示原文。 */
+export const AskAnswerRecord = Type.Object(
+  {
+    askId: Type.String(),
+    items: Type.Array(Type.Object(
+      {
+        questionId: Type.String(),
+        question: Type.String(),
+        kind: Type.Union([Type.Literal("option"), Type.Literal("other"), Type.Literal("skipped")]),
+        /** 选的选项原文，或自己写的；跳过时没有。 */
+        answer: Type.Optional(Type.String()),
+        /** 选的就是推荐的那个。 */
+        recommended: Type.Optional(Type.Boolean()),
+      },
+      { additionalProperties: false },
+    ), { minItems: 1, maxItems: 4 }),
+  },
+  { additionalProperties: false },
+);
+
 export const ConversationMessageRequest = Type.Object(
   {
     message: Type.String({ minLength: 1, maxLength: 20_000 }),
+    /** 回答 Agent 的提问：带了它，这一句的原文由服务端按提问卡和答案重写。 */
+    answers: Type.Optional(AskAnswerInput),
     references: Type.Optional(Type.Array(CardReference, { maxItems: 20 })),
     attachments: Type.Optional(Type.Array(ConversationAttachmentRef, { maxItems: 10 })),
     /** 工单 09：页面左侧正在看的那份材料；必须属于这个 scope 的对象。 */
@@ -82,6 +179,8 @@ export const ConversationMessageRequest = Type.Object(
      * 只能接这个人在这个页面自己的那一轮。
      */
     resumeRunId: Type.Optional(Type.String({ format: "uuid" })),
+    /** 本人在范围标签上改过的读取范围：这一轮三层取用的工具一律按它读。 */
+    scopeOverride: Type.Optional(ReadScopeParams),
   },
   { additionalProperties: false },
 );
@@ -94,6 +193,39 @@ export const ConversationRecoveryNote = Type.Object(
   { text: Type.String({ minLength: 1, maxLength: 120 }), detail: Type.String({ maxLength: 400 }) },
   { additionalProperties: false },
 );
+
+/**
+ * 回答后面挂的卡（对话里的一句话入口：生成复盘、帮我问问、请同事帮忙）。由服务端按工具结果生成，不由模型写；
+ * 卡上的状态（是否已发出、草稿进度）由界面按 id 读最新的对象，发出仍走各对象自己的 Action。href 是对象页面的地址。
+ */
+export const ConversationCard = Type.Union([
+  /** 复盘草稿：摘要与「打开修改」。 */
+  Type.Object({ kind: Type.Literal("review"), personalReviewId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+  /** 周复盘草稿：摘要与「打开修改」。 */
+  Type.Object({ kind: Type.Literal("weekly_review"), weeklyReviewId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+  /** 对上不止一件待办：本人点选其中一件，再查有没有人问过、整理问题。 */
+  Type.Object({
+    kind: Type.Literal("todo_pick"),
+    question: Type.String({ minLength: 1, maxLength: 1000 }),
+    candidates: Type.Array(Type.Object({
+      requestId: Type.String({ minLength: 1 }), title: Type.String(), initiatorName: Type.String(), sentAt: Type.String(), href: Type.String({ minLength: 1 }),
+    }, { additionalProperties: false }), { minItems: 2, maxItems: 4 }),
+  }, { additionalProperties: false }),
+  /** 已整理好的问题，等本人点「发送」。 */
+  Type.Object({ kind: Type.Literal("todo_ask"), requestId: Type.String({ minLength: 1 }), question: Type.String({ minLength: 1, maxLength: 1000 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+  /** 说明或已有问答里有答案：答案原文与出处；本人仍可以问。 */
+  Type.Object({
+    kind: Type.Literal("todo_answer"), requestId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }),
+    question: Type.String({ minLength: 1, maxLength: 1000 }), answer: Type.String({ minLength: 1 }),
+    source: Type.Union([Type.Literal("body"), Type.Literal("question")]), questionId: Type.Union([Type.String(), Type.Null()]),
+  }, { additionalProperties: false }),
+  /** 本人发起的请求草稿：收件人、标题、说明与「发送」。 */
+  Type.Object({ kind: Type.Literal("request_draft"), requestId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+  /** Agent 的提问：题目列表与「开始回答」；回答过的按后面那条作答消息显示成「已回答」。 */
+  Type.Object({ kind: Type.Literal("questions"), askId: Type.String({ minLength: 1 }), questions: Type.Array(AskQuestion, { minItems: 1, maxItems: 4 }) }, { additionalProperties: false }),
+  /** 本人发起的信息收集草稿：收什么、发给谁、截止、每周固定与「发送」。 */
+  Type.Object({ kind: Type.Literal("collection_draft"), collectionId: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+]);
 
 export const ConversationMessage = Type.Object(
   {
@@ -108,6 +240,21 @@ export const ConversationMessage = Type.Object(
     recoveryNote: Type.Optional(ConversationRecoveryNote),
     /** 只在助手回答上：这一轮实际装进上下文的个人记忆 id。回答里的记忆标记只认这里有的。 */
     memoryUsed: Type.Optional(Type.Array(Type.String())),
+    /** 只在助手回答上：这一轮工具生成的卡（排在回答后面）。 */
+    cards: Type.Optional(Type.Array(ConversationCard, { maxItems: 4 })),
+    /** 只在助手回答上：这一轮跨对象读取的范围（最后一次）。 */
+    readScope: Type.Optional(ReadScope),
+    /** 只在本人的作答消息上：回答 Agent 提问的问答记录。 */
+    answers: Type.Optional(AskAnswerRecord),
+    /**
+     * carried：从首页带过来的一段对话（转议题时复制进议题页对话）；trace：留痕行（「已转到议题 X」），点击直达 meta.href。
+     * 普通消息没有这个字段。
+     */
+    kind: Type.Optional(Type.Union([Type.Literal("carried"), Type.Literal("trace")])),
+    meta: Type.Optional(Type.Object(
+      { issueId: Type.Optional(Type.String()), title: Type.Optional(Type.String()), href: Type.Optional(Type.String()) },
+      { additionalProperties: false },
+    )),
   },
   { additionalProperties: false },
 );
@@ -158,6 +305,8 @@ export const ConversationSseEvent = Type.Union([
     },
     { additionalProperties: false },
   ),
+  /** 跨对象读取的范围标签（三层取用）：界面显示成可以点开调整的标签；同一轮后一条取代前一条。 */
+  Type.Object({ ...StreamBase, type: Type.Literal("scope"), label: ReadScope.properties.label, params: ReadScopeParams, choices: ReadScope.properties.choices }, { additionalProperties: false }),
   /** 本轮档位：快答 / 检索问答 / 深度；检索问答与深度档带一句开场说明（notice），界面先显示它和预计用时。 */
   Type.Object(
     {
@@ -267,8 +416,15 @@ export type TConversationAttachmentRef = Static<typeof ConversationAttachmentRef
 export type TConversationAttachmentInfo = Static<typeof ConversationAttachmentInfo>;
 export type TConversationAttachment = Static<typeof ConversationAttachment>;
 export type TConversationAttachmentUploadResponse = Static<typeof ConversationAttachmentUploadResponse>;
+export type TReadScopeParams = Static<typeof ReadScopeParams>;
+export type TReadScope = Static<typeof ReadScope>;
+export type TAskUserInput = Static<typeof AskUserInput>;
+export type TAskQuestion = Static<typeof AskQuestion>;
+export type TAskAnswerInput = Static<typeof AskAnswerInput>;
+export type TAskAnswerRecord = Static<typeof AskAnswerRecord>;
 export type TConversationMessageRequest = Static<typeof ConversationMessageRequest>;
 export type TConversationMessage = Static<typeof ConversationMessage>;
+export type TConversationCard = Static<typeof ConversationCard>;
 export type TConversationHistory = Static<typeof ConversationHistory>;
 export type TConversationRecoveryNote = Static<typeof ConversationRecoveryNote>;
 export type TConversationSseEvent = Static<typeof ConversationSseEvent>;

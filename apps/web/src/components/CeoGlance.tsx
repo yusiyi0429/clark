@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
-import { ChevronRight, Radar } from "lucide-react";
+import { Activity, ChevronRight, Radar } from "lucide-react";
 import type { Card } from "@/lib/api/client";
 import { payloadOf, type BattlefieldPayload, type IssuePayload, type RadarPayload } from "@/cards/payloads";
 import { HeroButton } from "@/components/HeroButton";
 import { meetingTimesByIssue, type IssueUrgencyLevel } from "@/components/IssueRow";
-import { capabilitySections, issueRowData, radarStatusText } from "@/components/HomeBoard";
+import { capabilitySections, issueRowData, progressEntryLabel, radarStatusText } from "@/components/HomeBoard";
+import { useProgressCounts } from "@/components/progress/useProgressCounts";
 import g from "@/styles/ceo-glance.module.css";
 
 type Props = {
@@ -30,6 +31,7 @@ export function CeoGlance({ cards, onNavigate }: Props) {
   const radar = cards.find((card) => card.kind === "radar");
   const radarPayload = radar ? payloadOf<RadarPayload>(radar) : null;
   const open = (href: string) => (event: { target: EventTarget }) => onNavigate(href, event.target as Element);
+  const progress = useProgressCounts();
 
   return (
     <section className={g.glance} aria-labelledby="ceo-glance-title" data-testid="ceo-glance">
@@ -77,6 +79,17 @@ export function CeoGlance({ cards, onNavigate }: Props) {
             </li>
           );
         })}
+        <li>
+          <HeroButton variant="ghost" data-ts-layout="true" type="button" className={g.row} data-origin="/progress" onPress={open("/progress")} aria-label={progressEntryLabel(progress)}>
+            <span className={g.icon} aria-hidden="true"><Activity size={16} /></span>
+            <span className={g.text}>
+              <span className={g.name}>全局进展</span>
+              {progress?.offPlan ? <small>{progress.offPlan} 条计划外</small> : null}
+            </span>
+            {progress?.redLines ? <span className={g.pending} data-urgency="red">{progress.redLines} 红线</span> : null}
+            <ChevronRight size={16} className={g.arrow} aria-hidden="true" />
+          </HeroButton>
+        </li>
         {radar ? (
           <li>
             <HeroButton variant="ghost" data-ts-layout="true" type="button" className={g.row} data-origin="/radar" onPress={open("/radar")}>

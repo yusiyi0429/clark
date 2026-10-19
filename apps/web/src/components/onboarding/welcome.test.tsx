@@ -42,9 +42,13 @@ import { MissionFlow } from "./MissionFlow";
 import { OnboardingProgress } from "./OnboardingProgress";
 import { RadarSettingsEditor, type RadarSavedSummary } from "@/components/radar/RadarSettingsEditor";
 import { ConnectAgentForm } from "@/components/ConnectAgentForm";
+import { CollectorInstallPanel, collectorCommand, scanSteps, type CollectorStatus } from "./CollectorSetup";
+import { DelegationPanel } from "./DelegationPanel";
+import { revisedLabel } from "./ReviewLists";
+import { CollectorConsentSwitch } from "./CollectorConsentSwitch";
 import { browserApi } from "@/lib/api/client";
 
-const base = { displayName: "测试", companyName: null, voiceprint: { configured: false, enrolled: false, updatedAt: null }, next: { text: "可以开始工作", action: "进入工作台", href: "/me" } };
+const base = { displayName: "测试", companyName: null, delegationStep: false, voiceprint: { configured: false, enrolled: false, updatedAt: null }, next: { text: "可以开始工作", action: "进入工作台", href: "/me" } };
 const member: Extract<OnboardingData, { role: "member" }> = { ...base, role: "member", radar: { configured: false, enabled: false, directions: 0 }, work: { period: "2026-10", planStatus: "none", battlefields: [], missions: [], missionCards: [] } };
 // CEO 的雷达就是公司雷达，不能关闭（enabled 恒为 true）。
 const ceo: Extract<OnboardingData, { role: "ceo" }> = { ...base, role: "ceo", radar: { configured: false, enabled: true, directions: 0 }, company: { sixMonthGoal: "", battlefields: [], capabilities: [], people: [] } };
@@ -92,8 +96,11 @@ function reachFinish(data: OnboardingData, nextPath?: string, summary?: RadarSav
   const editor = radarEditor(reachRadar(data, nextPath));
   if (summary) editor.onSaved!(summary);
   else editor.onLater!();
-  // 雷达之后是「连接外部工具」：选「稍后」进入结束页。
+  // 雷达之后是「连接外部工具」「安装本机采集器」：都选「稍后」；扫描页和最后一页直接往下走，进入结束页。
   (button(renderFlow(data, nextPath), "稍后").props.onClick as () => void)();
+  (button(renderFlow(data, nextPath), "稍后").props.onClick as () => void)();
+  (button(renderFlow(data, nextPath), "下一步").props.onClick as () => void)();
+  (button(renderFlow(data, nextPath), "完成").props.onClick as () => void)();
   return renderFlow(data, nextPath);
 }
 
@@ -135,10 +142,13 @@ describe("收尾按钮文案与实际落点一致", () => {
 
 describe("真实数据的首次引导", () => {
   it("成员先导览、再看 Mission 和本月工作；CEO 步骤保持原样", () => {
-    expect(onboardingSteps(member)).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", "connect", "start"]);
-    expect(onboardingSteps({ ...member, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", "voiceprint", "connect", "start"]);
-    expect(onboardingSteps(ceo)).toEqual(["hello", "tour-notifications", "tour-board", "radar", "connect", "start"]);
-    expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "radar", "voiceprint", "connect", "start"]);
+    const tail = ["connect", "collector", "scan", "review", "start"];
+    expect(onboardingSteps(member)).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", ...tail]);
+    expect(onboardingSteps({ ...member, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", "voiceprint", ...tail]);
+    expect(onboardingSteps(ceo)).toEqual(["hello", "tour-notifications", "tour-board", "radar", ...tail]);
+    expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "radar", "voiceprint", ...tail]);
+    // 委托授权这一步由配置打开，放在结束页之前。
+    expect(onboardingSteps({ ...member, delegationStep: true }).slice(-3)).toEqual(["review", "delegation", "start"]);
   });
   it("成员导览复用同一示意图，高亮通知后转向工作", () => {
     let tree = renderFlow(member);
@@ -331,5 +341,68 @@ describe("雷达步骤", () => {
     expect(form?.props).toMatchObject({ role: "member", defaultName: "我的电脑" });
     expect(elements(tree).find((element) => element.type === "button" && text(element.props.children as ReactNode) === "下一步")).toBeUndefined();
     expect(button(tree, "稍后")).toBeDefined();
+  });
+  it("同意上传会话的开关从「连上 AI 工具」挪到「安装本机采集器」：成员有，CEO 没有；没连上之前「下一步」不能点、可以「稍后」", () => {
+    radarEditor(reachRadar(member)).onLater!();
+    const connect = renderFlow(member);
+    expect(elements(connect).some((element) => element.type === CollectorConsentSwitch)).toBe(false);
+    (button(connect, "稍后").props.onClick as () => void)();
+    const tree = renderFlow(member);
+    expect(text(tree)).toContain("安装本机采集器");
+    const panel = elements(tree).find((element) => element.type === CollectorInstallPanel);
+    expect(panel?.props).toMatchObject({ token: null, status: null });
+    expect(button(tree, "下一步").props.disabled).toBe(true);
+    expect(button(tree, "稍后")).toBeDefined();
+    hooks.reset();
+    radarEditor(reachRadar(ceo)).onLater!();
+    (button(renderFlow(ceo), "稍后").props.onClick as () => void)();
+    expect(text(renderFlow(ceo))).toContain("安装本机采集器");
+  });
+  it("最后一页三个标签都确认之前「完成」不能点；委托授权一步只在配置打开时出现", () => {
+    radarEditor(reachRadar(member)).onLater!();
+    for (const label of ["稍后", "稍后", "下一步"]) (button(renderFlow(member), label).props.onClick as () => void)();
+    const review = renderFlow(member);
+    expect(text(review)).toContain("确认清单");
+    expect(button(review, "完成").props.disabled).toBe(true);
+    hooks.reset();
+    const flagged = { ...member, delegationStep: true };
+    radarEditor(reachRadar(flagged)).onLater!();
+    for (const label of ["稍后", "稍后", "下一步", "完成"]) (button(renderFlow(flagged), label).props.onClick as () => void)();
+    const delegation = renderFlow(flagged);
+    expect(text(delegation)).toContain("授权天枢替你记进本体");
+    expect(elements(delegation).some((element) => element.type === DelegationPanel)).toBe(true);
+    expect(button(delegation, "稍后")).toBeDefined();
+  });
+});
+
+describe("安装采集器与扫描", () => {
+  it("一行安装命令按系统给出，带着天枢地址和令牌", () => {
+    expect(collectorCommand("windows", "https://ts.example/", "tsm_x")).toBe(
+      "& ([scriptblock]::Create((irm 'https://ts.example/api/collector/install.ps1'))) -Server 'https://ts.example' -Token 'tsm_x'");
+    expect(collectorCommand("macos", "https://ts.example", "tsm_x")).toBe(
+      "curl -fsSL 'https://ts.example/api/collector/install.sh' | sh -s -- --server 'https://ts.example' --token 'tsm_x'");
+  });
+  const status = (patch: Partial<CollectorStatus> = {}): CollectorStatus => ({
+    consent: true,
+    devices: [{ id: "d", name: "工作机", platform: "windows", lastSeenAt: "2026-10-18T02:00:00.000Z" }],
+    scannedAt: null, inventory: { scheduledTasks: 3, feishuDocs: 5, memoryFiles: 12 }, ...patch,
+  });
+  const view = (steps: ReturnType<typeof scanSteps>) => steps.map((step) => [step.label, step.status, step.result ?? ""]);
+  it("扫描步骤：等盘点时当前一步高亮；盘点到了三类一起打勾带数字，再整理清单；没连上就停住", () => {
+    expect(view(scanSteps(status(), null))).toEqual([
+      ["连接采集器", "done", "工作机"], ["本机定时任务", "active", ""], ["飞书文档", "pending", ""], ["记忆文件", "pending", ""], ["整理清单", "pending", ""]]);
+    expect(view(scanSteps(status({ scannedAt: "2026-10-18T02:01:00.000Z" }), null))).toEqual([
+      ["连接采集器", "done", "工作机"], ["本机定时任务", "done", "3 项"], ["飞书文档", "done", "5 份"], ["记忆文件", "done", "12 个"], ["整理清单", "active", ""]]);
+    expect(view(scanSteps(status({ scannedAt: "2026-10-18T02:01:00.000Z" }), { basis: 4, schedules: 2 })).at(-1)).toEqual(["整理清单", "done", "依据 4 · 定时任务 2"]);
+    expect(view(scanSteps(status({ devices: [] }), null))).toEqual([
+      ["连接采集器", "stopped", "未连接"], ["本机定时任务", "stopped", "未连接"], ["飞书文档", "stopped", "未连接"], ["记忆文件", "stopped", "未连接"], ["整理清单", "active", ""]]);
+    expect(view(scanSteps(status(), null, true)).slice(1, 2)).toEqual([["本机定时任务", "stopped", "超时"]]);
+    // 没同意采集：本机清单的三步停在「未同意」，直接整理天枢里已有的。
+    expect(view(scanSteps(status({ consent: false }), null)).slice(1)).toEqual([
+      ["本机定时任务", "stopped", "未同意"], ["飞书文档", "stopped", "未同意"], ["记忆文件", "stopped", "未同意"], ["整理清单", "active", ""]]);
+  });
+  it("飞书文档的修订写成「月/日 修订 · 修订人」", () => {
+    expect(revisedLabel("2026-10-16T08:00:00.000Z", "编辑人")).toBe("10/16 修订 · 编辑人");
+    expect(revisedLabel("2026-10-16T08:00:00.000Z", null)).toBe("10/16 修订");
   });
 });

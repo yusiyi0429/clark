@@ -29,11 +29,22 @@ import { createMonthlyReviewAssessAgent, createMonthlyReviewDraftAgent, createMo
 import { createMonthlyReviewScheduler } from "./monthlyReviewScheduler.js";
 import { createMissionRoundScheduler } from "./missionRoundScheduler.js";
 import { createCollectorHealthScheduler } from "./collector.js";
+import { createCollectorDistillAgent, createCollectorDistillScheduler } from "./collectorDistill.js";
+import { createWeeklyReviewDraftAgent } from "./weeklyReviewAgent.js";
+import { createWeeklyReviewScheduler, createWeeklyReviewService } from "./weeklyReviewService.js";
+import { canUseMemberView } from "./memberAccess.js";
 import { recoverStaleMissionDrafts } from "./missionRounds.js";
 import { recoverInterruptedOutcome } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
 import { resolveWorldEnv, resolveWorldTkEnv } from "./worldClient.js";
+import { createJobWorker, exampleJobHandlers } from "./jobs.js";
+import { resolveFeishuEnv } from "./feishu/config.js";
+import { parseAdminPersonIds } from "./admin.js";
+import { createFeishuClient } from "./feishu/client.js";
+import { feishuTokenJobs } from "./feishu/refresh.js";
+import { feishuEventJobs, startFeishuEventStream } from "./feishu/events.js";
+import { feishuNotifyJobs } from "./feishu/notify.js";
 
 function requiredEnv(name: string): string {
   const v = process.env[name];
@@ -56,6 +67,7 @@ const env: AppEnv = {
   companyMemorySeedDir: requiredEnv("COMPANY_MEMORY_SEED_DIR"),
   companyPeopleSeed: requiredEnv("COMPANY_PEOPLE_SEED"),
   companyName: process.env.COMPANY_NAME,
+  onboardingDelegationStep: process.env.ONBOARDING_DELEGATION_STEP === "1",
   missionCardDraftsDir: process.env.MISSION_CARD_DRAFTS_DIR,
   missionCardKnownMissionsFile: process.env.MISSION_CARD_KNOWN_MISSIONS_FILE,
   piBaseUrl: requiredEnv("PI_BASE_URL"),
@@ -67,6 +79,8 @@ const env: AppEnv = {
   // 一号位对话主答与分诊（可选）：不配时主答用 heavy 槽位、分诊用 light 槽位。
   conversationModel: process.env.CONVERSATION_MODEL || undefined,
   triageModel: process.env.TRIAGE_MODEL || undefined,
+  // 个人记忆召回的快模型（可选）：不配时依次用 TRIAGE_MODEL、LIGHT_MODEL。
+  memoryRecallModel: process.env.MEMORY_RECALL_MODEL || undefined,
   conversationApi: process.env.CONVERSATION_API || undefined,
   conversationBaseUrl: process.env.CONVERSATION_BASE_URL || undefined,
   conversationThinking: process.env.CONVERSATION_THINKING || undefined,
@@ -82,6 +96,13 @@ const env: AppEnv = {
   // 本体公司事实（PR #12）：只读投影在 MEMORY_STORAGE_DIR/company；按人授权的域写在 COMPANY_WORLD_ACCESS_FILE（personId → domain 列表）。个人记忆在数据库里。
   companyStorageDir: process.env.MEMORY_STORAGE_DIR ? `${process.env.MEMORY_STORAGE_DIR}/company` : undefined,
   companyWorldAccessFile: process.env.COMPANY_WORLD_ACCESS_FILE || undefined,
+  // 飞书：FEISHU_APP_ID / FEISHU_APP_SECRET / FEISHU_TOKEN_KEY（/ FEISHU_TOKEN_KEY_VERSION）；都不配时关闭。
+  feishu: resolveFeishuEnv(process.env),
+  // 管理员视图：TIANSHU_ADMIN_PERSON_IDS（逗号分隔的 personId）；不配时没有人能看。
+  adminPersonIds: parseAdminPersonIds(process.env.TIANSHU_ADMIN_PERSON_IDS),
+  // 影响卡：live（缺省）推送；shadow 只在后台记录，不打扰人。
+  impactCardMode: process.env.IMPACT_CARD_MODE === "shadow" ? "shadow" : "live",
+  collectionBitable: process.env.FEISHU_BITABLE_MODE === "live" ? "live" : "mock",
 };
 
 const port = Number(process.env.PORT ?? "4000");
@@ -186,6 +207,12 @@ const monthlyReviewService = createMonthlyReviewService({
   },
 });
 const monthlyReviewScheduler = createMonthlyReviewScheduler(monthlyReviewService);
+// 周复盘（D-01）：每周五 15:00（上海时间）给成员工作台里的每个人生成本周草稿；与个人复盘同一个 heavy 模型槽位。
+const weeklyReviewService = createWeeklyReviewService({ pool, agent: createWeeklyReviewDraftAgent(reviewAgentOptions),
+  people: () => companyMemory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId) });
+const weeklyReviewScheduler = createWeeklyReviewScheduler(weeklyReviewService);
+// 采集器原文整理（D-02）：同一个 heavy 模型，每 5 分钟整理一次，原文 14 天后清空。TODO(jobs)：jobs 合入后迁成周期任务。
+const collectorDistillScheduler = createCollectorDistillScheduler(pool, createCollectorDistillAgent(reviewAgentOptions));
 const now = () => new Date();
 const missionRoundScheduler = createMissionRoundScheduler(pool, now);
 const collectorHealthScheduler = createCollectorHealthScheduler(pool, now);
@@ -210,6 +237,9 @@ const recordingService = createMeetingRecordingService({
   companyMemory,
 });
 await recordingService.recoverInterrupted();
+// 飞书（配了才启用）：一个开放接口客户端，免登路由与后台任务共用。
+const feishuClient = env.feishu ? createFeishuClient(env.feishu) : undefined;
+const feishuTokens = env.feishu && feishuClient ? feishuTokenJobs({ pool, env: env.feishu, client: feishuClient, now }) : undefined;
 const app = await buildApp({
   pool,
   env,
@@ -219,22 +249,49 @@ const app = await buildApp({
   researchService,
   monthlyPlanService,
   monthlyReviewService,
+  weeklyReviewService,
   recordingService,
   webSearch: bochaSearch,
   outlets: outletAdapter,
+  feishuClient,
 });
+// 公共后台任务（jobs.ts）：每 5 秒领一批；现有各功能的 setInterval 暂不迁移。
+// 会后链路：妙记轮询与「妙记生成」事件、分层同步、提醒与代判、影响卡推送与写本体；飞书通知配了飞书才发。
+const followThroughJobs = app.meetingFollowThrough.jobs();
+// 文档变更：群里 @机器人 贴文档链接即发布（im.message.receive_v1），找候选走后台任务。
+const docChangeJobs = app.docChanges.jobs();
+const jobWorker = createJobWorker({
+  pool,
+  handlers: {
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers,
+    ...(env.feishu ? feishuEventJobs(pool, { ...followThroughJobs.feishuEvents, ...docChangeJobs.feishuEvents }) : {}),
+    ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
+  },
+  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring],
+});
+let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {
+  feishuEvents?.close();
   scheduler.close();
   monthlyScheduler.close();
   monthlyReviewScheduler.close();
   await monthlyReviewService.idle();
   missionRoundScheduler.close();
   collectorHealthScheduler.close();
+  await jobWorker.close();
+  weeklyReviewScheduler.close();
+  await weeklyReviewService.idle();
+  await collectorDistillScheduler.close();
 });
 scheduler.start();
 monthlyScheduler.start();
 monthlyReviewScheduler.start();
 missionRoundScheduler.start();
 collectorHealthScheduler.start();
+jobWorker.start();
+weeklyReviewScheduler.start();
+collectorDistillScheduler.start();
 await app.listen({ port, host: "0.0.0.0" });
+// 飞书长连接：收到事件只落库并排 jobs，3 秒内 ack。
+feishuEvents = env.feishu ? startFeishuEventStream(pool, env.feishu) : undefined;
 console.log(`warmap api listening on :${port} (${join(".", "migrations")} applied, build ${env.buildSha})`);

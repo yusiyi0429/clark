@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const css = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8");
+// Windows 检出（autocrlf）是 CRLF，断言按 LF 书写：读入后统一换行。
+const css = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 
 /** 取出以 header 开头的整个 at-rule 块（按花括号配对），找不到返回 undefined。 */
 function block(source: string, header: string): string | undefined {

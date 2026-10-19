@@ -9,7 +9,7 @@ import {
   type TPostMeetingCandidate,
 } from "@warmap/contracts";
 import { createTestApp, createTestDb, preflightCandidate, testEnv, type TestApp } from "./helpers.js";
-import { recoverInterruptedOutcome, type PostMeetingAgent, type PostMeetingAgentInput } from "../src/outcome.js";
+import { assessOutcomeCandidate, recoverInterruptedOutcome, type PostMeetingAgent, type PostMeetingAgentInput } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import { migrate } from "../src/migrate.js";
 import { signActionId } from "../src/actionToken.js";
@@ -332,7 +332,7 @@ describe("deterministic PostMeeting candidate validation", () => {
     }
   });
 
-  it("rejects unknown owners, owners not derivable from the turn, non-CEO judgments and out-of-scope issues", async () => {
+  it("rejects unknown owners, owners not derivable from the turn and non-CEO judgments; keeps an item whose issueId is out of scope, unlinked", async () => {
     const candidate: TPostMeetingCandidate = {
       summary: "x",
       items: [
@@ -348,16 +348,39 @@ describe("deterministic PostMeeting candidate validation", () => {
       const { cookie, meetingId } = await readyMeeting(t, "owner");
       const res = await importVia(t, "service", meetingId, cookie, transcript(meetingId));
       const outcome = res.json().cards[0].payload.outcome;
-      expect(outcome.items.map((item: { id: string }) => item.id)).toEqual(["item-5"]);
+      expect(outcome.items.map((item: { id: string; issueId: string | null }) => [item.id, item.issueId])).toEqual([["item-4", null], ["item-5", null]]);
       expect(outcome.warnings.map((warning: { reason: string }) => warning.reason)).toEqual([
         "owner 不是该 Meeting 的 participant: person-not-in-seed",
         "owner 无法由该 turn 确定: person-fixture-001",
         "CEO 判断必须来自 CEO turn",
-        "issueId 不属于该 Meeting: 00000000-0000-4000-8000-000000000001",
       ]);
     } finally {
       await t.close();
     }
+  });
+
+  it("没挂议题的会：模型把会议 id 填进 issueId 时当没填，条目照常抽出", () => {
+    const meetingId = randomUUID();
+    const assessed = assessOutcomeCandidate({
+      candidate: { summary: "接口切到 v2", items: [
+        { kind: "decision", text: "接口统一改成 v2", turnId: "turn-001", quote: "灯塔项目优先", issueId: meetingId },
+        { kind: "todo", text: "排期", turnId: "turn-002", quote: "我周五前提交资源排期", ownerPersonId: "person-fixture-002", issueId: meetingId },
+      ] },
+      turns: [
+        { id: "turn-001", speakerId: "person-fixture-001", text: "灯塔项目优先。" },
+        { id: "turn-002", speakerId: "person-fixture-002", text: "我周五前提交资源排期。" },
+      ],
+      participants: [
+        { personId: "person-fixture-001", displayName: "测试甲", roles: ["ceo"], sourceRef: "t", updatedAt: "2026-10-19T00:00:00Z" },
+        { personId: "person-fixture-002", displayName: "测试乙", roles: ["dri"], sourceRef: "t", updatedAt: "2026-10-19T00:00:00Z" },
+      ],
+      ceoParticipantId: "person-fixture-001",
+      issueIds: [],
+    });
+    expect(assessed.ok).toBe(true);
+    if (!assessed.ok) return;
+    expect(assessed.items.map((item) => [item.kind, item.issueId])).toEqual([["decision", null], ["todo", null]]);
+    expect(assessed.warnings).toEqual([]);
   });
 
   it("accepts an owner explicitly named in the quote and a reopenWhen only for an accepted parent decision", async () => {

@@ -93,11 +93,14 @@ services:
       MISSION_CARD_DRAFTS_DIR: ${MISSION_CARD_DRAFTS_DIR:-/repo/seed/placeholders}
       MISSION_CARD_KNOWN_MISSIONS_FILE: ${MISSION_CARD_KNOWN_MISSIONS_FILE:-/repo/seed/imports/2026-10-known-missions.json}
       COMPANY_NAME: ${COMPANY_NAME:-}
+      ONBOARDING_DELEGATION_STEP: ${ONBOARDING_DELEGATION_STEP:-}
       PI_BASE_URL: ${PI_BASE_URL:?PI_BASE_URL required}
       PI_API_KEY: ${PI_API_KEY:?PI_API_KEY required}
       LIGHT_MODEL: ${LIGHT_MODEL:?LIGHT_MODEL required}
       HEAVY_MODEL: ${HEAVY_MODEL:?HEAVY_MODEL required}
       COMPACTION_MODEL: ${COMPACTION_MODEL:?COMPACTION_MODEL required}
+      # 个人记忆召回的快模型（可选）：不配时依次用 TRIAGE_MODEL、LIGHT_MODEL。
+      MEMORY_RECALL_MODEL: ${MEMORY_RECALL_MODEL:-}
       # Radar Provider 可选：缺失时 Radar Card 如实显示未配置。
       # 唯一 Web Search Provider 为博查；公众号只经内网 MCP sidecar，账号级、非关键词替代。
       BOCHA_API_KEY: ${BOCHA_API_KEY:-}

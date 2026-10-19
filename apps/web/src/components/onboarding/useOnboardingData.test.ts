@@ -25,6 +25,7 @@ import { useOnboardingData } from "./useOnboardingData";
 const initial: components["schemas"]["OnboardingResponse"] = {
   role: "ceo", displayName: "测试", companyName: null,
   voiceprint: { configured: false, enrolled: false, updatedAt: null },
+  delegationStep: false,
   radar: { configured: false, enabled: true, directions: 0 },
   company: { sixMonthGoal: "", battlefields: [], capabilities: [], people: [] },
   next: { text: "3 条意见待你处理", action: "查看 10 月任务卡", href: "/mission-cards/first" },

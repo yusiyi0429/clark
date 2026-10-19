@@ -46,7 +46,7 @@ export async function searchOwnConversationHistory(q: Query, input: {
   const rows = (await q(
     `SELECT m.conversation_id, m.sequence, m.role, m.content, m.created_at, c.scope, c.archived_at IS NOT NULL AS archived
        FROM conversation_messages m JOIN conversations c ON c.id = m.conversation_id
-      WHERE c.owner_id = $1 AND c.deleted_at IS NULL AND ($3::uuid IS NULL OR m.run_id <> $3::uuid)
+      WHERE c.owner_id = $1 AND c.deleted_at IS NULL AND ($3::uuid IS NULL OR m.run_id <> $3::uuid) AND m.kind = 'message'
         AND m.content ILIKE ANY($2::text[])
       ORDER BY m.created_at DESC
       LIMIT ${CANDIDATE_ROWS}`,

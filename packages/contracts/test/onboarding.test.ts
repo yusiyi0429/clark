@@ -8,6 +8,7 @@ const common = {
   next: { text: "可以开始了", action: "进入工作台", href: "/me" },
   voiceprint: { configured: false, enrolled: false, updatedAt: null },
   radar: { configured: false, enabled: false, directions: 0 },
+  delegationStep: false,
 };
 const company = { sixMonthGoal: "", battlefields: [], capabilities: [], people: [] };
 const work = { period: "2026-10", planStatus: "none", battlefields: [], missions: [], missionCards: [] };

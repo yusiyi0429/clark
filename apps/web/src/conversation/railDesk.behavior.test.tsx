@@ -43,7 +43,7 @@ vi.mock("react", async (importOriginal) => {
     },
   };
 });
-vi.mock("./useConversation", () => ({ useConversation: (scope: string) => ({ scope, messages: [], streaming: false,
+vi.mock("./useConversation", () => ({ CONVERSATION_SEND: "conversation-send", useConversation: (scope: string) => ({ scope, messages: [], streaming: false,
   attachments: [], error: null, historyStatus: "ready", historyError: null, retryHistory: vi.fn(), send: harness.privateSend, ...harness.conversation }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("./useMissionGroup", () => ({ useMissionGroup: () => ({ view: { members: [], entries: [] }, send: harness.groupSend }) }));

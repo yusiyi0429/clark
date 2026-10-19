@@ -19,6 +19,9 @@ import { REMARK_PLUGINS } from "@/lib/markdown";
 import type { Card } from "@/lib/api/client";
 import { draftAnswer, draftRequest, prepareQuestion, readRequest, requestError, runRequestAction } from "./requestApi";
 import { RequestSteps, runningSteps } from "./RequestSteps";
+import { ImpactCardScreen } from "./ImpactCard";
+import { DocChangeScreen } from "./DocChange";
+import { CollectionScreen } from "@/components/collections/CollectionScreen";
 import s from "./requests.module.css";
 
 const NO_CARDS: Card[] = [];
@@ -37,7 +40,17 @@ export function statusTone(request: Pick<TRequestView, "status">, mine: TRequest
   return { label: "进行中", tone: "wait" };
 }
 
-export function RequestScreen({ initialRequest, base }: { initialRequest: TRequestView | null; base: string }) {
+export function RequestScreen({ initialRequest, base, initialPrompt }: { initialRequest: TRequestView | null; base: string; initialPrompt?: string }) {
+  // 影响卡也走送达通道，二级页换成影响卡的样子。
+  if (initialRequest?.kind === "impact") return <ImpactCardScreen request={initialRequest} base={base} />;
+  // 文档变更：作者确认修订 / 取代哪份，或旧文档负责人回答还有效吗。
+  if (initialRequest?.kind === "doc_change") return <DocChangeScreen request={initialRequest} />;
+  // ③ 信息收集的一轮：待办卡（接收人）或汇总（发起人）。
+  if (initialRequest?.kind === "collection") return <CollectionScreen request={initialRequest} />;
+  return <RelayRequestScreen initialRequest={initialRequest} base={base} initialPrompt={initialPrompt} />;
+}
+
+function RelayRequestScreen({ initialRequest, base, initialPrompt }: { initialRequest: TRequestView | null; base: string; initialPrompt?: string }) {
   const workspace = useWorkspace();
   const [request, setRequest] = useState(initialRequest);
   const sent = request !== null && request.status !== "draft";
@@ -69,7 +82,7 @@ export function RequestScreen({ initialRequest, base }: { initialRequest: TReque
         <div className={s.content}>
           {sent
             ? <SentRequest request={request} onChange={setRequest} />
-            : <DraftRequest request={request} onChange={setRequest} onSent={(next) => {
+            : <DraftRequest request={request} initialPrompt={initialPrompt} onChange={setRequest} onSent={(next) => {
               setRequest(next);
               workspace.showToast(`已发给 ${next.recipients.map((person) => person.displayName).join("、")}`);
               if (!initialRequest) workspace.navigate(`${base}/${encodeURIComponent(next.id)}`);
@@ -82,8 +95,13 @@ export function RequestScreen({ initialRequest, base }: { initialRequest: TReque
 
 /* ---------- 发起人：起草 → 要你定 → 预览 → 发送 ---------- */
 
-function DraftRequest({ request, onChange, onSent }: { request: TRequestView | null; onChange: (next: TRequestView) => void; onSent: (next: TRequestView) => void }) {
-  const [prompt, setPrompt] = useState(request?.prompt ?? "");
+/** compact：对话里的草稿卡（conversation/EntryCards）用，原话已在对话里，不显示起草框；改了「要你定」的回答时在那一组下面给「按回答重写」。 */
+export function DraftRequest({ request, onChange, onSent, compact = false, initialPrompt }: {
+  request: TRequestView | null; onChange: (next: TRequestView) => void; onSent: (next: TRequestView) => void; compact?: boolean;
+  /** 从影响卡「可以问」进来时带上的开头。 */
+  initialPrompt?: string;
+}) {
+  const [prompt, setPrompt] = useState(request?.prompt ?? initialPrompt ?? "");
   const [steps, setSteps] = useState<TRequestStep[] | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>(() => Object.fromEntries((request?.clarifications ?? []).map((item) => [item.question, item.answer ?? ""])));
   const [chosen, setChosen] = useState<string[]>(() => request?.candidates.map((person) => person.personId) ?? []);
@@ -91,7 +109,7 @@ function DraftRequest({ request, onChange, onSent }: { request: TRequestView | n
   const [busy, setBusy] = useState<"draft" | "send" | null>(null);
   const [error, setError] = useState("");
   const promptRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { if (!request) promptRef.current?.focus(); }, [request]);
+  useEffect(() => { if (!request && !compact) promptRef.current?.focus(); }, [request, compact]);
 
   const clarifications = request?.clarifications ?? [];
   const unanswered = clarifications.filter((item) => !answers[item.question]?.trim()).length;
@@ -128,7 +146,7 @@ function DraftRequest({ request, onChange, onSent }: { request: TRequestView | n
 
   return (
     <div className={s.stack}>
-      <section className={s.composer} data-compact={request ? "" : undefined}>
+      {compact ? null : <section className={s.composer} data-compact={request ? "" : undefined}>
         <textarea ref={promptRef} aria-label="请谁做什么" placeholder="请谁做什么" rows={request ? 2 : 4} maxLength={2000} value={prompt} disabled={busy !== null}
           onChange={(event) => setPrompt(event.target.value)}
           onKeyDown={(event) => { if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void draft(); } }} />
@@ -138,7 +156,7 @@ function DraftRequest({ request, onChange, onSent }: { request: TRequestView | n
             <Sparkles size={16} aria-hidden="true" />{request ? "按回答重写" : "起草"}
           </Button>
         </div>
-      </section>
+      </section>}
 
       {steps ? <RequestSteps steps={steps} label="起草步骤" /> : null}
       {error ? <p className={s.error} role="alert">{error}</p> : null}
@@ -159,6 +177,13 @@ function DraftRequest({ request, onChange, onSent }: { request: TRequestView | n
               </li>
             ))}
           </ol>
+          {compact && stale ? (
+            <div className={s.replyBar}>
+              <Button variant="primary" className={s.primary} isDisabled={busy !== null} onPress={() => void draft()}>
+                <Sparkles size={16} aria-hidden="true" />{busy === "draft" ? "重写中" : "按回答重写"}
+              </Button>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -243,7 +268,7 @@ function SentRequest({ request, onChange }: { request: TRequestView; onChange: (
   );
 }
 
-function QuestionThread({ request, busy, perform }: {
+export function QuestionThread({ request, busy, perform }: {
   request: TRequestView; busy: boolean; perform: (action: TActionDescriptor | undefined, input?: unknown) => Promise<boolean>;
 }) {
   const ref = useRef<HTMLElement>(null);
@@ -317,7 +342,7 @@ function AnswerBox({ request, question, busy, perform }: {
 }
 
 /** 接收人提问：定位待办 → 查有没有人问过 → 整理问题 → 等你确认。查到答案就停在第二步。 */
-function AskBox({ request, perform }: { request: TRequestView; perform: (action: TActionDescriptor | undefined, input?: unknown) => Promise<boolean> }) {
+export function AskBox({ request, perform }: { request: TRequestView; perform: (action: TActionDescriptor | undefined, input?: unknown) => Promise<boolean> }) {
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<"idle" | "checking" | "found" | "preview" | "sending">("idle");
   const [result, setResult] = useState<TPrepareRequestQuestionResponse | null>(null);

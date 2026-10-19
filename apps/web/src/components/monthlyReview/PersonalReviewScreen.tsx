@@ -8,13 +8,13 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import ReactMarkdown from "react-markdown";
-import { Check, Loader2, Sparkles, X } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { Button } from "ts-design/primitives";
 import type { TMonthlyReviewField, TPersonalReviewPayload } from "@warmap/contracts";
 import { browserApi, type Card } from "@/lib/api/client";
 import { monthDayTime } from "@/lib/companyTime";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
+import { CONVERSATION_SEND } from "@/conversation/useConversation";
 import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { FIELD_HINTS, FIELD_LABELS, FIELDS, OPTIONAL_FIELDS, monthOf, requestError, ReviewActionError, type ReviewAction } from "./reviewApi";
@@ -22,30 +22,15 @@ import { REVIEW_INSTRUCTION, openConnectionDialog, personalStatusText, runPerson
 import { FeedbackLink } from "./FeedbackLink";
 import { Sources } from "./Sources";
 import { fromEditable, inlineSources, toEditable } from "./citationText";
-import { CITATION_MARKDOWN } from "@/conversation/citations";
-import { remarkCitationMarks } from "@/conversation/citationMarks";
+import { GenerationSteps, ReviewText } from "./ReviewParts";
 import s from "@/components/missionCards/mission-card.module.css";
 import r from "./monthly-review.module.css";
 
 type Drafts = Partial<Record<TMonthlyReviewField, string>>;
 const NO_CARDS: Card[] = [];
-const REMARK_PLUGINS = [remarkCitationMarks];
-
-/** 一栏正文：每行一段，句末出处显示成小标记。 */
-function ReviewText({ text }: { text: string }) {
-  return <div className={r.reviewText}><ReactMarkdown remarkPlugins={REMARK_PLUGINS} {...CITATION_MARKDOWN}>{text.replace(/\n+/g, "\n\n")}</ReactMarkdown></div>;
-}
-
-/** 生成的步骤：读 Mission 卡 → 读每周复盘 → 读采集记录 → 起草。 */
-function GenerationSteps({ steps }: { steps: TPersonalReviewPayload["generationSteps"] }) {
-  return <ol className={r.steps}>
-    {steps.map((step) => <li key={step.id} data-state={step.status}>
-      <span className={r.stepMark} aria-hidden>{step.status === "running" ? <Loader2 size={12} /> : step.status === "done" ? <Check size={12} /> : step.status === "failed" ? <X size={12} /> : null}</span>
-      <span>{step.label}{step.result ? <small>{step.result}</small> : null}</span>
-    </li>)}
-  </ol>;
-}
 const SOURCE_TEXT = { agent_tool: "你的 AI 工具", co_agent: "Co-Agent", manual: "手写" } as const;
+/** 「提交前核对」替本人在右边对话里说的这一句：Agent 对照 Mission 核对，要本人拿主意的用提问卡问（askUser.ts）。 */
+const CHECK_MESSAGE = "提交前帮我核对一遍复盘，需要我拿主意的地方直接问我。";
 
 function tone(status: TPersonalReviewPayload["status"]): "wait" | "warn" | "done" | undefined {
   if (status === "submitted") return "done";
@@ -142,6 +127,11 @@ export function PersonalReviewScreen({ initialReview }: { initialReview: TPerson
     if (unsaved && latest) accept(latest);
     if (await perform((latest ?? review).actions.find((candidate) => candidate.actionType === "personal-review.draft_with_co_agent"))) setDrafts({});
   };
+  // 提交前核对（复盘确认环节）：先存下没保存的修改（Agent 读的是存下的复盘），再在右边对话里请 Agent 核对。
+  const check = async () => {
+    if (dirtyFields.length && !(await save())) return;
+    window.dispatchEvent(new CustomEvent(CONVERSATION_SEND, { detail: { scope: review.conversationScope, text: CHECK_MESSAGE } }));
+  };
   const skip = async () => {
     if (!(await ask(`不等 ${review.personName} 了，继续？跳过会记在名单上，大家都看得到。`, "不等了，继续"))) return;
     await perform(action("personal-review.skip"), undefined, "已跳过。");
@@ -236,6 +226,7 @@ export function PersonalReviewScreen({ initialReview }: { initialReview: TPerson
           {editable ? <div className={r.bar}>
             <p className={`${s.hint} ${r.hint}`}>CEO 与战场负责人可见</p>
             {dirtyFields.length ? <Button variant="ghost" className={s.secondary} isDisabled={pending} onPress={() => void save("已保存。")}>保存</Button> : null}
+            {isSelf && submitAction ? <Button variant="ghost" className={s.secondary} isDisabled={pending} onPress={() => void check()}>提交前核对</Button> : null}
             {submitAction || dirtyFields.length ? <Button variant="primary" className={s.primary} isDisabled={pending || (!submitAction && !dirtyFields.length)} onPress={() => void submit()}>{pending ? "正在提交…" : "提交复盘"}</Button> : null}
           </div> : null}
 

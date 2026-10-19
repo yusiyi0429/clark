@@ -121,7 +121,9 @@ describe("address and opening rule reaches every prompt", () => {
     const dir = fileURLToPath(new URL("../src/", import.meta.url));
     // conversationRouting 的分诊提示词只让快模型输出一行档位 JSON，不产出给人看的文字；开场说明是固定模板（另有用例核对）。
     // conversationPrompt 只是对话系统提示的按档位替换段（快答检索条款），替换进去以后的整段仍带表达要求（另有用例核对）。
-    const exempt = new Set(["dictationPolishPrompt.ts", "promptStyle.ts", "conversationRouting.ts", "conversationPrompt.ts"]);
+    // personalMemoryRecall 的召回提示词与分诊一样只让快模型输出一行编号 JSON，不产出给人看的文字。
+    // memoryImportAgent 的分类和核对提示词只输出分类标签、把握和不超过 40 字的短标题，不产出给人看的段落。
+    const exempt = new Set(["dictationPolishPrompt.ts", "promptStyle.ts", "conversationRouting.ts", "conversationPrompt.ts", "personalMemoryRecall.ts", "memoryImportAgent.ts"]);
     const missing = readdirSync(dir).filter((file) => file.endsWith(".ts") && !exempt.has(file)).filter((file) => {
       const source = readFileSync(join(dir, file), "utf8");
       const declaresPrompt = /(?:const|export const) [A-Z_]*PROMPT\s*=\s*[`[]/.test(source) || /`你是[^`]{0,40}(Agent|Co-Agent|助手)/.test(source);

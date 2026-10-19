@@ -1,9 +1,12 @@
 "use client";
 
-import { Fragment, memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, memo, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import remend from "remend";
-import { ArrowDown, Paperclip, Quote } from "lucide-react";
+import { ArrowDown, ArrowRight, Paperclip, Quote } from "lucide-react";
+import { WorkspaceContext } from "@/components/shell/WorkspaceContext";
+import type { TReadScope } from "@warmap/contracts";
+import { ScopeChip } from "./ScopeChip";
 import { HeroButton } from "@/components/HeroButton";
 import { StepList, StepToggle, type Step } from "@/components/steps/StepList";
 import type { Message, ThinkingStage, TurnProgress, TurnThought } from "./useConversation";
@@ -11,6 +14,7 @@ import { QuoteChips } from "./QuoteChips";
 import { pageContextBattlefield, readQuotedMessage } from "./quotes";
 import { createArrivalLog, rehypeArrival, type ArrivalLog } from "./arrival";
 import { parseAnswerOptions } from "./answerOptions";
+import { AnswerRecord } from "./AskPanel";
 import { splitStableBlocks, useSmoothText } from "./smoothText";
 import { CITATION_MARKDOWN, MemoryUsedProvider } from "./citations";
 import { holdOpenLink, remarkCitationMarks } from "./citationMarks";
@@ -120,18 +124,41 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
     && a.role === b.role && a.content === b.content
     && a.recoveryNote?.text === b.recoveryNote?.text && a.recoveryNote?.detail === b.recoveryNote?.detail
     && (a.memoryUsed ?? []).join("|") === (b.memoryUsed ?? []).join("|")
+    && a.readScope?.label === b.readScope?.label && a.kind === b.kind && a.meta?.href === b.meta?.href && a.answers?.askId === b.answers?.askId
     && sameList(a.attachments, b.attachments, (item) => item.id)
     && sameList(a.referencesSnapshot, b.referencesSnapshot, (item) => `${item.cardId}@${item.version}`);
 }
 
+/** 首页留痕行（转议题之后）：「已转到议题 X」，点击直达议题页。像聊天里的系统行，居中、浅灰、不占一条回答的版面。 */
+function TraceLine({ message }: { message: Message }) {
+  const workspace = useContext(WorkspaceContext);
+  const href = message.meta?.href;
+  return (
+    <div className={s.trace} data-chat-role="trace" data-testid="conversation-trace">
+      {href ? (
+        <a href={href} onClick={(event) => { event.preventDefault(); if (workspace) workspace.navigate(href); else window.location.assign(href); }}>
+          <span>{message.content}</span><ArrowRight size={13} aria-hidden />
+        </a>
+      ) : <span>{message.content}</span>}
+    </div>
+  );
+}
+
 /** 一条消息（clark `ConversationTurn`）：不显示角色名，读屏读「你 / 天枢」。 */
 export const ConversationTurn = memo(function ConversationTurn({ message, ms, streaming = false, thought, steps }: TurnProps) {
+  if (message.kind === "trace") return <TraceLine message={message} />;
+  return <ConversationTurnBody message={message} ms={ms} streaming={streaming} thought={thought} steps={steps} />;
+}, sameTurn);
+
+function ConversationTurnBody({ message, ms, streaming = false, thought, steps }: TurnProps) {
   const user = message.role === "user";
   const [thoughtOpen, setThoughtOpen] = useState(false);
   const [stepsOpen, setStepsOpen] = useState(false);
   const stepsId = useId();
-  const thoughtToggle = thought || steps?.length ? (
+  const scope = !user && message.readScope ? <ScopeChip scope={message.readScope} /> : null;
+  const thoughtToggle = thought || steps?.length || scope ? (
     <>
+      {scope}
       {thought ? <button type="button" className={s.thoughtToggle} aria-expanded={thoughtOpen} onClick={() => setThoughtOpen((open) => !open)}
         data-testid="conversation-thought-toggle">已思考 {thought.seconds} 秒</button> : null}
       {steps?.length ? <StepToggle steps={steps} open={stepsOpen} onToggle={() => setStepsOpen((open) => !open)} className={s.thoughtToggle} controls={stepsId} /> : null}
@@ -190,18 +217,27 @@ export const ConversationTurn = memo(function ConversationTurn({ message, ms, st
       ) : null}
       {battlefield ? <div className={s.pageTag}>战场 · {battlefield}</div> : null}
       {quoted.quotes.length ? <QuoteChips quotes={quoted.quotes} sent /> : null}
-      <div className={s.prose}>
-        <MemoryUsedProvider value={memoryUsed}>
-          <MarkdownBody text={quoted.message} streaming={streaming} />
-        </MemoryUsedProvider>
-      </div>
+      {/* 回答 Agent 提问的那一句：画成紧凑的问答记录，不显示原文。 */}
+      {user && message.answers ? <AnswerRecord record={message.answers} /> : (
+        <div className={s.prose}>
+          <MemoryUsedProvider value={memoryUsed}>
+            <MarkdownBody text={quoted.message} streaming={streaming} />
+          </MemoryUsedProvider>
+        </div>
+      )}
       {/* 这一轮用了备用模型或走过恢复：末尾一行很淡的小字，悬停看具体一点的说明（不写模型名和英文原文）。 */}
       {!user && !streaming && message.recoveryNote?.text ? (
         <p className={s.recoveryNote} title={message.recoveryNote.detail || undefined} data-testid="conversation-recovery-note">{message.recoveryNote.text}</p>
       ) : null}
     </article>
   );
-}, sameTurn);
+}
+
+/** 从首页带过来的那一段（议题页对话的开头）：前面一行很淡的「首页 · 10月18日」。 */
+function CarriedDivider({ message }: { message: Message }) {
+  const day = message.createdAt ? new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "long", day: "numeric" }).format(new Date(message.createdAt)) : "";
+  return <div className={s.carried} data-testid="conversation-carried">首页{day ? ` · ${day}` : ""}</div>;
+}
 
 /**
  * 按位置给 key：流式那条占的就是最终回答的位置（messages.length），完成读回历史后最终回答落在同一个 key 上，
@@ -232,6 +268,7 @@ export function ConversationTurns({ messages, partial = "", footer, after, trail
     <>
       {messages.map((message, index) => (
         <Fragment key={`turn-${index}`}>
+          {message.kind === "carried" && messages[index - 1]?.kind !== "carried" ? <CarriedDivider message={message} /> : null}
           <ConversationTurn message={message} ms={message.role === "assistant" ? turnMs(messages, index) : undefined}
             thought={!partial && thought && index === messages.length - 1 && message.role === "assistant" ? thought : undefined}
             steps={!partial && steps?.length && index === messages.length - 1 && message.role === "assistant" ? steps : undefined} />
@@ -290,7 +327,7 @@ export function ThinkingStream({ text }: { text: string }) {
  * 回答进行中的一行（clark `ConversationThinking`）：脉冲点、阶段、在查什么 / 思考要点、已用秒数（深度档另附预计用时）、停止。
  * 非深度档中途升级时，上方多一行「这个问题需要更深入的分析，预计还需约 X 秒。」；正文开始后整行淡化。
  */
-export function ConversationThinking({ stage, startedAt, onStop, route, progress, steps = [], thought }: {
+export function ConversationThinking({ stage, startedAt, onStop, route, progress, steps = [], thought, readScope }: {
   stage: ThinkingStage; startedAt: number; onStop: () => void;
   route?: { tier: "quick" | "grounded" | "deep"; expectSeconds: number } | null;
   progress?: TurnProgress;
@@ -298,6 +335,8 @@ export function ConversationThinking({ stage, startedAt, onStop, route, progress
   steps?: Step[];
   /** 思考摘要：正文开始前在进度行上方滚动显示，正文开始后收到这条回答的「已思考 N 秒」里。 */
   thought?: TurnThought | null;
+  /** 这一轮跨对象读取的范围：先显示范围标签，再显示步骤。 */
+  readScope?: TReadScope | null;
 }) {
   const [elapsed, setElapsed] = useState(() => Date.now() - startedAt);
   useEffect(() => {
@@ -323,6 +362,7 @@ export function ConversationThinking({ stage, startedAt, onStop, route, progress
           停止
         </HeroButton>
       </div>
+      {readScope && !answering ? <div className={s.liveScope}><ScopeChip scope={readScope} /></div> : null}
       {stepped && !answering ? <StepList steps={steps} /> : null}
     </div>
   );

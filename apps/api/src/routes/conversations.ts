@@ -2,11 +2,17 @@ import { createHash, randomUUID } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
 import {
+  AcceptIssueDraftRequest,
   ConversationMessageRequest,
   ConversationScope,
+  IssueDraftResponse,
+  type TAcceptIssueDraftRequest,
+  type TAskAnswerRecord,
   type TConversationAttachment,
+  type TConversationCard,
   type TConversationMessageRequest,
   type TConversationScope,
+  type TReadScope,
 } from "@warmap/contracts";
 import {
   ACTIVE_CONVERSATION_WHERE,
@@ -22,7 +28,6 @@ import {
 import { AGENT_ROLES, anonUserId, conversationScope, conversationThreadId, conversationTurnId, preview, tracedTurn } from "../tracing.js";
 import { MAX_MATERIAL_FILES, MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch } from "../materialParser.js";
 import { logEvent } from "../observability.js";
-import { personDisplayNames } from "../people.js";
 import { getIssueRow } from "../issues.js";
 import { getMeetingRow } from "../meetingStore.js";
 import { projectMemberIssueCard, projectMemberMeetingCard } from "../memberCards.js";
@@ -33,10 +38,16 @@ import { ConversationTurnError, recoveryNote, resumeInstruction, shortFailureRea
 import { personalMemoryToolsFor, unknownMemoryMarks } from "../personalMemory.js";
 import { searchOwnConversationHistory } from "../conversationHistorySearch.js";
 import { createStepTracker } from "../conversationSteps.js";
-import type { AppInstance, RouteContext, SessionPerson } from "./shared.js";
+import { createConversationEntries, openTodoContext } from "../conversationEntries.js";
+import { loadAsk, readAnswers, type AskUser, type QuestionsCard } from "../askUser.js";
+import type { RequestAgent } from "../delivery/requestAgent.js";
+import { isRealPerson, personDisplayNames } from "../people.js";
+import { createCompanyMap, defaultFocus, scopeLabel } from "../companyMap.js";
+import { acceptIssueDraft, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, saveDraftMaterial } from "../issueDrafts.js";
+import { idParams, type AppInstance, type RouteContext, type SessionPerson } from "./shared.js";
 
-export function registerConversationRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, env, fail, requirePerson, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, conversationStallTimeoutMs, conversationHeartbeatMs, conversationCompaction } = ctx;
+export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, deliveryAgent: RequestAgent): void {
+  const { pool, q, env, fail, requirePerson, requireCEO, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, conversationStallTimeoutMs, conversationHeartbeatMs, conversationCompaction, research } = ctx;
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
   // 我的 Agent 按「人 × 页面」私有；任务卡 scope 始终复查对象成员及当前拍板权。
@@ -147,6 +158,18 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           // 那一轮记了有没有写出正文（存档里开头可能只有开场说明，不能当作正文）。
           resume = resumeInstruction(snapshot.message, snapshot.partial === false ? undefined : written.rows[0]?.content, snapshot.route?.tier);
         }
+        // 回答 Agent 的提问（askUser.ts）：只能答这条对话里的提问卡，一张卡只答一次。这一句的原文按卡和答案重写
+        // （下面存档、个人记忆、交给运行时的都是它），问答记录存在这条消息上。
+        let answerRecord: TAskAnswerRecord | undefined;
+        if (req.body.answers) {
+          const asked = await loadAsk(client.query.bind(client), row.id, req.body.answers.askId);
+          if (!asked) return fail(reply, 404, "ASK_NOT_FOUND", "这组提问找不到了，可以直接回复。");
+          if (asked.answered) return fail(reply, 409, "ASK_ANSWERED", "这组提问已经回答过了。");
+          const read = readAnswers(asked.card, req.body.answers);
+          if ("error" in read) return fail(reply, 400, "ASK_ANSWER_INVALID", read.error);
+          answerRecord = read.record;
+          req.body.message = read.text;
+        }
         // 附件：只信服务端 sidecar（客户端只能传 id）；原件不进入 Runtime，只拼接有界抽取文本。
         let attachments: TConversationAttachment[] = [];
         if (req.body.attachments?.length) {
@@ -172,6 +195,13 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           [row.id],
         );
         const userSequence = next.rows[0].sequence;
+        // 转议题时从首页带进来、模型还没见过的那一段：排在最后一轮普通问答之后的 carried 消息（运行时接进模型历史）。
+        const carried = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
+          `SELECT role, content, created_at FROM conversation_messages WHERE conversation_id = $1 AND kind = 'carried'
+              AND sequence > COALESCE((SELECT MAX(sequence) FROM conversation_messages WHERE conversation_id = $1 AND kind = 'message'), 0)
+            ORDER BY sequence`,
+          [row.id],
+        );
         // 闲置太久：这一轮模型侧只带摘要重新开始（「继续」那一轮要接上原来的工具结果，不重开）。
         const lastAt = next.rows[0].last_at;
         const idleRestart = !resume && Array.isArray(row.runtime_entries) && row.runtime_entries.length > 0
@@ -183,19 +213,28 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           : { runtimeEntries: row.runtime_entries };
         await client.query(
           `INSERT INTO conversation_messages
-             (conversation_id, sequence, role, content, references_snapshot, attachments, run_id)
-           VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6)`,
-          [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId],
+             (conversation_id, sequence, role, content, references_snapshot, attachments, run_id, meta)
+           VALUES ($1, $2, 'user', $3, $4::jsonb, $5::jsonb, $6, $7::jsonb)`,
+          [row.id, userSequence, req.body.message, JSON.stringify(references.snapshots), JSON.stringify(attachments), runId,
+            answerRecord ? JSON.stringify({ answers: answerRecord }) : null],
         );
         // 个人记忆：任何页面都读本人的记忆；后台提炼按游标增量跑（personalDistillation.ts），这里不排任务。
         // 「记住」「忘掉」「改成」由主 Agent 调工具完成，不在主回答之前同步跑提炼：记忆改动失败只是工具报错，不替换回答、不动上下文（3c）。
         // 当前页面对象就是这一轮的 anchor：检索时只比对象、不比版本；钉住的版本比现在旧时标「基于旧版本」（R8）。
         const objectRef = object.snapshot?.objectRef;
         const currentObject = objectRef ? { target: `${objectRef.type}:${objectRef.id}`, version: objectRef.version } : undefined;
-        const personalMemory = await ctx.personalMemory.select(owner, req.body.message, { currentObject }, client)
+        // 选取要等召回模型（personalMemoryRecall.ts）：不在这里等，交给运行时与分诊同时进行，拼上下文包时才等它。
+        // 本轮实际装进上下文的个人记忆 id：上下文包里的，加上检索工具返回的；随回答存进 memory_used。
+        // 运行时等的是记完 id 的这个 Promise，模型看到的条目一定已经记下。
+        const memoryUsed = new Set<string>();
+        const personalMemory = ctx.personalMemory.select(owner, req.body.message, { currentObject }, client)
           .then((entries) => entries.map(({ id, title, text, createdAt, basedOnOldVersion }) => ({ id, title, text, createdAt, ...(basedOnOldVersion ? { basedOnOldVersion } : {}) })), (error: unknown) => {
             logEvent({ event: "personal_memory.unavailable", requestId: String(req.id), runId, scope: req.params.scope, errorCode: (error as { code?: string })?.code ?? "PERSONAL_MEMORY_UNAVAILABLE" });
             return [];
+          })
+          .then((entries) => {
+            for (const entry of entries) memoryUsed.add(entry.id);
+            return entries;
           });
         // 主 Agent 记下的条目：依据是本轮这句原话，anchor 是当前页面对象（钉住此刻的版本）。
         const memoryTools = personalMemoryToolsFor(ctx.personalMemory, owner, (event) =>
@@ -203,18 +242,19 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           reference: { ref: `chat:${row.id}#${userSequence}`, quote: req.body.message.slice(0, 500), at: new Date().toISOString() },
           anchors: currentObject ? [{ target: currentObject.target, ...(typeof currentObject.version === "number" ? { pinnedVersion: currentObject.version } : {}) }] : [],
         });
-        // 本轮实际装进上下文的个人记忆 id：上下文包里的，加上检索工具返回的；随回答存进 memory_used。
-        const memoryUsed = new Set(personalMemory.map((entry) => entry.id));
         const personalMemoryTools = { ...memoryTools, search: async (query: string) => {
           const entries = await memoryTools.search(query);
           for (const entry of entries) memoryUsed.add(entry.id);
           return entries;
         } };
         const memoryUsedJson = () => (memoryUsed.size ? JSON.stringify([...memoryUsed]) : null);
+        // 本人手上没完成的待办，每轮带进上下文（条数少，只有标题、发起人、时间、类型）；读不到不影响这一轮。
+        const names = personDisplayNames(companyMemory);
+        const openTodos = await openTodoContext(q, owner, names).catch(() => []);
         const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
           `SELECT role, content, created_at
              FROM conversation_messages
-            WHERE conversation_id = $1 AND run_id <> $2
+            WHERE conversation_id = $1 AND run_id <> $2 AND kind <> 'trace'
             ORDER BY sequence DESC LIMIT 20`,
           [row.id, runId],
         );
@@ -267,6 +307,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         /** 本档实际用的主答模型（按档位换模型以后，runtime.modelId 只是默认的那个）。 */
         let routeModel: string | undefined;
         let recoveries = 0;
+        const toolErrors: { kind: "tool_error"; tool: string; code: string; at: string }[] = [];
         // 绝对上限只防死循环（10 分钟）；正常的长回答按进展判断，不按档位截断。
         const timeout = setTimeout(() => abort.abort(Object.assign(
           new Error(`Conversation turn exceeded ${Math.max(1, Math.round(conversationTurnTimeoutMs / 1000))} seconds`), { code: "TURN_TIMEOUT" })), conversationTurnTimeoutMs);
@@ -287,6 +328,14 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             // 界面只用它显示档位；时限统一是绝对上限。
             event = { ...event, timeoutMs: conversationTurnTimeoutMs };
           }
+          // 工具报错或超时：记一条质量信号（随运行记录存下，管理员视图的「质量信号」读它）；errorCode 只给运行记录，不发给界面。
+          if (event.type === "tool" && event.phase === "completed" && event.isError) {
+            const { errorCode, ...rest } = event as Record<string, unknown> & { errorCode?: unknown };
+            const signal = { kind: "tool_error" as const, tool: String(event.name), code: typeof errorCode === "string" ? errorCode : "TOOL_ERROR", at: new Date().toISOString() };
+            toolErrors.push(signal);
+            logEvent({ event: "conversation.quality_signal", signal: "tool_error", requestId: String(req.id), runId, scope: req.params.scope, tool: signal.tool, code: signal.code });
+            event = rest;
+          }
           if (!reply.raw.destroyed) {
             const data = { ...event, runId, scope: req.params.scope, sequence: ++eventSequence };
             reply.raw.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -296,6 +345,45 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
         };
         // 当前步骤（已定设计第 6 节第 2 条）：工具开始、结束映射成 step 事件；整轮的步骤随运行记录存下。
         const steps = createStepTracker((step) => emit({ type: "step", ...step }));
+        // 对话里的一句话入口（生成复盘、帮我问问、请同事帮忙）：步骤实时报给界面，结果卡随这一轮的运行记录存下、挂在回答后面。
+        const cards: TConversationCard[] = [];
+        const directory = companyMemory.searchPeople(undefined).filter(isRealPerson).map(({ personId, displayName }) => ({ personId, displayName }));
+        const entries = createConversationEntries({
+          pool, agent: deliveryAgent, secret: env.sessionSecret, viewer: { personId: owner, role: person.role },
+          message: resume ? resume.question : req.body.message, names, people: directory, directory, now: ctx.now,
+          reviews: ctx.monthlyReviewService, weeklyReviews: ctx.weeklyReviewService, collections: ctx.collections, fingerprint: `conversation:${runId}`,
+          onStep: (step) => steps.report(step), onCard: (card) => { if (cards.length < 4) cards.push(card); },
+        });
+        // Agent 向本人提问：提问卡和上面的卡一样随运行记录存下、挂在回答后面；「等你回答」这一步留着高亮。
+        const ask: AskUser = (questions) => {
+          const card: QuestionsCard = { kind: "questions", askId: randomUUID(), questions: questions.map((question, index) => ({ id: `q${index + 1}`, ...question })) };
+          cards.push(card);
+          steps.report({ id: "ask", label: "等你回答", status: "active", result: `${questions.length} 个问题` });
+          return card;
+        };
+
+        // 三层取用（companyMap.ts）：页面只决定默认焦点；跨对象读取时发范围标签，同时记成「定范围」这一步。
+        const now = ctx.now();
+        const viewer = { personId: owner, role: person.role };
+        const baseFocus = defaultFocus(req.params.scope, object.snapshot, viewer, now);
+        const focusIds = baseFocus.people === "all" ? null : baseFocus.people === "me" ? [owner] : baseFocus.people;
+        const battlefieldName = baseFocus.battlefieldId
+          ? (await q("SELECT name FROM battlefield_config WHERE id = $1", [baseFocus.battlefieldId])).rows[0]?.name as string | undefined : undefined;
+        const focus = { ...baseFocus, label: scopeLabel({ people: focusIds, battlefieldName, from: baseFocus.period, to: baseFocus.period, viewerId: owner }, names) };
+        let readScope: TReadScope | undefined;
+        const companyMap = createCompanyMap({ q, viewer, people: directory, now: ctx.now, focus: baseFocus, override: req.body.scopeOverride,
+          onScope: (scope) => {
+            readScope = scope;
+            emit({ type: "scope", ...scope });
+            steps.report({ id: "scope", label: "定范围", status: "done", result: scope.label });
+          } });
+        // 一号位深聊转议题（只在 CEO 首页）：这一轮提了建议，回答末尾附建议卡。
+        let issueDraftId: string | undefined;
+        const homeOfCeo = person.role === "ceo" && req.params.scope === "global";
+        const issueSuggest = homeOfCeo ? createIssueSuggest({ pool, ownerId: owner, conversationId: row.id, runId, userSequence, now: ctx.now,
+          onDraft: (draftId) => { issueDraftId = draftId; } }) : undefined;
+        const issueContext = homeOfCeo ? await issueSuggestContext(q, owner).catch(() => undefined) : undefined;
+        const withSuggestCard = (text: string) => (issueDraftId ? `${text.trimEnd()}\n\n${issueSuggestBlock(issueDraftId)}` : text);
 
         // 整轮卡住检测（最后一道）：模型调用自己的卡住会就地恢复并发 recovery 事件；这里只在连恢复都没有进展时停下。
         const stall = setInterval(() => {
@@ -314,11 +402,12 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           return [{ signal: "memory_mark_unknown_id", ids: unknown }];
         };
         const routeSnapshot = (partial: boolean | undefined, summary: TurnRecoverySummary | undefined, text: string) => {
-          const signals = qualitySignals(text);
+          const signals = [...qualitySignals(text), ...toolErrors];
           return JSON.stringify({ route: { tier: routeTier ?? null, model: routeModel ?? null, recoveries,
             ...(summary ? { recovery: { originalModel: summary.originalModel, fallbackModel: summary.fallbackModel ?? null, reasons: summary.reasons,
               actions: summary.actions, retries: summary.retries } } : {}) },
-            ...(partial === undefined ? {} : { partial }), steps: steps.list(), ...(signals.length ? { qualitySignals: signals } : {}) });
+            ...(partial === undefined ? {} : { partial }), steps: steps.list(), ...(cards.length ? { cards } : {}), ...(readScope ? { readScope } : {}),
+            ...(issueDraftId ? { issueDraftId } : {}), ...(signals.length ? { qualitySignals: signals } : {}) });
         };
         let recoverySummary: TurnRecoverySummary | undefined;
         /**
@@ -337,7 +426,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             : "（这次回答在这里中断了，以上是已经写出的部分。）";
           let saved = false;
           if (partial || !stopped) {
-            const content = withNotice(notice, partial ? `${streamedBody.trimEnd()}\n\n${note}` : note);
+            const content = withSuggestCard(withNotice(notice, partial ? `${streamedBody.trimEnd()}\n\n${note}` : note));
             saved = await client.query(
               `INSERT INTO conversation_messages (conversation_id, sequence, role, content, references_snapshot, run_id, memory_used)
                VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4, $5::jsonb)`,
@@ -380,14 +469,23 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
           }, () => runtime.run({
             scope: req.params.scope,
             runId,
-            viewer: { personId: owner, displayName: personDisplayNames(companyMemory).get(owner) ?? owner, role: person.role },
+            viewer: { personId: owner, displayName: names.get(owner) ?? owner, role: person.role },
             message: runtimeMessage,
             currentObject: object.snapshot,
             referencesSnapshot: references.snapshots,
-            ...(personalMemory.length ? { personalMemory } : {}),
+            personalMemory,
             personalMemoryTools,
             // 本人历史对话原文检索（3e）：跨所有页面与归档，只查本人，本轮这条不算。
             searchHistory: (query: string) => searchOwnConversationHistory(q, { personId: owner, query, excludeRunId: runId }),
+            openTodos,
+            entries,
+            ask,
+            companyMap,
+            focus,
+            ...(req.body.scopeOverride ? { scopeOverride: req.body.scopeOverride } : {}),
+            ...(issueSuggest ? { issueSuggest } : {}),
+            ...(issueContext ? { issueContext } : {}),
+            ...(carried.rows.length ? { carriedOver: carried.rows.map((message) => ({ role: message.role, content: message.content, createdAt: message.created_at.toISOString() })) } : {}),
             recentMessages: recent.rows.reverse().map((message) => ({
               role: message.role,
               content: message.content,
@@ -415,12 +513,15 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
             recoverySummary = result.recoverySummary;
             steps.finish(false);
             const note = recoveryNote(recoverySummary);
+            // 这一轮提了转议题建议：建议卡的块接在回答末尾（界面画成卡），也随正文流给界面。
+            const answer = withSuggestCard(result.assistantMessage);
+            if (answer !== result.assistantMessage) emit({ type: "message", delta: answer.slice(result.assistantMessage.length) });
             await client.query("BEGIN");
             await client.query(
               `INSERT INTO conversation_messages
                  (conversation_id, sequence, role, content, references_snapshot, run_id, recovery_note, memory_used)
                VALUES ($1, $2, 'assistant', $3, '[]'::jsonb, $4, $5::jsonb, $6::jsonb)`,
-              [row.id, userSequence + 1, result.assistantMessage, runId, note ? JSON.stringify(note) : null, memoryUsedJson()],
+              [row.id, userSequence + 1, answer, runId, note ? JSON.stringify(note) : null, memoryUsedJson()],
             );
             await client.query(
               `UPDATE conversations
@@ -524,6 +625,31 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext):
     async (req: FastifyRequest<{ Params: { scope: TConversationScope }; Body: TConversationMessageRequest }>, reply) =>
       sendConversationTurn(req, reply),
   );
+
+  // 一号位深聊转议题（issueDrafts.ts）：建议卡读取、开议题 / 接到议题、不用。只有 CEO。
+  const names = () => personDisplayNames(companyMemory);
+  app.get("/api/issue-drafts/:id", { preHandler: requireCEO, schema: { params: idParams, response: { 200: IssueDraftResponse } } }, async (req, reply) => {
+    const view = await getIssueDraftView(q, req.person!.personId, req.params.id);
+    return view ? { draft: view } : fail(reply, 404, "ISSUE_DRAFT_NOT_FOUND", "这条建议不存在");
+  });
+  app.post("/api/issue-drafts/:id/accept", { preHandler: requireCEO, schema: { params: idParams, body: AcceptIssueDraftRequest, response: { 200: IssueDraftResponse } } },
+    async (req: FastifyRequest<{ Params: { id: string }; Body: TAcceptIssueDraftRequest }>, reply) => {
+      const owner = req.person!.personId;
+      const result = await acceptIssueDraft(pool, env.sessionSecret, owner, req.params.id, req.body, ctx.now());
+      if ("error" in result) return fail(reply, result.error.status, result.error.code, result.error.message);
+      if (result.created) {
+        const { issueId, draft } = result.created;
+        // 与其他议题创建路径一致：立即启动预研；初稿存成议题的一份群材料。都不阻塞响应、失败不影响议题本身。
+        research.start(issueId).catch((error) => logEvent({ event: "issue_draft.research_failed", issueId, error: (error as Error)?.message }));
+        await saveDraftMaterial(pool, { personId: owner, role: "ceo", displayName: names().get(owner) ?? owner }, issueId, draft)
+          .catch((error) => logEvent({ event: "issue_draft.material_failed", issueId, error: (error as Error)?.message }));
+      }
+      return { draft: result.view };
+    });
+  app.post("/api/issue-drafts/:id/decline", { preHandler: requireCEO, schema: { params: idParams, response: { 200: IssueDraftResponse } } }, async (req, reply) => {
+    const result = await declineIssueDraft(pool, req.person!.personId, req.params.id, ctx.now());
+    return "error" in result ? fail(reply, result.error.status, result.error.code, result.error.message) : { draft: result.view };
+  });
 
   // 附件挂到这个人在这个页面的主对话（没有就建）；复用 Meeting 材料的受限解析器（PDF/DOCX/Markdown、同一大小/数量/超时限制），API 卷独立。
   app.post(

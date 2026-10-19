@@ -146,6 +146,19 @@ describe("首次登录引导", () => {
     } finally { await t.close(); }
   });
 
+  it("委托授权这一步默认隐藏，配置打开后两种角色都显示", async () => {
+    const hidden = await createTestApp({}, undefined, { monthlyNow: clock });
+    try {
+      expect((await read(hidden, await hidden.loginCookie())).delegationStep).toBe(false);
+      expect((await read(hidden, await hidden.memberCookie())).delegationStep).toBe(false);
+    } finally { await hidden.close(); }
+    const shown = await createTestApp({ onboardingDelegationStep: true }, undefined, { monthlyNow: clock });
+    try {
+      expect((await read(shown, await shown.loginCookie())).delegationStep).toBe(true);
+      expect((await read(shown, await shown.memberCookie())).delegationStep).toBe(true);
+    } finally { await shown.close(); }
+  });
+
   it("returns honest empty data for both roles and does not recommend a missing plan", async () => {
     const t = await createTestApp({}, undefined, { monthlyNow: clock });
     try {

@@ -160,6 +160,20 @@ describe("migration", () => {
         "074_request_asked_notification.sql",
         "075_collector.sql",
         "077_personal_review_generation.sql",
+        "079_jobs.sql",
+        "080_feishu.sql",
+        "083_weekly_reviews.sql",
+        "084_collector_distill.sql",
+        "086_meeting_minutes.sql",
+        "087_meeting_decisions.sql",
+        "088_impact_cards.sql",
+        "089_onboarding_collector.sql",
+        "090_memory_imports.sql",
+        "092_issue_drafts_and_message_kind.sql",
+        "093_off_plan_resolution.sql",
+        "095_admin_incidents.sql",
+        "097_collections.sql",
+        "099_doc_changes.sql",
       ]);
 
       // 幂等：重复执行不再变更
@@ -167,7 +181,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(74);
+      expect(Number(again.rows[0].count)).toBe(88);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(

@@ -1,0 +1,40 @@
+[
+  {
+    "personId": "smoke-pm", "name": "林晓",
+    "missions": [{ "id": "m-pm", "code": "pm-202610", "title": "Co-agent 第一版交互定稿", "outcome": "10 月 31 日前 co-agent 的会议、任务两个场景交互定稿，前后端按新稿开发完成并给 3 家试点客户用起来", "timeBoundary": "2026-10-31" }],
+    "tasks": [
+      { "id": "t-pm-1", "title": "co-agent 交互新稿", "status": "in_progress", "dueDate": "2026-10-24", "missionCode": "pm-202610", "acceptance": ["会议、任务两个场景的完整交互稿", "前端评审通过"] }
+    ]
+  },
+  {
+    "personId": "smoke-fe", "name": "陈一凡",
+    "missions": [],
+    "tasks": [
+      { "id": "t-fe-1", "title": "会议页改版", "status": "in_progress", "dueDate": "2026-10-31", "missionCode": "pm-202610", "acceptance": ["会议页在手机 390 宽度下可用", "纪要区按说话人显示", "不再调用旧的纪要接口"] },
+      { "id": "t-fe-2", "title": "任务卡列表性能优化", "status": "not_started", "dueDate": "2026-11-07", "missionCode": null, "acceptance": ["200 张卡滚动不掉帧"] }
+    ]
+  },
+  {
+    "personId": "smoke-be", "name": "吴桐",
+    "missions": [],
+    "tasks": [
+      { "id": "t-be-1", "title": "纪要接口 v2", "status": "not_started", "dueDate": "2026-10-28", "missionCode": "pm-202610", "acceptance": ["返回说话人和时间戳", "旧接口兼容到切换完成"] },
+      { "id": "t-be-2", "title": "试点客户数据隔离", "status": "in_progress", "dueDate": "2026-10-30", "missionCode": "pilot-202610", "acceptance": ["每家客户的数据库独立", "隔离方案经安全评审"] }
+    ]
+  },
+  {
+    "personId": "smoke-pilot", "name": "许诺",
+    "missions": [{ "id": "m-pilot", "code": "pilot-202610", "title": "B 端试点上线", "outcome": "10 月底 3 家 B 端试点客户每周至少用 co-agent 开 2 场会", "timeBoundary": "2026-10-31" }],
+    "tasks": [
+      { "id": "t-pilot-1", "title": "试点客户培训材料", "status": "in_progress", "dueDate": "2026-10-27", "missionCode": "pilot-202610", "acceptance": ["覆盖 3 家试点客户的使用场景", "附操作录屏"] },
+      { "id": "t-pilot-2", "title": "试点客户签约", "status": "in_progress", "dueDate": "2026-10-25", "missionCode": "pilot-202610", "acceptance": ["3 家客户签试用协议"] }
+    ]
+  },
+  {
+    "personId": "smoke-ops", "name": "郑可",
+    "missions": [],
+    "tasks": [
+      { "id": "t-ops-1", "title": "官网活动页", "status": "in_progress", "dueDate": "2026-10-26", "missionCode": null, "acceptance": ["活动页上线"] }
+    ]
+  }
+]

@@ -8,7 +8,7 @@ import { loadCompanyMemory } from "../src/companyMemory.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import type { ConversationRuntimeEvent } from "../src/conversations.js";
 import {
-  ESCALATION, THOUGHT_TRANSLATE_PROMPT, cleanThought, createEscalationWatch, createResponsesThoughtTranslator, escalationNotice, escalationSeconds, groundedNotice,
+  ESCALATION, THOUGHT_TRANSLATE_PROMPT, cleanThought, createEscalationWatch, createResponsesThoughtTranslator, escalationNotice, escalationSeconds, TIER_GUIDANCE,
   latestSummaryHeading, routeTurn, thinkingHeadline, toolResultDetail, type ThoughtTranslator,
 } from "../src/conversationRouting.js";
 import { createFakeWebSearchAdapter, testEnv } from "./helpers.js";
@@ -86,19 +86,20 @@ const shape = (events: ConversationRuntimeEvent[]) => events.map((event) =>
   event.type === "route" ? `route:${event.tier}` : event.type === "tool" ? `tool:${event.phase}` : event.type).filter((item, index, all) => item !== "message" || all[index - 1] !== "message");
 
 describe("各档的分段事件顺序", () => {
-  it("检索问答档：开场说明 → 思考 → 查证（开始在查什么、结束读到了什么）→ 思考 → 正文", async () => {
+  it("检索问答档：思考 → 查证（开始在查什么、结束读到了什么）→ 思考 → 正文，没有开场白", async () => {
     const { events, result } = await runTurn({
       message: "硅基流动最近一次融资是什么时候、融了多少？", triageTier: "grounded", topic: "硅基流动最近一次融资",
       calls: [{ tool: { id: "s1", name: "web_search", arguments: { query: "硅基流动 融资" } } }, { text: "九月完成新一轮融资。" }],
     });
     expect(shape(events)).toEqual(["route:grounded", "thinking", "tool:started", "tool:completed", "thinking", "message"]);
     const route = events[0] as Extract<ConversationRuntimeEvent, { type: "route" }>;
-    expect(route.notice).toBe(groundedNotice("硅基流动最近一次融资"));
+    // 检索问答档不加开场白：回答直接给结论。
+    expect(route.notice).toBeUndefined();
     const [started, completed] = events.filter((event) => event.type === "tool") as Extract<ConversationRuntimeEvent, { type: "tool" }>[];
     expect(started.label).toBe("检索公开来源「硅基流动 融资」");
     expect(completed.detail).toBe("「硅基流动 融资」找到 1 条公开来源，如《硅基流动完成新一轮融资》");
-    // 开场说明写进这条回答的开头，正文接在后面。
-    expect(result.assistantMessage).toBe(`${route.notice}\n\n九月完成新一轮融资。`);
+    // 回答就是正文，开头没有「先查……」。
+    expect(result.assistantMessage).toBe("九月完成新一轮融资。");
     expect(events.some((event) => event.type === "escalation")).toBe(false);
   });
 
@@ -109,14 +110,14 @@ describe("各档的分段事件顺序", () => {
     expect(result.assistantMessage).toBe("不客气。");
   });
 
-  it("深度档：开场说明带预计用时，查证进度照常；不做中途升级提示", async () => {
+  it("深度档：没有开场白，查证进度照常；不做中途升级提示", async () => {
     const { events } = await runTurn({
       message: "硅基流动和无问芯穹都已经递表了，为什么还要连续大额融资？背后的逻辑是什么？", triageTier: "deep", topic: "资本动作背后的逻辑", escalateAfterMs: 1,
       calls: [{ tool: { id: "s1", name: "web_search", arguments: { query: "硅基流动 融资" } }, delayMs: 20 }, { text: "判断如下。", delayMs: 20 }],
     });
     expect(shape(events)).toEqual(["route:deep", "thinking", "tool:started", "tool:completed", "thinking", "message"]);
-    expect((events[0] as { notice?: string }).notice).toMatch(/需要更深入地查证和推演。$/);
-    expect((events[0] as { notice?: string }).notice).not.toMatch(/预计|分钟/);
+    // 深度档也没有开场白：慢的原因由步骤列表体现。
+    expect((events[0] as { notice?: string }).notice).toBeUndefined();
   });
 
   it("推理摘要：中文要点随思考事件带上；英文摘要不上屏，只报状态", async () => {
@@ -230,18 +231,21 @@ describe("中途升级提示", () => {
   });
 
   it("提示措辞正式克制：不称呼、不出现运行环境字眼", () => {
-    for (const text of [escalationNotice(40), groundedNotice(), groundedNotice("硅基流动最近一次融资")]) expect(text).not.toMatch(FORBIDDEN);
+    for (const text of [escalationNotice(40)]) expect(text).not.toMatch(FORBIDDEN);
   });
 });
 
-describe("检索问答档的开场说明", () => {
-  it("对象来自分诊（同一次调用，不多叫模型）；分诊没给或失败时用通用说法；快答档没有", async () => {
+describe("检索问答档没有开场白", () => {
+  it("分诊给了对象、失败、给了不合规的对象，检索问答档都不在回答开头加「先查企业知识」这类话；快答档也没有", async () => {
     const withTopic = await routeTurn({ message: "Fireworks 和 Together 的定价有什么区别？", signal: signal(), triage: async () => ({ tier: "grounded", topic: "Fireworks与Together的定价" }) });
-    expect(withTopic.notice).toBe("需要先核实Fireworks与Together的定价的相关信息：先查企业知识，不足部分再查公开来源。");
+    expect(withTopic).toMatchObject({ tier: "grounded", source: "model" });
+    expect(withTopic.notice).toBeUndefined();
     const fallback = await routeTurn({ message: "Fireworks 和 Together 的定价有什么区别？", signal: signal(), triage: async () => { throw new Error("gateway 500"); } });
-    expect(fallback).toMatchObject({ tier: "grounded", source: "fallback", notice: groundedNotice() });
+    expect(fallback).toMatchObject({ tier: "grounded", source: "fallback" });
+    expect(fallback.notice).toBeUndefined();
     const bad = await routeTurn({ message: "Fireworks 和 Together 的定价有什么区别？", signal: signal(), triage: async () => ({ tier: "grounded", topic: "王总关心的定价" }) });
-    expect(bad.notice).toBe(groundedNotice());
+    expect(bad.notice).toBeUndefined();
+    expect(TIER_GUIDANCE.grounded).toContain("不写开场白");
     expect((await routeTurn({ message: "好的", signal: signal() })).notice).toBeUndefined();
     // 没配分诊（没有网关的环境）：只按规则分档，检索问答档不加开场句，回答与原来一致。
     expect(await routeTurn({ message: "Fireworks 和 Together 的定价有什么区别？", signal: signal() })).toMatchObject({ tier: "grounded", source: "fallback" });

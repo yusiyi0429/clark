@@ -31,6 +31,9 @@ import type { MissionCardAnnotationAgent } from "../src/missionCardAnnotationAge
 import type { MissionCardReviewAgent } from "../src/missionCardReview.js";
 import type { MissionCardDraftAgent } from "../src/missionCardDraftAgent.js";
 import type { RequestAgent } from "../src/delivery/requestAgent.js";
+import type { FeishuClient } from "../src/feishu/client.js";
+import { createWeeklyReviewService, type WeeklyReviewService } from "../src/weeklyReviewService.js";
+import type { WeeklyReviewAgent } from "../src/weeklyReviewAgent.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
 
@@ -189,6 +192,8 @@ export type TestApp = {
   monthlyReviews?: MonthlyReviewService;
   /** 仅当注入 recordingDeps 时存在；测试用它等流水线跑完、模拟重启恢复。 */
   recordings?: MeetingRecordingService;
+  /** 仅当注入 weeklyReviewAgent 时存在：测试用它触发周五定时、等生成跑完。 */
+  weeklyReviews?: WeeklyReviewService;
   restart: (runtime: ConversationRuntime) => Promise<FastifyInstance>;
   close: () => Promise<void>;
 };
@@ -212,7 +217,7 @@ const defaultConversationRuntime: ConversationRuntime = {
 };
 
 export async function createTestApp(
-  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "publicOrigin">> = {},
+  seedOverrides: Partial<Pick<AppEnv, "companyMemorySeedDir" | "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "publicOrigin" | "feishu" | "adminPersonIds" | "onboardingDelegationStep">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;
@@ -232,6 +237,9 @@ export async function createTestApp(
     missionCardDraftAgent?: MissionCardDraftAgent;
     /** 送达通道的假 Agent；不注入时用真实装配（测试里不会被调用）。 */
     requestAgent?: RequestAgent;
+    /** ③ 信息收集的假起草 Agent 与假多维表格；不注入时用真实装配（起草不会被调用）、多维表格是进程内的 mock。 */
+    collectionAgent?: Parameters<typeof buildApp>[0]["collectionAgent"];
+    bitable?: Parameters<typeof buildApp>[0]["bitable"];
     driExporter?: DriExporter;
     ontologyUpdater?: OntologyUpdater;
     monthlyDraftAgent?: MonthlyDraftAgent;
@@ -239,6 +247,9 @@ export async function createTestApp(
     /** 月末复盘的假起草、评估、汇总 Agent；与 monthlyDraftAgent 共用 monthlyNow。 */
     monthlyReviewAgents?: MonthlyReviewAgents;
     monthlyReviewRetryDelayMs?: number;
+    /** 周复盘的假 Co-Agent；与月度复盘共用 monthlyNow。people 缺省是名单里能进成员工作台的人。 */
+    weeklyReviewAgent?: WeeklyReviewAgent;
+    weeklyReviewPeople?: () => string[];
     /** 会议录音的假 ffmpeg/TOS/火山；不注入时 app 装配真实依赖（不会被调用）。 */
     recordingDeps?: RecordingDeps;
     /** /api/me/voiceprint 的假 ffmpeg/腾讯云；不注入时按环境变量判断未配置。 */
@@ -254,6 +265,16 @@ export async function createTestApp(
     personalRadarService?: PersonalRadarService;
     /** 个人记忆提炼的模型流；不注入时一律交 noop 候选（测试里不调真实模型）。 */
     personalDistillationStream?: Parameters<typeof buildApp>[0]["personalDistillationStream"];
+    /** 飞书开放接口替身；配合 seedOverrides.feishu 使用。 */
+    feishuClient?: FeishuClient;
+    /** 个人记忆的召回模型替身；不注入时不用模型、只按字面重合选（测试里不调真实模型）。 */
+    personalMemoryRecall?: Parameters<typeof buildApp>[0]["personalMemoryRecall"];
+    /** 记忆导入的分类与去重模型替身；不注入时按测试环境装配（测试里不调真实模型）。 */
+    memoryImportModel?: Parameters<typeof buildApp>[0]["memoryImportModel"];
+    /** 会后分层、影响分析与妙记接口的替身；不注入时用真实装配（只在后台任务里调用，测试不跑 worker）。 */
+    meetingFollowThroughAgents?: Parameters<typeof buildApp>[0]["meetingFollowThroughAgents"];
+    /** 文档变更找候选的假 Agent；不注入时用真实装配（只在后台任务里调用）。 */
+    docChangeAgent?: Parameters<typeof buildApp>[0]["docChangeAgent"];
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {
@@ -269,8 +290,8 @@ export async function createTestApp(
   await seedTestAccess(client);
   client.release();
   const env = { ...testEnv, ...seedOverrides };
-  const { monthlyDraftAgent, monthlyNow, recordingDeps, monthlyReviewAgents, monthlyReviewRetryDelayMs, ...restRuntimeOptions } = runtimeOptions;
-  const appRuntimeOptions = { backgroundPreflight: false, personalDistillationStream: noopDistillationStream, ...restRuntimeOptions };
+  const { monthlyDraftAgent, monthlyNow, recordingDeps, monthlyReviewAgents, monthlyReviewRetryDelayMs, weeklyReviewAgent, weeklyReviewPeople, ...restRuntimeOptions } = runtimeOptions;
+  const appRuntimeOptions = { backgroundPreflight: false, personalDistillationStream: noopDistillationStream, personalMemoryRecall: null, ...restRuntimeOptions };
   const monthlyPlans = monthlyDraftAgent
     ? createMonthlyPlanService({ pool, companyMemory: loadCompanyMemory(env), agent: monthlyDraftAgent, now: monthlyNow })
     : undefined;
@@ -282,10 +303,14 @@ export async function createTestApp(
           nextFocus: { text: "缺少材料", sources: [] }, escalations: { text: "", sources: [] },
         } }; } } } })
     : undefined;
+  const weeklyReviews = weeklyReviewAgent
+    ? createWeeklyReviewService({ pool, agent: weeklyReviewAgent, now: monthlyNow, retryDelayMs: 0,
+      people: weeklyReviewPeople ?? (() => loadCompanyMemory(env).searchPeople(undefined).filter((person) => person.roles.includes("dri") || person.roles.includes("participant")).map((person) => person.personId)) })
+    : undefined;
   const recordings = recordingDeps
     ? createMeetingRecordingService({ pool, storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR, companyMemory: loadCompanyMemory(env), deps: recordingDeps })
     : undefined;
-  const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, recordingService: recordings, now: monthlyNow,
+  const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, weeklyReviewService: weeklyReviews, recordingService: recordings, now: monthlyNow,
     threadIntroAgent: { async generate(input) { return { message: `${input.inviter}邀请${input.newcomers.join("、")}加入「${input.title}」，请查看对象进展。` }; } },
     taskAcceptanceAgent: { async draft() { throw new Error("测试里没有模型"); } },
     ...appRuntimeOptions });
@@ -295,6 +320,7 @@ export async function createTestApp(
     pool,
     monthlyPlans,
     monthlyReviews,
+    weeklyReviews,
     recordings,
     publicOrigin: env.publicOrigin,
     env,
@@ -350,6 +376,7 @@ export async function createTestApp(
     },
     close: async () => {
       await monthlyReviews?.idle();
+      await weeklyReviews?.idle();
       await Promise.all(apps.map((instance) => instance.close()));
       await pool.end();
       await admin.query(`DROP DATABASE ${database} WITH (FORCE)`);

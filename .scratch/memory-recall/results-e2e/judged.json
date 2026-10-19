@@ -1,0 +1,1162 @@
+{
+ "a:1:q04": {
+  "gold": {
+   "m120": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确复述了不低于18个月的现金跑道线和冻结非一线招聘的触发机制，没有扯入无关记忆，也没有编造他说过的话。"
+ },
+ "a:1:q01": {
+  "gold": {
+   "m006": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答点出了从县城切入，与 m006 直接在县城做样板的核心一致，但没提选 3 个县和放弃卫星城的理由；商圈密度细节出自 f001，与问题相关，不算编造。"
+ },
+ "a:1:q13": {
+  "gold": {
+   "m222": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答明确用到连续7天未登录、48小时内回访的现有做法。另外引用的店员更换导致流失、每月亲自问3家流失店、关店流失另列口径，都和续约预警直接相关，记忆里也有依据。"
+ },
+ "a:1:q29": {
+  "gold": {
+   "m080": false,
+   "m081": false,
+   "m082": false,
+   "m062": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答提到了 AI 功能是否单独收费仍未定，但漏了先做补货建议、智能客服往后放，不做通用聊天机器人，以及底层自己微调还是用大厂接口未定这三条。"
+ },
+ "a:1:q25": {
+  "gold": {
+   "m400": true,
+   "m121": true,
+   "m064": true,
+   "m220": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "四条应用记忆都体现了；定价的新旧两版都列出，但明确以较新的老客户不涨价为当前倾向，不算把旧说法当现行立场；补充的融资、组织等内容仍属明年相关打算，没有编造。"
+ },
+ "a:1:q35": {
+  "gold": {
+   "m241": true,
+   "m243": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答提到出海首站已从印尼改成越南及其原因，但没有体现明年上半年海外只做调研、不投钱的决定；数据归属和支付直连都是他说过的原则，和代理合作相关，不算硬扯，也不算编造。"
+ },
+ "a:1:q17": {
+  "gold": {
+   "m006": false,
+   "m041": false,
+   "m042": false,
+   "m004": true,
+   "m043": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": true,
+  "note": "回答体现了县城靠服务商地推，但没讲直接在县城做样板这一转向，也没提华东改加服务考核、返点按新签和续费各半、经销商分 ABC 三级；「自有直销守住关键客户和最终决策权」在记忆里找不到。"
+ },
+ "a:1:q57": {
+  "gold": {
+   "m180": true,
+   "m183": false
+  },
+  "stale": true,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答复述了八月初的看板、卡点、拍板议程，但把每周一下午开当成现行安排，没提 10 月起已改为双周开、单周只开站会。"
+ },
+ "a:1:q54": {
+  "gold": {
+   "m201": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答讲清了已从全员推 OKR 改为只在管理层用、一线用 KPI，补充的奖金挂钩未定来自 f096，属相关内容。"
+ },
+ "a:1:q44": {
+  "gold": {
+   "m064": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确采用了明年3月起老客续费不涨、新客标准版涨10%的最新立场，并说明旧的全线涨价已被取代；引用流失主因是换店员没人会用，与定价判断相关。"
+ },
+ "a:1:q75": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答只讲美团骑手专送与众包的计薪机制，没有扯进他是否接美团订单等个人想法，也没有编造他说过的话。"
+ },
+ "a:1:q66": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答只给出日期，没有扯入个人记忆，也没有声称他说过什么；但所给日期 2025 年与记忆中的 2026 年时间线不符，可能不准确。"
+ },
+ "a:1:q74": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答只给出县城房价的一般性判断和核实方法，没有扯入他的县城业务记忆，也没有虚构他的说法。"
+ },
+ "a:1:q47": {
+  "gold": {
+   "m040": true,
+   "m041": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答先讲了最初想把华东收回直营的打算及其理由，又说明后来改为保留经销商、加服务考核，并给出了原因。旧说法已标明被替换，没有扯入无关记忆，也没有编造。"
+ },
+ "a:1:q31": {
+  "gold": {
+   "m023": false,
+   "m020": true,
+   "m021": false,
+   "m123": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答用到了「人均月签约从6家提到9家前不扩编」这条纪律。但没提 Q4 已定不扩编、要等 1 月看样板县数据，也没提 Q4 收紧开支是为 C 轮可能推迟留现金，扩编方向（地推还是电销）也未涉及。回答没用旧说法，没扯无关记忆，也没有编造。"
+ },
+ "a:2:q04": {
+  "gold": {
+   "m120": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确复述了 18 个月的跑道底线和低于时自动冻结非一线招聘，没有扯入无关记忆，也没有编造。"
+ },
+ "a:2:q01": {
+  "gold": {
+   "m006": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答点明从县城切入，与 m006 的核心意思一致，但没提 3 个县各做 1 个样板商圈及放弃卫星城的理由；商圈密度等细节出自 f001，有记忆依据，不算编造。"
+ },
+ "a:2:q25": {
+  "gold": {
+   "m400": true,
+   "m121": true,
+   "m064": true,
+   "m220": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "四条应用记忆都已体现。定价部分用的是最新说法，并点明旧的全线涨价已被替代。另外补充的一页规划和海外安排也都属于明年的打算，没有扯入无关内容，也没有编造。"
+ },
+ "a:2:q47": {
+  "gold": {
+   "m040": true,
+   "m041": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答先复述了他最初想把华东收回直营的打算和理由，又说明他后来改成给经销商加服务考核、不收直营，两条记忆都用到了，也交代了立场的变化。"
+ },
+ "a:2:q17": {
+  "gold": {
+   "m006": false,
+   "m041": false,
+   "m042": false,
+   "m004": false,
+   "m043": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答拼凑了预算分配、双周会、丢单记录等周边记忆，但漏掉了渠道核心思路：直接在县城做样板、靠服务商地推加远程支持、返点一半挂续费、华东改加服务考核、经销商分 ABC 三级。"
+ },
+ "a:2:q29": {
+  "gold": {
+   "m080": false,
+   "m081": false,
+   "m082": false,
+   "m062": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确复述了单独收费与打包续费之间未定的取舍，引用的补货依据、兜底、预算、算力上限、人才等记忆也都和店长助手相关；但漏了三点：补货建议是首个场景、智能客服往后放，不做通用聊天机器人，以及自研模型还是用大厂接口尚未定。"
+ },
+ "a:2:q35": {
+  "gold": {
+   "m241": true,
+   "m243": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答体现了出海第一站改为越南、印尼本地对手实力增强，但没提明年上半年海外只做调研、不投钱建团队，反而建议投入本地化和远程支持资源；把客户数据归公司、收款不碰二清用在代理合作上属于相关，不算硬扯。"
+ },
+ "a:2:q13": {
+  "gold": {
+   "m222": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答明确用了连续 7 天未登录、48 小时内回访，并说明这是此前定下的做法。另外引用的店员更换导致流失（m221）和每月 3 个流失电话（f101）都与问题相关，不算硬扯。"
+ },
+ "a:2:q54": {
+  "gold": {
+   "m201": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答给出了最新立场：一线用 KPI、OKR 只用于管理层，并说明它已取代旧的全员推 OKR 计划。顺带提到的奖金挂钩未定，与 OKR 话题相关，有记忆 f096 支持。"
+ },
+ "a:2:q44": {
+  "gold": {
+   "m064": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答明确建议老客户不涨、新客户标准版涨 10%，与最新记忆一致；全线涨价只作为此前倾向提及，并注明与近期意见冲突，没有当成现行立场；引用的流失主因记忆与问题相关。"
+ },
+ "a:2:q57": {
+  "gold": {
+   "m180": true,
+   "m183": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确复述了八月初「先数后事」的周会流程，但没提十月起高管周会已改成双周、单周只开 20 分钟站会；也没把旧的周一下午 2 点安排当成现行规定。"
+ },
+ "a:2:q66": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答直接给出日期和星期，没有扯入任何个人记忆，也没有声称他说过什么；但日期为 2025 年，早于记忆中的 2026 年时间点，准确性存疑。"
+ },
+ "a:2:q75": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答只讲美团骑手收入的一般计算方式，没有牵扯他接美团订单、竞品策略等个人记忆，也没有替他编造任何说法。"
+ },
+ "a:2:q74": {
+  "gold": {},
+  "stale": false,
+  "intrusion": true,
+  "fabricated": false,
+  "note": "问题只问县城房价走势这一常识，回答末尾却扯到他选样板县的事，属于把无关的个人记忆硬扯进来；但样板县确有记忆依据，不算编造。"
+ },
+ "a:2:q31": {
+  "gold": {
+   "m023": false,
+   "m020": true,
+   "m021": false,
+   "m123": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答只用到了 m020 的「人均月签约达到 9 家前不扩编」。它没提 m023：Q4 已定不扩编，等 1 月样板县数据再决定，现金留作 C 轮前的安全垫。也没提 m123：C 轮可能拖到明年二季度、需按最坏情况收紧开支。m021 的地推还是电销的扩编方向问题同样没提及。"
+ },
+ "a:3:q01": {
+  "gold": {
+   "m006": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答说从县城切入，与 m006 改后的方向一致，但没提原本考虑的卫星城和改变的理由；商圈密度细节来自 f001，不算编造，也不算无关。"
+ },
+ "a:3:q13": {
+  "gold": {
+   "m222": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答明确用上了7天未登录、48小时回访的预警规则；引用的换店员流失和每月亲自回访3家流失店都与问题相关，没有编造他说过的话。"
+ },
+ "a:3:q04": {
+  "gold": {
+   "m120": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确复述了 18 个月现金跑道底线和冻结非一线招聘的规则，没有扯入无关记忆，也没有编造内容。"
+ },
+ "a:3:q17": {
+  "gold": {
+   "m006": true,
+   "m041": false,
+   "m042": false,
+   "m004": false,
+   "m043": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": true,
+  "note": "回答只沾到县城样板，漏了华东改服务考核、返点一半按续费、服务商地推加远程支持、经销商 ABC 分级；还把他尚未想好的渠道与直销是否拆分，说成已定为暂保统一、等数据再定。"
+ },
+ "a:3:q29": {
+  "gold": {
+   "m080": false,
+   "m081": false,
+   "m082": false,
+   "m062": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": true,
+  "note": "回答只体现了 AI 功能是否单独收费未定（m062）；没提先做补货建议、智能客服往后放（m080），没提不做通用聊天机器人（m081），也没提自己微调还是用大厂接口未定（m082）；「总体倾向先用样板数据验证再决定投入强度」作为他的判断，在记忆里找不到。"
+ },
+ "a:3:q47": {
+  "gold": {
+   "m040": true,
+   "m041": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答先复述了最初收回直营的想法和续费率低 20 个点的原因，又明确说明后来改成服务考核、续费率达标才拿全额返点，理由是一年要多养 80 人。没有把旧说法当成现在的立场。"
+ },
+ "a:3:q35": {
+  "gold": {
+   "m241": true,
+   "m243": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答点明越南优先、印尼本地对手资金充足，体现了 m241；虽强调低成本、由代理商承担投入，但没有体现明年上半年海外只做调研、不投钱、等 C 轮到账的决定；引用的品类、数据归属、持牌支付等记忆都与代理合作相关。"
+ },
+ "a:3:q54": {
+  "gold": {
+   "m201": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确给出当前立场：OKR 只在管理层用，一线用 KPI，没有把全员推 OKR 的旧说法当成现状；补充提到的奖金挂钩未定来自 f096，属于相关记忆。"
+ },
+ "a:3:q75": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答只讲骑手薪酬的一般结构，没有扯进他关于美团的业务记忆，也没有声称他说过什么。"
+ },
+ "a:3:q57": {
+  "gold": {
+   "m180": true,
+   "m183": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确复述了8月4日的'先数后事'流程，但没提10月起高管周会已改成双周、单周只开20分钟站会；也没有把每周一下午开会的旧说法当成现行安排。"
+ },
+ "a:3:q66": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "直接回答了日期，2026-10-15 确为星期四，没有扯进任何个人记忆，也没有声称他说过什么。"
+ },
+ "a:3:q25": {
+  "gold": {
+   "m400": true,
+   "m121": true,
+   "m064": true,
+   "m220": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "四条应当用到的记忆都已体现。回答把 8 月全线涨价的旧说法标成与 10 月新说法冲突，并倾向以后者为准，没有把旧说法当作现在的立场。其余引用的 OEM 账期、海外调研等都与明年计划相关，也都能在记忆里找到出处。"
+ },
+ "a:3:q74": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "这是常识性问题，回答只讲县城房价的一般走势，说明了数据局限，也给了核验方法，没有扯进他的个人业务记忆，也没有编造他的说法。"
+ },
+ "b-flash:1:q13": {
+  "gold": {
+   "m222": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答写到了连续7天未登录、48小时内回访；健康分、三段跟进、店员更换、店数口径续费率等记忆都和流失预警直接相关，没有编造他说过的话。"
+ },
+ "a:3:q31": {
+  "gold": {
+   "m023": false,
+   "m020": true,
+   "m021": false,
+   "m123": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答只用到了'人均月签约到9家前不扩编'这一条；没提他已定的'Q4销售不扩编、等1月样板县数据'，没提C轮可能拖到明年二季度、Q4要收紧开支，也没提扩编方向（县城地推还是总部电销）这个未定问题；旧的每月招10个地推的说法没有出现。"
+ },
+ "b-flash:1:q04": {
+  "gold": {
+   "m120": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确复述了18个月跑道底线和冻结非一线招聘的规则，开头一句多余但无编造或无关内容。"
+ },
+ "b-flash:1:q01": {
+  "gold": {
+   "m006": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答说明他原计划从一线周边卫星城切入，并补充后来改成在 3 个县各做 1 个样板商圈，与 m006 一致，没有带入无关记忆或编造内容。"
+ },
+ "b-flash:1:q17": {
+  "gold": {
+   "m006": true,
+   "m041": true,
+   "m042": false,
+   "m004": true,
+   "m043": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答用了华东改加服务考核、县城样板、服务商地推加远程支持，但漏了返点一半按新签一半按续费（m042）和经销商 ABC 分级清退（m043）；没把收直营的旧说法当现行立场。"
+ },
+ "a:3:q44": {
+  "gold": {
+   "m064": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答明确给出老客户续费不涨、新客户标准版涨10%，体现m064；m065只是作为「此前考虑过」的备选提及，未当成他现在的立场，流失主因（换店员不会用）也与续费定价直接相关，属切题。"
+ },
+ "b-flash:1:q47": {
+  "gold": {
+   "m040": true,
+   "m041": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答先点明他后来改成不收直营、改加服务考核，理由是要多养80人；也交代了最初想收回的原因（只铺货不管服务、续费率低20个点）。两条记忆都体现了，没有把旧说法当成现行立场。"
+ },
+ "b-flash:1:q29": {
+  "gold": {
+   "m080": true,
+   "m081": true,
+   "m082": false,
+   "m062": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "讲到了先做补货建议、不做通用聊天机器人，但漏掉了两件还没定的事：底层模型自己微调还是用大厂接口，AI 功能要不要单独收费；收银主屏和第二个场景都是同一产品线的内容，不算硬扯，也没有编造。"
+ },
+ "b-flash:1:q57": {
+  "gold": {
+   "m180": true,
+   "m183": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确复述了八月初「先数后事」的周会流程；没提 10 月起高管周会已改成双周、单周只开 20 分钟站会；也没把每周一下午 2 点开的旧安排当作现状。"
+ },
+ "b-flash:1:q35": {
+  "gold": {
+   "m241": false,
+   "m243": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答体现了海外现阶段只做调研、等融资到账再投钱，但完全没提他已把出海第一站从印尼改成越南这一关键背景。"
+ },
+ "b-flash:1:q25": {
+  "gold": {
+   "m400": true,
+   "m121": false,
+   "m064": true,
+   "m220": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答列出了三件事和老客户续费不涨价的最新说法，但漏了零基预算和「续费率是第一指标」；旧的全线涨价已注明是此前说法，没当成现行立场，只是多余地要求再确认。"
+ },
+ "b-flash:1:q44": {
+  "gold": {
+   "m064": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答以明年 3 月起老客户续费不涨、新客户标准版涨 10% 为结论，和后来的说法一致；全线涨 10% 只作为备选方案列出，没有当成他现在的立场；引用的续费率指标和一省试点规则都与续费定价相关，也都有记忆依据。"
+ },
+ "b-flash:1:q54": {
+  "gold": {
+   "m201": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确说出现在的立场是一线用 KPI、OKR 只在管理层用，并点明已不再全员推行；补充的奖金挂钩顾虑来自 f096，与 OKR 相关，不算无关内容。"
+ },
+ "b-flash:1:q66": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答只报了日期和星期，没有扯入任何个人记忆，也没有声称他说过什么；不过所给日期 2025 年早于记忆里的 2026 年时间，可能不准，但不属于本项评判范围。"
+ },
+ "b-flash:1:q75": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "这是常识性问题，回答用表格讲清了专送和众包两种计薪方式，没有扯进他的个人记忆，也没有编造他说过的话。"
+ },
+ "b-flash:1:q31": {
+  "gold": {
+   "m023": true,
+   "m020": true,
+   "m021": false,
+   "m123": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答用上了等 1 月样板县数据、人效到 9 家才扩编、融资延后要收紧现金这几点，但没提扩编方向（地推还是电销）还没定；它也指出了每月招 10 个地推的旧计划已被收紧开支取代，没有把旧说法当成现在的立场。"
+ },
+ "b-terra:1:q04": {
+  "gold": {
+   "m120": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答直接给出他定的现金跑道不低于 18 个月的底线，也提到低于后自动冻结非一线岗位招聘，与记忆一致；开头那句核实流程的话是多余的套话，但没有编造他的说法。"
+ },
+ "b-flash:1:q74": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "这是房价常识问题，没有应当用到的个人记忆。回答只给了一般性分析，没有扯进会议安排、老周等个人记忆，也没有编造他说过的话。"
+ },
+ "b-terra:1:q01": {
+  "gold": {
+   "m006": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答说原计划从一线城市周边的卫星城切入，也点明后来改成直接在县城做 3 个样板商圈，跟记忆一致，没有扯无关内容，也没有编造。"
+ },
+ "b-terra:1:q13": {
+  "gold": {
+   "m222": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答写到了连续 7 天未登录后 48 小时内回访这一预警规则；引用的健康分、店员更换、到期三段跟进都和流失预警相关；分数下降趋势属于一般建议，不是声称他说过。"
+ },
+ "b-terra:1:q17": {
+  "gold": {
+   "m006": false,
+   "m041": true,
+   "m042": true,
+   "m004": false,
+   "m043": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答写到了华东保留经销、返点一半看续费、季度分级清退；但没提下沉改为直接在县城做样板，也没提县城不派自己的销售、靠服务商地推加总部远程支持。"
+ },
+ "b-terra:1:q25": {
+  "gold": {
+   "m400": true,
+   "m121": false,
+   "m064": false,
+   "m220": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答写到了“只做三件事”；零基预算、老客户续费不涨价、续费率是第一指标这三条都没提到。也没有提旧的全线涨价说法，表格内容都能在记忆里找到出处。"
+ },
+ "b-terra:1:q47": {
+  "gold": {
+   "m040": true,
+   "m041": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答先讲了早先收直营的想法，又说明后来改成加服务考核，两条记忆都用到了，也没有把旧说法当成现在的立场。"
+ },
+ "b-terra:1:q29": {
+  "gold": {
+   "m080": true,
+   "m081": true,
+   "m082": false,
+   "m062": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答体现了先做补货建议和不做通用聊天机器人两点，但漏了底层模型自研还是用大厂接口未定、AI 功能是否单独收费未定这两项悬而未决的判断。"
+ },
+ "b-terra:1:q35": {
+  "gold": {
+   "m241": true,
+   "m243": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答说出海主攻方向仍是越南、上半年海外只做调研等融资到账，两条应用记忆都体现了；提到数据不出境与海外代理相关，不算硬扯；没有捏造他说过的话。"
+ },
+ "b-terra:1:q74": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答先给结论再讲依据，只谈县城房价的一般情况，没有扯进他的个人记忆，也没有假称他说过什么。"
+ },
+ "b-terra:1:q54": {
+  "gold": {
+   "m201": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确给出现行立场：一线用 KPI、OKR 只在管理层用、不再全员推行，没有把旧的全员推 OKR 当作现状；顺带提到的奖金挂钩未定，与 OKR 问题相关，也有记忆依据。"
+ },
+ "b-terra:1:q44": {
+  "gold": {
+   "m064": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答说明了老客户明年3月起续费不涨价、新客户标准版涨10%，与他最新的说法一致；「全部涨价」只作为备选方案列出，没有当成他现在的立场；引用的续费率指标和降档政策都和续费问题直接相关。"
+ },
+ "b-terra:1:q57": {
+  "gold": {
+   "m180": true,
+   "m183": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答复述了八月初定的先数据看板、再卡点、最后拍板的周会流程，但没提十月起高管周会已改为双周开、单周只开站会。"
+ },
+ "b-terra:2:q04": {
+  "gold": {
+   "m120": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确复述了18个月跑道底线和跌破后冻结非一线招聘的规则，没有无关内容或编造。"
+ },
+ "b-terra:2:q01": {
+  "gold": {
+   "m006": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答指出原计划是一线周边卫星城、后改为县城样板，与 m006 一致，也说明了改动。"
+ },
+ "b-terra:1:q31": {
+  "gold": {
+   "m023": true,
+   "m020": true,
+   "m021": false,
+   "m123": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答体现了等 1 月样板县数据再定规模、人均签约从 6 家提到 9 家前不扩编，但没提扩编方向（地推还是电销）尚未想好，也没提 C 轮可能拖到明年二季度、要按最坏情况收紧开支。"
+ },
+ "b-terra:1:q75": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "这是常识性问题，回答只讲骑手工资的通用算法，没有扯进他的个人记忆，也没有编造他说过或定过的事；先给结论、用表格只是贴合他的表达偏好。"
+ },
+ "b-terra:2:q25": {
+  "gold": {
+   "m400": true,
+   "m121": false,
+   "m064": false,
+   "m220": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答列出了「明年只做三件事」及其他手头的明年计划，但漏掉了零基预算、老客户续费不涨价和续费率是第一指标这三条；没有提到旧的全线涨价说法，所列内容都能在记忆里找到出处。"
+ },
+ "b-terra:2:q29": {
+  "gold": {
+   "m080": true,
+   "m081": true,
+   "m082": false,
+   "m062": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答讲到了先做补货建议、不做通用聊天机器人，补充的形态和试点细节都和店长助手相关，但漏了两件还没定的事：底层模型自己调还是用大厂接口，以及 AI 功能是否单独收费。"
+ },
+ "b-terra:2:q35": {
+  "gold": {
+   "m241": true,
+   "m243": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答点明首站仍是越南、明年上半年海外只调研不投钱；提到的数据不出境和每月 20 万调研封顶都和印尼代理直接相关，不算硬扯，也没有编造他的说法。"
+ },
+ "b-terra:2:q13": {
+  "gold": {
+   "m222": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答写明了连续 7 天未登录、48 小时内回访这一预警规则；健康分、到期三段跟进、换店员、店数口径等其他记忆都和流失预警相关，没有凭空编造他的说法。"
+ },
+ "b-terra:2:q47": {
+  "gold": {
+   "m040": true,
+   "m041": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答先说了早先想把华东三省收回直营及原因，又指出后来改为给经销商加服务考核，没有把旧说法当成现在的立场。"
+ },
+ "b-terra:2:q54": {
+  "gold": {
+   "m201": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答给出的是他现在的立场：管理层用 OKR、一线用 KPI，并明确不再全公司推行。奖金挂钩的顾虑来自 f096，和问题相关。"
+ },
+ "b-terra:2:q57": {
+  "gold": {
+   "m180": true,
+   "m183": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确复述了八月初「先数后事」的周会流程，但没提到 10 月起高管周会已改为双周、单周只开 20 分钟站会；也没有把旧的「每周一下午开」当成现行做法。"
+ },
+ "b-terra:2:q66": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答只报了日期，没有扯入他的个人记忆，也没有声称他说过什么；不过所给日期（2025年）早于记忆中的2026年，很可能不准确，但不属于评估项。"
+ },
+ "b-terra:2:q17": {
+  "gold": {
+   "m006": false,
+   "m041": false,
+   "m042": true,
+   "m004": true,
+   "m043": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答讲到了县城靠服务商地推加远程支持、返点一半按新签一半按续费、季度ABC分级清退。但没说下沉改为直接在县城选3个县做样板，也没提华东不收直营、改加服务考核的决定。"
+ },
+ "b-terra:2:q31": {
+  "gold": {
+   "m023": true,
+   "m020": true,
+   "m021": false,
+   "m123": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答用到了等 1 月数据、人均签约从 6 提到 9 家、融资可能拖到二季度这几条，但没提扩编方向（地推还是电销）他还没想好。"
+ },
+ "b-terra:2:q74": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "这是常识性问题，回答只谈县城房价走势，没有扯进他的个人记忆，也没有声称他说过什么；先给结论的写法只是格式偏好，不算硬扯。"
+ },
+ "b-terra:3:q04": {
+  "gold": {
+   "m120": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确给出他定的 18 个月跑道底线和低于后冻结非一线岗位招聘的规则，没有扯进无关记忆，也没有编造。"
+ },
+ "b-terra:3:q01": {
+  "gold": {
+   "m006": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答说出原计划是从一线周边卫星城切入，也说明后来改成在 3 个县各做 1 个样板商圈，与 m006 一致。没讲改动的理由，但核心意思已体现。没有扯进无关记忆，也没有编造内容。"
+ },
+ "b-terra:3:q13": {
+  "gold": {
+   "m222": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答用了连续 7 天未登录、48 小时内回访的预警规则；其他引用的流失原因、健康分、到期三段跟进、店数口径续费率都和续约预警直接相关；「每周看三类名单」是作为建议提出的，没说成他定过的事。"
+ },
+ "b-terra:1:q66": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答只给出日期和星期，没有扯进个人记忆，也没有声称他说过什么，符合简短偏好。"
+ },
+ "b-terra:2:q75": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答只讲骑手工资的一般计算方式，没有扯入任何个人记忆，也没有声称他说过什么；用表格、先给结论属于格式偏好，不算硬扯。"
+ },
+ "b-terra:3:q17": {
+  "gold": {
+   "m006": false,
+   "m041": true,
+   "m042": true,
+   "m004": false,
+   "m043": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答用「保留经销商模式、按续费和服务考核」体现了华东不收直营的新思路，也讲了返点拆分和 ABC 分级；但漏了下沉直接去县城做样板，以及县城靠服务商地推加总部远程支持这两点。"
+ },
+ "b-terra:3:q25": {
+  "gold": {
+   "m400": true,
+   "m121": false,
+   "m064": false,
+   "m220": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答写到了「只做三件事」，但漏了零基预算、老客户续费不涨价、续费率是第一指标这三条；没有提旧的全线涨价说法，其余内容都能在记忆里找到，也都和明年打算相关。"
+ },
+ "b-terra:3:q35": {
+  "gold": {
+   "m241": true,
+   "m243": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答体现了越南仍是第一站、明年上半年海外不投钱建团队；提到的数据不出境和每月20万调研费上限都来自记忆，且跟代理合作相关。"
+ },
+ "b-terra:3:q47": {
+  "gold": {
+   "m040": true,
+   "m041": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答说明他后来已改为给经销商加服务考核，不再收回直营，也提到了原先收回三省的想法已被替代。旧说法和新决定都讲到了，没有引入无关记忆或编造内容。"
+ },
+ "b-terra:3:q29": {
+  "gold": {
+   "m080": true,
+   "m081": true,
+   "m082": false,
+   "m062": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答讲到了先做补货建议、不做通用聊天机器人，但漏了两件他还没定的事：底层模型是自己调还是用大厂接口，以及 AI 功能要不要单独收费。"
+ },
+ "b-terra:3:q54": {
+  "gold": {
+   "m201": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确讲出一线用 KPI、OKR 只在管理层用。它提到旧的全公司推 OKR，但明确说已被新说法取代。补充的奖金挂钩顾虑来自 f096，属于相关的 OKR 记忆，不算无关内容硬扯进来。"
+ },
+ "b-terra:3:q57": {
+  "gold": {
+   "m180": true,
+   "m183": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答复述了八月初定的周会流程（先看板、再卡点、最后拍板事项），但没提 10 月起高管周会已改为双周、单周只开 20 分钟站会；回答也没把每周一下午开会的旧说法当成现行做法。"
+ },
+ "b-terra:3:q66": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "这是常识性问题，回答没有扯入他的个人记忆，也没有声称他说过什么；但给出的日期 2025 年 3 月 10 日早于记忆中的 2026 年，很可能不准确。"
+ },
+ "b-terra:3:q44": {
+  "gold": {
+   "m064": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答明确给出老客户续费不涨价、新客户标准版涨10%，没有沿用全线涨价的旧说法；引用的续费率指标、店数口径、允许降档和不靠打折都与续费定价直接相关，也没有编造他说过的话。"
+ },
+ "b-terra:3:q75": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "这是常识问题，没有应当用到的记忆；回答只套用了先给结论、用表格这类格式偏好，没有扯进他的个人想法，也没有编造他说过的话。"
+ },
+ "b-terra:3:q31": {
+  "gold": {
+   "m023": true,
+   "m020": true,
+   "m021": false,
+   "m123": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答体现了等 1 月样板县数据再决定扩编（m023）和人均签约从 6 家提到 9 家的人效门槛（m020）；但没提扩编方向在县城地推和总部电销之间还没定（m021），也没提 C 轮可能拖到明年二季度、要按最坏情况收紧开支（m123）。没有沿用每月招 10 个地推的旧说法，也没有编造他说过的话。"
+ },
+ "b-terra:3:q74": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "这是房价常识问题，没有应当用到的记忆；回答先给结论再讲依据，没有扯进他的业务或日程，也没有编造他说过的话。"
+ },
+ "full:1:q01": {
+  "gold": {
+   "m006": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答说出了原计划是一线周边的卫星城，也指出后来改成直接在县城做样板，和 m006 一致，没有扯进无关记忆。"
+ },
+ "full:1:q04": {
+  "gold": {
+   "m120": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确说出跑道不低于18个月、低于即冻结非一线岗位招聘，与m120一致；开头那句查证的话多余，但不算编造。"
+ },
+ "full:1:q13": {
+  "gold": {
+   "m222": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答写明了「连续 7 天未登录、48 小时内回访」，体现了 m222；健康分、到期分段跟进、店员更换等内容与续约预警相关，在记忆中都有出处，没有编造。"
+ },
+ "full:1:q17": {
+  "gold": {
+   "m006": false,
+   "m041": true,
+   "m042": false,
+   "m004": true,
+   "m043": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答写到了县城靠本地服务商、华东不收直营改为把收益与续费挂钩；但没提直接在县城做样板，也没提返点一半新签一半续费的拆法和经销商 ABC 分级清退。"
+ },
+ "full:1:q35": {
+  "gold": {
+   "m241": true,
+   "m243": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答点明印尼排在越南之后、明年上半年海外只调研不投钱建团队；引用的数据单独部署和客户数据归公司两条都与代理合作直接相关，不算硬扯，也没有编造他说过的话。"
+ },
+ "full:1:q25": {
+  "gold": {
+   "m400": true,
+   "m121": true,
+   "m064": true,
+   "m220": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答覆盖了明年三件事、零基预算、老客户续费不涨价、续费率作为第一指标这四条，并说明全线涨价的旧想法已经改掉；其余补充的条目都与明年计划相关，且能在记忆里找到出处。"
+ },
+ "full:1:q47": {
+  "gold": {
+   "m040": true,
+   "m041": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答复述了最初想收回直营及其原因，并点明后来改成保留经销商、加服务考核和返点挂钩，没有把旧说法当成现在的立场。"
+ },
+ "full:1:q54": {
+  "gold": {
+   "m201": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答准确说明他后来改为 OKR 只在管理层用、一线继续用 KPI，并点明这是后来改的，没有把全员 OKR 的旧说法当成现行立场；补充的「部门目标最多三个」出自记忆 f094，属于目标管理范畴，与问题相关，不算硬扯。"
+ },
+ "full:1:q57": {
+  "gold": {
+   "m180": true,
+   "m183": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答复述了八月初定的周会流程（先 15 分钟数据看板、再过卡点、最后只议需要拍板的事），但没提 10 月起高管周会已改为双周开、单周只开 20 分钟站会；也没有沿用每周一下午 2 点的旧说法。"
+ },
+ "full:1:q66": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "这是常识类问题，回答只报了日期和星期，没有扯进任何个人记忆，也没有声称他说过什么。"
+ },
+ "full:1:q44": {
+  "gold": {
+   "m064": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答明确给出老客续费不涨、新客标准版涨10%，并点明此前倾向已调整，没有把全线涨价的旧说法当成现行立场；引用的续费率第一指标、一省试点一个月、不靠打折挽留都与问题相关且有记忆依据。"
+ },
+ "full:1:q74": {
+  "gold": {},
+  "stale": false,
+  "intrusion": true,
+  "fabricated": false,
+  "note": "问的是县城房价走势这一常识问题，回答结尾却扯到样板县选择和服务商承受力，属于硬套他的业务记忆；没有声称他说过不存在的事。"
+ },
+ "full:1:q75": {
+  "gold": {},
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "这是常识问题，回答只介绍美团骑手的计酬方式，没有扯入他的业务想法（如是否接入美团外卖订单），也没有编造他说过的话。"
+ },
+ "full:1:q31": {
+  "gold": {
+   "m023": true,
+   "m020": true,
+   "m021": false,
+   "m123": false
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答用到了人均月签约从 6 家提到 9 家前不扩编、等 1 月样板县数据再定这两条；但没提扩编方向（县城地推还是总部电销）尚未想好，也没提 C 轮可能拖到明年二季度、要按最坏情况收紧开支，只泛泛提了 18 个月现金跑道。"
+ },
+ "b-terra:2:q44": {
+  "gold": {
+   "m064": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "回答明确用了老客户续费不涨价、新客户标准版明年3月涨10%的新口径，全线涨价只作为备选方案列出，没有当成他现在的立场；引用的降档、不打折、续费率口径、单省试点都和续费定价相关，且在记忆里都有依据。"
+ },
+ "full:1:q29": {
+  "gold": {
+   "m080": true,
+   "m081": true,
+   "m082": true,
+   "m062": true
+  },
+  "stale": false,
+  "intrusion": false,
+  "fabricated": false,
+  "note": "四条应用记忆都体现了：补货建议优先、不做通用聊天机器人、底层模型路线未定、AI 是否单独收费未定。额外提到的收银主屏和 10 家店试用两周均有记忆依据，且与 AI 产品线相关。"
+ }
+}

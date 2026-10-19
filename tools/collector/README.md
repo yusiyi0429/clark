@@ -1,9 +1,23 @@
 # 本机采集器
 
-## 准备
+## 一行安装（推荐）
+
+天枢上手流程的「安装本机采集器」一步：点「生成」得到本人的采集器令牌，按系统复制一行命令到终端执行。命令从天枢拉安装脚本（`/api/collector/install.ps1`、`/api/collector/install.sh`），脚本再从 `/api/collector/files/` 下载三个 Python 文件，令牌只在命令参数里：
+
+```powershell
+& ([scriptblock]::Create((irm 'https://天枢地址/api/collector/install.ps1'))) -Server 'https://天枢地址' -Token '令牌'
+```
+
+```sh
+curl -fsSL 'https://天枢地址/api/collector/install.sh' | sh -s -- --server 'https://天枢地址' --token '令牌'
+```
+
+装好后第一次检查就发心跳，上手页面随即显示「已连接」。本人在天枢同意采集之后（D-18，开关在上手流程的采集器那一步），心跳的回话带 `consent: true`，采集器才盘点并上传本机清单（定时任务、近 30 天会话里读过的飞书文档、记忆文件的路径和大小），之后每天盘点一次；没同意时不盘点，天枢也不收。
+
+## 准备（手动安装）
 
 1. 装好 Python 3（已装 tkos-world 的，会自动用 `~/.tkos-world/venv` 里的 Python）。
-2. 在天枢生成一个「本机采集器」令牌（client 为 `collector`，只能用来上报，连不了 MCP）。页面入口还没做，先在已登录天枢的浏览器标签里打开开发者工具的控制台，运行：
+2. 在天枢生成一个「本机采集器」令牌（client 为 `collector`，只能用来上报，连不了 MCP）。不走上手流程时，在已登录天枢的浏览器标签里打开开发者工具的控制台，运行：
 
    ```js
    await (await fetch("/api/me/tokens", { method: "POST", headers: { "content-type": "application/json" },

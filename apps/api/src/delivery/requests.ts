@@ -6,6 +6,7 @@ import type {
 } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "../actionToken.js";
 import type { Query } from "../meetingStore.js";
+import { fieldsFilledByRequest } from "../collections.js";
 import { insertNotification } from "../notifications.js";
 import { withTimeout, type RequestAgent } from "./requestAgent.js";
 
@@ -67,8 +68,10 @@ export async function projectRequest(q: Query, row: RequestRow, viewerId: string
   const actions: TActionDescriptor[] = [];
   if (isInitiator && draft) actions.push(sign(secret, row, "request.send", "发送"));
   if (mine?.status === "pending" && !draft) {
-    actions.push(sign(secret, row, "request.ask", "发送", viewerId));
-    actions.push(sign(secret, row, "request.mark_done", "标记完成", viewerId));
+    // 影响卡上的追问由收卡人自己的 Agent 回答（/api/impact-cards/:id/ask），不发给拍板的人。
+    if (row.kind !== "impact" && row.kind !== "doc_change") actions.push(sign(secret, row, "request.ask", "发送", viewerId));
+    // 文档变更的确认卡由确认或回答本身收尾（/api/doc-changes/:id/…）；信息收集的一轮由本人那一行在收集卡上「确认完成」（collections.ts）。两者都没有「标记完成」。
+    if (row.kind !== "doc_change" && row.kind !== "collection") actions.push(sign(secret, row, "request.mark_done", row.kind === "impact" ? "知道了" : "标记完成", viewerId));
   }
   if (isInitiator && !draft) for (const question of questions) if (question.answer === null) actions.push(sign(secret, row, "request.answer", "发出回答", question.id));
   return {
@@ -143,14 +146,17 @@ export async function listRequests(q: Query, viewerId: string, box: TRequestBox,
   const rows = (box === "inbox"
     ? await q(`SELECT r.*, rr.status AS my_status, ${aggregates} FROM request_recipients rr JOIN requests r ON r.id = rr.request_id
         WHERE rr.person_id = $1 AND r.status <> 'draft' ORDER BY rr.status = 'pending' DESC, r.sent_at DESC LIMIT 100`, [viewerId])
-    : await q(`SELECT r.*, NULL AS my_status, ${aggregates} FROM requests r WHERE r.initiator_id = $1
+    // 影响卡是系统替拍板的人推的，文档变更的确认卡是系统替作者发的，都不进「发出的」。
+    : await q(`SELECT r.*, NULL AS my_status, ${aggregates} FROM requests r WHERE r.initiator_id = $1 AND r.kind NOT IN ('impact', 'doc_change')
         ORDER BY r.status = 'done', r.created_at DESC LIMIT 100`, [viewerId])).rows as (RequestRow & {
     my_status: "pending" | "done" | null; recipient_ids: string[]; done_count: number; open_questions: number; unread: boolean;
   })[];
+  const filled = box === "inbox" ? await fieldsFilledByRequest(q, viewerId, rows.filter((row) => row.kind === "collection").map((row) => row.id)) : new Map();
   return rows.map((row) => ({
-    id: row.id, title: row.title, status: row.status, initiatorName: nameOf(names, row.initiator_id),
+    id: row.id, kind: row.kind, title: row.title, status: row.status, initiatorName: nameOf(names, row.initiator_id),
     createdAt: row.created_at.toISOString(), sentAt: row.sent_at?.toISOString() ?? null, myStatus: row.my_status,
     recipientNames: row.recipient_ids.map((personId) => nameOf(names, personId)), recipientsDone: row.done_count, openQuestions: row.open_questions, unread: row.unread,
+    ...(filled.has(row.id) ? { fieldsFilled: filled.get(row.id) } : {}),
   }));
 }
 
@@ -282,12 +288,13 @@ async function executeInTransaction(client: PoolClient, viewerId: string, scope:
   }
 
   if (scope.actionType === "request.mark_done") {
-    if (!mine || scope.itemId !== viewerId) return failure(403, "FORBIDDEN", "只有接收人可以标记完成");
+    if (!mine || scope.itemId !== viewerId || row.kind === "collection") return failure(403, "FORBIDDEN", "只有接收人可以标记完成");
     if (mine.status === "done") return { ok: true };
     await q("UPDATE request_recipients SET status = 'done', done_by = $3, done_at = now() WHERE request_id = $1 AND person_id = $2", [row.id, viewerId, viewerId]);
     await q(`UPDATE requests SET status = 'done', updated_at = now() WHERE id = $1
       AND NOT EXISTS (SELECT 1 FROM request_recipients WHERE request_id = $1 AND status = 'pending')`, [row.id]);
-    await insertNotification(client, { personId: row.initiator_id, kind: "request_done", objectType: "request", objectId: row.id, actorId: viewerId });
+    // 影响卡「知道了」不打扰拍板的人。
+    if (row.kind !== "impact") await insertNotification(client, { personId: row.initiator_id, kind: "request_done", objectType: "request", objectId: row.id, actorId: viewerId });
     return { ok: true };
   }
   return failure(404, "UNKNOWN_ACTION", "未注册的 actionType");

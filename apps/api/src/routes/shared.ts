@@ -18,6 +18,8 @@ import type { PersonalRadarService } from "../personalRadar.js";
 import type { ResearchService } from "../research.js";
 import type { MonthlyPlanService } from "../monthlyDraft.js";
 import type { MonthlyReviewService } from "../monthlyReviewService.js";
+import type { WeeklyReviewService } from "../weeklyReviewService.js";
+import type { WeeklyReviewWorldSync } from "../weeklyReviewWorld.js";
 import type { MeetingRecordingService } from "../meetingRecordings.js";
 import type { VoiceprintDeps } from "../voiceprints.js";
 import type { DictationDeps } from "../dictation.js";
@@ -30,6 +32,8 @@ import type { AppEnv } from "../app.js";
 import type { WorldReader } from "../worldReader.js";
 import type { PersonalMemory } from "../personalMemory.js";
 import type { PersonalDistillation } from "../personalDistillation.js";
+import type { CollectionAgent } from "../collectionAgent.js";
+import type { CollectionDeps } from "../collections.js";
 
 export type AppInstance = FastifyInstance<
   RawServerDefault,
@@ -79,6 +83,12 @@ export type RouteContext = {
   ontologyUpdater: OntologyUpdater;
   monthlyPlanService?: MonthlyPlanService;
   monthlyReviewService?: MonthlyReviewService;
+  /** 周复盘生成；缺省时重新生成返回 503（server.ts 注入真实服务）。 */
+  weeklyReviewService?: WeeklyReviewService;
+  /** 周复盘提交后写本体；本体没配或不写时为空，提交照常，world_sync_status 留 pending。 */
+  weeklyReviewWorld?: WeeklyReviewWorldSync;
+  /** ③ 信息收集：起草 Agent 与服务依赖（路由和对话入口共用）。 */
+  collections: { agent: CollectionAgent; deps: CollectionDeps };
   recordings: MeetingRecordingService;
   voiceprints: VoiceprintDeps;
   dictation: DictationDeps;

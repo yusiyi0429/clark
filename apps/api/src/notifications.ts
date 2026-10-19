@@ -36,6 +36,8 @@ type NotificationRow = {
   item_id: string | null;
   issue_assignments: { assignedAt: string; note: string | null }[] | null;
   request_title: string | null;
+  request_kind: string | null;
+  impact_trigger: string | null;
 };
 
 function composeText(row: NotificationRow, names: Map<string, string>): string {
@@ -60,13 +62,21 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"} 请你主责议题「${row.issue_title ?? ""}」${note ? `：${note}` : ""}`;
     }
     case "request_received":
+      // 影响卡：会上定的事影响到你手上的事。
+      if (row.request_kind === "impact") return `${row.impact_trigger === "doc_change" ? "文档变更影响你" : "会后影响你"}：${row.request_title ?? ""}`;
+      // 文档变更：作者确认新文档修订或取代了哪份，或旧文档负责人被问「还有效吗」。
+      if (row.request_kind === "doc_change") return `文档变更：${row.request_title ?? ""}`;
+      if (row.request_kind === "collection") return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}请你填：${row.request_title ?? ""}`;
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}请你：${row.request_title ?? ""}`;
     case "request_answered":
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}回答了你的问题：${row.request_title ?? ""}`;
     case "request_asked":
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}问你：${row.request_title ?? ""}`;
     case "request_done":
+      if (row.request_kind === "collection") return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}确认了：${row.request_title ?? ""}`;
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}完成了：${row.request_title ?? ""}`;
+    case "collection_reminder":
+      return `截止前提醒：${row.request_title ?? ""}`;
   }
 }
 
@@ -74,7 +84,8 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
 export async function listMyNotifications(q: Query, companyMemory: CompanyMemoryRepository, personId: string): Promise<TNotificationView[]> {
   const result = await q(
     `SELECT n.id::text, n.kind, n.object_type, n.object_id, n.item_id, n.actor_id, n.created_at, n.read_at,
-            t.title AS task_title, t.return_reason, m.title AS meeting_title, i.title AS issue_title, i.assignments AS issue_assignments, r.title AS request_title,
+            t.title AS task_title, t.return_reason, m.title AS meeting_title, i.title AS issue_title, i.assignments AS issue_assignments, r.title AS request_title, r.kind AS request_kind,
+            (SELECT ic.trigger_kind FROM impact_cards ic WHERE ic.request_id = r.id) AS impact_trigger,
             (SELECT item->>'title' FROM jsonb_array_elements(m.outcome->'items') AS item WHERE item->>'id' = n.item_id) AS item_title
        FROM notifications n
        LEFT JOIN tasks t ON n.object_type = 'task' AND t.id::text = n.object_id
