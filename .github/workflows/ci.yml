@@ -1,9 +1,15 @@
 # 只跑确定性检查（.tech/07 §12）：本地 stub Provider、一次性测试 PostgreSQL，无付费模型/Search/备份恢复。
 name: CI
 
+# 功能分支只在 PR 上跑一次，推 main 再跑一次；同一分支或 PR 有新提交时，取消还在跑的旧一轮，省 Actions 分钟。
 on:
   push:
+    branches: [main]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   deterministic-gates:
