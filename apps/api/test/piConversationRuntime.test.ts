@@ -668,16 +668,20 @@ describe("controlled Pi conversation adapter public behavior", () => {
     const issueSuggest = { propose: async () => ({}), readIssueConversation: async () => ({}) };
     const base = { currentObject: null, referencesSnapshot: [], runtimeEntries: [], signal: new AbortController().signal, emit: () => undefined };
     const tools = (index: number) => (contexts[index].tools ?? []).map((tool) => tool.name);
+    const anchor = (scene: string, range: string) => ({ view: { scene, period: "2026-10", range, summary: "当前可见", items: [], more: false }, focus: null,
+      ref: { scene, focus: null, items: [] }, read: async () => ({}), refOf: () => undefined, readRef: async () => ({}) });
     try {
       await runtime.run({ ...base, scope: "global", viewer: CEO_VIEWER, message: "渠道预算转不转", piSessionId: randomUUID(), companyMap, issueSuggest,
-        focus: { people: "all", period: "2026-10", label: "全员 · 10 月" }, issueContext: { issueThreads: [], declinedIssueTopics: ["渠道预算"] } });
+        anchor: anchor("公司首页", "全员 · 10 月"), issueContext: { issueThreads: [], declinedIssueTopics: ["渠道预算"] } });
       expect(tools(0)).toEqual(expect.arrayContaining(["read_mission_cards", "read_progress", "read_reviews", "read_object_tree", "propose_issue", "read_issue_conversation"]));
       expect(contexts[0].systemPrompt).toContain("# 三层取用");
       expect(contexts[0].systemPrompt).toContain("# 深聊转议题");
       expect(JSON.stringify(contexts[0].messages)).toContain("declinedIssueTopics");
+      expect(tools(0)).toContain("read_anchor");
+      expect(JSON.stringify(contexts[0].messages)).toContain("全员 · 10 月");
 
       await runtime.run({ ...base, scope: "task:11111111-1111-4111-8111-111111111111", viewer: MEMBER_VIEWER, message: "别人进展怎样", piSessionId: randomUUID(), companyMap,
-        focus: { people: "me", period: "2026-10", label: "我 · 10 月" }, scopeOverride: { people: "all", from: "2026-09", to: "2026-10" } });
+        anchor: anchor("执行事项详情", "我 · 10 月"), scopeOverride: { people: "all", from: "2026-09", to: "2026-10" } });
       expect(tools(1)).toEqual(expect.arrayContaining(["read_mission_cards", "read_progress", "read_reviews", "read_object_tree"]));
       expect(tools(1)).not.toContain("propose_issue");
       expect(contexts[1].systemPrompt).not.toContain("# 深聊转议题");

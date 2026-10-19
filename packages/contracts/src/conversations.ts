@@ -165,9 +165,20 @@ export const AskAnswerRecord = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * 场景锚点（PR #12 Anchor 层）：页面告诉服务端本人此刻在看哪张卡、看到的是哪一版。只传标识与版本，不传正文；
+ * 服务端在本人有权看的页面投影里找这张卡，找不到 404，版本比当前旧时照常回答、在锚点上标明页面是旧版本。
+ */
+export const AnchorSelection = Type.Object(
+  { cardId: Type.String({ minLength: 1, maxLength: 256 }), version: Type.Integer({ minimum: 1 }) },
+  { additionalProperties: false },
+);
+
 export const ConversationMessageRequest = Type.Object(
   {
     message: Type.String({ minLength: 1, maxLength: 20_000 }),
+    /** 当前页面上聚焦的那张卡；不带时对象页聚焦页面对象本身，首页没有聚焦项。 */
+    anchorSelection: Type.Optional(AnchorSelection),
     /** 回答 Agent 的提问：带了它，这一句的原文由服务端按提问卡和答案重写。 */
     answers: Type.Optional(AskAnswerInput),
     references: Type.Optional(Type.Array(CardReference, { maxItems: 20 })),
@@ -423,6 +434,7 @@ export type TAskQuestion = Static<typeof AskQuestion>;
 export type TAskAnswerInput = Static<typeof AskAnswerInput>;
 export type TAskAnswerRecord = Static<typeof AskAnswerRecord>;
 export type TConversationMessageRequest = Static<typeof ConversationMessageRequest>;
+export type TAnchorSelection = Static<typeof AnchorSelection>;
 export type TConversationMessage = Static<typeof ConversationMessage>;
 export type TConversationCard = Static<typeof ConversationCard>;
 export type TConversationHistory = Static<typeof ConversationHistory>;

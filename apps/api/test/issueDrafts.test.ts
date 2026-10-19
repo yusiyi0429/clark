@@ -171,7 +171,7 @@ describe("一号位深聊转议题", () => {
     const scope = read.events.find((event) => event.type === "scope");
     expect(scope).toMatchObject({ label: "全员 · 8–10 月", params: { people: "all", from: "2026-08", to: "2026-10" } });
     expect(read.events.some((event) => event.type === "step" && event.label === "定范围" && event.result === "全员 · 8–10 月")).toBe(true);
-    expect(read.turn.focus).toMatchObject({ people: "all" });
+    expect(read.turn.anchor!.view.range).toMatch(/^全员 · /);
     expect((await history(ceo, "global")).at(-1)!.readScope).toMatchObject({ label: "全员 · 8–10 月" });
 
     const override = { people: ["person-fixture-002"], from: "2026-09", to: "2026-10" };

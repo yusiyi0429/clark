@@ -13,6 +13,7 @@ import {
   type TConversationMessageRequest,
   type TConversationScope,
   type TReadScope,
+  type TReferenceSnapshot,
 } from "@warmap/contracts";
 import {
   ACTIVE_CONVERSATION_WHERE,
@@ -44,7 +45,18 @@ import type { RequestAgent } from "../delivery/requestAgent.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
 import { createCompanyMap, defaultFocus, scopeLabel } from "../companyMap.js";
 import { acceptIssueDraft, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, saveDraftMaterial } from "../issueDrafts.js";
+import { buildSceneAnchor } from "../sceneAnchor.js";
+import type { ConversationAnchor } from "../conversationAnchor.js";
+import { listMyTasks } from "../tasks.js";
+import { readMemberWork } from "../memberWork.js";
+import { readHomeCards } from "./cards.js";
 import { idParams, type AppInstance, type RouteContext, type SessionPerson } from "./shared.js";
+
+/** 场景锚点里对象页的叫法（按 scope 前缀）。 */
+const OBJECT_SCENES: Record<string, string> = {
+  task: "执行事项详情", meeting: "会议详情", issue: "议题详情", mission: "Mission 详情", "mission-card": "任务卡详情",
+  "monthly-plan": "月度计划详情", "monthly-review-item": "复盘项详情", "personal-review": "个人复盘", signal: "信号详情",
+};
 
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, deliveryAgent: RequestAgent): void {
   const { pool, q, env, fail, requirePerson, requireCEO, requestContext, runtime, companyMemory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, conversationStallTimeoutMs, conversationHeartbeatMs, conversationCompaction, research } = ctx;
@@ -88,16 +100,20 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       const owner = person.personId;
       const object = await scopeObjectFor(person, req.params.scope);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      if (req.body.viewingMaterialId) {
+      /** 页面左侧正在看的那份材料（只认这个 scope 的对象）；读不到抛错。read_anchor 展开时按当前权限重读。 */
+      const viewingMaterial = async (materialId: string) => {
         const [objectType, objectId] = req.params.scope.split(":", 2);
-        if (objectType !== "issue" && objectType !== "task" && objectType !== "meeting") return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在");
+        if (objectType !== "issue" && objectType !== "task" && objectType !== "meeting") throw new Error("MATERIAL_NOT_FOUND");
+        const names = personDisplayNames(companyMemory);
+        const material = await getObjectMaterial(q, { objectType, objectId }, materialId,
+          { personId: owner, role: person.role, displayName: names.get(owner) ?? owner }, names);
+        return { id: material.id, fileName: material.fileName, version: material.version, editable: material.editable, canEdit: material.canEdit,
+          ...(material.url ? { url: material.url } : {}) };
+      };
+      if (req.body.viewingMaterialId) {
         try {
-          const names = personDisplayNames(companyMemory);
-          const material = await getObjectMaterial(q, { objectType, objectId }, req.body.viewingMaterialId,
-            { personId: owner, role: person.role, displayName: names.get(owner) ?? owner }, names);
-          if (object.snapshot) Object.assign(object.snapshot, { viewingMaterial: {
-            id: material.id, fileName: material.fileName, version: material.version, editable: material.editable, canEdit: material.canEdit,
-            ...(material.url ? { url: material.url } : {}) } });
+          const material = await viewingMaterial(req.body.viewingMaterialId);
+          if (object.snapshot) Object.assign(object.snapshot, { viewingMaterial: material });
         } catch { return fail(reply, 404, "MATERIAL_NOT_FOUND", "材料不存在"); }
       }
       // 成员在 2a 看不到任何 Card，也不能借显式引用把 Card 带进自己的 Agent。
@@ -105,6 +121,47 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       const references = await resolveReferenceSnapshots(q, req.body.references ?? [], env.sessionSecret, person);
       if (!("snapshots" in references)) {
         return fail(reply, references.status, references.code, references.message);
+      }
+      // 场景锚点（PR #12 Anchor 层）：本人有权看的页面投影 → 目录、聚焦项与 read_anchor；每次展开都按当前权限和版本重读。
+      // 对象页 = 这个对象（第一次直接用上面已授权的快照）；首页 = CEO 首页的 Card / 成员工作台上本人的事项、任务卡与战场。
+      let firstList = true;
+      const pageSnapshots = async (): Promise<TReferenceSnapshot[]> => {
+        if (req.params.scope !== "global") {
+          if (firstList) { firstList = false; return object.snapshot ? [object.snapshot] : []; }
+          const current = await scopeObjectFor(person, req.params.scope);
+          if (!current.visible || !current.snapshot) return [];
+          if (req.body.viewingMaterialId) {
+            try { Object.assign(current.snapshot, { viewingMaterial: await viewingMaterial(req.body.viewingMaterialId) }); } catch { return []; }
+          }
+          return [current.snapshot];
+        }
+        if (person.role === "ceo") return (await readHomeCards(ctx, person)).cards.map((card) => ({
+          cardId: card.id, version: card.version, kind: card.kind, title: card.title, objectRef: card.objectRef, payload: card.payload,
+        }));
+        const names = personDisplayNames(companyMemory);
+        const [tasks, { work }] = await Promise.all([
+          listMyTasks(q, owner, names),
+          readMemberWork(q, companyMemory.searchPeople(undefined), env.sessionSecret, person, ctx.now()),
+        ]);
+        const item = (type: string, id: string, title: string, payload: unknown, version = 1): TReferenceSnapshot =>
+          ({ cardId: `${type}:${id}`, version, kind: type, title, objectRef: { type, id, version }, payload });
+        return [
+          ...tasks.map((task) => item("task", task.id, task.title, { task }, task.version)),
+          ...work.missionCards.map((card) => item("mission-card", card.cardId, `${card.battlefieldName} · ${card.period} 任务卡`, card)),
+          ...work.battlefields.map((field) => item("battlefield", field.id, field.name, { period: work.period, ...field })),
+        ];
+      };
+      const scene = {
+        scene: req.params.scope === "global" ? (person.role === "ceo" ? "公司首页" : "我的工作台") : OBJECT_SCENES[req.params.scope.split(":", 1)[0]] ?? "对象详情",
+        objectPage: req.params.scope !== "global", list: pageSnapshots,
+      };
+      let anchor: ConversationAnchor;
+      try {
+        anchor = await buildSceneAnchor({ ...scene, selection: req.body.anchorSelection });
+      } catch (error) {
+        const cause = error as { status?: number; code?: string; message: string };
+        if (cause.status && cause.code) return fail(reply, cause.status, cause.code, cause.message);
+        throw error;
       }
 
       // 锁按「人 × scope」：不同的人在同一页面不会互相挡住。
@@ -146,7 +203,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         // 「继续」：只能接这个人在这个页面自己的那一轮；有已写出的部分就从断点续写，没有就用已查到的材料重答。
         let resume: { tier?: "quick" | "grounded" | "deep"; question: string; instruction: string } | undefined;
         if (req.body.resumeRunId) {
-          const previous = await client.query<{ input_snapshot: { conversationId?: string; message?: string; route?: { tier?: string }; partial?: boolean } }>(
+          const previous = await client.query<{ input_snapshot: { conversationId?: string; message?: string; route?: { tier?: string }; partial?: boolean;
+            anchorFocus?: { cardId: string; version: number } | null } }>(
             "SELECT input_snapshot FROM agent_runs WHERE id = $1 AND kind = 'conversation'", [req.body.resumeRunId]);
           const snapshot = previous.rows[0]?.input_snapshot;
           if (!snapshot || snapshot.conversationId !== row.id || typeof snapshot.message !== "string") {
@@ -157,6 +215,11 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
             [row.id, req.body.resumeRunId]);
           // 那一轮记了有没有写出正文（存档里开头可能只有开场说明，不能当作正文）。
           resume = resumeInstruction(snapshot.message, snapshot.partial === false ? undefined : written.rows[0]?.content, snapshot.route?.tier);
+          // 场景锚点按那一轮记下的聚焦卡引用重建：读不到就不聚焦，版本变了按当前版本并标 changed。
+          if (snapshot.anchorFocus !== undefined) {
+            firstList = true;
+            anchor = await buildSceneAnchor({ ...scene, ...(snapshot.anchorFocus ? { selection: snapshot.anchorFocus } : {}), resumed: true });
+          }
         }
         // 回答 Agent 的提问（askUser.ts）：只能答这条对话里的提问卡，一张卡只答一次。这一句的原文按卡和答案重写
         // （下面存档、个人记忆、交给运行时的都是它），问答记录存在这条消息上。
@@ -220,8 +283,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         );
         // 个人记忆：任何页面都读本人的记忆；后台提炼按游标增量跑（personalDistillation.ts），这里不排任务。
         // 「记住」「忘掉」「改成」由主 Agent 调工具完成，不在主回答之前同步跑提炼：记忆改动失败只是工具报错，不替换回答、不动上下文（3c）。
-        // 当前页面对象就是这一轮的 anchor：检索时只比对象、不比版本；钉住的版本比现在旧时标「基于旧版本」（R8）。
-        const objectRef = object.snapshot?.objectRef;
+        // 场景锚点聚焦的那张卡（页面对象或本人选中的卡）就是这一轮记忆的 anchor：检索时只比对象、不比版本；钉住的版本比现在旧时标「基于旧版本」（R8）。
+        const objectRef = anchor.focus?.objectRef;
         const currentObject = objectRef ? { target: `${objectRef.type}:${objectRef.id}`, version: objectRef.version } : undefined;
         // 选取要等召回模型（personalMemoryRecall.ts）：不在这里等，交给运行时与分诊同时进行，拼上下文包时才等它。
         // 本轮实际装进上下文的个人记忆 id：上下文包里的，加上检索工具返回的；随回答存进 memory_used。
@@ -275,6 +338,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
               ...(req.body.resumeRunId ? { resumeOf: req.body.resumeRunId } : {}),
               ...(idleRestart ? { idleRestart: true } : {}),
               currentObject: object.snapshot,
+              // 场景锚点的聚焦卡引用（id@版本）：「继续」这一轮时按它重建锚点。
+              anchorFocus: anchor.focus ? { cardId: anchor.focus.cardId, version: anchor.focus.version } : null,
               references: references.snapshots,
               attachments: attachments.map(conversationAttachmentInfo),
             }),
@@ -362,14 +427,17 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           return card;
         };
 
-        // 三层取用（companyMap.ts）：页面只决定默认焦点；跨对象读取时发范围标签，同时记成「定范围」这一步。
+        // 三层取用（companyMap.ts）：默认焦点只有一个来源——场景锚点聚焦的那张卡（对象页就是页面对象；首页没有聚焦时按页面）。
+        // 同一个焦点既给三层取用的工具当默认参数，也作为 anchor.range / anchor.period 给模型看。跨对象读取时发范围标签，同时记成「定范围」这一步。
         const now = ctx.now();
         const viewer = { personId: owner, role: person.role };
-        const baseFocus = defaultFocus(req.params.scope, object.snapshot, viewer, now);
+        const focusScope = req.params.scope === "global" && anchor.focus ? `${anchor.focus.objectRef.type}:${anchor.focus.objectRef.id}` : req.params.scope;
+        const baseFocus = defaultFocus(focusScope, anchor.focus, viewer, now);
         const focusIds = baseFocus.people === "all" ? null : baseFocus.people === "me" ? [owner] : baseFocus.people;
         const battlefieldName = baseFocus.battlefieldId
           ? (await q("SELECT name FROM battlefield_config WHERE id = $1", [baseFocus.battlefieldId])).rows[0]?.name as string | undefined : undefined;
-        const focus = { ...baseFocus, label: scopeLabel({ people: focusIds, battlefieldName, from: baseFocus.period, to: baseFocus.period, viewerId: owner }, names) };
+        const turnAnchor: ConversationAnchor = { ...anchor, view: { ...anchor.view, period: baseFocus.period,
+          range: scopeLabel({ people: focusIds, battlefieldName, from: baseFocus.period, to: baseFocus.period, viewerId: owner }, names) } };
         let readScope: TReadScope | undefined;
         const companyMap = createCompanyMap({ q, viewer, people: directory, now: ctx.now, focus: baseFocus, override: req.body.scopeOverride,
           onScope: (scope) => {
@@ -481,7 +549,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
             entries,
             ask,
             companyMap,
-            focus,
+            anchor: turnAnchor,
             ...(req.body.scopeOverride ? { scopeOverride: req.body.scopeOverride } : {}),
             ...(issueSuggest ? { issueSuggest } : {}),
             ...(issueContext ? { issueContext } : {}),
