@@ -2,7 +2,7 @@ import React,{createContext,useContext,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Button} from '@heroui/react';
 import {MessageCircle} from 'lucide-react';
-import {templateFields,editableTemplateFields,listFields} from './document-template.mjs';
+import {cardFields,editableTemplateFields,listFields} from './document-template.mjs';
 import {milestoneParts,formatPlanDate} from './reader-view.mjs';
 const AnnotationContext=createContext(null);
 const EditingContext=createContext(null);
@@ -49,22 +49,21 @@ function MilestoneTimeline({value,original=value}){
  return <ul className="milestone-timeline">{entries.map((entry,i)=>{const {date,label}=milestoneParts(entry);return <li key={i} title={Array.isArray(original)?original[i]:String(original)}>{date&&<time>{date}</time>}<span>{label}</span></li>;})}</ul>;
 }
 export default function DocumentContent(props){return <EditingContext.Provider value={props.editing}><AnnotationContext.Provider value={props.annotation}><Content {...props}/></AnnotationContext.Provider></EditingContext.Provider>;}
-function Content({node,comments=[],onDetail,full=false,childNodes=node.children||[],onOpen,allowChildren=true}){
- const t=templateFields[node.level]||templateFields.activity;
- const fields=list=>list.map(([field,label])=><Field key={field} node={node} field={field} label={label} value={node[field]} comments={comments} onDetail={onDetail}/>);
- if(node.level==='mission'||node.level==='po'){
-  const rows=[['title','名称'],['result','成果描述'],['owner',node.level==='po'?'RU DRI':'Mission DRI'],['unitName','所属责任单元'],['time','时间边界'],['why','存在必要性'],['checks','验收标准'],['boundary','责任边界'],...(allowChildren?[['childList',node.isCompany?'RU PO 清单':node.level==='po'?'Mission 清单':'Task 清单']]:[]),...t.plan];
-  const hiddenFields=node.level==='po'?['title','owner','unitName','time','childList']:['title','owner','unitName','childList'];
-  const visibleRows=rows.filter(([field])=>!hiddenFields.includes(field));
-  return <div className="template-content mission-card" data-template-level={node.level}><h3 className="mission-card-title">{node.level==='po'?'PO Card':'Mission Card'}</h3><FieldTable node={node} rows={visibleRows} comments={comments} onDetail={onDetail} childNodes={childNodes} onOpen={onOpen}/></div>;
- }
- return <div className="template-content" data-template-level={node.level}>
-  {fields(t.core)}
-  {node.level==='po'&&<div className="template-identification"><span>时间边界：{node.time||'待补充'}</span><span>Parent LTO：{node.parentLtoReference||'版本引用待补充'}</span></div>}
-  {node.level==='mission'&&<div className="template-identification">所属责任单元：{node.unitName||node.unit||'待补充'}</div>}
-  {node.level==='task'&&full&&<div className="template-identification">所属 Mission：{node.parentTitle||'待补充'}</div>}
-  {t.detail.length>0&&<details className="plan-doc-more" open={full||undefined}><summary>{node.level==='po'?'目标详情':node.level==='mission'?'Mission Card · 必要性与边界':'Task Card · 必要性与边界'}</summary>{fields(t.detail)}</details>}
-  {t.plan&&<details className="plan-doc-more" open={full||undefined}><summary>Mission Plan</summary>{fields(t.plan)}<p className="template-identification">Task 全景与甘特图读取下方同一组 Task，不另建一份计划。</p></details>}
-  {t.extra&&node.boundary&&<details className="plan-doc-more"><summary>责任边界</summary>{fields(t.extra)}</details>}
+const filled=v=>v!=null&&(Array.isArray(v)?v.some(x=>String(x).trim()):String(v).trim()!=='');
+// Upstream elements this RU listed as not taken on this month, read from the round's own list.
+function Deferred({list}){
+ return <table className="card-deferred"><tbody><tr><th scope="row">本月暂缓</th><td>{list.length?<ol>{list.map((x,i)=><li key={x.id||i}><strong>{x.element}</strong>{x.note&&<span>：{x.note}</span>}</li>)}</ol>:<p className="template-missing">本月没有暂缓的上级要求</p>}</td></tr></tbody></table>;
+}
+function Content({node,comments=[],onDetail,deferred}){
+ const edit=useContext(EditingContext),anchor=useContext(AnnotationContext)?.anchor;
+ const spec=cardFields[node.level]||cardFields.activity;
+ // Folded fields stay one click away; while editing or annotating one of them the fold opens.
+ const more=spec.more.filter(([field])=>edit?.editing?editableTemplateFields(node.level,node).some(([key])=>key===field):filled(node[field]));
+ const open=Boolean(edit?.editing||more.some(([field])=>field===anchor||comments.some(c=>c.block===field)));
+ return <div className="template-content card-simple mission-card" data-template-level={node.level}>
+  <h3 className="mission-card-title">{{po:'PO Card',mission:'Mission Card',task:'Task Card'}[node.level]||'Activity'}</h3>
+  <FieldTable node={node} rows={spec.key} comments={comments} onDetail={onDetail}/>
+  {node.level==='po'&&deferred&&<Deferred list={deferred}/>}
+  {more.length>0&&<details className="plan-doc-more card-more" open={open||undefined}><summary>更多信息 · {more.map(([,label])=>label.replace(/（.*）/,'')).join('、')}</summary><FieldTable node={node} rows={more} comments={comments} onDetail={onDetail}/></details>}
  </div>;
 }

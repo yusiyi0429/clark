@@ -1,6 +1,6 @@
 {
   "source": "/Users/cooper/TKOS/apps/decoding-mvp",
-  "capturedAt": "2026-10-15",
+  "capturedAt": "2026-10-16",
   "files": [
     {
       "path": "document-navigation.mjs",
@@ -152,7 +152,7 @@
     },
     {
       "path": "style.css",
-      "sha256": "5857b3af0cf328fceb7e4448b4c201b37276f4b771e6a821b715e106b44bd1c8"
+      "sha256": "9c404a242b19c9be991377d86f7aa5c5018a11f6c478db3e769d0f4843c0ee97"
     },
     {
       "path": "ontology-sources.mjs",
@@ -160,11 +160,11 @@
     },
     {
       "path": "app.jsx",
-      "sha256": "71ae8c1f313c9d6b0afcb6b2d92c5be86e9b48da83e4f375b28d31f1ef8ce3bd"
+      "sha256": "8c8c913bd832dcd62e23c931aeeb876d5725edf4652d2146d1e0604c8ef89312"
     },
     {
       "path": "document-template.mjs",
-      "sha256": "6d58493c6ed2f16e8215426ebfd3e39995530c2b7c5a120d6d81410ef3d18c3e"
+      "sha256": "c23ec97bc166a0d42b5b1d869cb9b5f768c53a4fb00a4981d3eebff7e38f6187"
     },
     {
       "path": "gantt-time.mjs",
@@ -172,7 +172,7 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "cfca3acde5f75ed12afd367023964c1cb934bc5064eb303fc5a7cfb81f27e62d"
+      "sha256": "ef9bed1507810f5b93f6fc48bfb2893e7a971766b662faac8fbe62895b69c0d8"
     },
     {
       "path": "codex-ontology-bridge.mjs",
@@ -208,7 +208,7 @@
     },
     {
       "path": "DocumentContent.jsx",
-      "sha256": "deafdeaa2cc2916463cac6af43bc0e8de9a1cdcb3f747c3ecd5fe27ae6c2a9f4"
+      "sha256": "0931414815f69b5e6cf877031b120c5502efe381c822caf925072339ae7e45a7"
     },
     {
       "path": "reader-view.mjs",
@@ -264,11 +264,19 @@
     },
     {
       "path": "DocumentCanvas.jsx",
-      "sha256": "f429c03b5c58f641787c8e14bb91cc61256de0ed913167543601ad2bb6e64d3b"
+      "sha256": "7219280aa41fa41ce3eec09259bd593769871a4ab28541a17d3dbcf09fa689e3"
     },
     {
       "path": "owner-name.mjs",
       "sha256": "b7c317bf789a1add41dd948ee6305a6b401c2e1c71c2deaa742addae42c61693"
+    },
+    {
+      "path": "activity-plan.mjs",
+      "sha256": "963dd5ca35856c18da5744757200d69c4574535cd94ff973b24f30cca67aaca6"
+    },
+    {
+      "path": "ActivityGenerator.jsx",
+      "sha256": "753bc0fcaf71663a00a1118ceba80f2da49cc97ff00e5c6cfef54ea30d9304ac"
     }
   ],
   "excluded": [
