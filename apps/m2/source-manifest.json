@@ -1,291 +1,382 @@
 {
   "source": "/Users/cooper/TKOS/apps/decoding-mvp",
-  "capturedAt": "2026-10-16",
+  "capturedAt": "2026-10-19",
   "files": [
     {
-      "path": "document-navigation.mjs",
-      "sha256": "485371511fc3c47715d3e3572c568a3113e044068dbf63d00a0b956e8f92ed19"
-    },
-    {
-      "path": "generation-progress.mjs",
-      "sha256": "3a6d817f61ffe16c7f43504d0083bcf012481dfdf2677ade46b40078a3762f4f"
-    },
-    {
-      "path": "nexus-next-step.mjs",
-      "sha256": "aff4686f5070a5d0570e6e32a137e1c33b1991dcd8758e7e41c0892b2edd3bbf"
-    },
-    {
-      "path": "round-runner.mjs",
-      "sha256": "3db40babc173ea01449dfa2c13128a74a5f7805b3757ac57882e601685d69235"
-    },
-    {
-      "path": "schedule-check.mjs",
-      "sha256": "3aab52e26288043a8d49e1a27b7d9f78d792a22eca47a7b88480c32ed667c213"
-    },
-    {
-      "path": "RoundPanel.jsx",
-      "sha256": "c5038a376a5a96ab6a647593129094e5d58c1c3063323f2613297b8bedc0c056"
+      "path": "ActivityGenerator.jsx",
+      "sha256": "753bc0fcaf71663a00a1118ceba80f2da49cc97ff00e5c6cfef54ea30d9304ac"
     },
     {
       "path": "AuditStatus.jsx",
       "sha256": "4b5adc012a06e40b5c65253515b5400403add0dfd3368bb589e8565281b66384"
     },
     {
-      "path": "index.html",
-      "sha256": "dec2f579801850b5ac9ebb1cf8345ba9bb90944b8a559140af469b15ca9a916d"
-    },
-    {
-      "path": "discussion-minutes.mjs",
-      "sha256": "dd4b079fb691e4650e80e86105cbc0ea163f9efccfe7b3eba3b70606ba31ee75"
-    },
-    {
-      "path": "round-metadata.mjs",
-      "sha256": "1df164192cf0c5abc1c4c3d53c1fa9411465f4a28773c104594940905f96f9ac"
-    },
-    {
-      "path": "round-pool.mjs",
-      "sha256": "d821edc0cf277260c58438babe51589d74287d8cc1156deeb7db1bb6a7f082c0"
-    },
-    {
-      "path": "nexus-policy.mjs",
-      "sha256": "056b913adf22a9d680ef7d31c2c40a517b7b73c070e5da0776f267f7d7e97401"
-    },
-    {
-      "path": "round-activation.mjs",
-      "sha256": "0b82980b211499f57dbbb2c716b8191d0aebf141a5ffa18928c29a55f799a490"
-    },
-    {
-      "path": "member-profiles.mjs",
-      "sha256": "6813ba7784a2b1755e2e05e11d137bdb3ca9010dc4ddf76a745190e06b61e61f"
-    },
-    {
-      "path": "round-retry.mjs",
-      "sha256": "c15b2db085f9df3dd62b6363857b5a2956189e44467c53dc1eba1be43be19c36"
-    },
-    {
-      "path": "Handshake.jsx",
-      "sha256": "e2823887a370e3aea4c1ed2fcdf748b6c0bca124d246de70e02f0e409bdb60ac"
-    },
-    {
-      "path": "nexus-retry.mjs",
-      "sha256": "6c1b3fa79ca768d98f299bd0503737642de6b2f1bede59e8a7e072e7f32eb228"
-    },
-    {
       "path": "BotAvatar.jsx",
       "sha256": "228997dcf584dccc46d31a359c059f97e450fa8d5c791a3d51448218de6a112c"
-    },
-    {
-      "path": "round-context.mjs",
-      "sha256": "35aaf0d68d389d6d598e152689f58ab92c0f1bae725928ae7b7a7372b3400820"
-    },
-    {
-      "path": "ReviewEditor.jsx",
-      "sha256": "54c5be5431a46de973c713baa0b4cf53714f561bb98bb6d4a08fbbe998fa8beb"
-    },
-    {
-      "path": "nexus-participation.mjs",
-      "sha256": "6d64d8dcff9782b9abb14ec297293c55fa8f99f4ef53d3d6c10828a3d7d9eacd"
-    },
-    {
-      "path": "NexusOrb.jsx",
-      "sha256": "1c58465bc0173d096528b578c7c89946ba20ac7ecd0365ecf2a21ed0dbabf1fc"
-    },
-    {
-      "path": "round-audit.mjs",
-      "sha256": "bcac668320dc84fea6172484e37b66a0fc32ad19efb513e62e6c3221b51ee414"
-    },
-    {
-      "path": "EntryMetadata.jsx",
-      "sha256": "ef173a6af37c370b03dd3534d882718cd9cba280fe207e2ce613af7f998358d7"
-    },
-    {
-      "path": "ChatMessage.jsx",
-      "sha256": "ac02af9e78257708da40da2bc256e87b5ccd74c68e5c656af552d264a01016da"
-    },
-    {
-      "path": "skill-snapshot.mjs",
-      "sha256": "c59beda7622ebed35df008c1f86cbaadbd57fbd030dd0f8e7b0df665a72935d7"
-    },
-    {
-      "path": "agent-prompts.mjs",
-      "sha256": "8c98df03278bbc4fc2d84917e804acc32213ac37fa3c39b42eceaf206522f866"
-    },
-    {
-      "path": "mention-input.mjs",
-      "sha256": "c20bd255a74ded6b1dadc67c4f00732d1b1aa9ae45eeb26b1dd540b18d118aaf"
-    },
-    {
-      "path": "collaboration-store.mjs",
-      "sha256": "aa7c0995f1c3a6733c3608673d29cf18dfdcbae8456faad78ee72732cf10c60c"
-    },
-    {
-      "path": "shared-projection.mjs",
-      "sha256": "a3e8f41d3136187a6f8f11d2e2d261b967e094def7db7c6a5e87ae1ec128b20d"
-    },
-    {
-      "path": "NexusIsland.jsx",
-      "sha256": "5f64c73f68ff58cf21fb2b420318dc48afd6d2a9be980bcb8942ec1b4af7b960"
-    },
-    {
-      "path": "ProposalCard.jsx",
-      "sha256": "cd2abb179ecadf646cb126e61c13cdba60cb479de44f6a77a5e469fa31813b18"
-    },
-    {
-      "path": "reader-quality.mjs",
-      "sha256": "5e0c0a89788f76652d2944e21f52d81ef454d27264d8164e57b176c286e4e713"
-    },
-    {
-      "path": "topic-lifecycle.mjs",
-      "sha256": "e06f514f1d9273169c8a5da65b35357eb850a2599c633374e60bf9ffef2903f0"
-    },
-    {
-      "path": "domain.mjs",
-      "sha256": "0f44dc53e6618d98e43a5c797b41ad79dca4877f8f24317ff6e56fbc8edcaa70"
-    },
-    {
-      "path": "decoding-gateway.mjs",
-      "sha256": "ad4854be44d9d4104d78a9715805e2fca611e4573cbf0bb94be830ca8799d22f"
-    },
-    {
-      "path": "account-responsibilities.pending.json",
-      "sha256": "eba3e6ef5bb2a296d62e8d0b61a75aaf69830b2d1fb2632d9c298dd3fe23aa34"
-    },
-    {
-      "path": "style.css",
-      "sha256": "9c404a242b19c9be991377d86f7aa5c5018a11f6c478db3e769d0f4843c0ee97"
-    },
-    {
-      "path": "ontology-sources.mjs",
-      "sha256": "36909b379b729e7adc2ecd5ff1aa80a3b9475a6b329716a45e5954bd8f7e671b"
-    },
-    {
-      "path": "app.jsx",
-      "sha256": "8c8c913bd832dcd62e23c931aeeb876d5725edf4652d2146d1e0604c8ef89312"
-    },
-    {
-      "path": "document-template.mjs",
-      "sha256": "c23ec97bc166a0d42b5b1d869cb9b5f768c53a4fb00a4981d3eebff7e38f6187"
-    },
-    {
-      "path": "gantt-time.mjs",
-      "sha256": "c075db35622fe0e62759bce222d7f3ccbc1a8e5319ee74fd807a5fe4f973ab9e"
-    },
-    {
-      "path": "server.mjs",
-      "sha256": "ef9bed1507810f5b93f6fc48bfb2893e7a971766b662faac8fbe62895b69c0d8"
-    },
-    {
-      "path": "codex-ontology-bridge.mjs",
-      "sha256": "6ced8bbdf168ee1d0cf41f6780e814e107adb2c4f116d55f21e5dcd3b774edb4"
-    },
-    {
-      "path": "proposal-confirmation.mjs",
-      "sha256": "8a68eef13eb196c2d699897b10b6c1c8d7babb88332789cdb3f0c04841df47c0"
-    },
-    {
-      "path": "GenerationCanvas.jsx",
-      "sha256": "b5bd95c842335e375b0aac89e41d95dfeec6cf1067db7431b969960349a2d3e2"
-    },
-    {
-      "path": "nexus-memory.mjs",
-      "sha256": "a215920bf55032aeece897fcdf3a96d06eb2675f853316fdb7c0d8776f5588af"
-    },
-    {
-      "path": "review-workflow.mjs",
-      "sha256": "b4f687b2654fd3ac102ab092ffdb54a9b61acde6bd8551f6b7a9e8bac3c3e12b"
-    },
-    {
-      "path": "plan-labels.mjs",
-      "sha256": "2003139d23bba8c97f05e974db8b4126b1773c0d4e5b77017015a816c0b90dd9"
-    },
-    {
-      "path": "round-preview.mjs",
-      "sha256": "ef5ac527c9cdca4679ef716843a967b17485cebe3d37de9d7c682a572aa3ab4d"
-    },
-    {
-      "path": "governance.mjs",
-      "sha256": "85fc5706197ac10d4c3223fe07951afe71fd4abb95a4f6c5f3cac4e4ad593d6b"
-    },
-    {
-      "path": "DocumentContent.jsx",
-      "sha256": "0931414815f69b5e6cf877031b120c5502efe381c822caf925072339ae7e45a7"
-    },
-    {
-      "path": "reader-view.mjs",
-      "sha256": "3bea58d88a6b6db1286943966e581833cc8ef0b63fbc7362f430aa3ae60046ec"
-    },
-    {
-      "path": "reader-format.mjs",
-      "sha256": "c1174c26ec2348ae417398a5f964ab01898186e6681854861eafdc2a8a3c2617"
-    },
-    {
-      "path": "private-agent-context.mjs",
-      "sha256": "74ec5fb11aa96c25fefee0a814d76bd43fe73488d334f452f00a650920879a13"
-    },
-    {
-      "path": "chat-stream.mjs",
-      "sha256": "d699aa2f47d2cf71784d44819c3644afd869fc3b7a9f168bdb5785d7836612f7"
-    },
-    {
-      "path": "enter-submit.mjs",
-      "sha256": "8b151f93c7ce9ff04d5ed92c9b6e7c9255534e0aa171feb19a6fe6ce68d66f53"
-    },
-    {
-      "path": "conversation-context.mjs",
-      "sha256": "84ac0bc1a28c8c5e4d9de8355e54cbd00c4adc91cc2be9ee6c5ebc1efd00b166"
-    },
-    {
-      "path": "RevisionOverlay.jsx",
-      "sha256": "a3b3747a880b20526adf42ef7cce5c9d57e8373a2154d41b42d1e608a3393589"
-    },
-    {
-      "path": "model.mjs",
-      "sha256": "6a4c9c6b126be1053dbf343f9467461b8efd486e149bc817698751fe83d16d04"
-    },
-    {
-      "path": "MemberAvatar.jsx",
-      "sha256": "d72577d28aad8f3acf4a0a99cc2377cc682bc6a7f885b7e6189732c52039a935"
     },
     {
       "path": "ChatComposer.jsx",
       "sha256": "302b2e73dbede790194d55e8d38d32791bbadc95b3b4a1f6f16316c881d026b5"
     },
     {
-      "path": "round-completion.mjs",
-      "sha256": "3eefd2f806be081d33e80148974b3635ebcdf0af4fc92d9ca4b72d6b29e445ff"
+      "path": "ChatMessage.jsx",
+      "sha256": "0dfa186992c744f813355bbfe8d2c0b73f2299ee74aaa48f521edbe86ebdbc2d"
     },
     {
       "path": "DiscussionMinutes.jsx",
       "sha256": "40da4dfbefcc199590fd491e97260b4a1cdc80a6588fd22a8fccd450b425a2d0"
     },
     {
-      "path": "round-sources.mjs",
-      "sha256": "7522a52248e56e73b9f1bad51450982f42a0d5d75735d1e259de78e6e89a85cb"
-    },
-    {
       "path": "DocumentCanvas.jsx",
-      "sha256": "7219280aa41fa41ce3eec09259bd593769871a4ab28541a17d3dbcf09fa689e3"
+      "sha256": "3b1f503d6a6111f0fae5fdced33520c46b10844aebc9edcacb52a964a4cad61d"
     },
     {
-      "path": "owner-name.mjs",
-      "sha256": "b7c317bf789a1add41dd948ee6305a6b401c2e1c71c2deaa742addae42c61693"
+      "path": "DocumentContent.jsx",
+      "sha256": "f020e24609bf9f91798a5150dd5a504f6d701885e224985a8adb0301bf7f0ced"
+    },
+    {
+      "path": "EntryMetadata.jsx",
+      "sha256": "71330c75a1a9e9a34b8cc40e4038cc52092269650dd213fe76aca689e8db61ec"
+    },
+    {
+      "path": "GenerationCanvas.jsx",
+      "sha256": "b5bd95c842335e375b0aac89e41d95dfeec6cf1067db7431b969960349a2d3e2"
+    },
+    {
+      "path": "Handshake.jsx",
+      "sha256": "537837a3354c9e4f6e4345503604eb3cfa31a43a610fdc04429e67bebebfece3"
+    },
+    {
+      "path": "MemberAvatar.jsx",
+      "sha256": "d72577d28aad8f3acf4a0a99cc2377cc682bc6a7f885b7e6189732c52039a935"
+    },
+    {
+      "path": "NexusIsland.jsx",
+      "sha256": "682e25249707eb861cdf7c8a895d9b40ae1c82510d861ddec70c50e69985a83f"
+    },
+    {
+      "path": "NexusOrb.jsx",
+      "sha256": "1c58465bc0173d096528b578c7c89946ba20ac7ecd0365ecf2a21ed0dbabf1fc"
+    },
+    {
+      "path": "PlanTimeline.jsx",
+      "sha256": "5a3544981b6f3bc06ca9f020d1174094706676daa2a0e50bcde3de247a1b22bd"
+    },
+    {
+      "path": "ProposalCard.jsx",
+      "sha256": "6fd8c3f064657f7989a942a4e6ab3f92f2dc498b0347cf4c19410b3e5f4874cc"
+    },
+    {
+      "path": "ReviewEditor.jsx",
+      "sha256": "f15c2a016f5717259ea65e398f9f66f391615c891e9d1bdb8d5660f1547333f4"
+    },
+    {
+      "path": "RevisionOverlay.jsx",
+      "sha256": "f4c70c3897a52c010ccc0641ef20f818e2dfd793c364e241c3ea4f9e9ef0a595"
+    },
+    {
+      "path": "RoundPanel.jsx",
+      "sha256": "f7a7a8efa384070fe88738f98e56c7b8f003da180e548856819d87dabc2f53e7"
+    },
+    {
+      "path": "RoundStatusBar.jsx",
+      "sha256": "8ca2c0029fe770336f73cfb9f6f105e5b4ccda59e75fb832a9eb82b01a2598df"
+    },
+    {
+      "path": "SourceCoverage.jsx",
+      "sha256": "b27818fd1a6c6ccf5f84a50a80676ffea757e1211e41cb31fe0ee74696f27932"
+    },
+    {
+      "path": "TodoPanel.jsx",
+      "sha256": "ba43b1d9f6b7b3d8947dc78033c34210885a094e4f82b3418da3a14a4dd456b5"
+    },
+    {
+      "path": "UpstreamNotice.jsx",
+      "sha256": "8c0c9cf7ec0a8766df6538a0905ee629de71a67e2c3d548b2d356f58d65b59b2"
+    },
+    {
+      "path": "V3Blocks.jsx",
+      "sha256": "e456d6630234a2ee72f213a7599cbe1a10cdc1dac0de2aae128599dd6ac54da8"
+    },
+    {
+      "path": "account-responsibilities.pending.json",
+      "sha256": "eba3e6ef5bb2a296d62e8d0b61a75aaf69830b2d1fb2632d9c298dd3fe23aa34"
     },
     {
       "path": "activity-plan.mjs",
       "sha256": "963dd5ca35856c18da5744757200d69c4574535cd94ff973b24f30cca67aaca6"
     },
     {
-      "path": "ActivityGenerator.jsx",
-      "sha256": "753bc0fcaf71663a00a1118ceba80f2da49cc97ff00e5c6cfef54ea30d9304ac"
+      "path": "agent-prompts.mjs",
+      "sha256": "6bc95181b9f773745582256bb38ffaa70e14fd8b0eac6006281b90d83c86f1ee"
+    },
+    {
+      "path": "app.jsx",
+      "sha256": "e7a3c424885e2daa4c1600761004d00ba88896e4e75a788d123fd8a65651f8ba"
+    },
+    {
+      "path": "card-issues.mjs",
+      "sha256": "5b697a22c77d8d149c43f7c45c8128c705eba1c921d4a33b14355e13f85624c6"
+    },
+    {
+      "path": "chat-stream.mjs",
+      "sha256": "d699aa2f47d2cf71784d44819c3644afd869fc3b7a9f168bdb5785d7836612f7"
+    },
+    {
+      "path": "codex-ontology-bridge.mjs",
+      "sha256": "6ced8bbdf168ee1d0cf41f6780e814e107adb2c4f116d55f21e5dcd3b774edb4"
+    },
+    {
+      "path": "collaboration-store.mjs",
+      "sha256": "a3d386f456be91f36fa2ff554b78daea89c69150a1c6fde0190d0ecf37697ab2"
+    },
+    {
+      "path": "conversation-context.mjs",
+      "sha256": "84ac0bc1a28c8c5e4d9de8355e54cbd00c4adc91cc2be9ee6c5ebc1efd00b166"
+    },
+    {
+      "path": "decoding-gateway.mjs",
+      "sha256": "2564d86853b57e917799c96341c7549de8ae5d2d5636a71920850af9aa5c7e62"
+    },
+    {
+      "path": "discussion-minutes.mjs",
+      "sha256": "dd4b079fb691e4650e80e86105cbc0ea163f9efccfe7b3eba3b70606ba31ee75"
+    },
+    {
+      "path": "document-navigation.mjs",
+      "sha256": "7ebdea721b496ca847724b8eb46f43c0991bcf5285741ed1ca525c7daa0f531b"
+    },
+    {
+      "path": "document-template.mjs",
+      "sha256": "94666fd5ca069a1b902e044282f56d357f8203d4ccab09ad63e559da83741b13"
+    },
+    {
+      "path": "domain.mjs",
+      "sha256": "6f5e9bdb142e872040e64b5b1186b93dee72d6ab90ad096c6887d259202cfb50"
+    },
+    {
+      "path": "enter-submit.mjs",
+      "sha256": "8b151f93c7ce9ff04d5ed92c9b6e7c9255534e0aa171feb19a6fe6ce68d66f53"
+    },
+    {
+      "path": "entry-fields.mjs",
+      "sha256": "7786160ac92ce1437377603091c52929bd26437c4e92f208408c6c058c6ab315"
+    },
+    {
+      "path": "gantt-time.mjs",
+      "sha256": "c075db35622fe0e62759bce222d7f3ccbc1a8e5319ee74fd807a5fe4f973ab9e"
+    },
+    {
+      "path": "generation-progress.mjs",
+      "sha256": "3a6d817f61ffe16c7f43504d0083bcf012481dfdf2677ade46b40078a3762f4f"
+    },
+    {
+      "path": "governance.mjs",
+      "sha256": "199608b53540205b87e787e99016247f1efb4ff06e475fdee080a5b096b3d13b"
+    },
+    {
+      "path": "index.html",
+      "sha256": "dec2f579801850b5ac9ebb1cf8345ba9bb90944b8a559140af469b15ca9a916d"
+    },
+    {
+      "path": "layered-mock.mjs",
+      "sha256": "81d87dc13cca1bc20297b799a4b1ef2c33e60ae190f36d10f08f452c5d863b5c"
+    },
+    {
+      "path": "member-profiles.mjs",
+      "sha256": "6813ba7784a2b1755e2e05e11d137bdb3ca9010dc4ddf76a745190e06b61e61f"
+    },
+    {
+      "path": "mention-input.mjs",
+      "sha256": "c20bd255a74ded6b1dadc67c4f00732d1b1aa9ae45eeb26b1dd540b18d118aaf"
+    },
+    {
+      "path": "mentions.mjs",
+      "sha256": "c159ab22d24f118e2eeb2e875e89f4fc7fac8da0158f683763c54e80eb084e64"
+    },
+    {
+      "path": "model.mjs",
+      "sha256": "941a1cd5f66dab31f992ecfd1a770d971805173e995ddcd366621b7963e63de9"
+    },
+    {
+      "path": "nexus-cascade.mjs",
+      "sha256": "cc3a83ebd2f417828e060f907576ef0531305237b5a33050836e0cc1d9b11eb0"
+    },
+    {
+      "path": "nexus-context.mjs",
+      "sha256": "f18cc53772ae35e924c209d4f11bf15d023150bbad84007f8f8915e484834ee3"
+    },
+    {
+      "path": "nexus-listen.mjs",
+      "sha256": "f4199d2e5bb1f0667766c8f6b937525d79bfffa7d2b34e0fffe5da20af6494a1"
+    },
+    {
+      "path": "nexus-memory.mjs",
+      "sha256": "41dbe6330204aa0e4411ccf2bd603382f44e95cab57341f66d495ec612f2cd0f"
+    },
+    {
+      "path": "nexus-next-step.mjs",
+      "sha256": "1feafbd06dfa9f604d57c6832111c081d185e4dcfd441dd067ae1f091325e3cb"
+    },
+    {
+      "path": "nexus-participation.mjs",
+      "sha256": "92627b08fb3f20a0f7be6e660830d77f6068721153d6dc5eab2c604ddddace78"
+    },
+    {
+      "path": "nexus-policy.mjs",
+      "sha256": "372dcca9e22722f14ba759bb02404bff40be18ca679cf0709ed2b2358007fc56"
+    },
+    {
+      "path": "nexus-retry.mjs",
+      "sha256": "6c1b3fa79ca768d98f299bd0503737642de6b2f1bede59e8a7e072e7f32eb228"
+    },
+    {
+      "path": "ontology-sources.mjs",
+      "sha256": "f0b26294e6b4f55880eb28797296ef93bf616fd92b11aa427164eb4e48db6fa3"
+    },
+    {
+      "path": "owner-name.mjs",
+      "sha256": "b7c317bf789a1add41dd948ee6305a6b401c2e1c71c2deaa742addae42c61693"
+    },
+    {
+      "path": "plan-deps.mjs",
+      "sha256": "f1259a493597b47a8dc62c1675faa0b3f9065fff5750e102f568e56877c7b610"
+    },
+    {
+      "path": "plan-labels.mjs",
+      "sha256": "2003139d23bba8c97f05e974db8b4126b1773c0d4e5b77017015a816c0b90dd9"
+    },
+    {
+      "path": "plan-track.mjs",
+      "sha256": "fc37894261d498914b626c0fbbff1197fb611416421bad3fdf90f0b2041d35fb"
+    },
+    {
+      "path": "private-agent-context.mjs",
+      "sha256": "fcbcb6aa2820a0234b0b5dd54f4dbd8699616189f88a11a3fd9e5a0843a5801c"
+    },
+    {
+      "path": "proposal-confirmation.mjs",
+      "sha256": "8a68eef13eb196c2d699897b10b6c1c8d7babb88332789cdb3f0c04841df47c0"
+    },
+    {
+      "path": "proposal-diff.mjs",
+      "sha256": "bc9908affc98195aa972d3a49d74875dde1b91fa036cd6d9776d88a679811223"
+    },
+    {
+      "path": "reader-format.mjs",
+      "sha256": "c1174c26ec2348ae417398a5f964ab01898186e6681854861eafdc2a8a3c2617"
+    },
+    {
+      "path": "reader-quality.mjs",
+      "sha256": "bdef1e645288bd2141d8b47ad7910bbc8c6f9670363d76ec5b53e6095ca448c2"
+    },
+    {
+      "path": "reader-view.mjs",
+      "sha256": "1ff575d8b1f3a76648454f281f5b786932781fc440b7b52edcf952dcdae55a70"
+    },
+    {
+      "path": "review-workflow.mjs",
+      "sha256": "b4f687b2654fd3ac102ab092ffdb54a9b61acde6bd8551f6b7a9e8bac3c3e12b"
+    },
+    {
+      "path": "round-activation.mjs",
+      "sha256": "0b82980b211499f57dbbb2c716b8191d0aebf141a5ffa18928c29a55f799a490"
+    },
+    {
+      "path": "round-audit.mjs",
+      "sha256": "bcac668320dc84fea6172484e37b66a0fc32ad19efb513e62e6c3221b51ee414"
+    },
+    {
+      "path": "round-completion.mjs",
+      "sha256": "3eefd2f806be081d33e80148974b3635ebcdf0af4fc92d9ca4b72d6b29e445ff"
+    },
+    {
+      "path": "round-context.mjs",
+      "sha256": "35aaf0d68d389d6d598e152689f58ab92c0f1bae725928ae7b7a7372b3400820"
+    },
+    {
+      "path": "round-metadata.mjs",
+      "sha256": "0e0554e12e72dee7b8627b77a5cd18b9476e1b544ef5a62fbb46bc4b7a1844d2"
+    },
+    {
+      "path": "round-pool.mjs",
+      "sha256": "d821edc0cf277260c58438babe51589d74287d8cc1156deeb7db1bb6a7f082c0"
+    },
+    {
+      "path": "round-preview.mjs",
+      "sha256": "ef5ac527c9cdca4679ef716843a967b17485cebe3d37de9d7c682a572aa3ab4d"
+    },
+    {
+      "path": "round-retry.mjs",
+      "sha256": "d786fd83c24fb55a314e97450e498b9a5950d813dd1b0b5535fe9dfb06a2a57d"
+    },
+    {
+      "path": "round-runner-v3.mjs",
+      "sha256": "b10ed5712f27f86c217750c31314b97673d408e85abc053ccb335df0dd57b713"
+    },
+    {
+      "path": "round-runner.mjs",
+      "sha256": "fe8531f3a405c199b4e4a11a1ca8c8541b3eebd48c19ab20be16d600236e1b78"
+    },
+    {
+      "path": "round-sources.mjs",
+      "sha256": "7522a52248e56e73b9f1bad51450982f42a0d5d75735d1e259de78e6e89a85cb"
+    },
+    {
+      "path": "round-steps.mjs",
+      "sha256": "b5a955eb6a2570368f78ab3ec7abb6f07fb6aa139f700e68298c40b4b9e5f2c7"
+    },
+    {
+      "path": "schedule-check.mjs",
+      "sha256": "3aab52e26288043a8d49e1a27b7d9f78d792a22eca47a7b88480c32ed667c213"
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "2563236ab8484faa7c35588cf573801e85ae154b573d877f205d053cfafd76b0"
+    },
+    {
+      "path": "shared-projection.mjs",
+      "sha256": "0f7a34bd6206127c5415c627baf68a5f62de5499f37427f820901adfdca195b2"
+    },
+    {
+      "path": "skill-snapshot.mjs",
+      "sha256": "c59beda7622ebed35df008c1f86cbaadbd57fbd030dd0f8e7b0df665a72935d7"
+    },
+    {
+      "path": "source-coverage.mjs",
+      "sha256": "63e0731a8235a49fca8e17f135e22370eec1ce5b063eb5702f508b5146c4af5b"
+    },
+    {
+      "path": "stance.mjs",
+      "sha256": "80b4983e52fab65ce0b44e4d825b5086a4bd688d746a950cdddc155766defb3e"
+    },
+    {
+      "path": "style.css",
+      "sha256": "01cbedb17147e09c5068ec919274dc5d3802ad705126a40e025b1bd2b8a8f8ce"
+    },
+    {
+      "path": "todo.mjs",
+      "sha256": "626efbf641ef37bbe1170c9404218b08cffd97736b6d0701fad2aa7fcf3f87f7"
+    },
+    {
+      "path": "topic-lifecycle.mjs",
+      "sha256": "194283636d79eb45de7ec6417e4edd1c962ed947c482850da0db5e921a9fc2e2"
+    },
+    {
+      "path": "v3-display.mjs",
+      "sha256": "8422126802cbbe470026fec8296b8315c3b2b8f0e7f06f2a48f2ea00ab5aa385"
     }
   ],
   "excluded": [
     "world-snapshot.json (ontology snapshot not used by the trial service)",
-    "runtime state, histories and private inputs (deployment-only)"
+    "runtime state, histories and private inputs (deployment-only)",
+    "tests that need this machine's seed, eval skills, browser, Codex or real model (run them in the demo workspace)",
+    "lan-host.mjs and published-round.mjs (local-only; the server binds via M2_BIND_HOST and reads rounds from the private seed)"
   ],
   "skill": {
-    "version": "2.0.2",
-    "fingerprint": "7280d1495ee0",
-    "source": ".runtime/eval/skills/tkos-decoding-2.0.2"
-  }
+    "version": "3.1.5",
+    "fingerprint": "01a9b1723261",
+    "source": "~/.codex/skills/tkos-decoding"
+  },
+  "mergeBase": "Demo copies of these files are kept outside Git at /Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261019 for the next three-way sync."
 }

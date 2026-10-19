@@ -24,3 +24,10 @@ test('模型流中途被断开（terminated）按临时错误重试',async()=>{
  let calls=0;const result=await retryRoundCall(()=>{if(++calls<2)throw new TypeError('terminated',{cause:Object.assign(Error('other side closed'),{code:'UND_ERR_SOCKET'})});return 'ok';},{sleep:async()=>{}});
  assert.equal(result,'ok');assert.equal(calls,2);
 });
+test('连接被对方断开（socket hang up）按临时网络错误重试',async()=>{
+ const hangUp=()=>Object.assign(Error('socket hang up'),{code:'ECONNRESET'});
+ let calls=0;
+ const result=await retryRoundCall(()=>{if(++calls<2)throw hangUp();return 'ok';},{sleep:async()=>{}});
+ assert.equal(result,'ok');assert.equal(calls,2);
+ calls=0;assert.equal(await retryRoundCall(()=>{if(++calls<2)throw Error('socket hang up');return 'ok';},{sleep:async()=>{}}),'ok');
+});

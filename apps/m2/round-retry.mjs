@@ -1,6 +1,6 @@
 export function transientRoundFailure(error){
  if(error.code==='ONTOLOGY_RETRIES_EXHAUSTED')return false;
- return [408,429,500,502,503,504].includes(error.providerStatus)||['TimeoutError','AbortError'].includes(error.name)||['ECONNRESET','ETIMEDOUT','EAI_AGAIN'].includes(error.cause?.code)||error instanceof TypeError&&/fetch failed|network|terminated/i.test(error.message)||['UND_ERR_SOCKET','UND_ERR_BODY_TIMEOUT','ECONNREFUSED'].includes(error.cause?.code)||/模型响应提前结束|模型流式响应失败/.test(error.message);
+ return [408,429,500,502,503,504].includes(error.providerStatus)||['TimeoutError','AbortError'].includes(error.name)||['ECONNRESET','ETIMEDOUT','EAI_AGAIN','EPIPE'].includes(error.cause?.code??error.code)||/socket hang up/i.test(error.message)||error instanceof TypeError&&/fetch failed|network|terminated/i.test(error.message)||['UND_ERR_SOCKET','UND_ERR_BODY_TIMEOUT','ECONNREFUSED'].includes(error.cause?.code)||/模型响应提前结束|模型流式响应失败/.test(error.message);
 }
 // Rate limits get more room than other transient errors; Retry-After wins when given.
 export function retryDelayMs(error,attempt){

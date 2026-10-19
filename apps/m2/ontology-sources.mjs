@@ -8,6 +8,9 @@ import {join} from 'node:path';
 const manifestURL=process.env.M2_ONTOLOGY_MANIFEST_FILE||join(seedRoot(),'source-manifest.json');
 export async function loadOntologyManifest(url=manifestURL){
  const manifest=JSON.parse(await readFile(url,'utf8'));
+ // Reference answers listed in the manifest are counted (for the coverage view) and never selected.
+ const answers=manifest.selections.filter(s=>s.isAnswer);
+ manifest.answerExclusions={objects:answers.length,byType:answers.reduce((g,s)=>(g[s.sourceType||'未知']=(g[s.sourceType||'未知']||0)+1,g),{})};
  manifest.selections=manifest.selections.filter(s=>!s.isAnswer).map(s=>{const ref=s.sourceRef?.match(/^([a-f0-9-]{36})@(\d+)#([^/]+)\/(.+)$/);return ref?{...s,objectId:s.objectId||ref[1],version:s.version??Number(ref[2]),blockId:s.blockId||ref[3],componentId:s.componentId||ref[4]}:s;});
  return manifest;
 }
@@ -31,15 +34,20 @@ export async function fetchOntologySources({reader=createOntologyReader(),manife
  const retries=[];
  // A version that moved on is not an error: a recorded version never changes, so the reviewed text stands; the newer one is reported.
  const versionNotices=new Map();
+ // Month goals are read as they stood at the cutoff (version and draft/committed); a later status change is only reported.
+ const statusNotices=new Map();
  const verify=(s,object)=>{
   if(!object||typeof object!=='object')throw Object.assign(Error('本体没有返回对象：'+s.sourceRef),{status:409,diagnostics:{reason:'source-not-readable',sourceRef:s.sourceRef,unitKey:s.unit}});
   let source;
   if(s.eventId)source=object.events?.find(e=>e.event_id===s.eventId)?.content?.text;
   else if(s.identityNames){const names=object.identity?.responsible?.principals?.map(p=>p.display_name).sort();if(JSON.stringify(names)!==JSON.stringify([...s.identityNames].sort()))throw Object.assign(Error('责任信息发生变化，请重新核对：'+s.unit),{status:409});return s;}
-  else {const b=(object.business?.blocks||object.blocks||object.snapshot?.blocks)?.find(b=>b.id===s.blockId);source=s.componentId?(b?.components||b?.value?.components)?.find(c=>c.id===s.componentId)?.text:b?.text;
+  else {
+   if(s.lifecycleStatus){const live=object.records?.lifecycle?.status;if(live&&live!==s.lifecycleStatus)statusNotices.set(s.objectId,{unit:s.unit,title:s.title||s.kind,objectId:s.objectId,statusAtCutoff:s.lifecycleStatus,latestStatus:live});}
+   const b=(object.business?.blocks||object.blocks||object.snapshot?.blocks)?.find(b=>b.id===s.blockId);source=s.componentId?(b?.components||b?.value?.components)?.find(c=>c.id===s.componentId)?.text:b?.text;
    if(s.version!==undefined&&object.business?.version!==s.version){
     if(!(object.business?.version>s.version)||typeof s.text!=='string'||!s.text.trim())throw Object.assign(Error('基线版本发生变化，请重新选择：'+s.unit),{status:409});
-    versionNotices.set(s.id,{unit:s.unit,title:s.title||s.kind,sourceRef:s.sourceRef,usedVersion:s.version,latestVersion:object.business.version});
+    // A version pinned at the cutoff is deliberate (later versions are the DRI's own answer), so it is not offered as an update.
+    if(!s.pinnedAtCutoff)versionNotices.set(s.id,{unit:s.unit,title:s.title||s.kind,sourceRef:s.sourceRef,usedVersion:s.version,latestVersion:object.business.version});
     return s;
    }}
   const actualHash=typeof source==='string'?hash(source):null;
@@ -70,9 +78,10 @@ export async function fetchOntologySources({reader=createOntologyReader(),manife
  if(selected.audit.pending.length||selected.audit.excluded.length)throw Object.assign(Error('已审查输入未通过过滤，停止本轮生成'),{status:409});
  const keys=['company','bf01','bf02','bf03','rearch','method','agents','eo','tokenhub','talent','finance',...(selected.sources.some(s=>s.unit==='organization')?['organization']:[])];
  if(keys.filter(key=>key!=='organization').some(key=>!selected.sources.some(s=>s.unit===key&&s.kind==='lto')))throw Object.assign(Error('公司或责任单元缺少有效LTO，无法生成整轮'),{status:409});
- const sources=keys.map(key=>{const items=selected.sources.filter(s=>s.unit===key);const content=items.map(s=>`${s.title||s.kind} · ${s.sourceRef} · ${s.confirmation}${s.factThrough?' · 事实截至'+s.factThrough:''}\n${s.text}`).join('\n\n');return {key,title:key,content,hash:hash(content),revision:manifest.version,factRefs:items.map(s=>s.sourceRef),facts:items};});
+ const sources=keys.map(key=>{const items=selected.sources.filter(s=>s.unit===key);// This month's intent is marked in the text the model reads, so the skill can name it without field names.
+ const content=items.map(s=>`${s.kind==='intent'?'【本月意图】':''}${s.title||s.kind} · ${s.sourceRef} · ${s.confirmation}${s.factThrough?' · 事实截至'+s.factThrough:''}\n${s.text}`).join('\n\n');return {key,title:key,content,hash:hash(content),revision:manifest.version,factRefs:items.map(s=>s.sourceRef),facts:items};});
  // Public audit contains only safe gap descriptions, not quarantined raw answers.
- return {mode:'ontology-selected-facts',period:manifest.period,cutoff:manifest.cutoff,planningDate:manifest.planningDate,retrievedAt:new Date().toISOString(),sources,capacity:manifest.capacity,audit:{pending:manifest.pending,accepted:facts.length,reviewVersion:manifest.version,sourceRetries:retries},versionNotices:[...versionNotices.values()],model:null};
+ return {mode:'ontology-selected-facts',period:manifest.period,cutoff:manifest.cutoff,planningDate:manifest.planningDate,retrievedAt:new Date().toISOString(),sources,capacity:manifest.capacity,audit:{pending:manifest.pending,accepted:facts.length,reviewVersion:manifest.version,sourceRetries:retries,...(manifest.answerExclusions?{excludedAnswers:manifest.answerExclusions}:{})},versionNotices:[...versionNotices.values()],statusNotices:[...statusNotices.values()],model:null};
 }
 export async function fetchCodexOntologySources({onProgress=()=>{}}={}){
  const manifest=await loadOntologyManifest();

@@ -90,7 +90,7 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | `PUBLIC_DOMAIN`、`POSTGRES_PASSWORD` | 站点域名与数据库密码，必填 |
 | `NPM_CONFIG_REGISTRY`、`ALPINE_MIRROR` | 构建参数，主机拉依赖慢时换镜像源 |
 | `WECHAT_SITE_URL`、`WECHAT_LOGIN_PORT`、`WECHAT_PROXY_URLS` | 公众号 sidecar 自身配置与首次扫码端口 |
-| `M2_SEED_DIR`、`M2_INTERNAL_TOKEN`、`M2_MODEL_KEY`、`M2_MODEL_BASE`、`M2_MODEL`、`M2_WORLD_READ_TOKEN` | 启用 `infra/m2.override.yml` 时使用，见 [M2 试用](m2-trial.md) |
+| `M2_SEED_DIR`、`M2_INTERNAL_TOKEN`、`M2_MODEL_KEY`、`M2_MODEL_BASE`、`M2_MODEL`、`M2_CHAT_MODEL`、`M2_CASCADE`、`M2_WORLD_READ_TOKEN` | 启用 `infra/m2.override.yml` 时使用，见 [M2 试用](m2-trial.md) |
 | `BACKUP_*`、`WARMAP_*` | 宿主机备份脚本，见[部署指南](deployment.md#备份与恢复) |
 
 ## 生成随机值

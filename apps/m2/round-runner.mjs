@@ -65,7 +65,6 @@ export function validateRound(raw){
 const cardShape={title:'具体工作标题',result:'可观察的结果状态',owner:'公司名单中的姓名',time:'YYYY-MM-DD—YYYY-MM-DD（须换成本轮具体建议日期）',checks:['**证据：**填写本项的证据及通过口径'],why:['**必要性：**填写本项的必要理由'],boundary:['**分工：**填写本项责任边界']};
 const poShape={...cardShape,key:'当前领域key',name:'当前领域name',parentLtoReference:'资料中的有效版本或待确认',logic:['**交接：**填写必要先后与交接'],tradeoff:['**取舍：**填写主要取舍及依据'],dependencies:['**输入：**填写提供者、交付、需要时间及未满足影响'],milestones:['MM/DD 关键交付（须换成本轮节点）'],expectedProgress:'预计推进'};
 const missionShape={...cardShape,path:['**阶段：**填写核心工作阶段'],tradeoff:['**取舍：**填写主要取舍及依据'],dependencies:['**输入：**填写提供者、交付和未满足影响'],milestones:['MM/DD 结果节点（须换成本轮节点）']};
-const activityShape={type:'Agent Activity｜Human Activity｜Human Checkpoint',...cardShape};
 const layerNames={po:'PO 层',mission:'Mission 层',task:'Task 层',final:'总校验',format:'精简'};
 const issueTypes='真重复、边界不清、放错地方、负荷、漏接上级要素、验收太松、条件未标、时间矛盾、结构与表达、其他';
 const poFields=['key','name','owner','parentLtoReference','title','result','time','checks','why','boundary','logic','tradeoff','dependencies','milestones','expectedProgress'];
@@ -103,11 +102,11 @@ export function applyChanges(state,changes){
    upstream=upstream.map(x=>x.id===change.id?{...x,...edit}:x);
   }else if(change?.op==='replace'){
    const node=find(change.id);if(!node)throw Error(`修改引用了不存在的卡片 ${change.id}`);
-   const card=clean(change.card),keep={tasks:node.tasks,activities:node.activities};
-   for(const k of Object.keys(node))if(k!=='id')delete node[k];
-   Object.assign(node,card);
-   if(card.tasks===undefined&&keep.tasks)node.tasks=keep.tasks;
-   if(card.activities===undefined&&keep.activities)node.activities=keep.activities;
+   // Fields the replacement leaves out keep their old value (3.1.4 lost 灯塔's demands when a shortening pass rewrote its PO).
+   const card=clean(change.card);
+   for(const [k,v] of Object.entries(card))if(v!==undefined)node[k]=v;
+   // A replaced card's own children keep their positional ids, so later changes in the same list can still name them.
+   if(Array.isArray(node.tasks))node.tasks=node.tasks.map((t,j)=>({id:t.id||`${node.id}-t${j+1}`,...t,activities:(t.activities||[]).map((x,k)=>({id:x.id||`${node.id}-t${j+1}-a${k+1}`,...x}))}));
   }else if(change?.op==='add'){
    const card=clean(change.card);
    if(!change.parent||change.parent==='unit')tree.missions.push(card);
@@ -281,7 +280,7 @@ export async function generateRound({gateway,rules,fetchSources=fetchRoundSource
    candidates:()=>keys.map(k=>({key:k,po:layers.mission.units[k].po,upstream:layers.mission.units[k].upstream,missions:layers.mission.units[k].missions})),
   },
   task:{
-   generateMission:(key,i)=>{const unit=layers.mission.units[key],mission=unit.missions[i];return {stage:'task-generate',task:`为「${nameOf(key)}」（key=${key}）的 Mission「${mission.title}」拆 Task 和必要的 Activity：按技能“逐层生成·3. Task 层”执行。返回 {time,tasks:[{owner,title,result,time,checks,why,boundary,dependsOn:[],activities:[]}],gaps:[]}；dependsOn 写本 Task 真正要等的前置（本 Mission 内的前置 Task 标题，或其他 Mission、其他领域的交付），没有写空数组；time 为按 Task 首尾汇总的 Mission 日期。`,key,name:nameOf(key),owners:owners(key),context:taskContext(key),capacity:input.capacity,po:unit.po,upstream:unit.upstream,mission,siblingMissions:unit.missions.filter((_,j)=>j!==i).map(m=>({title:m.title,owner:m.owner,time:m.time,result:m.result})),otherMissions:missionIndex(key),missionLoad:loadFacts(keys.map(k=>layers.mission.units[k])).map(p=>({name:p.name,missionCount:p.missionCount,missions:p.missions.map(m=>m.title)})),schemaExample:{time:'YYYY-MM-DD—YYYY-MM-DD',tasks:[{...cardShape,activities:[activityShape]}]}};},
+   generateMission:(key,i)=>{const unit=layers.mission.units[key],mission=unit.missions[i];return {stage:'task-generate',task:`为「${nameOf(key)}」（key=${key}）的 Mission「${mission.title}」拆 Task：按技能“逐层生成·3. Task 层”执行。整轮只拆到 Task，Activity 由 Task 负责人以后按需生成。返回 {time,tasks:[{owner,title,result,time,checks,why,boundary,dependsOn:[]}],gaps:[]}；dependsOn 写本 Task 真正要等的前置（本 Mission 内的前置 Task 标题，或其他 Mission、其他领域的交付），没有写空数组；time 为按 Task 首尾汇总的 Mission 日期。`,key,name:nameOf(key),owners:owners(key),context:taskContext(key),capacity:input.capacity,po:unit.po,upstream:unit.upstream,mission,siblingMissions:unit.missions.filter((_,j)=>j!==i).map(m=>({title:m.title,owner:m.owner,time:m.time,result:m.result})),otherMissions:missionIndex(key),missionLoad:loadFacts(keys.map(k=>layers.mission.units[k])).map(p=>({name:p.name,missionCount:p.missionCount,missions:p.missions.map(m=>m.title)})),schemaExample:{time:'YYYY-MM-DD—YYYY-MM-DD',tasks:[cardShape]}};},
   },
   final:{candidates:()=>candidateContext(keys.map(k=>assembleUnit(layers.final.units[k])))},
  };

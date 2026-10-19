@@ -13,7 +13,8 @@ export function createDecodingGateway(gateway,skill){
   const global=task.startsWith('从基础资料'),audit=stage.endsWith('-check')||task.startsWith('审核完整')||task.startsWith('重新审核');
   // Product stages get the operating page first, then the method references it relies on.
   // Templates (document layouts) and the evaluation log are for chat use and maintainers, not for JSON generation.
-  const order=['SKILL.md','references/round-stages.md','references/contracts.md','references/quality-bars.md','references/method.md','references/feasibility.md','references/reader-format.md'];
+  // Writing rules come right after the operating page so every display field is drafted to them, not fixed later.
+  const order=['SKILL.md','references/reader-format.md','references/round-stages.md','references/contracts.md','references/quality-bars.md','references/method.md','references/feasibility.md'];
   const keep=new Set(order);
   const parts=skill.rules.split(/\n--- ([^\n]+) ---\n/);let rules='';
   const byPath=new Map();for(let i=1;i<parts.length;i+=2)byPath.set(parts[i],parts[i+1]);

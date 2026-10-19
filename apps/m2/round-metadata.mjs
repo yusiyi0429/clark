@@ -1,4 +1,5 @@
 import {readFile} from 'node:fs/promises';
+import {sourceCoverage} from './source-coverage.mjs';
 export async function roundMetadata(round,fallbackInput){
  const input=round?.input||fallbackInput||{};
  let generationModel=input.model||null;
@@ -13,5 +14,6 @@ export async function roundMetadata(round,fallbackInput){
  if(!generationModel&&published[round?.number]&&round.id?.startsWith(`published-round0${round.number}-`)){
   try{generationModel=JSON.parse(await readFile(new URL(`../../output/${published[round.number]}/generation-audit.json`,import.meta.url),'utf8')).model||null;}catch{}
  }
- return {sourceMode:input.mode||null,sourceTitles:[...new Set((input.sources||[]).map(s=>s.title).filter(Boolean))],generationModel:generationModel?{model:generationModel.model||generationModel.id||null,reasoningEffort:generationModel.reasoningEffort||null}:null,...(generationTiming?{generationTiming}:{}),...(input.versionNotices?.length?{versionNotices:input.versionNotices}:{}),...(round?.audit?{roundAudit:round.audit}:{}),...(readerViews?{readerViews}:{})};
+ const coverage=sourceCoverage(input);
+ return {...(coverage?{sourceCoverage:coverage}:{}),sourceMode:input.mode||null,sourceTitles:[...new Set((input.sources||[]).map(s=>s.title).filter(Boolean))],generationModel:generationModel?{model:generationModel.model||generationModel.id||null,reasoningEffort:generationModel.reasoningEffort||null}:null,...(generationTiming?{generationTiming}:{}),...(input.versionNotices?.length?{versionNotices:input.versionNotices}:{}),...(round?.audit?{roundAudit:round.audit}:{}),...(readerViews?{readerViews}:{})};
 }

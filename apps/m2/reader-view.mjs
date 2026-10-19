@@ -25,7 +25,13 @@ export function milestoneParts(entry){
  return match?{date:match[1],label:match[2]}:{date:'',label:String(entry)};
 }
 export function cleanCandidatePrefix(value){return typeof value==='string'?value.replace(/^\s*候选\s*[：:]\s*/,''):value;}
-export function formatPlanDate(value){return String(value||'').replace(/(\d{4})-(\d{2})-(\d{2})/g,'$1 $2 $3').replace(/\s*[—–]\s*/g,' 至 ');}
+// 2026-10-01—2026-10-31 → 2026.10.1 – 10.31 (the end date drops a repeated year).
+export function formatPlanDate(value){
+ const dot=(y,m,d)=>`${y}.${Number(m)}.${Number(d)}`;
+ return String(value||'')
+  .replace(/(\d{4})-(\d{2})-(\d{2})\s*(?:[—–~至]|--?)\s*(\d{4})-(\d{2})-(\d{2})/g,(_,y1,m1,d1,y2,m2,d2)=>`${dot(y1,m1,d1)} – ${y1===y2?`${Number(m2)}.${Number(d2)}`:dot(y2,m2,d2)}`)
+  .replace(/(\d{4})-(\d{2})-(\d{2})/g,(_,y,m,d)=>dot(y,m,d));
+}
 export function inheritedPlanField(node,field){
  if(node.level!=='po'||fieldPoints(node[field]).length)return null;
  if(field==='dependencies'){
@@ -41,4 +47,15 @@ export function inheritedPlanField(node,field){
   return value.length?{value,source:'汇总自下属 Mission 的收尾里程碑'}:null;
  }
  return null;
+}
+// Display-only: a heading that already ends in punctuation must not get a second mark (“复制。：”).
+export function trimTrailingPunct(value){return String(value??'').replace(/[\s。．.；;，,、：:]+$/,'');}
+// A parent plan shows each child as one short line (skill reader-format: 下级成果摘要 ≤50 字).
+// Take the first clause; if still long, cut at the last comma before the limit. Full text stays on the child card.
+export function planSummary(value,limit=50){
+ const text=String(value??'').trim();if(!text)return {text:'',truncated:false};
+ const first=text.split(/[；;。]/)[0].trim()||text;
+ if([...first].length<=limit)return {text:first,truncated:first!==text.replace(/[；;。\s]+$/,'')};
+ const head=[...first].slice(0,limit).join(''),cut=Math.max(head.lastIndexOf('，'),head.lastIndexOf(','),head.lastIndexOf('、'));
+ return {text:(cut>=limit*0.5?head.slice(0,cut):head)+'…',truncated:true};
 }
