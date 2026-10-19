@@ -92,18 +92,18 @@ function fingerprint(heads: WorldHead[]): string {
   return JSON.stringify(heads.map((head) => [head.object_id, head.revision_id, head.object_version]).sort(([left], [right]) => String(left).localeCompare(String(right))));
 }
 
-/**
- * 本体读不到时的处理（用户 2026-10-16 决定）：先如实告诉用户这次没读到本体，再用本地资料作答并注明来源，同时多记一条日志。
- * 不把「读不到」说成「本体里没有」。
- */
-export const LOCAL_FALLBACK = '请先如实告诉用户这次没有读到本体，再用本地资料（企业知识、看板、当前页面）回答，并注明依据来自本地、可能不是本体最新版本；不要说成本体里没有。';
+/** 读不到本体时附在 message 里的说明（2026-10-19 D-48，取代 10/16 的「再用本地资料作答」）：公司事实不兜底；天枢自己的业务数据照常可用。 */
+const NOT_READ = '这次没有读到本体：不能据此判断本体里有没有，也不要用本地资料补公司事实；Mission、执行事项、会议、复盘、材料这些天枢自己的业务数据照常可用。';
 
-/** Company is a disposable readable World projection, never a second authority or a World writer. */
+/**
+ * Company is a disposable readable World projection, never a second authority or a World writer.
+ * 读不到（not_configured / coverage_unavailable / unavailable）与「本体里确实没有」（empty）分开报告；读不到时同时记一条日志。
+ */
 export function createCompanyMemory(env: CompanyEnv): CompanyReader {
   let pending = Promise.resolve();
   return {
     async read(viewer, request, signal) {
-      if (!worldConfigured(env)) return { status: 'not_configured', entries: [], message: `本体公司事实读取尚未配置。${LOCAL_FALLBACK}` };
+      if (!worldConfigured(env)) return { status: 'not_configured', entries: [], message: `本体公司事实读取尚未配置。${NOT_READ}` };
       const authorizedDomains = async (): Promise<string[] | null> => {
         try {
           const grants = JSON.parse(await readFile(env.companyWorldAccessFile ?? '', 'utf8')) as Record<string, unknown>;
@@ -112,7 +112,7 @@ export function createCompanyMemory(env: CompanyEnv): CompanyReader {
           return [...new Set(grant)].sort();
         } catch { return null; }
       };
-      const unavailableScope: CompanyView = { status: 'coverage_unavailable', entries: [], message: `尚未确定你可读取的本体公司信息范围，不能据此判断公司是否没有这类对象。${LOCAL_FALLBACK}` };
+      const unavailableScope: CompanyView = { status: 'coverage_unavailable', entries: [], message: `尚未确定你可读取的本体公司信息范围。${NOT_READ}` };
       const domains = await authorizedDomains();
       if (!domains) {
         logEvent({ event: 'company.world_unavailable', status: 'coverage_unavailable', errorCode: 'NO_DOMAIN_GRANT', hasQuery: Boolean(request.query) });
@@ -183,15 +183,16 @@ export function createCompanyMemory(env: CompanyEnv): CompanyReader {
               page.push(entry); size += Buffer.byteLength(JSON.stringify(entry));
               if (page.length >= 8) break;
             }
-            return { status: heads.length ? 'ready' : 'empty', entries: page, ...(cursor + page.length < filtered.length ? { nextCursor: Buffer.from(JSON.stringify({ offset: cursor + page.length, version })).toString('base64url') } : {}),
+            if (!heads.length) return { status: 'empty', entries: [], message: '读到了本体：你被授权的范围里确实没有公司对象。' };
+            return { status: 'ready', entries: page, ...(cursor + page.length < filtered.length ? { nextCursor: Buffer.from(JSON.stringify({ offset: cursor + page.length, version })).toString('base64url') } : {}),
               ...(ranked.fallback ? { message: '未精确匹配关键词；以下为授权范围的有界目录及正文，请按标题继续定位。' } : {}) };
           }
           logEvent({ event: 'company.world_unavailable', status: 'unavailable', errorCode: 'WORLD_CHANGED_DURING_READ', domains: domains.length });
-          return { status: 'unavailable', entries: [], message: `读取期间本体公司信息发生变化，这次没有读到完整内容。${LOCAL_FALLBACK}` };
+          return { status: 'unavailable', entries: [], message: `读取期间本体公司信息发生变化，请重试。${NOT_READ}` };
         } catch (error) {
           logEvent({ event: 'company.world_unavailable', status: 'unavailable', errorCode: signal.aborted ? 'ABORTED' : 'WORLD_READ_FAILED',
             error: (error as Error)?.message, domains: domains.length });
-          return { status: 'unavailable', entries: [], message: `本体公司信息暂时读不到。${LOCAL_FALLBACK}` };
+          return { status: 'unavailable', entries: [], message: `本体公司信息暂时读不到。${NOT_READ}` };
         }
       };
       // One publication at a time in this single API process; no multi-instance writer claim.

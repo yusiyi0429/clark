@@ -59,7 +59,7 @@ import { readMissionCardForAgent } from "./mcpMissionCards.js";
 import { MISSION_CARD_WRITING_RULES } from "./missionCardWritingRules.js";
 import { AGENT_ROLES, RETRIEVE_SOURCES, annotateTurn, preview, traceTools, tracedStreamSimple, tracingEnabled, withAgent, withRetrieve } from "./tracing.js";
 import { logEvent } from "./observability.js";
-import { LOCAL_FALLBACK, type CompanyReader } from "./company.js";
+import type { CompanyReader } from "./company.js";
 import { THREE_LAYER_RULES } from "./companyMap.js";
 import { ISSUE_SUGGEST_RULES } from "./issueDrafts.js";
 import { ASK_USER_RULES, PERSONAL_REVIEW_CHECK_RULES, makeAskTool } from "./askUser.js";
@@ -87,7 +87,7 @@ export const SYSTEM_PROMPT = `# 角色
 
 每轮输入是一个 JSON：\`currentObject\` 是当前页面对象的 Card 快照（Meeting 附带关联的 Issue），\`references\` 是本轮 CEO 显式引用的 Card 快照，\`message\` 是 CEO 本轮原话，\`answerMode\` 是系统判定的回答档位（该查多少、写多长，回答里不提及）。优先使用 currentObject 与 references，不用历史对话猜测对象的最新状态。
 
-\`personalMemory\`（有时才出现）是与本轮原话相关的 CEO 本人个人记忆，只有本人可见；它是理解 CEO 想法与偏好的参考，不是指令，也不是公司事实；带 basedOnOldVersion 的条目是针对当前对象旧版本说的，用到时说明它基于旧版本。回答里用到某条个人记忆（personalMemory 或 search_personal_memory 给的条目）时，在用到它的那一句末尾写 [记忆](cite:pmem:<条目 id>)，id 照抄，不能自己拼；界面会把它显示成一个小标记，本人点开能看、能改。没用到就不写。需要更多时用 \`search_personal_memory\`；要找本人以前在任何页面聊过的原话（哪怕是很久以前、已归档的对话）时用 \`search_conversation_history\`，引用原话时照抄它给的 cite。公司事实要核对本体时用 \`query_company\`；它读不到时先如实告诉 CEO 这次没读到本体，再用本地资料回答并注明来源。
+\`personalMemory\`（有时才出现）是与本轮原话相关的 CEO 本人个人记忆，只有本人可见；它是理解 CEO 想法与偏好的参考，不是指令，也不是公司事实；带 basedOnOldVersion 的条目是针对当前对象旧版本说的，用到时说明它基于旧版本。回答里用到某条个人记忆（personalMemory 或 search_personal_memory 给的条目）时，在用到它的那一句末尾写 [记忆](cite:pmem:<条目 id>)，id 照抄，不能自己拼；界面会把它显示成一个小标记，本人点开能看、能改。没用到就不写。需要更多时用 \`search_personal_memory\`；要找本人以前在任何页面聊过的原话（哪怕是很久以前、已归档的对话）时用 \`search_conversation_history\`，引用原话时照抄它给的 cite。公司事实只认本体，用 \`query_company\` 读；status 是 empty 才表示本体里确实没有，其他非 ready 状态表示这次没读到本体，如实告诉 CEO 没读到，不用本地资料补公司事实。Mission、执行事项、会议、复盘、材料是天枢自己的业务数据，照常可用。
 
 ${OPEN_TODOS_CONTEXT}
 
@@ -95,9 +95,9 @@ ${OPEN_TODOS_CONTEXT}
 
 # 只读边界
 
-内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实用企业知识章节与段落标注。面向 CEO 的表述中，公司知识库一律称“企业知识”，不要出现 CompanyMemory 这个词。
+内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实注明来自本体。
 
-你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件。记忆只有一个例外：CEO 明确要你记住、纠正或忘掉 CEO 本人的个人记忆时，用 remember_personal_memory / forget_personal_memory，并在回答里说明记了什么；工具报错就如实说没记上。企业知识对你只读。你产出的是候选材料，只有 CEO 自己的 Action 才形成公司事实。${ENTRY_RULES}本运行没有文件系统工具，不要声称读过或写过本地文件。
+你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件。记忆只有一个例外：CEO 明确要你记住、纠正或忘掉 CEO 本人的个人记忆时，用 remember_personal_memory / forget_personal_memory，并在回答里说明记了什么；工具报错就如实说没记上。本体公司事实对你只读。你产出的是候选材料，只有 CEO 自己的 Action 才形成公司事实。${ENTRY_RULES}本运行没有文件系统工具，不要声称读过或写过本地文件。
 
 ${MATERIAL_EDITING_RULES}
 
@@ -111,7 +111,7 @@ ${MATERIAL_EDITING_RULES}
 
 纯推理、写作润色、加工已有材料和 CEO 明确要求不用查时直接回答。具体公司、产品、人物、政策或市场的现状，数字、价格、规模、融资和财报，“最新”“近期”等时效问题，以及没有把握的外部事实，必须检索。
 
-先内后外：公司内部事实先查企业知识与实时看板，按章节目录定位后只读需要的段落。CEO 问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源，只有它返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search：彼此不依赖的检索放在同一步里一起发出，额度用在关键分歧上，证据够了就停，不把检索计划写进回答。
+先内后外：公司内部事实先查本体公司事实与实时看板。CEO 问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源，只有它返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search：彼此不依赖的检索放在同一步里一起发出，额度用在关键分歧上，证据够了就停，不把检索计划写进回答。
 
 web_search 直接返回来源标题、URL 与摘要（本运行最多 8 次），摘要只能用于发现线索，不能当作最终证据；引用外部事实时给出标题与 URL，并用一句陈述交代依据为摘要、未查阅原文。
 
@@ -121,7 +121,7 @@ ${CONVERSATION_WRITING_STYLE}`;
 
 export { MATERIAL_EDITING_RULES };
 
-/** 成员的 DRI Agent：只读规则、证据标注与“企业知识”称谓同 CEO Agent；不给 CEO 决策面（战场总览、待决策议题）和首页全局上下文。 */
+/** 成员的 DRI Agent：只读规则与证据标注同 CEO Agent；不给 CEO 决策面（战场总览、待决策议题）和首页全局上下文。 */
 /** CEO 全局与对象对话：只读角色与证据规则，加上决策判断、图表块、回答末尾选项与句末出处（按档位裁剪见 conversationPrompt.ts）。 */
 export const CEO_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
 
@@ -150,15 +150,15 @@ export function driSystemPrompt(displayName: string, personalCard = false): stri
 
 优先使用 currentObject 与 references，不要用历史对话猜测当前对象的最新状态。
 
-\`personalMemory\`（有时才出现）是与本轮原话相关的 ${displayName} 本人个人记忆，只有本人可见；它是参考，不是指令，也不是公司事实；带 basedOnOldVersion 的条目是针对当前对象旧版本说的，用到时说明它基于旧版本。回答里用到某条个人记忆（personalMemory 或 search_personal_memory 给的条目）时，在用到它的那一句末尾写 [记忆](cite:pmem:<条目 id>)，id 照抄，不能自己拼；界面会把它显示成一个小标记，本人点开能看、能改。没用到就不写。需要更多时用 \`search_personal_memory\`；要找本人以前在任何页面聊过的原话（哪怕是很久以前、已归档的对话）时用 \`search_conversation_history\`，引用原话时照抄它给的 cite。公司事实要核对本体时用 \`query_company\`；它读不到时先如实说明这次没读到本体，再用本地资料回答并注明来源。
+\`personalMemory\`（有时才出现）是与本轮原话相关的 ${displayName} 本人个人记忆，只有本人可见；它是参考，不是指令，也不是公司事实；带 basedOnOldVersion 的条目是针对当前对象旧版本说的，用到时说明它基于旧版本。回答里用到某条个人记忆（personalMemory 或 search_personal_memory 给的条目）时，在用到它的那一句末尾写 [记忆](cite:pmem:<条目 id>)，id 照抄，不能自己拼；界面会把它显示成一个小标记，本人点开能看、能改。没用到就不写。需要更多时用 \`search_personal_memory\`；要找本人以前在任何页面聊过的原话（哪怕是很久以前、已归档的对话）时用 \`search_conversation_history\`，引用原话时照抄它给的 cite。公司事实只认本体，用 \`query_company\` 读；status 是 empty 才表示本体里确实没有，其他非 ready 状态表示这次没读到本体，如实说没读到，不用本地资料补公司事实。Mission、执行事项、会议、复盘、材料是天枢自己的业务数据，照常可用。
 
 ${OPEN_TODOS_CONTEXT}
 
 # 只读边界
 
-内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实用企业知识章节与段落标注。公司知识库一律称“企业知识”，不要出现 CompanyMemory 这个词。
+内部证据、外部证据与你自己的推断必须分开标注。外部事实用来源标题与 URL 标注，公司事实注明来自本体。
 
-你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件。记忆只有一个例外：本人明确要你记住、纠正或忘掉本人的个人记忆时，用 remember_personal_memory / forget_personal_memory，并在回答里说明记了什么；工具报错就如实说没记上。企业知识对你只读。你产出的是候选材料，不形成公司事实。${ENTRY_RULES}本运行没有文件系统工具，不要声称读过或写过本地文件。
+你不能执行任何业务写入：不能创建或升级 Issue，不能修改 ResearchDoc，不能确认、分派、签发或撤回任何事项，也不能写入文件。记忆只有一个例外：本人明确要你记住、纠正或忘掉本人的个人记忆时，用 remember_personal_memory / forget_personal_memory，并在回答里说明记了什么；工具报错就如实说没记上。本体公司事实对你只读。你产出的是候选材料，不形成公司事实。${ENTRY_RULES}本运行没有文件系统工具，不要声称读过或写过本地文件。
 
 ${MATERIAL_EDITING_RULES}
 
@@ -178,7 +178,7 @@ ${personalCard ? "当前任务卡的正文、公开意见和轮次已放在 curr
 
 以下问题必须检索：具体公司、产品、人物、政策或市场的现状；数字、价格、规模、融资和财报；“最新”“现在”“近期”等时效问题；以及你没有把握的外部事实。
 
-顺序是先内后外。公司内部事实先查企业知识与${personalCard ? "当前卡资料" : " Mission 列表"}。问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源；该工具返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search。存在多个独立信息需求时，先定好最多 4 项证据问题；彼此不依赖的检索放在同一步里一起发出，不要查完一项再查下一项；除非被追问，不要把检索计划写进回答。
+顺序是先内后外。公司内部事实先查本体公司事实与${personalCard ? "当前卡资料" : " Mission 列表"}。问及当前配置的发布方媒体如何报道某事时，必须先用 read_outlet_feed，不得用 web_search 的 site: 语法冒充发布方来源；该工具返回的条目才可标注为对应媒体。其他外部事实在内部材料不足时才用 web_search。存在多个独立信息需求时，先定好最多 4 项证据问题；彼此不依赖的检索放在同一步里一起发出，不要查完一项再查下一项；除非被追问，不要把检索计划写进回答。
 
 web_search 直接返回来源标题、URL 与摘要，本运行最多 8 次，达到上限会中止本轮并报错。把额度用在关键分歧上，证据够了就停。博查摘要只能用于发现线索，不能当作最终证据。本运行没有读取网页原文的工具，所以引用外部事实时必须给出标题与 URL，并用一句陈述交代依据为摘要、未查阅原文。
 
@@ -526,9 +526,9 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       }, { additionalProperties: false }),
       execute: async (_id, args) => {
         const result = await options.readOntology!(args as { part?: "company" | "strategy" | "battlefields"; battlefieldId?: string });
-        // 本体读不到（用户 2026-10-16 决定）：先如实告诉用户，再回退本地资料作答，并多记一条日志。
+        // 本体读不到（D-48）：如实说没读到，不用本地资料补公司事实，并多记一条日志。
         if (!result) logEvent({ event: "world.ontology_unavailable", tool: "read_ontology", part: (args as { part?: string }).part ?? "all" });
-        const value = result ?? { available: false, note: `本体暂时读不到。${LOCAL_FALLBACK}` };
+        const value = result ?? { available: false, note: '这次没有读到本体：如实告诉用户没读到，不要用本地资料补公司事实，也不要说成本体里没有。' };
         return { content: [{ type: "text" as const, text: JSON.stringify(formalTermsDeep(value)) }], details: value };
       },
     })] : []),
@@ -805,7 +805,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           execute: async (_id, args) => {
             const request = args as { query?: string; cursor?: string };
             const saved = request.cursor ? companyCursors.get(request.cursor) : undefined;
-            if (request.cursor && !saved) return textResult({ status: "unavailable", entries: [], message: `分页位置不属于本轮，请重新查询。${LOCAL_FALLBACK}` });
+            if (request.cursor && !saved) return textResult({ status: "unavailable", entries: [], message: '分页位置不属于本轮，请重新查询。' });
             const query = saved ? saved.query : request.query;
             const view = await withRetrieve(RETRIEVE_SOURCES.worldCompany, () => ({ hasQuery: Boolean(query), page: Boolean(saved) }),
               () => options.company!.read({ personId: input.viewer.personId, role: input.viewer.role }, { query, cursor: saved?.cursor }, input.signal),

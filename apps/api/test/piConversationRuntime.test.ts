@@ -920,7 +920,8 @@ describe("controlled Pi conversation adapter public behavior", () => {
       expect(userPrompt(contexts[0]).globalContext).toBeNull();
       expect(globalContextReads).toBe(0);
       expect(contexts[0].systemPrompt).toContain("测试乙 的 DRI Agent");
-      expect(contexts[0].systemPrompt).toContain("企业知识");
+      expect(contexts[0].systemPrompt).toContain("公司事实只认本体");
+      expect(contexts[0].systemPrompt).not.toContain("本地资料回答");
       expect(contexts[0].systemPrompt).toContain("不能执行任何业务写入");
       expect(contexts[0].systemPrompt).not.toContain("CEO WarMap 的只读决策对话助手");
       expect(contexts[0].systemPrompt).not.toContain("get_warmap_overview");

@@ -65,7 +65,7 @@ describe('World company public read boundary', () => {
     } finally { await t.close(); }
   });
 
-  // 主对话里的 query_company：与 main 已有的看板、企业知识工具并存；本体读不到时工具结果要求先如实说明、再回退本地。
+  // 主对话里的 query_company：本体读不到时工具结果要求如实说没读到，不用本地资料补公司事实（D-48）。
   const runCompanyTurn = async (t: Awaited<ReturnType<typeof setup>>) => {
     let calls = 0;
     const toolResults: string[] = [];
@@ -104,14 +104,14 @@ describe('World company public read boundary', () => {
     } finally { await t.close(); }
   });
 
-  it('when World is unreadable the tool tells the agent to say so first, then answer from local data', async () => {
+  it('when World is unreadable the tool says so and forbids filling company facts from local data', async () => {
     const t = await setup();
     try {
       t.fail();
       const [text] = await runCompanyTurn(t);
       expect(text).toContain('unavailable');
-      expect(text).toContain('如实告诉用户这次没有读到本体');
-      expect(text).toContain('本地资料');
+      expect(text).toContain('这次没有读到本体');
+      expect(text).toContain('不要用本地资料补公司事实');
     } finally { await t.close(); }
   });
 
