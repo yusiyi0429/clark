@@ -19,6 +19,7 @@ M2 是同站点 `/m2/` 的独立应用。主站入口、发布脚本、备份与
 ## 模型与开关
 
 - `M2_MODEL`、`M2_CHAT_MODEL`（容器内为 `DECODING_MODEL`、`DECODING_CHAT_MODEL`）缺省都是 `wangsu/claude-sonnet-5-5`。前者用于拆解生成，后者用于 Nexus 群聊和私人 Agent。Claude 在 TokenHub 上只走 Messages 接口，程序按 TokenHub 地址自动改用 `/api/anthropic/v1/messages`，不用另配地址；同一个 `M2_MODEL_KEY` 即可。
+- Messages 流断开时，`.runtime/stream-breaks.jsonl`（在 `m2_state` 卷里）记一行诊断：时间、模型、请求编号、持续时间、字节数、最后 15 个事件的类型名和原因，不含模型输出和密钥。需要排查时从卷里导出。
 - `M2_CASCADE=off` 关闭下级对齐：上级卡片修订后，Nexus 不再按技能对照下级并出修订卡。缺省开启。
 - 技能随镜像固定为 `apps/m2/skill`（tkos-decoding 3.1.5，指纹 `01a9b1723261`）。新一轮从本体生成时，私有 seed 里的 `source-manifest.json` 要用 10/17 版本体选择清单（各单元 10 月 PO、Mission、Task 标为参考答案，不进入生成）。只阅读和协作已有计划时不受影响。
 
