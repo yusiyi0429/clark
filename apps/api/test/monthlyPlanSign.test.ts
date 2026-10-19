@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import {
   BattlefieldCardPayload,
@@ -8,8 +11,11 @@ import {
 import { loadCompanyMemory } from "../src/companyMemory.js";
 import { type MonthlyDraftAgent, type MonthlyDraftAgentInput } from "../src/monthlyDraft.js";
 import { createTestApp, testEnv, type TestApp } from "./helpers.js";
+import { loadWorldInstance } from "../src/worldClient.js";
 
 type FakeAgent = MonthlyDraftAgent & { calls: MonthlyDraftAgentInput[] };
+
+afterEach(() => vi.unstubAllGlobals());
 
 const CAPABILITY_ID = "cap-delivery";
 
@@ -335,6 +341,50 @@ describe("BattlefieldConfig registration", () => {
 });
 
 describe("MonthlyPlan signing projections", () => {
+  it("world 允许写时：CEO 签发后后台按 0.3 代名单里的 CEO 确认本体同周期、已承诺的周期目标", async () => {
+    const world = loadWorldInstance();
+    // 测试名单里的 CEO 是 person-fixture-001，用本地人员对应文件给他一个本体主体。
+    const localFile = join(mkdtempSync(join(tmpdir(), "world-people-")), "people.json");
+    writeFileSync(localFile, JSON.stringify({ people: { "person-fixture-001": "principal-ceo" } }));
+    const goal = {
+      object_id: "goal-eo", object_type: "PeriodGoal", title: "E&O 本月", revision_id: "rev-1", object_version: 3, version: 2,
+      domain_id: world.domains.eo, external_refs: [], lifecycle: { status: "committed", display_name: "已承诺" },
+    };
+    const commits: any[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const path = new URL(url).pathname;
+      if (path === "/v1/world/objects") return Response.json({ items: [goal], next_cursor: null });
+      if (path.startsWith("/v1/world/objects/")) return Response.json({ business: { ...goal, attributes: { external_refs: [] } }, records: { lifecycle: goal.lifecycle }, protocol: { contract_version: "tkos.world/0.3" } });
+      if (path.endsWith("/prepare")) return Response.json({ expected_versions: [] });
+      if (path === "/v1/actions") {
+        commits.push(JSON.parse(String(init?.body)));
+        return Response.json({ receipt_id: "r-1", status: "committed", result: { event_id: "ev-1" } });
+      }
+      return Response.json({ ok: true });
+    }));
+    const t = await createTestApp({ worldApiUrl: "https://world.test", worldAgentToken: "stub-world-token", worldInstanceLocalFile: localFile }, undefined,
+      { monthlyDraftAgent: fakeAgent(), monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+    try {
+      const planId = await readyPlan(t);
+      const cookie = await t.loginCookie();
+      await checkAll(t, cookie, planId);
+      expect(commits).toHaveLength(0);
+      expect((await sign(t, cookie, planId)).statusCode).toBe(200);
+      for (let i = 0; i < 100 && commits.length === 0; i++) await new Promise((resolve) => setTimeout(resolve, 50));
+      const confirmedAt = (await t.sql("SELECT confirmed_at FROM monthly_plans WHERE id = $1", [planId]))[0].confirmed_at as Date;
+      expect(commits).toHaveLength(1);
+      expect(commits[0]).toMatchObject({
+        action_type: "world_confirm_period_goal", contract_version: "tkos.world/0.3",
+        target: { object_id: "goal-eo", revision_id: "rev-1", expected_version: 3 },
+        params: { outcome: "accepted", on_behalf_of: { principal_id: "principal-ceo", external_record_id: `tianshu:plan-sign:${planId}` } },
+      });
+      expect(commits[0].params).not.toHaveProperty("declaration");
+      expect(new Date(commits[0].params.on_behalf_of.external_confirmed_at).getTime()).toBe(Math.floor(confirmedAt.getTime() / 1000) * 1000);
+    } finally {
+      await t.close();
+    }
+  });
+
   it("confirms one plan, projects it into battlefield/notification and rebuilds ontology Radar anchors", async () => {
     const t = await appWith();
     try {

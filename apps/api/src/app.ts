@@ -41,6 +41,7 @@ import type { MonthlyPlanService } from "./monthlyDraft.js";
 import type { MonthlyReviewService } from "./monthlyReviewService.js";
 import type { WeeklyReviewService } from "./weeklyReviewService.js";
 import { createWeeklyReviewWorldSync, type WeeklyReviewWorldSync } from "./weeklyReviewWorld.js";
+import { createWorldPeriodGoalService, type WorldPeriodGoalService } from "./worldPeriodGoals.js";
 import { logEvent } from "./observability.js";
 import { clientTagFor, enterRequestClient, tracingEnabled } from "./tracing.js";
 import type { FeishuEnv } from "./feishu/config.js";
@@ -516,6 +517,14 @@ export async function buildApp({
     weeklyReviewWorld = sync;
     app.addHook("onClose", async () => { await sync.close(); });
   }
+  // 签发月度计划后代 CEO 确认本体同周期的周期目标：同样只在实例配置允许写时启用。
+  let worldPeriodGoals: WorldPeriodGoalService | undefined;
+  if (worldConfigured(env) && world.status().writes) {
+    const service = createWorldPeriodGoalService(pool, new WorldClient(q, env),
+      () => companyMemory.searchPeople(undefined).find((person) => person.roles.includes("ceo"))?.personId);
+    worldPeriodGoals = service;
+    app.addHook("onClose", async () => { await service.close(); });
+  }
   // 每个请求的结构化日志上下文：handler 里补充 action/run 字段，onResponse 统一落一条。
   const requestContext = new WeakMap<FastifyRequest, RequestContext>();
   app.addHook("onResponse", async (req, reply) => {
@@ -619,6 +628,7 @@ export async function buildApp({
     monthlyReviewService,
     weeklyReviewService,
     weeklyReviewWorld,
+    worldPeriodGoals,
     collections: { agent: collectionAgent ?? createCollectionAgent(pool, env), deps: collectionDeps },
     recordings,
     voiceprints: voiceprintDeps,

@@ -20,6 +20,7 @@ import type { MonthlyPlanService } from "../monthlyDraft.js";
 import type { MonthlyReviewService } from "../monthlyReviewService.js";
 import type { WeeklyReviewService } from "../weeklyReviewService.js";
 import type { WeeklyReviewWorldSync } from "../weeklyReviewWorld.js";
+import type { WorldPeriodGoalService } from "../worldPeriodGoals.js";
 import type { MeetingRecordingService } from "../meetingRecordings.js";
 import type { VoiceprintDeps } from "../voiceprints.js";
 import type { DictationDeps } from "../dictation.js";
@@ -87,6 +88,8 @@ export type RouteContext = {
   weeklyReviewService?: WeeklyReviewService;
   /** 周复盘提交后写本体；本体没配或不写时为空，提交照常，world_sync_status 留 pending。 */
   weeklyReviewWorld?: WeeklyReviewWorldSync;
+  /** 签发月度计划后代 CEO 确认本体周期目标；本体没配或不写时为空。 */
+  worldPeriodGoals?: WorldPeriodGoalService;
   /** ③ 信息收集：起草 Agent 与服务依赖（路由和对话入口共用）。 */
   collections: { agent: CollectionAgent; deps: CollectionDeps };
   recordings: MeetingRecordingService;

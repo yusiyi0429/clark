@@ -170,6 +170,8 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
         // 签发已提交：由系统为各战场参与者起草任务卡；重放不再启动，已有轮次的战场跳过。起草没能开始也不影响签发结果。
         if ("card" in result && !result.replayed) await startSignedMissionDrafts(pool, companyMemory.searchPeople(undefined), (result.card.payload as { period: string }).period,
           ctx.now, ctx.missionCardDraftAgent, companyMemory, env.missionCardKnownMissionsFile).catch((error) => console.error("mission card drafts did not start", error));
+        // 签发即代 CEO 确认本体同周期的周期目标；后台发送，不影响签发结果。
+        if ("card" in result && !result.replayed) ctx.worldPeriodGoals?.schedule();
         return respond(reply, result);
       }
 
