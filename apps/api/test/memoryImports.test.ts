@@ -113,7 +113,7 @@ describe('记忆导入：拆分与规则', () => {
         expect(splitDocs(docs).candidates.map((candidate) => candidate.text)).toEqual(['回答先给结论', '这个项目用 pnpm', '文案用口语']);
     });
 
-    it('默认勾选只给把握大的个人偏好和公司事实；要本人看的不超过 15%，冲突优先；同一份文件的副本按指纹去重、不重复送模型', async () => {
+    it('默认勾选只给把握大的个人偏好，公司事实默认不勾；要本人看的不超过 15%，冲突优先；同一份文件的副本按指纹去重、不重复送模型', async () => {
         const { candidates } = splitDocs([{ source: 'chatgpt', path: 'p.txt', mtime: 'x', text: PASTE }]);
         const log = { classify: 0, reconcile: 0 };
         await classifyCandidates(candidates, fakeModel(log));
@@ -127,9 +127,10 @@ describe('记忆导入：拆分与规则', () => {
         expect(group('公司财务报销走飞书审批')).toBe('company');
         expect(group('本仓库用 pnpm')).toBe('project');
         expect(group('本周在做登录页')).toBe('dropped');
-        // 公司事实 V1 也当本人记忆导入：把握大的默认勾上，分类仍是 company_fact。
+        // 公司事实默认不勾（D-55）：把握再大也只进 company 组，本人勾了才导入。
         expect(candidates.filter((candidate) => candidate.checked).map((candidate) => [candidate.text, candidate.category]))
-            .toEqual([['周报用三段式写', 'personal_preference'], ['公司财务报销走飞书审批', 'company_fact']]);
+            .toEqual([['周报用三段式写', 'personal_preference']]);
+        expect(candidates.find((candidate) => candidate.text === '公司财务报销走飞书审批')).toMatchObject({ category: 'company_fact', group: 'company', checked: false });
         expect(candidates.filter((candidate) => candidate.group === 'conflict' || candidate.group === 'uncertain').length).toBeLessThanOrEqual(Math.floor(candidates.length * 0.15));
         expect(fingerprint('周报用三段式写。')).toBe(fingerprint('周报 用三段式写'));
         // 只有一条把握中等的个人偏好，本批上限 2 条：冲突在前。
@@ -170,8 +171,11 @@ describe('记忆导入：接口', { timeout: 120_000 }, () => {
             const uncertain = detail.candidates.find((candidate: { group: string }) => candidate.group === 'uncertain');
             const defaults = detail.candidates.filter((candidate: { checked: boolean }) => candidate.checked).map((candidate: { id: string }) => candidate.id);
             const locked = detail.candidates.find((candidate: { locked: boolean }) => candidate.locked);
+            const company = detail.candidates.find((candidate: { group: string }) => candidate.group === 'company');
+            expect(company).toMatchObject({ text: '公司财务报销走飞书审批', category: 'company_fact', checked: false });
+            expect(defaults).not.toContain(company.id);
             const confirmed = await t.app.inject({ method: 'POST', url: `/api/me/memory/imports/${id}/confirm`, headers,
-                payload: { checked: [...defaults, uncertain.id, locked.id], resolutions: [{ id: conflict.id, choice: 'use_new' }] } });
+                payload: { checked: [...defaults, uncertain.id, company.id, locked.id], resolutions: [{ id: conflict.id, choice: 'use_new' }] } });
             expect(confirmed.statusCode).toBe(200);
             expect(confirmed.json()).toMatchObject({ status: 'confirmed', counts: { imported: 4 } });
             expect(confirmed.json().steps[4]).toEqual({ id: 'confirm', label: '等你确认', status: 'done', result: '导入 4' });
@@ -180,7 +184,6 @@ describe('记忆导入：接口', { timeout: 120_000 }, () => {
                 .toEqual(['可能喜欢用表格', '周报用三段式写', '回答先给结论再展开', '公司财务报销走飞书审批'].sort());
             // 公司事实进本人记忆的「想法与立场」组（idea），钉 topic:公司事实；候选上仍是 company_fact，第二版据此迁到公司知识。
             expect(memory.find((item: { text: string }) => item.text === '公司财务报销走飞书审批')).toMatchObject({ kind: 'idea', anchors: [{ target: 'topic:公司事实' }] });
-            expect(detail.candidates.find((candidate: { text: string }) => candidate.text === '公司财务报销走飞书审批')).toMatchObject({ category: 'company_fact', group: 'company', checked: true });
             const replacement = memory.find((item: { text: string }) => item.text === '回答先给结论再展开');
             expect(memory.find((item: { id: string }) => item.id === old)).toMatchObject({ status: 'superseded', supersededBy: replacement.id });
             expect(replacement.kind).toBe('preference');

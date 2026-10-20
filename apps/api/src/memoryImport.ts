@@ -407,10 +407,10 @@ export function effectiveConfidence(candidate: Candidate): number {
 /**
  * 分组与默认勾选（7a-3、导入设计 4.5）：
  * - 分到个人偏好、把握 ≥ DEFAULT_CHECK_THRESHOLD、没有冲突、不重复的默认勾选（import）；
- * - 公司事实（V1 当本人记忆导入）：同样的把握门槛默认勾选，在 company 组里；有冲突的进 conflict；
+ * - 公司事实（V1 当本人记忆导入）：在 company 组里，默认不勾，本人勾了才导入（D-55）；有冲突的进 conflict；
  * - 要本人看的两组：有冲突的（conflict，和已有记忆或同批更早的一条说法相反）、没把握的（uncertain：个人偏好把握中等，或在个人偏好和别的类之间摇摆）；
  *   合计不超过本批的 15%、最多 15 条，冲突优先、表达方式类其次，超出的不导入（skipped）；
- * - 其余：把握不够的公司事实、项目指令、重复、不导入、把握低的个人偏好（skipped），都不勾。
+ * - 其余：项目指令、重复、不导入、把握低的个人偏好（skipped），都不勾。
  */
 export function decide(candidates: Candidate[], thresholds: { defaultCheck?: number; reviewFloor?: number } = {}): void {
     const DEFAULT_CHECK = thresholds.defaultCheck ?? DEFAULT_CHECK_THRESHOLD, FLOOR = thresholds.reviewFloor ?? REVIEW_FLOOR;
@@ -428,10 +428,7 @@ export function decide(candidates: Candidate[], thresholds: { defaultCheck?: num
             else candidate.group = 'skipped';
         } else if (candidate.category === 'company_fact' && candidate.conflictWith) candidate.group = 'conflict';
         else if (candidate.alternative === 'personal_preference' && confidence < DEFAULT_CHECK && confidence >= FLOOR - 0.1) candidate.group = 'uncertain';
-        else {
-            candidate.group = candidate.category === 'company_fact' ? 'company' : 'project';
-            if (candidate.group === 'company' && confidence >= DEFAULT_CHECK) candidate.checked = true;
-        }
+        else candidate.group = candidate.category === 'company_fact' ? 'company' : 'project';
         if (candidate.group === 'conflict' || candidate.group === 'uncertain') review.push(candidate);
     }
     // 同批冲突：较早的那条跟着冲突那条一起定，不单独勾。
@@ -449,7 +446,7 @@ export function decide(candidates: Candidate[], thresholds: { defaultCheck?: num
         if (extra.group === 'conflict' && extra.conflictWith?.key) { const partner = byKey.get(extra.conflictWith.key); if (partner?.group === 'partner') partner.group = 'skipped'; }
         extra.group = 'skipped';
     }
-    for (const candidate of candidates) candidate.checked = candidate.group === 'import' || (candidate.group === 'company' && candidate.checked);
+    for (const candidate of candidates) candidate.checked = candidate.group === 'import';
 }
 
 export type ImportCounts = {
