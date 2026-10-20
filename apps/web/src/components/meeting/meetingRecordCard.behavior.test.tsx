@@ -20,6 +20,7 @@ vi.mock("react", async (original) => ({ ...(await original<typeof import("react"
 const api = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), post: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ browserApi: { GET: api.get, PUT: api.put, POST: api.post } }));
 
+import { ActionItemRow } from "./ActionItemRow";
 import { CardItemMenu } from "./CardItemMenu";
 import { InlineText } from "./InlineText";
 import { MeetingRecordCard } from "./MeetingRecordCard";
@@ -29,7 +30,7 @@ import { RecordSection } from "./RecordSection";
 
 type Node = { type?: unknown; props?: Record<string, unknown> };
 /** 展开会议卡自己的子组件（库组件不展开），按渲染顺序深度优先，hooks 顺序和真渲染一致。 */
-const PARTS = new Set<unknown>([CardItemMenu, InlineText, ObjectChangeDiff, RecordCardFooter, RecordSection]);
+const PARTS = new Set<unknown>([ActionItemRow, CardItemMenu, InlineText, ObjectChangeDiff, RecordCardFooter, RecordSection]);
 function expand(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(expand);
   if (!value || typeof value !== "object") return value;
@@ -62,6 +63,7 @@ const confirmedOf = (source: TMeetingCardDraft, revision = 1): NonNullable<TMeet
   payload: { ...source, revision, relatedObjectRefs: ["obj-1@4"], objectChanges: source.objectChanges.map(({ stale: _stale, ...change }) => change) },
   confirmation: { revision, confirmedBy: "p1", confirmedAt: "2026-10-20T10:42:00.000Z", payloadHash: "b".repeat(64) },
   kind: "first",
+  actionItems: [],
 });
 const SYNCED: TMeetingCardSync = { revision: 1, writeToWorld: true, event: { status: "succeeded", eventId: "ev-1", error: null },
   objects: [{ changeId: "chg-1", title: "接口全量切到 v2 · result", status: "updated", actualVersion: 5, error: null }] };
@@ -70,10 +72,12 @@ const view = (overrides: Partial<TMeetingCardView> = {}): TMeetingCardView => ({
 });
 const ok = (data: TMeetingCardView) => ({ data, response: { ok: true, status: 200 } });
 
+const PEOPLE = [{ personId: "p1", displayName: "林晓" }, { personId: "p2", displayName: "周舟" }];
+const ITEM = { id: "act-1", text: "提交排期", ownerPersonId: null, dueDate: null, basisSectionIds: ["sec-2"], taskId: null };
 const render = (initial: TMeetingCardView) => {
   hooks.index = 0;
   hooks.refIndex = 0;
-  return nodes(expand(MeetingRecordCard({ meetingId: "m1", initial })));
+  return nodes(expand(MeetingRecordCard({ meetingId: "m1", initial, people: PEOPLE })));
 };
 const button = (tree: Node[], label: string) => tree.find((node) => node.type === "button" && text(node) === label);
 const click = (node: Node | undefined) => (node!.props!.onClick as () => void)();
@@ -168,9 +172,9 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
     const item = { id: "act-1", text: "提交排期", ownerPersonId: null, dueDate: null, basisSectionIds: ["sec-1", "sec-2"], taskId: null };
     const initial = view({ actionItems: [item] });
     api.put.mockResolvedValue(ok(view({ draftVersion: 4, draft: draft({ sections: [SEC_2] }), actionItems: [{ ...item, basisSectionIds: ["sec-2"] }] })));
-    // 两段、一条对象修改各有「⋯ 删除」，第一个是第 1 段的。
+    // 两段、一条行动项、一条对象修改各有「⋯ 删除」，第一个是第 1 段的。
     const remove = render(initial).filter((node) => node.props?.onPress && text(node) === "删除");
-    expect(remove).toHaveLength(3);
+    expect(remove).toHaveLength(4);
     (remove[0].props!.onPress as () => void)();
     await vi.waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
     const request = api.put.mock.calls[0][1] as { body: { draft: TMeetingCardDraft; actionItems?: unknown } };
@@ -285,6 +289,65 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
     expect(hasText(tree, "接口全量切到 v2 · result · 已更新")).toBe(true);
     click(button(tree, "重试"));
     await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/card/retry", { params: { path: { id: "m1" } } }));
+  });
+
+  it("行动项可以改负责人", async () => {
+    const initial = view({ actionItems: [ITEM] });
+    api.put.mockResolvedValue(ok(view({ draftVersion: 4, actionItems: [{ ...ITEM, ownerPersonId: "p2" }] })));
+    const tree = render(initial);
+    expect(hasText(tree, "依据：第 2 段")).toBe(true);
+    const owner = tree.find((node) => node.props?.["aria-label"] === "第 1 条负责人" && "options" in node.props)!;
+    expect(owner.props!.options).toEqual([{ value: "p1", label: "林晓" }, { value: "p2", label: "周舟" }]);
+    (owner.props!.onChange as (value: string) => void)("p2");
+    await vi.waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    const request = api.put.mock.calls[0][1] as { body: { actionItems: { ownerPersonId: string | null }[] } };
+    expect(request.body.actionItems[0].ownerPersonId).toBe("p2");
+  });
+
+  it("加一条行动项，写了事项才存", async () => {
+    vi.useFakeTimers();
+    const initial = view({ actionItems: [ITEM] });
+    api.put.mockResolvedValue(ok(view({ draftVersion: 4 })));
+    click(button(render(initial), "加一条"));
+    const fresh = render(initial).find((node) => node.type === "textarea" && node.props?.["aria-label"] === "第 2 条事项")!;
+    expect(fresh).toBeDefined();
+    await vi.advanceTimersByTimeAsync(900);
+    expect(api.put).not.toHaveBeenCalled();
+    (fresh.props!.onChange as (event: unknown) => void)({ target: { value: "约客户演示" } });
+    await vi.advanceTimersByTimeAsync(900);
+    expect(api.put).toHaveBeenCalledTimes(1);
+    const items = (api.put.mock.calls[0][1] as { body: { actionItems: { id: string; text: string; taskId: string | null }[] } }).body.actionItems;
+    expect(items.map((item) => item.text)).toEqual(["提交排期", "约客户演示"]);
+    expect(new Set(items.map((item) => item.id)).size).toBe(2);
+    expect(items[1].taskId).toBeNull();
+  });
+
+  it("已派的显示标签；只读的人只看", () => {
+    const sent = { ...ITEM, ownerPersonId: "p2", taskId: "task-1" };
+    const editor = render(view({ actionItems: [sent, { ...ITEM, id: "act-2", text: "补预算表" }] }));
+    const sentTag = (tree: Node[], label: string) => hasText(nodes(tree.find((node) => node.props?.["aria-label"] === label)), "已派");
+    expect(sentTag(editor, "第 1 条")).toBe(true);
+    expect(sentTag(editor, "第 2 条")).toBe(false);
+
+    hooks.values = []; hooks.refs = [];
+    const confirmed = { ...confirmedOf(draft()), actionItems: [sent] };
+    const reader = render(view({ canEdit: false, actionItems: [sent, { ...ITEM, id: "act-2", text: "补预算表" }], confirmed, sync: SYNCED }));
+    expect(hasText(reader, "提交排期")).toBe(true);
+    expect(hasText(reader, "已派")).toBe(true);
+    expect(hasText(reader, "周舟")).toBe(true);
+    expect(hasText(reader, "补预算表")).toBe(false);
+    expect(button(reader, "加一条")).toBeUndefined();
+    expect(reader.some((node) => node.props?.["aria-label"] === "第 1 条负责人")).toBe(false);
+  });
+
+  it("修改中：改过的行动项原文划线在新文字上方", () => {
+    const tree = render(view({ actionItems: [{ ...ITEM, text: "提交排期和预算" }], confirmed: { ...confirmedOf(draft()), actionItems: [ITEM] }, sync: SYNCED }));
+    expect(hasText(tree, "修改中")).toBe(true);
+    const row = tree.find((node) => node.props?.["aria-label"] === "第 1 条" && node.props?.["data-changed"] !== undefined)!;
+    const inside = nodes(row);
+    const struck = inside.findIndex((node) => node.type === "del");
+    expect(text(inside[struck])).toBe("提交排期");
+    expect(struck).toBeLessThan(inside.findIndex((node) => node.type === "textarea" && node.props?.["aria-label"] === "第 1 条事项"));
   });
 
   it("只读的人没有编辑控件", () => {

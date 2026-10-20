@@ -2,9 +2,9 @@
 
 /**
  * 会议卡（FR-4.3–4.5、FR-5.1/5.4/5.5）：会后一张卡审阅整场会——会名和实际时间、参会人、挂点、摘要、按议题的正文各段（带出处）、
- * 对象修改（改前 / 改后）；主持人或创建人就地编辑、停顿自动保存，整卡确认一次；确认后可「修改」（更正原记录或会后新决定），
- * 修改中改过的地方原文划线显示在新内容上方；底部逐行显示会议事件和对象修改的同步状态。
- * 别人只读：有确认版看确认版，没有看草稿（标「待确认」）。行动项这一版不在卡上（存草稿不交 actionItems，服务端沿用已存的）。
+ * 行动项（天枢本地：随整卡确认推成执行事项，不进本体）、对象修改（改前 / 改后）；主持人或创建人就地编辑、停顿自动保存，整卡确认一次；
+ * 确认后可「修改」（更正原记录或会后新决定），修改中改过的地方原文划线显示在新内容上方；底部逐行显示会议事件和对象修改的同步状态。
+ * 别人只读：有确认版看确认版（行动项看确认时的快照），没有看草稿（标「待确认」）。
  */
 import { useEffect, useState } from "react";
 import type { TMeetingCardView, TWorldAnchor } from "@warmap/contracts";
@@ -13,8 +13,9 @@ import { DateTimePicker } from "@/components/ui/DatePicker";
 import { monthDayClock } from "@/lib/companyTime";
 import { getMeetingWorld } from "./meetingDecisionApi";
 import {
-  basisLabel, changeRows, companyInput, draftReady, fromCompanyInput, inFuture, sectionRows, syncRows, type CardContent, type RecordTurn,
+  basisLabel, changeRows, companyInput, draftReady, fromCompanyInput, inFuture, itemRows, itemsReady, sectionRows, syncRows, type CardContent, type RecordTurn,
 } from "./meetingCardModel";
+import { ActionItemRow, type MeetingPerson } from "./ActionItemRow";
 import { InlineText } from "./InlineText";
 import { ObjectChangeDiff } from "./ObjectChangeDiff";
 import { RecordCardFooter, type FooterMode } from "./RecordCardFooter";
@@ -32,13 +33,16 @@ type MeetingRecordCardProps = {
   /** 会议页已有的逐字稿发言段：展开出处时显示那几句原话；没有就不显示。 */
   turns?: RecordTurn[];
   speakerName?: (speakerId: string) => string | null;
+  /** 会议页的参会人（天枢 personId）：行动项的负责人从这里选。 */
+  people?: MeetingPerson[];
 };
 
 const noSpeaker = () => null;
+const noPeople: MeetingPerson[] = [];
 const SAVE_LABEL = { idle: null, saving: "保存中", saved: "已保存", failed: "保存失败", offline: "网络不通" } as const;
 const names = (content: CardContent) => content.participants.map((person) => person.name).join("、");
 
-export function MeetingRecordCard({ meetingId, initial, onView, turns = [], speakerName = noSpeaker }: MeetingRecordCardProps) {
+export function MeetingRecordCard({ meetingId, initial, onView, turns = [], speakerName = noSpeaker, people = noPeople }: MeetingRecordCardProps) {
   const card = useMeetingCard(meetingId, initial, onView);
   const [anchors, setAnchors] = useState<TWorldAnchor[]>([]);
   useEffect(() => { void getMeetingWorld(meetingId).then((detail) => setAnchors(detail?.world.anchors ?? []), () => undefined); }, [meetingId]);
@@ -57,16 +61,18 @@ export function MeetingRecordCard({ meetingId, initial, onView, turns = [], spea
   const wasSummary = was(content.summary, baseline?.summary);
   const rows = sectionRows(content.sections, baseline?.sections ?? null);
   const changes = changeRows(content.objectChanges, baseline?.objectChanges ?? null);
+  const items = itemRows(editable ? card.items : confirmed?.actionItems ?? view.actionItems, editable && confirmed ? confirmed.actionItems : null);
   const tag = !confirmed ? "待确认" : editable ? "修改中" : null;
   const saveLabel = editable ? SAVE_LABEL[card.saveState] : null;
   const mode: FooterMode = !view.canEdit ? "readonly" : !confirmed ? "first" : editable ? "editing" : "confirmed";
   const timeInvalid = Boolean(draft && (card.timeRejected || inFuture(draft.occurredAt)));
   const pendingHasText = Boolean(pending && (pending.heading.trim() || pending.body.trim()));
   const ready = editable && draft !== null && !card.unsaved && card.saveState !== "saving" && !card.conflict && !pendingHasText
-    && draftReady(draft) && Boolean(draft.occurredAt) && !timeInvalid;
+    && draftReady(draft) && itemsReady(card.items) && Boolean(draft.occurredAt) && !timeInvalid;
   const setOccurredAt = (value: string) => card.setOccurredAt(fromCompanyInput(value));
   const nowInput = companyInput(new Date().toISOString());
   let number = 0;
+  let itemNumber = 0;
 
   return (
     <article className={c.card} aria-label="会议记录">
@@ -140,6 +146,24 @@ export function MeetingRecordCard({ meetingId, initial, onView, turns = [], spea
           <button type="button" className={c.add} disabled={locked} onClick={card.addSection}><Plus size={14} strokeWidth={2} aria-hidden="true" />加一段</button>
         ) : null}
       </section>
+
+      {editable || items.length ? (
+        <section className={c.block}>
+          <h3 className={c.blockLabel}>行动项</h3>
+          {items.length ? (
+            <div className={c.items}>
+              {items.map(({ item, state, was: before }) => (
+                <ActionItemRow key={`${state === "deleted" ? "deleted:" : ""}${item.id}`} number={state === "deleted" ? null : ++itemNumber} item={item} state={state}
+                  was={before} editable={editable} locked={locked} people={people} basis={basisLabel(item.basisSectionIds, content.sections)}
+                  onChange={(field, value) => card.setItem(item.id, field, value)} onLeave={card.leaveItem} onDelete={() => card.deleteItem(item.id)} />
+              ))}
+            </div>
+          ) : null}
+          {editable ? (
+            <button type="button" className={c.add} disabled={locked} onClick={card.addItem}><Plus size={14} strokeWidth={2} aria-hidden="true" />加一条</button>
+          ) : null}
+        </section>
+      ) : null}
 
       {changes.length ? (
         <section className={c.block}>

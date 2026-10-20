@@ -22,7 +22,7 @@ async function settle(request: Promise<{ data?: TMeetingCardView; error?: unknow
 export const getMeetingCard = (meetingId: string) =>
   settle(browserApi.GET("/api/meetings/{id}/card", { params: { path: { id: meetingId } } }));
 
-/** 整份保存草稿。actionItems 不传时服务端沿用已存的（这一版卡上不编辑行动项）。 */
+/** 整份保存草稿。actionItems 不传时服务端沿用已存的；传 [] 是全删了。 */
 export const saveMeetingCardDraft = (meetingId: string, draftVersion: number, draft: TMeetingCardDraft, actionItems?: TMeetingActionItem[]) =>
   settle(browserApi.PUT("/api/meetings/{id}/card/draft", {
     params: { path: { id: meetingId } }, body: { draftVersion, draft, ...(actionItems ? { actionItems } : {}) },

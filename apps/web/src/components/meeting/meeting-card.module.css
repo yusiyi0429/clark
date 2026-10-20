@@ -47,7 +47,7 @@
 
 /* 正文一段：编号 | 标题 + 正文 + 出处 | ⋯。修改中和确认版不同的段落左侧一条蓝线；删掉的划线。 */
 .section { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; column-gap: 10px; align-items: start; }
-.section[data-changed]::before, .block[data-changed]::before, .change[data-changed]::before, .titleBlock[data-changed]::before, .props > div[data-changed]::before {
+.section[data-changed]::before, .item[data-changed]::before, .block[data-changed]::before, .change[data-changed]::before, .titleBlock[data-changed]::before, .props > div[data-changed]::before {
   content: ""; position: absolute; left: -14px; top: 3px; bottom: 3px; width: 3px; border-radius: 2px; background: #1f5fd6;
 }
 .block[data-changed]::before { top: 19px; }
@@ -102,6 +102,19 @@ button.source:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; b
 .sideLabel { color: #8a93a2; font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: .02em; }
 .basis { margin: 0; color: #8a93a2; font-size: 12px; line-height: 18px; }
 
+/* 行动项一条：编号 | 事项（已派）+ 负责人、日期、依据 | ⋯。 */
+.items { display: grid; gap: 12px; }
+.item { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; column-gap: 10px; align-items: start; }
+.item[data-deleted] .text { color: #a3abb7; text-decoration: line-through; text-decoration-color: #b8bfca; }
+.itemMain { display: grid; gap: 6px; min-width: 0; }
+.itemHead { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.itemHead > .itemText { flex: 1 1 auto; }
+.itemHead > .flag { margin-top: 1px; }
+.itemText { font-size: 14px; line-height: 24px; }
+.itemMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; color: #6b7280; font-size: 13px; line-height: 20px; }
+.ownerPicker { width: 140px; max-width: 100%; }
+.flag[data-tone='done'] { background: #e9f7ef; color: #1c7a43; }
+
 /* 底部：同步状态逐行 + 这一刻能做的事。 */
 .footer { display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid #eef0f3; }
 .sync { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; color: #3b4250; font-size: 13px; line-height: 20px; }
@@ -150,8 +163,11 @@ button.source:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; b
 
 @media (max-width: 959px), (pointer: coarse) {
   .card { gap: 14px; padding: 18px 16px 16px; border-radius: 18px; }
-  .section[data-changed]::before, .block[data-changed]::before, .change[data-changed]::before, .titleBlock[data-changed]::before, .props > div[data-changed]::before { left: -10px; }
-  .summary, .body, .heading, .side { font-size: 16px; }
+  .section[data-changed]::before, .item[data-changed]::before, .block[data-changed]::before, .change[data-changed]::before, .titleBlock[data-changed]::before, .props > div[data-changed]::before { left: -10px; }
+  .summary, .body, .heading, .side, .itemText { font-size: 16px; }
+  .itemMeta { font-size: 14px; }
+  .itemMeta > * { flex: 1 1 140px; }
+  .itemMeta > .basis { flex-basis: 100%; }
   .title { font-size: 20px; }
   .props, .sync, .toggle, .kind, .add, .conflict { font-size: 14px; }
   .source { min-height: var(--touch-hit, 44px); font-size: 13px; }

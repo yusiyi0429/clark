@@ -152,7 +152,11 @@ export const MeetingCardView = Type.Object(
     draftStatus: MeetingCardDraftStatus,
     actionItems: Type.Array(MeetingActionItem),
     confirmed: Type.Union([
-      Type.Object({ payload: MeetingCardV1Payload, confirmation: MeetingCardConfirmation, kind: MeetingCardKind }, { additionalProperties: false }),
+      Type.Object(
+        // actionItems：这次确认时的行动项快照（不进 payload，推成执行事项后带 taskId）。
+        { payload: MeetingCardV1Payload, confirmation: MeetingCardConfirmation, kind: MeetingCardKind, actionItems: Type.Array(MeetingActionItem) },
+        { additionalProperties: false },
+      ),
       Type.Null(),
     ]),
     sync: Type.Union([MeetingCardSync, Type.Null()]),

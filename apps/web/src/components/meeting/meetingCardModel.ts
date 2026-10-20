@@ -1,4 +1,4 @@
-import type { TMeetingCardDraft, TMeetingCardSection, TMeetingCardSync, TMeetingCardV1Payload, TMeetingCardView } from "@warmap/contracts";
+import type { TMeetingActionItem, TMeetingCardDraft, TMeetingCardSection, TMeetingCardSync, TMeetingCardV1Payload, TMeetingCardView } from "@warmap/contracts";
 import { COMPANY_TIMEZONE } from "@/lib/companyTime";
 
 /** 会议卡上显示的那一份：草稿或确认版（确认版的修改不带 stale）。 */
@@ -18,7 +18,12 @@ export function cardDiffers(draft: TMeetingCardDraft, payload: TMeetingCardV1Pay
     || draft.objectChanges.length !== payload.objectChanges.length
     || draft.objectChanges.some((change, index) => change.id !== payload.objectChanges[index].id || !sameChange(change, payload.objectChanges[index]));
 }
-export const viewDiffers = (view: TMeetingCardView) => Boolean(view.draft && view.confirmed && cardDiffers(view.draft, view.confirmed.payload));
+const sameItem = (a: TMeetingActionItem, b: TMeetingActionItem) => a.text === b.text && a.ownerPersonId === b.ownerPersonId && a.dueDate === b.dueDate;
+/** 行动项和确认时的快照不同（taskId 由服务填，不算）。 */
+export const itemsDiffer = (items: TMeetingActionItem[], confirmed: TMeetingActionItem[]) => items.length !== confirmed.length
+  || items.some((item, index) => item.id !== confirmed[index].id || !sameItem(item, confirmed[index]) || item.basisSectionIds.join() !== confirmed[index].basisSectionIds.join());
+export const viewDiffers = (view: TMeetingCardView) => Boolean(view.draft && view.confirmed
+  && (cardDiffers(view.draft, view.confirmed.payload) || itemsDiffer(view.actionItems, view.confirmed.actionItems)));
 
 export type DiffRow<T> = { item: T; state: "same" | "changed" | "deleted"; was: T | null };
 /**
@@ -46,6 +51,7 @@ function diffRows<T extends { id: string }>(items: T[], confirmed: T[] | null, s
 }
 export const sectionRows = (sections: TMeetingCardSection[], confirmed: TMeetingCardSection[] | null) => diffRows(sections, confirmed, sameSection);
 export const changeRows = (changes: Change[], confirmed: Change[] | null) => diffRows<Change>(changes, confirmed, sameChange);
+export const itemRows = (items: TMeetingActionItem[], confirmed: TMeetingActionItem[] | null) => diffRows(items, confirmed, sameItem);
 
 /** 「依据：第 1、3 段」：按当前段落顺序编号，指不到的不写；一段都指不到时不显示。 */
 export function basisLabel(sectionIds: string[], sections: TMeetingCardSection[]): string | null {
@@ -86,18 +92,31 @@ export function draftFromConfirmed(draft: TMeetingCardDraft, payload: TMeetingCa
     sections: payload.sections, objectChanges: payload.objectChanges.map((change) => ({ ...change, stale: false })) };
 }
 
-/** 删掉的段落如果被行动项引为依据，存草稿时连行动项一起交（去掉那段）；否则不交，服务端沿用已存的。 */
-export function actionItemsAfterDelete(draft: TMeetingCardDraft, items: TMeetingCardView["actionItems"]): TMeetingCardView["actionItems"] | undefined {
-  const ids = new Set(draft.sections.map((section) => section.id));
-  if (!items.some((item) => item.basisSectionIds.some((id) => !ids.has(id)))) return undefined;
-  return items.map((item) => ({ ...item, basisSectionIds: item.basisSectionIds.filter((id) => ids.has(id)) }));
+/** 行动项都写了事项才能存。 */
+export const itemsReady = (items: TMeetingActionItem[]) => items.every((item) => !blank(item.text));
+/** 删掉一段：引它为依据的行动项去掉那段（没有引它的原样返回）。 */
+export function itemsWithoutSection(items: TMeetingActionItem[], sectionId: string): TMeetingActionItem[] {
+  if (!items.some((item) => item.basisSectionIds.includes(sectionId))) return items;
+  return items.map((item) => ({ ...item, basisSectionIds: item.basisSectionIds.filter((id) => id !== sectionId) }));
+}
+/** 离开行动项时，清空了事项的恢复成上次存下的；还没存过的新一条空着就去掉。没有要改的原样返回。 */
+export function restoreBlankItems(local: TMeetingActionItem[], saved: TMeetingActionItem[]): TMeetingActionItem[] {
+  if (itemsReady(local)) return local;
+  const savedItems = new Map(saved.map((item) => [item.id, item]));
+  return local.flatMap((item) => {
+    if (!blank(item.text)) return [item];
+    const old = savedItems.get(item.id);
+    return old ? [{ ...item, text: old.text }] : [];
+  });
 }
 
-export function newSectionId(sections: { id: string }[]): string {
+function newId(prefix: string, items: { id: string }[]): string {
   let id = "";
-  do id = `sec-${Math.random().toString(36).slice(2, 10)}`; while (!id || sections.some((section) => section.id === id));
+  do id = `${prefix}-${Math.random().toString(36).slice(2, 10)}`; while (!id || items.some((item) => item.id === id));
   return id;
 }
+export const newSectionId = (sections: { id: string }[]) => newId("sec", sections);
+export const newItemId = (items: { id: string }[]) => newId("act", items);
 
 type SyncTone = "wait" | "done" | "warn" | "fail" | "off";
 export type SyncRow = { key: string; text: string; tone: SyncTone; retry: boolean };

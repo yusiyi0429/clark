@@ -3690,6 +3690,14 @@ export interface components {
                         payloadHash: string;
                     };
                     kind: "first" | "correction" | "followup";
+                    actionItems: {
+                        id: string;
+                        text: string;
+                        ownerPersonId: string | null;
+                        dueDate: string | null;
+                        basisSectionIds: string[];
+                        taskId: string | null;
+                    }[];
                 } | null;
                 sync: {
                     revision: number;
@@ -10387,6 +10395,14 @@ export interface components {
                     payloadHash: string;
                 };
                 kind: "first" | "correction" | "followup";
+                actionItems: {
+                    id: string;
+                    text: string;
+                    ownerPersonId: string | null;
+                    dueDate: string | null;
+                    basisSectionIds: string[];
+                    taskId: string | null;
+                }[];
             } | null;
             sync: {
                 revision: number;

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import type {
   TMeetingActionItem, TMeetingCardConfirmation, TMeetingCardConfirmRequest, TMeetingCardDraft, TMeetingCardKind, TMeetingCardSync, TMeetingCardV1Payload,
   TMeetingCardView, TMeetingConfirmedObjectChange, TMeetingObjectResult, TMeetingRecordStatus,
@@ -10,6 +10,7 @@ import { payloadHash } from "./meetingCardHash.js";
 import { getMeetingRow, UUID_PATTERN, type MeetingRow, type Query } from "./meetingStore.js";
 import { initialObjectResults, supersedeObjects, type MeetingObjectSync } from "./meetingObjectSync.js";
 import { logEvent } from "./observability.js";
+import { dispatchMeetingTodo } from "./tasks.js";
 import { WorldError, worldRef, type WorldClient } from "./worldClient.js";
 import type { MeetingEventWorld } from "./worldMeetingEvent.js";
 
@@ -20,6 +21,8 @@ import type { MeetingEventWorld } from "./worldMeetingEvent.js";
  *   已有确认版时要选修改原因：correction 更正原记录、followup 会后新决定。confirmation.confirmedBy 是确认人的 personId（拍板 9）。
  * - 冻结时 relatedObjectRefs 换成确认时的 <对象 id>@<版本>（确认时本体读不到、选了不写入的，到同一草稿改成写入时再补版本），
  *   修改去掉 stale，算 payloadHash；行动项快照存确认表，不进 payload。
+ * - 行动项（拍板 4）：同一事务里把还没 taskId 的推成执行事项（dispatchMeetingTodo，负责人缺省主持人、是 CEO 的不建），taskId 回填到草稿和这次的快照；
+ *   已推的不再推，推完再改不回改执行事项。负责人是 CEO 的 taskId 一直空着，之后每次新确认版会再走一遍，照样不建。
  * - 写本体按 revision 串行（jobs worker 逐条执行）：一直写最早一版待写的，前次写成的那条在写的时候现找（写入中又确认了新版，新版指回刚写成的那条）。
  *   NETWORK_ERROR 抛出交给 jobs 按原幂等键重放，其他错误记 failed 和原因（拍板 8：不设正文上限，本体回超长就如实记下）。
  * - 选了不写入：回执 skipped，不发请求；已经写进去的不撤回。
@@ -34,13 +37,13 @@ type ConfirmResult = { view: TMeetingCardView } | { error: ConfirmError };
 /** 当前确认版连同它的同步回执。 */
 type ConfirmationRow = {
   revision: number; draft_version: number; kind: TMeetingCardKind; payload: TMeetingCardV1Payload; confirmation: TMeetingCardConfirmation;
-  write_to_world: boolean; created_at: Date;
+  action_items: TMeetingActionItem[]; write_to_world: boolean; created_at: Date;
   event_status: TMeetingCardSync["event"]["status"]; event_id: string | null; event_error: string | null; objects: TMeetingObjectResult[];
 };
 
 export async function currentConfirmation(q: Query, meetingId: string): Promise<ConfirmationRow | null> {
   const row = (await q(
-    `SELECT c.revision, c.draft_version, c.kind, c.payload, c.confirmation, c.write_to_world, c.created_at, s.event_status, s.event_id, s.event_error, s.objects
+    `SELECT c.revision, c.draft_version, c.kind, c.payload, c.confirmation, c.action_items, c.write_to_world, c.created_at, s.event_status, s.event_id, s.event_error, s.objects
        FROM meeting_cards k
        JOIN meeting_card_confirmations c ON c.meeting_id = k.meeting_id AND c.revision = k.current_revision
        JOIN meeting_card_syncs s ON s.meeting_id = c.meeting_id AND s.revision = c.revision
@@ -54,7 +57,7 @@ export async function currentConfirmation(q: Query, meetingId: string): Promise<
 export function confirmedView(row: ConfirmationRow | null): Pick<TMeetingCardView, "confirmed" | "sync"> {
   if (!row) return { confirmed: null, sync: null };
   return {
-    confirmed: { payload: row.payload, confirmation: row.confirmation, kind: row.kind },
+    confirmed: { payload: row.payload, confirmation: row.confirmation, kind: row.kind, actionItems: row.action_items },
     sync: { revision: row.revision, writeToWorld: row.write_to_world, event: { status: row.event_status, eventId: row.event_id, error: row.event_error }, objects: row.objects },
   };
 }
@@ -62,26 +65,29 @@ export function confirmedView(row: ConfirmationRow | null): Pick<TMeetingCardVie
 const bareRef = (ref: string) => ref.replace(/@\d+$/, "");
 /** 修改里人定的部分（目标标题、原内容、版本、stale 由服务填）。 */
 const decided = ({ id, targetRef, after, basisSectionIds }: TMeetingConfirmedObjectChange) => ({ id, targetRef, after, basisSectionIds });
-/** 草稿和确认版内容不同（不算服务填的修改字段和挂点对象的版本）。 */
-function draftDiffers(draft: TMeetingCardDraft, payload: TMeetingCardV1Payload): boolean {
-  const { revision: _revision, ...confirmed } = payload;
+/** 行动项里人定的部分（taskId 由服务填）。 */
+const itemDecided = ({ taskId: _taskId, ...item }: TMeetingActionItem) => item;
+/** 草稿和确认版内容不同（不算服务填的修改字段、挂点对象的版本和行动项的 taskId）。 */
+function draftDiffers(draft: TMeetingCardDraft, items: TMeetingActionItem[], current: Pick<ConfirmationRow, "payload" | "action_items">): boolean {
+  const { revision: _revision, ...confirmed } = current.payload;
   return !isDeepStrictEqual(
-    { ...confirmed, relatedObjectRefs: confirmed.relatedObjectRefs.map(bareRef), objectChanges: confirmed.objectChanges.map(decided) },
-    { ...draft, relatedObjectRefs: [...new Set(draft.relatedObjectRefs)], objectChanges: draft.objectChanges.map(decided) },
+    { ...confirmed, relatedObjectRefs: confirmed.relatedObjectRefs.map(bareRef), objectChanges: confirmed.objectChanges.map(decided), actionItems: current.action_items.map(itemDecided) },
+    { ...draft, relatedObjectRefs: [...new Set(draft.relatedObjectRefs)], objectChanges: draft.objectChanges.map(decided), actionItems: items.map(itemDecided) },
   );
 }
 
 /** 会议页「这场会在本体里」的记录状态（GET /api/meetings/:id/world），由确认表和回执算出；nameOf 把确认人的 personId 换成显示名。 */
 export type MeetingRecordState = { status: TMeetingRecordStatus; version: number; eventId: string | null; confirmedAt: string | null; excludedBy: string | null; at: string | null };
 export async function meetingRecordState(q: Query, meetingId: string, nameOf: (personId: string) => string): Promise<MeetingRecordState> {
-  const draft = (await q("SELECT draft FROM meeting_cards WHERE meeting_id = $1", [meetingId])).rows[0]?.draft as TMeetingCardDraft | null | undefined;
+  const card = (await q("SELECT draft, action_items FROM meeting_cards WHERE meeting_id = $1", [meetingId])).rows[0] as
+    { draft: TMeetingCardDraft | null; action_items: TMeetingActionItem[] } | undefined;
   const current = await currentConfirmation(q, meetingId);
   const written = (await q(
     "SELECT event_id, updated_at FROM meeting_card_syncs WHERE meeting_id = $1 AND event_status = 'succeeded' ORDER BY revision DESC LIMIT 1", [meetingId],
   )).rows[0] as { event_id: string; updated_at: Date } | undefined;
   const base = { eventId: written?.event_id ?? null, at: written ? new Date(written.updated_at).toISOString() : null };
   if (!current) return { status: "pending", version: 0, confirmedAt: null, excludedBy: null, ...base };
-  const status: TMeetingRecordStatus = draft && draftDiffers(draft, current.payload) ? "edit_pending"
+  const status: TMeetingRecordStatus = card?.draft && draftDiffers(card.draft, card.action_items, current) ? "edit_pending"
     : !current.write_to_world ? "excluded"
     : current.event_status === "succeeded" ? "committed" : current.event_status === "failed" ? "failed" : "pending";
   return { status, version: current.revision, confirmedAt: new Date(current.created_at).toISOString(),
@@ -126,11 +132,11 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     participants.find((person) => person.personId === personId)?.displayName ?? deps.names?.().get(personId) ?? personId;
 
   /** 一个事务；读到冲突时提交的是空事务（等同回滚）。连接在返回前放回，之后再读本体、重走确认。 */
-  async function transaction<T>(run: (cq: Query) => Promise<T>): Promise<T> {
+  async function transaction<T>(run: (cq: Query, client: PoolClient) => Promise<T>): Promise<T> {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      const result = await run(client.query.bind(client));
+      const result = await run(client.query.bind(client), client);
       await client.query("COMMIT");
       return result;
     } catch (error) {
@@ -195,7 +201,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     }
 
     let kind: TMeetingCardKind = "first";
-    const outcome = await transaction(async (cq): Promise<Locked> => {
+    const outcome = await transaction(async (cq, client): Promise<Locked> => {
       const { locked, conflict } = await lockCard(cq, meetingId, input.draftVersion, card.current_revision);
       if (conflict) return conflict;
       const revision = (locked.current_revision ?? 0) + 1;
@@ -206,17 +212,25 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
         relatedObjectRefs, summary: draft.summary, sections: draft.sections, sources: draft.sources, objectChanges,
       };
       const confirmation: TMeetingCardConfirmation = { revision, confirmedBy: viewer.personId, confirmedAt: at.toISOString(), payloadHash: payloadHash(payload) };
+      const actionItems: TMeetingActionItem[] = [];
+      for (const item of locked.action_items) {
+        if (item.taskId) { actionItems.push(item); continue; }
+        const owner = item.ownerPersonId ?? meeting.lead_dri_id;
+        const taskId = await dispatchMeetingTodo(client, { id: meetingId, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id,
+          ownerName: nameOf(meeting.participants, owner), title: meeting.title }, { ...item, dueDate: item.dueDate ?? undefined, quote: "" });
+        actionItems.push({ ...item, taskId });
+      }
       await cq(
         `INSERT INTO meeting_card_confirmations (meeting_id, revision, draft_version, kind, reason, payload, confirmation, action_items, write_to_world, created_at)
          VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10)`,
-        [meetingId, revision, input.draftVersion, kind, reason, JSON.stringify(payload), JSON.stringify(confirmation), JSON.stringify(locked.action_items), input.writeToWorld, at],
+        [meetingId, revision, input.draftVersion, kind, reason, JSON.stringify(payload), JSON.stringify(confirmation), JSON.stringify(actionItems), input.writeToWorld, at],
       );
       await cq("INSERT INTO meeting_card_syncs (meeting_id, revision, event_status, objects, updated_at) VALUES ($1, $2, $3, $4::jsonb, $5)",
         [meetingId, revision, input.writeToWorld ? "pending" : "skipped", JSON.stringify(initialObjectResults(objectChanges, input.writeToWorld)), at]);
       await supersedeObjects(cq, meetingId, revision);
       // 确认后草稿的 stale 清掉（差异已经看过、确认过）；草稿版本不变，同一草稿再确认还认得出来。
-      await cq(`UPDATE meeting_cards SET current_revision = $2, draft = jsonb_set(draft, '{objectChanges}', $3::jsonb), updated_at = now() WHERE meeting_id = $1`,
-        [meetingId, revision, JSON.stringify(draft.objectChanges.map((change) => ({ ...change, stale: false })))]);
+      await cq(`UPDATE meeting_cards SET current_revision = $2, draft = jsonb_set(draft, '{objectChanges}', $3::jsonb), action_items = $4::jsonb, updated_at = now()
+        WHERE meeting_id = $1`, [meetingId, revision, JSON.stringify(draft.objectChanges.map((change) => ({ ...change, stale: false }))), JSON.stringify(actionItems)]);
       // 第一次确认：会后事项算处理完；主持人和创建人的「会议记录待确认」提醒标为已读。
       await cq("UPDATE meetings SET status = 'reviewed', version = version + 1, updated_at = now() WHERE id = $1 AND status = 'held'", [meetingId]);
       await cq("UPDATE notifications SET read_at = now() WHERE kind = 'meeting_card_pending' AND object_id = $1 AND read_at IS NULL", [meetingId]);

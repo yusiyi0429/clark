@@ -1522,7 +1522,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         </p>
       ) : null}
       <MeetingRecordCard key={meetingId} meetingId={meetingId} initial={recordCard.initial} onView={recordCard.remember}
-        turns={source.transcript?.turns ?? []} speakerName={(speakerId) => speakerLabel(speakerId, people)} />
+        turns={source.transcript?.turns ?? []} speakerName={(speakerId) => speakerLabel(speakerId, people)} people={payload.participants} />
     </>
   ) : null;
   const legacyRecord = recordCard.status === "legacy";

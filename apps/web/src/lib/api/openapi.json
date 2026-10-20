@@ -14899,7 +14899,8 @@
                     "required": [
                       "payload",
                       "confirmation",
-                      "kind"
+                      "kind",
+                      "actionItems"
                     ],
                     "properties": {
                       "payload": {
@@ -15253,6 +15254,76 @@
                             "type": "string"
                           }
                         ]
+                      },
+                      "actionItems": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "text",
+                            "ownerPersonId",
+                            "dueDate",
+                            "basisSectionIds",
+                            "taskId"
+                          ],
+                          "properties": {
+                            "id": {
+                              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                              "type": "string"
+                            },
+                            "text": {
+                              "minLength": 1,
+                              "maxLength": 300,
+                              "type": "string"
+                            },
+                            "ownerPersonId": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "dueDate": {
+                              "anyOf": [
+                                {
+                                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "basisSectionIds": {
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "minLength": 1,
+                                "maxLength": 64,
+                                "type": "string"
+                              }
+                            },
+                            "taskId": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        }
                       }
                     }
                   },
@@ -58709,7 +58780,8 @@
                 "required": [
                   "payload",
                   "confirmation",
-                  "kind"
+                  "kind",
+                  "actionItems"
                 ],
                 "properties": {
                   "payload": {
@@ -59063,6 +59135,76 @@
                         "type": "string"
                       }
                     ]
+                  },
+                  "actionItems": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "text",
+                        "ownerPersonId",
+                        "dueDate",
+                        "basisSectionIds",
+                        "taskId"
+                      ],
+                      "properties": {
+                        "id": {
+                          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                          "type": "string"
+                        },
+                        "text": {
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "type": "string"
+                        },
+                        "ownerPersonId": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "dueDate": {
+                          "anyOf": [
+                            {
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "basisSectionIds": {
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "minLength": 1,
+                            "maxLength": 64,
+                            "type": "string"
+                          }
+                        },
+                        "taskId": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
                   }
                 }
               },
