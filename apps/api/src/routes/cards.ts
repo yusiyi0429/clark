@@ -1,5 +1,5 @@
 import type { FastifyReply } from "fastify";
-import { PeopleDirectoryResponse, type TCard, type TCardCollection } from "@warmap/contracts";
+import { PeopleDirectoryResponse, PersonDirectoryResponse, type TCard, type TCardCollection } from "@warmap/contracts";
 import { listBattlefieldCards } from "../battlefields.js";
 import { listCapabilityCards } from "../capabilities.js";
 import { canReadMission, getMissionRow, listMissionCards, projectMissionCard } from "../missions.js";
@@ -39,13 +39,16 @@ export async function readHomeCards(ctx: RouteContext, person: SessionPerson): P
 export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
   const { q, env, fail, requireCEO, now, peopleDirectory, radar } = ctx;
 
-  // 人员目录：建会表单选主持人、参会人（CEO 和成员都约会议）。
-  app.get("/api/people", { preHandler: ctx.requirePerson, schema: { response: { 200: PeopleDirectoryResponse } } }, async () => ({
+  app.get("/api/people", { preHandler: requireCEO, schema: { response: { 200: PeopleDirectoryResponse } } }, async () => ({
     people: peopleDirectory.searchPeople(undefined).filter(isRealPerson).map((person) => ({
       personId: person.personId,
       displayName: person.displayName,
       roles: [...person.roles],
     })),
+  }));
+  // 人员名册：CEO 和成员约会议选参会人；只给真人的 personId 和名字（角色、来源不出去）。
+  app.get("/api/people/directory", { preHandler: ctx.requirePerson, schema: { response: { 200: PersonDirectoryResponse } } }, async () => ({
+    people: peopleDirectory.searchPeople(undefined).filter(isRealPerson).map(({ personId, displayName }) => ({ personId, displayName })),
   }));
   app.get("/api/cards/home", { preHandler: requireCEO }, async (req): Promise<TCardCollection> => readHomeCards(ctx, req.person!));
   app.get(

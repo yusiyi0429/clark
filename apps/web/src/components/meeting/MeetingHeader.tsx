@@ -305,6 +305,8 @@ export function MeetingStatus({ phase, facts, now, endedAt }: { phase: MeetingPh
 const FAILURE: Record<TMeetingMinutesFailure, string> = { no_permission: "无权限", not_ready: "未就绪", not_found: "未找到", fetch_failed: "读取失败" };
 /** 再读、贴链接没成功时的短标签（不显示服务端原话）。 */
 const FETCH_ERROR: Record<string, string> = { INVALID_MINUTES_URL: "不是妙记链接", MINUTE_TAKEN: "已对到别的会" };
+/** 其实已经读完了（页面上的会议卡旧了）：直接重取会议卡。 */
+const ALREADY_READ = new Set(["MINUTES_READY", "TRANSCRIPT_ALREADY_IMPORTED"]);
 
 /**
  * 逐字稿读到哪了（FR-4.2）：已读完只在逐字稿确认存下后出现（有候选等对说话人时还算读取中）；
@@ -341,7 +343,8 @@ export function MeetingTranscriptStatus({ meetingId, status, failure, confirmed,
     setBusy(true); setError("");
     try {
       const result = await work();
-      if ("code" in result) setError(FETCH_ERROR[result.code] ?? "没有读到");
+      if ("code" in result && ALREADY_READ.has(result.code)) onFetched?.();
+      else if ("code" in result) setError(FETCH_ERROR[result.code] ?? "没有读到");
       else { setFetched(result); setUrl(""); onFetched?.(); }
     } catch { setError("没有读到"); }
     finally { setBusy(false); }

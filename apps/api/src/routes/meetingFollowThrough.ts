@@ -82,7 +82,7 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
     ctx.requestContext.set(req, { actionType: "meeting.book" });
     const viewer = req.person!;
     const result = await bookMeeting({ pool: ctx.pool, peopleDirectory: ctx.peopleDirectory, preflightAgent: ctx.preflight, secret: ctx.env.sessionSecret,
-      introAgent: ctx.threadIntroAgent, anchorOptions: followThrough.decisions.anchorOptionsFor }, viewer, req.body);
+      introAgent: ctx.threadIntroAgent, anchorOptions: followThrough.decisions.anchorChoicesFor }, viewer, req.body);
     if ("error" in result) {
       return ctx.fail(reply, result.error.status, result.error.code, result.error.message, result.error.fieldErrors ? { fieldErrors: result.error.fieldErrors } : undefined);
     }

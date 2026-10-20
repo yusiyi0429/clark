@@ -12,8 +12,8 @@ import d from "./meeting-decisions.module.css";
 const GROUPS = [["po", "PO"], ["lto", "LTO"], ["mission", "Mission"], ["unit", "单元"]] as const;
 const KIND = Object.fromEntries(GROUPS) as Record<TWorldAnchorOption["kind"], string>;
 const same = (a: Pick<TWorldAnchor, "kind" | "id">, b: Pick<TWorldAnchor, "kind" | "id">) => a.kind === b.kind && a.id === b.id;
-/** lifecycle 是草稿（本体的 draft、Mission 轮次没确认）。 */
-const isDraftLifecycle = (lifecycle: string | null) => Boolean(lifecycle && /草稿|draft/i.test(lifecycle));
+/** lifecycle 是草稿（本体对象的 draft、Mission 轮次没确认）。 */
+const isDraftLifecycle = (lifecycle: string | null) => lifecycle === "draft";
 
 export function WorldAnchorPicker({ options, value, onChange, min = 0 }: {
   options: TWorldAnchorOption[]; value: TWorldAnchor[]; onChange(next: TWorldAnchor[]): void;

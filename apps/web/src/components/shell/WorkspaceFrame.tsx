@@ -641,7 +641,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
           </div>
         ) : null}
         <WhatsNewCard />
-        {booking && viewerId ? <MeetingBookingSheet open onClose={() => setBooking(false)} viewer={{ personId: viewerId, role: account.role }} /> : null}
+        {booking && viewerId ? <MeetingBookingSheet open onClose={() => setBooking(false)} viewer={{ personId: viewerId, role: account.role, displayName: account.displayName }} /> : null}
       </div>
       </ReferenceProvider>
     </WorkspaceContext.Provider>

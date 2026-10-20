@@ -9,7 +9,7 @@ const END = "2026-10-22T11:30:00.000+08:00";
 const MISSION = "m-booking";
 const head = (object_id: string, object_type: string, title: string) => ({
   object_id, object_type, title, revision_id: `${object_id}-rev`, object_version: 1, version: 1, domain_id: "<domain:eo>",
-  external_refs: [], lifecycle: { status: "committed" }, contract_version: "tkos.world/0.3",
+  external_refs: [], lifecycle: { status: "established", display_name: "已成立" }, contract_version: "tkos.world/0.3",
 });
 const PO = head("<period-goal-oct>", "PeriodGoal", "E&O 10 月目标");
 const LTO = head("<long-term-goal-1>", "LongTermGoal", "E&O 长期目标");
@@ -65,8 +65,13 @@ describe("预约建会", () => {
     try {
       await seed(t);
       const member = await t.memberCookie();
-      // 建会表单要选参会人：成员也能读人员目录。
-      expect((await t.app.inject({ method: "GET", url: "/api/people", headers: { cookie: member } })).statusCode).toBe(200);
+      // 建会表单选参会人：成员读人员名册（只有 personId 和名字），完整人员目录仍只给 CEO。
+      expect((await t.app.inject({ method: "GET", url: "/api/people", headers: { cookie: member } })).statusCode).toBe(403);
+      const roster = await t.app.inject({ method: "GET", url: "/api/people/directory", headers: { cookie: member } });
+      expect(roster.statusCode).toBe(200);
+      const people = roster.json().people as Record<string, unknown>[];
+      expect(people.length).toBeGreaterThan(0);
+      for (const person of people) expect(Object.keys(person).sort()).toEqual(["displayName", "personId"]);
       const created = await book(t, member, body());
       expect(created.statusCode).toBe(200);
       const meetingId = created.json().card.objectRef.id as string;
@@ -87,6 +92,8 @@ describe("预约建会", () => {
       await seed(t);
       const created = await book(t, await t.memberCookie(), body({ anchors: [{ kind: "po", id: PO.object_id }, { kind: "mission", id: MISSION }] }));
       expect(created.statusCode).toBe(200);
+      // 校验挂点只列对象，不取 PO 的内容。
+      expect(calls.some((call) => call.url.pathname.startsWith("/v1/world/objects/"))).toBe(false);
       const worker = createJobWorker({ pool: t.pool, handlers: t.app.meetingFollowThrough.jobs().handlers });
       while (await worker.tick() > 0);
       expect(calls.filter((call) => call.url.pathname.startsWith("/v1/actions"))).toEqual([]);
@@ -150,8 +157,8 @@ describe("预约建会", () => {
       const res = await t.app.inject({ method: "GET", url: "/api/world-anchor-options?period=2026-10", headers: { cookie: await t.memberCookie() } });
       expect(res.statusCode).toBe(200);
       const options = res.json().options as { kind: string; id: string; title: string }[];
-      expect(options.filter((option) => option.kind === "po")).toEqual([{ kind: "po", id: PO.object_id, title: PO.title, brief: PO_OUTCOME, lifecycle: "committed" }]);
-      expect(options.filter((option) => option.kind === "lto")).toEqual([{ kind: "lto", id: LTO.object_id, title: LTO.title, brief: LTO_OUTCOME, lifecycle: "committed" }]);
+      expect(options.filter((option) => option.kind === "po")).toEqual([{ kind: "po", id: PO.object_id, title: PO.title, brief: PO_OUTCOME, lifecycle: "established" }]);
+      expect(options.filter((option) => option.kind === "lto")).toEqual([{ kind: "lto", id: LTO.object_id, title: LTO.title, brief: LTO_OUTCOME, lifecycle: "established" }]);
       expect(options).toContainEqual(expect.objectContaining({ kind: "mission", id: MISSION, title: "预约挂点 Mission" }));
       expect(options).toContainEqual(expect.objectContaining({ kind: "unit", id: "unit-booking", title: "预约单元" }));
     } finally {
@@ -168,7 +175,7 @@ describe("预约建会", () => {
       const res = await t.app.inject({ method: "GET", url: "/api/world-anchor-options?period=2026-10", headers: { cookie: await t.memberCookie() } });
       expect(res.statusCode).toBe(200);
       const options = res.json().options as { kind: string; id: string; brief: string | null; lifecycle: string | null }[];
-      expect(options.find((option) => option.kind === "po")).toMatchObject({ brief: PO_OUTCOME, lifecycle: "committed" });
+      expect(options.find((option) => option.kind === "po")).toMatchObject({ brief: PO_OUTCOME, lifecycle: "established" });
       expect(options.find((option) => option.id === "m-draft")).toMatchObject({ kind: "mission", brief: null, lifecycle: "draft" });
       expect(options.find((option) => option.id === "unit-booking")).toMatchObject({ kind: "unit", brief: "预约单元" });
 
@@ -186,7 +193,7 @@ describe("预约建会", () => {
       const goals = (again.json().options as { kind: string }[]).filter((option) => option.kind === "po" || option.kind === "lto");
       expect(goals).toEqual([
         { kind: "po", id: draftPo.object_id, title: "草稿 PO", brief: null, lifecycle: "draft" },
-        { kind: "lto", id: otherLto.object_id, title: "读不到的 LTO", brief: null, lifecycle: "committed" },
+        { kind: "lto", id: otherLto.object_id, title: "读不到的 LTO", brief: null, lifecycle: "established" },
       ]);
       expect(calls.some((call) => call.url.pathname.endsWith(encodeURIComponent(draftPo.object_id)))).toBe(false);
     } finally {

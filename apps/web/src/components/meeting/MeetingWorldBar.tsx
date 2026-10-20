@@ -2,7 +2,7 @@
 
 /**
  * 会议页页头下面一行（会前会后都在，回流设计稿 3.1、FR-4.1/4.2）：这场会挂到哪些对象、会议记录写进本体了没有、逐字稿读到哪了。
- * 主持人和 CEO 能「改」挂点（WorldAnchorPicker，可恢复自动）；会开完了，主持人、创建人和 CEO 看得到记录状态和逐字稿状态；
+ * 主持人和建会的人能「改」挂点（WorldAnchorPicker，可恢复自动）；会开完了，主持人、建会的人和 CEO 看得到记录状态和逐字稿状态；
  * 参会人只看挂点；别人看不到这一行（GET /api/meetings/:id/world 给 404）。
  */
 import { useEffect, useState, type ReactNode } from "react";

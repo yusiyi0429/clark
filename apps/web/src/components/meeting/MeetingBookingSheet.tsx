@@ -15,7 +15,7 @@ import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Select } from "@/components/ui/Select";
 import { timeOptions } from "@/components/ui/pickerFormat";
-import { bookMeeting, listPeople, listWorldAnchorOptions, type DirectoryPerson } from "./meetingDecisionApi";
+import { bookMeeting, listPeople, listPersonDirectory, listWorldAnchorOptions, type DirectoryPerson } from "./meetingDecisionApi";
 import { WorldAnchorPicker } from "./WorldAnchorPicker";
 import d from "./meeting-decisions.module.css";
 
@@ -30,7 +30,11 @@ function nextSlot(now = new Date()): { date: string; start: string; end: string 
   return { date, start: `${pad(hour)}:00`, end: hour >= 23 ? "23:45" : `${pad(hour + 1)}:00` };
 }
 
-export function MeetingBookingSheet({ open, onClose, viewer }: { open: boolean; onClose(): void; viewer: { personId: string; role: "ceo" | "member" } }) {
+export function MeetingBookingSheet({ open, onClose, viewer }: {
+  open: boolean; onClose(): void;
+  /** 登录的人；成员的主持人一栏就是 displayName。 */
+  viewer: { personId: string; role: "ceo" | "member"; displayName: string };
+}) {
   const { navigate } = useWorkspace();
   const [title, setTitle] = useState("");
   const [slot, setSlot] = useState(nextSlot);
@@ -38,31 +42,37 @@ export function MeetingBookingSheet({ open, onClose, viewer }: { open: boolean; 
   const [participants, setParticipants] = useState<string[]>([]);
   const [anchors, setAnchors] = useState<TWorldAnchor[]>([]);
   const [options, setOptions] = useState<TWorldAnchorOption[] | null>(null);
-  const [people, setPeople] = useState<DirectoryPerson[]>([]);
+  /** 人员名册（选参会人）；CEO 另取带角色的目录选主持人。 */
+  const [people, setPeople] = useState<{ personId: string; displayName: string }[]>([]);
+  const [hosts, setHosts] = useState<DirectoryPerson[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [optionsError, setOptionsError] = useState(false);
   const period = slot.date.slice(0, 7);
 
   useEffect(() => {
     if (!open) return;
     let live = true;
-    void listPeople().then((next) => { if (live) setPeople(next); }, () => undefined);
+    void listPersonDirectory().then((next) => { if (live) setPeople(next); }, () => undefined);
+    if (viewer.role === "ceo") void listPeople().then((next) => { if (live) setHosts(next.filter((person) => person.roles.includes("dri"))); }, () => undefined);
     return () => { live = false; };
-  }, [open]);
-  // 挂点按开会那个月取：换了月份重取，已选的不在新选项里就去掉。
+  }, [open, viewer.role]);
+  // 挂点按开会那个月取：换了月份先收起旧选项再重取，已选的不在新选项里就去掉。
   useEffect(() => {
     if (!open) return;
     let live = true;
+    setOptions(null);
     void listWorldAnchorOptions(period).then((next) => {
       if (!live) return;
       setOptions(next);
+      setOptionsError(false);
       setAnchors((current) => current.filter((anchor) => next.some((option) => option.kind === anchor.kind && option.id === anchor.id)));
-    }, () => { if (live) setError("没有读到对象"); });
+    }, () => { if (live) setOptionsError(true); });
     return () => { live = false; };
   }, [open, period]);
 
   const nameOf = (personId: string) => people.find((person) => person.personId === personId)?.displayName ?? "";
-  const valid = Boolean(title.trim() && slot.date && slot.start && slot.end && slot.end > slot.start && leadDriId && anchors.length);
+  const valid = Boolean(title.trim() && slot.date && slot.start && slot.end && slot.end > slot.start && leadDriId && options && anchors.length);
   const submit = async () => {
     setBusy(true); setError("");
     try {
@@ -86,7 +96,6 @@ export function MeetingBookingSheet({ open, onClose, viewer }: { open: boolean; 
     }
   };
 
-  const hosts = people.filter((person) => person.roles.includes("dri"));
   const invitable = people.filter((person) => person.personId !== leadDriId && !participants.includes(person.personId));
 
   return (
@@ -113,7 +122,7 @@ export function MeetingBookingSheet({ open, onClose, viewer }: { open: boolean; 
               <div className={d.bookField}>
                 <span>主持人</span>
                 {viewer.role === "member"
-                  ? <output aria-label="主持人" className={d.bookHost}>{nameOf(viewer.personId)}</output>
+                  ? <output aria-label="主持人" className={d.bookHost}>{viewer.displayName}</output>
                   : <Select aria-label="主持人" value={leadDriId} placeholder="选主持人" options={hosts.map((person) => ({ value: person.personId, label: person.displayName }))}
                     onChange={(next) => { setLeadDriId(next); setParticipants((current) => current.filter((id) => id !== next)); }} />}
               </div>
@@ -135,6 +144,7 @@ export function MeetingBookingSheet({ open, onClose, viewer }: { open: boolean; 
               <div className={d.bookField}>
                 <span>挂到</span>
                 {options ? <WorldAnchorPicker options={options} value={anchors} onChange={setAnchors} /> : null}
+                {optionsError ? <p className={d.worldError} role="alert">没有读到对象</p> : null}
               </div>
               {error ? <p className={d.worldError} role="alert">{error}</p> : null}
               <div className={d.bookActions}>

@@ -50,8 +50,8 @@ const text = (node: Node): string => {
   return (Array.isArray(children) ? children : [children]).map((child) => (typeof child === "string" ? child : child && typeof child === "object" ? text(child as Node) : "")).join("");
 };
 
-const MEMBER = { personId: "p-member", role: "member" as const };
-const CEO = { personId: "p-ceo", role: "ceo" as const };
+const MEMBER = { personId: "p-member", role: "member" as const, displayName: "林晓" };
+const CEO = { personId: "p-ceo", role: "ceo" as const, displayName: "王总" };
 const PEOPLE = [
   { personId: "p-member", displayName: "林晓", roles: ["dri"] },
   { personId: "p-ceo", displayName: "王总", roles: ["ceo", "dri"] },
@@ -60,7 +60,7 @@ const PEOPLE = [
 const PO: TWorldAnchorOption = { kind: "po", id: "<po-oct>", title: "E&O 10 月目标", brief: "十月把预约跑通", lifecycle: "committed" };
 const MISSION: TWorldAnchorOption = { kind: "mission", id: "m-draft", title: "草稿 Mission", brief: null, lifecycle: "draft" };
 
-const render = (viewer: { personId: string; role: "ceo" | "member" }) => {
+const render = (viewer: typeof MEMBER | typeof CEO) => {
   hooks.index = 0;
   hooks.effectIndex = 0;
   return nodes(expand(MeetingBookingSheet({ open: true, onClose: vi.fn(), viewer })));
@@ -75,7 +75,9 @@ beforeEach(() => {
   api.get.mockReset(); api.post.mockReset(); workspace.navigate.mockReset();
   api.get.mockImplementation(async (path: string) => path === "/api/people"
     ? { data: { people: PEOPLE }, response: { ok: true, status: 200 } }
-    : { data: { options: [PO, MISSION] }, response: { ok: true, status: 200 } });
+    : path === "/api/people/directory"
+      ? { data: { people: PEOPLE.map(({ personId, displayName }) => ({ personId, displayName })) }, response: { ok: true, status: 200 } }
+      : { data: { options: [PO, MISSION] }, response: { ok: true, status: 200 } });
 });
 
 /** 填名称、日期、起止（10:00–11:30），等挂点选项到。 */
@@ -99,9 +101,10 @@ describe("约会议", () => {
   });
 
   it("成员只能约自己主持的会", async () => {
-    await vi.waitFor(() => expect(render(MEMBER).some((node) => text(node) === "林晓")).toBe(true));
-    expect(api.get).toHaveBeenCalledWith("/api/people");
     const tree = render(MEMBER);
+    // 成员：主持人就是登录的本人；参会人从人员名册选，不读带角色的人员目录。
+    expect(api.get).toHaveBeenCalledWith("/api/people/directory");
+    expect(api.get).not.toHaveBeenCalledWith("/api/people");
     expect(tree.some((node) => node.type === Select && node.props?.["aria-label"] === "主持人")).toBe(false);
     expect(field(tree, "主持人").type).toBe("output");
     expect(text(field(tree, "主持人"))).toBe("林晓");
@@ -124,5 +127,25 @@ describe("约会议", () => {
     expect(Date.parse(body.endsAt as string)).toBeGreaterThan(Date.parse(body.scheduledAt as string));
     expect(new Date(body.scheduledAt as string).toISOString()).toBe("2026-10-22T02:00:00.000Z");
     await vi.waitFor(() => expect(workspace.navigate).toHaveBeenCalledWith("/me/meetings/m-new"));
+  });
+
+  it("换了月份：旧选项先收起，读不到时标出来，再读到就清掉", async () => {
+    await fill(MEMBER);
+    let fail = true;
+    api.get.mockImplementation(async (path: string, init?: { params?: { query?: { period?: string } } }) => {
+      if (path !== "/api/world-anchor-options") return { data: { people: [] }, response: { ok: true, status: 200 } };
+      if (init?.params?.query?.period === "2026-11" && fail) return { data: undefined, response: { ok: false, status: 500 } };
+      return { data: { options: [PO] }, response: { ok: true, status: 200 } };
+    });
+    change(render(MEMBER).find((node) => node.type === DatePicker)!, "2026-11-03");
+    render(MEMBER); // 这一遍跑换月的 effect（收起旧选项），下一遍才看得到
+    expect(render(MEMBER).some((node) => node.props?.["aria-pressed"] !== undefined)).toBe(false);
+    await vi.waitFor(() => expect(render(MEMBER).some((node) => node.props?.role === "alert" && text(node) === "没有读到对象")).toBe(true));
+    expect(button(render(MEMBER), "约好").props!.disabled).toBe(true);
+    fail = false;
+    change(render(MEMBER).find((node) => node.type === DatePicker)!, "2026-12-01");
+    change(render(MEMBER).find((node) => node.type === DatePicker)!, "2026-11-04");
+    await vi.waitFor(() => expect(render(MEMBER).some((node) => node.props?.["aria-pressed"] !== undefined)).toBe(true));
+    expect(render(MEMBER).some((node) => node.props?.role === "alert")).toBe(false);
   });
 });

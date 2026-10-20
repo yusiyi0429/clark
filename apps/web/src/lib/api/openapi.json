@@ -567,6 +567,34 @@
         }
       }
     },
+    "/api/people/directory": {
+      "get": {
+        "operationId": "listPersonDirectory",
+        "summary": "人员名册（CEO 和成员）：真人的 personId 和名字，约会议选参会人用",
+        "responses": {
+          "200": {
+            "description": "人员名册",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonDirectoryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cards/home": {
       "get": {
         "operationId": "getHomeCards",
@@ -15733,6 +15761,37 @@
                     "maxLength": 50,
                     "type": "string"
                   }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PersonDirectoryResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "people"
+        ],
+        "properties": {
+          "people": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "displayName"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "displayName": {
+                  "minLength": 1,
+                  "type": "string"
                 }
               }
             }

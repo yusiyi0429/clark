@@ -116,7 +116,7 @@ export const MeetingWorldView = Type.Object(
     anchors: Type.Array(WorldAnchor),
     /** 主持人或 CEO 改过挂点。 */
     edited: Type.Boolean(),
-    /** 看的人能不能改挂点（主持人和 CEO）。 */
+    /** 看的人能不能改挂点（主持人和建会的人）。 */
     canEdit: Type.Boolean(),
   },
   { additionalProperties: false },

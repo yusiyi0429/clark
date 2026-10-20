@@ -1,6 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { MeetingOutcomeState, StoredTranscript, TranscriptCandidateProjection } from "./transcript.js";
 import { MeetingAttendees, MeetingDecisionView, MeetingMinutesFailure, MeetingMinutesStatus, PickedWorldAnchor } from "./meetingDecisions.js";
+import { RequestPerson } from "./requests.js";
 
 export const MeetingStatus = Type.Union([
   Type.Literal("scheduled"),
@@ -573,7 +574,7 @@ export const JoinMeetingRequest = Type.Object(
   { additionalProperties: false },
 );
 
-/** 只读人员目录（CEO 和成员）：建会表单选主持人、参会人的 personId；单 CEO 产品，ceo 角色唯一。 */
+/** CEO 端只读人员目录：Meeting 创建表单选择 personId；单 CEO 产品，ceo 角色唯一。 */
 export const PeopleDirectoryResponse = Type.Object(
   {
     people: Type.Array(
@@ -587,6 +588,9 @@ export const PeopleDirectoryResponse = Type.Object(
   },
   { additionalProperties: false },
 );
+
+/** 人员名册（CEO 和成员都能读）：只有真人的 personId 和名字，约会议选参会人用；同传话起草里的 directory。 */
+export const PersonDirectoryResponse = Type.Object({ people: Type.Array(RequestPerson, { maxItems: 200 }) }, { additionalProperties: false });
 
 export const UpdateMeetingDraftRequest = Type.Object(
   {
@@ -696,6 +700,7 @@ export type TStartMeetingRecordingResponse = Static<typeof StartMeetingRecording
 export type TMeetingCardPayload = Static<typeof MeetingCardPayload>;
 export type TCreateMeetingRequest = Static<typeof CreateMeetingRequest>;
 export type TMeetingBookingRequest = Static<typeof MeetingBookingRequest>;
+export type TPersonDirectoryResponse = Static<typeof PersonDirectoryResponse>;
 export type TJoinMeetingRequest = Static<typeof JoinMeetingRequest>;
 export type TUpdateMeetingDraftRequest = Static<typeof UpdateMeetingDraftRequest>;
 export type TRequestSupplementRequest = Static<typeof RequestSupplementRequest>;

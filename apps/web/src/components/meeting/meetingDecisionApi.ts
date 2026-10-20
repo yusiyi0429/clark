@@ -47,8 +47,14 @@ export async function listWorldAnchorOptions(period: string): Promise<TWorldAnch
 }
 
 export type DirectoryPerson = { personId: string; displayName: string; roles: string[] };
+/** 完整人员目录（带角色，只给 CEO）：CEO 约会议时选主持人。 */
 export async function listPeople(): Promise<DirectoryPerson[]> {
   const { data, response } = await browserApi.GET("/api/people");
+  return response.ok && data ? data.people : [];
+}
+/** 人员名册（CEO 和成员）：约会议选参会人。 */
+export async function listPersonDirectory(): Promise<{ personId: string; displayName: string }[]> {
+  const { data, response } = await browserApi.GET("/api/people/directory");
   return response.ok && data ? data.people : [];
 }
 
@@ -62,6 +68,7 @@ export async function bookMeeting(body: TMeetingBookingRequest): Promise<{ card:
 type MinutesResult = TMeetingMinutesFetchResponse | { code: string };
 async function settleMinutes(promise: Promise<{ data?: TMeetingMinutesFetchResponse; error?: unknown; response: Response }>): Promise<MinutesResult> {
   const { data, error, response } = await promise;
+  if (response.status === 401) { window.location.assign("/access"); return { code: "UNAUTHENTICATED" }; }
   return response.ok && data ? data : { code: (error as { code?: string } | undefined)?.code ?? "FAILED" };
 }
 /** 妙记「再读一次」（主持人、创建人）。 */

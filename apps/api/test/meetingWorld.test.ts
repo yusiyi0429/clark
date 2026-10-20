@@ -90,9 +90,9 @@ const UNIT: TWorldAnchor = { kind: "unit", id: "agents", title: "智能体" };
 afterEach(() => vi.unstubAllGlobals());
 
 describe("会议入本体：挂点", () => {
-  it("改挂点：只能挑本月选项，主持人和 CEO 能改，参会人不能；null 回到主持人的单元", async () => {
+  it("改挂点：只能挑本月选项，主持人和建会的人能改，参会人和没建会的 CEO 不能；null 回到主持人的单元", async () => {
     ontology();
-    const { t, host, owner, meetingId } = await setup();
+    const { t, ceo, host, owner, meetingId } = await setup();
     try {
       const options = await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/world-anchor-options`, headers: { cookie: host } });
       // 候选带已确认的内容：没有轮次的 Mission 不给，单元是名称。
@@ -106,6 +106,15 @@ describe("会议入本体：挂点", () => {
       const edited = await putAnchors(t, host, meetingId, [{ kind: "unit", id: "agents" }, { kind: "mission", id: "m-v2" }]);
       expect(edited.json().world).toMatchObject({ edited: true, anchors: [UNIT, MISSION], record: { status: "pending" } });
       expect((await putAnchors(t, host, meetingId, null)).json().world).toMatchObject({ edited: false, anchors: [UNIT] });
+
+      // 从议题建的会没记建会的人（按主持人算）：CEO 只看记录状态、不能改（裁定 24）；记成 CEO 建的以后 CEO 能改。
+      const view = await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/world`, headers: { cookie: ceo } });
+      expect(view.json().world).toMatchObject({ canEdit: false, record: { status: "pending" } });
+      expect((await putAnchors(t, ceo, meetingId, [{ kind: "unit", id: "agents" }])).statusCode).toBe(404);
+      expect((await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/world-anchor-options`, headers: { cookie: ceo } })).statusCode).toBe(404);
+      await t.pool.query("UPDATE meetings SET created_by = $2 WHERE id = $1", [meetingId, CEO]);
+      expect((await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/world`, headers: { cookie: ceo } })).json().world).toMatchObject({ canEdit: true });
+      expect((await putAnchors(t, ceo, meetingId, [{ kind: "unit", id: "agents" }])).statusCode).toBe(200);
     } finally {
       await t.close();
     }

@@ -24,28 +24,40 @@ const brief = (text: string | null | undefined): string | null => {
   if (!value) return null;
   return value.length > BRIEF_MAX ? `${value.slice(0, BRIEF_MAX - 1)}…` : value;
 };
-const isDraft = (lifecycle: string | null) => Boolean(lifecycle && /草稿|draft/i.test(lifecycle));
+/** 对象的生命周期状态（tkos.world 0.3 records.lifecycle.status：draft 草稿、established 已成立、in_progress 进行中……；没有为 null）。 */
 const lifecycleOf = (head: WorldHead): string | null => {
-  const value = head.lifecycle as { status?: string; display_name?: string } | null;
-  return value?.display_name ?? value?.status ?? null;
+  const status = (head.lifecycle as { status?: unknown } | null)?.status;
+  return typeof status === "string" && status ? status : null;
 };
+/** 已成立的对象才取内容：有生命周期且不是草稿（撤销、作废的已被 usableWorldHead 去掉）。 */
+const established = (lifecycle: string | null) => lifecycle !== null && lifecycle !== "draft";
+/** 取 PO、LTO 内容时同时最多几个请求。 */
+const BRIEF_READS = 4;
 
 /**
- * 预约、改挂点时能挑的对象，按 本月 PO、LTO、本月 Mission、责任单元 排：PO、LTO 读本体（串行，读不到就不给），Mission、单元读天枢。
- * world-02 里没有 Task 对象，不给 Task。每项带已确认的内容（brief）：PO、LTO 取对象目标块的结果组件（草稿不取，读不到为 null），
- * Mission 取定义的结果（轮次确认了才给），单元是名称。
+ * 预约、改挂点时能挑的对象，按 本月 PO、LTO、本月 Mission、责任单元 排：PO、LTO 读本体（列对象串行，读不到就不给），Mission、单元读天枢。
+ * world-02 里没有 Task 对象，不给 Task。每项带已确认的内容（brief）：PO、LTO 取已成立对象目标块的结果组件（同时最多 4 个请求，读不到为 null），
+ * Mission 取定义的结果（轮次确认了才给），单元是名称。`briefs` 为 null 时（建会、改挂点的校验）PO、LTO 不取内容，只看列出来的对象。
  */
-export async function anchorOptions(q: Query, world: AnchorWorld | null, period: string, cache: AnchorBriefCache = new Map()): Promise<TWorldAnchorOption[]> {
+export async function anchorOptions(q: Query, world: AnchorWorld | null, period: string, briefs: AnchorBriefCache | null): Promise<TWorldAnchorOption[]> {
   let goals: TWorldAnchorOption[] = [];
   if (world) {
     try {
       const pos = await world.listObjects({ type: "PeriodGoal", period });
       const ltos = await world.listObjects({ type: "LongTermGoal" });
-      const heads = [...pos.map((head) => ({ kind: "po" as const, head })), ...ltos.map((head) => ({ kind: "lto" as const, head }))]
-        .filter(({ head }) => usableWorldHead(head) && head.title.trim());
-      for (const { kind, head } of heads) {
-        const lifecycle = lifecycleOf(head);
-        goals.push({ kind, id: head.object_id, title: worldDisplayText(head.title.trim()), brief: isDraft(lifecycle) ? null : await goalBrief(world, head, cache), lifecycle });
+      goals = [...pos.map((head) => ({ kind: "po" as const, head })), ...ltos.map((head) => ({ kind: "lto" as const, head }))]
+        .filter(({ head }) => usableWorldHead(head) && head.title.trim())
+        .map(({ kind, head }) => ({ kind, id: head.object_id, title: worldDisplayText(head.title.trim()), brief: null, lifecycle: lifecycleOf(head) }));
+      if (briefs) {
+        const heads = new Map([...pos, ...ltos].map((head) => [head.object_id, head]));
+        const pending = goals.filter((option) => established(option.lifecycle));
+        const next = async (): Promise<void> => {
+          const option = pending.shift();
+          if (!option) return;
+          option.brief = await goalBrief(world, heads.get(option.id)!, briefs);
+          return next();
+        };
+        await Promise.all(Array.from({ length: Math.min(BRIEF_READS, pending.length) }, next));
       }
     } catch {
       goals = [];

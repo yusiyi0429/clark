@@ -192,6 +192,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/people/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 人员名册（CEO 和成员）：真人的 personId 和名字，约会议选参会人用 */
+        get: operations["listPersonDirectory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cards/home": {
         parameters: {
             query?: never;
@@ -3765,6 +3782,12 @@ export interface components {
                 personId: string;
                 displayName: string;
                 roles: string[];
+            }[];
+        };
+        PersonDirectoryResponse: {
+            people: {
+                personId: string;
+                displayName: string;
             }[];
         };
         ExecuteActionRequest: {
@@ -11695,6 +11718,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PeopleDirectoryResponse"];
+                };
+            };
+        };
+    };
+    listPersonDirectory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 人员名册 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonDirectoryResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
         };

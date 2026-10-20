@@ -83,6 +83,7 @@ import {
   DemoEntryResponse,
   ChangePasscodeRequest,
   PeopleDirectoryResponse,
+  PersonDirectoryResponse,
   MonthlyDraftCandidate,
   MonthlyPlanCapability,
   MonthlyPlanCardPayload,
@@ -383,6 +384,16 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
                 "application/json": { schema: { $ref: "#/components/schemas/PeopleDirectoryResponse" } },
               },
             },
+          },
+        },
+      },
+      "/api/people/directory": {
+        get: {
+          operationId: "listPersonDirectory",
+          summary: "人员名册（CEO 和成员）：真人的 personId 和名字，约会议选参会人用",
+          responses: {
+            "200": { description: "人员名册", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonDirectoryResponse" } } } },
+            "401": errorResponse,
           },
         },
       },
@@ -2728,6 +2739,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ChangePasscodeRequest: ChangePasscodeRequest as JsonSchema,
         SessionResponse: SessionResponse as JsonSchema,
         PeopleDirectoryResponse: PeopleDirectoryResponse as JsonSchema,
+        PersonDirectoryResponse: PersonDirectoryResponse as JsonSchema,
         ExecuteActionRequest: ExecuteActionRequest as JsonSchema,
         ConversationHistory: ConversationHistory as JsonSchema,
         ConversationMessageRequest: ConversationMessageRequest as JsonSchema,

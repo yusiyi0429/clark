@@ -155,6 +155,14 @@ describe("会议页页头：逐字稿", () => {
     expect(transcript({ canFetch: false }).some((node) => node.type === "button")).toBe(false);
   });
 
+  it("其实已经读完了（会议卡旧了）：重取会议卡，不报错", async () => {
+    const onFetched = vi.fn();
+    api.post.mockResolvedValue({ data: undefined, error: { code: "MINUTES_READY" }, response: { ok: false, status: 409 } });
+    (transcript({ onFetched }).find((node) => node.type === "button" && text(node) === "再读一次")!.props!.onClick as () => void)();
+    await vi.waitFor(() => expect(onFetched).toHaveBeenCalled());
+    expect(transcript({ onFetched }).some((node) => node.props?.role === "alert")).toBe(false);
+  });
+
   it("没有妙记：主持人、创建人贴链接读", async () => {
     const tree = transcript({ status: "manual", failure: null });
     const input = tree.find((node) => node.props?.["aria-label"] === "妙记链接")!;

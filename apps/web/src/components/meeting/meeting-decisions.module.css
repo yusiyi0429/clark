@@ -71,7 +71,8 @@
 
 @media (max-width: 959px), (pointer: coarse) {
   .sheet { width: 100vw; box-shadow: none; }
-  .pickOption, .anchorEdit, .bookPeople button, .primary, .ghost { min-height: 44px; }
+  .pickOption, .anchorEdit, .bookPeople button, .primary, .ghost, .picker input { min-height: 44px; }
+  .anchorRemove { min-width: 44px; min-height: 44px; }
   .bookField > input { height: 44px; }
   .pickList { max-height: none; }
 }
