@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { Pool, PoolClient } from "pg";
-import type { TImpactAskWho, TImpactSource, TImpactTarget, TMeetingDecisionView, TMeetingOutcomeItem, TMeetingParticipant, TMeetingWorldResponse, TMyMeetingDecisionGroup, TPickedWorldAnchor, TWorldAnchor } from "@warmap/contracts";
+import type { TImpactAskWho, TImpactSource, TImpactTarget, TMeetingDecisionView, TMeetingOutcomeItem, TMeetingWorldResponse, TMyMeetingDecisionGroup, TPickedWorldAnchor, TWorldAnchor } from "@warmap/contracts";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { feishuNotifier, type FeishuNotify } from "./feishu/notify.js";
 import type { ImpactAgent, TImpactAnalysisCandidate } from "./impactAgent.js";
@@ -10,12 +10,12 @@ import { enqueueJob, type JobHandler, type RecurringJob } from "./jobs.js";
 import { impactCandidates, type ImpactCandidate, type InterpretationContext } from "./meetingContext.js";
 import { transcriptLines, type DecisionLayeringAgent } from "./meetingDecisionAgent.js";
 import { attendeesOf, decisionEffective, decisionStatement, projectMeetingDecision, type MeetingDecisionRow } from "./meetingDecisionView.js";
+import { meetingRecordState } from "./meetingCardConfirm.js";
 import { getMeetingRow, meetingColumns, UUID_PATTERN, type MeetingRow, type Query, type StoredWorldAnchor } from "./meetingStore.js";
-import { anchorOptions, meetingAnchorGroups, meetingWorldDetail, storedAnchor, type AnchorWorld } from "./meetingWorld.js";
+import { anchorOptions, meetingWorldDetail, storedAnchor, type AnchorWorld } from "./meetingWorld.js";
 import { logEvent } from "./observability.js";
 import { personDisplayNames } from "./people.js";
 import { addWorkday, nextWorkdayAt, shanghaiDate, shanghaiLabel } from "./workdays.js";
-import { changedParts, MAX_EVENT_TEXT, meetingEventText, meetingRecord, sameRecord, type MeetingEventWorld, type MeetingRecord } from "./worldMeetingEvent.js";
 
 /**
  * 会后分层确认（议题 3）：
@@ -24,14 +24,13 @@ import { changedParts, MAX_EVENT_TEXT, meetingEventText, meetingRecord, sameReco
  * - 提醒：出来之后提醒一次（散会当天），下一个工作日 9:30 再提醒一次，天枢通知栏置顶 + 飞书通知；
  * - 满一个工作日主持人没确认，按 Agent 的推荐判断生效（agent_judged），往下推的卡标「Agent 代判，Host 尚未确认」；
  * - 生效的决定做影响分析，给受影响的人推影响卡；主持人之后改判，revision 加一，给收过卡的人出更正卡。逐条决定不再各写本体。
- * - 会议入本体（B 方案，D-58）：建会、逐条确认都不写；主持人或创建人整卡确认后写一条整场会议事件（confirmRecord），
- *   修改要重新整卡确认，另记一条并指回前次；「不写入」在整卡确认时选。主持人或 CEO 可改挂点，确认后改了要重新确认才写。
- * 耗时的事（分层、影响分析、写本体）都走 jobs，失败按 jobs 退避重试。
+ * - 会议入本体（B 方案，D-58）：建会、逐条确认都不写；整卡确认和写会议事件在 meetingCardConfirm.ts。主持人或 CEO 可改挂点，
+ *   会议卡草稿的挂点对象跟着改，要重新整卡确认才写。
+ * 耗时的事（分层、影响分析）都走 jobs，失败按 jobs 退避重试。
  */
 export const MEETING_DECISIONS_SYNC_KIND = "meeting.decisions_sync";
 export const MEETING_DECISIONS_TICK_KIND = "meeting.decisions_tick";
 export const MEETING_DECISION_PROPAGATE_KIND = "meeting.decision_propagate";
-export const MEETING_WORLD_SYNC_KIND = "meeting.world_sync";
 const TICK_EVERY_MS = 10 * 60_000;
 const MAX_HOST_DECISIONS = 5;
 const PICKABLE_KINDS = new Set(["decision", "todo", "ceoJudgment", "reopenWhen"]);
@@ -45,8 +44,6 @@ export type MeetingDecisionDeps = {
   context: () => Promise<InterpretationContext>;
   /** 飞书配了才有。 */
   notify?: FeishuNotify;
-  /** 会议事件：本体可写时才有。 */
-  meetingWorld?: MeetingEventWorld;
   /** 挂点选项里的 LTO、本月 PO 从这里读；没有时选项只有 Mission 和单元。 */
   anchorWorld?: AnchorWorld;
   /** 挂点改了以后（会议卡草稿的挂点对象跟着改）。 */
@@ -93,24 +90,10 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
   const pathFor = (personId: string, kind: "request" | "meeting", id: string) =>
     `${isCeo(personId) ? "" : "/me"}/${kind === "request" ? "requests" : "meetings"}/${id}`;
   const enqueue = (client: Query, kind: string, key: string, payload: unknown) => enqueueJob(client, { kind, dedupeKey: `${kind}:${key}`, payload });
-  /** 排一次本体同步（只在本体可写时）；按会议串行由 jobs worker 逐条执行保证。 */
-  const queueWorldSync = async (client: Query, meetingId: string) => {
-    if (deps.meetingWorld) await enqueue(client, MEETING_WORLD_SYNC_KIND, `${meetingId}:${randomUUID()}`, { meetingId });
-  };
   /** 主持人和 CEO 能改挂点。 */
   const canManageWorld = (meeting: Pick<MeetingRow, "lead_dri_id">, viewerId: string) => meeting.lead_dri_id === viewerId || isCeo(viewerId);
   /** 建会的人（没记时按主持人算）：和主持人一样能整卡确认、看会议记录状态。 */
   const isCreator = (meeting: Pick<MeetingRow, "lead_dri_id" | "created_by">, viewerId: string) => (meeting.created_by ?? meeting.lead_dri_id) === viewerId;
-  const nameIn = (participants: TMeetingParticipant[], personId: string) =>
-    participants.find((person) => person.personId === personId)?.displayName ?? names().get(personId) ?? personId;
-  /** 这一版会议事件的正文：第 2 版起接最近一次写进去的那条（world_event_id / world_event_record），写明改了什么和原因。 */
-  const recordText = (meetingId: string, version: number, record: MeetingRecord, reason: string | null, confirmedBy: string, confirmedAt: Date,
-    row: Pick<MeetingRow, "participants" | "world_event_id"> & { world_event_record: MeetingRecord | null }) =>
-    meetingEventText(record, { meetingId, version, confirmedBy: nameIn(row.participants, confirmedBy), confirmedAt,
-      previous: row.world_event_id && row.world_event_record
-        ? { eventId: row.world_event_id, changed: changedParts(row.world_event_record, record), reason }
-        : null });
-
   const rowsOf = async (client: Query, meetingId: string) =>
     (await client("SELECT * FROM meeting_decisions WHERE meeting_id = $1 ORDER BY tier DESC, ordinal", [meetingId])).rows as MeetingDecisionRow[];
 
@@ -418,90 +401,6 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     }
   }
 
-  /**
-   * 整卡确认（B 方案）：主持人或创建人确认这场会的记录（Task 6 的 POST /record/confirm 在它上面加摘要、主持人条目的处理）。
-   * - 选了不写入：只留天枢记录，不发本体请求；已经写进去的不撤回，原事件保留；版本不加。
-   * - 记录和这一版确认下来的一样：不写新的，版本不加，只刷新确认时刻；这一版上次写失败的，按同一版重试。
-   * - 否则版本加一，存下这一版的记录和修改原因，排一次本体同步写一条会议事件（第 2 版起指回前次）。
-   */
-  async function confirmRecord(meetingId: string, viewerId: string, input: { writeToWorld: boolean; reason?: string }): Promise<WorldResult> {
-    const reason = input.reason?.trim() || null;
-    if (reason && reason.length > 200) return { error: { status: 400, code: "REASON_TOO_LONG", message: "原因不超过 200 字" } };
-    if (!UUID_PATTERN.test(meetingId)) return NOT_FOUND;
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      const cq: Query = client.query.bind(client);
-      const meeting = (await cq(`SELECT ${meetingColumns()}, record_snapshot, world_event_record FROM meetings WHERE id = $1 FOR UPDATE`, [meetingId])).rows[0] as
-        (MeetingRow & { record_snapshot: MeetingRecord | null; world_event_record: MeetingRecord | null }) | undefined;
-      if (!meeting || (meeting.lead_dri_id !== viewerId && !isCreator(meeting, viewerId))) { await client.query("ROLLBACK"); return NOT_FOUND; }
-      const at = now();
-      if (!input.writeToWorld) {
-        await cq(`UPDATE meetings SET record_confirmed_at = $2, record_confirmed_by = $3, record_edit_pending = FALSE, world_excluded = TRUE, world_excluded_by = $4
-          WHERE id = $1`, [meetingId, at, viewerId, nameIn(meeting.participants, viewerId)]);
-      } else {
-        const record = meetingRecord(meeting, await rowsOf(cq, meetingId), await meetingAnchorGroups(cq, meeting), names());
-        if (meeting.record_version > 0 && meeting.record_snapshot && sameRecord(meeting.record_snapshot, record)) {
-          await cq(`UPDATE meetings SET record_confirmed_at = $2, record_confirmed_by = $3, record_edit_pending = FALSE, world_excluded = FALSE, world_excluded_by = NULL,
-              world_event_status = CASE WHEN world_event_status = 'failed' THEN 'none' ELSE world_event_status END WHERE id = $1`, [meetingId, at, viewerId]);
-          if (meeting.world_event_status !== "committed") await queueWorldSync(cq, meetingId);
-        } else {
-          // 正文只放摘要和条目，不超过 3000 字；不截断（写进去的要和确认的一样），超了不让确认。
-          if ([...recordText(meetingId, meeting.record_version + 1, record, reason, viewerId, at, meeting)].length > MAX_EVENT_TEXT) {
-            await client.query("ROLLBACK");
-            return { error: { status: 400, code: "RECORD_TOO_LONG", message: `会议记录写进本体的正文超过 ${MAX_EVENT_TEXT} 字，删减摘要或条目后再确认` } };
-          }
-          await cq(`UPDATE meetings SET record_version = record_version + 1, record_snapshot = $2::jsonb, record_reason = $3, record_confirmed_at = $4,
-              record_confirmed_by = $5, record_edit_pending = FALSE, world_excluded = FALSE, world_excluded_by = NULL, world_event_status = 'none' WHERE id = $1`,
-            [meetingId, JSON.stringify(record), reason, at, viewerId]);
-          await queueWorldSync(cq, meetingId);
-        }
-      }
-      await client.query("COMMIT");
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw error;
-    } finally {
-      client.release();
-    }
-    return worldView(meetingId, viewerId);
-  }
-
-  /**
-   * 这场会的本体同步（jobs worker 逐条执行）：这一版确认下来、还没写的，照存下的记录写一条会议事件，读回核对后记已写入。
-   * 选了不写入、还没确认、这一版已写过或失败过的都不动。NETWORK_ERROR 抛出交给 jobs 按原幂等键重放，其他错误记 failed（错误码在 world_sync_ledger）。
-   */
-  async function syncWorld(meetingId: string): Promise<void> {
-    if (!deps.meetingWorld || !UUID_PATTERN.test(meetingId)) return;
-    const row = (await q(
-      `SELECT lead_dri_id, participants, minute_token, record_version, record_confirmed_at, record_confirmed_by, record_reason, record_snapshot,
-         world_excluded, world_event_status, world_event_id, world_event_record FROM meetings WHERE id = $1`,
-      [meetingId],
-    )).rows[0] as (Pick<MeetingRow, "lead_dri_id" | "participants" | "minute_token" | "record_version" | "record_confirmed_at" | "record_confirmed_by"
-      | "world_excluded" | "world_event_status" | "world_event_id"> & { record_reason: string | null; record_snapshot: MeetingRecord | null; world_event_record: MeetingRecord | null }) | undefined;
-    if (!row || row.world_excluded || row.world_event_status !== "none" || !row.record_snapshot || !row.record_confirmed_at) return;
-    const record = row.record_snapshot;
-    const version = row.record_version;
-    const text = recordText(meetingId, version, record, row.record_reason, row.record_confirmed_by ?? row.lead_dri_id, new Date(row.record_confirmed_at), row);
-    try {
-      const written = await deps.meetingWorld.write({ meetingId, version, text, occurredAt: new Date(record.startedAt), anchorGroups: record.anchors,
-        previousEventId: row.world_event_id, minuteToken: row.minute_token ?? null });
-      // 写进去的这条总是接到链上（写的过程中又确认了新的一版时，新版要指回它）；版本没变才记这一版已写入。
-      await q(
-        `UPDATE meetings SET world_event_id = $3, world_event_record = $4::jsonb, world_event_anchors = $5::jsonb, world_event_at = $6,
-           world_event_status = CASE WHEN record_version = $2 THEN 'committed' ELSE world_event_status END
-          WHERE id = $1`,
-        [meetingId, version, written.eventId, JSON.stringify(record), JSON.stringify(written.anchors), now()],
-      );
-      logEvent({ event: "meeting.world_event", objectRef: `meeting:${meetingId}`, status: "committed" });
-    } catch (error) {
-      const code = deps.meetingWorld.errorCode(error);
-      logEvent({ event: "meeting.world_event", objectRef: `meeting:${meetingId}`, status: "world_failed", errorCode: code });
-      if (code === "NETWORK_ERROR") throw error;
-      await q("UPDATE meetings SET world_event_status = 'failed' WHERE id = $1 AND record_version = $2 AND world_event_status = 'none'", [meetingId, version]);
-    }
-  }
-
   /** 这场会在本体里：主持人和 CEO 能改挂点；主持人、创建人和 CEO 看会议记录状态；实际参会的人只看挂点和落点；别人 404。 */
   async function worldView(meetingId: string, viewerId: string): Promise<WorldResult> {
     const meeting = await getMeetingRow(q, meetingId);
@@ -509,7 +408,7 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     const manage = canManageWorld(meeting, viewerId);
     const showStatus = manage || isCreator(meeting, viewerId);
     if (!showStatus && !attendeesOf(meeting).personIds.includes(viewerId)) return NOT_FOUND;
-    return meetingWorldDetail(q, meeting, meeting.decisions ?? [], { canEdit: manage, showStatus });
+    return meetingWorldDetail(q, meeting, meeting.decisions ?? [], await meetingRecordState(q, meetingId), { canEdit: manage, showStatus });
   }
 
   /** 某月能挑的挂点：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元。 */
@@ -517,7 +416,7 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
   const meetingPeriod = (meeting: MeetingRow) => shanghaiDate(new Date(meeting.scheduled_at)).slice(0, 7);
 
   /**
-   * 改挂点（null 回到自动）：只存天枢，不写本体；整卡确认过的记为修改待确认，重新确认后才写（裁定 24）。
+   * 改挂点（null 回到自动）：只存天枢，不写本体；会议卡草稿的挂点对象跟着改（和确认版不同就是修改待确认），重新确认后才写（裁定 24）。
    * 挑的要在会议所在月的选项里；已经存着的 LTO、PO 本体读不到时也算数（沿用存下的标题）。
    */
   async function setAnchors(meetingId: string, viewerId: string, anchors: TPickedWorldAnchor[] | null): Promise<WorldResult> {
@@ -535,8 +434,7 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
       }
     }
     const changed = !isDeepStrictEqual(meeting.world_anchors, chosen);
-    await q("UPDATE meetings SET world_anchors = $2::jsonb, record_edit_pending = record_edit_pending OR ($3 AND record_confirmed_at IS NOT NULL) WHERE id = $1",
-      [meetingId, chosen ? JSON.stringify(chosen) : null, changed]);
+    await q("UPDATE meetings SET world_anchors = $2::jsonb WHERE id = $1", [meetingId, chosen ? JSON.stringify(chosen) : null]);
     if (changed) await deps.onAnchorsChanged?.(meetingId);
     return worldView(meetingId, viewerId);
   }
@@ -564,7 +462,7 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     return [...groups.values()];
   }
 
-  return { sync, review, tick, propagate, listMine, confirmRecord, syncWorld, worldView, setAnchors, listAnchorOptions, anchorOptionsFor };
+  return { sync, review, tick, propagate, listMine, worldView, setAnchors, listAnchorOptions, anchorOptionsFor };
 }
 
 export type MeetingDecisionService = ReturnType<typeof createMeetingDecisionService>;
@@ -583,7 +481,6 @@ export function meetingDecisionJobs(service: MeetingDecisionService): { handlers
         const { decisionId, revision } = payload as { decisionId: string; revision: number };
         return service.propagate(decisionId, Number(revision));
       },
-      [MEETING_WORLD_SYNC_KIND]: (payload) => service.syncWorld(String((payload as { meetingId?: unknown }).meetingId)),
     },
     recurring: [{ kind: MEETING_DECISIONS_TICK_KIND, everyMs: TICK_EVERY_MS }],
   };

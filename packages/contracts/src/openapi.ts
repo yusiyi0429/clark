@@ -5,7 +5,7 @@ import {
   DraftRequestRequest, DraftRequestResponse, RequestListItem, RequestListResponse, PrepareRequestQuestionRequest,
   PrepareRequestQuestionResponse, DraftRequestAnswerResponse, RequestSendInput, RequestAskInput, RequestAnswerInput, ExecuteRequestActionRequest,
 } from "./requests.js";
-import { MeetingCardDraftRequest, MeetingCardView } from "./meetingCard.js";
+import { MeetingCardConfirmRequest, MeetingCardDraftRequest, MeetingCardView } from "./meetingCard.js";
 import { MeetingDecisionView, MeetingDecisionReviewRequest, MeetingDecisionResponse, MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingDecisionsResponse } from "./meetingDecisions.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
@@ -887,6 +887,22 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/MeetingCardDraftRequest" }),
           responses: { "200": { description: "保存后的会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/card/confirm": {
+        post: {
+          operationId: "confirmMeetingCard",
+          summary: "主持人或创建人整卡确认：冻结一个确认版本并排写本体（选了不写入只留天枢）；draftVersion 过期 409 DRAFT_CHANGED（带 view），同一草稿再确认不出新版本；已有确认版时 kind 必填（400 KIND_REQUIRED），没有实际时间或在将来 400 OCCURRED_AT_REQUIRED",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingCardConfirmRequest" }),
+          responses: { "200": { description: "确认后的会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/card/retry": {
+        post: {
+          operationId: "retryMeetingCardSync", summary: "主持人或创建人重试当前确认版的会议事件写入（失败或还在等的）；已写成或选了不写入 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "重排后的会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "401": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/meetings/{id}/world": {
@@ -2997,6 +3013,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeetingWorldResponse: MeetingWorldResponse as JsonSchema,
         MeetingCardView: MeetingCardView as JsonSchema,
         MeetingCardDraftRequest: MeetingCardDraftRequest as JsonSchema,
+        MeetingCardConfirmRequest: MeetingCardConfirmRequest as JsonSchema,
         MeetingMinutesLinkRequest: MeetingMinutesLinkRequest as JsonSchema,
         MeetingMinutesFetchResponse: MeetingMinutesFetchResponse as JsonSchema,
         MeetingWorldAnchorsRequest: MeetingWorldAnchorsRequest as JsonSchema,

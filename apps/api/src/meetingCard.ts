@@ -11,6 +11,7 @@ import {
   type TMeetingObjectChange,
   type TMeetingSource,
 } from "@warmap/contracts";
+import { confirmedView, currentConfirmation } from "./meetingCardConfirm.js";
 import { attendeesOf } from "./meetingDecisionView.js";
 import { getMeetingRow, type MeetingRow, type Query } from "./meetingStore.js";
 import { meetingAnchorGroups } from "./meetingWorld.js";
@@ -275,7 +276,7 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     }
     return {
       draft: row?.draft ?? null, draftVersion: row?.draft_version ?? 0, draftStatus: row?.draft_status ?? "created", actionItems: row?.action_items ?? [],
-      confirmed: null, sync: null, targetOptions, canEdit,
+      ...confirmedView(row ? await currentConfirmation(q, meetingId) : null), targetOptions, canEdit,
     };
   }
 

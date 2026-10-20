@@ -41,21 +41,20 @@ export const MeetingCardSection = Type.Object(
 );
 /**
  * 对本体对象的一处修改：只支持文本组件（拍板 5）。targetRef 是「<对象 id>#<块 id>/<组件 id>」，null 表示目标未定（不能提交）；
- * before、expectedVersion、targetTitle 由服务按对象当前内容填；stale 表示读卡时发现目标变过、差异已刷新（确认时清掉，不进冻结 payload）。
+ * before、expectedVersion、targetTitle 由服务按对象当前内容填。冻结 payload 里的修改就是这些字段（MeetingConfirmedObjectChange）。
  */
-export const MeetingObjectChange = Type.Object(
-  {
-    id: CardItemId,
-    targetRef: NullableString({ minLength: 1, maxLength: 500 }),
-    targetTitle: NullableString({ maxLength: 500 }),
-    expectedVersion: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
-    before: Type.Union([Type.Object({ text: Type.String() }, { additionalProperties: false }), Type.Null()]),
-    after: Type.Object({ text: Type.String({ minLength: 1, maxLength: 20000 }) }, { additionalProperties: false }),
-    basisSectionIds: Type.Array(Type.String({ minLength: 1, maxLength: 64 }), { maxItems: 50 }),
-    stale: Type.Boolean(),
-  },
-  { additionalProperties: false },
-);
+const objectChangeFields = {
+  id: CardItemId,
+  targetRef: NullableString({ minLength: 1, maxLength: 500 }),
+  targetTitle: NullableString({ maxLength: 500 }),
+  expectedVersion: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+  before: Type.Union([Type.Object({ text: Type.String() }, { additionalProperties: false }), Type.Null()]),
+  after: Type.Object({ text: Type.String({ minLength: 1, maxLength: 20000 }) }, { additionalProperties: false }),
+  basisSectionIds: Type.Array(Type.String({ minLength: 1, maxLength: 64 }), { maxItems: 50 }),
+};
+export const MeetingConfirmedObjectChange = Type.Object(objectChangeFields, { additionalProperties: false });
+/** 草稿里的修改多一个 stale：读卡时发现目标变过、差异已刷新（确认时清掉，不进冻结 payload）。 */
+export const MeetingObjectChange = Type.Object({ ...objectChangeFields, stale: Type.Boolean() }, { additionalProperties: false });
 export const MeetingCardParticipant = Type.Object(
   { name: Type.String({ minLength: 1, maxLength: 200 }), personRef: NullableString({ minLength: 1, maxLength: 200 }) },
   { additionalProperties: false },
@@ -72,13 +71,13 @@ const payloadFields = {
   summary: Type.String({ maxLength: 4000 }),
   sections: Type.Array(MeetingCardSection, { minItems: 1, maxItems: 100 }),
   sources: Type.Array(MeetingSource, { minItems: 1, maxItems: 20 }),
-  objectChanges: Type.Array(MeetingObjectChange, { maxItems: 50 }),
 };
+/** 冻结的确认版本：relatedObjectRefs 是确认时的 <对象 id>@<版本>，修改不带 stale。 */
 export const MeetingCardV1Payload = Type.Object(
-  { ...payloadFields, revision: Type.Integer({ minimum: 1 }) },
+  { ...payloadFields, objectChanges: Type.Array(MeetingConfirmedObjectChange, { maxItems: 50 }), revision: Type.Integer({ minimum: 1 }) },
   { additionalProperties: false },
 );
-export const MeetingCardDraft = Type.Object(payloadFields, { additionalProperties: false });
+export const MeetingCardDraft = Type.Object({ ...payloadFields, objectChanges: Type.Array(MeetingObjectChange, { maxItems: 50 }) }, { additionalProperties: false });
 
 /** 天枢本地的行动项（拍板 4）：会上明确分给某人的待办；整卡确认后没推过的推成执行事项，taskId 回填（只由服务改）。 */
 export const MeetingActionItem = Type.Object(
@@ -177,6 +176,20 @@ export const MeetingCardDraftRequest = Type.Object(
 );
 
 /**
+ * POST /api/meetings/:id/card/confirm：主持人或创建人整卡确认。draftVersion 不是当前的 409 DRAFT_CHANGED（带 view）；
+ * 同一草稿版本再确认不出新版本。已有确认版时 kind 必填（correction 更正原记录 / followup 会后新决定），第一次确认忽略 kind。
+ */
+export const MeetingCardConfirmRequest = Type.Object(
+  {
+    draftVersion: Type.Integer({ minimum: 0 }),
+    writeToWorld: Type.Boolean(),
+    kind: Type.Optional(Type.Union([Type.Literal("correction"), Type.Literal("followup")])),
+    reason: Type.Optional(Type.String({ maxLength: 200 })),
+  },
+  { additionalProperties: false },
+);
+
+/**
  * 会后生成卡片的模型输出（只能调用 submit_candidate）：模型只填摘要、按议题的正文段落（带引用的发言段 turnId）、
  * 从候选目标里选的修改（after 文字和依据段落序号，从 1 开始）、会上明确分给某人的行动项。
  */
@@ -225,6 +238,7 @@ export type TMeetingSource = Static<typeof MeetingSource>;
 export type TMeetingCardSourceRef = Static<typeof MeetingCardSourceRef>;
 export type TMeetingCardSection = Static<typeof MeetingCardSection>;
 export type TMeetingObjectChange = Static<typeof MeetingObjectChange>;
+export type TMeetingConfirmedObjectChange = Static<typeof MeetingConfirmedObjectChange>;
 export type TMeetingCardV1Payload = Static<typeof MeetingCardV1Payload>;
 export type TMeetingCardDraft = Static<typeof MeetingCardDraft>;
 export type TMeetingActionItem = Static<typeof MeetingActionItem>;
@@ -235,4 +249,5 @@ export type TMeetingObjectResult = Static<typeof MeetingObjectResult>;
 export type TMeetingCardSync = Static<typeof MeetingCardSync>;
 export type TMeetingCardView = Static<typeof MeetingCardView>;
 export type TMeetingCardDraftRequest = Static<typeof MeetingCardDraftRequest>;
+export type TMeetingCardConfirmRequest = Static<typeof MeetingCardConfirmRequest>;
 export type TMeetingCardCandidate = Static<typeof MeetingCardCandidate>;

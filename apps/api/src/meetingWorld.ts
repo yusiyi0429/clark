@@ -1,4 +1,5 @@
 import type { TImpactTarget, TMeetingDecisionWorld, TMeetingRecordStatus, TMeetingWorldResponse, TWorldAnchor } from "@warmap/contracts";
+import type { MeetingRecordState } from "./meetingCardConfirm.js";
 import { decisionEffective, type MeetingDecisionRow } from "./meetingDecisionView.js";
 import type { MeetingRow, Query, StoredWorldAnchor } from "./meetingStore.js";
 import type { WorldClient } from "./worldClient.js";
@@ -101,39 +102,27 @@ export async function meetingAnchorGroups(q: Query, meeting: Pick<MeetingRow, "l
   return [first, hostUnits, [COMPANY]];
 }
 
-/** 会议记录的状态：没确认 → 待确认；确认后又改了 → 修改待确认；选了不写入；这一版写进去了、写失败了，或已确认等写入（仍是 pending）。 */
-export function recordStatus(meeting: Pick<MeetingRow, "record_confirmed_at" | "record_edit_pending" | "world_excluded" | "world_event_status">): TMeetingRecordStatus {
-  if (!meeting.record_confirmed_at) return "pending";
-  if (meeting.record_edit_pending) return "edit_pending";
-  if (meeting.world_excluded) return "excluded";
-  return meeting.world_event_status === "none" ? "pending" : meeting.world_event_status;
-}
-
 /** 一条生效的决定在本体里：决定随整场会议事件写，跟着会议记录走。 */
 function decisionWorld(status: TMeetingRecordStatus): TMeetingDecisionWorld {
   return status === "excluded" ? "off" : status === "committed" || status === "failed" ? status : "waiting";
 }
 
 /**
- * 会议页上「这场会在本体里」：挂点（已写入且之后没改过时是写进去的那些，否则是第一组非空的候选）、会议记录状态、每条生效的决定落到哪。
+ * 会议页上「这场会在本体里」：挂点（第一组非空的候选）、会议记录状态（由整卡确认表和回执算出）、每条生效的决定落到哪。
  * 记录状态只给主持人、创建人和 CEO（showStatus）；参会人只看挂点和落点。
  */
-export async function meetingWorldDetail(q: Query, meeting: MeetingRow, decisions: MeetingDecisionRow[],
+export async function meetingWorldDetail(q: Query, meeting: MeetingRow, decisions: MeetingDecisionRow[], record: MeetingRecordState,
   viewer: { canEdit: boolean; showStatus: boolean }): Promise<TMeetingWorldResponse> {
-  const status = recordStatus(meeting);
-  const written = status === "committed" && meeting.world_event_anchors?.length;
-  const anchors = written ? meeting.world_event_anchors! : (await meetingAnchorGroups(q, meeting)).find((group) => group.length) ?? [];
+  const { status } = record;
+  const anchors = (await meetingAnchorGroups(q, meeting)).find((group) => group.length) ?? [];
   const effective = decisions.filter(decisionEffective);
   const targets = await decisionTargets(q, effective);
   return {
     world: {
-      excluded: meeting.world_excluded,
-      excludedBy: meeting.world_excluded ? meeting.world_excluded_by : null,
-      record: viewer.showStatus ? {
-        status, version: meeting.record_version, eventId: meeting.world_event_id,
-        confirmedAt: meeting.record_confirmed_at ? new Date(meeting.record_confirmed_at).toISOString() : null,
-      } : null,
-      at: viewer.showStatus && meeting.world_event_at ? new Date(meeting.world_event_at).toISOString() : null,
+      excluded: record.excludedBy !== null,
+      excludedBy: record.excludedBy,
+      record: viewer.showStatus ? { status, version: record.version, eventId: record.eventId, confirmedAt: record.confirmedAt } : null,
+      at: viewer.showStatus ? record.at : null,
       anchors,
       edited: meeting.world_anchors !== null,
       canEdit: viewer.canEdit,

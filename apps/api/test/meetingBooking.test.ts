@@ -90,10 +90,13 @@ describe("预约建会", () => {
       const meetingId = byCeo.json().card.objectRef.id as string;
       const [row] = await t.sql("SELECT lead_dri_id, created_by FROM meetings WHERE id = $1", [meetingId]);
       expect(row).toEqual({ lead_dri_id: TEST_MEMBER.personId, created_by: TEST_CEO.personId });
-      // 建会的 CEO 和主持人都能整卡确认。
-      const { decisions } = t.app.meetingFollowThrough;
-      expect(await decisions.confirmRecord(meetingId, TEST_CEO.personId, { writeToWorld: false })).toMatchObject({ world: { record: { status: "excluded" } } });
-      expect(await decisions.confirmRecord(meetingId, TEST_MEMBER.personId, { writeToWorld: false })).toMatchObject({ world: { record: { status: "excluded" } } });
+      // 建会的 CEO 和主持人都能编辑、整卡确认会议卡（还没有草稿：确认得到 409 而不是 404）。
+      const { cards, cardConfirm } = t.app.meetingFollowThrough;
+      for (const personId of [TEST_CEO.personId, TEST_MEMBER.personId]) {
+        const viewer = { personId, isCeo: personId === TEST_CEO.personId };
+        expect(await cards.view(meetingId, viewer)).toMatchObject({ view: { canEdit: true } });
+        expect(await cardConfirm.confirm(meetingId, viewer, { draftVersion: 0, writeToWorld: false })).toMatchObject({ error: { status: 409, code: "CARD_NOT_READY" } });
+      }
     } finally {
       await t.close();
     }

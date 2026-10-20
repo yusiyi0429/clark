@@ -4339,6 +4339,152 @@
         }
       }
     },
+    "/api/meetings/{id}/card/confirm": {
+      "post": {
+        "operationId": "confirmMeetingCard",
+        "summary": "主持人或创建人整卡确认：冻结一个确认版本并排写本体（选了不写入只留天枢）；draftVersion 过期 409 DRAFT_CHANGED（带 view），同一草稿再确认不出新版本；已有确认版时 kind 必填（400 KIND_REQUIRED），没有实际时间或在将来 400 OCCURRED_AT_REQUIRED",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeetingCardConfirmRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "确认后的会议卡",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingCardView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/card/retry": {
+      "post": {
+        "operationId": "retryMeetingCardSync",
+        "summary": "主持人或创建人重试当前确认版的会议事件写入（失败或还在等的）；已写成或选了不写入 409",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "重排后的会议卡",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingCardView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/meetings/{id}/world": {
       "get": {
         "operationId": "getMeetingWorld",
@@ -15058,8 +15204,7 @@
                                 "expectedVersion",
                                 "before",
                                 "after",
-                                "basisSectionIds",
-                                "stale"
+                                "basisSectionIds"
                               ],
                               "properties": {
                                 "id": {
@@ -15141,9 +15286,6 @@
                                     "maxLength": 64,
                                     "type": "string"
                                   }
-                                },
-                                "stale": {
-                                  "type": "boolean"
                                 }
                               }
                             }
@@ -59258,8 +59400,7 @@
                             "expectedVersion",
                             "before",
                             "after",
-                            "basisSectionIds",
-                            "stale"
+                            "basisSectionIds"
                           ],
                           "properties": {
                             "id": {
@@ -59341,9 +59482,6 @@
                                 "maxLength": 64,
                                 "type": "string"
                               }
-                            },
-                            "stale": {
-                              "type": "boolean"
                             }
                           }
                         }
@@ -59983,6 +60121,39 @@
                 }
               }
             }
+          }
+        }
+      },
+      "MeetingCardConfirmRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "draftVersion",
+          "writeToWorld"
+        ],
+        "properties": {
+          "draftVersion": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "writeToWorld": {
+            "type": "boolean"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "correction",
+                "type": "string"
+              },
+              {
+                "const": "followup",
+                "type": "string"
+              }
+            ]
+          },
+          "reason": {
+            "maxLength": 200,
+            "type": "string"
           }
         }
       },

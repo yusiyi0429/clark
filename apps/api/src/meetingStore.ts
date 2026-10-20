@@ -13,7 +13,7 @@ import type {
   TTranscriptCandidateProjection,
   TMeetingRecordingSummary,
 } from "@warmap/contracts";
-import type { TMeetingMinutesFailure, TMeetingMinutesStatus, TWorldAnchor } from "@warmap/contracts";
+import type { TMeetingMinutesFailure, TMeetingMinutesStatus } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
 import { attendeesOf, minutesStatusOf, projectMeetingDecision, type MeetingDecisionRow } from "./meetingDecisionView.js";
 import { computeStaleInputs, type GroupInputVersions } from "./preflightStaleness.js";
@@ -61,19 +61,9 @@ export type MeetingRow = {
   attendees_actual?: string[] | null;
   /** 会后分层确认（meeting_decisions 另表，随 meetingColumns 带出）；`SELECT *` 读出的行没有这一格。 */
   decisions?: MeetingDecisionRow[];
-  /** 会议入本体（100）：建会的人、挂点、整卡确认、选了不写入、会议事件的写入状态（记录快照不随会议读出，要用时单独查）。 */
+  /** 会议入本体（100）：建会的人、挂点（确认版本和写入回执在 meeting_card_confirmations / meeting_card_syncs）。 */
   created_by: string | null;
-  world_excluded: boolean;
-  world_excluded_by: string | null;
   world_anchors: StoredWorldAnchor[] | null;
-  record_version: number;
-  record_confirmed_at: Date | null;
-  record_confirmed_by: string | null;
-  record_edit_pending: boolean;
-  world_event_status: "none" | "committed" | "failed";
-  world_event_id: string | null;
-  world_event_anchors: TWorldAnchor[] | null;
-  world_event_at: Date | null;
 };
 
 /** 选过的挂点：Mission、单元存天枢 id；LTO、PO 天枢里没有表，连同选时的标题一起存（本体读不到时照样能显示）。 */
@@ -84,8 +74,7 @@ const MEETING_COLUMNS = [
   "participants", "issue_ids", "preflight", "draft", "materials", "transcript", "transcript_candidate", "outcome", "origin_ref", "external_id",
   "request_fingerprint", "action_fingerprints", "created_at", "updated_at",
   "feishu_meeting_id", "minute_token", "minutes_status", "minutes_failure", "attendees_actual",
-  "created_by", "world_excluded", "world_excluded_by", "world_anchors", "record_version", "record_confirmed_at", "record_confirmed_by", "record_edit_pending",
-  "world_event_status", "world_event_id", "world_event_anchors", "world_event_at",
+  "created_by", "world_anchors",
 ];
 /** 会后分层确认不 bump Meeting version（主持人确认走自己的接口），每次读取现查。 */
 const decisionsColumn = (prefix: string) =>

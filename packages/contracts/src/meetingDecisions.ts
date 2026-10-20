@@ -89,7 +89,7 @@ export const MeetingDecisionView = Type.Object(
  * 会议记录（B 方案）：整卡确认后写一条整场会议事件。只给主持人、创建人和 CEO，其他人为 null。
  * status：pending 待确认（confirmedAt 为空）或已确认、等写入；committed 已写入（读回核对过）；excluded 选了不写入；
  * failed 写入失败；edit_pending 确认之后又改了，要重新确认。
- * version 是写进本体的确认版本（原样再确认、选了不写入都不加）；eventId 是最近一次写进去的会议事件。
+ * version 是当前确认版本（会议卡 revision，同一草稿再确认不加）；eventId 是最近一次写进去的会议事件；由整卡确认表和同步回执算出。
  */
 export const MeetingRecordStatus = Type.Union([
   Type.Literal("pending"), Type.Literal("committed"), Type.Literal("excluded"), Type.Literal("failed"), Type.Literal("edit_pending"),

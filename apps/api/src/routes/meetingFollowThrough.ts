@@ -1,6 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import {
-  ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardView, MeetingDecisionResponse, MeetingDecisionReviewRequest,
+  ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardView, MeetingDecisionResponse,
+  MeetingDecisionReviewRequest,
   MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingDecisionsResponse,
 } from "@warmap/contracts";
 import { askImpactCard, markImpactCardIrrelevant, readImpactCardByRequest } from "../impactCards.js";
@@ -47,6 +48,26 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
     if ("view" in result) return result.view;
     const { status, code, message, fieldErrors, view } = result.error;
     return ctx.fail(reply, status, code, message, { ...(fieldErrors ? { fieldErrors } : {}), ...(view ? { view } : {}) });
+  });
+
+  // 整卡确认：只有主持人或创建人（别人 404）；草稿版本过期 409 带最新视图；确认后排写本体（选了不写入只留天枢）。
+  app.post("/api/meetings/:id/card/confirm", {
+    preHandler: ctx.requirePerson, schema: { params: idParams, body: MeetingCardConfirmRequest, response: { 200: MeetingCardView } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "meeting_card.confirm", objectRef: `meeting:${req.params.id}` });
+    const result = await followThrough.cardConfirm.confirm(req.params.id, { personId: req.person!.personId, isCeo: req.person!.role === "ceo" }, req.body);
+    if ("view" in result) return result.view;
+    const { status, code, message, view } = result.error;
+    return ctx.fail(reply, status, code, message, view ? { view } : undefined);
+  });
+
+  // 重试当前确认版的会议事件写入（主持人或创建人）。
+  app.post("/api/meetings/:id/card/retry", {
+    preHandler: ctx.requirePerson, schema: { params: idParams, response: { 200: MeetingCardView } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "meeting_card.retry", objectRef: `meeting:${req.params.id}` });
+    const result = await followThrough.cardConfirm.retry(req.params.id, { personId: req.person!.personId, isCeo: req.person!.role === "ceo" });
+    return "view" in result ? result.view : ctx.fail(reply, result.error.status, result.error.code, result.error.message);
   });
 
   // 主持人和 CEO 改挂点（别人一律 404）；「不写入」在整卡确认时选。
