@@ -21,6 +21,8 @@ services:
       DECODING_CHAT_MODEL: ${M2_CHAT_MODEL:-wangsu/claude-sonnet-5-5}
       # off stops downstream alignment (Nexus re-checks lower cards after an upper card changes).
       DECODING_CASCADE: ${M2_CASCADE:-on}
+      # Member ids besides the CEO who may start, resume and load a round (comma separated, e.g. member-04).
+      M2_ROUND_OPERATORS: ${M2_ROUND_OPERATORS:-}
       TKOS_WORLD_PRODUCT_TOKEN: ${M2_WORLD_READ_TOKEN:-}
     volumes:
       - ${M2_SEED_DIR:?M2_SEED_DIR required}:/var/lib/m2/seed:ro

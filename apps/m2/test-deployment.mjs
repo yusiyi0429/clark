@@ -17,7 +17,7 @@ await writeFile(join(dir,'source-manifest.json'),JSON.stringify({version:1,perio
 await writeFile(join(dir,'accounts.json'),JSON.stringify({schemaVersion:1,bindings:[{personId:'ceo',memberId:'member-01'},{personId:'owner',memberId:'member-02'},{personId:'other',memberId:'member-03'}]}));
 const legacy=createServer((req,res)=>{const id=req.headers.cookie?.replace('warmap_session=','');res.setHeader('Content-Type','application/json');res.end(JSON.stringify({authenticated:!!id&&id!=='revoked',personId:id,role:id==='ceo'?'ceo':'member'}));});
 await new Promise(r=>legacy.listen(0,'127.0.0.1',r));
-Object.assign(process.env,{NODE_ENV:'test',PUBLIC_ORIGIN:'http://trial.example',M2_AUTH_API_URL:`http://127.0.0.1:${legacy.address().port}/api/auth/session`,M2_ACCOUNT_MAP_FILE:join(dir,'accounts.json'),M2_SEED_DIR:dir,M2_INTERNAL_TOKEN:'test-internal-token-at-least-32-characters',DECODING_STATE_PATH:join(dir,'collaboration.json'),DECODING_DISABLE_LOCAL_KEY:'1'});
+Object.assign(process.env,{NODE_ENV:'test',PUBLIC_ORIGIN:'http://trial.example',M2_AUTH_API_URL:`http://127.0.0.1:${legacy.address().port}/api/auth/session`,M2_ACCOUNT_MAP_FILE:join(dir,'accounts.json'),M2_SEED_DIR:dir,M2_INTERNAL_TOKEN:'test-internal-token-at-least-32-characters',M2_ROUND_OPERATORS:'member-03',DECODING_STATE_PATH:join(dir,'collaboration.json'),DECODING_DISABLE_LOCAL_KEY:'1'});
 delete process.env.DECODING_API_KEY;delete process.env.TOKENHUB_API_KEY;delete process.env.TKOS_WORLD_PRODUCT_TOKEN;delete process.env.DECODING_API_KEY_FILE;
 const {server}=await import('./server.mjs');await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const base=`http://127.0.0.1:${server.address().port}`;
@@ -65,4 +65,11 @@ test('Polled reads revalidate with ETag only after the legacy session check, and
 test('Small avatars, including the personal agent, are served behind the login',async()=>{
  const agent=await call('/avatars/personal-agent.png','owner');assert.equal(agent.status,200);assert.ok((await agent.arrayBuffer()).byteLength<200_000);
  assert.equal((await call('/avatars/personal-agent.png')).status,401);
+});
+test('A round operator may start a round like the CEO; other members may not',async()=>{
+ assert.equal((await call('/api/rounds','owner',{sourceMode:'ontology'})).status,403);
+ const operator=await call('/api/rounds','other',{sourceMode:'ontology'});assert.equal(operator.status,503,'past the permission check, stopped only by the missing world credential');
+ assert.equal((await (await call('/api/data','other')).json()).canRunRounds,true);
+ assert.equal((await (await call('/api/data','owner')).json()).canRunRounds,false);
+ assert.equal((await (await call('/api/data','ceo')).json()).canRunRounds,true);
 });

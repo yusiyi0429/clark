@@ -632,6 +632,7 @@
 .round-bar>span{flex:1 1 280px;min-width:0}
 .round-bar.is-running{background:#eef4ff;color:#174285;border:1px solid #d4dfff}
 .round-bar.is-failed{background:#fff7ec;color:#7a5a2c;border:1px solid #f0dcbc}
+.round-bar.is-idle{background:#f5f7fa;color:#536879;border:1px solid #dce4eb}
 .round-bar.is-ready{background:#eff8f2;color:#16804b;border:1px solid #c9e6d3}
 .round-bar svg{flex-shrink:0}
 .round-bar-spin{animation:round-spin 1.2s linear infinite}
