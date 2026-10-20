@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TMeetingObjectResult } from "@warmap/contracts";
 import { cardAgent, confirm, edit, getCard, OCCURRED, ready, setup, worldOf } from "./meetingCardFixture.js";
-import { projection, stubWorld } from "./worldFixture.js";
+import { createMeetingObjectSync } from "../src/meetingObjectSync.js";
+import type { Query } from "../src/meetingStore.js";
+import { WorldClient } from "../src/worldClient.js";
+import { instance, projection, stubWorld, worldEnv } from "./worldFixture.js";
 
 // 对象修改（FR-5.3、5.4）：会议事件写成后，确认版里的每条修改按顺序各提交一次修订、读回核对，各有回执；本期不做失败项重试（拍板 5）。
 
@@ -18,7 +21,7 @@ const error = (status: number, code: string) => Response.json({ error: { code, m
  * afterCommit(key) 在修订提交、回执返回前跑（模拟提交和读回之间别人的修改）；network() 为 true 时修订请求抛网络错误。
  */
 function ontology({ refuse, afterCommit, network = () => false }:
-  { refuse?: (body: any, path: string) => Response | undefined; afterCommit?: (key: string) => void; network?: () => boolean } = {}) {
+  { refuse?: (body: any, path: string) => Response | undefined; afterCommit?: (key: string) => void | Promise<void>; network?: () => boolean } = {}) {
   const po = {
     object_id: "obj-po-1", object_type: "PeriodGoal", title: "十月交付", revision_id: "obj-po-1-r5", object_version: 5, version: 5,
     lifecycle: { status: "active" }, contract_version: "tkos.world/0.3", external_refs: [],
@@ -52,7 +55,7 @@ function ontology({ refuse, afterCommit, network = () => false }:
         const receipt = { receipt_id: `r-${body.idempotency_key}`, status: "committed", result: { version: po.version },
           object_versions: [{ object_id: po.object_id, object_version: po.object_version }] };
         revised.set(body.idempotency_key, receipt);
-        afterCommit?.(body.idempotency_key);
+        await afterCommit?.(body.idempotency_key);
         return receipt;
       }
       if (path === "/v1/actions/prepare") return { expected_versions: [] };
@@ -177,6 +180,48 @@ describe("对象修改逐个提交", () => {
         { changeId: "chg-1", status: "updated", actualVersion: 6 },
         { changeId: "chg-2", status: "conflict", error: "目标已变" },
       ]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("提交后、草稿跟上前有人读卡：自己改成的仍不算目标已变", async () => {
+    let window: (() => Promise<unknown>) | null = null;
+    ontology({ afterCommit: async () => { const step = window; window = null; await step?.(); } });
+    const { t, host, meetingId, run } = await setup();
+    try {
+      const draftVersion = await ready(t, host, meetingId);
+      await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
+      // 回执返回前读卡：按版本把这条刷到 6、标 stale、草稿版本加一。
+      window = async () => expect((await getCard(t, host, meetingId)).draft!.objectChanges[0]).toMatchObject({ stale: true, expectedVersion: 6 });
+      await run();
+      expect(window).toBeNull();
+      const card = await getCard(t, host, meetingId);
+      expect(card.draftVersion).toBe(draftVersion + 1);
+      expect(card.draft!.objectChanges[0]).toMatchObject({ stale: false, expectedVersion: 6, before: { text: "十月底前 4 家客户上线" }, after: { text: "十月底前 4 家客户上线" } });
+      expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "committed" });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("草稿跟上时刚好有人存草稿：重读再来", async () => {
+    ontology();
+    const { t, host, meetingId } = await setup();
+    try {
+      const view = (await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true })).json();
+      // 第一次写草稿前，别人存了一版（草稿版本加一），条件更新落空。
+      let saves = 0;
+      const q: Query = async (sql, params) => {
+        if (sql.startsWith("UPDATE meeting_cards") && saves++ === 0) await t.pool.query("UPDATE meeting_cards SET draft_version = draft_version + 1 WHERE meeting_id = $1", [meetingId]);
+        return t.pool.query(sql, params);
+      };
+      const sync = createMeetingObjectSync({ q, world: new WorldClient(t.pool.query.bind(t.pool), worldEnv, instance), refreshDraft: t.app.meetingFollowThrough.cards.refreshDraft });
+      await sync.run(meetingId, 1, view.confirmed.payload.objectChanges, view.sync.objects, false);
+      expect(saves).toBe(2);
+      expect(await objectsOf(t, meetingId, 1)).toMatchObject([{ status: "updated", actualVersion: 6 }]);
+      const card = (await t.sql("SELECT draft FROM meeting_cards WHERE meeting_id = $1", [meetingId]))[0];
+      expect(card.draft.objectChanges[0]).toMatchObject({ stale: false, expectedVersion: 6, before: { text: "十月底前 4 家客户上线" } });
     } finally {
       await t.close();
     }

@@ -85,23 +85,35 @@ export function createMeetingObjectSync({ q, world, refreshDraft }: {
   /**
    * 改成以后当前草稿跟上（不加草稿版本，只动服务填的字段，记录状态不因此变成修改待确认）：
    * 目标在这个对象上、基于提交前版本的修改，版本换成改出的版本；同一组件的原内容换成改后内容；同一条修改不再标 stale。
-   * 草稿这时刚好被人存过就不动，读卡时按版本刷新。
+   * 读卡已经把同一条修改刷到改出的版本、标了 stale（刷的就是这次提交）的，也清掉 stale、原内容换成改后内容。
+   * 草稿版本在读和写之间变了（有人刚存过、读卡刚刷新）就重读再来，最多 3 次；还不行记日志，交给读卡时按版本刷新。
    */
   async function rebaseline(meetingId: string, change: TMeetingConfirmedObjectChange, objectId: string, from: number, to: number): Promise<void> {
-    const row = (await q("SELECT draft, draft_version FROM meeting_cards WHERE meeting_id = $1", [meetingId])).rows[0] as
-      { draft: TMeetingCardDraft | null; draft_version: number } | undefined;
-    if (!row?.draft) return;
-    let changed = false;
-    const changes = row.draft.objectChanges.map((item) => {
-      if (!item.targetRef?.startsWith(`${objectId}#`) || item.expectedVersion !== from) return item;
-      changed = true;
-      const same = item.targetRef === change.targetRef;
-      return { ...item, expectedVersion: to, ...(same ? { before: { text: change.after.text } } : {}), ...(same && item.id === change.id ? { stale: false } : {}) };
-    });
-    if (changed) {
-      await q("UPDATE meeting_cards SET draft = jsonb_set(draft, '{objectChanges}', $3::jsonb), updated_at = now() WHERE meeting_id = $1 AND draft_version = $2",
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const row = (await q("SELECT draft, draft_version FROM meeting_cards WHERE meeting_id = $1", [meetingId])).rows[0] as
+        { draft: TMeetingCardDraft | null; draft_version: number } | undefined;
+      if (!row?.draft) return;
+      let changed = false;
+      const changes = row.draft.objectChanges.map((item) => {
+        if (!item.targetRef?.startsWith(`${objectId}#`)) return item;
+        const same = item.targetRef === change.targetRef;
+        const own = same && item.id === change.id;
+        if (item.expectedVersion === from) {
+          changed = true;
+          return { ...item, expectedVersion: to, ...(same ? { before: { text: change.after.text } } : {}), ...(own ? { stale: false } : {}) };
+        }
+        if (own && item.expectedVersion === to && (item.stale || item.before?.text !== change.after.text)) {
+          changed = true;
+          return { ...item, before: { text: change.after.text }, stale: false };
+        }
+        return item;
+      });
+      if (!changed) return;
+      const updated = await q("UPDATE meeting_cards SET draft = jsonb_set(draft, '{objectChanges}', $3::jsonb), updated_at = now() WHERE meeting_id = $1 AND draft_version = $2",
         [meetingId, row.draft_version, JSON.stringify(changes)]);
+      if (updated.rowCount) return;
     }
+    logEvent({ event: "meeting.world_object_rebaseline", objectRef: `meeting:${meetingId}`, status: "skipped", errorCode: "DRAFT_CHANGED" });
   }
 
   /** 按顺序提交这一版还 pending 的修改。lastAttempt：任务最后一次重跑，网络错误也记失败。 */
