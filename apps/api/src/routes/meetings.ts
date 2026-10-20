@@ -1,10 +1,12 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import type { TCardCollection } from "@warmap/contracts";
+import { MeetingTranscriptQuery, type TCardCollection, type TMeetingTranscriptPage } from "@warmap/contracts";
 import { MAX_MATERIAL_FILES, MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch, readStoredMaterial } from "../materialParser.js";
 import { renderMaterialPreview } from "../materialPreview.js";
 import { appendSupplementMaterial, replaceMeetingMaterials } from "../meetingMaterials.js";
 import { getMeetingRow } from "../meetingStore.js";
+import { attendeesOf } from "../meetingDecisionView.js";
+import { personDisplayNames } from "../people.js";
 import { isActiveMember } from "../threads.js";
 import { importTranscript } from "../outcome.js";
 import { createTranscriptCandidate } from "../transcriptCandidate.js";
@@ -16,6 +18,28 @@ export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void
   const { pool, q, env, peopleDirectory, fail, requireCEO, requirePerson, outcome, materialStorageDir, materialMultipartLimitError, respond, respondTranscriptImport, maxTranscriptBytes } = ctx;
   // 议题有效历史（H05）只读接口：GET /api/issues/:id/history、GET /api/meetings/:id/history
   registerDecisionHistoryRoutes(app, ctx);
+
+  // 逐字稿按发言段分页读：只给 CEO、主持人和实际参会的人（同成员 Card 的 attended）；其他人与不存在的会同一个 404，不泄露这场会。
+  app.get(
+    "/api/meetings/:id/transcript",
+    { preHandler: requirePerson, schema: { params: idParams, querystring: MeetingTranscriptQuery } },
+    async (req, reply): Promise<TMeetingTranscriptPage | FastifyReply> => {
+      const person = req.person!;
+      const meeting = await getMeetingRow(q, req.params.id);
+      const allowed = meeting && (person.role === "ceo" || meeting.lead_dri_id === person.personId || attendeesOf(meeting).personIds.includes(person.personId));
+      if (!allowed) return fail(reply, 404, "NOT_FOUND", "会议不存在");
+      const turns = meeting.transcript?.turns ?? [];
+      const start = req.query.from === undefined ? 0 : turns.findIndex((turn) => turn.id === req.query.from);
+      if (start < 0) return { turns: [], nextTurn: null, total: turns.length };
+      const end = start + (req.query.limit ?? 200);
+      const names = personDisplayNames(peopleDirectory);
+      return {
+        turns: turns.slice(start, end).map((turn) => ({ id: turn.id, speakerName: names.get(turn.speakerId) ?? "发言人", startedAt: turn.startedAt ?? null, text: turn.text })),
+        nextTurn: turns[end]?.id ?? null,
+        total: turns.length,
+      };
+    },
+  );
 
   app.post(
     "/api/meetings/:id/transcript",

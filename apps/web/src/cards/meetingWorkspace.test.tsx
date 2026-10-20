@@ -378,7 +378,8 @@ describe("Meeting Outcome 复核", () => {
     expect(html).toContain('data-state="pending"');
     expect(html).toContain('data-state="open"');
     expect(html).toContain("仅展示，不产生效果");
-    expect(html).toContain("3 条发言已保存");
+    // 逐字稿一节换成按发言阅读：标题旁写段数，正文由阅读器按页取。
+    expect(html).toMatch(/逐字稿<\/h3><span[^>]*>3 段<\/span>/);
     // 会议记录页不出现英文内部名词。
     for (const term of ["Transcript", "warmap-transcript", "Action Item", "Outcome candidate", "confirmed effect"]) expect(html).not.toContain(term);
     // 每条只渲染服务端下发的真实 Action；待办会后自动推给负责人，这里只看，不出确认 / 忽略按钮。

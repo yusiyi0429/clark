@@ -11,6 +11,7 @@ import {
   sectionAnchorId,
   sourceLabel,
   sourceTarget,
+  transcriptTurnAnchorId,
   type SourceContext,
 } from "./meetingSources";
 
@@ -137,6 +138,18 @@ describe("依据点下去打开什么（feedback 14）", () => {
     expect(sourceTarget(`issue:${ISSUE}`, ctx)).toMatchObject({ type: "anchor", anchorId: issueAnchorId(ISSUE) });
     expect(sourceTarget("issue:elsewhere", ctx)).toEqual({ type: "route", href: "/issues/elsewhere" });
     expect(sourceTarget(`research:${ISSUE}`, ctx)).toMatchObject({ type: "anchor", anchorId: sectionAnchorId(ISSUE, "evidence") });
+  });
+
+  it("出处带发言段", () => {
+    expect(parseSourceRef("transcript:m1#t42")).toEqual({ kind: "transcript", ref: "transcript:m1#t42", meetingId: "m1", turnId: "t42" });
+    expect(parseSourceRef("transcript:m1")).toMatchObject({ meetingId: "m1", turnId: null });
+    expect(transcriptTurnAnchorId("t42")).toBe("turn-t42");
+    // 同一场会：滚到那一段；那一段还没在页面上时切到会议记录再定位。
+    expect(sourceTarget(`transcript:${MEETING}#t42`, ctx)).toMatchObject({ type: "anchor", anchorId: "turn-t42", fallback: { type: "record", turnId: "t42" } });
+    const other = sourceTarget(`transcript:${OLD_MEETING}#t42`, ctx);
+    expect(other.type).toBe("route");
+    expect(other.type === "route" && other.href).toBe(`/meetings/${OLD_MEETING}?meetingAction=transcript&turn=t42`);
+    expect(sourceLabel(`transcript:${OLD_MEETING}#t42`, ctx)).toBe(sourceLabel(`transcript:${OLD_MEETING}`, ctx));
   });
 
   it("会后条目：本场的定位到条目，别场的定位到历史里的候选或打开那场会", () => {

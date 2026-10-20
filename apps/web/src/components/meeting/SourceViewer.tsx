@@ -54,7 +54,8 @@ export function useSourceNavigator({ context, rootRef, onNavigate, onShowRecord,
   /** 页面根（会议 / 议题工作区）：锚点在它里面找，抽屉也挂在它里面。 */
   rootRef: RefObject<HTMLElement | null>;
   onNavigate: (href: string, origin?: Element | null) => void;
-  onShowRecord?: () => void;
+  /** 切到会议记录；带 turnId 时定位到那一段发言。 */
+  onShowRecord?: (turnId?: string) => void;
   /** 材料与群讨论可能属于的对象（当前会议、关联议题、相关会议），按顺序查找。 */
   objects: SourceObject[];
   /** 会前材料（旧材料）所在的会议。 */
@@ -89,7 +90,7 @@ export function useSourceNavigator({ context, rootRef, onNavigate, onShowRecord,
         onNavigate(target.href, trigger);
         return;
       case "record":
-        onShowRecord?.();
+        onShowRecord?.(target.turnId);
         return;
       case "none":
         return;

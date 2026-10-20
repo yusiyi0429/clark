@@ -496,6 +496,32 @@ export const MemberMeetingsResponse = Type.Object(
   { additionalProperties: false },
 );
 
+/** 逐字稿按发言段分页读（GET /api/meetings/:id/transcript）：说话人只给名字；nextTurn 是下一页第一段的 id。 */
+export const MeetingTranscriptTurnView = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    speakerName: Type.String({ minLength: 1 }),
+    startedAt: Type.Union([Type.String(), Type.Null()]),
+    text: Type.String(),
+  },
+  { additionalProperties: false },
+);
+export const MeetingTranscriptPage = Type.Object(
+  {
+    turns: Type.Array(MeetingTranscriptTurnView),
+    nextTurn: Type.Union([Type.String(), Type.Null()]),
+    total: Type.Integer({ minimum: 0 }),
+  },
+  { additionalProperties: false },
+);
+export const MeetingTranscriptQuery = Type.Object(
+  {
+    from: Type.Optional(Type.String({ minLength: 1 })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500 })),
+  },
+  { additionalProperties: false },
+);
+
 export const MeetingCardPayload = Type.Object(
   {
     status: MeetingStatus,
@@ -674,6 +700,8 @@ export type TMeetingRecordingSummary = Static<typeof MeetingRecordingSummary>;
 export type TMeetingRecording = Static<typeof MeetingRecording>;
 export type TStartMeetingRecordingResponse = Static<typeof StartMeetingRecordingResponse>;
 export type TMeetingCardPayload = Static<typeof MeetingCardPayload>;
+export type TMeetingTranscriptPage = Static<typeof MeetingTranscriptPage>;
+export type TMeetingTranscriptQuery = Static<typeof MeetingTranscriptQuery>;
 export type TCreateMeetingRequest = Static<typeof CreateMeetingRequest>;
 export type TJoinMeetingRequest = Static<typeof JoinMeetingRequest>;
 export type TUpdateMeetingDraftRequest = Static<typeof UpdateMeetingDraftRequest>;
