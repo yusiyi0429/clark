@@ -44,12 +44,10 @@ export const WorldAnchor = Type.Object(
   { additionalProperties: false },
 );
 /**
- * 一条决定写进本体的状态（只给主持人和 CEO）：waiting 等写，committed 已记，fallback 对不上受影响的对象、挂到了会议的挂点上，
- * skipped 没写（本体里没有对应对象），failed 写入失败，off 这场会标了不写进本体。
+ * 一条生效的决定在本体里（只给能看会议记录状态的人）：决定随整场会议事件写，跟着会议记录走——
+ * waiting 还没写，committed 已写入，failed 写入失败，off 选了不写入。
  */
-export const MeetingDecisionWorld = Type.Union([
-  Type.Literal("waiting"), Type.Literal("committed"), Type.Literal("fallback"), Type.Literal("skipped"), Type.Literal("failed"), Type.Literal("off"),
-]);
+export const MeetingDecisionWorld = Type.Union([Type.Literal("waiting"), Type.Literal("committed"), Type.Literal("failed"), Type.Literal("off")]);
 
 export const MeetingDecisionView = Type.Object(
   {
@@ -79,38 +77,49 @@ export const MeetingDecisionView = Type.Object(
 );
 
 /**
- * 这场会在本体里（会议事件）：挂点、是否不写进本体、写入状态。
- * status：none 还没写 / committed 已记 / withdrawn 已撤回（标了不写进本体）/ skipped 没写 / failed 写入失败；只给主持人和 CEO，其他人为 null。
+ * 会议记录（B 方案）：整卡确认后写一条整场会议事件。只给主持人、创建人和 CEO，其他人为 null。
+ * status：pending 待确认（confirmedAt 为空）或已确认、等写入；committed 已写入（读回核对过）；excluded 选了不写入；
+ * failed 写入失败；edit_pending 确认之后又改了，要重新确认。
+ * version 是写进本体的确认版本（原样再确认、选了不写入都不加）；eventId 是最近一次写进去的会议事件。
  */
-export const MeetingWorldStatus = Type.Union([
-  Type.Literal("none"), Type.Literal("committed"), Type.Literal("withdrawn"), Type.Literal("skipped"), Type.Literal("failed"),
+export const MeetingRecordStatus = Type.Union([
+  Type.Literal("pending"), Type.Literal("committed"), Type.Literal("excluded"), Type.Literal("failed"), Type.Literal("edit_pending"),
 ]);
+export const MeetingRecordView = Type.Object(
+  {
+    status: MeetingRecordStatus,
+    version: Type.Integer({ minimum: 0 }),
+    eventId: Type.Union([Type.String(), Type.Null()]),
+    confirmedAt: Type.Union([Type.String({ minLength: 1, maxLength: 100 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+/** 这场会在本体里：挂点、是否选了不写入、会议记录的状态。 */
 export const MeetingWorldView = Type.Object(
   {
     excluded: Type.Boolean(),
-    /** 谁标的不写进本体（名字）。 */
+    /** 谁选的不写入（名字）。 */
     excludedBy: Type.Union([Type.String(), Type.Null()]),
-    status: Type.Union([MeetingWorldStatus, Type.Null()]),
-    /** 最近一次写进本体的时刻。 */
+    record: Type.Union([MeetingRecordView, Type.Null()]),
+    /** 最近一次写进本体的时刻（只给能看记录状态的人）。 */
     at: Type.Union([Type.String(), Type.Null()]),
-    /** 已写入时是写进去的挂点，否则是现在会挂的。 */
+    /** 已写入且确认后没改过时是写进去的挂点，否则是现在会挂的。 */
     anchors: Type.Array(WorldAnchor),
     /** 主持人或 CEO 改过挂点。 */
     edited: Type.Boolean(),
-    /** 看的人能不能改挂点、开关不写进本体（主持人和 CEO）。 */
+    /** 看的人能不能改挂点（主持人和 CEO）。 */
     canEdit: Type.Boolean(),
   },
   { additionalProperties: false },
 );
-/** 一条生效的决定在本体里：落到的对象（受影响的 Mission、Task；挂到会议挂点上时是会议的挂点）和写入状态（不是主持人和 CEO 时为 null）。 */
+/** 一条生效的决定在本体里：落到的对象（影响卡里受影响的 Mission、Task）和写入状态（看不到会议记录状态的人为 null）。 */
 export const MeetingDecisionWorldItem = Type.Object(
   { id: Type.String({ minLength: 1 }), anchors: Type.Array(WorldAnchor), world: Type.Union([MeetingDecisionWorld, Type.Null()]) },
   { additionalProperties: false },
 );
 /** 会议页单独取（不进会议卡）：这场会在本体里，和每条生效的决定落到哪。 */
 export const MeetingWorldResponse = Type.Object({ world: MeetingWorldView, decisions: Type.Array(MeetingDecisionWorldItem) }, { additionalProperties: false });
-export const MeetingWorldExcludedRequest = Type.Object({ excluded: Type.Boolean() }, { additionalProperties: false });
-/** 改挂点：挑 LTO、本月 PO、本月 Mission、责任单元；null 回到自动（决定影响到的 Mission，都没有挂主持人的单元）。 */
+/** 改挂点：挑 LTO、本月 PO、本月 Mission、责任单元；null 回到自动（主持人负责的单元，没有就挂公司）。 */
 export const MeetingWorldAnchorsRequest = Type.Object(
   { anchors: Type.Union([Type.Array(PickedWorldAnchor, { minItems: 1, maxItems: 10 }), Type.Null()]) },
   { additionalProperties: false },
@@ -154,7 +163,8 @@ export type TMyMeetingDecisionGroup = Static<typeof MyMeetingDecisionGroup>;
 export type TMyMeetingDecisionsResponse = Static<typeof MyMeetingDecisionsResponse>;
 export type TWorldAnchor = Static<typeof WorldAnchor>;
 export type TMeetingDecisionWorld = Static<typeof MeetingDecisionWorld>;
-export type TMeetingWorldStatus = Static<typeof MeetingWorldStatus>;
+export type TMeetingRecordStatus = Static<typeof MeetingRecordStatus>;
+export type TMeetingRecordView = Static<typeof MeetingRecordView>;
 export type TMeetingWorldView = Static<typeof MeetingWorldView>;
 export type TMeetingWorldResponse = Static<typeof MeetingWorldResponse>;
 export type TMeetingDecisionWorldItem = Static<typeof MeetingDecisionWorldItem>;

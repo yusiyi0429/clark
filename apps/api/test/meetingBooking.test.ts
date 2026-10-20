@@ -87,8 +87,13 @@ describe("预约建会", () => {
 
       const byCeo = await book(t, ceo, body({ leadDriId: TEST_MEMBER.personId }));
       expect(byCeo.statusCode).toBe(200);
-      const [row] = await t.sql("SELECT lead_dri_id FROM meetings WHERE id = $1", [byCeo.json().card.objectRef.id]);
-      expect(row.lead_dri_id).toBe(TEST_MEMBER.personId);
+      const meetingId = byCeo.json().card.objectRef.id as string;
+      const [row] = await t.sql("SELECT lead_dri_id, created_by FROM meetings WHERE id = $1", [meetingId]);
+      expect(row).toEqual({ lead_dri_id: TEST_MEMBER.personId, created_by: TEST_CEO.personId });
+      // 建会的 CEO 和主持人都能整卡确认。
+      const { decisions } = t.app.meetingFollowThrough;
+      expect(await decisions.confirmRecord(meetingId, TEST_CEO.personId, { writeToWorld: false })).toMatchObject({ world: { record: { status: "excluded" } } });
+      expect(await decisions.confirmRecord(meetingId, TEST_MEMBER.personId, { writeToWorld: false })).toMatchObject({ world: { record: { status: "excluded" } } });
     } finally {
       await t.close();
     }

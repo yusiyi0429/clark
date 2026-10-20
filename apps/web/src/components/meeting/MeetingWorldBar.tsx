@@ -1,27 +1,26 @@
 "use client";
 
 /**
- * 会议页「会上定了」头部的一条（回流设计稿 3.1）：这场会挂到哪些对象、写进本体了没有、不写进本体开关。
- * 主持人和 CEO 能「改」挂点（本月 Mission、责任单元，可恢复自动）、开关不写进本体；参会人只看挂点。
+ * 会议页「会上定了」头部的一条（回流设计稿 3.1）：这场会挂到哪些对象、会议记录写进本体了没有。
+ * 主持人和 CEO 能「改」挂点（本月 Mission、责任单元，可恢复自动）；「不写入」在整卡确认时选；参会人只看挂点。
  */
 import { useEffect, useMemo, useState } from "react";
 import type { TMeetingWorldResponse, TMeetingWorldView, TWorldAnchor } from "@warmap/contracts";
 import { monthDayTime } from "@/lib/companyTime";
-import { listMeetingWorldAnchorOptions, setMeetingWorldAnchors, setMeetingWorldExcluded } from "./meetingDecisionApi";
+import { listMeetingWorldAnchorOptions, setMeetingWorldAnchors } from "./meetingDecisionApi";
 import { WorldAnchors, type AnchorTone } from "./WorldAnchors";
 import s from "@/styles/meeting-workspace.module.css";
 import d from "./meeting-decisions.module.css";
 
 const toneOf = (world: TMeetingWorldView): AnchorTone | undefined =>
-  world.status === null ? undefined : world.excluded ? "off"
-    : world.status === "committed" ? "ok" : world.status === "skipped" ? "miss" : world.status === "failed" ? "fail" : "wait";
+  world.record === null ? undefined : world.record.status === "excluded" ? "off"
+    : world.record.status === "committed" ? "ok" : world.record.status === "failed" ? "fail" : "wait";
 
 function statusPill(world: TMeetingWorldView): { text: string; tone: string } | null {
-  if (world.status === null) return null;
-  if (world.excluded) return { text: [world.excludedBy, world.status === "withdrawn" ? "已撤回" : null].filter(Boolean).join(" · ") || "不写", tone: "off" };
-  if (world.status === "committed") return { text: `已记 · ${monthDayTime(world.at)}`, tone: "done" };
-  if (world.status === "skipped") return { text: "没对上", tone: "agent" };
-  if (world.status === "failed") return { text: "写入失败", tone: "fail" };
+  if (world.record === null) return null;
+  if (world.record.status === "excluded") return { text: world.excludedBy ?? "不写", tone: "off" };
+  if (world.record.status === "committed") return { text: `已记 · ${monthDayTime(world.at)}`, tone: "done" };
+  if (world.record.status === "failed") return { text: "写入失败", tone: "fail" };
   return { text: "待写入", tone: "wait" };
 }
 
@@ -65,12 +64,6 @@ export function MeetingWorldBar({ meetingId, world: initial, onChange }: { meeti
         {world.canEdit && !picking && !world.excluded ? <button type="button" className={d.anchorEdit} disabled={busy} onClick={() => void openPicker()}>改</button> : null}
         <span className={d.worldEnd}>
           {pill ? <span className={d.status} data-tone={pill.tone}>{pill.text}</span> : null}
-          {world.canEdit ? (
-            <button type="button" role="switch" aria-checked={world.excluded} className={d.switchRow} disabled={busy}
-              onClick={() => void settle(() => setMeetingWorldExcluded(meetingId, !world.excluded))}>
-              <span className={d.switch} data-on={world.excluded} aria-hidden="true"><span /></span>不写进本体
-            </button>
-          ) : null}
         </span>
       </div>
       {picking ? (

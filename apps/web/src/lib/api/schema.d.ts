@@ -1203,26 +1203,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 这场会在本体里：挂点、写入状态（主持人和 CEO）、每条生效的决定落到哪；参会人只看挂点和落点 */
+        /** 这场会在本体里：挂点、会议记录状态（主持人、创建人和 CEO）、每条生效的决定落到哪；参会人只看挂点和落点 */
         get: operations["getMeetingWorld"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/meetings/{id}/world-excluded": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** 主持人或 CEO 把会议标成不写进本体（或取消）；已经写进去的在本体里记撤回更正 */
-        put: operations["setMeetingWorldExcluded"];
         post?: never;
         delete?: never;
         options?: never;
@@ -10100,7 +10083,12 @@ export interface components {
             world: {
                 excluded: boolean;
                 excludedBy: string | null;
-                status: ("none" | "committed" | "withdrawn" | "skipped" | "failed") | null;
+                record: {
+                    status: "pending" | "committed" | "excluded" | "failed" | "edit_pending";
+                    version: number;
+                    eventId: string | null;
+                    confirmedAt: string | null;
+                } | null;
                 at: string | null;
                 anchors: {
                     kind: "lto" | "po" | "mission" | "task" | "unit" | "company";
@@ -10117,11 +10105,8 @@ export interface components {
                     id: string;
                     title: string;
                 }[];
-                world: ("waiting" | "committed" | "fallback" | "skipped" | "failed" | "off") | null;
+                world: ("waiting" | "committed" | "failed" | "off") | null;
             }[];
-        };
-        MeetingWorldExcludedRequest: {
-            excluded: boolean;
         };
         MeetingWorldAnchorsRequest: {
             anchors: {
@@ -14269,59 +14254,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeetingWorldResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    setMeetingWorldExcluded: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MeetingWorldExcludedRequest"];
-            };
-        };
-        responses: {
-            /** @description 这场会在本体里的最新状态 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MeetingWorldResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
                 };
             };
             /** @description ApiError 统一错误 */

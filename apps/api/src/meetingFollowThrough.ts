@@ -14,7 +14,6 @@ import { createMeetingMinutesService, meetingMinutesJobs, type MeetingMinutesSer
 import { onOutcomeReviewed, setOutcomeContextProvider, type PostMeetingAgent } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
 import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
-import { createDecisionWorldSync } from "./worldDecisionEvents.js";
 import { createMeetingEventWorld } from "./worldMeetingEvent.js";
 import { WORLD_READ_TIMEOUT_MS, type WorldReader } from "./worldReader.js";
 
@@ -22,7 +21,7 @@ import { WORLD_READ_TIMEOUT_MS, type WorldReader } from "./worldReader.js";
  * 会后链路的装配（G 会议链路 + 分层确认 + H 影响卡）：
  * - 解读纪要时对照的公司地图（按池注册给会后抽取）；
  * - 纪要整理好、会议条目有人处理过 → 排 meeting.decisions_sync；
- * - 后台任务（server.ts 的 jobs worker 注册）：妙记轮询与「妙记生成」事件、分层同步、提醒与代判、往下推影响卡与写本体。
+ * - 后台任务（server.ts 的 jobs worker 注册）：妙记轮询与「妙记生成」事件、分层同步、提醒与代判、往下推影响卡、整卡确认后写会议事件。
  */
 export type MeetingFollowThroughEnv = WorldEnv & {
   publicOrigin: string;
@@ -36,6 +35,8 @@ export type MeetingFollowThroughEnv = WorldEnv & {
   feishu?: FeishuEnv;
   /** IMPACT_CARD_MODE：live（缺省，置信度低的卡仍只记影子）或 shadow（全部只记影子，不推送）。 */
   impactCardMode?: "live" | "shadow";
+  /** FEISHU_WEB_ORIGIN（如 https://tokenking.feishu.cn）：会议事件的 artifacts 拼妙记链接 <origin>/minutes/<minute_token>；不配时不带链接。 */
+  feishuWebOrigin?: string;
 };
 
 export type MeetingFollowThrough = {
@@ -68,13 +69,12 @@ export function createMeetingFollowThrough({ pool, env, peopleDirectory, world, 
     world.enabled ? await world.snapshot(2_000).catch(() => null) : null);
   setOutcomeContextProvider(pool, () => context());
   const notify = env.feishu ? feishuNotifier(q) : undefined;
-  // 本体可写时：一条决定一条事件，一场会一条会议事件（挂点、摘要、会上定了）。
+  // 本体可写时：整卡确认后一场会写一条会议事件。
   const worldClient = worldConfigured(env) && world.status().writes ? new WorldClient(q, env) : undefined;
-  const worldSync = worldClient ? createDecisionWorldSync({ q, client: worldClient, publicOrigin: env.publicOrigin, now }) : undefined;
-  const meetingWorld = worldClient ? createMeetingEventWorld({ q, client: worldClient, publicOrigin: env.publicOrigin, now }) : undefined;
+  const meetingWorld = worldClient ? createMeetingEventWorld({ q, client: worldClient, feishuWebOrigin: env.feishuWebOrigin }) : undefined;
   // 挂点选项里的 LTO、本月 PO：同一条件下只列对象，用读的超时（预约表单在等）。
   const anchorWorld = worldClient ? new WorldClient(q, env, undefined, { timeoutMs: WORLD_READ_TIMEOUT_MS }) : undefined;
-  const decisions = createMeetingDecisionService({ pool, peopleDirectory, layering: layeringAgent, impact: impactAgent, context, notify, world: worldSync,
+  const decisions = createMeetingDecisionService({ pool, peopleDirectory, layering: layeringAgent, impact: impactAgent, context, notify,
     meetingWorld, anchorWorld, impactMode: env.impactCardMode ?? "live", now });
   const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now,
     ...(env.feishu ? { feishu: { env: env.feishu, api: minutesApi ?? createFeishuMinutesApi() } } : {}) });

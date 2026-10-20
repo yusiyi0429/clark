@@ -173,6 +173,8 @@ services:
       # 采集表：live 才写真实多维表格，其余为 mock。影响卡：shadow 只在后台记录，其余为 live。
       FEISHU_BITABLE_MODE: ${FEISHU_BITABLE_MODE:-}
       IMPACT_CARD_MODE: ${IMPACT_CARD_MODE:-}
+      # 飞书网页域名：会议事件写本体时拼妙记链接；留空不带链接。
+      FEISHU_WEB_ORIGIN: ${FEISHU_WEB_ORIGIN:-}
       # 管理员视图：逗号分隔的 personId；留空时没有人能看。
       TIANSHU_ADMIN_PERSON_IDS: ${TIANSHU_ADMIN_PERSON_IDS:-}
       MEETING_MATERIAL_STORAGE_DIR: /var/lib/warmap/meeting_materials

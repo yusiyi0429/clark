@@ -223,12 +223,12 @@ export async function createConfigMeeting(
     return { error: { status: 400, code: "INVALID_ISSUE", message: "issueIds 包含不存在的 Issue", fieldErrors: { issueIds: "unknown issue" } } };
   }
   return insertScheduledMeeting(pool, peopleDirectory, preflightAgent, secret,
-    { title: input.title, scheduledAt, endsAt, resolved, issueIds, originRef: { type: "config" } }, introAgent,
+    { title: input.title, scheduledAt, endsAt, resolved, issueIds, originRef: { type: "config" }, createdBy: ceo.personId }, introAgent,
     input.materials?.length ? { items: input.materials, storageDir: input.materialStorageDir } : undefined);
 }
 
 /**
- * 预约建会：带起止、挂点、是否不写进本体。成员只能给自己建（leadDriId 缺省或等于本人，否则 403）；
+ * 预约建会：带起止、挂点，只存天枢。成员只能给自己建（leadDriId 缺省或等于本人，否则 403）；
  * CEO 必须从 DRI 里指定主持人（同配置页）。挂点要在开会那个月的选项里。
  */
 export async function bookMeeting(
@@ -269,7 +269,7 @@ export async function bookMeeting(
   }
   return insertScheduledMeeting(deps.pool, deps.peopleDirectory, deps.preflightAgent, deps.secret, {
     title: input.title, scheduledAt, endsAt, resolved, issueIds: [], originRef: { type: "booking" },
-    worldAnchors: anchors,
+    worldAnchors: anchors, createdBy: viewer.personId,
   }, deps.introAgent);
 }
 
@@ -282,6 +282,8 @@ async function insertScheduledMeeting(
   input: {
     title: string; scheduledAt: Date; endsAt: Date; resolved: ResolvedParticipants; issueIds: string[]; originRef: Record<string, unknown>;
     worldAnchors?: StoredWorldAnchor[];
+    /** 建会的人（预约的人；配置页是 CEO）：整卡确认只给主持人和他。 */
+    createdBy: string;
   },
   introAgent?: ThreadIntroAgent,
   materials?: { items: ParsedMaterial[]; storageDir: string },
@@ -291,8 +293,8 @@ async function insertScheduledMeeting(
     `INSERT INTO meetings
        (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
         participants, issue_ids, preflight, draft, origin_ref, action_fingerprints, ends_at,
-        world_anchors)
-     VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb, $11, $12::jsonb)
+        world_anchors, created_by)
+     VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb, $11, $12::jsonb, $13)
      RETURNING ${meetingColumns()}`,
     [
       randomUUID(),
@@ -307,6 +309,7 @@ async function insertScheduledMeeting(
       JSON.stringify(input.originRef),
       input.endsAt,
       input.worldAnchors ? JSON.stringify(input.worldAnchors) : null,
+      input.createdBy,
     ],
   );
   const created = inserted.rows[0];

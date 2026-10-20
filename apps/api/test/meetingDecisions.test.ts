@@ -12,7 +12,6 @@ import { meetingInterpretationContext } from "../src/meetingContext.js";
 import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { personDisplayNames } from "../src/people.js";
 import type { FeishuNotice } from "../src/feishu/notify.js";
-import type { DecisionEventInput, DecisionWorldSync } from "../src/worldDecisionEvents.js";
 import { hashSecret } from "../src/session.js";
 
 // 会后分层确认与影响卡：主持人确认三到五条、提醒与 Agent 代判、更正卡、战略项跟着 CEO、原文可见范围。
@@ -212,21 +211,16 @@ describe("会后分层确认与影响卡", () => {
     }
   });
 
-  it("提醒两次、满一个工作日由 Agent 代判并标出来；主持人改判后给收过卡的人出更正卡，本体记 correction", async () => {
+  it("提醒两次、满一个工作日由 Agent 代判并标出来；主持人改判后给收过卡的人出更正卡", async () => {
     const t = await newApp();
     try {
       const { meetingId } = await readyMeeting(t);
       const peopleDirectory = loadPeopleDirectory(t.env);
       let clock = new Date("2026-06-05T16:00:00+08:00"); // 周五
       const notices: { notice: FeishuNotice; key: string }[] = [];
-      const events: DecisionEventInput[] = [];
-      const world: DecisionWorldSync = {
-        async record(input) { events.push(input); return { status: "committed", eventId: `event-${events.length}` }; },
-        errorCode: () => "WORLD_SYNC_FAILED",
-      };
       const impact = fakeImpact();
       const service = createMeetingDecisionService({
-        pool: t.pool, peopleDirectory, layering: fakeLayering(), impact, world, now: () => clock,
+        pool: t.pool, peopleDirectory, layering: fakeLayering(), impact, now: () => clock,
         context: () => meetingInterpretationContext(t.pool.query.bind(t.pool), clock, personDisplayNames(peopleDirectory)),
         notify: async (notice, key) => { notices.push({ notice, key }); },
       });
@@ -269,14 +263,12 @@ describe("会后分层确认与影响卡", () => {
       expect(impact.inputs[0].decision.decidedBy).toBe("agent");
       const original = (await t.pool.query("SELECT * FROM impact_cards")).rows[0];
       expect(original).toMatchObject({ agent_judged: true, status: "delivered", trigger_revision: 0 });
-      expect(events).toEqual([expect.objectContaining({ supersedesEventId: null, withdrawn: false, decision: expect.objectContaining({ decidedBy: "agent", revision: 0 }) })]);
-      expect(events[0].targets).toEqual([{ type: "task", id: original.targets[0].id }]);
 
       const owner = await ownerCookie(t);
       const read = async () => (await t.app.inject({ method: "GET", url: `/api/requests/${original.request_id}/impact`, headers: { cookie: owner } })).json().card;
       expect((await read()).agentJudged).toBe(true);
 
-      // 主持人改判：改一下 → revision 1，给收过卡的测试丙出更正卡，本体记 correction。
+      // 主持人改判：改一下 → revision 1，给收过卡的测试丙出更正卡。
       const host = await t.memberCookie();
       const edited = await review(t, host, meetingId, decisions[0].id, { verdict: "edited", statement: "接口统一改成 v2，下月 15 日前切换" });
       expect(edited.json().decision).toMatchObject({ status: "edited", revision: 1, statement: "接口统一改成 v2，下月 15 日前切换", originalStatement: "接口统一改成 v2，月底前切换" });
@@ -286,16 +278,14 @@ describe("会后分层确认与影响卡", () => {
       const correction = (await t.pool.query("SELECT * FROM impact_cards WHERE trigger_revision = 1")).rows[0];
       expect(correction).toMatchObject({ person_id: OWNER, correction_of: original.id, agent_judged: false, correction_note: "测试乙把「接口统一改成 v2，月底前切换」改为「接口统一改成 v2，下月 15 日前切换」" });
       expect(await read()).toMatchObject({ superseded: true, agentJudged: false });
-      expect(events[1]).toMatchObject({ supersedesEventId: "event-1", correctionNote: correction.correction_note, decision: expect.objectContaining({ decidedBy: "host", revision: 1 }) });
 
-      // 再改成其实没定：给测试丙一张作废卡（知悉即可），本体再记一条 correction。
+      // 再改成其实没定：给测试丙一张作废卡（知悉即可）。
       await review(t, host, meetingId, decisions[0].id, { verdict: "not_decided" });
       await service.propagate(decisions[0].id, 2);
       expect(impact.inputs).toHaveLength(2);
       const withdrawn = (await t.pool.query("SELECT * FROM impact_cards WHERE trigger_revision = 2")).rows[0];
       expect(withdrawn).toMatchObject({ person_id: OWNER, correction_of: correction.id, correction_note: "测试乙确认会上其实没定「接口统一改成 v2，下月 15 日前切换」" });
       expect(withdrawn.action).toEqual({ kind: "know", text: "知悉即可", due: null });
-      expect(events[2]).toMatchObject({ supersedesEventId: "event-2", withdrawn: true });
 
       // 代判为「其实没定」的那条，主持人后来确认：第一次往下推，不是更正。
       const late = await review(t, host, meetingId, decisions[1].id, { verdict: "confirmed" });

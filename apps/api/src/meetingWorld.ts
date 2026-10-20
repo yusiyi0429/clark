@@ -1,4 +1,4 @@
-import type { TImpactTarget, TMeetingDecisionWorld, TMeetingWorldResponse, TWorldAnchor } from "@warmap/contracts";
+import type { TImpactTarget, TMeetingDecisionWorld, TMeetingRecordStatus, TMeetingWorldResponse, TWorldAnchor } from "@warmap/contracts";
 import { decisionEffective, type MeetingDecisionRow } from "./meetingDecisionView.js";
 import type { MeetingRow, Query, StoredWorldAnchor } from "./meetingStore.js";
 import type { WorldClient } from "./worldClient.js";
@@ -82,11 +82,9 @@ export async function decisionTargets(q: Query, decisions: Pick<MeetingDecisionR
 }
 
 /**
- * 挂点候选，三组按顺序回退（写入时取第一组在本体对得上的）：
- * ① 主持人或 CEO 改过的；没改过就是生效的决定影响到的 Mission（Task 取它所属的 Mission）；② 主持人负责的责任单元；③ 公司。
+ * 挂点候选，三组按顺序回退（写入时取第一组在本体对得上的）：① 建会选的或主持人、CEO 改过的；② 主持人负责的责任单元；③ 公司。
  */
-export async function meetingAnchorGroups(q: Query, meeting: Pick<MeetingRow, "lead_dri_id" | "world_anchors">,
-  decisions: MeetingDecisionRow[]): Promise<TWorldAnchor[][]> {
+export async function meetingAnchorGroups(q: Query, meeting: Pick<MeetingRow, "lead_dri_id" | "world_anchors">): Promise<TWorldAnchor[][]> {
   let first: TWorldAnchor[] = [];
   const chosen = meeting.world_anchors ?? [];
   if (chosen.length) {
@@ -98,55 +96,48 @@ export async function meetingAnchorGroups(q: Query, meeting: Pick<MeetingRow, "l
       return title ? [{ kind: anchor.kind, id: anchor.id, title }] : [];
     });
   }
-  if (!first.length) {
-    const targets = (await cardTargets(q, decisions.filter(decisionEffective).map((row) => row.id))).flatMap((card) => card.targets);
-    const taskIds = [...new Set(targets.filter((t) => t.type !== "mission").map((t) => t.id))];
-    const viaTasks = taskIds.length
-      ? ((await q("SELECT DISTINCT mission_id FROM tasks WHERE id::text = ANY($1) AND mission_id IS NOT NULL", [taskIds])).rows as { mission_id: string }[]).map((row) => row.mission_id)
-      : [];
-    const missionIds = [...new Set([...targets.filter((t) => t.type === "mission").map((t) => t.id), ...viaTasks])];
-    if (missionIds.length) {
-      first = ((await q("SELECT id, title FROM missions WHERE id = ANY($1) ORDER BY title", [missionIds])).rows as { id: string; title: string }[])
-        .map((row) => ({ kind: "mission" as const, id: row.id, title: row.title }));
-    }
-  }
   const hostUnits = ((await q("SELECT id, name FROM capability_config WHERE owner_id <> '' AND owner_id = $1 ORDER BY sort_order, code", [meeting.lead_dri_id]))
     .rows as { id: string; name: string }[]).map((row) => ({ kind: "unit" as const, id: row.id, title: row.name }));
   return [first, hostUnits, [COMPANY]];
 }
 
-/** 一条生效的决定写进本体的状态。 */
-function decisionWorld(row: MeetingDecisionRow, excluded: boolean): TMeetingDecisionWorld {
-  if (excluded) return "off";
-  if (row.world_status === "committed") return row.world_fallback ? "fallback" : "committed";
-  if (row.world_status === "skipped" || row.world_status === "failed") return row.world_status;
-  return "waiting";
+/** 会议记录的状态：没确认 → 待确认；确认后又改了 → 修改待确认；选了不写入；这一版写进去了、写失败了，或已确认等写入（仍是 pending）。 */
+export function recordStatus(meeting: Pick<MeetingRow, "record_confirmed_at" | "record_edit_pending" | "world_excluded" | "world_event_status">): TMeetingRecordStatus {
+  if (!meeting.record_confirmed_at) return "pending";
+  if (meeting.record_edit_pending) return "edit_pending";
+  if (meeting.world_excluded) return "excluded";
+  return meeting.world_event_status === "none" ? "pending" : meeting.world_event_status;
+}
+
+/** 一条生效的决定在本体里：决定随整场会议事件写，跟着会议记录走。 */
+function decisionWorld(status: TMeetingRecordStatus): TMeetingDecisionWorld {
+  return status === "excluded" ? "off" : status === "committed" || status === "failed" ? status : "waiting";
 }
 
 /**
- * 会议页上「这场会在本体里」：挂点（已写入时是写进去的那些，否则是第一组非空的候选）、写入状态、每条生效的决定落到哪。
- * 写入状态只给主持人和 CEO（showStatus）；参会人只看挂点和落点。
+ * 会议页上「这场会在本体里」：挂点（已写入且之后没改过时是写进去的那些，否则是第一组非空的候选）、会议记录状态、每条生效的决定落到哪。
+ * 记录状态只给主持人、创建人和 CEO（showStatus）；参会人只看挂点和落点。
  */
 export async function meetingWorldDetail(q: Query, meeting: MeetingRow, decisions: MeetingDecisionRow[],
   viewer: { canEdit: boolean; showStatus: boolean }): Promise<TMeetingWorldResponse> {
-  const written = (meeting.world_event_status === "committed" || meeting.world_event_status === "withdrawn") && meeting.world_event_anchors?.length;
-  const anchors = written ? meeting.world_event_anchors! : (await meetingAnchorGroups(q, meeting, decisions)).find((group) => group.length) ?? [];
+  const status = recordStatus(meeting);
+  const written = status === "committed" && meeting.world_event_anchors?.length;
+  const anchors = written ? meeting.world_event_anchors! : (await meetingAnchorGroups(q, meeting)).find((group) => group.length) ?? [];
   const effective = decisions.filter(decisionEffective);
   const targets = await decisionTargets(q, effective);
   return {
     world: {
       excluded: meeting.world_excluded,
       excludedBy: meeting.world_excluded ? meeting.world_excluded_by : null,
-      status: viewer.showStatus ? meeting.world_event_status : null,
+      record: viewer.showStatus ? {
+        status, version: meeting.record_version, eventId: meeting.world_event_id,
+        confirmedAt: meeting.record_confirmed_at ? new Date(meeting.record_confirmed_at).toISOString() : null,
+      } : null,
       at: viewer.showStatus && meeting.world_event_at ? new Date(meeting.world_event_at).toISOString() : null,
       anchors,
       edited: meeting.world_anchors !== null,
       canEdit: viewer.canEdit,
     },
-    decisions: effective.map((row) => ({
-      id: row.id,
-      anchors: row.world_fallback && row.world_status === "committed" ? anchors : targets.get(row.id) ?? [],
-      world: viewer.showStatus ? decisionWorld(row, meeting.world_excluded) : null,
-    })),
+    decisions: effective.map((row) => ({ id: row.id, anchors: targets.get(row.id) ?? [], world: viewer.showStatus ? decisionWorld(status) : null })),
   };
 }

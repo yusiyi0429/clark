@@ -31,8 +31,9 @@ const text = (node: Node): string => {
 };
 
 const MISSION = { kind: "mission" as const, id: "m-v2", title: "接口全量切到 v2" };
+const RECORD = { status: "committed" as const, version: 1, eventId: "ev-1", confirmedAt: "2026-10-19T10:40:00.000Z" };
 const world = (overrides: Partial<TMeetingWorldView> = {}): TMeetingWorldView => ({
-  excluded: false, excludedBy: null, status: "committed", at: "2026-10-19T10:42:00.000Z", anchors: [MISSION], edited: false, canEdit: true, ...overrides,
+  excluded: false, excludedBy: null, record: RECORD, at: "2026-10-19T10:42:00.000Z", anchors: [MISSION], edited: false, canEdit: true, ...overrides,
 });
 const render = (view: TMeetingWorldView, onChange = vi.fn()) => {
   hooks.index = 0;
@@ -41,34 +42,26 @@ const render = (view: TMeetingWorldView, onChange = vi.fn()) => {
 
 beforeEach(() => { hooks.values = []; api.put.mockReset(); api.get.mockReset(); });
 
-describe("会议页：这场会挂到哪、写进本体没有、不写进本体", () => {
-  it("主持人：挂点带已记的绿点，能改、能开关；开了以后调接口，挂点划掉、写明谁标的", async () => {
+describe("会议页：这场会挂到哪、会议记录写进本体没有", () => {
+  it("主持人：挂点带已记的绿点，能改；选了不写入时挂点划掉、写明谁选的，不能改", () => {
     const tree = render(world());
     const anchors = tree.find((node) => node.type === WorldAnchors)!;
     expect(anchors.props).toMatchObject({ anchors: [MISSION], tone: "ok" });
     expect(tree.some((node) => node.type === "button" && text(node) === "改")).toBe(true);
     expect(tree.some((node) => node.type === "span" && text(node) === "已记 · 10/19 18:42")).toBe(true);
-    const toggle = tree.find((node) => node.props?.role === "switch")!;
-    expect(toggle.props).toMatchObject({ "aria-checked": false });
+    expect(tree.some((node) => node.props?.role === "switch")).toBe(false);
 
-    const excluded = world({ excluded: true, excludedBy: "林晓", status: "withdrawn" });
-    api.put.mockResolvedValue({ data: { world: excluded, decisions: [] }, response: { ok: true, status: 200 } });
-    const onChange = vi.fn();
-    hooks.index = 0;
-    (nodes(MeetingWorldBar({ meetingId: "m1", world: world(), onChange })).find((node) => node.props?.role === "switch")!.props!.onClick as () => void)();
-    await vi.waitFor(() => expect(onChange).toHaveBeenCalledWith({ world: excluded, decisions: [] }));
-    expect(api.put).toHaveBeenCalledWith("/api/meetings/{id}/world-excluded", { params: { path: { id: "m1" } }, body: { excluded: true } });
-
-    const after = render(excluded);
+    hooks.values = [];
+    const after = render(world({ excluded: true, excludedBy: "林晓", record: { ...RECORD, status: "excluded" } }));
     expect(after.find((node) => node.type === WorldAnchors)!.props).toMatchObject({ tone: "off" });
-    expect(after.some((node) => node.type === "span" && text(node) === "林晓 · 已撤回")).toBe(true);
+    expect(after.some((node) => node.type === "span" && text(node) === "林晓")).toBe(true);
     expect(after.some((node) => node.type === "button" && text(node) === "改")).toBe(false);
   });
 
-  it("参会人：只看挂点，没有状态、没有开关", () => {
-    const tree = render(world({ status: null, at: null, canEdit: false }));
+  it("参会人：只看挂点，没有状态", () => {
+    const tree = render(world({ record: null, at: null, canEdit: false }));
     expect(tree.find((node) => node.type === WorldAnchors)!.props).toMatchObject({ anchors: [MISSION], tone: undefined });
-    expect(tree.some((node) => node.props?.role === "switch")).toBe(false);
+    expect(tree.some((node) => node.type === "span" && node.props?.["data-tone"] !== undefined)).toBe(false);
     expect(tree.some((node) => node.type === "button" && text(node) === "改")).toBe(false);
   });
 

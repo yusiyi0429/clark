@@ -9,9 +9,6 @@ export type MeetingDecisionRow = {
   reviewed_at: string | Date | null; judged_at: string | Date | null; revision: number;
   remind_count: number; next_remind_at: string | Date | null; due_at: string | Date | null;
   impact_status: "none" | "pending" | "done" | "failed";
-  world_status: "none" | "pending" | "committed" | "skipped" | "failed"; world_event_id: string | null;
-  /** 受影响的对象对不上、挂到了会议挂点上；world_event_id 写入时的 revision（100）。 */
-  world_fallback: boolean; world_event_revision: number | null;
   created_at: string | Date; updated_at: string | Date;
 };
 

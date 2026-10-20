@@ -103,6 +103,8 @@ const env: AppEnv = {
   adminPersonIds: parseAdminPersonIds(process.env.TIANSHU_ADMIN_PERSON_IDS),
   // 影响卡：live（缺省）推送；shadow 只在后台记录，不打扰人。
   impactCardMode: process.env.IMPACT_CARD_MODE === "shadow" ? "shadow" : "live",
+  // 会议事件的妙记链接：FEISHU_WEB_ORIGIN（如 https://tokenking.feishu.cn）；不配时不带链接。
+  feishuWebOrigin: process.env.FEISHU_WEB_ORIGIN?.trim() || undefined,
   collectionBitable: process.env.FEISHU_BITABLE_MODE === "live" ? "live" : "mock",
 };
 

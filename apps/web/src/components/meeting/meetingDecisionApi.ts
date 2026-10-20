@@ -40,10 +40,6 @@ export async function getMeetingWorld(meetingId: string): Promise<TMeetingWorldR
   return response.ok && data ? data : null;
 }
 
-/** 会议入本体：标不写进本体（或取消）。 */
-export const setMeetingWorldExcluded = (meetingId: string, excluded: boolean) =>
-  settleWorld(browserApi.PUT("/api/meetings/{id}/world-excluded", { params: { path: { id: meetingId } }, body: { excluded } }));
-
 /** 会议入本体：改挂点；null 回到自动。 */
 export const setMeetingWorldAnchors = (meetingId: string, anchors: { kind: "mission" | "unit"; id: string }[] | null) =>
   settleWorld(browserApi.PUT("/api/meetings/{id}/world-anchors", { params: { path: { id: meetingId } }, body: { anchors } }));

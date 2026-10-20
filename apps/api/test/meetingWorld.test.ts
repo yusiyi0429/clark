@@ -7,21 +7,23 @@ import type { PostMeetingAgent } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import type { DecisionLayeringAgent } from "../src/meetingDecisionAgent.js";
 import type { ImpactAgent } from "../src/impactAgent.js";
-import { createMeetingDecisionService } from "../src/meetingDecisions.js";
+import { createJobWorker } from "../src/jobs.js";
+import { createMeetingDecisionService, meetingDecisionJobs } from "../src/meetingDecisions.js";
 import { meetingInterpretationContext } from "../src/meetingContext.js";
 import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { personDisplayNames } from "../src/people.js";
-import type { DecisionEventInput, DecisionWorldSync } from "../src/worldDecisionEvents.js";
-import { createMeetingEventWorld, type MeetingEventWorld, type MeetingEventWrite } from "../src/worldMeetingEvent.js";
+import { WorldClient } from "../src/worldClient.js";
+import { createMeetingEventWorld } from "../src/worldMeetingEvent.js";
 import { hashSecret } from "../src/session.js";
-import { projection, stubWorld, withWorld } from "./worldFixture.js";
+import { projection, stubWorld, withWorld, worldEnv } from "./worldFixture.js";
 
-// 会议入本体（回流设计稿 3.1、3.2）：主持人办完后先记会议事件、再记决定事件指回它；挂点、不写进本体（撤回、恢复）、落点与写入状态的可见范围。
+// 会议入本体（B 方案，D-58）：建会、逐条确认都不写；主持人或创建人整卡确认后写一条整场会议事件，修改另记一条并指回前次；选了不写入不发请求。
 const PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people-candidate.json", import.meta.url));
 const CEO = TEST_CEO.personId; // 测试甲
 const HOST = TEST_MEMBER.personId; // 测试乙：主持人
 const OWNER = "person-fixture-003"; // 测试丙
 const OWNER_LOGIN = { loginId: "ceshib", passcode: "3579" };
+const FEISHU = "https://tokenking.feishu.cn";
 
 const TURNS = [
   { id: "turn-001", speakerId: CEO, text: "渠道预算这个月先不动，下周再看数据。" },
@@ -37,6 +39,7 @@ const CANDIDATE: TPostMeetingCandidate = {
     { kind: "decision", text: "渠道预算这个月先不动", turnId: "turn-001", quote: "渠道预算这个月先不动" },
     { kind: "strategic", text: "是否整体撤出东南亚", turnId: "turn-004", quote: "东南亚要不要整体撤出", title: "是否整体撤出东南亚市场",
       brief: "测试丙提出东南亚业务是否整体撤出，需要 CEO 拍板。", judgmentKind: "company_direction" },
+    { kind: "open", text: "渠道预算下周看数据再定", turnId: "turn-001", quote: "下周再看数据" },
   ],
 };
 const preflightAgent: PreflightAgent = { async generate(input: PreflightAgentInput) { return { candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)) }; } };
@@ -55,29 +58,50 @@ const impact: ImpactAgent = {
   async answer() { return "按 v2 验。"; },
 };
 
-/** 假本体：决定事件和会议事件各记一份；挂点取第一组非空的（refs = obj:<kind>:<id>@1）。 */
-function fakeWorld(fallbackFor: Set<string> = new Set()) {
-  const decisions: DecisionEventInput[] = [];
-  const meetings: MeetingEventWrite[] = [];
-  const world: DecisionWorldSync = {
-    async record(input) { decisions.push(input); return { status: "committed", eventId: `dev-${decisions.length}`, fallback: fallbackFor.has(input.decision.id) }; },
-    errorCode: () => "WORLD_SYNC_FAILED",
-  };
-  const meetingWorld: MeetingEventWorld = {
-    async resolve(groups) {
-      const group = groups.find((item) => item.length);
-      return group ? { refs: group.map((anchor) => `obj:${anchor.kind}:${anchor.id}@1`), sceneId: `obj:${group[0].kind}:${group[0].id}`, used: group } : null;
-    },
-    async write(input) { meetings.push(input); return `mev-${meetings.length}`; },
-    errorCode: () => "WORLD_SYNC_FAILED",
-  };
-  return { world, meetingWorld, decisions, meetings };
+/** 本体里的对象：本月 Mission（mission:v2-202606）和主持人负责的单元（capability:07）。 */
+const head = (object_id: string, object_type: string, title: string, version: number, externalId: string) => ({
+  object_id, object_type, title, revision_id: `${object_id}-r${version}`, object_version: version, version, lifecycle: { status: "active" },
+  contract_version: "tkos.world/0.3", external_refs: [{ system: "tianshu", id: externalId }],
+});
+const MISSION_HEAD = head("obj-mission-v2", "Mission", "接口全量切到 v2", 3, "mission:v2-202606");
+const UNIT_HEAD = head("obj-unit-07", "ResponsibilityUnit", "Agents", 2, "capability:07");
+
+/**
+ * 假本体：按外部引用列对象、取对象；记事件按幂等键去重（同键重放回原回执）；取事件返回挂在这个对象上的事件。
+ * failing() 为 true 时记事件返回 503。
+ */
+function ontology(failing = () => false) {
+  const recorded: { eventId: string; body: { idempotency_key: string; params: { subject_refs: string[] } } }[] = [];
+  const calls = stubWorld((call) => {
+    const path = call.url.pathname;
+    if (path === "/v1/world/objects") {
+      const external = call.url.searchParams.get("external_id");
+      return { items: [MISSION_HEAD, UNIT_HEAD].filter((item) => item.external_refs[0].id === external), next_cursor: null };
+    }
+    if (path === "/v1/actions/prepare") return { expected_versions: [] };
+    if (path === "/v1/actions") {
+      if (failing()) return new Response(JSON.stringify({ error: { code: "UNAVAILABLE", message: "down" } }), { status: 503 });
+      const event = recorded.find((item) => item.body.idempotency_key === call.body.idempotency_key)
+        ?? recorded[recorded.push({ eventId: `ev-${recorded.length + 1}`, body: call.body }) - 1];
+      return { receipt_id: `r-${event.eventId}`, status: "committed", result: { event_id: event.eventId } };
+    }
+    const events = path.match(/^\/v1\/world\/objects\/([^/]+)\/events$/);
+    if (events) {
+      return { events: recorded.filter((item) => item.body.params.subject_refs.some((ref) => ref.startsWith(`${decodeURIComponent(events[1])}@`)))
+        .map((item) => ({ event_id: item.eventId })) };
+    }
+    const object = [MISSION_HEAD, UNIT_HEAD].find((item) => path === `/v1/world/objects/${item.object_id}`);
+    return object ? projection(object) : { items: [], next_cursor: null };
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const writes = () => calls.filter((call) => call.url.pathname === "/v1/actions").map((call) => call.body as any);
+  return { calls, writes };
 }
 
 type CardAction = { actionType: string; actionId: string; itemId?: string };
 
-async function setup() {
-  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent, meetingFollowThroughAgents: { layering, impact } });
+async function setup(env: Parameters<typeof createTestApp>[0] = {}) {
+  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, ...env }, undefined, { preflightAgent, outcomeAgent, meetingFollowThroughAgents: { layering, impact } });
   const ceo = await t.loginCookie();
   const issueCard = await t.createIssue();
   const create = ((issueCard as unknown as { actions: CardAction[] }).actions).find((a) => a.actionType === "issue.create_meeting")!;
@@ -100,171 +124,228 @@ async function setup() {
   return { t, ceo, host: await t.memberCookie(), owner, meetingId };
 }
 
-function serviceFor(t: TestApp, fake: ReturnType<typeof fakeWorld>) {
+/** 会后服务（时钟可拨）：会议事件经 WorldClient 写进假本体；run() 把排队的任务跑完。 */
+function serviceFor(t: TestApp, clock = { now: new Date("2026-06-01T12:00:00+08:00") }) {
   const peopleDirectory = loadPeopleDirectory(t.env);
-  const clock = new Date("2026-06-01T12:00:00+08:00");
-  return createMeetingDecisionService({ pool: t.pool, peopleDirectory, layering, impact, world: fake.world, meetingWorld: fake.meetingWorld, now: () => clock,
-    context: () => meetingInterpretationContext(t.pool.query.bind(t.pool), clock, personDisplayNames(peopleDirectory)) });
+  const q = t.pool.query.bind(t.pool);
+  const meetingWorld = createMeetingEventWorld({ q, client: new WorldClient(q, worldEnv), feishuWebOrigin: FEISHU });
+  const service = createMeetingDecisionService({ pool: t.pool, peopleDirectory, layering, impact, meetingWorld, now: () => clock.now,
+    context: () => meetingInterpretationContext(q, clock.now, personDisplayNames(peopleDirectory)) });
+  const worker = createJobWorker({ pool: t.pool, handlers: meetingDecisionJobs(service).handlers });
+  const run = async () => { while (await worker.tick() > 0); };
+  return { service, run, clock };
+}
+
+/** 主持人把两条办掉：第一条对，第二条其实没定。 */
+async function hostReviews(t: TestApp, service: ReturnType<typeof serviceFor>["service"], meetingId: string) {
+  await service.sync(meetingId);
+  const [first, second] = (await t.pool.query("SELECT id FROM meeting_decisions WHERE tier = 'host' ORDER BY ordinal")).rows as { id: string }[];
+  await service.review(meetingId, first.id, HOST, { verdict: "confirmed" });
+  await service.review(meetingId, second.id, HOST, { verdict: "not_decided" });
+  return { first, second };
 }
 
 /** 会议页单独取的「这场会在本体里」（不进会议卡）。 */
 const worldOf = async (t: TestApp, cookie: string, meetingId: string): Promise<TMeetingWorldResponse> =>
   (await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/world`, headers: { cookie } })).json();
+const putAnchors = (t: TestApp, cookie: string, meetingId: string, anchors: unknown) => t.app.inject({ method: "PUT", url: `/api/meetings/${meetingId}/world-anchors`,
+  headers: { cookie, origin: t.publicOrigin }, payload: { anchors } });
 const MISSION: TWorldAnchor = { kind: "mission", id: "m-v2", title: "接口全量切到 v2" };
+const UNIT: TWorldAnchor = { kind: "unit", id: "agents", title: "智能体" };
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("会议入本体", () => {
-  it("主持人办完、影响卡推完后先记会议事件（提炼，不带原文），再记决定事件并指回它；落点与状态只给主持人和 CEO 看", async () => {
+describe("会议入本体：整卡确认后写一条整场会议事件", () => {
+  it("建会不写本体：建会、纪要、主持人逐条确认之后跑任务，本体一次都没被写；整卡确认后才写", async () => {
+    const world = ontology();
+    const { t, meetingId } = await setup(worldEnv);
+    try {
+      const followThrough = t.app.meetingFollowThrough;
+      const worker = createJobWorker({ pool: t.pool, handlers: followThrough.jobs().handlers });
+      const run = async () => { while (await worker.tick() > 0); };
+      await run();
+      const [first, second] = (await t.pool.query("SELECT id FROM meeting_decisions WHERE tier = 'host' ORDER BY ordinal")).rows as { id: string }[];
+      await followThrough.decisions.review(meetingId, first.id, HOST, { verdict: "confirmed" });
+      await followThrough.decisions.review(meetingId, second.id, HOST, { verdict: "not_decided" });
+      await run();
+      expect((await t.pool.query("SELECT impact_status FROM meeting_decisions WHERE id = $1", [first.id])).rows[0].impact_status).toBe("done");
+      expect(world.calls.filter((call) => call.url.pathname.startsWith("/v1/actions"))).toEqual([]);
+
+      // 对照：本体是通的，整卡确认后写一条。
+      await followThrough.decisions.confirmRecord(meetingId, HOST, { writeToWorld: true });
+      await run();
+      expect(world.writes().map((body) => body.idempotency_key)).toEqual([`tianshu-meeting:${meetingId}:v1`]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("确认后写一条整场事件：category meeting、幂等键 v1、正文是整份记录、带写入声明和妙记链接；读回核对后才算已写入", async () => {
+    const world = ontology();
     const { t, ceo, host, owner, meetingId } = await setup();
     try {
-      const fake = fakeWorld();
-      const service = serviceFor(t, fake);
-      await service.sync(meetingId);
-      const [first, second] = (await t.pool.query("SELECT id FROM meeting_decisions WHERE tier = 'host' ORDER BY ordinal")).rows as { id: string }[];
-      // 主持人还没办：不写。
-      await service.syncWorld(meetingId);
-      expect(fake.meetings).toEqual([]);
+      const { service, run } = serviceFor(t);
+      await hostReviews(t, service, meetingId);
+      await run();
+      // 确认前改挂点：只存，不写。
+      expect((await putAnchors(t, host, meetingId, [{ kind: "mission", id: "m-v2" }])).statusCode).toBe(200);
+      await run();
+      expect(world.writes()).toEqual([]);
+      expect((await worldOf(t, host, meetingId)).world.record).toEqual({ status: "pending", version: 0, eventId: null, confirmedAt: null });
+      await t.pool.query("UPDATE meetings SET minute_token = 'obcnminute1' WHERE id = $1", [meetingId]);
 
-      await service.review(meetingId, first.id, HOST, { verdict: "confirmed" });
-      await service.review(meetingId, second.id, HOST, { verdict: "not_decided" });
-      await service.propagate(first.id, 0);
+      // 只有主持人或创建人能确认（这场会没记创建人，按主持人算）。
+      expect(await service.confirmRecord(meetingId, OWNER, { writeToWorld: true })).toMatchObject({ error: { status: 404 } });
+      expect(await service.confirmRecord(meetingId, CEO, { writeToWorld: true })).toMatchObject({ error: { status: 404 } });
+      const confirmed = await service.confirmRecord(meetingId, HOST, { writeToWorld: true });
+      expect(confirmed).toMatchObject({ world: { record: { status: "pending", version: 1, eventId: null, confirmedAt: "2026-06-01T04:00:00.000Z" } } });
+      expect((await t.pool.query("SELECT count(*)::int AS n FROM jobs WHERE kind = 'meeting.world_sync' AND status = 'pending'")).rows[0].n).toBe(1);
+      await run();
 
-      expect(fake.meetings).toHaveLength(1);
-      const event = fake.meetings[0];
-      expect(event).toMatchObject({ supersedesEventId: null, anchors: { refs: ["obj:mission:m-v2@1"], used: [MISSION] } });
-      expect(event.text.split("\n")).toEqual([
-        "会议：接口切换会", "时间：2026-06-01 10:00–11:00（北京时间）", "主持人：测试乙", "参会人：测试甲、测试乙、测试丙", `天枢会议：${meetingId}`,
-        "挂到：Mission「接口全量切到 v2」", "", "摘要：", CANDIDATE.summary, "", "会上定了：", "1. 接口统一改成 v2，月底前切换（Host 已确认）",
+      expect(world.writes()).toHaveLength(1);
+      const body = world.writes()[0];
+      expect(body).toEqual({
+        action_type: "world_record_event", contract_version: "tkos.world/0.3", target: null, expected_versions: [],
+        idempotency_key: `tianshu-meeting:${meetingId}:v1`, reason: expect.any(String),
+        params: {
+          category: "meeting", subject_refs: ["obj-mission-v2@3"], occurred_at: "2026-06-01T10:00:00+08:00",
+          content: { text: expect.any(String), artifacts: [`${FEISHU}/minutes/obcnminute1`] },
+          declaration: { scene: "obj-mission-v2@3", trigger: "天枢会议记录确认", human_acceptance: { required: false } },
+        },
+      });
+      expect(body.params.content.text.split("\n")).toEqual([
+        "会议：接口切换会", "时间：2026-06-01 10:00–11:00（北京时间）", "主持人：测试乙", "参会人：测试甲、测试乙、测试丙",
+        "", "摘要：", CANDIDATE.summary,
+        "", "决定：", "1. 接口统一改成 v2，月底前切换",
+        "", "分歧：", "1. 渠道预算下周看数据再定",
+        "", "待办：", "1. 渠道看板接到 v2（测试丙，2026-06-30 前）",
+        "", "确认：测试乙 2026-06-01 12:00（北京时间）", `天枢会议：${meetingId}`, "确认版本：v1",
       ]);
-      expect(event.text).not.toContain(TURNS[0].text);
-      // 决定事件在会议事件之后，指回它；没定的那条不写。
-      expect(fake.decisions).toHaveLength(1);
-      expect(fake.decisions[0]).toMatchObject({ meetingEventId: "mev-1", fallback: { refs: ["obj:mission:m-v2@1"] }, decision: { id: first.id, decidedBy: "host" } });
+      expect(body.params.content.text).not.toContain(TURNS[0].text);
+      // 读回：写完按挂点对象取事件，带 since。
+      const readBack = world.calls.find((call) => call.url.pathname === "/v1/world/objects/obj-mission-v2/events")!;
+      expect(readBack.url.searchParams.get("since")).toBe("2026-06-01T10:00:00+08:00");
 
-      // 主持人：落点和写入状态都看得到，能改；没定的那条不列。
+      // 主持人、CEO 看得到记录状态；参会人看不到。
       const hostView = await worldOf(t, host, meetingId);
       expect(Value.Check(MeetingWorldResponse, hostView)).toBe(true);
-      expect(hostView.world).toMatchObject({ excluded: false, status: "committed", anchors: [MISSION], edited: false, canEdit: true });
-      expect(hostView.decisions).toEqual([{ id: first.id, world: "committed", anchors: [expect.objectContaining({ kind: "task", title: "渠道看板接到 v2" })] }]);
-      // 参会人：只看落点。
-      const ownerView = await worldOf(t, owner, meetingId);
-      expect(ownerView.world).toMatchObject({ status: null, at: null, canEdit: false, anchors: [MISSION] });
-      expect(ownerView.decisions).toEqual([{ id: first.id, world: null, anchors: [expect.objectContaining({ kind: "task" })] }]);
-      // CEO：看得到状态；会议卡本身不带这些（读会议保持轻）。
-      expect((await worldOf(t, ceo, meetingId)).world).toMatchObject({ status: "committed", canEdit: true });
-      const ceoCard = (await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie: ceo } })).json().cards[0];
-      expect(ceoCard.payload).not.toHaveProperty("world");
-      expect(ceoCard.payload.decisions[0]).not.toHaveProperty("anchors");
-
-      // 再跑一次同步：内容没变，不重写。
-      await service.syncWorld(meetingId);
-      expect(fake.meetings).toHaveLength(1);
+      expect(hostView.world).toMatchObject({ excluded: false, anchors: [MISSION], record: { status: "committed", version: 1, eventId: "ev-1" } });
+      expect((await worldOf(t, ceo, meetingId)).world.record).toMatchObject({ status: "committed", eventId: "ev-1" });
+      expect((await worldOf(t, owner, meetingId)).world).toMatchObject({ record: null, at: null, canEdit: false, anchors: [MISSION] });
+      // 逐条决定不再各写一条事件。
+      expect(world.writes()).toHaveLength(1);
     } finally {
       await t.close();
     }
   });
 
-  it("CEO 确认战略项后会议事件记 correction；对不上受影响对象的决定挂到会议挂点上，界面标出来", async () => {
-    const { t, ceo, host, meetingId } = await setup();
+  it("修改另记一条并指回前次：原样再确认不写；改了挂点显示修改待确认，再确认记 v2，refs 指回第一条，写明改了什么、原因、确认人和时间", async () => {
+    const world = ontology();
+    const { t, host, meetingId } = await setup();
     try {
-      const strategicId = () => t.pool.query("SELECT id FROM meeting_decisions WHERE tier = 'strategic'").then((r) => r.rows[0]?.id as string);
-      const fake = fakeWorld();
-      const service = serviceFor(t, fake);
-      await service.sync(meetingId);
-      for (const row of (await t.pool.query("SELECT id FROM meeting_decisions WHERE tier = 'host' ORDER BY ordinal")).rows) {
-        await service.review(meetingId, row.id, HOST, { verdict: "not_decided" });
-      }
-      // 主持人的条目都没定：会议事件照样写，挂主持人负责的单元。
-      await service.syncWorld(meetingId);
-      expect(fake.meetings[0].anchors.used).toEqual([{ kind: "unit", id: "agents", title: "智能体" }]);
+      const { service, run, clock } = serviceFor(t);
+      await hostReviews(t, service, meetingId);
+      await service.confirmRecord(meetingId, HOST, { writeToWorld: true });
+      await run();
+      const first = world.writes()[0];
+      expect(first.params).toMatchObject({ subject_refs: ["obj-unit-07@2"] });
+      expect(first.params.content).not.toHaveProperty("refs");
+      expect(first.params.content.artifacts).toEqual([]);
 
-      const card = (await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie: ceo } })).json().cards[0];
-      const item = card.payload.outcome.items.find((entry: { kind: string }) => entry.kind === "strategic");
-      const confirm = (card.actions as CardAction[]).find((a) => a.actionType === "meeting.confirm_item" && a.itemId === item.id)!;
-      await t.app.inject({ method: "POST", url: "/api/actions/execute", headers: { cookie: ceo, origin: t.publicOrigin }, payload: { actionId: confirm.actionId, input: {} } });
-      await service.sync(meetingId);
-      const id = await strategicId();
-      fake.world.record = async (input) => { fake.decisions.push(input); return { status: "committed", eventId: "dev-s", fallback: true }; };
-      await service.propagate(id, 0);
+      // 什么都没改，再确认一次：不写、不升版本，只刷新确认时刻。
+      clock.now = new Date("2026-06-01T12:30:00+08:00");
+      expect(await service.confirmRecord(meetingId, HOST, { writeToWorld: true })).toMatchObject({ world: { record: { status: "committed", version: 1, eventId: "ev-1",
+        confirmedAt: "2026-06-01T04:30:00.000Z" } } });
+      await run();
+      expect(world.writes()).toHaveLength(1);
 
-      expect(fake.meetings).toHaveLength(2);
-      expect(fake.meetings[1]).toMatchObject({ supersedesEventId: "mev-1", anchors: { used: [MISSION] } });
-      expect(fake.meetings[1].text).toContain("1. 是否整体撤出东南亚市场（CEO 已确认）");
-      expect(fake.decisions.at(-1)).toMatchObject({ meetingEventId: "mev-2", decision: { decidedBy: "ceo" } });
-      const strategic = (await worldOf(t, host, meetingId)).decisions.find((d) => d.id === id);
-      expect(strategic).toMatchObject({ world: "fallback", anchors: [MISSION] });
+      // 确认后改挂点：修改待确认，不写。
+      expect((await putAnchors(t, host, meetingId, [{ kind: "mission", id: "m-v2" }])).statusCode).toBe(200);
+      await run();
+      expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "edit_pending", version: 1, eventId: "ev-1" });
+      expect(world.writes()).toHaveLength(1);
+
+      clock.now = new Date("2026-06-02T09:00:00+08:00");
+      await service.confirmRecord(meetingId, HOST, { writeToWorld: true, reason: "挂错了对象" });
+      await run();
+      expect(world.writes()).toHaveLength(2);
+      const second = world.writes()[1];
+      expect(second.idempotency_key).toBe(`tianshu-meeting:${meetingId}:v2`);
+      expect(second.params).toMatchObject({ category: "meeting", subject_refs: ["obj-mission-v2@3"], content: { refs: ["event:ev-1"] } });
+      expect(second.params).not.toHaveProperty("supersedes_event_id");
+      const lines = second.params.content.text.split("\n");
+      expect(lines.slice(0, 4)).toEqual(["修改：第 2 版，接前次事件 ev-1", "改了：挂点", "原因：挂错了对象", ""]);
+      expect(lines).toContain("会议：接口切换会");
+      expect(lines.slice(-3)).toEqual(["确认：测试乙 2026-06-02 09:00（北京时间）", `天枢会议：${meetingId}`, "确认版本：v2"]);
+      expect((await worldOf(t, host, meetingId)).world).toMatchObject({ anchors: [MISSION], record: { status: "committed", version: 2, eventId: "ev-2" } });
     } finally {
       await t.close();
     }
   });
 
-  it("主持人和 CEO 能标不写进本体：已写的记撤回，取消后重新写；别人不能动", async () => {
-    const { t, ceo, host, owner, meetingId } = await setup();
+  it("写入失败后原样再确认：按同一版重试", async () => {
+    let failing = true;
+    const world = ontology(() => failing);
+    const { t, host, meetingId } = await setup();
     try {
-      const fake = fakeWorld();
-      const service = serviceFor(t, fake);
-      await service.sync(meetingId);
-      const [first, second] = (await t.pool.query("SELECT id FROM meeting_decisions WHERE tier = 'host' ORDER BY ordinal")).rows as { id: string }[];
-      await service.review(meetingId, first.id, HOST, { verdict: "confirmed" });
-      await service.review(meetingId, second.id, HOST, { verdict: "not_decided" });
-      await service.propagate(first.id, 0);
-      expect(fake.decisions).toHaveLength(1);
+      const { service, run } = serviceFor(t);
+      await hostReviews(t, service, meetingId);
+      await service.confirmRecord(meetingId, HOST, { writeToWorld: true });
+      await run();
+      expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "failed", version: 1, eventId: null });
 
-      const put = (cookie: string, excluded: boolean) => t.app.inject({ method: "PUT", url: `/api/meetings/${meetingId}/world-excluded`,
-        headers: { cookie, origin: t.publicOrigin }, payload: { excluded } });
-      expect((await put(owner, true)).statusCode).toBe(404);
-      const excluded = await put(host, true);
-      expect(excluded.statusCode).toBe(200);
-      expect(excluded.json().world).toMatchObject({ excluded: true, excludedBy: "测试乙", status: "committed" });
-      expect((await t.pool.query("SELECT count(*)::int AS n FROM jobs WHERE kind = 'meeting.world_sync'")).rows[0].n).toBeGreaterThan(0);
-
-      await service.syncWorld(meetingId);
-      expect(fake.meetings.at(-1)).toMatchObject({ digest: "withdrawn", supersedesEventId: "mev-1" });
-      expect(fake.meetings.at(-1)!.text.split("\n")[0]).toBe("撤回：测试乙标为不写进本体");
-      expect(fake.decisions.at(-1)).toMatchObject({ withdrawnBy: "测试乙", supersedesEventId: "dev-1", variant: ":dev-1" });
-      const off = await worldOf(t, host, meetingId);
-      expect(off.world).toMatchObject({ excluded: true, status: "withdrawn" });
-      expect(off.decisions.find((d) => d.id === first.id)!.world).toBe("off");
-
-      // CEO 取消：会议事件和决定事件各记一条恢复（更正撤回的那条）。
-      expect((await put(ceo, false)).json().world).toMatchObject({ excluded: false, excludedBy: null });
-      await service.syncWorld(meetingId);
-      expect(fake.meetings.at(-1)).toMatchObject({ supersedesEventId: "mev-2" });
-      expect(fake.meetings.at(-1)!.digest).not.toBe("withdrawn");
-      expect(fake.decisions.at(-1)).toMatchObject({ supersedesEventId: "dev-2", variant: ":dev-2" });
-      expect(fake.decisions.at(-1)!.withdrawnBy).toBeUndefined();
-      expect((await worldOf(t, host, meetingId)).world.status).toBe("committed");
+      failing = false;
+      await service.confirmRecord(meetingId, HOST, { writeToWorld: true });
+      await run();
+      expect(world.writes().map((body) => body.idempotency_key)).toEqual([`tianshu-meeting:${meetingId}:v1`, `tianshu-meeting:${meetingId}:v1`]);
+      expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "committed", version: 1, eventId: "ev-1" });
     } finally {
       await t.close();
     }
   });
 
-  it("改挂点：只能挑本月 Mission 和责任单元；改了以后会议事件记 correction，null 回到自动", async () => {
+  it("选了不写入不发请求：只留天枢记录；写过的再选不写入也不追加，原事件保留", async () => {
+    const world = ontology();
+    const { t, host, meetingId } = await setup();
+    try {
+      const { service, run } = serviceFor(t);
+      await hostReviews(t, service, meetingId);
+      const excluded = await service.confirmRecord(meetingId, HOST, { writeToWorld: false });
+      expect(excluded).toMatchObject({ world: { excluded: true, excludedBy: "测试乙", record: { status: "excluded", version: 0, eventId: null } } });
+      await run();
+      expect(world.calls.filter((call) => call.url.pathname.startsWith("/v1/actions"))).toEqual([]);
+      expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "excluded" });
+
+      // 改成写入：这是第一次真写，版本是 v1。
+      await service.confirmRecord(meetingId, HOST, { writeToWorld: true });
+      await run();
+      expect(world.writes().map((body) => body.idempotency_key)).toEqual([`tianshu-meeting:${meetingId}:v1`]);
+
+      // 已写入后再选不写入：不追加，原事件留着。
+      await service.confirmRecord(meetingId, HOST, { writeToWorld: false });
+      await run();
+      expect(world.writes()).toHaveLength(1);
+      expect((await worldOf(t, host, meetingId)).world).toMatchObject({ excluded: true, record: { status: "excluded", version: 1, eventId: "ev-1" } });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("改挂点：只能挑本月选项，主持人和 CEO 能改，参会人不能；null 回到主持人的单元", async () => {
+    ontology();
     const { t, host, owner, meetingId } = await setup();
     try {
-      const fake = fakeWorld();
-      const service = serviceFor(t, fake);
-      await service.sync(meetingId);
-      const put = (cookie: string, anchors: unknown) => t.app.inject({ method: "PUT", url: `/api/meetings/${meetingId}/world-anchors`,
-        headers: { cookie, origin: t.publicOrigin }, payload: { anchors } });
       const options = await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/world-anchor-options`, headers: { cookie: host } });
-      expect(options.json().options).toEqual([MISSION, { kind: "unit", id: "agents", title: "智能体" }]);
+      expect(options.json().options).toEqual([MISSION, UNIT]);
       expect((await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/world-anchor-options`, headers: { cookie: owner } })).statusCode).toBe(404);
-      expect((await put(host, [{ kind: "mission", id: "nope" }])).statusCode).toBe(400);
-      expect((await put(owner, [{ kind: "unit", id: "agents" }])).statusCode).toBe(404);
+      expect((await putAnchors(t, host, meetingId, [{ kind: "mission", id: "nope" }])).statusCode).toBe(400);
+      expect((await putAnchors(t, owner, meetingId, [{ kind: "unit", id: "agents" }])).statusCode).toBe(404);
+      expect((await t.app.inject({ method: "PUT", url: `/api/meetings/${meetingId}/world-excluded`, headers: { cookie: host, origin: t.publicOrigin },
+        payload: { excluded: true } })).statusCode).toBe(404);
 
-      const edited = await put(host, [{ kind: "unit", id: "agents" }, { kind: "mission", id: "m-v2" }]);
-      expect(edited.json().world).toMatchObject({ edited: true, anchors: [{ kind: "unit", id: "agents" }, MISSION] });
-      for (const row of (await t.pool.query("SELECT id FROM meeting_decisions WHERE tier = 'host'")).rows) {
-        await service.review(meetingId, row.id, HOST, { verdict: "not_decided" });
-      }
-      await service.syncWorld(meetingId);
-      expect(fake.meetings[0].anchors.refs).toEqual(["obj:unit:agents@1", "obj:mission:m-v2@1"]);
-
-      expect((await put(host, null)).json().world).toMatchObject({ edited: false });
-      await service.syncWorld(meetingId);
-      expect(fake.meetings[1]).toMatchObject({ supersedesEventId: "mev-1", anchors: { used: [{ kind: "unit", id: "agents" }] } });
+      const edited = await putAnchors(t, host, meetingId, [{ kind: "unit", id: "agents" }, { kind: "mission", id: "m-v2" }]);
+      expect(edited.json().world).toMatchObject({ edited: true, anchors: [UNIT, MISSION], record: { status: "pending" } });
+      expect((await putAnchors(t, host, meetingId, null)).json().world).toMatchObject({ edited: false, anchors: [UNIT] });
     } finally {
       await t.close();
     }
@@ -273,7 +354,7 @@ describe("会议入本体", () => {
   it("代判后的条目留在主持人的通知栏，直到主持人点过", async () => {
     const { t, host, meetingId } = await setup();
     try {
-      const service = serviceFor(t, fakeWorld());
+      const { service } = serviceFor(t);
       await service.sync(meetingId);
       await t.pool.query("UPDATE meeting_decisions SET status = 'agent_judged', judged_at = now() WHERE tier = 'host'");
       const mine = (await t.app.inject({ method: "GET", url: "/api/me/meeting-decisions", headers: { cookie: host } })).json().groups;
@@ -289,37 +370,51 @@ describe("会议入本体", () => {
 });
 
 describe("会议事件写本体（WorldClient）", () => {
-  it("挂点按组回退到本体里对得上的；记 meeting，原文地址带逐字稿摘要；更正带 supersedes、幂等键另起", async () => {
+  const MEETING_ID = "m1m1m1m1-0000-4000-8000-000000000001";
+  const LTO = { object_id: "lto-1", object_type: "LongTermGoal", title: "E&O 长期目标", revision_id: "r1", object_version: 4, version: 4, lifecycle: {}, contract_version: "tkos.world/0.3" };
+  const unit = { object_id: "unit-07", object_type: "ResponsibilityUnit", title: "Agents", revision_id: "r1", object_version: 2, version: 2, lifecycle: {}, contract_version: "tkos.world/0.3" };
+
+  it("挂点按组回退：LTO 按本体编号取，对不上的组跳过；写完读回找到才返回；读回找不到报 READBACK_MISMATCH；没有妙记时不带原文链接", async () => {
     await withWorld(async (client, db) => {
       await db.pool.query("INSERT INTO capability_config (id, version, name, \"group\", six_month_outcome, code) VALUES ('agents', 1, '智能体', 'test', '', '07')");
-      const unit = { object_id: "unit-07", object_type: "ResponsibilityUnit", title: "Agents", revision_id: "r1", object_version: 2, version: 2, lifecycle: {}, contract_version: "tkos.world/0.3" };
       let events = 0;
+      let readable = true;
       const calls = stubWorld((call) => {
-        if (call.url.pathname === "/v1/world/objects") return { items: call.url.searchParams.get("external_id") === "capability:07" ? [unit] : [], next_cursor: null };
-        if (call.url.pathname === "/v1/world/objects/unit-07") return projection(unit);
-        if (call.url.pathname === "/v1/actions/prepare") return { expected_versions: [] };
-        if (call.url.pathname === "/v1/actions") return { receipt_id: `r${++events}`, status: "committed", result: { event_id: `ev-${events}` } };
-        throw new Error(`unexpected ${call.url.pathname}`);
+        const path = call.url.pathname;
+        if (path === "/v1/world/objects") return { items: call.url.searchParams.get("external_id") === "capability:07" ? [unit] : [], next_cursor: null };
+        if (path === "/v1/world/objects/unit-07") return projection(unit);
+        if (path === "/v1/world/objects/lto-1") return projection(LTO);
+        if (path === "/v1/world/objects/lto-missing") return new Response(JSON.stringify({ error: { code: "NOT_FOUND", message: "no" } }), { status: 404 });
+        if (path.endsWith("/events")) return { events: readable ? [{ event_id: `ev-${events}` }] : [] };
+        if (path === "/v1/actions/prepare") return { expected_versions: [] };
+        if (path === "/v1/actions") return { receipt_id: `r${++events}`, status: "committed", result: { event_id: `ev-${events}` } };
+        throw new Error(`unexpected ${path}`);
       });
-      const world = createMeetingEventWorld({ q: (sql, params) => db.pool.query(sql, params), client, publicOrigin: "https://tianshu.test/", now: () => new Date("2026-10-19T18:00:00+08:00") });
-      // 第一组的 Mission 在本体里没有（库里也没有）：退到单元。
-      const anchors = await world.resolve([[{ kind: "mission", id: "missing", title: "不存在" }], [{ kind: "unit", id: "agents", title: "智能体" }]]);
-      expect(anchors).toEqual({ refs: ["unit-07@2"], sceneId: "unit-07", used: [{ kind: "unit", id: "agents", title: "Agents" }] });
-      const meeting = { id: "m1m1m1m1-0000-4000-8000-000000000001", title: "接口切换会", scheduled_at: new Date("2026-10-19T14:00:00+08:00") };
-      expect(await world.write({ meeting, text: "会议：接口切换会", digest: "abcdef0123456789", transcriptDigest: "0011223344556677", anchors: anchors!, supersedesEventId: null })).toBe("ev-1");
-      const body = calls.filter((call) => call.url.pathname === "/v1/actions").at(-1)!.body;
-      expect(body).toMatchObject({
-        action_type: "world_record_event", idempotency_key: `tianshu:meeting:${meeting.id}:abcdef0123456789`,
-        params: { category: "meeting", subject_refs: ["unit-07@2"], occurred_at: "2026-10-19T14:00:00+08:00",
-          content: { text: "会议：接口切换会", artifacts: [`https://tianshu.test/meetings/${meeting.id}#sha256=0011223344556677`] },
-          declaration: { scene: "unit-07@2", trigger: "天枢会议入本体" } },
+      const world = createMeetingEventWorld({ q: (sql, params) => db.pool.query(sql, params), client, feishuWebOrigin: "https://tokenking.feishu.cn/" });
+      const write = (anchorGroups: TWorldAnchor[][], extra: { minuteToken?: string | null; previousEventId?: string | null; version?: number } = {}) => world.write({
+        meetingId: MEETING_ID, version: extra.version ?? 1, text: "会议：接口切换会", occurredAt: new Date("2026-10-19T14:00:00+08:00"), anchorGroups,
+        previousEventId: extra.previousEventId ?? null, minuteToken: extra.minuteToken === undefined ? "obcn1" : extra.minuteToken,
       });
-      await world.write({ meeting, text: "撤回", digest: "withdrawn", transcriptDigest: "0011223344556677", anchors: anchors!, supersedesEventId: "ev-1" });
-      const withdrawal = calls.filter((call) => call.url.pathname === "/v1/actions").at(-1)!.body;
-      expect(withdrawal.idempotency_key).toBe(`tianshu:meeting:${meeting.id}:withdrawn:ev-1`);
-      expect(withdrawal.params).toMatchObject({ category: "correction", supersedes_event_id: "ev-1" });
-      // 一组都对不上：null。
-      expect(await world.resolve([[{ kind: "mission", id: "missing", title: "不存在" }]])).toBeNull();
+
+      // LTO 用本体编号直接取（不落到公司）。
+      expect(await write([[{ kind: "lto", id: "lto-1", title: "选时的标题" }]])).toEqual({ eventId: "ev-1", anchors: [{ kind: "lto", id: "lto-1", title: "E&O 长期目标" }] });
+      expect(calls.filter((call) => call.url.pathname === "/v1/actions").at(-1)!.body).toMatchObject({
+        idempotency_key: `tianshu-meeting:${MEETING_ID}:v1`,
+        params: { category: "meeting", subject_refs: ["lto-1@4"], occurred_at: "2026-10-19T14:00:00+08:00",
+          content: { text: "会议：接口切换会", artifacts: ["https://tokenking.feishu.cn/minutes/obcn1"] }, declaration: { scene: "lto-1@4" } },
+      });
+      // 第一组在本体里没有：退到单元；有前次事件时 content.refs 指回它。
+      expect(await write([[{ kind: "lto", id: "lto-missing", title: "没了" }], [{ kind: "unit", id: "agents", title: "智能体" }]], { previousEventId: "ev-1", version: 2, minuteToken: null }))
+        .toEqual({ eventId: "ev-2", anchors: [{ kind: "unit", id: "agents", title: "Agents" }] });
+      const second = calls.filter((call) => call.url.pathname === "/v1/actions").at(-1)!.body;
+      expect(second.params).toMatchObject({ subject_refs: ["unit-07@2"], content: { refs: ["event:ev-1"], artifacts: [] } });
+
+      readable = false;
+      await expect(write([[{ kind: "unit", id: "agents", title: "智能体" }]], { version: 3 })).rejects.toMatchObject({ code: "READBACK_MISMATCH" });
+      // 一组都对不上：不发写请求。
+      const before = calls.length;
+      await expect(write([[{ kind: "mission", id: "missing", title: "不存在" }]], { version: 4 })).rejects.toMatchObject({ code: "NO_ANCHOR" });
+      expect(calls.slice(before).filter((call) => call.url.pathname.startsWith("/v1/actions"))).toEqual([]);
     });
   });
 });

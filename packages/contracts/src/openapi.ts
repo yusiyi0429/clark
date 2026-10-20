@@ -5,7 +5,7 @@ import {
   DraftRequestRequest, DraftRequestResponse, RequestListItem, RequestListResponse, PrepareRequestQuestionRequest,
   PrepareRequestQuestionResponse, DraftRequestAnswerResponse, RequestSendInput, RequestAskInput, RequestAnswerInput, ExecuteRequestActionRequest,
 } from "./requests.js";
-import { MeetingDecisionView, MeetingDecisionReviewRequest, MeetingDecisionResponse, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldExcludedRequest, MeetingWorldResponse, MyMeetingDecisionsResponse } from "./meetingDecisions.js";
+import { MeetingDecisionView, MeetingDecisionReviewRequest, MeetingDecisionResponse, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingDecisionsResponse } from "./meetingDecisions.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
@@ -860,17 +860,9 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       "/api/meetings/{id}/world": {
         get: {
-          operationId: "getMeetingWorld", summary: "这场会在本体里：挂点、写入状态（主持人和 CEO）、每条生效的决定落到哪；参会人只看挂点和落点",
+          operationId: "getMeetingWorld", summary: "这场会在本体里：挂点、会议记录状态（主持人、创建人和 CEO）、每条生效的决定落到哪；参会人只看挂点和落点",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           responses: { "200": { description: "这场会在本体里", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingWorldResponse" } } } }, "401": errorResponse, "404": errorResponse },
-        },
-      },
-      "/api/meetings/{id}/world-excluded": {
-        put: {
-          operationId: "setMeetingWorldExcluded", summary: "主持人或 CEO 把会议标成不写进本体（或取消）；已经写进去的在本体里记撤回更正",
-          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingWorldExcludedRequest" }),
-          responses: { "200": { description: "这场会在本体里的最新状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingWorldResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse },
         },
       },
       "/api/meetings/{id}/world-anchors": {
@@ -2972,7 +2964,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeetingDecisionResponse: MeetingDecisionResponse as JsonSchema,
         MyMeetingDecisionsResponse: MyMeetingDecisionsResponse as JsonSchema,
         MeetingWorldResponse: MeetingWorldResponse as JsonSchema,
-        MeetingWorldExcludedRequest: MeetingWorldExcludedRequest as JsonSchema,
         MeetingWorldAnchorsRequest: MeetingWorldAnchorsRequest as JsonSchema,
         MeetingWorldAnchorOptionsResponse: MeetingWorldAnchorOptionsResponse as JsonSchema,
         ImpactCardView: ImpactCardView as JsonSchema,

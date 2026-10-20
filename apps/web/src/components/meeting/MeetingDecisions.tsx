@@ -3,7 +3,7 @@
 /**
  * 会议页「会上定了」：分层后的几条（战略项给 CEO、其余给主持人），每条一句、带原话和状态。
  * 主持人在这里三选一：对 / 改一下 / 其实没定；已经办过的（包括 Agent 代判的）可以改判。
- * 头部一条是这场会在本体里挂到哪、写了没有、不写进本体开关；生效的每条下面是它落到的对象和写入状态（回流设计稿 3.1、3.2）。
+ * 头部一条是这场会在本体里挂到哪、会议记录写了没有；生效的每条下面是它落到的对象和写入状态（回流设计稿 3.1、3.2）。
  * 这些单独取（GET /api/meetings/:id/world，不进会议卡）：打开时取一次，办完一条后再取（影响卡在后台推，过几秒再取一次）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -19,7 +19,7 @@ const off = (decision: TMeetingDecisionView) =>
   decision.status === "not_decided" || decision.status === "rejected" || (decision.status === "agent_judged" && decision.recommendation === "not_decided");
 const tone = (decision: TMeetingDecisionView) =>
   decision.status === "pending" ? "wait" : off(decision) ? "off" : decision.status === "agent_judged" ? "agent" : "done";
-const ANCHOR_TONE: Record<TMeetingDecisionWorld, AnchorTone> = { waiting: "wait", committed: "ok", fallback: "miss", skipped: "miss", failed: "fail", off: "off" };
+const ANCHOR_TONE: Record<TMeetingDecisionWorld, AnchorTone> = { waiting: "wait", committed: "ok", failed: "fail", off: "off" };
 
 const RELOAD_AFTER_MS = 5_000;
 

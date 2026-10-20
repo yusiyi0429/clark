@@ -1,7 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import {
   ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingDecisionResponse, MeetingDecisionReviewRequest,
-  MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldExcludedRequest, MeetingWorldResponse, MyMeetingDecisionsResponse,
+  MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingDecisionsResponse,
 } from "@warmap/contracts";
 import { askImpactCard, markImpactCardIrrelevant, readImpactCardByRequest } from "../impactCards.js";
 import type { MeetingFollowThrough } from "../meetingFollowThrough.js";
@@ -26,21 +26,13 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
     return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
   });
 
-  // 会议入本体：会议页单独取挂点、写入状态和每条决定的落点（不进会议卡，读会议保持轻）。
+  // 会议入本体：会议页单独取挂点、会议记录状态和每条决定的落点（不进会议卡，读会议保持轻）。
   app.get("/api/meetings/:id/world", { preHandler: ctx.requirePerson, schema: { params: idParams, response: { 200: MeetingWorldResponse } } }, async (req, reply) => {
     const result = await followThrough.decisions.worldView(req.params.id, req.person!.personId);
     return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
   });
 
-  // 主持人和 CEO 标不写进本体、改挂点（别人一律 404）。
-  app.put("/api/meetings/:id/world-excluded", {
-    preHandler: ctx.requirePerson, schema: { params: idParams, body: MeetingWorldExcludedRequest, response: { 200: MeetingWorldResponse } },
-  }, async (req, reply) => {
-    ctx.requestContext.set(req, { actionType: "meeting.world_excluded", objectRef: `meeting:${req.params.id}` });
-    const result = await followThrough.decisions.setExcluded(req.params.id, req.person!.personId, req.body.excluded);
-    return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
-  });
-
+  // 主持人和 CEO 改挂点（别人一律 404）；「不写入」在整卡确认时选。
   app.put("/api/meetings/:id/world-anchors", {
     preHandler: ctx.requirePerson, schema: { params: idParams, body: MeetingWorldAnchorsRequest, response: { 200: MeetingWorldResponse } },
   }, async (req, reply) => {
@@ -56,7 +48,7 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
     return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
   });
 
-  // 预约建会：登录的人都能建（成员只能给自己建，CEO 从 DRI 里指定主持人），带起止、挂点、是否不写进本体。
+  // 预约建会：登录的人都能建（成员只能给自己建，CEO 从 DRI 里指定主持人），带起止、挂点；只存天枢，不写本体。
   app.post("/api/meetings", { preHandler: ctx.requirePerson, schema: { body: MeetingBookingRequest } }, async (req, reply) => {
     ctx.requestContext.set(req, { actionType: "meeting.book" });
     const viewer = req.person!;

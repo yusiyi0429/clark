@@ -190,6 +190,8 @@ export type AppEnv = {
   adminPersonIds?: string[];
   /** 影响卡：live 推送（缺省；置信度低的仍只记影子）、shadow 只在后台记录（IMPACT_CARD_MODE）。 */
   impactCardMode?: "live" | "shadow";
+  /** 飞书网页域名（FEISHU_WEB_ORIGIN）：会议事件里拼妙记链接用；不配时不带链接。 */
+  feishuWebOrigin?: string;
   /** ③ 信息收集的飞书多维表格：live 以发起人身份调开放接口（要先在飞书后台开通 base 权限，见 feishu/bitable.ts）；缺省 mock，不调飞书（FEISHU_BITABLE_MODE）。 */
   collectionBitable?: "live" | "mock";
 } & PeopleDirectoryEnv & WorldEnv & CompanyContextEnv;

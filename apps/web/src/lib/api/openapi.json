@@ -4080,7 +4080,7 @@
     "/api/meetings/{id}/world": {
       "get": {
         "operationId": "getMeetingWorld",
-        "summary": "这场会在本体里：挂点、写入状态（主持人和 CEO）、每条生效的决定落到哪；参会人只看挂点和落点",
+        "summary": "这场会在本体里：挂点、会议记录状态（主持人、创建人和 CEO）、每条生效的决定落到哪；参会人只看挂点和落点",
         "parameters": [
           {
             "name": "id",
@@ -4098,74 +4098,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MeetingWorldResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/meetings/{id}/world-excluded": {
-      "put": {
-        "operationId": "setMeetingWorldExcluded",
-        "summary": "主持人或 CEO 把会议标成不写进本体（或取消）；已经写进去的在本体里记撤回更正",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MeetingWorldExcludedRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "这场会在本体里的最新状态",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MeetingWorldResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -57173,7 +57105,7 @@
             "required": [
               "excluded",
               "excludedBy",
-              "status",
+              "record",
               "at",
               "anchors",
               "edited",
@@ -57193,31 +57125,69 @@
                   }
                 ]
               },
-              "status": {
+              "record": {
                 "anyOf": [
                   {
-                    "anyOf": [
-                      {
-                        "const": "none",
-                        "type": "string"
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "status",
+                      "version",
+                      "eventId",
+                      "confirmedAt"
+                    ],
+                    "properties": {
+                      "status": {
+                        "anyOf": [
+                          {
+                            "const": "pending",
+                            "type": "string"
+                          },
+                          {
+                            "const": "committed",
+                            "type": "string"
+                          },
+                          {
+                            "const": "excluded",
+                            "type": "string"
+                          },
+                          {
+                            "const": "failed",
+                            "type": "string"
+                          },
+                          {
+                            "const": "edit_pending",
+                            "type": "string"
+                          }
+                        ]
                       },
-                      {
-                        "const": "committed",
-                        "type": "string"
+                      "version": {
+                        "minimum": 0,
+                        "type": "integer"
                       },
-                      {
-                        "const": "withdrawn",
-                        "type": "string"
+                      "eventId": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
-                      {
-                        "const": "skipped",
-                        "type": "string"
-                      },
-                      {
-                        "const": "failed",
-                        "type": "string"
+                      "confirmedAt": {
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "maxLength": 100,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
-                    ]
+                    }
                   },
                   {
                     "type": "null"
@@ -57370,14 +57340,6 @@
                           "type": "string"
                         },
                         {
-                          "const": "fallback",
-                          "type": "string"
-                        },
-                        {
-                          "const": "skipped",
-                          "type": "string"
-                        },
-                        {
                           "const": "failed",
                           "type": "string"
                         },
@@ -57394,18 +57356,6 @@
                 }
               }
             }
-          }
-        }
-      },
-      "MeetingWorldExcludedRequest": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "excluded"
-        ],
-        "properties": {
-          "excluded": {
-            "type": "boolean"
           }
         }
       },
