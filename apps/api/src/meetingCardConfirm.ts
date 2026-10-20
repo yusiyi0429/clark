@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { Pool, PoolClient } from "pg";
 import type {
   TMeetingActionItem, TMeetingCardConfirmation, TMeetingCardConfirmRequest, TMeetingCardDraft, TMeetingCardKind, TMeetingCardSync, TMeetingCardV1Payload,
-  TMeetingCardView, TMeetingConfirmedObjectChange, TMeetingObjectResult, TMeetingRecordStatus,
+  TMeetingCardView, TMeetingConfirmedObjectChange, TMeetingDraftChange, TMeetingObjectResult, TMeetingRecordStatus,
 } from "@warmap/contracts";
 import { enqueueJob, JOB_MAX_ATTEMPTS, type JobHandler } from "./jobs.js";
 import { payloadHash } from "./meetingCardHash.js";
@@ -77,9 +77,15 @@ function contentDiffers(draft: TMeetingCardDraft, payload: TMeetingCardV1Payload
 }
 /** 行动项和确认时的快照不同（不算 taskId）。 */
 const itemsDiffer = (items: TMeetingActionItem[], snapshot: TMeetingActionItem[]) => !isDeepStrictEqual(items.map(itemDecided), snapshot.map(itemDecided));
-/** 草稿（连同行动项）和确认版不同。 */
-const draftDiffers = (draft: TMeetingCardDraft, items: TMeetingActionItem[], current: Pick<ConfirmationRow, "payload" | "action_items">) =>
-  contentDiffers(draft, current.payload) || itemsDiffer(items, current.action_items);
+/**
+ * 草稿和当前确认版比（Ruling 21，确认和会议卡视图用同一份判断）：content 会议内容不同或有目标已变的修改（确认出新版本、要选原因）；
+ * items 只有行动项不同（确认不出新版本）；none 没有不同或还没有确认版。
+ */
+export function draftChangeOf(draft: TMeetingCardDraft | null, items: TMeetingActionItem[], current: Pick<ConfirmationRow, "payload" | "action_items"> | null): TMeetingDraftChange {
+  if (!draft || !current) return "none";
+  if (contentDiffers(draft, current.payload) || draft.objectChanges.some((change) => change.stale)) return "content";
+  return itemsDiffer(items, current.action_items) ? "items" : "none";
+}
 
 /** 会议页「这场会在本体里」的记录状态（GET /api/meetings/:id/world），由确认表和回执算出；nameOf 把确认人的 personId 换成显示名。 */
 export type MeetingRecordState = { status: TMeetingRecordStatus; version: number; eventId: string | null; confirmedAt: string | null; excludedBy: string | null; at: string | null };
@@ -92,7 +98,7 @@ export async function meetingRecordState(q: Query, meetingId: string, nameOf: (p
   )).rows[0] as { event_id: string; updated_at: Date } | undefined;
   const base = { eventId: written?.event_id ?? null, at: written ? new Date(written.updated_at).toISOString() : null };
   if (!current) return { status: "pending", version: 0, confirmedAt: null, excludedBy: null, ...base };
-  const status: TMeetingRecordStatus = card?.draft && draftDiffers(card.draft, card.action_items, current) ? "edit_pending"
+  const status: TMeetingRecordStatus = draftChangeOf(card?.draft ?? null, card?.action_items ?? [], current) !== "none" ? "edit_pending"
     : !current.write_to_world ? "excluded"
     : current.event_status === "succeeded" ? "committed" : current.event_status === "failed" ? "failed" : "pending";
   return { status, version: current.revision, confirmedAt: new Date(current.created_at).toISOString(),
@@ -187,10 +193,8 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     }
 
     const draft = card.draft;
-    // 只改了行动项（会议内容和确认版一样、没有目标已变的修改）：不出新版本、不写本体、不要求选原因（Ruling 20）。
-    if (current && !contentDiffers(draft, current.payload) && !draft.objectChanges.some((change) => change.stale) && itemsDiffer(card.action_items, current.action_items)) {
-      return confirmItems(meetingId, viewer, input, meeting, current);
-    }
+    // 会议内容没变（只改了行动项，或改了又改回）：不出新版本、不要求选原因（Ruling 20、21）。
+    if (current && draftChangeOf(draft, card.action_items, current) !== "content") return confirmItems(meetingId, viewer, input, meeting, current);
     const at = now();
     const occurredAt = draft.occurredAt ? Date.parse(draft.occurredAt) : NaN;
     if (!draft.title.trim()) return bad("TITLE_REQUIRED", "会议名不能为空");
@@ -260,8 +264,8 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
   }
 
   /**
-   * 确认后只改了行动项（Ruling 20）：当前确认版不变，只把行动项推出去、换掉它的行动项快照，草稿版本记成这一版
-   * （同一草稿再确认按原样返回）；不出新版本、不排写本体。
+   * 确认后会议内容没变（Ruling 20、21）：当前确认版不变，只把行动项推出去、换掉它的行动项快照，草稿版本记成这一版
+   * （同一草稿再确认按原样返回）；不出新版本。这一版原先不写入、这次选了写入的，记完接着按同一草稿改成写入（enableWrite）。
    */
   async function confirmItems(meetingId: string, viewer: Viewer, input: TMeetingCardConfirmRequest, meeting: MeetingRow, current: ConfirmationRow): Promise<ConfirmResult> {
     const outcome = await transaction(async (cq, client): Promise<Locked> => {
@@ -276,6 +280,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     if (outcome === "changed") return changed(meetingId, viewer);
     if (outcome === "rerun") return confirm(meetingId, viewer, input);
     logEvent({ event: "meeting_card.confirm", objectRef: `meeting:${meetingId}`, status: "action_items" });
+    if (!current.write_to_world && input.writeToWorld) return confirm(meetingId, viewer, input);
     return { view: await latestView(meetingId, viewer) };
   }
 

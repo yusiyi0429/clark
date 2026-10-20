@@ -1,4 +1,4 @@
-import type { TMeetingActionItem, TMeetingCardDraft, TMeetingCardSection, TMeetingCardSync, TMeetingCardV1Payload, TMeetingCardView } from "@warmap/contracts";
+import type { TMeetingActionItem, TMeetingCardDraft, TMeetingCardSection, TMeetingCardSync, TMeetingCardV1Payload } from "@warmap/contracts";
 import { COMPANY_TIMEZONE } from "@/lib/companyTime";
 
 /** 会议卡上显示的那一份：草稿或确认版（确认版的修改不带 stale）。 */
@@ -24,8 +24,6 @@ const sameItem = (a: TMeetingActionItem, b: TMeetingActionItem) => a.text === b.
 /** 行动项和确认时的快照不同。 */
 export const itemsDiffer = (items: TMeetingActionItem[], confirmed: TMeetingActionItem[]) => items.length !== confirmed.length
   || items.some((item, index) => item.id !== confirmed[index].id || !sameItem(item, confirmed[index]));
-export const viewDiffers = (view: TMeetingCardView) => Boolean(view.draft && view.confirmed
-  && (cardDiffers(view.draft, view.confirmed.payload) || itemsDiffer(view.actionItems, view.confirmed.actionItems)));
 
 export type DiffRow<T> = { item: T; state: "same" | "changed" | "deleted"; was: T | null };
 /**
@@ -114,9 +112,6 @@ export function restoreBlankItems(local: TMeetingActionItem[], saved: TMeetingAc
     return old ? [{ ...item, text: old.text }] : dropNew ? [] : [item];
   });
 }
-/** 确认后只改了行动项（会议内容和确认版一样、没有目标已变的修改）：确认不出新版本，不用选修改原因。 */
-export const onlyItemsChanged = (draft: TMeetingCardDraft, items: TMeetingActionItem[], confirmed: NonNullable<TMeetingCardView["confirmed"]>) =>
-  !cardDiffers(draft, confirmed.payload) && !draft.objectChanges.some((change) => change.stale) && itemsDiffer(items, confirmed.actionItems);
 
 function newId(prefix: string, items: { id: string }[]): string {
   let id = "";

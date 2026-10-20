@@ -5,7 +5,7 @@ import type { TMeetingActionItem, TMeetingCardDraft, TMeetingCardSection, TMeeti
 import { confirmMeetingCard, getMeetingCard, retryMeetingCardSync, saveMeetingCardDraft, type CardResult } from "./meetingCardApi";
 import {
   cardDiffers, draftFromConfirmed, draftReady, itemsDiffer, itemsWithoutSection, newItemId, newSectionId, restoreBlank, restoreBlankItems,
-  syncPending, viewDiffers,
+  syncPending,
 } from "./meetingCardModel";
 
 const SAVE_DELAY = 800;
@@ -46,7 +46,7 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
   /** 离开过一次的行动项（还空着事项就标红）。 */
   const [leftItems, setLeftItems] = useState<string[]>([]);
   const [pending, setPending] = useState<PendingSection | null>(null);
-  const [editing, setEditing] = useState(() => viewDiffers(initial));
+  const [editing, setEditing] = useState(() => initial.draftChange !== "none");
   const [timeInFooter, setTimeInFooter] = useState(() => !initial.confirmed && !initial.draft?.occurredAt);
   const [timeRejected, setTimeRejected] = useState(false);
   const [focus, setFocus] = useState<"title" | "confirmed" | null>(null);
@@ -241,19 +241,24 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
     setTimeRejected(false);
     setPending(null);
     adopt(result.view, true);
-    setEditing((current) => viewDiffers(result.view) || (current && Boolean(result.view.confirmed)));
+    setEditing((current) => result.view.draftChange !== "none" || (current && Boolean(result.view.confirmed)));
     setTimeInFooter(!result.view.confirmed && !result.view.draft?.occurredAt);
   };
 
-  /** 整卡确认（第一次或「确认修改」）：先存掉没存的（含刚填的实际时间），再带最新的 draftVersion 确认；进行中不能改。 */
+  /**
+   * 整卡确认（第一次或「确认修改」）：先存掉没存的（含刚填的实际时间），再带最新的 draftVersion 确认；进行中不能改。
+   * 修改原因按存完后服务端给的 draftChange：content 才带（还没选就先不发，等界面出现原因再选）；只改了行动项或没改不带。
+   */
   const confirm = async (input: ConfirmInput) => {
     setBusy(true);
     setError(null);
     try {
       if (!(await flush())) return;
-      const reason = input.reason?.trim();
+      const content = viewRef.current.confirmed !== null && viewRef.current.draftChange === "content";
+      if (content && !input.kind) return;
+      const reason = content ? input.reason?.trim() : undefined;
       const result = await confirmMeetingCard(meetingId, {
-        draftVersion: versionRef.current, writeToWorld: input.writeToWorld, ...(input.kind ? { kind: input.kind } : {}), ...(reason ? { reason } : {}),
+        draftVersion: versionRef.current, writeToWorld: input.writeToWorld, ...(content && input.kind ? { kind: input.kind } : {}), ...(reason ? { reason } : {}),
       });
       if (!aliveRef.current) return;
       if (result.ok) {

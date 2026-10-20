@@ -142,6 +142,8 @@ export const MeetingCardSync = Type.Object(
   },
   { additionalProperties: false },
 );
+/** 草稿和当前确认版比：content 会议内容改了（确认出新版本、要选修改原因）；items 只改了行动项（确认不出新版本）；none 没改或还没有确认版。 */
+export const MeetingDraftChange = Type.Union([Type.Literal("none"), Type.Literal("items"), Type.Literal("content")]);
 export const MeetingCardDraftStatus = Type.Union([Type.Literal("created"), Type.Literal("draft_ready")]);
 
 /** GET /api/meetings/:id/card：主持人、创建人、CEO、实际参会人能读；targetOptions 只给能编辑的人。 */
@@ -162,6 +164,7 @@ export const MeetingCardView = Type.Object(
     sync: Type.Union([MeetingCardSync, Type.Null()]),
     targetOptions: Type.Array(MeetingCardTargetOption),
     canEdit: Type.Boolean(),
+    draftChange: MeetingDraftChange,
   },
   { additionalProperties: false },
 );
@@ -252,6 +255,7 @@ export type TMeetingCardConfirmation = Static<typeof MeetingCardConfirmation>;
 export type TMeetingObjectResult = Static<typeof MeetingObjectResult>;
 export type TMeetingCardSync = Static<typeof MeetingCardSync>;
 export type TMeetingCardView = Static<typeof MeetingCardView>;
+export type TMeetingDraftChange = Static<typeof MeetingDraftChange>;
 export type TMeetingCardDraftRequest = Static<typeof MeetingCardDraftRequest>;
 export type TMeetingCardConfirmRequest = Static<typeof MeetingCardConfirmRequest>;
 export type TMeetingCardCandidate = Static<typeof MeetingCardCandidate>;

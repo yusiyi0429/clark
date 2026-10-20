@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TMeetingCardView } from "@warmap/contracts";
-import { confirm, getCard, OWNER, putDraft, ready, setup } from "./meetingCardFixture.js";
+import { confirm, edit, getCard, OWNER, putDraft, ready, setup } from "./meetingCardFixture.js";
 import { projection, stubWorld } from "./worldFixture.js";
 
 // 行动项（拍板 4）：天枢本地，随整卡确认；确认后没推过的推成执行事项、taskId 回填到草稿和这次的确认快照；不重复推、推完再改不回改；不进本体。
@@ -122,6 +122,49 @@ describe("行动项推成执行事项", () => {
       expect(await tasksOf(t, meetingId)).toHaveLength(2);
       expect((await stored(t, meetingId)).snapshots).toHaveLength(1);
       expect(world.events()).toHaveLength(1);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("会议卡视图带草稿和确认版的差别：没改 none、只改行动项 items、挂点变了 content（连同行动项也是 content，确认要选原因）", async () => {
+    ontology();
+    const { t, host, meetingId } = await setup();
+    try {
+      expect((await getCard(t, host, meetingId)).draftChange).toBe("none");
+      await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
+      const view = await getCard(t, host, meetingId);
+      expect(view.draftChange).toBe("none");
+      const saved = await putDraft(t, host, meetingId, { draftVersion: view.draftVersion, draft: view.draft, actionItems: [{ ...view.actionItems[0], text: "渠道看板接到 v3" }] });
+      expect((saved.json() as TMeetingCardView).draftChange).toBe("items");
+      // 挂点改了以后（同 anchorsChanged）：草稿的挂点对象跟着改、草稿版本加一。
+      await t.pool.query("UPDATE meeting_cards SET draft = jsonb_set(draft, '{relatedObjectRefs}', '[]'::jsonb), draft_version = draft_version + 1 WHERE meeting_id = $1", [meetingId]);
+      const both = await getCard(t, host, meetingId);
+      expect(both.draftChange).toBe("content");
+      const res = await confirm(t, host, meetingId, { draftVersion: both.draftVersion, writeToWorld: false });
+      expect(res.json()).toMatchObject({ code: "KIND_REQUIRED" });
+      await t.pool.query("UPDATE meeting_cards SET action_items = $2::jsonb WHERE meeting_id = $1", [meetingId, JSON.stringify(view.actionItems)]);
+      expect((await getCard(t, host, meetingId)).draftChange).toBe("content");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("改了又改回（none）：确认不出新版本、不用选原因；先不写入、这次选写入的改成写入", async () => {
+    const world = ontology();
+    const { t, host, meetingId, run } = await setup();
+    try {
+      await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: false });
+      const summary = (await getCard(t, host, meetingId)).draft!.summary;
+      await edit(t, host, meetingId, (draft) => { draft.summary = "临时改一下"; });
+      const back = await edit(t, host, meetingId, (draft) => { draft.summary = summary; });
+      expect(back.draftChange).toBe("none");
+      const res = await confirm(t, host, meetingId, { draftVersion: back.draftVersion, writeToWorld: true });
+      expect(res.statusCode).toBe(200);
+      expect((res.json() as TMeetingCardView).sync).toMatchObject({ revision: 1, writeToWorld: true, event: { status: "pending" } });
+      await run();
+      expect(world.events()).toHaveLength(1);
+      expect((await stored(t, meetingId)).snapshots).toHaveLength(1);
     } finally {
       await t.close();
     }

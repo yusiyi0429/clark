@@ -3722,6 +3722,7 @@ export interface components {
                     text: string;
                 }[];
                 canEdit: boolean;
+                draftChange: "none" | "items" | "content";
             };
         };
         LoginRequest: {
@@ -10427,6 +10428,7 @@ export interface components {
                 text: string;
             }[];
             canEdit: boolean;
+            draftChange: "none" | "items" | "content";
         };
         MeetingCardDraftRequest: {
             draftVersion: number;

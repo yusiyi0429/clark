@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { TMeetingCardConfirmation } from "@warmap/contracts";
+import type { TMeetingCardConfirmation, TMeetingDraftChange } from "@warmap/contracts";
 import { DateTimePicker } from "@/components/ui/DatePicker";
 import { monthDayTime } from "@/lib/companyTime";
 import type { SyncRow } from "./meetingCardModel";
@@ -26,8 +26,8 @@ type RecordCardFooterProps = {
   /** 「不写进本体」默认开不开（修改时沿用上一版的选择）。 */
   skipWorld: boolean;
   error: ActionError | null;
-  /** 修改中只改了行动项：确认不出新版本，不选修改原因、不填原因。 */
-  itemsOnly?: boolean;
+  /** 服务端给的草稿和确认版的差别：content 要选修改原因；items 只改了行动项（不出新版本，没有原因和本体开关）；none 没改（可以只改写不写本体）。 */
+  change?: TMeetingDraftChange;
   /** 刚确认完：焦点放到「已确认」这一行。 */
   focusLine?: boolean;
   onConfirm?: (input: ConfirmInput) => void;
@@ -40,11 +40,11 @@ type RecordCardFooterProps = {
 /**
  * 会议卡底部：同步状态逐行（会议事件、每条对象修改），下面是这一刻能做的事——
  * 待确认：「不写进本体」开关 +「确认这份记录」；已确认：「已确认 · v<版本> · <时间>」+「修改」；
- * 修改中：「更正原记录／会后新决定」（不预选，没选不能确认）、原因、「放弃修改」「确认修改」；只改了行动项时没有原因，直接「确认修改」。
+ * 修改中：会议内容改了时「更正原记录／会后新决定」（不预选，没选不能确认）、原因；「放弃修改」「确认修改」。只改了行动项时没有原因和本体开关，直接「确认修改」。
  * 写进本体却没有挂点对象时开关旁标「未挂对象」，确认按钮不可点。
  */
 export function RecordCardFooter(props: RecordCardFooterProps) {
-  const { mode, confirmation, rows, busy, ready, anchored, time, skipWorld: skipDefault, error, itemsOnly, focusLine, onConfirm, onModify, onDiscard, onRetry } = props;
+  const { mode, confirmation, rows, busy, ready, anchored, time, skipWorld: skipDefault, error, change = "none", focusLine, onConfirm, onModify, onDiscard, onRetry } = props;
   const [skipWorld, setSkipWorld] = useState(skipDefault);
   const [kind, setKind] = useState<ConfirmInput["kind"] | null>(null);
   const [reason, setReason] = useState("");
@@ -92,31 +92,32 @@ export function RecordCardFooter(props: RecordCardFooterProps) {
           ) : null}
           <button type="button" className={c.primary} disabled={!canConfirm} onClick={() => onConfirm?.({ writeToWorld: !skipWorld })}>确认这份记录</button>
         </div>
-      ) : mode === "editing" && itemsOnly ? (
-        <div className={c.actions}>
-          <span className={c.spacer} />
-          {errorFlag}
-          <button type="button" className={c.ghost} disabled={busy} onClick={onDiscard}>放弃修改</button>
-          <button type="button" className={c.primary} disabled={!ready || busy} onClick={() => onConfirm?.({ writeToWorld: !skipDefault })}>确认修改</button>
-        </div>
       ) : mode === "editing" ? (
         <>
-          <div className={c.kinds} role="radiogroup" aria-label="修改原因">
-            {KINDS.map(([value, label]) => (
-              <label key={value} className={c.kind}>
-                <input type="radio" name="meeting-card-kind" value={value} checked={kind === value} disabled={busy} onChange={() => setKind(value)} />
-                <span>{label}</span>
-              </label>
-            ))}
-          </div>
-          <input className={c.reason} aria-label="原因" placeholder="原因" maxLength={200} value={reason} disabled={busy} onChange={(event) => setReason(event.target.value)} />
+          {change === "content" ? (
+            <>
+              <div className={c.kinds} role="radiogroup" aria-label="修改原因">
+                {KINDS.map(([value, label]) => (
+                  <label key={value} className={c.kind}>
+                    <input type="radio" name="meeting-card-kind" value={value} checked={kind === value} disabled={busy} onChange={() => setKind(value)} />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+              <input className={c.reason} aria-label="原因" placeholder="原因" maxLength={200} value={reason} disabled={busy} onChange={(event) => setReason(event.target.value)} />
+            </>
+          ) : null}
           <div className={c.actions}>
-            {worldSwitch}
+            {change !== "items" ? worldSwitch : null}
             <span className={c.spacer} />
             {errorFlag}
             <button type="button" className={c.ghost} disabled={busy} onClick={onDiscard}>放弃修改</button>
-            <button type="button" className={c.primary} disabled={!canConfirm || !kind}
-              onClick={() => onConfirm?.({ writeToWorld: !skipWorld, kind: kind ?? undefined, reason })}>确认修改</button>
+            {change === "items" ? (
+              <button type="button" className={c.primary} disabled={!ready || busy} onClick={() => onConfirm?.({ writeToWorld: !skipDefault })}>确认修改</button>
+            ) : (
+              <button type="button" className={c.primary} disabled={!canConfirm || (change === "content" && !kind)}
+                onClick={() => onConfirm?.({ writeToWorld: !skipWorld, kind: kind ?? undefined, reason })}>确认修改</button>
+            )}
           </div>
         </>
       ) : confirmedLine ? (

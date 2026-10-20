@@ -12,7 +12,7 @@ import {
   type TMeetingSource,
   type TMyMeetingCard,
 } from "@warmap/contracts";
-import { confirmedView, currentConfirmation, meetingRecordState } from "./meetingCardConfirm.js";
+import { confirmedView, currentConfirmation, draftChangeOf, meetingRecordState } from "./meetingCardConfirm.js";
 import { feishuNotifier, type FeishuNotify } from "./feishu/notify.js";
 import { attendeesOf } from "./meetingDecisionView.js";
 import { getMeetingRow, type MeetingRow, type Query } from "./meetingStore.js";
@@ -305,9 +305,10 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
   async function buildView(meetingId: string, canEdit: boolean): Promise<TMeetingCardView> {
     const { row, draft, objects } = await refreshDraft(meetingId, canEdit);
     const targetOptions: TMeetingCardTargetOption[] = draft && canEdit ? targetOptionsOf(draft.relatedObjectRefs, objects) : [];
+    const current = row ? await currentConfirmation(q, meetingId) : null;
     return {
       draft: row?.draft ?? null, draftVersion: row?.draft_version ?? 0, draftStatus: row?.draft_status ?? "created", actionItems: row?.action_items ?? [],
-      ...confirmedView(row ? await currentConfirmation(q, meetingId) : null), targetOptions, canEdit,
+      ...confirmedView(current), targetOptions, canEdit, draftChange: draftChangeOf(row?.draft ?? null, row?.action_items ?? [], current),
     };
   }
 

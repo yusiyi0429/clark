@@ -13,7 +13,7 @@ import { DateTimePicker } from "@/components/ui/DatePicker";
 import { monthDayClock } from "@/lib/companyTime";
 import { getMeetingWorld } from "./meetingDecisionApi";
 import {
-  basisLabel, changeRows, companyInput, draftReady, fromCompanyInput, inFuture, itemRows, itemsReady, onlyItemsChanged, sectionRows, syncRows, type CardContent, type RecordTurn,
+  basisLabel, changeRows, companyInput, draftReady, fromCompanyInput, inFuture, itemRows, itemsReady, sectionRows, syncRows, type CardContent, type RecordTurn,
 } from "./meetingCardModel";
 import { ActionItemRow, type MeetingPerson } from "./ActionItemRow";
 import { InlineText } from "./InlineText";
@@ -69,8 +69,6 @@ export function MeetingRecordCard({ meetingId, initial, onView, turns = [], spea
   const pendingHasText = Boolean(pending && (pending.heading.trim() || pending.body.trim()));
   const ready = editable && draft !== null && !card.unsaved && card.saveState !== "saving" && !card.conflict && !pendingHasText
     && draftReady(draft) && itemsReady(card.items) && Boolean(draft.occurredAt) && !timeInvalid;
-  // 确认后只改了行动项：确认不出新版本，不选修改原因（Ruling 20）。
-  const itemsOnly = Boolean(editable && confirmed && draft && onlyItemsChanged(draft, card.items, confirmed));
   const setOccurredAt = (value: string) => card.setOccurredAt(fromCompanyInput(value));
   const nowInput = companyInput(new Date().toISOString());
   let number = 0;
@@ -184,7 +182,7 @@ export function MeetingRecordCard({ meetingId, initial, onView, turns = [], spea
 
       <RecordCardFooter key={`${confirmed?.confirmation.revision ?? 0}:${editable}`} mode={mode} confirmation={confirmed?.confirmation ?? null}
         rows={confirmed && view.sync ? syncRows(view.sync, confirmed.payload.objectChanges) : []}
-        busy={card.busy} ready={ready} anchored={Boolean(draft?.relatedObjectRefs.length)} error={view.canEdit ? card.error : null} itemsOnly={itemsOnly}
+        busy={card.busy} ready={ready} anchored={Boolean(draft?.relatedObjectRefs.length)} error={view.canEdit ? card.error : null} change={view.draftChange}
         skipWorld={view.sync?.writeToWorld === false} focusLine={card.focus === "confirmed"}
         time={editable && card.timeInFooter && draft ? { value: companyInput(draft.occurredAt), max: nowInput, invalid: timeInvalid, onChange: setOccurredAt } : null}
         onConfirm={(input) => void card.confirm(input)} onModify={card.startEditing} onDiscard={() => void card.discard()}

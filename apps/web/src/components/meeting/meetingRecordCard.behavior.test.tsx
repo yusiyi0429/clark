@@ -68,7 +68,7 @@ const confirmedOf = (source: TMeetingCardDraft, revision = 1): NonNullable<TMeet
 const SYNCED: TMeetingCardSync = { revision: 1, writeToWorld: true, event: { status: "succeeded", eventId: "ev-1", error: null },
   objects: [{ changeId: "chg-1", title: "接口全量切到 v2 · result", status: "updated", actualVersion: 5, error: null }] };
 const view = (overrides: Partial<TMeetingCardView> = {}): TMeetingCardView => ({
-  draft: draft(), draftVersion: 3, draftStatus: "draft_ready", actionItems: [], confirmed: null, sync: null, targetOptions: [], canEdit: true, ...overrides,
+  draft: draft(), draftVersion: 3, draftStatus: "draft_ready", actionItems: [], confirmed: null, sync: null, targetOptions: [], canEdit: true, draftChange: "none", ...overrides,
 });
 const ok = (data: TMeetingCardView) => ({ data, response: { ok: true, status: 200 } });
 
@@ -137,7 +137,7 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
   it("修改时标出差异且要选原因", async () => {
     const original = draft();
     const edited = draft({ sections: [SEC_1, { ...SEC_2, body: "十二月上线。已定。" }] });
-    const initial = view({ draft: edited, confirmed: confirmedOf(original), sync: SYNCED });
+    const initial = view({ draft: edited, confirmed: confirmedOf(original), sync: SYNCED, draftChange: "content" });
     const tree = render(initial);
     expect(hasText(tree, "修改中")).toBe(true);
     expect(tree.filter((node) => node.props?.["data-changed"] !== undefined).map((node) => node.props!["aria-label"])).toEqual(["第 2 段"]);
@@ -250,7 +250,7 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
 
   it("修改中：改过的段落，确认版原文划线显示在新文字正上方；没改的只显示一次", () => {
     const edited = draft({ sections: [SEC_1, { ...SEC_2, body: "十二月上线。已定。" }] });
-    const tree = render(view({ draft: edited, confirmed: confirmedOf(draft()), sync: SYNCED }));
+    const tree = render(view({ draft: edited, confirmed: confirmedOf(draft()), sync: SYNCED, draftChange: "content" }));
     const second = nodes(tree.find((node) => node.props?.["aria-label"] === "第 2 段"));
     const struck = second.findIndex((node) => node.type === "del");
     expect(text(second[struck])).toBe("十一月上线。未定。");
@@ -268,7 +268,7 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
     expect((api.put.mock.calls[0][1] as { body: { draft: TMeetingCardDraft } }).body.draft.objectChanges).toEqual([]);
 
     hooks.values = []; hooks.refs = [];
-    const editing = render(view({ draft: draft({ objectChanges: [] }), confirmed: confirmedOf(draft()), sync: SYNCED }));
+    const editing = render(view({ draft: draft({ objectChanges: [] }), confirmed: confirmedOf(draft()), sync: SYNCED, draftChange: "content" }));
     const gone = editing.find((node) => node.type === "article" && node.props?.["data-deleted"] !== undefined)!;
     expect(gone.props!["aria-label"]).toBe("接口全量切到 v2 · result");
     expect(nodes(gone).some((node) => node.type === "textarea")).toBe(false);
@@ -341,7 +341,7 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
   });
 
   it("修改中：改过的行动项原文划线在新文字上方", () => {
-    const tree = render(view({ actionItems: [{ ...ITEM, text: "提交排期和预算" }], confirmed: { ...confirmedOf(draft()), actionItems: [ITEM] }, sync: SYNCED }));
+    const tree = render(view({ actionItems: [{ ...ITEM, text: "提交排期和预算" }], confirmed: { ...confirmedOf(draft()), actionItems: [ITEM] }, sync: SYNCED, draftChange: "items" }));
     expect(hasText(tree, "修改中")).toBe(true);
     const row = tree.find((node) => node.props?.["aria-label"] === "第 1 条" && node.props?.["data-changed"] !== undefined)!;
     const inside = nodes(row);
@@ -350,21 +350,36 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
     expect(struck).toBeLessThan(inside.findIndex((node) => node.type === "textarea" && node.props?.["aria-label"] === "第 1 条事项"));
   });
 
-  it("确认后只改了行动项：没有修改原因，确认不带 kind", async () => {
+  it("服务端说只改了行动项（items）：没有修改原因和本体开关，确认不带 kind", async () => {
     const confirmed = { ...confirmedOf(draft()), actionItems: [ITEM] };
-    const initial = view({ actionItems: [ITEM, { ...ITEM, id: "act-2", text: "补预算表" }], confirmed, sync: SYNCED });
+    const initial = view({ actionItems: [ITEM, { ...ITEM, id: "act-2", text: "补预算表" }], confirmed, sync: SYNCED, draftChange: "items" });
     api.post.mockResolvedValue(ok(view({ actionItems: initial.actionItems, confirmed: { ...confirmed, actionItems: initial.actionItems }, sync: SYNCED })));
     const tree = render(initial);
     expect(hasText(tree, "修改中")).toBe(true);
     expect(tree.some((node) => node.type === "input" && node.props?.type === "radio")).toBe(false);
+    expect(tree.some((node) => node.props?.role === "switch")).toBe(false);
     expect(button(tree, "确认修改")!.props!.disabled).toBe(false);
     click(button(tree, "确认修改"));
     await vi.waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
     expect((api.post.mock.calls[0][1] as { body: unknown }).body).toEqual({ draftVersion: 3, writeToWorld: true });
   });
 
+  it("服务端说会议内容也改了（content，比如挂点变了）：本地只改了行动项也要选原因，确认带 kind", async () => {
+    // 挂点这类卡上看不出来的变化：本地草稿和确认版一样，只有行动项不同；以服务端的 draftChange 为准。
+    const confirmed = { ...confirmedOf(draft()), actionItems: [ITEM] };
+    const initial = view({ actionItems: [{ ...ITEM, text: "提交排期和预算" }], confirmed, sync: SYNCED, draftChange: "content" });
+    api.post.mockResolvedValue(ok(view({ confirmed: { ...confirmedOf(draft(), 2), kind: "followup" }, sync: { ...SYNCED, revision: 2 } })));
+    const tree = render(initial);
+    expect(hasText(tree, "修改中")).toBe(true);
+    expect(button(tree, "确认修改")!.props!.disabled).toBe(true);
+    (tree.find((node) => node.type === "input" && node.props?.type === "radio" && node.props?.value === "followup")!.props!.onChange as () => void)();
+    click(button(render(initial), "确认修改"));
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect((api.post.mock.calls[0][1] as { body: unknown }).body).toEqual({ draftVersion: 3, writeToWorld: true, kind: "followup" });
+  });
+
   it("只改了依据也标出来", () => {
-    const tree = render(view({ actionItems: [{ ...ITEM, basisSectionIds: ["sec-1"] }], confirmed: { ...confirmedOf(draft()), actionItems: [ITEM] }, sync: SYNCED }));
+    const tree = render(view({ actionItems: [{ ...ITEM, basisSectionIds: ["sec-1"] }], confirmed: { ...confirmedOf(draft()), actionItems: [ITEM] }, sync: SYNCED, draftChange: "items" }));
     expect(tree.some((node) => node.props?.["aria-label"] === "第 1 条" && node.props?.["data-changed"] !== undefined)).toBe(true);
   });
 

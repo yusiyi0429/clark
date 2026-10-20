@@ -14488,7 +14488,8 @@
               "confirmed",
               "sync",
               "targetOptions",
-              "canEdit"
+              "canEdit",
+              "draftChange"
             ],
             "properties": {
               "draft": {
@@ -15518,6 +15519,22 @@
               },
               "canEdit": {
                 "type": "boolean"
+              },
+              "draftChange": {
+                "anyOf": [
+                  {
+                    "const": "none",
+                    "type": "string"
+                  },
+                  {
+                    "const": "items",
+                    "type": "string"
+                  },
+                  {
+                    "const": "content",
+                    "type": "string"
+                  }
+                ]
               }
             }
           }
@@ -58369,7 +58386,8 @@
           "confirmed",
           "sync",
           "targetOptions",
-          "canEdit"
+          "canEdit",
+          "draftChange"
         ],
         "properties": {
           "draft": {
@@ -59399,6 +59417,22 @@
           },
           "canEdit": {
             "type": "boolean"
+          },
+          "draftChange": {
+            "anyOf": [
+              {
+                "const": "none",
+                "type": "string"
+              },
+              {
+                "const": "items",
+                "type": "string"
+              },
+              {
+                "const": "content",
+                "type": "string"
+              }
+            ]
           }
         }
       },
