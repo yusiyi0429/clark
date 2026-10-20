@@ -18,10 +18,12 @@ export function cardDiffers(draft: TMeetingCardDraft, payload: TMeetingCardV1Pay
     || draft.objectChanges.length !== payload.objectChanges.length
     || draft.objectChanges.some((change, index) => change.id !== payload.objectChanges[index].id || !sameChange(change, payload.objectChanges[index]));
 }
-const sameItem = (a: TMeetingActionItem, b: TMeetingActionItem) => a.text === b.text && a.ownerPersonId === b.ownerPersonId && a.dueDate === b.dueDate;
-/** 行动项和确认时的快照不同（taskId 由服务填，不算）。 */
+/** 行动项人定的部分都一样（taskId 由服务填，不算；和服务端判断「改过」用同一组字段）。 */
+const sameItem = (a: TMeetingActionItem, b: TMeetingActionItem) => a.text === b.text && a.ownerPersonId === b.ownerPersonId && a.dueDate === b.dueDate
+  && a.basisSectionIds.join("\n") === b.basisSectionIds.join("\n");
+/** 行动项和确认时的快照不同。 */
 export const itemsDiffer = (items: TMeetingActionItem[], confirmed: TMeetingActionItem[]) => items.length !== confirmed.length
-  || items.some((item, index) => item.id !== confirmed[index].id || !sameItem(item, confirmed[index]) || item.basisSectionIds.join() !== confirmed[index].basisSectionIds.join());
+  || items.some((item, index) => item.id !== confirmed[index].id || !sameItem(item, confirmed[index]));
 export const viewDiffers = (view: TMeetingCardView) => Boolean(view.draft && view.confirmed
   && (cardDiffers(view.draft, view.confirmed.payload) || itemsDiffer(view.actionItems, view.confirmed.actionItems)));
 
@@ -92,23 +94,29 @@ export function draftFromConfirmed(draft: TMeetingCardDraft, payload: TMeetingCa
     sections: payload.sections, objectChanges: payload.objectChanges.map((change) => ({ ...change, stale: false })) };
 }
 
-/** 行动项都写了事项才能存。 */
+/** 行动项都写了事项才能确认。 */
 export const itemsReady = (items: TMeetingActionItem[]) => items.every((item) => !blank(item.text));
 /** 删掉一段：引它为依据的行动项去掉那段（没有引它的原样返回）。 */
 export function itemsWithoutSection(items: TMeetingActionItem[], sectionId: string): TMeetingActionItem[] {
   if (!items.some((item) => item.basisSectionIds.includes(sectionId))) return items;
   return items.map((item) => ({ ...item, basisSectionIds: item.basisSectionIds.filter((id) => id !== sectionId) }));
 }
-/** 离开行动项时，清空了事项的恢复成上次存下的；还没存过的新一条空着就去掉。没有要改的原样返回。 */
-export function restoreBlankItems(local: TMeetingActionItem[], saved: TMeetingActionItem[]): TMeetingActionItem[] {
+/**
+ * 空着事项的行动项：存过的恢复成上次存下的文字；还没存过的新一条 dropNew 时去掉（存草稿时不交，不拦住别的内容），否则留着（离开时标红）。
+ * 没有要改的原样返回。
+ */
+export function restoreBlankItems(local: TMeetingActionItem[], saved: TMeetingActionItem[], dropNew = false): TMeetingActionItem[] {
   if (itemsReady(local)) return local;
   const savedItems = new Map(saved.map((item) => [item.id, item]));
   return local.flatMap((item) => {
     if (!blank(item.text)) return [item];
     const old = savedItems.get(item.id);
-    return old ? [{ ...item, text: old.text }] : [];
+    return old ? [{ ...item, text: old.text }] : dropNew ? [] : [item];
   });
 }
+/** 确认后只改了行动项（会议内容和确认版一样、没有目标已变的修改）：确认不出新版本，不用选修改原因。 */
+export const onlyItemsChanged = (draft: TMeetingCardDraft, items: TMeetingActionItem[], confirmed: NonNullable<TMeetingCardView["confirmed"]>) =>
+  !cardDiffers(draft, confirmed.payload) && !draft.objectChanges.some((change) => change.stale) && itemsDiffer(items, confirmed.actionItems);
 
 function newId(prefix: string, items: { id: string }[]): string {
   let id = "";

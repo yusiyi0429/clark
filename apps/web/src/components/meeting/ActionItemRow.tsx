@@ -27,6 +27,8 @@ type ActionItemRowProps = {
   people: MeetingPerson[];
   /** 「依据：第 N 段」。 */
   basis: string | null;
+  /** 离开过还空着事项：标红。 */
+  invalid?: boolean;
   onChange?: (field: ItemField, value: string | null) => void;
   /** 焦点离开这一条。 */
   onLeave?: () => void;
@@ -37,7 +39,7 @@ type ActionItemRowProps = {
  * 一条行动项（天枢本地，拍板 4）：事项就地编辑，推成执行事项的后面标「已派」；下面一行负责人、日期、依据；右侧「⋯」删除。
  * 只读的人只看文字。
  */
-export function ActionItemRow({ number, item, state, was, editable, locked, people, basis, onChange, onLeave, onDelete }: ActionItemRowProps) {
+export function ActionItemRow({ number, item, state, was, editable, locked, people, basis, invalid, onChange, onLeave, onDelete }: ActionItemRowProps) {
   const live = editable && state !== "deleted";
   const label = number ? `第 ${number} 条` : undefined;
   const wasText = state === "changed" && was && was.text !== item.text ? was.text : null;
@@ -56,7 +58,7 @@ export function ActionItemRow({ number, item, state, was, editable, locked, peop
         {wasText ? <del className={`${c.was} ${c.itemText}`}>{wasText}</del> : null}
         <div className={c.itemHead}>
           <InlineText className={c.itemText} value={item.text} editable={live} readOnly={locked} label={`${label ?? ""}事项`} placeholder="事项"
-            autoFocus={live && !item.text && !item.taskId} onChange={(value) => onChange?.("text", value)} />
+            invalid={invalid} autoFocus={live && !item.text && !item.taskId} onChange={(value) => onChange?.("text", value)} />
           {item.taskId ? <span className={c.flag} data-tone="done">已派</span> : null}
         </div>
         <div className={c.itemMeta}>

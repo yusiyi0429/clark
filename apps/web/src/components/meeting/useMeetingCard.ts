@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { TMeetingActionItem, TMeetingCardDraft, TMeetingCardSection, TMeetingCardTargetOption, TMeetingCardView } from "@warmap/contracts";
 import { confirmMeetingCard, getMeetingCard, retryMeetingCardSync, saveMeetingCardDraft, type CardResult } from "./meetingCardApi";
 import {
-  cardDiffers, draftFromConfirmed, draftReady, itemsDiffer, itemsReady, itemsWithoutSection, newItemId, newSectionId, restoreBlank, restoreBlankItems,
+  cardDiffers, draftFromConfirmed, draftReady, itemsDiffer, itemsWithoutSection, newItemId, newSectionId, restoreBlank, restoreBlankItems,
   syncPending, viewDiffers,
 } from "./meetingCardModel";
 
@@ -43,6 +43,8 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
   const [view, setView] = useState(initial);
   const [draft, setDraft] = useState(initial.draft);
   const [items, setItems] = useState(initial.actionItems);
+  /** 离开过一次的行动项（还空着事项就标红）。 */
+  const [leftItems, setLeftItems] = useState<string[]>([]);
   const [pending, setPending] = useState<PendingSection | null>(null);
   const [editing, setEditing] = useState(() => viewDiffers(initial));
   const [timeInFooter, setTimeInFooter] = useState(() => !initial.confirmed && !initial.draft?.occurredAt);
@@ -86,15 +88,15 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
 
   /**
    * 存一次（串行）：没改过、409 之后、还有空着的必填项都不发；返回此刻的修改是否都已存下。卸载后只存不改界面、不再排重试。
-   * 行动项存完不换成返回的（存草稿不改 taskId），本地还没写事项的新一条留着。
+   * 行动项改过才交：还没写事项的新一条不交（不拦住别的内容），清空了事项的交上次存下的文字；存完不换成返回的（存草稿不改 taskId），本地的空行留着。
    */
   const save = async (): Promise<boolean> => {
     while (savingRef.current) await savingRef.current;
     if (conflictRef.current) return false;
     if (!dirtyRef.current) return true;
     const sent = draftRef.current;
-    const sentItems = itemsDirtyRef.current ? itemsRef.current : undefined;
-    if (!sent || !draftReady(sent) || (sentItems && !itemsReady(sentItems))) return false;
+    const sentItems = itemsDirtyRef.current ? restoreBlankItems(itemsRef.current, viewRef.current.actionItems, true) : undefined;
+    if (!sent || !draftReady(sent)) return false;
     dirtyRef.current = false;
     itemsDirtyRef.current = false;
     let finish!: () => void;
@@ -208,15 +210,16 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
   }), true);
   const deleteChange = (id: string) => update((current) => ({ ...current, objectChanges: current.objectChanges.filter((change) => change.id !== id) }), true);
 
-  /** 「+ 加一条」：本地先加一条空的，写了事项才存（空的不拦住别的内容保存，离开时去掉）。 */
+  /** 「+ 加一条」：本地先加一条空的，写了事项才存（空的不拦住别的内容保存）。 */
   const addItem = () => showItems([...itemsRef.current, { id: newItemId(itemsRef.current), text: "", ownerPersonId: null, dueDate: null, basisSectionIds: [], taskId: null }]);
   const setItem = (id: string, field: ItemField, value: string | null) =>
     editItems(itemsRef.current.map((item) => (item.id === id ? { ...item, [field]: value } : item)), field !== "text");
   const deleteItem = (id: string) => editItems(itemsRef.current.filter((item) => item.id !== id), true);
-  /** 离开一条行动项：清空了的事项恢复，没写过的新一条去掉，马上存。 */
-  const leaveItem = () => {
+  /** 离开一条行动项：清空了的事项恢复，没写过的新一条留着、之后标红（删掉走「⋯ 删除」），马上存。 */
+  const leaveItem = (id: string) => {
     const fixed = restoreBlankItems(itemsRef.current, viewRef.current.actionItems);
     if (fixed !== itemsRef.current) showItems(fixed);
+    setLeftItems((ids) => (ids.includes(id) ? ids : [...ids, id]));
     void flush();
   };
 
@@ -337,7 +340,6 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
       stopTimer();
       if (!dirtyRef.current && !savingRef.current) return;
       if (draftRef.current) draftRef.current = restoreBlank(draftRef.current, viewRef.current.draft);
-      itemsRef.current = restoreBlankItems(itemsRef.current, viewRef.current.actionItems);
       const final = save().then((saved) => (saved ? viewRef.current : null));
       leaving.set(meetingId, final);
       void final.finally(() => { if (leaving.get(meetingId) === final) leaving.delete(meetingId); });
@@ -345,7 +347,7 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
-    view, draft, items, pending, editing, timeInFooter, timeRejected, focus, conflict, unsaved, saveState, busy, error,
+    view, draft, items, leftItems, pending, editing, timeInFooter, timeRejected, focus, conflict, unsaved, saveState, busy, error,
     edit: update, leave, setOccurredAt, setSection, moveSection, deleteSection, addSection, setPendingField, leavePending, setAfter, setTarget, deleteChange,
     addItem, setItem, deleteItem, leaveItem,
     startEditing: () => { setSaveState("idle"); setFocus("title"); setEditing(true); }, reload, confirm, discard, retry,

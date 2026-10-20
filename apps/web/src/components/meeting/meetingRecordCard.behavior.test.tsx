@@ -350,6 +350,41 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
     expect(struck).toBeLessThan(inside.findIndex((node) => node.type === "textarea" && node.props?.["aria-label"] === "第 1 条事项"));
   });
 
+  it("确认后只改了行动项：没有修改原因，确认不带 kind", async () => {
+    const confirmed = { ...confirmedOf(draft()), actionItems: [ITEM] };
+    const initial = view({ actionItems: [ITEM, { ...ITEM, id: "act-2", text: "补预算表" }], confirmed, sync: SYNCED });
+    api.post.mockResolvedValue(ok(view({ actionItems: initial.actionItems, confirmed: { ...confirmed, actionItems: initial.actionItems }, sync: SYNCED })));
+    const tree = render(initial);
+    expect(hasText(tree, "修改中")).toBe(true);
+    expect(tree.some((node) => node.type === "input" && node.props?.type === "radio")).toBe(false);
+    expect(button(tree, "确认修改")!.props!.disabled).toBe(false);
+    click(button(tree, "确认修改"));
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect((api.post.mock.calls[0][1] as { body: unknown }).body).toEqual({ draftVersion: 3, writeToWorld: true });
+  });
+
+  it("只改了依据也标出来", () => {
+    const tree = render(view({ actionItems: [{ ...ITEM, basisSectionIds: ["sec-1"] }], confirmed: { ...confirmedOf(draft()), actionItems: [ITEM] }, sync: SYNCED }));
+    expect(tree.some((node) => node.props?.["aria-label"] === "第 1 条" && node.props?.["data-changed"] !== undefined)).toBe(true);
+  });
+
+  it("空着的新一条不拦住别的保存；离开后标红", async () => {
+    const initial = view({ actionItems: [ITEM] });
+    api.put.mockResolvedValue(ok(view({ draftVersion: 4, actionItems: [{ ...ITEM, ownerPersonId: "p2" }] })));
+    click(button(render(initial), "加一条"));
+    const owner = render(initial).find((node) => node.props?.["aria-label"] === "第 1 条负责人" && "options" in node.props)!;
+    (owner.props!.onChange as (value: string) => void)("p2");
+    await vi.waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    const sent = (api.put.mock.calls[0][1] as { body: { actionItems: { id: string; ownerPersonId: string | null }[] } }).body.actionItems;
+    expect(sent).toEqual([{ ...ITEM, ownerPersonId: "p2" }]);
+
+    const blankRow = () => render(initial).find((node) => node.props?.["aria-label"] === "第 2 条")!;
+    const blankText = () => nodes(blankRow()).find((node) => node.type === "textarea")!;
+    expect(blankText().props!["aria-invalid"]).toBeUndefined();
+    (blankRow().props!.onBlur as (event: unknown) => void)({ currentTarget: { contains: () => false }, relatedTarget: null });
+    expect(blankText().props!["aria-invalid"]).toBe(true);
+  });
+
   it("只读的人没有编辑控件", () => {
     const noEdits = (tree: Node[]) => {
       expect(button(tree, "确认这份记录")).toBeUndefined();

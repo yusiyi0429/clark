@@ -67,14 +67,19 @@ const bareRef = (ref: string) => ref.replace(/@\d+$/, "");
 const decided = ({ id, targetRef, after, basisSectionIds }: TMeetingConfirmedObjectChange) => ({ id, targetRef, after, basisSectionIds });
 /** 行动项里人定的部分（taskId 由服务填）。 */
 const itemDecided = ({ taskId: _taskId, ...item }: TMeetingActionItem) => item;
-/** 草稿和确认版内容不同（不算服务填的修改字段、挂点对象的版本和行动项的 taskId）。 */
-function draftDiffers(draft: TMeetingCardDraft, items: TMeetingActionItem[], current: Pick<ConfirmationRow, "payload" | "action_items">): boolean {
-  const { revision: _revision, ...confirmed } = current.payload;
+/** 草稿和确认版的会议内容（payload 部分）不同（不算服务填的修改字段和挂点对象的版本）。 */
+function contentDiffers(draft: TMeetingCardDraft, payload: TMeetingCardV1Payload): boolean {
+  const { revision: _revision, ...confirmed } = payload;
   return !isDeepStrictEqual(
-    { ...confirmed, relatedObjectRefs: confirmed.relatedObjectRefs.map(bareRef), objectChanges: confirmed.objectChanges.map(decided), actionItems: current.action_items.map(itemDecided) },
-    { ...draft, relatedObjectRefs: [...new Set(draft.relatedObjectRefs)], objectChanges: draft.objectChanges.map(decided), actionItems: items.map(itemDecided) },
+    { ...confirmed, relatedObjectRefs: confirmed.relatedObjectRefs.map(bareRef), objectChanges: confirmed.objectChanges.map(decided) },
+    { ...draft, relatedObjectRefs: [...new Set(draft.relatedObjectRefs)], objectChanges: draft.objectChanges.map(decided) },
   );
 }
+/** 行动项和确认时的快照不同（不算 taskId）。 */
+const itemsDiffer = (items: TMeetingActionItem[], snapshot: TMeetingActionItem[]) => !isDeepStrictEqual(items.map(itemDecided), snapshot.map(itemDecided));
+/** 草稿（连同行动项）和确认版不同。 */
+const draftDiffers = (draft: TMeetingCardDraft, items: TMeetingActionItem[], current: Pick<ConfirmationRow, "payload" | "action_items">) =>
+  contentDiffers(draft, current.payload) || itemsDiffer(items, current.action_items);
 
 /** 会议页「这场会在本体里」的记录状态（GET /api/meetings/:id/world），由确认表和回执算出；nameOf 把确认人的 personId 换成显示名。 */
 export type MeetingRecordState = { status: TMeetingRecordStatus; version: number; eventId: string | null; confirmedAt: string | null; excludedBy: string | null; at: string | null };
@@ -168,8 +173,8 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     if (!UUID_PATTERN.test(meetingId)) return NOT_FOUND;
     const meeting = await getMeetingRow(q, meetingId);
     if (!meeting || !isHostOrCreator(meeting, viewer.personId)) return NOT_FOUND;
-    const card = (await q("SELECT draft, draft_version, current_revision FROM meeting_cards WHERE meeting_id = $1", [meetingId])).rows[0] as
-      { draft: TMeetingCardDraft | null; draft_version: number; current_revision: number | null } | undefined;
+    const card = (await q("SELECT draft, action_items, draft_version, current_revision FROM meeting_cards WHERE meeting_id = $1", [meetingId])).rows[0] as
+      { draft: TMeetingCardDraft | null; action_items: TMeetingActionItem[]; draft_version: number; current_revision: number | null } | undefined;
     if (!card?.draft) return { error: { status: 409, code: "CARD_NOT_READY", message: "会议卡草稿还没生成" } };
     if (input.draftVersion !== card.draft_version) return changed(meetingId, viewer);
     const current = card.current_revision ? await currentConfirmation(q, meetingId) : null;
@@ -182,6 +187,10 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     }
 
     const draft = card.draft;
+    // 只改了行动项（会议内容和确认版一样、没有目标已变的修改）：不出新版本、不写本体、不要求选原因（Ruling 20）。
+    if (current && !contentDiffers(draft, current.payload) && !draft.objectChanges.some((change) => change.stale) && itemsDiffer(card.action_items, current.action_items)) {
+      return confirmItems(meetingId, viewer, input, meeting, current);
+    }
     const at = now();
     const occurredAt = draft.occurredAt ? Date.parse(draft.occurredAt) : NaN;
     if (!draft.title.trim()) return bad("TITLE_REQUIRED", "会议名不能为空");
@@ -212,14 +221,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
         relatedObjectRefs, summary: draft.summary, sections: draft.sections, sources: draft.sources, objectChanges,
       };
       const confirmation: TMeetingCardConfirmation = { revision, confirmedBy: viewer.personId, confirmedAt: at.toISOString(), payloadHash: payloadHash(payload) };
-      const actionItems: TMeetingActionItem[] = [];
-      for (const item of locked.action_items) {
-        if (item.taskId) { actionItems.push(item); continue; }
-        const owner = item.ownerPersonId ?? meeting.lead_dri_id;
-        const taskId = await dispatchMeetingTodo(client, { id: meetingId, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id,
-          ownerName: nameOf(meeting.participants, owner), title: meeting.title }, { ...item, dueDate: item.dueDate ?? undefined, quote: "" });
-        actionItems.push({ ...item, taskId });
-      }
+      const actionItems = await dispatchItems(client, meeting, locked.action_items);
       await cq(
         `INSERT INTO meeting_card_confirmations (meeting_id, revision, draft_version, kind, reason, payload, confirmation, action_items, write_to_world, created_at)
          VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10)`,
@@ -241,6 +243,39 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     if (outcome === "changed") return changed(meetingId, viewer);
     if (outcome === "rerun") return confirm(meetingId, viewer, input);
     logEvent({ event: "meeting_card.confirm", objectRef: `meeting:${meetingId}`, status: kind });
+    return { view: await latestView(meetingId, viewer) };
+  }
+
+  /** 行动项里还没 taskId 的推成执行事项（负责人缺省主持人；是 CEO 的不建，taskId 留空），返回回填后的行动项。 */
+  async function dispatchItems(client: PoolClient, meeting: MeetingRow, items: TMeetingActionItem[]): Promise<TMeetingActionItem[]> {
+    const dispatched: TMeetingActionItem[] = [];
+    for (const item of items) {
+      if (item.taskId) { dispatched.push(item); continue; }
+      const owner = item.ownerPersonId ?? meeting.lead_dri_id;
+      const taskId = await dispatchMeetingTodo(client, { id: meeting.id, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id,
+        ownerName: nameOf(meeting.participants, owner), title: meeting.title }, { ...item, dueDate: item.dueDate ?? undefined, quote: "" });
+      dispatched.push({ ...item, taskId });
+    }
+    return dispatched;
+  }
+
+  /**
+   * 确认后只改了行动项（Ruling 20）：当前确认版不变，只把行动项推出去、换掉它的行动项快照，草稿版本记成这一版
+   * （同一草稿再确认按原样返回）；不出新版本、不排写本体。
+   */
+  async function confirmItems(meetingId: string, viewer: Viewer, input: TMeetingCardConfirmRequest, meeting: MeetingRow, current: ConfirmationRow): Promise<ConfirmResult> {
+    const outcome = await transaction(async (cq, client): Promise<Locked> => {
+      const { locked, conflict } = await lockCard(cq, meetingId, input.draftVersion, current.revision);
+      if (conflict) return conflict;
+      const actionItems = JSON.stringify(await dispatchItems(client, meeting, locked.action_items));
+      await cq("UPDATE meeting_card_confirmations SET action_items = $3::jsonb, draft_version = $4 WHERE meeting_id = $1 AND revision = $2",
+        [meetingId, current.revision, actionItems, input.draftVersion]);
+      await cq("UPDATE meeting_cards SET action_items = $2::jsonb, updated_at = now() WHERE meeting_id = $1", [meetingId, actionItems]);
+      return "done";
+    });
+    if (outcome === "changed") return changed(meetingId, viewer);
+    if (outcome === "rerun") return confirm(meetingId, viewer, input);
+    logEvent({ event: "meeting_card.confirm", objectRef: `meeting:${meetingId}`, status: "action_items" });
     return { view: await latestView(meetingId, viewer) };
   }
 

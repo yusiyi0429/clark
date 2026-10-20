@@ -376,7 +376,6 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
       return { id: change.id, ...target, after: { text: change.after.text }, basisSectionIds: change.basisSectionIds, stale };
     });
     const members = memberIds(found.meeting);
-    const existingItems = new Map(row.action_items.map((item) => [item.id, item]));
     const items = body.actionItems ?? row.action_items;
     unique(items.map((item) => item.id), (i) => `actionItems[${i}].id`);
     const actionItems = items.map((item, i) => {
@@ -384,7 +383,7 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
       if (item.ownerPersonId !== null && !members.has(item.ownerPersonId)) fieldErrors[`actionItems[${i}].ownerPersonId`] = "负责人要是这场会的人";
       if (item.dueDate !== null && !isCalendarDate(item.dueDate)) fieldErrors[`actionItems[${i}].dueDate`] = "日期不合法";
       checkBasis(item.basisSectionIds, `actionItems[${i}]`);
-      return { ...item, taskId: existingItems.get(item.id)?.taskId ?? null };
+      return { ...item, taskId: null }; // 前端传的不算，写入时按行里已存的回填
     });
     if (Object.keys(fieldErrors).length) {
       return { error: { status: 400, code: invalidTarget ? "INVALID_TARGET" : "INVALID_DRAFT", message: invalidTarget ? "修改的目标不在挂点对象里" : "会议卡草稿没通过校验", fieldErrors } };
@@ -397,8 +396,12 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
       participants: input.participants.map((person) => ({ name: person.name, personRef: personRefs.get(person.name) ?? null })),
       objectChanges,
     };
+    // taskId 取写入这一刻行里的（同时确认刚回填的不被读到的旧值盖掉）：并发更新后 UPDATE 按最新的行重算。
     const saved = await q(
-      `UPDATE meeting_cards SET draft = $3::jsonb, action_items = $4::jsonb, draft_version = draft_version + 1, updated_at = now()
+      `UPDATE meeting_cards k SET draft = $3::jsonb, draft_version = draft_version + 1, updated_at = now(), action_items = (
+          SELECT COALESCE(jsonb_agg(item || jsonb_build_object('taskId',
+            (SELECT old -> 'taskId' FROM jsonb_array_elements(k.action_items) old WHERE old ->> 'id' = item ->> 'id' LIMIT 1)) ORDER BY ord), '[]'::jsonb)
+            FROM jsonb_array_elements($4::jsonb) WITH ORDINALITY AS input(item, ord))
         WHERE meeting_id = $1 AND draft_version = $2`,
       [meetingId, body.draftVersion, JSON.stringify(draft), JSON.stringify(actionItems)],
     );

@@ -92,6 +92,65 @@ describe("行动项推成执行事项", () => {
     }
   });
 
+  it("确认后只改了行动项：不出新版本、不写本体、不用选原因，新的一条照推；再点一次不动", async () => {
+    const world = ontology();
+    const { t, host, meetingId, run } = await setup();
+    try {
+      await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
+      await run();
+      const view = await getCard(t, host, meetingId);
+      const added = { id: "act-new", text: "约客户演示", ownerPersonId: OWNER, dueDate: null, basisSectionIds: [], taskId: null };
+      const saved = await putDraft(t, host, meetingId, { draftVersion: view.draftVersion, draft: view.draft, actionItems: [...view.actionItems, added] });
+      expect(saved.statusCode).toBe(200);
+      const draftVersion = (saved.json() as TMeetingCardView).draftVersion;
+      const res = await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
+      expect(res.statusCode).toBe(200);
+      await run();
+      const tasks = await tasksOf(t, meetingId);
+      expect(tasks.map((task) => task.origin_item_id)).toEqual(["act-1", "act-new"]);
+      const { draft, snapshots } = await stored(t, meetingId);
+      expect(snapshots).toHaveLength(1);
+      expect(snapshots[0].map((item) => item.taskId)).toEqual([tasks[0].id, tasks[1].id]);
+      expect(draft[1].taskId).toBe(tasks[1].id);
+      expect(world.events()).toHaveLength(1);
+      const after: TMeetingCardView = res.json();
+      expect(after.confirmed).toMatchObject({ confirmation: { revision: 1 }, actionItems: [{ id: "act-1" }, { id: "act-new", taskId: tasks[1].id }] });
+
+      const again = await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
+      expect(again.statusCode).toBe(200);
+      await run();
+      expect(await tasksOf(t, meetingId)).toHaveLength(2);
+      expect((await stored(t, meetingId)).snapshots).toHaveLength(1);
+      expect(world.events()).toHaveLength(1);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("存草稿和确认回填撞在一起：taskId 按写入时的行，不被读到的旧值盖掉", async () => {
+    ontology();
+    const { t, host, meetingId } = await setup();
+    try {
+      await ready(t, host, meetingId);
+      const view = await getCard(t, host, meetingId);
+      // 另一个事务先回填 taskId 且不提交；存草稿读到的是旧的（null），写的时候等它。
+      const other = await t.pool.connect();
+      try {
+        await other.query("BEGIN");
+        await other.query(`UPDATE meeting_cards SET action_items = jsonb_set(action_items, '{0,taskId}', '"task-race"') WHERE meeting_id = $1`, [meetingId]);
+        const put = putDraft(t, host, meetingId, { draftVersion: view.draftVersion, draft: view.draft, actionItems: view.actionItems });
+        await vi.waitFor(async () => expect((await t.sql("SELECT count(*)::int AS n FROM pg_locks WHERE NOT granted"))[0].n).toBeGreaterThan(0), { timeout: 5000 });
+        await other.query("COMMIT");
+        expect((await put).statusCode).toBe(200);
+      } finally {
+        other.release();
+      }
+      expect((await stored(t, meetingId)).draft[0].taskId).toBe("task-race");
+    } finally {
+      await t.close();
+    }
+  });
+
   it("不写本体也照推", async () => {
     const world = ontology();
     const { t, host, meetingId, run } = await setup();
