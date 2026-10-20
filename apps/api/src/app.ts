@@ -52,6 +52,7 @@ import type { DecisionLayeringAgent } from "./meetingDecisionAgent.js";
 import type { ImpactAgent } from "./impactAgent.js";
 import type { FeishuMinutesApi } from "./feishu/minutes.js";
 import { registerMeetingFollowThroughRoutes } from "./routes/meetingFollowThrough.js";
+import { registerInternalMeetingRoutes } from "./routes/internalMeetings.js";
 import { createDocChangeAgent, type DocChangeAgent } from "./docChangeAgent.js";
 import { createDocChangeService, type DocChangeService } from "./docChanges.js";
 import { registerDocChangeRoutes } from "./routes/docChanges.js";
@@ -153,6 +154,8 @@ export type AppEnv = {
   missionCardKnownMissionsFile?: string;
   driServiceToken: string;
   ontologyServiceToken?: string;
+  /** 独立 Chat 读确认会议的服务凭据（INTERNAL_CHAT_TOKEN）；不配时 /internal/confirmed-meetings 不注册。 */
+  internalChatToken?: string;
   buildSha: string;
   piBaseUrl: string;
   piApiKey: string;
@@ -692,6 +695,7 @@ export async function buildApp({
   registerAdminRoutes(app, ctx);
   registerProgressRoutes(app, ctx);
   registerMeetingFollowThroughRoutes(app, ctx, followThrough);
+  registerInternalMeetingRoutes(app, ctx);
   // 文档变更：找候选用快模型；按作者身份读飞书文档元数据（不读正文）；后台任务与群消息事件由 server.ts 按 app.docChanges.jobs() 注册。
   const isCeo = (personId: string) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false;
   const docChanges = createDocChangeService({

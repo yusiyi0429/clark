@@ -38,7 +38,7 @@ export type MeetingCardDeps = {
   /** 参会人的显示名（会议成员里没有的人从人员目录取）。 */
   names?: () => Map<string, string>;
 };
-type Viewer = { personId: string; isCeo: boolean };
+export type Viewer = { personId: string; isCeo: boolean };
 type CardError = { status: number; code: string; message: string; fieldErrors?: Record<string, string>; view?: TMeetingCardView };
 type CardRow = { draft: TMeetingCardDraft | null; action_items: TMeetingActionItem[]; draft_version: number; draft_status: "created" | "draft_ready" };
 
@@ -56,6 +56,9 @@ const isCalendarDate = (value: string) => {
 const ISO_WITH_TIMEZONE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 const isHostOrCreator = (meeting: Pick<MeetingRow, "lead_dri_id" | "created_by">, personId: string) =>
   meeting.lead_dri_id === personId || (meeting.created_by ?? meeting.lead_dri_id) === personId;
+/** 读卡的人：主持人、创建人、CEO、实际参会人（拍板 7）；其他人当会议不存在。 */
+export const canReadMeetingCard = (meeting: Pick<MeetingRow, "lead_dri_id" | "created_by" | "attendees_actual" | "participants">, viewer: Viewer) =>
+  isHostOrCreator(meeting, viewer.personId) || viewer.isCeo || attendeesOf(meeting).personIds.includes(viewer.personId);
 
 /** 本体里一个对象的文字组件（键是「<块 id>/<组件 id>」）和对象版本。 */
 type ObjectRead = { id: string; title: string; version: number; components: Map<string, { type: string; text: string }> };
@@ -234,12 +237,10 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
   const cardRow = async (meetingId: string) =>
     (await q("SELECT draft, action_items, draft_version, draft_status FROM meeting_cards WHERE meeting_id = $1", [meetingId])).rows[0] as CardRow | undefined;
 
-  /** 读卡的人：主持人、创建人、CEO、实际参会人（拍板 7）；编辑只给主持人和创建人。 */
+  /** 读卡见 canReadMeetingCard；编辑只给主持人和创建人。 */
   async function access(meetingId: string, viewer: Viewer) {
     const meeting = await getMeetingRow(q, meetingId);
-    if (!meeting) return null;
-    const canEdit = isHostOrCreator(meeting, viewer.personId);
-    return canEdit || viewer.isCeo || attendeesOf(meeting).personIds.includes(viewer.personId) ? { meeting, canEdit } : null;
+    return meeting && canReadMeetingCard(meeting, viewer) ? { meeting, canEdit: isHostOrCreator(meeting, viewer.personId) } : null;
   }
 
   /** 目标对象版本变了的修改：重读原内容和版本、标 stale（组件没了就成目标未定）；返回刷新后的修改，没有变化时 null。 */

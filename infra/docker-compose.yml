@@ -84,6 +84,7 @@ services:
       EXTRA_ALLOWED_ORIGINS: ${EXTRA_ALLOWED_ORIGINS:-}
       DRI_SERVICE_TOKEN: ${DRI_SERVICE_TOKEN:?DRI_SERVICE_TOKEN required}
       ONTOLOGY_SERVICE_TOKEN: ${ONTOLOGY_SERVICE_TOKEN:-}
+      INTERNAL_CHAT_TOKEN: ${INTERNAL_CHAT_TOKEN:-}
       TKOS_WORLD_API_URL: ${TKOS_WORLD_API_URL:-}
       TKOS_WORLD_AGENT_TOKEN: ${TKOS_WORLD_AGENT_TOKEN:-}
       # 本体可选项（worldClient.ts）：实例名缺省 mvp；凭证文件、本地人员补充文件与 TK 只读实例都写容器内路径（放进只读挂载的 /repo/seed）。

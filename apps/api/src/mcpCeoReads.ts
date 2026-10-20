@@ -3,6 +3,7 @@ import type { Query } from "./meetingStore.js";
 import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import { getIssueRow, listPendingIssueCards, projectIssueCard } from "./issues.js";
 import { issueOriginFields } from "./dataOrigin.js";
+import { meetingCardFacts } from "./meetingCardRead.js";
 import { getMeetingRow, hasPendingStrategicItem, listMeetingRows, projectMeetingCard } from "./meetingStore.js";
 import { companyPeriod, getMonthlyPlanNotice } from "./monthlyPlans.js";
 import { listMissionRoundCards } from "./missionRounds.js";
@@ -72,6 +73,8 @@ export async function getMeeting(ctx: Context, meetingId: string) {
   if (!row) return null;
   const card = projectMeetingCard(row, ctx.secret);
   const payload = card.payload as TMeetingCardPayload;
+  // 有会议卡的会只读确认版（只有草稿时 unconfirmed），不读逐条结论。
+  const meetingCard = await meetingCardFacts(ctx.q, meetingId);
   return { id: meetingId, title: card.title, scheduledAt: payload.scheduledAt, endsAt: payload.endsAt,
     endedAt: payload.endedAt, host: ctx.names.get(payload.leadDriId) ?? payload.leadDriId,
     participants: payload.participants.map((person) => ({ personId: person.personId, displayName: person.displayName })),
@@ -81,8 +84,10 @@ export async function getMeeting(ctx: Context, meetingId: string) {
         priorityAction: short(payload.preflight.summary.priorityAction) } : null },
     agenda: payload.preflight.entries.filter((entry) => entry.kind === "agenda" || entry.kind === "meeting_question")
       .map((entry) => ({ title: entry.title, body: short(payload.draft.editsByEntryId[entry.id] ?? entry.body) })),
-    outcome: payload.outcome ? { status: payload.outcome.status, summary: short(payload.outcome.summary),
+    outcome: !meetingCard && payload.outcome ? { status: payload.outcome.status, summary: short(payload.outcome.summary),
       items: payload.outcome.items.map((item) => ({ kind: item.kind, text: short(item.text), status: item.review?.status ?? "open" })) } : null,
+    ...(meetingCard ? { meetingCard: meetingCard.status === "confirmed" ? { ...meetingCard, summary: short(meetingCard.summary),
+      sections: meetingCard.sections.map((section) => ({ heading: section.heading, body: short(section.body) })) } : meetingCard } : {}),
     href: `/meetings/${meetingId}` };
 }
 

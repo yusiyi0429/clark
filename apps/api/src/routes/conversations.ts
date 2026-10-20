@@ -31,6 +31,7 @@ import { MAX_MATERIAL_FILES, MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanu
 import { logEvent } from "../observability.js";
 import { getIssueRow } from "../issues.js";
 import { getMeetingRow } from "../meetingStore.js";
+import { cardWithMeetingFacts } from "../meetingCardRead.js";
 import { projectMemberIssueCard, projectMemberMeetingCard } from "../memberCards.js";
 import { isActiveMember } from "../threads.js";
 import { getObjectMaterial } from "../objectMaterials.js";
@@ -69,7 +70,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       if (!await isActiveMember(q, { objectType, objectId }, person.personId)) return { snapshot: null, visible: false };
       const card = objectType === "issue"
         ? await getIssueRow(q, objectId).then((row) => row && projectMemberIssueCard(row, env.sessionSecret))
-        : await getMeetingRow(q, objectId).then((row) => row && projectMemberMeetingCard(row, env.sessionSecret, person.personId));
+        : await getMeetingRow(q, objectId).then((row) => row && cardWithMeetingFacts(q, row, projectMemberMeetingCard(row, env.sessionSecret, person.personId),
+          { personId: person.personId, isCeo: false }));
       if (!card) return { snapshot: null, visible: false };
       return { visible: true, snapshot: { cardId: card.id, version: card.version, kind: card.kind, title: card.title,
         objectRef: card.objectRef, payload: card.payload } };
