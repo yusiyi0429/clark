@@ -49,7 +49,9 @@ function fakeOutcomeAgent(): PostMeetingAgent & { calls: PostMeetingAgentInput[]
       return {
         candidate: {
           summary: "会议形成一项待办",
-          items: [{ kind: "todo", text: "周五前给排期", turnId: "turn-0002", quote: "我周五前给排期", ownerPersonId: "person-fixture-002" }],
+          sections: [{ heading: "排期", body: "已定：测试乙周五前给排期。", turnIds: ["turn-0002"] }],
+          objectChanges: [],
+          actionItems: [{ text: "周五前给排期", ownerPersonId: "person-fixture-002", dueDate: null, basisSections: [1] }],
         },
         runId: "outcome-run-1",
       };
@@ -317,8 +319,8 @@ describe("meeting.confirm_transcript_candidate", () => {
       const res = await execute(t, cookie, confirm, { speakerMappings: MAPPINGS, confirmAddParticipants: true });
       expect(res.statusCode).toBe(200);
       const payload = res.json().cards[0].payload;
-      // 唯一的 todo 已自动推送成执行事项，没有待处理条目，Meeting 直接 reviewed
-      expect(payload.status).toBe("reviewed");
+      // 会后整理生成会议卡（待办留在卡片的行动项里，确认后才推），Meeting 停在 held 等整卡确认
+      expect(payload.status).toBe("held");
       expect(payload.transcriptCandidate).toBeNull();
       expect(Value.Check(StoredTranscript, payload.transcript)).toBe(true);
       expect(payload.transcript.source).toMatchObject({ format: "miaoji_markdown", fileName: "meeting.md", timeAnchor: "2026-06-01T02:00:00.000Z" });

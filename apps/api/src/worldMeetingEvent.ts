@@ -55,7 +55,7 @@ const shanghai = (at: Date) => new Date(at.getTime() + 8 * 3_600_000).toISOStrin
 const minute = (at: Date) => shanghai(at).slice(0, 16).replace("T", " ");
 
 /** 实际开始：逐字稿来自飞书妙记或录音时，它记下的开始时刻是实际开会时刻（transcriptCandidate 同一规则）。 */
-function actualStart(meeting: Pick<MeetingRow, "transcript" | "scheduled_at">): Date {
+export function actualStart(meeting: Pick<MeetingRow, "transcript" | "scheduled_at">): Date {
   const source = meeting.transcript?.source;
   const absolute = source && (source.format === "feishu_minutes" || source.format === "volc_asr") && source.timeAnchor;
   return absolute ? new Date(absolute) : new Date(meeting.scheduled_at);
@@ -125,31 +125,36 @@ export function meetingEventText(record: MeetingRecord, meta: {
   return lines.join("\n");
 }
 
+/** 读挂点要用的本体接口（会议事件和会议卡共用）。 */
+export type AnchorHeadClient = Pick<WorldClient, "getHead" | "byExternalRef" | "listObjects" | "config">;
+
+/** 挂点在本体里的对象：LTO、PO 按本体编号，Mission 按 mission:<code>，单元按 capability:<code>，公司按实例配置或类型 Company；对不上为 null。 */
+export async function anchorHead(q: Query, client: AnchorHeadClient, anchor: TWorldAnchor): Promise<WorldHead | null> {
+  if (anchor.kind === "task") return null;
+  if (anchor.kind === "lto" || anchor.kind === "po") {
+    // LTO、PO 存的就是本体编号（裁定 1）；本体里已经没有了就跳过，退到下一组。
+    try {
+      return await client.getHead(anchor.id);
+    } catch (error) {
+      if (error instanceof WorldError && error.status === 404) return null;
+      throw error;
+    }
+  }
+  if (anchor.kind === "mission") {
+    const code = (await q("SELECT code FROM missions WHERE id = $1", [anchor.id])).rows[0]?.code as string | undefined;
+    return code ? client.byExternalRef(`mission:${code}`) : null;
+  }
+  if (anchor.kind === "unit") {
+    const code = (await q("SELECT code FROM capability_config WHERE id = $1", [anchor.id])).rows[0]?.code as string | undefined;
+    return code ? client.byExternalRef(`capability:${code}`) : null;
+  }
+  const id = client.config.anchors?.company ?? (await client.listObjects({ type: "Company", limit: 1 }))[0]?.object_id;
+  return id ? client.getHead(id) : null;
+}
+
 export function createMeetingEventWorld({ q, client, feishuWebOrigin }: { q: Query; client: WorldClient; feishuWebOrigin?: string }): MeetingEventWorld {
   const feishu = feishuWebOrigin?.replace(/\/+$/, "");
-
-  async function headOf(anchor: TWorldAnchor): Promise<WorldHead | null> {
-    if (anchor.kind === "task") return null;
-    if (anchor.kind === "lto" || anchor.kind === "po") {
-      // LTO、PO 存的就是本体编号（裁定 1）；本体里已经没有了就跳过，退到下一组。
-      try {
-        return await client.getHead(anchor.id);
-      } catch (error) {
-        if (error instanceof WorldError && error.status === 404) return null;
-        throw error;
-      }
-    }
-    if (anchor.kind === "mission") {
-      const code = (await q("SELECT code FROM missions WHERE id = $1", [anchor.id])).rows[0]?.code as string | undefined;
-      return code ? client.byExternalRef(`mission:${code}`) : null;
-    }
-    if (anchor.kind === "unit") {
-      const code = (await q("SELECT code FROM capability_config WHERE id = $1", [anchor.id])).rows[0]?.code as string | undefined;
-      return code ? client.byExternalRef(`capability:${code}`) : null;
-    }
-    const id = client.config.anchors?.company ?? (await client.listObjects({ type: "Company", limit: 1 }))[0]?.object_id;
-    return id ? client.getHead(id) : null;
-  }
+  const headOf = (anchor: TWorldAnchor) => anchorHead(q, client, anchor);
 
   async function resolve(groups: TWorldAnchor[][]) {
     for (const group of groups) {

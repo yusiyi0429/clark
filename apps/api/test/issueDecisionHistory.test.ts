@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { IssueDecisionHistory, MeetingDecisionHistoryResponse, type TPostMeetingCandidate } from "@warmap/contracts";
-import { createTestApp, preflightCandidate, type TestApp } from "./helpers.js";
+import { createTestApp, preflightCandidate, seedLegacyOutcome, type TestApp } from "./helpers.js";
 import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import { createObjectMaterial } from "../src/objectMaterials.js";
@@ -17,19 +17,22 @@ const TURNS = [
   { id: "turn-003", speakerId: DRI_ID, startedAt: "2026-05-01T10:02:05+08:00", text: "我下周把验收清单发给客户。" },
 ];
 
-/** 第一场确认“先统一验收标准”；第二场提出“两家大单允许定制验收”（确认后又撤回）。 */
+/** 第一场确认“先统一验收标准”；第二场提出“两家大单允许定制验收”（确认后又撤回）。旧格式会议的逐条条目（seedLegacyOutcome 写入）。 */
+function legacyCandidate(issueId: string, title: string): TPostMeetingCandidate {
+  const second = title.includes("第二场");
+  return {
+    summary: second ? "讨论大单定制" : "确定统一验收标准",
+    items: [second
+      ? { kind: "decision", text: "两家大单允许定制验收", turnId: "turn-002", quote: "两家大单允许定制验收", issueId }
+      : { kind: "decision", text: "先统一验收标准，定制需审批", turnId: "turn-001", quote: "先统一验收标准，定制需审批", issueId }],
+  };
+}
+
+/** 现在的会后整理只生成会议卡；逐条条目由 holdWithOutcome 按旧会议写入。 */
 function outcomeAgent(): PostMeetingAgent {
   return {
     async generate(input: PostMeetingAgentInput) {
-      const issueId = input.issues[0].id;
-      const second = input.meeting.title.includes("第二场");
-      const candidate: TPostMeetingCandidate = {
-        summary: second ? "讨论大单定制" : "确定统一验收标准",
-        items: [second
-          ? { kind: "decision", text: "两家大单允许定制验收", turnId: "turn-002", quote: "两家大单允许定制验收", issueId }
-          : { kind: "decision", text: "先统一验收标准，定制需审批", turnId: "turn-001", quote: "先统一验收标准，定制需审批", issueId }],
-      };
-      return { candidate };
+      return { candidate: { summary: input.meeting.title, sections: [{ heading: "验收", body: "已定：按会上说的办。", turnIds: [] }], objectChanges: [], actionItems: [] } };
     },
   };
 }
@@ -76,6 +79,8 @@ async function holdWithOutcome(t: TestApp, meetingId: string): Promise<void> {
   });
   expect(res.statusCode).toBe(200);
   expect(res.json().cards[0].payload.outcome).toMatchObject({ status: "ready" });
+  const meeting = (await t.sql("SELECT title, issue_ids FROM meetings WHERE id = $1", [meetingId]))[0];
+  await seedLegacyOutcome(t.pool, meetingId, legacyCandidate(meeting.issue_ids[0], meeting.title));
 }
 
 async function meetingAction(t: TestApp, cookie: string, meetingId: string, actionType: string) {

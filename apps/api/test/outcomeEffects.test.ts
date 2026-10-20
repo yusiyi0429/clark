@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { Card, MeetingCardPayload, MeetingOutcomeState, type TPostMeetingCandidate } from "@warmap/contracts";
-import { createTestApp, preflightCandidate, testEnv, type TestApp } from "./helpers.js";
+import { createTestApp, preflightCandidate, seedLegacyOutcome, testEnv, type TestApp } from "./helpers.js";
 import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import { signActionId } from "../src/actionToken.js";
@@ -20,7 +20,10 @@ const TURNS = [
   { id: "turn-003", speakerId: "person-fixture-001", startedAt: "2026-06-01T10:01:00+08:00", text: "外部承诺先不签，六月前给我风险清单。" },
 ];
 
-/** item-1 decision、item-2 todo（抽取完成即推送成执行事项）、item-3 ceoJudgment、item-4 reopenWhen、item-5 open。 */
+/**
+ * 旧格式会议的逐条条目（会议卡之前的会后抽取，seedLegacyOutcome 写入）：
+ * item-1 decision、item-2 todo（抽取完成即推送成执行事项）、item-3 ceoJudgment、item-4 reopenWhen、item-5 open。
+ */
 function candidate(issueId: string): TPostMeetingCandidate {
   return {
     summary: "会议形成一项决定、一项待办、一项判断与一个复议条件",
@@ -40,12 +43,15 @@ const preflightAgent: PreflightAgent = {
   },
 };
 
+const OPEN_ONLY: TPostMeetingCandidate = { summary: "只有未决事项", items: [{ kind: "open", text: "TokenOps 最低验证力量", turnId: "turn-001", quote: "TokenOps 保留最低验证力量" }] };
+
+/** 现在的会后整理只生成会议卡（逐条条目只在旧会议里，用 seedLegacyOutcome 写）。 */
 function outcomeAgent(): PostMeetingAgent & { calls: PostMeetingAgentInput[] } {
   const agent = {
     calls: [] as PostMeetingAgentInput[],
     async generate(input: PostMeetingAgentInput) {
       agent.calls.push(input);
-      return { candidate: candidate(input.issues[0].id) };
+      return { candidate: { summary: "灯塔项目优先", sections: [{ heading: "资源", body: "已定：灯塔项目优先。", turnIds: ["turn-001"] }], objectChanges: [], actionItems: [] } };
     },
   };
   return agent;
@@ -69,9 +75,10 @@ async function createIssue(t: TestApp, externalId: string): Promise<string> {
   return res.json().cards[0].objectRef.id as string;
 }
 
-/** 一条 Issue → Meeting → held → ready Outcome 的完整链路。 */
+/** 一条 Issue → Meeting → held → 会后整理完成，再写成旧格式会议（逐条条目）。 */
 async function readyOutcome(
   t: TestApp,
+  legacy: (issueId: string) => TPostMeetingCandidate = candidate,
 ): Promise<{ cookie: string; issueId: string; meetingId: string; card: Record<string, unknown> }> {
   const issueId = await createIssue(t, `ticket11-${Math.random().toString(36).slice(2)}`);
   const cookie = await t.loginCookie();
@@ -92,8 +99,10 @@ async function readyOutcome(
     payload: { schemaVersion: "warmap-transcript.v1", meetingId, turns: TURNS },
   });
   expect(imported.statusCode).toBe(200);
-  const card = imported.json().cards[0];
-  expect(card.payload.outcome).toMatchObject({ status: "ready" });
+  expect(imported.json().cards[0].payload.outcome).toMatchObject({ status: "ready" });
+  await seedLegacyOutcome(t.pool, meetingId, legacy(issueId));
+  const card = await meetingCard(t, cookie, meetingId);
+  expect(card.payload).toMatchObject({ outcome: { status: "ready" } });
   return { cookie, issueId, meetingId, card };
 }
 
@@ -141,14 +150,9 @@ async function anchors(t: TestApp): Promise<Record<string, unknown>[]> {
 
 describe("item-by-item Outcome review", () => {
   it("moves a Meeting with no reviewable items straight to reviewed", async () => {
-    const openOnly: PostMeetingAgent = {
-      async generate() {
-        return { candidate: { summary: "只有未决事项", items: [{ kind: "open", text: "TokenOps 最低验证力量", turnId: "turn-001", quote: "TokenOps 保留最低验证力量" }] } };
-      },
-    };
-    const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: openOnly });
+    const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: outcomeAgent() });
     try {
-      const { cookie, meetingId, card } = await readyOutcome(t);
+      const { cookie, meetingId, card } = await readyOutcome(t, () => OPEN_ONLY);
       // 没有可审阅条目：按文档直接 reviewed，并且不暴露任何逐项 Action
       expect(card.payload.status).toBe("reviewed");
       expect(outcomeOf(card).outcome.items[0].review).toBeNull();
@@ -174,20 +178,9 @@ describe("item-by-item Outcome review", () => {
   });
 
   it("allows replacing the transcript of a reviewed Meeting with no confirmed effect", async () => {
-    let calls = 0;
-    const agent: PostMeetingAgent = {
-      async generate(input) {
-        calls += 1;
-        return {
-          candidate: calls === 1
-            ? { summary: "只有未决事项", items: [{ kind: "open", text: "TokenOps 最低验证力量", turnId: "turn-001", quote: "TokenOps 保留最低验证力量" }] }
-            : candidate(input.issues[0].id),
-        };
-      },
-    };
-    const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: agent });
+    const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: outcomeAgent() });
     try {
-      const { cookie, meetingId, card } = await readyOutcome(t);
+      const { cookie, meetingId, card } = await readyOutcome(t, () => OPEN_ONLY);
       expect(card.payload.status).toBe("reviewed");
       const replace = await meetingActionId(t, cookie, meetingId, "meeting.replace_transcript");
       expect(replace).toBeTruthy();
@@ -197,9 +190,10 @@ describe("item-by-item Outcome review", () => {
       });
       expect(replaced.statusCode).toBe(200);
       const payload = replaced.json().cards[0].payload;
-      // 旧 Outcome 作废，Meeting 回到 held 并重新抽取
+      // 旧 Outcome 作废，Meeting 回到 held 并重新整理：现在生成的是会议卡，不再有逐条条目
       expect(payload.status).toBe("held");
-      expect(payload.outcome.items).toHaveLength(5);
+      expect(payload.outcome).toMatchObject({ status: "ready", items: [], summary: "" });
+      expect((await t.sql("SELECT draft_status FROM meeting_cards WHERE meeting_id = $1", [meetingId]))[0].draft_status).toBe("draft_ready");
     } finally {
       await t.close();
     }

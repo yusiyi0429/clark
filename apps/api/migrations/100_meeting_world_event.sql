@@ -31,3 +31,16 @@ ALTER TABLE meetings DROP CONSTRAINT meetings_minutes_status_check;
 ALTER TABLE meetings
   ADD CONSTRAINT meetings_minutes_status_check CHECK (minutes_status IN ('none', 'waiting', 'manual', 'ready', 'failed')),
   ADD COLUMN minutes_failure TEXT CHECK (minutes_failure IS NULL OR minutes_failure IN ('no_permission', 'not_ready', 'not_found', 'fetch_failed'));
+
+-- 会议卡草稿（FR-4.3–4.5）：一场会一行，有这一行就是新格式会议（会后整理只记进度，outcome.items 为空）。
+--   draft 是 MeetingCardDraft（payload 去掉 revision），action_items 是天枢本地的行动项（不进 payload、不写本体）；
+--   draft_version 每次生成、保存、刷新差异、改挂点加一（编辑带它做并发控制）；draft_status created / draft_ready；current_revision 是当前确认版（整卡确认后才有）。
+CREATE TABLE meeting_cards (
+  meeting_id UUID PRIMARY KEY REFERENCES meetings(id),
+  draft JSONB,
+  action_items JSONB NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(action_items) = 'array'),
+  draft_version INTEGER NOT NULL DEFAULT 0,
+  draft_status TEXT NOT NULL DEFAULT 'created' CHECK (draft_status IN ('created', 'draft_ready')),
+  current_revision INTEGER,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { ImpactCardView, MeetingDecisionView, type TPostMeetingCandidate } from "@warmap/contracts";
-import { createTestApp, preflightCandidate, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
+import { createTestApp, preflightCandidate, seedLegacyOutcome, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
 import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import type { DecisionLayeringAgent, DecisionLayeringInput } from "../src/meetingDecisionAgent.js";
@@ -100,7 +100,8 @@ async function readyMeeting(t: TestApp): Promise<{ ceo: string; meetingId: strin
   const imported = await t.app.inject({ method: "POST", url: `/api/dri/meetings/${meetingId}/transcript`, headers: { authorization: `Bearer ${t.env.driServiceToken}` },
     payload: { schemaVersion: "warmap-transcript.v1", meetingId, turns: TURNS } });
   expect(imported.statusCode).toBe(200);
-  expect(imported.json().cards[0].payload.outcome.status).toBe("ready");
+  // 分层确认只对旧格式会议（逐条条目）：现在的会后整理只生成会议卡，这里写成旧会议的样子。
+  await seedLegacyOutcome(t.pool, meetingId, CANDIDATE);
   return { ceo, meetingId };
 }
 

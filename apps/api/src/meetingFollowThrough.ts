@@ -10,6 +10,7 @@ import type { JobHandler, RecurringJob } from "./jobs.js";
 import { meetingInterpretationContext, type InterpretationContext } from "./meetingContext.js";
 import { createDecisionLayeringAgent, type DecisionLayeringAgent } from "./meetingDecisionAgent.js";
 import { createMeetingDecisionService, enqueueDecisionSync, meetingDecisionJobs, type MeetingDecisionService } from "./meetingDecisions.js";
+import { createMeetingCardService, registerMeetingCardDeps, type MeetingCardService } from "./meetingCard.js";
 import { createMeetingMinutesService, meetingMinutesJobs, type MeetingMinutesService } from "./meetingMinutes.js";
 import { onOutcomeReviewed, setOutcomeContextProvider, type PostMeetingAgent } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
@@ -41,6 +42,7 @@ export type MeetingFollowThroughEnv = WorldEnv & {
 
 export type MeetingFollowThrough = {
   decisions: MeetingDecisionService;
+  cards: MeetingCardService;
   minutes: MeetingMinutesService;
   impact: ImpactAgent;
   context: () => Promise<InterpretationContext>;
@@ -74,15 +76,19 @@ export function createMeetingFollowThrough({ pool, env, peopleDirectory, world, 
   const meetingWorld = worldClient ? createMeetingEventWorld({ q, client: worldClient, feishuWebOrigin: env.feishuWebOrigin }) : undefined;
   // 挂点选项里的 LTO、本月 PO：同一条件下只列对象，用读的超时（预约表单在等）。
   const anchorWorld = worldClient ? new WorldClient(q, env, undefined, { timeoutMs: WORLD_READ_TIMEOUT_MS }) : undefined;
+  // 会议卡草稿：生成（会后整理按池取）和读写共用同一套依赖；挂点对象、修改目标读本体（同一条件下用读的超时）。
+  const cardDeps = { world: anchorWorld, publicOrigin: env.publicOrigin, names: () => personDisplayNames(peopleDirectory) };
+  registerMeetingCardDeps(pool, cardDeps);
+  const cards = createMeetingCardService(pool, cardDeps);
   const decisions = createMeetingDecisionService({ pool, peopleDirectory, layering: layeringAgent, impact: impactAgent, context, notify,
-    meetingWorld, anchorWorld, impactMode: env.impactCardMode ?? "live", now });
+    meetingWorld, anchorWorld, impactMode: env.impactCardMode ?? "live", now, onAnchorsChanged: cards.anchorsChanged });
   const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now, feishuWebOrigin: env.feishuWebOrigin,
     ...(env.feishu ? { feishu: { env: env.feishu, api: minutesApi ?? createFeishuMinutesApi() } } : {}) });
   const unsubscribe = onOutcomeReviewed(pool, (meetingId) => {
     enqueueDecisionSync(q, meetingId).catch((error) => console.warn(`meeting decisions sync enqueue failed: ${(error as Error).message}`));
   });
   return {
-    decisions, minutes, impact: impactAgent, context,
+    decisions, cards, minutes, impact: impactAgent, context,
     jobs() {
       const decisionJobs = meetingDecisionJobs(decisions);
       const minuteJobs = meetingMinutesJobs(minutes);

@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import {
-  ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingDecisionResponse, MeetingDecisionReviewRequest,
+  ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardView, MeetingDecisionResponse, MeetingDecisionReviewRequest,
   MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingDecisionsResponse,
 } from "@warmap/contracts";
 import { askImpactCard, markImpactCardIrrelevant, readImpactCardByRequest } from "../impactCards.js";
@@ -30,6 +30,23 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
   app.get("/api/meetings/:id/world", { preHandler: ctx.requirePerson, schema: { params: idParams, response: { 200: MeetingWorldResponse } } }, async (req, reply) => {
     const result = await followThrough.decisions.worldView(req.params.id, req.person!.personId);
     return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
+  });
+
+  // 会议卡：主持人、创建人、CEO、实际参会人能读（读时目标变过就刷新差异）；只有主持人或创建人整份保存草稿，别人 404。
+  app.get("/api/meetings/:id/card", { preHandler: ctx.requirePerson, schema: { params: idParams, response: { 200: MeetingCardView } } }, async (req, reply) => {
+    const result = await followThrough.cards.view(req.params.id, { personId: req.person!.personId, isCeo: req.person!.role === "ceo" });
+    return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result.view;
+  });
+
+  // body 的结构也由服务校验，fieldErrors 统一按草稿字段路径（sections[2].sourceRefs[0].sourceId）。
+  app.put("/api/meetings/:id/card/draft", {
+    preHandler: ctx.requirePerson, schema: { params: idParams, response: { 200: MeetingCardView } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "meeting_card.save_draft", objectRef: `meeting:${req.params.id}` });
+    const result = await followThrough.cards.saveDraft(req.params.id, { personId: req.person!.personId, isCeo: req.person!.role === "ceo" }, req.body);
+    if ("view" in result) return result.view;
+    const { status, code, message, fieldErrors, view } = result.error;
+    return ctx.fail(reply, status, code, message, { ...(fieldErrors ? { fieldErrors } : {}), ...(view ? { view } : {}) });
   });
 
   // 主持人和 CEO 改挂点（别人一律 404）；「不写入」在整卡确认时选。

@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { MeetingOutcomeState, NotificationList, TaskView, type TPostMeetingCandidate } from "@warmap/contracts";
-import { createTestApp, preflightCandidate, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
+import { createTestApp, preflightCandidate, seedLegacyOutcome, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
 import { assessOutcomeCandidate, type OntologyUpdateRequest, type OntologyUpdater, type PostMeetingAgent } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import { hashSecret } from "../src/session.js";
@@ -115,7 +115,9 @@ async function readyMeeting(t: TestApp): Promise<{ ceo: string; meetingId: strin
     payload: { schemaVersion: "warmap-transcript.v1", meetingId, turns: TURNS },
   });
   expect(imported.statusCode).toBe(200);
-  const outcome = imported.json().cards[0].payload.outcome;
+  // 会后逐条条目只在旧格式会议里：现在的会后整理只生成会议卡，这里写成旧会议的样子（todo 照旧推成执行事项）。
+  await seedLegacyOutcome(t.pool, meetingId, CANDIDATE);
+  const outcome = (await t.sql("SELECT outcome FROM meetings WHERE id = $1", [meetingId]))[0].outcome;
   expect(outcome.status).toBe("ready");
   return { ceo, meetingId, items: outcome.items as Item[] };
 }

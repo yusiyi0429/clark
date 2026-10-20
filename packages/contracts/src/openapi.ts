@@ -5,6 +5,7 @@ import {
   DraftRequestRequest, DraftRequestResponse, RequestListItem, RequestListResponse, PrepareRequestQuestionRequest,
   PrepareRequestQuestionResponse, DraftRequestAnswerResponse, RequestSendInput, RequestAskInput, RequestAnswerInput, ExecuteRequestActionRequest,
 } from "./requests.js";
+import { MeetingCardDraftRequest, MeetingCardView } from "./meetingCard.js";
 import { MeetingDecisionView, MeetingDecisionReviewRequest, MeetingDecisionResponse, MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingDecisionsResponse } from "./meetingDecisions.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
@@ -871,6 +872,21 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           operationId: "refetchMeetingMinutes", summary: "主持人或创建人再读一次妙记（等待中、没拿到、读取失败时）；已读完 409",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           responses: { "200": { description: "读完之后的妙记状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingMinutesFetchResponse" } } } }, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/card": {
+        get: {
+          operationId: "getMeetingCard", summary: "会议卡：草稿（读时目标变过就刷新差异）、行动项、确认版与同步回执；主持人、创建人、CEO、实际参会人能读，别人 404",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/card/draft": {
+        put: {
+          operationId: "saveMeetingCardDraft", summary: "主持人或创建人整份保存会议卡草稿；draftVersion 过期 409 DRAFT_CHANGED（带 view），校验不过 400（fieldErrors 按字段路径）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingCardDraftRequest" }),
+          responses: { "200": { description: "保存后的会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/meetings/{id}/world": {
@@ -2979,6 +2995,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeetingDecisionResponse: MeetingDecisionResponse as JsonSchema,
         MyMeetingDecisionsResponse: MyMeetingDecisionsResponse as JsonSchema,
         MeetingWorldResponse: MeetingWorldResponse as JsonSchema,
+        MeetingCardView: MeetingCardView as JsonSchema,
+        MeetingCardDraftRequest: MeetingCardDraftRequest as JsonSchema,
         MeetingMinutesLinkRequest: MeetingMinutesLinkRequest as JsonSchema,
         MeetingMinutesFetchResponse: MeetingMinutesFetchResponse as JsonSchema,
         MeetingWorldAnchorsRequest: MeetingWorldAnchorsRequest as JsonSchema,

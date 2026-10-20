@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
-import type { TPostMeetingCandidate } from "@warmap/contracts";
+import type { TMeetingCardCandidate } from "@warmap/contracts";
 import { createTestApp, preflightCandidate, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
 import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
@@ -39,9 +39,11 @@ const TRANSCRIPT = [
   "",
 ].join("\n");
 
-const CANDIDATE: TPostMeetingCandidate = {
+const CANDIDATE: TMeetingCardCandidate = {
   summary: "接口统一切到 v2",
-  items: [{ kind: "decision", text: "接口统一改成 v2", turnId: "turn-0001", quote: "接口统一改成 v2" }],
+  sections: [{ heading: "接口", body: "已定：接口统一改成 v2。", turnIds: ["turn-0001"] }],
+  objectChanges: [],
+  actionItems: [],
 };
 
 const preflightAgent: PreflightAgent = { async generate(input: PreflightAgentInput) { return { candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)) }; } };

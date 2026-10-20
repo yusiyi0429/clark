@@ -5,6 +5,7 @@ import {
   PostMeetingCandidate,
   type TCard,
   type TIssueLocation,
+  type TMeetingCardTargetOption,
   type TMeetingOutcomeItem,
   type TMeetingOutcomeState,
   type TMeetingParticipant,
@@ -37,6 +38,7 @@ import {
 import { insertNotification } from "./notifications.js";
 import { dispatchMeetingTodo } from "./tasks.js";
 import type { InterpretationContext } from "./meetingContext.js";
+import { buildCardDraft, prepareCardGeneration, saveGeneratedCard } from "./meetingCard.js";
 
 type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
 
@@ -68,8 +70,10 @@ export type PostMeetingAgentInput = {
   meeting: { id: string; title: string; scheduledAt: string; ceoParticipantId: string; participants: TMeetingParticipant[] };
   transcript: { turns: TTranscriptTurn[] };
   issues: { id: string; title: string; location: unknown; urgency: unknown; research: unknown }[];
-  /** 公司地图：用来判断哪些改动和战略方向有关（推给 CEO），哪些会牵动别人的 Mission。 */
+  /** 公司地图：用来理解会上说的对象。 */
   context?: InterpretationContext;
+  /** 会议卡修改的候选目标：挂点对象里有文字的组件。 */
+  targetOptions: TMeetingCardTargetOption[];
 };
 
 export type PostMeetingAgent = {
@@ -400,8 +404,8 @@ type OutcomeMeetingRow = {
 type IssueSnapshotRow = { id: string; title: string; location: unknown; urgency: unknown; research: unknown };
 
 /**
- * 运行一次会后抽取：pending/failed → running → ready 或 failed。
- * 进入 ready 的同一事务内把每条 todo 推送成执行事项（见 dispatchMeetingTodo）。
+ * 运行一次会后整理：pending/failed → running → ready 或 failed。
+ * 生成会议卡草稿（meetingCard.ts），进入 ready 的同一事务内存进 meeting_cards；outcome 只记进度，items 为空、summary 为空（拍板 4、5）。
  * 失败保留原始 Transcript 并写可见 error，等待 CEO 显式重试；不自动 retry。
  */
 export async function runOutcome(
@@ -453,6 +457,8 @@ export async function runOutcome(
     const issueResult = await q("SELECT id, title, location, urgency, research FROM issues WHERE id = ANY($1::uuid[])", [meeting.issue_ids]);
     // 公司地图读不到不拦着整理纪要：没有就按原来的输入跑。
     const context = await contextProviders.get(pool)?.(meetingId).catch(() => null) ?? null;
+    // 会议卡：挂点对象里有文字的组件作候选目标给模型选（本体读不到时为空）。
+    const prepared = await prepareCardGeneration(pool, meetingId);
     const input: PostMeetingAgentInput = {
       meeting: {
         id: meeting.id,
@@ -463,6 +469,7 @@ export async function runOutcome(
       },
       transcript: { turns: meeting.transcript.turns },
       issues: issueResult.rows as IssueSnapshotRow[],
+      targetOptions: prepared.targetOptions,
       ...(context ? { context } : {}),
     };
     const abort = new AbortController();
@@ -474,15 +481,9 @@ export async function runOutcome(
     } finally {
       clearTimeout(timer);
     }
-    const assessed = assessOutcomeCandidate({
-      candidate: generated.candidate,
-      turns: meeting.transcript.turns,
-      participants: meeting.participants,
-      ceoParticipantId: meeting.ceo_participant_id,
-      issueIds: meeting.issue_ids,
-    });
-    if (!assessed.ok) {
-      await fail(assessed.code, assessed.message);
+    const card = buildCardDraft(pool, prepared, generated.candidate);
+    if (!card) {
+      await fail(INVALID_OUTCOME_CANDIDATE, "会议卡候选不符合严格 schema");
       return;
     }
     const client = await pool.connect();
@@ -493,15 +494,9 @@ export async function runOutcome(
         await client.query("ROLLBACK");
         return;
       }
-      // 推送后的 todo 记为已确认（effect task:<id>），已有确认效果即阻止替换 Transcript
-      for (const item of assessed.items) {
-        if (item.kind !== "todo") continue;
-        const ownerId = item.ownerPersonId ?? meeting.lead_dri_id;
-        const taskId = await dispatchMeetingTodo(client, { id: meetingId, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id,
-          ownerName: meeting.participants.find((person) => person.personId === ownerId)?.displayName, title: meeting.title }, item);
-        if (taskId) item.review = { status: "confirmed", effectRef: `task:${taskId}` };
-      }
-      const nextStatus = deriveMeetingStatus(meeting.status, assessed.items);
+      // 会议卡只在 meeting_cards 里；会后整理只记进度，不出逐条条目、不推执行事项（行动项整卡确认后才推）、不排分层。
+      // 会议停在 held（卡片还待整卡确认），不按逐条条目算成 reviewed。
+      await saveGeneratedCard(client, meetingId, card);
       await client.query(
         `UPDATE meetings
             SET outcome = outcome || jsonb_build_object(
@@ -513,14 +508,12 @@ export async function runOutcome(
                   'error', NULL,
                   'startedAt', NULL
                 ),
-                status = $6,
                 version = version + 1,
                 updated_at = now()
           WHERE id = $1`,
-        [meetingId, assessed.summary, JSON.stringify(assessed.items), JSON.stringify(assessed.warnings), new Date().toISOString(), nextStatus],
+        [meetingId, "", "[]", "[]", new Date().toISOString()],
       );
       await client.query("COMMIT");
-      notifyReviewed(pool, meetingId);
     } catch (err) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw err;

@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { MeetingWorldResponse, type TMeetingWorldResponse, type TPostMeetingCandidate, type TWorldAnchor } from "@warmap/contracts";
-import { createTestApp, preflightCandidate, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
+import { createTestApp, preflightCandidate, seedLegacyOutcome, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
 import type { PostMeetingAgent } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import type { DecisionLayeringAgent } from "../src/meetingDecisionAgent.js";
@@ -113,6 +113,8 @@ async function setup(env: Parameters<typeof createTestApp>[0] = {}) {
   const meetingId = created.json().cards[0].objectRef.id as string;
   await t.app.inject({ method: "POST", url: `/api/dri/meetings/${meetingId}/transcript`, headers: { authorization: `Bearer ${t.env.driServiceToken}` },
     payload: { schemaVersion: "warmap-transcript.v1", meetingId, turns: TURNS } });
+  // 整卡确认（记录）现在还按旧格式会议的逐条条目算（Task 3 改成会议卡）：写成旧会议的样子。
+  await seedLegacyOutcome(t.pool, meetingId, CANDIDATE);
   // 测试丙的执行事项挂在本月 Mission 下；主持人负责「智能体」单元。
   await t.pool.query("INSERT INTO capability_config (id, version, name, \"group\", six_month_outcome, code, owner_id) VALUES ('agents', 1, '智能体', 'test', '', '07', $1)", [HOST]);
   await t.pool.query(`INSERT INTO missions (id, version, code, period, title, owner_id, capability_id, outcome, source_ref, source_document_id, source_revision, source_title)
