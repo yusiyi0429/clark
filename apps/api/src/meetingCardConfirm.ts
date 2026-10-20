@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { Pool } from "pg";
 import type {
   TMeetingActionItem, TMeetingCardConfirmation, TMeetingCardConfirmRequest, TMeetingCardDraft, TMeetingCardKind, TMeetingCardSync, TMeetingCardV1Payload,
-  TMeetingCardView, TMeetingObjectResult, TMeetingRecordStatus,
+  TMeetingCardView, TMeetingConfirmedObjectChange, TMeetingObjectResult, TMeetingRecordStatus,
 } from "@warmap/contracts";
 import { enqueueJob, JOB_MAX_ATTEMPTS, type JobHandler } from "./jobs.js";
 import { payloadHash } from "./meetingCardHash.js";
@@ -60,12 +60,14 @@ export function confirmedView(row: ConfirmationRow | null): Pick<TMeetingCardVie
 }
 
 const bareRef = (ref: string) => ref.replace(/@\d+$/, "");
-/** 草稿和确认版内容不同（不算 stale 和挂点对象的版本）。 */
+/** 修改里人定的部分（目标标题、原内容、版本、stale 由服务填）。 */
+const decided = ({ id, targetRef, after, basisSectionIds }: TMeetingConfirmedObjectChange) => ({ id, targetRef, after, basisSectionIds });
+/** 草稿和确认版内容不同（不算服务填的修改字段和挂点对象的版本）。 */
 function draftDiffers(draft: TMeetingCardDraft, payload: TMeetingCardV1Payload): boolean {
   const { revision: _revision, ...confirmed } = payload;
   return !isDeepStrictEqual(
-    { ...confirmed, relatedObjectRefs: confirmed.relatedObjectRefs.map(bareRef) },
-    { ...draft, relatedObjectRefs: [...new Set(draft.relatedObjectRefs)], objectChanges: draft.objectChanges.map(({ stale: _stale, ...change }) => change) },
+    { ...confirmed, relatedObjectRefs: confirmed.relatedObjectRefs.map(bareRef), objectChanges: confirmed.objectChanges.map(decided) },
+    { ...draft, relatedObjectRefs: [...new Set(draft.relatedObjectRefs)], objectChanges: draft.objectChanges.map(decided) },
   );
 }
 

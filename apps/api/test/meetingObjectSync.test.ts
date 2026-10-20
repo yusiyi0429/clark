@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TMeetingObjectResult } from "@warmap/contracts";
-import { cardAgent, confirm, edit, getCard, ready, setup } from "./meetingCardFixture.js";
+import { cardAgent, confirm, edit, getCard, OCCURRED, ready, setup, worldOf } from "./meetingCardFixture.js";
 import { projection, stubWorld } from "./worldFixture.js";
 
 // 对象修改（FR-5.3、5.4）：会议事件写成后，确认版里的每条修改按顺序各提交一次修订、读回核对，各有回执；本期不做失败项重试（拍板 5）。
@@ -14,9 +14,11 @@ const error = (status: number, code: string) => Response.json({ error: { code, m
 /**
  * 假本体：挂点 PO（版本 5，target 块两个文字组件）。记事件按幂等键去重、取事件能读回；
  * 修订：expected_version 不是对象当前版本回 409 VERSION_CONFLICT；提交时组件按 id 合并、版本加一（同键重放不再改）。
- * refuse(body, path) 返回 Response 时修订照它回（模拟无权限、状态不允许、别人刚好改了）；network() 为 true 时修订请求抛网络错误。
+ * 回执带 object_versions。refuse(body, path) 返回 Response 时修订照它回（模拟无权限、状态不允许、别人刚好改了）；
+ * afterCommit(key) 在修订提交、回执返回前跑（模拟提交和读回之间别人的修改）；network() 为 true 时修订请求抛网络错误。
  */
-function ontology({ refuse, network = () => false }: { refuse?: (body: any, path: string) => Response | undefined; network?: () => boolean } = {}) {
+function ontology({ refuse, afterCommit, network = () => false }:
+  { refuse?: (body: any, path: string) => Response | undefined; afterCommit?: (key: string) => void; network?: () => boolean } = {}) {
   const po = {
     object_id: "obj-po-1", object_type: "PeriodGoal", title: "十月交付", revision_id: "obj-po-1-r5", object_version: 5, version: 5,
     lifecycle: { status: "active" }, contract_version: "tkos.world/0.3", external_refs: [],
@@ -47,8 +49,10 @@ function ontology({ refuse, network = () => false }: { refuse?: (body: any, path
         for (const [, block] of Object.entries(body.params.payload.blocks as Record<string, { components: { id: string; text: string }[] }>)) {
           for (const component of block.components) edit(component.id, component.text);
         }
-        const receipt = { receipt_id: `r-${body.idempotency_key}`, status: "committed", result: { version: po.version } };
+        const receipt = { receipt_id: `r-${body.idempotency_key}`, status: "committed", result: { version: po.version },
+          object_versions: [{ object_id: po.object_id, object_version: po.object_version }] };
         revised.set(body.idempotency_key, receipt);
+        afterCommit?.(body.idempotency_key);
         return receipt;
       }
       if (path === "/v1/actions/prepare") return { expected_versions: [] };
@@ -103,6 +107,14 @@ describe("对象修改逐个提交", () => {
       // 再跑一遍不再提交。
       await run();
       expect(world.revisions()).toHaveLength(2);
+      // 自己改成的不算「目标已变」，记录也不变成修改待确认。
+      const card = await getCard(t, host, meetingId);
+      expect(card.draft!.objectChanges).toMatchObject([
+        { id: "chg-1", stale: false, expectedVersion: 7, before: { text: "十月底前 4 家客户上线" }, after: { text: "十月底前 4 家客户上线" } },
+        { id: "chg-2", stale: false, expectedVersion: 7, before: { text: "接口统一切到 v2" }, after: { text: "接口统一切到 v2" } },
+      ]);
+      expect(card.draftVersion).toBe(draftVersion);
+      expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "committed", version: 1 });
     } finally {
       await t.close();
     }
@@ -147,6 +159,46 @@ describe("对象修改逐个提交", () => {
       ]);
       expect(view.confirmed!.payload.objectChanges.map((change) => change.id)).toEqual(["chg-1", "chg-2"]);
       expect(world.revisions()).toHaveLength(2);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("提交和读回之间别人改了同一对象：下一条不接着改", async () => {
+    const world = ontology({ afterCommit: (key) => { if (key.endsWith(":chg-1")) world.edit("acc-2", "别人改的"); } });
+    const { t, host, meetingId, run } = await setup(cardAgent(TWO_CHANGES));
+    try {
+      await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
+      await run();
+      // 第一条按回执记 6（不是读回时的 7）；第二条接着 6 提交，过不了版本核对，不发请求。
+      expect(world.revisions()).toHaveLength(1);
+      expect(world.po.blocks[0].components[1].text).toBe("别人改的");
+      expect(await objectsOf(t, meetingId, 1)).toMatchObject([
+        { changeId: "chg-1", status: "updated", actualVersion: 6 },
+        { changeId: "chg-2", status: "conflict", error: "目标已变" },
+      ]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("改后内容为空不提交；契约版本不对不允许", async () => {
+    const world = ontology({ refuse: () => error(409, "PROTOCOL_BINDING_CONFLICT") });
+    const { t, host, meetingId, run } = await setup(cardAgent([
+      { targetRef: "obj-po-1#target/acc-1", after: { text: " " }, basisSections: [1] },
+      { targetRef: "obj-po-1#target/acc-2", after: { text: "接口统一切到 v2" }, basisSections: [1] },
+    ]));
+    try {
+      // 存草稿不收空内容，只有模型生成的能带进来；实际开始直接填进库。
+      await t.pool.query(`UPDATE meeting_cards SET draft = jsonb_set(draft, '{occurredAt}', $2::jsonb) WHERE meeting_id = $1`, [meetingId, JSON.stringify(OCCURRED)]);
+      expect((await confirm(t, host, meetingId, { draftVersion: 1, writeToWorld: true })).statusCode).toBe(200);
+      await run();
+      expect(world.revisions().length).toBeGreaterThan(0);
+      expect(world.revisions().every((body) => body.idempotency_key.endsWith(":chg-2"))).toBe(true);
+      expect(await objectsOf(t, meetingId, 1)).toMatchObject([
+        { changeId: "chg-1", status: "blocked", error: "改后内容为空" },
+        { changeId: "chg-2", status: "not_allowed", error: "契约版本不对" },
+      ]);
     } finally {
       await t.close();
     }

@@ -134,7 +134,9 @@ export type WorldAction = {
     on_behalf_of?: { principal_id: string; external_record_id: string; external_confirmed_at: string };
   };
 };
-export type WorldReceipt = { receipt_id: string; status: string; result: { event_id?: string; [key: string]: unknown } };
+/** object_versions：这次写入后各对象的版本（修订、生命周期等改对象的写入才有）；同键重放回原回执，值不变。 */
+export type WorldReceipt = { receipt_id: string; status: string; result: { event_id?: string; [key: string]: unknown };
+  object_versions?: { object_id: string; object_version: number }[] };
 export class WorldError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
 }
