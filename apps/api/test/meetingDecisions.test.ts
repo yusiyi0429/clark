@@ -82,8 +82,8 @@ function fakeImpact(): ImpactAgent & { inputs: ImpactAnalysisInput[] } {
   return agent;
 }
 
-async function newApp(layering = fakeLayering(), impact = fakeImpact()): Promise<TestApp> {
-  return createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent, meetingFollowThroughAgents: { layering, impact } });
+async function newApp(layering = fakeLayering(), impact = fakeImpact(), switches: { collectionsEnabled?: boolean; docChangeEnabled?: boolean } = {}): Promise<TestApp> {
+  return createTestApp({ companyPeopleSeed: PEOPLE_SEED, ...switches }, undefined, { preflightAgent, outcomeAgent, meetingFollowThroughAgents: { layering, impact } });
 }
 
 type CardAction = { actionType: string; actionId: string; itemId?: string };
@@ -119,7 +119,8 @@ describe("会后分层确认与影响卡", () => {
   it("主持人只看几条「会上定了 X」，确认后影响卡经送达通道推给受影响的人；卡上能追问、能点和我无关", async () => {
     const layering = fakeLayering();
     const impact = fakeImpact();
-    const t = await newApp(layering, impact);
+    // 信息收集、文档变更两个开关都关（D-56）：会议影响卡照常推。
+    const t = await newApp(layering, impact, { collectionsEnabled: false, docChangeEnabled: false });
     try {
       const { ceo, meetingId } = await readyMeeting(t);
       // 解读纪要时带上了公司地图（每个人的 Mission、本月 outcome、长期目标）。

@@ -192,6 +192,10 @@ export type AppEnv = {
   impactCardMode?: "live" | "shadow";
   /** ③ 信息收集的飞书多维表格：live 以发起人身份调开放接口（要先在飞书后台开通 base 权限，见 feishu/bitable.ts）；缺省 mock，不调飞书（FEISHU_BITABLE_MODE）。 */
   collectionBitable?: "live" | "mock";
+  /** ③ 信息收集（COLLECTIONS_ENABLED=1 才开，D-56）：关着时不接收集路由、不跑每分钟的收集任务、对话里没有「发起信息收集」，定时任务里不列收集项。 */
+  collectionsEnabled?: boolean;
+  /** ⑧ 文档变更推送（DOC_CHANGE_ENABLED=1 才开，D-56）：关着时群里贴文档链接不触发；已有的变更照常能看、能处理。 */
+  docChangeEnabled?: boolean;
 } & PeopleDirectoryEnv & WorldEnv & CompanyContextEnv;
 
 declare module "fastify" {
@@ -506,7 +510,7 @@ export async function buildApp({
     names: () => personDisplayNames(peopleDirectory),
     now,
   };
-  app.decorate("collectionJobs", collectionJobs(collectionDeps));
+  app.decorate("collectionJobs", env.collectionsEnabled ? collectionJobs(collectionDeps) : { handlers: {}, recurring: [] });
   app.addHook("onClose", async () => { followThrough.close(); });
   // 周复盘提交后按关联的 Mission、Task 写进展到本体：同样只在实例配置允许写时启用；不写时提交照常，等配好后补发。
   let weeklyReviewWorld: WeeklyReviewWorldSync | undefined;
@@ -628,7 +632,7 @@ export async function buildApp({
     weeklyReviewService,
     weeklyReviewWorld,
     worldPeriodGoals,
-    collections: { agent: collectionAgent ?? createCollectionAgent(pool, env), deps: collectionDeps },
+    collections: env.collectionsEnabled ? { agent: collectionAgent ?? createCollectionAgent(pool, env), deps: collectionDeps } : undefined,
     recordings,
     voiceprints: voiceprintDeps,
     dictation: dictationDeps,
@@ -698,7 +702,7 @@ export async function buildApp({
     ...(feishuApi && env.feishu ? { feishu: { client: feishuApi, env: env.feishu } } : {}),
     pathFor: (personId, requestId) => `${isCeo(personId) ? "" : "/me"}/requests/${requestId}`,
   });
-  app.decorate("docChanges", docChanges);
+  app.decorate("docChanges", env.docChangeEnabled ? docChanges : { ...docChanges, jobs: () => ({ ...docChanges.jobs(), feishuEvents: {} }) });
   registerDocChangeRoutes(app, ctx, docChanges);
 
   return app;

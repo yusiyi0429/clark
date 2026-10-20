@@ -8,6 +8,7 @@ import { docLinks } from "../src/docChanges.js";
 import type { DocChangeAgent, DocChangeAgentInput, TDocCandidatesCandidate } from "../src/docChangeAgent.js";
 import type { FeishuClient } from "../src/feishu/client.js";
 import { saveAuthorizedToken } from "../src/feishu/tokens.js";
+import { FEISHU_EVENT_KIND, feishuEventJobs, recordFeishuEvent } from "../src/feishu/events.js";
 import { hashSecret } from "../src/session.js";
 
 // ⑧ 文档变更：群里 @机器人 贴链接即发布 → Agent 找候选 → 作者确认（或改问负责人）→ 依据旧版的人收影响卡 → 卡上选择更新工作依据清单。
@@ -84,7 +85,7 @@ describe("文档变更", () => {
     // 别人依据清单里、作者打不开的文档（元数据读不到）不列给作者。
     const agent = fakeAgent([{ key: "feishu:OldDocV6", relation: "supersede", reason: "同一编号的方法，测试丙 9/20 写的" },
       { key: "feishu:Hidden01", relation: "supersede", reason: "标题相近" }, { key: "feishu:NotInPool", relation: "revision", reason: "编的" }]);
-    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, feishu }, undefined, { feishuClient: client, docChangeAgent: agent });
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, feishu, docChangeEnabled: true }, undefined, { feishuClient: client, docChangeAgent: agent });
     try {
       await identities(t);
       await saveAuthorizedToken(async (sql, params) => ({ rows: await t.sql(sql, params) }) as never, feishu, AUTHOR,
@@ -180,7 +181,7 @@ describe("文档变更", () => {
 
   it("作者确认不了 → 改问旧文档负责人；负责人答已被取代才推卡，答完这次变更收尾", async () => {
     const agent = fakeAgent([{ key: "feishu:OldDocV6", relation: "supersede", reason: "测试丙在群里发过的同类方法" }]);
-    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { docChangeAgent: agent });
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, docChangeEnabled: true }, undefined, { docChangeAgent: agent });
     try {
       await identities(t);
       // 测试丙以前在群里发过旧文档：没有飞书元数据时按发它的人当负责人。
@@ -229,7 +230,7 @@ describe("文档变更", () => {
 
   it("修订：同一个链接的新版本，卡上「知道了」把依据更新到这一版；都不是的不推送，流程停在确认那一步", async () => {
     const agent = fakeAgent([]);
-    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { docChangeAgent: agent });
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, docChangeEnabled: true }, undefined, { docChangeAgent: agent });
     try {
       await identities(t);
       await basis(t, CEO, `${NEW_URL}?from=wiki`, "M2 战略解码 v0.3", "2026-10-01T02:00:00.000Z");
@@ -257,4 +258,19 @@ describe("文档变更", () => {
       expect((await post(t, ceo, `/api/impact-cards/${card.id}/irrelevant`, {})).statusCode).toBe(200);
     } finally { await t.close(); }
   }, 30_000);
+
+  it("文档变更关闭时群消息不触发", async () => {
+    const agent = fakeAgent([]);
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, docChangeEnabled: false }, undefined, { docChangeAgent: agent });
+    try {
+      await identities(t);
+      // 和 server.ts 一样：事件落库排 feishu.event，再交给注册的处理函数。
+      expect(await recordFeishuEvent(t.pool, MESSAGE_EVENT, groupMessage("om_off", `@_user_1 ${NEW_URL}`))).toBe("recorded");
+      const [event] = await t.sql("SELECT id FROM feishu_events WHERE event_type = $1", [MESSAGE_EVENT]);
+      await feishuEventJobs(t.pool, t.app.docChanges.jobs().feishuEvents)[FEISHU_EVENT_KIND]({ feishuEventId: event.id }, { id: "1", kind: FEISHU_EVENT_KIND, dedupe_key: "", attempts: 1, payload: {} });
+      expect(await t.sql("SELECT count(*)::int AS n FROM doc_changes")).toEqual([{ n: 0 }]);
+      expect(await t.sql("SELECT count(*)::int AS n FROM requests WHERE kind = 'doc_change'")).toEqual([{ n: 0 }]);
+      expect(agent.inputs).toEqual([]);
+    } finally { await t.close(); }
+  });
 });

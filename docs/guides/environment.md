@@ -76,6 +76,8 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | | `FEISHU_TOKEN_KEY_VERSION` | 1；换密钥时递增，空串会被判非法 |
 | | `FEISHU_BITABLE_MODE` | 只有 `live` 才写真实多维表格，其余为 mock |
 | | `IMPACT_CARD_MODE` | 只有 `shadow` 时影响卡只在后台记录，其余为 live 推送 |
+| | `COLLECTIONS_ENABLED` | 只有 `1` 才开信息收集（收集接口、每分钟收集任务、对话里发起收集、定时任务里的收集项），其余关 |
+| | `DOC_CHANGE_ENABLED` | 只有 `1` 时群里贴文档链接才触发文档变更推送，其余关 |
 | 观测 | `LANGSMITH_TRACING`、`LANGSMITH_API_KEY` | 只有 `LANGSMITH_TRACING=true` 且有 key 才上报 |
 | | `LANGSMITH_PROJECT` | Compose 缺省 `warmap`，代码缺省 `default` |
 | | `LANGSMITH_ENDPOINT` | SDK 默认端点 |

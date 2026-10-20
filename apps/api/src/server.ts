@@ -104,6 +104,9 @@ const env: AppEnv = {
   // 影响卡：live（缺省）推送；shadow 只在后台记录，不打扰人。
   impactCardMode: process.env.IMPACT_CARD_MODE === "shadow" ? "shadow" : "live",
   collectionBitable: process.env.FEISHU_BITABLE_MODE === "live" ? "live" : "mock",
+  // 信息收集、文档变更推送（D-56）：值为 1 才开，缺省关。
+  collectionsEnabled: process.env.COLLECTIONS_ENABLED === "1",
+  docChangeEnabled: process.env.DOC_CHANGE_ENABLED === "1",
 };
 
 const port = Number(process.env.PORT ?? "4000");

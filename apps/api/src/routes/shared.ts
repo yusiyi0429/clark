@@ -94,8 +94,8 @@ export type RouteContext = {
   weeklyReviewWorld?: WeeklyReviewWorldSync;
   /** 签发月度计划后代 CEO 确认本体周期目标；本体没配或不写时为空。 */
   worldPeriodGoals?: WorldPeriodGoalService;
-  /** ③ 信息收集：起草 Agent 与服务依赖（路由和对话入口共用）。 */
-  collections: { agent: CollectionAgent; deps: CollectionDeps };
+  /** ③ 信息收集：起草 Agent 与服务依赖（路由和对话入口共用）；收集关着时（env.collectionsEnabled）为空。 */
+  collections?: { agent: CollectionAgent; deps: CollectionDeps };
   recordings: MeetingRecordingService;
   voiceprints: VoiceprintDeps;
   dictation: DictationDeps;

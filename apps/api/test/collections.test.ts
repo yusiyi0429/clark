@@ -3,13 +3,16 @@ import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
 import type { TCollectionView, TConversationCard, TRequestListItem, TScheduleItem } from "@warmap/contracts";
 import { hashSecret } from "../src/session.js";
 import type { CollectionAgent } from "../src/collectionAgent.js";
 import { createConversationEntries, type EntryStep } from "../src/conversationEntries.js";
 import { cellText, createFeishuBitable, createMockBitable } from "../src/feishu/bitable.js";
 import type { RequestAgent } from "../src/delivery/requestAgent.js";
-import { createTestApp, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
+import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
+import { createTestApp, TEST_CEO, TEST_MEMBER, testEnv, type TestApp } from "./helpers.js";
 
 // ③ 信息收集：发起人测试甲（CEO），收件人测试乙、测试丙；测试丁不在名单里。
 const THIRD = { personId: "person-fixture-003", loginId: "ceshib", passcode: "8642" } as const;
@@ -30,7 +33,7 @@ const agent: CollectionAgent = {
 let t: TestApp | undefined;
 afterEach(async () => { await t?.close(); t = undefined; });
 
-async function setup() {
+async function setup(collectionsEnabled = true) {
   const dir = await mkdtemp(join(tmpdir(), "warmap-collections-test-"));
   const seed = join(dir, "people.json");
   await writeFile(seed, JSON.stringify({ schemaVersion: "company-people.v1", people: [
@@ -41,7 +44,7 @@ async function setup() {
   ] }));
   const clock = { now: MONDAY_10 };
   const bitable = createMockBitable();
-  t = await createTestApp({ companyPeopleSeed: seed }, undefined, { collectionAgent: agent, bitable, monthlyNow: () => clock.now });
+  t = await createTestApp({ companyPeopleSeed: seed, collectionsEnabled }, undefined, { collectionAgent: agent, bitable, monthlyNow: () => clock.now });
   for (const who of [THIRD, FOURTH]) {
     await t.sql("INSERT INTO member_access (person_id, login_id, passcode_hash, must_change) VALUES ($1, $2, $3, FALSE)", [who.personId, who.loginId, hashSecret(who.passcode)]);
   }
@@ -253,6 +256,17 @@ describe("③ 信息收集", () => {
     expect(items[0].nextRunAt).toBe(new Date("2026-10-23T07:00:00Z").toISOString());
   });
 
+  it("收集关闭时定时任务里没有收集项", async () => {
+    const { call, sql } = await setup(false);
+    await sql(`INSERT INTO collections (id, initiator_id, prompt, scenario, title, fields, deadline_at, weekly, status, sent_at)
+      VALUES ($1, $2, '每周收一下这周的开销', 'expense', '灯塔项目每周开销', '[]'::jsonb, $3, TRUE, 'active', now())`, [randomUUID(), TEST_CEO.personId, FRIDAY_18]);
+    const res = await call("ceo", "GET", "/api/me/schedules");
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { items: TScheduleItem[] }).items.filter((item) => item.category === "collect")).toEqual([]);
+    expect((await call("ceo", "POST", "/api/collections/draft", { prompt: "每周收一下这周的开销" })).statusCode).toBe(404);
+    expect(t!.app.collectionJobs).toEqual({ handlers: {}, recurring: [] });
+  });
+
   it("飞书多维表格：发出后建表、每人一行；天枢改的推上去，飞书里改的读回来", async () => {
     const { launch, round, act, tick, bitable, sql } = await setup();
     const requestId = (await launch("收一下这周的开销")).round!.requestId;
@@ -309,6 +323,38 @@ describe("③ 信息收集", () => {
     const refused = await entries.startCollection({ prompt: "收一下大家的反馈" });
     expect(refused).toMatchObject({ drafted: false });
     expect(steps.findLast((step) => step.id === "collection-scenario")).toMatchObject({ status: "done", result: "不是开销或周进展" });
+  });
+});
+
+describe("对话里的「发起信息收集」", () => {
+  it("收集关闭时不给模型 start_collection", async () => {
+    const seen: string[][] = [];
+    const runtime = await createPiConversationRuntime({ peopleDirectory: loadPeopleDirectory(testEnv),
+      baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
+      streamSimple: (_model, context) => {
+        seen.push(context.tools?.map((tool) => tool.name) ?? []);
+        const stream = createAssistantMessageEventStream();
+        const message: AssistantMessage = { role: "assistant", api: "openai-responses", provider: "warmap", model: "test", content: [{ type: "text", text: "好的" }],
+          stopReason: "stop", timestamp: Date.now(), usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
+        queueMicrotask(() => stream.push({ type: "done", reason: "stop", message }));
+        return stream;
+      } });
+    const entries = (collections: boolean) => createConversationEntries({
+      pool: {} as never, agent: {} as RequestAgent, secret: "s", viewer: { personId: TEST_CEO.personId, role: "ceo" }, message: "", names: new Map(), people: [], directory: [],
+      now: () => MONDAY_10, fingerprint: "test", onStep: () => undefined, onCard: () => undefined,
+      ...(collections ? { collections: { agent, deps: { pool: {} as never, bitable: createMockBitable(), isCeo: () => true, names: () => new Map(), now: () => MONDAY_10 } } } : {}),
+    });
+    const base = { scope: "global" as const, viewer: { personId: TEST_CEO.personId, displayName: "测试甲", role: "ceo" as const },
+      currentObject: null, referencesSnapshot: [], signal: new AbortController().signal, emit: () => undefined, message: "每周收一下开销", runtimeEntries: [] };
+    try {
+      await runtime.run({ ...base, piSessionId: randomUUID(), entries: entries(false) });
+      await runtime.run({ ...base, piSessionId: randomUUID(), entries: entries(true) });
+      expect(seen[0]).toContain("request_help");
+      expect(seen[0]).not.toContain("start_collection");
+      expect(seen[1]).toContain("start_collection");
+    } finally {
+      await runtime.close?.();
+    }
   });
 });
 
