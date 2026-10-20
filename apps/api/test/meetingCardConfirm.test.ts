@@ -45,9 +45,17 @@ const preflightAgent: PreflightAgent = { async generate(input: PreflightAgentInp
 type Written = { eventId: string; body: any };
 /**
  * 假本体：挂点 PO（版本 5）；记事件按幂等键去重（同键重放回原回执）；取事件返回 subject_refs 挂到这个对象上的事件（带 content）。
- * network() 为 true 时记事件请求抛网络错误；beforeCommit 在每次记事件（prepare 之后、提交之前）先跑；readable() 为 false 时取事件为空。
+ * network() 为 true 时记事件请求抛网络错误；beforeCommit 在每次记事件（prepare 之后、提交之前）先跑；readable() 为 false 时取事件为空；
+ * tampered() 为 true 时读回的正文 payload 被改了一个字（confirmation 原样）。
  */
-function ontology({ network = () => false, beforeCommit, readable = () => true }: { network?: () => boolean; beforeCommit?: () => Promise<void>; readable?: () => boolean } = {}) {
+function ontology({ network = () => false, beforeCommit, readable = () => true, tampered = () => false }:
+  { network?: () => boolean; beforeCommit?: () => Promise<void>; readable?: () => boolean; tampered?: () => boolean } = {}) {
+  const tamper = (text: string) => {
+    if (!tampered()) return text;
+    const body = JSON.parse(text);
+    body.payload.summary = `${body.payload.summary}。`;
+    return JSON.stringify(body);
+  };
   const po = {
     object_id: "obj-po-1", object_type: "PeriodGoal", title: "十月交付", revision_id: "obj-po-1-r5", object_version: 5, version: 5,
     lifecycle: { status: "active" }, contract_version: "tkos.world/0.3", external_refs: [],
@@ -67,7 +75,7 @@ function ontology({ network = () => false, beforeCommit, readable = () => true }
     const events = path.match(/^\/v1\/world\/objects\/([^/]+)\/events$/);
     if (events) {
       return { events: readable() ? recorded.filter((item) => item.body.params.subject_refs.some((ref: string) => ref.startsWith(`${decodeURIComponent(events[1])}@`)))
-        .map((item) => ({ event_id: item.eventId, content: { refs: [], components: [], ...item.body.params.content } })) : [] };
+        .map((item) => ({ event_id: item.eventId, content: { refs: [], components: [], ...item.body.params.content, text: tamper(item.body.params.content.text) } })) : [] };
     }
     if (path === `/v1/world/objects/${po.object_id}`) return projection(po);
     return { items: [], next_cursor: null };
@@ -142,7 +150,7 @@ describe("整卡确认与会议事件", () => {
       expect(res.statusCode).toBe(200);
       const view: TMeetingCardView = res.json();
       expect(Value.Check(MeetingCardView, view)).toBe(true);
-      expect(view.confirmed).toMatchObject({ kind: "first", confirmation: { revision: 1, confirmedBy: "测试乙" }, payload: { revision: 1, relatedObjectRefs: ["obj-po-1@5"] } });
+      expect(view.confirmed).toMatchObject({ kind: "first", confirmation: { revision: 1, confirmedBy: HOST }, payload: { revision: 1, relatedObjectRefs: ["obj-po-1@5"] } });
       expect(view.confirmed!.confirmation.payloadHash).toBe(payloadHash(view.confirmed!.payload));
       expect(view.confirmed!.payload.objectChanges[0]).not.toHaveProperty("stale");
       expect(view.sync).toMatchObject({ revision: 1, writeToWorld: true, event: { status: "pending", eventId: null }, objects: [] });
@@ -159,16 +167,23 @@ describe("整卡确认与会议事件", () => {
         params: { category: "meeting", subject_refs: ["obj-po-1@5"], occurred_at: "2026-06-01T10:02:00+08:00",
           declaration: { scene: "obj-po-1@5", trigger: "会议记录整卡确认", human_acceptance: { required: false } } } });
       expect(body.params).not.toHaveProperty("supersedes_event_id");
+      // 确认人的名字只写在 reason 里。
+      expect(body.reason).toBe("天枢会议记录整卡确认（测试乙）");
       expect(Object.keys(body.params.content).sort()).toEqual(["artifacts", "text"]);
       expect(body.params.content.artifacts).toEqual([view.confirmed!.payload.sources[0].url]);
       const { payload, confirmation } = parsed(body);
       expect(payload).toEqual(view.confirmed!.payload);
       expect(payload.revision).toBe(1);
       expect(confirmation.payloadHash).toBe(payloadHash(payload));
+      // 读回：写完按挂点对象取事件，带 since。
+      const readBack = world.calls.find((call) => call.url.pathname === "/v1/world/objects/obj-po-1/events")!;
+      expect(readBack.url.searchParams.get("since")).toBe("2026-06-01T10:02:00+08:00");
 
       const after = await getCard(t, host, meetingId);
       expect(after.sync).toMatchObject({ event: { status: "succeeded", eventId: "ev-1", error: null } });
       expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "committed", version: 1, eventId: "ev-1" });
+      // 参会人看不到记录状态。
+      expect((await worldOf(t, owner, meetingId)).world).toMatchObject({ record: null, at: null });
       // CEO 能读确认版。
       expect((await getCard(t, ceo, meetingId)).confirmed).toEqual(after.confirmed);
     } finally {
@@ -272,6 +287,25 @@ describe("整卡确认与会议事件", () => {
     }
   });
 
+  it("读回找到了这条但正文对不上摘要值：不算写成", async () => {
+    let tampered = true;
+    const world = ontology({ tampered: () => tampered });
+    const { t, host, meetingId, run } = await setup();
+    try {
+      const draftVersion = await ready(t, host, meetingId);
+      await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
+      await run();
+      expect(world.writes()).toHaveLength(1);
+      expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "failed", eventId: null, error: expect.stringContaining("READBACK_MISMATCH") });
+      tampered = false;
+      await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
+      await run();
+      expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "succeeded", eventId: "ev-1" });
+    } finally {
+      await t.close();
+    }
+  });
+
   it("没有对象修改也能确认", async () => {
     const world = ontology();
     const { t, host, meetingId, run } = await setup(cardAgent([]));
@@ -312,7 +346,39 @@ describe("整卡确认与会议事件", () => {
       await run();
       expect(world.writes()).toEqual([]);
       expect((await worldOf(t, host, meetingId)).world).toMatchObject({ excluded: true, excludedBy: "测试乙", record: { status: "excluded", version: 1, eventId: null } });
+      expect(view.confirmed!.confirmation.confirmedBy).toBe(HOST);
       expect((await t.sql("SELECT status FROM meetings WHERE id = $1", [meetingId]))[0].status).toBe("reviewed");
+
+      // 同一草稿改成写入：不出新版本、不用选原因，写一条（拍板 8）。
+      const enabled = await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
+      expect(enabled.statusCode).toBe(200);
+      expect((enabled.json() as TMeetingCardView)).toMatchObject({ confirmed: { kind: "first", confirmation: { revision: 1 } },
+        sync: { revision: 1, writeToWorld: true, event: { status: "pending" } } });
+      await run();
+      expect(world.writes()).toHaveLength(1);
+      expect(parsed(world.writes()[0]).payload.revision).toBe(1);
+      expect((await t.sql("SELECT count(*)::int AS n FROM meeting_card_confirmations WHERE meeting_id = $1", [meetingId]))[0].n).toBe(1);
+      expect((await worldOf(t, host, meetingId)).world).toMatchObject({ excluded: false, excludedBy: null, record: { status: "committed", version: 1, eventId: "ev-1" } });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("写过再选不写入：不出新版本、不追加，原事件保留", async () => {
+    const world = ontology();
+    const { t, host, meetingId, run } = await setup();
+    try {
+      const draftVersion = await ready(t, host, meetingId);
+      await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
+      await run();
+      const res = await confirm(t, host, meetingId, { draftVersion, writeToWorld: false });
+      expect(res.statusCode).toBe(200);
+      expect((res.json() as TMeetingCardView)).toMatchObject({ confirmed: { confirmation: { revision: 1 } },
+        sync: { writeToWorld: true, event: { status: "succeeded", eventId: "ev-1" } } });
+      await run();
+      expect(world.writes()).toHaveLength(1);
+      expect((await t.sql("SELECT count(*)::int AS n FROM meeting_card_confirmations WHERE meeting_id = $1", [meetingId]))[0].n).toBe(1);
+      expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "committed", version: 1, eventId: "ev-1" });
     } finally {
       await t.close();
     }
@@ -342,6 +408,8 @@ describe("整卡确认与会议事件", () => {
       // 改挂点对象的版本（本体那边有人改过），更正仍沿用被更正事件的 subject_refs 和发生时刻。
       world.po.object_version = 6;
       world.po.version = 6;
+      // 被更正那条的台账没了：沿用同步回执里记下的 subject_refs 和 occurred_at。
+      await t.pool.query("DELETE FROM world_sync_ledger WHERE idempotency_key = $1", [`tianshu-meeting:${meetingId}:v1`]);
       const next = await edit(t, host, meetingId, (draft) => { draft.sections[0].body = "已定：接口统一改成 v2，十月底切换。"; draft.occurredAt = "2026-06-01T10:30:00+08:00"; });
       const view = (await confirm(t, host, meetingId, { draftVersion: next.draftVersion, writeToWorld: true, kind: "correction", reason: "记错了切换时间" })).json() as TMeetingCardView;
       expect(view.confirmed).toMatchObject({ kind: "correction", payload: { revision: 2, relatedObjectRefs: ["obj-po-1@6"] } });

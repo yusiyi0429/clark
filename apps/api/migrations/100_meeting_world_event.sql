@@ -47,6 +47,7 @@ CREATE TABLE meeting_card_confirmations (
 
 -- 同步回执（每个确认版本一行）：会议事件 event_status pending 待写 / succeeded 写成并读回 / failed 失败（event_error 记原因）/ skipped 选了不写入；
 --   幂等键 tianshu-meeting:<会议 id>:v<revision>；objects 是对象修改的回执（MeetingObjectResult[]）；状态变化不改冻结的 payload。
+--   event_subject_refs、event_occurred_at 是写成时实际写进去的 subject_refs 和 occurred_at（之后更正这条时沿用）；
 --   updated_at 是最近一次变化的时刻（写成时就是写成的时刻）。
 CREATE TABLE meeting_card_syncs (
   meeting_id UUID NOT NULL,
@@ -54,6 +55,8 @@ CREATE TABLE meeting_card_syncs (
   event_status TEXT NOT NULL CHECK (event_status IN ('pending', 'succeeded', 'failed', 'skipped')),
   event_id TEXT,
   event_error TEXT,
+  event_subject_refs JSONB CHECK (event_subject_refs IS NULL OR jsonb_typeof(event_subject_refs) = 'array'),
+  event_occurred_at TEXT,
   objects JSONB NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(objects) = 'array'),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (meeting_id, revision),

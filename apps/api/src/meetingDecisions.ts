@@ -408,7 +408,8 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     const manage = canManageWorld(meeting, viewerId);
     const showStatus = manage || isCreator(meeting, viewerId);
     if (!showStatus && !attendeesOf(meeting).personIds.includes(viewerId)) return NOT_FOUND;
-    return meetingWorldDetail(q, meeting, meeting.decisions ?? [], await meetingRecordState(q, meetingId), { canEdit: manage, showStatus });
+    const nameOf = (personId: string) => meeting.participants.find((person) => person.personId === personId)?.displayName ?? names().get(personId) ?? personId;
+    return meetingWorldDetail(q, meeting, meeting.decisions ?? [], await meetingRecordState(q, meetingId, nameOf), { canEdit: manage, showStatus });
   }
 
   /** 某月能挑的挂点：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元。 */

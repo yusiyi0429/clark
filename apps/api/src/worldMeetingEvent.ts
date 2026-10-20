@@ -1,28 +1,32 @@
 import type { TMeetingCardConfirmation, TMeetingCardKind, TMeetingCardV1Payload, TWorldAnchor } from "@warmap/contracts";
+import { payloadHash } from "./meetingCardHash.js";
 import type { MeetingRow, Query } from "./meetingStore.js";
 import { WorldClient, WorldError, worldErrorCode, worldRef, type WorldAction, type WorldHead } from "./worldClient.js";
 
 /**
  * 会议事件（B 方案，D-58；会议卡 FR-5）：主持人或创建人整卡确认后，一个确认版本在本体里记一条外部事件。
  * - 正文 content.text 是 JSON.stringify({ payload, confirmation })，Card 和 Event 共用同一份结构；content 只放 text、refs、artifacts（拍板 13），
- *   artifacts 是来源地址去重。写入声明三项都带，trigger「会议记录整卡确认」，reason 写真实确认人。
+ *   artifacts 是来源地址去重。写入声明三项都带，trigger「会议记录整卡确认」，reason 写真实确认人的名字（confirmation.confirmedBy 是 personId）。
  * - first：category meeting，subject_refs 是 payload.relatedObjectRefs 去重，occurred_at 是会议实际开始。
  * - followup（会后新决定）：category meeting，content.refs 指回前次写成的事件，occurred_at 取确认时刻减 60 秒（服务端不收将来时刻）。
- * - correction（更正原记录）：category correction，supersedes_event_id 是前次写成的事件，subject_refs 和 occurred_at 沿用被更正那条。
+ * - correction（更正原记录）：category correction，supersedes_event_id 是前次写成的事件，subject_refs 和 occurred_at 沿用被更正那条
+ *   （同步回执里记下的；更早写成、回执里没记的，退回台账里的原请求）。
  * - 前次没有写成的事件就按 first 写。幂等键 tianshu-meeting:<会议 ID>:v<revision>；结果未知时同键重放台账里的原请求（拍板 3）。
- * - 写完按挂点对象取事件读回：找到这条、正文解析出的 confirmation.payloadHash 一致才算写成。
+ * - 写完按挂点对象取事件读回：找到这条，正文解析出的 confirmation.payloadHash 和确认的一致、并且按解析出的 payload 重算也一致，才算写成。
  */
 export type MeetingEventWrite = {
   meetingId: string;
   kind: TMeetingCardKind;
   payload: TMeetingCardV1Payload;
   confirmation: TMeetingCardConfirmation;
-  /** 前次写成的会议事件（同一会议更早的确认版本）；没有就按 first 写。 */
-  previous: { eventId: string; revision: number } | null;
+  /** 确认人的显示名（写进 reason）。 */
+  confirmerName: string;
+  /** 前次写成的会议事件（同一会议更早的确认版本）和它实际写进去的 subject_refs、occurred_at（没记下为 null）；没有前次就按 first 写。 */
+  previous: { eventId: string; revision: number; subjectRefs: string[] | null; occurredAt: string | null } | null;
 };
 export type MeetingEventWorld = {
-  /** 写入并读回；返回事件 id。 */
-  write(input: MeetingEventWrite): Promise<{ eventId: string }>;
+  /** 写入并读回；返回事件 id 和实际写进去的 subject_refs、occurred_at。 */
+  write(input: MeetingEventWrite): Promise<{ eventId: string; subjectRefs: string[]; occurredAt: string }>;
   errorCode(error: unknown): string;
 };
 
@@ -63,29 +67,31 @@ export async function anchorHead(q: Query, client: AnchorHeadClient, anchor: TWo
   return id ? client.getHead(id) : null;
 }
 
-/** 读回的事件正文里的 confirmation.payloadHash；解析不了为 null。 */
-function readBackHash(event: Record<string, unknown>): string | null {
+/** 读回的事件正文和确认的一致：confirmation.payloadHash 相同，并且按解析出的 payload 重算也相同；解析不了算不一致。 */
+function readBackMatches(event: Record<string, unknown>, expected: string): boolean {
   const text = (event.content as { text?: unknown } | undefined)?.text;
-  if (typeof text !== "string") return null;
+  if (typeof text !== "string") return false;
   try {
-    const hash = (JSON.parse(text) as { confirmation?: { payloadHash?: unknown } }).confirmation?.payloadHash;
-    return typeof hash === "string" ? hash : null;
+    const parsed = JSON.parse(text) as { payload?: TMeetingCardV1Payload; confirmation?: { payloadHash?: unknown } };
+    return parsed.confirmation?.payloadHash === expected && Boolean(parsed.payload) && payloadHash(parsed.payload!) === expected;
   } catch {
-    return null;
+    return false;
   }
 }
 
 export function createMeetingEventWorld({ client }: { client: WorldClient }): MeetingEventWorld {
   return {
-    async write({ meetingId, kind: requested, payload, confirmation, previous }) {
+    async write({ meetingId, kind: requested, payload, confirmation, confirmerName, previous }) {
       const kind = previous ? requested : "first";
       let subjectRefs = [...new Set(payload.relatedObjectRefs)];
       let occurredAt = shanghai(new Date(payload.occurredAt!));
       if (kind === "correction") {
-        // 沿用被更正那条实际写进去的（台账里的原请求）。
-        const corrected = (await client.savedRequest(meetingEventKey(meetingId, previous!.revision)))?.params as { subject_refs?: string[]; occurred_at?: string } | undefined;
-        if (corrected?.subject_refs?.length) subjectRefs = corrected.subject_refs;
-        if (corrected?.occurred_at) occurredAt = corrected.occurred_at;
+        // 沿用被更正那条实际写进去的：同步回执里记下的；没记下的（更早写成的）退回台账里的原请求。
+        const ledger = previous!.subjectRefs?.length && previous!.occurredAt ? undefined
+          : (await client.savedRequest(meetingEventKey(meetingId, previous!.revision)))?.params as { subject_refs?: string[]; occurred_at?: string } | undefined;
+        const corrected = previous!.subjectRefs?.length ? previous!.subjectRefs : ledger?.subject_refs;
+        if (corrected?.length) subjectRefs = corrected;
+        occurredAt = previous!.occurredAt ?? ledger?.occurred_at ?? occurredAt;
       }
       if (kind === "followup") occurredAt = shanghai(new Date(new Date(confirmation.confirmedAt).getTime() - 60_000));
       const sceneId = subjectRefs[0]?.replace(/@\d+$/, "");
@@ -95,7 +101,7 @@ export function createMeetingEventWorld({ client }: { client: WorldClient }): Me
         const scene = await client.getHead(sceneId);
         return {
           action_type: "world_record_event", contract_version: scene.contract_version, target: null, expected_versions: [], idempotency_key: key,
-          reason: `天枢会议记录整卡确认（${confirmation.confirmedBy}）`,
+          reason: `天枢会议记录整卡确认（${confirmerName}）`,
           params: {
             category: kind === "correction" ? "correction" : "meeting",
             subject_refs: subjectRefs,
@@ -114,10 +120,10 @@ export function createMeetingEventWorld({ client }: { client: WorldClient }): Me
       if (!eventId) throw new WorldError(502, "INVALID_RESPONSE", "会议事件回执缺少 event_id");
       const read = await client.getEvents(sceneId, occurredAt);
       const event = (read.events ?? read.items ?? []).find((item) => item.event_id === eventId);
-      if (!event || readBackHash(event) !== confirmation.payloadHash) {
+      if (!event || !readBackMatches(event, confirmation.payloadHash)) {
         throw new WorldError(502, "READBACK_MISMATCH", "写入后在挂点对象上没读回这条会议事件，或正文摘要值对不上");
       }
-      return { eventId };
+      return { eventId, subjectRefs, occurredAt };
     },
     errorCode: worldErrorCode,
   };
