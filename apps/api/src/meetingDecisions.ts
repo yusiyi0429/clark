@@ -1,11 +1,11 @@
 import { isDeepStrictEqual } from "node:util";
 import type { Pool } from "pg";
-import type { TMeetingWorldResponse, TPickedWorldAnchor, TWorldAnchor } from "@warmap/contracts";
+import type { TMeetingWorldResponse, TPickedWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { attendeesOf } from "./meetingDecisionView.js";
 import { meetingRecordState } from "./meetingCardConfirm.js";
 import { getMeetingRow, type MeetingRow, type Query, type StoredWorldAnchor } from "./meetingStore.js";
-import { anchorOptions, meetingWorldDetail, storedAnchor, type AnchorWorld } from "./meetingWorld.js";
+import { anchorOptions, meetingWorldDetail, storedAnchor, type AnchorBriefCache, type AnchorWorld } from "./meetingWorld.js";
 import { personDisplayNames } from "./people.js";
 import { shanghaiDate } from "./workdays.js";
 
@@ -47,8 +47,9 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     return meetingWorldDetail(q, meeting, meeting.decisions ?? [], await meetingRecordState(q, meetingId, nameOf), { canEdit: manage, showStatus });
   }
 
-  /** 某月能挑的挂点：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元。 */
-  const anchorOptionsFor = (period: string) => anchorOptions(q, deps.anchorWorld ?? null, period);
+  /** 某月能挑的挂点：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元；PO、LTO 的内容按对象版本记在这个服务里。 */
+  const briefs: AnchorBriefCache = new Map();
+  const anchorOptionsFor = (period: string) => anchorOptions(q, deps.anchorWorld ?? null, period, briefs);
   const meetingPeriod = (meeting: MeetingRow) => shanghaiDate(new Date(meeting.scheduled_at)).slice(0, 7);
 
   /**
@@ -75,7 +76,7 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     return worldView(meetingId, viewerId);
   }
 
-  async function listAnchorOptions(meetingId: string, viewerId: string): Promise<{ options: TWorldAnchor[] } | typeof NOT_FOUND> {
+  async function listAnchorOptions(meetingId: string, viewerId: string): Promise<{ options: TWorldAnchorOption[] } | typeof NOT_FOUND> {
     const meeting = await getMeetingRow(q, meetingId);
     if (!meeting || !canManageWorld(meeting, viewerId)) return NOT_FOUND;
     return { options: await anchorOptionsFor(meetingPeriod(meeting)) };

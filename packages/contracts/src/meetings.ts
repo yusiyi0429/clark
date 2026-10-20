@@ -506,6 +506,8 @@ export const MeetingCardPayload = Type.Object(
     endedAt: Type.Union([Type.String(), Type.Null()]),
     hasEnded: Type.Optional(Type.Boolean()),
     leadDriId: Type.String(),
+    /** 建会的人（没记时为 null，按主持人算）：和主持人一样能再读妙记、贴妙记链接。 */
+    createdBy: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     ceoParticipantId: Type.String(),
     participants: Type.Array(MeetingParticipant),
     issueIds: Type.Array(Type.String()),
@@ -571,7 +573,7 @@ export const JoinMeetingRequest = Type.Object(
   { additionalProperties: false },
 );
 
-/** CEO 端只读人员目录：Meeting 创建表单选择 personId；单 CEO 产品，ceo 角色唯一。 */
+/** 只读人员目录（CEO 和成员）：建会表单选主持人、参会人的 personId；单 CEO 产品，ceo 角色唯一。 */
 export const PeopleDirectoryResponse = Type.Object(
   {
     people: Type.Array(

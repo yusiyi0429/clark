@@ -60007,7 +60007,9 @@
               "required": [
                 "kind",
                 "id",
-                "title"
+                "title",
+                "brief",
+                "lifecycle"
               ],
               "properties": {
                 "kind": {
@@ -60025,15 +60027,7 @@
                       "type": "string"
                     },
                     {
-                      "const": "task",
-                      "type": "string"
-                    },
-                    {
                       "const": "unit",
-                      "type": "string"
-                    },
-                    {
-                      "const": "company",
                       "type": "string"
                     }
                   ]
@@ -60045,6 +60039,27 @@
                 "title": {
                   "minLength": 1,
                   "type": "string"
+                },
+                "brief": {
+                  "anyOf": [
+                    {
+                      "maxLength": 80,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "lifecycle": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }

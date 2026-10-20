@@ -237,6 +237,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
       endedAt: row.ended_at?.toISOString() ?? null,
       hasEnded: meetingHasEnded(row, at),
       leadDriId: row.lead_dri_id,
+      createdBy: row.created_by,
       ceoParticipantId: row.ceo_participant_id,
       participants: row.participants,
       issueIds: row.issue_ids,

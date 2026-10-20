@@ -31,7 +31,7 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
     status: payload.status, scheduledAt: payload.scheduledAt, endsAt: payload.endsAt, endedAt: payload.endedAt,
     hasEnded: payload.hasEnded,
     ...(isHost ? { transcriptCandidate: payload.transcriptCandidate } : {}),
-    leadDriId: payload.leadDriId, participants: payload.participants,
+    leadDriId: payload.leadDriId, createdBy: payload.createdBy ?? null, participants: payload.participants,
     purpose: payload.preflight.taskDefinition?.reviewPurpose ?? null,
     materials: payload.materials,
     preflight: { status: payload.preflight.status, brief: payload.preflight.brief,

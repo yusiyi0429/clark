@@ -9,7 +9,7 @@ import { payloadOf, type IssuePayload, type MeetingPayload } from "./payloads";
 import { issueScopeLabel } from "./scopeNames";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { SelectionToolbar, useSelectionQuote } from "@/components/SelectionQuote";
-import { MeetingClock, MeetingHeaderActions, MeetingStatus, meetingDayWord, meetingPhase, meetingSlot, useMeetingTimeline } from "@/components/meeting/MeetingHeader";
+import { MeetingClock, MeetingHeaderActions, MeetingStatus, MeetingTranscriptStatus, meetingDayWord, meetingPhase, meetingSlot, useMeetingTimeline } from "@/components/meeting/MeetingHeader";
 import { useMeetingRecorder, type RecorderState } from "@/components/meeting/useMeetingRecorder";
 import { MaterialPane, useMaterialPreview, type MaterialMeta } from "@/components/meeting/meetingMaterialPreview";
 import { IssueDecisionBlock } from "@/components/meeting/IssueDecisionBlock";
@@ -1514,7 +1514,6 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const retryOutcome = actionOf("meeting.retry_outcome");
   const cardArea = recordCard.status === "card" ? (
     <>
-      <MeetingWorldSection meetingId={meetingId} />
       {source.outcome?.status === "failed" ? (
         <p className={s.error} role="alert">
           生成失败
@@ -1531,14 +1530,13 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     memberReadOnly && !(isHost && payload.status === "scheduled") ? (
       <section className={s.review}>
         {cardArea ?? (legacyRecord ? <>
-        {/* 实际参会的人能看完整纪要和这场会在本体里的挂点。 */}
+        {/* 实际参会的人能看完整纪要。 */}
         {memberOutcomeSummary(source) ? (
           <section className={s.reviewSection} data-outline="summary">
             <header><h3>会议纪要</h3></header>
             <p className={s.entryBody}>{memberOutcomeSummary(source)}</p>
           </section>
         ) : null}
-        <MeetingWorldSection meetingId={meetingId} />
         <section className={s.reviewSection}>
           <header><h3>会后结论</h3></header>
           {outcomeItems.length ? (
@@ -1620,7 +1618,6 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
               </header>
               <p className={s.entryBody}>{payload.outcome.summary || "抽取尚未产出摘要。"}</p>
             </section>
-            <MeetingWorldSection meetingId={meetingId} />
             {payload.outcome.error ? (
               <p className={s.error} role="alert" title={payload.outcome.error.code}>
                 {payload.outcome.error.message}
@@ -1714,6 +1711,21 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       </section>
     );
 
+  // 页头下面一行（会前会后都在）：挂点、会议记录状态、逐字稿状态。再读、贴妙记链接只给主持人和建会的人；读完重取会议卡。
+  const canFetchMinutes = Boolean(workspace.viewerId) && (isHost || (source.createdBy ?? source.leadDriId) === workspace.viewerId);
+  const reloadCard = async () => {
+    const next = memberReadOnly
+      ? (await browserApi.GET("/api/me/cards/meetings/{id}", { params: { path: { id: meetingId } } })).data
+      : (await browserApi.GET("/api/cards/meetings/{id}", { params: { path: { id: meetingId } } })).data?.cards?.[0];
+    if (next) onCard(next);
+  };
+  const worldLine = (
+    <MeetingWorldSection meetingId={meetingId} ended={ended} transcript={
+      <MeetingTranscriptStatus meetingId={meetingId} status={source.minutesStatus ?? "none"} failure={source.minutesFailure ?? null}
+        confirmed={Boolean(source.transcript)} canFetch={canFetchMinutes} onFetched={() => void reloadCard()} />
+    } />
+  );
+
   const recordTab = memberReadOnly && !isHost ? { ...RECORD_TAB, title: "会议记录：已确认的决定与待办" } : RECORD_TAB;
   const showing = view.current === RECORD_TAB.id ? recordTab : viewedMaterial ? materialTab(viewedMaterial) : meetingHeld ? { ...PREFLIGHT_TAB, title: "会前预审" } : PREFLIGHT_TAB;
 
@@ -1743,6 +1755,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
             <div className={s.readingGrid} data-toc={outline ? "true" : undefined} data-type-pair={view.current === PREFLIGHT_TAB.id && !viewedMaterial ? "preflight" : undefined}>
               {outline ? <MeetingOutline items={outline} active={outlineActive} onJump={jumpOutline} label={recordShown ? "会后目录" : "议题目录"} /> : null}
               <div className={s.readingMain} data-material-column ref={mainRef} onMouseUp={onQuoteMouseUp}>
+                {worldLine}
                 <MeetingStatus phase={phase} facts={facts} now={statusNow} endedAt={payload.endedAt} />
                 {(memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose) ?
                   <p className={s.agenda}>{stripInternalRefs(memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose)}</p> : null}

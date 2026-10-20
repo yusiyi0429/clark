@@ -10506,9 +10506,11 @@ export interface components {
         };
         MeetingWorldAnchorOptionsResponse: {
             options: {
-                kind: "lto" | "po" | "mission" | "task" | "unit" | "company";
+                kind: "lto" | "po" | "mission" | "unit";
                 id: string;
                 title: string;
+                brief: string | null;
+                lifecycle: string | null;
             }[];
         };
         ImpactCardView: {

@@ -263,3 +263,19 @@
 @media (max-width: 959px), (pointer: coarse) {
   .end.end { min-height: var(--touch-hit, 44px); min-width: 72px; font-size: 14px; }
 }
+
+/* 页头下面那一行末尾的逐字稿状态（MeetingTranscriptStatus）。 */
+.transcript { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.transcriptState { display: inline-flex; align-items: center; padding: 0 8px; border-radius: 999px; background: #eaf2ff; color: #1f5fd6; font-size: 12px; line-height: 22px; font-weight: 600; white-space: nowrap; }
+.transcriptState[data-tone='done'] { background: #e9f7ef; color: #1c7a43; }
+.transcriptState[data-tone='fail'] { background: #fde8ec; color: #be123c; }
+.transcriptAction { min-height: 26px; padding: 0 10px; border: 1px solid #d9dde3; border-radius: 999px; background: #fff; color: #1f2937; font: inherit; font-size: 13px; cursor: pointer; }
+.transcriptAction:disabled { opacity: .45; cursor: default; }
+.transcriptLink { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.transcriptLink input { width: min(260px, 60vw); height: 28px; padding: 0 10px; border: 1px solid #dfe3e8; border-radius: 10px; font: inherit; font-size: 13px; }
+.transcriptError { color: #be123c; font-size: 12px; }
+@media (max-width: 959px), (pointer: coarse) {
+  .transcriptAction, .transcriptLink input { min-height: 44px; }
+  .transcriptLink { flex: 1 1 100%; }
+  .transcriptLink input { flex: 1; width: auto; }
+}

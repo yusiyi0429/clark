@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { TMeetingWorldView } from "@warmap/contracts";
+import type { TMeetingWorldView, TWorldAnchorOption } from "@warmap/contracts";
 
 const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0,
   useState(initial: unknown) {
@@ -12,13 +12,24 @@ const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0,
 }));
 vi.mock("react", async (original) => ({ ...(await original<typeof import("react")>()),
   useState: hooks.useState, useEffect: () => undefined, useMemo: (fn: () => unknown) => fn() }));
-const api = vi.hoisted(() => ({ put: vi.fn(), get: vi.fn() }));
-vi.mock("@/lib/api/client", () => ({ browserApi: { PUT: api.put, GET: api.get } }));
+const api = vi.hoisted(() => ({ put: vi.fn(), get: vi.fn(), post: vi.fn() }));
+vi.mock("@/lib/api/client", () => ({ browserApi: { PUT: api.put, GET: api.get, POST: api.post } }));
 
 import { MeetingWorldBar } from "./MeetingWorldBar";
+import { MeetingTranscriptStatus } from "./MeetingHeader";
+import { WorldAnchorPicker } from "./WorldAnchorPicker";
 import { WorldAnchors } from "./WorldAnchors";
 
 type Node = { type?: unknown; props?: Record<string, unknown> };
+/** 展开自己的子组件（挑挂点、逐字稿状态），库组件不展开。 */
+const PARTS = new Set<unknown>([WorldAnchorPicker, MeetingTranscriptStatus]);
+function expand(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(expand);
+  if (!value || typeof value !== "object") return value;
+  const node = value as Node;
+  if (typeof node.type === "function" && PARTS.has(node.type)) return expand((node.type as (props: unknown) => unknown)(node.props));
+  return node.props ? { ...node, props: { ...node.props, children: expand(node.props.children) } } : value;
+}
 function nodes(value: unknown): Node[] {
   if (Array.isArray(value)) return value.flatMap(nodes);
   if (!value || typeof value !== "object") return [];
@@ -35,26 +46,27 @@ const RECORD = { status: "committed" as const, version: 1, eventId: "ev-1", conf
 const world = (overrides: Partial<TMeetingWorldView> = {}): TMeetingWorldView => ({
   excluded: false, excludedBy: null, record: RECORD, at: "2026-10-19T10:42:00.000Z", anchors: [MISSION], edited: false, canEdit: true, ...overrides,
 });
-const render = (view: TMeetingWorldView, onChange = vi.fn()) => {
+const render = (view: TMeetingWorldView, ended = true, onChange = vi.fn()) => {
   hooks.index = 0;
-  return nodes(MeetingWorldBar({ meetingId: "m1", world: view, onChange }));
+  return nodes(expand(MeetingWorldBar({ meetingId: "m1", world: view, ended, onChange })));
 };
+const option = (anchor: { kind: TWorldAnchorOption["kind"]; id: string; title: string }, brief: string | null = null, lifecycle: string | null = null): TWorldAnchorOption =>
+  ({ ...anchor, brief, lifecycle });
 
-beforeEach(() => { hooks.values = []; api.put.mockReset(); api.get.mockReset(); });
+beforeEach(() => { hooks.values = []; api.put.mockReset(); api.get.mockReset(); api.post.mockReset(); });
 
-describe("会议页：这场会挂到哪、会议记录写进本体没有", () => {
-  it("主持人：挂点带已记的绿点，能改；选了不写入时挂点划掉、写明谁选的，不能改", () => {
+describe("会议页页头：这场会挂到哪、会议记录写进本体没有", () => {
+  it("主持人：挂点带已写入的绿点，能改；选了不写入时挂点划掉，不能改", () => {
     const tree = render(world());
     const anchors = tree.find((node) => node.type === WorldAnchors)!;
     expect(anchors.props).toMatchObject({ anchors: [MISSION], tone: "ok" });
     expect(tree.some((node) => node.type === "button" && text(node) === "改")).toBe(true);
-    expect(tree.some((node) => node.type === "span" && text(node) === "已记 · 10/19 18:42")).toBe(true);
-    expect(tree.some((node) => node.props?.role === "switch")).toBe(false);
+    expect(tree.some((node) => node.type === "span" && text(node) === "记录 · 已写入")).toBe(true);
 
     hooks.values = [];
     const after = render(world({ excluded: true, excludedBy: "林晓", record: { ...RECORD, status: "excluded" } }));
     expect(after.find((node) => node.type === WorldAnchors)!.props).toMatchObject({ tone: "off" });
-    expect(after.some((node) => node.type === "span" && text(node) === "林晓")).toBe(true);
+    expect(after.some((node) => node.type === "span" && text(node) === "记录 · 不写入")).toBe(true);
     expect(after.some((node) => node.type === "button" && text(node) === "改")).toBe(false);
   });
 
@@ -65,21 +77,93 @@ describe("会议页：这场会挂到哪、会议记录写进本体没有", () =
     expect(tree.some((node) => node.type === "button" && text(node) === "改")).toBe(false);
   });
 
-  it("改挂点：列本月 Mission 和单元，选了保存；改过的可以恢复自动", async () => {
+  it("会前也能看到挂点条", () => {
+    const tree = render(world({ record: { ...RECORD, status: "pending", eventId: null, confirmedAt: null }, at: null }), false);
+    expect(tree.some((node) => node.type === "span" && text(node) === "挂到")).toBe(true);
+    expect(tree.find((node) => node.type === WorldAnchors)!.props).toMatchObject({ anchors: [MISSION], tone: undefined });
+    expect(tree.some((node) => text(node).startsWith("记录 ·"))).toBe(false);
+    expect(tree.some((node) => node.type === "button" && text(node) === "改")).toBe(true);
+  });
+
+  it("显示会议记录状态", () => {
+    const labels: [NonNullable<TMeetingWorldView["record"]>["status"], string][] = [
+      ["pending", "记录 · 待确认"], ["committed", "记录 · 已写入"], ["excluded", "记录 · 不写入"], ["edit_pending", "记录 · 修改待确认"], ["failed", "记录 · 写入失败"],
+    ];
+    for (const [status, label] of labels) {
+      hooks.values = [];
+      const tree = render(world({ record: { ...RECORD, status }, excluded: status === "excluded" }));
+      expect(tree.filter((node) => node.type === "span" && node.props?.["data-tone"] !== undefined).map(text)).toEqual([label]);
+    }
+  });
+
+  it("改挂点：按类型分组可搜，选了保存；改过的可以恢复自动", async () => {
     const unit = { kind: "unit" as const, id: "agents", title: "智能体" };
-    api.get.mockResolvedValue({ data: { options: [MISSION, unit] }, response: { ok: true, status: 200 } });
+    const po = { kind: "po" as const, id: "<po>", title: "十月目标" };
+    api.get.mockResolvedValue({ data: { options: [option(po, "十月跑通预约", "committed"), option(MISSION, null, "draft"), option(unit, "智能体")] }, response: { ok: true, status: 200 } });
     const view = world({ edited: true });
     (render(view).find((node) => node.type === "button" && text(node) === "改")!.props!.onClick as () => void)();
-    await vi.waitFor(() => expect(api.get).toHaveBeenCalled());
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/meetings/{id}/world-anchor-options", { params: { path: { id: "m1" } } }));
     await vi.waitFor(() => expect(render(view).some((node) => node.props?.["aria-pressed"] !== undefined)).toBe(true));
     const picker = render(view);
-    expect(picker.filter((node) => node.props?.["aria-pressed"] !== undefined).map((node) => node.props!["aria-pressed"])).toEqual([true, false]);
-    (picker.find((node) => node.props?.["aria-pressed"] === false)!.props!.onClick as () => void)();
+    expect(picker.filter((node) => node.type === "h4").map(text)).toEqual(["PO", "Mission", "单元"]);
+    expect(picker.filter((node) => node.props?.["aria-pressed"] !== undefined).map((node) => node.props!["aria-pressed"])).toEqual([false, true, false]);
+    const missionRow = picker.find((node) => node.props?.["aria-pressed"] === true)!;
+    expect(nodes(missionRow).some((node) => text(node) === "草稿")).toBe(true);
+    const poRow = picker.find((node) => node.props?.["aria-pressed"] === false)!;
+    expect(nodes(poRow).some((node) => text(node) === "十月跑通预约")).toBe(true);
+
+    (picker.find((node) => node.props?.["aria-label"] === "搜对象")!.props!.onChange as (event: unknown) => void)({ target: { value: "智能" } });
+    const searched = render(view);
+    expect(searched.filter((node) => node.props?.["aria-pressed"] !== undefined)).toHaveLength(1);
+    (searched.find((node) => node.props?.["aria-pressed"] === false)!.props!.onClick as () => void)();
     expect(render(view).some((node) => node.type === "button" && text(node) === "恢复自动")).toBe(true);
 
     api.put.mockResolvedValue({ data: { world: world({ anchors: [MISSION, unit], edited: true }), decisions: [] }, response: { ok: true, status: 200 } });
     (render(view).find((node) => node.type === "button" && text(node) === "保存")!.props!.onClick as () => void)();
     await vi.waitFor(() => expect(api.put).toHaveBeenCalledWith("/api/meetings/{id}/world-anchors",
       { params: { path: { id: "m1" } }, body: { anchors: [{ kind: "mission", id: "m-v2" }, { kind: "unit", id: "agents" }] } }));
+  });
+});
+
+describe("会议页页头：逐字稿", () => {
+  const transcript = (props: Partial<Parameters<typeof MeetingTranscriptStatus>[0]> = {}) => {
+    hooks.index = 0;
+    return nodes(expand(MeetingTranscriptStatus({ meetingId: "m1", status: "failed", failure: "fetch_failed", confirmed: false, canFetch: true, ...props })));
+  };
+
+  it("读取失败可以再读", async () => {
+    const tree = transcript();
+    expect(tree.some((node) => node.type === "span" && text(node) === "逐字稿 · 读取失败")).toBe(true);
+    api.post.mockResolvedValue({ data: { minutesStatus: "waiting", minutesFailure: null }, response: { ok: true, status: 200 } });
+    (tree.find((node) => node.type === "button" && text(node) === "再读一次")!.props!.onClick as () => void)();
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/minutes/refetch", { params: { path: { id: "m1" } } }));
+    await vi.waitFor(() => expect(transcript().some((node) => node.type === "span" && text(node) === "逐字稿 · 读取中")).toBe(true));
+  });
+
+  it("原因写成短标签；只在逐字稿确认存下后才是已读完", () => {
+    hooks.values = [];
+    expect(transcript({ failure: "no_permission" }).some((node) => text(node) === "逐字稿 · 读取失败 · 无权限")).toBe(true);
+    hooks.values = [];
+    expect(transcript({ failure: "not_ready" }).some((node) => text(node) === "逐字稿 · 未就绪")).toBe(true);
+    hooks.values = [];
+    expect(transcript({ status: "ready", failure: null }).some((node) => text(node) === "逐字稿 · 读取中")).toBe(true);
+    hooks.values = [];
+    const done = transcript({ status: "ready", failure: null, confirmed: true });
+    expect(done.some((node) => text(node) === "逐字稿 · 已读完")).toBe(true);
+    expect(done.some((node) => node.type === "button")).toBe(false);
+    hooks.values = [];
+    expect(transcript({ canFetch: false }).some((node) => node.type === "button")).toBe(false);
+  });
+
+  it("没有妙记：主持人、创建人贴链接读", async () => {
+    const tree = transcript({ status: "manual", failure: null });
+    const input = tree.find((node) => node.props?.["aria-label"] === "妙记链接")!;
+    (input.props!.onChange as (event: unknown) => void)({ target: { value: "https://x.feishu.cn/minutes/obcn1" } });
+    api.post.mockResolvedValue({ data: { minutesStatus: "ready", minutesFailure: null }, response: { ok: true, status: 200 } });
+    (transcript({ status: "manual", failure: null }).find((node) => node.type === "button" && text(node) === "读取")!.props!.onClick as () => void)();
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/minutes",
+      { params: { path: { id: "m1" } }, body: { url: "https://x.feishu.cn/minutes/obcn1" } }));
+    hooks.values = [];
+    expect(transcript({ status: "manual", failure: null, canFetch: false }).some((node) => node.props?.["aria-label"] === "妙记链接")).toBe(false);
   });
 });

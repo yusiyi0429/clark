@@ -1,9 +1,9 @@
-import type { TImpactTarget, TMeetingDecisionWorld, TMeetingRecordStatus, TMeetingWorldResponse, TWorldAnchor } from "@warmap/contracts";
+import type { TImpactTarget, TMeetingDecisionWorld, TMeetingRecordStatus, TMeetingWorldResponse, TWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
 import type { MeetingRecordState } from "./meetingCardConfirm.js";
 import { decisionEffective, type MeetingDecisionRow } from "./meetingDecisionView.js";
 import type { MeetingRow, Query, StoredWorldAnchor } from "./meetingStore.js";
-import type { WorldClient } from "./worldClient.js";
-import { usableWorldHead, worldDisplayText } from "./worldReader.js";
+import type { WorldClient, WorldHead } from "./worldClient.js";
+import { usableWorldHead, worldDisplayText, worldGoalOf } from "./worldReader.js";
 
 /**
  * 会议入本体的挂点与落点（回流设计稿 3.1、3.2）。只在会议页（GET /api/meetings/:id/world）、本体同步、挂点接口里查，
@@ -13,33 +13,69 @@ const COMPANY: TWorldAnchor = { kind: "company", id: "company", title: "公司" 
 const ORDER = { po: 0, lto: 1, mission: 2, task: 3, unit: 4, company: 5 } as const;
 const sorted = (anchors: TWorldAnchor[]) => [...anchors].sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || a.title.localeCompare(b.title, "zh-CN"));
 
-/** 挂点选项读本体用的客户端（只列对象）；本体没配或不可写时为 null，选项只有 Mission 和单元。 */
-export type AnchorWorld = Pick<WorldClient, "listObjects">;
+/** 挂点选项读本体用的客户端（列对象，取已确认对象的内容）；本体没配或不可写时为 null，选项只有 Mission 和单元。 */
+export type AnchorWorld = Pick<WorldClient, "listObjects" | "getObject">;
+/** 已确认对象的 brief，按「对象 id@版本」记：对象改了版本就重读。 */
+export type AnchorBriefCache = Map<string, string | null>;
+
+const BRIEF_MAX = 80;
+const brief = (text: string | null | undefined): string | null => {
+  const value = text?.trim();
+  if (!value) return null;
+  return value.length > BRIEF_MAX ? `${value.slice(0, BRIEF_MAX - 1)}…` : value;
+};
+const isDraft = (lifecycle: string | null) => Boolean(lifecycle && /草稿|draft/i.test(lifecycle));
+const lifecycleOf = (head: WorldHead): string | null => {
+  const value = head.lifecycle as { status?: string; display_name?: string } | null;
+  return value?.display_name ?? value?.status ?? null;
+};
 
 /**
  * 预约、改挂点时能挑的对象，按 本月 PO、LTO、本月 Mission、责任单元 排：PO、LTO 读本体（串行，读不到就不给），Mission、单元读天枢。
- * world-02 里没有 Task 对象，不给 Task。
+ * world-02 里没有 Task 对象，不给 Task。每项带已确认的内容（brief）：PO、LTO 取对象目标块的结果组件（草稿不取，读不到为 null），
+ * Mission 取定义的结果（轮次确认了才给），单元是名称。
  */
-export async function anchorOptions(q: Query, world: AnchorWorld | null, period: string): Promise<TWorldAnchor[]> {
-  let goals: TWorldAnchor[] = [];
+export async function anchorOptions(q: Query, world: AnchorWorld | null, period: string, cache: AnchorBriefCache = new Map()): Promise<TWorldAnchorOption[]> {
+  let goals: TWorldAnchorOption[] = [];
   if (world) {
     try {
-      const goal = (kind: "po" | "lto") => (head: { object_id: string; title: string; lifecycle: unknown }) =>
-        usableWorldHead(head) && head.title.trim() ? [{ kind, id: head.object_id, title: worldDisplayText(head.title.trim()) }] : [];
       const pos = await world.listObjects({ type: "PeriodGoal", period });
       const ltos = await world.listObjects({ type: "LongTermGoal" });
-      goals = [...pos.flatMap(goal("po")), ...ltos.flatMap(goal("lto"))];
+      const heads = [...pos.map((head) => ({ kind: "po" as const, head })), ...ltos.map((head) => ({ kind: "lto" as const, head }))]
+        .filter(({ head }) => usableWorldHead(head) && head.title.trim());
+      for (const { kind, head } of heads) {
+        const lifecycle = lifecycleOf(head);
+        goals.push({ kind, id: head.object_id, title: worldDisplayText(head.title.trim()), brief: isDraft(lifecycle) ? null : await goalBrief(world, head, cache), lifecycle });
+      }
     } catch {
       goals = [];
     }
   }
-  const missions = (await q("SELECT id, title FROM missions WHERE period = $1 AND NOT placeholder ORDER BY code", [period])).rows as { id: string; title: string }[];
+  const missions = (await q(
+    `SELECT m.id, m.title, m.outcome, r.status AS round_status FROM missions m
+       LEFT JOIN personal_mission_cards c ON c.id = m.personal_mission_card_id LEFT JOIN mission_rounds r ON r.id = c.round_id
+      WHERE m.period = $1 AND NOT m.placeholder ORDER BY m.code`, [period])).rows as { id: string; title: string; outcome: string; round_status: string | null }[];
   const units = (await q("SELECT id, name FROM capability_config ORDER BY sort_order, code")).rows as { id: string; name: string }[];
   return [
     ...goals,
-    ...missions.map((row) => ({ kind: "mission" as const, id: row.id, title: row.title })),
-    ...units.map((row) => ({ kind: "unit" as const, id: row.id, title: row.name })),
+    ...missions.map((row) => ({ kind: "mission" as const, id: row.id, title: row.title,
+      brief: row.round_status === "confirmed" ? brief(row.outcome) : null,
+      lifecycle: row.round_status === null ? null : row.round_status === "confirmed" ? "confirmed" : "draft" })),
+    ...units.map((row) => ({ kind: "unit" as const, id: row.id, title: row.name, brief: brief(row.name), lifecycle: null })),
   ];
+}
+
+/** 一个 PO、LTO 目标块的结果组件；读不到为 null（不缓存，下次再读）。 */
+async function goalBrief(world: AnchorWorld, head: WorldHead, cache: AnchorBriefCache): Promise<string | null> {
+  const key = `${head.object_id}@${head.version}`;
+  if (cache.has(key)) return cache.get(key)!;
+  try {
+    const value = brief(worldGoalOf(await world.getObject(head.object_id) as unknown as Parameters<typeof worldGoalOf>[0]).outcome);
+    cache.set(key, value);
+    return value;
+  } catch {
+    return null;
+  }
 }
 
 /** 挑中的选项存进 world_anchors 的样子（选项只有 PO、LTO、Mission、单元）。 */

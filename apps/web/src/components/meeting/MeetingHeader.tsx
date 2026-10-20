@@ -9,6 +9,7 @@
  *   分:秒）；点计时弹出一小块，里面是「这场会开完了」。开完之后写「已开完」和几点，不能再按。
  * - `MeetingHeaderActions`：把上面两样和页头右边那一样（会开完了是「会前预审 ｜ 会议记录」两段切换）按页头的约定排好。
  * - `MeetingStatus`：材料上面一行灰字：谁主持、几人参会这类事实，再加这一刻的一件事。
+ * - `MeetingTranscriptStatus`：页头下面那一行（MeetingWorldSection）末尾的逐字稿状态和「再读一次」、贴妙记链接。
  *
  * 「开始会议」同时开始录音（useMeetingRecorder），计时只是这一页的状态；「这场会开完了」停下录音、交给服务端转写，
  * 并写进后台（meeting.end）。天枢没有会中 Co-Agent，所以不写「Co-Agent 在听」，写的是录没录上。
@@ -19,6 +20,8 @@ import { Button, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
 import { Check, ChevronDown, Radio } from "lucide-react";
 import { COMPANY_TIMEZONE } from "@/lib/companyTime";
+import type { TMeetingMinutesFailure, TMeetingMinutesFetchResponse, TMeetingMinutesStatus } from "@warmap/contracts";
+import { readMeetingMinutesLink, refetchMeetingMinutes } from "./meetingDecisionApi";
 import s from "@/styles/meeting-header.module.css";
 
 export type MeetingPhase = "idle" | "live" | "ended";
@@ -296,5 +299,65 @@ export function MeetingStatus({ phase, facts, now, endedAt }: { phase: MeetingPh
     <p className={s.status} data-phase={phase}>
       {[...facts, now].filter(Boolean).join(" · ")}
     </p>
+  );
+}
+
+const FAILURE: Record<TMeetingMinutesFailure, string> = { no_permission: "无权限", not_ready: "未就绪", not_found: "未找到", fetch_failed: "读取失败" };
+/** 再读、贴链接没成功时的短标签（不显示服务端原话）。 */
+const FETCH_ERROR: Record<string, string> = { INVALID_MINUTES_URL: "不是妙记链接", MINUTE_TAKEN: "已对到别的会" };
+
+/**
+ * 逐字稿读到哪了（FR-4.2）：已读完只在逐字稿确认存下后出现（有候选等对说话人时还算读取中）；
+ * 未就绪、读取失败带短原因，后面是「再读一次」；没有妙记时是贴妙记链接的输入框。两个按钮只给主持人和创建人（canFetch）。
+ */
+function transcriptState(status: TMeetingMinutesStatus, failure: TMeetingMinutesFailure | null, confirmed: boolean): { label: string | null; retry: boolean; paste: boolean } {
+  if (confirmed) return { label: "逐字稿 · 已读完", retry: false, paste: false };
+  if (status === "ready" || status === "waiting") return { label: "逐字稿 · 读取中", retry: false, paste: false };
+  if (status === "failed") {
+    const reason = failure ? FAILURE[failure] : "读取失败";
+    const head = failure === "not_ready" ? "未就绪" : "读取失败";
+    return { label: ["逐字稿", head, ...(reason === head ? [] : [reason])].join(" · "), retry: true, paste: failure === "not_found" };
+  }
+  if (status === "manual") return { label: "逐字稿 · 未找到", retry: false, paste: true };
+  return { label: null, retry: false, paste: true };
+}
+
+export function MeetingTranscriptStatus({ meetingId, status, failure, confirmed, canFetch, onFetched }: {
+  meetingId: string; status: TMeetingMinutesStatus; failure: TMeetingMinutesFailure | null;
+  /** 逐字稿已确认存下（会议卡里有 transcript）。 */
+  confirmed: boolean;
+  /** 主持人或创建人：能再读一次、贴妙记链接。 */
+  canFetch: boolean;
+  /** 再读、贴链接成功之后（会议页重取会议卡）。 */
+  onFetched?: () => void;
+}) {
+  const [fetched, setFetched] = useState<TMeetingMinutesFetchResponse | null>(null);
+  useEffect(() => setFetched(null), [status, failure]);
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const state = transcriptState(fetched?.minutesStatus ?? status, fetched ? fetched.minutesFailure : failure, confirmed);
+  const run = async (work: () => Promise<TMeetingMinutesFetchResponse | { code: string }>) => {
+    setBusy(true); setError("");
+    try {
+      const result = await work();
+      if ("code" in result) setError(FETCH_ERROR[result.code] ?? "没有读到");
+      else { setFetched(result); setUrl(""); onFetched?.(); }
+    } catch { setError("没有读到"); }
+    finally { setBusy(false); }
+  };
+  if (!state.label && !(canFetch && state.paste)) return null;
+  return (
+    <span className={s.transcript}>
+      {state.label ? <span className={s.transcriptState} data-tone={state.retry ? "fail" : confirmed ? "done" : "wait"}>{state.label}</span> : null}
+      {canFetch && state.retry ? <button type="button" className={s.transcriptAction} disabled={busy} onClick={() => void run(() => refetchMeetingMinutes(meetingId))}>再读一次</button> : null}
+      {canFetch && state.paste ? (
+        <span className={s.transcriptLink}>
+          <input type="url" aria-label="妙记链接" placeholder="贴妙记链接" value={url} disabled={busy} onChange={(event) => setUrl(event.target.value)} />
+          <button type="button" className={s.transcriptAction} disabled={busy || !url.trim()} onClick={() => void run(() => readMeetingMinutesLink(meetingId, url.trim()))}>读取</button>
+        </span>
+      ) : null}
+      {error ? <span className={s.transcriptError} role="alert">{error}</span> : null}
+    </span>
   );
 }

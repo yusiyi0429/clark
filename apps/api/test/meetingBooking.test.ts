@@ -3,7 +3,7 @@ import { createTestApp, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js
 import { createJobWorker } from "../src/jobs.js";
 import { stubWorld, worldEnv } from "./worldFixture.js";
 
-// 预约建会：带挂点、起止，只存天枢不写本体；主持人（成员）也能给自己建会。挂点选项含本体里的本月 PO 和 LTO。
+// 预约建会：带挂点、起止，只存天枢不写本体；主持人（成员）也能给自己建会。挂点选项含本体里的本月 PO 和 LTO，每项带已确认的内容。
 const START = "2026-10-22T10:00:00.000+08:00";
 const END = "2026-10-22T11:30:00.000+08:00";
 const MISSION = "m-booking";
@@ -14,9 +14,19 @@ const head = (object_id: string, object_type: string, title: string) => ({
 const PO = head("<period-goal-oct>", "PeriodGoal", "E&O 10 月目标");
 const LTO = head("<long-term-goal-1>", "LongTermGoal", "E&O 长期目标");
 
-/** 假本体：按类型列对象（PeriodGoal 只在 period=2026-10 时有）；其余请求一律空。 */
+const PO_OUTCOME = "十月把预约跑通，每场会都挂到对象上";
+const LTO_OUTCOME = "预约成为开会的默认入口";
+/** 取对象：目标块里的结果组件。 */
+const view = (target: typeof PO, outcome: string) => ({
+  business: { ...target, attributes: {}, blocks: [{ id: "target", display_name: "目标", components: [{ id: "c1", type: "outcome", text: outcome }, { id: "c2", type: "success_criterion", text: "不进 brief" }] }] },
+  records: { lifecycle: target.lifecycle }, protocol: { contract_version: target.contract_version },
+});
+
+/** 假本体：按类型列对象（PeriodGoal 只在 period=2026-10 时有）、按 id 取 PO 和 LTO；其余请求一律空。 */
 function ontology() {
   return stubWorld(({ url }) => {
+    if (url.pathname === `/v1/world/objects/${encodeURIComponent(PO.object_id)}`) return view(PO, PO_OUTCOME);
+    if (url.pathname === `/v1/world/objects/${encodeURIComponent(LTO.object_id)}`) return view(LTO, LTO_OUTCOME);
     if (url.pathname !== "/v1/world/objects") return { ok: true };
     const type = url.searchParams.get("type");
     const items = type === "LongTermGoal" ? [LTO] : type === "PeriodGoal" && url.searchParams.get("period") === "2026-10" ? [PO] : [];
@@ -28,6 +38,18 @@ async function seed(t: TestApp) {
   await t.pool.query("INSERT INTO capability_config (id, version, name, \"group\", six_month_outcome, code, owner_id) VALUES ('unit-booking', 1, '预约单元', 'test', '', '99', $1)", [TEST_MEMBER.personId]);
   await t.pool.query(`INSERT INTO missions (id, version, code, period, title, owner_id, capability_id, outcome, source_ref, source_document_id, source_revision, source_title)
     VALUES ($1, 1, 'booking-202610', '2026-10', '预约挂点 Mission', $2, 'unit-booking', '跑通预约', 'test://m', 'test', 1, '测试')`, [MISSION, TEST_MEMBER.personId]);
+}
+
+/** 一张还在草稿轮次里的 Mission（本月计划已签，Mission 轮次没确认）。 */
+async function seedDraftMission(t: TestApp) {
+  await t.sql(`INSERT INTO monthly_plans (id,version,period,status,company_outcome,battlefields,todos,negotiation,generation,confirmed_at)
+    VALUES ('00000000-0000-4000-8000-000000000001',1,'2026-10','confirmed','公司目标','[]','[]','{}','{}','2026-10-01T02:00:00Z')`);
+  await t.sql(`INSERT INTO mission_rounds (id,version,battlefield_id,period,monthly_plan_id,status,draft_origin,draft_source,created_at,updated_at)
+    VALUES ('00000000-0000-4000-8000-000000000002',1,'growth','2026-10','00000000-0000-4000-8000-000000000001','draft','placeholder','{}','2026-10-01T02:00:00Z','2026-10-01T02:00:00Z')`);
+  await t.sql(`INSERT INTO personal_mission_cards (id,round_id,owner_id,sort_order,member_ids,created_at)
+    VALUES ('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000002',$1,0,$2::jsonb,'2026-10-01T02:00:00Z')`, [TEST_MEMBER.personId, JSON.stringify([TEST_MEMBER.personId])]);
+  await t.sql(`INSERT INTO missions (id, version, code, period, title, owner_id, capability_id, outcome, source_ref, source_document_id, source_revision, source_title, personal_mission_card_id)
+    VALUES ('m-draft', 1, 'draft-202610', '2026-10', '草稿里的 Mission', $1, 'unit-booking', '还没定的结果', 'test://m', 'test', 1, '测试', '00000000-0000-4000-8000-000000000003')`, [TEST_MEMBER.personId]);
 }
 
 const book = (t: TestApp, cookie: string, payload: Record<string, unknown>) =>
@@ -43,6 +65,8 @@ describe("预约建会", () => {
     try {
       await seed(t);
       const member = await t.memberCookie();
+      // 建会表单要选参会人：成员也能读人员目录。
+      expect((await t.app.inject({ method: "GET", url: "/api/people", headers: { cookie: member } })).statusCode).toBe(200);
       const created = await book(t, member, body());
       expect(created.statusCode).toBe(200);
       const meetingId = created.json().card.objectRef.id as string;
@@ -90,6 +114,8 @@ describe("预约建会", () => {
       const meetingId = byCeo.json().card.objectRef.id as string;
       const [row] = await t.sql("SELECT lead_dri_id, created_by FROM meetings WHERE id = $1", [meetingId]);
       expect(row).toEqual({ lead_dri_id: TEST_MEMBER.personId, created_by: TEST_CEO.personId });
+      // 会议卡带上建会的人（会议页据此给「再读一次」、贴妙记链接）。
+      expect(byCeo.json().card.payload.createdBy).toBe(TEST_CEO.personId);
       // 建会的 CEO 和主持人都能编辑、整卡确认会议卡（还没有草稿：确认得到 409 而不是 404）。
       const { cards, cardConfirm } = t.app.meetingFollowThrough;
       for (const personId of [TEST_CEO.personId, TEST_MEMBER.personId]) {
@@ -124,10 +150,45 @@ describe("预约建会", () => {
       const res = await t.app.inject({ method: "GET", url: "/api/world-anchor-options?period=2026-10", headers: { cookie: await t.memberCookie() } });
       expect(res.statusCode).toBe(200);
       const options = res.json().options as { kind: string; id: string; title: string }[];
-      expect(options.filter((option) => option.kind === "po")).toEqual([{ kind: "po", id: PO.object_id, title: PO.title }]);
-      expect(options.filter((option) => option.kind === "lto")).toEqual([{ kind: "lto", id: LTO.object_id, title: LTO.title }]);
-      expect(options).toContainEqual({ kind: "mission", id: MISSION, title: "预约挂点 Mission" });
-      expect(options).toContainEqual({ kind: "unit", id: "unit-booking", title: "预约单元" });
+      expect(options.filter((option) => option.kind === "po")).toEqual([{ kind: "po", id: PO.object_id, title: PO.title, brief: PO_OUTCOME, lifecycle: "committed" }]);
+      expect(options.filter((option) => option.kind === "lto")).toEqual([{ kind: "lto", id: LTO.object_id, title: LTO.title, brief: LTO_OUTCOME, lifecycle: "committed" }]);
+      expect(options).toContainEqual(expect.objectContaining({ kind: "mission", id: MISSION, title: "预约挂点 Mission" }));
+      expect(options).toContainEqual(expect.objectContaining({ kind: "unit", id: "unit-booking", title: "预约单元" }));
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("挂点候选带已确认内容", async () => {
+    ontology();
+    const t = await createTestApp(worldEnv);
+    try {
+      await seed(t);
+      await seedDraftMission(t);
+      const res = await t.app.inject({ method: "GET", url: "/api/world-anchor-options?period=2026-10", headers: { cookie: await t.memberCookie() } });
+      expect(res.statusCode).toBe(200);
+      const options = res.json().options as { kind: string; id: string; brief: string | null; lifecycle: string | null }[];
+      expect(options.find((option) => option.kind === "po")).toMatchObject({ brief: PO_OUTCOME, lifecycle: "committed" });
+      expect(options.find((option) => option.id === "m-draft")).toMatchObject({ kind: "mission", brief: null, lifecycle: "draft" });
+      expect(options.find((option) => option.id === "unit-booking")).toMatchObject({ kind: "unit", brief: "预约单元" });
+
+      // 草稿的 PO 不取内容（不读对象）；读不到对象时 brief 是 null，选项照给。
+      const draftPo = { ...PO, object_id: "<period-goal-draft>", title: "草稿 PO", lifecycle: { status: "draft" } };
+      const otherLto = { ...LTO, object_id: "<long-term-goal-2>", title: "读不到的 LTO" };
+      const calls = stubWorld(({ url }) => {
+        if (url.pathname === "/v1/world/objects") {
+          const type = url.searchParams.get("type");
+          return { items: type === "PeriodGoal" ? [draftPo] : type === "LongTermGoal" ? [otherLto] : [], next_cursor: null };
+        }
+        return new Response(JSON.stringify({ error: { code: "UNAVAILABLE", message: "down" } }), { status: 503 });
+      });
+      const again = await t.app.inject({ method: "GET", url: "/api/world-anchor-options?period=2026-10", headers: { cookie: await t.memberCookie() } });
+      const goals = (again.json().options as { kind: string }[]).filter((option) => option.kind === "po" || option.kind === "lto");
+      expect(goals).toEqual([
+        { kind: "po", id: draftPo.object_id, title: "草稿 PO", brief: null, lifecycle: "draft" },
+        { kind: "lto", id: otherLto.object_id, title: "读不到的 LTO", brief: null, lifecycle: "committed" },
+      ]);
+      expect(calls.some((call) => call.url.pathname.endsWith(encodeURIComponent(draftPo.object_id)))).toBe(false);
     } finally {
       await t.close();
     }

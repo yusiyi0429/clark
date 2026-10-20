@@ -95,7 +95,8 @@ describe("会议入本体：挂点", () => {
     const { t, host, owner, meetingId } = await setup();
     try {
       const options = await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/world-anchor-options`, headers: { cookie: host } });
-      expect(options.json().options).toEqual([MISSION, UNIT]);
+      // 候选带已确认的内容：没有轮次的 Mission 不给，单元是名称。
+      expect(options.json().options).toEqual([{ ...MISSION, brief: null, lifecycle: null }, { ...UNIT, brief: UNIT.title, lifecycle: null }]);
       expect((await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/world-anchor-options`, headers: { cookie: owner } })).statusCode).toBe(404);
       expect((await putAnchors(t, host, meetingId, [{ kind: "mission", id: "nope" }])).statusCode).toBe(400);
       expect((await putAnchors(t, owner, meetingId, [{ kind: "unit", id: "agents" }])).statusCode).toBe(404);

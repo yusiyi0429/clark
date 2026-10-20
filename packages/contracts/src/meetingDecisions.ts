@@ -133,7 +133,21 @@ export const MeetingWorldAnchorsRequest = Type.Object(
   { anchors: Type.Union([Type.Array(PickedWorldAnchor, { minItems: 1, maxItems: 10 }), Type.Null()]) },
   { additionalProperties: false },
 );
-export const MeetingWorldAnchorOptionsResponse = Type.Object({ options: Type.Array(WorldAnchor) }, { additionalProperties: false });
+/**
+ * 预约、改挂点时的一个候选：名称、类型，加对象已确认的内容（brief，截 80 字）——LTO、PO 是目标块的结果，Mission 是定义的结果，
+ * 单元是名称；草稿或读不到时为 null。lifecycle 照本体（LTO、PO）或 Mission 轮次（draft / confirmed），单元为 null。
+ */
+export const WorldAnchorOption = Type.Object(
+  {
+    kind: PickedWorldAnchor.properties.kind,
+    id: Type.String({ minLength: 1 }),
+    title: Type.String({ minLength: 1 }),
+    brief: Type.Union([Type.String({ maxLength: 80 }), Type.Null()]),
+    lifecycle: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+export const MeetingWorldAnchorOptionsResponse = Type.Object({ options: Type.Array(WorldAnchorOption) }, { additionalProperties: false });
 
 /**
  * 我要处理的会议记录（通知栏置顶，一场会一条）：我是主持人或创建人、草稿已生成的会里，
@@ -165,6 +179,7 @@ export type TMyMeetingCardStatus = Static<typeof MyMeetingCardStatus>;
 export type TMyMeetingCard = Static<typeof MyMeetingCard>;
 export type TMyMeetingCardsResponse = Static<typeof MyMeetingCardsResponse>;
 export type TWorldAnchor = Static<typeof WorldAnchor>;
+export type TWorldAnchorOption = Static<typeof WorldAnchorOption>;
 export type TMeetingDecisionWorld = Static<typeof MeetingDecisionWorld>;
 export type TMeetingRecordStatus = Static<typeof MeetingRecordStatus>;
 export type TMeetingRecordView = Static<typeof MeetingRecordView>;

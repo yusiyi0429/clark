@@ -39,7 +39,8 @@ export async function readHomeCards(ctx: RouteContext, person: SessionPerson): P
 export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
   const { q, env, fail, requireCEO, now, peopleDirectory, radar } = ctx;
 
-  app.get("/api/people", { preHandler: requireCEO, schema: { response: { 200: PeopleDirectoryResponse } } }, async () => ({
+  // 人员目录：建会表单选主持人、参会人（CEO 和成员都约会议）。
+  app.get("/api/people", { preHandler: ctx.requirePerson, schema: { response: { 200: PeopleDirectoryResponse } } }, async () => ({
     people: peopleDirectory.searchPeople(undefined).filter(isRealPerson).map((person) => ({
       personId: person.personId,
       displayName: person.displayName,
