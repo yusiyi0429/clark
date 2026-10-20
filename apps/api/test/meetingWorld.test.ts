@@ -68,11 +68,11 @@ const UNIT_HEAD = head("obj-unit-07", "ResponsibilityUnit", "Agents", 2, "capabi
 
 /**
  * 假本体：按外部引用列对象、取对象；记事件按幂等键去重（同键重放回原回执）；取事件返回挂在这个对象上的事件。
- * failing() 为 true 时记事件返回 503。
+ * failing() 为 true 时记事件返回 503；beforeCommit 在每次记事件（prepare 之后、提交之前）先跑。
  */
-function ontology(failing = () => false) {
+function ontology({ failing = () => false, beforeCommit }: { failing?: () => boolean; beforeCommit?: () => Promise<void> } = {}) {
   const recorded: { eventId: string; body: { idempotency_key: string; params: { subject_refs: string[] } } }[] = [];
-  const calls = stubWorld((call) => {
+  const calls = stubWorld(async (call) => {
     const path = call.url.pathname;
     if (path === "/v1/world/objects") {
       const external = call.url.searchParams.get("external_id");
@@ -80,6 +80,7 @@ function ontology(failing = () => false) {
     }
     if (path === "/v1/actions/prepare") return { expected_versions: [] };
     if (path === "/v1/actions") {
+      await beforeCommit?.();
       if (failing()) return new Response(JSON.stringify({ error: { code: "UNAVAILABLE", message: "down" } }), { status: 503 });
       const event = recorded.find((item) => item.body.idempotency_key === call.body.idempotency_key)
         ?? recorded[recorded.push({ eventId: `ev-${recorded.length + 1}`, body: call.body }) - 1];
@@ -285,7 +286,7 @@ describe("会议入本体：整卡确认后写一条整场会议事件", () => {
 
   it("写入失败后原样再确认：按同一版重试", async () => {
     let failing = true;
-    const world = ontology(() => failing);
+    const world = ontology({ failing: () => failing });
     const { t, host, meetingId } = await setup();
     try {
       const { service, run } = serviceFor(t);
@@ -298,7 +299,53 @@ describe("会议入本体：整卡确认后写一条整场会议事件", () => {
       await service.confirmRecord(meetingId, HOST, { writeToWorld: true });
       await run();
       expect(world.writes().map((body) => body.idempotency_key)).toEqual([`tianshu-meeting:${meetingId}:v1`, `tianshu-meeting:${meetingId}:v1`]);
+      // 重试是原样重放第一次的请求（台账里的那份）。
+      expect(world.writes()[1]).toEqual(world.writes()[0]);
       expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "committed", version: 1, eventId: "ev-1" });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("写的时候又确认了一版：写进去的那条照样接到链上，新版 refs 指回它、和它比改了什么", async () => {
+    let interleave: (() => Promise<void>) | null = null;
+    const world = ontology({ beforeCommit: async () => { const run = interleave; interleave = null; await run?.(); } });
+    const { t, host, meetingId } = await setup();
+    try {
+      const { service, run } = serviceFor(t);
+      await hostReviews(t, service, meetingId);
+      await service.confirmRecord(meetingId, HOST, { writeToWorld: true });
+      await run();
+      expect((await putAnchors(t, host, meetingId, [{ kind: "mission", id: "m-v2" }])).statusCode).toBe(200);
+      await service.confirmRecord(meetingId, HOST, { writeToWorld: true });
+      // v2 提交前，主持人又把挂点改回自动、再确认一次（v3）。
+      interleave = async () => {
+        expect((await putAnchors(t, host, meetingId, null)).statusCode).toBe(200);
+        expect(await service.confirmRecord(meetingId, HOST, { writeToWorld: true, reason: "挂回单元" })).toMatchObject({ world: { record: { version: 3 } } });
+      };
+      await run();
+      expect(world.writes().map((body) => body.idempotency_key)).toEqual([1, 2, 3].map((version) => `tianshu-meeting:${meetingId}:v${version}`));
+      const third = world.writes()[2];
+      expect(third.params.content.refs).toEqual(["event:ev-2"]);
+      expect(third.params.content.text.split("\n").slice(0, 3)).toEqual(["修改：第 3 版，接前次事件 ev-2", "改了：挂点", "原因：挂回单元"]);
+      expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "committed", version: 3, eventId: "ev-3" });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("正文超过 3000 字不让确认（不截断），本体不收请求；选不写入照样能确认", async () => {
+    const world = ontology();
+    const { t, host, meetingId } = await setup();
+    try {
+      const { service, run } = serviceFor(t);
+      await hostReviews(t, service, meetingId);
+      await t.pool.query("UPDATE meetings SET outcome = jsonb_set(outcome, '{summary}', to_jsonb($2::text)) WHERE id = $1", [meetingId, "长".repeat(3000)]);
+      expect(await service.confirmRecord(meetingId, HOST, { writeToWorld: true })).toMatchObject({ error: { status: 400, code: "RECORD_TOO_LONG" } });
+      await run();
+      expect(world.calls.filter((call) => call.url.pathname.startsWith("/v1/actions"))).toEqual([]);
+      expect((await worldOf(t, host, meetingId)).world.record).toEqual({ status: "pending", version: 0, eventId: null, confirmedAt: null });
+      expect(await service.confirmRecord(meetingId, HOST, { writeToWorld: false })).toMatchObject({ world: { record: { status: "excluded", version: 0 } } });
     } finally {
       await t.close();
     }

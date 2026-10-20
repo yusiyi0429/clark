@@ -85,6 +85,9 @@ export function meetingRecord(meeting: MeetingRow, decisions: MeetingDecisionRow
 
 export const sameRecord = (a: MeetingRecord, b: MeetingRecord): boolean => isDeepStrictEqual(a, b);
 
+/** K2-A：事件正文只放摘要和条目，不超过 3000 字（按字符数）。 */
+export const MAX_EVENT_TEXT = 3000;
+
 /** 和前次写进去的那份比，改了哪几部分。 */
 export function changedParts(previous: MeetingRecord, next: MeetingRecord): string[] {
   return PART_LABEL.filter(([key]) => key === "time"

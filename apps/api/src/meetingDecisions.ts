@@ -15,7 +15,7 @@ import { anchorOptions, meetingAnchorGroups, meetingWorldDetail, storedAnchor, t
 import { logEvent } from "./observability.js";
 import { personDisplayNames } from "./people.js";
 import { addWorkday, nextWorkdayAt, shanghaiDate, shanghaiLabel } from "./workdays.js";
-import { changedParts, meetingEventText, meetingRecord, sameRecord, type MeetingEventWorld, type MeetingRecord } from "./worldMeetingEvent.js";
+import { changedParts, MAX_EVENT_TEXT, meetingEventText, meetingRecord, sameRecord, type MeetingEventWorld, type MeetingRecord } from "./worldMeetingEvent.js";
 
 /**
  * 会后分层确认（议题 3）：
@@ -101,6 +101,13 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
   const isCreator = (meeting: Pick<MeetingRow, "lead_dri_id" | "created_by">, viewerId: string) => (meeting.created_by ?? meeting.lead_dri_id) === viewerId;
   const nameIn = (participants: TMeetingParticipant[], personId: string) =>
     participants.find((person) => person.personId === personId)?.displayName ?? names().get(personId) ?? personId;
+  /** 这一版会议事件的正文：第 2 版起接最近一次写进去的那条（world_event_id / world_event_record），写明改了什么和原因。 */
+  const recordText = (meetingId: string, version: number, record: MeetingRecord, reason: string | null, confirmedBy: string, confirmedAt: Date,
+    row: Pick<MeetingRow, "participants" | "world_event_id"> & { world_event_record: MeetingRecord | null }) =>
+    meetingEventText(record, { meetingId, version, confirmedBy: nameIn(row.participants, confirmedBy), confirmedAt,
+      previous: row.world_event_id && row.world_event_record
+        ? { eventId: row.world_event_id, changed: changedParts(row.world_event_record, record), reason }
+        : null });
 
   const rowsOf = async (client: Query, meetingId: string) =>
     (await client("SELECT * FROM meeting_decisions WHERE meeting_id = $1 ORDER BY tier DESC, ordinal", [meetingId])).rows as MeetingDecisionRow[];
@@ -423,8 +430,8 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     try {
       await client.query("BEGIN");
       const cq: Query = client.query.bind(client);
-      const meeting = (await cq(`SELECT ${meetingColumns()}, record_snapshot FROM meetings WHERE id = $1 FOR UPDATE`, [meetingId])).rows[0] as
-        (MeetingRow & { record_snapshot: MeetingRecord | null }) | undefined;
+      const meeting = (await cq(`SELECT ${meetingColumns()}, record_snapshot, world_event_record FROM meetings WHERE id = $1 FOR UPDATE`, [meetingId])).rows[0] as
+        (MeetingRow & { record_snapshot: MeetingRecord | null; world_event_record: MeetingRecord | null }) | undefined;
       if (!meeting || (meeting.lead_dri_id !== viewerId && !isCreator(meeting, viewerId))) { await client.query("ROLLBACK"); return NOT_FOUND; }
       const at = now();
       if (!input.writeToWorld) {
@@ -437,6 +444,11 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
               world_event_status = CASE WHEN world_event_status = 'failed' THEN 'none' ELSE world_event_status END WHERE id = $1`, [meetingId, at, viewerId]);
           if (meeting.world_event_status !== "committed") await queueWorldSync(cq, meetingId);
         } else {
+          // 正文只放摘要和条目，不超过 3000 字；不截断（写进去的要和确认的一样），超了不让确认。
+          if ([...recordText(meetingId, meeting.record_version + 1, record, reason, viewerId, at, meeting)].length > MAX_EVENT_TEXT) {
+            await client.query("ROLLBACK");
+            return { error: { status: 400, code: "RECORD_TOO_LONG", message: `会议记录写进本体的正文超过 ${MAX_EVENT_TEXT} 字，删减摘要或条目后再确认` } };
+          }
           await cq(`UPDATE meetings SET record_version = record_version + 1, record_snapshot = $2::jsonb, record_reason = $3, record_confirmed_at = $4,
               record_confirmed_by = $5, record_edit_pending = FALSE, world_excluded = FALSE, world_excluded_by = NULL, world_event_status = 'none' WHERE id = $1`,
             [meetingId, JSON.stringify(record), reason, at, viewerId]);
@@ -468,17 +480,15 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     if (!row || row.world_excluded || row.world_event_status !== "none" || !row.record_snapshot || !row.record_confirmed_at) return;
     const record = row.record_snapshot;
     const version = row.record_version;
-    const previous = row.world_event_id && row.world_event_record
-      ? { eventId: row.world_event_id, changed: changedParts(row.world_event_record, record), reason: row.record_reason }
-      : null;
-    const text = meetingEventText(record, { meetingId, version, previous,
-      confirmedBy: nameIn(row.participants, row.record_confirmed_by ?? row.lead_dri_id), confirmedAt: new Date(row.record_confirmed_at) });
+    const text = recordText(meetingId, version, record, row.record_reason, row.record_confirmed_by ?? row.lead_dri_id, new Date(row.record_confirmed_at), row);
     try {
       const written = await deps.meetingWorld.write({ meetingId, version, text, occurredAt: new Date(record.startedAt), anchorGroups: record.anchors,
         previousEventId: row.world_event_id, minuteToken: row.minute_token ?? null });
+      // 写进去的这条总是接到链上（写的过程中又确认了新的一版时，新版要指回它）；版本没变才记这一版已写入。
       await q(
-        `UPDATE meetings SET world_event_status = 'committed', world_event_id = $3, world_event_record = $4::jsonb, world_event_anchors = $5::jsonb, world_event_at = $6
-          WHERE id = $1 AND record_version = $2`,
+        `UPDATE meetings SET world_event_id = $3, world_event_record = $4::jsonb, world_event_anchors = $5::jsonb, world_event_at = $6,
+           world_event_status = CASE WHEN record_version = $2 THEN 'committed' ELSE world_event_status END
+          WHERE id = $1`,
         [meetingId, version, written.eventId, JSON.stringify(record), JSON.stringify(written.anchors), now()],
       );
       logEvent({ event: "meeting.world_event", objectRef: `meeting:${meetingId}`, status: "committed" });
