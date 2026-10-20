@@ -73,9 +73,9 @@ export function createFeishuMinutesApi({ fetch: fetchImpl = fetch }: { fetch?: F
     });
     const text = await response.text();
     let body: Record<string, unknown>;
-    try { body = JSON.parse(text) as Record<string, unknown>; } catch { throw new FeishuApiError(0, `飞书接口返回了非 JSON 响应（HTTP ${response.status}）`); }
+    try { body = JSON.parse(text) as Record<string, unknown>; } catch { throw new FeishuApiError(0, `飞书接口返回了非 JSON 响应（HTTP ${response.status}）`, response.status); }
     const code = Number(body.code ?? -1);
-    if (code !== 0) throw new FeishuApiError(code, String(body.msg ?? "飞书接口失败"));
+    if (code !== 0) throw new FeishuApiError(code, String(body.msg ?? "飞书接口失败"), response.status);
     return (body.data ?? {}) as Record<string, unknown>;
   }
   return {
@@ -99,7 +99,7 @@ export function createFeishuMinutesApi({ fetch: fetchImpl = fetch }: { fetch?: F
         let code = 0, msg = `HTTP ${response.status}`;
         try { const body = JSON.parse(text) as { code?: number; msg?: string }; code = Number(body.code ?? 0); msg = body.msg ?? msg; } catch { /* 非 JSON */ }
         // 2091003 一类：妙记还没转写完。
-        throw new FeishuApiError(code, `导出妙记逐字稿失败：${msg}`);
+        throw new FeishuApiError(code, `导出妙记逐字稿失败：${msg}`, response.status);
       }
       return text;
     },

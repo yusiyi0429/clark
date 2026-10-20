@@ -7,7 +7,7 @@ import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js"
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { saveAuthorizedToken } from "../src/feishu/tokens.js";
-import type { FeishuMinuteInfo, FeishuMinutesApi } from "../src/feishu/minutes.js";
+import { createFeishuMinutesApi, type FeishuMinuteInfo, type FeishuMinutesApi } from "../src/feishu/minutes.js";
 import { createMeetingMinutesService, meetingMinutesReply, minuteFromEvent } from "../src/meetingMinutes.js";
 import { parseFeishuTranscriptText } from "../src/transcriptMarkdown.js";
 import { getMeetingRow } from "../src/meetingStore.js";
@@ -51,16 +51,23 @@ function recordingOutcome(): PostMeetingAgent & { inputs: PostMeetingAgentInput[
   return agent;
 }
 
-function fakeMinutesApi(transcript = TRANSCRIPT): FeishuMinutesApi & { calls: string[]; artifactsError: Error | null; exportError: Error | null } {
+function fakeMinutesApi(transcript = TRANSCRIPT): FeishuMinutesApi & {
+  calls: string[]; artifactsError: Error | null; exportError: Error | null; listEmpty: boolean; onRead: (() => Promise<void>) | null;
+} {
   const minute: FeishuMinuteInfo = { token: "obcn_minute_1", title: "接口切换会", ownerOpenId: "ou_host", createdAt: new Date("2026-06-01T10:02:10+08:00"),
     durationSeconds: 3483, url: "https://example.feishu.cn/minutes/obcn_minute_1", meetingId: "vc_1" };
   const api = {
     calls: [] as string[],
     artifactsError: null as Error | null,
     exportError: null as Error | null,
+    /** 列妙记时返回空（妙记还没生成）。 */
+    listEmpty: false,
+    /** 读全文时先做的事（模拟读的过程中会议被取消）。 */
+    onRead: null as (() => Promise<void>) | null,
     async getMinute(token: string, minuteToken: string) { api.calls.push(`get:${token}:${minuteToken}`); return { ...minute, token: minuteToken, meetingId: null }; },
     async artifactTranscript(token: string, minuteToken: string) {
       api.calls.push(`artifacts:${token}:${minuteToken}`);
+      await api.onRead?.();
       if (api.artifactsError) throw api.artifactsError;
       return transcript;
     },
@@ -69,7 +76,7 @@ function fakeMinutesApi(transcript = TRANSCRIPT): FeishuMinutesApi & { calls: st
       if (api.exportError) throw api.exportError;
       return transcript;
     },
-    async listMinutes(token: string, owner: { openId: string }) { api.calls.push(`list:${token}:${owner.openId}`); return [minute]; },
+    async listMinutes(token: string, owner: { openId: string }) { api.calls.push(`list:${token}:${owner.openId}`); return api.listEmpty ? [] : [minute]; },
     async meetingParticipants(token: string, meetingId: string) { api.calls.push(`participants:${meetingId}`); return ["ou_host", "ou_owner", "ou_guest"]; },
   };
   return api;
@@ -373,6 +380,107 @@ describe("妙记来源与再读", () => {
       expect((await post(t, owner, `/api/meetings/${meetingId}/minutes`, { url })).statusCode).toBe(404);
       expect((await post(t, owner, `/api/meetings/${meetingId}/minutes/refetch`)).statusCode).toBe(404);
       expect(api.calls).toEqual([]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("产物接口回任何飞书错误都退回导出接口（非 JSON 的 403、没有逐字稿）", async () => {
+    const responses = [
+      () => new Response("<html>403 Forbidden</html>", { status: 403, headers: { "content-type": "text/html" } }),
+      () => new Response(JSON.stringify({ code: 0, msg: "success", data: { transcript: "" } }), { status: 200, headers: { "content-type": "application/json" } }),
+    ];
+    for (const response of responses) {
+      const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
+      try {
+        const meetingId = await scheduledMeeting(t);
+        await authorize(t, HOST, "ou_host", "测试乙", new Date());
+        const api = fakeMinutesApi();
+        // 产物接口走真实适配层（假 fetch），其余用假实现。
+        api.artifactTranscript = createFeishuMinutesApi({ fetch: async () => response() }).artifactTranscript;
+        await tickAfterMeeting(t, api);
+        expect(api.calls).toContain("export:u-person-fixture-002:obcn_minute_1");
+        const row = (await getMeetingRow(t.pool.query.bind(t.pool), meetingId))!;
+        expect(row.minutes_status).toBe("ready");
+        expect(row.transcript?.source?.contentHash).toBe(transcriptContentHash(TRANSCRIPT));
+      } finally {
+        await t.close();
+      }
+    }
+  });
+
+  it("自动拉取遇到临时故障（网络、飞书 5xx）照常再取，不记失败", async () => {
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
+    try {
+      const meetingId = await scheduledMeeting(t);
+      await authorize(t, HOST, "ou_host", "测试乙", new Date());
+      const api = fakeMinutesApi();
+      const status = async () => (await t.pool.query("SELECT minutes_status, minutes_failure FROM meetings WHERE id = $1", [meetingId])).rows[0];
+      // 网络错误：不算产物接口不可用，不退回导出接口。
+      api.artifactsError = new TypeError("fetch failed");
+      await tickAfterMeeting(t, api);
+      expect(await status()).toEqual({ minutes_status: "waiting", minutes_failure: null });
+      expect(api.calls.some((call) => call.startsWith("export:"))).toBe(false);
+      api.artifactsError = new FeishuApiError(0, "飞书接口返回了非 JSON 响应（HTTP 502）", 502);
+      api.exportError = new FeishuApiError(0, "导出妙记逐字稿失败：HTTP 502", 502);
+      await tickAfterMeeting(t, api);
+      expect(await status()).toEqual({ minutes_status: "waiting", minutes_failure: null });
+      api.artifactsError = null;
+      api.exportError = null;
+      await tickAfterMeeting(t, api);
+      expect(await status()).toEqual({ minutes_status: "ready", minutes_failure: null });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("再读一次没找到妙记时照常轮询", async () => {
+    const api = fakeMinutesApi();
+    const t = await feishuApp(api);
+    try {
+      const meetingId = await scheduledMeeting(t);
+      api.listEmpty = true;
+      await tickAfterMeeting(t, api);
+      expect((await getMeetingRow(t.pool.query.bind(t.pool), meetingId))?.minutes_status).toBe("waiting");
+      const again = await post(t, await t.memberCookie(), `/api/meetings/${meetingId}/minutes/refetch`);
+      expect(again.json()).toEqual({ minutesStatus: "failed", minutesFailure: "not_ready" });
+      api.listEmpty = false;
+      api.calls.length = 0;
+      await tickAfterMeeting(t, api);
+      expect(api.calls[0]).toBe("list:u-person-fixture-002:ou_host");
+      expect((await getMeetingRow(t.pool.query.bind(t.pool), meetingId))?.minutes_status).toBe("ready");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("不是待开的会不能贴链接，妙记不会锁在错的会上", async () => {
+    const api = fakeMinutesApi();
+    const t = await feishuApp(api);
+    try {
+      const host = await t.memberCookie();
+      const url = "https://example.feishu.cn/minutes/obcnpasted1";
+      const tokenOf = async (id: string) => (await t.pool.query("SELECT minute_token FROM meetings WHERE id = $1", [id])).rows[0].minute_token;
+      // 已取消的会：先拒，接口一次没调。
+      const cancelled = await scheduledMeeting(t);
+      await t.pool.query("UPDATE meetings SET status = 'cancelled' WHERE id = $1", [cancelled]);
+      const rejected = await post(t, host, `/api/meetings/${cancelled}/minutes`, { url });
+      expect(rejected.statusCode).toBe(409);
+      expect(rejected.json().code).toBe("MEETING_NOT_SCHEDULED");
+      expect((await post(t, host, `/api/meetings/${cancelled}/minutes/refetch`)).statusCode).not.toBe(200);
+      expect(api.calls).toEqual([]);
+      expect(await tokenOf(cancelled)).toBeNull();
+      // 读的过程中会被取消：候选写不进去，妙记还回去。
+      const racing = await scheduledMeeting(t);
+      api.onRead = async () => { await t.pool.query("UPDATE meetings SET status = 'cancelled' WHERE id = $1", [racing]); };
+      expect((await post(t, host, `/api/meetings/${racing}/minutes`, { url })).statusCode).toBe(409);
+      expect(await tokenOf(racing)).toBeNull();
+      // 对的会照样能对上这份妙记。
+      api.onRead = null;
+      const right = await scheduledMeeting(t);
+      const read = await post(t, host, `/api/meetings/${right}/minutes`, { url });
+      expect(read.statusCode).toBe(200);
+      expect(await tokenOf(right)).toBe("obcnpasted1");
     } finally {
       await t.close();
     }

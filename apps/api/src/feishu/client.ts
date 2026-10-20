@@ -4,9 +4,9 @@ const ACCOUNTS = "https://accounts.feishu.cn";
 const OPEN_API = "https://open.feishu.cn/open-apis";
 const TIMEOUT_MS = 10_000;
 
-/** 飞书接口返回的业务错误（code 非 0）。code 为 0 表示是网络或格式问题。 */
+/** 飞书接口返回的业务错误（code 非 0）。code 为 0 表示是网络或格式问题。httpStatus：调用方记了时为响应的 HTTP 状态（5xx 按临时故障重试）。 */
 export class FeishuApiError extends Error {
-  constructor(readonly code: number, message: string) {
+  constructor(readonly code: number, message: string, readonly httpStatus?: number) {
     super(message);
     this.name = "FeishuApiError";
   }
