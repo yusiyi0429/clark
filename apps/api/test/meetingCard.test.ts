@@ -135,7 +135,8 @@ describe("会议卡草稿", () => {
       expect(row.outcome).toMatchObject({ status: "ready", items: [], summary: "" });
       const worker = createJobWorker({ pool: t.pool, handlers: t.app.meetingFollowThrough.jobs().handlers });
       while (await worker.tick() > 0);
-      expect((await t.sql("SELECT count(*)::int AS n FROM jobs WHERE kind = 'meeting.decisions_sync'"))[0].n).toBe(0);
+      // 生成不排任何后台任务（没有分层、提醒、代判）：跑完能跑的之后队列里不剩待办。
+      expect(await t.sql("SELECT kind FROM jobs WHERE status <> 'done'")).toEqual([]);
       expect((await t.sql("SELECT count(*)::int AS n FROM meeting_decisions WHERE meeting_id = $1", [meetingId]))[0].n).toBe(0);
       expect(await taskCount(t, meetingId)).toBe(tasksBefore);
     } finally {
@@ -408,6 +409,10 @@ describe("会后待确认入口", () => {
         payload: { draftVersion: saved.json().draftVersion, writeToWorld: false } });
       expect(confirmed.statusCode).toBe(200);
       expect(await myCards(t, host)).toEqual([]);
+      // 确认后主持人和创建人的「会议记录待确认」提醒都标为已读，不再挂着。
+      expect(await t.sql("SELECT person_id FROM notifications WHERE kind = 'meeting_card_pending' AND object_id = $1 AND read_at IS NULL", [meetingId])).toEqual([]);
+      expect(await t.sql("SELECT person_id FROM notifications WHERE kind = 'meeting_card_pending' AND object_id = $1 ORDER BY person_id", [meetingId]))
+        .toEqual([{ person_id: CEO }, { person_id: HOST }]);
       const after = await viewOf(t, host, meetingId);
       expect((await putDraft(t, host, meetingId, { draftVersion: after.draftVersion, draft: { ...after.draft, summary: "会后补一句" } })).statusCode).toBe(200);
       expect((await myCards(t, host)).map((item) => item.status)).toEqual(["edit_pending"]);

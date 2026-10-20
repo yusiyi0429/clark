@@ -69,3 +69,6 @@ ALTER TABLE notifications ADD CONSTRAINT notifications_kind_check
   CHECK (kind IN ('meeting_action_assigned', 'task_returned', 'strategic_rejected', 'task_collaborator_added', 'thread_member_added', 'task_submitted', 'issue_assigned',
     'request_received', 'request_answered', 'request_done', 'request_asked', 'collection_reminder', 'meeting_card_pending'));
 CREATE UNIQUE INDEX notifications_meeting_card_pending_once ON notifications (person_id, object_id) WHERE kind = 'meeting_card_pending';
+
+-- 会后只有会议卡一个入口（拍板 4、11）：逐条分层、提醒代判、影响卡往下推的后台任务不再有处理方，队列里没跑完的删掉（跑完的留着）。
+DELETE FROM jobs WHERE kind IN ('meeting.decisions_sync', 'meeting.decisions_tick', 'meeting.decision_propagate') AND status <> 'done';

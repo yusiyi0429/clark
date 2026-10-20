@@ -977,14 +977,15 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const recordShown = view.current === RECORD_TAB.id;
   const issueOutline = (focus: "decision" | "outcome"): OutlineItem[] => payload.issueIds.map((issueId, index) => {
     const status = issueStatusOf(issueId);
-    const waiting = (outcomeGroups.byIssue.get(issueId) ?? []).filter((item) => item.review?.status === "pending" && item.kind !== "todo" && !isChildDecision(outcomeItems, item)).length;
+    // 旧会议的会后结论只读：目录里只写条数，不按待确认标。
+    const concluded = (outcomeGroups.byIssue.get(issueId) ?? []).filter((item) => item.kind !== "todo" && !isChildDecision(outcomeItems, item)).length;
     const base = `issue:${issueId}`;
     return {
       key: base,
       label: issueById.get(issueId)?.title ?? sourceContext.issueTitle(issueId) ?? `议题 ${index + 1}`,
       short: `议题 ${index + 1}${payload.issueIds.length > 1 ? ` / ${payload.issueIds.length}` : ""}`,
-      hint: focus === "outcome" && waiting ? `${waiting} 条待确认` : ISSUE_STATUS_LABEL[status],
-      tone: focus === "outcome" && waiting ? "pending" : status === "decided" ? "decided" : status === "dismissed" ? "dismissed" : "pending",
+      hint: focus === "outcome" && concluded ? `${concluded} 条` : ISSUE_STATUS_LABEL[status],
+      tone: focus === "outcome" && concluded ? "neutral" : status === "decided" ? "decided" : status === "dismissed" ? "dismissed" : "pending",
       children: focus === "outcome"
         ? [{ key: `${base}:outcome`, label: "会上结论" }, { key: `${base}:result`, label: "实际结果" }, { key: `${base}:history`, label: "历史与变化" }]
         : [{ key: `${base}:judgment`, label: "核心判断" }, { key: `${base}:history`, label: "历史与变化" }, { key: `${base}:evidence`, label: "事实与依据" },

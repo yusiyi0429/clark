@@ -22,7 +22,7 @@ import { MemberHomeWidgets } from "./MemberHomeWidgets";
 import { MemberRadarWidget } from "./MemberRadarWidget";
 import { MemberRadarNotices, noteworthySignals } from "./MemberRadarNotices";
 import { MemberMeetingSchedule } from "./MemberMeetingSchedule";
-import { memberNoticeGroups } from "./memberNotices";
+import { memberNoticeGroups, quietNoticeCount } from "./memberNotices";
 import { useMemberHome } from "./useMemberHome";
 import { weeklySyncNotices } from "./weeklySyncNotice";
 import n from "@/styles/notifications.module.css";
@@ -73,7 +73,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
               api.navigate(`${item.href}?channel=group`, from);
             }, buttons: [] })))} onSettled={() => undefined} />
             <MemberRadarNotices signals={radarSignals} currentHref={currentHref} onNavigate={api.navigate} onRead={home.readRadarNotice} />
-            {home.rounds.length + home.meetings.length + home.unreadThreads.length + home.unreadMissionGroups.length + home.notifications.filter((item) => !item.readAt).length + radarSignals.length + (home.weeklySync ? 1 : 0) + (weeklyReviews.board?.rows.length ?? 0) === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
+            {home.rounds.length + home.meetings.length + home.unreadThreads.length + home.unreadMissionGroups.length + quietNoticeCount(home.notifications) + radarSignals.length + (home.weeklySync ? 1 : 0) + (weeklyReviews.board?.rows.length ?? 0) === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
           </div>
           <div className={n.railFoot}>
             <AccountMenu account={account} onNavigate={api.navigate} />

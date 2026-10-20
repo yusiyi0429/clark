@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemberMeetingSchedule } from "./MemberMeetingSchedule";
-import { memberNoticeGroups } from "./memberNotices";
+import { memberNoticeGroups, quietNoticeCount } from "./memberNotices";
 
 describe("群聊与会议通知", () => {
   it("邀请通知打开对应议题；已读通知不再出现", () => {
@@ -26,5 +26,16 @@ describe("群聊与会议通知", () => {
     expect(html).toContain("10:00");
     expect(html).toContain("11:00");
     expect(html.match(/<button/g)).toHaveLength(1);
+  });
+
+  it("会议记录待确认的提醒在自己的一组里：不算进通知栏空状态，主持过会、确认完了的成员仍看到「暂时没有新通知」", () => {
+    const pending = { id: "n2", kind: "meeting_card_pending" as const, text: "接口切换会 · 会议记录待确认", objectType: "meeting" as const,
+      objectId: "m1", createdAt: "2026-10-20T00:00:00Z", readAt: null };
+    expect(quietNoticeCount([pending])).toBe(0);
+    expect(quietNoticeCount([{ ...pending, readAt: "2026-10-20T01:00:00Z" }])).toBe(0);
+    const handlers = { markSeen: vi.fn(), returnTask: vi.fn() };
+    const groups = memberNoticeGroups([pending], handlers);
+    expect([...groups.assigned, ...groups.results]).toEqual([]);
+    expect(quietNoticeCount([pending, { ...pending, id: "n3", kind: "task_returned" as const, objectType: "task" as const }])).toBe(1);
   });
 });

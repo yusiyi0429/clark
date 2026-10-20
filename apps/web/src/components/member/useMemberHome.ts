@@ -16,7 +16,7 @@ import type { WeeklySyncReminder } from "./weeklySyncNotice";
 
 export interface MemberNotification {
   id: string;
-  kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted";
+  kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "meeting_card_pending";
   text: string;
   objectType: "task" | "meeting" | "issue";
   objectId: string;

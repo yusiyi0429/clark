@@ -233,8 +233,9 @@ describe("会后：会上形成的结论回到议题块里确认", () => {
     expect(html.indexOf("华东改为主战场")).toBeGreaterThan(others);
     expect(html).toContain("会上形成的结论");
     expect(html).not.toContain("未确认的候选不构成决定");
-    // 会后目录：纪要 → 议题 → 其他 → 原文。
+    // 会后目录：纪要 → 议题 → 其他 → 原文；旧会议的结论只读，议题那一行写条数，不标待确认。
     expect(html).toContain('aria-label="会后目录"');
+    expect(html).not.toContain("条待确认");
   });
 
   it("原话里的 Markdown 表格行改写成一句、和条目重复时不再摆两遍；过了截止的待办标「已过期」", () => {

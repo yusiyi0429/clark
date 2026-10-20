@@ -217,8 +217,9 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
       // 确认后草稿的 stale 清掉（差异已经看过、确认过）；草稿版本不变，同一草稿再确认还认得出来。
       await cq(`UPDATE meeting_cards SET current_revision = $2, draft = jsonb_set(draft, '{objectChanges}', $3::jsonb), updated_at = now() WHERE meeting_id = $1`,
         [meetingId, revision, JSON.stringify(draft.objectChanges.map((change) => ({ ...change, stale: false })))]);
-      // 第一次确认：会后事项算处理完。
+      // 第一次确认：会后事项算处理完；主持人和创建人的「会议记录待确认」提醒标为已读。
       await cq("UPDATE meetings SET status = 'reviewed', version = version + 1, updated_at = now() WHERE id = $1 AND status = 'held'", [meetingId]);
+      await cq("UPDATE notifications SET read_at = now() WHERE kind = 'meeting_card_pending' AND object_id = $1 AND read_at IS NULL", [meetingId]);
       if (input.writeToWorld) await queueSync(cq, meetingId);
       return "done";
     });
