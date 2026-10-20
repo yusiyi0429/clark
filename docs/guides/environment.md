@@ -76,7 +76,6 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | 飞书 | `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_TOKEN_KEY` | 三项都留空＝关闭飞书（路由 404，不起长连接）；只填一部分 API 启动失败。`FEISHU_TOKEN_KEY` 为 base64 的 32 字节，与 `SESSION_SECRET` 分开 |
 | | `FEISHU_TOKEN_KEY_VERSION` | 1；换密钥时递增，空串会被判非法 |
 | | `FEISHU_BITABLE_MODE` | 只有 `live` 才写真实多维表格，其余为 mock |
-| | `IMPACT_CARD_MODE` | 只有 `shadow` 时影响卡只在后台记录，其余为 live 推送 |
 | | `FEISHU_WEB_ORIGIN` | 飞书网页域名（如 `https://tokenking.feishu.cn`）；会议事件写本体时拼妙记链接，留空不带链接 |
 | 观测 | `LANGSMITH_TRACING`、`LANGSMITH_API_KEY` | 只有 `LANGSMITH_TRACING=true` 且有 key 才上报 |
 | | `LANGSMITH_PROJECT` | Compose 缺省 `warmap`，代码缺省 `default` |

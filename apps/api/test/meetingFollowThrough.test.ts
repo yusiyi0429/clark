@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { MeetingOutcomeState, NotificationList, TaskView, type TPostMeetingCandidate } from "@warmap/contracts";
 import { createTestApp, preflightCandidate, seedLegacyOutcome, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
-import { assessOutcomeCandidate, type OntologyUpdateRequest, type OntologyUpdater, type PostMeetingAgent } from "../src/outcome.js";
+import { assessOutcomeCandidate, type PostMeetingAgent } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import { hashSecret } from "../src/session.js";
 
-// 会后闭环：todo 推送成执行事项、成员处理与退回、战略项确认与不同意、成员通知。
+// 旧格式会议的会后闭环：todo 推送成执行事项、成员处理与退回、成员通知；逐条确认和战略项分流已停（会后只有会议卡一个入口）。
 const PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people-candidate.json", import.meta.url));
 const CEO = TEST_CEO.personId; // 测试甲
 const LEAD = TEST_MEMBER.personId; // 测试乙：主持人
@@ -53,19 +53,8 @@ const outcomeAgent: PostMeetingAgent = {
   },
 };
 
-function recordingUpdater(): OntologyUpdater & { calls: OntologyUpdateRequest[] } {
-  const updater = {
-    calls: [] as OntologyUpdateRequest[],
-    async apply(request: OntologyUpdateRequest) {
-      updater.calls.push(request);
-      return { status: "applied" as const, result: { nodeId: "ontology-node-1" } };
-    },
-  };
-  return updater;
-}
-
-function newApp(ontologyUpdater?: OntologyUpdater): Promise<TestApp> {
-  return createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent, ontologyUpdater });
+function newApp(): Promise<TestApp> {
+  return createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent });
 }
 
 type CardAction = { actionType: string; actionId: string; itemId?: string; label: string };
@@ -191,12 +180,10 @@ describe("会后自动推送执行事项", () => {
       expect(notifications.filter((row) => row.person_id === LEAD).map((row) => row.object_id).sort())
         .toEqual([taskIdOf(items[1]), taskIdOf(items[2])].sort());
 
-      // 已推送的执行事项是已确认效果：不再允许替换逐字稿；CEO 的 todo 与战略项仍可确认/不同意
+      // 已推送的执行事项是已确认效果：不再允许替换逐字稿；CEO 的 todo 与战略项只读，没有逐条动作
       const actions = (await meetingCard(t, ceo, meetingId)).actions as CardAction[];
       expect(actions.some((a) => a.actionType === "meeting.replace_transcript")).toBe(false);
-      expect(actions.filter((a) => a.actionType === "meeting.revoke_effect").map((a) => a.itemId)).toEqual(["item-1", "item-2", "item-3"]);
-      expect(actions.filter((a) => a.actionType === "meeting.confirm_item").map((a) => a.itemId)).toEqual(["item-4", "item-5"]);
-      expect(actions.find((a) => a.actionType === "meeting.dismiss_item" && a.itemId === "item-5")?.label).toBe("不同意");
+      expect(actions.filter((a) => a.itemId)).toEqual([]);
     } finally {
       await t.close();
     }
@@ -213,40 +200,6 @@ describe("会后自动推送执行事项", () => {
       expect(again.slice(0, 3).map((item) => item.review?.effectRef)).toEqual(items.slice(0, 3).map((item) => item.review?.effectRef));
       expect(await t.sql("SELECT id FROM tasks")).toHaveLength(3);
       expect(await t.sql("SELECT id FROM notifications")).toHaveLength(3);
-    } finally {
-      await t.close();
-    }
-  });
-
-  it("撤回推送只在执行事项未开始时可用，删除执行事项且不通知任何人；撤回后可再推送", async () => {
-    const t = await newApp();
-    try {
-      const { ceo, meetingId, items } = await readyMeeting(t);
-      const revoked = await execute(t, ceo, meetingId, "meeting.revoke_effect", "item-2");
-      expect(revoked.statusCode).toBe(200);
-      expect((revoked.json().cards[0].payload.outcome.items as Item[])[1].review).toMatchObject({ status: "pending", effectRef: null });
-      expect(await t.sql("SELECT id FROM tasks WHERE id = $1", [taskIdOf(items[1])])).toHaveLength(0);
-      expect(await t.sql("SELECT person_id FROM task_members WHERE task_id = $1", [taskIdOf(items[1])])).toHaveLength(0);
-      // 原来的分配通知随执行事项一起删除，不产生新通知
-      expect(await t.sql("SELECT object_id FROM notifications ORDER BY object_id")).toEqual(
-        [taskIdOf(items[0]), taskIdOf(items[2])].sort().map((object_id) => ({ object_id })),
-      );
-
-      // 负责人已开始推进的，撤回被拒绝
-      const lead = await t.memberCookie();
-      expect((await me(t, lead, "PATCH", `/api/me/tasks/${taskIdOf(items[2])}`, { version: 1, status: "in_progress" })).statusCode).toBe(200);
-      const refused = await execute(t, ceo, meetingId, "meeting.revoke_effect", "item-3");
-      expect(refused.statusCode).toBe(409);
-      expect(refused.json().code).toBe("TASK_ALREADY_STARTED");
-      expect(await t.sql("SELECT status FROM tasks WHERE id = $1", [taskIdOf(items[2])])).toEqual([{ status: "in_progress" }]);
-
-      // 撤回后的 todo 回到待处理，再确认即重新推送
-      const redispatched = await execute(t, ceo, meetingId, "meeting.confirm_item", "item-2");
-      expect(redispatched.statusCode).toBe(200);
-      const item2 = (redispatched.json().cards[0].payload.outcome.items as Item[])[1];
-      expect(item2.review?.effectRef).toMatch(/^task:/);
-      expect(taskIdOf(item2)).not.toBe(taskIdOf(items[1]));
-      expect(await t.sql("SELECT owner_id FROM tasks WHERE id = $1", [taskIdOf(item2)])).toEqual([{ owner_id: LEAD }]);
     } finally {
       await t.close();
     }
@@ -331,65 +284,33 @@ describe("成员的执行事项", () => {
   });
 });
 
-describe("提给 CEO 的战略议题", () => {
-  it("确认写入待更新本体请求并交给 OntologyUpdater；确认后不提供撤回", async () => {
-    const updater = recordingUpdater();
-    const t = await newApp(updater);
-    try {
-      const { ceo, meetingId } = await readyMeeting(t);
-      const confirmed = await execute(t, ceo, meetingId, "meeting.confirm_item", "item-5");
-      expect(confirmed.statusCode).toBe(200);
-      const item = (confirmed.json().cards[0].payload.outcome.items as Item[])[4];
-      expect(item.review?.status).toBe("confirmed");
-      const requestId = item.review!.effectRef!.replace(/^ontology:/, "");
-      expect(await t.sql("SELECT meeting_id::text, item_id, title, brief, status, result FROM ontology_update_requests WHERE id = $1", [requestId])).toEqual([
-        { meeting_id: meetingId, item_id: "item-5", title: "是否整体撤出东南亚市场", brief: "测试丙提出东南亚业务是否整体撤出，需要 CEO 拍板。", status: "applied", result: { nodeId: "ontology-node-1" } },
-      ]);
-      expect(updater.calls).toEqual([{ id: requestId, meetingId, itemId: "item-5", title: "是否整体撤出东南亚市场", brief: "测试丙提出东南亚业务是否整体撤出，需要 CEO 拍板。" }]);
-      const actions = (await meetingCard(t, ceo, meetingId)).actions as CardAction[];
-      expect(actions.some((a) => a.itemId === "item-5")).toBe(false);
-      // CEO 确认不给任何人发通知
-      expect(await t.sql("SELECT id FROM notifications WHERE kind <> 'meeting_action_assigned'")).toHaveLength(0);
-    } finally {
-      await t.close();
-    }
-  });
-
-  it("默认 OntologyUpdater 不做事，请求保持 pending", async () => {
+describe("旧会议的会后条目", () => {
+  it("原文和完整纪要只给实际参会的人；逐条决定只读，首页不再单列待 CEO 确认的战略项", async () => {
     const t = await newApp();
     try {
       const { ceo, meetingId } = await readyMeeting(t);
-      expect((await execute(t, ceo, meetingId, "meeting.confirm_item", "item-5")).statusCode).toBe(200);
-      expect(await t.sql("SELECT status, result FROM ontology_update_requests")).toEqual([{ status: "pending", result: null }]);
-    } finally {
-      await t.close();
-    }
-  });
+      // 战略项还没处理，会议也不再进 CEO 首页（不再有 CEO 单独确认的卡）。
+      const home = (await t.app.inject({ method: "GET", url: "/api/cards/home", headers: { cookie: ceo } })).json().cards as { id: string }[];
+      expect(home.some((card) => card.id === `meeting:${meetingId}`)).toBe(false);
 
-  it("不同意给主持人发 strategic_rejected；首页只收有待确认战略项的会议", async () => {
-    const t = await newApp();
-    try {
-      const { ceo, meetingId } = await readyMeeting(t);
-      const homeMeeting = async () => ((await t.app.inject({ method: "GET", url: "/api/cards/home", headers: { cookie: ceo } })).json().cards as { id: string; actions: CardAction[] }[])
-        .find((card) => card.id === `meeting:${meetingId}`);
-      const before = await homeMeeting();
-      expect(before).toBeDefined();
-      expect(before!.actions.filter((a) => a.itemId === "item-5").map((a) => a.actionType).sort()).toEqual(["meeting.confirm_item", "meeting.dismiss_item"]);
-
-      const dismissed = await execute(t, ceo, meetingId, "meeting.dismiss_item", "item-5");
-      expect(dismissed.statusCode).toBe(200);
-      expect((dismissed.json().cards[0].payload.outcome.items as Item[])[4].review?.status).toBe("dismissed");
-      expect(await t.sql("SELECT person_id, object_type, object_id, item_id FROM notifications WHERE kind = 'strategic_rejected'")).toEqual([
-        { person_id: LEAD, object_type: "meeting", object_id: meetingId, item_id: "item-5" },
-      ]);
-      const lead = await t.memberCookie();
-      const rejected = ((await me(t, lead, "GET", "/api/me/notifications")).json().notifications as { kind: string; text: string; objectId: string }[])
-        .find((n) => n.kind === "strategic_rejected");
-      expect(rejected).toMatchObject({ text: "CEO 不同意「是否整体撤出东南亚市场」", objectId: meetingId });
-      expect(await t.sql("SELECT id FROM ontology_update_requests")).toHaveLength(0);
-
-      // 已处理完战略项、且不是 scheduled 的会议不再进首页
-      expect(await homeMeeting()).toBeUndefined();
+      // 飞书参会名单里只有主持人：测试丙（手填的参会人）看不到原文和完整纪要，主持人看得到。
+      await t.pool.query("UPDATE meetings SET attendees_actual = $2::jsonb WHERE id = $1", [meetingId, JSON.stringify([LEAD])]);
+      await t.pool.query(
+        `INSERT INTO meeting_decisions (id, meeting_id, tier, ordinal, statement, item_ids, recommendation) VALUES (gen_random_uuid(), $1, 'host', 1, '周五前提交资源排期', '["item-2"]'::jsonb, 'confirmed')`,
+        [meetingId],
+      );
+      const host = await t.memberCookie();
+      const hostCard = (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${meetingId}`, headers: { cookie: host } })).json();
+      expect(hostCard.payload).toMatchObject({ attended: true, outcome: { summary: CANDIDATE.summary } });
+      expect(hostCard.payload.transcript.turns).toHaveLength(4);
+      expect(hostCard.payload.decisions.map((d: { statement: string; canReview: boolean }) => [d.statement, d.canReview])).toEqual([["周五前提交资源排期", false]]);
+      const owner = await ownerCookie(t);
+      const ownerCard = (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${meetingId}`, headers: { cookie: owner } })).json();
+      expect(ownerCard.payload.attended).toBe(false);
+      expect(ownerCard.payload).not.toHaveProperty("transcript");
+      expect(ownerCard.payload).not.toHaveProperty("decisions");
+      expect(ownerCard.payload.outcome).not.toHaveProperty("summary");
+      expect(ownerCard.payload.attendees).toBeUndefined();
     } finally {
       await t.close();
     }

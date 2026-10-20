@@ -161,22 +161,6 @@ export async function listMeetingRows(q: Query): Promise<MeetingRow[]> {
   const result = await q(`SELECT ${meetingColumns()} FROM meetings ORDER BY scheduled_at DESC, created_at DESC`);
   return result.rows as MeetingRow[];
 }
-/**
- * 子决定：parentItemId 指向同场会里的一条主决定。子决定不单独确认／忽略／撤回，
- * 随主决定一起处理（主决定确认 → 子项确认；忽略 → 一并忽略；撤回 → 一起恢复待处理）。
- */
-export function isChildDecision(items: TMeetingOutcomeItem[], item: TMeetingOutcomeItem): boolean {
-  if (item.kind !== "decision" || !item.parentItemId) return false;
-  return items.some((candidate) => candidate.id === item.parentItemId && candidate.kind === "decision");
-}
-export function childDecisionsOf(items: TMeetingOutcomeItem[], parentId: string): TMeetingOutcomeItem[] {
-  return items.filter((candidate) => candidate.kind === "decision" && candidate.parentItemId === parentId);
-}
-function parentConfirmed(outcome: TMeetingOutcomeState, item: TMeetingOutcomeItem): boolean {
-  const parent = item.parentItemId ? outcome.items.find((candidate) => candidate.id === item.parentItemId) : undefined;
-  return parent?.review?.status === "confirmed";
-}
-
 /** 候选只向 Card 投影摘要与抽样；完整 turns 留在服务端 JSONB。 */
 export function projectTranscriptCandidate(candidate: TStoredTranscriptCandidate | null): TTranscriptCandidateProjection | null {
   if (!candidate || candidate.turns.length === 0) return null;
@@ -205,9 +189,9 @@ export function hasMeetingNotice(row: MeetingRow, viewerId: string, at: Date): b
 }
 
 export function projectMeetingCard(row: MeetingRow, secret: string, at = new Date()): TCard {
-  const action = (actionType: string, label: string, itemId?: string): TActionDescriptor => {
-    const scope: ActionScope = { actionType, objectType: "meeting", objectId: row.id, objectVersion: row.version, itemId };
-    return { actionId: signActionId(secret, scope), actionType, label, ...(itemId ? { itemId } : {}) };
+  const action = (actionType: string, label: string): TActionDescriptor => {
+    const scope: ActionScope = { actionType, objectType: "meeting", objectId: row.id, objectVersion: row.version };
+    return { actionId: signActionId(secret, scope), actionType, label };
   };
   const actions: TActionDescriptor[] = [];
   if (row.status === "scheduled") {
@@ -236,24 +220,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
   if ((row.status === "held" || row.status === "reviewed") && !hasConfirmedEffect(row.outcome)) {
     actions.push(action("meeting.replace_transcript", "替换 Transcript"));
   }
-  // Ticket 11：逐项确认/忽略/撤回；open item 与已 delivered 的外部效果不提供撤回
-  if ((row.status === "held" || row.status === "reviewed") && row.outcome?.status === "ready") {
-    for (const item of row.outcome.items) {
-      if (!item.review) continue;
-      // 子决定没有自己的动作，跟着主决定走
-      if (isChildDecision(row.outcome.items, item)) continue;
-      if (item.review.status === "pending") {
-        // 无法产生精确效果时不暴露确认：父 decision 未确认的 reopenWhen。
-        // 无可解析 Issue 的 decision 也能确认：只记为会上已确认的决定，不写任何议题。
-        const confirmable = item.kind !== "reopenWhen" || parentConfirmed(row.outcome, item);
-        if (confirmable) actions.push(action("meeting.confirm_item", "确认", item.id));
-        actions.push(action("meeting.dismiss_item", item.kind === "strategic" ? "不同意" : "忽略", item.id));
-      } else if (item.review.status === "confirmed" && item.kind !== "strategic") {
-        // 战略项确认后已交给本体更新，不提供撤回；已推送 todo 的撤回由服务端按执行事项状态判定
-        actions.push(action("meeting.revoke_effect", "撤回", item.id));
-      }
-    }
-  }
+  // 会后只有会议卡一个入口（FR-5.1、拍板 4）：不再逐条确认、忽略、撤回；旧会议的逐条条目只读。
   return {
     schemaVersion: 1,
     id: `meeting:${row.id}`,
@@ -284,9 +251,8 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
       minutesStatus: minutesStatusOf(row),
       minutesFailure: minutesStatusOf(row) === "failed" ? row.minutes_failure ?? null : null,
       attendees: attendeesOf(row),
-      // 主持人在自己的会议卡上确认；CEO 卡上只有 CEO 自己主持时才能点。
-      decisions: (row.decisions ?? []).map((decision) => projectMeetingDecision(decision, row.participants,
-        decision.tier === "host" && row.lead_dri_id === row.ceo_participant_id)),
+      // 旧会议的逐条决定只读。
+      decisions: (row.decisions ?? []).map((decision) => projectMeetingDecision(decision, row.participants, false)),
     },
     navigation: [{ href: `/meetings/${row.id}`, label: "Meeting" }],
     conversation: { scope: `meeting:${row.id}` },
@@ -362,11 +328,6 @@ export async function updateMeeting(client: PoolClient, id: string, assignments:
 /** 只有 confirmed 的 item 才能真正阻止替换；pending/dismissed 不算已生效效果。 */
 export function hasConfirmedEffect(outcome: TMeetingOutcomeState | null): boolean {
   return outcome?.items.some((item) => item.review?.status === "confirmed" || item.review?.effectRef != null) ?? false;
-}
-
-/** CEO 通知栏「需要你确认」：抽取已完成且还有未处理的战略议题。 */
-export function hasPendingStrategicItem(outcome: TMeetingOutcomeState | null): boolean {
-  return outcome?.status === "ready" && outcome.items.some((item) => item.kind === "strategic" && item.review?.status === "pending");
 }
 
 /** decision 的关联 Issue：显式 issueId 优先，否则只有单一关联 Issue 时才无歧义。 */

@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg";
-import type { TMeetingOutcomeItem, TMeetingOutcomeState, TRadarAnchor } from "@warmap/contracts";
+import type { TMeetingOutcomeItem, TMeetingOutcomeState } from "@warmap/contracts";
 import type { IssueReceiptRow, IssueRow } from "./issues.js";
 import type { MeetingRow } from "./meetingStore.js";
 import { deleteDispatchedTask } from "./tasks.js";
@@ -83,43 +83,6 @@ async function parseTaskEffectRef(
   const origin = task.rows[0];
   if (!origin?.origin_meeting_id || !origin.origin_item_id) return null;
   return { meetingId: origin.origin_meeting_id, kind: "todo", itemId: origin.origin_item_id, taskId: match[1] };
-}
-
-/** 复议条件写入的 Radar anchor 是确定性的：id 由会议条目派生，撤回与重建都按 id 精确匹配。 */
-function reopenAnchorId(meetingId: string, itemId: string): string {
-  return `meeting-reopen:${meetingId}:${itemId}`.slice(0, 100);
-}
-
-export function buildReopenAnchor(input: {
-  meetingId: string;
-  itemId: string;
-  text: string;
-  location: TRadarAnchor["location"];
-  effectRef: string;
-}): TRadarAnchor {
-  return {
-    id: reopenAnchorId(input.meetingId, input.itemId),
-    title: input.text.slice(0, 200),
-    query: input.text.slice(0, 500),
-    location: input.location,
-    source: "meeting-reopen",
-    originRef: input.effectRef,
-  };
-}
-
-export async function upsertRadarAnchor(client: PoolClient, anchor: TRadarAnchor): Promise<void> {
-  await client.query("SELECT id FROM radar_config WHERE id = 'default' FOR UPDATE");
-  await client.query(
-    `UPDATE radar_config
-        SET anchors = (
-              SELECT COALESCE(jsonb_agg(item), '[]'::jsonb)
-                FROM jsonb_array_elements(anchors) AS item
-               WHERE item->>'id' <> $1
-            ) || $2::jsonb,
-            updated_at = now()
-      WHERE id = 'default'`,
-    [anchor.id, JSON.stringify([anchor])],
-  );
 }
 
 async function removeRadarAnchor(client: PoolClient, anchorId: string): Promise<void> {

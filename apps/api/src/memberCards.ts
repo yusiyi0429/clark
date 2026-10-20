@@ -47,8 +47,8 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
     ...(attended ? {
       // 原文只在已有逐字稿时带上（会前没有这一格）。
       ...(payload.transcript ? { transcript: payload.transcript } : {}),
-      // 主持人确认 host 条目；战略项给 CEO，这里只看不点。
-      decisions: (payload.decisions ?? []).map((decision) => ({ ...decision, canReview: isHost && decision.tier === "host" })),
+      // 旧会议的逐条决定只读。
+      decisions: payload.decisions ?? [],
     } : {}),
   },
     actions: isHost ? card.actions.filter((action) => ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate"].includes(action.actionType)) : [],

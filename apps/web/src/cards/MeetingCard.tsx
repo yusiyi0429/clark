@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, FileUp, Loader2, Pencil, RefreshCw, X } from "lucide-react";
-import { browserApi, type CardAction } from "@/lib/api/client";
+import { browserApi } from "@/lib/api/client";
 import type { TMeetingDecisionHistoryResponse, TTranscriptCandidateProjection } from "@warmap/contracts";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type IssuePayload, type MeetingPayload } from "./payloads";
@@ -17,6 +17,7 @@ import type { HistoryView } from "@/components/meeting/DecisionHistoryLayers";
 import { MeetingOutline, saveReadingPosition, useOutlineSpy, useReadingAnchor, useRestoreReadingPosition, type OutlineItem } from "@/components/meeting/MeetingOutline";
 import { SourceList, SourceNavigatorProvider, useSourceNavigator, type SourceObject } from "@/components/meeting/SourceViewer";
 import { DECISION_HISTORY_CHANGED, useDecisionHistory } from "@/components/meeting/useDecisionHistory";
+import { MeetingWorldSection } from "@/components/meeting/MeetingWorldBar";
 import { PreflightProgress } from "@/components/meeting/PreflightProgress";
 import { DivergencesSection, LensAnswers, MaterialQuestionsSection } from "@/components/meeting/PreflightReviewExtras";
 import { announceMeetingCard, listenMeetingCard } from "@/lib/meetingSync";
@@ -32,13 +33,11 @@ import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceCon
 import { calendarDate, COMPANY_TIMEZONE } from "@/lib/companyTime";
 import { cleanDisplayText, isPastDue, materialTitle, stripInternalRefs } from "@/lib/displayText";
 import { ActionFeedback, useCardAction, type ActionState } from "@/lib/useCardAction";
-import { useUndoWindow } from "@/lib/undoWindow";
 import { DateTimePicker } from "@/components/ui/DatePicker";
 import { Select } from "@/components/ui/Select";
 import { groupPreflight } from "./preflightOutline";
-import { attributeEntries, groupOutcomeByIssue, ISSUE_STATUS_LABEL, outcomeIssueId, preflightInFlight, preflightStatusText, speakerLabel, type PreflightEntry } from "./meetingIssueModel";
+import { attributeEntries, groupOutcomeByIssue, ISSUE_STATUS_LABEL, preflightInFlight, preflightStatusText, speakerLabel, type PreflightEntry } from "./meetingIssueModel";
 import { buildHistoryIndex, outcomeAnchorId, type SourceContext, type SourceMaterial } from "./meetingSources";
-import { MeetingDecisions } from "@/components/meeting/MeetingDecisions";
 import s from "@/styles/meeting-workspace.module.css";
 
 export { MaterialPane, materialMeta, previewKind, type MaterialMeta, type MaterialPreview } from "@/components/meeting/meetingMaterialPreview";
@@ -377,9 +376,9 @@ export function outcomeItemState(item: OutcomeItem, payload: MeetingPayload, nam
   const status = item.review?.status;
   if (item.kind === "open") return { state: "open", label: "仅展示，不产生效果" };
   if (item.kind === "strategic") {
-    if (status === "confirmed") return { state: "confirmed", label: "CEO 已确认 · 本体待 Co-Agent 更新" };
+    if (status === "confirmed") return { state: "confirmed", label: "CEO 已确认" };
     if (status === "dismissed") return { state: "dismissed", label: "CEO 不同意" };
-    return { state: "pending", label: "待 CEO 确认" };
+    return { state: "pending", label: "未处理" };
   }
   if (item.kind === "todo") {
     const owner = actionOwner(item, payload);
@@ -389,7 +388,7 @@ export function outcomeItemState(item: OutcomeItem, payload: MeetingPayload, nam
   }
   if (status === "confirmed") return { state: "confirmed", label: "已确认" };
   if (status === "dismissed") return { state: "dismissed", label: "已忽略" };
-  return { state: "pending", label: "待处理" };
+  return { state: "pending", label: "未处理" };
 }
 
 /** 待办事项的一行总结：按实际推送情况写，不把没推送的也说成「已推给负责人」（巡检 P2-22）。待办会后自动推给负责人，这里只看不办。 */
@@ -405,18 +404,11 @@ export function decisionGroups(decisions: OutcomeItem[], all: OutcomeItem[]): { 
     .map((item) => ({ item, children: all.filter((child) => child.parentItemId === item.id && isChildDecision(all, child)) }));
 }
 
-/** 子决定此刻写什么：跟着主决定走——主决定在撤回窗口里时写它的结果，否则写自己的（待处理时不写）。 */
-export function childDecisionLabel(child: OutcomeItem, parentHeld: "confirm" | "dismiss" | null): { state: "confirmed" | "dismissed"; label: string } | null {
-  if (parentHeld) return parentHeld === "confirm" ? { state: "confirmed", label: "已确认" } : { state: "dismissed", label: "已忽略" };
+/** 子决定写什么：已确认、已忽略照写，未处理时不写。 */
+export function childDecisionLabel(child: OutcomeItem): { state: "confirmed" | "dismissed"; label: string } | null {
   if (child.review?.status === "confirmed") return { state: "confirmed", label: "已确认" };
   if (child.review?.status === "dismissed") return { state: "dismissed", label: "已忽略" };
   return null;
-}
-
-/** 撤回窗口里（还没提交）这一条写什么：和提交后的说法一致。 */
-export function heldItemLabel(item: OutcomeItem, kind: "confirm" | "dismiss", name: (personId: string) => string, payload: MeetingPayload): string {
-  if (kind === "dismiss") return item.kind === "strategic" ? "不同意" : "已忽略";
-  return item.kind === "todo" ? `推送给${name(actionOwner(item, payload))}` : "已确认";
 }
 
 /** 会议录音的几步（服务端实际先后：转码 → 上传 → 识别）。 */
@@ -451,8 +443,7 @@ export function meetingNow(payload: MeetingPayload, ended: boolean): string {
   if (payload.status === "cancelled") return "已取消";
   if (payload.status === "reviewed") return "会后事项已处理完";
   if (payload.status === "held") {
-    if (payload.outcome?.status !== "ready") return "正在整理纪要";
-    return payload.outcome.items.some((item) => item.kind === "strategic" && item.review?.status === "pending") ? "纪要已生成 · 待 CEO 确认战略议题" : "纪要已生成";
+    return payload.outcome?.status === "ready" ? "纪要已生成" : "正在整理纪要";
   }
   if (ended && payload.transcriptCandidate) return "会议记录待确认说话人";
   if (ended && recordingInFlight(payload.recording)) return "录音转写中";
@@ -497,7 +488,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   } : source;
   const { homeCards } = workspace;
   const { ask, dialog: confirmDialog } = useConfirm();
-  // 会后事项先留 5 秒撤回再提交：到点时从最新的会议 Card 取动作（每处理一条版本 +1），并且一条接一条地发。
+  // 最新的会议 Card（版本只增不减）。
   const latestCard = useRef(card);
   if (card.version >= latestCard.current.version) latestCard.current = card;
   const updateCard = (updated: CardRenderProps["card"]) => {
@@ -520,8 +511,6 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       .finally(() => window.dispatchEvent(new CustomEvent(DECISION_HISTORY_CHANGED, { detail: { issueId: issueIds[0] } })));
   };
   useEffect(() => listenMeetingCard("page", (updated) => syncRef.current(updated)), []);
-  const itemUndo = useUndoWindow<"confirm" | "dismiss">();
-  const commitChain = useRef<Promise<unknown>>(Promise.resolve());
   const [note, setNote] = useState(payload.draft.note);
   const [supplementText, setSupplementText] = useState("");
   const [supplementEntry, setSupplementEntry] = useState("");
@@ -567,8 +556,6 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
 
   const actions = memberReadOnly ? card.actions.filter((action) => isHost && ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate"].includes(action.actionType)) : card.actions;
   const actionOf = (type: string) => actions.find((action) => action.actionType === type);
-  const itemAction = (type: string, itemId: string) =>
-    actions.find((action) => action.actionType === type && action.itemId === itemId);
 
   const issues = collection.filter((item) => item.kind === "issue");
   const issueById = new Map(issues.map((item) => [item.objectRef.id, item]));
@@ -895,33 +882,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     others: items.filter((item) => !["decision", "todo", "strategic"].includes(item.kind)),
   });
   const minutes = minutesOf(memberReadOnly ? outcomeItems : outcomeGroups.others);
-  /**
-   * 会后确认 / 忽略 / 撤回走原生 meeting Action，返回的是会议 Card；决定被确认后议题的回执和状态也变了，
-   * 所以成功后按议题再读一次议题 Card（只读），历史分层跟着重读；演示里再通知首页刷新。
-   */
-  const runItem = async (action: CardAction, item: (typeof outcomeItems)[number]) => {
-    if (!(await run(action, {}))) return;
-    // 会议页确认的决定同样写到战场（没有倒计时：会议页上一直留着撤回；撤回时服务端把战场恢复）。docs/superpowers/specs/2026-10-12-confirm-to-battlefield.md §6
-    if (action.actionType === "meeting.confirm_item" && item.kind === "decision") {
-      const apply = latestCard.current.actions.find((candidate) => candidate.actionType === "meeting.apply_battlefield");
-      if (apply) await run(apply, {});
-    }
-    const issueId = outcomeIssueId(item, payload.issueIds);
-    if (issueId) {
-      const { data } = await browserApi.GET("/api/cards/issues/{id}", { params: { path: { id: issueId } } });
-      const next = data?.cards?.[0];
-      if (next) onCard(next);
-    }
-    window.dispatchEvent(new CustomEvent(DECISION_HISTORY_CHANGED, { detail: { issueId } }));
-  };
-  /** 确认 / 推送 / 忽略：先显示结果并给 5 秒「撤回」，到点才提交（和左栏一致，巡检 P1-9）。 */
-  const holdItem = (kind: "confirm" | "dismiss", item: (typeof outcomeItems)[number]) => itemUndo.hold(item.id, kind, () => {
-    const type = kind === "confirm" ? "meeting.confirm_item" : "meeting.dismiss_item";
-    commitChain.current = commitChain.current.then(async () => {
-      const action = latestCard.current.actions.find((candidate) => candidate.actionType === type && candidate.itemId === item.id);
-      if (action) await runItem(action, item);
-    }).catch(() => undefined);
-  });
+  /** 旧格式会议的会后条目只读：会后只有会议卡一个入口，不再逐条确认、忽略、撤回。 */
   const renderItem = (item: (typeof outcomeItems)[number]) => {
     // 子决定画在主决定下面（缩进、没有自己的按钮），不单独成条
     if (isChildDecision(outcomeItems, item)) return null;
@@ -930,7 +891,6 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     const itemText = cleanDisplayText(item.kind === "strategic" && item.title ? item.title : item.text);
     const quote = cleanDisplayText(item.quote);
     const overdue = item.kind === "todo" && item.review?.status === "pending" && isPastDue(item.dueDate, item.text, calendarDate(new Date().toISOString()));
-    const held = item.review?.status === "pending" ? itemUndo.pending(item.id) : null;
     return (
       <article key={item.id} id={outcomeAnchorId(item.id)} className={s.decisionRecord} data-kind={item.kind}>
         <div className={s.itemHead}>
@@ -950,37 +910,13 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
             {item.kind === "todo" && payload.issueIds.length ? <span>负责人 {people.get(actionOwner(item, payload)) ?? "待确认"}</span> : null}
             {item.dueDate ? <span>{item.dueDate.slice(5).replace("-", "/")} 前</span> : null}
             {overdue ? <span className={s.overdue}>已过期</span> : null}
-            <span className={s.itemState} data-state={held ? (held === "confirm" ? "confirmed" : "dismissed") : itemState.state}>
-              {held ? heldItemLabel(item, held, (id) => people.get(id) ?? id, payload) : itemState.label}
-            </span>
+            <span className={s.itemState} data-state={itemState.state}>{itemState.label}</span>
           </div>
-          {/* 待办会后已自动推给负责人：这里只看，不再逐条推送、忽略或撤回 */}
-          {item.kind === "todo" ? null : <div className={s.itemActions}>
-            {held ? (
-              <button type="button" aria-label={`撤回：${itemText}`} onClick={() => itemUndo.undo(item.id)}>撤回</button>
-            ) : <>
-            {itemAction("meeting.confirm_item", item.id) ? (
-              <button type="button" data-variant="confirm" disabled={pending} onClick={() => holdItem("confirm", item)}>
-                确认
-              </button>
-            ) : null}
-            {itemAction("meeting.dismiss_item", item.id) ? (
-              <button type="button" disabled={pending} onClick={() => holdItem("dismiss", item)}>
-                {item.kind === "strategic" ? "不同意" : "忽略"}
-              </button>
-            ) : null}
-            </>}
-            {itemAction("meeting.revoke_effect", item.id) ? (
-              <button type="button" disabled={pending} onClick={() => void runItem(itemAction("meeting.revoke_effect", item.id)!, item)}>
-                撤回
-              </button>
-            ) : null}
-          </div>}
         </div>
         {children.length ? (
           <ul className={s.subDecisions} aria-label={`含 ${children.length} 项`}>
             {children.map((child) => {
-              const childState = childDecisionLabel(child, held);
+              const childState = childDecisionLabel(child);
               return (
                 <li key={child.id} id={outcomeAnchorId(child.id)} className={s.subDecision}>
                   <p>{cleanDisplayText(child.text)}</p>
@@ -1571,14 +1507,14 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const recordView =
     memberReadOnly && !(isHost && payload.status === "scheduled") ? (
       <section className={s.review}>
-        {/* 实际参会的人能看完整纪要和「会上定了」；主持人在这里确认。 */}
+        {/* 实际参会的人能看完整纪要和这场会在本体里的挂点。 */}
         {memberOutcomeSummary(source) ? (
           <section className={s.reviewSection} data-outline="summary">
             <header><h3>会议纪要</h3></header>
             <p className={s.entryBody}>{memberOutcomeSummary(source)}</p>
           </section>
         ) : null}
-        <MeetingDecisions decisions={payload.decisions ?? []} meetingId={meetingId} />
+        <MeetingWorldSection meetingId={meetingId} />
         <section className={s.reviewSection}>
           <header><h3>会后结论</h3></header>
           {outcomeItems.length ? (
@@ -1659,7 +1595,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
               </header>
               <p className={s.entryBody}>{payload.outcome.summary || "抽取尚未产出摘要。"}</p>
             </section>
-            <MeetingDecisions decisions={payload.decisions ?? []} meetingId={meetingId} />
+            <MeetingWorldSection meetingId={meetingId} />
             {payload.outcome.error ? (
               <p className={s.error} role="alert" title={payload.outcome.error.code}>
                 {payload.outcome.error.message}

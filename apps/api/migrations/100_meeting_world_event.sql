@@ -62,3 +62,10 @@ CREATE TABLE meeting_card_syncs (
   PRIMARY KEY (meeting_id, revision),
   FOREIGN KEY (meeting_id, revision) REFERENCES meeting_card_confirmations(meeting_id, revision)
 );
+
+-- 会议记录待确认（FR-5.2）：草稿生成好了给主持人和创建人各发一条提醒，一场会只发一次（再存草稿、重新生成都不再发）。
+ALTER TABLE notifications DROP CONSTRAINT notifications_kind_check;
+ALTER TABLE notifications ADD CONSTRAINT notifications_kind_check
+  CHECK (kind IN ('meeting_action_assigned', 'task_returned', 'strategic_rejected', 'task_collaborator_added', 'thread_member_added', 'task_submitted', 'issue_assigned',
+    'request_received', 'request_answered', 'request_done', 'request_asked', 'collection_reminder', 'meeting_card_pending'));
+CREATE UNIQUE INDEX notifications_meeting_card_pending_once ON notifications (person_id, object_id) WHERE kind = 'meeting_card_pending';

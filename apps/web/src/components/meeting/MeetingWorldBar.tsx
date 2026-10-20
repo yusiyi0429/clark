@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * 会议页「会上定了」头部的一条（回流设计稿 3.1）：这场会挂到哪些对象、会议记录写进本体了没有。
+ * 会议页会后区的一条（回流设计稿 3.1）：这场会挂到哪些对象、会议记录写进本体了没有。
  * 主持人和 CEO 能「改」挂点（本月 Mission、责任单元，可恢复自动）；「不写入」在整卡确认时选；参会人只看挂点。
+ * MeetingWorldSection 打开会议页时单独取一次（GET /api/meetings/:id/world，不进会议卡），看不到时不显示。
  */
 import { useEffect, useMemo, useState } from "react";
 import type { TMeetingWorldResponse, TMeetingWorldView, TWorldAnchor } from "@warmap/contracts";
 import { monthDayTime } from "@/lib/companyTime";
-import { listMeetingWorldAnchorOptions, setMeetingWorldAnchors } from "./meetingDecisionApi";
+import { getMeetingWorld, listMeetingWorldAnchorOptions, setMeetingWorldAnchors } from "./meetingDecisionApi";
 import { WorldAnchors, type AnchorTone } from "./WorldAnchors";
 import s from "@/styles/meeting-workspace.module.css";
 import d from "./meeting-decisions.module.css";
@@ -26,6 +27,12 @@ function statusPill(world: TMeetingWorldView): { text: string; tone: string } | 
 
 type AnchorKey = Pick<TWorldAnchor, "kind" | "id">;
 const sameAnchor = (a: AnchorKey, b: AnchorKey) => a.kind === b.kind && a.id === b.id;
+
+export function MeetingWorldSection({ meetingId }: { meetingId: string }) {
+  const [detail, setDetail] = useState<TMeetingWorldResponse | null>(null);
+  useEffect(() => { void getMeetingWorld(meetingId).then(setDetail, () => undefined); }, [meetingId]);
+  return detail ? <MeetingWorldBar meetingId={meetingId} world={detail.world} onChange={setDetail} /> : null;
+}
 
 export function MeetingWorldBar({ meetingId, world: initial, onChange }: { meetingId: string; world: TMeetingWorldView; onChange: (next: TMeetingWorldResponse) => void }) {
   const [world, setWorld] = useState(initial);

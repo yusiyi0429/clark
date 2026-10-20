@@ -1,9 +1,9 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 /**
- * 会后链路：妙记状态、实际参会名单、分层确认的「会上定了 X」。
+ * 会后链路：妙记状态、实际参会名单、会议记录待确认清单；旧格式会议的逐条决定只读。
  * - 妙记：none（会还没开完）/ waiting（开完了，等飞书妙记生成）/ manual（拿不到，退回手动上传）/ ready（已拿到）/ failed（读取失败，带原因）。
- * - 分层：strategic 推给 CEO（不代判）；host 由主持人确认，每场最多 5 条，满一个工作日没确认由 Agent 按推荐判断代判。
+ * - 旧会议的逐条决定（strategic / host）只读显示，不再确认、提醒或代判；新会议会后只有会议卡一个入口（整卡确认）。
  */
 export const MeetingMinutesStatus = Type.Union([Type.Literal("none"), Type.Literal("waiting"), Type.Literal("manual"), Type.Literal("ready"), Type.Literal("failed")]);
 /** 妙记读取失败（failed）的原因：没权限 / 原文还没好 / 没找到 / 其他失败。主持人或创建人可以再读一次。 */
@@ -79,7 +79,7 @@ export const MeetingDecisionView = Type.Object(
     reviewedAt: Type.Union([Type.String(), Type.Null()]),
     /** 到点由 Agent 代判（只有 host）。 */
     dueAt: Type.Union([Type.String(), Type.Null()]),
-    /** 看的人能不能在这里确认（主持人确认 host 条目）。 */
+    /** 旧字段：逐条确认已停，总是 false。 */
     canReview: Type.Boolean(),
   },
   { additionalProperties: false },
@@ -135,29 +135,22 @@ export const MeetingWorldAnchorsRequest = Type.Object(
 );
 export const MeetingWorldAnchorOptionsResponse = Type.Object({ options: Type.Array(WorldAnchor) }, { additionalProperties: false });
 
-export const MeetingDecisionVerdict = Type.Union([Type.Literal("confirmed"), Type.Literal("edited"), Type.Literal("not_decided")]);
-export const MeetingDecisionReviewRequest = Type.Object(
-  {
-    verdict: MeetingDecisionVerdict,
-    /** verdict = edited 时必填：改后的说法。 */
-    statement: Type.Optional(Type.String({ minLength: 1, maxLength: 300 })),
-  },
-  { additionalProperties: false },
-);
-export const MeetingDecisionResponse = Type.Object({ decision: MeetingDecisionView }, { additionalProperties: false });
-
-/** 我要确认的会后决定（通知栏置顶）：按会议分组，只列还没确认的。 */
-export const MyMeetingDecisionGroup = Type.Object(
+/**
+ * 我要处理的会议记录（通知栏置顶，一场会一条）：我是主持人或创建人、草稿已生成的会里，
+ * pending 还没确认过、edit_pending 确认后又改了、failed 写入失败。提醒只提示，不改状态。
+ */
+export const MyMeetingCardStatus = Type.Union([Type.Literal("pending"), Type.Literal("edit_pending"), Type.Literal("failed")]);
+export const MyMeetingCard = Type.Object(
   {
     meetingId: Type.String({ minLength: 1 }),
-    meetingTitle: Type.String({ minLength: 1 }),
-    scheduledAt: Type.String({ minLength: 1 }),
-    dueAt: Type.Union([Type.String(), Type.Null()]),
-    decisions: Type.Array(MeetingDecisionView),
+    title: Type.String({ minLength: 1 }),
+    /** 会议结束时刻（没记下实际结束时用预约的结束时刻）。 */
+    endedAt: Type.String({ minLength: 1 }),
+    status: MyMeetingCardStatus,
   },
   { additionalProperties: false },
 );
-export const MyMeetingDecisionsResponse = Type.Object({ groups: Type.Array(MyMeetingDecisionGroup) }, { additionalProperties: false });
+export const MyMeetingCardsResponse = Type.Object({ meetings: Type.Array(MyMeetingCard) }, { additionalProperties: false });
 
 export type TMeetingMinutesStatus = Static<typeof MeetingMinutesStatus>;
 export type TMeetingMinutesFailure = Static<typeof MeetingMinutesFailure>;
@@ -168,11 +161,9 @@ export type TMeetingDecisionTier = Static<typeof MeetingDecisionTier>;
 export type TMeetingDecisionStatus = Static<typeof MeetingDecisionStatus>;
 export type TMeetingDecisionRecommendation = Static<typeof MeetingDecisionRecommendation>;
 export type TMeetingDecisionView = Static<typeof MeetingDecisionView>;
-export type TMeetingDecisionVerdict = Static<typeof MeetingDecisionVerdict>;
-export type TMeetingDecisionReviewRequest = Static<typeof MeetingDecisionReviewRequest>;
-export type TMeetingDecisionResponse = Static<typeof MeetingDecisionResponse>;
-export type TMyMeetingDecisionGroup = Static<typeof MyMeetingDecisionGroup>;
-export type TMyMeetingDecisionsResponse = Static<typeof MyMeetingDecisionsResponse>;
+export type TMyMeetingCardStatus = Static<typeof MyMeetingCardStatus>;
+export type TMyMeetingCard = Static<typeof MyMeetingCard>;
+export type TMyMeetingCardsResponse = Static<typeof MyMeetingCardsResponse>;
 export type TWorldAnchor = Static<typeof WorldAnchor>;
 export type TMeetingDecisionWorld = Static<typeof MeetingDecisionWorld>;
 export type TMeetingRecordStatus = Static<typeof MeetingRecordStatus>;

@@ -70,7 +70,7 @@ async function importMeeting(t: TestApp, externalId: string, title: string, sche
   return res.json().cards[0].objectRef.id as string;
 }
 
-async function holdWithOutcome(t: TestApp, meetingId: string): Promise<void> {
+async function holdWithOutcome(t: TestApp, meetingId: string, seed: { confirmDecisions?: boolean } = {}): Promise<void> {
   const res = await t.app.inject({
     method: "POST",
     url: `/api/dri/meetings/${meetingId}/transcript`,
@@ -80,16 +80,16 @@ async function holdWithOutcome(t: TestApp, meetingId: string): Promise<void> {
   expect(res.statusCode).toBe(200);
   expect(res.json().cards[0].payload.outcome).toMatchObject({ status: "ready" });
   const meeting = (await t.sql("SELECT title, issue_ids FROM meetings WHERE id = $1", [meetingId]))[0];
-  await seedLegacyOutcome(t.pool, meetingId, legacyCandidate(meeting.issue_ids[0], meeting.title));
+  await seedLegacyOutcome(t.pool, meetingId, legacyCandidate(meeting.issue_ids[0], meeting.title), seed);
 }
 
-async function meetingAction(t: TestApp, cookie: string, meetingId: string, actionType: string) {
-  const card = (await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie } })).json().cards[0];
-  const descriptor = card.actions.find((action: { actionType: string }) => action.actionType === actionType);
-  expect(descriptor, `${actionType} 应可用`).toBeTruthy();
-  const res = await t.app.inject({ method: "POST", url: "/api/actions/execute", headers: { cookie, origin: t.publicOrigin }, payload: { actionId: descriptor.actionId, input: {} } });
+/** 议题页撤回一条回执（旧会议的会上决定回执由议题页代为撤回，会议条目跟着回到待处理）。 */
+async function revokeReceipt(t: TestApp, cookie: string, issueId: string, receiptId: string) {
+  const card = (await t.app.inject({ method: "GET", url: `/api/cards/issues/${issueId}`, headers: { cookie } })).json().cards[0];
+  const descriptor = card.actions.find((action: { actionType: string; itemId?: string }) => action.actionType === "issue.revoke_receipt" && action.itemId === receiptId);
+  expect(descriptor, "issue.revoke_receipt 应可用").toBeTruthy();
+  const res = await t.app.inject({ method: "POST", url: "/api/actions/execute", headers: { cookie, origin: t.publicOrigin }, payload: { actionId: descriptor.actionId, input: { reason: "会后撤回" } } });
   expect(res.statusCode).toBe(200);
-  return res.json().cards[0];
 }
 
 describe("feedback 9：有效历史决定、此后执行变化、本次待判断分层", () => {
@@ -110,19 +110,16 @@ describe("feedback 9：有效历史决定、此后执行变化、本次待判断
         [oldId, newId, issueId, CEO_ID],
       );
 
-      // 第一场：确认“先统一验收标准”
+      // 第一场：当时已确认“先统一验收标准”（旧会议的逐条确认）
       const first = await importMeeting(t, "m-1", "验收标准第一场", "2026-05-01T10:00:00+08:00", issueId);
-      await holdWithOutcome(t, first);
-      const firstItem = (await t.sql("SELECT outcome FROM meetings WHERE id = $1", [first]))[0].outcome.items[0].id as string;
-      const confirmed = await t.app.inject({ method: "GET", url: `/api/cards/meetings/${first}`, headers: { cookie } });
-      const confirmAction = confirmed.json().cards[0].actions.find((action: { actionType: string; itemId?: string }) => action.actionType === "meeting.confirm_item" && action.itemId === firstItem);
-      expect((await t.app.inject({ method: "POST", url: "/api/actions/execute", headers: { cookie, origin: t.publicOrigin }, payload: { actionId: confirmAction.actionId, input: {} } })).statusCode).toBe(200);
+      await holdWithOutcome(t, first, { confirmDecisions: true });
 
-      // 第二场：确认“两家大单允许定制验收”，随后撤回 → 回到待确认候选
+      // 第二场：当时确认了“两家大单允许定制验收”，随后在议题页撤回 → 回到待确认候选
       const second = await importMeeting(t, "m-2", "验收标准第二场", "2026-05-15T10:00:00+08:00", issueId);
-      await holdWithOutcome(t, second);
-      await meetingAction(t, cookie, second, "meeting.confirm_item");
-      await meetingAction(t, cookie, second, "meeting.revoke_effect");
+      await holdWithOutcome(t, second, { confirmDecisions: true });
+      const secondReceipt = ((await t.sql("SELECT receipts FROM issues WHERE id = $1", [issueId]))[0].receipts as { id: string; decisionText: string }[])
+        .find((receipt) => receipt.decisionText === "两家大单允许定制验收")!;
+      await revokeReceipt(t, cookie, issueId, secondReceipt.id);
 
       // 此后的执行事实：阶段反馈（有一条早于所有有效决定，不应列出）、群讨论、材料修订
       await t.sql(

@@ -4,7 +4,7 @@ import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import { getIssueRow, listPendingIssueCards, projectIssueCard } from "./issues.js";
 import { issueOriginFields } from "./dataOrigin.js";
 import { meetingCardFacts } from "./meetingCardRead.js";
-import { getMeetingRow, hasPendingStrategicItem, listMeetingRows, projectMeetingCard } from "./meetingStore.js";
+import { getMeetingRow, listMeetingRows, projectMeetingCard } from "./meetingStore.js";
 import { companyPeriod, getMonthlyPlanNotice } from "./monthlyPlans.js";
 import { listMissionRoundCards } from "./missionRounds.js";
 import { readMissionCardForAgent } from "./mcpMissionCards.js";
@@ -27,8 +27,8 @@ export async function listPending(ctx: Context) {
     return { kind: card.kind, id: card.objectRef.id, title: card.title, urgency: payload.urgency.level,
       status: payload.status, at: payload.urgency.decisionBy ?? null, href: `/issues/${card.objectRef.id}`, ...issueOriginFields(payload.originRef) };
   });
-  const meetingItems = meetingRows.filter((row) => row.status === "scheduled" || hasPendingStrategicItem(row.outcome)).map((row) => ({
-    kind: "meeting", id: row.id, title: row.title, urgency: null, status: row.status === "scheduled" ? "待开会" : "会后条目待确认",
+  const meetingItems = meetingRows.filter((row) => row.status === "scheduled").map((row) => ({
+    kind: "meeting", id: row.id, title: row.title, urgency: null, status: "待开会",
     at: row.scheduled_at.toISOString(), href: `/meetings/${row.id}`,
   }));
   const monthlyItems = monthly && (monthly.payload as { status?: string }).status !== "confirmed" ? [{

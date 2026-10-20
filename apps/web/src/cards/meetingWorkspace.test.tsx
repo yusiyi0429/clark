@@ -381,8 +381,9 @@ describe("Meeting Outcome 复核", () => {
     expect(html).toContain("3 条发言已保存");
     // 会议记录页不出现英文内部名词。
     for (const term of ["Transcript", "warmap-transcript", "Action Item", "Outcome candidate", "confirmed effect"]) expect(html).not.toContain(term);
-    // 每条只渲染服务端下发的真实 Action；待办会后自动推给负责人，这里只看，不出确认 / 忽略按钮。
-    expect(html).toContain(">撤回<");
+    // 会后只有会议卡一个入口：旧会议的条目只读，带着旧的逐条动作也不出确认 / 忽略 / 撤回按钮。
+    expect(html).not.toContain(">撤回<");
+    expect(html).not.toContain(">确认<");
     expect(html).not.toContain(">忽略<");
     expect(html).not.toContain(">推送<");
   });

@@ -3963,108 +3963,22 @@
         }
       }
     },
-    "/api/me/meeting-decisions": {
+    "/api/me/meeting-cards": {
       "get": {
-        "operationId": "listMyMeetingDecisions",
-        "summary": "我主持的会里还没确认的「会上定了 X」，按会议分组",
+        "operationId": "listMyMeetingCards",
+        "summary": "我主持或创建的会里待处理的会议记录：待确认、修改待确认、写入失败，一场会一条",
         "responses": {
           "200": {
-            "description": "待确认的会后决定",
+            "description": "待处理的会议记录",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MyMeetingDecisionsResponse"
+                  "$ref": "#/components/schemas/MyMeetingCardsResponse"
                 }
               }
             }
           },
           "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/meetings/{id}/decisions/{decisionId}/review": {
-      "post": {
-        "operationId": "reviewMeetingDecision",
-        "summary": "主持人确认一条会后决定：对 / 改一下 / 其实没定；Agent 代判之后改判会给已收卡的人出更正卡",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "decisionId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MeetingDecisionReviewRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "这条决定的最新状态",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MeetingDecisionResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -38174,33 +38088,6 @@
           }
         }
       },
-      "MeetingConfirmItemInput": {
-        "additionalProperties": false,
-        "type": "object",
-        "properties": {}
-      },
-      "MeetingDismissItemInput": {
-        "additionalProperties": false,
-        "type": "object",
-        "properties": {
-          "reason": {
-            "minLength": 1,
-            "maxLength": 500,
-            "type": "string"
-          }
-        }
-      },
-      "MeetingRevokeEffectInput": {
-        "additionalProperties": false,
-        "type": "object",
-        "properties": {
-          "reason": {
-            "minLength": 1,
-            "maxLength": 500,
-            "type": "string"
-          }
-        }
-      },
       "ThreadView": {
         "additionalProperties": false,
         "type": "object",
@@ -53938,6 +53825,10 @@
                     {
                       "const": "collection_reminder",
                       "type": "string"
+                    },
+                    {
+                      "const": "meeting_card_pending",
+                      "type": "string"
                     }
                   ]
                 },
@@ -58076,415 +57967,52 @@
           }
         }
       },
-      "MeetingDecisionReviewRequest": {
+      "MyMeetingCardsResponse": {
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "verdict"
+          "meetings"
         ],
         "properties": {
-          "verdict": {
-            "anyOf": [
-              {
-                "const": "confirmed",
-                "type": "string"
-              },
-              {
-                "const": "edited",
-                "type": "string"
-              },
-              {
-                "const": "not_decided",
-                "type": "string"
-              }
-            ]
-          },
-          "statement": {
-            "minLength": 1,
-            "maxLength": 300,
-            "type": "string"
-          }
-        }
-      },
-      "MeetingDecisionResponse": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "decision"
-        ],
-        "properties": {
-          "decision": {
-            "additionalProperties": false,
-            "type": "object",
-            "required": [
-              "id",
-              "meetingId",
-              "tier",
-              "ordinal",
-              "statement",
-              "originalStatement",
-              "quote",
-              "speakerName",
-              "recommendation",
-              "why",
-              "status",
-              "revision",
-              "reviewerName",
-              "reviewedAt",
-              "dueAt",
-              "canReview"
-            ],
-            "properties": {
-              "id": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "meetingId": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "tier": {
-                "anyOf": [
-                  {
-                    "const": "strategic",
-                    "type": "string"
-                  },
-                  {
-                    "const": "host",
-                    "type": "string"
-                  }
-                ]
-              },
-              "ordinal": {
-                "minimum": 1,
-                "type": "integer"
-              },
-              "statement": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "originalStatement": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "quote": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "speakerName": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "recommendation": {
-                "anyOf": [
-                  {
-                    "const": "confirmed",
-                    "type": "string"
-                  },
-                  {
-                    "const": "not_decided",
-                    "type": "string"
-                  }
-                ]
-              },
-              "why": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "status": {
-                "anyOf": [
-                  {
-                    "const": "pending",
-                    "type": "string"
-                  },
-                  {
-                    "const": "confirmed",
-                    "type": "string"
-                  },
-                  {
-                    "const": "edited",
-                    "type": "string"
-                  },
-                  {
-                    "const": "not_decided",
-                    "type": "string"
-                  },
-                  {
-                    "const": "rejected",
-                    "type": "string"
-                  },
-                  {
-                    "const": "agent_judged",
-                    "type": "string"
-                  }
-                ]
-              },
-              "revision": {
-                "minimum": 0,
-                "type": "integer"
-              },
-              "reviewerName": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "reviewedAt": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "dueAt": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "canReview": {
-                "type": "boolean"
-              }
-            }
-          }
-        }
-      },
-      "MyMeetingDecisionsResponse": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "groups"
-        ],
-        "properties": {
-          "groups": {
+          "meetings": {
             "type": "array",
             "items": {
               "additionalProperties": false,
               "type": "object",
               "required": [
                 "meetingId",
-                "meetingTitle",
-                "scheduledAt",
-                "dueAt",
-                "decisions"
+                "title",
+                "endedAt",
+                "status"
               ],
               "properties": {
                 "meetingId": {
                   "minLength": 1,
                   "type": "string"
                 },
-                "meetingTitle": {
+                "title": {
                   "minLength": 1,
                   "type": "string"
                 },
-                "scheduledAt": {
+                "endedAt": {
                   "minLength": 1,
                   "type": "string"
                 },
-                "dueAt": {
+                "status": {
                   "anyOf": [
                     {
+                      "const": "pending",
                       "type": "string"
                     },
                     {
-                      "type": "null"
+                      "const": "edit_pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "failed",
+                      "type": "string"
                     }
                   ]
-                },
-                "decisions": {
-                  "type": "array",
-                  "items": {
-                    "additionalProperties": false,
-                    "type": "object",
-                    "required": [
-                      "id",
-                      "meetingId",
-                      "tier",
-                      "ordinal",
-                      "statement",
-                      "originalStatement",
-                      "quote",
-                      "speakerName",
-                      "recommendation",
-                      "why",
-                      "status",
-                      "revision",
-                      "reviewerName",
-                      "reviewedAt",
-                      "dueAt",
-                      "canReview"
-                    ],
-                    "properties": {
-                      "id": {
-                        "minLength": 1,
-                        "type": "string"
-                      },
-                      "meetingId": {
-                        "minLength": 1,
-                        "type": "string"
-                      },
-                      "tier": {
-                        "anyOf": [
-                          {
-                            "const": "strategic",
-                            "type": "string"
-                          },
-                          {
-                            "const": "host",
-                            "type": "string"
-                          }
-                        ]
-                      },
-                      "ordinal": {
-                        "minimum": 1,
-                        "type": "integer"
-                      },
-                      "statement": {
-                        "minLength": 1,
-                        "type": "string"
-                      },
-                      "originalStatement": {
-                        "minLength": 1,
-                        "type": "string"
-                      },
-                      "quote": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "speakerName": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "recommendation": {
-                        "anyOf": [
-                          {
-                            "const": "confirmed",
-                            "type": "string"
-                          },
-                          {
-                            "const": "not_decided",
-                            "type": "string"
-                          }
-                        ]
-                      },
-                      "why": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "status": {
-                        "anyOf": [
-                          {
-                            "const": "pending",
-                            "type": "string"
-                          },
-                          {
-                            "const": "confirmed",
-                            "type": "string"
-                          },
-                          {
-                            "const": "edited",
-                            "type": "string"
-                          },
-                          {
-                            "const": "not_decided",
-                            "type": "string"
-                          },
-                          {
-                            "const": "rejected",
-                            "type": "string"
-                          },
-                          {
-                            "const": "agent_judged",
-                            "type": "string"
-                          }
-                        ]
-                      },
-                      "revision": {
-                        "minimum": 0,
-                        "type": "integer"
-                      },
-                      "reviewerName": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "reviewedAt": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "dueAt": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "canReview": {
-                        "type": "boolean"
-                      }
-                    }
-                  }
                 }
               }
             }

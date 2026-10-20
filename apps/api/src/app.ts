@@ -31,7 +31,7 @@ import { resumeResearch, type ResearchService } from "./research.js";
 import { resumePreflights, type PreflightAgent } from "./meetingPreflight.js";
 import { createPreflightAgent, createPreflightThoughtTranslator, preflightThinkingLevel } from "./preflightAgent.js";
 import { agentModel, type AgentModelEnv } from "./agentModels.js";
-import { pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } from "./outcome.js";
+import type { PostMeetingAgent } from "./outcome.js";
 import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { createWorldReader, mergeWorldGoalsIntoContext, ontologyToolResult, type OntologyQuery } from "./worldReader.js";
@@ -48,7 +48,6 @@ import type { FeishuEnv } from "./feishu/config.js";
 import { createFeishuClient, type FeishuClient } from "./feishu/client.js";
 import { registerFeishuAuthRoutes } from "./routes/feishu.js";
 import { createMeetingFollowThrough, type MeetingFollowThrough } from "./meetingFollowThrough.js";
-import type { DecisionLayeringAgent } from "./meetingDecisionAgent.js";
 import type { ImpactAgent } from "./impactAgent.js";
 import type { FeishuMinutesApi } from "./feishu/minutes.js";
 import { registerMeetingFollowThroughRoutes } from "./routes/meetingFollowThrough.js";
@@ -191,8 +190,6 @@ export type AppEnv = {
   feishu?: FeishuEnv;
   /** 管理员（TIANSHU_ADMIN_PERSON_IDS，逗号分隔的 personId）：能看管理员视图；不配时没有人能看。 */
   adminPersonIds?: string[];
-  /** 影响卡：live 推送（缺省；置信度低的仍只记影子）、shadow 只在后台记录（IMPACT_CARD_MODE）。 */
-  impactCardMode?: "live" | "shadow";
   /** 飞书网页域名（FEISHU_WEB_ORIGIN）：会议事件里拼妙记链接用；不配时不带链接。 */
   feishuWebOrigin?: string;
   /** ③ 信息收集的飞书多维表格：live 以发起人身份调开放接口（要先在飞书后台开通 base 权限，见 feishu/bitable.ts）；缺省 mock，不调飞书（FEISHU_BITABLE_MODE）。 */
@@ -223,7 +220,6 @@ export async function buildApp({
   preflightAgent,
   outcomeAgent,
   driExporter,
-  ontologyUpdater = pendingOntologyUpdater,
   monthlyPlanService,
   monthlyReviewService,
   weeklyReviewService,
@@ -270,8 +266,6 @@ export async function buildApp({
   preflightAgent?: PreflightAgent;
   outcomeAgent?: PostMeetingAgent;
   driExporter?: DriExporter;
-  /** CEO 确认战略议题后的本体更新；缺省不做事、请求保持 pending（co-agent 同事实现真实 Agent）。 */
-  ontologyUpdater?: OntologyUpdater;
   monthlyPlanService?: MonthlyPlanService;
   /** 月末复盘的起草、评估、汇总；缺省时 open 返回 503，其余生成不运行。 */
   monthlyReviewService?: MonthlyReviewService;
@@ -306,8 +300,8 @@ export async function buildApp({
   outlets?: RadarOutletAdapter;
   /** 飞书开放接口；缺省按 env.feishu 装配真实客户端（测试注入假实现）。 */
   feishuClient?: FeishuClient;
-  /** 会后分层、影响分析与妙记接口（测试注入假实现）；缺省用 heavy 模型与真实飞书接口。 */
-  meetingFollowThroughAgents?: { layering?: DecisionLayeringAgent; impact?: ImpactAgent; minutesApi?: FeishuMinutesApi };
+  /** 影响卡追问与妙记接口（测试注入假实现）；缺省用 heavy 模型与真实飞书接口。 */
+  meetingFollowThroughAgents?: { impact?: ImpactAgent; minutesApi?: FeishuMinutesApi };
   /** 文档变更找候选的 Agent（测试注入假实现）；缺省用快模型。 */
   docChangeAgent?: DocChangeAgent;
   conversationTurnTimeoutMs?: number;
@@ -512,7 +506,6 @@ export async function buildApp({
     now,
   };
   app.decorate("collectionJobs", collectionJobs(collectionDeps));
-  app.addHook("onClose", async () => { followThrough.close(); });
   // 周复盘提交后按关联的 Mission、Task 写进展到本体：同样只在实例配置允许写时启用；不写时提交照常，等配好后补发。
   let weeklyReviewWorld: WeeklyReviewWorldSync | undefined;
   if (worldConfigured(env) && world.status().writes) {
@@ -627,7 +620,6 @@ export async function buildApp({
     personalRadar,
     research,
     driExporter,
-    ontologyUpdater,
     monthlyPlanService,
     monthlyReviewService,
     weeklyReviewService,

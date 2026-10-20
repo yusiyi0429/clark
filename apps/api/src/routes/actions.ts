@@ -7,9 +7,6 @@ import {
   EditMeetingDetailsRequest,
   ExecuteActionRequest,
   JoinMeetingRequest,
-  MeetingConfirmItemInput,
-  MeetingDismissItemInput,
-  MeetingRevokeEffectInput,
   MissionEditInput,
   ReplaceTranscriptRequest,
   RequestSupplementRequest,
@@ -28,14 +25,14 @@ import { executeEditMission } from "../missions.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
 import { executeRetryMonthlyPlanDraft, executeSignMonthlyPlan, executeUpdateMonthlyPlanDraft } from "../monthlyPlans.js";
 import { startSignedMissionDrafts } from "../missionRounds.js";
-import { executeConfirmItem, executeDismissItem, executeReplaceTranscript, executeRetryOutcome, executeRevokeEffect } from "../outcome.js";
+import { executeReplaceTranscript, executeRetryOutcome } from "../outcome.js";
 import { executeConfirmTranscriptCandidate, executeDiscardTranscriptCandidate } from "../transcriptCandidate.js";
 import { getMeetingRow, type MeetingActionOutcome } from "../meetingStore.js";
 import { projectMemberMeetingCardFromCard } from "../memberCards.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, env, fail, requirePerson, requestContext, peopleDirectory, preflight, driExporter, ontologyUpdater, outcome, monthlyPlanService, research, invalidInput, respond } = ctx;
+  const { pool, q, env, fail, requirePerson, requestContext, peopleDirectory, preflight, driExporter, outcome, monthlyPlanService, research, invalidInput, respond } = ctx;
 
   app.post(
     "/api/actions/execute",
@@ -131,21 +128,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
         if (!Value.Check(DiscardTranscriptCandidateRequest, discardInput)) return invalidInput(reply, DiscardTranscriptCandidateRequest, discardInput);
         return respondMeeting(await executeDiscardTranscriptCandidate(pool, env.sessionSecret, scope, fingerprint, hostId));
       }
-      // Ticket 11：逐项确认/忽略/撤回；itemId 由签名 actionId 携带
-      if (scope.actionType === "meeting.confirm_item") {
-        if (!Value.Check(MeetingConfirmItemInput, input ?? {})) return invalidInput(reply, MeetingConfirmItemInput, input ?? {});
-        return respond(reply, await executeConfirmItem(pool, ontologyUpdater, env.sessionSecret, scope, fingerprint));
-      }
-      if (scope.actionType === "meeting.dismiss_item") {
-        const dismissInput = input ?? {};
-        if (!Value.Check(MeetingDismissItemInput, dismissInput)) return invalidInput(reply, MeetingDismissItemInput, dismissInput);
-        return respond(reply, await executeDismissItem(pool, env.sessionSecret, scope, fingerprint, dismissInput.reason));
-      }
-      if (scope.actionType === "meeting.revoke_effect") {
-        const revokeInput = input ?? {};
-        if (!Value.Check(MeetingRevokeEffectInput, revokeInput)) return invalidInput(reply, MeetingRevokeEffectInput, revokeInput);
-        return respond(reply, await executeRevokeEffect(pool, env.sessionSecret, scope, fingerprint, revokeInput.reason));
-      }
+      // 会后逐条确认 / 忽略 / 撤回已停（会后只有会议卡一个入口）：旧的签名动作落到下面的 UNKNOWN_ACTION。
 
       if (scope.actionType === "monthly-plan.update_draft") {
         const monthlyInput = input ?? {};

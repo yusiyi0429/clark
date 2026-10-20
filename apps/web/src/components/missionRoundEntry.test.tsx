@@ -33,11 +33,10 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("CEO 通知栏里的任务卡轮次", () => {
   function render(card: Card) {
-    const onCard = vi.fn();
     const onNavigate = vi.fn();
-    renderToStaticMarkup(<NotificationRail cards={[card]} onCard={onCard} onNavigate={onNavigate} />);
+    renderToStaticMarkup(<NotificationRail cards={[card]} onNavigate={onNavigate} />);
     const press = [...ui.buttons.entries()].find(([label]) => label.startsWith("10 月 Mission Card") || label.startsWith("白田田"))?.[1];
-    return { press: () => press!(event), onCard, onNavigate };
+    return { press: () => press!(event), onNavigate };
   }
 
   it("轮次直接打开第一张任务卡", async () => {

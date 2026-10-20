@@ -1162,34 +1162,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/me/meeting-decisions": {
+    "/api/me/meeting-cards": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 我主持的会里还没确认的「会上定了 X」，按会议分组 */
-        get: operations["listMyMeetingDecisions"];
+        /** 我主持或创建的会里待处理的会议记录：待确认、修改待确认、写入失败，一场会一条 */
+        get: operations["listMyMeetingCards"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/meetings/{id}/decisions/{decisionId}/review": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 主持人确认一条会后决定：对 / 改一下 / 其实没定；Agent 代判之后改判会给已收卡的人出更正卡 */
-        post: operations["reviewMeetingDecision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7213,13 +7196,6 @@ export interface components {
             /** @constant */
             confirmReplace: true;
         };
-        MeetingConfirmItemInput: Record<string, never>;
-        MeetingDismissItemInput: {
-            reason?: string;
-        };
-        MeetingRevokeEffectInput: {
-            reason?: string;
-        };
         ThreadView: {
             members: {
                 personId: string;
@@ -9613,7 +9589,7 @@ export interface components {
         NotificationList: {
             notifications: {
                 id: string;
-                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned" | "request_received" | "request_answered" | "request_done" | "request_asked" | "collection_reminder";
+                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned" | "request_received" | "request_answered" | "request_done" | "request_asked" | "collection_reminder" | "meeting_card_pending";
                 text: string;
                 objectType: "task" | "meeting" | "issue" | "request";
                 objectId: string;
@@ -10267,54 +10243,12 @@ export interface components {
             dueAt: string | null;
             canReview: boolean;
         };
-        MeetingDecisionReviewRequest: {
-            verdict: "confirmed" | "edited" | "not_decided";
-            statement?: string;
-        };
-        MeetingDecisionResponse: {
-            decision: {
-                id: string;
+        MyMeetingCardsResponse: {
+            meetings: {
                 meetingId: string;
-                tier: "strategic" | "host";
-                ordinal: number;
-                statement: string;
-                originalStatement: string;
-                quote: string | null;
-                speakerName: string | null;
-                recommendation: "confirmed" | "not_decided";
-                why: string | null;
-                status: "pending" | "confirmed" | "edited" | "not_decided" | "rejected" | "agent_judged";
-                revision: number;
-                reviewerName: string | null;
-                reviewedAt: string | null;
-                dueAt: string | null;
-                canReview: boolean;
-            };
-        };
-        MyMeetingDecisionsResponse: {
-            groups: {
-                meetingId: string;
-                meetingTitle: string;
-                scheduledAt: string;
-                dueAt: string | null;
-                decisions: {
-                    id: string;
-                    meetingId: string;
-                    tier: "strategic" | "host";
-                    ordinal: number;
-                    statement: string;
-                    originalStatement: string;
-                    quote: string | null;
-                    speakerName: string | null;
-                    recommendation: "confirmed" | "not_decided";
-                    why: string | null;
-                    status: "pending" | "confirmed" | "edited" | "not_decided" | "rejected" | "agent_judged";
-                    revision: number;
-                    reviewerName: string | null;
-                    reviewedAt: string | null;
-                    dueAt: string | null;
-                    canReview: boolean;
-                }[];
+                title: string;
+                endedAt: string;
+                status: "pending" | "edit_pending" | "failed";
             }[];
         };
         MeetingWorldResponse: {
@@ -14582,7 +14516,7 @@ export interface operations {
             };
         };
     };
-    listMyMeetingDecisions: {
+    listMyMeetingCards: {
         parameters: {
             query?: never;
             header?: never;
@@ -14591,80 +14525,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 待确认的会后决定 */
+            /** @description 待处理的会议记录 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MyMeetingDecisionsResponse"];
+                    "application/json": components["schemas"]["MyMeetingCardsResponse"];
                 };
             };
             /** @description ApiError 统一错误 */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    reviewMeetingDecision: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-                decisionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MeetingDecisionReviewRequest"];
-            };
-        };
-        responses: {
-            /** @description 这条决定的最新状态 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MeetingDecisionResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -6,7 +6,7 @@ import {
   PrepareRequestQuestionResponse, DraftRequestAnswerResponse, RequestSendInput, RequestAskInput, RequestAnswerInput, ExecuteRequestActionRequest,
 } from "./requests.js";
 import { MeetingCardConfirmRequest, MeetingCardDraftRequest, MeetingCardView } from "./meetingCard.js";
-import { MeetingDecisionView, MeetingDecisionReviewRequest, MeetingDecisionResponse, MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingDecisionsResponse } from "./meetingDecisions.js";
+import { MeetingDecisionView, MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse } from "./meetingDecisions.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
@@ -114,9 +114,6 @@ import {
   PostMeetingCandidate,
   StoredTranscript,
   WarmapTranscript,
-  MeetingConfirmItemInput,
-  MeetingDismissItemInput,
-  MeetingRevokeEffectInput,
   MeetingRecording,
   StartMeetingRecordingResponse,
   MarkThreadReadRequest,
@@ -845,18 +842,10 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "定时任务", content: { "application/json": { schema: { $ref: "#/components/schemas/ScheduleListResponse" } } } }, "401": errorResponse },
         },
       },
-      "/api/me/meeting-decisions": {
+      "/api/me/meeting-cards": {
         get: {
-          operationId: "listMyMeetingDecisions", summary: "我主持的会里还没确认的「会上定了 X」，按会议分组",
-          responses: { "200": { description: "待确认的会后决定", content: { "application/json": { schema: { $ref: "#/components/schemas/MyMeetingDecisionsResponse" } } } }, "401": errorResponse },
-        },
-      },
-      "/api/meetings/{id}/decisions/{decisionId}/review": {
-        post: {
-          operationId: "reviewMeetingDecision", summary: "主持人确认一条会后决定：对 / 改一下 / 其实没定；Agent 代判之后改判会给已收卡的人出更正卡",
-          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }, { name: "decisionId", in: "path", required: true, schema: { type: "string" } }],
-          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingDecisionReviewRequest" }),
-          responses: { "200": { description: "这条决定的最新状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingDecisionResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+          operationId: "listMyMeetingCards", summary: "我主持或创建的会里待处理的会议记录：待确认、修改待确认、写入失败，一场会一条",
+          responses: { "200": { description: "待处理的会议记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MyMeetingCardsResponse" } } } }, "401": errorResponse },
         },
       },
       "/api/meetings/{id}/minutes": {
@@ -2866,9 +2855,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         PostMeetingCandidate: PostMeetingCandidate as JsonSchema,
         MeetingOutcomeState: MeetingOutcomeState as JsonSchema,
         ReplaceTranscriptRequest: ReplaceTranscriptRequest as JsonSchema,
-        MeetingConfirmItemInput: MeetingConfirmItemInput as JsonSchema,
-        MeetingDismissItemInput: MeetingDismissItemInput as JsonSchema,
-        MeetingRevokeEffectInput: MeetingRevokeEffectInput as JsonSchema,
         ThreadView: ThreadView as JsonSchema,
         SetViewRequest: SetViewRequest as JsonSchema,
         AddThreadMembersRequest: AddThreadMembersRequest as JsonSchema,
@@ -3007,9 +2993,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         RequestAnswerInput: RequestAnswerInput as JsonSchema,
         ExecuteRequestActionRequest: ExecuteRequestActionRequest as JsonSchema,
         MeetingDecisionView: MeetingDecisionView as JsonSchema,
-        MeetingDecisionReviewRequest: MeetingDecisionReviewRequest as JsonSchema,
-        MeetingDecisionResponse: MeetingDecisionResponse as JsonSchema,
-        MyMeetingDecisionsResponse: MyMeetingDecisionsResponse as JsonSchema,
+        MyMeetingCardsResponse: MyMeetingCardsResponse as JsonSchema,
         MeetingWorldResponse: MeetingWorldResponse as JsonSchema,
         MeetingCardView: MeetingCardView as JsonSchema,
         MeetingCardDraftRequest: MeetingCardDraftRequest as JsonSchema,

@@ -1,8 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import {
-  ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardView, MeetingDecisionResponse,
-  MeetingDecisionReviewRequest,
-  MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingDecisionsResponse,
+  ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardView,
+  MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse,
 } from "@warmap/contracts";
 import { askImpactCard, markImpactCardIrrelevant, readImpactCardByRequest } from "../impactCards.js";
 import type { MeetingFollowThrough } from "../meetingFollowThrough.js";
@@ -13,19 +12,11 @@ import type { AppInstance, RouteContext } from "./shared.js";
 
 const idParams = Type.Object({ id: Type.String() });
 
-/** 会后分层确认（主持人的「会上定了 X」）与影响卡（读、追问、和我无关）。 */
+/** 会后：会议卡（待确认清单、读、存草稿、整卡确认）、挂点与会议记录状态、已推影响卡（读、追问、和我无关）。 */
 export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteContext, followThrough: MeetingFollowThrough): void {
-  app.get("/api/me/meeting-decisions", { preHandler: ctx.requirePerson, schema: { response: { 200: MyMeetingDecisionsResponse } } },
-    async (req) => ({ groups: await followThrough.decisions.listMine(req.person!.personId) }));
-
-  app.post("/api/meetings/:id/decisions/:decisionId/review", {
-    preHandler: ctx.requirePerson,
-    schema: { params: Type.Object({ id: Type.String(), decisionId: Type.String() }), body: MeetingDecisionReviewRequest, response: { 200: MeetingDecisionResponse } },
-  }, async (req, reply) => {
-    ctx.requestContext.set(req, { actionType: "meeting_decision.review", objectRef: `meeting_decision:${req.params.decisionId}` });
-    const result = await followThrough.decisions.review(req.params.id, req.params.decisionId, req.person!.personId, req.body);
-    return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
-  });
+  // 通知栏一场会一条：我主持或创建的会里待确认、修改待确认、写入失败的会议记录。
+  app.get("/api/me/meeting-cards", { preHandler: ctx.requirePerson, schema: { response: { 200: MyMeetingCardsResponse } } },
+    async (req) => ({ meetings: await followThrough.cards.pendingFor(req.person!.personId) }));
 
   // 会议入本体：会议页单独取挂点、会议记录状态和每条决定的落点（不进会议卡，读会议保持轻）。
   app.get("/api/meetings/:id/world", { preHandler: ctx.requirePerson, schema: { params: idParams, response: { 200: MeetingWorldResponse } } }, async (req, reply) => {

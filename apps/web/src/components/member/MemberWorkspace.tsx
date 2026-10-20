@@ -12,7 +12,7 @@ import { MonthlyReviewNotices } from "@/components/monthlyReview/MonthlyReviewNo
 import { PersonalReviewBoard } from "@/components/monthlyReview/PersonalReviewBoard";
 import { useWeeklyReviewBoard, WeeklyReviewBoard } from "@/components/weeklyReview/WeeklyReviewBoard";
 import { RequestNotices } from "@/components/requests/RequestNotices";
-import { HostDecisionNotices } from "@/components/meeting/HostDecisionNotices";
+import { MeetingCardNotices } from "@/components/meeting/MeetingCardNotices";
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { logout } from "@/lib/logout";
@@ -55,7 +55,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
           />
           <div className={n.noticeList}>
             <CycleCountdown />
-            <HostDecisionNotices meetingBase="/me/meetings" onNavigate={api.navigate} />
+            <MeetingCardNotices meetingBase="/me/meetings" onNavigate={api.navigate} />
             <ActionNoticeCard id="weekly-sync" title="每周同步" subtitle="把本周进展写进天枢" mark="meeting" notices={weeklySyncNotices(home.weeklySync)} onSettled={() => undefined} />
             <MemberMeetingSchedule meetings={home.meetings} onNavigate={api.navigate} />
             <WeeklyReviewBoard onNavigate={api.navigate} state={weeklyReviews} />

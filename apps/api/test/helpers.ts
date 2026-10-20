@@ -16,10 +16,9 @@ import { createMonthlyPlanService, type MonthlyDraftAgent, type MonthlyPlanServi
 import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { createCompanyContext } from "../src/companyContext.js";
 import { createMonthlyReviewService, type MonthlyReviewAgents, type MonthlyReviewService } from "../src/monthlyReviewService.js";
-import { assessOutcomeCandidate, type OntologyUpdater, type PostMeetingAgent } from "../src/outcome.js";
-import { deriveMeetingStatus } from "../src/effects.js";
-import { enqueueDecisionSync } from "../src/meetingDecisions.js";
-import { getMeetingRow } from "../src/meetingStore.js";
+import { assessOutcomeCandidate, type PostMeetingAgent } from "../src/outcome.js";
+import { deriveMeetingStatus, meetingEffectRef } from "../src/effects.js";
+import { decisionIssueId, getMeetingRow } from "../src/meetingStore.js";
 import { dispatchMeetingTodo } from "../src/tasks.js";
 import type { WebSearchAdapter } from "../src/webSearch.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService, type RecordingDeps } from "../src/meetingRecordings.js";
@@ -134,10 +133,11 @@ export const TEST_MEMBER = { personId: "person-fixture-002", loginId: "ceshiy", 
 export const TEST_LOGIN = { loginId: TEST_CEO.loginId, passcode: TEST_CEO.passcode };
 
 /**
- * 旧格式会议（会议卡之前，会后逐条条目）：现在的会后整理只生成会议卡。测旧会议逐条处理的用例在逐字稿导入之后用它把会议写成旧会议的样子，
- * 和原来的会后抽取一样：校验候选、todo 推成执行事项、按条目算会议状态、排分层；没有会议卡。
+ * 旧格式会议（会议卡之前，会后逐条条目）：现在的会后整理只生成会议卡，逐条确认也已停。测旧会议数据的用例在逐字稿导入之后用它把会议写成旧会议的样子，
+ * 和原来的会后抽取一样：校验候选、todo 推成执行事项、按条目算会议状态；没有会议卡。
+ * confirmDecisions：写成当时已经逐条确认过决定的样子（关联议题的写一条 meeting.confirm_item 回执、议题记为 decided）。
  */
-export async function seedLegacyOutcome(pool: Pool, meetingId: string, candidate: unknown): Promise<void> {
+export async function seedLegacyOutcome(pool: Pool, meetingId: string, candidate: unknown, { confirmDecisions = false }: { confirmDecisions?: boolean } = {}): Promise<void> {
   const meeting = (await getMeetingRow(pool.query.bind(pool), meetingId))!;
   const assessed = assessOutcomeCandidate({ candidate, turns: meeting.transcript!.turns, participants: meeting.participants,
     ceoParticipantId: meeting.ceo_participant_id, issueIds: meeting.issue_ids });
@@ -152,13 +152,25 @@ export async function seedLegacyOutcome(pool: Pool, meetingId: string, candidate
         ownerName: meeting.participants.find((person) => person.personId === ownerId)?.displayName, title: meeting.title }, item);
       if (taskId) item.review = { status: "confirmed", effectRef: `task:${taskId}` };
     }
+    for (const item of confirmDecisions ? assessed.items : []) {
+      if (item.kind !== "decision") continue;
+      const effectRef = meetingEffectRef(meetingId, "decision", item.id)!;
+      const issueId = decisionIssueId(meeting, item);
+      if (issueId) {
+        const issue = (await client.query("SELECT receipts, research FROM issues WHERE id = $1", [issueId])).rows[0];
+        const receipt = { id: randomUUID(), actionType: "meeting.confirm_item", actionFingerprint: randomUUID(), effectRef, decisionText: item.text,
+          researchStatusAtDecision: issue.research.status, override: false, source: { kind: "meeting-item", meetingId, outcomeItemId: item.id }, createdAt: new Date().toISOString() };
+        await client.query("UPDATE issues SET status = 'decided', receipts = $2::jsonb, version = version + 1, updated_at = now() WHERE id = $1",
+          [issueId, JSON.stringify([...issue.receipts, receipt])]);
+      }
+      item.review = { status: "confirmed", effectRef };
+    }
     await client.query("DELETE FROM meeting_cards WHERE meeting_id = $1", [meetingId]);
     await client.query(
       `UPDATE meetings SET outcome = outcome || jsonb_build_object('status', 'ready', 'summary', $2::text, 'items', $3::jsonb, 'warnings', $4::jsonb,
          'extractedAt', $5::text, 'error', NULL, 'startedAt', NULL), status = $6, version = version + 1, updated_at = now() WHERE id = $1`,
       [meetingId, assessed.summary, JSON.stringify(assessed.items), JSON.stringify(assessed.warnings), new Date().toISOString(), deriveMeetingStatus(meeting.status, assessed.items)],
     );
-    await enqueueDecisionSync(client.query.bind(client), meetingId);
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
@@ -278,7 +290,6 @@ export async function createTestApp(
     collectionAgent?: Parameters<typeof buildApp>[0]["collectionAgent"];
     bitable?: Parameters<typeof buildApp>[0]["bitable"];
     driExporter?: DriExporter;
-    ontologyUpdater?: OntologyUpdater;
     monthlyDraftAgent?: MonthlyDraftAgent;
     monthlyNow?: () => Date;
     /** 月末复盘的假起草、评估、汇总 Agent；与 monthlyDraftAgent 共用 monthlyNow。 */

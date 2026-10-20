@@ -4,16 +4,10 @@ import type { TPostMeetingCandidate, TWorldAnchor } from "@warmap/contracts";
 import { createTestApp, preflightCandidate, seedLegacyOutcome, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
 import type { PostMeetingAgent } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
-import type { DecisionLayeringAgent } from "../src/meetingDecisionAgent.js";
-import type { ImpactAgent } from "../src/impactAgent.js";
-import { createMeetingDecisionService } from "../src/meetingDecisions.js";
-import { meetingInterpretationContext } from "../src/meetingContext.js";
-import { loadPeopleDirectory } from "../src/peopleDirectory.js";
-import { personDisplayNames } from "../src/people.js";
 import { hashSecret } from "../src/session.js";
 import { projection, stubWorld } from "./worldFixture.js";
 
-// 会议入本体：改挂点、旧会议的逐条决定。整卡确认和写会议事件见 meetingCardConfirm.test.ts。
+// 会议入本体：改挂点（旧格式会议上）。整卡确认和写会议事件见 meetingCardConfirm.test.ts。
 const PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people-candidate.json", import.meta.url));
 const CEO = TEST_CEO.personId; // 测试甲
 const HOST = TEST_MEMBER.personId; // 测试乙：主持人
@@ -39,20 +33,6 @@ const CANDIDATE: TPostMeetingCandidate = {
 };
 const preflightAgent: PreflightAgent = { async generate(input: PreflightAgentInput) { return { candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)) }; } };
 const outcomeAgent: PostMeetingAgent = { async generate() { return { candidate: structuredClone(CANDIDATE) }; } };
-const layering: DecisionLayeringAgent = { async layer() { return { decisions: [
-  { statement: "接口统一改成 v2，月底前切换", itemIds: ["item-1", "item-2"], affects: [OWNER], why: "看板要改接口", recommendation: "confirmed" as const, recommendationReason: "主持人点名" },
-  { statement: "渠道预算这个月先不动", itemIds: ["item-3"], affects: [], why: "预算", recommendation: "not_decided" as const, recommendationReason: "下周再看" },
-] }; } };
-/** 影响分析：给测试丙一张卡，落到他手上的第一个执行事项。 */
-const impact: ImpactAgent = {
-  async analyze(input) {
-    const task = input.people.find((person) => person.personId === OWNER)?.tasks[0];
-    return { cards: task ? [{ personId: OWNER, targets: [{ type: "task" as const, id: task.id }], title: "渠道看板要切到 v2 接口", impact: "你的看板要跟着切。",
-      action: { kind: "do" as const, text: "月底前切到 v2", due: null }, why: "旧接口下线。", confidence: "high" as const }] : [] };
-  },
-  async answer() { return "按 v2 验。"; },
-};
-
 /** 本体里的对象：本月 Mission（mission:v2-202606）和主持人负责的单元（capability:07）。 */
 const head = (object_id: string, object_type: string, title: string, version: number, externalId: string) => ({
   object_id, object_type, title, revision_id: `${object_id}-r${version}`, object_version: version, version, lifecycle: { status: "active" },
@@ -77,7 +57,7 @@ function ontology() {
 type CardAction = { actionType: string; actionId: string; itemId?: string };
 
 async function setup(env: Parameters<typeof createTestApp>[0] = {}) {
-  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, ...env }, undefined, { preflightAgent, outcomeAgent, meetingFollowThroughAgents: { layering, impact } });
+  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, ...env }, undefined, { preflightAgent, outcomeAgent });
   const ceo = await t.loginCookie();
   const issueCard = await t.createIssue();
   const create = ((issueCard as unknown as { actions: CardAction[] }).actions).find((a) => a.actionType === "issue.create_meeting")!;
@@ -102,15 +82,6 @@ async function setup(env: Parameters<typeof createTestApp>[0] = {}) {
   return { t, ceo, host: await t.memberCookie(), owner, meetingId };
 }
 
-/** 会后服务（时钟固定）。 */
-function serviceFor(t: TestApp, clock = { now: new Date("2026-06-01T12:00:00+08:00") }) {
-  const peopleDirectory = loadPeopleDirectory(t.env);
-  const q = t.pool.query.bind(t.pool);
-  const service = createMeetingDecisionService({ pool: t.pool, peopleDirectory, layering, impact, now: () => clock.now,
-    context: () => meetingInterpretationContext(q, clock.now, personDisplayNames(peopleDirectory)) });
-  return { service };
-}
-
 const putAnchors = (t: TestApp, cookie: string, meetingId: string, anchors: unknown) => t.app.inject({ method: "PUT", url: `/api/meetings/${meetingId}/world-anchors`,
   headers: { cookie, origin: t.publicOrigin }, payload: { anchors } });
 const MISSION: TWorldAnchor = { kind: "mission", id: "m-v2", title: "接口全量切到 v2" };
@@ -118,7 +89,7 @@ const UNIT: TWorldAnchor = { kind: "unit", id: "agents", title: "智能体" };
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("会议入本体：挂点与旧会议的逐条决定", () => {
+describe("会议入本体：挂点", () => {
   it("改挂点：只能挑本月选项，主持人和 CEO 能改，参会人不能；null 回到主持人的单元", async () => {
     ontology();
     const { t, host, owner, meetingId } = await setup();
@@ -134,23 +105,6 @@ describe("会议入本体：挂点与旧会议的逐条决定", () => {
       const edited = await putAnchors(t, host, meetingId, [{ kind: "unit", id: "agents" }, { kind: "mission", id: "m-v2" }]);
       expect(edited.json().world).toMatchObject({ edited: true, anchors: [UNIT, MISSION], record: { status: "pending" } });
       expect((await putAnchors(t, host, meetingId, null)).json().world).toMatchObject({ edited: false, anchors: [UNIT] });
-    } finally {
-      await t.close();
-    }
-  });
-
-  it("代判后的条目留在主持人的通知栏，直到主持人点过", async () => {
-    const { t, host, meetingId } = await setup();
-    try {
-      const { service } = serviceFor(t);
-      await service.sync(meetingId);
-      await t.pool.query("UPDATE meeting_decisions SET status = 'agent_judged', judged_at = now() WHERE tier = 'host'");
-      const mine = (await t.app.inject({ method: "GET", url: "/api/me/meeting-decisions", headers: { cookie: host } })).json().groups;
-      expect(mine[0].decisions.map((d: { status: string; recommendation: string }) => [d.status, d.recommendation]))
-        .toEqual([["agent_judged", "confirmed"], ["agent_judged", "not_decided"]]);
-      const first = mine[0].decisions[0];
-      await service.review(meetingId, first.id, HOST, { verdict: "confirmed" });
-      expect((await t.app.inject({ method: "GET", url: "/api/me/meeting-decisions", headers: { cookie: host } })).json().groups[0].decisions).toHaveLength(1);
     } finally {
       await t.close();
     }

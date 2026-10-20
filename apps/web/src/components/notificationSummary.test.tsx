@@ -120,7 +120,7 @@ describe("本月 Mission Card 的 CEO 通知入口", () => {
       firstPendingFeedbackId: null, pendingCorrections: 2, firstPendingCorrectionId: "correction-01", mine: false, placeholder: false };
     const corrections = summaryCard({ phase: "confirmed", todo: "2 条更正申请待你处理", counts: { ...round.counts, corrections: 2 }, cards: [row] });
     expect(railGroups([corrections])[0].items[0]).toMatchObject({ meta: "2 条更正申请待你处理", missionRound: corrections });
-    const html = renderToStaticMarkup(<NotificationRail cards={[corrections]} onNavigate={() => undefined} onCard={() => undefined} />);
+    const html = renderToStaticMarkup(<NotificationRail cards={[corrections]} onNavigate={() => undefined} />);
     expect(html).toContain('aria-label="2 条更正申请待你处理"');
     expect(html).toContain('data-origin="/mission-cards/card-01?correction=correction-01"');
   });

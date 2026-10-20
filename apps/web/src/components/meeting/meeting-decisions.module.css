@@ -1,24 +1,10 @@
-/* 会议页「会上定了」：一条一行，序号 + 状态标 + 一句话 + 原话，主持人的三个按钮在下面。 */
-.list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
-.row { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; padding: 14px 0; border-top: 1px solid #eef0f3; }
-.row:first-child { border-top: 0; padding-top: 4px; }
-.ordinal { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #f1f3f6; color: #4f5866; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.body { display: grid; gap: 6px; min-width: 0; }
-.head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 24px; }
-.tier { padding: 0 8px; border-radius: 999px; background: #f3eefe; color: #5b3fb3; font-size: 12px; line-height: 22px; font-weight: 600; }
+/* 会议页挂点那一行（MeetingWorldBar、WorldAnchors）：挂点、会议记录状态、改挂点的选择框。 */
 .status { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 999px; background: #f1f3f6; color: #4f5866; font-size: 12px; line-height: 22px; font-weight: 600; white-space: nowrap; }
 .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .7; }
 .status[data-tone='wait'] { background: #eaf2ff; color: #1f5fd6; }
-.status[data-tone='agent'] { background: #fff4de; color: #8a5a00; }
 .status[data-tone='done'] { background: #e9f7ef; color: #1c7a43; }
 .status[data-tone='off'] { background: #f3f4f6; color: #6b7280; }
 .status[data-tone='fail'] { background: #fde8ec; color: #be123c; }
-.hint { color: #8a5a00; font-size: 12px; }
-.statement { margin: 0; color: #111827; font-size: 15px; line-height: 1.7; font-weight: 500; overflow-wrap: anywhere; }
-.row[data-off] .statement { color: #6b7280; text-decoration: line-through; text-decoration-color: #c5cad3; }
-.was { margin: 0; color: #6b7280; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
-.quote { margin: 0; color: #4f5866; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
-.quote span { color: #8a93a2; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 2px; }
 .primary, .ghost, .link { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 6px 14px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background .14s ease, border-color .14s ease; }
 .primary { border: 0; background: #1f5fd6; color: #fff; }
@@ -28,8 +14,6 @@
 .link { min-height: 28px; padding: 2px 4px; border: 0; background: transparent; color: #1f5fd6; font-weight: 500; }
 .primary:disabled, .ghost:disabled { opacity: .45; cursor: default; }
 .primary:focus-visible, .ghost:focus-visible, .link:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; }
-.edit { display: grid; gap: 8px; }
-.edit textarea { width: 100%; min-height: 64px; field-sizing: content; max-height: 200px; font-size: 15px; line-height: 1.6; }
 
 
 /* 落点（回流设计稿 2）：类型 名称 + 写入状态点；样子同影响卡的「落到」一排。 */
@@ -61,7 +45,5 @@
 .spacer { flex: 1; }
 
 @media (max-width: 759px) {
-  .row { grid-template-columns: 20px minmax(0, 1fr); gap: 10px; }
-  .ordinal { width: 20px; height: 20px; font-size: 11px; }
   .actions > .primary, .actions > .ghost { flex: 1 1 0; min-width: 0; min-height: 40px; padding-inline: 8px; }
 }

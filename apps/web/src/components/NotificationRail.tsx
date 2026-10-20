@@ -12,7 +12,6 @@ import { payloadOf, type BattlefieldPayload, type CapabilityPayload, type IssueP
 import { ContextMark, type ContextMarkKind } from "./ContextMark";
 import { HeroButton } from "./HeroButton";
 import { ReferenceButton } from "@/conversation/references";
-import { StrategicConfirmCard, pendingStrategicItems } from "./StrategicConfirmCard";
 import { TianshuMark } from "./TianshuMark";
 import { COMPANY_TIMEZONE, monthDayTime } from "@/lib/companyTime";
 import { MissionCardNoticeGroup } from "./missionCards/MissionCardNoticeGroup";
@@ -21,7 +20,7 @@ import { MonthlyReviewNotices } from "./monthlyReview/MonthlyReviewNotices";
 import { PersonalReviewBoard } from "./monthlyReview/PersonalReviewBoard";
 import { useWeeklyReviewBoard, WeeklyReviewBoard } from "./weeklyReview/WeeklyReviewBoard";
 import { RequestNotices } from "./requests/RequestNotices";
-import { HostDecisionNotices } from "./meeting/HostDecisionNotices";
+import { MeetingCardNotices } from "./meeting/MeetingCardNotices";
 import { CycleCountdown } from "./CycleCountdown";
 import { RADAR_ORIGIN_LABEL, RadarOriginIcon } from "./OriginTag";
 import { preflightInFlight } from "@/cards/meetingIssueModel";
@@ -227,14 +226,11 @@ export function NotificationRail({
   onHome,
   homeActive = true,
   currentHref,
-  onCard,
   account,
   viewerId,
 }: {
   cards: Card[];
   onNavigate: (href: string, origin?: Element | null) => void;
-  /** 在通知栏卡上办完的动作（战略议题确认）返回的新 Card。 */
-  onCard?: (card: Card) => void;
   /** 左下角自己的名字：个人菜单。 */
   account?: Account;
   viewerId?: string;
@@ -248,8 +244,7 @@ export function NotificationRail({
   const rail = useRef<HTMLElement>(null);
   const positions = useRef(new Map<string, number>());
   const weeklyReviews = useWeeklyReviewBoard();
-  const strategic = pendingStrategicItems(cards).length;
-  const layoutKey = [`strategic:${strategic}`, ...groups.map((group) => `${group.kind}:${group.items.length}`)].join("|");
+  const layoutKey = groups.map((group) => `${group.kind}:${group.items.length}`).join("|");
 
   // 同成员工作台同步其他拍板人的变更；倒计时本身由分组与卡页共享分钟时钟。会前预审在跑时 5 秒一次，预审一出结果左栏就换上结论。
   const refreshEvery = railRefreshInterval(cards);
@@ -291,8 +286,7 @@ export function NotificationRail({
       />
       <div className={n.noticeList}>
         <CycleCountdown />
-        {onCard ? <StrategicConfirmCard cards={cards} onCard={onCard} onNavigate={onNavigate} /> : null}
-        <HostDecisionNotices meetingBase="/meetings" onNavigate={onNavigate} />
+        <MeetingCardNotices meetingBase="/meetings" onNavigate={onNavigate} />
         <WeeklyReviewBoard onNavigate={onNavigate} state={weeklyReviews} />
         <PersonalReviewBoard onNavigate={onNavigate} />
         <RequestNotices base="/requests" currentHref={currentHref} onNavigate={onNavigate} />

@@ -290,17 +290,6 @@ export const ReplaceTranscriptRequest = Type.Object(
   { additionalProperties: false },
 );
 
-/** 逐项处理 Action 的输入；itemId 由确定性 actionId 携带，不重复提交。 */
-export const MeetingConfirmItemInput = Type.Object({}, { additionalProperties: false });
-export const MeetingDismissItemInput = Type.Object(
-  { reason: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })) },
-  { additionalProperties: false },
-);
-export const MeetingRevokeEffectInput = Type.Object(
-  { reason: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })) },
-  { additionalProperties: false },
-);
-
 export type TTranscriptSchemaVersion = Static<typeof TranscriptSchemaVersion>;
 export type TTranscriptTurn = Static<typeof TranscriptTurn>;
 export type TWarmapTranscript = Static<typeof WarmapTranscript>;
@@ -322,9 +311,6 @@ export type TOutcomeReviewStatus = Static<typeof OutcomeReviewStatus>;
 export type THandoffExportStatus = Static<typeof HandoffExportStatus>;
 export type TOutcomeHandoff = Static<typeof OutcomeHandoff>;
 export type TOutcomeReview = Static<typeof OutcomeReview>;
-export type TMeetingConfirmItemInput = Static<typeof MeetingConfirmItemInput>;
-export type TMeetingDismissItemInput = Static<typeof MeetingDismissItemInput>;
-export type TMeetingRevokeEffectInput = Static<typeof MeetingRevokeEffectInput>;
 export type TMeetingOutcomeItem = Static<typeof MeetingOutcomeItem>;
 export type TOutcomeWarning = Static<typeof OutcomeWarning>;
 export type TOutcomeError = Static<typeof OutcomeError>;

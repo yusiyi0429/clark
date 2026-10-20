@@ -10,13 +10,17 @@ import {
   type TMeetingCardView,
   type TMeetingObjectChange,
   type TMeetingSource,
+  type TMyMeetingCard,
 } from "@warmap/contracts";
-import { confirmedView, currentConfirmation } from "./meetingCardConfirm.js";
+import { confirmedView, currentConfirmation, meetingRecordState } from "./meetingCardConfirm.js";
+import { feishuNotifier, type FeishuNotify } from "./feishu/notify.js";
 import { attendeesOf } from "./meetingDecisionView.js";
 import { getMeetingRow, type MeetingRow, type Query } from "./meetingStore.js";
 import { meetingAnchorGroups } from "./meetingWorld.js";
+import { insertNotification } from "./notifications.js";
 import { logEvent } from "./observability.js";
 import { capturedAtOf, meetingTranscriptUrl, transcriptContentHash } from "./transcriptHash.js";
+import { shanghaiLabel } from "./workdays.js";
 import type { WorldClient } from "./worldClient.js";
 import { anchorHead, recordedStart, type AnchorHeadClient } from "./worldMeetingEvent.js";
 
@@ -37,6 +41,8 @@ export type MeetingCardDeps = {
   publicOrigin?: string;
   /** 参会人的显示名（会议成员里没有的人从人员目录取）。 */
   names?: () => Map<string, string>;
+  /** 配了飞书：草稿好了的提醒同时推飞书。 */
+  feishuNotify?: boolean;
 };
 export type Viewer = { personId: string; isCeo: boolean };
 type CardError = { status: number; code: string; message: string; fieldErrors?: Record<string, string>; view?: TMeetingCardView };
@@ -214,16 +220,31 @@ export function buildCardDraft(pool: Pool, prepared: CardGeneration, candidate: 
 
 /**
  * 存下生成的草稿（和会后整理的 ready 同一事务）：第一次 draft_version 为 1，重新生成在原版本上加一。
- * 旧格式会议换了逐字稿、重新整理成会议卡时，还没人处理的逐条决定（主持人条目、战略项）一并删掉，免得继续提醒、代判、往下推；处理过的留着。
+ * 同一事务里提醒主持人和创建人去确认（见 notifyCardPending）。
  */
-export async function saveGeneratedCard(client: PoolClient, meetingId: string, built: { draft: TMeetingCardDraft; actionItems: TMeetingActionItem[] }): Promise<void> {
-  await client.query("DELETE FROM meeting_decisions WHERE meeting_id = $1 AND status = 'pending'", [meetingId]);
+export async function saveGeneratedCard(pool: Pool, client: PoolClient, meetingId: string, built: { draft: TMeetingCardDraft; actionItems: TMeetingActionItem[] }): Promise<void> {
   await client.query(
     `INSERT INTO meeting_cards (meeting_id, draft, action_items, draft_version, draft_status) VALUES ($1, $2::jsonb, $3::jsonb, 1, 'draft_ready')
      ON CONFLICT (meeting_id) DO UPDATE SET draft = EXCLUDED.draft, action_items = EXCLUDED.action_items,
        draft_version = meeting_cards.draft_version + 1, draft_status = 'draft_ready', updated_at = now()`,
     [meetingId, JSON.stringify(built.draft), JSON.stringify(built.actionItems)],
   );
+  await notifyCardPending(client, meetingId, registered.get(pool)?.feishuNotify ? feishuNotifier(client.query.bind(client)) : undefined);
+}
+
+/**
+ * 草稿好了：主持人和创建人各一条「<会名> · 会议记录待确认」，一场会只发一次（唯一约束兜底，再存草稿、重新生成都不再发）；
+ * 配了飞书同时推一次，点了去会议页。提醒只提示，不改任何状态。
+ */
+async function notifyCardPending(client: PoolClient, meetingId: string, notify?: FeishuNotify): Promise<void> {
+  const meeting = (await client.query("SELECT title, scheduled_at, lead_dri_id, created_by, ceo_participant_id FROM meetings WHERE id = $1", [meetingId])).rows[0] as
+    Pick<MeetingRow, "title" | "scheduled_at" | "lead_dri_id" | "created_by" | "ceo_participant_id">;
+  const title = `${meeting.title} · 会议记录待确认`;
+  for (const personId of new Set([meeting.lead_dri_id, meeting.created_by ?? meeting.lead_dri_id])) {
+    if (!await insertNotification(client, { personId, kind: "meeting_card_pending", objectType: "meeting", objectId: meetingId })) continue;
+    await notify?.({ personId, title, body: shanghaiLabel(new Date(meeting.scheduled_at)),
+      links: [{ label: "去确认", path: `${personId === meeting.ceo_participant_id ? "" : "/me"}/meetings/${meetingId}` }] }, `meeting-card-pending:${meetingId}:${personId}`);
+  }
 }
 
 /** TypeBox 的错误路径 /draft/sections/2/sourceRefs/0/sourceId → sections[2].sourceRefs[0].sourceId（草稿字段不带 draft 前缀）。 */
@@ -402,7 +423,27 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
       WHERE meeting_id = $1 AND draft IS NOT NULL`, [meetingId, JSON.stringify(refs)]);
   }
 
-  return { view, saveDraft, anchorsChanged, refreshDraft: async (meetingId: string) => { await refreshDraft(meetingId); } };
+  /**
+   * 我要处理的会议记录（通知栏一场会一条）：我是主持人或创建人、草稿已生成的会里，还没确认过的、确认后又改了的、写入失败的。
+   * 已确认在写入中、已写入、选了不写入的不列。只读，不改任何状态。
+   */
+  async function pendingFor(personId: string): Promise<TMyMeetingCard[]> {
+    const rows = (await q(
+      `SELECT m.id, m.title, COALESCE(m.ended_at, m.ends_at) AS ended_at FROM meetings m JOIN meeting_cards k ON k.meeting_id = m.id
+        WHERE k.draft_status = 'draft_ready' AND (m.lead_dri_id = $1 OR COALESCE(m.created_by, m.lead_dri_id) = $1)
+        ORDER BY COALESCE(m.ended_at, m.ends_at) DESC`,
+      [personId],
+    )).rows as { id: string; title: string; ended_at: Date }[];
+    const meetings: TMyMeetingCard[] = [];
+    for (const row of rows) {
+      const record = await meetingRecordState(q, row.id, (id) => id);
+      const status = record.version === 0 ? "pending" : record.status === "edit_pending" || record.status === "failed" ? record.status : null;
+      if (status) meetings.push({ meetingId: row.id, title: row.title, endedAt: new Date(row.ended_at).toISOString(), status });
+    }
+    return meetings;
+  }
+
+  return { view, saveDraft, anchorsChanged, pendingFor, refreshDraft: async (meetingId: string) => { await refreshDraft(meetingId); } };
 }
 
 export type MeetingCardService = ReturnType<typeof createMeetingCardService>;

@@ -209,7 +209,7 @@ describe("会后：会上形成的结论回到议题块里确认", () => {
   const item = (id: string, kind: string, issueId: string | null, extra: Record<string, unknown> = {}) =>
     ({ id, kind, text: `${id} 的内容`, quote: `${id} 原话`, turnId: "t1", speakerId: "p1", ownerPersonId: null, issueId, judgmentKind: null, parentItemId: null, review: { status: "pending" }, ...extra });
 
-  it("指向议题的决定候选在议题块里，带原生确认 / 忽略；没有议题的进「其他事项」", () => {
+  it("指向议题的决定候选在议题块里（只读，没有确认 / 忽略）；没有议题的进「其他事项」", () => {
     const held = meeting({
       status: "held",
       transcript: { turns: [{}, {}] },
@@ -227,7 +227,8 @@ describe("会后：会上形成的结论回到议题块里确认", () => {
     const decision = html.indexOf('id="outcome-d1"');
     expect(decision).toBeGreaterThan(block);
     expect(decision).toBeLessThan(others);
-    expect(html.slice(decision, others)).toMatch(/data-variant="confirm"[^>]*>确认</);
+    expect(html.slice(decision, others)).not.toContain(">确认<");
+    expect(html.slice(decision, others)).not.toContain(">忽略<");
     expect(html.indexOf('id="outcome-a1"')).toBeGreaterThan(others);
     expect(html.indexOf("华东改为主战场")).toBeGreaterThan(others);
     expect(html).toContain("会上形成的结论");

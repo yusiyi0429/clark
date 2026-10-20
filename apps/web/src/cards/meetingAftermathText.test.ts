@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { actionCountText, childDecisionLabel, decisionGroups, heldItemLabel, sameSentence } from "./MeetingCard";
+import { actionCountText, childDecisionLabel, decisionGroups, sameSentence } from "./MeetingCard";
 import type { MeetingPayload } from "./payloads";
 
 type Item = NonNullable<MeetingPayload["outcome"]>["items"][number];
 const todo = (status: string, effectRef: string | null = null) => ({ id: "t", kind: "todo", text: "x", ownerPersonId: "liu", review: { status, effectRef } }) as unknown as Item;
-const payload = { leadDriId: "zheng" } as MeetingPayload;
 
 describe("会议页会后事项的文字", () => {
   it("待办收成一行，按实际推送写，不把没推送的说成已推给负责人", () => {
@@ -13,21 +12,13 @@ describe("会议页会后事项的文字", () => {
     expect(actionCountText(Array.from({ length: 7 }, () => todo("confirmed", "task:1")))).toBe("7 项待办已推给负责人");
   });
 
-  it("会议共识按主决定分组，子项挂在主决定下面，状态跟着主决定", () => {
+  it("会议共识按主决定分组，子项挂在主决定下面，写自己的状态（只读）", () => {
     const d = (id: string, parentItemId: string | null = null, status = "pending") => ({ id, kind: "decision", text: id, parentItemId, review: { status, effectRef: null } }) as unknown as Item;
     const all = [d("m1"), d("c1", "m1"), d("c2", "m1"), d("m2"), d("c3", "m2"), d("m3")];
     expect(decisionGroups(all, all).map(({ item, children }) => [item.id, children.map((child) => child.id)])).toEqual([["m1", ["c1", "c2"]], ["m2", ["c3"]], ["m3", []]]);
-    expect(childDecisionLabel(d("c1", "m1"), null)).toBeNull();
-    expect(childDecisionLabel(d("c1", "m1"), "confirm")).toEqual({ state: "confirmed", label: "已确认" });
-    expect(childDecisionLabel(d("c1", "m1"), "dismiss")).toEqual({ state: "dismissed", label: "已忽略" });
-    expect(childDecisionLabel(d("c1", "m1", "confirmed"), null)).toEqual({ state: "confirmed", label: "已确认" });
-  });
-
-  it("撤回窗口里的说法", () => {
-    const name = (id: string) => (id === "liu" ? "刘明华" : id);
-    expect(heldItemLabel(todo("pending"), "confirm", name, payload)).toBe("推送给刘明华");
-    expect(heldItemLabel({ ...todo("pending"), kind: "decision" } as Item, "confirm", name, payload)).toBe("已确认");
-    expect(heldItemLabel(todo("pending"), "dismiss", name, payload)).toBe("已忽略");
+    expect(childDecisionLabel(d("c1", "m1"))).toBeNull();
+    expect(childDecisionLabel(d("c1", "m1", "confirmed"))).toEqual({ state: "confirmed", label: "已确认" });
+    expect(childDecisionLabel(d("c1", "m1", "dismissed"))).toEqual({ state: "dismissed", label: "已忽略" });
   });
 
   it("纪要表格行改写出的原话已全部写在条目里时，算同一句，不再显示两遍（巡检 P2-27）", () => {
