@@ -1,6 +1,7 @@
 -- 会议入本体（回流设计稿 3.1、3.2，10/19 拍板）：
 -- world_excluded：主持人或 CEO 标「不写进本体」（world_excluded_by 记标的人的名字）；已经写进去的，本体里记撤回更正，不删。
--- world_anchors：主持人或 CEO 改过的挂点 [{kind: mission | unit, id}]；NULL 时按决定影响到的 Mission，都没有就挂主持人负责的单元。
+-- world_anchors：预约时选的、或主持人和 CEO 改过的挂点 [{kind: mission | unit, id} | {kind: lto | po, id: 本体 object_id, title}]；
+--   NULL 时按决定影响到的 Mission，都没有就挂主持人负责的单元。
 -- world_event_*：这场会在本体里的会议事件（摘要 + 会上定了 + 挂点，原文留在天枢）。world_event_id 是这条链上最新的一条：
 --   改挂点、换纪要、改判都记 correction；撤回后是 withdrawn；world_event_anchors 是实际写进去的挂点（界面展示用）。
 ALTER TABLE meetings

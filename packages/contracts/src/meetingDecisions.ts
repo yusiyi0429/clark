@@ -28,9 +28,17 @@ export const MeetingDecisionStatus = Type.Union([
 export const MeetingDecisionRecommendation = Type.Union([Type.Literal("confirmed"), Type.Literal("not_decided")]);
 
 /**
- * 落点：写进本体时挂到的对象（9 个对象里的 Mission / Task / 责任单元 / 公司）。id 是天枢里的 id（公司是 company）。
+ * 落点：写进本体时挂到的对象（LTO / 本月 PO / Mission / Task / 责任单元 / 公司）。
+ * lto、po 的 id 是本体 object_id；其余是天枢里的 id（Mission 按 mission:<code>、单元按 capability:<code> 对本体；公司是 company）。
  */
-export const WorldAnchorKind = Type.Union([Type.Literal("mission"), Type.Literal("task"), Type.Literal("unit"), Type.Literal("company")]);
+export const WorldAnchorKind = Type.Union([
+  Type.Literal("lto"), Type.Literal("po"), Type.Literal("mission"), Type.Literal("task"), Type.Literal("unit"), Type.Literal("company"),
+]);
+/** 预约、改挂点时能挑的挂点：LTO、本月 PO、本月 Mission、责任单元。 */
+export const PickedWorldAnchor = Type.Object(
+  { kind: Type.Union([Type.Literal("lto"), Type.Literal("po"), Type.Literal("mission"), Type.Literal("unit")]), id: Type.String({ minLength: 1, maxLength: 200 }) },
+  { additionalProperties: false },
+);
 export const WorldAnchor = Type.Object(
   { kind: WorldAnchorKind, id: Type.String({ minLength: 1 }), title: Type.String({ minLength: 1 }) },
   { additionalProperties: false },
@@ -102,15 +110,9 @@ export const MeetingDecisionWorldItem = Type.Object(
 /** 会议页单独取（不进会议卡）：这场会在本体里，和每条生效的决定落到哪。 */
 export const MeetingWorldResponse = Type.Object({ world: MeetingWorldView, decisions: Type.Array(MeetingDecisionWorldItem) }, { additionalProperties: false });
 export const MeetingWorldExcludedRequest = Type.Object({ excluded: Type.Boolean() }, { additionalProperties: false });
-/** 改挂点：只能挑 Mission 和责任单元；null 回到自动（决定影响到的 Mission，都没有挂主持人的单元）。 */
+/** 改挂点：挑 LTO、本月 PO、本月 Mission、责任单元；null 回到自动（决定影响到的 Mission，都没有挂主持人的单元）。 */
 export const MeetingWorldAnchorsRequest = Type.Object(
-  {
-    anchors: Type.Union([
-      Type.Array(Type.Object({ kind: Type.Union([Type.Literal("mission"), Type.Literal("unit")]), id: Type.String({ minLength: 1, maxLength: 200 }) },
-        { additionalProperties: false }), { minItems: 1, maxItems: 10 }),
-      Type.Null(),
-    ]),
-  },
+  { anchors: Type.Union([Type.Array(PickedWorldAnchor, { minItems: 1, maxItems: 10 }), Type.Null()]) },
   { additionalProperties: false },
 );
 export const MeetingWorldAnchorOptionsResponse = Type.Object({ options: Type.Array(WorldAnchor) }, { additionalProperties: false });
@@ -157,3 +159,4 @@ export type TMeetingWorldView = Static<typeof MeetingWorldView>;
 export type TMeetingWorldResponse = Static<typeof MeetingWorldResponse>;
 export type TMeetingDecisionWorldItem = Static<typeof MeetingDecisionWorldItem>;
 export type TMeetingWorldAnchorsRequest = Static<typeof MeetingWorldAnchorsRequest>;
+export type TPickedWorldAnchor = Static<typeof PickedWorldAnchor>;

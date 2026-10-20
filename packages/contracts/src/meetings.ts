@@ -1,6 +1,6 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { MeetingOutcomeState, StoredTranscript, TranscriptCandidateProjection } from "./transcript.js";
-import { MeetingAttendees, MeetingDecisionView, MeetingMinutesStatus } from "./meetingDecisions.js";
+import { MeetingAttendees, MeetingDecisionView, MeetingMinutesStatus, PickedWorldAnchor } from "./meetingDecisions.js";
 
 export const MeetingStatus = Type.Union([
   Type.Literal("scheduled"),
@@ -547,6 +547,23 @@ export const CreateMeetingRequest = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * 预约建会（POST /api/meetings）：带起止、挂点（1..10）、是否不写进本体。
+ * 成员只能给自己建（leadDriId 缺省或等于本人）；CEO 必须从 DRI 里指定主持人。
+ */
+export const MeetingBookingRequest = Type.Object(
+  {
+    title: Type.String({ minLength: 1, maxLength: 200 }),
+    scheduledAt: IsoDateTime,
+    endsAt: IsoDateTime,
+    leadDriId: Type.Optional(PersonId),
+    participants: Type.Optional(Type.Array(PersonId, { maxItems: 50 })),
+    anchors: Type.Array(PickedWorldAnchor, { minItems: 1, maxItems: 10 }),
+    worldExcluded: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
 /** Issue Action：把当前 Issue 加入已有 scheduled Meeting。 */
 export const JoinMeetingRequest = Type.Object(
   { meetingId: Type.String({ minLength: 1 }) },
@@ -675,6 +692,7 @@ export type TMeetingRecording = Static<typeof MeetingRecording>;
 export type TStartMeetingRecordingResponse = Static<typeof StartMeetingRecordingResponse>;
 export type TMeetingCardPayload = Static<typeof MeetingCardPayload>;
 export type TCreateMeetingRequest = Static<typeof CreateMeetingRequest>;
+export type TMeetingBookingRequest = Static<typeof MeetingBookingRequest>;
 export type TJoinMeetingRequest = Static<typeof JoinMeetingRequest>;
 export type TUpdateMeetingDraftRequest = Static<typeof UpdateMeetingDraftRequest>;
 export type TRequestSupplementRequest = Static<typeof RequestSupplementRequest>;

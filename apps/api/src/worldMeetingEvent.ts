@@ -28,7 +28,7 @@ export type MeetingEventWorld = {
 };
 
 const DECIDED_BY = { host: "Host 已确认", ceo: "CEO 已确认", agent: "Agent 代判，Host 尚未确认" } as const;
-const KIND_LABEL = { mission: "Mission", task: "Task", unit: "单元", company: "公司" } as const;
+const KIND_LABEL = { lto: "长期目标", po: "本月目标", mission: "Mission", task: "Task", unit: "单元", company: "公司" } as const;
 const shanghai = (at: Date) => new Date(at.getTime() + 8 * 3_600_000).toISOString().replace(/\.\d{3}Z$/, "+08:00");
 const sha = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 

@@ -1,14 +1,51 @@
 import type { TImpactTarget, TMeetingDecisionWorld, TMeetingWorldResponse, TWorldAnchor } from "@warmap/contracts";
 import { decisionEffective, type MeetingDecisionRow } from "./meetingDecisionView.js";
-import type { MeetingRow, Query } from "./meetingStore.js";
+import type { MeetingRow, Query, StoredWorldAnchor } from "./meetingStore.js";
+import type { WorldClient } from "./worldClient.js";
+import { usableWorldHead, worldDisplayText } from "./worldReader.js";
 
 /**
  * 会议入本体的挂点与落点（回流设计稿 3.1、3.2）。只在会议页（GET /api/meetings/:id/world）、本体同步、挂点接口里查，
  * 不进读会议的 SQL：那里带上这些相关子查询会把估算代价抬过 JIT 阈值，每次读会议多一秒多（10/19 实测）。
  */
 const COMPANY: TWorldAnchor = { kind: "company", id: "company", title: "公司" };
-const ORDER = { mission: 0, task: 1, unit: 2, company: 3 } as const;
+const ORDER = { po: 0, lto: 1, mission: 2, task: 3, unit: 4, company: 5 } as const;
 const sorted = (anchors: TWorldAnchor[]) => [...anchors].sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || a.title.localeCompare(b.title, "zh-CN"));
+
+/** 挂点选项读本体用的客户端（只列对象）；本体没配或不可写时为 null，选项只有 Mission 和单元。 */
+export type AnchorWorld = Pick<WorldClient, "listObjects">;
+
+/**
+ * 预约、改挂点时能挑的对象，按 本月 PO、LTO、本月 Mission、责任单元 排：PO、LTO 读本体（串行，读不到就不给），Mission、单元读天枢。
+ * world-02 里没有 Task 对象，不给 Task。
+ */
+export async function anchorOptions(q: Query, world: AnchorWorld | null, period: string): Promise<TWorldAnchor[]> {
+  let goals: TWorldAnchor[] = [];
+  if (world) {
+    try {
+      const goal = (kind: "po" | "lto") => (head: { object_id: string; title: string; lifecycle: unknown }) =>
+        usableWorldHead(head) && head.title.trim() ? [{ kind, id: head.object_id, title: worldDisplayText(head.title.trim()) }] : [];
+      const pos = await world.listObjects({ type: "PeriodGoal", period });
+      const ltos = await world.listObjects({ type: "LongTermGoal" });
+      goals = [...pos.flatMap(goal("po")), ...ltos.flatMap(goal("lto"))];
+    } catch {
+      goals = [];
+    }
+  }
+  const missions = (await q("SELECT id, title FROM missions WHERE period = $1 AND NOT placeholder ORDER BY code", [period])).rows as { id: string; title: string }[];
+  const units = (await q("SELECT id, name FROM capability_config ORDER BY sort_order, code")).rows as { id: string; name: string }[];
+  return [
+    ...goals,
+    ...missions.map((row) => ({ kind: "mission" as const, id: row.id, title: row.title })),
+    ...units.map((row) => ({ kind: "unit" as const, id: row.id, title: row.name })),
+  ];
+}
+
+/** 挑中的选项存进 world_anchors 的样子（选项只有 PO、LTO、Mission、单元）。 */
+export function storedAnchor(option: TWorldAnchor | StoredWorldAnchor): StoredWorldAnchor {
+  if (option.kind === "lto" || option.kind === "po") return { kind: option.kind, id: option.id, title: option.title };
+  return { kind: option.kind as "mission" | "unit", id: option.id };
+}
 
 /** 这几条决定当前版本的影响卡落到的对象。 */
 async function cardTargets(q: Query, decisionIds: string[]): Promise<{ decisionId: string; targets: TImpactTarget[] }[]> {
@@ -55,8 +92,9 @@ export async function meetingAnchorGroups(q: Query, meeting: Pick<MeetingRow, "l
   if (chosen.length) {
     const missions = await titles(q, "SELECT id, title FROM missions WHERE id = ANY($1)", chosen.filter((a) => a.kind === "mission").map((a) => a.id));
     const units = await titles(q, "SELECT id, name AS title FROM capability_config WHERE id = ANY($1)", chosen.filter((a) => a.kind === "unit").map((a) => a.id));
+    // LTO、PO 天枢里没有表，用选的时候存下的标题。
     first = chosen.flatMap((anchor) => {
-      const title = (anchor.kind === "mission" ? missions : units).get(anchor.id);
+      const title = anchor.kind === "lto" || anchor.kind === "po" ? anchor.title : (anchor.kind === "mission" ? missions : units).get(anchor.id);
       return title ? [{ kind: anchor.kind, id: anchor.id, title }] : [];
     });
   }

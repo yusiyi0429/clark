@@ -1238,7 +1238,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 主持人或 CEO 改会议挂到的 Mission、责任单元；null 回到自动 */
+        /** 主持人或 CEO 改会议挂到的 LTO、本月 PO、Mission、责任单元；null 回到自动 */
         put: operations["setMeetingWorldAnchors"];
         post?: never;
         delete?: never;
@@ -1254,8 +1254,42 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 改挂点时可选的对象：本月 Mission 和责任单元 */
+        /** 改挂点时可选的对象：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元 */
         get: operations["listMeetingWorldAnchorOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人 */
+        post: operations["bookMeeting"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/world-anchor-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 预约时可选的挂点：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元 */
+        get: operations["listWorldAnchorOptions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6589,6 +6623,18 @@ export interface components {
             participants: string[];
             issueIds: string[];
         };
+        MeetingBookingRequest: {
+            title: string;
+            scheduledAt: string;
+            endsAt: string;
+            leadDriId?: string;
+            participants?: string[];
+            anchors: {
+                kind: "lto" | "po" | "mission" | "unit";
+                id: string;
+            }[];
+            worldExcluded: boolean;
+        };
         JoinMeetingRequest: {
             meetingId: string;
         };
@@ -10058,7 +10104,7 @@ export interface components {
                 status: ("none" | "committed" | "withdrawn" | "skipped" | "failed") | null;
                 at: string | null;
                 anchors: {
-                    kind: "mission" | "task" | "unit" | "company";
+                    kind: "lto" | "po" | "mission" | "task" | "unit" | "company";
                     id: string;
                     title: string;
                 }[];
@@ -10068,7 +10114,7 @@ export interface components {
             decisions: {
                 id: string;
                 anchors: {
-                    kind: "mission" | "task" | "unit" | "company";
+                    kind: "lto" | "po" | "mission" | "task" | "unit" | "company";
                     id: string;
                     title: string;
                 }[];
@@ -10080,13 +10126,13 @@ export interface components {
         };
         MeetingWorldAnchorsRequest: {
             anchors: {
-                kind: "mission" | "unit";
+                kind: "lto" | "po" | "mission" | "unit";
                 id: string;
             }[] | null;
         };
         MeetingWorldAnchorOptionsResponse: {
             options: {
-                kind: "mission" | "task" | "unit" | "company";
+                kind: "lto" | "po" | "mission" | "task" | "unit" | "company";
                 id: string;
                 title: string;
             }[];
@@ -14383,6 +14429,99 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    bookMeeting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingBookingRequest"];
+            };
+        };
+        responses: {
+            /** @description 新建的会议卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        card: components["schemas"]["Card"];
+                    };
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listWorldAnchorOptions: {
+        parameters: {
+            query: {
+                period: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 可选的挂点 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingWorldAnchorOptionsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

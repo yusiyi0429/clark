@@ -63,6 +63,7 @@ import {
   BattlefieldManagementResponse,
   CreateConfigMeetingRequest,
   CreateMeetingRequest,
+  MeetingBookingRequest,
   DriIssueImportRequest,
   DriMeetingImportRequest,
   HealthResponse,
@@ -874,7 +875,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       "/api/meetings/{id}/world-anchors": {
         put: {
-          operationId: "setMeetingWorldAnchors", summary: "主持人或 CEO 改会议挂到的 Mission、责任单元；null 回到自动",
+          operationId: "setMeetingWorldAnchors", summary: "主持人或 CEO 改会议挂到的 LTO、本月 PO、Mission、责任单元；null 回到自动",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/MeetingWorldAnchorsRequest" }),
           responses: { "200": { description: "这场会在本体里的最新状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingWorldResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse },
@@ -882,9 +883,26 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       "/api/meetings/{id}/world-anchor-options": {
         get: {
-          operationId: "listMeetingWorldAnchorOptions", summary: "改挂点时可选的对象：本月 Mission 和责任单元",
+          operationId: "listMeetingWorldAnchorOptions", summary: "改挂点时可选的对象：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           responses: { "200": { description: "可选的挂点", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingWorldAnchorOptionsResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/meetings": {
+        post: {
+          operationId: "bookMeeting", summary: "预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人",
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingBookingRequest" }),
+          responses: {
+            "200": { description: "新建的会议卡", content: { "application/json": { schema: { type: "object", required: ["card"], additionalProperties: false, properties: { card: { $ref: "#/components/schemas/Card" } } } } } },
+            "400": errorResponse, "401": errorResponse, "403": errorResponse,
+          },
+        },
+      },
+      "/api/world-anchor-options": {
+        get: {
+          operationId: "listWorldAnchorOptions", summary: "预约时可选的挂点：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元",
+          parameters: [{ name: "period", in: "query", required: true, schema: { type: "string", pattern: "^\\d{4}-(0[1-9]|1[0-2])$" } }],
+          responses: { "200": { description: "可选的挂点", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingWorldAnchorOptionsResponse" } } } }, "400": errorResponse, "401": errorResponse },
         },
       },
       "/api/cards/radar": {
@@ -2787,6 +2805,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         IssueRevokeReceiptInput: IssueRevokeReceiptInput as JsonSchema,
         DriMeetingImportRequest: DriMeetingImportRequest as JsonSchema,
         CreateMeetingRequest: CreateMeetingRequest as JsonSchema,
+        MeetingBookingRequest: MeetingBookingRequest as JsonSchema,
         JoinMeetingRequest: JoinMeetingRequest as JsonSchema,
         UpdateMeetingDraftRequest: UpdateMeetingDraftRequest as JsonSchema,
         EditMeetingDetailsRequest: EditMeetingDetailsRequest as JsonSchema,

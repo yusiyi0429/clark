@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import type { TImpactAskWho, TImpactSource, TImpactTarget, TMeetingDecisionView, TMeetingOutcomeItem, TMeetingWorldResponse, TMyMeetingDecisionGroup, TWorldAnchor } from "@warmap/contracts";
+import type { TImpactAskWho, TImpactSource, TImpactTarget, TMeetingDecisionView, TMeetingOutcomeItem, TMeetingWorldResponse, TMyMeetingDecisionGroup, TPickedWorldAnchor, TWorldAnchor } from "@warmap/contracts";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { feishuNotifier, type FeishuNotify } from "./feishu/notify.js";
 import type { ImpactAgent, TImpactAnalysisCandidate } from "./impactAgent.js";
@@ -9,8 +9,8 @@ import { enqueueJob, type JobHandler, type RecurringJob } from "./jobs.js";
 import { impactCandidates, type ImpactCandidate, type InterpretationContext } from "./meetingContext.js";
 import { transcriptLines, type DecisionLayeringAgent } from "./meetingDecisionAgent.js";
 import { attendeesOf, decisionEffective, decisionStatement, projectMeetingDecision, type MeetingDecisionRow } from "./meetingDecisionView.js";
-import { getMeetingRow, meetingColumns, UUID_PATTERN, type MeetingRow, type Query } from "./meetingStore.js";
-import { meetingAnchorGroups, meetingWorldDetail } from "./meetingWorld.js";
+import { getMeetingRow, meetingColumns, UUID_PATTERN, type MeetingRow, type Query, type StoredWorldAnchor } from "./meetingStore.js";
+import { anchorOptions, meetingAnchorGroups, meetingWorldDetail, storedAnchor, type AnchorWorld } from "./meetingWorld.js";
 import { logEvent } from "./observability.js";
 import { personDisplayNames } from "./people.js";
 import { addWorkday, nextWorkdayAt, shanghaiDate, shanghaiLabel } from "./workdays.js";
@@ -49,6 +49,8 @@ export type MeetingDecisionDeps = {
   world?: DecisionWorldSync;
   /** 会议事件（和 world 一起装配）；没有时只写决定事件。 */
   meetingWorld?: MeetingEventWorld;
+  /** 挂点选项里的 LTO、本月 PO 从这里读；没有时选项只有 Mission 和单元。 */
+  anchorWorld?: AnchorWorld;
   /** live：影响卡推送；shadow：只在后台记录。缺省 live（低置信度的卡一律影子）。 */
   impactMode?: "live" | "shadow";
   now?: () => Date;
@@ -559,27 +561,26 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     return worldView(meetingId, viewerId);
   }
 
-  /** 改挂点时可选的对象：会议所在月的 Mission 和所有责任单元。 */
-  async function anchorOptions(meeting: MeetingRow): Promise<TWorldAnchor[]> {
-    const period = shanghaiDate(new Date(meeting.scheduled_at)).slice(0, 7);
-    const missions = (await q("SELECT id, title FROM missions WHERE period = $1 AND NOT placeholder ORDER BY code", [period])).rows as { id: string; title: string }[];
-    const units = (await q("SELECT id, name FROM capability_config ORDER BY sort_order, code")).rows as { id: string; name: string }[];
-    return [
-      ...missions.map((row) => ({ kind: "mission" as const, id: row.id, title: row.title })),
-      ...units.map((row) => ({ kind: "unit" as const, id: row.id, title: row.name })),
-    ];
-  }
+  /** 某月能挑的挂点：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元。 */
+  const anchorOptionsFor = (period: string) => anchorOptions(q, deps.anchorWorld ?? null, period);
+  const meetingPeriod = (meeting: MeetingRow) => shanghaiDate(new Date(meeting.scheduled_at)).slice(0, 7);
 
-  /** 改挂点（null 回到自动）；已写入的在下一次同步时记 correction。 */
-  async function setAnchors(meetingId: string, viewerId: string, anchors: { kind: "mission" | "unit"; id: string }[] | null): Promise<WorldResult> {
+  /**
+   * 改挂点（null 回到自动）；已写入的在下一次同步时记 correction。
+   * 挑的要在会议所在月的选项里；已经存着的 LTO、PO 本体读不到时也算数（沿用存下的标题）。
+   */
+  async function setAnchors(meetingId: string, viewerId: string, anchors: TPickedWorldAnchor[] | null): Promise<WorldResult> {
     const meeting = await getMeetingRow(q, meetingId);
     if (!meeting || !canManageWorld(meeting, viewerId)) return NOT_FOUND;
-    let chosen = anchors;
-    if (chosen) {
-      chosen = chosen.filter((anchor, index) => chosen!.findIndex((other) => other.kind === anchor.kind && other.id === anchor.id) === index);
-      const known = await anchorOptions(meeting);
-      if (chosen.some((anchor) => !known.some((option) => option.kind === anchor.kind && option.id === anchor.id))) {
-        return { error: { status: 400, code: "ANCHOR_NOT_FOUND", message: "挂点只能是本月的 Mission 或责任单元" } };
+    let chosen: StoredWorldAnchor[] | null = null;
+    if (anchors) {
+      const known = [...await anchorOptionsFor(meetingPeriod(meeting)), ...(meeting.world_anchors ?? []).filter((anchor) => anchor.kind === "lto" || anchor.kind === "po")];
+      chosen = [];
+      for (const anchor of anchors) {
+        if (chosen.some((other) => other.kind === anchor.kind && other.id === anchor.id)) continue;
+        const option = known.find((candidate) => candidate.kind === anchor.kind && candidate.id === anchor.id);
+        if (!option) return { error: { status: 400, code: "ANCHOR_NOT_FOUND", message: "挂点只能是 LTO、本月 PO、本月 Mission 或责任单元" } };
+        chosen.push(storedAnchor(option));
       }
     }
     await q("UPDATE meetings SET world_anchors = $2::jsonb WHERE id = $1", [meetingId, chosen ? JSON.stringify(chosen) : null]);
@@ -590,7 +591,7 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
   async function listAnchorOptions(meetingId: string, viewerId: string): Promise<{ options: TWorldAnchor[] } | typeof NOT_FOUND> {
     const meeting = await getMeetingRow(q, meetingId);
     if (!meeting || !canManageWorld(meeting, viewerId)) return NOT_FOUND;
-    return { options: await anchorOptions(meeting) };
+    return { options: await anchorOptionsFor(meetingPeriod(meeting)) };
   }
 
   /** 我主持的会里还没确认的主持人条目（通知栏置顶）：待确认的，和 Agent 代判了、我还没点过的。 */
@@ -610,7 +611,7 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     return [...groups.values()];
   }
 
-  return { sync, review, tick, propagate, listMine, syncWorld, worldView, setExcluded, setAnchors, listAnchorOptions };
+  return { sync, review, tick, propagate, listMine, syncWorld, worldView, setExcluded, setAnchors, listAnchorOptions, anchorOptionsFor };
 }
 
 export type MeetingDecisionService = ReturnType<typeof createMeetingDecisionService>;

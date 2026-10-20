@@ -4196,7 +4196,7 @@
     "/api/meetings/{id}/world-anchors": {
       "put": {
         "operationId": "setMeetingWorldAnchors",
-        "summary": "主持人或 CEO 改会议挂到的 Mission、责任单元；null 回到自动",
+        "summary": "主持人或 CEO 改会议挂到的 LTO、本月 PO、Mission、责任单元；null 回到自动",
         "parameters": [
           {
             "name": "id",
@@ -4264,7 +4264,7 @@
     "/api/meetings/{id}/world-anchor-options": {
       "get": {
         "operationId": "listMeetingWorldAnchorOptions",
-        "summary": "改挂点时可选的对象：本月 Mission 和责任单元",
+        "summary": "改挂点时可选的对象：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元",
         "parameters": [
           {
             "name": "id",
@@ -4297,6 +4297,122 @@
             }
           },
           "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings": {
+      "post": {
+        "operationId": "bookMeeting",
+        "summary": "预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeetingBookingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "新建的会议卡",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "card"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "card": {
+                      "$ref": "#/components/schemas/Card"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/world-anchor-options": {
+      "get": {
+        "operationId": "listWorldAnchorOptions",
+        "summary": "预约时可选的挂点：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "可选的挂点",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingWorldAnchorOptionsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -34406,6 +34522,91 @@
           }
         }
       },
+      "MeetingBookingRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "scheduledAt",
+          "endsAt",
+          "anchors",
+          "worldExcluded"
+        ],
+        "properties": {
+          "title": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "scheduledAt": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "endsAt": {
+            "minLength": 1,
+            "maxLength": 100,
+            "type": "string"
+          },
+          "leadDriId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "participants": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          "anchors": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "kind",
+                "id"
+              ],
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "lto",
+                      "type": "string"
+                    },
+                    {
+                      "const": "po",
+                      "type": "string"
+                    },
+                    {
+                      "const": "mission",
+                      "type": "string"
+                    },
+                    {
+                      "const": "unit",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "id": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "worldExcluded": {
+            "type": "boolean"
+          }
+        }
+      },
       "JoinMeetingRequest": {
         "additionalProperties": false,
         "type": "object",
@@ -57051,6 +57252,14 @@
                     "kind": {
                       "anyOf": [
                         {
+                          "const": "lto",
+                          "type": "string"
+                        },
+                        {
+                          "const": "po",
+                          "type": "string"
+                        },
+                        {
                           "const": "mission",
                           "type": "string"
                         },
@@ -57115,6 +57324,14 @@
                     "properties": {
                       "kind": {
                         "anyOf": [
+                          {
+                            "const": "lto",
+                            "type": "string"
+                          },
+                          {
+                            "const": "po",
+                            "type": "string"
+                          },
                           {
                             "const": "mission",
                             "type": "string"
@@ -57220,6 +57437,14 @@
                     "kind": {
                       "anyOf": [
                         {
+                          "const": "lto",
+                          "type": "string"
+                        },
+                        {
+                          "const": "po",
+                          "type": "string"
+                        },
+                        {
                           "const": "mission",
                           "type": "string"
                         },
@@ -57264,6 +57489,14 @@
               "properties": {
                 "kind": {
                   "anyOf": [
+                    {
+                      "const": "lto",
+                      "type": "string"
+                    },
+                    {
+                      "const": "po",
+                      "type": "string"
+                    },
                     {
                       "const": "mission",
                       "type": "string"

@@ -1,10 +1,12 @@
 import { Type } from "@sinclair/typebox";
 import {
-  ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingDecisionResponse, MeetingDecisionReviewRequest,
+  ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingDecisionResponse, MeetingDecisionReviewRequest,
   MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldExcludedRequest, MeetingWorldResponse, MyMeetingDecisionsResponse,
 } from "@warmap/contracts";
 import { askImpactCard, markImpactCardIrrelevant, readImpactCardByRequest } from "../impactCards.js";
 import type { MeetingFollowThrough } from "../meetingFollowThrough.js";
+import { bookMeeting } from "../meetings.js";
+import { projectMemberMeetingCardFromCard } from "../memberCards.js";
 import { personDisplayNames } from "../people.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
@@ -53,6 +55,24 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
     const result = await followThrough.decisions.listAnchorOptions(req.params.id, req.person!.personId);
     return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
   });
+
+  // 预约建会：登录的人都能建（成员只能给自己建，CEO 从 DRI 里指定主持人），带起止、挂点、是否不写进本体。
+  app.post("/api/meetings", { preHandler: ctx.requirePerson, schema: { body: MeetingBookingRequest } }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "meeting.book" });
+    const viewer = req.person!;
+    const result = await bookMeeting({ pool: ctx.pool, peopleDirectory: ctx.peopleDirectory, preflightAgent: ctx.preflight, secret: ctx.env.sessionSecret,
+      introAgent: ctx.threadIntroAgent, anchorOptions: followThrough.decisions.anchorOptionsFor }, viewer, req.body);
+    if ("error" in result) {
+      return ctx.fail(reply, result.error.status, result.error.code, result.error.message, result.error.fieldErrors ? { fieldErrors: result.error.fieldErrors } : undefined);
+    }
+    return { card: viewer.role === "ceo" ? result.card : projectMemberMeetingCardFromCard(result.card, viewer.personId) };
+  });
+
+  // 预约时的挂点选项（还没有会议）：登录的人都能取。
+  app.get("/api/world-anchor-options", {
+    preHandler: ctx.requirePerson,
+    schema: { querystring: Type.Object({ period: Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" }) }), response: { 200: MeetingWorldAnchorOptionsResponse } },
+  }, async (req) => ({ options: await followThrough.decisions.anchorOptionsFor(req.query.period) }));
 
   app.get("/api/requests/:id/impact", { preHandler: ctx.requirePerson, schema: { params: idParams, response: { 200: ImpactCardResponse } } }, async (req, reply) => {
     const card = await readImpactCardByRequest(ctx.q, req.params.id, req.person!.personId);

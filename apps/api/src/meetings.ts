@@ -2,9 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type {
   TCard,
+  TMeetingBookingRequest,
   TMeetingDraft,
   TMeetingParticipant,
   TSupplementRequest,
+  TWorldAnchor,
 } from "@warmap/contracts";
 import type { ActionScope } from "./actionToken.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
@@ -14,6 +16,8 @@ import { replaceMeetingMaterials } from "./meetingMaterials.js";
 import { syncMeetingMembers, threadIntroInput } from "./threads.js";
 import { postThreadIntro, type ThreadIntroAgent } from "./threadIntro.js";
 import { startPreflight, type PreflightAgent } from "./meetingPreflight.js";
+import { storedAnchor } from "./meetingWorld.js";
+import { shanghaiDate } from "./workdays.js";
 import {
   appendFingerprint,
   commit,
@@ -31,12 +35,15 @@ import {
   type MeetingActionOutcome,
   type MeetingRow,
   type Query,
+  type StoredWorldAnchor,
 } from "./meetingStore.js";
+
+type ResolvedParticipants = { participants: TMeetingParticipant[]; ceo: TMeetingParticipant; lead: TMeetingParticipant };
 
 function resolveParticipants(
   peopleDirectory: PeopleDirectory,
   input: { leadDriId: string; ceoParticipantId: string; participants: string[] },
-): { participants: TMeetingParticipant[]; ceo: TMeetingParticipant; lead: TMeetingParticipant } | { error: MeetingActionError } {
+): ResolvedParticipants | { error: MeetingActionError } {
   const byId = new Map(peopleDirectory.searchPeople(undefined).map((person) => [person.personId, person]));
   const ids = unique([input.ceoParticipantId, input.leadDriId, ...input.participants]);
   const missing = ids.filter((id) => !byId.has(id));
@@ -215,24 +222,94 @@ export async function createConfigMeeting(
   if (!(await issuesExist(pool.query.bind(pool), issueIds))) {
     return { error: { status: 400, code: "INVALID_ISSUE", message: "issueIds 包含不存在的 Issue", fieldErrors: { issueIds: "unknown issue" } } };
   }
+  return insertScheduledMeeting(pool, peopleDirectory, preflightAgent, secret,
+    { title: input.title, scheduledAt, endsAt, resolved, issueIds, originRef: { type: "config" } }, introAgent,
+    input.materials?.length ? { items: input.materials, storageDir: input.materialStorageDir } : undefined);
+}
+
+/**
+ * 预约建会：带起止、挂点、是否不写进本体。成员只能给自己建（leadDriId 缺省或等于本人，否则 403）；
+ * CEO 必须从 DRI 里指定主持人（同配置页）。挂点要在开会那个月的选项里。
+ */
+export async function bookMeeting(
+  deps: {
+    pool: Pool;
+    peopleDirectory: PeopleDirectory;
+    preflightAgent: PreflightAgent;
+    secret: string;
+    introAgent?: ThreadIntroAgent;
+    /** 某月能挑的挂点（本月 PO、LTO、本月 Mission、责任单元）。 */
+    anchorOptions: (period: string) => Promise<TWorldAnchor[]>;
+  },
+  viewer: { personId: string; role: "ceo" | "member" },
+  input: TMeetingBookingRequest,
+): Promise<{ card: TCard } | { error: MeetingActionError }> {
+  let leadDriId = input.leadDriId;
+  if (viewer.role === "ceo") {
+    if (!leadDriId) return { error: { status: 400, code: "INVALID_LEAD_DRI", message: "要指定主持人", fieldErrors: { leadDriId: "required" } } };
+  } else {
+    if (leadDriId !== undefined && leadDriId !== viewer.personId) return { error: { status: 403, code: "FORBIDDEN", message: "只能给自己建会" } };
+    leadDriId = viewer.personId;
+  }
+  const scheduledAt = parseScheduledAt(input.scheduledAt);
+  if (!scheduledAt) return { error: { status: 400, code: "INVALID_INPUT", message: "scheduledAt 不是可解析时间", fieldErrors: { scheduledAt: "unparsable" } } };
+  const endsAt = resolveEndsAt(scheduledAt, input.endsAt);
+  if (!(endsAt instanceof Date)) return { error: endsAt };
+  const ceo = deps.peopleDirectory.searchPeople(undefined).find((person) => person.roles.includes("ceo"));
+  if (!ceo) return { error: { status: 400, code: "INVALID_CEO", message: "company-people.v1 中没有 ceo 角色", fieldErrors: { leadDriId: "ceo missing" } } };
+  const resolved = resolveParticipants(deps.peopleDirectory, { leadDriId, ceoParticipantId: ceo.personId, participants: input.participants ?? [] });
+  if ("error" in resolved) return resolved;
+  const options = await deps.anchorOptions(shanghaiDate(scheduledAt).slice(0, 7));
+  const anchors: StoredWorldAnchor[] = [];
+  for (const anchor of input.anchors) {
+    if (anchors.some((other) => other.kind === anchor.kind && other.id === anchor.id)) continue;
+    const option = options.find((candidate) => candidate.kind === anchor.kind && candidate.id === anchor.id);
+    if (!option) return { error: { status: 400, code: "ANCHOR_NOT_FOUND", message: "挂点只能是 LTO、本月 PO、本月 Mission 或责任单元", fieldErrors: { anchors: "unknown anchor" } } };
+    anchors.push(storedAnchor(option));
+  }
+  const excludedBy = input.worldExcluded ? resolved.participants.find((person) => person.personId === viewer.personId)?.displayName ?? null : null;
+  return insertScheduledMeeting(deps.pool, deps.peopleDirectory, deps.preflightAgent, deps.secret, {
+    title: input.title, scheduledAt, endsAt, resolved, issueIds: [], originRef: { type: "booking" },
+    world: { anchors, excluded: input.worldExcluded, excludedBy },
+  }, deps.introAgent);
+}
+
+/** 建一场 scheduled 会（配置页、预约共用）：落库、同步成员、邀请介绍、可选会前材料，再跑首次预审。 */
+async function insertScheduledMeeting(
+  pool: Pool,
+  peopleDirectory: PeopleDirectory,
+  preflightAgent: PreflightAgent,
+  secret: string,
+  input: {
+    title: string; scheduledAt: Date; endsAt: Date; resolved: ResolvedParticipants; issueIds: string[]; originRef: Record<string, unknown>;
+    world?: { anchors: StoredWorldAnchor[]; excluded: boolean; excludedBy: string | null };
+  },
+  introAgent?: ThreadIntroAgent,
+  materials?: { items: ParsedMaterial[]; storageDir: string },
+): Promise<{ card: TCard } | { error: MeetingActionError }> {
+  const { resolved } = input;
   const inserted = await pool.query<MeetingRow>(
     `INSERT INTO meetings
        (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
-        participants, issue_ids, preflight, draft, origin_ref, action_fingerprints, ends_at)
-     VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb, $11)
+        participants, issue_ids, preflight, draft, origin_ref, action_fingerprints, ends_at,
+        world_anchors, world_excluded, world_excluded_by)
+     VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb, $11, $12::jsonb, $13, $14)
      RETURNING ${meetingColumns()}`,
     [
       randomUUID(),
       input.title,
-      scheduledAt,
+      input.scheduledAt,
       resolved.lead.personId,
       resolved.ceo.personId,
       JSON.stringify(resolved.participants),
-      JSON.stringify(issueIds),
+      JSON.stringify(input.issueIds),
       JSON.stringify(emptyPreflight()),
       JSON.stringify(emptyDraft()),
-      JSON.stringify({ type: "config" }),
-      endsAt,
+      JSON.stringify(input.originRef),
+      input.endsAt,
+      input.world ? JSON.stringify(input.world.anchors) : null,
+      input.world?.excluded ?? false,
+      input.world?.excludedBy ?? null,
     ],
   );
   const created = inserted.rows[0];
@@ -241,8 +318,8 @@ export async function createConfigMeeting(
   finally { memberClient.release(); }
   scheduleMeetingIntro(pool, peopleDirectory, introAgent, created.id, created.lead_dri_id,
     created.participants.map((person) => person.personId).filter((id) => id !== created.lead_dri_id), [created.lead_dri_id]);
-  if (input.materials?.length) {
-    const stored = await replaceMeetingMaterials(pool, secret, created.id, input.materials, input.materialStorageDir);
+  if (materials) {
+    const stored = await replaceMeetingMaterials(pool, secret, created.id, materials.items, materials.storageDir);
     if ("error" in stored) return stored;
   }
   await startPreflight(pool, peopleDirectory, preflightAgent, created.id);

@@ -16,7 +16,7 @@ import { personDisplayNames } from "./people.js";
 import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
 import { createDecisionWorldSync } from "./worldDecisionEvents.js";
 import { createMeetingEventWorld } from "./worldMeetingEvent.js";
-import type { WorldReader } from "./worldReader.js";
+import { WORLD_READ_TIMEOUT_MS, type WorldReader } from "./worldReader.js";
 
 /**
  * 会后链路的装配（G 会议链路 + 分层确认 + H 影响卡）：
@@ -72,8 +72,10 @@ export function createMeetingFollowThrough({ pool, env, peopleDirectory, world, 
   const worldClient = worldConfigured(env) && world.status().writes ? new WorldClient(q, env) : undefined;
   const worldSync = worldClient ? createDecisionWorldSync({ q, client: worldClient, publicOrigin: env.publicOrigin, now }) : undefined;
   const meetingWorld = worldClient ? createMeetingEventWorld({ q, client: worldClient, publicOrigin: env.publicOrigin, now }) : undefined;
+  // 挂点选项里的 LTO、本月 PO：同一条件下只列对象，用读的超时（预约表单在等）。
+  const anchorWorld = worldClient ? new WorldClient(q, env, undefined, { timeoutMs: WORLD_READ_TIMEOUT_MS }) : undefined;
   const decisions = createMeetingDecisionService({ pool, peopleDirectory, layering: layeringAgent, impact: impactAgent, context, notify, world: worldSync,
-    meetingWorld, impactMode: env.impactCardMode ?? "live", now });
+    meetingWorld, anchorWorld, impactMode: env.impactCardMode ?? "live", now });
   const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now,
     ...(env.feishu ? { feishu: { env: env.feishu, api: minutesApi ?? createFeishuMinutesApi() } } : {}) });
   const unsubscribe = onOutcomeReviewed(pool, (meetingId) => {

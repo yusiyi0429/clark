@@ -4,13 +4,13 @@
  * 落点标签（回流设计稿 2）：写进本体时挂到的对象，「类型 名称」一枚，右侧小点是写入状态（等写 / 已记 / 没对上 / 失败 / 不写）。
  * 样子沿用影响卡的「落到」一排（ImpactFace 的 targets）。
  */
-import { Building2, Layers, ListTodo, Target } from "lucide-react";
+import { Building2, Flag, Layers, ListTodo, Mountain, Target } from "lucide-react";
 import type { TWorldAnchor } from "@warmap/contracts";
 import d from "./meeting-decisions.module.css";
 
 export type AnchorTone = "wait" | "ok" | "miss" | "fail" | "off";
-const ICON = { mission: Target, task: ListTodo, unit: Layers, company: Building2 } as const;
-const KIND = { mission: "Mission", task: "Task", unit: "单元", company: "公司" } as const;
+const ICON = { lto: Mountain, po: Flag, mission: Target, task: ListTodo, unit: Layers, company: Building2 } as const;
+const KIND = { lto: "LTO", po: "PO", mission: "Mission", task: "Task", unit: "单元", company: "公司" } as const;
 
 export function WorldAnchors({ anchors, tone, onRemove }: { anchors: TWorldAnchor[]; tone?: AnchorTone; onRemove?: (anchor: TWorldAnchor) => void }) {
   if (!anchors.length) return null;

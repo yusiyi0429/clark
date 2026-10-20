@@ -62,13 +62,16 @@ export type MeetingRow = {
   /** 会议入本体（100）：不写进本体、改过的挂点、会议事件的状态。 */
   world_excluded: boolean;
   world_excluded_by: string | null;
-  world_anchors: { kind: "mission" | "unit"; id: string }[] | null;
+  world_anchors: StoredWorldAnchor[] | null;
   world_event_status: TMeetingWorldStatus;
   world_event_id: string | null;
   world_event_digest: string | null;
   world_event_anchors: TWorldAnchor[] | null;
   world_event_at: Date | null;
 };
+
+/** 选过的挂点：Mission、单元存天枢 id；LTO、PO 天枢里没有表，连同选时的标题一起存（本体读不到时照样能显示）。 */
+export type StoredWorldAnchor = { kind: "mission" | "unit"; id: string } | { kind: "lto" | "po"; id: string; title: string };
 
 const MEETING_COLUMNS = [
   "id", "version", "title", "status", "scheduled_at", "ends_at", "ended_at", "lead_dri_id", "ceo_participant_id",
