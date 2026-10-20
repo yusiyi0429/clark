@@ -1,46 +1,12 @@
-import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
-import { MeetingCardView, type TMeetingCardView, type TMeetingWorldResponse } from "@warmap/contracts";
-import { createTestApp, preflightCandidate, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
-import type { PostMeetingAgent } from "../src/outcome.js";
-import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
-import { createJobWorker } from "../src/jobs.js";
+import { MeetingCardView, type TMeetingCardView } from "@warmap/contracts";
 import { payloadHash } from "../src/meetingCardHash.js";
-import { hashSecret } from "../src/session.js";
-import { projection, stubWorld, worldEnv } from "./worldFixture.js";
+import { cardAgent, confirm, edit, getCard, HOST, ready, retry, setup, worldOf } from "./meetingCardFixture.js";
+import { projection, stubWorld } from "./worldFixture.js";
 
 // 整卡确认（FR-5.1、5.3、5.5）：主持人或创建人带草稿版本确认 → 冻结一版 → 写一条整场会议事件，正文是 {payload, confirmation} 的 JSON；
 // 修改分更正原记录（correction）和会后新决定（新 meeting 事件指回前次）。
-const PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people-candidate.json", import.meta.url));
-const CEO = TEST_CEO.personId;
-const HOST = TEST_MEMBER.personId;
-const OWNER = "person-fixture-003";
-const OWNER_LOGIN = { loginId: "ceshib", passcode: "3579" };
-const OCCURRED = "2026-06-01T10:02:00+08:00";
-
-const TURNS = [
-  { id: "turn-001", speakerId: CEO, text: "渠道预算这个月先不动，下周再看数据。" },
-  { id: "turn-002", speakerId: HOST, text: "接口统一改成 v2，验收标准改成十月底前 4 家客户上线。" },
-  { id: "turn-003", speakerId: OWNER, text: "好，我月底前把渠道看板接到 v2。" },
-];
-
-function cardAgent(objectChanges = [{ targetRef: "obj-po-1#target/acc-1", after: { text: "十月底前 4 家客户上线" }, basisSections: [1] }]): PostMeetingAgent {
-  return {
-    async generate() {
-      return { candidate: {
-        summary: "接口统一切到 v2，渠道预算下周再定。",
-        sections: [
-          { heading: "接口切换", body: "已定：接口统一改成 v2。", turnIds: ["turn-002", "turn-003"] },
-          { heading: "渠道预算", body: "未定：渠道预算下周看数据再定。", turnIds: ["turn-001"] },
-        ],
-        objectChanges,
-        actionItems: [{ text: "渠道看板接到 v2", ownerPersonId: OWNER, dueDate: "2026-06-30", basisSections: [1] }],
-      } };
-    },
-  };
-}
-const preflightAgent: PreflightAgent = { async generate(input: PreflightAgentInput) { return { candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)) }; } };
 
 type Written = { eventId: string; body: any };
 /**
@@ -66,6 +32,8 @@ function ontology({ network = () => false, beforeCommit, readable = () => true, 
     const path = call.url.pathname;
     if (path === "/v1/actions/prepare") return { expected_versions: [] };
     if (path === "/v1/actions") {
+      // 对象修改照收不改（读回对不上记失败），只看会议事件。
+      if (call.body.action_type !== "world_record_event") return { receipt_id: `r-${call.body.idempotency_key}`, status: "committed", result: {} };
       await beforeCommit?.();
       if (network()) throw new TypeError("fetch failed");
       const event = recorded.find((item) => item.body.idempotency_key === call.body.idempotency_key)
@@ -80,59 +48,11 @@ function ontology({ network = () => false, beforeCommit, readable = () => true, 
     if (path === `/v1/world/objects/${po.object_id}`) return projection(po);
     return { items: [], next_cursor: null };
   });
-  const writes = () => calls.filter((call) => call.url.pathname === "/v1/actions").map((call) => call.body);
+  // 会议事件的提交（对象修改另见 meetingObjectSync.test.ts）。
+  const writes = () => calls.filter((call) => call.url.pathname === "/v1/actions" && call.body.action_type === "world_record_event").map((call) => call.body);
   return { po, calls, writes };
 }
 
-async function setup(agent: PostMeetingAgent = cardAgent()) {
-  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, ...worldEnv }, undefined, { preflightAgent, outcomeAgent: agent });
-  const ceo = await t.loginCookie();
-  const issueCard = await t.createIssue();
-  const create = ((issueCard as unknown as { actions: { actionType: string; actionId: string }[] }).actions).find((a) => a.actionType === "issue.create_meeting")!;
-  const created = await t.app.inject({ method: "POST", url: "/api/actions/execute", headers: { cookie: ceo, origin: t.publicOrigin }, payload: {
-    actionId: create.actionId,
-    input: { title: "接口切换会", scheduledAt: "2026-06-01T10:00:00.000+08:00", leadDriId: HOST, ceoParticipantId: CEO, participants: [HOST, OWNER], issueIds: [issueCard.objectRef.id] },
-  } });
-  const meetingId = created.json().cards[0].objectRef.id as string;
-  await t.pool.query("UPDATE meetings SET world_anchors = $2::jsonb WHERE id = $1", [meetingId, JSON.stringify([{ kind: "po", id: "obj-po-1", title: "十月交付" }])]);
-  await t.pool.query("INSERT INTO member_access (person_id, login_id, passcode_hash, must_change) VALUES ($1, $2, $3, FALSE) ON CONFLICT (person_id) DO NOTHING",
-    [OWNER, OWNER_LOGIN.loginId, hashSecret(OWNER_LOGIN.passcode)]);
-  const ownerLogin = await t.app.inject({ method: "POST", url: "/api/auth/login", headers: { origin: t.publicOrigin }, payload: OWNER_LOGIN });
-  const owner = String(ownerLogin.headers["set-cookie"]).split(";")[0];
-  const imported = await t.app.inject({ method: "POST", url: `/api/dri/meetings/${meetingId}/transcript`, headers: { authorization: `Bearer ${t.env.driServiceToken}` },
-    payload: { schemaVersion: "warmap-transcript.v1", meetingId, turns: TURNS } });
-  expect(imported.statusCode).toBe(200);
-  const host = await t.memberCookie();
-  const worker = createJobWorker({ pool: t.pool, handlers: t.app.meetingFollowThrough.jobs().handlers });
-  const run = async () => { while (await worker.tick() > 0); };
-  return { t, ceo, host, owner, meetingId, run };
-}
-
-const getCard = async (t: TestApp, cookie: string, meetingId: string): Promise<TMeetingCardView> => {
-  const res = await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/card`, headers: { cookie } });
-  expect(res.statusCode).toBe(200);
-  return res.json();
-};
-const putDraft = (t: TestApp, cookie: string, meetingId: string, payload: unknown) =>
-  t.app.inject({ method: "PUT", url: `/api/meetings/${meetingId}/card/draft`, headers: { cookie, origin: t.publicOrigin }, payload });
-const confirm = (t: TestApp, cookie: string, meetingId: string, payload: Record<string, unknown>) =>
-  t.app.inject({ method: "POST", url: `/api/meetings/${meetingId}/card/confirm`, headers: { cookie, origin: t.publicOrigin }, payload });
-const retry = (t: TestApp, cookie: string, meetingId: string) =>
-  t.app.inject({ method: "POST", url: `/api/meetings/${meetingId}/card/retry`, headers: { cookie, origin: t.publicOrigin } });
-const worldOf = async (t: TestApp, cookie: string, meetingId: string): Promise<TMeetingWorldResponse> =>
-  (await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/world`, headers: { cookie } })).json();
-
-/** 改草稿（edit 改一份拷贝），返回保存后的视图。 */
-async function edit(t: TestApp, cookie: string, meetingId: string, change: (draft: NonNullable<TMeetingCardView["draft"]>) => void): Promise<TMeetingCardView> {
-  const view = await getCard(t, cookie, meetingId);
-  const draft = structuredClone(view.draft!);
-  change(draft);
-  const res = await putDraft(t, cookie, meetingId, { draftVersion: view.draftVersion, draft, actionItems: view.actionItems });
-  expect(res.statusCode).toBe(200);
-  return res.json();
-}
-/** 填上实际开始（服务导入的逐字稿没有），返回可确认的草稿版本。 */
-const ready = async (t: TestApp, host: string, meetingId: string) => (await edit(t, host, meetingId, (draft) => { draft.occurredAt = OCCURRED; })).draftVersion;
 const parsed = (body: any) => JSON.parse(body.params.content.text) as { payload: any; confirmation: any };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -153,7 +73,8 @@ describe("整卡确认与会议事件", () => {
       expect(view.confirmed).toMatchObject({ kind: "first", confirmation: { revision: 1, confirmedBy: HOST }, payload: { revision: 1, relatedObjectRefs: ["obj-po-1@5"] } });
       expect(view.confirmed!.confirmation.payloadHash).toBe(payloadHash(view.confirmed!.payload));
       expect(view.confirmed!.payload.objectChanges[0]).not.toHaveProperty("stale");
-      expect(view.sync).toMatchObject({ revision: 1, writeToWorld: true, event: { status: "pending", eventId: null }, objects: [] });
+      expect(view.sync).toMatchObject({ revision: 1, writeToWorld: true, event: { status: "pending", eventId: null },
+        objects: [{ changeId: "chg-1", title: "十月交付 · acceptance_criterion", status: "pending", actualVersion: null, error: null }] });
       // 第一次确认：会议算处理完。
       expect((await t.sql("SELECT status FROM meetings WHERE id = $1", [meetingId]))[0].status).toBe("reviewed");
       // 行动项快照留在确认表，不进 payload。

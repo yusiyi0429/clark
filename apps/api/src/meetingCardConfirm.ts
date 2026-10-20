@@ -5,9 +5,10 @@ import type {
   TMeetingActionItem, TMeetingCardConfirmation, TMeetingCardConfirmRequest, TMeetingCardDraft, TMeetingCardKind, TMeetingCardSync, TMeetingCardV1Payload,
   TMeetingCardView, TMeetingObjectResult, TMeetingRecordStatus,
 } from "@warmap/contracts";
-import { enqueueJob, type JobHandler } from "./jobs.js";
+import { enqueueJob, JOB_MAX_ATTEMPTS, type JobHandler } from "./jobs.js";
 import { payloadHash } from "./meetingCardHash.js";
 import { getMeetingRow, UUID_PATTERN, type MeetingRow, type Query } from "./meetingStore.js";
+import { initialObjectResults, supersedeObjects, type MeetingObjectSync } from "./meetingObjectSync.js";
 import { logEvent } from "./observability.js";
 import { WorldError, worldRef, type WorldClient } from "./worldClient.js";
 import type { MeetingEventWorld } from "./worldMeetingEvent.js";
@@ -22,6 +23,7 @@ import type { MeetingEventWorld } from "./worldMeetingEvent.js";
  * - 写本体按 revision 串行（jobs worker 逐条执行）：一直写最早一版待写的，前次写成的那条在写的时候现找（写入中又确认了新版，新版指回刚写成的那条）。
  *   NETWORK_ERROR 抛出交给 jobs 按原幂等键重放，其他错误记 failed 和原因（拍板 8：不设正文上限，本体回超长就如实记下）。
  * - 选了不写入：回执 skipped，不发请求；已经写进去的不撤回。
+ * - 对象修改（meetingObjectSync）：确认时排好每条的回执，新版确认后旧版还没提交的作废；事件写成后同一任务里接着按顺序提交这一版的修改。
  */
 export const MEETING_WORLD_SYNC_KIND = "meeting.world_sync";
 
@@ -90,6 +92,8 @@ export type MeetingCardConfirmDeps = {
   world?: Pick<WorldClient, "getHead">;
   /** 会议事件：本体可写时才有。 */
   meetingWorld?: MeetingEventWorld;
+  /** 对象修改：本体可写时才有。 */
+  objectSync?: MeetingObjectSync;
   /** 确认人的显示名（会议成员里没有的人从人员目录取），只用在写入的 reason 里。 */
   names?: () => Map<string, string>;
   /** 最新的会议卡视图（会议卡服务的 view）。 */
@@ -205,8 +209,9 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
          VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10)`,
         [meetingId, revision, input.draftVersion, kind, reason, JSON.stringify(payload), JSON.stringify(confirmation), JSON.stringify(locked.action_items), input.writeToWorld, at],
       );
-      await cq("INSERT INTO meeting_card_syncs (meeting_id, revision, event_status, updated_at) VALUES ($1, $2, $3, $4)",
-        [meetingId, revision, input.writeToWorld ? "pending" : "skipped", at]);
+      await cq("INSERT INTO meeting_card_syncs (meeting_id, revision, event_status, objects, updated_at) VALUES ($1, $2, $3, $4::jsonb, $5)",
+        [meetingId, revision, input.writeToWorld ? "pending" : "skipped", JSON.stringify(initialObjectResults(objectChanges, input.writeToWorld)), at]);
+      await supersedeObjects(cq, meetingId, revision);
       // 确认后草稿的 stale 清掉（差异已经看过、确认过）；草稿版本不变，同一草稿再确认还认得出来。
       await cq(`UPDATE meeting_cards SET current_revision = $2, draft = jsonb_set(draft, '{objectChanges}', $3::jsonb), updated_at = now() WHERE meeting_id = $1`,
         [meetingId, revision, JSON.stringify(draft.objectChanges.map((change) => ({ ...change, stale: false })))]);
@@ -243,8 +248,8 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
       if (conflict) return conflict;
       await cq(`UPDATE meeting_card_confirmations SET write_to_world = TRUE, payload = $3::jsonb, confirmation = $4::jsonb
         WHERE meeting_id = $1 AND revision = $2 AND write_to_world = FALSE`, [meetingId, current.revision, JSON.stringify(payload), JSON.stringify(confirmation)]);
-      await cq("UPDATE meeting_card_syncs SET event_status = 'pending', updated_at = now() WHERE meeting_id = $1 AND revision = $2 AND event_status = 'skipped'",
-        [meetingId, current.revision]);
+      await cq(`UPDATE meeting_card_syncs SET event_status = 'pending', objects = $3::jsonb, updated_at = now()
+        WHERE meeting_id = $1 AND revision = $2 AND event_status = 'skipped'`, [meetingId, current.revision, JSON.stringify(initialObjectResults(payload.objectChanges, true))]);
       await queueSync(cq, meetingId);
       return "done";
     });
@@ -279,19 +284,27 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     return { view: await latestView(meetingId, viewer) };
   }
 
-  /** 这场会的本体同步（jobs worker 逐条执行）：按 revision 从早到晚写待写的版本，前次写成的那条在写的时候现找。 */
-  async function syncWorld(meetingId: string): Promise<void> {
+  /**
+   * 这场会的本体同步（jobs worker 逐条执行）：按 revision 从早到晚，先写待写的事件（前次写成的那条在写的时候现找），
+   * 事件写成的接着提交这一版还没提交的对象修改。lastAttempt：任务最后一次重跑，对象修改的网络错误也记失败。
+   */
+  async function syncWorld(meetingId: string, lastAttempt = false): Promise<void> {
     const world = deps.meetingWorld;
     if (!world || !UUID_PATTERN.test(meetingId)) return;
     for (;;) {
       const row = (await q(
-        `SELECT c.revision, c.kind, c.payload, c.confirmation, m.participants FROM meeting_card_syncs s
+        `SELECT c.revision, c.kind, c.payload, c.confirmation, m.participants, s.event_status, s.objects FROM meeting_card_syncs s
            JOIN meeting_card_confirmations c ON c.meeting_id = s.meeting_id AND c.revision = s.revision
            JOIN meetings m ON m.id = s.meeting_id
-          WHERE s.meeting_id = $1 AND s.event_status = 'pending' ORDER BY s.revision LIMIT 1`,
-        [meetingId],
-      )).rows[0] as (Pick<ConfirmationRow, "revision" | "kind" | "payload" | "confirmation"> & Pick<MeetingRow, "participants">) | undefined;
+          WHERE s.meeting_id = $1 AND (s.event_status = 'pending' OR ($2 AND s.event_status = 'succeeded' AND s.objects @> '[{"status":"pending"}]'::jsonb))
+          ORDER BY s.revision LIMIT 1`,
+        [meetingId, Boolean(deps.objectSync)],
+      )).rows[0] as (Pick<ConfirmationRow, "revision" | "kind" | "payload" | "confirmation" | "event_status" | "objects"> & Pick<MeetingRow, "participants">) | undefined;
       if (!row) return;
+      if (row.event_status === "succeeded") {
+        await deps.objectSync!.run(meetingId, row.revision, row.payload.objectChanges, row.objects, lastAttempt);
+        continue;
+      }
       const previous = (await q(
         `SELECT revision, event_id, event_subject_refs, event_occurred_at FROM meeting_card_syncs
           WHERE meeting_id = $1 AND revision < $2 AND event_status = 'succeeded' ORDER BY revision DESC LIMIT 1`,
@@ -326,5 +339,5 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
 export type MeetingCardConfirmService = ReturnType<typeof createMeetingCardConfirmService>;
 
 export function meetingCardConfirmJobs(service: MeetingCardConfirmService): Record<string, JobHandler> {
-  return { [MEETING_WORLD_SYNC_KIND]: (payload) => service.syncWorld(String((payload as { meetingId?: unknown }).meetingId)) };
+  return { [MEETING_WORLD_SYNC_KIND]: (payload, job) => service.syncWorld(String((payload as { meetingId?: unknown }).meetingId), job.attempts >= JOB_MAX_ATTEMPTS) };
 }

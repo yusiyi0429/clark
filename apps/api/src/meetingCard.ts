@@ -255,13 +255,17 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     return changed ? next : null;
   }
 
-  async function buildView(meetingId: string, canEdit: boolean): Promise<TMeetingCardView> {
+  /**
+   * 草稿里目标对象版本变了的修改按对象当前值刷新（读卡时；写对象修改遇到冲突时也调）。withAnchors 时连挂点对象一起读（给候选目标）。
+   * 返回最新的卡行、刷新前的草稿和读到的对象。
+   */
+  async function refreshDraft(meetingId: string, withAnchors = false) {
     let row = await cardRow(meetingId);
-    let targetOptions: TMeetingCardTargetOption[] = [];
-    if (row?.draft) {
-      const draft = row.draft;
+    const draft = row?.draft ?? null;
+    let objects = new Map<string, ObjectRead>();
+    if (row && draft) {
       const targetIds = draft.objectChanges.flatMap((change) => (change.targetRef ? [splitTarget(change.targetRef)?.objectId ?? ""] : [])).filter(Boolean);
-      const objects = await readObjects(deps.world, [...(canEdit ? draft.relatedObjectRefs : []), ...targetIds]);
+      objects = await readObjects(deps.world, [...(withAnchors ? draft.relatedObjectRefs : []), ...targetIds]);
       const changes = refreshed(draft.objectChanges, objects);
       if (changes) {
         const updated = await q(
@@ -272,8 +276,13 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
         // 别人刚好也改了：读最新的，不再刷新。
         row = (updated.rows[0] as CardRow | undefined) ?? await cardRow(meetingId);
       }
-      if (canEdit) targetOptions = targetOptionsOf(draft.relatedObjectRefs, objects);
     }
+    return { row, draft, objects };
+  }
+
+  async function buildView(meetingId: string, canEdit: boolean): Promise<TMeetingCardView> {
+    const { row, draft, objects } = await refreshDraft(meetingId, canEdit);
+    const targetOptions: TMeetingCardTargetOption[] = draft && canEdit ? targetOptionsOf(draft.relatedObjectRefs, objects) : [];
     return {
       draft: row?.draft ?? null, draftVersion: row?.draft_version ?? 0, draftStatus: row?.draft_status ?? "created", actionItems: row?.action_items ?? [],
       ...confirmedView(row ? await currentConfirmation(q, meetingId) : null), targetOptions, canEdit,
@@ -392,7 +401,7 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
       WHERE meeting_id = $1 AND draft IS NOT NULL`, [meetingId, JSON.stringify(refs)]);
   }
 
-  return { view, saveDraft, anchorsChanged };
+  return { view, saveDraft, anchorsChanged, refreshDraft: async (meetingId: string) => { await refreshDraft(meetingId); } };
 }
 
 export type MeetingCardService = ReturnType<typeof createMeetingCardService>;

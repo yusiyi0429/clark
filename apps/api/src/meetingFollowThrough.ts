@@ -12,6 +12,7 @@ import { createDecisionLayeringAgent, type DecisionLayeringAgent } from "./meeti
 import { createMeetingDecisionService, enqueueDecisionSync, meetingDecisionJobs, type MeetingDecisionService } from "./meetingDecisions.js";
 import { createMeetingCardService, registerMeetingCardDeps, type MeetingCardService } from "./meetingCard.js";
 import { createMeetingCardConfirmService, meetingCardConfirmJobs, type MeetingCardConfirmService } from "./meetingCardConfirm.js";
+import { createMeetingObjectSync } from "./meetingObjectSync.js";
 import { createMeetingMinutesService, meetingMinutesJobs, type MeetingMinutesService } from "./meetingMinutes.js";
 import { onOutcomeReviewed, setOutcomeContextProvider, type PostMeetingAgent } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
@@ -83,7 +84,8 @@ export function createMeetingFollowThrough({ pool, env, peopleDirectory, world, 
   const cardDeps = { world: anchorWorld, publicOrigin: env.publicOrigin, names: () => personDisplayNames(peopleDirectory) };
   registerMeetingCardDeps(pool, cardDeps);
   const cards = createMeetingCardService(pool, cardDeps);
-  const cardConfirm = createMeetingCardConfirmService({ pool, world: anchorWorld, meetingWorld, names: cardDeps.names, view: cards.view, now });
+  const objectSync = worldClient ? createMeetingObjectSync({ q, world: worldClient, refreshDraft: cards.refreshDraft }) : undefined;
+  const cardConfirm = createMeetingCardConfirmService({ pool, world: anchorWorld, meetingWorld, objectSync, names: cardDeps.names, view: cards.view, now });
   const decisions = createMeetingDecisionService({ pool, peopleDirectory, layering: layeringAgent, impact: impactAgent, context, notify,
     anchorWorld, impactMode: env.impactCardMode ?? "live", now, onAnchorsChanged: cards.anchorsChanged });
   const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now, feishuWebOrigin: env.feishuWebOrigin,
