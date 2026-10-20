@@ -267,10 +267,9 @@ export async function bookMeeting(
     if (!option) return { error: { status: 400, code: "ANCHOR_NOT_FOUND", message: "挂点只能是 LTO、本月 PO、本月 Mission 或责任单元", fieldErrors: { anchors: "unknown anchor" } } };
     anchors.push(storedAnchor(option));
   }
-  const excludedBy = input.worldExcluded ? resolved.participants.find((person) => person.personId === viewer.personId)?.displayName ?? null : null;
   return insertScheduledMeeting(deps.pool, deps.peopleDirectory, deps.preflightAgent, deps.secret, {
     title: input.title, scheduledAt, endsAt, resolved, issueIds: [], originRef: { type: "booking" },
-    world: { anchors, excluded: input.worldExcluded, excludedBy },
+    worldAnchors: anchors,
   }, deps.introAgent);
 }
 
@@ -282,7 +281,7 @@ async function insertScheduledMeeting(
   secret: string,
   input: {
     title: string; scheduledAt: Date; endsAt: Date; resolved: ResolvedParticipants; issueIds: string[]; originRef: Record<string, unknown>;
-    world?: { anchors: StoredWorldAnchor[]; excluded: boolean; excludedBy: string | null };
+    worldAnchors?: StoredWorldAnchor[];
   },
   introAgent?: ThreadIntroAgent,
   materials?: { items: ParsedMaterial[]; storageDir: string },
@@ -292,8 +291,8 @@ async function insertScheduledMeeting(
     `INSERT INTO meetings
        (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
         participants, issue_ids, preflight, draft, origin_ref, action_fingerprints, ends_at,
-        world_anchors, world_excluded, world_excluded_by)
-     VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb, $11, $12::jsonb, $13, $14)
+        world_anchors)
+     VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb, $11, $12::jsonb)
      RETURNING ${meetingColumns()}`,
     [
       randomUUID(),
@@ -307,9 +306,7 @@ async function insertScheduledMeeting(
       JSON.stringify(emptyDraft()),
       JSON.stringify(input.originRef),
       input.endsAt,
-      input.world ? JSON.stringify(input.world.anchors) : null,
-      input.world?.excluded ?? false,
-      input.world?.excludedBy ?? null,
+      input.worldAnchors ? JSON.stringify(input.worldAnchors) : null,
     ],
   );
   const created = inserted.rows[0];

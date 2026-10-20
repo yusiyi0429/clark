@@ -548,7 +548,7 @@ export const CreateMeetingRequest = Type.Object(
 );
 
 /**
- * 预约建会（POST /api/meetings）：带起止、挂点（1..10）、是否不写进本体。
+ * 预约建会（POST /api/meetings）：带起止、挂点（1..10）；只存天枢，不写本体。
  * 成员只能给自己建（leadDriId 缺省或等于本人）；CEO 必须从 DRI 里指定主持人。
  */
 export const MeetingBookingRequest = Type.Object(
@@ -559,7 +559,6 @@ export const MeetingBookingRequest = Type.Object(
     leadDriId: Type.Optional(PersonId),
     participants: Type.Optional(Type.Array(PersonId, { maxItems: 50 })),
     anchors: Type.Array(PickedWorldAnchor, { minItems: 1, maxItems: 10 }),
-    worldExcluded: Type.Boolean(),
   },
   { additionalProperties: false },
 );

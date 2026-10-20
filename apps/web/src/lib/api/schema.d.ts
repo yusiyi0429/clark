@@ -6633,7 +6633,6 @@ export interface components {
                 kind: "lto" | "po" | "mission" | "unit";
                 id: string;
             }[];
-            worldExcluded: boolean;
         };
         JoinMeetingRequest: {
             meetingId: string;

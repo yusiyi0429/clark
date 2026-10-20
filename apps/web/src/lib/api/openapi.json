@@ -34529,8 +34529,7 @@
           "title",
           "scheduledAt",
           "endsAt",
-          "anchors",
-          "worldExcluded"
+          "anchors"
         ],
         "properties": {
           "title": {
@@ -34601,9 +34600,6 @@
                 }
               }
             }
-          },
-          "worldExcluded": {
-            "type": "boolean"
           }
         }
       },

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestApp, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
+import { createJobWorker } from "../src/jobs.js";
 import { stubWorld, worldEnv } from "./worldFixture.js";
 
-// 预约建会：带挂点、起止、不写进本体；主持人（成员）也能给自己建会。挂点选项含本体里的本月 PO 和 LTO。
+// 预约建会：带挂点、起止，只存天枢不写本体；主持人（成员）也能给自己建会。挂点选项含本体里的本月 PO 和 LTO。
 const START = "2026-10-22T10:00:00.000+08:00";
 const END = "2026-10-22T11:30:00.000+08:00";
 const MISSION = "m-booking";
@@ -32,12 +33,12 @@ async function seed(t: TestApp) {
 const book = (t: TestApp, cookie: string, payload: Record<string, unknown>) =>
   t.app.inject({ method: "POST", url: "/api/meetings", headers: { cookie, origin: t.publicOrigin }, payload });
 const body = (extra: Record<string, unknown> = {}) =>
-  ({ title: "预约的会", scheduledAt: START, endsAt: END, anchors: [{ kind: "mission", id: MISSION }], worldExcluded: false, ...extra });
+  ({ title: "预约的会", scheduledAt: START, endsAt: END, anchors: [{ kind: "mission", id: MISSION }], ...extra });
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("预约建会", () => {
-  it("主持人自己建会，挂点和开关都存下", async () => {
+  it("主持人自己建会，挂点和起止都存下", async () => {
     const t = await createTestApp();
     try {
       await seed(t);
@@ -45,17 +46,26 @@ describe("预约建会", () => {
       const created = await book(t, member, body());
       expect(created.statusCode).toBe(200);
       const meetingId = created.json().card.objectRef.id as string;
-      const [row] = await t.sql("SELECT lead_dri_id, world_anchors, world_excluded, world_excluded_by, ends_at FROM meetings WHERE id = $1", [meetingId]);
+      const [row] = await t.sql("SELECT lead_dri_id, world_anchors, scheduled_at, ends_at FROM meetings WHERE id = $1", [meetingId]);
       expect(row.lead_dri_id).toBe(TEST_MEMBER.personId);
       expect(row.world_anchors).toEqual([{ kind: "mission", id: MISSION }]);
-      expect(row.world_excluded).toBe(false);
-      expect(row.world_excluded_by).toBeNull();
+      expect((row.scheduled_at as Date).toISOString()).toBe(new Date(START).toISOString());
       expect((row.ends_at as Date).toISOString()).toBe(new Date(END).toISOString());
+    } finally {
+      await t.close();
+    }
+  });
 
-      const excluded = await book(t, member, body({ worldExcluded: true, anchors: [{ kind: "unit", id: "unit-booking" }] }));
-      expect(excluded.statusCode).toBe(200);
-      const [off] = await t.sql("SELECT world_anchors, world_excluded, world_excluded_by FROM meetings WHERE id = $1", [excluded.json().card.objectRef.id]);
-      expect(off).toEqual({ world_anchors: [{ kind: "unit", id: "unit-booking" }], world_excluded: true, world_excluded_by: "测试乙" });
+  it("建会不写本体", async () => {
+    const calls = ontology();
+    const t = await createTestApp(worldEnv);
+    try {
+      await seed(t);
+      const created = await book(t, await t.memberCookie(), body({ anchors: [{ kind: "po", id: PO.object_id }, { kind: "mission", id: MISSION }] }));
+      expect(created.statusCode).toBe(200);
+      const worker = createJobWorker({ pool: t.pool, handlers: t.app.meetingFollowThrough.jobs().handlers });
+      while (await worker.tick() > 0);
+      expect(calls.filter((call) => call.url.pathname.startsWith("/v1/actions"))).toEqual([]);
     } finally {
       await t.close();
     }
