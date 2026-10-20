@@ -17,7 +17,7 @@ import { meetingAnchorGroups } from "./meetingWorld.js";
 import { logEvent } from "./observability.js";
 import { capturedAtOf, meetingTranscriptUrl, transcriptContentHash } from "./transcriptHash.js";
 import type { WorldClient } from "./worldClient.js";
-import { actualStart, anchorHead, type AnchorHeadClient } from "./worldMeetingEvent.js";
+import { anchorHead, recordedStart, type AnchorHeadClient } from "./worldMeetingEvent.js";
 
 /**
  * 会议卡草稿（FR-4.3–4.5）：逐字稿确认后生成一张统一会议卡草稿，取代会后逐条抽取。
@@ -200,7 +200,7 @@ export function buildCardDraft(pool: Pool, prepared: CardGeneration, candidate: 
   }));
   return {
     draft: {
-      schemaVersion: "meeting-card.v1", meetingId: meeting.id, title: meeting.title, occurredAt: actualStart(meeting).toISOString(),
+      schemaVersion: "meeting-card.v1", meetingId: meeting.id, title: meeting.title, occurredAt: recordedStart(meeting)?.toISOString() ?? null,
       participants: participantsOf(meeting, deps), relatedObjectRefs: prepared.relatedObjectRefs, summary: value.summary, sections,
       sources: [sourceOf(meeting, deps.publicOrigin ?? "")], objectChanges,
     },
@@ -208,8 +208,12 @@ export function buildCardDraft(pool: Pool, prepared: CardGeneration, candidate: 
   };
 }
 
-/** 存下生成的草稿（和会后整理的 ready 同一事务）：第一次 draft_version 为 1，重新生成在原版本上加一。 */
+/**
+ * 存下生成的草稿（和会后整理的 ready 同一事务）：第一次 draft_version 为 1，重新生成在原版本上加一。
+ * 旧格式会议换了逐字稿、重新整理成会议卡时，还没人处理的逐条决定（主持人条目、战略项）一并删掉，免得继续提醒、代判、往下推；处理过的留着。
+ */
 export async function saveGeneratedCard(client: PoolClient, meetingId: string, built: { draft: TMeetingCardDraft; actionItems: TMeetingActionItem[] }): Promise<void> {
+  await client.query("DELETE FROM meeting_decisions WHERE meeting_id = $1 AND status = 'pending'", [meetingId]);
   await client.query(
     `INSERT INTO meeting_cards (meeting_id, draft, action_items, draft_version, draft_status) VALUES ($1, $2::jsonb, $3::jsonb, 1, 'draft_ready')
      ON CONFLICT (meeting_id) DO UPDATE SET draft = EXCLUDED.draft, action_items = EXCLUDED.action_items,
@@ -335,7 +339,9 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
           fieldErrors[`objectChanges[${i}].targetRef`] = "目标只能从挂点对象的文字组件里选";
         }
       }
-      return { id: change.id, ...target, after: { text: change.after.text }, basisSectionIds: change.basisSectionIds, stale: keep ? before.stale : false };
+      // 同一目标、对象版本这次读到的和草稿里的不同：差异已按新版本重读，标 stale 让主持人重看（保存不能悄悄把基准挪到新版本）。
+      const stale = keep ? before.stale || target.expectedVersion !== before.expectedVersion : false;
+      return { id: change.id, ...target, after: { text: change.after.text }, basisSectionIds: change.basisSectionIds, stale };
     });
     const members = memberIds(found.meeting);
     const existingItems = new Map(row.action_items.map((item) => [item.id, item]));
@@ -368,10 +374,11 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     return { view: await buildView(meetingId, true) };
   }
 
-  /** 改挂点后：草稿的挂点对象跟着改，草稿版本加一（还没有草稿就不动；本体读不到就不改）。 */
+  /** 挂点改了以后：草稿的挂点对象跟着改，草稿版本加一（还没有草稿、挂点对象没变、本体读不到都不动）。 */
   async function anchorsChanged(meetingId: string): Promise<void> {
     const meeting = await getMeetingRow(q, meetingId);
-    if (!meeting || !(await cardRow(meetingId))?.draft) return;
+    const draft = meeting ? (await cardRow(meetingId))?.draft : null;
+    if (!meeting || !draft) return;
     let refs: string[];
     try {
       refs = await relatedObjectRefsOf(q, deps.world, meeting);
@@ -379,6 +386,7 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
       logEvent({ event: "meeting_card.world_read", objectRef: `meeting:${meetingId}`, status: "failed", errorCode: (error as { code?: string }).code ?? "WORLD_READ_FAILED" });
       return;
     }
+    if (refs.length === draft.relatedObjectRefs.length && refs.every((ref, index) => ref === draft.relatedObjectRefs[index])) return;
     await q(`UPDATE meeting_cards SET draft = jsonb_set(draft, '{relatedObjectRefs}', $2::jsonb), draft_version = draft_version + 1, updated_at = now()
       WHERE meeting_id = $1 AND draft IS NOT NULL`, [meetingId, JSON.stringify(refs)]);
   }

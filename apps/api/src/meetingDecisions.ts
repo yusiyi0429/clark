@@ -49,7 +49,7 @@ export type MeetingDecisionDeps = {
   meetingWorld?: MeetingEventWorld;
   /** 挂点选项里的 LTO、本月 PO 从这里读；没有时选项只有 Mission 和单元。 */
   anchorWorld?: AnchorWorld;
-  /** 改挂点之后（会议卡草稿的挂点对象跟着改）。 */
+  /** 挂点改了以后（会议卡草稿的挂点对象跟着改）。 */
   onAnchorsChanged?: (meetingId: string) => Promise<void>;
   /** live：影响卡推送；shadow：只在后台记录。缺省 live（低置信度的卡一律影子）。 */
   impactMode?: "live" | "shadow";
@@ -537,7 +537,7 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
     const changed = !isDeepStrictEqual(meeting.world_anchors, chosen);
     await q("UPDATE meetings SET world_anchors = $2::jsonb, record_edit_pending = record_edit_pending OR ($3 AND record_confirmed_at IS NOT NULL) WHERE id = $1",
       [meetingId, chosen ? JSON.stringify(chosen) : null, changed]);
-    await deps.onAnchorsChanged?.(meetingId);
+    if (changed) await deps.onAnchorsChanged?.(meetingId);
     return worldView(meetingId, viewerId);
   }
 

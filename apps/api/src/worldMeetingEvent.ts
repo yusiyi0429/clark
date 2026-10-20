@@ -54,11 +54,16 @@ const PART_LABEL: [keyof MeetingRecord | "time", string][] = [
 const shanghai = (at: Date) => new Date(at.getTime() + 8 * 3_600_000).toISOString().replace(/\.\d{3}Z$/, "+08:00");
 const minute = (at: Date) => shanghai(at).slice(0, 16).replace("T", " ");
 
-/** 实际开始：逐字稿来自飞书妙记或录音时，它记下的开始时刻是实际开会时刻（transcriptCandidate 同一规则）。 */
-export function actualStart(meeting: Pick<MeetingRow, "transcript" | "scheduled_at">): Date {
+/** 逐字稿记下的实际开始：来自飞书妙记或录音时，它记下的开始时刻是实际开会时刻（transcriptCandidate 同一规则）；没有为 null。 */
+export function recordedStart(meeting: Pick<MeetingRow, "transcript">): Date | null {
   const source = meeting.transcript?.source;
   const absolute = source && (source.format === "feishu_minutes" || source.format === "volc_asr") && source.timeAnchor;
-  return absolute ? new Date(absolute) : new Date(meeting.scheduled_at);
+  return absolute ? new Date(absolute) : null;
+}
+
+/** 实际开始：逐字稿记下的开始时刻，没有就是计划开始。 */
+export function actualStart(meeting: Pick<MeetingRow, "transcript" | "scheduled_at">): Date {
+  return recordedStart(meeting) ?? new Date(meeting.scheduled_at);
 }
 
 /** 这场会现在的记录（只读天枢）：整卡确认时存下，写入时照它写。 */

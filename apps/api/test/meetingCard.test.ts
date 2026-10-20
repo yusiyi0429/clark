@@ -6,6 +6,7 @@ import { createTestApp, preflightCandidate, TEST_CEO, TEST_MEMBER, type TestApp 
 import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import { createJobWorker } from "../src/jobs.js";
+import { buildCardDraft, prepareCardGeneration } from "../src/meetingCard.js";
 import { hashSecret } from "../src/session.js";
 import { projection, stubWorld, worldEnv } from "./worldFixture.js";
 
@@ -113,7 +114,8 @@ describe("会议卡草稿", () => {
       expect(Value.Check(MeetingCardView, view)).toBe(true);
       expect(view).toMatchObject({ draftVersion: 1, draftStatus: "draft_ready", canEdit: true, confirmed: null, sync: null });
       const draft = view.draft!;
-      expect(draft).toMatchObject({ schemaVersion: "meeting-card.v1", meetingId, title: "接口切换会", occurredAt: "2026-06-01T02:00:00.000Z",
+      // 服务导入的逐字稿没有记下实际开始：occurredAt 为 null，不拿预约时间顶。
+      expect(draft).toMatchObject({ schemaVersion: "meeting-card.v1", meetingId, title: "接口切换会", occurredAt: null,
         summary: "接口统一切到 v2，渠道预算下周再定。", relatedObjectRefs: ["obj-po-1"] });
       expect(draft.sections.map((section) => section.id)).toEqual(["sec-1", "sec-2"]);
       expect(draft.sections.map((section) => section.sourceRefs)).toEqual([
@@ -150,6 +152,21 @@ describe("会议卡草稿", () => {
     }
   });
 
+  it("实际开始取飞书妙记或录音记下的开始时刻", async () => {
+    ontology();
+    const { agent } = cardAgent();
+    const { t, meetingId } = await setup(agent);
+    try {
+      await t.pool.query("UPDATE meetings SET transcript = jsonb_set(transcript, '{source}', $2::jsonb) WHERE id = $1", [meetingId, JSON.stringify({
+        format: "feishu_minutes", fileName: "minutes.txt", sizeBytes: 10, sha256: "x", parserVersion: "1", timeAnchor: "2026-06-01T10:02:10+08:00" })]);
+      const { candidate } = await agent.generate({} as PostMeetingAgentInput);
+      const built = buildCardDraft(t.pool, await prepareCardGeneration(t.pool, meetingId), candidate);
+      expect(built!.draft.occurredAt).toBe("2026-06-01T02:02:10.000Z");
+    } finally {
+      await t.close();
+    }
+  });
+
   it("目标不在候选里就是未定", async () => {
     ontology();
     const { t, host, meetingId } = await setup(cardAgent("obj-other#target/x").agent);
@@ -161,8 +178,8 @@ describe("会议卡草稿", () => {
     }
   });
 
-  it("存草稿：整份替换、版本加一，服务重读 before 和版本、忽略前端传的 stale 和 taskId；旧版本 409 带最新视图", async () => {
-    ontology();
+  it("存草稿：整份替换、版本加一，服务重读 before 和版本、忽略前端传的 stale 和 taskId；目标保存前变了标 stale；旧版本 409 带最新视图", async () => {
+    const world = ontology();
     const { t, host, meetingId } = await setup(cardAgent().agent);
     try {
       const view = await viewOf(t, host, meetingId);
@@ -179,10 +196,18 @@ describe("会议卡草稿", () => {
         stale: false, basisSectionIds: ["sec-3"] });
       expect(next.actionItems[0]).toMatchObject({ text: "看板接到 v2", taskId: null });
 
+      // 主持人看的还是 v5 的差异，对象这时被改成 v6：保存按新版本重读原内容，并标 stale 让他重看，不悄悄挪基准。
+      world.po.object_version = 6;
+      world.po.version = 6;
+      world.po.blocks[0].components[0].text = "十月底前 5 家客户上线";
+      const resaved = await putDraft(t, host, meetingId, { draftVersion: 2, draft: next.draft, actionItems: next.actionItems });
+      expect(resaved.statusCode).toBe(200);
+      expect(resaved.json().draft.objectChanges[0]).toMatchObject({ before: { text: "十月底前 5 家客户上线" }, expectedVersion: 6, stale: true });
+
       // 草稿版本过期不让存：409，带最新视图。
       const stale = await putDraft(t, host, meetingId, { draftVersion: 1, draft });
       expect(stale.statusCode).toBe(409);
-      expect(stale.json()).toMatchObject({ code: "DRAFT_CHANGED", view: { draftVersion: 2 } });
+      expect(stale.json()).toMatchObject({ code: "DRAFT_CHANGED", view: { draftVersion: 3 } });
     } finally {
       await t.close();
     }
@@ -242,10 +267,13 @@ describe("会议卡草稿", () => {
     }
   });
 
-  it("改挂点时草稿的 relatedObjectRefs 跟着改，草稿版本加一", async () => {
+  it("改挂点时草稿的 relatedObjectRefs 跟着改，草稿版本加一；挂点没变不动", async () => {
     ontology();
     const { t, host, meetingId } = await setup(cardAgent().agent);
     try {
+      const same = await t.app.inject({ method: "PUT", url: `/api/meetings/${meetingId}/world-anchors`, headers: { cookie: host, origin: t.publicOrigin }, payload: { anchors: [{ kind: "po", id: "obj-po-1" }] } });
+      expect(same.statusCode).toBe(200);
+      expect((await viewOf(t, host, meetingId)).draftVersion).toBe(1);
       const res = await t.app.inject({ method: "PUT", url: `/api/meetings/${meetingId}/world-anchors`, headers: { cookie: host, origin: t.publicOrigin }, payload: { anchors: null } });
       expect(res.statusCode).toBe(200);
       const view = await viewOf(t, host, meetingId);

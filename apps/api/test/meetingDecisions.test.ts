@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { ImpactCardView, MeetingDecisionView, type TPostMeetingCandidate } from "@warmap/contracts";
 import { createTestApp, preflightCandidate, seedLegacyOutcome, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
-import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
+import { pendingOutcome, runOutcome, type PostMeetingAgent, type PostMeetingAgentInput } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import type { DecisionLayeringAgent, DecisionLayeringInput } from "../src/meetingDecisionAgent.js";
 import type { ImpactAgent, ImpactAnalysisInput } from "../src/impactAgent.js";
@@ -295,6 +295,38 @@ describe("会后分层确认与影响卡", () => {
       const feishu = (await t.pool.query("SELECT payload FROM jobs WHERE kind = 'feishu.notify' ORDER BY id")).rows.map((row) => row.payload);
       expect(feishu.map((item) => item.title)).toEqual(["渠道看板要切到 v2 接口", "更正 · 渠道看板要切到 v2 接口", "更正 · 「渠道看板要切到 v2 接口」作废"]);
       expect(feishu[0].links).toEqual([{ label: "查看", path: `/me/requests/${original.request_id}` }]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("旧格式会议换逐字稿、重新整理成会议卡：还没人处理的逐条决定删掉，不再提醒、代判、往下推；处理过的留着", async () => {
+    const t = await newApp();
+    try {
+      const { meetingId } = await readyMeeting(t);
+      const peopleDirectory = loadPeopleDirectory(t.env);
+      let clock = new Date("2026-06-05T16:00:00+08:00");
+      const service = createMeetingDecisionService({ pool: t.pool, peopleDirectory, layering: fakeLayering(), impact: fakeImpact(), now: () => clock,
+        context: () => meetingInterpretationContext(t.pool.query.bind(t.pool), clock, personDisplayNames(peopleDirectory)) });
+      await service.sync(meetingId);
+      const [, second] = (await t.pool.query("SELECT id FROM meeting_decisions WHERE tier = 'host' ORDER BY ordinal")).rows as { id: string }[];
+      await service.review(meetingId, second.id, HOST, { verdict: "not_decided" });
+      expect((await t.pool.query("SELECT tier, status FROM meeting_decisions ORDER BY tier DESC, ordinal")).rows)
+        .toEqual([{ tier: "strategic", status: "pending" }, { tier: "host", status: "pending" }, { tier: "host", status: "not_decided" }]);
+
+      // 换逐字稿后重新整理（同 meeting.replace_transcript：outcome 回到 pending 再跑），这次生成的是会议卡。
+      await t.pool.query("UPDATE meetings SET outcome = $2::jsonb, status = 'held' WHERE id = $1", [meetingId, JSON.stringify(pendingOutcome())]);
+      const cardAgent: PostMeetingAgent = { async generate() { return { candidate: {
+        summary: "接口切到 v2", sections: [{ heading: "接口", body: "已定：接口统一改成 v2。", turnIds: ["turn-002"] }], objectChanges: [], actionItems: [] } }; } };
+      await runOutcome(t.pool, cardAgent, meetingId);
+      expect((await t.pool.query("SELECT draft_status FROM meeting_cards WHERE meeting_id = $1", [meetingId])).rows[0].draft_status).toBe("draft_ready");
+      expect((await t.pool.query("SELECT id, status FROM meeting_decisions WHERE meeting_id = $1", [meetingId])).rows).toEqual([{ id: second.id, status: "not_decided" }]);
+
+      // 过了截止时间跑定时任务：没有代判，也没有往下推的任务。
+      clock = new Date("2026-06-08T16:01:00+08:00");
+      await service.tick();
+      expect((await t.pool.query("SELECT count(*)::int AS n FROM meeting_decisions WHERE status = 'agent_judged'")).rows[0].n).toBe(0);
+      expect((await t.pool.query("SELECT count(*)::int AS n FROM jobs WHERE kind = 'meeting.decision_propagate'")).rows[0].n).toBe(0);
     } finally {
       await t.close();
     }
