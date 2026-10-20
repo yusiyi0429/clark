@@ -13,7 +13,7 @@ import type {
   TTranscriptCandidateProjection,
   TMeetingRecordingSummary,
 } from "@warmap/contracts";
-import type { TMeetingMinutesStatus, TWorldAnchor } from "@warmap/contracts";
+import type { TMeetingMinutesFailure, TMeetingMinutesStatus, TWorldAnchor } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
 import { attendeesOf, minutesStatusOf, projectMeetingDecision, type MeetingDecisionRow } from "./meetingDecisionView.js";
 import { computeStaleInputs, type GroupInputVersions } from "./preflightStaleness.js";
@@ -56,6 +56,8 @@ export type MeetingRow = {
   feishu_meeting_id?: string | null;
   minute_token?: string | null;
   minutes_status?: TMeetingMinutesStatus;
+  /** 妙记读取失败的原因（100）；不是 failed 时为 null。 */
+  minutes_failure?: TMeetingMinutesFailure | null;
   attendees_actual?: string[] | null;
   /** 会后分层确认（meeting_decisions 另表，随 meetingColumns 带出）；`SELECT *` 读出的行没有这一格。 */
   decisions?: MeetingDecisionRow[];
@@ -81,7 +83,7 @@ const MEETING_COLUMNS = [
   "id", "version", "title", "status", "scheduled_at", "ends_at", "ended_at", "lead_dri_id", "ceo_participant_id",
   "participants", "issue_ids", "preflight", "draft", "materials", "transcript", "transcript_candidate", "outcome", "origin_ref", "external_id",
   "request_fingerprint", "action_fingerprints", "created_at", "updated_at",
-  "feishu_meeting_id", "minute_token", "minutes_status", "attendees_actual",
+  "feishu_meeting_id", "minute_token", "minutes_status", "minutes_failure", "attendees_actual",
   "created_by", "world_excluded", "world_excluded_by", "world_anchors", "record_version", "record_confirmed_at", "record_confirmed_by", "record_edit_pending",
   "world_event_status", "world_event_id", "world_event_anchors", "world_event_at",
 ];
@@ -291,6 +293,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
       outcome: row.outcome,
       recording: row.latest_recording ?? null,
       minutesStatus: minutesStatusOf(row),
+      minutesFailure: minutesStatusOf(row) === "failed" ? row.minutes_failure ?? null : null,
       attendees: attendeesOf(row),
       // 主持人在自己的会议卡上确认；CEO 卡上只有 CEO 自己主持时才能点。
       decisions: (row.decisions ?? []).map((decision) => projectMeetingDecision(decision, row.participants,

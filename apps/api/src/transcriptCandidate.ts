@@ -32,6 +32,7 @@ import {
   TRANSCRIPT_PARSER_VERSION,
   type ParsedTranscriptTurn,
 } from "./transcriptMarkdown.js";
+import { capturedAtOf, meetingTranscriptUrl, transcriptContentHash } from "./transcriptHash.js";
 
 export type TranscriptCandidateResult =
   | { status: 200; card: TCard }
@@ -84,11 +85,12 @@ export function buildTranscriptCandidate(
   return { source, createdAt: new Date().toISOString(), speakers, turns, warnings };
 }
 
-/** 上传 Markdown 只生成候选并 bump version：不改 status、不跑 Outcome。 */
+/** 上传 Markdown 只生成候选并 bump version：不改 status、不跑 Outcome。来源地址是天枢会议页的逐字稿，摘要值算上传的原文。 */
 export async function createTranscriptCandidate(
   pool: Pool,
   peopleDirectory: PeopleDirectory,
   secret: string,
+  publicOrigin: string,
   meetingId: string,
   file: { fileName: string; buffer: Buffer },
   hostId?: string,
@@ -107,6 +109,9 @@ export async function createTranscriptCandidate(
     sha256: createHash("sha256").update(file.buffer).digest("hex"),
     parserVersion: TRANSCRIPT_PARSER_VERSION,
     timeAnchor: meeting.scheduled_at.toISOString(),
+    url: meetingTranscriptUrl(publicOrigin, meetingId),
+    contentHash: transcriptContentHash(file.buffer.toString("utf8")),
+    capturedAt: capturedAtOf(new Date()),
   };
   const candidate = buildTranscriptCandidate(parsed.transcript.turns, peopleDirectory.searchPeople(undefined), source);
   const saved = await saveTranscriptCandidate(pool, meetingId, candidate, hostId);

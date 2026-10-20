@@ -43,6 +43,14 @@ export const TranscriptSource = Type.Object(
     parserVersion: Type.String({ minLength: 1, maxLength: 50 }),
     /** 绝对时间锚点：妙记为生成 turns 时的 Meeting scheduledAt，volc_asr 为录音开始时刻；无锚点时为 null。 */
     timeAnchor: Type.Union([Type.String({ minLength: 1, maxLength: 100 }), Type.Null()]),
+    /** 来源地址：飞书妙记为 FEISHU_WEB_ORIGIN/minutes/<token>；手动上传、录音转写为天枢会议页的逐字稿。旧数据没有。 */
+    url: Type.Optional(Type.String({ minLength: 1, maxLength: 2000 })),
+    /** 来源标题：飞书妙记取妙记标题。 */
+    title: Type.Optional(Type.String({ minLength: 1, maxLength: 300 })),
+    /** 原文全文的摘要值（transcriptContentHash：只统一换行为 LF，UTF-8 SHA-256 hex）；Chat 侧用同一算法核对。 */
+    contentHash: Type.Optional(Type.String({ pattern: "^[0-9a-f]{64}$" })),
+    /** 读取完成时刻（+08:00）。 */
+    capturedAt: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
   },
   { additionalProperties: false },
 );

@@ -1,6 +1,6 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import type { TCardCollection } from "@warmap/contracts";
+import { MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, type TCardCollection } from "@warmap/contracts";
 import { MAX_MATERIAL_FILES, MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch, readStoredMaterial } from "../materialParser.js";
 import { renderMaterialPreview } from "../materialPreview.js";
 import { appendSupplementMaterial, replaceMeetingMaterials } from "../meetingMaterials.js";
@@ -70,11 +70,28 @@ export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void
         }
         throw err;
       }
-      const result = await createTranscriptCandidate(pool, peopleDirectory, env.sessionSecret, req.params.id, file, hostId);
+      const result = await createTranscriptCandidate(pool, peopleDirectory, env.sessionSecret, env.publicOrigin, req.params.id, file, hostId);
       if (result.status === 200) return { cards: [hostId === undefined ? result.card : projectMemberMeetingCardFromCard(result.card, hostId)] };
       return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
     },
   );
+
+  // 飞书妙记：主持人或创建人「再读一次」、贴妙记链接（别人一律 404）。
+  app.post("/api/meetings/:id/minutes/refetch", {
+    preHandler: requirePerson, schema: { params: idParams, response: { 200: MeetingMinutesFetchResponse } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "meeting.minutes_refetch", objectRef: `meeting:${req.params.id}` });
+    const result = await app.meetingFollowThrough.minutes.refetch(req.params.id, req.person!.personId);
+    return "error" in result ? fail(reply, result.error.status, result.error.code, result.error.message) : result;
+  });
+
+  app.post("/api/meetings/:id/minutes", {
+    preHandler: requirePerson, schema: { params: idParams, body: MeetingMinutesLinkRequest, response: { 200: MeetingMinutesFetchResponse } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "meeting.minutes_link", objectRef: `meeting:${req.params.id}` });
+    const result = await app.meetingFollowThrough.minutes.readLink(req.params.id, req.person!.personId, req.body.url);
+    return "error" in result ? fail(reply, result.error.status, result.error.code, result.error.message) : result;
+  });
 
   // Meeting Material 使用独立 endpoint，绝不复用 Transcript 语义或 DRI service 身份。
   app.post(

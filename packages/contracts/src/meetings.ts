@@ -1,6 +1,6 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { MeetingOutcomeState, StoredTranscript, TranscriptCandidateProjection } from "./transcript.js";
-import { MeetingAttendees, MeetingDecisionView, MeetingMinutesStatus, PickedWorldAnchor } from "./meetingDecisions.js";
+import { MeetingAttendees, MeetingDecisionView, MeetingMinutesFailure, MeetingMinutesStatus, PickedWorldAnchor } from "./meetingDecisions.js";
 
 export const MeetingStatus = Type.Union([
   Type.Literal("scheduled"),
@@ -520,6 +520,8 @@ export const MeetingCardPayload = Type.Object(
     recording: Type.Union([MeetingRecordingSummary, Type.Null()]),
     /** 妙记：开完会后等飞书生成（waiting），拿不到时退回手动上传（manual）。 */
     minutesStatus: Type.Optional(MeetingMinutesStatus),
+    /** 妙记读取失败（failed）时的原因；其余为 null。 */
+    minutesFailure: Type.Optional(Type.Union([MeetingMinutesFailure, Type.Null()])),
     /** 实际参会的人（飞书名单；拿不到时是手填的参会人）。 */
     attendees: Type.Optional(MeetingAttendees),
     /** 会后分层确认的「会上定了 X」。 */

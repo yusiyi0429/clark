@@ -35,7 +35,7 @@ export type MeetingFollowThroughEnv = WorldEnv & {
   feishu?: FeishuEnv;
   /** IMPACT_CARD_MODE：live（缺省，置信度低的卡仍只记影子）或 shadow（全部只记影子，不推送）。 */
   impactCardMode?: "live" | "shadow";
-  /** FEISHU_WEB_ORIGIN（如 https://tokenking.feishu.cn）：会议事件的 artifacts 拼妙记链接 <origin>/minutes/<minute_token>；不配时不带链接。 */
+  /** FEISHU_WEB_ORIGIN（如 https://tokenking.feishu.cn）：会议事件的 artifacts、逐字稿来源地址拼妙记链接 <origin>/minutes/<minute_token>；不配时不带链接。 */
   feishuWebOrigin?: string;
 };
 
@@ -76,7 +76,7 @@ export function createMeetingFollowThrough({ pool, env, peopleDirectory, world, 
   const anchorWorld = worldClient ? new WorldClient(q, env, undefined, { timeoutMs: WORLD_READ_TIMEOUT_MS }) : undefined;
   const decisions = createMeetingDecisionService({ pool, peopleDirectory, layering: layeringAgent, impact: impactAgent, context, notify,
     meetingWorld, anchorWorld, impactMode: env.impactCardMode ?? "live", now });
-  const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now,
+  const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now, feishuWebOrigin: env.feishuWebOrigin,
     ...(env.feishu ? { feishu: { env: env.feishu, api: minutesApi ?? createFeishuMinutesApi() } } : {}) });
   const unsubscribe = onOutcomeReviewed(pool, (meetingId) => {
     enqueueDecisionSync(q, meetingId).catch((error) => console.warn(`meeting decisions sync enqueue failed: ${(error as Error).message}`));

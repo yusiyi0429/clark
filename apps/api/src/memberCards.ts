@@ -42,6 +42,7 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
         .filter((item) => (item.kind === "decision" || item.kind === "todo") && item.review?.status === "confirmed")
         .map((item) => ({ id: item.id, kind: item.kind, text: item.text, ownerPersonId: item.ownerPersonId })) } : null,
     minutesStatus: payload.minutesStatus ?? "none",
+    minutesFailure: payload.minutesFailure ?? null,
     attended,
     ...(attended ? {
       // 原文只在已有逐字稿时带上（会前没有这一格）。

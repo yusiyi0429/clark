@@ -306,7 +306,7 @@ export async function createTestApp(
       people: weeklyReviewPeople ?? (() => loadPeopleDirectory(env).searchPeople(undefined).filter((person) => person.roles.includes("dri") || person.roles.includes("participant")).map((person) => person.personId)) })
     : undefined;
   const recordings = recordingDeps
-    ? createMeetingRecordingService({ pool, storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR, peopleDirectory: loadPeopleDirectory(env), deps: recordingDeps })
+    ? createMeetingRecordingService({ pool, storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR, peopleDirectory: loadPeopleDirectory(env), publicOrigin: env.publicOrigin, deps: recordingDeps })
     : undefined;
   const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, weeklyReviewService: weeklyReviews, recordingService: recordings, now: monthlyNow,
     threadIntroAgent: { async generate(input) { return { message: `${input.inviter}邀请${input.newcomers.join("、")}加入「${input.title}」，请查看对象进展。` }; } },

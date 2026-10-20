@@ -5,7 +5,7 @@ import {
   DraftRequestRequest, DraftRequestResponse, RequestListItem, RequestListResponse, PrepareRequestQuestionRequest,
   PrepareRequestQuestionResponse, DraftRequestAnswerResponse, RequestSendInput, RequestAskInput, RequestAnswerInput, ExecuteRequestActionRequest,
 } from "./requests.js";
-import { MeetingDecisionView, MeetingDecisionReviewRequest, MeetingDecisionResponse, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingDecisionsResponse } from "./meetingDecisions.js";
+import { MeetingDecisionView, MeetingDecisionReviewRequest, MeetingDecisionResponse, MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingDecisionsResponse } from "./meetingDecisions.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
@@ -856,6 +856,21 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }, { name: "decisionId", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/MeetingDecisionReviewRequest" }),
           responses: { "200": { description: "这条决定的最新状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingDecisionResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/minutes": {
+        post: {
+          operationId: "readMeetingMinutesLink", summary: "主持人或创建人贴飞书妙记链接，按这个妙记读逐字稿（别人一律 404）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingMinutesLinkRequest" }),
+          responses: { "200": { description: "读完之后的妙记状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingMinutesFetchResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/minutes/refetch": {
+        post: {
+          operationId: "refetchMeetingMinutes", summary: "主持人或创建人再读一次妙记（等待中、没拿到、读取失败时）；已读完 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "读完之后的妙记状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingMinutesFetchResponse" } } } }, "401": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/meetings/{id}/world": {
@@ -2964,6 +2979,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeetingDecisionResponse: MeetingDecisionResponse as JsonSchema,
         MyMeetingDecisionsResponse: MyMeetingDecisionsResponse as JsonSchema,
         MeetingWorldResponse: MeetingWorldResponse as JsonSchema,
+        MeetingMinutesLinkRequest: MeetingMinutesLinkRequest as JsonSchema,
+        MeetingMinutesFetchResponse: MeetingMinutesFetchResponse as JsonSchema,
         MeetingWorldAnchorsRequest: MeetingWorldAnchorsRequest as JsonSchema,
         MeetingWorldAnchorOptionsResponse: MeetingWorldAnchorOptionsResponse as JsonSchema,
         ImpactCardView: ImpactCardView as JsonSchema,

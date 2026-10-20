@@ -24,3 +24,10 @@ ALTER TABLE meetings
   ADD COLUMN world_event_record JSONB,
   ADD COLUMN world_event_anchors JSONB CHECK (world_event_anchors IS NULL OR jsonb_typeof(world_event_anchors) = 'array'),
   ADD COLUMN world_event_at TIMESTAMPTZ;
+
+-- 妙记读取失败（会议卡 FR-4.2）：minutes_status 加 failed，minutes_failure 记原因（no_permission 没权限 / not_ready 原文还没好 /
+--   not_found 没找到 / fetch_failed 其他失败），主持人或创建人可以再读一次；只有逐字稿存下才是 ready。
+ALTER TABLE meetings DROP CONSTRAINT meetings_minutes_status_check;
+ALTER TABLE meetings
+  ADD CONSTRAINT meetings_minutes_status_check CHECK (minutes_status IN ('none', 'waiting', 'manual', 'ready', 'failed')),
+  ADD COLUMN minutes_failure TEXT CHECK (minutes_failure IS NULL OR minutes_failure IN ('no_permission', 'not_ready', 'not_found', 'fetch_failed'));

@@ -1196,6 +1196,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meetings/{id}/minutes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 主持人或创建人贴飞书妙记链接，按这个妙记读逐字稿（别人一律 404） */
+        post: operations["readMeetingMinutesLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/minutes/refetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 主持人或创建人再读一次妙记（等待中、没拿到、读取失败时）；已读完 409 */
+        post: operations["refetchMeetingMinutes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings/{id}/world": {
         parameters: {
             query?: never;
@@ -6895,6 +6929,10 @@ export interface components {
                 sha256: string;
                 parserVersion: string;
                 timeAnchor: string | null;
+                url?: string;
+                title?: string;
+                contentHash?: string;
+                capturedAt?: string;
             };
         };
         PostMeetingCandidate: {
@@ -10107,6 +10145,13 @@ export interface components {
                 }[];
                 world: ("waiting" | "committed" | "failed" | "off") | null;
             }[];
+        };
+        MeetingMinutesLinkRequest: {
+            url: string;
+        };
+        MeetingMinutesFetchResponse: {
+            minutesStatus: "none" | "waiting" | "manual" | "ready" | "failed";
+            minutesFailure: ("no_permission" | "not_ready" | "not_found" | "fetch_failed") | null;
         };
         MeetingWorldAnchorsRequest: {
             anchors: {
@@ -14205,6 +14250,117 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readMeetingMinutesLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingMinutesLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description 读完之后的妙记状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingMinutesFetchResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    refetchMeetingMinutes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 读完之后的妙记状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingMinutesFetchResponse"];
                 };
             };
             /** @description ApiError 统一错误 */

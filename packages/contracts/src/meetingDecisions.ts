@@ -2,10 +2,19 @@ import { Type, type Static } from "@sinclair/typebox";
 
 /**
  * 会后链路：妙记状态、实际参会名单、分层确认的「会上定了 X」。
- * - 妙记：none（会还没开完）/ waiting（开完了，等飞书妙记生成）/ manual（拿不到，退回手动上传）/ ready（已拿到）。
+ * - 妙记：none（会还没开完）/ waiting（开完了，等飞书妙记生成）/ manual（拿不到，退回手动上传）/ ready（已拿到）/ failed（读取失败，带原因）。
  * - 分层：strategic 推给 CEO（不代判）；host 由主持人确认，每场最多 5 条，满一个工作日没确认由 Agent 按推荐判断代判。
  */
-export const MeetingMinutesStatus = Type.Union([Type.Literal("none"), Type.Literal("waiting"), Type.Literal("manual"), Type.Literal("ready")]);
+export const MeetingMinutesStatus = Type.Union([Type.Literal("none"), Type.Literal("waiting"), Type.Literal("manual"), Type.Literal("ready"), Type.Literal("failed")]);
+/** 妙记读取失败（failed）的原因：没权限 / 原文还没好 / 没找到 / 其他失败。主持人或创建人可以再读一次。 */
+export const MeetingMinutesFailure = Type.Union([Type.Literal("no_permission"), Type.Literal("not_ready"), Type.Literal("not_found"), Type.Literal("fetch_failed")]);
+/** 主持人或创建人贴妙记链接：https://<租户>.feishu.cn/minutes/<token>。 */
+export const MeetingMinutesLinkRequest = Type.Object({ url: Type.String({ minLength: 1, maxLength: 1000 }) }, { additionalProperties: false });
+/** 再读一次、贴链接之后的妙记状态。 */
+export const MeetingMinutesFetchResponse = Type.Object(
+  { minutesStatus: MeetingMinutesStatus, minutesFailure: Type.Union([MeetingMinutesFailure, Type.Null()]) },
+  { additionalProperties: false },
+);
 
 /** 实际参会的人：飞书参会名单（中途加入的也算）；拿不到时退回手填的参会人。 */
 export const MeetingAttendees = Type.Object(
@@ -151,6 +160,9 @@ export const MyMeetingDecisionGroup = Type.Object(
 export const MyMeetingDecisionsResponse = Type.Object({ groups: Type.Array(MyMeetingDecisionGroup) }, { additionalProperties: false });
 
 export type TMeetingMinutesStatus = Static<typeof MeetingMinutesStatus>;
+export type TMeetingMinutesFailure = Static<typeof MeetingMinutesFailure>;
+export type TMeetingMinutesLinkRequest = Static<typeof MeetingMinutesLinkRequest>;
+export type TMeetingMinutesFetchResponse = Static<typeof MeetingMinutesFetchResponse>;
 export type TMeetingAttendees = Static<typeof MeetingAttendees>;
 export type TMeetingDecisionTier = Static<typeof MeetingDecisionTier>;
 export type TMeetingDecisionStatus = Static<typeof MeetingDecisionStatus>;

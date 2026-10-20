@@ -241,6 +241,7 @@ const recordingService = createMeetingRecordingService({
   pool,
   storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR,
   peopleDirectory,
+  publicOrigin: env.publicOrigin,
 });
 await recordingService.recoverInterrupted();
 // 飞书（配了才启用）：一个开放接口客户端，免登路由与后台任务共用。

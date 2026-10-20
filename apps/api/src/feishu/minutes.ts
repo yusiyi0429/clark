@@ -6,7 +6,8 @@ import { decryptTokenSecret } from "./crypto.js";
 /**
  * 飞书妙记与会议的适配层（会议链路 G）。都用主持人本人的 user_access_token（用户身份）：
  * - 妙记详情：GET /minutes/v1/minutes/{minute_token}（minutes:minutes:readonly）
- * - 逐字稿导出：GET /minutes/v1/minutes/{minute_token}/transcript?need_speaker=true&need_timestamp=true&file_format=txt（minutes:minutes.transcript:export）
+ * - 逐字稿全文：GET /minutes/v1/minutes/{minute_token}/artifacts 的 data.transcript（与 lark-cli minutes +detail --transcript 写出的逐字相同，Chat 侧按它核对摘要值）
+ * - 逐字稿导出（产物接口没权限时退回）：GET /minutes/v1/minutes/{minute_token}/transcript?need_speaker=true&need_timestamp=true&file_format=txt（minutes:minutes.transcript:export）
  * - 轮询兜底：POST /minutes/v1/minutes/search，按本人名下、时间段列妙记
  * - 实际参会名单：GET /vc/v1/meetings/{meeting_id}?with_participants=true（vc:meeting:readonly）
  * 后台权限和 OAuth scope 还没配好，这一层先用 mock 测；search 的请求字段、时间格式和参会名单的字段名要在联调时核实（标了「待联调」）。
@@ -26,9 +27,14 @@ export type FeishuMinuteInfo = {
   meetingId: string | null;
 };
 
+/** 妙记还没转写完（待联调：按开放平台妙记错误码）。 */
+export const MINUTES_NOT_READY_CODE = 2091003;
+
 export type FeishuMinutesApi = {
   getMinute(userAccessToken: string, minuteToken: string): Promise<FeishuMinuteInfo>;
-  /** 逐字稿 txt 原文。 */
+  /** 妙记产物里的逐字稿全文（/artifacts 的 data.transcript）。 */
+  artifactTranscript(userAccessToken: string, minuteToken: string): Promise<string>;
+  /** 逐字稿 txt 原文（导出接口；产物接口没权限时退回用）。 */
   exportTranscript(userAccessToken: string, minuteToken: string): Promise<string>;
   /** 本人名下、时间段内的妙记（轮询兜底）。 */
   listMinutes(userAccessToken: string, owner: { openId: string }, range: { start: Date; end: Date }): Promise<FeishuMinuteInfo[]>;
@@ -76,6 +82,11 @@ export function createFeishuMinutesApi({ fetch: fetchImpl = fetch }: { fetch?: F
     async getMinute(userAccessToken, minuteToken) {
       const data = await call(userAccessToken, `/minutes/v1/minutes/${encodeURIComponent(minuteToken)}?user_id_type=open_id`);
       return minuteOf({ ...((data.minute ?? data) as Record<string, unknown>), token: minuteToken });
+    },
+    async artifactTranscript(userAccessToken, minuteToken) {
+      const data = await call(userAccessToken, `/minutes/v1/minutes/${encodeURIComponent(minuteToken)}/artifacts`);
+      if (typeof data.transcript !== "string" || !data.transcript) throw new FeishuApiError(MINUTES_NOT_READY_CODE, "妙记产物里还没有逐字稿");
+      return data.transcript;
     },
     async exportTranscript(userAccessToken, minuteToken) {
       const response = await fetchImpl(`${OPEN_API}/minutes/v1/minutes/${encodeURIComponent(minuteToken)}/transcript?need_speaker=true&need_timestamp=true&file_format=txt`, {

@@ -4077,6 +4077,142 @@
         }
       }
     },
+    "/api/meetings/{id}/minutes": {
+      "post": {
+        "operationId": "readMeetingMinutesLink",
+        "summary": "主持人或创建人贴飞书妙记链接，按这个妙记读逐字稿（别人一律 404）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeetingMinutesLinkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "读完之后的妙记状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingMinutesFetchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/minutes/refetch": {
+      "post": {
+        "operationId": "refetchMeetingMinutes",
+        "summary": "主持人或创建人再读一次妙记（等待中、没拿到、读取失败时）；已读完 409",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "读完之后的妙记状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingMinutesFetchResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/meetings/{id}/world": {
       "get": {
         "operationId": "getMeetingWorld",
@@ -36165,6 +36301,25 @@
                     "type": "null"
                   }
                 ]
+              },
+              "url": {
+                "minLength": 1,
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "title": {
+                "minLength": 1,
+                "maxLength": 300,
+                "type": "string"
+              },
+              "contentHash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "capturedAt": {
+                "minLength": 1,
+                "maxLength": 100,
+                "type": "string"
               }
             }
           }
@@ -57356,6 +57511,81 @@
                 }
               }
             }
+          }
+        }
+      },
+      "MeetingMinutesLinkRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "minLength": 1,
+            "maxLength": 1000,
+            "type": "string"
+          }
+        }
+      },
+      "MeetingMinutesFetchResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "minutesStatus",
+          "minutesFailure"
+        ],
+        "properties": {
+          "minutesStatus": {
+            "anyOf": [
+              {
+                "const": "none",
+                "type": "string"
+              },
+              {
+                "const": "waiting",
+                "type": "string"
+              },
+              {
+                "const": "manual",
+                "type": "string"
+              },
+              {
+                "const": "ready",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ]
+          },
+          "minutesFailure": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "no_permission",
+                    "type": "string"
+                  },
+                  {
+                    "const": "not_ready",
+                    "type": "string"
+                  },
+                  {
+                    "const": "not_found",
+                    "type": "string"
+                  },
+                  {
+                    "const": "fetch_failed",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
