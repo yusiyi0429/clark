@@ -18,6 +18,7 @@ import { MeetingOutline, saveReadingPosition, useOutlineSpy, useReadingAnchor, u
 import { SourceList, SourceNavigatorProvider, useSourceNavigator, type SourceObject } from "@/components/meeting/SourceViewer";
 import { DECISION_HISTORY_CHANGED, useDecisionHistory } from "@/components/meeting/useDecisionHistory";
 import { MeetingWorldSection } from "@/components/meeting/MeetingWorldBar";
+import { MeetingRecordCard, useMeetingCardProbe } from "@/components/meeting/MeetingRecordCard";
 import { PreflightProgress } from "@/components/meeting/PreflightProgress";
 import { DivergencesSection, LensAnswers, MaterialQuestionsSection } from "@/components/meeting/PreflightReviewExtras";
 import { announceMeetingCard, listenMeetingCard } from "@/lib/meetingSync";
@@ -565,6 +566,12 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const viewedMaterial = payload.materials.find((material) => material.id === view.current) ?? null;
 
   const meetingId = card.objectRef.id;
+  // 会议记录用会议卡还是旧格式的会后条目：问会议卡接口（有草稿或确认版就是会议卡）；会议状态或会后整理状态变了再问一次。
+  const recordCard = useMeetingCardProbe(meetingId, `${payload.status}|${source.outcome?.status ?? ""}`);
+  const cardRecord = recordCard.status === "card" ? (
+    <MeetingRecordCard key={recordCard.key} meetingId={meetingId} initial={recordCard.view}
+      turns={source.transcript?.turns ?? []} speakerName={(speakerId) => speakerLabel(speakerId, people)} />
+  ) : null;
   const readingKey = `meeting:${meetingId}|${view.current}`;
   useRememberedScroll(`${card.objectRef.id}|${view.current}`);
   // 跳到外部信号、别的会议后再回来：回到离开前读到的议题（必须在 useRememberedScroll 之后）。
@@ -1002,7 +1009,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     ...(showMeetingSection ? [{ key: "meeting", label: payload.issueIds.length ? "会议层面的判断" : "预审判断", short: "预审判断" }] : []),
     ...(!readOnly ? [{ key: "prep", label: "会前准备", short: "会前准备" }] : []),
   ] : null;
-  const recordOutline: OutlineItem[] | null = !memberReadOnly && payload.issueIds.length && payload.outcome && (payload.status === "held" || payload.status === "reviewed") ? [
+  const recordOutline: OutlineItem[] | null = !memberReadOnly && !cardRecord && payload.issueIds.length && payload.outcome && (payload.status === "held" || payload.status === "reviewed") ? [
     { key: "summary", label: "会议纪要", short: "会议纪要" },
     ...issueOutline("outcome"),
     ...(outcomeGroups.others.length ? [{ key: "others", label: "其他事项", short: "其他事项", hint: `${outcomeGroups.others.length} 条` }] : []),
@@ -1508,6 +1515,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const recordView =
     memberReadOnly && !(isHost && payload.status === "scheduled") ? (
       <section className={s.review}>
+        {cardRecord ? <><MeetingWorldSection meetingId={meetingId} />{cardRecord}</> : <>
         {/* 实际参会的人能看完整纪要和这场会在本体里的挂点。 */}
         {memberOutcomeSummary(source) ? (
           <section className={s.reviewSection} data-outline="summary">
@@ -1516,7 +1524,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           </section>
         ) : null}
         <MeetingWorldSection meetingId={meetingId} />
-        <section className={s.reviewSection}>
+        {/* 还没问到是不是会议卡时不出「暂无」，免得会议卡出来前闪一下。 */}
+        {outcomeItems.length || recordCard.status === "legacy" ? <section className={s.reviewSection}>
           <header><h3>会后结论</h3></header>
           {outcomeItems.length ? (
             <>
@@ -1536,7 +1545,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
               </section> : null}
             </>
           ) : <p className={s.empty}>暂无已确认的会后结论。</p>}
-        </section>
+        </section> : null}
+        </>}
       </section>
     ) : payload.status === "cancelled" ? (
       <p className={s.empty}>该会议已取消，无会议记录。</p>
@@ -1588,14 +1598,22 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       </>
     ) : (
       <section className={s.review}>
-        {payload.outcome ? (
+        {cardRecord ? (
           <>
-            <section className={s.reviewSection} data-outline="summary">
-              <header>
-                <h3>会议纪要</h3>
-              </header>
-              <p className={s.entryBody}>{payload.outcome.summary || "抽取尚未产出摘要。"}</p>
-            </section>
+            <MeetingWorldSection meetingId={meetingId} />
+            {cardRecord}
+          </>
+        ) : payload.outcome ? (
+          <>
+            {/* 还没问到是不是会议卡时不出「尚未产出」，免得会议卡出来前闪一下。 */}
+            {payload.outcome.summary || recordCard.status === "legacy" ? (
+              <section className={s.reviewSection} data-outline="summary">
+                <header>
+                  <h3>会议纪要</h3>
+                </header>
+                <p className={s.entryBody}>{payload.outcome.summary || "抽取尚未产出摘要。"}</p>
+              </section>
+            ) : null}
             <MeetingWorldSection meetingId={meetingId} />
             {payload.outcome.error ? (
               <p className={s.error} role="alert" title={payload.outcome.error.code}>

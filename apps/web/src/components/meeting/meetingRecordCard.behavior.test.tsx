@@ -1,0 +1,208 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Ellipsis } from "lucide-react";
+import type { TMeetingCardDraft, TMeetingCardSync, TMeetingCardView } from "@warmap/contracts";
+
+/* 把组件当函数调用、点里面的按钮：hooks 用一个按调用顺序存值的小仓库代替（同 meetingWorldBar.behavior.test）。 */
+const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0, refs: [] as { current: unknown }[], refIndex: 0,
+  useState(initial: unknown) {
+    const index = hooks.index++;
+    if (!(index in hooks.values)) hooks.values[index] = typeof initial === "function" ? (initial as () => unknown)() : initial;
+    return [hooks.values[index], (next: unknown) => {
+      hooks.values[index] = typeof next === "function" ? (next as (value: unknown) => unknown)(hooks.values[index]) : next;
+    }];
+  },
+  useRef(initial: unknown) {
+    return (hooks.refs[hooks.refIndex++] ??= { current: initial });
+  },
+}));
+vi.mock("react", async (original) => ({ ...(await original<typeof import("react")>()),
+  useState: hooks.useState, useRef: hooks.useRef, useEffect: () => undefined, useCallback: (fn: unknown) => fn, useMemo: (fn: () => unknown) => fn() }));
+const api = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), post: vi.fn() }));
+vi.mock("@/lib/api/client", () => ({ browserApi: { GET: api.get, PUT: api.put, POST: api.post } }));
+
+import { InlineText } from "./InlineText";
+import { MeetingRecordCard } from "./MeetingRecordCard";
+import { ObjectChangeDiff } from "./ObjectChangeDiff";
+import { RecordCardFooter } from "./RecordCardFooter";
+import { RecordSection } from "./RecordSection";
+
+type Node = { type?: unknown; props?: Record<string, unknown> };
+/** 展开会议卡自己的子组件（库组件不展开），按渲染顺序深度优先，hooks 顺序和真渲染一致。 */
+const PARTS = new Set<unknown>([InlineText, ObjectChangeDiff, RecordCardFooter, RecordSection]);
+function expand(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(expand);
+  if (!value || typeof value !== "object") return value;
+  const node = value as Node;
+  if (typeof node.type === "function" && PARTS.has(node.type)) return expand((node.type as (props: unknown) => unknown)(node.props));
+  return node.props ? { ...node, props: { ...node.props, children: expand(node.props.children) } } : value;
+}
+function nodes(value: unknown): Node[] {
+  if (Array.isArray(value)) return value.flatMap(nodes);
+  if (!value || typeof value !== "object") return [];
+  const node = value as Node;
+  return node.props ? [node, ...nodes(node.props.children)] : [];
+}
+const text = (node: Node): string => {
+  const children = node.props?.children;
+  return (Array.isArray(children) ? children : [children]).map((child) => (typeof child === "string" || typeof child === "number" ? String(child) : child && typeof child === "object" ? text(child as Node) : "")).join("");
+};
+
+const SOURCE = { id: "src-1", url: "https://example.feishu.cn/minutes/abc", title: "渠道预算会", contentHash: "a".repeat(64), sourceVersion: null, capturedAt: "2026-10-20T15:00:00+08:00" };
+const SEC_1 = { id: "sec-1", heading: "预算", body: "二期预算定为 80 万。已定。", sourceRefs: [{ sourceId: "src-1", locator: "turn-0001..turn-0002" }] };
+const SEC_2 = { id: "sec-2", heading: "排期", body: "十一月上线。未定。", sourceRefs: [] };
+const CHANGE = { id: "chg-1", targetRef: "obj-1#b1/c1", targetTitle: "接口全量切到 v2 · result", expectedVersion: 4, before: { text: "九月完成" },
+  after: { text: "十一月完成" }, basisSectionIds: ["sec-1"], stale: false };
+const draft = (overrides: Partial<TMeetingCardDraft> = {}): TMeetingCardDraft => ({
+  schemaVersion: "meeting-card.v1", meetingId: "m1", title: "渠道预算会", occurredAt: "2026-10-20T14:00:00+08:00",
+  participants: [{ name: "林晓", personRef: null }], relatedObjectRefs: ["obj-1"], summary: "定了两期投入。",
+  sections: [SEC_1, SEC_2], sources: [SOURCE], objectChanges: [CHANGE], ...overrides,
+});
+const confirmedOf = (source: TMeetingCardDraft, revision = 1): NonNullable<TMeetingCardView["confirmed"]> => ({
+  payload: { ...source, revision, relatedObjectRefs: ["obj-1@4"], objectChanges: source.objectChanges.map(({ stale: _stale, ...change }) => change) },
+  confirmation: { revision, confirmedBy: "p1", confirmedAt: "2026-10-20T10:42:00.000Z", payloadHash: "b".repeat(64) },
+  kind: "first",
+});
+const SYNCED: TMeetingCardSync = { revision: 1, writeToWorld: true, event: { status: "succeeded", eventId: "ev-1", error: null },
+  objects: [{ changeId: "chg-1", title: "接口全量切到 v2 · result", status: "updated", actualVersion: 5, error: null }] };
+const view = (overrides: Partial<TMeetingCardView> = {}): TMeetingCardView => ({
+  draft: draft(), draftVersion: 3, draftStatus: "draft_ready", actionItems: [], confirmed: null, sync: null, targetOptions: [], canEdit: true, ...overrides,
+});
+const ok = (data: TMeetingCardView) => ({ data, response: { ok: true, status: 200 } });
+
+const render = (initial: TMeetingCardView) => {
+  hooks.index = 0;
+  hooks.refIndex = 0;
+  return nodes(expand(MeetingRecordCard({ meetingId: "m1", initial })));
+};
+const button = (tree: Node[], label: string) => tree.find((node) => node.type === "button" && text(node) === label);
+const click = (node: Node | undefined) => (node!.props!.onClick as () => void)();
+const hasText = (tree: Node[], value: string) => tree.some((node) => typeof node.type === "string" && text(node) === value);
+
+beforeEach(() => {
+  hooks.values = []; hooks.refs = [];
+  api.get.mockReset(); api.put.mockReset(); api.post.mockReset();
+  vi.stubGlobal("window", { dispatchEvent: vi.fn(), location: { assign: vi.fn() } });
+});
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
+  it("点确认带上草稿版本", async () => {
+    const initial = view();
+    api.post.mockResolvedValue(ok(view({ confirmed: confirmedOf(draft()), sync: { ...SYNCED, event: { status: "pending", eventId: null, error: null } } })));
+    expect(hasText(render(initial), "待确认")).toBe(true);
+    click(button(render(initial), "确认这份记录"));
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/card/confirm",
+      { params: { path: { id: "m1" } }, body: { draftVersion: 3, writeToWorld: true } }));
+    await vi.waitFor(() => expect(hasText(render(initial), "会议事件 · 写入中")).toBe(true));
+    const after = render(initial);
+    expect(hasText(after, "已确认 · v1 · 10/20 18:42")).toBe(true);
+    expect(button(after, "修改")).toBeDefined();
+    expect(button(after, "确认这份记录")).toBeUndefined();
+  });
+
+  it("草稿过期提示查看最新", async () => {
+    const initial = view();
+    api.post.mockResolvedValue({ error: { code: "DRAFT_CHANGED", message: "会议卡已被修改，请查看最新内容", view: view({ draftVersion: 4 }) }, response: { ok: false, status: 409 } });
+    click(button(render(initial), "确认这份记录"));
+    await vi.waitFor(() => expect(hasText(render(initial), "内容已更新")).toBe(true));
+    api.get.mockResolvedValue(ok(view({ draftVersion: 4, draft: draft({ summary: "别人改过的摘要。" }) })));
+    click(button(render(initial), "查看最新"));
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/meetings/{id}/card", { params: { path: { id: "m1" } } }));
+    await vi.waitFor(() => expect(hasText(render(initial), "内容已更新")).toBe(false));
+    expect(render(initial).some((node) => node.type === "textarea" && node.props?.value === "别人改过的摘要。")).toBe(true);
+  });
+
+  it("改一段正文自动保存", async () => {
+    vi.useFakeTimers();
+    const initial = view();
+    api.put.mockResolvedValue(ok(view({ draftVersion: 4 })));
+    const body = render(initial).find((node) => node.type === "textarea" && node.props?.["aria-label"] === "第 1 段正文")!;
+    (body.props!.onChange as (event: unknown) => void)({ target: { value: "二期预算定为 90 万。已定。" } });
+    expect(api.put).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(900);
+    expect(api.put).toHaveBeenCalledTimes(1);
+    const [path, request] = api.put.mock.calls[0] as [string, { params: unknown; body: { draftVersion: number; draft: TMeetingCardDraft } }];
+    expect(path).toBe("/api/meetings/{id}/card/draft");
+    expect(request.params).toEqual({ path: { id: "m1" } });
+    expect(request.body.draftVersion).toBe(3);
+    expect(request.body.draft.sections[0].body).toBe("二期预算定为 90 万。已定。");
+    expect(request.body).not.toHaveProperty("actionItems");
+  });
+
+  it("修改时标出差异且要选原因", async () => {
+    const original = draft();
+    const edited = draft({ sections: [SEC_1, { ...SEC_2, body: "十二月上线。已定。" }] });
+    const initial = view({ draft: edited, confirmed: confirmedOf(original), sync: SYNCED });
+    const tree = render(initial);
+    expect(hasText(tree, "修改中")).toBe(true);
+    expect(tree.filter((node) => node.props?.["data-changed"] !== undefined).map((node) => node.props!["aria-label"])).toEqual(["第 2 段"]);
+    expect(button(tree, "确认修改")!.props!.disabled).toBe(true);
+    const followup = tree.find((node) => node.type === "input" && node.props?.type === "radio" && node.props?.value === "followup")!;
+    expect(tree.filter((node) => node.type === "input" && node.props?.type === "radio").every((node) => node.props!.checked === false)).toBe(true);
+    (followup.props!.onChange as () => void)();
+
+    api.post.mockResolvedValue(ok(view({ draft: edited, confirmed: { ...confirmedOf(edited, 2), kind: "followup" }, sync: { ...SYNCED, revision: 2 } })));
+    const chosen = render(initial);
+    expect(button(chosen, "确认修改")!.props!.disabled).toBe(false);
+    click(button(chosen, "确认修改"));
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/card/confirm",
+      { params: { path: { id: "m1" } }, body: expect.objectContaining({ draftVersion: 3, writeToWorld: true, kind: "followup" }) }));
+  });
+
+  it("目标未定可以选目标", async () => {
+    const undecided = { ...CHANGE, targetRef: null, targetTitle: null, expectedVersion: null, before: null };
+    const option = { targetRef: "obj-1#b1/c1", title: "接口全量切到 v2 · result", componentType: "result", text: "九月完成" };
+    const initial = view({ draft: draft({ objectChanges: [undecided] }), targetOptions: [option] });
+    api.put.mockResolvedValue(ok(view({ draftVersion: 4 })));
+    const tree = render(initial);
+    expect(hasText(tree, "目标未定")).toBe(true);
+    const picker = tree.find((node) => node.props?.["aria-label"] === "选目标" && "options" in node.props)!;
+    (picker.props!.onChange as (value: string) => void)(option.targetRef);
+    await vi.waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    const request = api.put.mock.calls[0][1] as { body: { draft: TMeetingCardDraft } };
+    expect(request.body.draft.objectChanges[0].targetRef).toBe(option.targetRef);
+  });
+
+  it("删掉被行动项引为依据的段落：行动项跟着去掉那段一起交，没引的不交", async () => {
+    const item = { id: "act-1", text: "提交排期", ownerPersonId: null, dueDate: null, basisSectionIds: ["sec-1", "sec-2"], taskId: null };
+    const initial = view({ actionItems: [item] });
+    api.put.mockResolvedValue(ok(view({ draftVersion: 4, draft: draft({ sections: [SEC_2] }), actionItems: [{ ...item, basisSectionIds: ["sec-2"] }] })));
+    const remove = render(initial).filter((node) => node.props?.onPress && text(node) === "删除");
+    expect(remove).toHaveLength(2);
+    (remove[0].props!.onPress as () => void)();
+    await vi.waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    const request = api.put.mock.calls[0][1] as { body: { draft: TMeetingCardDraft; actionItems?: unknown } };
+    expect(request.body.draft.sections.map((section) => section.id)).toEqual(["sec-2"]);
+    expect(request.body.draft.objectChanges[0].basisSectionIds).toEqual([]);
+    expect(request.body.actionItems).toEqual([{ ...item, basisSectionIds: ["sec-2"] }]);
+  });
+
+  it("事件写失败可以重试", async () => {
+    const initial = view({ confirmed: confirmedOf(draft()), sync: { ...SYNCED, event: { status: "failed", eventId: null, error: "本体超时" } } });
+    api.post.mockResolvedValue(ok(view({ confirmed: confirmedOf(draft()), sync: { ...SYNCED, event: { status: "pending", eventId: null, error: null } } })));
+    const tree = render(initial);
+    expect(hasText(tree, "会议事件 · 写入失败 · 本体超时")).toBe(true);
+    expect(hasText(tree, "接口全量切到 v2 · result · 已更新")).toBe(true);
+    click(button(tree, "重试"));
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/card/retry", { params: { path: { id: "m1" } } }));
+  });
+
+  it("只读的人没有编辑控件", () => {
+    const noEdits = (tree: Node[]) => {
+      expect(button(tree, "确认这份记录")).toBeUndefined();
+      expect(button(tree, "修改")).toBeUndefined();
+      expect(tree.some((node) => node.type === Ellipsis)).toBe(false);
+      expect(tree.some((node) => node.type === "textarea" || node.type === "input")).toBe(false);
+    };
+    const pending = render(view({ canEdit: false }));
+    expect(hasText(pending, "待确认")).toBe(true);
+    noEdits(pending);
+
+    hooks.values = []; hooks.refs = [];
+    const confirmed = render(view({ canEdit: false, draft: draft({ summary: "还没确认的新摘要。" }), confirmed: confirmedOf(draft()) }));
+    expect(hasText(confirmed, "定了两期投入。")).toBe(true);
+    expect(hasText(confirmed, "还没确认的新摘要。")).toBe(false);
+    expect(hasText(confirmed, "待确认")).toBe(false);
+    noEdits(confirmed);
+  });
+});
