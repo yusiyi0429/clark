@@ -67,11 +67,19 @@ for file in Path(sys.argv[1]).rglob('*.sh'):
     file.write_bytes(file.read_bytes().replace(b'\r\n', b'\n'))
     subprocess.run(['bash', '-n', str(file)], check=True)
 PY
-  # 固定本次镜像标签、构建目录与 BUILD_SHA；相对路径以 infra/ 为基准
-  python3 - "$release/release.pin.yml" "$revision" "$short" "${build_services[@]}" <<'PY'
-import sys
-target, revision, short, *services = sys.argv[1:]
-lines = ['# 由 infra/staging/release.sh 生成：固定本次发布的镜像与构建来源。', 'services:']
+  # 固定本次镜像标签、构建目录与 BUILD_SHA；本次不构建的服务沿用现网 pin 里原有的段。相对路径以 infra/ 为基准
+  python3 - "$release/release.pin.yml" infra/release.pin.yml "$revision" "$short" "${build_services[@]}" <<'PY'
+import os, re, sys
+target, live, revision, short, *services = sys.argv[1:]
+lines = ['# 由 infra/staging/release.sh 生成：固定现网各服务的镜像与构建来源。', 'services:']
+# 现网 pin 按服务分段：从两空格缩进的服务名到下一个服务名
+keep = False
+for line in (open(live).read().splitlines() if os.path.exists(live) else []):
+    match = re.fullmatch(r'  ([\w-]+):\s*', line)
+    if match:
+        keep = match[1] not in services
+    if keep:
+        lines.append(line)
 for service in services:
     assert service in ('api', 'web', 'm2'), service
     image = f'tianshu-m2:{short}' if service == 'm2' else f'warmap-{service}:{short}'

@@ -11,6 +11,7 @@ const COMPOSE_FILE = join(REPO, "infra/docker-compose.yml");
 const BACKUP_SH = join(REPO, "infra/backup/backup.sh");
 const RESTORE_SH = join(REPO, "infra/backup/restore.sh");
 const SMOKE_SH = join(REPO, "infra/staging/smoke.sh");
+const RELEASE_SH = join(REPO, "infra/staging/release.sh");
 const WINDOWS = process.platform === "win32";
 const BASH = WINDOWS
   ? [join(process.env.ProgramFiles ?? "C:/Program Files", "Git/bin/bash.exe"), join(process.env.LOCALAPPDATA ?? "", "Programs/Git/bin/bash.exe")].find((path) => existsSync(path))
@@ -39,7 +40,7 @@ afterAll(() => {
 });
 
 function run(script: string, args: string[], env: Record<string, string> = {}) {
-  if (![BACKUP_SH, RESTORE_SH, SMOKE_SH].includes(script)) throw new Error("Unknown deployment test script");
+  if (![BACKUP_SH, RESTORE_SH, SMOKE_SH, RELEASE_SH].includes(script)) throw new Error("Unknown deployment test script");
   const sandbox = tempDir(), guard = join(sandbox, "guard-bin");
   mkdirSync(guard, { recursive: true });
   // Missing test shims must fail closed instead of finding a real database, Docker or SSH client.
@@ -682,5 +683,49 @@ describe("staging smoke script", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("dry-run");
     expect(result.stdout).toContain("/healthz");
+  });
+});
+
+// Git Bash 的 install 在临时目录里改不了 700 权限，python3 也只是应用商店占位，所以只在 Linux/macOS 上跑。
+describe.skipIf(WINDOWS)("release.sh prepare pin", () => {
+  const REVISION = `b2b2b2b${"0".repeat(33)}`;
+  const LIVE_API = ["  api:", "    image: warmap-api:a1a1a1a", "    build:", "      context: ../releases/a1a1a1a", "      labels:",
+    `        tianshu.revision: "a1a1a1a${"0".repeat(33)}"`, "    environment:", '      BUILD_SHA: "a1a1a1a"'].join("\n");
+  const LIVE_WEB = ["  web:", "    image: warmap-web:b7a05db", "    build:", "      context: ../releases/b7a05db"].join("\n");
+  const LIVE_M2 = ["  m2:", "    image: tianshu-m2:7c148bb", "    build:", "      context: ../releases/7c148bb"].join("\n");
+
+  /** 以桩 docker 跑真实的 prepare，返回本次生成、switch 时会装进现网的 pin。 */
+  function prepare(services: string, livePin?: string) {
+    const dir = tempDir(), app = join(dir, "app"), bin = join(dir, "bin"), src = join(dir, "src");
+    for (const path of [join(app, "infra"), bin, join(src, "infra")]) mkdirSync(path, { recursive: true });
+    if (livePin !== undefined) writeFileSync(join(app, "infra/release.pin.yml"), livePin);
+    writeFileSync(join(src, "infra/README"), "release fixture\n");
+    const archive = join(dir, "source.tgz");
+    execFileSync("tar", ["-czf", archive, "-C", src, "."]);
+    writeFileSync(join(bin, "docker"), [
+      "#!/usr/bin/env bash",
+      'case "$*" in *"image inspect"*) echo "$WARMAP_TEST_REVISION" ;; esac',
+    ].join("\n"), { mode: 0o755 });
+    const result = run(RELEASE_SH, ["prepare", REVISION, archive], {
+      PATH: stubSearchPath(bin), TIANSHU_APP: app, BUILD_SERVICES: services, WARMAP_TEST_REVISION: REVISION,
+    });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    return readFileSync(join(app, "releases/b2b2b2b/release.pin.yml"), "utf8");
+  }
+
+  it("keeps the live pin of every service a web-only release does not rebuild", () => {
+    const pin = prepare("web", ["# 由 infra/staging/release.sh 生成", "services:", LIVE_API, LIVE_WEB, LIVE_M2, ""].join("\n"));
+    expect(pin).toContain(`${LIVE_API}\n`);
+    expect(pin).toContain(`${LIVE_M2}\n`);
+    expect(pin).toContain("  web:\n    image: warmap-web:b2b2b2b\n    build:\n      context: ../releases/b2b2b2b\n");
+    expect(pin).not.toContain("b7a05db");
+  });
+
+  it("pins only the built services on the first release", () => {
+    const pin = prepare("api web");
+    expect(pin).toContain("  api:\n    image: warmap-api:b2b2b2b\n");
+    expect(pin).toContain("  web:\n    image: warmap-web:b2b2b2b\n");
+    expect(pin).not.toContain("m2");
   });
 });
