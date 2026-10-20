@@ -17,7 +17,8 @@ import type { MeetingEventWorld } from "./worldMeetingEvent.js";
  * - 主持人或创建人带 draftVersion 确认，一个事务里冻结一个确认版本（revision 加一）、存确认和待同步回执、排 meeting.world_sync；
  *   同一草稿版本只算一次确认（拍板 8）：再确认不出新版本（事件失败的按同一版重写；先不写入、再选写入的改成写入；写过再选不写入不动）。
  *   已有确认版时要选修改原因：correction 更正原记录、followup 会后新决定。confirmation.confirmedBy 是确认人的 personId（拍板 9）。
- * - 冻结时 relatedObjectRefs 换成确认时的 <对象 id>@<版本>、修改去掉 stale，算 payloadHash；行动项快照存确认表，不进 payload。
+ * - 冻结时 relatedObjectRefs 换成确认时的 <对象 id>@<版本>（确认时本体读不到、选了不写入的，到同一草稿改成写入时再补版本），
+ *   修改去掉 stale，算 payloadHash；行动项快照存确认表，不进 payload。
  * - 写本体按 revision 串行（jobs worker 逐条执行）：一直写最早一版待写的，前次写成的那条在写的时候现找（写入中又确认了新版，新版指回刚写成的那条）。
  *   NETWORK_ERROR 抛出交给 jobs 按原幂等键重放，其他错误记 failed 和原因（拍板 8：不设正文上限，本体回超长就如实记下）。
  * - 选了不写入：回执 skipped，不发请求；已经写进去的不撤回。
@@ -163,8 +164,8 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     // 同一草稿版本只算一次确认（拍板 8）：不出新版本、不要求选原因。
     if (current && current.draft_version === input.draftVersion) {
       if (!current.write_to_world && input.writeToWorld) return enableWrite(meetingId, viewer, input, current);
-      // 这一版事件失败的按同一版重写；写过再选不写入：不撤回、不追加（事件只追加），原样返回。
-      if (current.write_to_world && current.event_status === "failed") await requeue(meetingId, current.revision);
+      // 再选写入、这一版事件失败的按同一版重写；选过写入再选不写入：不管事件什么状态都不动（不撤回、不追加、不重排），原样返回。
+      if (input.writeToWorld && current.write_to_world && current.event_status === "failed") await requeue(meetingId, current.revision);
       return { view: await latestView(meetingId, viewer) };
     }
 

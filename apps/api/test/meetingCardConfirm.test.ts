@@ -287,6 +287,29 @@ describe("整卡确认与会议事件", () => {
     }
   });
 
+  it("写失败后同一草稿再选不写入：不出新版本、不重排、不再发请求", async () => {
+    const world = ontology({ readable: () => false });
+    const { t, host, meetingId, run } = await setup();
+    try {
+      const draftVersion = await ready(t, host, meetingId);
+      await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
+      await run();
+      expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "failed" });
+      const requests = world.calls.length;
+
+      const res = await confirm(t, host, meetingId, { draftVersion, writeToWorld: false });
+      expect(res.statusCode).toBe(200);
+      expect((res.json() as TMeetingCardView)).toMatchObject({ confirmed: { confirmation: { revision: 1 } }, sync: { writeToWorld: true, event: { status: "failed" } } });
+      expect((await t.sql("SELECT count(*)::int AS n FROM jobs WHERE kind = 'meeting.world_sync' AND status = 'pending'"))[0].n).toBe(0);
+      await run();
+      expect(world.calls.slice(requests).filter((call) => call.url.pathname.startsWith("/v1/actions") || call.url.pathname.endsWith("/events"))).toEqual([]);
+      expect(world.writes()).toHaveLength(1);
+      expect((await t.sql("SELECT count(*)::int AS n FROM meeting_card_confirmations WHERE meeting_id = $1", [meetingId]))[0].n).toBe(1);
+    } finally {
+      await t.close();
+    }
+  });
+
   it("读回找到了这条但正文对不上摘要值：不算写成", async () => {
     let tampered = true;
     const world = ontology({ tampered: () => tampered });
