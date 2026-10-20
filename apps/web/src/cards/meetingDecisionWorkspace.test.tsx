@@ -13,6 +13,8 @@ vi.mock("@/components/meeting/useDecisionHistory", () => ({
 }));
 vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ homeCards: [], closing: false, quote: () => undefined, compose: () => undefined }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
+// 会议记录用会议卡还是旧格式，由会议卡接口决定（静态渲染问不到）：这里的会议都是旧格式。
+vi.mock("@/components/meeting/useMeetingCardProbe", () => ({ useMeetingCardProbe: () => ({ status: "legacy" }) }));
 
 const ISSUE = "22222222-2222-4222-8222-222222222222";
 const MATERIAL = "11111111-1111-4111-8111-111111111111";

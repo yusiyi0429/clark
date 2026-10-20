@@ -20,34 +20,32 @@ export function cardDiffers(draft: TMeetingCardDraft, payload: TMeetingCardV1Pay
 }
 export const viewDiffers = (view: TMeetingCardView) => Boolean(view.draft && view.confirmed && cardDiffers(view.draft, view.confirmed.payload));
 
-type SectionRow = { section: TMeetingCardSection; state: "same" | "changed" | "deleted" };
+export type DiffRow<T> = { item: T; state: "same" | "changed" | "deleted"; was: T | null };
 /**
- * 正文各段和确认版比：标题或正文不同、新加的算改了；确认版有、草稿里删掉的放回原来的位置（跟在它前面那段后面），划线显示。
- * 没有确认版时全是 same。
+ * 修改中按 id 和确认版比（没有确认版时全是 same）：内容不同、新加的、和别的项调了先后的算 changed，was 是确认版里的那一项（界面在新文字上方划线显示）；
+ * 确认版有、草稿里删掉的放回原来的位置（跟在它前面那项后面），state deleted。
  */
-export function sectionRows(sections: TMeetingCardSection[], confirmed: TMeetingCardSection[] | null): SectionRow[] {
-  if (!confirmed) return sections.map((section) => ({ section, state: "same" }));
-  const before = new Map(confirmed.map((section) => [section.id, section]));
-  const kept = new Set(sections.map((section) => section.id));
-  const rows: SectionRow[] = sections.map((section) => {
-    const old = before.get(section.id);
-    return { section, state: old && sameSection(old, section) ? "same" : "changed" };
+function diffRows<T extends { id: string }>(items: T[], confirmed: T[] | null, same: (a: T, b: T) => boolean): DiffRow<T>[] {
+  if (!confirmed) return items.map((item) => ({ item, state: "same", was: null }));
+  const before = new Map(confirmed.map((item) => [item.id, item]));
+  const kept = new Set(items.map((item) => item.id));
+  const nowOrder = items.map((item) => item.id).filter((id) => before.has(id));
+  const oldOrder = confirmed.map((item) => item.id).filter((id) => kept.has(id));
+  const rows: DiffRow<T>[] = items.map((item) => {
+    const was = before.get(item.id) ?? null;
+    const moved = was !== null && nowOrder.indexOf(item.id) !== oldOrder.indexOf(item.id);
+    return { item, state: was && !moved && same(was, item) ? "same" : "changed", was };
   });
   confirmed.forEach((old, index) => {
     if (kept.has(old.id)) return;
     let after = -1;
-    for (let previous = index - 1; previous >= 0 && after < 0; previous -= 1) after = rows.findIndex((row) => row.section.id === confirmed[previous].id);
-    rows.splice(after + 1, 0, { section: old, state: "deleted" });
+    for (let previous = index - 1; previous >= 0 && after < 0; previous -= 1) after = rows.findIndex((row) => row.item.id === confirmed[previous].id);
+    rows.splice(after + 1, 0, { item: old, state: "deleted", was: old });
   });
   return rows;
 }
-
-/** 修改中和确认版不同的对象修改（改了目标或改后内容，或是新的）。 */
-export function changedChangeIds(changes: Change[], confirmed: Change[] | null): Set<string> {
-  if (!confirmed) return new Set();
-  const before = new Map(confirmed.map((change) => [change.id, change]));
-  return new Set(changes.filter((change) => { const old = before.get(change.id); return !old || !sameChange(old, change); }).map((change) => change.id));
-}
+export const sectionRows = (sections: TMeetingCardSection[], confirmed: TMeetingCardSection[] | null) => diffRows(sections, confirmed, sameSection);
+export const changeRows = (changes: Change[], confirmed: Change[] | null) => diffRows<Change>(changes, confirmed, sameChange);
 
 /** 「依据：第 1、3 段」：按当前段落顺序编号，指不到的不写；一段都指不到时不显示。 */
 export function basisLabel(sectionIds: string[], sections: TMeetingCardSection[]): string | null {
@@ -159,3 +157,5 @@ export function companyInput(iso: string | null): string {
   return `${at.toLocaleDateString("sv-SE", { timeZone: COMPANY_TIMEZONE })}T${clock(iso!)}`;
 }
 export const fromCompanyInput = (value: string) => (value ? `${value}:00+08:00` : null);
+/** 实际时间在将来（服务端不收）。 */
+export const inFuture = (iso: string | null, now = Date.now()) => Boolean(iso && Date.parse(iso) > now);

@@ -29,11 +29,17 @@
 .field[aria-invalid='true'] { background: #fff7f8; box-shadow: inset 0 0 0 1px #f2b8c4; }
 
 .title { font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -.01em; }
+.titleBlock { position: relative; display: grid; gap: 2px; min-width: 0; }
+
+/* 修改中：确认版的原文划线放在新内容正上方（GitHub 式的先旧后新），手机上一样上下排。 */
+.was { display: block; margin: 0; color: #a3abb7; text-decoration: line-through; text-decoration-color: #c3c9d2; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .props { display: grid; gap: 6px; margin: 0; font-size: 13px; line-height: 20px; }
-.props > div { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 28px; }
+.props > div { position: relative; display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 28px; }
 .props dt { color: #8a93a2; }
-.props dd { margin: 0; min-width: 0; color: #3b4250; overflow-wrap: anywhere; }
+.props dd { display: grid; justify-items: start; gap: 2px; margin: 0; min-width: 0; color: #3b4250; overflow-wrap: anywhere; }
+.timeField { display: inline-flex; min-width: 0; max-width: 100%; }
+.timeField[data-invalid] :global([data-slot='field-trigger']) { border-color: #e8a1b0; background: #fff7f8; }
 
 .block { position: relative; display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid #eef0f3; }
 .blockLabel { margin: 0; color: #8a93a2; font-size: 12px; line-height: 18px; font-weight: 600; letter-spacing: .02em; }
@@ -41,7 +47,7 @@
 
 /* 正文一段：编号 | 标题 + 正文 + 出处 | ⋯。修改中和确认版不同的段落左侧一条蓝线；删掉的划线。 */
 .section { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; column-gap: 10px; align-items: start; }
-.section[data-changed]::before, .block[data-changed]::before, .change[data-changed]::before {
+.section[data-changed]::before, .block[data-changed]::before, .change[data-changed]::before, .titleBlock[data-changed]::before, .props > div[data-changed]::before {
   content: ""; position: absolute; left: -14px; top: 3px; bottom: 3px; width: 3px; border-radius: 2px; background: #1f5fd6;
 }
 .block[data-changed]::before { top: 19px; }
@@ -79,6 +85,8 @@ button.source:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; b
 .changes { display: grid; gap: 12px; }
 .change { position: relative; display: grid; gap: 10px; min-width: 0; padding: 14px 16px; border: 1px solid #e6e9ed; border-radius: 14px; background: #fbfcfd; }
 .changeHead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+.changeMenu { margin-left: auto; }
+.change[data-deleted] .target, .change[data-deleted] .text { color: #a3abb7; text-decoration: line-through; text-decoration-color: #b8bfca; }
 .target { min-width: 0; color: var(--doc-ink-1, #17171b); font-size: 14px; line-height: 22px; font-weight: 600; overflow-wrap: anywhere; }
 .flag { display: inline-flex; align-items: center; padding: 0 8px; border-radius: 999px; font-size: 12px; line-height: 22px; font-weight: 600; white-space: nowrap; }
 .flag[data-tone='fail'] { background: #fde8ec; color: #be123c; }
@@ -109,8 +117,6 @@ button.source:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; b
 @keyframes syncPulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .sync li[data-tone='wait'] .dot { animation: none; } }
 
-.error { margin: 0; padding: 8px 12px; border-radius: 10px; background: #fdecea; color: #a1443c; font-size: 13px; line-height: 20px; }
-
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
 .spacer { flex: 1 1 0; }
 .primary, .ghost { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 6px 16px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color .14s ease, border-color .14s ease; }
@@ -129,7 +135,7 @@ button.source:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; b
 .switch[aria-checked='true'] { background: #6b7280; }
 .switch[aria-checked='true'] > span { transform: translateX(14px); }
 .switch:disabled { cursor: default; opacity: .45; }
-.timePicker { flex: 0 1 auto; min-width: 0; }
+.worldChoice { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 
 .confirmed { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 999px; background: #e9f7ef; color: #1c7a43; font-size: 12px; line-height: 24px; font-weight: 600; white-space: nowrap; }
 .confirmed::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .7; }
@@ -144,10 +150,10 @@ button.source:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; b
 
 @media (max-width: 959px), (pointer: coarse) {
   .card { gap: 14px; padding: 18px 16px 16px; border-radius: 18px; }
-  .section[data-changed]::before, .block[data-changed]::before, .change[data-changed]::before { left: -10px; }
+  .section[data-changed]::before, .block[data-changed]::before, .change[data-changed]::before, .titleBlock[data-changed]::before, .props > div[data-changed]::before { left: -10px; }
   .summary, .body, .heading, .side { font-size: 16px; }
   .title { font-size: 20px; }
-  .props, .sync, .toggle, .kind, .add, .error, .conflict { font-size: 14px; }
+  .props, .sync, .toggle, .kind, .add, .conflict { font-size: 14px; }
   .source { min-height: var(--touch-hit, 44px); font-size: 13px; }
   .diff { grid-template-columns: minmax(0, 1fr); }
   .change { padding: 12px; }

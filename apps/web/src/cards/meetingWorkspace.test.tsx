@@ -11,6 +11,8 @@ vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ h
 
 // useCardAction 需要 Next 路由上下文；这里只渲染静态标记。
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
+// 会议记录用会议卡还是旧格式，由会议卡接口决定（静态渲染问不到）：这里的会议都是旧格式。
+vi.mock("@/components/meeting/useMeetingCardProbe", () => ({ useMeetingCardProbe: () => ({ status: "legacy" }) }));
 
 const participants = [
   { personId: "p1", displayName: "林晓", roles: ["dri"], sourceRef: "person:p1", updatedAt: "2025-09-01" },

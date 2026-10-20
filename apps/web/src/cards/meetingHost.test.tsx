@@ -6,6 +6,8 @@ import { meetingCard } from "./meetingWorkspace.test";
 const viewer = vi.hoisted(() => ({ id: "none" }));
 vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ homeCards: [], viewerId: viewer.id }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
+// 会议记录用会议卡还是旧格式，由会议卡接口决定（静态渲染问不到）：这里的会议都是旧格式。
+vi.mock("@/components/meeting/useMeetingCardProbe", () => ({ useMeetingCardProbe: () => ({ status: "legacy" }) }));
 
 describe("成员主持会议", () => {
   it("主持人能重新安排并上传文字记录，普通参会人保持只读", () => {

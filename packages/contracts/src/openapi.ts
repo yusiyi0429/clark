@@ -865,7 +865,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       "/api/meetings/{id}/card": {
         get: {
-          operationId: "getMeetingCard", summary: "会议卡：草稿（读时目标变过就刷新差异）、行动项、确认版与同步回执；主持人、创建人、CEO、实际参会人能读，别人 404",
+          operationId: "getMeetingRecordCard", summary: "会议卡：草稿（读时目标变过就刷新差异）、行动项、确认版与同步回执；主持人、创建人、CEO、实际参会人能读，别人 404",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           responses: { "200": { description: "会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "401": errorResponse, "404": errorResponse },
         },

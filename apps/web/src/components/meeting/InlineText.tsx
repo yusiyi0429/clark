@@ -21,6 +21,8 @@ type InlineTextProps = {
   single?: boolean;
   placeholder?: string;
   invalid?: boolean;
+  /** 确认、放弃修改进行中：文字照常显示，暂时不能改。 */
+  readOnly?: boolean;
   autoFocus?: boolean;
   onChange?: (value: string) => void;
   onBlur?: () => void;
@@ -30,7 +32,7 @@ type InlineTextProps = {
  * 就地编辑（Notion / Linear 的写法）：能编辑的人看到的就是正文本身，点进去直接改，文本框随内容长高、长文完整展开；
  * 不能编辑的人看到纯文字。
  */
-export function InlineText({ value, editable, label, as: Tag = "p", className, single, placeholder, invalid, autoFocus, onChange, onBlur }: InlineTextProps) {
+export function InlineText({ value, editable, label, as: Tag = "p", className, single, placeholder, invalid, readOnly, autoFocus, onChange, onBlur }: InlineTextProps) {
   const classes = [c.text, className].filter(Boolean).join(" ");
   if (!editable) return <Tag className={classes}>{value}</Tag>;
   return (
@@ -41,6 +43,7 @@ export function InlineText({ value, editable, label, as: Tag = "p", className, s
       value={value}
       rows={1}
       placeholder={placeholder}
+      readOnly={readOnly}
       autoFocus={autoFocus}
       ref={fit}
       onChange={(event) => {

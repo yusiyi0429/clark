@@ -20,6 +20,7 @@ vi.mock("react", async (original) => ({ ...(await original<typeof import("react"
 const api = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), post: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ browserApi: { GET: api.get, PUT: api.put, POST: api.post } }));
 
+import { CardItemMenu } from "./CardItemMenu";
 import { InlineText } from "./InlineText";
 import { MeetingRecordCard } from "./MeetingRecordCard";
 import { ObjectChangeDiff } from "./ObjectChangeDiff";
@@ -28,7 +29,7 @@ import { RecordSection } from "./RecordSection";
 
 type Node = { type?: unknown; props?: Record<string, unknown> };
 /** 展开会议卡自己的子组件（库组件不展开），按渲染顺序深度优先，hooks 顺序和真渲染一致。 */
-const PARTS = new Set<unknown>([InlineText, ObjectChangeDiff, RecordCardFooter, RecordSection]);
+const PARTS = new Set<unknown>([CardItemMenu, InlineText, ObjectChangeDiff, RecordCardFooter, RecordSection]);
 function expand(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(expand);
   if (!value || typeof value !== "object") return value;
@@ -167,14 +168,113 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
     const item = { id: "act-1", text: "提交排期", ownerPersonId: null, dueDate: null, basisSectionIds: ["sec-1", "sec-2"], taskId: null };
     const initial = view({ actionItems: [item] });
     api.put.mockResolvedValue(ok(view({ draftVersion: 4, draft: draft({ sections: [SEC_2] }), actionItems: [{ ...item, basisSectionIds: ["sec-2"] }] })));
+    // 两段、一条对象修改各有「⋯ 删除」，第一个是第 1 段的。
     const remove = render(initial).filter((node) => node.props?.onPress && text(node) === "删除");
-    expect(remove).toHaveLength(2);
+    expect(remove).toHaveLength(3);
     (remove[0].props!.onPress as () => void)();
     await vi.waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
     const request = api.put.mock.calls[0][1] as { body: { draft: TMeetingCardDraft; actionItems?: unknown } };
     expect(request.body.draft.sections.map((section) => section.id)).toEqual(["sec-2"]);
     expect(request.body.draft.objectChanges[0].basisSectionIds).toEqual([]);
     expect(request.body.actionItems).toEqual([{ ...item, basisSectionIds: ["sec-2"] }]);
+  });
+
+  it("存的时候又改了：等这次存完，下一次带它回来的版本和新文字", async () => {
+    vi.useFakeTimers();
+    const initial = view();
+    let finishFirst!: (value: unknown) => void;
+    api.put.mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve; })).mockResolvedValueOnce(ok(view({ draftVersion: 5 })));
+    const typeBody = (value: string) =>
+      (render(initial).find((node) => node.type === "textarea" && node.props?.["aria-label"] === "第 1 段正文")!.props!.onChange as (event: unknown) => void)({ target: { value } });
+    typeBody("二期预算定为 85 万。");
+    await vi.advanceTimersByTimeAsync(900);
+    expect(api.put).toHaveBeenCalledTimes(1);
+    typeBody("二期预算定为 85 万。已定。");
+    await vi.advanceTimersByTimeAsync(900);
+    expect(api.put).toHaveBeenCalledTimes(1);
+    finishFirst(ok(view({ draftVersion: 4 })));
+    await vi.waitFor(() => expect(api.put).toHaveBeenCalledTimes(2));
+    const second = (api.put.mock.calls[1][1] as { body: { draftVersion: number; draft: TMeetingCardDraft } }).body;
+    expect(second.draftVersion).toBe(4);
+    expect(second.draft.sections[0].body).toBe("二期预算定为 85 万。已定。");
+  });
+
+  it("没填实际时间：按钮旁边选时间，先存时间再确认", async () => {
+    const initial = view({ draft: draft({ occurredAt: null }) });
+    const timed = draft({ occurredAt: "2026-10-01T09:00:00+08:00" });
+    api.put.mockResolvedValue(ok(view({ draftVersion: 4, draft: timed })));
+    api.post.mockResolvedValue(ok(view({ draftVersion: 4, draft: timed, confirmed: confirmedOf(timed), sync: SYNCED })));
+    const tree = render(initial);
+    expect(button(tree, "确认这份记录")!.props!.disabled).toBe(true);
+    const pickers = tree.filter((node) => node.props?.label === "实际" && typeof node.props?.onChange === "function");
+    expect(pickers).toHaveLength(1);
+    (pickers[0].props!.onChange as (value: string) => void)("2026-10-01T09:00");
+    await vi.waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    expect((api.put.mock.calls[0][1] as { body: { draft: TMeetingCardDraft } }).body.draft.occurredAt).toBe("2026-10-01T09:00:00+08:00");
+    await vi.waitFor(() => expect(button(render(initial), "确认这份记录")!.props!.disabled).toBe(false));
+    click(button(render(initial), "确认这份记录"));
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect((api.post.mock.calls[0][1] as { body: unknown }).body).toEqual({ draftVersion: 4, writeToWorld: true });
+    expect(api.put.mock.invocationCallOrder[0]).toBeLessThan(api.post.mock.invocationCallOrder[0]);
+  });
+
+  it("没挂对象又要写进本体：开关旁标「未挂对象」、不能确认；选不写进本体就能确认", () => {
+    const initial = view({ draft: draft({ relatedObjectRefs: [] }) });
+    const tree = render(initial);
+    expect(hasText(tree, "未挂对象")).toBe(true);
+    expect(button(tree, "确认这份记录")!.props!.disabled).toBe(true);
+    click(tree.find((node) => node.props?.role === "switch"));
+    const off = render(initial);
+    expect(hasText(off, "未挂对象")).toBe(false);
+    expect(button(off, "确认这份记录")!.props!.disabled).toBe(false);
+  });
+
+  it("确认出错只显示标签：本体读不了是「本体暂不可用」，时间不对把时间标红", async () => {
+    const initial = view();
+    api.post.mockResolvedValueOnce({ error: { code: "WORLD_UNAVAILABLE", message: "World read failed: ETIMEDOUT" }, response: { ok: false, status: 503 } });
+    click(button(render(initial), "确认这份记录"));
+    await vi.waitFor(() => expect(hasText(render(initial), "本体暂不可用")).toBe(true));
+    expect(render(initial).some((node) => text(node).includes("ETIMEDOUT"))).toBe(false);
+
+    api.post.mockResolvedValueOnce({ error: { code: "OCCURRED_AT_REQUIRED", message: "实际时间要填且不能在将来" }, response: { ok: false, status: 400 } });
+    click(button(render(initial), "确认这份记录"));
+    await vi.waitFor(() => expect(render(initial).some((node) => node.props?.["data-invalid"] !== undefined)).toBe(true));
+    const after = render(initial);
+    expect(after.some((node) => text(node).includes("将来"))).toBe(false);
+    expect(button(after, "确认这份记录")!.props!.disabled).toBe(true);
+  });
+
+  it("修改中：改过的段落，确认版原文划线显示在新文字正上方；没改的只显示一次", () => {
+    const edited = draft({ sections: [SEC_1, { ...SEC_2, body: "十二月上线。已定。" }] });
+    const tree = render(view({ draft: edited, confirmed: confirmedOf(draft()), sync: SYNCED }));
+    const second = nodes(tree.find((node) => node.props?.["aria-label"] === "第 2 段"));
+    const struck = second.findIndex((node) => node.type === "del");
+    expect(text(second[struck])).toBe("十一月上线。未定。");
+    expect(struck).toBeLessThan(second.findIndex((node) => node.type === "textarea" && node.props?.["aria-label"] === "第 2 段正文"));
+    expect(second.filter((node) => node.type === "del")).toHaveLength(1);
+    expect(nodes(tree.find((node) => node.props?.["aria-label"] === "第 1 段")).some((node) => node.type === "del")).toBe(false);
+  });
+
+  it("对象修改可以删；修改中删掉的整条划线留在原处", async () => {
+    api.put.mockResolvedValue(ok(view({ draftVersion: 4, draft: draft({ objectChanges: [] }) })));
+    const initial = view();
+    // 两段和一条对象修改各有「⋯ 删除」，最后一个是对象修改的。
+    (render(initial).filter((node) => node.props?.onPress && text(node) === "删除").at(-1)!.props!.onPress as () => void)();
+    await vi.waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    expect((api.put.mock.calls[0][1] as { body: { draft: TMeetingCardDraft } }).body.draft.objectChanges).toEqual([]);
+
+    hooks.values = []; hooks.refs = [];
+    const editing = render(view({ draft: draft({ objectChanges: [] }), confirmed: confirmedOf(draft()), sync: SYNCED }));
+    const gone = editing.find((node) => node.type === "article" && node.props?.["data-deleted"] !== undefined)!;
+    expect(gone.props!["aria-label"]).toBe("接口全量切到 v2 · result");
+    expect(nodes(gone).some((node) => node.type === "textarea")).toBe(false);
+  });
+
+  it("只读的人也看同步状态，没有重试", () => {
+    const tree = render(view({ canEdit: false, confirmed: confirmedOf(draft()), sync: { ...SYNCED, event: { status: "failed", eventId: null, error: "本体超时" } } }));
+    expect(hasText(tree, "会议事件 · 写入失败 · 本体超时")).toBe(true);
+    expect(hasText(tree, "接口全量切到 v2 · result · 已更新")).toBe(true);
+    expect(button(tree, "重试")).toBeUndefined();
   });
 
   it("事件写失败可以重试", async () => {

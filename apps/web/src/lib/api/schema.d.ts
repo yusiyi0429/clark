@@ -1221,7 +1221,7 @@ export interface paths {
             cookie?: never;
         };
         /** 会议卡：草稿（读时目标变过就刷新差异）、行动项、确认版与同步回执；主持人、创建人、CEO、实际参会人能读，别人 404 */
-        get: operations["getMeetingCard"];
+        get: operations["getMeetingRecordCard"];
         put?: never;
         post?: never;
         delete?: never;
@@ -14656,7 +14656,7 @@ export interface operations {
             };
         };
     };
-    getMeetingCard: {
+    getMeetingRecordCard: {
         parameters: {
             query?: never;
             header?: never;
