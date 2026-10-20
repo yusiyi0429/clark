@@ -55,6 +55,10 @@ const liveUnitsFrom=s=>{const visit=n=>({...currentVersion(s.cards[n.id]).conten
 const liveUnits=()=>liveUnitsFrom(store.snapshot());
 const liveNodes=()=>allNodes(liveUnits());
 const actorFor=id=>memberActor(id,store.snapshot());
+// M2_ROUND_OPERATORS lists members (besides the CEO) who may start, resume and load a round from the deployment.
+// It carries no right to confirm plans or to see the CEO's plan audit.
+const roundOperators=new Set((process.env.M2_ROUND_OPERATORS||'').split(',').map(s=>s.trim()).filter(Boolean));
+const mayRunRounds=actor=>!!actor.ceo||roundOperators.has(actor.id);
 let roundFlight=false,auditFlight=false;
 if(store.snapshot().roundJob?.status==='running')await store.transact(s=>{s.roundJob.status='failed';s.roundJob.error='服务重启中断了生成，旧轮未受影响，可续跑未完成部分';return s;});
 if(store.snapshot().roundAuditJob?.status==='running')await store.transact(s=>{s.roundAuditJob.status='failed';s.roundAuditJob.error='服务重启中断了审核，当前计划保留，可重试审核';s.sequence++;return s;});
@@ -132,9 +136,9 @@ export const server=createServer(async(req,res)=>{
    await store.transact(old=>{if(old.round?.id===round.id)throw Object.assign(Error(`第${b.round}轮已载入，不能清空当前讨论重新导入`),{status:409});if(b.expectedSequence!==old.sequence)throw Object.assign(Error('协作记录有更新，请核对后再导入'),{status:409});return activateIndependentRound(old,round);});
    return json(res,200,{ok:true,round:round.number,counts:round.counts,roundId:round.id});
   }
-  if(route.pathname==='/api/rounds'&&req.method==='GET'){const state=store.snapshot(),member=req.m2Session.memberId;return revalidated(req,res,cachedRead(state,'rounds:'+member,()=>{const actor=memberActor(member,state);return {auditJob:actor.ceo?state.roundAuditJob||null:null,job:generationView(state.roundJob,actor)};}));}
+  if(route.pathname==='/api/rounds'&&req.method==='GET'){const state=store.snapshot(),member=req.m2Session.memberId;return revalidated(req,res,cachedRead(state,'rounds:'+member,()=>{const actor=memberActor(member,state);return {auditJob:actor.ceo?state.roundAuditJob||null:null,job:generationView(state.roundJob,mayRunRounds(actor)?{...actor,ceo:true}:actor)};}));}
   if(req.url==='/api/rounds'&&req.method==='POST'){
-   const b=await body(req);if(!actorFor(b.memberId).ceo)return json(res,403,{error:'请由公司负责人开始新轮次'});
+   const b=await body(req);if(!mayRunRounds(actorFor(b.memberId)))return json(res,403,{error:'请由公司负责人或轮次操作人开始新轮次'});
    if(b.sourceMode&&!['ontology','feishu'].includes(b.sourceMode))return json(res,400,{error:'请选择本体或飞书基础资料'});
    if(!b.resume&&(b.sourceMode||'ontology')==='ontology'&&!(await ontologyConnectionStatus()).configured)return json(res,503,{error:'服务器尚未配置本体只读凭证，无法重新读取；当前计划保留。'});
    if(!ready)return json(res,503,{error:'模型服务尚未配置'});
@@ -163,13 +167,13 @@ export const server=createServer(async(req,res)=>{
    return json(res,202,{id,status:'running'});
   }
   if(req.url==='/api/rounds/preview-failed'&&req.method==='POST'){
-   const b=await body(req);if(!actorFor(b.memberId).ceo)return json(res,403,{error:'请由公司负责人展示候选'});
+   const b=await body(req);if(!mayRunRounds(actorFor(b.memberId)))return json(res,403,{error:'请由公司负责人或轮次操作人展示候选'});
    if(roundFlight||auditFlight)return json(res,409,{error:'生成中不能切换轮次'});
    const next=await store.transact(old=>{if(old.sequence!==b.expectedSequence)throw Object.assign(Error('协作记录已更新，请核对后再展示'),{status:409});return previewFailedRound(old,b.jobId,gateway.status);});
    return json(res,200,{ok:true,round:next.round.number,roundId:next.round.id,audit:next.round.audit});
   }
   if(req.url==='/api/rounds/activate'&&req.method==='POST'){
-   const b=await body(req);if(!actorFor(b.memberId).ceo)return json(res,403,{error:'请由公司负责人载入候选'});
+   const b=await body(req);if(!mayRunRounds(actorFor(b.memberId)))return json(res,403,{error:'请由公司负责人或轮次操作人载入候选'});
    const job=store.snapshot().roundJob;if(!job||job.id!==b.jobId||job.status!=='ready')return json(res,409,{error:'候选尚未生成或已载入'});
    await store.transact(old=>{if(old.roundJob?.id!==b.jobId||old.roundJob.status!=='ready')throw Object.assign(Error('候选已被载入，请刷新画布'),{status:409});const roundUnits=job.result.raw?validateRound(job.result.raw):job.result.units;const next=createCollaborationState(roundUnits);next.archives=[...(old.archives||[]),{...old,archives:undefined,roundJob:undefined}];next.round={id:job.id,number:(old.round?.number||6)+1,units:roundUnits,input:job.result.input,audit:job.result.audit};next.roundJob={...job,status:'activated'};next.sequence=old.sequence+1;return next;});
    return json(res,200,{ok:true});
@@ -212,7 +216,7 @@ export const server=createServer(async(req,res)=>{
    if(b.action.type==='rejectProposal'){const event=next.messages.at(-1);if(event?.rejectsProposal===b.action.proposalId)await scheduleNexus(event.scope,actor.id,event);}
    return json(res,200,sharedProjection(next,actor));
   }
-  if(req.url==='/api/data'){const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state);const metadata=await roundMetadata(state.round,input);metadata.readerViews=visibleReaderViews(metadata.readerViews,state,actor);if(!actor.ceo)delete metadata.roundAudit;return revalidated(req,res,etagged(JSON.stringify({session:req.m2Session,units:liveUnitsFrom(state).filter(u=>canRead(actor,state.cards[u.id])),round:state.round?.number||6,roundId:state.round?.id||null,skill:state.round?.input?.skill?.version||'旧轮未记录实际技能快照',availableSkill:loadedSkill.version,modelReady:ready,modelStatus:gateway.status,chatModelStatus:chatGateway===gateway?null:chatGateway.status,auditStatus:state.round?.audit?.status||null,auditIssueCount:state.round?.audit?.issues?.length||0,auditGapCount:state.round?.audit?.gaps?.length||0,sourceTime:state.round?.input.retrievedAt||input.retrievedAt,...metadata})));}
+  if(req.url==='/api/data'){const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state);const metadata=await roundMetadata(state.round,input);metadata.readerViews=visibleReaderViews(metadata.readerViews,state,actor);if(!actor.ceo)delete metadata.roundAudit;return revalidated(req,res,etagged(JSON.stringify({session:req.m2Session,canRunRounds:mayRunRounds(actor),units:liveUnitsFrom(state).filter(u=>canRead(actor,state.cards[u.id])),round:state.round?.number||6,roundId:state.round?.id||null,skill:state.round?.input?.skill?.version||'旧轮未记录实际技能快照',availableSkill:loadedSkill.version,modelReady:ready,modelStatus:gateway.status,chatModelStatus:chatGateway===gateway?null:chatGateway.status,auditStatus:state.round?.audit?.status||null,auditIssueCount:state.round?.audit?.issues?.length||0,auditGapCount:state.round?.audit?.gaps?.length||0,sourceTime:state.round?.input.retrievedAt||input.retrievedAt,...metadata})));}
   if(['/api/agent','/api/nexus'].includes(req.url)&&req.method==='POST'){
    const b=await body(req), n=liveNodes().find(n=>n.id===b.context?.selection?.id),roundAtStart=store.snapshot().round?.id;
    if(!ready)return json(res,503,{error:'模型服务尚未配置。需在服务器配置 DECODING_API_BASE、DECODING_MODEL、DECODING_API_KEY；密钥不进入浏览器。'});
