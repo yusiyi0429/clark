@@ -3775,6 +3775,7 @@ export interface components {
         FeishuAuthConfigResponse: {
             enabled: boolean;
             appId?: string;
+            scopes?: string[];
         };
         FeishuCodeLoginRequest: {
             code: string;

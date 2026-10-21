@@ -1,8 +1,8 @@
 import { Type, type Static } from "@sinclair/typebox";
 
-/** 前端判断能否走飞书免登：未配置飞书应用时 enabled=false、不给 appId。 */
+/** 前端判断能否走飞书免登：未配置飞书应用时 enabled=false、不给 appId；scopes 是浏览器授权同一套用户权限，供 requestAccess 的 scopeList 使用。 */
 export const FeishuAuthConfigResponse = Type.Object(
-  { enabled: Type.Boolean(), appId: Type.Optional(Type.String()) },
+  { enabled: Type.Boolean(), appId: Type.Optional(Type.String()), scopes: Type.Optional(Type.Array(Type.String())) },
   { additionalProperties: false },
 );
 

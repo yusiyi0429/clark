@@ -65,7 +65,10 @@ describe("飞书免登路由", () => {
     const fake = fakeFeishu();
     t = await createTestApp({ feishu }, undefined, { feishuClient: fake.client });
     await t.sql("INSERT INTO feishu_identities (person_id, open_id) VALUES ($1, 'ou_ceo')", [TEST_CEO.personId]);
-    expect((await t.app.inject({ method: "GET", url: "/api/auth/feishu/config" })).json()).toEqual({ enabled: true, appId: "cli_test" });
+    expect((await t.app.inject({ method: "GET", url: "/api/auth/feishu/config" })).json()).toEqual({
+      enabled: true, appId: "cli_test",
+      scopes: ["offline_access", "drive:drive.metadata:readonly", "minutes:minutes:readonly", "minutes:minutes.basic:read", "minutes:minutes.search:read", "minutes:minutes.artifacts:read", "minutes:minutes.transcript:export", "vc:meeting:readonly"],
+    });
 
     const { state, stateCookie, location } = await startFlow(t.app);
     expect(location.origin + location.pathname).toBe("https://accounts.feishu.cn/open-apis/authen/v1/authorize");

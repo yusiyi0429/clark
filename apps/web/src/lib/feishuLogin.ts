@@ -33,7 +33,10 @@ function loadSdk(): Promise<FeishuWindow> {
 }
 
 /** h5sdk.ready 之后调 requestAccess；客户端低于 V6.9.0（errno 103）或 JSSDK 太旧时退回 requestAuthCode。 */
-export function requestFeishuCode(win: FeishuWindow, appId: string): Promise<string> {
+export function requestFeishuCode(win: FeishuWindow, appId: string, scopes: string[] = []): Promise<string> {
+  // offline_access 是 OAuth 的刷新令牌声明，不是开放平台里能开通的权限点；JSSDK 文档只说 scopeList 传「需要用户授权的权限」，
+  // 未开通的点位会让整个授权报错，所以不传它，免登拿到的令牌是否带刷新令牌以实测为准。
+  const scopeList = scopes.filter((scope) => scope !== "offline_access");
   return new Promise((resolve, reject) => {
     win.h5sdk!.ready(() => {
       const fallback = () => {
@@ -43,7 +46,7 @@ export function requestFeishuCode(win: FeishuWindow, appId: string): Promise<str
       if (!win.tt?.requestAccess) return fallback();
       win.tt.requestAccess({
         appID: appId,
-        scopeList: [],
+        scopeList,
         success: (res) => resolve(res.code),
         fail: (err) => (err.errno === 103 ? fallback() : reject(new Error("飞书授权没有完成"))),
       });
@@ -56,7 +59,7 @@ export async function feishuAutoLogin(): Promise<FeishuLoginResult | null> {
   const { data: config } = await browserApi.GET("/api/auth/feishu/config");
   if (!config?.enabled || !config.appId) return null;
   try {
-    const code = await requestFeishuCode(await loadSdk(), config.appId);
+    const code = await requestFeishuCode(await loadSdk(), config.appId, config.scopes);
     const { data, error } = await browserApi.POST("/api/auth/feishu/code", { body: { code } });
     if (data) return { ok: true, role: data.role, onboarded: data.onboarded };
     return { ok: false, message: (error as { message?: string } | undefined)?.message ?? "飞书免登失败" };

@@ -42,7 +42,7 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
   const redirectUri = `${env.publicOrigin}/api/auth/feishu/callback`;
 
   app.get("/api/auth/feishu/config", { schema: { response: { 200: FeishuAuthConfigResponse } } }, async () =>
-    feishu && client ? { enabled: true, appId: feishu.appId } : { enabled: false });
+    feishu && client ? { enabled: true, appId: feishu.appId, scopes: FEISHU_OAUTH_SCOPE.split(" ") } : { enabled: false });
 
   app.get("/api/me/feishu", { preHandler: requirePerson, schema: { response: { 200: FeishuConnectionResponse } } }, async (req) =>
     feishu && client ? { enabled: true, connected: await feishuConnected(q, feishu, req.person!.personId, now()) } : { enabled: false, connected: false });
