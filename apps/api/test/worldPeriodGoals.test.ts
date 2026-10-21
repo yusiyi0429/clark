@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createWorldPeriodGoalService, periodGoalCommitAction, periodGoalConfirmAction } from "../src/worldPeriodGoals.js";
-import { WorldClient, type WorldHead } from "../src/worldClient.js";
+import { loadWorldInstance, WorldClient, type WorldHead } from "../src/worldClient.js";
 import { instance, projection, stubWorld, withWorld, worldEnv } from "./worldFixture.js";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -212,8 +212,8 @@ describe("world 代 RU DRI 承诺周期目标（0.3）", () => {
     { event_id: "<create-2>", kind: "object.created", recorded_at: "2026-10-01T02:00:00Z" },
     { event_id: "<revise-2>", kind: "object.revised", recorded_at: "2026-10-05T02:00:00Z" },
   ] });
-  /** 实例配置按域写明 RU DRI：缺省 E&O 是于斯一（同 MVP 配置）。 */
-  const withUnitDris = (run: (client: WorldClient, pool: Pool) => Promise<void>, unitDris: Record<string, string> = { eo: "yu-siyi" }) =>
+  /** 实例配置按域写明 RU DRI：缺省 E&O 是刘人豪（同 MVP 配置）。 */
+  const withUnitDris = (run: (client: WorldClient, pool: Pool) => Promise<void>, unitDris: Record<string, string> = { eo: "liu-renhao" }) =>
     withWorld(async (_client, { pool }) => run(new WorldClient(pool.query.bind(pool), worldEnv, { ...instance, unit_dris: unitDris }), pool));
 
   /** 有状态的本体桩：代承诺写进去后目标变成已承诺（版本加一，承诺事件带外部记录），之后才轮到代确认。 */
@@ -261,7 +261,7 @@ describe("world 代 RU DRI 承诺周期目标（0.3）", () => {
       expect(writes.map((call) => call.body.action_type)).toEqual(["world_commit_period_goal", "world_confirm_period_goal"]);
       expect(writes[0].body.target).toEqual({ object_id: "<period-goal-2>", revision_id: "<revision-20>", expected_version: 1 });
       expect(writes[0].body.params).toEqual({
-        on_behalf_of: { principal_id: instance.people["yu-siyi"], external_record_id: `tianshu:plan-sign:${planId}`, external_confirmed_at: "2026-10-08T21:22:05+08:00" },
+        on_behalf_of: { principal_id: instance.people["liu-renhao"], external_record_id: `tianshu:plan-sign:${planId}`, external_confirmed_at: "2026-10-08T21:22:05+08:00" },
       });
       expect(writes[1].body).toMatchObject({
         target: { object_id: "<period-goal-2>", expected_version: 2 },
@@ -269,7 +269,7 @@ describe("world 代 RU DRI 承诺周期目标（0.3）", () => {
       });
       // 回执里本体实际用的委托照存，开代记后读回核对。
       expect((await pool.query("SELECT action_type, status, delegation_event_id FROM world_sync_ledger ORDER BY id")).rows).toEqual([
-        { action_type: "world_commit_period_goal", status: "committed", delegation_event_id: `<delegation:${instance.people["yu-siyi"]}>` },
+        { action_type: "world_commit_period_goal", status: "committed", delegation_event_id: `<delegation:${instance.people["liu-renhao"]}>` },
         { action_type: "world_confirm_period_goal", status: "committed", delegation_event_id: `<delegation:${instance.people["liu-minghua"]}>` },
       ]);
       service.schedule();
@@ -295,6 +295,15 @@ describe("world 代 RU DRI 承诺周期目标（0.3）", () => {
       expect(actionsOf(calls)).toHaveLength(0);
       await service.close();
     });
+  });
+
+  it("MVP 实例配置：写了 RU DRI 的域都在 domains 里，那个人都有本体主体（写错会静默不代）", () => {
+    const config = loadWorldInstance();
+    expect(Object.keys(config.unit_dris ?? {}).length).toBeGreaterThan(0);
+    for (const [key, person] of Object.entries(config.unit_dris ?? {})) {
+      expect(config.domains[key], key).toBeTruthy();
+      expect(config.people[person], person).toBeTruthy();
+    }
   });
 
   it("实例配置里没写这个域的 RU DRI、或写的人没有本体主体，就不代承诺", async () => {
