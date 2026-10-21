@@ -7,9 +7,10 @@
  */
 import { useEffect, useState } from "react";
 import { Button } from "ts-design/primitives";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Download, X } from "lucide-react";
 import type { TUsageLedgerItem, TUsagePath, TUsagePersonRow, TUsageResponse, TUsageWeekReport } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
+import { deliverMarkdown, downloadText, type Delivered } from "./deliverMarkdown";
 import s from "./admin.module.css";
 import u from "./usage.module.css";
 
@@ -23,7 +24,7 @@ export function UsagePanel() {
   const [week, setWeek] = useState<string | null>(null);
   const [view, setView] = useState<TUsageResponse | null>(null);
   const [failed, setFailed] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [delivered, setDelivered] = useState<Delivered | "failed" | null>(null);
 
   useEffect(() => {
     let current = true;
@@ -35,15 +36,18 @@ export function UsagePanel() {
     return () => { current = false; };
   }, [week]);
 
+  /** 复制周报 Markdown；剪贴板用不了就下载 .md。按钮上的图标和字两秒内显示结果。 */
   const copy = async () => {
     if (!view) return;
+    let result: Delivered | "failed" = "failed";
     try {
       const { data } = await browserApi.GET("/api/admin/usage/markdown", { params: { query: { week: view.report.weekStart } }, parseAs: "text" });
-      if (typeof data !== "string") return;
-      await navigator.clipboard.writeText(data);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2_000);
-    } catch { /* 复制不了就保持原样 */ }
+      if (typeof data === "string") {
+        result = await deliverMarkdown(data, `天枢使用周报-${view.report.weekStart}.md`, { clipboard: navigator.clipboard, download: downloadText });
+      }
+    } catch { /* 记成失败 */ }
+    setDelivered(result);
+    window.setTimeout(() => setDelivered(null), 2_000);
   };
 
   if (!view) return <div className={u.panel}>{failed ? <p className={s.error} role="alert">没有取到数据</p> : <div className={u.placeholder} aria-busy="true" />}</div>;
@@ -55,7 +59,9 @@ export function UsagePanel() {
           {view.weeks.map((item) => <option key={item.weekStart} value={item.weekStart}>{weekLabel(item.weekStart)}{item.live ? " · 本周" : ""}</option>)}
         </select>
         <Button variant="ghost" className={s.action} onPress={() => void copy()}>
-          {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}Markdown
+          {delivered === "copied" ? <Check size={14} aria-hidden="true" /> : delivered === "downloaded" ? <Download size={14} aria-hidden="true" />
+            : delivered === "failed" ? <X size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+          <span role="status">{delivered === "copied" ? "已复制" : delivered === "downloaded" ? "已下载" : delivered === "failed" ? "失败" : "Markdown"}</span>
         </Button>
       </div>
       {failed ? <p className={s.error} role="alert">没有取到数据</p> : null}

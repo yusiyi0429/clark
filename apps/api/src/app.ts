@@ -526,10 +526,12 @@ export async function buildApp({
   }
   // 每个请求的结构化日志上下文：handler 里补充 action/run 字段，onResponse 统一落一条。
   const requestContext = new WeakMap<FastifyRequest, RequestContext>();
-  // 使用周报的「哪天用过」：登录后的请求，一人一天记一次。
+  // 使用周报的「哪天用过」：登录后发问或改动（非 GET 的请求；上手步骤上报本身不算），一人一天记一次。页面打开、轮询不算。
   const usage = createUsageTracker(q, now);
   app.addHook("onResponse", async (req, reply) => {
-    if (req.person && reply.statusCode < 400) usage.active(req.person.personId);
+    if (req.person && reply.statusCode < 400 && req.method !== "GET" && req.method !== "HEAD" && req.routeOptions.url !== "/api/me/usage/onboarding-step") {
+      usage.active(req.person.personId);
+    }
     const ctx = requestContext.get(req) ?? {};
     logEvent({
       event: "http.request",

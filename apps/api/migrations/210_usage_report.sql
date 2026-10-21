@@ -1,6 +1,6 @@
 -- 使用周报（usage.ts）：能从现有表推导的都现算（对话运行、会议卡、个人记忆、上手完成、失败与质量信号），这里只存推导不了的几类，以及每周生成的周报快照。
 -- usage_events：一次一行，只有 personId、种类、时间，不存正文和凭证。
---   active 某人这一天用过天枢（登录后的任何请求，一人一天一行）；login 登录成功；memory_edit 本人在界面上原地改了一条个人记忆；
+--   active 某人这一天用过天枢（登录后发问或改动，GET 不算，一人一天一行）；login 登录成功；memory_edit 本人在界面上原地改了一条个人记忆；
 --   memory_purge 本人彻底删除了一条个人记忆（行已经没了，推导不出来）；onboarding_step 上手走到了哪一步（detail 是步骤名，一人一步一天一行）。
 --   day 是北京时间的日期。
 CREATE TABLE usage_events (
