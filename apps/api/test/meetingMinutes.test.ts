@@ -691,3 +691,37 @@ describe("用户自己上传了，自动同步就停下", () => {
     }
   });
 });
+
+// 10/21 对真飞书：search 条件在 filter 里、每页最多 30，结果只有 token 和展示文字；开始时刻、所有者、来源会议逐条查详情补上。
+describe("妙记搜索按真飞书的请求与返回", () => {
+  it("按本人和时间段搜，再逐条查详情；来源会议取 generated_source", async () => {
+    const requests: { url: string; body: unknown }[] = [];
+    const json = (data: unknown) => new Response(JSON.stringify({ code: 0, msg: "success", data }), { headers: { "content-type": "application/json" } });
+    const fetchFake = (async (url: string, init?: RequestInit) => {
+      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+      if (url.includes("/minutes/search")) {
+        return url.includes("page_token=p2")
+          ? json({ has_more: false, items: [{ token: "obcn_b", display_info: "周会", meta_data: { app_link: "https://x/minutes/obcn_b" } }] })
+          : json({ has_more: true, page_token: "p2", items: [{ token: "obcn_a", display_info: "对话质量", meta_data: { app_link: "https://x/minutes/obcn_a" } }] });
+      }
+      const token = url.includes("obcn_a") ? "obcn_a" : "obcn_b";
+      return json({ minute: { token, title: token === "obcn_a" ? "对话质量" : "周会", owner_id: "ou_host", create_time: token === "obcn_a" ? "1792380446082" : "1792390000000",
+        duration: "3181000", url: `https://x/minutes/${token}`, generated_source: { source_entity_id: `vc_${token}`, source_type: "meeting" } } });
+    }) as typeof fetch;
+    const api = createFeishuMinutesApi({ fetch: fetchFake });
+    const start = new Date("2026-10-19T02:00:00.000Z");
+    const end = new Date("2026-10-19T06:00:00.000Z");
+    const minutes = await api.listMinutes("u-token", { openId: "ou_host" }, { start, end });
+
+    const searches = requests.filter((item) => item.url.includes("/minutes/search"));
+    expect(searches).toHaveLength(2);
+    expect(searches[0].url).toContain("page_size=30");
+    expect(searches[0].body).toEqual({ filter: { owner_ids: ["ou_host"], create_time: { start_time: start.toISOString(), end_time: end.toISOString() } } });
+    expect(searches[1].url).toContain("page_token=p2");
+    expect(minutes.map(({ token, ownerOpenId, meetingId, durationSeconds }) => ({ token, ownerOpenId, meetingId, durationSeconds }))).toEqual([
+      { token: "obcn_a", ownerOpenId: "ou_host", meetingId: "vc_obcn_a", durationSeconds: 3181 },
+      { token: "obcn_b", ownerOpenId: "ou_host", meetingId: "vc_obcn_b", durationSeconds: 3181 },
+    ]);
+    expect(minutes[0].createdAt?.toISOString()).toBe(new Date(1792380446082).toISOString());
+  });
+});

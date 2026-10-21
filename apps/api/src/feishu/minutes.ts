@@ -10,7 +10,8 @@ import { decryptTokenSecret } from "./crypto.js";
  * - 逐字稿导出（产物接口没权限时退回）：GET /minutes/v1/minutes/{minute_token}/transcript?need_speaker=true&need_timestamp=true&file_format=txt（minutes:minutes.transcript:export）
  * - 轮询兜底：POST /minutes/v1/minutes/search，按本人名下、时间段列妙记
  * - 实际参会名单：GET /vc/v1/meetings/{meeting_id}?with_participants=true（用户身份 vc:meeting）
- * 后台权限和 OAuth scope 还没配好，这一层先用 mock 测；search 的请求字段、时间格式和参会名单的字段名要在联调时核实（标了「待联调」）。
+ * search 10/21 对过真飞书：条件放在 filter 里（owner_ids、create_time 的起止），每页最多 30；结果只有 token 和展示文字，
+ * 开始时刻、所有者、来源会议要再逐条查详情。参会名单的字段名还没对过（标了「待联调」）。
  */
 const OPEN_API = "https://open.feishu.cn/open-apis";
 const TIMEOUT_MS = 15_000;
@@ -23,7 +24,7 @@ export type FeishuMinuteInfo = {
   createdAt: Date | null;
   durationSeconds: number | null;
   url: string | null;
-  /** 来源会议（事件里的 minute_source.source_entity_id）；详情接口不一定给。 */
+  /** 来源会议（详情里的 generated_source.source_entity_id）。 */
   meetingId: string | null;
 };
 
@@ -60,7 +61,7 @@ function minuteOf(raw: Record<string, unknown>): FeishuMinuteInfo {
     createdAt: msDate(raw.create_time ?? raw.start_time),
     durationSeconds: Number.isFinite(duration) && duration > 0 ? Math.round(duration > 100_000 ? duration / 1000 : duration) : null,
     url: str(raw.url),
-    meetingId: str((raw.minute_source as { source_entity_id?: unknown } | undefined)?.source_entity_id),
+    meetingId: str(((raw.generated_source ?? raw.minute_source) as { source_entity_id?: unknown } | undefined)?.source_entity_id),
   };
 }
 
@@ -78,11 +79,12 @@ export function createFeishuMinutesApi({ fetch: fetchImpl = fetch }: { fetch?: F
     if (code !== 0) throw new FeishuApiError(code, String(body.msg ?? "飞书接口失败"), response.status);
     return (body.data ?? {}) as Record<string, unknown>;
   }
+  async function getMinute(userAccessToken: string, minuteToken: string): Promise<FeishuMinuteInfo> {
+    const data = await call(userAccessToken, `/minutes/v1/minutes/${encodeURIComponent(minuteToken)}?user_id_type=open_id`);
+    return minuteOf({ ...((data.minute ?? data) as Record<string, unknown>), token: minuteToken });
+  }
   return {
-    async getMinute(userAccessToken, minuteToken) {
-      const data = await call(userAccessToken, `/minutes/v1/minutes/${encodeURIComponent(minuteToken)}?user_id_type=open_id`);
-      return minuteOf({ ...((data.minute ?? data) as Record<string, unknown>), token: minuteToken });
-    },
+    getMinute,
     async artifactTranscript(userAccessToken, minuteToken) {
       const data = await call(userAccessToken, `/minutes/v1/minutes/${encodeURIComponent(minuteToken)}/artifacts`);
       if (typeof data.transcript !== "string" || !data.transcript) throw new FeishuApiError(MINUTES_NOT_READY_CODE, "妙记产物里还没有逐字稿");
@@ -104,13 +106,19 @@ export function createFeishuMinutesApi({ fetch: fetchImpl = fetch }: { fetch?: F
       return text;
     },
     async listMinutes(userAccessToken, owner, range) {
-      // 待联调：search 的过滤字段名与时间格式（这里按 RFC3339 写）。
-      const data = await call(userAccessToken, "/minutes/v1/minutes/search?page_size=50&user_id_type=open_id", {
-        method: "POST",
-        body: JSON.stringify({ owner_ids: [owner.openId], start_time: range.start.toISOString(), end_time: range.end.toISOString() }),
-      });
-      const items = (data.items ?? data.minutes ?? []) as Record<string, unknown>[];
-      return items.map(minuteOf).filter((minute) => minute.token);
+      const tokens: string[] = [];
+      let pageToken: string | undefined;
+      // 一场会前后几小时的窗口，本人名下通常就几份；最多翻 3 页。
+      for (let page = 0; page < 3; page += 1) {
+        const data = await call(userAccessToken, `/minutes/v1/minutes/search?page_size=30&user_id_type=open_id${pageToken ? `&page_token=${encodeURIComponent(pageToken)}` : ""}`, {
+          method: "POST",
+          body: JSON.stringify({ filter: { owner_ids: [owner.openId], create_time: { start_time: range.start.toISOString(), end_time: range.end.toISOString() } } }),
+        });
+        for (const item of (data.items ?? []) as Record<string, unknown>[]) if (str(item.token)) tokens.push(item.token as string);
+        pageToken = data.has_more === true ? str(data.page_token) ?? undefined : undefined;
+        if (!pageToken) break;
+      }
+      return Promise.all(tokens.map((token) => getMinute(userAccessToken, token)));
     },
     async meetingParticipants(userAccessToken, meetingId) {
       const data = await call(userAccessToken, `/vc/v1/meetings/${encodeURIComponent(meetingId)}?with_participants=true&user_id_type=open_id`);

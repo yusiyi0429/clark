@@ -99,7 +99,7 @@ export function minuteFromEvent(payload: Record<string, unknown>): { minuteToken
   const event = (payload.event as Record<string, unknown> | undefined) ?? payload;
   const token = event.minute_token ?? (event.minute as { token?: unknown } | undefined)?.token;
   if (typeof token !== "string" || !token) return null;
-  const source = event.minute_source as { source_type?: unknown; source_entity_id?: unknown } | undefined;
+  const source = (event.generated_source ?? event.minute_source) as { source_type?: unknown; source_entity_id?: unknown } | undefined;
   return { minuteToken: token, feishuMeetingId: typeof source?.source_entity_id === "string" && source.source_entity_id ? source.source_entity_id : null };
 }
 
