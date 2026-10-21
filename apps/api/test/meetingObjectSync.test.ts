@@ -92,7 +92,7 @@ describe("对象修改逐个提交", () => {
       const [first, second] = world.revisions();
       expect(world.revisions()).toHaveLength(2);
       expect(first).toMatchObject({
-        action_type: "world_revise_object", contract_version: "tkos.world/0.3", idempotency_key: `tianshu-meeting:${meetingId}:v1:obj:chg-1`,
+        action_type: "world_revise_object", contract_version: "tkos.world/0.3", idempotency_key: `tianshu-meeting:${meetingId}:v1:change:chg-1`,
         target: { object_id: "obj-po-1", revision_id: "obj-po-1-r5", expected_version: 5 },
         params: {
           payload: { blocks: { target: { components: [{ id: "acc-1", type: "acceptance_criterion", text: "十月底前 4 家客户上线" }] } } },
@@ -100,13 +100,18 @@ describe("对象修改逐个提交", () => {
         },
       });
       // 冻结的是 5；第一条是天枢自己改的，第二条接着它改出的版本提交。
-      expect(second).toMatchObject({ idempotency_key: `tianshu-meeting:${meetingId}:v1:obj:chg-2`, target: { revision_id: "obj-po-1-r6", expected_version: 6 } });
+      expect(second).toMatchObject({ idempotency_key: `tianshu-meeting:${meetingId}:v1:change:chg-2`, target: { revision_id: "obj-po-1-r6", expected_version: 6 } });
       const sync = (await getCard(t, host, meetingId)).sync!;
       expect(sync.event.status).toBe("succeeded");
       expect(sync.objects).toEqual([
         { changeId: "chg-1", title: "十月交付 · 验收标准", status: "updated", actualVersion: 6, error: null },
         { changeId: "chg-2", title: "十月交付 · 验收标准", status: "updated", actualVersion: 7, error: null },
       ]);
+      // 先逐条写修订，最后写会议事件；事件的 refs 列写成的修订，钉到改出的版本（斯一 10/21）。
+      const prepares = world.calls.filter((call) => call.url.pathname === "/v1/actions/prepare").map((call) => call.body);
+      expect(prepares.map((body) => body.action_type)).toEqual(["world_revise_object", "world_revise_object", "world_record_event"]);
+      expect(prepares[2]).toMatchObject({ idempotency_key: `tianshu-meeting:${meetingId}:v1:event`,
+        params: { content: { refs: ["obj-po-1@6#target/acc-1", "obj-po-1@7#target/acc-2"] } } });
       // 再跑一遍不再提交。
       await run();
       expect(world.revisions()).toHaveLength(2);
@@ -157,11 +162,14 @@ describe("对象修改逐个提交", () => {
       const view = await getCard(t, host, meetingId);
       expect(view.sync!.event).toMatchObject({ status: "succeeded", eventId: "ev-1" });
       expect(view.sync!.objects).toMatchObject([
-        { changeId: "chg-1", status: "not_allowed", error: "没有修改权限", actualVersion: null },
+        { changeId: "chg-1", status: "not_allowed", error: "已确认、待同步", actualVersion: null },
         { changeId: "chg-2", status: "not_allowed", error: "对象状态不允许", actualVersion: null },
       ]);
       expect(view.confirmed!.payload.objectChanges.map((change) => change.id)).toEqual(["chg-1", "chg-2"]);
       expect(world.revisions()).toHaveLength(2);
+      // 一条都没写成：事件不带 refs，不说修订已生效。
+      const event = world.calls.find((call) => call.url.pathname === "/v1/actions/prepare" && call.body.action_type === "world_record_event")!.body;
+      expect(event.params.content).not.toHaveProperty("refs");
     } finally {
       await t.close();
     }
@@ -174,6 +182,22 @@ describe("对象修改逐个提交", () => {
       await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
       await run();
       expect(await objectsOf(t, meetingId, 1)).toMatchObject([{ status: "failed", error: "写入失败" }]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("一次确认里一条修订写失败：事件 refs 里没有它", async () => {
+    const world = ontology({ refuse: (body) => body.idempotency_key?.endsWith(":chg-2")
+      ? Response.json({ error: { code: "SCHEMA_INVALID", message: "x" } }, { status: 422 }) : undefined });
+    const { t, host, meetingId, run } = await setup(cardAgent(TWO_CHANGES));
+    try {
+      const draftVersion = await ready(t, host, meetingId);
+      await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
+      await run();
+      expect(await objectsOf(t, meetingId, 1)).toMatchObject([{ changeId: "chg-1", status: "updated", actualVersion: 6 }, { changeId: "chg-2", status: "failed", error: "写入失败" }]);
+      const event = world.calls.find((call) => call.url.pathname === "/v1/actions/prepare" && call.body.action_type === "world_record_event")!.body;
+      expect(event.params.content.refs).toEqual(["obj-po-1@6#target/acc-1"]);
     } finally {
       await t.close();
     }
@@ -303,7 +327,7 @@ describe("对象修改逐个提交", () => {
       await confirm(t, host, meetingId, { draftVersion: next.draftVersion, writeToWorld: true, kind: "correction" });
       expect((await objectsOf(t, meetingId, 1)).map((item) => item.status)).toEqual(["superseded", "superseded"]);
       await run();
-      expect(world.revisions().map((body) => body.idempotency_key)).toEqual([`tianshu-meeting:${meetingId}:v2:obj:chg-1`, `tianshu-meeting:${meetingId}:v2:obj:chg-2`]);
+      expect(world.revisions().map((body) => body.idempotency_key)).toEqual([`tianshu-meeting:${meetingId}:v2:change:chg-1`, `tianshu-meeting:${meetingId}:v2:change:chg-2`]);
       expect((await objectsOf(t, meetingId, 1)).map((item) => item.status)).toEqual(["superseded", "superseded"]);
       expect((await objectsOf(t, meetingId, 2)).map((item) => item.status)).toEqual(["updated", "updated"]);
       // 已经改成的不因新版确认作废。
@@ -356,7 +380,7 @@ describe("对象修改逐个提交", () => {
       const v2 = await edit(t, host, meetingId, (draft) => { draft.objectChanges[0].after.text = "十月底前 6 家客户上线"; });
       await confirm(t, host, meetingId, { draftVersion: v2.draftVersion, writeToWorld: true, kind: "correction" });
       await run();
-      expect(world.revisions().map((body) => body.idempotency_key)).toEqual([`tianshu-meeting:${meetingId}:v1:obj:chg-1`, `tianshu-meeting:${meetingId}:v2:obj:chg-1`]);
+      expect(world.revisions().map((body) => body.idempotency_key)).toEqual([`tianshu-meeting:${meetingId}:v1:change:chg-1`, `tianshu-meeting:${meetingId}:v2:change:chg-1`]);
       expect(world.revisions()[1]).toMatchObject({ target: { expected_version: 6 } });
       expect(world.po.blocks[0].components[0].text).toBe("十月底前 6 家客户上线");
       expect(await objectsOf(t, meetingId, 2)).toMatchObject([{ status: "updated", actualVersion: 7 }]);

@@ -4,20 +4,24 @@ import { logEvent } from "./observability.js";
 import { WorldError, worldErrorCode, worldRef, type WorldClient, type WorldObject } from "./worldClient.js";
 
 /**
- * 对象修改（FR-5.3、5.4）：一个确认版本的会议事件写成后，确认版里的修改按顺序各提交一次 world_revise_object，读回核对，回执逐条记在同步表 objects 里。
+ * 对象修改（FR-5.3、5.4）：一个确认版本先按顺序逐条提交修改（world_revise_object），读回核对，回执逐条记在同步表 objects 里；修改都提交完再写会议事件，
+ *   事件的 content.refs 只列这一版真正写成的修改（writtenRevisionRefs，钉到改出的版本）。幂等键 tianshu-meeting:<会议>:v<确认版本>:change:<修改 id>（斯一 10/21）。
  * - 确认时就排好回执：上一版已改成、这次没动的沿用结果（appliedChanges）；目标未定（或改后内容为空）的 blocked，选了不写入的 blocked「不写入」，其余 pending；
  *   新版确认后旧版还 pending 的改 superseded。
  * - 以天枢服务主体提交（本期不代人），声明的 scene 是目标对象，trigger「会议记录整卡确认」，不要求人工验收；正式块要不要验收、有没有权限由本体判。
  * - target 用对象当前 revision_id 和冻结的 expectedVersion；同一确认版里前面的修改已经把同一对象改成新版本的，接着那个版本提交（天枢自己的修改不算冲突）。
  *   本体上的版本已经不是期望的版本就不提交，直接按冲突记。
  * - 提交成功后取对象读回，组件文字等于改后内容才算 updated；改出的版本（actualVersion，也是同一对象下一条接着提交的版本）取回执的 object_versions，
- *   不取读回时的版本（提交和读回之间别人的修改不能被接上覆盖）。改成后当前草稿跟上这次的结果，不显示「目标已变」。冲突记「目标已变」，并让当前草稿按对象当前值刷新重看；403 和状态、契约不允许记 not_allowed；
- *   其他错误记 failed 和错误码。网络错误抛出交给任务按原幂等键重跑，任务最后一次仍是网络错误时记 failed。本期不提供失败项重试（拍板 5）。
+ *   不取读回时的版本（提交和读回之间别人的修改不能被接上覆盖）。改成后当前草稿跟上这次的结果，不显示「目标已变」。冲突记「目标已变」，并让当前草稿按对象当前值刷新重看；
+ *   403（天枢以自己身份改不了正式块、Mission 计划和无门对象，斯一 10/21）记 not_allowed「已确认、待同步」；状态、契约不允许也记 not_allowed；
+ *   其他错误记 failed 和错误码，列为待重新确认：没写成的不算已改成，下一次确认出新版本时换新键再提交。网络错误抛出交给任务按原幂等键重跑，任务最后一次仍是网络错误时记 failed。本期不提供失败项重试（拍板 5）。
  */
 export type MeetingObjectWorld = Pick<WorldClient, "write" | "getObject">;
 
 const TRIGGER = "会议记录整卡确认";
-const objectKey = (meetingId: string, revision: number, changeId: string) => `tianshu-meeting:${meetingId}:v${revision}:obj:${changeId}`;
+const objectKey = (meetingId: string, revision: number, changeId: string) => `tianshu-meeting:${meetingId}:v${revision}:change:${changeId}`;
+/** 正式块等天枢以自己身份改不了的（本体回 403）：已确认，等有权限的人同步。 */
+export const PENDING_SYNC = "已确认、待同步";
 const NOT_ALLOWED = new Set(["INVALID_STATE", "PROTOCOL_BINDING_CONFLICT"]);
 const ERROR_LABELS: Record<string, string> = {
   NETWORK_ERROR: "连不上本体", READBACK_MISMATCH: "读回不一致", VERSION_CONFLICT: "目标已变", INVALID_STATE: "对象状态不允许", PROTOCOL_BINDING_CONFLICT: "契约版本不对",
@@ -165,7 +169,7 @@ export function createMeetingObjectSync({ q, world, refreshDraft }: {
         if (code === "NETWORK_ERROR" && !lastAttempt) throw error;
         const status = error instanceof WorldError ? error.status : 0;
         next = code === "VERSION_CONFLICT" ? { ...result, status: "conflict", error: worldErrorLabel(code) }
-          : status === 403 ? { ...result, status: "not_allowed", error: "没有修改权限" }
+          : status === 403 ? { ...result, status: "not_allowed", error: PENDING_SYNC }
           : NOT_ALLOWED.has(code) ? { ...result, status: "not_allowed", error: worldErrorLabel(code) }
           : { ...result, status: "failed", error: worldErrorLabel(code) };
         message = error instanceof Error ? error.message : undefined;
@@ -178,6 +182,20 @@ export function createMeetingObjectSync({ q, world, refreshDraft }: {
   }
 
   return { run };
+}
+
+/**
+ * 这一版真正写成的修改，给会议事件的 content.refs：<对象 id>@<改出的版本>#<块 id>/<组件 id>。
+ * 沿用上一版结果的（改出的版本不比冻结的新）不是这一版写的，不列。
+ */
+export function writtenRevisionRefs(changes: TMeetingConfirmedObjectChange[], results: TMeetingObjectResult[]): string[] {
+  return changes.flatMap((change, index) => {
+    const result = results[index];
+    if (result?.status !== "updated" || result.actualVersion === null || change.expectedVersion === null || !change.targetRef) return [];
+    if (result.actualVersion <= change.expectedVersion) return [];
+    const at = change.targetRef.indexOf("#");
+    return [`${change.targetRef.slice(0, at)}@${result.actualVersion}${change.targetRef.slice(at)}`];
+  });
 }
 
 export type MeetingObjectSync = ReturnType<typeof createMeetingObjectSync>;

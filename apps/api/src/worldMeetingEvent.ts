@@ -9,9 +9,11 @@ import { WorldClient, WorldError, worldErrorCode, worldRef, type WorldAction, ty
  *   artifacts 是来源地址去重。写入声明三项都带，trigger「会议记录整卡确认」，reason 写真实确认人的名字（confirmation.confirmedBy 是 personId）。
  * - first：category meeting，subject_refs 是 payload.relatedObjectRefs 去重，occurred_at 是会议实际开始。
  * - followup（会后新决定）：category meeting，content.refs 指回前次写成的事件，occurred_at 取确认时刻减 60 秒（服务端不收将来时刻）。
+ * - 对象修改先写、事件最后写（斯一 10/21）：content.refs 再列这一版真正写成的修改 <对象>@<新版本>#<块>/<组件>；没写成的不列。
  * - correction（更正原记录）：category correction，supersedes_event_id 是前次写成的事件，subject_refs 和 occurred_at 沿用被更正那条
  *   （同步回执里记下的；更早写成、回执里没记的，退回台账里的原请求）。
- * - 前次没有写成的事件就按 first 写。幂等键 tianshu-meeting:<会议 ID>:v<revision>；结果未知时同键重放台账里的原请求（拍板 3）。
+ * - 前次没有写成的事件就按 first 写。幂等键 tianshu-meeting:<会议 ID>:v<revision>:event（10/21 起；更早写成的用的是不带 :event 的旧键）；
+ *   结果未知时同键重放台账里的原请求（拍板 3）。
  * - 写完按挂点对象取事件读回：找到这条，正文解析出的 confirmation.payloadHash 和确认的一致、并且按解析出的 payload 重算也一致，才算写成。
  */
 export type MeetingEventWrite = {
@@ -23,6 +25,8 @@ export type MeetingEventWrite = {
   confirmerName: string;
   /** 前次写成的会议事件（同一会议更早的确认版本）和它实际写进去的 subject_refs、occurred_at（没记下为 null）；没有前次就按 first 写。 */
   previous: { eventId: string; revision: number; subjectRefs: string[] | null; occurredAt: string | null } | null;
+  /** 这一版真正写成的对象修改（writtenRevisionRefs）；没有为空。 */
+  revisionRefs?: string[];
 };
 export type MeetingEventWorld = {
   /** 写入并读回；返回事件 id 和实际写进去的 subject_refs、occurred_at。 */
@@ -30,7 +34,9 @@ export type MeetingEventWorld = {
   errorCode(error: unknown): string;
 };
 
-const meetingEventKey = (meetingId: string, revision: number) => `tianshu-meeting:${meetingId}:v${revision}`;
+const meetingEventKey = (meetingId: string, revision: number) => `tianshu-meeting:${meetingId}:v${revision}:event`;
+/** 10/21 之前写成的会议事件用的键（更正时查它的台账）。 */
+const legacyEventKey = (meetingId: string, revision: number) => `tianshu-meeting:${meetingId}:v${revision}`;
 const shanghai = (at: Date) => new Date(at.getTime() + 8 * 3_600_000).toISOString().replace(/\.\d{3}Z$/, "+08:00");
 
 /** 逐字稿记下的实际开始：来自飞书妙记或录音时，它记下的开始时刻是实际开会时刻（transcriptCandidate 同一规则）；没有为 null。 */
@@ -81,14 +87,15 @@ function readBackMatches(event: Record<string, unknown>, expected: string): bool
 
 export function createMeetingEventWorld({ client }: { client: WorldClient }): MeetingEventWorld {
   return {
-    async write({ meetingId, kind: requested, payload, confirmation, confirmerName, previous }) {
+    async write({ meetingId, kind: requested, payload, confirmation, confirmerName, previous, revisionRefs = [] }) {
       const kind = previous ? requested : "first";
       let subjectRefs = [...new Set(payload.relatedObjectRefs)];
       let occurredAt = shanghai(new Date(payload.occurredAt!));
       if (kind === "correction") {
         // 沿用被更正那条实际写进去的：同步回执里记下的；没记下的（更早写成的）退回台账里的原请求。
         const ledger = previous!.subjectRefs?.length && previous!.occurredAt ? undefined
-          : (await client.savedRequest(meetingEventKey(meetingId, previous!.revision)))?.params as { subject_refs?: string[]; occurred_at?: string } | undefined;
+          : ((await client.savedRequest(meetingEventKey(meetingId, previous!.revision))) ?? (await client.savedRequest(legacyEventKey(meetingId, previous!.revision))))
+            ?.params as { subject_refs?: string[]; occurred_at?: string } | undefined;
         const corrected = previous!.subjectRefs?.length ? previous!.subjectRefs : ledger?.subject_refs;
         if (corrected?.length) subjectRefs = corrected;
         occurredAt = previous!.occurredAt ?? ledger?.occurred_at ?? occurredAt;
@@ -97,6 +104,7 @@ export function createMeetingEventWorld({ client }: { client: WorldClient }): Me
       const sceneId = subjectRefs[0]?.replace(/@\d+$/, "");
       if (!sceneId) throw new WorldError(409, "NO_SUBJECT", "会议事件没有挂点对象");
       const key = meetingEventKey(meetingId, payload.revision);
+      const refs = [...(kind === "followup" ? [`event:${previous!.eventId}`] : []), ...revisionRefs];
       const receipt = await client.write(key, async () => {
         const scene = await client.getHead(sceneId);
         return {
@@ -109,7 +117,7 @@ export function createMeetingEventWorld({ client }: { client: WorldClient }): Me
             ...(kind === "correction" ? { supersedes_event_id: previous!.eventId } : {}),
             content: {
               text: JSON.stringify({ payload, confirmation }),
-              ...(kind === "followup" ? { refs: [`event:${previous!.eventId}`] } : {}),
+              ...(refs.length ? { refs } : {}),
               artifacts: [...new Set(payload.sources.map((source) => source.url))],
             },
             declaration: { scene: worldRef(scene), trigger: "会议记录整卡确认", human_acceptance: { required: false } },

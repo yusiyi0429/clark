@@ -8,7 +8,7 @@ import type {
 import { enqueueJob, JOB_MAX_ATTEMPTS, type JobHandler } from "./jobs.js";
 import { payloadHash } from "./meetingCardHash.js";
 import { getMeetingRow, UUID_PATTERN, type MeetingRow, type Query } from "./meetingStore.js";
-import { appliedChanges, initialObjectResults, supersedeObjects, worldErrorLabel, type MeetingObjectSync } from "./meetingObjectSync.js";
+import { appliedChanges, initialObjectResults, supersedeObjects, worldErrorLabel, writtenRevisionRefs, type MeetingObjectSync } from "./meetingObjectSync.js";
 import { logEvent } from "./observability.js";
 import { dispatchMeetingTodo } from "./tasks.js";
 import { WorldError, worldRef, type WorldClient } from "./worldClient.js";
@@ -346,8 +346,9 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
   }
 
   /**
-   * 这场会的本体同步（jobs worker 逐条执行）：按 revision 从早到晚，先写待写的事件（前次写成的那条在写的时候现找），
-   * 事件写成的接着提交这一版还没提交的对象修改。lastAttempt：任务最后一次重跑，事件和对象修改的网络错误也记失败。
+   * 这场会的本体同步（jobs worker 逐条执行）：按 revision 从早到晚，先逐条提交这一版还没提交的对象修改，再写会议事件
+   * （content.refs 只列这一版写成的修改；前次写成的那条事件在写的时候现找）。10/21 之前按「先事件后修改」排下、事件已写成的那一版，接着提交剩下的修改。
+   * lastAttempt：任务最后一次重跑，事件和对象修改的网络错误也记失败。
    */
   async function syncWorld(meetingId: string, lastAttempt = false): Promise<void> {
     const world = deps.meetingWorld;
@@ -366,6 +367,11 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
         await deps.objectSync!.run(meetingId, row.revision, row.payload.objectChanges, row.objects, lastAttempt);
         continue;
       }
+      let objects = row.objects;
+      if (deps.objectSync && objects.some((object) => object.status === "pending")) {
+        await deps.objectSync.run(meetingId, row.revision, row.payload.objectChanges, objects, lastAttempt);
+        objects = (await q("SELECT objects FROM meeting_card_syncs WHERE meeting_id = $1 AND revision = $2", [meetingId, row.revision])).rows[0].objects;
+      }
       const previous = (await q(
         `SELECT revision, event_id, event_subject_refs, event_occurred_at FROM meeting_card_syncs
           WHERE meeting_id = $1 AND revision < $2 AND event_status = 'succeeded' ORDER BY revision DESC LIMIT 1`,
@@ -374,7 +380,8 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
       try {
         const written = await world.write({ meetingId, kind: row.kind, payload: row.payload, confirmation: row.confirmation,
           confirmerName: nameOf(row.participants, row.confirmation.confirmedBy),
-          previous: previous ? { eventId: previous.event_id, revision: previous.revision, subjectRefs: previous.event_subject_refs, occurredAt: previous.event_occurred_at } : null });
+          previous: previous ? { eventId: previous.event_id, revision: previous.revision, subjectRefs: previous.event_subject_refs, occurredAt: previous.event_occurred_at } : null,
+          revisionRefs: writtenRevisionRefs(row.payload.objectChanges, objects) });
         // 记下实际写进去的 subject_refs 和 occurred_at：之后更正这条时沿用。
         await q(`UPDATE meeting_card_syncs SET event_status = 'succeeded', event_id = $3, event_error = NULL, event_subject_refs = $4::jsonb, event_occurred_at = $5,
             updated_at = now() WHERE meeting_id = $1 AND revision = $2`,

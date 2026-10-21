@@ -88,7 +88,7 @@ describe("整卡确认与会议事件", () => {
 
       expect(world.writes()).toHaveLength(1);
       const body = world.writes()[0];
-      expect(body).toMatchObject({ action_type: "world_record_event", idempotency_key: `tianshu-meeting:${meetingId}:v1`,
+      expect(body).toMatchObject({ action_type: "world_record_event", idempotency_key: `tianshu-meeting:${meetingId}:v1:event`,
         params: { category: "meeting", subject_refs: ["obj-po-1@5"], occurred_at: "2026-06-01T10:02:00+08:00",
           declaration: { scene: "obj-po-1@5", trigger: "会议记录整卡确认", human_acceptance: { required: false } } } });
       expect(body.params).not.toHaveProperty("supersedes_event_id");
@@ -263,7 +263,7 @@ describe("整卡确认与会议事件", () => {
       const again = (await confirm(t, host, meetingId, { draftVersion, writeToWorld: true })).json() as TMeetingCardView;
       expect(again.confirmed!.confirmation.revision).toBe(1);
       await run();
-      expect(world.writes().map((body) => body.idempotency_key)).toEqual([`tianshu-meeting:${meetingId}:v1`, `tianshu-meeting:${meetingId}:v1`]);
+      expect(world.writes().map((body) => body.idempotency_key)).toEqual([`tianshu-meeting:${meetingId}:v1:event`, `tianshu-meeting:${meetingId}:v1:event`]);
       expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "succeeded", eventId: "ev-1" });
     } finally {
       await t.close();
@@ -415,13 +415,13 @@ describe("整卡确认与会议事件", () => {
       world.po.object_version = 6;
       world.po.version = 6;
       // 被更正那条的台账没了：沿用同步回执里记下的 subject_refs 和 occurred_at。
-      await t.pool.query("DELETE FROM world_sync_ledger WHERE idempotency_key = $1", [`tianshu-meeting:${meetingId}:v1`]);
+      await t.pool.query("DELETE FROM world_sync_ledger WHERE idempotency_key = $1", [`tianshu-meeting:${meetingId}:v1:event`]);
       const next = await edit(t, host, meetingId, (draft) => { draft.sections[0].body = "已定：接口统一改成 v2，十月底切换。"; draft.occurredAt = "2026-06-01T10:30:00+08:00"; });
       const view = (await confirm(t, host, meetingId, { draftVersion: next.draftVersion, writeToWorld: true, kind: "correction", reason: "记错了切换时间" })).json() as TMeetingCardView;
       expect(view.confirmed).toMatchObject({ kind: "correction", payload: { revision: 2, relatedObjectRefs: ["obj-po-1@6"] } });
       await run();
       const [first, second] = world.writes();
-      expect(second.idempotency_key).toBe(`tianshu-meeting:${meetingId}:v2`);
+      expect(second.idempotency_key).toBe(`tianshu-meeting:${meetingId}:v2:event`);
       expect(second.params).toMatchObject({ category: "correction", supersedes_event_id: "ev-1", subject_refs: first.params.subject_refs, occurred_at: first.params.occurred_at });
       expect(second.params.content).not.toHaveProperty("refs");
       expect(parsed(second).payload.sections[0].body).toBe("已定：接口统一改成 v2，十月底切换。");
@@ -484,7 +484,7 @@ describe("整卡确认与会议事件", () => {
         expect((res.json() as TMeetingCardView).confirmed!.confirmation.revision).toBe(3);
       };
       await run();
-      expect(world.writes().map((body) => body.idempotency_key)).toEqual([1, 2, 3].map((revision) => `tianshu-meeting:${meetingId}:v${revision}`));
+      expect(world.writes().map((body) => body.idempotency_key)).toEqual([1, 2, 3].map((revision) => `tianshu-meeting:${meetingId}:v${revision}:event`));
       expect(world.writes()[2].params.content.refs).toEqual(["event:ev-2"]);
       expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "committed", version: 3, eventId: "ev-3" });
     } finally {

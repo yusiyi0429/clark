@@ -127,7 +127,7 @@ export type SyncRow = { key: string; text: string; tone: SyncTone; retry: boolea
 const withReason = (label: string, reason: string | null) => (reason && reason !== "写入失败" ? `${label} · ${reason}` : label);
 /**
  * 同步状态逐行：会议事件一行（写入失败可重试），每条对象修改一行；被新版本取代的不显示。
- * 对象只说已更新 / 更新中 / 未更新 · 原因 / 更新失败 · 原因 / 目标未定（对象重试这一期不做）。
+ * 对象只说已更新 / 更新中 / 已确认、待同步 / 待重新确认 · 原因（目标已变、写失败，草稿已刷新，再确认一次换新键提交）/ 目标未定。
  */
 export function syncRows(sync: TMeetingCardSync, changes: { id: string }[]): SyncRow[] {
   const { event } = sync;
@@ -142,9 +142,10 @@ export function syncRows(sync: TMeetingCardSync, changes: { id: string }[]): Syn
     switch (object.status) {
       case "updated": return row("已更新", "done");
       case "pending": return row("更新中", "wait");
-      case "conflict": return row("未更新 · 目标已变", "warn");
-      case "not_allowed": return row(withReason("未更新", object.error), "warn");
-      case "failed": return row(withReason("更新失败", object.error), "fail");
+      case "conflict": return row("待重新确认 · 目标已变", "warn");
+      // 天枢以自己身份改不了的（正式块等）：已经确认，等有权限的人同步。
+      case "not_allowed": return object.error === "已确认、待同步" ? row("已确认、待同步", "wait") : row(withReason("未更新", object.error), "warn");
+      case "failed": return row(withReason("待重新确认", object.error), "fail");
       default: return object.error && object.error !== "目标未定" ? row(withReason("未更新", object.error), object.error === "不写入" ? "off" : "warn") : row("目标未定", "fail");
     }
   });
