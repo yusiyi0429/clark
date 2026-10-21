@@ -303,7 +303,7 @@ export function MeetingStatus({ phase, facts, now, endedAt, children }: { phase:
   return (
     <p className={s.status} data-phase={phase}>
       {[...facts, now].filter(Boolean).join(" · ")}
-      {children}
+      {children ? <> · {children}</> : null}
     </p>
   );
 }

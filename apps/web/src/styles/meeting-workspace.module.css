@@ -485,7 +485,7 @@
 .feishuEntry{display:inline-flex;align-items:center;gap:8px}
 .feishuLink{color:#215ba1;font-size:13px;text-decoration:none}
 .feishuLink:hover{text-decoration:underline;text-underline-offset:3px}
-.feishuFailed{color:#4c545e;font-size:12px}
+.feishuFailed{color:#4c545e}
 .feishuAction{min-height:24px;padding:0 10px;border:1px solid #d9dde5;border-radius:999px;background:#f7f8fa;color:#215ba1;font:inherit;font-size:12px;cursor:pointer}
 .feishuAction:hover{border-color:#215ba1;background:#fff}
 .feishuAction:disabled{cursor:default;opacity:.6}
