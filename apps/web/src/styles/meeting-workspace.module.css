@@ -421,6 +421,8 @@
   .staleNotice button, .chooseButton, .confirmDecision, .cancelDecision, .revokeButton, .editCancel, .editSave, .candidateReopen {
     min-height: var(--touch-hit, 44px);
   }
+  /* 报错条里的「重试会后抽取」：原来 26 高。 */
+  .error button { min-height: var(--touch-hit, 44px); padding: 0 14px; font-size: 14px; }
   .staleNotice button, .chooseButton, .cancelDecision, .revokeButton, .editCancel, .editSave, .candidateReopen { font-size: 14px; }
   .confirmDecision { min-width: 72px; font-size: 14px; }
   .issueLink { display: inline-flex; align-items: center; min-height: var(--touch-hit, 44px); font-size: 14px; }

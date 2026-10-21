@@ -100,6 +100,12 @@ describe("约会议", () => {
     expect(button(render(MEMBER), "约好").props!.disabled).toBe(true);
   });
 
+  it("开始、横线、结束在同一行", () => {
+    const row = render(MEMBER).find((node) => Array.isArray(node.props?.children) && (node.props!.children as Node[]).some((child) => child?.props?.["aria-label"] === "开始"))!;
+    expect(row.type).toBe("div");
+    expect((row.props!.children as Node[]).map((child) => child.props?.["aria-label"] ?? text(child))).toEqual(["开始", "–", "结束"]);
+  });
+
   it("成员只能约自己主持的会", async () => {
     const tree = render(MEMBER);
     // 成员：主持人就是登录的本人；参会人从人员名册选，不读带角色的人员目录。

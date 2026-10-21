@@ -1610,24 +1610,22 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       </>
     ) : (
       <section className={s.review}>
-        {cardArea ?? (!legacyRecord ? null : payload.outcome ? (
+        {cardArea ?? (!legacyRecord ? null : payload.outcome && payload.outcome.status !== "ready" ? (
+          /* 会议记录还在生成（或第一次生成失败）：只给短状态，失败的和会议卡那边一样可以重试；生成好了换成会议卡。 */
+          payload.outcome.status === "failed" ? (
+            <p className={s.error} role="alert">
+              生成失败
+              {retryOutcome ? <button type="button" disabled={pending} onClick={() => void run(retryOutcome, {})}>重试会后抽取</button> : null}
+            </p>
+          ) : <p className={s.empty} role="status">会议记录生成中</p>
+        ) : payload.outcome ? (
           <>
             <section className={s.reviewSection} data-outline="summary">
               <header>
                 <h3>会议纪要</h3>
               </header>
-              <p className={s.entryBody}>{payload.outcome.summary || "抽取尚未产出摘要。"}</p>
+              <p className={s.entryBody}>{payload.outcome.summary}</p>
             </section>
-            {payload.outcome.error ? (
-              <p className={s.error} role="alert" title={payload.outcome.error.code}>
-                {payload.outcome.error.message}
-                {actionOf("meeting.retry_outcome") ? (
-                  <button type="button" disabled={pending} onClick={() => void run(actionOf("meeting.retry_outcome")!, {})}>
-                    重试会后抽取
-                  </button>
-                ) : null}
-              </p>
-            ) : null}
             {payload.issueIds.length ? (
               /* 会后条目收回到各自的议题块里确认（feedback 15）；没有议题的放在后面的「其他事项」。 */
               <div className={s.issueList} aria-label="按议题确认会后结论">{issueBlocks("outcome")}</div>
@@ -1698,7 +1696,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
             <input ref={replaceRef} type="file" accept="application/json,.json" aria-label="选择替换用的逐字稿文件" />
             <label className={s.summaryEdit}>
               <input type="checkbox" checked={replaceArmed} onChange={(event) => setReplaceArmed(event.target.checked)} />
-              我确认整份替换，现有会后候选随之作废
+              我确认整份替换，会议记录草稿随之作废
             </label>
             <div className={s.stageActions}>
               <button type="button" disabled={pending || !replaceArmed} onClick={() => void replaceTranscript()}>

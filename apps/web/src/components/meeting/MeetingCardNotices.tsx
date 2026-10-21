@@ -28,7 +28,8 @@ export function MeetingCardNoticeList({ meetings, meetingBase, onNavigate }: { m
   return <ActionNoticeCard id="meeting-cards" title="会议记录" mark="meeting" notices={meetingCardNotices(meetings, meetingBase, onNavigate)} onSettled={() => undefined} />;
 }
 
-export function MeetingCardNotices({ meetingBase, onNavigate }: { meetingBase: string; onNavigate: Navigate }) {
+/** 我要处理的会议记录：打开时取，每 30 秒（页面可见时）、回到窗口、会议记录状态变了（meeting-changed）再取。 */
+export function useMyMeetingCards(): TMyMeetingCard[] {
   const [meetings, setMeetings] = useState<TMyMeetingCard[]>([]);
   const load = useCallback(async () => {
     try {
@@ -48,5 +49,9 @@ export function MeetingCardNotices({ meetingBase, onNavigate }: { meetingBase: s
       window.removeEventListener("meeting-changed", refresh);
     };
   }, [load]);
-  return <MeetingCardNoticeList meetings={meetings} meetingBase={meetingBase} onNavigate={onNavigate} />;
+  return meetings;
+}
+
+export function MeetingCardNotices({ meetingBase, onNavigate }: { meetingBase: string; onNavigate: Navigate }) {
+  return <MeetingCardNoticeList meetings={useMyMeetingCards()} meetingBase={meetingBase} onNavigate={onNavigate} />;
 }

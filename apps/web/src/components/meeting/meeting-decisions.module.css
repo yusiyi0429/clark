@@ -63,6 +63,8 @@
 .bookField > span:first-child { color: #4f5866; font-size: 13px; font-weight: 600; }
 .bookField > input { height: 40px; padding: 0 12px; border: 1px solid #dfe3e8; border-radius: 10px; font: inherit; font-size: 14px; }
 .bookTime { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* 开始、横线、结束一行（手持也是）。 */
+.bookSpan { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; }
 .bookHost { color: #1f2937; font-size: 14px; line-height: 40px; }
 .bookPeople { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .bookPeople li { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border: 1px solid #dfe3e8; border-radius: 12px; font-size: 13px; }

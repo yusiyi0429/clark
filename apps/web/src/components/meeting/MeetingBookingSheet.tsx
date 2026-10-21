@@ -112,11 +112,13 @@ export function MeetingBookingSheet({ open, onClose, viewer }: {
                 <span>时间</span>
                 <div className={d.bookTime}>
                   <DatePicker label="日期" value={slot.date} onChange={(date) => setSlot((current) => ({ ...current, date }))} />
-                  <Select aria-label="开始" value={slot.start} options={timeOptions(slot.start).map((time) => ({ value: time, label: time }))}
-                    onChange={(start) => setSlot((current) => ({ ...current, start }))} />
-                  <span aria-hidden="true">–</span>
-                  <Select aria-label="结束" value={slot.end} options={timeOptions(slot.end).map((time) => ({ value: time, label: time }))}
-                    onChange={(end) => setSlot((current) => ({ ...current, end }))} />
+                  <div className={d.bookSpan}>
+                    <Select aria-label="开始" value={slot.start} options={timeOptions(slot.start).map((time) => ({ value: time, label: time }))}
+                      onChange={(start) => setSlot((current) => ({ ...current, start }))} />
+                    <span aria-hidden="true">–</span>
+                    <Select aria-label="结束" value={slot.end} options={timeOptions(slot.end).map((time) => ({ value: time, label: time }))}
+                      onChange={(end) => setSlot((current) => ({ ...current, end }))} />
+                  </div>
                 </div>
               </div>
               <div className={d.bookField}>

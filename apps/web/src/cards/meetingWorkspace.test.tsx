@@ -343,6 +343,22 @@ describe("Meeting 编辑会议弹层 CSS 基线", () => {
 });
 
 describe("Meeting Outcome 复核", () => {
+  it("会议记录还在生成：只有短状态；第一次生成失败：生成失败和重试，不显示报错原文", () => {
+    const outcome = (status: string) => ({ status, pendingSince: null, startedAt: null, runId: null, previousRunIds: [], summary: "", warnings: [], extractedAt: null, items: [],
+      error: status === "failed" ? { code: "MODEL_TIMEOUT", message: "模型调用超时：upstream 504", at: "2025-09-25T00:00:00.000Z" } : null });
+    for (const status of ["pending", "running"]) {
+      const html = render(meetingCard({ status: "held", transcript: { turns: [{}] }, outcome: outcome(status) }));
+      expect(html).toContain("会议记录生成中");
+      expect(html).not.toContain("抽取尚未产出摘要");
+    }
+    const failed = render(meetingCard({ status: "held", transcript: { turns: [{}] }, outcome: outcome("failed") },
+      [{ actionId: "r1", actionType: "meeting.retry_outcome", label: "重试会后抽取" }]));
+    expect(failed).toContain("生成失败");
+    expect(failed).toContain(">重试会后抽取</button>");
+    expect(failed).not.toContain("upstream 504");
+    expect(failed).not.toContain("抽取尚未产出摘要");
+  });
+
   it("逐项处理按 kind 与真实状态渲染徽标、状态色与操作", () => {
     const html = render(
       meetingCard(
