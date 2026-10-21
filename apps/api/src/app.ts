@@ -147,6 +147,8 @@ export type AppEnv = {
   companyName?: string;
   /** 上手流程显示「授权天枢替你记进本体」这一步（ONBOARDING_DELEGATION_STEP=1）；本体的网页授权页确认之前默认关闭。 */
   onboardingDelegationStep?: boolean;
+  /** 签发月度计划后代记本体周期目标的门（TKOS_WORLD_PERIOD_GOAL_GATES=1）；本人委托登记好之前默认关闭，只管这一项，其他本体写入不受影响。 */
+  worldPeriodGoalGates?: boolean;
   /** 旧配置兼容；正式自动起草不读取文件，人工导入须由 CLI 显式指定路径。 */
   missionCardDraftsDir?: string;
   /** 已知的本月任务（飞书任务卡、本体 Mission 导出），作为起草依据；未配置或文件缺失时照常起草。 */
@@ -515,9 +517,9 @@ export async function buildApp({
     weeklyReviewWorld = sync;
     app.addHook("onClose", async () => { await sync.close(); });
   }
-  // 签发月度计划后代 CEO 确认本体同周期的周期目标：同样只在实例配置允许写时启用。
+  // 签发月度计划后代 CEO 确认本体同周期的周期目标：实例配置允许写、且单独的开关打开时才启用。
   let worldPeriodGoals: WorldPeriodGoalService | undefined;
-  if (worldConfigured(env) && world.status().writes) {
+  if (worldConfigured(env) && world.status().writes && env.worldPeriodGoalGates) {
     const service = createWorldPeriodGoalService(pool, new WorldClient(q, env),
       () => peopleDirectory.searchPeople(undefined).find((person) => person.roles.includes("ceo"))?.personId);
     worldPeriodGoals = service;
