@@ -110,7 +110,7 @@ function worldDocOf(view: ObjectView): WorldDoc {
     components: components(view).slice(0, 24).map((item) => ({ ...item, text: clip(item.text, 600) })),
   };
 }
-const battlefieldIdOf = (head: WorldHead): string | null => {
+export const battlefieldIdOf = (head: Pick<WorldHead, "external_refs">): string | null => {
   for (const ref of head.external_refs ?? []) {
     const match = ref.system === "tianshu" ? BATTLEFIELD_REF.exec(ref.id) : null;
     if (match) return match[1];
