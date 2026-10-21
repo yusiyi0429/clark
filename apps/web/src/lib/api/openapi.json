@@ -37635,6 +37635,18 @@
                   {
                     "const": "feishu_minutes",
                     "type": "string"
+                  },
+                  {
+                    "const": "feishu_text",
+                    "type": "string"
+                  },
+                  {
+                    "const": "speaker_lines",
+                    "type": "string"
+                  },
+                  {
+                    "const": "meeting_notes",
+                    "type": "string"
                   }
                 ]
               },

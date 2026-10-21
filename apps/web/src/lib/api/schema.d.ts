@@ -7160,7 +7160,7 @@ export interface components {
             }[];
             importedAt: string;
             source?: {
-                format: "miaoji_markdown" | "warmap_json" | "volc_asr" | "feishu_minutes";
+                format: "miaoji_markdown" | "warmap_json" | "volc_asr" | "feishu_minutes" | "feishu_text" | "speaker_lines" | "meeting_notes";
                 fileName: string;
                 sizeBytes: number;
                 sha256: string;

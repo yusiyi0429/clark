@@ -27,12 +27,8 @@ import {
   type MeetingRow,
 } from "./meetingStore.js";
 import { pendingOutcome, runOutcome, validateTranscript, type PostMeetingAgent } from "./outcome.js";
-import {
-  MIAOJI_MARKDOWN_FORMAT,
-  parseMiaojiMarkdown,
-  TRANSCRIPT_PARSER_VERSION,
-  type ParsedTranscriptTurn,
-} from "./transcriptMarkdown.js";
+import type { ParsedTranscriptTurn } from "./transcriptMarkdown.js";
+import { extractTranscriptText, recognizeTranscript } from "./transcriptFile.js";
 import { capturedAtOf, meetingTranscriptUrl, transcriptContentHash } from "./transcriptHash.js";
 import { MINUTES_GIVE_UP_MS } from "./meetingDecisionView.js";
 
@@ -87,10 +83,15 @@ export function buildTranscriptCandidate(
   return { source, createdAt: new Date().toISOString(), speakers, turns, warnings };
 }
 
-/** 上传 Markdown 只生成候选并 bump version：不改 status、不跑 Outcome。来源地址是天枢会议页的逐字稿，摘要值算上传的原文。 */
+/**
+ * 上传会议记录（md/txt/html/docx/pdf）：认得出说话人的只生成候选并 bump version，不改 status、不跑 Outcome；
+ * 认不出说话人的按纪要（「会议纪要」一个说话人）存候选后直接确认，和飞书妙记自动确认一样保留为未对上人的说话人，随即生成会议卡。
+ * 来源地址是天枢会议页的逐字稿；sha256 算上传的原始字节，摘要值文本文件算原文、docx/pdf/html 算抽出的文字。
+ */
 export async function createTranscriptCandidate(
   pool: Pool,
   peopleDirectory: PeopleDirectory,
+  outcomeAgent: PostMeetingAgent,
   secret: string,
   publicOrigin: string,
   meetingId: string,
@@ -99,25 +100,39 @@ export async function createTranscriptCandidate(
 ): Promise<TranscriptCandidateResult> {
   const meeting = await getMeetingRow(pool.query.bind(pool), meetingId);
   if (!meeting || (hostId !== undefined && meeting.lead_dri_id !== hostId)) return { status: 404, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
-  const parsed = parseMiaojiMarkdown(file.buffer);
-  if (!parsed.ok) {
-    const message = parsed.error.line ? `${parsed.error.message}（第 ${parsed.error.line} 行）` : parsed.error.message;
-    return { status: 400, code: parsed.error.code, message };
-  }
+  const extracted = await extractTranscriptText(file);
+  if (!extracted.ok) return { status: 400, code: extracted.code, message: extracted.message };
+  const parsed = recognizeTranscript(extracted.text);
+  if (!parsed.ok) return { status: 400, code: parsed.code, message: parsed.line ? `${parsed.message}（第 ${parsed.line} 行）` : parsed.message };
+  const sha256 = createHash("sha256").update(file.buffer).digest("hex");
   const source: TTranscriptSource = {
-    format: MIAOJI_MARKDOWN_FORMAT,
+    format: parsed.format,
     fileName: file.fileName,
     sizeBytes: file.buffer.length,
-    sha256: createHash("sha256").update(file.buffer).digest("hex"),
-    parserVersion: TRANSCRIPT_PARSER_VERSION,
+    sha256,
+    parserVersion: parsed.parserVersion,
     timeAnchor: meeting.scheduled_at.toISOString(),
     url: meetingTranscriptUrl(publicOrigin, meetingId),
-    contentHash: transcriptContentHash(file.buffer.toString("utf8")),
+    contentHash: transcriptContentHash(extracted.kind === "text" ? file.buffer.toString("utf8") : extracted.text),
     capturedAt: capturedAtOf(new Date()),
   };
-  const candidate = buildTranscriptCandidate(parsed.transcript.turns, peopleDirectory.searchPeople(undefined), source);
+  const candidate = buildTranscriptCandidate(parsed.turns, peopleDirectory.searchPeople(undefined), source);
   const saved = await saveTranscriptCandidate(pool, meetingId, candidate, hostId);
-  return "row" in saved ? { status: 200, card: projectMeetingCard(saved.row, secret) } : saved;
+  if (!("row" in saved)) return saved;
+  if (parsed.format !== "meeting_notes") return { status: 200, card: projectMeetingCard(saved.row, secret) };
+
+  // 纪要没有说话人可对：同飞书妙记自动确认，对不上人的保留原名，直接生成会议卡。
+  const confirmed = await executeConfirmTranscriptCandidate(pool, peopleDirectory, outcomeAgent, secret,
+    { actionType: "meeting.confirm_transcript_candidate", objectType: "meeting", objectId: meetingId, objectVersion: saved.row.version },
+    {
+      speakerMappings: candidate.speakers.flatMap((speaker) => speaker.suggestedPersonId ? [{ speakerName: speaker.speakerName, personId: speaker.suggestedPersonId }] : []),
+      confirmAddParticipants: true,
+      keepUnmapped: true,
+    },
+    `meeting-notes:${sha256}:${saved.row.version}`, hostId);
+  if ("error" in confirmed) return { status: confirmed.error.status as 400 | 404 | 409, code: confirmed.error.code, message: confirmed.error.message };
+  if (confirmed.conflict) return { status: 409, code: "VERSION_CONFLICT", message: "会议刚被改过，请重新上传" };
+  return { status: 200, card: confirmed.card };
 }
 
 /**

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import JSZip from "jszip";
 import { Value } from "@sinclair/typebox/value";
 import { fileURLToPath } from "node:url";
 import { Card, MeetingCardPayload, StoredTranscript, type TTranscriptSource } from "@warmap/contracts";
@@ -205,8 +206,12 @@ describe("妙记 Markdown Transcript 候选", () => {
     const t = await newApp();
     try {
       const { cookie, meetingId } = await readyMeeting(t, "upload-invalid");
-      expect((await upload(t, cookie, meetingId, MARKDOWN, "transcript.json")).json().code).toBe("INVALID_TRANSCRIPT");
-      expect((await upload(t, cookie, meetingId, "x".repeat(1_200_000))).statusCode).toBe(413);
+      expect((await upload(t, cookie, meetingId, MARKDOWN, "transcript.json")).json()).toMatchObject({ code: "UNSUPPORTED_FILE_TYPE", message: "只收 txt、md、pdf、docx、html" });
+      expect((await upload(t, cookie, meetingId, MARKDOWN, "旧版.doc")).json()).toMatchObject({ code: "DOC_NOT_SUPPORTED", message: "请另存为 docx 再上传" });
+      expect((await upload(t, cookie, meetingId, " \n\n", "空.txt")).json().code).toBe("EMPTY_TRANSCRIPT");
+      const oversize = await upload(t, cookie, meetingId, Buffer.alloc(20 * 1024 * 1024 + 1, "x"));
+      expect(oversize.statusCode).toBe(413);
+      expect(oversize.json().code).toBe("TRANSCRIPT_TOO_LARGE");
       const bad = await upload(t, cookie, meetingId, "### 文字记录\n\n测试甲 00:05\n");
       expect(bad.statusCode).toBe(400);
       expect(bad.json()).toMatchObject({ code: "EMPTY_TURN_TEXT" });
@@ -406,6 +411,91 @@ describe("meeting.confirm_transcript_candidate", () => {
       expect(res.json().code).toBe("INVALID_INPUT");
       expect((await t.sql("SELECT status, transcript, transcript_candidate FROM meetings WHERE id = $1", [meetingId]))[0]).toMatchObject({ status: "scheduled", transcript: null });
       expect((await t.sql("SELECT transcript_candidate FROM meetings WHERE id = $1", [meetingId]))[0].transcript_candidate).not.toBeNull();
+    } finally {
+      await t.close();
+    }
+  });
+});
+
+describe("会议记录多格式上传", () => {
+  it("reads a Markdown file without the 文字记录 heading but with 姓名：内容 lines as a candidate", async () => {
+    const t = await newApp();
+    try {
+      const { cookie, meetingId } = await readyMeeting(t, "speaker-lines");
+      const content = "# 渠道周会\n\n测试甲：方向我确认。\n测试乙：我周五前给排期。\n测试甲：好。\n";
+      const res = await upload(t, cookie, meetingId, content, "周会.md");
+      expect(res.statusCode).toBe(200);
+      const candidate = res.json().cards[0].payload.transcriptCandidate;
+      expect(candidate).toMatchObject({ turnCount: 3, speakerCount: 2, source: { format: "speaker_lines", fileName: "周会.md", parserVersion: "speaker-lines.v1" } });
+      expect(candidate.speakers.map((speaker: { speakerName: string }) => speaker.speakerName)).toEqual(["测试甲", "测试乙"]);
+      expect(res.json().cards[0].payload.status).toBe("scheduled");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("reads a Feishu txt export as a candidate", async () => {
+    const t = await newApp();
+    try {
+      const { cookie, meetingId } = await readyMeeting(t, "feishu-text");
+      const content = "2026-06-01 10:00:02 CST|26min 25s\n\n关键词:\n渠道、排期\n\n测试甲 00:00:05.120\n我确认这个方向。\n\n测试乙 00:00:20.000\n我周五前给排期。\n";
+      const res = await upload(t, cookie, meetingId, content, "妙记.txt");
+      expect(res.statusCode).toBe(200);
+      expect(res.json().cards[0].payload.transcriptCandidate).toMatchObject({
+        turnCount: 2, speakerCount: 2, firstOffsetSeconds: 5, lastOffsetSeconds: 20,
+        source: { format: "feishu_text", fileName: "妙记.txt", parserVersion: "feishu-minutes-txt.v1" },
+      });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("imports plain notes as an unmapped 会议纪要 speaker and starts the meeting card right away", async () => {
+    const agent = fakeOutcomeAgent();
+    const t = await newApp(agent);
+    try {
+      const { cookie, meetingId } = await readyMeeting(t, "notes");
+      const notes = "# 渠道周会纪要\n\n本周先把渠道排期定下来，预算按上月口径走。\n\n各组周五前交风险清单。\n";
+      const res = await upload(t, cookie, meetingId, notes, "纪要.md");
+      expect(res.statusCode).toBe(200);
+      const payload = res.json().cards[0].payload;
+      expect(payload.status).toBe("held");
+      expect(payload.transcriptCandidate).toBeNull();
+      expect(Value.Check(StoredTranscript, payload.transcript)).toBe(true);
+      expect(payload.transcript.source).toMatchObject({ format: "meeting_notes", fileName: "纪要.md", parserVersion: "meeting-notes.v1" });
+      expect(payload.transcript.unmappedSpeakers).toEqual([{ id: "speaker:1", name: "会议纪要" }]);
+      expect(payload.transcript.turns.map((turn: { speakerId: string; text: string }) => [turn.speakerId, turn.text])).toEqual([
+        ["speaker:1", "# 渠道周会纪要"],
+        ["speaker:1", "本周先把渠道排期定下来，预算按上月口径走。"],
+        ["speaker:1", "各组周五前交风险清单。"],
+      ]);
+      expect(agent.calls).toHaveLength(1);
+      expect(payload.outcome).not.toBeNull();
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("reads html and docx uploads", async () => {
+    const t = await newApp();
+    try {
+      const { cookie, meetingId } = await readyMeeting(t, "html-docx");
+      const html = "<html><head><script>alert(1)</script></head><body><p>测试甲：方向我确认。</p><p>测试乙：我周五前给&amp;排期。</p></body></html>";
+      const fromHtml = await upload(t, cookie, meetingId, html, "周会.html");
+      expect(fromHtml.statusCode).toBe(200);
+      expect(fromHtml.json().cards[0].payload.transcriptCandidate).toMatchObject({ speakerCount: 2, source: { format: "speaker_lines", fileName: "周会.html" } });
+      const turns = (await t.sql("SELECT transcript_candidate FROM meetings WHERE id = $1", [meetingId]))[0].transcript_candidate.turns as { text: string }[];
+      expect(turns.map((turn) => turn.text)).toEqual(["方向我确认。", "我周五前给&排期。"]);
+
+      const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+      const zip = new JSZip();
+      zip.file("[Content_Types].xml", `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`);
+      zip.file("_rels/.rels", `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="word/document.xml"/></Relationships>`);
+      zip.file("word/document.xml", `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>测试甲：方向我确认。</w:t></w:r></w:p><w:p><w:r><w:t>测试乙：我周五前给排期。</w:t></w:r></w:p></w:body></w:document>`);
+      const docx = await zip.generateAsync({ type: "nodebuffer" });
+      const fromDocx = await upload(t, cookie, meetingId, docx, "周会.docx");
+      expect(fromDocx.statusCode).toBe(200);
+      expect(fromDocx.json().cards[0].payload.transcriptCandidate).toMatchObject({ speakerCount: 2, source: { format: "speaker_lines", fileName: "周会.docx", sizeBytes: docx.length } });
     } finally {
       await t.close();
     }

@@ -32,6 +32,12 @@ export const TranscriptSourceFormat = Type.Union([
   Type.Literal("volc_asr"),
   /** 飞书妙记开放接口导出的逐字稿（txt，带说话人和时间戳）；timeAnchor 是妙记记下的会议开始时刻。 */
   Type.Literal("feishu_minutes"),
+  /** 主持人上传的飞书妙记 txt 导出（「姓名 hh:mm:ss.mmm」，第一行日期可有可无）。 */
+  Type.Literal("feishu_text"),
+  /** 主持人上传的通用说话人格式：「姓名：内容」行，或没有 `### 文字记录` 标题的「姓名 mm:ss」发言头。 */
+  Type.Literal("speaker_lines"),
+  /** 认不出说话人的会议记录：按段落导入为一个未对上人的说话人「会议纪要」，上传即确认。 */
+  Type.Literal("meeting_notes"),
 ]);
 
 export const TranscriptSource = Type.Object(
