@@ -570,7 +570,7 @@ export async function importTranscript(
   return { status: 200, card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), meetingId))!, secret) };
 }
 /**
- * 危险 Action：仅在 held 且没有 confirmed effect 时整份替换 Transcript。
+ * 危险 Action：仅在 held 且没有 confirmed effect（会议卡确认过、推过行动项也算）时整份替换 Transcript。
  * 替换清空旧 candidate、bump version 使旧 actionId 失效，提交后强制重跑抽取。
  */
 export async function executeReplaceTranscript(
@@ -585,7 +585,7 @@ export async function executeReplaceTranscript(
     if (row.status !== "held" && row.status !== "reviewed") {
       return { error: { status: 409, code: "MEETING_NOT_HELD", message: "只有 held/reviewed Meeting 可以替换 Transcript" } };
     }
-    if (hasConfirmedEffect(row.outcome)) {
+    if (hasConfirmedEffect(row.outcome) || row.card_confirmed) {
       return { error: { status: 409, code: "OUTCOME_HAS_CONFIRMED_EFFECT", message: "已有 confirmed effect，禁止替换 Transcript" } };
     }
     const validated = validateTranscript(input.transcript, row);

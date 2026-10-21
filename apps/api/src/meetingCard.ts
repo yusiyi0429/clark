@@ -16,6 +16,7 @@ import { confirmedView, currentConfirmation, draftChangeOf, meetingRecordState }
 import { feishuNotifier, type FeishuNotify } from "./feishu/notify.js";
 import { attendeesOf } from "./meetingDecisionView.js";
 import { getMeetingRow, type MeetingRow, type Query } from "./meetingStore.js";
+import { appliedChanges, type AppliedChanges } from "./meetingObjectSync.js";
 import { meetingAnchorGroups } from "./meetingWorld.js";
 import { insertNotification } from "./notifications.js";
 import { logEvent } from "./observability.js";
@@ -100,7 +101,12 @@ const splitTarget = (targetRef: string) => {
   const at = targetRef.indexOf("#");
   return at > 0 ? { objectId: targetRef.slice(0, at), path: targetRef.slice(at + 1) } : null;
 };
-const titleOf = (object: ObjectRead, type: string) => `${object.title} · ${type}`;
+/** 本体组件类型的中文名（修改标题、同步行用）；表里没有的原样显示。 */
+const COMPONENT_LABELS: Record<string, string> = {
+  outcome: "结果", acceptance_criterion: "验收标准", success_criterion: "成功标准", realization_logic: "实现逻辑", time_boundary: "时间边界", contribution: "贡献",
+  scope_boundary: "范围边界", core_path: "核心路径", milestone: "里程碑", constraint_dependency: "约束与依赖", key_trade_off: "关键取舍",
+};
+const titleOf = (object: ObjectRead, type: string) => `${object.title} · ${COMPONENT_LABELS[type] ?? type}`;
 
 /** 挂点对象里有文字的组件，按对象、块、组件原顺序。 */
 function targetOptionsOf(refs: string[], objects: Map<string, ObjectRead>): TMeetingCardTargetOption[] {
@@ -264,13 +270,16 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     return meeting && canReadMeetingCard(meeting, viewer) ? { meeting, canEdit: isHostOrCreator(meeting, viewer.personId) } : null;
   }
 
-  /** 目标对象版本变了的修改：重读原内容和版本、标 stale（组件没了就成目标未定）；返回刷新后的修改，没有变化时 null。 */
-  function refreshed(changes: TMeetingObjectChange[], objects: Map<string, ObjectRead>): TMeetingObjectChange[] | null {
+  /**
+   * 目标对象版本变了的修改：重读原内容和版本、标 stale（组件没了就成目标未定）；返回刷新后的修改，没有变化时 null。
+   * 当前确认版已改成、这次没动的不刷新（之后是别人的改动，不算目标已变）。
+   */
+  function refreshed(changes: TMeetingObjectChange[], objects: Map<string, ObjectRead>, applied: AppliedChanges): TMeetingObjectChange[] | null {
     let changed = false;
     const next = changes.map((change) => {
       const target = change.targetRef ? splitTarget(change.targetRef) : null;
       const object = target ? objects.get(target.objectId) : undefined;
-      if (!object || object.version === change.expectedVersion) return change;
+      if (!object || object.version === change.expectedVersion || applied(change)) return change;
       changed = true;
       return { ...change, ...resolveTarget(change.targetRef, objects), stale: true };
     });
@@ -279,16 +288,17 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
 
   /**
    * 草稿里目标对象版本变了的修改按对象当前值刷新（读卡时；写对象修改遇到冲突时也调）。withAnchors 时连挂点对象一起读（给候选目标）。
-   * 返回最新的卡行、刷新前的草稿和读到的对象。
+   * 返回最新的卡行、刷新前的草稿、读到的对象和当前确认版。
    */
   async function refreshDraft(meetingId: string, withAnchors = false) {
     let row = await cardRow(meetingId);
     const draft = row?.draft ?? null;
+    const current = row ? await currentConfirmation(q, meetingId) : null;
     let objects = new Map<string, ObjectRead>();
     if (row && draft) {
       const targetIds = draft.objectChanges.flatMap((change) => (change.targetRef ? [splitTarget(change.targetRef)?.objectId ?? ""] : [])).filter(Boolean);
       objects = await readObjects(deps.world, [...(withAnchors ? draft.relatedObjectRefs : []), ...targetIds]);
-      const changes = refreshed(draft.objectChanges, objects);
+      const changes = refreshed(draft.objectChanges, objects, appliedChanges(current));
       if (changes) {
         const updated = await q(
           `UPDATE meeting_cards SET draft = jsonb_set(draft, '{objectChanges}', $3::jsonb), draft_version = draft_version + 1, updated_at = now()
@@ -299,13 +309,12 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
         row = (updated.rows[0] as CardRow | undefined) ?? await cardRow(meetingId);
       }
     }
-    return { row, draft, objects };
+    return { row, draft, objects, current };
   }
 
   async function buildView(meetingId: string, canEdit: boolean): Promise<TMeetingCardView> {
-    const { row, draft, objects } = await refreshDraft(meetingId, canEdit);
+    const { row, draft, objects, current } = await refreshDraft(meetingId, canEdit);
     const targetOptions: TMeetingCardTargetOption[] = draft && canEdit ? targetOptionsOf(draft.relatedObjectRefs, objects) : [];
-    const current = row ? await currentConfirmation(q, meetingId) : null;
     return {
       draft: row?.draft ?? null, draftVersion: row?.draft_version ?? 0, draftStatus: row?.draft_status ?? "created", actionItems: row?.action_items ?? [],
       ...confirmedView(current), targetOptions, canEdit, draftChange: draftChangeOf(row?.draft ?? null, row?.action_items ?? [], current),
@@ -338,6 +347,7 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     const current = row.draft;
     const input = body.draft;
     const objects = await readObjects(deps.world, current.relatedObjectRefs);
+    const applied = appliedChanges(await currentConfirmation(q, meetingId));
     const options = new Set(targetOptionsOf(current.relatedObjectRefs, objects).map((option) => option.targetRef));
     const previous = new Map(current.objectChanges.map((change) => [change.id, change]));
     const fieldErrors: Record<string, string> = {};
@@ -361,19 +371,22 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
       if (!change.after.text.trim()) fieldErrors[`objectChanges[${i}].after.text`] = "改后的内容不能为空";
       const before = previous.get(change.id);
       const keep = before && before.targetRef === change.targetRef;
-      let target = resolveTarget(change.targetRef, objects);
-      if (change.targetRef && !options.has(change.targetRef)) {
-        // 挂点对象这次没读到、目标也没改：沿用原来的原内容和版本。
+      const kept = keep ? { targetRef: before.targetRef, targetTitle: before.targetTitle, expectedVersion: before.expectedVersion, before: before.before } : null;
+      // 当前确认版已改成、这次没动：不按对象当前版本重读（不标目标已变、不挪基准）。
+      const done = keep && applied(change);
+      let target = done ? kept! : resolveTarget(change.targetRef, objects);
+      if (!done && change.targetRef && !options.has(change.targetRef)) {
+        // 挂点对象这次没读到、目标也没改：沿用原来的原内容和版本。目标没改、组件没了：目标未定（resolveTarget 已给空）。
         const objectId = splitTarget(change.targetRef)?.objectId ?? "";
         const unread = current.relatedObjectRefs.includes(objectId) && !objects.has(objectId);
-        if (keep && unread) target = { targetRef: before.targetRef, targetTitle: before.targetTitle, expectedVersion: before.expectedVersion, before: before.before };
-        else {
+        if (keep && unread) target = kept!;
+        else if (!keep) {
           invalidTarget = true;
           fieldErrors[`objectChanges[${i}].targetRef`] = "目标只能从挂点对象的文字组件里选";
         }
       }
       // 同一目标、对象版本这次读到的和草稿里的不同：差异已按新版本重读，标 stale 让主持人重看（保存不能悄悄把基准挪到新版本）。
-      const stale = keep ? before.stale || target.expectedVersion !== before.expectedVersion : false;
+      const stale = keep && !done && target.targetRef !== null ? before.stale || target.expectedVersion !== before.expectedVersion : false;
       return { id: change.id, ...target, after: { text: change.after.text }, basisSectionIds: change.basisSectionIds, stale };
     });
     const members = memberIds(found.meeting);
@@ -410,11 +423,13 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     return { view: await buildView(meetingId, true) };
   }
 
-  /** 挂点改了以后：草稿的挂点对象跟着改，草稿版本加一（还没有草稿、挂点对象没变、本体读不到都不动）。 */
+  /**
+   * 挂点改了以后：草稿的挂点对象跟着改，指向不再挂着的对象的修改成目标未定（要重新选目标），草稿版本加一
+   * （还没有草稿、挂点对象没变、本体读不到都不动）。草稿版本在读和写之间变了（有人刚存过）就重读再来。
+   */
   async function anchorsChanged(meetingId: string): Promise<void> {
     const meeting = await getMeetingRow(q, meetingId);
-    const draft = meeting ? (await cardRow(meetingId))?.draft : null;
-    if (!meeting || !draft) return;
+    if (!meeting || !(await cardRow(meetingId))?.draft) return;
     let refs: string[];
     try {
       refs = await relatedObjectRefsOf(q, deps.world, meeting);
@@ -422,9 +437,20 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
       logEvent({ event: "meeting_card.world_read", objectRef: `meeting:${meetingId}`, status: "failed", errorCode: (error as { code?: string }).code ?? "WORLD_READ_FAILED" });
       return;
     }
-    if (refs.length === draft.relatedObjectRefs.length && refs.every((ref, index) => ref === draft.relatedObjectRefs[index])) return;
-    await q(`UPDATE meeting_cards SET draft = jsonb_set(draft, '{relatedObjectRefs}', $2::jsonb), draft_version = draft_version + 1, updated_at = now()
-      WHERE meeting_id = $1 AND draft IS NOT NULL`, [meetingId, JSON.stringify(refs)]);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const row = await cardRow(meetingId);
+      const draft = row?.draft;
+      if (!row || !draft) return;
+      if (refs.length === draft.relatedObjectRefs.length && refs.every((ref, index) => ref === draft.relatedObjectRefs[index])) return;
+      const objectChanges = draft.objectChanges.map((change) => {
+        const objectId = change.targetRef ? splitTarget(change.targetRef)?.objectId : undefined;
+        return objectId === undefined || refs.includes(objectId) ? change
+          : { ...change, targetRef: null, targetTitle: null, expectedVersion: null, before: null, stale: false };
+      });
+      const updated = await q(`UPDATE meeting_cards SET draft = $3::jsonb, draft_version = draft_version + 1, updated_at = now()
+        WHERE meeting_id = $1 AND draft_version = $2`, [meetingId, row.draft_version, JSON.stringify({ ...draft, relatedObjectRefs: refs, objectChanges })]);
+      if (updated.rowCount) return;
+    }
   }
 
   /**

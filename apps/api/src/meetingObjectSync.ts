@@ -1,11 +1,12 @@
-import type { TMeetingCardDraft, TMeetingConfirmedObjectChange, TMeetingObjectResult } from "@warmap/contracts";
+import type { TMeetingCardDraft, TMeetingConfirmedObjectChange, TMeetingObjectChange, TMeetingObjectResult } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
 import { WorldError, worldErrorCode, worldRef, type WorldClient, type WorldObject } from "./worldClient.js";
 
 /**
  * 对象修改（FR-5.3、5.4）：一个确认版本的会议事件写成后，确认版里的修改按顺序各提交一次 world_revise_object，读回核对，回执逐条记在同步表 objects 里。
- * - 确认时就排好回执：目标未定（或改后内容为空）的 blocked，选了不写入的全部 blocked「不写入」，其余 pending；新版确认后旧版还 pending 的改 superseded。
+ * - 确认时就排好回执：上一版已改成、这次没动的沿用结果（appliedChanges）；目标未定（或改后内容为空）的 blocked，选了不写入的 blocked「不写入」，其余 pending；
+ *   新版确认后旧版还 pending 的改 superseded。
  * - 以天枢服务主体提交（本期不代人），声明的 scene 是目标对象，trigger「会议记录整卡确认」，不要求人工验收；正式块要不要验收、有没有权限由本体判。
  * - target 用对象当前 revision_id 和冻结的 expectedVersion；同一确认版里前面的修改已经把同一对象改成新版本的，接着那个版本提交（天枢自己的修改不算冲突）。
  *   本体上的版本已经不是期望的版本就不提交，直接按冲突记。
@@ -17,11 +18,33 @@ export type MeetingObjectWorld = Pick<WorldClient, "write" | "getObject">;
 
 const TRIGGER = "会议记录整卡确认";
 const objectKey = (meetingId: string, revision: number, changeId: string) => `tianshu-meeting:${meetingId}:v${revision}:obj:${changeId}`;
-const NOT_ALLOWED: Record<string, string> = { INVALID_STATE: "对象状态不允许", PROTOCOL_BINDING_CONFLICT: "契约版本不对" };
+const NOT_ALLOWED = new Set(["INVALID_STATE", "PROTOCOL_BINDING_CONFLICT"]);
+const ERROR_LABELS: Record<string, string> = {
+  NETWORK_ERROR: "连不上本体", READBACK_MISMATCH: "读回不一致", VERSION_CONFLICT: "目标已变", INVALID_STATE: "对象状态不允许", PROTOCOL_BINDING_CONFLICT: "契约版本不对",
+};
+/** 回执里给人看的短标签（会议事件和对象修改共用）；本体的原话只进日志，没列的错误码都记「写入失败」。 */
+export const worldErrorLabel = (code: string) => ERROR_LABELS[code] ?? "写入失败";
 
-/** 确认时排好的回执。 */
-export function initialObjectResults(changes: TMeetingConfirmedObjectChange[], writeToWorld: boolean): TMeetingObjectResult[] {
+/** 已改成的修改：同一处修改（id、目标、改后文字都相同）→ 改成时的回执；不是的为 undefined。 */
+export type AppliedChanges = (change: Pick<TMeetingObjectChange, "id" | "targetRef" | "after">) => TMeetingObjectResult | undefined;
+const appliedKey = (change: Pick<TMeetingObjectChange, "id" | "targetRef" | "after">) => JSON.stringify([change.id, change.targetRef, change.after.text]);
+/**
+ * 当前确认版里已改成（回执 updated）的修改。新版确认时同一处修改沿用回执、不再提交（不覆盖之后别人的改动、不发空修订）；
+ * 读卡和存草稿也不再按对象版本把它标成目标已变、不挪它的基准。改后文字改过的不算，照常提交。
+ */
+export function appliedChanges(current: { payload: { objectChanges: TMeetingConfirmedObjectChange[] }; objects: TMeetingObjectResult[] } | null): AppliedChanges {
+  const applied = new Map<string, TMeetingObjectResult>();
+  current?.payload.objectChanges.forEach((change, index) => {
+    if (change.targetRef && current.objects[index]?.status === "updated") applied.set(appliedKey(change), current.objects[index]);
+  });
+  return (change) => applied.get(appliedKey(change));
+}
+
+/** 确认时排好的回执；上一版已改成的同一处修改沿用结果（已更新、同一个实际版本）。 */
+export function initialObjectResults(changes: TMeetingConfirmedObjectChange[], writeToWorld: boolean, applied: AppliedChanges = () => undefined): TMeetingObjectResult[] {
   return changes.map((change) => {
+    const carried = applied(change);
+    if (carried) return { changeId: change.id, title: change.targetTitle ?? "", status: "updated", actualVersion: carried.actualVersion, error: null };
     const error = !writeToWorld ? "不写入" : !change.targetRef ? "目标未定" : !change.after.text.trim() ? "改后内容为空" : null;
     return { changeId: change.id, title: change.targetTitle ?? "", status: error ? "blocked" : "pending", actualVersion: null, error };
   });
@@ -123,12 +146,16 @@ export function createMeetingObjectSync({ q, world, refreshDraft }: {
     for (const [index, change] of changes.entries()) {
       const result = results[index];
       const objectId = change.targetRef?.slice(0, change.targetRef.indexOf("#")) ?? "";
-      if (result.status === "updated" && result.actualVersion !== null && change.expectedVersion !== null) own.set(objectId, { from: change.expectedVersion, to: result.actualVersion });
+      // 沿用上一版结果的（实际版本不比冻结的新）不是这一版改的，不接。
+      if (result.status === "updated" && result.actualVersion !== null && change.expectedVersion !== null && result.actualVersion > change.expectedVersion) {
+        own.set(objectId, { from: change.expectedVersion, to: result.actualVersion });
+      }
       if (result.status !== "pending" || !await stillPending(meetingId, revision, index)) continue;
       const chained = own.get(objectId);
       const expected = chained && chained.from === change.expectedVersion ? chained.to : change.expectedVersion!;
       let next: TMeetingObjectResult;
       let code: string | undefined;
+      let message: string | undefined;
       try {
         const actualVersion = await revise(meetingId, revision, change, expected);
         if (actualVersion !== null) own.set(objectId, { from: change.expectedVersion!, to: actualVersion });
@@ -137,14 +164,14 @@ export function createMeetingObjectSync({ q, world, refreshDraft }: {
         code = worldErrorCode(error);
         if (code === "NETWORK_ERROR" && !lastAttempt) throw error;
         const status = error instanceof WorldError ? error.status : 0;
-        next = code === "VERSION_CONFLICT" ? { ...result, status: "conflict", error: "目标已变" }
-          : code === "READBACK_MISMATCH" ? { ...result, status: "failed", error: "读回不一致" }
+        next = code === "VERSION_CONFLICT" ? { ...result, status: "conflict", error: worldErrorLabel(code) }
           : status === 403 ? { ...result, status: "not_allowed", error: "没有修改权限" }
-          : NOT_ALLOWED[code] ? { ...result, status: "not_allowed", error: NOT_ALLOWED[code] }
-          : { ...result, status: "failed", error: code };
+          : NOT_ALLOWED.has(code) ? { ...result, status: "not_allowed", error: worldErrorLabel(code) }
+          : { ...result, status: "failed", error: worldErrorLabel(code) };
+        message = error instanceof Error ? error.message : undefined;
       }
       await record(meetingId, revision, index, next);
-      logEvent({ event: "meeting.world_object", objectRef: `meeting:${meetingId}`, status: next.status, errorCode: code });
+      logEvent({ event: "meeting.world_object", objectRef: `meeting:${meetingId}`, status: next.status, errorCode: code, message });
       if (next.status === "conflict") await refreshDraft(meetingId);
       if (next.status === "updated" && next.actualVersion !== null) await rebaseline(meetingId, change, objectId, expected, next.actualVersion);
     }

@@ -84,8 +84,8 @@ describe("对象修改逐个提交", () => {
       const draftVersion = await ready(t, host, meetingId);
       const view = (await confirm(t, host, meetingId, { draftVersion, writeToWorld: true })).json();
       expect(view.sync.objects).toEqual([
-        { changeId: "chg-1", title: "十月交付 · acceptance_criterion", status: "pending", actualVersion: null, error: null },
-        { changeId: "chg-2", title: "十月交付 · acceptance_criterion", status: "pending", actualVersion: null, error: null },
+        { changeId: "chg-1", title: "十月交付 · 验收标准", status: "pending", actualVersion: null, error: null },
+        { changeId: "chg-2", title: "十月交付 · 验收标准", status: "pending", actualVersion: null, error: null },
       ]);
       await run();
 
@@ -104,8 +104,8 @@ describe("对象修改逐个提交", () => {
       const sync = (await getCard(t, host, meetingId)).sync!;
       expect(sync.event.status).toBe("succeeded");
       expect(sync.objects).toEqual([
-        { changeId: "chg-1", title: "十月交付 · acceptance_criterion", status: "updated", actualVersion: 6, error: null },
-        { changeId: "chg-2", title: "十月交付 · acceptance_criterion", status: "updated", actualVersion: 7, error: null },
+        { changeId: "chg-1", title: "十月交付 · 验收标准", status: "updated", actualVersion: 6, error: null },
+        { changeId: "chg-2", title: "十月交付 · 验收标准", status: "updated", actualVersion: 7, error: null },
       ]);
       // 再跑一遍不再提交。
       await run();
@@ -137,7 +137,7 @@ describe("对象修改逐个提交", () => {
       await run();
       expect(world.revisions()).toHaveLength(1);
       expect(world.po.blocks[0].components[0].text).toBe("十月底前 5 家客户上线");
-      expect(await objectsOf(t, meetingId, 1)).toEqual([{ changeId: "chg-1", title: "十月交付 · acceptance_criterion", status: "conflict", actualVersion: null, error: "目标已变" }]);
+      expect(await objectsOf(t, meetingId, 1)).toEqual([{ changeId: "chg-1", title: "十月交付 · 验收标准", status: "conflict", actualVersion: null, error: "目标已变" }]);
       // 草稿里这条按对象当前值刷新，要重看（不经读卡，写入时就刷新）。
       const card = (await t.sql("SELECT draft, draft_version FROM meeting_cards WHERE meeting_id = $1", [meetingId]))[0];
       expect(card.draft_version).toBe(draftVersion + 1);
@@ -162,6 +162,18 @@ describe("对象修改逐个提交", () => {
       ]);
       expect(view.confirmed!.payload.objectChanges.map((change) => change.id)).toEqual(["chg-1", "chg-2"]);
       expect(world.revisions()).toHaveLength(2);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("本体回别的错误：只记短标签「写入失败」，不记本体原话", async () => {
+    ontology({ refuse: () => Response.json({ error: { code: "SCHEMA_INVALID", message: "params.payload.blocks.target: unknown component" } }, { status: 422 }) });
+    const { t, host, meetingId, run } = await setup();
+    try {
+      await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
+      await run();
+      expect(await objectsOf(t, meetingId, 1)).toMatchObject([{ status: "failed", error: "写入失败" }]);
     } finally {
       await t.close();
     }
@@ -303,6 +315,56 @@ describe("对象修改逐个提交", () => {
     }
   });
 
+  it("上一版已改成的修改：新版沿用结果、不再提交；之后别人改了这个对象，卡片不算目标已变、也不改回去", async () => {
+    const world = ontology();
+    const { t, host, meetingId, run } = await setup();
+    try {
+      await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
+      await run();
+      expect(world.revisions()).toHaveLength(1);
+      const v2 = await edit(t, host, meetingId, (draft) => { draft.summary = "第二版摘要"; });
+      const confirmed = (await confirm(t, host, meetingId, { draftVersion: v2.draftVersion, writeToWorld: true, kind: "correction" })).json();
+      expect(confirmed.sync.objects).toMatchObject([{ changeId: "chg-1", status: "updated", actualVersion: 6, error: null }]);
+      await run();
+      expect(world.revisions()).toHaveLength(1);
+      expect(await objectsOf(t, meetingId, 2)).toMatchObject([{ status: "updated", actualVersion: 6 }]);
+
+      // 别人把对象改了：读卡、存草稿都不把这条标成目标已变，记录不变成修改待确认。
+      world.edit("acc-1", "别人改的");
+      const card = await getCard(t, host, meetingId);
+      expect(card.draftChange).toBe("none");
+      expect(card.draft!.objectChanges[0]).toMatchObject({ id: "chg-1", stale: false });
+      expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "committed", version: 2 });
+      const v3 = await edit(t, host, meetingId, (draft) => { draft.summary = "第三版摘要"; });
+      expect(v3.draft!.objectChanges[0]).toMatchObject({ stale: false });
+      expect(v3.draftChange).toBe("content");
+      await confirm(t, host, meetingId, { draftVersion: v3.draftVersion, writeToWorld: true, kind: "correction" });
+      await run();
+      expect(world.revisions()).toHaveLength(1);
+      expect(world.po.blocks[0].components[0].text).toBe("别人改的");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("上一版已改成、这次改了改后内容：照常提交", async () => {
+    const world = ontology();
+    const { t, host, meetingId, run } = await setup();
+    try {
+      await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
+      await run();
+      const v2 = await edit(t, host, meetingId, (draft) => { draft.objectChanges[0].after.text = "十月底前 6 家客户上线"; });
+      await confirm(t, host, meetingId, { draftVersion: v2.draftVersion, writeToWorld: true, kind: "correction" });
+      await run();
+      expect(world.revisions().map((body) => body.idempotency_key)).toEqual([`tianshu-meeting:${meetingId}:v1:obj:chg-1`, `tianshu-meeting:${meetingId}:v2:obj:chg-1`]);
+      expect(world.revisions()[1]).toMatchObject({ target: { expected_version: 6 } });
+      expect(world.po.blocks[0].components[0].text).toBe("十月底前 6 家客户上线");
+      expect(await objectsOf(t, meetingId, 2)).toMatchObject([{ status: "updated", actualVersion: 7 }]);
+    } finally {
+      await t.close();
+    }
+  });
+
   it("网络错误留给任务重跑，最后一次仍失败记失败", async () => {
     let down = true;
     const world = ontology({ network: () => down });
@@ -314,7 +376,7 @@ describe("对象修改逐个提交", () => {
       expect((await t.sql("SELECT count(*)::int AS n FROM jobs WHERE kind = 'meeting.world_sync' AND status = 'pending'"))[0].n).toBe(1);
       // 任务最后一次重跑还是网络错误：记失败，不再留在待提交。
       await t.app.meetingFollowThrough.cardConfirm.syncWorld(meetingId, true);
-      expect(await objectsOf(t, meetingId, 1)).toMatchObject([{ status: "failed", error: "NETWORK_ERROR" }]);
+      expect(await objectsOf(t, meetingId, 1)).toMatchObject([{ status: "failed", error: "连不上本体" }]);
       down = false;
       await t.app.meetingFollowThrough.cardConfirm.syncWorld(meetingId);
       expect(world.po.object_version).toBe(5);

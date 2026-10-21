@@ -111,8 +111,8 @@ describe("会议卡草稿", () => {
     try {
       // 模型拿到挂点对象里有文字的组件作候选目标。
       expect(calls[0].targetOptions).toEqual([
-        { targetRef: ACCEPTANCE, title: "十月交付 · acceptance_criterion", componentType: "acceptance_criterion", text: "十月底前 3 家客户上线" },
-        { targetRef: "obj-po-1#target/out-1", title: "十月交付 · outcome", componentType: "outcome", text: "首批客户用上 v2" },
+        { targetRef: ACCEPTANCE, title: "十月交付 · 验收标准", componentType: "acceptance_criterion", text: "十月底前 3 家客户上线" },
+        { targetRef: "obj-po-1#target/out-1", title: "十月交付 · 结果", componentType: "outcome", text: "首批客户用上 v2" },
       ]);
       const view = await viewOf(t, host, meetingId);
       expect(Value.Check(MeetingCardView, view)).toBe(true);
@@ -149,7 +149,7 @@ describe("会议卡草稿", () => {
     const { t, host, meetingId } = await setup(cardAgent().agent);
     try {
       const view = await viewOf(t, host, meetingId);
-      expect(view.draft!.objectChanges).toEqual([{ id: "chg-1", targetRef: ACCEPTANCE, targetTitle: "十月交付 · acceptance_criterion", expectedVersion: 5,
+      expect(view.draft!.objectChanges).toEqual([{ id: "chg-1", targetRef: ACCEPTANCE, targetTitle: "十月交付 · 验收标准", expectedVersion: 5,
         before: { text: "十月底前 3 家客户上线" }, after: { text: "十月底前 4 家客户上线" }, basisSectionIds: ["sec-1"], stale: false }]);
       expect(view.targetOptions.map((option) => option.targetRef)).toEqual([ACCEPTANCE, "obj-po-1#target/out-1"]);
     } finally {
@@ -197,7 +197,7 @@ describe("会议卡草稿", () => {
       const next: TMeetingCardView = saved.json();
       expect(next.draftVersion).toBe(2);
       expect(next.draft!.sections.map((section) => section.body)).toEqual([draft.sections[0].body, "已定：渠道预算这个月不动。", "已定：会后补充的一段。"]);
-      expect(next.draft!.objectChanges[0]).toMatchObject({ before: { text: "十月底前 3 家客户上线" }, expectedVersion: 5, targetTitle: "十月交付 · acceptance_criterion",
+      expect(next.draft!.objectChanges[0]).toMatchObject({ before: { text: "十月底前 3 家客户上线" }, expectedVersion: 5, targetTitle: "十月交付 · 验收标准",
         stale: false, basisSectionIds: ["sec-3"] });
       expect(next.actionItems[0]).toMatchObject({ text: "看板接到 v2", taskId: null });
 
@@ -284,6 +284,39 @@ describe("会议卡草稿", () => {
       const view = await viewOf(t, host, meetingId);
       expect(view.draft!.relatedObjectRefs).toEqual([]);
       expect(view.draftVersion).toBe(2);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("草稿生成后改挂点：指向不再挂着的对象的修改成目标未定，照常能存", async () => {
+    ontology();
+    const { t, host, meetingId } = await setup(cardAgent().agent);
+    try {
+      const res = await t.app.inject({ method: "PUT", url: `/api/meetings/${meetingId}/world-anchors`, headers: { cookie: host, origin: t.publicOrigin }, payload: { anchors: null } });
+      expect(res.statusCode).toBe(200);
+      const view = await viewOf(t, host, meetingId);
+      expect(view.draft!.objectChanges[0]).toMatchObject({ id: "chg-1", targetRef: null, targetTitle: null, expectedVersion: null, before: null, stale: false,
+        after: { text: "十月底前 4 家客户上线" } });
+      const draft = structuredClone(view.draft!);
+      draft.summary = "改过的摘要";
+      const saved = await putDraft(t, host, meetingId, { draftVersion: view.draftVersion, draft });
+      expect(saved.statusCode).toBe(200);
+      expect((saved.json() as TMeetingCardView).draft!.objectChanges[0]).toMatchObject({ targetRef: null, stale: false });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("目标组件被删了：存草稿时这条成目标未定，不拒收", async () => {
+    const world = ontology();
+    const { t, host, meetingId } = await setup(cardAgent().agent);
+    try {
+      const view = await viewOf(t, host, meetingId);
+      world.po.blocks[0].components.splice(0, 1);
+      const saved = await putDraft(t, host, meetingId, { draftVersion: view.draftVersion, draft: view.draft });
+      expect(saved.statusCode).toBe(200);
+      expect((saved.json() as TMeetingCardView).draft!.objectChanges[0]).toMatchObject({ targetRef: null, targetTitle: null, expectedVersion: null, before: null, stale: false });
     } finally {
       await t.close();
     }

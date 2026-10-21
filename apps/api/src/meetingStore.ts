@@ -61,6 +61,8 @@ export type MeetingRow = {
   attendees_actual?: string[] | null;
   /** 会后分层确认（meeting_decisions 另表，随 meetingColumns 带出）；`SELECT *` 读出的行没有这一格。 */
   decisions?: MeetingDecisionRow[];
+  /** 会议卡已有确认效果（有确认版，或行动项推出过执行事项；随 meetingColumns 带出）：不再给替换逐字稿。`SELECT *` 读出的行没有这一格。 */
+  card_confirmed?: boolean;
   /** 会议入本体（100）：建会的人、挂点（确认版本和写入回执在 meeting_card_confirmations / meeting_card_syncs）。 */
   created_by: string | null;
   world_anchors: StoredWorldAnchor[] | null;
@@ -104,7 +106,12 @@ const groupInputsColumn = (prefix: string) => {
     'newDiscussionCount', (SELECT count(*) ${discussions} AND gm.id > COALESCE((${m}preflight #>> '{inputCoverage,evidence,discussionMaxId}')::bigint, 0))
   ) END) AS group_inputs`;
 };
-export const meetingColumns = (prefix = "") => [...MEETING_COLUMNS.map((column) => `${prefix}${column}`), latestRecordingColumn(prefix), groupInputsColumn(prefix), decisionsColumn(prefix)].join(", ");
+/** 会议卡确认不 bump Meeting version，每次读取现查。 */
+const cardConfirmedColumn = (prefix: string) =>
+  `EXISTS (SELECT 1 FROM meeting_cards k WHERE k.meeting_id = ${prefix || "meetings."}id
+     AND (k.current_revision IS NOT NULL OR jsonb_path_exists(k.action_items, '$[*] ? (@.taskId != null)'))) AS card_confirmed`;
+export const meetingColumns = (prefix = "") => [...MEETING_COLUMNS.map((column) => `${prefix}${column}`), latestRecordingColumn(prefix), groupInputsColumn(prefix), decisionsColumn(prefix),
+  cardConfirmedColumn(prefix)].join(", ");
 
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type MeetingActionError = { status: number; code: string; message: string; fieldErrors?: Record<string, string> };
@@ -215,9 +222,9 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
       action("meeting.discard_transcript_candidate", "清除会议记录候选"),
     );
   }
-  // Ticket 10：held 后只能显式重试失败的抽取；无 confirmed effect 时才允许危险替换 Transcript（reviewed 同样适用）
+  // Ticket 10：held 后只能显式重试失败的抽取；无 confirmed effect（含会议卡确认过）时才允许危险替换 Transcript（reviewed 同样适用）
   if (row.status === "held" && row.outcome?.status === "failed") actions.push(action("meeting.retry_outcome", "重试会后抽取"));
-  if ((row.status === "held" || row.status === "reviewed") && !hasConfirmedEffect(row.outcome)) {
+  if ((row.status === "held" || row.status === "reviewed") && !hasConfirmedEffect(row.outcome) && !row.card_confirmed) {
     actions.push(action("meeting.replace_transcript", "替换 Transcript"));
   }
   // 会后只有会议卡一个入口（FR-5.1、拍板 4）：不再逐条确认、忽略、撤回；旧会议的逐条条目只读。

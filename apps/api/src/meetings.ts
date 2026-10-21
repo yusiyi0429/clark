@@ -118,6 +118,8 @@ export async function executeCreateMeeting(
   scope: ActionScope,
   input: { title: string; scheduledAt: string; endsAt?: string; leadDriId: string; ceoParticipantId: string; participants: string[]; issueIds: string[] },
   fingerprint: string,
+  /** 建会的人（议题建会是操作的 CEO）。 */
+  createdBy: string,
   introAgent?: ThreadIntroAgent,
 ): Promise<MeetingActionOutcome> {
   if (scope.objectType !== "issue") return { error: { status: 404, code: "UNKNOWN_ACTION", message: "无效 actionId" } };
@@ -158,8 +160,8 @@ export async function executeCreateMeeting(
       const inserted = await client.query<MeetingRow>(
         `INSERT INTO meetings
            (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
-            participants, issue_ids, preflight, draft, materials, origin_ref, action_fingerprints, ends_at)
-         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, '[]'::jsonb, $10::jsonb, $11::jsonb, $12)
+            participants, issue_ids, preflight, draft, materials, origin_ref, action_fingerprints, ends_at, created_by)
+         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, '[]'::jsonb, $10::jsonb, $11::jsonb, $12, $13)
          RETURNING ${meetingColumns()}`,
         [
           meetingId,
@@ -174,6 +176,7 @@ export async function executeCreateMeeting(
           JSON.stringify({ type: "issue", issueId: scope.objectId }),
           JSON.stringify([fingerprint]),
           endsAt,
+          createdBy,
         ],
       );
       created = inserted.rows[0];

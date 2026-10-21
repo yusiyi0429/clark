@@ -8,7 +8,7 @@ import type {
 import { enqueueJob, JOB_MAX_ATTEMPTS, type JobHandler } from "./jobs.js";
 import { payloadHash } from "./meetingCardHash.js";
 import { getMeetingRow, UUID_PATTERN, type MeetingRow, type Query } from "./meetingStore.js";
-import { initialObjectResults, supersedeObjects, type MeetingObjectSync } from "./meetingObjectSync.js";
+import { appliedChanges, initialObjectResults, supersedeObjects, worldErrorLabel, type MeetingObjectSync } from "./meetingObjectSync.js";
 import { logEvent } from "./observability.js";
 import { dispatchMeetingTodo } from "./tasks.js";
 import { WorldError, worldRef, type WorldClient } from "./worldClient.js";
@@ -24,9 +24,11 @@ import type { MeetingEventWorld } from "./worldMeetingEvent.js";
  * - 行动项（拍板 4）：同一事务里把还没 taskId 的推成执行事项（dispatchMeetingTodo，负责人缺省主持人、是 CEO 的不建），taskId 回填到草稿和这次的快照；
  *   已推的不再推，推完再改不回改执行事项。负责人是 CEO 的 taskId 一直空着，之后每次新确认版会再走一遍，照样不建。
  * - 写本体按 revision 串行（jobs worker 逐条执行）：一直写最早一版待写的，前次写成的那条在写的时候现找（写入中又确认了新版，新版指回刚写成的那条）。
- *   NETWORK_ERROR 抛出交给 jobs 按原幂等键重放，其他错误记 failed 和原因（拍板 8：不设正文上限，本体回超长就如实记下）。
+ *   NETWORK_ERROR 抛出交给 jobs 按原幂等键重放，任务最后一次仍是网络错误、其他错误都记 failed 和原因（拍板 8：不设正文上限，本体回超长就如实记下）；
+ *   原因记短标签（worldErrorLabel），本体原话只进日志。
  * - 选了不写入：回执 skipped，不发请求；已经写进去的不撤回。
- * - 对象修改（meetingObjectSync）：确认时排好每条的回执，新版确认后旧版还没提交的作废；事件写成后同一任务里接着按顺序提交这一版的修改。
+ * - 对象修改（meetingObjectSync）：确认时排好每条的回执（上一版已改成、这次没动的沿用结果），新版确认后旧版还没提交的作废；
+ *   事件写成后同一任务里接着按顺序提交这一版的修改。
  */
 export const MEETING_WORLD_SYNC_KIND = "meeting.world_sync";
 
@@ -226,13 +228,15 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
       };
       const confirmation: TMeetingCardConfirmation = { revision, confirmedBy: viewer.personId, confirmedAt: at.toISOString(), payloadHash: payloadHash(payload) };
       const actionItems = await dispatchItems(client, meeting, locked.action_items);
+      // 上一版已改成的同一处修改沿用结果，不再提交（回执现读，锁住后不会再出新版本）。
+      const applied = appliedChanges(locked.current_revision ? await currentConfirmation(cq, meetingId) : null);
       await cq(
         `INSERT INTO meeting_card_confirmations (meeting_id, revision, draft_version, kind, reason, payload, confirmation, action_items, write_to_world, created_at)
          VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10)`,
         [meetingId, revision, input.draftVersion, kind, reason, JSON.stringify(payload), JSON.stringify(confirmation), JSON.stringify(actionItems), input.writeToWorld, at],
       );
       await cq("INSERT INTO meeting_card_syncs (meeting_id, revision, event_status, objects, updated_at) VALUES ($1, $2, $3, $4::jsonb, $5)",
-        [meetingId, revision, input.writeToWorld ? "pending" : "skipped", JSON.stringify(initialObjectResults(objectChanges, input.writeToWorld)), at]);
+        [meetingId, revision, input.writeToWorld ? "pending" : "skipped", JSON.stringify(initialObjectResults(objectChanges, input.writeToWorld, applied)), at]);
       await supersedeObjects(cq, meetingId, revision);
       // 确认后草稿的 stale 清掉（差异已经看过、确认过）；草稿版本不变，同一草稿再确认还认得出来。
       await cq(`UPDATE meeting_cards SET current_revision = $2, draft = jsonb_set(draft, '{objectChanges}', $3::jsonb), action_items = $4::jsonb, updated_at = now()
@@ -257,7 +261,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
       if (item.taskId) { dispatched.push(item); continue; }
       const owner = item.ownerPersonId ?? meeting.lead_dri_id;
       const taskId = await dispatchMeetingTodo(client, { id: meeting.id, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id,
-        ownerName: nameOf(meeting.participants, owner), title: meeting.title }, { ...item, dueDate: item.dueDate ?? undefined, quote: "" });
+        ownerName: nameOf(meeting.participants, owner), title: meeting.title }, { ...item, dueDate: item.dueDate ?? undefined, quote: null });
       dispatched.push({ ...item, taskId });
     }
     return dispatched;
@@ -306,7 +310,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
       await cq(`UPDATE meeting_card_confirmations SET write_to_world = TRUE, payload = $3::jsonb, confirmation = $4::jsonb
         WHERE meeting_id = $1 AND revision = $2 AND write_to_world = FALSE`, [meetingId, current.revision, JSON.stringify(payload), JSON.stringify(confirmation)]);
       await cq(`UPDATE meeting_card_syncs SET event_status = 'pending', objects = $3::jsonb, updated_at = now()
-        WHERE meeting_id = $1 AND revision = $2 AND event_status = 'skipped'`, [meetingId, current.revision, JSON.stringify(initialObjectResults(payload.objectChanges, true))]);
+        WHERE meeting_id = $1 AND revision = $2 AND event_status = 'skipped'`, [meetingId, current.revision, JSON.stringify(initialObjectResults(payload.objectChanges, true, appliedChanges(current)))]);
       await queueSync(cq, meetingId);
       return "done";
     });
@@ -343,7 +347,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
 
   /**
    * 这场会的本体同步（jobs worker 逐条执行）：按 revision 从早到晚，先写待写的事件（前次写成的那条在写的时候现找），
-   * 事件写成的接着提交这一版还没提交的对象修改。lastAttempt：任务最后一次重跑，对象修改的网络错误也记失败。
+   * 事件写成的接着提交这一版还没提交的对象修改。lastAttempt：任务最后一次重跑，事件和对象修改的网络错误也记失败。
    */
   async function syncWorld(meetingId: string, lastAttempt = false): Promise<void> {
     const world = deps.meetingWorld;
@@ -378,14 +382,14 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
         logEvent({ event: "meeting.world_event", objectRef: `meeting:${meetingId}`, status: "committed" });
       } catch (error) {
         const code = world.errorCode(error);
-        logEvent({ event: "meeting.world_event", objectRef: `meeting:${meetingId}`, status: "world_failed", errorCode: code });
-        const text = error instanceof WorldError ? `${code}: ${error.message}` : code;
-        if (code === "NETWORK_ERROR") {
-          await q("UPDATE meeting_card_syncs SET event_error = $3, updated_at = now() WHERE meeting_id = $1 AND revision = $2", [meetingId, row.revision, text]);
+        logEvent({ event: "meeting.world_event", objectRef: `meeting:${meetingId}`, status: "world_failed", errorCode: code, message: error instanceof Error ? error.message : undefined });
+        const label = worldErrorLabel(code);
+        if (code === "NETWORK_ERROR" && !lastAttempt) {
+          await q("UPDATE meeting_card_syncs SET event_error = $3, updated_at = now() WHERE meeting_id = $1 AND revision = $2", [meetingId, row.revision, label]);
           throw error;
         }
         await q("UPDATE meeting_card_syncs SET event_status = 'failed', event_error = $3, updated_at = now() WHERE meeting_id = $1 AND revision = $2",
-          [meetingId, row.revision, text]);
+          [meetingId, row.revision, label]);
       }
     }
   }

@@ -67,6 +67,19 @@ describe("行动项推成执行事项", () => {
     }
   });
 
+  it("推出的执行事项没有逐字引用：负责人首页照常打开", async () => {
+    ontology();
+    const { t, host, owner, meetingId } = await setup();
+    try {
+      expect((await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true })).statusCode).toBe(200);
+      const home = await t.app.inject({ method: "GET", url: "/api/me/home", headers: { cookie: owner } });
+      expect(home.statusCode).toBe(200);
+      expect((await t.sql("SELECT source_quote FROM tasks WHERE origin_meeting_id = $1", [meetingId]))[0].source_quote).toBeNull();
+    } finally {
+      await t.close();
+    }
+  });
+
   it("修改后再确认不重复推；推完再改不回改执行事项", async () => {
     ontology();
     const { t, host, meetingId } = await setup();

@@ -107,7 +107,8 @@ describe("会议入本体：挂点", () => {
       expect(edited.json().world).toMatchObject({ edited: true, anchors: [UNIT, MISSION], record: { status: "pending" } });
       expect((await putAnchors(t, host, meetingId, null)).json().world).toMatchObject({ edited: false, anchors: [UNIT] });
 
-      // 从议题建的会没记建会的人（按主持人算）：CEO 只看记录状态、不能改（裁定 24）；记成 CEO 建的以后 CEO 能改。
+      // 不是建会的人的 CEO：只看记录状态、不能改（裁定 24）；从议题建的会记的是建会的 CEO，CEO 能改。
+      await t.pool.query("UPDATE meetings SET created_by = $2 WHERE id = $1", [meetingId, HOST]);
       const view = await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/world`, headers: { cookie: ceo } });
       expect(view.json().world).toMatchObject({ canEdit: false, record: { status: "pending" } });
       expect((await putAnchors(t, ceo, meetingId, [{ kind: "unit", id: "agents" }])).statusCode).toBe(404);

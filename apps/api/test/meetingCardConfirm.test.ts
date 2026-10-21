@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { MeetingCardView, type TMeetingCardView } from "@warmap/contracts";
+import { signActionId } from "../src/actionToken.js";
 import { payloadHash } from "../src/meetingCardHash.js";
-import { cardAgent, confirm, edit, getCard, HOST, ready, retry, setup, worldOf } from "./meetingCardFixture.js";
+import { cardAgent, CEO, confirm, edit, getCard, HOST, ready, retry, setup, worldOf } from "./meetingCardFixture.js";
 import { projection, stubWorld } from "./worldFixture.js";
 
 // 整卡确认（FR-5.1、5.3、5.5）：主持人或创建人带草稿版本确认 → 冻结一版 → 写一条整场会议事件，正文是 {payload, confirmation} 的 JSON；
@@ -63,7 +64,8 @@ describe("整卡确认与会议事件", () => {
     const { t, ceo, host, owner, meetingId, run } = await setup();
     try {
       const draftVersion = await ready(t, host, meetingId);
-      // 只有主持人或创建人能确认（议题建会没记创建人，按主持人算）：参会人、CEO 都 404。
+      // 只有主持人或创建人能确认：参会人 404；不是建会的人的 CEO 也 404。
+      await t.pool.query("UPDATE meetings SET created_by = $2 WHERE id = $1", [meetingId, HOST]);
       expect((await confirm(t, owner, meetingId, { draftVersion, writeToWorld: true })).statusCode).toBe(404);
       expect((await confirm(t, ceo, meetingId, { draftVersion, writeToWorld: true })).statusCode).toBe(404);
       const res = await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
@@ -74,7 +76,7 @@ describe("整卡确认与会议事件", () => {
       expect(view.confirmed!.confirmation.payloadHash).toBe(payloadHash(view.confirmed!.payload));
       expect(view.confirmed!.payload.objectChanges[0]).not.toHaveProperty("stale");
       expect(view.sync).toMatchObject({ revision: 1, writeToWorld: true, event: { status: "pending", eventId: null },
-        objects: [{ changeId: "chg-1", title: "十月交付 · acceptance_criterion", status: "pending", actualVersion: null, error: null }] });
+        objects: [{ changeId: "chg-1", title: "十月交付 · 验收标准", status: "pending", actualVersion: null, error: null }] });
       // 第一次确认：会议算处理完。
       expect((await t.sql("SELECT status FROM meetings WHERE id = $1", [meetingId]))[0].status).toBe("reviewed");
       // 行动项快照留在确认表，不进 payload。
@@ -107,6 +109,43 @@ describe("整卡确认与会议事件", () => {
       expect((await worldOf(t, owner, meetingId)).world).toMatchObject({ record: null, at: null });
       // CEO 能读确认版。
       expect((await getCard(t, ceo, meetingId)).confirmed).toEqual(after.confirmed);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("从议题建的会记下建会的人：CEO 建、主持人是别人，CEO 也能确认", async () => {
+    ontology();
+    const { t, ceo, host, meetingId } = await setup();
+    try {
+      expect((await t.sql("SELECT created_by FROM meetings WHERE id = $1", [meetingId]))[0].created_by).toBe(CEO);
+      const draftVersion = await ready(t, host, meetingId);
+      expect((await getCard(t, ceo, meetingId)).canEdit).toBe(true);
+      const res = await confirm(t, ceo, meetingId, { draftVersion, writeToWorld: true });
+      expect(res.statusCode).toBe(200);
+      expect((res.json() as TMeetingCardView).confirmed!.confirmation.confirmedBy).toBe(CEO);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("会议卡确认后不能替换逐字稿：CEO 看不到这个动作，签好的也 409", async () => {
+    ontology();
+    const { t, ceo, host, meetingId } = await setup();
+    try {
+      const actions = async () => ((await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie: ceo } })).json()
+        .cards[0].actions as { actionType: string }[]).map((action) => action.actionType);
+      expect(await actions()).toContain("meeting.replace_transcript");
+      expect((await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: false })).statusCode).toBe(200);
+      expect(await actions()).not.toContain("meeting.replace_transcript");
+      const version = (await t.sql("SELECT version FROM meetings WHERE id = $1", [meetingId]))[0].version as number;
+      const replaced = await t.app.inject({ method: "POST", url: "/api/actions/execute", headers: { cookie: ceo, origin: t.publicOrigin }, payload: {
+        actionId: signActionId(t.env.sessionSecret, { actionType: "meeting.replace_transcript", objectType: "meeting", objectId: meetingId, objectVersion: version }),
+        input: { transcript: { schemaVersion: "warmap-transcript.v1", meetingId, turns: [{ id: "turn-001", speakerId: HOST, text: "换一份逐字稿。" }] }, confirmReplace: true },
+      } });
+      expect(replaced.statusCode).toBe(409);
+      expect(replaced.json().code).toBe("OUTCOME_HAS_CONFIRMED_EFFECT");
+      expect((await getCard(t, host, meetingId)).confirmed!.confirmation.revision).toBe(1);
     } finally {
       await t.close();
     }
@@ -185,6 +224,27 @@ describe("整卡确认与会议事件", () => {
     }
   });
 
+  it("一直连不上本体：任务最后一次仍是网络错误，事件记失败「连不上本体」，能重试", async () => {
+    let down = true;
+    const world = ontology({ network: () => down });
+    const { t, host, meetingId, run } = await setup();
+    try {
+      await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
+      await run();
+      expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "pending" });
+      await t.app.meetingFollowThrough.cardConfirm.syncWorld(meetingId, true);
+      expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "failed", eventId: null, error: "连不上本体" });
+      expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "failed" });
+      down = false;
+      expect((await retry(t, host, meetingId)).statusCode).toBe(200);
+      await run();
+      expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "succeeded", eventId: "ev-1", error: null });
+      expect(world.writes().length).toBeGreaterThan(1);
+    } finally {
+      await t.close();
+    }
+  });
+
   it("写成但读回对不上：记失败和原因；同一草稿再确认按同一版重写", async () => {
     let readable = false;
     const world = ontology({ readable: () => readable });
@@ -194,7 +254,7 @@ describe("整卡确认与会议事件", () => {
       await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
       await run();
       const failed = await getCard(t, host, meetingId);
-      expect(failed.sync!.event).toMatchObject({ status: "failed", eventId: null, error: expect.stringContaining("READBACK_MISMATCH") });
+      expect(failed.sync!.event).toMatchObject({ status: "failed", eventId: null, error: "读回不一致" });
       expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "failed", version: 1 });
 
       readable = true;
@@ -240,7 +300,7 @@ describe("整卡确认与会议事件", () => {
       await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
       await run();
       expect(world.writes()).toHaveLength(1);
-      expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "failed", eventId: null, error: expect.stringContaining("READBACK_MISMATCH") });
+      expect((await getCard(t, host, meetingId)).sync!.event).toMatchObject({ status: "failed", eventId: null, error: "读回不一致" });
       tampered = false;
       await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
       await run();

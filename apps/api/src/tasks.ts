@@ -389,8 +389,8 @@ export async function addTaskCollaborators(pool: Pool, ownerId: string, taskId: 
   } catch(e) { await client.query("ROLLBACK").catch(()=>undefined); throw e; } finally { client.release(); }
 }
 
-/** 会后推送保持原有幂等和通知规则，同时建立可访问的事项群组。 */
-export async function dispatchMeetingTodo(client: PoolClient, meeting: { id:string; leadDriId:string; ceoId:string; ownerName?:string; title?:string }, item:Pick<TMeetingOutcomeItem,"id"|"text"|"ownerPersonId"|"dueDate"|"quote">): Promise<string | null> {
+/** 会后推送保持原有幂等和通知规则，同时建立可访问的事项群组。会议卡的行动项没有逐字引用，quote 为 null。 */
+export async function dispatchMeetingTodo(client: PoolClient, meeting: { id:string; leadDriId:string; ceoId:string; ownerName?:string; title?:string }, item:Pick<TMeetingOutcomeItem,"id"|"text"|"ownerPersonId"|"dueDate"> & { quote: string | null }): Promise<string | null> {
   const ownerId = item.ownerPersonId ?? meeting.leadDriId;
   if (ownerId === meeting.ceoId) return null;
   const inserted = await client.query<{id:string}>(`INSERT INTO tasks(id,title,due_date,status,owner_id,created_by,origin_meeting_id,origin_item_id,source_quote)

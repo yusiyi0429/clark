@@ -63,7 +63,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       // Ticket 09：Issue 侧 Meeting Action 先于 Ticket 08 的通用 Issue Action 分派
       if (scope.actionType === "issue.create_meeting") {
         if (!Value.Check(CreateMeetingRequest, input)) return invalidInput(reply, CreateMeetingRequest, input);
-        return respond(reply, await executeCreateMeeting(pool, peopleDirectory, preflight, env.sessionSecret, scope, input, fingerprint, ctx.threadIntroAgent));
+        return respond(reply, await executeCreateMeeting(pool, peopleDirectory, preflight, env.sessionSecret, scope, input, fingerprint, req.person!.personId, ctx.threadIntroAgent));
       }
       if (scope.actionType === "issue.join_meeting") {
         if (!Value.Check(JoinMeetingRequest, input)) return invalidInput(reply, JoinMeetingRequest, input);
