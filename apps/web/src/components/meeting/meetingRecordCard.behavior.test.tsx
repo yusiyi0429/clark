@@ -117,6 +117,25 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
     expect(render(initial).some((node) => node.type === "textarea" && node.props?.value === "别人改过的摘要。")).toBe(true);
   });
 
+  it("存草稿后和确认版的差别变了才通知页头重读", async () => {
+    vi.useFakeTimers();
+    const confirmed = { confirmed: confirmedOf(draft()), sync: SYNCED };
+    const initial = view({ ...confirmed, draftChange: "none" });
+    const changed = (window.dispatchEvent as ReturnType<typeof vi.fn>);
+    const edit = (value: string) => (render(initial).find((node) => node.type === "textarea" && node.props?.["aria-label"] === "第 1 段正文")!.props!
+      .onChange as (event: unknown) => void)({ target: { value } });
+    click(button(render(initial), "修改"));
+    api.put.mockResolvedValue(ok(view({ ...confirmed, draftVersion: 4, draftChange: "content" })));
+    edit("二期预算定为 90 万。已定。");
+    await vi.advanceTimersByTimeAsync(900);
+    expect(changed.mock.calls.map(([event]) => (event as Event).type)).toEqual(["meeting-changed"]);
+    api.put.mockResolvedValue(ok(view({ ...confirmed, draftVersion: 5, draftChange: "content" })));
+    edit("二期预算定为 95 万。已定。");
+    await vi.advanceTimersByTimeAsync(900);
+    expect(api.put).toHaveBeenCalledTimes(2);
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
   it("改一段正文自动保存", async () => {
     vi.useFakeTimers();
     const initial = view();
@@ -279,6 +298,16 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
     expect(hasText(tree, "会议事件 · 写入失败 · 本体超时")).toBe(true);
     expect(hasText(tree, "接口全量切到 v2 · result · 已更新")).toBe(true);
     expect(button(tree, "重试")).toBeUndefined();
+  });
+
+  it("同步行只显示短标签：连不上本体照写；没细分的失败不重复「写入失败」", () => {
+    const tree = render(view({ canEdit: false, confirmed: confirmedOf(draft()), sync: { ...SYNCED, event: { status: "failed", eventId: null, error: "连不上本体" },
+      objects: [{ ...SYNCED.objects[0], status: "failed", error: "写入失败" }] } }));
+    expect(hasText(tree, "会议事件 · 写入失败 · 连不上本体")).toBe(true);
+    expect(hasText(tree, "接口全量切到 v2 · result · 更新失败")).toBe(true);
+    hooks.values = []; hooks.refs = [];
+    const generic = render(view({ canEdit: false, confirmed: confirmedOf(draft()), sync: { ...SYNCED, event: { status: "failed", eventId: null, error: "写入失败" } } }));
+    expect(hasText(generic, "会议事件 · 写入失败")).toBe(true);
   });
 
   it("事件写失败可以重试", async () => {

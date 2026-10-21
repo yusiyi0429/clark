@@ -87,13 +87,20 @@ describe("会议页页头：这场会挂到哪、会议记录写进本体没有"
 
   it("显示会议记录状态", () => {
     const labels: [NonNullable<TMeetingWorldView["record"]>["status"], string][] = [
-      ["pending", "记录 · 待确认"], ["committed", "记录 · 已写入"], ["excluded", "记录 · 不写入"], ["edit_pending", "记录 · 修改待确认"], ["failed", "记录 · 写入失败"],
+      ["pending", "记录 · 待确认"], ["writing", "记录 · 写入中"], ["committed", "记录 · 已写入"], ["excluded", "记录 · 不写入"], ["edit_pending", "记录 · 修改待确认"], ["failed", "记录 · 写入失败"],
     ];
     for (const [status, label] of labels) {
       hooks.values = [];
       const tree = render(world({ record: { ...RECORD, status }, excluded: status === "excluded" }));
       expect(tree.filter((node) => node.type === "span" && node.props?.["data-tone"] !== undefined).map(text)).toEqual([label]);
     }
+  });
+
+  it("挂点标签：类型和名称一样时只写一次（公司）", () => {
+    const anchors = nodes(WorldAnchors({ anchors: [{ kind: "company", id: "company", title: "公司" }, MISSION] }));
+    const items = anchors.filter((node) => node.type === "li");
+    expect(nodes(items[0]).filter((node) => node.type === "span").map(text)).toEqual(["公司"]);
+    expect(nodes(items[1]).filter((node) => node.type === "span").map(text)).toEqual(["Mission", "接口全量切到 v2"]);
   });
 
   it("改挂点：按类型分组可搜，选了保存；改过的可以恢复自动", async () => {

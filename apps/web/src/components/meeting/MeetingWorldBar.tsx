@@ -19,6 +19,7 @@ const toneOf = (world: TMeetingWorldView): AnchorTone | undefined =>
 
 const RECORD: Record<TMeetingRecordStatus, { text: string; tone: string }> = {
   pending: { text: "记录 · 待确认", tone: "wait" },
+  writing: { text: "记录 · 写入中", tone: "wait" },
   committed: { text: "记录 · 已写入", tone: "done" },
   edit_pending: { text: "记录 · 修改待确认", tone: "wait" },
   excluded: { text: "记录 · 不写入", tone: "off" },

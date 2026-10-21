@@ -82,6 +82,8 @@ describe("整卡确认与会议事件", () => {
       // 行动项快照留在确认表，不进 payload。
       expect((await t.sql("SELECT action_items FROM meeting_card_confirmations WHERE meeting_id = $1", [meetingId]))[0].action_items).toEqual(view.actionItems);
       expect(view.confirmed!.payload).not.toHaveProperty("actionItems");
+      // 已确认、事件还在写：页头是「写入中」，不是待确认。
+      expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "writing", version: 1, eventId: null });
       await run();
 
       expect(world.writes()).toHaveLength(1);

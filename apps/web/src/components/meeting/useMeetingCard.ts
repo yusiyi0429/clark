@@ -11,6 +11,8 @@ import {
 const SAVE_DELAY = 800;
 const NETWORK_RETRY = 3000;
 const POLL_MS = 3000;
+/** 同步一直在等（本体长时间连不上）时轮询的上限；之后等用户下一次操作或重新打开会议页再接着问。 */
+const POLL_LIMIT_MS = 10 * 60_000;
 
 /** 自动保存的状态（卡顶右侧的小字）：保存中、已保存、保存失败、网络不通。 */
 export type SaveState = "idle" | "saving" | "saved" | "failed" | "offline";
@@ -22,7 +24,7 @@ type ItemField = "text" | "ownerPersonId" | "dueDate";
 /** 「+ 加一段」还没写全的那段：标题和正文都有了才进草稿（空段不拦住其他内容的保存）；touched 是离开过一次。 */
 type PendingSection = Pick<TMeetingCardSection, "id" | "heading" | "body"> & { touched: boolean };
 
-/** 通知栏和左栏按会议记录状态刷新（确认、放弃修改、重试之后）。 */
+/** 通知栏、左栏和页头按会议记录状态刷新（确认、放弃修改、重试之后，存草稿后差别变了，同步写完了）。 */
 const announce = () => window.dispatchEvent(new Event("meeting-changed"));
 const actionError = (result: { status: number; code: string }, fallback: ActionError): ActionError =>
   result.status === 0 ? "网络不通" : result.status === 503 || result.code === "WORLD_UNAVAILABLE" ? "本体暂不可用" : fallback;
@@ -37,7 +39,7 @@ export async function readMeetingCard(meetingId: string): Promise<CardResult> {
 /**
  * 会议卡的一次编辑：本地草稿和行动项 + 停顿 800ms 自动保存（带当前 draftVersion，一次只发一个，存完换成返回的版本；行动项改过才交整份 actionItems）；
  * 409 后停下自动保存，等用户「查看最新」重新读卡（本地没存的丢掉）。确认前先把没存的存掉，确认、放弃修改进行中不能改；
- * 确认后同步有在等的项时每 3 秒重读一次。onView 收到每一份服务端的最新视图（会议页记着，会议卡重新挂上时从最新的接着显示）。
+ * 确认后同步有在等的项时每 3 秒重读一次（最多 10 分钟）。onView 收到每一份服务端的最新视图（会议页记着，会议卡重新挂上时从最新的接着显示）。
  */
 export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onView?: (view: TMeetingCardView) => void) {
   const [view, setView] = useState(initial);
@@ -56,6 +58,8 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ActionError | null>(null);
   const [tick, setTick] = useState(0);
+  /** 轮询到这一刻为止（打开、确认、重试、重读时重新算）。 */
+  const [pollUntil, setPollUntil] = useState(() => Date.now() + POLL_LIMIT_MS);
   const viewRef = useRef(initial);
   const draftRef = useRef(initial.draft);
   const itemsRef = useRef(initial.actionItems);
@@ -105,8 +109,10 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
     try {
       const result = await saveMeetingCardDraft(meetingId, versionRef.current, sent, sentItems);
       if (result.ok) {
+        const changed = result.view.draftChange !== viewRef.current.draftChange;
         versionRef.current = result.view.draftVersion;
         remember(result.view);
+        if (changed) announce();
         if (aliveRef.current) {
           setView(result.view);
           // 存的时候用户又改了：留着本地的，等下一次存（原内容、版本、stale 每次存都由服务端重算）。
@@ -241,6 +247,7 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
     setTimeRejected(false);
     setPending(null);
     adopt(result.view, true);
+    setPollUntil(Date.now() + POLL_LIMIT_MS);
     setEditing((current) => result.view.draftChange !== "none" || (current && Boolean(result.view.confirmed)));
     setTimeInFooter(!result.view.confirmed && !result.view.draft?.occurredAt);
   };
@@ -267,6 +274,7 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
         setTimeInFooter(false);
         setSaveState("idle");
         setFocus("confirmed");
+        setPollUntil(Date.now() + POLL_LIMIT_MS);
         announce();
       } else if (result.code === "DRAFT_CHANGED") {
         conflictRef.current = true;
@@ -311,21 +319,25 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
     if (!result.ok) { setError(actionError(result, "重试失败")); return; }
     adopt(result.view, !dirtyRef.current && !conflictRef.current);
     setError(null);
+    setPollUntil(Date.now() + POLL_LIMIT_MS);
     announce();
   };
 
-  // 会议事件或对象修改还在等：每 3 秒重读一次；用户正在改的草稿不被盖掉。
+  // 会议事件或对象修改还在等：每 3 秒重读一次，最多问到 pollUntil；用户正在改的草稿不被盖掉。写完了（不再等）通知页头和通知栏。
   const waiting = syncPending(view.sync);
   useEffect(() => {
-    if (!waiting) return;
+    if (!waiting || Date.now() > pollUntil) return;
     let live = true;
     const timer = setTimeout(() => void getMeetingCard(meetingId).then((result) => {
       if (!live) return;
-      if (result.ok) adopt(result.view, !dirtyRef.current && !savingRef.current && !conflictRef.current);
+      if (result.ok) {
+        adopt(result.view, !dirtyRef.current && !savingRef.current && !conflictRef.current);
+        if (!syncPending(result.view.sync)) announce();
+      }
       setTick((value) => value + 1);
     }), POLL_MS);
     return () => { live = false; clearTimeout(timer); };
-  }, [meetingId, waiting, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [meetingId, waiting, tick, pollUntil]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 挂上时：上一个会议卡卸载前的最后一次保存还在路上，先不能改，等它回来用它的结果。
   // 卸载时：清空了的必填项先恢复，还有没存的（或正在存的）就存最后一次；不再改界面、不排重试，新挂上的会议卡和读卡等它。

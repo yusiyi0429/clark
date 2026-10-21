@@ -102,7 +102,7 @@ export async function meetingRecordState(q: Query, meetingId: string, nameOf: (p
   if (!current) return { status: "pending", version: 0, confirmedAt: null, excludedBy: null, ...base };
   const status: TMeetingRecordStatus = draftChangeOf(card?.draft ?? null, card?.action_items ?? [], current) !== "none" ? "edit_pending"
     : !current.write_to_world ? "excluded"
-    : current.event_status === "succeeded" ? "committed" : current.event_status === "failed" ? "failed" : "pending";
+    : current.event_status === "succeeded" ? "committed" : current.event_status === "failed" ? "failed" : "writing";
   return { status, version: current.revision, confirmedAt: new Date(current.created_at).toISOString(),
     excludedBy: current.write_to_world ? null : nameOf(current.confirmation.confirmedBy), ...base };
 }

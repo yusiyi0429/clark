@@ -123,7 +123,8 @@ export const newItemId = (items: { id: string }[]) => newId("act", items);
 
 type SyncTone = "wait" | "done" | "warn" | "fail" | "off";
 export type SyncRow = { key: string; text: string; tone: SyncTone; retry: boolean };
-const withReason = (label: string, reason: string | null) => (reason ? `${label} · ${reason}` : label);
+/** 原因是服务端给的短标签；没细分的「写入失败」不再跟在失败后面重复。 */
+const withReason = (label: string, reason: string | null) => (reason && reason !== "写入失败" ? `${label} · ${reason}` : label);
 /**
  * 同步状态逐行：会议事件一行（写入失败可重试），每条对象修改一行；被新版本取代的不显示。
  * 对象只说已更新 / 更新中 / 未更新 · 原因 / 更新失败 · 原因 / 目标未定（对象重试这一期不做）。

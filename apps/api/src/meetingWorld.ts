@@ -150,7 +150,7 @@ export async function meetingAnchorGroups(q: Query, meeting: Pick<MeetingRow, "l
   return [first, hostUnits, [COMPANY]];
 }
 
-/** 一条生效的决定在本体里：决定随整场会议事件写，跟着会议记录走。 */
+/** 一条生效的决定在本体里：决定随整场会议事件写，跟着会议记录走（待确认、写入中、修改待确认都是 waiting）。 */
 function decisionWorld(status: TMeetingRecordStatus): TMeetingDecisionWorld {
   return status === "excluded" ? "off" : status === "committed" || status === "failed" ? status : "waiting";
 }

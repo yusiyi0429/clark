@@ -58219,6 +58219,10 @@
                             "type": "string"
                           },
                           {
+                            "const": "writing",
+                            "type": "string"
+                          },
+                          {
                             "const": "committed",
                             "type": "string"
                           },

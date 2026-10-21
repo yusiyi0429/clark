@@ -10288,7 +10288,7 @@ export interface components {
                 excluded: boolean;
                 excludedBy: string | null;
                 record: {
-                    status: "pending" | "committed" | "excluded" | "failed" | "edit_pending";
+                    status: "pending" | "writing" | "committed" | "excluded" | "failed" | "edit_pending";
                     version: number;
                     eventId: string | null;
                     confirmedAt: string | null;
