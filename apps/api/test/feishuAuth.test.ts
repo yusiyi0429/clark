@@ -68,7 +68,7 @@ describe("飞书免登路由", () => {
     const { state, stateCookie, location } = await startFlow(t.app);
     expect(location.origin + location.pathname).toBe("https://accounts.feishu.cn/open-apis/authen/v1/authorize");
     expect(location.searchParams.get("redirect_uri")).toBe(`${t.publicOrigin}/api/auth/feishu/callback`);
-    expect(location.searchParams.get("scope")).toBe("offline_access drive:drive.metadata:readonly");
+    expect(location.searchParams.get("scope")).toBe("offline_access drive:drive.metadata:readonly minutes:minutes:readonly minutes:minutes.basic:read minutes:minutes.search:read minutes:minutes.artifacts:read minutes:minutes.transcript:export vc:meeting:readonly");
 
     // state 不符、没有 cookie：都拒绝，不去换 token
     const wrong = await t.app.inject({ method: "GET", url: `/api/auth/feishu/callback?code=c1&state=${state}x`, headers: { cookie: stateCookie } });
