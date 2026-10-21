@@ -30,13 +30,18 @@ export function registerPersonalMemoryRoutes(app: AppInstance, ctx: RouteContext
     app.patch('/api/me/memory/personal/items/:id', { preValidation: async (req, reply) => {
         if (!Value.Check(UpdatePersonalMemoryItemRequest, req.body)) return ctx.invalidInput(reply, UpdatePersonalMemoryItemRequest, req.body);
     }, preHandler: requirePerson, schema: { params: itemParams, body: UpdatePersonalMemoryItemRequest, response: { 200: PersonalMemoryItem } } },
-        async (req, reply) => respond(reply, () => personalMemory.edit(req.person!.personId, req.params.id, req.body)));
+        async (req, reply) => respond(reply, async () => {
+            const item = await personalMemory.edit(req.person!.personId, req.params.id, req.body);
+            await ctx.usage.record(req.person!.personId, 'memory_edit');
+            return item;
+        }));
     // 删除 = 忘掉：不再装进对话；正文留着，后台提炼据此不再把它学回来，本人可以恢复。?purge=1 = 彻底删除（204，不能恢复）。
     app.delete('/api/me/memory/personal/items/:id', { preHandler: requirePerson,
         schema: { params: itemParams, querystring: DeletePersonalMemoryItemQuery, response: { 200: PersonalMemoryItem, 204: Type.Null() } } },
         async (req, reply) => respond(reply, async () => {
             if (req.query.purge !== '1') return personalMemory.forget(req.person!.personId, req.params.id);
             await personalMemory.purge(req.person!.personId, req.params.id);
+            await ctx.usage.record(req.person!.personId, 'memory_purge');
             return reply.status(204).send(null);
         }));
     app.post('/api/me/memory/personal/items/:id/restore', { preHandler: requirePerson, schema: { params: itemParams, response: { 200: PersonalMemoryItem } } },

@@ -134,6 +134,10 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
     content.current?.parentElement?.scrollTo({ top: 0, behavior: "instant" });
     title.current?.focus({ preventScroll: true });
   }, [index]);
+  // 使用周报的上手漏斗：打开哪一步报一次，报不上不影响上手。
+  useEffect(() => {
+    void browserApi.POST("/api/me/usage/onboarding-step", { body: { step } }).catch(() => undefined);
+  }, [step]);
   useEffect(() => {
     if (step !== "voiceprint" || voice.phase !== "recorded" || !window.matchMedia("(max-width: 759px)").matches) return;
     // 手机读完长稿后，把时长和重录入口带回视野，避免被固定操作区遮住。

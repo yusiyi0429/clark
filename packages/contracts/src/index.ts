@@ -36,6 +36,7 @@ export * from "./collector.js";
 export * from "./feishu.js";
 export * from "./weeklyReviews.js";
 export * from "./admin.js";
+export * from "./usage.js";
 export * from "./progress.js";
 export * from "./issueDrafts.js";
 export * from "./meetingDecisions.js";

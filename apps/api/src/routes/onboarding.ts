@@ -1,4 +1,4 @@
-import { CompleteOnboardingResponse, OnboardingResponse, ScheduleMigrationResponse, UpdateScheduleMigrationRequest, UpdateWorkBasisRequest,
+import { CompleteOnboardingResponse, OnboardingResponse, OnboardingStepUsageRequest, ScheduleMigrationResponse, UpdateScheduleMigrationRequest, UpdateWorkBasisRequest,
   WorkBasisResponse } from "@warmap/contracts";
 import { completeOnboarding, readOnboarding, resetOnboarding } from "../onboarding.js";
 import { readScheduleMigration, readWorkBasis, saveScheduleMigration, saveWorkBasis, type FeishuDocReader } from "../onboardingLists.js";
@@ -23,6 +23,11 @@ export function registerOnboardingRoutes(app: AppInstance, ctx: RouteContext, fe
   );
   app.delete("/api/me/onboarding/complete", { preHandler: requirePerson }, async (req, reply) => {
     await resetOnboarding(q, req.person!.personId);
+    return reply.code(204).send();
+  });
+  // 使用周报的上手漏斗：界面打开哪一步报一次（一人一步一天只记一次）。
+  app.post("/api/me/usage/onboarding-step", { preHandler: requirePerson, schema: { body: OnboardingStepUsageRequest } }, async (req, reply) => {
+    await ctx.usage.record(req.person!.personId, "onboarding_step", req.body.step);
     return reply.code(204).send();
   });
 

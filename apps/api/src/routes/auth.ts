@@ -30,6 +30,7 @@ export function registerAuthRoutes(app: AppInstance, ctx: RouteContext): void {
 
   async function signIn(reply: FastifyReply, personId: string, version: number, role: TSessionRole): Promise<TLoginResponse> {
     const onboarded = await hasCompletedOnboarding(q, personId);
+    await ctx.usage.record(personId, "login");
     reply.header("set-cookie", sessionSetCookie(env.sessionSecret, env.sessionMaxAgeSeconds, { pid: personId, v: version, view: role }));
     return { authenticated: true, mustChangePasscode: false, role, onboarded };
   }

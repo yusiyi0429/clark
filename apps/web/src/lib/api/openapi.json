@@ -7696,6 +7696,147 @@
         }
       }
     },
+    "/api/admin/usage": {
+      "get": {
+        "operationId": "getAdminUsage",
+        "summary": "使用周报：谁在用、频率、关键路径漏斗和中断点、本周问题台账、和上周对比；week 不传为本周（现算）。非管理员 404",
+        "parameters": [
+          {
+            "name": "week",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "周一（北京时间），如 2026-10-19"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "可选的各周与所选那一周的周报",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/usage/markdown": {
+      "get": {
+        "operationId": "getAdminUsageMarkdown",
+        "summary": "使用周报导出 Markdown（贴到飞书）；week 不传为本周（现算）。非管理员 404",
+        "parameters": [
+          {
+            "name": "week",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "周一（北京时间），如 2026-10-19"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Markdown 周报",
+            "content": {
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/usage/onboarding-step": {
+      "post": {
+        "operationId": "recordOnboardingStep",
+        "summary": "上手流程打开了哪一步（使用周报的上手漏斗）；一人一步一天只记一次",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingStepUsageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "已记下"
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/collector/status": {
       "get": {
         "operationId": "getCollectorStatus",
@@ -43199,6 +43340,427 @@
             }
           }
         ]
+      },
+      "UsageResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "weeks",
+          "report"
+        ],
+        "properties": {
+          "weeks": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "weekStart",
+                "live"
+              ],
+              "properties": {
+                "weekStart": {
+                  "format": "date",
+                  "type": "string"
+                },
+                "live": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "report": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "weekStart",
+              "weekEnd",
+              "generatedAt",
+              "live",
+              "summary",
+              "previous",
+              "people",
+              "paths",
+              "ledger"
+            ],
+            "properties": {
+              "weekStart": {
+                "format": "date",
+                "type": "string"
+              },
+              "weekEnd": {
+                "format": "date",
+                "type": "string"
+              },
+              "generatedAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "live": {
+                "type": "boolean"
+              },
+              "summary": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "roster",
+                  "activePeople",
+                  "avgActiveDays",
+                  "asks"
+                ],
+                "properties": {
+                  "roster": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "activePeople": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "avgActiveDays": {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "asks": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                }
+              },
+              "previous": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "roster",
+                  "activePeople",
+                  "avgActiveDays",
+                  "asks"
+                ],
+                "properties": {
+                  "roster": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "activePeople": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "avgActiveDays": {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "asks": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                }
+              },
+              "people": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "displayName",
+                    "days",
+                    "asks",
+                    "breaks",
+                    "previousActiveDays"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "days": {
+                      "type": "array",
+                      "items": {
+                        "format": "date",
+                        "type": "string"
+                      }
+                    },
+                    "asks": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "breaks": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "previousActiveDays": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "key",
+                    "title",
+                    "unit",
+                    "shape",
+                    "available",
+                    "steps",
+                    "stuckStep",
+                    "breaks",
+                    "previousUnits"
+                  ],
+                  "properties": {
+                    "key": {
+                      "anyOf": [
+                        {
+                          "const": "conversation",
+                          "type": "string"
+                        },
+                        {
+                          "const": "meeting",
+                          "type": "string"
+                        },
+                        {
+                          "const": "memory",
+                          "type": "string"
+                        },
+                        {
+                          "const": "onboarding",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "unit": {
+                      "type": "string"
+                    },
+                    "shape": {
+                      "anyOf": [
+                        {
+                          "const": "funnel",
+                          "type": "string"
+                        },
+                        {
+                          "const": "counts",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "steps": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "key",
+                          "label",
+                          "units",
+                          "people"
+                        ],
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "units": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "people": {
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "stuckStep": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "breaks": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "step",
+                          "label",
+                          "count"
+                        ],
+                        "properties": {
+                          "step": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "previousUnits": {
+                      "type": "array",
+                      "items": {
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              },
+              "ledger": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "key",
+                    "source",
+                    "label",
+                    "count",
+                    "people",
+                    "open",
+                    "previousCount",
+                    "lastAt"
+                  ],
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "anyOf": [
+                        {
+                          "const": "quality",
+                          "type": "string"
+                        },
+                        {
+                          "const": "feedback",
+                          "type": "string"
+                        },
+                        {
+                          "const": "job",
+                          "type": "string"
+                        },
+                        {
+                          "const": "world",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "people": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "open": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "previousCount": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "lastAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "OnboardingStepUsageRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "step"
+        ],
+        "properties": {
+          "step": {
+            "anyOf": [
+              {
+                "const": "hello",
+                "type": "string"
+              },
+              {
+                "const": "tour-notifications",
+                "type": "string"
+              },
+              {
+                "const": "tour-board",
+                "type": "string"
+              },
+              {
+                "const": "mission-flow",
+                "type": "string"
+              },
+              {
+                "const": "work",
+                "type": "string"
+              },
+              {
+                "const": "radar",
+                "type": "string"
+              },
+              {
+                "const": "voiceprint",
+                "type": "string"
+              },
+              {
+                "const": "connect",
+                "type": "string"
+              },
+              {
+                "const": "collector",
+                "type": "string"
+              },
+              {
+                "const": "scan",
+                "type": "string"
+              },
+              {
+                "const": "review",
+                "type": "string"
+              },
+              {
+                "const": "delegation",
+                "type": "string"
+              },
+              {
+                "const": "start",
+                "type": "string"
+              }
+            ]
+          }
+        }
       },
       "CollectorStatusResponse": {
         "additionalProperties": false,

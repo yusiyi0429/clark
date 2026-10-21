@@ -36,6 +36,7 @@ import type { PersonalMemory } from "../personalMemory.js";
 import type { PersonalDistillation } from "../personalDistillation.js";
 import type { CollectionAgent } from "../collectionAgent.js";
 import type { CollectionDeps } from "../collections.js";
+import type { UsageTracker } from "../usage.js";
 
 export type AppInstance = FastifyInstance<
   RawServerDefault,
@@ -72,6 +73,8 @@ export type RouteContext = {
   env: AppEnv;
   /** 人员目录：登录、会话角色、本人隔离、人名解析只看它。 */
   peopleDirectory: PeopleDirectory;
+  /** 使用周报的埋点（usage.ts）：只记 personId、种类、时间。 */
+  usage: UsageTracker;
   /** 后台起草读本体公司事实的入口（只读）。 */
   company: CompanyContext;
   /** 本人私有的个人记忆（只有本人可见，不写进本体）。 */

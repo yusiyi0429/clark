@@ -44,8 +44,10 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
 
   if (!feishu || !client) return;
 
-  const sessionCookie = (outcome: Extract<FeishuLoginOutcome, { kind: "ok" }>) =>
-    sessionSetCookie(env.sessionSecret, env.sessionMaxAgeSeconds, { pid: outcome.personId, v: outcome.sessionVersion, view: outcome.role });
+  const sessionCookie = (outcome: Extract<FeishuLoginOutcome, { kind: "ok" }>) => {
+    void ctx.usage.record(outcome.personId, "login");
+    return sessionSetCookie(env.sessionSecret, env.sessionMaxAgeSeconds, { pid: outcome.personId, v: outcome.sessionVersion, view: outcome.role });
+  };
 
   app.get(
     "/api/auth/feishu/start",
