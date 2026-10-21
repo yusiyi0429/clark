@@ -174,7 +174,7 @@ describe("migration", () => {
         "095_admin_incidents.sql",
         "097_collections.sql",
         "099_doc_changes.sql",
-        "100_meeting_world_event.sql",
+        "200_meeting_world_event.sql",
       ]);
 
       // 幂等：重复执行不再变更
