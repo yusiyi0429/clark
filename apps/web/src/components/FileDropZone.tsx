@@ -43,7 +43,7 @@ export function FileDropZone({ onFile, disabled = false, busy = false, className
       } : undefined}
     >
       {children}
-      {state === "over" || state === "busy" ? <span className={s.hint} role="status">{state === "busy" ? "上传中…" : "松开上传"}</span> : null}
+      {state === "over" || state === "busy" ? <span className={s.hint} role="status"><span>{state === "busy" ? "上传中…" : "松开上传"}</span></span> : null}
     </div>
   );
 }
