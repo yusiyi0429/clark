@@ -441,6 +441,11 @@ describe("妙记 Markdown 候选预览", () => {
     expect(html).not.toContain("未映射，确认不可用");
     expect(html).not.toContain('data-status="unmapped"');
     expect(buttonMarkup(html, "确认并写入逐字稿")).not.toContain("disabled");
+
+    const samePerson = { ...candidateBase, speakers: candidateBase.speakers.map((speaker) => ({ ...speaker, suggestedPersonId: speaker.suggestedPersonId ?? "p1" })) };
+    const merged = render(meetingCard({ transcriptCandidate: samePerson }, [confirmAction]));
+    expect(merged).not.toContain('role="alert"');
+    expect(buttonMarkup(merged, "确认并写入逐字稿")).not.toContain("disabled");
   });
 
   it("清除与确认按钮只按服务端下发的 opaque action 渲染", () => {
@@ -463,8 +468,10 @@ describe("妙记 Markdown 候选预览", () => {
     expect(rows.map((row) => row.status)).toEqual(["existing", "add", "unmapped"]);
     expect(speakerMappingError(rows)).toContain("未映射");
 
-    const duplicated = speakerMappingRows(candidateBase, ["p1"], { 外部顾问: "p1" });
-    expect(speakerMappingError(duplicated)).toBe("同一个人不能映射多个说话人");
+    // 飞书会把同一个人拆成两个说话人：两行选同一人照常放行
+    const samePerson = speakerMappingRows(candidateBase, ["p1"], { 外部顾问: "p1" });
+    expect(samePerson.map((row) => [row.personId, row.status])).toEqual([["p1", "existing"], ["p2", "add"], ["p1", "existing"]]);
+    expect(speakerMappingError(samePerson)).toBeNull();
     expect(speakerMappingRows({ ...candidateBase, speakers: candidateBase.speakers.slice(0, 2) }, ["p1", "p2"], {})).toHaveLength(2);
   });
 

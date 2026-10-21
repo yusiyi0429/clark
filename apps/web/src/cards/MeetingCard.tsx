@@ -128,7 +128,7 @@ export type SpeakerMappingRow = {
   status: "existing" | "add" | "unmapped";
 };
 
-/** 映射表状态：已参与 / 确认后加入 / 未映射；同一个人不能映射多个说话人。 */
+/** 映射表状态：已参与 / 确认后加入 / 未映射；几个说话人可以对到同一个人。 */
 export function speakerMappingRows(
   candidate: TTranscriptCandidateProjection,
   participantIds: string[],
@@ -150,8 +150,6 @@ export function speakerMappingRows(
 export function speakerMappingError(rows: SpeakerMappingRow[]): string | null {
   const unmapped = rows.filter((row) => !row.personId).length;
   if (unmapped > 0) return `还有 ${unmapped} 位说话人未映射，确认不可用`;
-  const ids = rows.map((row) => row.personId);
-  if (new Set(ids).size !== ids.length) return "同一个人不能映射多个说话人";
   return null;
 }
 
