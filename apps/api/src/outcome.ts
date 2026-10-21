@@ -12,6 +12,7 @@ import {
   type TPostMeetingCandidate,
   type TStoredTranscript,
   type TTranscriptTurn,
+  type TUnmappedSpeaker,
   type TWarmapTranscript,
   WarmapTranscript,
 } from "@warmap/contracts";
@@ -42,7 +43,8 @@ export function setOutcomeContextProvider(pool: Pool, provider: (meetingId: stri
 /** 抽取输入只读取 Meeting 内嵌结构和关联 Issue，Agent 不能访问业务库。 */
 export type PostMeetingAgentInput = {
   meeting: { id: string; title: string; scheduledAt: string; ceoParticipantId: string; participants: TMeetingParticipant[] };
-  transcript: { turns: TTranscriptTurn[] };
+  /** unmappedSpeakers：没对上人的说话人（speakerId 是合成编号，name 是飞书原名），不是参会人。 */
+  transcript: { turns: TTranscriptTurn[]; unmappedSpeakers?: TUnmappedSpeaker[] };
   issues: { id: string; title: string; location: unknown; urgency: unknown; research: unknown }[];
   /** 公司地图：用来理解会上说的对象。 */
   context?: InterpretationContext;
@@ -83,12 +85,12 @@ export type TranscriptValid = { ok: true; value: TWarmapTranscript };
 const ISO_WITH_TIMEZONE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
 /**
- * 整份校验 warmap-transcript.v1：schema、目标 Meeting、turn 唯一、speaker 属 participant、
+ * 整份校验 warmap-transcript.v1：schema、目标 Meeting、turn 唯一、speaker 属 participant（或属没对上人的说话人名单）、
  * 非空文本、带时区且不破坏顺序的 startedAt。任一项失败整份拒绝，不保存部分 turns。
  */
 export function validateTranscript(
   input: unknown,
-  meeting: { id: string; participants: TMeetingParticipant[] },
+  meeting: { id: string; participants: TMeetingParticipant[]; unmappedSpeakers?: TUnmappedSpeaker[] },
 ): TranscriptValid | TranscriptInvalid {
   if (!Value.Check(WarmapTranscript, input)) {
     const fieldErrors: Record<string, string> = {};
@@ -100,7 +102,7 @@ export function validateTranscript(
   if (input.meetingId !== meeting.id) {
     return { ok: false, code: "TRANSCRIPT_MEETING_MISMATCH", message: "Transcript meetingId 与目标 Meeting 不一致", fieldErrors: { meetingId: "meeting mismatch" } };
   }
-  const participantIds = new Set(meeting.participants.map((participant) => participant.personId));
+  const participantIds = new Set([...meeting.participants.map((participant) => participant.personId), ...(meeting.unmappedSpeakers ?? []).map((speaker) => speaker.id)]);
   const seen = new Set<string>();
   let lastStartedAt: number | null = null;
   for (const [index, turn] of input.turns.entries()) {
@@ -356,7 +358,7 @@ type OutcomeMeetingRow = {
   lead_dri_id: string;
   ceo_participant_id: string;
   issue_ids: string[];
-  transcript: { turns: TTranscriptTurn[] } | null;
+  transcript: { turns: TTranscriptTurn[]; unmappedSpeakers?: TUnmappedSpeaker[] } | null;
   outcome: TMeetingOutcomeState | null;
 };
 
@@ -426,7 +428,10 @@ export async function runOutcome(
         ceoParticipantId: meeting.ceo_participant_id,
         participants: meeting.participants,
       },
-      transcript: { turns: meeting.transcript.turns },
+      transcript: {
+        turns: meeting.transcript.turns,
+        ...(meeting.transcript.unmappedSpeakers?.length ? { unmappedSpeakers: meeting.transcript.unmappedSpeakers } : {}),
+      },
       issues: issueResult.rows as IssueSnapshotRow[],
       targetOptions: prepared.targetOptions,
       ...(context ? { context } : {}),

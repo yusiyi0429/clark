@@ -6,7 +6,7 @@ import type { FeishuEnv } from "./feishu/config.js";
 import { FeishuApiError } from "./feishu/client.js";
 import { activeUserAccessToken, MINUTES_NOT_READY_CODE, type FeishuMinuteInfo, type FeishuMinutesApi } from "./feishu/minutes.js";
 import type { JobHandler, RecurringJob } from "./jobs.js";
-import { minutesStatusOf } from "./meetingDecisionView.js";
+import { MINUTES_GIVE_UP_MS, MINUTES_RECENT_MS, minutesStatusOf } from "./meetingDecisionView.js";
 import { getMeetingRow, meetingColumns, type MeetingRow, type Query } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
 import type { PostMeetingAgent } from "./outcome.js";
@@ -17,19 +17,16 @@ import { FEISHU_TRANSCRIPT_PARSER_VERSION, parseFeishuTranscriptText } from "./t
 /**
  * 会议链路 G：会开完以后自动拿飞书妙记。
  * - 订阅「妙记生成」（minutes.minute.generated_v1，长连接收进 feishu_events，再由 jobs 交到这里），另有每 5 分钟一次的轮询兜底；
- * - 妙记还没生成时会议记为 waiting（对话里问到就答「还在生成」）；飞书没接、主持人没授权、或等了 24 小时还没有，记为 manual，退回现有的手动上传；
+ * - 妙记还没生成时会议记为 waiting（对话里问到就答「还在生成」）；飞书没接、主持人没授权、或等了 2 小时还没有，记为 manual，退回现有的手动上传；
  * - 全文取 /artifacts 的 data.transcript（与 lark-cli 读到的逐字相同，来源记下摘要值）；读取失败记 failed 和原因，
  *   原文还没好（not_ready）的照常跟着轮询和事件再取，主持人或创建人也可以「再读一次」或贴妙记链接；
- * - 拿到逐字稿先生成候选（与手动上传同一条路）；说话人都能唯一对上人时直接确认，开始解读纪要，对不上的留给主持人在会议页确认；
+ * - 拿到逐字稿先生成候选（与手动上传同一条路），直接确认并开始解读纪要：对得上人的说话人对到那个人，对不上的保留飞书原名（FR-4.2，不做发言人纠正）；
+ * - 用户自己上传了（有候选或逐字稿）的会不再自动去拿，也不覆盖用户上传的内容；
  * - 实际参会名单从飞书会议拿（中途加入的也算），拿不到就退回手填的参会人。
  */
 export const MEETING_MINUTES_POLL_KIND = "meeting.minutes_poll";
 export const FEISHU_MINUTES_EVENT = "minutes.minute.generated_v1";
 const POLL_EVERY_MS = 5 * 60_000;
-/** 开完多久以内的会才自动去拿（更早的会照旧手动上传）。 */
-const RECENT_MS = 48 * 60 * 60_000;
-/** 等妙记最多等多久，过了就退回手动上传。 */
-const GIVE_UP_MS = 24 * 60 * 60_000;
 /** 妙记的开始时刻和会议计划开始时刻最多差多少还算同一场会。 */
 const MATCH_WINDOW_MS = 3 * 60 * 60_000;
 /** 还在等妙记的会：waiting，以及读的时候原文还没好的（failed / not_ready）。 */
@@ -111,7 +108,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     ((await q("SELECT person_id, open_id, name FROM feishu_identities WHERE person_id = $1", [personId])).rows[0] as FeishuIdentity | undefined) ?? null;
   const tokenFor = (personId: string) => (feishu ? activeUserAccessToken(q, feishu.env, personId, now()) : Promise.resolve(null));
 
-  /** failed 也记等待起点：原文还没好的跟着轮询再取，等满 24 小时同样退回手动上传。 */
+  /** failed 也记等待起点：原文还没好的跟着轮询再取，等满 2 小时同样退回手动上传。 */
   async function setStatus(meetingId: string, status: TMeetingMinutesStatus, error: string | null = null, failure: TMeetingMinutesFailure | null = null): Promise<void> {
     await q(
       `UPDATE meetings SET minutes_status = $2, minutes_error = $3, minutes_failure = $4,
@@ -133,16 +130,16 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
       `SELECT id, lead_dri_id FROM meetings
         WHERE status = 'scheduled' AND minutes_status = 'none' AND transcript IS NULL AND transcript_candidate IS NULL
           AND COALESCE(ended_at, ends_at) <= $1 AND COALESCE(ended_at, ends_at) > $2`,
-      [at, new Date(at.getTime() - RECENT_MS)],
+      [at, new Date(at.getTime() - MINUTES_RECENT_MS)],
     );
     for (const row of ended.rows as { id: string; lead_dri_id: string }[]) {
       const reachable = Boolean(feishu && await identity(row.lead_dri_id) && await tokenFor(row.lead_dri_id));
       await setStatus(row.id, reachable ? "waiting" : "manual", reachable ? null : "主持人没有可用的飞书授权");
     }
     await q(
-      `UPDATE meetings SET minutes_status = 'manual', minutes_failure = NULL, minutes_error = '等了 24 小时还没拿到妙记'
+      `UPDATE meetings SET minutes_status = 'manual', minutes_failure = NULL, minutes_error = '等了 2 小时还没拿到妙记'
         WHERE ${STILL_WAITING} AND minutes_waiting_since < $1 AND transcript IS NULL AND transcript_candidate IS NULL`,
-      [new Date(at.getTime() - GIVE_UP_MS)],
+      [new Date(at.getTime() - MINUTES_GIVE_UP_MS)],
     );
     // 已经有逐字稿或候选的（手动上传、录音转写）一律算 ready，轮询不再管。
     await q(`UPDATE meetings SET minutes_status = 'ready', minutes_failure = NULL
@@ -190,8 +187,8 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
 
   /**
    * 拿到妙记：先把妙记记到这场会上（同一份妙记只对一场会；贴链接时可以换掉原来对上的那份）→ 读逐字稿全文 → 记下飞书会议与实际参会名单
-   * → 生成候选（来源带地址、标题、摘要值和读取时刻）→ 说话人都对得上就直接确认并解读纪要。读不到或解析不了记 failed 和原因；
-   * 自动拉取遇到临时故障不改状态（下一轮再取）。候选没能写进去时把妙记还回去，不让它锁在这场会上。
+   * → 生成候选（来源带地址、标题、摘要值和读取时刻）→ 直接确认并解读纪要。读不到或解析不了记 failed 和原因；
+   * 自动拉取遇到临时故障不改状态（下一轮再取）；读的过程中用户自己上传了候选的，不覆盖。候选没能写进去时把妙记还回去，不让它锁在这场会上。
    */
   async function ingest(api: FeishuMinutesApi, meeting: MeetingRow, minute: FeishuMinuteInfo, token: string, feishuMeetingId: string | null,
     { replace = false, manual = false }: { replace?: boolean; manual?: boolean } = {}): Promise<IngestResult> {
@@ -234,7 +231,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
       capturedAt,
     };
     const candidate = buildTranscriptCandidate(parsed.transcript.turns, await peopleWithFeishuNames(), source);
-    const saved = await saveTranscriptCandidate(pool, meeting.id, candidate);
+    const saved = await saveTranscriptCandidate(pool, meeting.id, candidate, undefined, { keepExisting: !manual });
     if (!("row" in saved)) {
       await q("UPDATE meetings SET minute_token = $3 WHERE id = $1 AND minute_token = $2", [meeting.id, minute.token, meeting.minute_token]);
       return { kind: "rejected", status: saved.status, code: saved.code, message: saved.message };
@@ -242,14 +239,15 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     await setStatus(meeting.id, "ready");
     logEvent({ event: "meeting.minutes", objectRef: `meeting:${meeting.id}`, status: "fetched" });
 
-    // 说话人都唯一对上、且不重复时直接确认；否则留给主持人在会议页确认说话人。
-    const ids = candidate.speakers.map((speaker) => speaker.suggestedPersonId);
-    if (ids.every(Boolean) && new Set(ids).size === ids.length) {
-      await executeConfirmTranscriptCandidate(pool, peopleDirectory, outcomeAgent, secret,
-        { actionType: "meeting.confirm_transcript_candidate", objectType: "meeting", objectId: meeting.id, objectVersion: saved.row.version },
-        { speakerMappings: candidate.speakers.map((speaker) => ({ speakerName: speaker.speakerName, personId: speaker.suggestedPersonId! })), confirmAddParticipants: true },
-        `feishu-minutes:${minute.token}`);
-    }
+    // 不等主持人对说话人，直接确认：对得上人的对到那个人（几个说话人可以对到同一人），对不上的保留飞书原名。
+    await executeConfirmTranscriptCandidate(pool, peopleDirectory, outcomeAgent, secret,
+      { actionType: "meeting.confirm_transcript_candidate", objectType: "meeting", objectId: meeting.id, objectVersion: saved.row.version },
+      {
+        speakerMappings: candidate.speakers.flatMap((speaker) => speaker.suggestedPersonId ? [{ speakerName: speaker.speakerName, personId: speaker.suggestedPersonId }] : []),
+        confirmAddParticipants: true,
+        keepUnmapped: true,
+      },
+      `feishu-minutes:${minute.token}`);
     return { kind: "ready" };
   }
 

@@ -43,6 +43,8 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
         .map((item) => ({ id: item.id, kind: item.kind, text: item.text, ownerPersonId: item.ownerPersonId })) } : null,
     minutesStatus: payload.minutesStatus ?? "none",
     minutesFailure: payload.minutesFailure ?? null,
+    minutesWaitingSince: payload.minutesWaitingSince ?? null,
+    minutesManualImport: payload.minutesManualImport ?? false,
     attended,
     ...(attended ? {
       // 原文只在已有逐字稿时带上（会前没有这一格）。

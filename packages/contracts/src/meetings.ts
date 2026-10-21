@@ -525,6 +525,10 @@ export const MeetingCardPayload = Type.Object(
     minutesStatus: Type.Optional(MeetingMinutesStatus),
     /** 妙记读取失败（failed）时的原因；其余为 null。 */
     minutesFailure: Type.Optional(Type.Union([MeetingMinutesFailure, Type.Null()])),
+    /** 开始等妙记的时刻（waiting、读取失败时记下）；没等过为 null。 */
+    minutesWaitingSince: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    /** 自动同步失败、要手动导入会议记录：manual；读取失败且不是原文还没好；开完超过 48 小时还没有逐字稿和候选。 */
+    minutesManualImport: Type.Optional(Type.Boolean()),
     /** 实际参会的人（飞书名单；拿不到时是手填的参会人）。 */
     attendees: Type.Optional(MeetingAttendees),
     /** 会后分层确认的「会上定了 X」。 */

@@ -9,6 +9,7 @@ import type {
   TTranscriptCandidateSpeaker,
   TTranscriptSource,
   TTranscriptTurn,
+  TUnmappedSpeaker,
   TWarmapTranscript,
 } from "@warmap/contracts";
 import type { ActionScope } from "./actionToken.js";
@@ -33,6 +34,7 @@ import {
   type ParsedTranscriptTurn,
 } from "./transcriptMarkdown.js";
 import { capturedAtOf, meetingTranscriptUrl, transcriptContentHash } from "./transcriptHash.js";
+import { MINUTES_GIVE_UP_MS } from "./meetingDecisionView.js";
 
 export type TranscriptCandidateResult =
   | { status: 200; card: TCard }
@@ -120,13 +122,14 @@ export async function createTranscriptCandidate(
 
 /**
  * 候选落库（妙记 Markdown 与会议录音识别共用）：行锁内确认没有已确认 Transcript、仍是 scheduled，
- * 整份替换候选并 bump version；不改 status、不跑 Outcome。
+ * 整份替换候选并 bump version；不改 status、不跑 Outcome。keepExisting（自动拉妙记）：已有候选（用户自己上传的）时不替换。
  */
 export async function saveTranscriptCandidate(
   pool: Pool,
   meetingId: string,
   candidate: TStoredTranscriptCandidate,
   hostId?: string,
+  { keepExisting = false }: { keepExisting?: boolean } = {},
 ): Promise<{ row: MeetingRow } | { status: 404 | 409; code: string; message: string }> {
   const client = await pool.connect();
   try {
@@ -149,6 +152,10 @@ export async function saveTranscriptCandidate(
       await client.query("ROLLBACK");
       return { status: 409, code: "MEETING_NOT_SCHEDULED", message: "只有 scheduled Meeting 可以导入会议记录" };
     }
+    if (keepExisting && row.transcript_candidate) {
+      await client.query("ROLLBACK");
+      return { status: 409, code: "TRANSCRIPT_CANDIDATE_EXISTS", message: "已有会议记录候选" };
+    }
     const updated = await client.query<MeetingRow>(
       `UPDATE meetings SET transcript_candidate = $2::jsonb, version = version + 1, updated_at = now() WHERE id = $1 RETURNING ${meetingColumns()}`,
       [meetingId, JSON.stringify(candidate)],
@@ -166,6 +173,8 @@ export async function saveTranscriptCandidate(
 /**
  * 确认候选：同事务补齐 participants、写标准 Transcript（startedAt = 锁内最新 scheduledAt + offset）、
  * 清候选、status→held、outcome→pending；提交后才启动既有 Outcome Agent。
+ * keepUnmapped（只给飞书妙记自动确认用，接口不收）：没映射的说话人不对到人，保留原名记进 unmappedSpeakers，
+ * 发言的 speakerId 用合成编号 speaker:<n>（n 是说话人首次出现的次序），不进参会人。
  */
 export async function executeConfirmTranscriptCandidate(
   pool: Pool,
@@ -173,7 +182,7 @@ export async function executeConfirmTranscriptCandidate(
   outcomeAgent: PostMeetingAgent,
   secret: string,
   scope: ActionScope,
-  input: { speakerMappings: { speakerName: string; personId: string }[]; confirmAddParticipants: true },
+  input: { speakerMappings: { speakerName: string; personId: string }[]; confirmAddParticipants: true; keepUnmapped?: boolean },
   fingerprint: string,
   hostId?: string,
 ): Promise<MeetingActionOutcome> {
@@ -200,6 +209,10 @@ export async function executeConfirmTranscriptCandidate(
       mappingBySpeaker.set(mapping.speakerName, mapping.personId);
       usedPersonIds.add(mapping.personId);
     }
+    const unmappedSpeakers: TUnmappedSpeaker[] = input.keepUnmapped
+      ? candidate.speakers.flatMap((speaker, index) => mappingBySpeaker.has(speaker.speakerName) ? [] : [{ id: `speaker:${index + 1}`, name: speaker.speakerName }])
+      : [];
+    for (const speaker of unmappedSpeakers) mappingBySpeaker.set(speaker.name, speaker.id);
     const missing = [...known].filter((speakerName) => !mappingBySpeaker.has(speakerName));
     if (missing.length > 0) {
       return { error: { status: 400, code: "INCOMPLETE_SPEAKER_MAPPING", message: `缺少说话人映射：${missing.join("、")}`, fieldErrors: { speakerMappings: "missing mapping" } } };
@@ -220,7 +233,7 @@ export async function executeConfirmTranscriptCandidate(
       text: turn.text,
     }));
     const transcriptInput: TWarmapTranscript = { schemaVersion: "warmap-transcript.v1", meetingId: row.id, turns };
-    const validated = validateTranscript(transcriptInput, { id: row.id, participants });
+    const validated = validateTranscript(transcriptInput, { id: row.id, participants, unmappedSpeakers });
     if (!validated.ok) {
       return { error: { status: 400, code: validated.code, message: validated.message, fieldErrors: validated.fieldErrors } };
     }
@@ -229,6 +242,7 @@ export async function executeConfirmTranscriptCandidate(
       ...validated.value,
       importedAt: now,
       source: { ...candidate.source, timeAnchor: anchorIso },
+      ...(unmappedSpeakers.length ? { unmappedSpeakers } : {}),
     };
     const updated = await updateMeeting(
       client,
@@ -248,7 +262,10 @@ export async function executeConfirmTranscriptCandidate(
   return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
 }
 
-/** 清除候选：scheduled only，version+1 使旧 actionId 失效；重上传允许整份替换。 */
+/**
+ * 清除候选：scheduled only，version+1 使旧 actionId 失效；重上传允许整份替换。
+ * 妙记跟着回到自动同步：会还没开完回到 none；开完不到 2 小时回到 waiting（等待起点按开完时刻算）；超过 2 小时按等太久退回手动导入。
+ */
 export async function executeDiscardTranscriptCandidate(
   pool: Pool,
   secret: string,
@@ -264,8 +281,14 @@ export async function executeDiscardTranscriptCandidate(
     const updated = await updateMeeting(
       client,
       row.id,
-      "transcript_candidate = NULL, version = version + 1, action_fingerprints = $2::jsonb",
-      [JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint))],
+      `transcript_candidate = NULL, version = version + 1, action_fingerprints = $2::jsonb,
+       minutes_status = CASE WHEN ended_at IS NULL AND ends_at > now() THEN 'none'
+         WHEN COALESCE(ended_at, ends_at) > now() - $3 * interval '1 millisecond' THEN 'waiting' ELSE 'manual' END,
+       minutes_failure = NULL,
+       minutes_error = CASE WHEN COALESCE(ended_at, ends_at) <= now() - $3 * interval '1 millisecond' THEN '等了 2 小时还没拿到妙记' END,
+       minutes_waiting_since = CASE WHEN ended_at IS NULL AND ends_at > now() THEN minutes_waiting_since
+         ELSE COALESCE(minutes_waiting_since, COALESCE(ended_at, ends_at)) END`,
+      [JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint)), MINUTES_GIVE_UP_MS],
     );
     return commit(client, updated, secret);
   }, hostId);

@@ -55,6 +55,15 @@ export const TranscriptSource = Type.Object(
   { additionalProperties: false },
 );
 
+/** 飞书妙记里没对上人的说话人（FR-4.2 保留飞书导出的说话人）：id 是合成编号 speaker:<n>，name 是飞书原名；不是参会人。 */
+export const UnmappedSpeaker = Type.Object(
+  {
+    id: Type.String({ pattern: "^speaker:\\d+$", maxLength: 50 }),
+    name: Type.String({ minLength: 1, maxLength: 200 }),
+  },
+  { additionalProperties: false },
+);
+
 /** 已落库的 Transcript：原始 turns 加导入时间，不复制 participant。 */
 export const StoredTranscript = Type.Object(
   {
@@ -64,6 +73,8 @@ export const StoredTranscript = Type.Object(
     importedAt: Type.String({ minLength: 1 }),
     /** 来源留痕；原始 Markdown 不落库，只看正文已进入 turns。 */
     source: Type.Optional(TranscriptSource),
+    /** 没对上人的说话人：这些发言的 speakerId 是这里的合成编号。旧数据没有。 */
+    unmappedSpeakers: Type.Optional(Type.Array(UnmappedSpeaker, { maxItems: 50 })),
   },
   { additionalProperties: false },
 );
@@ -295,6 +306,7 @@ export type TTranscriptTurn = Static<typeof TranscriptTurn>;
 export type TWarmapTranscript = Static<typeof WarmapTranscript>;
 export type TTranscriptSourceFormat = Static<typeof TranscriptSourceFormat>;
 export type TTranscriptSource = Static<typeof TranscriptSource>;
+export type TUnmappedSpeaker = Static<typeof UnmappedSpeaker>;
 export type TStoredTranscript = Static<typeof StoredTranscript>;
 export type TTranscriptCandidateTurn = Static<typeof TranscriptCandidateTurn>;
 export type TTranscriptCandidateSpeaker = Static<typeof TranscriptCandidateSpeaker>;

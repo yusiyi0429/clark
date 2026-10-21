@@ -15,7 +15,7 @@ import type {
 } from "@warmap/contracts";
 import type { TMeetingMinutesFailure, TMeetingMinutesStatus } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
-import { attendeesOf, minutesStatusOf, projectMeetingDecision, type MeetingDecisionRow } from "./meetingDecisionView.js";
+import { attendeesOf, minutesManualImport, minutesStatusOf, projectMeetingDecision, type MeetingDecisionRow } from "./meetingDecisionView.js";
 import { computeStaleInputs, type GroupInputVersions } from "./preflightStaleness.js";
 
 export type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
@@ -58,6 +58,8 @@ export type MeetingRow = {
   minutes_status?: TMeetingMinutesStatus;
   /** 妙记读取失败的原因（200）；不是 failed 时为 null。 */
   minutes_failure?: TMeetingMinutesFailure | null;
+  /** 开始等妙记的时刻（086）。 */
+  minutes_waiting_since?: Date | null;
   attendees_actual?: string[] | null;
   /** 会后分层确认（meeting_decisions 另表，随 meetingColumns 带出）；`SELECT *` 读出的行没有这一格。 */
   decisions?: MeetingDecisionRow[];
@@ -75,7 +77,7 @@ const MEETING_COLUMNS = [
   "id", "version", "title", "status", "scheduled_at", "ends_at", "ended_at", "lead_dri_id", "ceo_participant_id",
   "participants", "issue_ids", "preflight", "draft", "materials", "transcript", "transcript_candidate", "outcome", "origin_ref", "external_id",
   "request_fingerprint", "action_fingerprints", "created_at", "updated_at",
-  "feishu_meeting_id", "minute_token", "minutes_status", "minutes_failure", "attendees_actual",
+  "feishu_meeting_id", "minute_token", "minutes_status", "minutes_failure", "minutes_waiting_since", "attendees_actual",
   "created_by", "world_anchors",
 ];
 /** 会后分层确认不 bump Meeting version（主持人确认走自己的接口），每次读取现查。 */
@@ -258,6 +260,8 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
       recording: row.latest_recording ?? null,
       minutesStatus: minutesStatusOf(row),
       minutesFailure: minutesStatusOf(row) === "failed" ? row.minutes_failure ?? null : null,
+      minutesWaitingSince: row.minutes_waiting_since?.toISOString() ?? null,
+      minutesManualImport: minutesManualImport(row, at),
       attendees: attendeesOf(row),
       // 旧会议的逐条决定只读。
       decisions: (row.decisions ?? []).map((decision) => projectMeetingDecision(decision, row.participants, false)),

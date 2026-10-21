@@ -7149,6 +7149,10 @@ export interface components {
                 contentHash?: string;
                 capturedAt?: string;
             };
+            unmappedSpeakers?: {
+                id: string;
+                name: string;
+            }[];
         };
         PostMeetingCandidate: {
             summary: string;
