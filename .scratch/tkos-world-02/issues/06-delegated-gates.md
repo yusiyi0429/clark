@@ -45,7 +45,12 @@ Blocked by: 01、02
 
 - 委托：`on_behalf_of` 只带 `principal_id`、`external_record_id`、`external_confirmed_at` 三项，不加指定委托的字段。本体在覆盖该动作族和目标分区的有效委托里取最早登记的一条，实际用了哪条写在回执 `on_behalf_of.delegation_event_id`。天枢把它存进 `world_sync_ledger.delegation_event_id`（迁移 201）。开代记后头几次真写要读回核对：如果是 `1bc680df`，说明开早了，停下告诉铭泽。`1bc680df` 不撤，10/31 到期，之后再开代记。
 - 判权：每条都按被代记的人判。他要在对象所在分区持对应角色，并且本人登记过覆盖门族和这个分区的有效委托。天枢不代登委托，也不读取、索取任何人的本人凭证。
-- 现状：除 `1bc680df` 外，新委托都还没登。明华那条只覆盖代 CEO 确认，加上他自己当 DRI 的单元的承诺。本体本周出 v0.8.0，带登记委托的命令。11/3–4 能代记谁，看到时谁登了。第一次真写进 scope `a92430fd`。
+- 现状（斯一 10/21 下午）：v0.8.0 已上线，带人用的门命令 `tkos-gate`，登委托用 `tkos-gate --api … delegate --to <受托方> --families gate --domains <分区,逗号无空格> --until <时刻>`（`--api` 在 `delegate` 前；一行一个 `--to`）。
+  - 群通知由本体团队统一发，每人登两条：一条给天枢（只给门族，到 2026-12-31T23:59:59+08:00），一条给自己的 Agent。
+  - 明华跑他 10/19 那份文件，里面已有给天枢的委托。秦梦怡、唐巨杰现在没有本人凭证，重签时再登；在那之前天枢代他们的承诺会 403，如实记失败。
+  - 重签本人凭证不影响已登的委托（本体按委托人的主体和角色判，不看凭证）。
+  - 任务卡确认只用门族；生命周期族（确认完成）V1 不用。
+  - 第一次真写进 scope `a92430fd`。
 
 ## Mission 两门（设计，按斯一 10/21 答复；代码未写）
 
@@ -55,11 +60,13 @@ Blocked by: 01、02
   - `execution_plan`：这个 Mission 下真实的 Task，每条写名称和 Task DRI（`responsible`），组件 id 用天枢执行事项 id；随承诺的候选一起带，不先单独修订。
   - 一条真实的 Task 都没有就不发承诺，提示 Mission DRI 先补 Task；不生成占位条目。
   - 外部记录 `tianshu:card-confirm:<cardId>:<window_seq>`，时刻取 `owner_confirmed_at`。
-- 确认：战场 DRI 一次确认整个组合，落到本体时每个 Mission 一条 `world_confirm_mission`（`outcome: accepted`，代 `confirmed_by`）。
+- 确认：战场 DRI 一次确认整个组合，落到本体时每个 Mission 一条 `world_confirm_mission`（`outcome: accepted`）。
+  - 代谁：Mission 所在单元的 RU DRI，不是天枢里点确认的战场 DRI（斯一 10/21）。E&O 按 10/10 的对应关系：人豪的 Mission（renhao-202610-b、c）由斯一确认，斯一的 siyi-202610-1 由人豪确认。斯一保留 E&O 的 DOMAIN_DRI 就是为此。
+  - 待定：天枢里点确认的人和本体里被代记的 RU DRI 不是同一个人时，外部记录指向的是战场 DRI 的那次确认，同周期目标承诺一样。
   - 每条单独请求、单独事务、各用各的幂等键。
   - 可以共用外部记录 `tianshu:round-confirm:<roundId>:<window_seq>` 和确认时刻（不晚于记录时刻）。
   - 每条单独成败：某个 Mission 还没承诺、父周期目标没确认、委托不覆盖等，只有这一条失败，其他照常。失败的 Mission 和原因单独告诉确认人，已成功的不受影响。
-- 硬拦截（10/10 对斯一说过）：确认人就是该 Mission 的 Mission DRI 时不写这一条。
+- 硬拦截（10/10 对斯一说过）：被代记的 RU DRI 就是该 Mission 的 Mission DRI 时不写这一条；E&O 有两位 RU DRI，按上面的对应关系取另一位。
 - 还没定：
   - 拦截落在哪：拒掉天枢里的组合确认，或者组合照常确认、只是这一条不写，告诉确认人。
   - 战场 DRI 退回任务卡时，本体那边已承诺的 Mission 要不要代记一条 `outcome: returned`。
