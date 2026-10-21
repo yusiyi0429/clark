@@ -156,7 +156,7 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     expect(html).toContain("data-header-tools");
     expect(html).toContain("预审摘要");
     expect(html).toContain("对齐预算");
-    for (const label of ["开始会议", "编辑会议", "导入会议记录", "请求补充材料", "会前备注", "替换材料集", "标记已核对", "保存准备状态"]) {
+    for (const label of ["开始会议", "编辑会议", "上传会议记录", "请求补充材料", "会前备注", "替换材料集", "标记已核对", "保存准备状态"]) {
       expect(html).not.toContain(label);
     }
   });
@@ -172,7 +172,7 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     expect(html).toContain("批准预算");
     expect(html).toContain("提交排期");
     expect(html).toContain("林晓");
-    for (const label of ["Transcript", "逐字稿", "替换", "忽略", "录音", "导入会议记录"]) expect(html).not.toContain(label);
+    for (const label of ["Transcript", "逐字稿", "替换", "忽略", "录音", "上传会议记录"]) expect(html).not.toContain(label);
     expect(html).not.toMatch(/<button[^>]*>确认/);
   });
 
@@ -261,14 +261,14 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     const failed = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", minutesManualImport: true, recording: { id: "r1", status: "failed", error: "识别服务没有返回结果。" } }));
     expect(failed).toContain("识别服务没有返回结果。");
     expect(failed).not.toContain("可以改用下面的妙记导入");
-    expect(failed).toContain("导入会议记录");
+    expect(failed).toContain("上传会议记录");
   });
 
   it("这一刻的一件事随会议状态走", () => {
     const payload = (overrides: Record<string, unknown>) => meetingCard(overrides).payload as never;
-    // 和页头会后阶段同一套词：没失败就是等妙记，自动同步失败才是待导入会议记录。
+    // 和页头会后阶段同一套词：没失败就是等妙记，自动同步失败才是待交记录。
     expect(meetingNow(payload({}), true)).toBe("等妙记");
-    expect(meetingNow(payload({ minutesManualImport: true }), true)).toBe("待导入会议记录");
+    expect(meetingNow(payload({ minutesManualImport: true }), true)).toBe("待交记录");
     expect(meetingNow(payload({ status: "held" }), true)).toBe("生成会议卡");
     expect(meetingNow(payload({ status: "cancelled" }), false)).toBe("已取消");
   });
@@ -423,27 +423,26 @@ describe("Meeting Outcome 复核", () => {
 });
 
 describe("妙记 Markdown 候选预览", () => {
-  it("自动同步失败才出「导入会议记录」：等妙记、刚开完时不出，失败后出", () => {
+  it("自动同步失败才出「上传会议记录」：等妙记、刚开完时不出，失败后出", () => {
     const ended = { endedAt: "2025-09-24T15:40:00.000Z" };
     for (const waiting of [{}, { minutesStatus: "waiting", minutesWaitingSince: "2025-09-24T15:41:00.000Z" }, { minutesStatus: "failed", minutesFailure: "not_ready" }]) {
       const html = render(meetingCard({ ...ended, ...waiting, minutesManualImport: false }));
-      expect(html).not.toContain("<h3>导入会议记录</h3>");
-      expect(html).not.toContain(">导入会议记录<");
+      expect(html).not.toContain(">上传会议记录<");
     }
     const manual = render(meetingCard({ ...ended, minutesStatus: "manual", minutesManualImport: true }));
-    expect(manual).toContain("<h3>导入会议记录</h3>");
+    expect(manual).toContain(">上传会议记录<");
   });
 
   it("等妙记时没有大块导入，选文件仍在（页头「自己上传」用）", () => {
     const html = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", minutesStatus: "waiting", minutesWaitingSince: "2025-09-24T15:41:00.000Z", minutesManualImport: false }));
     expect(html).toContain('aria-label="选择会议记录文件"');
-    expect(html).not.toContain("<h3>导入会议记录</h3>");
+    expect(html).not.toContain(">上传会议记录<");
   });
 
-  it("会开完了默认打开会议记录：入口同时接受 .md 与 .json", () => {
+  it("会开完了默认打开会议记录：入口接受 txt、md、pdf、docx、html 和 .json", () => {
     const html = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", minutesManualImport: true }));
-    expect(html).toContain('accept=".md,.json,application/json,text/markdown"');
-    expect(html).toContain("导入会议记录");
+    expect(html).toContain('accept=".md,.markdown,.txt,.pdf,.docx,.html,.htm,.json,');
+    expect(html).toContain(">上传会议记录<");
     expect(html).not.toContain("上传会议逐字稿");
   });
 
@@ -457,8 +456,8 @@ describe("妙记 Markdown 候选预览", () => {
     expect(html).toContain("末段 +59:01");
     expect(html).toContain("先把结论说清楚。");
     expect(html).toContain("“外部顾问”未匹配到人员，请手动选择。");
-    // 有候选时 Header 切到重新导入文案。
-    expect(html).toContain("重新导入会议记录");
+    // 有候选时上传区切到重新上传。
+    expect(html).toContain("重新上传会议记录");
   });
 
   it("未映射说话人时给出行内错误并禁用确认，全部唯一映射后放行", () => {

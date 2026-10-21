@@ -11,3 +11,7 @@
 }
 .followUp{padding:0 2px 12px 17px;font-size:12px}.followUp>div{display:flex;gap:8px;margin-top:8px}.card .followUp button{width:auto;padding:6px 10px;border:1px solid #ffffff33;border-radius:8px;font-size:12px}
 @media(max-width:959px){.card .followUp button{border-color:#1c223026;font-size:14px}.followUp{font-size:14px}}
+/* 待交记录的会：整张卡能拖文件进来；虚线框、「松开上传」见 file-drop-zone。 */
+.drop{margin:0 -6px;padding:0 6px;border-radius:12px}
+.error{display:block;margin-top:6px;color:#ffb4b4}
+@media(max-width:959px){.error{color:#be123c}}

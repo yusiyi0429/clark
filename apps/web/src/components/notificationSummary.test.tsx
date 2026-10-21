@@ -28,7 +28,7 @@ describe("通知栏分组（clark 三组）", () => {
     expect(railGroups([ended, marked], now, "attendee")).toEqual([]);
     expect(railGroups([ended], now, "host")[0].items[0]).toMatchObject({ followUp: true, canReschedule: true });
     const html = renderToStaticMarkup(<NotificationRail cards={[ended]} viewerId="host" onNavigate={() => undefined} />);
-    expect(html).toContain("重新安排"); expect(html).toContain("上传文字纪要");
+    expect(html).toContain("重新安排"); expect(html).toContain(">上传<"); expect(html).toContain("待交记录");
   });
   it("只收需要行动的：未签发月度计划、已排期会议、红色待决议题；顺序固定", () => {
     const now = new Date("2026-09-23T01:00:00Z");

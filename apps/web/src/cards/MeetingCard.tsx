@@ -31,6 +31,8 @@ import { useRememberedScroll, type MaterialTab } from "@/components/shell/Materi
 import { SegmentedSwitch } from "@/components/SegmentedSwitch";
 import { escapeToSegment, initialMeetingView, meetingSegments, noPreflightContent, pickMaterial, pickSegment, selectedSegment, type MeetingView } from "./meetingView";
 import { ObjectMaterialArea } from "@/components/materials/ObjectMaterialArea";
+import { FileDropZone } from "@/components/FileDropZone";
+import { MEETING_RECORD_ACCEPT, uploadMeetingRecord } from "@/lib/meetingRecordUpload";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { calendarDate, COMPANY_TIMEZONE } from "@/lib/companyTime";
 import { cleanDisplayText, isPastDue, materialTitle, stripInternalRefs } from "@/lib/displayText";
@@ -477,7 +479,7 @@ export function meetingNow(payload: MeetingPayload, ended: boolean): string {
   if (ended && payload.transcriptCandidate) return "待确认说话人";
   if (ended && recordingInFlight(payload.recording)) return "录音转写中";
   if (ended && payload.recording?.status === "failed") return "录音转写失败，可导入妙记";
-  if (ended && payload.minutesManualImport) return "待导入会议记录";
+  if (ended && payload.minutesManualImport) return "待交记录";
   if (ended) return "等妙记";
   return preflightStatusText(payload.preflight);
 }
@@ -787,42 +789,15 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     if (await run(action, patch)) setEditOpen(false);
   }
 
-  /** JSON 直导：multipart 单文件；与 DRI service API 共用同一校验边界。 */
-  async function uploadTranscript(file: File) {
-    setUploading(true);
-    setUploadError(null);
-    const form = new FormData();
-    form.append("file", file);
-    const response = await fetch(`/api/meetings/${card.objectRef.id}/transcript`, { method: "POST", body: form });
-    setUploading(false);
-    if (response.status === 401) {
-      onNavigate("/access");
-      return;
-    }
-    const body = (await response.json().catch(() => ({}))) as { message?: string; cards?: typeof collection };
-    if (response.ok && body.cards?.[0]) {
-      updateCard(body.cards[0]);
-      return;
-    }
-    setUploadError(body.message ?? "逐字稿整份被拒绝");
-  }
-
-  /** 会议记录入口按扩展名分流：.md 只生成候选，.json 走既有 immediate import。 */
+  /** 会议记录（txt、md、pdf、docx、html 由服务端认；.json 直导）：点选和拖进来共用。 */
   async function importTranscriptFile(file: File) {
-    if (!/\.md$/i.test(file.name)) return uploadTranscript(file);
     setUploading(true);
     setUploadError(null);
-    const form = new FormData();
-    form.append("file", file);
-    const response = await fetch(`/api/meetings/${card.objectRef.id}/transcript-candidate`, { method: "POST", body: form });
+    const result = await uploadMeetingRecord<(typeof collection)[number]>(card.objectRef.id, file);
     setUploading(false);
-    if (response.status === 401) {
-      onNavigate("/access");
-      return;
-    }
-    const body = (await response.json().catch(() => ({}))) as { message?: string; cards?: typeof collection };
-    if (response.ok && body.cards?.[0]) return updateCard(body.cards[0]);
-    setUploadError(body.message ?? "妙记 Markdown 整份被拒绝");
+    if (result.ok) return result.card ? updateCard(result.card) : undefined;
+    if (result.status === 401) return onNavigate("/access");
+    setUploadError(result.message);
   }
 
   /** 确认候选：只提交 speakerMappings 与显式标记，全量 turns 留在服务端。 */
@@ -1612,20 +1587,16 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       ) : null}
       {payload.minutesManualImport || payload.transcriptCandidate ? (
       <section className={s.reviewSection}>
-        <header>
-          <h3>导入会议记录</h3>
-        </header>
-        <div className={s.stageActions}>
-          <button type="button" className={s.primaryAction} disabled={uploading} onClick={() => uploadRef.current?.click()}>
-            <FileUp size={13} aria-hidden="true" />
-            {uploading ? "上传中…" : payload.transcriptCandidate ? "重新导入会议记录" : "导入会议记录"}
+        {/* 一块轻的上传区：点它选文件，拖进主栏任何地方也行（FileDropZone）。 */}
+        <button type="button" className={s.recordUpload} disabled={uploading} onClick={() => uploadRef.current?.click()}>
+          <FileUp size={16} aria-hidden="true" />
+          {uploading ? "上传中…" : payload.transcriptCandidate ? "重新上传会议记录" : "上传会议记录"}
+        </button>
+        {payload.transcriptCandidate && !candidateOpen ? (
+          <button type="button" className={s.candidateReopen} onClick={() => setCandidateOpen(true)}>
+            查看会议记录候选
           </button>
-          {payload.transcriptCandidate && !candidateOpen ? (
-            <button type="button" className={s.candidateReopen} onClick={() => setCandidateOpen(true)}>
-              查看会议记录候选
-            </button>
-          ) : null}
-        </div>
+        ) : null}
         {uploadError ? <p className={s.error} role="alert">{uploadError}</p> : null}
       </section>
       ) : null}
@@ -1749,12 +1720,14 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         onUpload={canUpload ? () => uploadRef.current?.click() : undefined} uploading={uploading} uploadError={uploadError} />
     } />
   );
-  // 选会议记录文件：「导入会议记录」和页头的「自己上传」共用，导入块不出现时也在。
+  // 会开完、还没有确认的逐字稿时，主栏整块能拖会议记录进来（FileDropZone）。
+  const recordDrop = canUpload && ended && !source.transcript;
+  // 选会议记录文件：「上传会议记录」和页头的「自己上传」共用，上传块不出现时也在。
   const uploadInput = canUpload ? (
     <input
       ref={uploadRef}
       type="file"
-      accept=".md,.json,application/json,text/markdown"
+      accept={MEETING_RECORD_ACCEPT}
       className={s.hiddenInput}
       aria-label="选择会议记录文件"
       onChange={(event) => {
@@ -1795,6 +1768,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
             <div className={s.readingGrid} data-toc={outline ? "true" : undefined} data-type-pair={view.current === PREFLIGHT_TAB.id && !viewedMaterial ? "preflight" : undefined}>
               {outline ? <MeetingOutline items={outline} active={outlineActive} onJump={jumpOutline} label={recordShown ? "会后目录" : "议题目录"} /> : null}
               <div className={s.readingMain} data-material-column ref={mainRef} onMouseUp={onQuoteMouseUp}>
+                <FileDropZone disabled={!recordDrop} busy={recordDrop && uploading} onFile={(file) => void importTranscriptFile(file)}>
                 {worldLine}
                 <MeetingStatus phase={phase} facts={facts} now={statusNow} endedAt={payload.endedAt} />
                 {(memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose) ?
@@ -1809,6 +1783,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
                     preflightView
                   )}
                 </section>
+                </FileDropZone>
                 <SelectionToolbar
                   selected={quoteSelection}
                   onQuote={() => {

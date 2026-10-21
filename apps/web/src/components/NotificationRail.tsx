@@ -21,6 +21,7 @@ import { PersonalReviewBoard } from "./monthlyReview/PersonalReviewBoard";
 import { useWeeklyReviewBoard, WeeklyReviewBoard } from "./weeklyReview/WeeklyReviewBoard";
 import { RequestNotices } from "./requests/RequestNotices";
 import { MeetingCardNotices } from "./meeting/MeetingCardNotices";
+import { MeetingRecordDrop } from "./meeting/MeetingRecordDrop";
 import { CycleCountdown } from "./CycleCountdown";
 import { RADAR_ORIGIN_LABEL, RadarOriginIcon } from "./OriginTag";
 import { preflightInFlight } from "@/cards/meetingIssueModel";
@@ -28,7 +29,7 @@ import n from "@/styles/notifications.module.css";
 
 type RailKind = "decisions" | "meetings" | "research";
 type Tone = "red" | "amber" | "neutral";
-type RailItem = { id: string; title: string; meta: string; tone: Tone; href: string; missionRound?: Card; followUp?: boolean; canReschedule?: boolean };
+type RailItem = { id: string; title: string; meta: string; tone: Tone; href: string; missionRound?: Card; followUp?: boolean; canReschedule?: boolean; meetingId?: string };
 type RailGroup = { kind: RailKind; title: string; subtitle: ReactNode; mark: ContextMarkKind; items: RailItem[] };
 
 const RAIL: Record<RailKind, { title: string; mark: ContextMarkKind }> = {
@@ -126,8 +127,9 @@ export function railGroups(cards: Card[], now: Date = new Date(), viewerId?: str
     return {
       id: card.id,
       title: card.title,
-      meta: followUp ? "会议已结束，待提交记录或重新安排" : sameCompanyDay(new Date(at), now) ? clock(new Date(at)).time : monthDayTime(at),
+      meta: followUp ? "待交记录" : sameCompanyDay(new Date(at), now) ? clock(new Date(at)).time : monthDayTime(at),
       followUp,
+      meetingId: card.objectRef.id,
       canReschedule: card.actions.some((action) => action.actionType === "meeting.reschedule"),
       tone: "neutral",
       href: `/meetings/${card.objectRef.id}`,
@@ -319,7 +321,7 @@ export function NotificationRail({
                 {group.items.map((item) => item.missionRound ? (
                   <MissionCardNoticeGroup key={item.id} round={payloadOf<TMissionRoundSummary>(item.missionRound)} entry="ceo" embedded currentHref={currentHref} onNavigate={onNavigate} onRefresh={refreshRound} />
                 ) : (
-                  <div key={item.id}>
+                  <RailItemFrame key={item.id} item={item} onNavigate={onNavigate}>{(pick, busy) => <>
                   <HeroButton
                     variant="ghost"
                     size="sm"
@@ -341,9 +343,9 @@ export function NotificationRail({
                   </HeroButton>
                   {item.followUp ? <div className={n.meetingFollowUp}>
                     {item.canReschedule ? <button type="button" onClick={(event) => onNavigate(`${item.href}?meetingAction=reschedule`, event.currentTarget)}>重新安排</button> : null}
-                    <button type="button" onClick={(event) => onNavigate(`${item.href}?meetingAction=transcript`, event.currentTarget)}>上传文字纪要</button>
+                    <button type="button" disabled={busy} onClick={pick}>{busy ? "上传中…" : "上传"}</button>
                   </div> : null}
-                  </div>
+                  </>}</RailItemFrame>
                 ))}
               </div>
             </HeroCard>
@@ -357,4 +359,12 @@ export function NotificationRail({
       ) : null}
     </aside>
   );
+}
+
+/** 通知栏一行：开完待交记录的会整行能拖文件上传（MeetingRecordDrop）；其余照旧。 */
+function RailItemFrame({ item, onNavigate, children }: { item: RailItem; onNavigate: (href: string, from?: Element | null) => void; children: (pick: () => void, busy: boolean) => ReactNode }) {
+  if (!item.followUp || !item.meetingId) return <div>{children(() => undefined, false)}</div>;
+  return <MeetingRecordDrop meetingId={item.meetingId} title={item.title} href={item.href} onNavigate={onNavigate} className={n.meetingDrop} errorClassName={n.meetingDropError}>
+    {children}
+  </MeetingRecordDrop>;
 }

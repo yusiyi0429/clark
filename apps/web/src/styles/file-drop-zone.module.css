@@ -1,0 +1,11 @@
+/* 能接文件的区域：拖着文件时虚线框；拖到上方时整块盖一层蓝，写「松开上传」。 */
+.zone { position: relative; border-radius: inherit; }
+.zone[data-drop="ready"] { outline: 1.5px dashed rgba(51, 112, 255, 0.55); outline-offset: 2px; transition: outline-color 120ms ease; }
+.zone[data-drop="over"] { outline: 2px solid #3370ff; outline-offset: 2px; }
+.hint {
+  position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
+  border-radius: inherit; background: rgba(51, 112, 255, 0.9); color: #fff; font-size: 14px; font-weight: 600; letter-spacing: 0.02em;
+  pointer-events: none;
+}
+.zone[data-drop="busy"] .hint { background: rgba(51, 112, 255, 0.72); }
+@media (prefers-reduced-motion: reduce) { .zone[data-drop="ready"] { transition: none; } }

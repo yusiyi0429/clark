@@ -469,3 +469,9 @@
 .divergenceGroup>small{display:block;padding:6px 0 0;color:#4f5866;font-size:12px;font-weight:600}
 .lensAnswers{display:flex;flex-direction:column;gap:4px;margin:6px 0 0;padding:0;list-style:none;color:#8a6220;font-size:12px;line-height:18px}
 .lensAnswers b{margin-right:6px;font-weight:600}
+/* 会后要自己交会议记录时的上传区：一整块虚线，点它选文件；拖文件到主栏任何地方也行。字号、颜色沿用本页已有的。 */
+.recordUpload{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:72px;padding:14px;border:1.5px dashed #d9dde5;border-radius:14px;background:#f7f8fa;color:#215ba1;font:inherit;font-size:13px;font-weight:500;cursor:pointer}
+.recordUpload:hover{border-color:#215ba1;background:#fff}
+.recordUpload:disabled{cursor:default;opacity:.7}
+.recordUpload:focus-visible{outline:2px solid #96beff;outline-offset:2px}
+.recordUpload+.candidateReopen{margin-top:10px}
