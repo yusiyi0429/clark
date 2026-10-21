@@ -323,7 +323,8 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
     announce();
   };
 
-  // 会议事件或对象修改还在等：每 3 秒重读一次，最多问到 pollUntil；用户正在改的草稿不被盖掉。写完了（不再等）通知页头和通知栏。
+  // 会议事件或对象修改还在等：每 3 秒重读一次，最多问到 pollUntil；用户正在改的草稿不被盖掉。
+  // 会议事件写完了（页头只看它）或全都不等了，通知页头和通知栏。
   const waiting = syncPending(view.sync);
   useEffect(() => {
     if (!waiting || Date.now() > pollUntil) return;
@@ -331,8 +332,9 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
     const timer = setTimeout(() => void getMeetingCard(meetingId).then((result) => {
       if (!live) return;
       if (result.ok) {
+        const eventWasPending = viewRef.current.sync?.event.status === "pending";
         adopt(result.view, !dirtyRef.current && !savingRef.current && !conflictRef.current);
-        if (!syncPending(result.view.sync)) announce();
+        if (!syncPending(result.view.sync) || (eventWasPending && result.view.sync?.event.status !== "pending")) announce();
       }
       setTick((value) => value + 1);
     }), POLL_MS);
