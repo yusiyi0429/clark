@@ -225,6 +225,34 @@ Speaker 3 00:03:00.000
     }
   });
 
+  it("主持人没授权、或主持人的授权读不了妙记：用建会的人的授权拿", async () => {
+    for (const hostState of ["none", "no_scope"] as const) {
+      const outcome = recordingOutcome();
+      const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: outcome });
+      try {
+        // 会是 CEO（测试甲）建的，主持人是测试乙。
+        const meetingId = await scheduledMeeting(t);
+        const clock = new Date("2026-06-01T11:15:00+08:00");
+        await authorize(t, CEO, "ou_ceo", "测试甲", clock);
+        if (hostState === "no_scope") await authorize(t, HOST, "ou_host", "测试乙", clock);
+        const api = fakeMinutesApi();
+        const listMinutes = api.listMinutes;
+        api.listMinutes = async (token, owner) => {
+          if (token === `u-${HOST}`) { api.calls.push(`list:${token}:${owner.openId}`); throw new FeishuApiError(99991679, "missing scope"); }
+          return listMinutes(token, owner);
+        };
+        await createMeetingMinutesService({ pool: t.pool, peopleDirectory: loadPeopleDirectory(t.env), outcomeAgent: outcome, secret: t.env.sessionSecret,
+          feishu: { env: feishuEnv, api }, now: () => clock }).tick();
+        expect(api.calls.filter((call) => call.startsWith("list:"))).toEqual(
+          hostState === "none" ? [`list:u-${CEO}:ou_ceo`] : [`list:u-${HOST}:ou_host`, `list:u-${CEO}:ou_ceo`]);
+        expect(api.calls).toContain(`artifacts:u-${CEO}:obcn_minute_1`);
+        expect((await getMeetingRow(t.pool.query.bind(t.pool), meetingId))).toMatchObject({ status: "held", minutes_status: "ready", minute_token: "obcn_minute_1" });
+      } finally {
+        await t.close();
+      }
+    }
+  });
+
   it("飞书没接或主持人没授权：退回手动上传（manual）；手动上传后算 ready", async () => {
     const outcome = recordingOutcome();
     const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: outcome });
