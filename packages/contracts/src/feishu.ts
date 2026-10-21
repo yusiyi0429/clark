@@ -12,5 +12,12 @@ export const FeishuCodeLoginRequest = Type.Object(
   { additionalProperties: false },
 );
 
+/** 本人的飞书连好了没有：enabled=false 是这套天枢没接飞书；connected 要求授权有效、带着会后拿妙记要的权限。 */
+export const FeishuConnectionResponse = Type.Object(
+  { enabled: Type.Boolean(), connected: Type.Boolean() },
+  { additionalProperties: false },
+);
+
 export type TFeishuAuthConfigResponse = Static<typeof FeishuAuthConfigResponse>;
+export type TFeishuConnectionResponse = Static<typeof FeishuConnectionResponse>;
 export type TFeishuCodeLoginRequest = Static<typeof FeishuCodeLoginRequest>;

@@ -107,6 +107,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/feishu": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人的飞书连好了没有（授权有效、带着会后拿妙记要的权限）；没接飞书时 enabled=false */
+        get: operations["getMyFeishuConnection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/feishu/start": {
         parameters: {
             query?: never;
@@ -114,7 +131,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 浏览器打开：已登录直接跳到 next；否则写 state cookie 后跳飞书授权页。飞书消息里的深链接都指向这里 */
+        /** 浏览器打开：已登录直接跳到 next；否则写 state cookie 后跳飞书授权页。飞书消息里的深链接都指向这里。connect=1：已登录的人也去授权，连接飞书 */
         get: operations["startFeishuAuth"];
         put?: never;
         post?: never;
@@ -3761,6 +3778,10 @@ export interface components {
         };
         FeishuCodeLoginRequest: {
             code: string;
+        };
+        FeishuConnectionResponse: {
+            enabled: boolean;
+            connected: boolean;
         };
         ChangePasscodeRequest: {
             loginId: string;
@@ -11479,11 +11500,42 @@ export interface operations {
             };
         };
     };
+    getMyFeishuConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 飞书连接状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeishuConnectionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     startFeishuAuth: {
         parameters: {
             query?: {
                 /** @description 登录后回到的站内路径，只接受以 / 开头的相对路径 */
                 next?: string;
+                /** @description 已登录的人连接飞书：授权完回到 next，不换会话 */
+                connect?: "1";
             };
             header?: never;
             path?: never;

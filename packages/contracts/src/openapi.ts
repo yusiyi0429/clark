@@ -208,6 +208,7 @@ import {
   WeeklyProgressResponse,
   FeishuAuthConfigResponse,
   FeishuCodeLoginRequest,
+  FeishuConnectionResponse,
 } from "./index.js";
 
 const errorResponse = {
@@ -319,11 +320,24 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "飞书配置", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuAuthConfigResponse" } } } } },
         },
       },
+      "/api/me/feishu": {
+        get: {
+          operationId: "getMyFeishuConnection",
+          summary: "本人的飞书连好了没有（授权有效、带着会后拿妙记要的权限）；没接飞书时 enabled=false",
+          responses: {
+            "200": { description: "飞书连接状态", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuConnectionResponse" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
       "/api/auth/feishu/start": {
         get: {
           operationId: "startFeishuAuth",
-          summary: "浏览器打开：已登录直接跳到 next；否则写 state cookie 后跳飞书授权页。飞书消息里的深链接都指向这里",
-          parameters: [{ name: "next", in: "query", required: false, schema: { type: "string" }, description: "登录后回到的站内路径，只接受以 / 开头的相对路径" }],
+          summary: "浏览器打开：已登录直接跳到 next；否则写 state cookie 后跳飞书授权页。飞书消息里的深链接都指向这里。connect=1：已登录的人也去授权，连接飞书",
+          parameters: [
+            { name: "next", in: "query", required: false, schema: { type: "string" }, description: "登录后回到的站内路径，只接受以 / 开头的相对路径" },
+            { name: "connect", in: "query", required: false, schema: { type: "string", enum: ["1"] }, description: "已登录的人连接飞书：授权完回到 next，不换会话" },
+          ],
           responses: { "302": { description: "跳到 next 或飞书授权页" }, "404": errorResponse, "429": errorResponse },
         },
       },
@@ -2736,6 +2750,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         DemoEntryResponse: DemoEntryResponse as JsonSchema,
         FeishuAuthConfigResponse: FeishuAuthConfigResponse as JsonSchema,
         FeishuCodeLoginRequest: FeishuCodeLoginRequest as JsonSchema,
+        FeishuConnectionResponse: FeishuConnectionResponse as JsonSchema,
         ChangePasscodeRequest: ChangePasscodeRequest as JsonSchema,
         SessionResponse: SessionResponse as JsonSchema,
         PeopleDirectoryResponse: PeopleDirectoryResponse as JsonSchema,

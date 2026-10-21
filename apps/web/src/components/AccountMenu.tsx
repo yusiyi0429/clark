@@ -2,7 +2,7 @@
 
 /**
  * 个人菜单：通知栏左下角点自己的名字（收起成窄条时是头像）弹出。本人能改的设置都收在这里 ——
- * 声纹（已配置时）、雷达、我的记忆（成员 /me/memory、CEO /memory）、定时任务（成员 /me/schedules、CEO /schedules）、Co-Agent 形象、修改口令、重看首次引导；双身份者还能切换工作台。
+ * 声纹（已配置时）、雷达、我的记忆（成员 /me/memory、CEO /memory）、定时任务（成员 /me/schedules、CEO /schedules）、连接飞书（接了飞书时）、Co-Agent 形象、修改口令、重看首次引导；双身份者还能切换工作台。
  * CEO 多一项组织配置，管理员多一项管理员视图；最后是退出登录。
  * 声纹、雷达和口令各开一个小弹窗，不离开当前页面。
  */
@@ -10,8 +10,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Modal, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, CalendarClock, KeyRound, LogOut, PlugZap, Radar, RotateCcw, Settings2, Smile, X } from "lucide-react";
+import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, CalendarClock, KeyRound, Link2, LogOut, PlugZap, Radar, RotateCcw, Settings2, Smile, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
+import { feishuConnectHref, readFeishuConnection } from "@/lib/feishuLogin";
 import { logout } from "@/lib/logout";
 import { VoiceprintCard } from "@/components/member/VoiceprintCard";
 import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
@@ -50,6 +51,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   const [canSwitchView, setCanSwitchView] = useState(false);
   const [admin, setAdmin] = useState(false);
   const [voiceConfigured, setVoiceConfigured] = useState(false);
+  const [feishu, setFeishu] = useState<{ enabled: boolean; connected: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const radarTitle = account.role === "ceo" ? "雷达设置" : "我的雷达";
@@ -75,6 +77,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
       setAdmin(Boolean(session.response.ok && session.data?.authenticated && session.data.admin));
       setVoiceConfigured(Boolean(voiceprint.response.ok && voiceprint.data?.configured));
     }).catch(() => setError("个人设置暂时无法读取，请重试。"));
+    void readFeishuConnection().then(setFeishu);
   };
   const switchView = async () => {
     const view = account.role === "ceo" ? "member" : "ceo";
@@ -147,6 +150,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                   定时任务
                 </Button>
               ) : null}
+              {feishu?.enabled ? <FeishuConnectItem connected={feishu.connected} /> : null}
               <Button variant="ghost" className={m.item} onPress={() => pick("connection")}>
                 <PlugZap size={16} aria-hidden="true" />连接到外部工具
               </Button>
@@ -237,6 +241,19 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
       {dialog === "coagent" ? <MenuDialog title="Co-Agent 形象" wide onClose={() => setDialog(null)}><CoAgentSkinPicker /></MenuDialog> : null}
       {dialog === "connection" ? <MenuDialog title="连接到外部工具" wide onClose={() => setDialog(null)}><ConnectionDialog role={account.role} /></MenuDialog> : null}
     </>
+  );
+}
+
+/** 个人菜单里的飞书：没连好时「连接飞书」，整页去飞书授权、授权完回到这一页；连好了只显示状态。 */
+export function FeishuConnectItem({ connected }: { connected: boolean }) {
+  return connected ? (
+    <Button variant="ghost" className={m.item} isDisabled>
+      <Link2 size={16} aria-hidden="true" />飞书已连接
+    </Button>
+  ) : (
+    <Button variant="ghost" className={m.item} onPress={() => window.location.assign(feishuConnectHref(`${window.location.pathname}${window.location.search}`))}>
+      <Link2 size={16} aria-hidden="true" />连接飞书
+    </Button>
   );
 }
 

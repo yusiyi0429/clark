@@ -5,7 +5,7 @@ import type { PeopleDirectory } from "./peopleDirectory.js";
 import type { FeishuEnv } from "./feishu/config.js";
 import { FeishuApiError } from "./feishu/client.js";
 import { activeUserAccessToken, MINUTES_NOT_READY_CODE, type FeishuMinuteInfo, type FeishuMinutesApi } from "./feishu/minutes.js";
-import type { JobHandler, RecurringJob } from "./jobs.js";
+import { enqueueJob, type JobHandler, type RecurringJob } from "./jobs.js";
 import { MINUTES_GIVE_UP_MS, MINUTES_RECENT_MS, minutesStatusOf } from "./meetingDecisionView.js";
 import { getMeetingRow, meetingColumns, type MeetingRow, type Query } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
@@ -32,6 +32,8 @@ const MATCH_WINDOW_MS = 3 * 60 * 60_000;
 /** 还在等妙记的会：waiting，以及读的时候原文还没好的（failed / not_ready）。 */
 const STILL_WAITING = "(minutes_status = 'waiting' OR (minutes_status = 'failed' AND minutes_failure = 'not_ready'))";
 const NO_AUTH = "主持人和建会的人都没有可用的飞书授权";
+/** a44afae6 之前记下的同一原因。 */
+const LEGACY_NO_AUTH = "主持人没有可用的飞书授权";
 const MEETING_NOT_FOUND = { status: 404 as const, code: "MEETING_NOT_FOUND", message: "Meeting 不存在" };
 const NOT_SCHEDULED = { status: 409 as const, code: "MEETING_NOT_SCHEDULED", message: "只有 scheduled Meeting 可以导入会议记录" };
 
@@ -399,12 +401,32 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     return respond(meeting.id, await ingestByToken(feishu.api, meeting, readers, minuteToken, true));
   }
 
+  /**
+   * 有人刚连上飞书：他主持或建的会里，因为没有可用授权退回手动（或读的时候没权限）、还没有逐字稿和候选、开完 48 小时以内的，
+   * 回到等妙记（从现在起再等 2 小时），并马上排一次轮询，不等下一个 5 分钟。返回接着等的会有几场。
+   */
+  async function resumeFor(personId: string): Promise<number> {
+    const at = now();
+    const resumed = await q(
+      `UPDATE meetings SET minutes_status = 'waiting', minutes_error = NULL, minutes_failure = NULL, minutes_waiting_since = $3
+        WHERE status = 'scheduled' AND transcript IS NULL AND transcript_candidate IS NULL AND (lead_dri_id = $1 OR created_by = $1)
+          AND COALESCE(ended_at, ends_at) > $2 AND COALESCE(ended_at, ends_at) <= $3
+          AND ((minutes_status = 'manual' AND minutes_error = ANY($4::text[])) OR (minutes_status = 'failed' AND minutes_failure = 'no_permission'))`,
+      [personId, new Date(at.getTime() - MINUTES_RECENT_MS), at, [NO_AUTH, LEGACY_NO_AUTH]],
+    );
+    if (resumed.rowCount) {
+      await enqueueJob(q, { kind: MEETING_MINUTES_POLL_KIND, dedupeKey: `${MEETING_MINUTES_POLL_KIND}:connect:${personId}:${at.getTime()}`, runAt: at });
+    }
+    return resumed.rowCount ?? 0;
+  }
+
   return {
     markEnded,
     poll,
     onMinuteGenerated,
     refetch,
     readLink,
+    resumeFor,
     async tick(): Promise<void> {
       await markEnded(now());
       await poll();

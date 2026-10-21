@@ -64,3 +64,18 @@ export async function feishuAutoLogin(): Promise<FeishuLoginResult | null> {
     return { ok: false, message: (cause as Error).message || "飞书免登失败" };
   }
 }
+
+/** 已登录的人连接飞书：整页跳到飞书授权页，授权完回到 next（一般是当前页），不换会话。 */
+export function feishuConnectHref(next: string): string {
+  return `/api/auth/feishu/start?${new URLSearchParams({ connect: "1", next })}`;
+}
+
+/** 本人的飞书连好了没有；读不到时按没接飞书算，不出「连接飞书」。 */
+export async function readFeishuConnection(): Promise<{ enabled: boolean; connected: boolean }> {
+  try {
+    const { data } = await browserApi.GET("/api/me/feishu");
+    return data ?? { enabled: false, connected: false };
+  } catch {
+    return { enabled: false, connected: false };
+  }
+}

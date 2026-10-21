@@ -1,11 +1,11 @@
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { FeishuAuthConfigResponse, FeishuCodeLoginRequest, LoginResponse } from "@warmap/contracts";
+import { FeishuAuthConfigResponse, FeishuCodeLoginRequest, FeishuConnectionResponse, LoginResponse } from "@warmap/contracts";
 import { parseCookies, sessionSetCookie } from "../session.js";
 import type { FeishuClient } from "../feishu/client.js";
 import {
-  FEISHU_OAUTH_SCOPE, FEISHU_STATE_COOKIE, clearOAuthStateCookie, completeFeishuLogin, createOAuthState, safeNextPath, verifyOAuthState,
-  type FeishuLoginOutcome,
+  FEISHU_OAUTH_SCOPE, FEISHU_STATE_COOKIE, clearOAuthStateCookie, completeFeishuLogin, createOAuthState, feishuConnected, safeNextPath, verifyOAuthState,
+  type FeishuConnectIntent, type FeishuLoginOutcome,
 } from "../feishu/oauth.js";
 import { isAllowedOrigin, type AppInstance, type RouteContext } from "./shared.js";
 
@@ -20,6 +20,7 @@ function page(title: string, body: string, redirectTo?: string): string {
 }
 
 const failurePage = (message: string) => page("没能用飞书登录天枢", `${escapeHtml(message)}<br><a href="/access">用天枢 ID 和口令登录</a>`);
+const connectFailurePage = (message: string, back: string) => page("没能连接飞书", `${escapeHtml(message)}<br><a href="${escapeHtml(back)}">回到天枢</a>`);
 
 const OUTCOME_STATUS: Record<Exclude<FeishuLoginOutcome["kind"], "ok">, { status: number; code: string }> = {
   code_invalid: { status: 401, code: "FEISHU_CODE_INVALID" },
@@ -31,10 +32,11 @@ const OUTCOME_STATUS: Record<Exclude<FeishuLoginOutcome["kind"], "ok">, { status
 
 /**
  * 飞书免登：浏览器走 /start → 飞书授权页 → /callback；飞书客户端里由前端 requestAccess 拿 code 后 POST /code。
- * 两条路都复用 sessionSetCookie 建会话。未配置飞书应用时只有 /config（enabled=false），其余 404。
+ * 两条路都复用 sessionSetCookie 建会话。已登录的人「连接飞书」走 /start?connect=1，回调只关联账号、存授权，不换会话。
+ * 未配置飞书应用时只有 /config 和 /api/me/feishu（enabled=false），其余 404。
  */
 export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, client: FeishuClient | undefined): void {
-  const { env, q, fail, readSession, peopleDirectory, now } = ctx;
+  const { env, q, fail, readSession, requirePerson, peopleDirectory, now } = ctx;
   const feishu = env.feishu;
   const perIp = { rateLimit: { max: 20, timeWindow: "1 minute" } };
   const redirectUri = `${env.publicOrigin}/api/auth/feishu/callback`;
@@ -42,19 +44,40 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
   app.get("/api/auth/feishu/config", { schema: { response: { 200: FeishuAuthConfigResponse } } }, async () =>
     feishu && client ? { enabled: true, appId: feishu.appId } : { enabled: false });
 
+  app.get("/api/me/feishu", { preHandler: requirePerson, schema: { response: { 200: FeishuConnectionResponse } } }, async (req) =>
+    feishu && client ? { enabled: true, connected: await feishuConnected(q, feishu, req.person!.personId, now()) } : { enabled: false, connected: false });
+
   if (!feishu || !client) return;
 
   const sessionCookie = (outcome: Extract<FeishuLoginOutcome, { kind: "ok" }>) =>
     sessionSetCookie(env.sessionSecret, env.sessionMaxAgeSeconds, { pid: outcome.personId, v: outcome.sessionVersion, view: outcome.role });
 
+  /**
+   * 连接飞书的回调：发起时的会话还有效（口令没重置）才继续；飞书账号关联给发起的人、存授权，不换会话。
+   * 之后这个人主持或建的会里，因为没有飞书授权退回手动的，接着自动拿妙记。
+   */
+  const connectFeishu = async (reply: FastifyReply, intent: FeishuConnectIntent, next: string, code: string | undefined, error: string | undefined) => {
+    if (!code) return reply.status(400).send(connectFailurePage(error ? "你取消了飞书授权。" : "飞书没有返回授权码，请再试一次。", next));
+    const access = (await q("SELECT session_version FROM member_access WHERE person_id = $1", [intent.personId])).rows[0] as { session_version: number } | undefined;
+    if (access?.session_version !== intent.sessionVersion) return reply.status(401).send(connectFailurePage("登录已失效，请重新登录天枢后再连接飞书。", "/access"));
+    const outcome = await completeFeishuLogin({
+      q, env: feishu, client, peopleDirectory, code, redirectUri, sessionPersonId: intent.personId, connect: true, now: now(),
+    });
+    if (outcome.kind !== "ok") return reply.status(outcome.kind === "code_invalid" ? 400 : OUTCOME_STATUS[outcome.kind].status).send(connectFailurePage(outcome.message, next));
+    await app.meetingFollowThrough.minutes.resumeFor(intent.personId);
+    return reply.send(page("已连接飞书", `<a href="${escapeHtml(next)}">没有自动跳转请点这里</a>`, next));
+  };
+
   app.get(
     "/api/auth/feishu/start",
-    { config: perIp, schema: { querystring: Type.Object({ next: Type.Optional(Type.String()) }) } },
+    { config: perIp, schema: { querystring: Type.Object({ next: Type.Optional(Type.String()), connect: Type.Optional(Type.Literal("1")) }) } },
     async (req, reply) => {
       const next = safeNextPath(req.query.next);
-      // 已登录就直接进去：飞书消息里的深链接不必每次都走一遍授权。
-      if (await readSession(req)) return reply.redirect(next, 302);
-      const { state, setCookie } = createOAuthState(env.sessionSecret, next, now().getTime());
+      const session = await readSession(req);
+      // 已登录就直接进去：飞书消息里的深链接不必每次都走一遍授权。连接飞书（connect=1）除外。
+      if (session && !req.query.connect) return reply.redirect(next, 302);
+      const connect = session ? { personId: session.personId, sessionVersion: session.sessionVersion } : undefined;
+      const { state, setCookie } = createOAuthState(env.sessionSecret, next, now().getTime(), connect);
       reply.header("set-cookie", setCookie);
       return reply.redirect(client.authorizeUrl(redirectUri, state, FEISHU_OAUTH_SCOPE), 302);
     },
@@ -68,6 +91,7 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
       const verified = verifyOAuthState(env.sessionSecret, parseCookies(req.headers.cookie)[FEISHU_STATE_COOKIE], req.query.state, now().getTime());
       reply.header("set-cookie", clearOAuthStateCookie());
       if (!verified) return reply.status(400).send(failurePage("登录链接已过期或不是从这个浏览器发起的，请重新打开天枢。"));
+      if (verified.connect) return connectFeishu(reply, verified.connect, verified.next, req.query.code, req.query.error);
       if (!req.query.code) return reply.status(400).send(failurePage(req.query.error ? "你取消了飞书授权。" : "飞书没有返回授权码，请重新打开天枢。"));
       const session = await readSession(req);
       const outcome = await completeFeishuLogin({

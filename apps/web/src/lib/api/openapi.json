@@ -285,10 +285,38 @@
         }
       }
     },
+    "/api/me/feishu": {
+      "get": {
+        "operationId": "getMyFeishuConnection",
+        "summary": "本人的飞书连好了没有（授权有效、带着会后拿妙记要的权限）；没接飞书时 enabled=false",
+        "responses": {
+          "200": {
+            "description": "飞书连接状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeishuConnectionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/feishu/start": {
       "get": {
         "operationId": "startFeishuAuth",
-        "summary": "浏览器打开：已登录直接跳到 next；否则写 state cookie 后跳飞书授权页。飞书消息里的深链接都指向这里",
+        "summary": "浏览器打开：已登录直接跳到 next；否则写 state cookie 后跳飞书授权页。飞书消息里的深链接都指向这里。connect=1：已登录的人也去授权，连接飞书",
         "parameters": [
           {
             "name": "next",
@@ -298,6 +326,18 @@
               "type": "string"
             },
             "description": "登录后回到的站内路径，只接受以 / 开头的相对路径"
+          },
+          {
+            "name": "connect",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "已登录的人连接飞书：授权完回到 next，不换会话"
           }
         ],
         "responses": {
@@ -15656,6 +15696,22 @@
             "minLength": 1,
             "maxLength": 512,
             "type": "string"
+          }
+        }
+      },
+      "FeishuConnectionResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled",
+          "connected"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "connected": {
+            "type": "boolean"
           }
         }
       },

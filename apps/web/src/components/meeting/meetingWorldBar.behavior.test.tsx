@@ -183,6 +183,30 @@ describe("会议页页头：逐字稿", () => {
     hooks.values = [];
     expect(transcript({ status: "manual", failure: null, canFetch: false }).some((node) => node.props?.["aria-label"] === "妙记链接")).toBe(false);
   });
+
+  it("主持人、建会的人自己没连好飞书：「未找到」「无权限」旁边是「连接飞书」，授权完回到这一页；连好了、别的失败、参会人都不出", () => {
+    vi.stubGlobal("window", { location: { pathname: "/meetings/m1", search: "" } });
+    // 本人飞书连接状态是这个组件里最后一个 state（读到之前是 null）。
+    const withConnection = (props: Partial<Parameters<typeof MeetingTranscriptStatus>[0]>, connection: { enabled: boolean; connected: boolean }) => {
+      hooks.values = [];
+      transcript(props);
+      hooks.values[hooks.values.lastIndexOf(null)] = connection;
+      return transcript(props);
+    };
+    try {
+      for (const props of [{ status: "manual" as const, failure: null }, { failure: "no_permission" as const }]) {
+        const tree = withConnection(props, { enabled: true, connected: false });
+        expect(tree.find((node) => node.type === "a" && text(node) === "连接飞书")!.props!.href).toBe("/api/auth/feishu/start?connect=1&next=%2Fmeetings%2Fm1");
+        expect(tree.some((node) => node.type === "button" && text(node) === "再读一次")).toBe(false);
+      }
+      expect(withConnection({ status: "manual", failure: null }, { enabled: true, connected: true }).some((node) => text(node) === "连接飞书")).toBe(false);
+      expect(withConnection({ status: "manual", failure: null }, { enabled: false, connected: false }).some((node) => text(node) === "连接飞书")).toBe(false);
+      expect(withConnection({}, { enabled: true, connected: false }).some((node) => text(node) === "连接飞书")).toBe(false);
+      expect(withConnection({ status: "manual", failure: null, canFetch: false }, { enabled: true, connected: false }).some((node) => text(node) === "连接飞书")).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe("会议页页头：阶段与用时", () => {

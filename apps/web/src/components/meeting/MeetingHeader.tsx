@@ -22,6 +22,7 @@ import { TianshuPortalTheme } from "ts-design";
 import { Check, ChevronDown, Radio } from "lucide-react";
 import { COMPANY_TIMEZONE } from "@/lib/companyTime";
 import type { TMeetingMinutesFailure, TMeetingMinutesFetchResponse, TMeetingMinutesStatus } from "@warmap/contracts";
+import { feishuConnectHref, readFeishuConnection } from "@/lib/feishuLogin";
 import { readMeetingMinutesLink, refetchMeetingMinutes } from "./meetingDecisionApi";
 import s from "@/styles/meeting-header.module.css";
 
@@ -346,7 +347,7 @@ const FETCH_ERROR: Record<string, string> = { INVALID_MINUTES_URL: "不是妙记
 /** 其实已经读完了（页面上的会议卡旧了）：直接重取会议卡。 */
 const ALREADY_READ = new Set(["MINUTES_READY", "TRANSCRIPT_ALREADY_IMPORTED"]);
 
-type TranscriptState = { label: string | null; retry: boolean; paste: boolean; live?: "minutes" | "card"; upload?: boolean };
+type TranscriptState = { label: string | null; retry: boolean; paste: boolean; live?: "minutes" | "card"; upload?: boolean; connect?: boolean };
 
 /**
  * 会后到哪一步了（FR-4.2）：等妙记（带已用时，旁边「自己上传」）→ 生成会议卡（带已用时）→ 逐字稿已读完；
@@ -362,9 +363,9 @@ function transcriptState(status: TMeetingMinutesStatus, failure: TMeetingMinutes
   if (status === "failed") {
     const reason = failure ? FAILURE[failure] : "读取失败";
     const head = failure === "not_ready" ? "未就绪" : "读取失败";
-    return { label: ["逐字稿", head, ...(reason === head ? [] : [reason])].join(" · "), retry: true, paste: failure === "not_found" };
+    return { label: ["逐字稿", head, ...(reason === head ? [] : [reason])].join(" · "), retry: true, paste: failure === "not_found", connect: failure === "no_permission" };
   }
-  if (status === "manual") return { label: "逐字稿 · 未找到", retry: false, paste: true };
+  if (status === "manual") return { label: "逐字稿 · 未找到", retry: false, paste: true, connect: true };
   return { label: null, retry: false, paste: true };
 }
 
@@ -397,6 +398,16 @@ export function MeetingTranscriptStatus({ meetingId, status, failure, confirmed,
   // 等妙记时「自己上传」点开才有上传、贴链接；其余照旧。
   const canUpload = Boolean(state.upload && (onUpload || canFetch));
   const paste = state.paste || (canUpload && uploadOpen);
+  // 主持人、建会的人自己没连好飞书时，「未找到」「无权限」旁边给「连接飞书」：连上后这场会接着自动拿妙记。
+  const wantsConnect = Boolean(canFetch && state.connect);
+  const [feishu, setFeishu] = useState<{ enabled: boolean; connected: boolean } | null>(null);
+  useEffect(() => {
+    if (!wantsConnect) return;
+    let live = true;
+    void readFeishuConnection().then((value) => { if (live) setFeishu(value); });
+    return () => { live = false; };
+  }, [wantsConnect]);
+  const connectHref = wantsConnect && feishu?.enabled && !feishu.connected ? feishuConnectHref(`${window.location.pathname}${window.location.search}`) : null;
   const run = async (work: () => Promise<TMeetingMinutesFetchResponse | { code: string }>) => {
     setBusy(true); setError("");
     try {
@@ -420,7 +431,8 @@ export function MeetingTranscriptStatus({ meetingId, status, failure, confirmed,
       {canUpload && uploadOpen && onUpload ? (
         <button type="button" className={s.transcriptAction} disabled={uploading} onClick={onUpload}>{uploading ? "上传中…" : "上传文件"}</button>
       ) : null}
-      {canFetch && state.retry ? <button type="button" className={s.transcriptAction} disabled={busy} onClick={() => void run(() => refetchMeetingMinutes(meetingId))}>再读一次</button> : null}
+      {connectHref ? <a className={s.transcriptAction} href={connectHref}>连接飞书</a> : null}
+      {canFetch && state.retry && !connectHref ? <button type="button" className={s.transcriptAction} disabled={busy} onClick={() => void run(() => refetchMeetingMinutes(meetingId))}>再读一次</button> : null}
       {canFetch && paste ? (
         <span className={s.transcriptLink}>
           <input type="url" aria-label="妙记链接" placeholder="贴妙记链接" value={url} disabled={busy} onChange={(event) => setUrl(event.target.value)} />
