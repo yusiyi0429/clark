@@ -54,6 +54,21 @@ sudo -E bash release.sh switch  57e51cdd8fc57b849d980fa7a256f7a5b9ce1103
 - 切换时额外核对 m2 容器 healthy、`/m2/api/session` 不再是 404；已有 `m2_state` 卷时先打包到回退目录。
 - 回退会停掉 m2 容器（保留 `m2_state` 卷与私有 seed）、恢复原 infra 和 Caddyfile、重建 edge。
 
+## 清理旧版本
+
+每次发布都会在主机上留下三样东西：镜像（`warmap-api`、`warmap-web`、`tianshu-m2` 各一个短 SHA 标签）、`releases/<短SHA>` 源码目录和 `releases/before-<短SHA>` 回退目录。`switch` 成功后会自动清理，只保留最近 `KEEP_RELEASES` 次发布（默认 3，含当前，最少 2），清理失败不影响已完成的发布。
+
+- 只删本脚本建的东西：带 `tianshu.revision` 标签的镜像、本脚本构建后变成悬空的镜像，以及 `releases/` 下以短 SHA 命名的目录。
+- 正被任何容器使用的镜像不删（例如这次没重建、还在跑旧标签的 M2）。
+- 其他项目的镜像、构建缓存、数据卷都不碰；数据库和卷的备份按 `backup.sh` 的保留天数（至少 7 天）处理。
+
+先看会删什么，再手动清理：
+
+```bash
+sudo DRY_RUN=1 infra/staging/release.sh cleanup <当前完整提交SHA>
+sudo infra/staging/release.sh cleanup <当前完整提交SHA>
+```
+
 ## 回退
 
 切换成功后仍可手动回退：`sudo bash releases/before-<短SHA>/rollback.sh`。它换回切换前的 api/web 镜像与整套 infra（含 compose 清单），停掉本次新增的服务，不恢复数据库、不删卷。需要回到旧数据时按 `runbook.md` §6 用 `releases/<短SHA>/BACKUP_BATCH` 记录的备份批次恢复。
