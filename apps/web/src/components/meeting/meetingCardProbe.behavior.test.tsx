@@ -62,7 +62,8 @@ describe("会议记录用会议卡还是旧格式", () => {
     api.get.mockResolvedValueOnce(ok({ draft: null, confirmed: null, draftVersion: 0 })).mockResolvedValueOnce(ok(cardView(1)));
     render("held|running");
     await vi.waitFor(() => expect(render("held|running").status).toBe("legacy"));
-    render("held|ready");
+    // 再问的这一会儿不先显示旧格式。
+    expect(render("held|ready").status).toBe("unknown");
     await vi.waitFor(() => expect(render("held|ready").status).toBe("card"));
     expect(api.get).toHaveBeenCalledTimes(2);
   });

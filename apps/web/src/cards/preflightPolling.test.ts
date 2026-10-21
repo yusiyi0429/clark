@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Card } from "@/lib/api/client";
-import { MEETING_POLL_MS, meetingNeedsPolling } from "./MeetingCard";
+import { MEETING_POLL_MS, MINUTES_POLL_MS, meetingNeedsPolling, meetingPollMs } from "./MeetingCard";
 import { preflightInFlight } from "./meetingIssueModel";
 import { railRefreshInterval } from "@/components/NotificationRail";
 import type { MeetingPayload } from "./payloads";
@@ -25,6 +25,21 @@ describe("会前预审在后台跑时接着刷新", () => {
     expect(meetingNeedsPolling(meeting({ preflightStatus: "failed" }))).toBe(false);
     expect(meetingNeedsPolling(meeting({ preflightStatus: "running" }), true)).toBe(false);
     expect(meetingNeedsPolling(meeting({ status: "held", outcome: { status: "running" } } as never))).toBe(true);
+  });
+
+  it("等妙记时 30 秒取一次、生成会议卡时 5 秒一次：到下一阶段卡片自己出来；成员视图的主持人也跟着取", () => {
+    expect(MINUTES_POLL_MS).toBe(30_000);
+    const waiting = meeting({ minutesStatus: "waiting" });
+    expect(meetingNeedsPolling(waiting)).toBe(true);
+    expect(meetingPollMs(waiting)).toBe(30_000);
+    expect(meetingNeedsPolling(meeting({ minutesStatus: "failed", minutesFailure: "not_ready" }))).toBe(true);
+    expect(meetingNeedsPolling(meeting({ minutesStatus: "failed", minutesFailure: "no_permission" }))).toBe(false);
+    expect(meetingNeedsPolling(meeting({ minutesStatus: "manual" }))).toBe(false);
+    expect(meetingNeedsPolling(waiting, true)).toBe(true);
+    const generating = meeting({ status: "held", outcome: { status: "pending" } } as never);
+    expect(meetingNeedsPolling(generating, true)).toBe(true);
+    expect(meetingPollMs(generating)).toBe(5_000);
+    expect(meetingPollMs(meeting({ preflightStatus: "running" }))).toBe(2_000);
   });
 
   it("首页左栏：有会在预审中 5 秒一次，其余待开的会 20 秒一次，没有要等的就不轮询", () => {

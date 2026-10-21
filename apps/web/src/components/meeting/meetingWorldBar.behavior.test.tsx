@@ -16,13 +16,13 @@ const api = vi.hoisted(() => ({ put: vi.fn(), get: vi.fn(), post: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ browserApi: { PUT: api.put, GET: api.get, POST: api.post } }));
 
 import { MeetingWorldBar } from "./MeetingWorldBar";
-import { MeetingTranscriptStatus } from "./MeetingHeader";
+import { CARD_EXPECTED_MS, MINUTES_EXPECTED_MS, MeetingTranscriptStatus, PhaseLive, PhaseTimer, phaseElapsedLabel } from "./MeetingHeader";
 import { WorldAnchorPicker } from "./WorldAnchorPicker";
 import { WorldAnchors } from "./WorldAnchors";
 
 type Node = { type?: unknown; props?: Record<string, unknown> };
 /** 展开自己的子组件（挑挂点、逐字稿状态），库组件不展开。 */
-const PARTS = new Set<unknown>([WorldAnchorPicker, MeetingTranscriptStatus]);
+const PARTS = new Set<unknown>([WorldAnchorPicker, MeetingTranscriptStatus, PhaseLive]);
 function expand(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(expand);
   if (!value || typeof value !== "object") return value;
@@ -144,7 +144,7 @@ describe("会议页页头：逐字稿", () => {
     api.post.mockResolvedValue({ data: { minutesStatus: "waiting", minutesFailure: null }, response: { ok: true, status: 200 } });
     (tree.find((node) => node.type === "button" && text(node) === "再读一次")!.props!.onClick as () => void)();
     await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/minutes/refetch", { params: { path: { id: "m1" } } }));
-    await vi.waitFor(() => expect(transcript().some((node) => node.type === "span" && text(node) === "逐字稿 · 读取中")).toBe(true));
+    await vi.waitFor(() => expect(transcript().some((node) => node.type === "span" && text(node) === "等妙记")).toBe(true));
   });
 
   it("原因写成短标签；只在逐字稿确认存下后才是已读完", () => {
@@ -153,7 +153,9 @@ describe("会议页页头：逐字稿", () => {
     hooks.values = [];
     expect(transcript({ failure: "not_ready" }).some((node) => text(node) === "逐字稿 · 未就绪")).toBe(true);
     hooks.values = [];
-    expect(transcript({ status: "ready", failure: null }).some((node) => text(node) === "逐字稿 · 读取中")).toBe(true);
+    expect(transcript({ status: "ready", failure: null, candidate: true }).some((node) => text(node) === "待确认说话人")).toBe(true);
+    hooks.values = [];
+    expect(transcript({ status: "ready", failure: null, candidate: true }).some((node) => text(node).includes("读取中"))).toBe(false);
     hooks.values = [];
     const done = transcript({ status: "ready", failure: null, confirmed: true });
     expect(done.some((node) => text(node) === "逐字稿 · 已读完")).toBe(true);
@@ -180,5 +182,58 @@ describe("会议页页头：逐字稿", () => {
       { params: { path: { id: "m1" } }, body: { url: "https://x.feishu.cn/minutes/obcn1" } }));
     hooks.values = [];
     expect(transcript({ status: "manual", failure: null, canFetch: false }).some((node) => node.props?.["aria-label"] === "妙记链接")).toBe(false);
+  });
+});
+
+describe("会议页页头：阶段与用时", () => {
+  const transcript = (props: Partial<Parameters<typeof MeetingTranscriptStatus>[0]> = {}) => {
+    hooks.index = 0;
+    return nodes(expand(MeetingTranscriptStatus({ meetingId: "m1", status: "waiting", failure: null, confirmed: false, canFetch: true, ...props })));
+  };
+  const timer = (tree: Node[]) => tree.find((node) => node.type === PhaseTimer)?.props;
+
+  it("已用时 / 约多少；超过预计只写已用时，不出负数", () => {
+    const since = "2026-10-21T10:00:00.000Z";
+    const at = (seconds: number) => Date.parse(since) + seconds * 1000;
+    expect(phaseElapsedLabel(since, at(-30), CARD_EXPECTED_MS)).toBe("0 秒 / 约 1 分钟");
+    expect(phaseElapsedLabel(since, at(42), CARD_EXPECTED_MS)).toBe("42 秒 / 约 1 分钟");
+    expect(phaseElapsedLabel(since, at(75), CARD_EXPECTED_MS)).toBe("1 分钟");
+    expect(phaseElapsedLabel(since, at(3 * 60 + 5), MINUTES_EXPECTED_MS)).toBe("3 分钟 / 约 15 分钟");
+    expect(phaseElapsedLabel(since, at(16 * 60), MINUTES_EXPECTED_MS)).toBe("16 分钟");
+    expect(phaseElapsedLabel(since, at(95 * 60), MINUTES_EXPECTED_MS)).toBe("1 小时 35 分钟");
+    expect(MINUTES_EXPECTED_MS).toBe(15 * 60_000);
+    expect(CARD_EXPECTED_MS).toBe(60_000);
+  });
+
+  it("等妙记：从开始等的时刻走字；旁边一个「自己上传」，点开才有上传和贴链接", () => {
+    hooks.values = [];
+    const onUpload = vi.fn();
+    const tree = transcript({ waitingSince: "2026-10-21T10:00:00.000Z", onUpload });
+    expect(tree.some((node) => text(node) === "等妙记")).toBe(true);
+    expect(timer(tree)).toMatchObject({ since: "2026-10-21T10:00:00.000Z", expectedMs: MINUTES_EXPECTED_MS });
+    expect(tree.some((node) => node.props?.["aria-label"] === "妙记链接")).toBe(false);
+    const open = tree.find((node) => node.type === "button" && text(node) === "自己上传")!;
+    expect(open.props?.["aria-expanded"]).toBe(false);
+    (open.props!.onClick as () => void)();
+    const opened = transcript({ waitingSince: "2026-10-21T10:00:00.000Z", onUpload });
+    expect(opened.some((node) => node.props?.["aria-label"] === "妙记链接")).toBe(true);
+    (opened.find((node) => node.type === "button" && text(node) === "上传文件")!.props!.onClick as () => void)();
+    expect(onUpload).toHaveBeenCalled();
+  });
+
+  it("生成会议卡：已用时 / 约 1 分钟，没有按钮", () => {
+    hooks.values = [];
+    const tree = transcript({ status: "ready", confirmed: true, generatingSince: "2026-10-21T10:00:00.000Z" });
+    expect(tree.some((node) => text(node) === "生成会议卡")).toBe(true);
+    expect(timer(tree)).toMatchObject({ since: "2026-10-21T10:00:00.000Z", expectedMs: CARD_EXPECTED_MS });
+    expect(tree.some((node) => node.type === "button")).toBe(false);
+  });
+
+  it("用户自己上传了：跟着上传这条路走，不再显示等妙记", () => {
+    hooks.values = [];
+    const tree = transcript({ status: "ready", candidate: true, waitingSince: "2026-10-21T10:00:00.000Z", onUpload: vi.fn() });
+    expect(tree.some((node) => text(node) === "待确认说话人")).toBe(true);
+    expect(tree.some((node) => text(node) === "等妙记")).toBe(false);
+    expect(tree.some((node) => node.type === "button" && text(node) === "自己上传")).toBe(false);
   });
 });

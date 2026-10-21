@@ -9,7 +9,7 @@ import { payloadOf, type IssuePayload, type MeetingPayload } from "./payloads";
 import { issueScopeLabel } from "./scopeNames";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { SelectionToolbar, useSelectionQuote } from "@/components/SelectionQuote";
-import { MeetingClock, MeetingHeaderActions, MeetingStatus, MeetingTranscriptStatus, meetingDayWord, meetingPhase, meetingSlot, useMeetingTimeline } from "@/components/meeting/MeetingHeader";
+import { CARD_EXPECTED_MS, MeetingClock, MeetingHeaderActions, MeetingStatus, MeetingTranscriptStatus, PhaseLive, meetingDayWord, meetingPhase, meetingSlot, useMeetingTimeline } from "@/components/meeting/MeetingHeader";
 import { useMeetingRecorder, type RecorderState } from "@/components/meeting/useMeetingRecorder";
 import { MaterialPane, useMaterialPreview, type MaterialMeta } from "@/components/meeting/meetingMaterialPreview";
 import { IssueDecisionBlock } from "@/components/meeting/IssueDecisionBlock";
@@ -426,12 +426,40 @@ export const MEETING_POLL_MS = 5000;
 /** 会前预审进行中：每两秒取一次，过程一步一步跟上。 */
 export const PREFLIGHT_POLL_MS = 2000;
 
-/** 会议页要不要每 5 秒重取卡片：会前预审还在跑、录音转写中、会后抽取中（成员只读视图不取，它的卡片走成员接口）。 */
+/** 等飞书妙记时：30 秒取一次会议卡片，妙记一到就接着生成会议卡。 */
+export const MINUTES_POLL_MS = 30_000;
+
+/** 自动同步还在等妙记（waiting，或读的时候原文还没好）。 */
+function awaitingMinutes(payload: MeetingPayload): boolean {
+  return payload.status === "scheduled" && !payload.transcriptCandidate
+    && (payload.minutesStatus === "waiting" || (payload.minutesStatus === "failed" && payload.minutesFailure === "not_ready"));
+}
+
+/** 会议卡正在生成（排队也算）。 */
+function generatingCard(payload: MeetingPayload): boolean {
+  return payload.status === "held" && (payload.outcome?.status === "pending" || payload.outcome?.status === "running");
+}
+
+/** 会议卡生成从哪一刻算起：在跑的按开跑时刻，排队的按排上的时刻；不在生成时为 null。 */
+function generatingSince(payload: MeetingPayload): string | null {
+  if (!generatingCard(payload)) return null;
+  return (payload.outcome?.status === "running" ? payload.outcome.startedAt : null) ?? payload.outcome?.pendingSince ?? null;
+}
+
+/**
+ * 会议页要不要重取卡片：会前预审还在跑、录音转写中、等妙记、会议卡生成中。到下一阶段卡片自己出来，不用刷新页面。
+ * 成员只读视图（卡片走成员接口）只跟等妙记、生成会议卡。
+ */
 export function meetingNeedsPolling(payload: MeetingPayload, memberReadOnly = false): boolean {
+  if (awaitingMinutes(payload) || generatingCard(payload)) return true;
   if (memberReadOnly) return false;
-  if (preflightInFlight(payload)) return true;
-  const extracting = payload.status === "held" && (payload.outcome?.status === "pending" || payload.outcome?.status === "running");
-  return recordingInFlight(payload.recording) || extracting;
+  return preflightInFlight(payload) || recordingInFlight(payload.recording);
+}
+
+/** 多久取一次：预审 2 秒，等妙记 30 秒，其余 5 秒。 */
+export function meetingPollMs(payload: MeetingPayload): number {
+  if (preflightInFlight(payload)) return PREFLIGHT_POLL_MS;
+  return awaitingMinutes(payload) && !recordingInFlight(payload.recording) ? MINUTES_POLL_MS : MEETING_POLL_MS;
 }
 
 export function recordingInFlight(recording: MeetingPayload["recording"]): boolean {
@@ -559,7 +587,11 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
 
   const issues = collection.filter((item) => item.kind === "issue");
   const issueById = new Map(issues.map((item) => [item.objectRef.id, item]));
-  const people = new Map(payload.participants.map((person) => [person.personId, person.displayName]));
+  // 说话人的名字：参会人；对不上人的说话人退回飞书原名。
+  const people = new Map([
+    ...payload.participants.map((person) => [person.personId, person.displayName] as [string, string]),
+    ...(source.transcript?.unmappedSpeakers ?? []).map((speaker) => [speaker.id, speaker.name] as [string, string]),
+  ]);
   const dri = payload.participants.filter((person) => person.roles.includes("dri"));
   const readOnly = memberReadOnly || payload.status !== "scheduled";
   const viewedMaterial = payload.materials.find((material) => material.id === view.current) ?? null;
@@ -628,21 +660,23 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
 
   const candidateKey = payload.transcriptCandidate?.createdAt ?? null;
 
-  // 录音转写中、会后抽取中、会前预审中：每 5 秒取一次会议卡片，状态、候选、纪要、预审跟着更新；候选一到，下面那段就自动打开说话人对应。
+  // 录音转写中、会后抽取中、会前预审中、等妙记：定时取会议卡片，状态、候选、纪要、预审跟着更新；候选一到，下面那段就自动打开说话人对应。
   const refreshing = meetingNeedsPolling(payload, memberReadOnly);
-  const pollMs = preflightInFlight(payload) ? PREFLIGHT_POLL_MS : MEETING_POLL_MS;
+  const pollMs = meetingPollMs(payload);
   useEffect(() => {
     if (!refreshing) return;
     const timer = window.setInterval(async () => {
-      const { data } = await browserApi.GET("/api/cards/meetings/{id}", { params: { path: { id: card.objectRef.id } } });
-      const next = data?.cards?.[0];
+      const id = card.objectRef.id;
+      const next = memberReadOnly
+        ? (await browserApi.GET("/api/me/cards/meetings/{id}", { params: { path: { id } } })).data
+        : (await browserApi.GET("/api/cards/meetings/{id}", { params: { path: { id } } })).data?.cards?.[0];
       if (!next) return;
       onCard(next);
       // 预审出结果：左栏会议卡跟着从「会前预审中」换成结论。
       if (!preflightInFlight(payloadOf<MeetingPayload>(next))) window.dispatchEvent(new Event("meeting-changed"));
     }, pollMs);
     return () => window.clearInterval(timer);
-  }, [refreshing, pollMs, card.objectRef.id, onCard]);
+  }, [refreshing, pollMs, card.objectRef.id, onCard, memberReadOnly]);
 
   // 候选出现或重上传后自动打开预览；关闭只收起，不回滚服务端候选。
   useEffect(() => {
@@ -1575,24 +1609,12 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           ) : null}
         </section>
       ) : null}
+      {payload.minutesManualImport || payload.transcriptCandidate ? (
       <section className={s.reviewSection}>
         <header>
           <h3>导入会议记录</h3>
-          {payload.minutesStatus === "waiting" ? <span>飞书妙记生成中</span> : null}
         </header>
         <div className={s.stageActions}>
-          <input
-            ref={uploadRef}
-            type="file"
-            accept=".md,.json,application/json,text/markdown"
-            className={s.hiddenInput}
-            aria-label="选择会议记录文件"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) void importTranscriptFile(file);
-            }}
-          />
           <button type="button" className={s.primaryAction} disabled={uploading} onClick={() => uploadRef.current?.click()}>
             <FileUp size={13} aria-hidden="true" />
             {uploading ? "上传中…" : payload.transcriptCandidate ? "重新导入会议记录" : "导入会议记录"}
@@ -1605,18 +1627,19 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         </div>
         {uploadError ? <p className={s.error} role="alert">{uploadError}</p> : null}
       </section>
+      ) : null}
       </>
     ) : (
       <section className={s.review}>
-        {cardArea ?? (!legacyRecord ? null : payload.outcome && payload.outcome.status !== "ready" ? (
-          /* 会议记录还在生成（或第一次生成失败）：只给短状态，失败的和会议卡那边一样可以重试；生成好了换成会议卡。 */
+        {cardArea ?? (payload.outcome && payload.outcome.status !== "ready" ? (
+          /* 会议记录还在生成（或第一次生成失败）：只给短状态（不等会议卡接口问完），失败的和会议卡那边一样可以重试；生成好了换成会议卡。 */
           payload.outcome.status === "failed" ? (
             <p className={s.error} role="alert">
               生成失败
               {retryOutcome ? <button type="button" disabled={pending} onClick={() => void run(retryOutcome, {})}>重试会后抽取</button> : null}
             </p>
-          ) : <p className={s.empty} role="status">会议记录生成中</p>
-        ) : payload.outcome ? (
+          ) : <p className={s.empty}><PhaseLive label="会议记录生成中" since={generatingSince(payload)} expectedMs={CARD_EXPECTED_MS} /></p>
+        ) : !legacyRecord ? null : payload.outcome ? (
           <>
             <section className={s.reviewSection} data-outline="summary">
               <header>
@@ -1715,12 +1738,31 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       : (await browserApi.GET("/api/cards/meetings/{id}", { params: { path: { id: meetingId } } })).data?.cards?.[0];
     if (next) onCard(next);
   };
+  // 能上传会议记录的人（CEO、主持人）：等妙记时页头旁边的「自己上传」打开这里的选文件。
+  const canUpload = payload.status === "scheduled" && (!memberReadOnly || isHost);
   const worldLine = (
     <MeetingWorldSection meetingId={meetingId} ended={ended} transcript={
       <MeetingTranscriptStatus meetingId={meetingId} status={source.minutesStatus ?? "none"} failure={source.minutesFailure ?? null}
-        confirmed={Boolean(source.transcript)} canFetch={canFetchMinutes} onFetched={() => void reloadCard()} />
+        confirmed={Boolean(source.transcript)} canFetch={canFetchMinutes} onFetched={() => void reloadCard()}
+        candidate={Boolean(source.transcriptCandidate)} waitingSince={source.minutesWaitingSince ?? null} generatingSince={generatingSince(source)}
+        onUpload={canUpload ? () => uploadRef.current?.click() : undefined} uploading={uploading} uploadError={uploadError} />
     } />
   );
+  // 选会议记录文件：「导入会议记录」和页头的「自己上传」共用，导入块不出现时也在。
+  const uploadInput = canUpload ? (
+    <input
+      ref={uploadRef}
+      type="file"
+      accept=".md,.json,application/json,text/markdown"
+      className={s.hiddenInput}
+      aria-label="选择会议记录文件"
+      onChange={(event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (file) void importTranscriptFile(file);
+      }}
+    />
+  ) : null;
 
   const recordTab = memberReadOnly && !isHost ? { ...RECORD_TAB, title: "会议记录：已确认的决定与待办" } : RECORD_TAB;
   const showing = view.current === RECORD_TAB.id ? recordTab : viewedMaterial ? materialTab(viewedMaterial) : meetingHeld ? { ...PREFLIGHT_TAB, title: "会前预审" } : PREFLIGHT_TAB;
@@ -1729,6 +1771,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     <section ref={workspaceRef} className={s.workspace} data-testid="meeting-workspace" data-status={payload.status} data-timeline={timeline}
       {...{ [ESCAPE_BACK_ATTR]: viewingMaterialFile ? "true" : undefined }}>
       {confirmDialog}
+      {uploadInput}
       <SourceNavigatorProvider value={sourceApi}>
       <DetailFrame
         headingId="meeting-title"

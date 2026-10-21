@@ -269,11 +269,21 @@
 .transcriptLink { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .transcriptLink input { width: min(260px, 60vw); height: 28px; padding: 0 10px; border: 1px solid #dfe3e8; border-radius: 10px; font: inherit; font-size: 13px; }
 .transcriptError { color: #be123c; font-size: 12px; }
+/* 等妙记时的次要入口：像链接一样轻，不抢状态的眼。 */
+.transcriptQuiet { min-height: 26px; padding: 0 4px; border: 0; background: none; color: #5b6472; font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-decoration-color: #c7ccd4; text-underline-offset: 3px; }
+.transcriptQuiet:hover, .transcriptQuiet[aria-expanded='true'] { color: #1f2937; text-decoration-color: currentColor; }
+
+/* 进行中的阶段（等妙记、生成会议卡）：呼吸点 + 短标签 + 走字的已用时；数字等宽，走字时不抖。 */
+.phase { display: inline-flex; align-items: center; gap: 6px; }
+.phaseDot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: currentColor; animation: phaseBreathe 2.4s ease-in-out infinite; }
+.phaseTime { font-variant-numeric: tabular-nums; font-weight: 500; opacity: .75; }
+@keyframes phaseBreathe { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .phaseDot { animation: none; } }
 
 /* 点触下限（手机端规范 §2 / §3.5）：计时弹层里的「结束会议」高 44、最小宽 72；胶囊本身手持下已是 44 高；逐字稿状态的按钮、贴链接的输入框也是 44。鼠标的电脑不变。 */
 @media (max-width: 959px), (pointer: coarse) {
   .end.end { min-height: var(--touch-hit, 44px); min-width: 72px; font-size: 14px; }
-  .transcriptAction, .transcriptLink input { min-height: 44px; }
+  .transcriptAction, .transcriptQuiet, .transcriptLink input { min-height: 44px; }
   .transcriptLink { flex: 1 1 100%; }
   .transcriptLink input { flex: 1; width: auto; }
 }

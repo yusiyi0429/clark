@@ -9,7 +9,8 @@
  *   分:秒）；点计时弹出一小块，里面是「这场会开完了」。开完之后写「已开完」和几点，不能再按。
  * - `MeetingHeaderActions`：把上面两样和页头右边那一样（会开完了是「会前预审 ｜ 会议记录」两段切换）按页头的约定排好。
  * - `MeetingStatus`：材料上面一行灰字：谁主持、几人参会这类事实，再加这一刻的一件事。
- * - `MeetingTranscriptStatus`：页头下面那一行（MeetingWorldSection）末尾的逐字稿状态和「再读一次」、贴妙记链接。
+ * - `MeetingTranscriptStatus`：页头下面那一行（MeetingWorldSection）末尾的会后阶段（等妙记、待确认说话人、生成会议卡，带已用时）
+ *   和「再读一次」、贴妙记链接、等妙记时的「自己上传」。
  *
  * 「开始会议」同时开始录音（useMeetingRecorder），计时只是这一页的状态；「这场会开完了」停下录音、交给服务端转写，
  * 并写进后台（meeting.end）。天枢没有会中 Co-Agent，所以不写「Co-Agent 在听」，写的是录没录上。
@@ -302,19 +303,62 @@ export function MeetingStatus({ phase, facts, now, endedAt }: { phase: MeetingPh
   );
 }
 
+/** 等妙记的预计用时：飞书妙记一般会后 15 分钟左右生成（联调时实测校准）。 */
+export const MINUTES_EXPECTED_MS = 15 * 60_000;
+/** 生成会议卡的预计用时（联调时实测校准；10/21 基线：长会单次调用 17–30 秒）。 */
+export const CARD_EXPECTED_MS = 60_000;
+
+const spanWords = (ms: number): string => {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分钟`;
+  return `${Math.floor(minutes / 60)} 小时${minutes % 60 ? ` ${minutes % 60} 分钟` : ""}`;
+};
+
+/** 阶段已用时：「42 秒 / 约 1 分钟」；超过预计只写已用时；时钟偏差也不出负数。 */
+export function phaseElapsedLabel(since: string, now: number, expectedMs: number): string {
+  const spent = Math.max(0, now - Date.parse(since));
+  return spent > expectedMs ? spanWords(spent) : `${spanWords(spent)} / 约 ${spanWords(expectedMs)}`;
+}
+
+/** 阶段已用时，每秒走一次。 */
+export function PhaseTimer({ since, expectedMs }: { since: string; expectedMs: number }) {
+  const now = useNow(1000);
+  // role="timer"：读屏不每秒播报（外面的 role="status" 只报阶段变化）。
+  return <time className={s.phaseTime} role="timer" dateTime={since} suppressHydrationWarning>{phaseElapsedLabel(since, now, expectedMs)}</time>;
+}
+
+/** 进行中的阶段：呼吸点 + 短标签 + 已用时（会议记录区也用）。 */
+export function PhaseLive({ label, since, expectedMs, className }: { label: string; since: string | null; expectedMs: number; className?: string }) {
+  return (
+    <span className={[s.phase, className].filter(Boolean).join(" ")} role="status">
+      <i className={s.phaseDot} aria-hidden />
+      <span>{label}</span>
+      {since ? <PhaseTimer since={since} expectedMs={expectedMs} /> : null}
+    </span>
+  );
+}
+
 const FAILURE: Record<TMeetingMinutesFailure, string> = { no_permission: "无权限", not_ready: "未就绪", not_found: "未找到", fetch_failed: "读取失败" };
 /** 再读、贴链接没成功时的短标签（不显示服务端原话）。 */
 const FETCH_ERROR: Record<string, string> = { INVALID_MINUTES_URL: "不是妙记链接", MINUTE_TAKEN: "已对到别的会" };
 /** 其实已经读完了（页面上的会议卡旧了）：直接重取会议卡。 */
 const ALREADY_READ = new Set(["MINUTES_READY", "TRANSCRIPT_ALREADY_IMPORTED"]);
 
+type TranscriptState = { label: string | null; retry: boolean; paste: boolean; live?: "minutes" | "card"; upload?: boolean };
+
 /**
- * 逐字稿读到哪了（FR-4.2）：已读完只在逐字稿确认存下后出现（有候选等对说话人时还算读取中）；
- * 未就绪、读取失败带短原因，后面是「再读一次」；没有妙记时是贴妙记链接的输入框。两个按钮只给主持人和创建人（canFetch）。
+ * 会后到哪一步了（FR-4.2）：等妙记（带已用时，旁边「自己上传」）→ 生成会议卡（带已用时）→ 逐字稿已读完；
+ * 自己上传的候选在等对说话人时是「待确认说话人」。未就绪、读取失败带短原因，后面是「再读一次」；没有妙记时是贴妙记链接的输入框。
+ * 再读、贴链接只给主持人和创建人（canFetch）。
  */
-function transcriptState(status: TMeetingMinutesStatus, failure: TMeetingMinutesFailure | null, confirmed: boolean): { label: string | null; retry: boolean; paste: boolean } {
+function transcriptState(status: TMeetingMinutesStatus, failure: TMeetingMinutesFailure | null, confirmed: boolean, candidate: boolean, generating: boolean): TranscriptState {
+  if (confirmed && generating) return { label: "生成会议卡", retry: false, paste: false, live: "card" };
   if (confirmed) return { label: "逐字稿 · 已读完", retry: false, paste: false };
-  if (status === "ready" || status === "waiting") return { label: "逐字稿 · 读取中", retry: false, paste: false };
+  if (candidate) return { label: "待确认说话人", retry: false, paste: false };
+  if (status === "waiting") return { label: "等妙记", retry: false, paste: false, live: "minutes", upload: true };
+  if (status === "ready") return { label: null, retry: false, paste: false };
   if (status === "failed") {
     const reason = failure ? FAILURE[failure] : "读取失败";
     const head = failure === "not_ready" ? "未就绪" : "读取失败";
@@ -324,7 +368,7 @@ function transcriptState(status: TMeetingMinutesStatus, failure: TMeetingMinutes
   return { label: null, retry: false, paste: true };
 }
 
-export function MeetingTranscriptStatus({ meetingId, status, failure, confirmed, canFetch, onFetched }: {
+export function MeetingTranscriptStatus({ meetingId, status, failure, confirmed, canFetch, onFetched, candidate = false, waitingSince = null, generatingSince = null, onUpload, uploading = false, uploadError = null }: {
   meetingId: string; status: TMeetingMinutesStatus; failure: TMeetingMinutesFailure | null;
   /** 逐字稿已确认存下（会议卡里有 transcript）。 */
   confirmed: boolean;
@@ -332,13 +376,27 @@ export function MeetingTranscriptStatus({ meetingId, status, failure, confirmed,
   canFetch: boolean;
   /** 再读、贴链接成功之后（会议页重取会议卡）。 */
   onFetched?: () => void;
+  /** 有待确认说话人的候选（自己上传、录音转写）。 */
+  candidate?: boolean;
+  /** 开始等妙记的时刻。 */
+  waitingSince?: string | null;
+  /** 会议卡正在生成（排队也算）时从哪一刻算起；不在生成时为 null。 */
+  generatingSince?: string | null;
+  /** 能上传会议记录的人：等妙记时「自己上传」里的「上传文件」（打开会议页的选文件）。 */
+  onUpload?: () => void;
+  uploading?: boolean;
+  uploadError?: string | null;
 }) {
   const [fetched, setFetched] = useState<TMeetingMinutesFetchResponse | null>(null);
   useEffect(() => setFetched(null), [status, failure]);
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const state = transcriptState(fetched?.minutesStatus ?? status, fetched ? fetched.minutesFailure : failure, confirmed);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const state = transcriptState(fetched?.minutesStatus ?? status, fetched ? fetched.minutesFailure : failure, confirmed, candidate, Boolean(generatingSince));
+  // 等妙记时「自己上传」点开才有上传、贴链接；其余照旧。
+  const canUpload = Boolean(state.upload && (onUpload || canFetch));
+  const paste = state.paste || (canUpload && uploadOpen);
   const run = async (work: () => Promise<TMeetingMinutesFetchResponse | { code: string }>) => {
     setBusy(true); setError("");
     try {
@@ -352,15 +410,24 @@ export function MeetingTranscriptStatus({ meetingId, status, failure, confirmed,
   if (!state.label && !(canFetch && state.paste)) return null;
   return (
     <span className={s.transcript}>
-      {state.label ? <span className={s.transcriptState} data-tone={state.retry ? "fail" : confirmed ? "done" : "wait"}>{state.label}</span> : null}
+      {state.live ? (
+        <PhaseLive label={state.label!} since={state.live === "card" ? generatingSince : waitingSince}
+          expectedMs={state.live === "card" ? CARD_EXPECTED_MS : MINUTES_EXPECTED_MS} className={s.transcriptState} />
+      ) : state.label ? <span className={s.transcriptState} data-tone={state.retry ? "fail" : confirmed ? "done" : "wait"}>{state.label}</span> : null}
+      {canUpload ? (
+        <button type="button" className={s.transcriptQuiet} aria-expanded={uploadOpen} onClick={() => setUploadOpen(!uploadOpen)}>自己上传</button>
+      ) : null}
+      {canUpload && uploadOpen && onUpload ? (
+        <button type="button" className={s.transcriptAction} disabled={uploading} onClick={onUpload}>{uploading ? "上传中…" : "上传文件"}</button>
+      ) : null}
       {canFetch && state.retry ? <button type="button" className={s.transcriptAction} disabled={busy} onClick={() => void run(() => refetchMeetingMinutes(meetingId))}>再读一次</button> : null}
-      {canFetch && state.paste ? (
+      {canFetch && paste ? (
         <span className={s.transcriptLink}>
           <input type="url" aria-label="妙记链接" placeholder="贴妙记链接" value={url} disabled={busy} onChange={(event) => setUrl(event.target.value)} />
           <button type="button" className={s.transcriptAction} disabled={busy || !url.trim()} onClick={() => void run(() => readMeetingMinutesLink(meetingId, url.trim()))}>读取</button>
         </span>
       ) : null}
-      {error ? <span className={s.transcriptError} role="alert">{error}</span> : null}
+      {error || (canUpload && uploadError) ? <span className={s.transcriptError} role="alert">{error || uploadError}</span> : null}
     </span>
   );
 }

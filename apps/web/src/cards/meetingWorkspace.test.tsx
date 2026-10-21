@@ -258,7 +258,7 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     expect(transcribing).toContain("会议录音");
     expect(transcribing).toContain("正在识别");
     expect(transcribing).not.toContain("一小时会议约需数分钟");
-    const failed = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", recording: { id: "r1", status: "failed", error: "识别服务没有返回结果。" } }));
+    const failed = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", minutesManualImport: true, recording: { id: "r1", status: "failed", error: "识别服务没有返回结果。" } }));
     expect(failed).toContain("识别服务没有返回结果。");
     expect(failed).not.toContain("可以改用下面的妙记导入");
     expect(failed).toContain("导入会议记录");
@@ -347,8 +347,10 @@ describe("Meeting Outcome 复核", () => {
     const outcome = (status: string) => ({ status, pendingSince: null, startedAt: null, runId: null, previousRunIds: [], summary: "", warnings: [], extractedAt: null, items: [],
       error: status === "failed" ? { code: "MODEL_TIMEOUT", message: "模型调用超时：upstream 504", at: "2025-09-25T00:00:00.000Z" } : null });
     for (const status of ["pending", "running"]) {
-      const html = render(meetingCard({ status: "held", transcript: { turns: [{}] }, outcome: outcome(status) }));
+      const html = render(meetingCard({ status: "held", transcript: { turns: [{}] }, outcome: { ...outcome(status), pendingSince: "2025-09-25T00:00:00.000Z" } }));
       expect(html).toContain("会议记录生成中");
+      // 带已用时（走字的 <time>）。
+      expect(html).toMatch(/会议记录生成中[\s\S]*?<time/);
       expect(html).not.toContain("抽取尚未产出摘要");
     }
     const failed = render(meetingCard({ status: "held", transcript: { turns: [{}] }, outcome: outcome("failed") },
@@ -357,6 +359,17 @@ describe("Meeting Outcome 复核", () => {
     expect(failed).toContain(">重试会后抽取</button>");
     expect(failed).not.toContain("upstream 504");
     expect(failed).not.toContain("抽取尚未产出摘要");
+  });
+
+  it("对不上人的说话人写飞书原名，不写内部编号", () => {
+    const html = render(meetingCard({
+      status: "held",
+      transcript: { turns: [{ id: "turn-0001", speakerId: "speaker:3", text: "我来把预算表发给大家。" }], unmappedSpeakers: [{ id: "speaker:3", name: "Speaker 3" }] },
+      outcome: { status: "ready", pendingSince: null, startedAt: null, runId: null, previousRunIds: [], error: null, summary: "预算", warnings: [], extractedAt: "2025-09-25T00:00:00.000Z",
+        items: [{ id: "i1", kind: "open", text: "预算表待发", quote: "我来把预算表发给大家", speakerId: "speaker:3", review: null }] },
+    }));
+    expect(html).toContain("Speaker 3");
+    expect(html).not.toContain("speaker:3");
   });
 
   it("逐项处理按 kind 与真实状态渲染徽标、状态色与操作", () => {
@@ -408,8 +421,25 @@ describe("Meeting Outcome 复核", () => {
 });
 
 describe("妙记 Markdown 候选预览", () => {
+  it("自动同步失败才出「导入会议记录」：等妙记、刚开完时不出，失败后出", () => {
+    const ended = { endedAt: "2025-09-24T15:40:00.000Z" };
+    for (const waiting of [{}, { minutesStatus: "waiting", minutesWaitingSince: "2025-09-24T15:41:00.000Z" }, { minutesStatus: "failed", minutesFailure: "not_ready" }]) {
+      const html = render(meetingCard({ ...ended, ...waiting, minutesManualImport: false }));
+      expect(html).not.toContain("<h3>导入会议记录</h3>");
+      expect(html).not.toContain(">导入会议记录<");
+    }
+    const manual = render(meetingCard({ ...ended, minutesStatus: "manual", minutesManualImport: true }));
+    expect(manual).toContain("<h3>导入会议记录</h3>");
+  });
+
+  it("等妙记时没有大块导入，选文件仍在（页头「自己上传」用）", () => {
+    const html = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", minutesStatus: "waiting", minutesWaitingSince: "2025-09-24T15:41:00.000Z", minutesManualImport: false }));
+    expect(html).toContain('aria-label="选择会议记录文件"');
+    expect(html).not.toContain("<h3>导入会议记录</h3>");
+  });
+
   it("会开完了默认打开会议记录：入口同时接受 .md 与 .json", () => {
-    const html = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z" }));
+    const html = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", minutesManualImport: true }));
     expect(html).toContain('accept=".md,.json,application/json,text/markdown"');
     expect(html).toContain("导入会议记录");
     expect(html).not.toContain("上传会议逐字稿");
