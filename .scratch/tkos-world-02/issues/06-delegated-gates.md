@@ -1,7 +1,7 @@
 # 06 · 代记门：月度计划签发、任务卡确认
 
 Type: implementation
-Status: in-progress（周期目标两门已实现，开关缺省关；Mission 两门等斯一答复）
+Status: in-progress（周期目标两门已实现，开关缺省关，代哪位 RU DRI 待定；Mission 两门已按斯一 10/21 答复设计，代码未写）
 Blocked by: 01、02
 
 ## 要做什么
@@ -38,28 +38,33 @@ Blocked by: 01、02
 - 先承诺：同周期的草稿，只承诺签发时那一版（推出草稿的事件和每次修订都记在签发之前），不带候选。代谁：本体里该域挂天枢战场（外部引用 `tianshu` / `battlefield:<id>`）的责任单元 → `battlefield_config.owner_id`；对不上唯一一位、或这个人在实例配置里没有本体主体，就不代（日志 `NO_UNIT_DRI`）。
 - 再确认：已承诺、承诺记在签发之前，或这条承诺就是这次签发代记的（外部记录 `tianshu:plan-sign:<planId>`）。
 - 幂等键一个目标版本一个：承诺 `tianshu:plan-sign:<planId>:commit:<id>:<version>`，确认 `tianshu:plan-sign:<planId>:<id>:<version>`。成功或失败（403 等）不再自动重试，进管理员失败列表；网络失败按原键重放。
-- 没核实：TK 试用 scope 的 E&O 责任单元有没有挂 `battlefield:<id>`；天枢 E&O 战场的 `owner_id` 是谁；11 月的周期目标草稿谁建。签发时那位 RU DRI 在天枢里没有单独动作，外部记录用的是 CEO 那次签发。
+- 对 E&O 不起作用（10/21 铭泽确认）：E&O 在天枢里不是战场，是能力域 05，本体里它的责任单元挂的是 `capability:05`。能力域本身没有负责人，负责人在整个能力建设（capabilities）这一层。所以按战场 DRI 取人对 E&O 取不到，会跳过。代哪位 RU DRI 待铭泽在三个方案里选：按能力建设负责人取、实例配置写死、不代承诺。
+- 签发时那位 RU DRI 在天枢里没有单独动作，外部记录用的是 CEO 那次签发。11 月的周期目标草稿谁建，没核实。
 
-## Mission 两门（设计，等斯一答复再写代码）
+## 斯一 10/21 的规则（所有代记门通用）
 
-问斯一的两点：
+- 委托：`on_behalf_of` 只带 `principal_id`、`external_record_id`、`external_confirmed_at` 三项，不加指定委托的字段。本体在覆盖该动作族和目标分区的有效委托里取最早登记的一条，实际用了哪条写在回执 `on_behalf_of.delegation_event_id`。天枢把它存进 `world_sync_ledger.delegation_event_id`（迁移 201）。开代记后头几次真写要读回核对：如果是 `1bc680df`，说明开早了，停下告诉铭泽。`1bc680df` 不撤，10/31 到期，之后再开代记。
+- 判权：每条都按被代记的人判。他要在对象所在分区持对应角色，并且本人登记过覆盖门族和这个分区的有效委托。天枢不代登委托，也不读取、索取任何人的本人凭证。
+- 现状：除 `1bc680df` 外，新委托都还没登。明华那条只覆盖代 CEO 确认，加上他自己当 DRI 的单元的承诺。本体本周出 v0.8.0，带登记委托的命令。11/3–4 能代记谁，看到时谁登了。第一次真写进 scope `a92430fd`。
 
-1. 战场 DRI 一次确认整个战场的任务组合，能否按每个 Mission 各记一条 `world_confirm_mission`（外部记录都指同一次组合确认）。
-2. 承诺要求 Task 全景至少一条计划条目；本人确认任务卡时还没有执行事项，怎么办。
-
-按两点都答「可以」的设计：
+## Mission 两门（设计，按斯一 10/21 答复；代码未写）
 
 - 承诺：本人确认任务卡后（异步，写法同周期目标服务），对卡上每个已挂本体的 Mission（外部引用 `mission:<code>`）代 Mission DRI 承诺，带候选：
   - `definition`：outcome → `outcome`（组件 id `outcome`）；successEvidence 逐条 → `acceptance_criterion`（`ac-1`…）；why → `contribution`；boundaries → `scope_boundary`；timeBoundary → `time_boundary`。
   - `mission_plan`：keyPath → `core_path`；milestones 逐条 → `milestone`；dependencies、risk → `constraint_dependency`；tradeoffs → `key_trade_off`（有则写）。
-  - `execution_plan`：按第 2 点的答复。
+  - `execution_plan`：这个 Mission 下真实的 Task，每条写名称和 Task DRI（`responsible`），组件 id 用天枢执行事项 id；随承诺的候选一起带，不先单独修订。
+  - 一条真实的 Task 都没有就不发承诺，提示 Mission DRI 先补 Task；不生成占位条目。
   - 外部记录 `tianshu:card-confirm:<cardId>:<window_seq>`，时刻取 `owner_confirmed_at`。
-- 确认：战场 DRI 确认组合后，对本轮每个 Mission 代 `confirmed_by` 记 `outcome: accepted`；外部记录 `tianshu:round-confirm:<roundId>:<window_seq>`。
+- 确认：战场 DRI 一次确认整个组合，落到本体时每个 Mission 一条 `world_confirm_mission`（`outcome: accepted`，代 `confirmed_by`）。
+  - 每条单独请求、单独事务、各用各的幂等键。
+  - 可以共用外部记录 `tianshu:round-confirm:<roundId>:<window_seq>` 和确认时刻（不晚于记录时刻）。
+  - 每条单独成败：某个 Mission 还没承诺、父周期目标没确认、委托不覆盖等，只有这一条失败，其他照常。失败的 Mission 和原因单独告诉确认人，已成功的不受影响。
 - 硬拦截（10/10 对斯一说过）：确认人就是该 Mission 的 Mission DRI 时不写这一条。
 - 还没定：
-  - 拦截落在哪：拒掉天枢里的组合确认，或者组合照常确认、只是这一条不写并进失败列表。
+  - 拦截落在哪：拒掉天枢里的组合确认，或者组合照常确认、只是这一条不写，告诉确认人。
   - 战场 DRI 退回任务卡时，本体那边已承诺的 Mission 要不要代记一条 `outcome: returned`。
   - 11 月的本体 Mission 谁建、怎么挂外部引用。现在只有 10 月三条硬编码（`worldMissions.ts` `WORLD_MISSION_LINKS`）。
+  - 天枢里 Task 什么时候有。本人确认任务卡时多半还没有执行事项，按上面的规则就不承诺，要等 Task 出来再补发；补发由什么触发要定。
   - 用同一个开关，还是另设一个。
 - 前提：父周期目标已确认，所以周期目标两门要先跑通。
 

@@ -241,7 +241,9 @@ describe("world 代 RU DRI 承诺周期目标（0.3）", () => {
         (events[body.target.object_id] ??= []).push({ event_id: eventId, kind: "commit", recorded_at: new Date().toISOString(),
           external_confirmation: { external_record_id: body.params.on_behalf_of.external_record_id, external_confirmed_at: body.params.on_behalf_of.external_confirmed_at } });
       }
-      return { receipt_id: `<receipt-${eventId}>`, status: "committed", result: { event_id: eventId } };
+      // 本体自己挑委托：按被代记的人给一条（这里用主体 id 区分）。
+      return { receipt_id: `<receipt-${eventId}>`, status: "committed",
+        result: { event_id: eventId, on_behalf_of: { ...body.params.on_behalf_of, delegation_event_id: `<delegation:${body.params.on_behalf_of.principal_id}>` } } };
     });
   }
 
@@ -272,9 +274,10 @@ describe("world 代 RU DRI 承诺周期目标（0.3）", () => {
         target: { object_id: "<period-goal-2>", expected_version: 2 },
         params: { outcome: "accepted", on_behalf_of: { principal_id: instance.people["liu-minghua"], external_record_id: `tianshu:plan-sign:${planId}` } },
       });
-      expect((await pool.query("SELECT action_type, status FROM world_sync_ledger ORDER BY id")).rows).toEqual([
-        { action_type: "world_commit_period_goal", status: "committed" },
-        { action_type: "world_confirm_period_goal", status: "committed" },
+      // 回执里本体实际用的委托照存，开代记后读回核对。
+      expect((await pool.query("SELECT action_type, status, delegation_event_id FROM world_sync_ledger ORDER BY id")).rows).toEqual([
+        { action_type: "world_commit_period_goal", status: "committed", delegation_event_id: `<delegation:${instance.people["yu-siyi"]}>` },
+        { action_type: "world_confirm_period_goal", status: "committed", delegation_event_id: `<delegation:${instance.people["liu-minghua"]}>` },
       ]);
       service.schedule();
       await service.idle();
