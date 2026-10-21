@@ -470,14 +470,15 @@ export function recordingInFlight(recording: MeetingPayload["recording"]): boole
 export function meetingNow(payload: MeetingPayload, ended: boolean): string {
   if (payload.status === "cancelled") return "已取消";
   if (payload.status === "reviewed") return "会后事项已处理完";
+  // 和页头那一行的会后阶段用同一套词：等妙记、待确认说话人、生成会议卡。
   if (payload.status === "held") {
-    return payload.outcome?.status === "ready" ? "纪要已生成" : "正在整理纪要";
+    return payload.outcome?.status === "ready" ? "纪要已生成" : "生成会议卡";
   }
-  if (ended && payload.transcriptCandidate) return "会议记录待确认说话人";
+  if (ended && payload.transcriptCandidate) return "待确认说话人";
   if (ended && recordingInFlight(payload.recording)) return "录音转写中";
   if (ended && payload.recording?.status === "failed") return "录音转写失败，可导入妙记";
-  if (ended && payload.minutesStatus === "waiting") return "妙记生成中";
-  if (ended) return "待导入会议记录";
+  if (ended && payload.minutesManualImport) return "待导入会议记录";
+  if (ended) return "等妙记";
   return preflightStatusText(payload.preflight);
 }
 
@@ -1539,7 +1540,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   );
 
   const statusNow = memberReadOnly && ended
-    ? outcomeItems.length ? "会后结论已确认" : payload.minutesStatus === "waiting" ? "妙记生成中" : "会议已结束"
+    ? outcomeItems.length ? "会后结论已确认" : generatingCard(payload) ? "生成会议卡" : awaitingMinutes(payload) ? "等妙记" : "会议已结束"
     : phase === "live" ? recorderLine(recorder.state) : meetingNow(payload, ended);
 
   // 会议卡这一块：会后整理（重新生成）失败时上面一行标出来，能重试的人有「重试会后抽取」。

@@ -141,6 +141,9 @@ describe("会开完后自动拿妙记", () => {
       await createMeetingMinutesService({ pool: t.pool, peopleDirectory: loadPeopleDirectory(t.env), outcomeAgent: outcome, secret: t.env.sessionSecret,
         feishu: { env: feishuEnv, api: emptyApi }, now: () => clock }).tick();
       expect(await meetingMinutesReply(t.pool.query.bind(t.pool), meetingId)).toEqual({ status: "waiting", reply: "飞书妙记还在生成，生成后会自动整理纪要。" });
+      // 等妙记从会开完那一刻算起，不是从轮询发现的时刻。
+      const waitingRow = (await getMeetingRow(t.pool.query.bind(t.pool), meetingId))!;
+      expect(waitingRow.minutes_waiting_since?.toISOString()).toBe((waitingRow.ended_at ?? waitingRow.ends_at).toISOString());
       const ceo = await t.loginCookie();
       expect((await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie: ceo } })).json().cards[0].payload.minutesStatus).toBe("waiting");
 

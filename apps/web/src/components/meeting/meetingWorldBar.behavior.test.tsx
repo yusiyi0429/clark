@@ -77,6 +77,17 @@ describe("会议页页头：这场会挂到哪、会议记录写进本体没有"
     expect(tree.some((node) => node.type === "button" && text(node) === "改")).toBe(false);
   });
 
+  it("参会人：会开完了也看得到会后阶段（等妙记带用时），没有记录状态", () => {
+    hooks.index = 0;
+    const phase = <span>等妙记</span>;
+    const tree = nodes(expand(MeetingWorldBar({ meetingId: "m1", world: world({ record: null, at: null, canEdit: false }), ended: true, onChange: vi.fn(), transcript: phase })));
+    expect(tree.some((node) => text(node) === "等妙记")).toBe(true);
+    expect(tree.some((node) => text(node).startsWith("记录 ·"))).toBe(false);
+    hooks.values = []; hooks.index = 0;
+    const before = nodes(expand(MeetingWorldBar({ meetingId: "m1", world: world({ record: null, at: null, canEdit: false }), ended: false, onChange: vi.fn(), transcript: phase })));
+    expect(before.some((node) => text(node) === "等妙记")).toBe(false);
+  });
+
   it("会前也能看到挂点条", () => {
     const tree = render(world({ record: { ...RECORD, status: "pending", eventId: null, confirmedAt: null }, at: null }), false);
     expect(tree.some((node) => node.type === "span" && text(node) === "挂到")).toBe(true);
@@ -151,7 +162,10 @@ describe("会议页页头：逐字稿", () => {
     hooks.values = [];
     expect(transcript({ failure: "no_permission" }).some((node) => text(node) === "逐字稿 · 读取失败 · 无权限")).toBe(true);
     hooks.values = [];
-    expect(transcript({ failure: "not_ready" }).some((node) => text(node) === "逐字稿 · 未就绪")).toBe(true);
+    // 原文还没好也还在自动等：和等妙记一样显示，不出「再读一次」。
+    const notReady = transcript({ failure: "not_ready" });
+    expect(notReady.some((node) => text(node) === "等妙记")).toBe(true);
+    expect(notReady.some((node) => node.type === "button" && text(node) === "再读一次")).toBe(false);
     hooks.values = [];
     expect(transcript({ status: "ready", failure: null, candidate: true }).some((node) => text(node) === "待确认说话人")).toBe(true);
     hooks.values = [];

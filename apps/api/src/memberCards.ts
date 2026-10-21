@@ -37,7 +37,9 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
     preflight: { status: payload.preflight.status, brief: payload.preflight.brief,
       readiness: payload.preflight.readiness ?? null, summary: payload.preflight.summary ?? null },
     outcome: payload.outcome ? {
-      ...(attended ? { summary: payload.outcome.summary, status: payload.outcome.status } : {}),
+      // 生成会议卡的阶段和用时（排上、开跑的时刻）参会的人也看得到。
+      ...(attended ? { summary: payload.outcome.summary, status: payload.outcome.status,
+        pendingSince: payload.outcome.pendingSince ?? null, startedAt: payload.outcome.startedAt ?? null } : {}),
       items: payload.outcome.items
         .filter((item) => (item.kind === "decision" || item.kind === "todo") && item.review?.status === "confirmed")
         .map((item) => ({ id: item.id, kind: item.kind, text: item.text, ownerPersonId: item.ownerPersonId })) } : null,

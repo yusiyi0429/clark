@@ -1071,6 +1071,9 @@ describe("Meeting 计划结束时间与「这场会开完了」", () => {
       expect(endedCard.payload.endedAt).toEqual(expect.any(String));
       expect(endedCard.objectRef.version).toBe(created.objectRef.version + 1);
       expect(actionTypes(endedCard)).not.toContain("meeting.end");
+      // 开完马上排一次妙记轮询，不等下一个 5 分钟。
+      expect((await t.sql("SELECT dedupe_key FROM jobs WHERE kind = 'meeting.minutes_poll'")).map((row) => row.dedupe_key))
+        .toEqual([`meeting.minutes_poll:end:${meetingId}`]);
       // 其余 scheduled Action 不受影响
       expect(actionTypes(endedCard)).toEqual(expect.arrayContaining(["meeting.edit_details", "meeting.cancel"]));
 

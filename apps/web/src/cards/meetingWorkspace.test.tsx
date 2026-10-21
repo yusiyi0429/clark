@@ -266,8 +266,10 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
 
   it("这一刻的一件事随会议状态走", () => {
     const payload = (overrides: Record<string, unknown>) => meetingCard(overrides).payload as never;
-    expect(meetingNow(payload({}), true)).toBe("待导入会议记录");
-    expect(meetingNow(payload({ status: "held" }), true)).toBe("正在整理纪要");
+    // 和页头会后阶段同一套词：没失败就是等妙记，自动同步失败才是待导入会议记录。
+    expect(meetingNow(payload({}), true)).toBe("等妙记");
+    expect(meetingNow(payload({ minutesManualImport: true }), true)).toBe("待导入会议记录");
+    expect(meetingNow(payload({ status: "held" }), true)).toBe("生成会议卡");
     expect(meetingNow(payload({ status: "cancelled" }), false)).toBe("已取消");
   });
 

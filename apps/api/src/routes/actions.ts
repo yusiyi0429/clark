@@ -17,6 +17,8 @@ import {
   type TUpdateMonthlyPlanDraftRequest,
 } from "@warmap/contracts";
 import { actionFingerprint, verifyActionId } from "../actionToken.js";
+import { enqueueJob } from "../jobs.js";
+import { MEETING_MINUTES_POLL_KIND } from "../meetingMinutes.js";
 import { executeIssueAction } from "../issues.js";
 import { executeCancelMeeting, executeCreateMeeting, executeEditMeetingDetails, executeEndMeeting, executeJoinMeeting, executeRequestSupplement, executeUpdateDraft } from "../meetings.js";
 import { executeEditMaterials } from "../meetingMaterials.js";
@@ -98,6 +100,8 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       }
       if (scope.actionType === "meeting.end") {
         const result = await executeEndMeeting(pool, env.sessionSecret, scope, fingerprint, hostId);
+        // 开完马上排一次妙记轮询：几秒内进入「等妙记」，不等下一个 5 分钟。
+        if ("card" in result) await enqueueJob(q, { kind: MEETING_MINUTES_POLL_KIND, dedupeKey: `${MEETING_MINUTES_POLL_KIND}:end:${scope.objectId}` });
         if (req.person!.role === "ceo" || "error" in result) return respond(reply, result);
         const viewerId = req.person!.personId;
         return respond(reply, "card" in result

@@ -123,12 +123,13 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   }
 
   /** failed 也记等待起点：原文还没好的跟着轮询再取，等满 2 小时同样退回手动上传。 */
-  async function setStatus(meetingId: string, status: TMeetingMinutesStatus, error: string | null = null, failure: TMeetingMinutesFailure | null = null): Promise<void> {
+  async function setStatus(meetingId: string, status: TMeetingMinutesStatus, error: string | null = null, failure: TMeetingMinutesFailure | null = null,
+    since: Date | null = null): Promise<void> {
     await q(
       `UPDATE meetings SET minutes_status = $2, minutes_error = $3, minutes_failure = $4,
-         minutes_waiting_since = CASE WHEN $2 IN ('waiting', 'failed') THEN COALESCE(minutes_waiting_since, now()) ELSE minutes_waiting_since END
+         minutes_waiting_since = CASE WHEN $2 IN ('waiting', 'failed') THEN COALESCE(minutes_waiting_since, $5, now()) ELSE minutes_waiting_since END
        WHERE id = $1`,
-      [meetingId, status, error, failure],
+      [meetingId, status, error, failure, since],
     );
   }
 
@@ -138,17 +139,17 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     return { kind: "failed" };
   }
 
-  /** 开完的会记为 waiting（飞书拿得到）或 manual（拿不到）；等太久的也退回 manual。 */
+  /** 开完的会记为 waiting（飞书拿得到，从开完那一刻算起）或 manual（拿不到）；等太久的也退回 manual。 */
   async function markEnded(at: Date): Promise<void> {
     const ended = await q(
-      `SELECT id, lead_dri_id, created_by FROM meetings
+      `SELECT id, lead_dri_id, created_by, COALESCE(ended_at, ends_at) AS ended FROM meetings
         WHERE status = 'scheduled' AND minutes_status = 'none' AND transcript IS NULL AND transcript_candidate IS NULL
           AND COALESCE(ended_at, ends_at) <= $1 AND COALESCE(ended_at, ends_at) > $2`,
       [at, new Date(at.getTime() - MINUTES_RECENT_MS)],
     );
-    for (const row of ended.rows as { id: string; lead_dri_id: string; created_by: string | null }[]) {
+    for (const row of ended.rows as { id: string; lead_dri_id: string; created_by: string | null; ended: Date }[]) {
       const reachable = Boolean(feishu && (await fetchers(row)).length);
-      await setStatus(row.id, reachable ? "waiting" : "manual", reachable ? null : NO_AUTH);
+      await setStatus(row.id, reachable ? "waiting" : "manual", reachable ? null : NO_AUTH, null, row.ended);
     }
     await q(
       `UPDATE meetings SET minutes_status = 'manual', minutes_failure = NULL, minutes_error = '等了 2 小时还没拿到妙记'

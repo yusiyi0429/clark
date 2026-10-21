@@ -358,7 +358,8 @@ function transcriptState(status: TMeetingMinutesStatus, failure: TMeetingMinutes
   if (confirmed && generating) return { label: "生成会议卡", retry: false, paste: false, live: "card" };
   if (confirmed) return { label: "逐字稿 · 已读完", retry: false, paste: false };
   if (candidate) return { label: "待确认说话人", retry: false, paste: false };
-  if (status === "waiting") return { label: "等妙记", retry: false, paste: false, live: "minutes", upload: true };
+  // 读的时候原文还没好（not_ready）也还在自动等，和等妙记一样显示。
+  if (status === "waiting" || (status === "failed" && failure === "not_ready")) return { label: "等妙记", retry: false, paste: false, live: "minutes", upload: true };
   if (status === "ready") return { label: null, retry: false, paste: false };
   if (status === "failed") {
     const reason = failure ? FAILURE[failure] : "读取失败";
