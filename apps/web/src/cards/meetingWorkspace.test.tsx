@@ -448,7 +448,7 @@ describe("妙记 Markdown 候选预览", () => {
 
   it("候选存在时自动打开预览：来源摘要、时间锚点、抽样发言与告警", () => {
     const html = render(meetingCard({ transcriptCandidate: candidateBase }));
-    expect(html).toContain("确认妙记会议记录");
+    expect(html).toContain("确认会议记录");
     expect(html).toContain("本体建模 Part 2.md");
     expect(html).toContain("40 KB");
     expect(html).toContain("12 条发言 · 3 位说话人 · 时长 59:00");

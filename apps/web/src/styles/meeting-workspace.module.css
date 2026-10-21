@@ -475,3 +475,7 @@
 .recordUpload:disabled{cursor:default;opacity:.7}
 .recordUpload:focus-visible{outline:2px solid #96beff;outline-offset:2px}
 .recordUpload+.candidateReopen{margin-top:10px}
+/* 替换逐字稿：平时只是一行不显眼的链接，点开才出危险操作区。 */
+.replaceLink{align-self:flex-start;margin-top:4px;padding:4px 0;border:0;background:none;color:#4c545e;font:inherit;font-size:12px;text-decoration:underline;text-decoration-color:#d9dde5;text-underline-offset:3px;cursor:pointer}
+.replaceLink:hover{color:#215ba1;text-decoration-color:currentColor}
+.replaceLink:focus-visible{outline:2px solid #96beff;outline-offset:2px}

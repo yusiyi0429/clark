@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import JSZip from "jszip";
 import { Value } from "@sinclair/typebox/value";
 import { fileURLToPath } from "node:url";
@@ -469,8 +469,9 @@ describe("会议记录多格式上传", () => {
         ["speaker:1", "本周先把渠道排期定下来，预算按上月口径走。"],
         ["speaker:1", "各组周五前交风险清单。"],
       ]);
-      expect(agent.calls).toHaveLength(1);
+      // 上传一返回就能走，会议卡在后台接着生成。
       expect(payload.outcome).not.toBeNull();
+      await vi.waitFor(() => expect(agent.calls).toHaveLength(1));
     } finally {
       await t.close();
     }

@@ -224,7 +224,7 @@ export function TranscriptCandidateDialog({
     <dialog ref={dialogRef} className={s.candidateDialog} aria-label="妙记会议记录候选">
       <header className={s.candidateHeader}>
         <div>
-          <h2>确认妙记会议记录</h2>
+          <h2>确认会议记录</h2>
           <p>
             {candidate.source.fileName} · {Math.ceil(candidate.source.sizeBytes / 1024)} KB · SHA-256 {candidate.source.sha256.slice(0, 12)}…
           </p>
@@ -548,6 +548,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const [supplementTarget, setSupplementTarget] = useState(payload.leadDriId);
   const [cancelArmed, setCancelArmed] = useState(false);
   const [replaceArmed, setReplaceArmed] = useState(false);
+  // 替换逐字稿是少用的危险操作：平时只是一个不显眼的链接，点开才出确认。
+  const [replaceOpen, setReplaceOpen] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   // 补充材料：仅 scheduled 渲染入口；状态只存内存，成功后由后端返回的新 Card 驱动。
@@ -1681,7 +1683,10 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
             {payload.transcript ? `${payload.transcript.turns.length} 条发言已保存` : "尚未导入逐字稿"}
           </p>
         </section>
-        {actionOf("meeting.replace_transcript") ? (
+        {actionOf("meeting.replace_transcript") && !replaceOpen ? (
+          <button type="button" className={s.replaceLink} onClick={() => setReplaceOpen(true)}>替换逐字稿</button>
+        ) : null}
+        {actionOf("meeting.replace_transcript") && replaceOpen ? (
           <section className={`${s.reviewSection} ${s.dangerSection}`}>
             <header>
               <h3>替换逐字稿 · 危险操作</h3>

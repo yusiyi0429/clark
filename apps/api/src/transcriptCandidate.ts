@@ -27,6 +27,7 @@ import {
   type MeetingRow,
 } from "./meetingStore.js";
 import { pendingOutcome, runOutcome, validateTranscript, type PostMeetingAgent } from "./outcome.js";
+import { logEvent } from "./observability.js";
 import type { ParsedTranscriptTurn } from "./transcriptMarkdown.js";
 import { extractTranscriptText, recognizeTranscript } from "./transcriptFile.js";
 import { capturedAtOf, meetingTranscriptUrl, transcriptContentHash } from "./transcriptHash.js";
@@ -129,7 +130,7 @@ export async function createTranscriptCandidate(
       confirmAddParticipants: true,
       keepUnmapped: true,
     },
-    `meeting-notes:${sha256}:${saved.row.version}`, hostId);
+    `meeting-notes:${sha256}:${saved.row.version}`, hostId, { background: true });
   if ("error" in confirmed) return { status: confirmed.error.status as 400 | 404 | 409, code: confirmed.error.code, message: confirmed.error.message };
   if (confirmed.conflict) return { status: 409, code: "VERSION_CONFLICT", message: "会议刚被改过，请重新上传" };
   return { status: 200, card: confirmed.card };
@@ -200,6 +201,8 @@ export async function executeConfirmTranscriptCandidate(
   input: { speakerMappings: { speakerName: string; personId: string }[]; confirmAddParticipants: true; keepUnmapped?: boolean },
   fingerprint: string,
   hostId?: string,
+  /** 上传纪要时：逐字稿确认完就返回，会议卡在后台接着生成（会议页显示「生成会议卡」带用时），不让上传一直转圈。 */
+  { background = false }: { background?: boolean } = {},
 ): Promise<MeetingActionOutcome> {
   const personById = new Map(peopleDirectory.searchPeople(undefined).map((person) => [person.personId, person]));
   const outcome = await withMeetingLock(pool, scope.objectId, secret, fingerprint, scope.objectVersion, async (client, row) => {
@@ -273,7 +276,12 @@ export async function executeConfirmTranscriptCandidate(
     return commit(client, updated, secret);
   }, hostId);
   if ("error" in outcome || outcome.conflict || outcome.replayed) return outcome;
-  await runOutcome(pool, outcomeAgent, scope.objectId);
+  if (background) {
+    void runOutcome(pool, outcomeAgent, scope.objectId).catch((error: unknown) =>
+      logEvent({ event: "meeting.outcome", objectRef: `meeting:${scope.objectId}`, status: "failed", errorCode: error instanceof Error ? error.name : "OUTCOME_FAILED" }));
+  } else {
+    await runOutcome(pool, outcomeAgent, scope.objectId);
+  }
   return { card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), scope.objectId))!, secret) };
 }
 
