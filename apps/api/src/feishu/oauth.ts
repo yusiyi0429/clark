@@ -10,13 +10,13 @@ import { saveAuthorizedToken } from "./tokens.js";
 /**
  * offline_access 才会返回 refresh token；drive:drive.metadata:readonly 用来读本人工作依据里飞书文档的标题、修订时间和修订人（不读正文）。
  * 会后自动拿妙记（meetingMinutes.ts）先用主持人、拿不到再用建会的人本人的授权：minutes:minutes:readonly 读妙记信息，minutes:minutes.basic:read 收「妙记生成」事件，
- * minutes:minutes.search:read 轮询兜底，minutes:minutes.artifacts:read 读逐字稿全文，minutes:minutes.transcript:export 退回导出，vc:meeting:readonly 读实际参会人。
+ * minutes:minutes.search:read 轮询兜底，minutes:minutes.artifacts:read 读逐字稿全文，minutes:minutes.transcript:export 退回导出，vc:meeting 读实际参会人（vc:meeting:readonly 只有应用身份，用户身份只能开 vc:meeting，10/21）。
  * 其余用户权限随后续功能加进来；在开发者后台开通的清单见 .scratch/tianshu-v1/飞书开发者后台配置清单.md。
  */
 export const FEISHU_OAUTH_SCOPE = [
   "offline_access", "drive:drive.metadata:readonly",
   "minutes:minutes:readonly", "minutes:minutes.basic:read", "minutes:minutes.search:read",
-  "minutes:minutes.artifacts:read", "minutes:minutes.transcript:export", "vc:meeting:readonly",
+  "minutes:minutes.artifacts:read", "minutes:minutes.transcript:export", "vc:meeting",
 ].join(" ");
 /** 会后自动拿妙记最少要的权限：读妙记信息、按所有者搜妙记、读逐字稿全文。授权里缺任何一项，都算没连好飞书。 */
 export const FEISHU_MINUTES_READ_SCOPES = ["minutes:minutes:readonly", "minutes:minutes.search:read", "minutes:minutes.artifacts:read"];

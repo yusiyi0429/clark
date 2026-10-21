@@ -9,7 +9,7 @@ import { decryptTokenSecret } from "./crypto.js";
  * - 逐字稿全文：GET /minutes/v1/minutes/{minute_token}/artifacts 的 data.transcript（与 lark-cli minutes +detail --transcript 写出的逐字相同，Chat 侧按它核对摘要值）
  * - 逐字稿导出（产物接口没权限时退回）：GET /minutes/v1/minutes/{minute_token}/transcript?need_speaker=true&need_timestamp=true&file_format=txt（minutes:minutes.transcript:export）
  * - 轮询兜底：POST /minutes/v1/minutes/search，按本人名下、时间段列妙记
- * - 实际参会名单：GET /vc/v1/meetings/{meeting_id}?with_participants=true（vc:meeting:readonly）
+ * - 实际参会名单：GET /vc/v1/meetings/{meeting_id}?with_participants=true（用户身份 vc:meeting）
  * 后台权限和 OAuth scope 还没配好，这一层先用 mock 测；search 的请求字段、时间格式和参会名单的字段名要在联调时核实（标了「待联调」）。
  */
 const OPEN_API = "https://open.feishu.cn/open-apis";
