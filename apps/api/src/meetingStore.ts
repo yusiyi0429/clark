@@ -56,14 +56,14 @@ export type MeetingRow = {
   feishu_meeting_id?: string | null;
   minute_token?: string | null;
   minutes_status?: TMeetingMinutesStatus;
-  /** 妙记读取失败的原因（100）；不是 failed 时为 null。 */
+  /** 妙记读取失败的原因（200）；不是 failed 时为 null。 */
   minutes_failure?: TMeetingMinutesFailure | null;
   attendees_actual?: string[] | null;
   /** 会后分层确认（meeting_decisions 另表，随 meetingColumns 带出）；`SELECT *` 读出的行没有这一格。 */
   decisions?: MeetingDecisionRow[];
   /** 会议卡已有确认效果（有确认版，或行动项推出过执行事项；随 meetingColumns 带出）：不再给替换逐字稿。`SELECT *` 读出的行没有这一格。 */
   card_confirmed?: boolean;
-  /** 会议入本体（100）：建会的人、挂点（确认版本和写入回执在 meeting_card_confirmations / meeting_card_syncs）。 */
+  /** 会议入本体（200）：建会的人、挂点（确认版本和写入回执在 meeting_card_confirmations / meeting_card_syncs）。 */
   created_by: string | null;
   world_anchors: StoredWorldAnchor[] | null;
 };
