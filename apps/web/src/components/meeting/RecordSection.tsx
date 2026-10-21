@@ -38,16 +38,17 @@ type RecordSectionProps = {
 };
 
 /**
- * 一段正文：标题 + 正文就地编辑；下面一行灰字是出处（来源标题 · 原话时段），点开是那几句原话（逐字稿里找得到时）；
+ * 一段正文：标题 + 正文就地编辑；下面一行灰字是出处（来源标题 · 每处原话的时段），点开一处一组原话（逐字稿里找得到时）；
  * 右侧「⋯」上移、下移、删除。修改中和确认版不同的段落左侧一条蓝线（data-changed），原文划线显示在新文字上方；删掉的段落整段划线。
  */
 export function RecordSection(props: RecordSectionProps) {
   const { number, section, state, was, fresh, touched, editable, locked, sources, turns, speakerName, canMoveUp, canMoveDown, canDelete, onChange, onLeave, onMove, onDelete } = props;
   const [open, setOpen] = useState(false);
   const refs = section.sourceRefs ?? [];
-  const quoted = refs.flatMap((ref) => excerptTurns(ref.locator, turns) ?? []);
+  // 一处出处一组原话；时段按处列出（11:38、11:52–11:53），不拿第一处到最后一处连成一个大时段。
+  const groups = refs.map((ref) => excerptTurns(ref.locator, turns) ?? []).filter((group) => group.length);
   const titles = [...new Set(refs.map((ref) => sources.find((source) => source.id === ref.sourceId)?.title).filter(Boolean))].join("、");
-  const sourceLine = [titles, excerptSpan(quoted)].filter(Boolean).join(" · ");
+  const sourceLine = [titles, groups.map(excerptSpan).filter(Boolean).join("、")].filter(Boolean).join(" · ");
   const live = editable && state !== "deleted";
   const label = number ? `第 ${number} 段` : undefined;
   const flagEmpty = !fresh || touched;
@@ -72,7 +73,7 @@ export function RecordSection(props: RecordSectionProps) {
         <InlineText className={c.body} value={section.body} editable={live} readOnly={locked} label={`${label ?? ""}正文`}
           placeholder={fresh ? "正文" : undefined} invalid={flagEmpty && !section.body.trim()} onChange={(value) => onChange?.("body", value)} />
         {sourceLine ? (
-          quoted.length ? (
+          groups.length ? (
             <button type="button" className={c.source} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
               <Quote size={12} strokeWidth={2} aria-hidden="true" />
               <span>{sourceLine}</span>
@@ -82,16 +83,16 @@ export function RecordSection(props: RecordSectionProps) {
             <p className={c.source}><Quote size={12} strokeWidth={2} aria-hidden="true" /><span>{sourceLine}</span></p>
           )
         ) : null}
-        {open && quoted.length ? (
-          <ol className={c.excerpt}>
-            {quoted.map((turn) => (
+        {open ? groups.map((group) => (
+          <ol key={group[0].id} className={c.excerpt}>
+            {group.map((turn) => (
               <li key={turn.id}>
                 {speakerName(turn.speakerId) ? <span className={c.speaker}>{speakerName(turn.speakerId)}</span> : null}
                 <p>{turn.text}</p>
               </li>
             ))}
           </ol>
-        ) : null}
+        )) : null}
       </div>
       {live && onMove && onDelete ? (
         <CardItemMenu label="段落操作" disabled={locked} items={[

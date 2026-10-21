@@ -181,7 +181,7 @@ function participantsOf(meeting: MeetingRow, deps: MeetingCardDeps) {
 const memberIds = (meeting: MeetingRow) => new Set([...meeting.participants.map((person) => person.personId), ...attendeesOf(meeting).personIds]);
 
 /**
- * 模型候选 → 草稿和行动项：段落编号 sec-N，turnId 换成发言段区间；修改编号 chg-N，目标不在候选里的当未定；
+ * 模型候选 → 草稿和行动项：段落编号 sec-N，turnId 换成出处（连着的发言并成一处）；修改编号 chg-N，目标不在候选里的当未定；
  * 行动项编号 act-N，负责人不是这场会的人、日期不合法的当没填；依据段落序号换成段落 id，指不到的丢掉。候选不合 schema 返回 null。
  */
 export function buildCardDraft(pool: Pool, prepared: CardGeneration, candidate: unknown): { draft: TMeetingCardDraft; actionItems: TMeetingActionItem[] } | null {
@@ -194,8 +194,17 @@ export function buildCardDraft(pool: Pool, prepared: CardGeneration, candidate: 
   const basis = (numbers: number[]) => [...new Set(numbers)].filter((n) => n <= sectionIds.length).map((n) => sectionIds[n - 1]);
   const sections = value.sections.map((section, index) => {
     const turns = [...new Set(section.turnIds)].filter((id) => order.has(id)).sort((a, b) => order.get(a)! - order.get(b)!);
-    const locator = turns.length === 0 ? null : turns.length === 1 ? turns[0] : `${turns[0]}..${turns[turns.length - 1]}`;
-    return { id: sectionIds[index], heading: section.heading, body: section.body, sourceRefs: [{ sourceId: "src-1", locator }] };
+    // 逐句引用：逐字稿里连着的发言并成一处，隔开的各算一处，不合成一个覆盖中间所有发言的大区间。
+    const runs: string[][] = [];
+    for (const id of turns) {
+      const run = runs[runs.length - 1];
+      if (run && order.get(id)! === order.get(run[run.length - 1])! + 1) run.push(id);
+      else runs.push([id]);
+    }
+    const sourceRefs = runs.length
+      ? runs.map((run) => ({ sourceId: "src-1", locator: run.length === 1 ? run[0] : `${run[0]}..${run[run.length - 1]}` }))
+      : [{ sourceId: "src-1", locator: null }];
+    return { id: sectionIds[index], heading: section.heading, body: section.body, sourceRefs };
   });
   const options = new Set(prepared.targetOptions.map((option) => option.targetRef));
   const objectChanges = value.objectChanges.map((change, index) => ({

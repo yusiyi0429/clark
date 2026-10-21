@@ -172,6 +172,26 @@ describe("会议卡草稿", () => {
     }
   });
 
+  it("出处保留逐句引用：连续的发言并成一处，隔开的各算一处，不合成一个大区间", async () => {
+    ontology();
+    const { agent } = cardAgent();
+    const { t, meetingId } = await setup(agent);
+    try {
+      const { candidate } = await agent.generate({} as PostMeetingAgentInput);
+      const sections = [
+        { heading: "接口切换", body: "已定：接口统一改成 v2。", turnIds: ["turn-003", "turn-001"] },
+        { heading: "渠道预算", body: "未定：下周再定。", turnIds: ["turn-001", "turn-002", "turn-002"] },
+      ];
+      const built = buildCardDraft(t.pool, await prepareCardGeneration(t.pool, meetingId), { ...(candidate as object), sections });
+      expect(built!.draft.sections.map((section) => section.sourceRefs)).toEqual([
+        [{ sourceId: "src-1", locator: "turn-001" }, { sourceId: "src-1", locator: "turn-003" }],
+        [{ sourceId: "src-1", locator: "turn-001..turn-002" }],
+      ]);
+    } finally {
+      await t.close();
+    }
+  });
+
   it("目标不在候选里就是未定", async () => {
     ontology();
     const { t, host, meetingId } = await setup(cardAgent("obj-other#target/x").agent);
