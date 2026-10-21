@@ -497,6 +497,16 @@ export const MemberMeetingsResponse = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * 天枢建会后自动在飞书约上（用建会的人本人的授权，他是组织者）：pending 排上了 / booked 约上了 / waiting_auth 等他连飞书 /
+ * failed 飞书报错（可重试）/ cancelled 会取消了、日程已删。joinUrl 是进入飞书会议的链接；organizerId 是约的人（天枢 person_id）。
+ */
+export const MeetingFeishuEventStatus = Type.Union([Type.Literal("pending"), Type.Literal("booked"), Type.Literal("waiting_auth"), Type.Literal("failed"), Type.Literal("cancelled")]);
+export const MeetingFeishuEvent = Type.Object(
+  { status: MeetingFeishuEventStatus, joinUrl: Type.Union([Type.String(), Type.Null()]), organizerId: Type.String() },
+  { additionalProperties: false },
+);
+
 export const MeetingCardPayload = Type.Object(
   {
     status: MeetingStatus,
@@ -533,6 +543,8 @@ export const MeetingCardPayload = Type.Object(
     attendees: Type.Optional(MeetingAttendees),
     /** 会后分层确认的「会上定了 X」。 */
     decisions: Type.Optional(Type.Array(MeetingDecisionView)),
+    /** 在飞书约上这场会：没配飞书、旧会为 null。 */
+    feishuEvent: Type.Optional(Type.Union([MeetingFeishuEvent, Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -702,6 +714,7 @@ export type TMeetingRecordingSummary = Static<typeof MeetingRecordingSummary>;
 export type TMeetingRecording = Static<typeof MeetingRecording>;
 export type TStartMeetingRecordingResponse = Static<typeof StartMeetingRecordingResponse>;
 export type TMeetingCardPayload = Static<typeof MeetingCardPayload>;
+export type TMeetingFeishuEvent = Static<typeof MeetingFeishuEvent>;
 export type TCreateMeetingRequest = Static<typeof CreateMeetingRequest>;
 export type TMeetingBookingRequest = Static<typeof MeetingBookingRequest>;
 export type TPersonDirectoryResponse = Static<typeof PersonDirectoryResponse>;

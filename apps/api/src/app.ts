@@ -49,6 +49,7 @@ import { createFeishuClient, type FeishuClient } from "./feishu/client.js";
 import { registerFeishuAuthRoutes } from "./routes/feishu.js";
 import { createMeetingFollowThrough, type MeetingFollowThrough } from "./meetingFollowThrough.js";
 import type { ImpactAgent } from "./impactAgent.js";
+import type { FeishuCalendarApi } from "./feishu/calendar.js";
 import type { FeishuMinutesApi } from "./feishu/minutes.js";
 import { registerMeetingFollowThroughRoutes } from "./routes/meetingFollowThrough.js";
 import { registerInternalMeetingRoutes } from "./routes/internalMeetings.js";
@@ -300,8 +301,8 @@ export async function buildApp({
   outlets?: RadarOutletAdapter;
   /** 飞书开放接口；缺省按 env.feishu 装配真实客户端（测试注入假实现）。 */
   feishuClient?: FeishuClient;
-  /** 影响卡追问与妙记接口（测试注入假实现）；缺省用 heavy 模型与真实飞书接口。 */
-  meetingFollowThroughAgents?: { impact?: ImpactAgent; minutesApi?: FeishuMinutesApi };
+  /** 影响卡追问、妙记与日历接口（测试注入假实现）；缺省用 heavy 模型与真实飞书接口。 */
+  meetingFollowThroughAgents?: { impact?: ImpactAgent; minutesApi?: FeishuMinutesApi; calendarApi?: FeishuCalendarApi };
   /** 文档变更找候选的 Agent（测试注入假实现）；缺省用快模型。 */
   docChangeAgent?: DocChangeAgent;
   conversationTurnTimeoutMs?: number;

@@ -86,6 +86,8 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
     if ("error" in result) {
       return ctx.fail(reply, result.error.status, result.error.code, result.error.message, result.error.fieldErrors ? { fieldErrors: result.error.fieldErrors } : undefined);
     }
+    // 后台在飞书约上（建会的人本人的授权）；返回的卡不等它。
+    await followThrough.feishuEvents.schedule(result.card.objectRef.id, "create");
     return { card: viewer.role === "ceo" ? result.card : projectMemberMeetingCardFromCard(result.card, viewer.personId) };
   });
 

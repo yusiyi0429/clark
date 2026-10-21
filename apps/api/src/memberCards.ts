@@ -47,6 +47,7 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
     minutesFailure: payload.minutesFailure ?? null,
     minutesWaitingSince: payload.minutesWaitingSince ?? null,
     minutesManualImport: payload.minutesManualImport ?? false,
+    feishuEvent: payload.feishuEvent ?? null,
     attended,
     ...(attended ? {
       // 原文只在已有逐字稿时带上（会前没有这一格）。
@@ -55,6 +56,6 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
       decisions: payload.decisions ?? [],
     } : {}),
   },
-    actions: isHost ? card.actions.filter((action) => ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate"].includes(action.actionType)) : [],
+    actions: isHost ? card.actions.filter((action) => ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate", "meeting.retry_feishu_booking"].includes(action.actionType)) : [],
     navigation: [{ href: `/me/meetings/${card.objectRef.id}`, label: "会议" }] };
 }

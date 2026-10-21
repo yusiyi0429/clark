@@ -287,8 +287,11 @@ export function MeetingHeaderActions({ day, slot, clock, children, timeline, lab
   );
 }
 
-/** 材料上面那一行灰字。`facts` 会前会中都写（谁主持、几人参会）；`now` 是这一刻的一件事（待预审、待导入会议记录）。 */
-export function MeetingStatus({ phase, facts, now, endedAt }: { phase: MeetingPhase; facts: (string | undefined)[]; now?: string; endedAt?: string | null }) {
+/**
+ * 材料上面那一行灰字。`facts` 会前会中都写（谁主持、几人参会）；`now` 是这一刻的一件事（待预审、待导入会议记录）；
+ * `children` 跟在会前会中那一行后面（飞书会议的入口）。
+ */
+export function MeetingStatus({ phase, facts, now, endedAt, children }: { phase: MeetingPhase; facts: (string | undefined)[]; now?: string; endedAt?: string | null; children?: ReactNode }) {
   if (phase === "ended") {
     const at = endedAt ? localClock(endedAt) : "";
     return (
@@ -300,6 +303,7 @@ export function MeetingStatus({ phase, facts, now, endedAt }: { phase: MeetingPh
   return (
     <p className={s.status} data-phase={phase}>
       {[...facts, now].filter(Boolean).join(" · ")}
+      {children}
     </p>
   );
 }

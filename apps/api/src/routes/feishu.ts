@@ -54,7 +54,7 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
 
   /**
    * 连接飞书的回调：发起时的会话还有效（口令没重置）才继续；飞书账号关联给发起的人、存授权，不换会话。
-   * 之后这个人主持或建的会里，因为没有飞书授权退回手动的，接着自动拿妙记。
+   * 之后这个人主持或建的会里，因为没有飞书授权退回手动的，接着自动拿妙记；他约的、等他连飞书的会补约到飞书。
    */
   const connectFeishu = async (reply: FastifyReply, intent: FeishuConnectIntent, next: string, code: string | undefined, error: string | undefined) => {
     if (!code) return reply.status(400).send(connectFailurePage(error ? "你取消了飞书授权。" : "飞书没有返回授权码，请再试一次。", next));
@@ -65,6 +65,7 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
     });
     if (outcome.kind !== "ok") return reply.status(outcome.kind === "code_invalid" ? 400 : OUTCOME_STATUS[outcome.kind].status).send(connectFailurePage(outcome.message, next));
     await app.meetingFollowThrough.minutes.resumeFor(intent.personId);
+    await app.meetingFollowThrough.feishuEvents.resumeFor(intent.personId);
     return reply.send(page("已连接飞书", `<a href="${escapeHtml(next)}">没有自动跳转请点这里</a>`, next));
   };
 

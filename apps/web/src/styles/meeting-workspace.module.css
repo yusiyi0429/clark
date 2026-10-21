@@ -434,6 +434,8 @@
   .itemActions { gap: 8px; }
   .itemActions button { min-height: var(--touch-hit, 44px); padding: 0 14px; border-radius: 10px; font-size: 14px; }
   .actionDigest > summary { min-height: var(--touch-hit, 44px); }
+  /* 会前那一行后面的飞书会议入口：24 → 44 高。 */
+  .feishuAction, .feishuLink { display: inline-flex; align-items: center; min-height: var(--touch-hit, 44px); font-size: 14px; }
 }
 /* 会后页的类型角标与区块计数：手持 13（原来 11–12）。 */
 @media (max-width: 959px) {
@@ -479,3 +481,12 @@
 .replaceLink{align-self:flex-start;margin-top:4px;padding:4px 0;border:0;background:none;color:#4c545e;font:inherit;font-size:12px;text-decoration:underline;text-decoration-color:#d9dde5;text-underline-offset:3px;cursor:pointer}
 .replaceLink:hover{color:#215ba1;text-decoration-color:currentColor}
 .replaceLink:focus-visible{outline:2px solid #96beff;outline-offset:2px}
+/* 会前那一行灰字后面的飞书会议入口：进入会议是一个安静的链接；没约上是短状态加「重试」，等连飞书是「连接飞书」。 */
+.feishuEntry{display:inline-flex;align-items:center;gap:8px}
+.feishuLink{color:#215ba1;font-size:13px;text-decoration:none}
+.feishuLink:hover{text-decoration:underline;text-underline-offset:3px}
+.feishuFailed{color:#4c545e;font-size:12px}
+.feishuAction{min-height:24px;padding:0 10px;border:1px solid #d9dde5;border-radius:999px;background:#f7f8fa;color:#215ba1;font:inherit;font-size:12px;cursor:pointer}
+.feishuAction:hover{border-color:#215ba1;background:#fff}
+.feishuAction:disabled{cursor:default;opacity:.6}
+.feishuLink:focus-visible,.feishuAction:focus-visible{outline:2px solid #96beff;outline-offset:2px}

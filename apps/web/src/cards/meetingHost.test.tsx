@@ -57,3 +57,37 @@ describe("成员主持会议", () => {
     expect(render()).not.toContain("挂到");
   });
 });
+
+describe("飞书会议入口", () => {
+  const feishu = (status: string, extra: Record<string, unknown> = {}) => ({ feishuEvent: { status, joinUrl: null, organizerId: "p1", ...extra } });
+  const retry = [{ actionId: "f1", actionType: "meeting.retry_feishu_booking", label: "重试飞书预约" }];
+  const render = (payload: Record<string, unknown>, actions: { actionId: string; actionType: string; label: string }[] = []) => {
+    const card = meetingCard(payload, actions);
+    return renderToStaticMarkup(<MeetingCard card={card} collection={[card]} onCard={() => undefined} onNavigate={() => undefined} readOnly />);
+  };
+
+  it("约上了：会前那一行灰字后面是「进入飞书会议」，参会的人都看得到；开完了不再出", () => {
+    const booked = feishu("booked", { joinUrl: "https://vc.feishu.cn/j/123456789" });
+    viewer.id = "someone-else";
+    expect(render(booked)).toContain('href="https://vc.feishu.cn/j/123456789"');
+    expect(render(booked)).toContain("进入飞书会议");
+    expect(render({ ...booked, hasEnded: true })).not.toContain("进入飞书会议");
+    expect(render(feishu("pending"))).not.toContain("飞书");
+  });
+
+  it("等连飞书：只有约的人本人看到「连接飞书」", () => {
+    viewer.id = "p1";
+    expect(render(feishu("waiting_auth"))).toContain("连接飞书");
+    viewer.id = "someone-else";
+    expect(render(feishu("waiting_auth"))).not.toContain("连接飞书");
+  });
+
+  it("没约上：主持人看到短状态和「重试」，别人看不到", () => {
+    viewer.id = "p1";
+    const html = render(feishu("failed"), retry);
+    expect(html).toContain("飞书未约上");
+    expect(html).toMatch(/<button[^>]*>重试<\/button>/);
+    viewer.id = "someone-else";
+    expect(render(feishu("failed"), retry)).not.toContain("飞书未约上");
+  });
+});

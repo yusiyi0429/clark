@@ -13,7 +13,7 @@ import type {
   TTranscriptCandidateProjection,
   TMeetingRecordingSummary,
 } from "@warmap/contracts";
-import type { TMeetingMinutesFailure, TMeetingMinutesStatus } from "@warmap/contracts";
+import type { TMeetingFeishuEvent, TMeetingMinutesFailure, TMeetingMinutesStatus } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
 import { attendeesOf, minutesManualImport, minutesStatusOf, projectMeetingDecision, type MeetingDecisionRow } from "./meetingDecisionView.js";
 import { computeStaleInputs, type GroupInputVersions } from "./preflightStaleness.js";
@@ -68,7 +68,15 @@ export type MeetingRow = {
   /** 会议入本体（200）：建会的人、挂点（确认版本和写入回执在 meeting_card_confirmations / meeting_card_syncs）。 */
   created_by: string | null;
   world_anchors: StoredWorldAnchor[] | null;
+  /** 在飞书约上这场会（201）：没配飞书、旧会为 null。 */
+  feishu_event_status?: TMeetingFeishuEvent["status"] | null;
+  feishu_calendar_id?: string | null;
+  feishu_event_id?: string | null;
+  feishu_event_join_url?: string | null;
+  feishu_event_organizer_id?: string | null;
+  feishu_event_error?: string | null;
 };
+
 
 /** 选过的挂点：Mission、单元存天枢 id；LTO、PO 天枢里没有表，连同选时的标题一起存（本体读不到时照样能显示）。 */
 export type StoredWorldAnchor = { kind: "mission" | "unit"; id: string } | { kind: "lto" | "po"; id: string; title: string };
@@ -79,6 +87,7 @@ const MEETING_COLUMNS = [
   "request_fingerprint", "action_fingerprints", "created_at", "updated_at",
   "feishu_meeting_id", "minute_token", "minutes_status", "minutes_failure", "minutes_waiting_since", "attendees_actual",
   "created_by", "world_anchors",
+  "feishu_event_status", "feishu_calendar_id", "feishu_event_id", "feishu_event_join_url", "feishu_event_organizer_id", "feishu_event_error",
 ];
 /** 会后分层确认不 bump Meeting version（主持人确认走自己的接口），每次读取现查。 */
 const decisionsColumn = (prefix: string) =>
@@ -217,6 +226,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
     if (!row.ended_at) actions.push(action("meeting.end", "结束会议"));
     if (row.preflight.status === "failed") actions.push(action("meeting.retry_preflight", "重试预审"));
     if (row.preflight.status === "ready") actions.push(action("meeting.regenerate_preflight", "重新预审"));
+    if (row.feishu_event_status === "failed") actions.push(action("meeting.retry_feishu_booking", "重试飞书预约"));
   }
   if (row.status === "scheduled" && row.transcript_candidate) {
     actions.push(
@@ -263,6 +273,9 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
       minutesWaitingSince: row.minutes_waiting_since?.toISOString() ?? null,
       minutesManualImport: minutesManualImport(row, at),
       attendees: attendeesOf(row),
+      feishuEvent: row.feishu_event_status
+        ? { status: row.feishu_event_status, joinUrl: row.feishu_event_join_url ?? null, organizerId: row.feishu_event_organizer_id ?? row.created_by ?? row.lead_dri_id }
+        : null,
       // 旧会议的逐条决定只读。
       decisions: (row.decisions ?? []).map((decision) => projectMeetingDecision(decision, row.participants, false)),
     },

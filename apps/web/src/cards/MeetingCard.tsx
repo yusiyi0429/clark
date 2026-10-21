@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, FileUp, Loader2, Pencil, RefreshCw, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
+import { feishuConnectHref } from "@/lib/feishuLogin";
 import type { TMeetingDecisionHistoryResponse, TTranscriptCandidateProjection } from "@warmap/contracts";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type IssuePayload, type MeetingPayload } from "./payloads";
@@ -587,7 +588,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const materialRef = useRef<HTMLInputElement>(null);
   const candidateDialog = useRef<HTMLDialogElement>(null);
 
-  const actions = memberReadOnly ? card.actions.filter((action) => isHost && ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate"].includes(action.actionType)) : card.actions;
+  const actions = memberReadOnly ? card.actions.filter((action) => isHost && ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate", "meeting.retry_feishu_booking"].includes(action.actionType)) : card.actions;
   const actionOf = (type: string) => actions.find((action) => action.actionType === type);
 
   const issues = collection.filter((item) => item.kind === "issue");
@@ -1516,6 +1517,20 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     </div>
   );
 
+  // 在飞书约上的会（还没开完）：约的人还没连飞书时给他「连接飞书」，没约上给短状态和「重试」，有入会链接时一个安静的「进入飞书会议」。
+  const feishuEvent = !ended && payload.status === "scheduled" ? source.feishuEvent ?? null : null;
+  const retryBooking = actionOf("meeting.retry_feishu_booking");
+  const feishuEntry = !feishuEvent ? null
+    : feishuEvent.status === "waiting_auth" && feishuEvent.organizerId === workspace.viewerId ? (
+      <button type="button" className={s.feishuAction}
+        onClick={() => window.location.assign(feishuConnectHref(`${window.location.pathname}${window.location.search}`))}>连接飞书</button>
+    ) : feishuEvent.status === "failed" && retryBooking ? (
+      <span className={s.feishuEntry}>
+        <span className={s.feishuFailed}>飞书未约上</span>
+        <button type="button" className={s.feishuAction} disabled={pending} onClick={() => void run(retryBooking, {})}>重试</button>
+      </span>
+    ) : feishuEvent.joinUrl ? <a className={s.feishuLink} href={feishuEvent.joinUrl} target="_blank" rel="noreferrer">进入飞书会议</a> : null;
+
   const statusNow = memberReadOnly && ended
     ? outcomeItems.length ? "会后结论已确认" : generatingCard(payload) ? "生成会议卡" : awaitingMinutes(payload) ? "等妙记" : "会议已结束"
     : phase === "live" ? recorderLine(recorder.state) : meetingNow(payload, ended);
@@ -1775,7 +1790,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
               <div className={s.readingMain} data-material-column ref={mainRef} onMouseUp={onQuoteMouseUp}>
                 <FileDropZone disabled={!recordDrop} busy={recordDrop && uploading} onFile={(file) => void importTranscriptFile(file)}>
                 {worldLine}
-                <MeetingStatus phase={phase} facts={facts} now={statusNow} endedAt={payload.endedAt} />
+                <MeetingStatus phase={phase} facts={facts} now={statusNow} endedAt={payload.endedAt}>{feishuEntry}</MeetingStatus>
                 {(memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose) ?
                   <p className={s.agenda}>{stripInternalRefs(memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose)}</p> : null}
                 {preflightToolbar}
