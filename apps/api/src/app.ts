@@ -517,7 +517,7 @@ export async function buildApp({
     weeklyReviewWorld = sync;
     app.addHook("onClose", async () => { await sync.close(); });
   }
-  // 签发月度计划后代记本体同周期周期目标的门（代战场 DRI 承诺、代 CEO 确认）：实例配置允许写、且单独的开关打开时才启用。
+  // 签发月度计划后代记本体同周期周期目标的门（代 RU DRI 承诺、代 CEO 确认）：实例配置允许写、且单独的开关打开时才启用。
   let worldPeriodGoals: WorldPeriodGoalService | undefined;
   if (worldConfigured(env) && world.status().writes && env.worldPeriodGoalGates) {
     const service = createWorldPeriodGoalService(pool, new WorldClient(q, env),

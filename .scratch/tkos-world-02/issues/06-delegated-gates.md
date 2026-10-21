@@ -1,7 +1,7 @@
 # 06 · 代记门：月度计划签发、任务卡确认
 
 Type: implementation
-Status: in-progress（周期目标两门已实现，开关缺省关，代哪位 RU DRI 待定；Mission 两门已按斯一 10/21 答复设计，代码未写）
+Status: in-progress（周期目标两门已实现，开关缺省关；Mission 两门已按斯一 10/21 答复设计，代码未写）
 Blocked by: 01、02
 
 ## 要做什么
@@ -24,7 +24,7 @@ Blocked by: 01、02
 
 | 天枢动作 | 门 | 代谁 | 状态 |
 |-|-|-|-|
-| CEO 签发月度计划（`monthlyPlans.ts` `executeSignMonthlyPlan`） | `world_commit_period_goal` | 该域的战场 DRI | 已实现 |
+| CEO 签发月度计划（`monthlyPlans.ts` `executeSignMonthlyPlan`） | `world_commit_period_goal` | 实例配置 `unit_dris` 写明的 RU DRI（eo → 于斯一） | 已实现 |
 | 同上 | `world_confirm_period_goal` | 人员名单里 ceo 角色的人 | 已实现（74ca02e、b04eb03、2e08112） |
 | 本人确认任务卡（`personalMissionCards.ts` 写 `owner_confirmed_at`） | `world_commit_mission` | Mission DRI 本人 | 等斯一 |
 | 战场 DRI 确认任务组合（`missionRounds.ts` `executeConfirmMissionRound`） | `world_confirm_mission` | 这次确认的战场 DRI（`confirmed_by`） | 等斯一 |
@@ -35,10 +35,10 @@ Blocked by: 01、02
 
 - 开关 `TKOS_WORLD_PERIOD_GOAL_GATES=1` 且实例配置允许写才启用，缺省关；只管这两门，会议卡、周复盘写入不受影响。
 - 签发后立即跑一次、每 10 分钟补跑；只看最近一份已签发的计划。
-- 先承诺：同周期的草稿，只承诺签发时那一版（推出草稿的事件和每次修订都记在签发之前），不带候选。代谁：本体里该域挂天枢战场（外部引用 `tianshu` / `battlefield:<id>`）的责任单元 → `battlefield_config.owner_id`；对不上唯一一位、或这个人在实例配置里没有本体主体，就不代（日志 `NO_UNIT_DRI`）。
+- 先承诺：同周期的草稿，只承诺签发时那一版（推出草稿的事件和每次修订都记在签发之前），不带候选。代谁：实例配置 `unit_dris` 按域写明（`domains` 的键 → 天枢 personId，再经 `people` 取本体主体），MVP 配置写的是 eo → 于斯一（10/21 铭泽定）。没写的域、或写的人没有本体主体，就不代（日志 `NO_UNIT_DRI`）。被代记的人要本人登记覆盖门族和这个分区的委托。
 - 再确认：已承诺、承诺记在签发之前，或这条承诺就是这次签发代记的（外部记录 `tianshu:plan-sign:<planId>`）。
 - 幂等键一个目标版本一个：承诺 `tianshu:plan-sign:<planId>:commit:<id>:<version>`，确认 `tianshu:plan-sign:<planId>:<id>:<version>`。成功或失败（403 等）不再自动重试，进管理员失败列表；网络失败按原键重放。
-- 对 E&O 不起作用（10/21 铭泽确认）：E&O 在天枢里不是战场，是能力域 05，本体里它的责任单元挂的是 `capability:05`。能力域本身没有负责人，负责人在整个能力建设（capabilities）这一层。所以按战场 DRI 取人对 E&O 取不到，会跳过。代哪位 RU DRI 待铭泽在三个方案里选：按能力建设负责人取、实例配置写死、不代承诺。
+- 为什么写配置、不从天枢推：E&O 在天枢里不是战场，是能力域 05（本体里它的责任单元挂 `capability:05`）。能力域本身没有负责人，负责人在整个能力建设这一层，所以天枢里推不出 E&O 的 RU DRI。
 - 签发时那位 RU DRI 在天枢里没有单独动作，外部记录用的是 CEO 那次签发。11 月的周期目标草稿谁建，没核实。
 
 ## 斯一 10/21 的规则（所有代记门通用）

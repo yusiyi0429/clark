@@ -2,7 +2,6 @@ import type { Pool } from "pg";
 import type { Query } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
 import { WorldClient, WorldError, worldErrorCode, worldTarget, type WorldAction, type WorldHead } from "./worldClient.js";
-import { battlefieldIdOf } from "./worldReader.js";
 
 type SignedPlan = { id: string; period: string; confirmed_at: Date };
 type WorldEvent = Record<string, unknown>;
@@ -37,20 +36,11 @@ async function draftAtSign(client: WorldClient, goal: WorldHead, signedAt: Date)
   return shaping.some((event) => event.event_id === eventId) && shaping.every((event) => recordedBy(event, signedAt));
 }
 
-/**
- * 各域的 RU DRI：本体里该域挂天枢战场（外部引用 battlefield:<id>）的责任单元，取天枢里这个战场的 DRI。
- * 同一域对上不止一位就记 null，不猜。
- */
-async function unitDris(client: WorldClient, q: Query): Promise<Map<string, string | null>> {
-  const owners = new Map((await q("SELECT id, owner_id FROM battlefield_config")).rows.map((row) => [row.id as string, row.owner_id as string]));
-  const dris = new Map<string, string | null>();
-  for (const unit of await client.listObjects({ type: "ResponsibilityUnit" })) {
-    const battlefieldId = battlefieldIdOf(unit);
-    const owner = battlefieldId ? owners.get(battlefieldId) : undefined;
-    if (!unit.domain_id || !owner) continue;
-    dris.set(unit.domain_id, dris.has(unit.domain_id) && dris.get(unit.domain_id) !== owner ? null : owner);
-  }
-  return dris;
+/** 周期目标所在域的 RU DRI 的本体主体：实例配置 unit_dris 按域写明是谁（E&O 是能力域，天枢里没有对应的负责人）；没写的域不代。 */
+function unitDriPrincipal(client: WorldClient, domainId: string | undefined): string | undefined {
+  const key = Object.entries(client.config.domains).find(([, id]) => id === domainId)?.[0];
+  const dri = key ? client.config.unit_dris?.[key] : undefined;
+  return dri ? client.config.people[dri] : undefined;
 }
 
 /** 一个目标版本一个键：同一版本只试一次，网络失败按这个键重放；目标重新承诺（版本变了）才再试。 */
@@ -86,7 +76,7 @@ export function periodGoalConfirmAction(goal: WorldHead, plan: SignedPlan, princ
 
 /**
  * 最近一份已签发的月度计划（只代记当月）→ 本体同周期、各单元的周期目标：
- * 先把签发时那一版草稿代 RU DRI（天枢里挂这个域的战场 DRI）承诺，再把「已承诺」、承诺在签发之前或就是这次代记的目标代 CEO 确认
+ * 先把签发时那一版草稿代 RU DRI（实例配置 unit_dris 按域写明）承诺，再把「已承诺」、承诺在签发之前或就是这次代记的目标代 CEO 确认
  * （CEO 取人员名单里 ceo 角色的人）。签发后立即跑一次，另定时补跑（签发时本体不通、部署前已签发）。
  * 结果看 world_sync_ledger：成功或失败（委托没登记 / 失效、版本对不上等）的版本不再自动重试，失败照台账进管理员视图的失败列表；
  * 网络失败下一轮按原幂等键重放。
@@ -105,15 +95,11 @@ export function createWorldPeriodGoalService(pool: Pool, client: WorldClient, ce
   };
   /** 代 RU DRI 承诺草稿；返回是否写进了至少一条。 */
   async function commitDrafts(plan: SignedPlan, goals: WorldHead[]): Promise<boolean> {
-    const drafts = goals.filter((goal) => lifecycleOf(goal).status === "draft");
-    if (!drafts.length) return false;
-    const dris = await unitDris(client, q);
     let committed = false;
-    for (const listed of drafts) {
+    for (const listed of goals.filter((goal) => lifecycleOf(goal).status === "draft")) {
       const log = (status: string, errorCode?: string) =>
         logEvent({ event: "world.period_goal", actionType: "world_commit_period_goal", objectRef: `period-goal:${listed.object_id}`, status, errorCode });
-      const dri = listed.domain_id ? dris.get(listed.domain_id) : undefined;
-      const principal = dri ? client.config.people[dri] : undefined;
+      const principal = unitDriPrincipal(client, listed.domain_id);
       if (!principal) { log("skipped", "NO_UNIT_DRI"); continue; }
       const key = periodGoalCommitKey(plan.id, listed);
       if (await settled(key)) continue;

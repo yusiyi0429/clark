@@ -18,6 +18,8 @@ export type WorldInstance = {
   label?: string;
   principals?: Record<string, string>;
   anchors?: { company?: string; strategy?: string };
+  /** 签发月度计划时代哪位 RU DRI 承诺周期目标：domains 的键 → 天枢 personId（再经 people 取本体主体）；没写的域不代。 */
+  unit_dris?: Record<string, string>;
   reads?: boolean;
   writes?: boolean;
 };
