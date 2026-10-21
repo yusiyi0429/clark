@@ -13,7 +13,8 @@ import { WorldError, worldErrorCode, worldRef, type WorldClient, type WorldObjec
  *   本体上的版本已经不是期望的版本就不提交，直接按冲突记。
  * - 提交成功后取对象读回，组件文字等于改后内容才算 updated；改出的版本（actualVersion，也是同一对象下一条接着提交的版本）取回执的 object_versions，
  *   不取读回时的版本（提交和读回之间别人的修改不能被接上覆盖）。改成后当前草稿跟上这次的结果，不显示「目标已变」。冲突记「目标已变」，并让当前草稿按对象当前值刷新重看；
- *   403（天枢以自己身份改不了正式块、Mission 计划和无门对象，斯一 10/21）记 not_allowed「已确认、待同步」；状态、契约不允许也记 not_allowed；
+ *   目标块是正式块（class formal）的不提交，直接记 not_allowed「已确认、待同步」：天枢以自己身份改不了任何正式块（斯一 10/21），
+ *   提交了本体也只回 422（要人工验收）或 403；本体回 403（Mission 计划、无门对象等）同样记「已确认、待同步」；状态、契约不允许也记 not_allowed；
  *   其他错误记 failed 和错误码，列为待重新确认：没写成的不算已改成，下一次确认出新版本时换新键再提交。网络错误抛出交给任务按原幂等键重跑，任务最后一次仍是网络错误时记 failed。本期不提供失败项重试（拍板 5）。
  */
 export type MeetingObjectWorld = Pick<WorldClient, "write" | "getObject">;
@@ -65,10 +66,12 @@ export async function supersedeObjects(q: Query, meetingId: string, revision: nu
   );
 }
 
+type WorldBlock = { id: string; class?: string; components?: { id?: string; type: string; text?: string }[] };
+const blockOf = (object: WorldObject, blockId: string): WorldBlock | undefined =>
+  ((object.business as { blocks?: WorldBlock[] }).blocks ?? []).find((block) => block.id === blockId);
 /** 组件当前文字（<块 id>/<组件 id>）。 */
 function componentOf(object: WorldObject, blockId: string, componentId: string): { type: string; text?: string } | undefined {
-  const blocks = (object.business as { blocks?: { id: string; components?: { id?: string; type: string; text?: string }[] }[] }).blocks ?? [];
-  return blocks.find((block) => block.id === blockId)?.components?.find((item) => item.id === componentId);
+  return blockOf(object, blockId)?.components?.find((item) => item.id === componentId);
 }
 
 export function createMeetingObjectSync({ q, world, refreshDraft }: {
@@ -92,6 +95,8 @@ export function createMeetingObjectSync({ q, world, refreshDraft }: {
     const key = objectKey(meetingId, revision, change.id);
     const receipt = await world.write(key, async () => {
       const object = await world.getObject(objectId);
+      // 正式块不提交（在建请求之前就停，台账不留记录、不发请求），按 403 记「已确认、待同步」。
+      if (blockOf(object, blockId)?.class === "formal") throw new WorldError(403, "FORMAL_BLOCK", "天枢以自己身份改不了正式块");
       const component = componentOf(object, blockId, componentId);
       if (object.business.object_version !== expectedVersion || !component) throw new WorldError(409, "VERSION_CONFLICT", "目标已变");
       return {

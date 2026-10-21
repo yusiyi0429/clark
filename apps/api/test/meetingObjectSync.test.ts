@@ -20,12 +20,12 @@ const error = (status: number, code: string) => Response.json({ error: { code, m
  * 回执带 object_versions。refuse(body, path) 返回 Response 时修订照它回（模拟无权限、状态不允许、别人刚好改了）；
  * afterCommit(key) 在修订提交、回执返回前跑（模拟提交和读回之间别人的修改）；network() 为 true 时修订请求抛网络错误。
  */
-function ontology({ refuse, afterCommit, network = () => false }:
-  { refuse?: (body: any, path: string) => Response | undefined; afterCommit?: (key: string) => void | Promise<void>; network?: () => boolean } = {}) {
+function ontology({ refuse, afterCommit, network = () => false, blockClass }:
+  { refuse?: (body: any, path: string) => Response | undefined; afterCommit?: (key: string) => void | Promise<void>; network?: () => boolean; blockClass?: string } = {}) {
   const po = {
     object_id: "obj-po-1", object_type: "PeriodGoal", title: "十月交付", revision_id: "obj-po-1-r5", object_version: 5, version: 5,
     lifecycle: { status: "active" }, contract_version: "tkos.world/0.3", external_refs: [],
-    blocks: [{ id: "target", components: [
+    blocks: [{ id: "target", ...(blockClass ? { class: blockClass } : {}), components: [
       { id: "acc-1", type: "acceptance_criterion", text: "十月底前 3 家客户上线" },
       { id: "acc-2", type: "acceptance_criterion", text: "接口用 v1" },
     ] }],
@@ -182,6 +182,26 @@ describe("对象修改逐个提交", () => {
       await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
       await run();
       expect(await objectsOf(t, meetingId, 1)).toMatchObject([{ status: "failed", error: "写入失败" }]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("目标是正式块：不提交，直接记「已确认、待同步」，台账不留记录；事件照写、不带 refs", async () => {
+    const world = ontology({ blockClass: "formal" });
+    const { t, host, meetingId, run } = await setup(cardAgent(TWO_CHANGES));
+    try {
+      await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
+      await run();
+      expect(await objectsOf(t, meetingId, 1)).toMatchObject([
+        { changeId: "chg-1", status: "not_allowed", error: "已确认、待同步", actualVersion: null },
+        { changeId: "chg-2", status: "not_allowed", error: "已确认、待同步", actualVersion: null },
+      ]);
+      expect(world.revisions()).toHaveLength(0);
+      expect(await t.sql("SELECT idempotency_key FROM world_sync_ledger WHERE idempotency_key LIKE $1", [`%:change:%`])).toEqual([]);
+      const event = world.calls.find((call) => call.url.pathname === "/v1/actions/prepare" && call.body.action_type === "world_record_event")!.body;
+      expect(event.params.content).not.toHaveProperty("refs");
+      expect((await getCard(t, host, meetingId)).sync!.event.status).toBe("succeeded");
     } finally {
       await t.close();
     }
