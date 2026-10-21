@@ -51,6 +51,8 @@ export type MeetingMinutesDeps = {
 
 type FeishuIdentity = { person_id: string; open_id: string; name: string | null };
 type IngestResult = { kind: "ready" | "failed" | "taken" } | { kind: "rejected"; status: 404 | 409; code: string; message: string };
+/** 代读结果：text 是飞书原文；contentHash 算它，confirmedContentHash 是确认时那份逐字稿来源记下的（没有为 null）。 */
+type TranscriptRead = { meetingId: string; source: { url: string | null; title: string }; text: string; contentHash: string; confirmedContentHash: string | null };
 type MinutesFetchResult = TMeetingMinutesFetchResponse | { error: { status: 400 | 404 | 409; code: string; message: string } };
 
 /** 飞书错误码归到读取失败的原因（待联调：按开放平台妙记错误码，2091002 / 2091004 不存在或已删，2091005 与 99991672 / 99991679 没权限）。 */
@@ -421,6 +423,37 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     return resumed.rowCount ?? 0;
   }
 
+  /**
+   * 给独立 Chat 代读（10/21 与人豪约定）：用提问人本人的飞书授权读这场会对上的妙记全文；Chat 不拿飞书凭据。
+   * 读不到就返回原因，不退回天枢存的逐字稿。不检查会议可见范围，调用方已检查。不记全文和 token。
+   */
+  async function transcriptFor(meetingId: string, personId: string): Promise<TranscriptRead | { error: { status: 403 | 404 | 409 | 502 | 503; code: string; message: string } }> {
+    const meeting = await getMeetingRow(q, meetingId);
+    const minuteToken = meeting?.minute_token;
+    if (!meeting || !minuteToken) return { error: { status: 404, code: "NO_FEISHU_MINUTES", message: "这场会没有飞书妙记" } };
+    if (!feishu) return { error: { status: 503, code: "FEISHU_UNAVAILABLE", message: "飞书没接" } };
+    const token = await tokenFor(personId);
+    if (!token) return { error: { status: 403, code: "FEISHU_NOT_CONNECTED", message: "提问人没有可用的飞书授权" } };
+    let text: string;
+    try {
+      text = await readFullText(feishu.api, meetingId, token, minuteToken);
+    } catch (error) {
+      const failure = minutesFailureOf(error);
+      if (failure === "no_permission") return { error: { status: 403, code: "FEISHU_NO_PERMISSION", message: "提问人在飞书里没有这份妙记的权限" } };
+      if (failure === "not_ready") return { error: { status: 409, code: "MINUTES_NOT_READY", message: "妙记还在生成" } };
+      if (failure === "not_found") return { error: { status: 404, code: "MINUTES_NOT_FOUND", message: "飞书里找不到这份妙记" } };
+      return { error: { status: 502, code: "FEISHU_UNAVAILABLE", message: "飞书暂时读不到" } };
+    }
+    const source = meeting.transcript?.source;
+    return {
+      meetingId,
+      source: { url: source?.url ?? (feishuWebOrigin ? `${feishuWebOrigin}/minutes/${encodeURIComponent(minuteToken)}` : null), title: source?.title ?? meeting.title },
+      text,
+      contentHash: transcriptContentHash(text),
+      confirmedContentHash: source?.contentHash ?? null,
+    };
+  }
+
   return {
     markEnded,
     poll,
@@ -428,6 +461,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     refetch,
     readLink,
     resumeFor,
+    transcriptFor,
     async tick(): Promise<void> {
       await markEnded(now());
       await poll();

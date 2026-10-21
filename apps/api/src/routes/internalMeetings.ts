@@ -17,6 +17,7 @@ const meetingParams = Type.Object({ meetingId: Type.String({ minLength: 1 }) }, 
 /**
  * 给独立 Chat 的确认会议只读接口（拍板 12）：Authorization: Bearer <INTERNAL_CHAT_TOKEN> 加可信用户 X-Owner-Id（personId）。
  * 没配 INTERNAL_CHAT_TOKEN 时不注册（一律 404）；凭据不对 401；X-Owner-Id 不在人员目录或读不了这场会 404。
+ * /:meetingId/transcript 用提问人本人的飞书授权读妙记全文（Chat 不拿飞书凭据）。
  * 不走浏览器会话；不在公开 OpenAPI 里（契约包的 OpenAPI 文档按路径手列）。
  */
 export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -47,5 +48,19 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
       if (error instanceof PayloadHashMismatchError) return fail(reply, 500, error.code, "会议确认版正文和摘要值对不上");
       throw error;
     }
+  });
+
+  // 逐字稿全文：只读有确认版的会，用提问人本人的飞书授权现读妙记（meetingMinutes.transcriptFor），读不到不退回天枢存的。
+  app.get("/internal/confirmed-meetings/:meetingId/transcript", { onRequest, schema: { params: meetingParams } }, async (req, reply) => {
+    const owner = ownerOf(req);
+    if (!owner) return notFound(reply);
+    try {
+      if ((await readConfirmedMeeting(q, owner, req.params.meetingId))?.status !== "confirmed") return notFound(reply);
+    } catch (error) {
+      if (error instanceof PayloadHashMismatchError) return fail(reply, 500, error.code, "会议确认版正文和摘要值对不上");
+      throw error;
+    }
+    const result = await app.meetingFollowThrough.minutes.transcriptFor(req.params.meetingId, owner.personId);
+    return "error" in result ? fail(reply, result.error.status, result.error.code, result.error.message) : result;
   });
 }

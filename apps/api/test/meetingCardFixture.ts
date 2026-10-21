@@ -7,6 +7,8 @@ import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPrefligh
 import { createJobWorker } from "../src/jobs.js";
 import { hashSecret } from "../src/session.js";
 import { worldEnv } from "./worldFixture.js";
+import type { AppEnv } from "../src/app.js";
+import type { FeishuMinutesApi } from "../src/feishu/minutes.js";
 
 // 会议卡测试共用：建会、导入逐字稿生成草稿、确认和读卡的请求。假本体各测试文件自己 stubWorld。
 const PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people-candidate.json", import.meta.url));
@@ -39,8 +41,9 @@ export function cardAgent(objectChanges = [{ targetRef: "obj-po-1#target/acc-1",
 }
 const preflightAgent: PreflightAgent = { async generate(input: PreflightAgentInput) { return { candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)) }; } };
 
-export async function setup(agent: PostMeetingAgent = cardAgent(), env: { internalChatToken?: string } = {}) {
-  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, ...worldEnv, ...env }, undefined, { preflightAgent, outcomeAgent: agent });
+export async function setup(agent: PostMeetingAgent = cardAgent(), env: Pick<AppEnv, "internalChatToken" | "feishu"> = {},
+  extra: { meetingFollowThroughAgents?: { minutesApi?: FeishuMinutesApi } } = {}) {
+  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, ...worldEnv, ...env }, undefined, { preflightAgent, outcomeAgent: agent, ...extra });
   const ceo = await t.loginCookie();
   const issueCard = await t.createIssue();
   const create = ((issueCard as unknown as { actions: { actionType: string; actionId: string }[] }).actions).find((a) => a.actionType === "issue.create_meeting")!;
