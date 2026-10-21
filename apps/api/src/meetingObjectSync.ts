@@ -13,16 +13,30 @@ import { WorldError, worldErrorCode, worldRef, type WorldClient, type WorldObjec
  *   本体上的版本已经不是期望的版本就不提交，直接按冲突记。
  * - 提交成功后取对象读回，组件文字等于改后内容才算 updated；改出的版本（actualVersion，也是同一对象下一条接着提交的版本）取回执的 object_versions，
  *   不取读回时的版本（提交和读回之间别人的修改不能被接上覆盖）。改成后当前草稿跟上这次的结果，不显示「目标已变」。冲突记「目标已变」，并让当前草稿按对象当前值刷新重看；
- *   目标块是正式块（class formal）的不提交，直接记 not_allowed「已确认、待同步」：天枢以自己身份改不了任何正式块（斯一 10/21），
- *   提交了本体也只回 422（要人工验收）或 403；本体回 403（Mission 计划、无门对象等）同样记「已确认、待同步」；状态、契约不允许也记 not_allowed；
+ *   提交前按 FR-5.4 的本期可写范围判定（白名单）：只有有门对象（Strategy、LongTermGoal、PeriodGoal、Mission）非终态时的活动块（class activity）才提交；
+ *   正式块（formal）、Mission 计划（dri_maintained）、无门对象（Company、RU、Task）、已结束的对象都不提交、不进台账，
+ *   直接记 not_allowed「已确认、待同步 · 原因」（斯一、人豪 10/21）。本体回 403 的也记「已确认、待同步 · 本体拒绝」；状态、契约不允许也记 not_allowed；
  *   其他错误记 failed 和错误码，列为待重新确认：没写成的不算已改成，下一次确认出新版本时换新键再提交。网络错误抛出交给任务按原幂等键重跑，任务最后一次仍是网络错误时记 failed。本期不提供失败项重试（拍板 5）。
  */
 export type MeetingObjectWorld = Pick<WorldClient, "write" | "getObject">;
 
 const TRIGGER = "会议记录整卡确认";
 const objectKey = (meetingId: string, revision: number, changeId: string) => `tianshu-meeting:${meetingId}:v${revision}:change:${changeId}`;
-/** 正式块等天枢以自己身份改不了的（本体回 403）：已确认，等有权限的人同步。 */
+/** 天枢以自己身份改不了的（不在本期可写范围，或本体拒绝）：已确认，等有权限的人同步。回执写成「已确认、待同步 · 原因」。 */
 export const PENDING_SYNC = "已确认、待同步";
+const pendingSync = (reason: string) => `${PENDING_SYNC} · ${reason}`;
+/** 有门对象：天枢只能改它们非终态时的活动块。 */
+const GATED_TYPES = new Set(["Strategy", "LongTermGoal", "PeriodGoal", "Mission"]);
+const TERMINAL = new Set(["completed", "done", "closed", "cancelled", "canceled", "archived", "abandoned", "superseded"]);
+/** 不在本期可写范围时给原因（短标签），在范围内为 null。 */
+function outOfScope(object: WorldObject, block: WorldBlock | undefined): string | null {
+  const type = (object.business as { object_type?: string }).object_type ?? "";
+  if (!GATED_TYPES.has(type)) return "无门对象";
+  if (TERMINAL.has(String((object.records.lifecycle as { status?: unknown } | null)?.status ?? ""))) return "对象已结束";
+  if (block?.class === "formal") return "正式块";
+  if (block?.class === "dri_maintained") return "Mission 计划";
+  return block?.class === "activity" ? null : "不在可写范围";
+}
 const NOT_ALLOWED = new Set(["INVALID_STATE", "PROTOCOL_BINDING_CONFLICT"]);
 const ERROR_LABELS: Record<string, string> = {
   NETWORK_ERROR: "连不上本体", READBACK_MISMATCH: "读回不一致", VERSION_CONFLICT: "目标已变", INVALID_STATE: "对象状态不允许", PROTOCOL_BINDING_CONFLICT: "契约版本不对",
@@ -95,8 +109,9 @@ export function createMeetingObjectSync({ q, world, refreshDraft }: {
     const key = objectKey(meetingId, revision, change.id);
     const receipt = await world.write(key, async () => {
       const object = await world.getObject(objectId);
-      // 正式块不提交（在建请求之前就停，台账不留记录、不发请求），按 403 记「已确认、待同步」。
-      if (blockOf(object, blockId)?.class === "formal") throw new WorldError(403, "FORMAL_BLOCK", "天枢以自己身份改不了正式块");
+      // 不在本期可写范围的不提交（在建请求之前就停，台账不留记录、不发请求），记「已确认、待同步 · 原因」。
+      const reason = outOfScope(object, blockOf(object, blockId));
+      if (reason) throw new WorldError(403, "OUT_OF_SCOPE", reason);
       const component = componentOf(object, blockId, componentId);
       if (object.business.object_version !== expectedVersion || !component) throw new WorldError(409, "VERSION_CONFLICT", "目标已变");
       return {
@@ -174,7 +189,7 @@ export function createMeetingObjectSync({ q, world, refreshDraft }: {
         if (code === "NETWORK_ERROR" && !lastAttempt) throw error;
         const status = error instanceof WorldError ? error.status : 0;
         next = code === "VERSION_CONFLICT" ? { ...result, status: "conflict", error: worldErrorLabel(code) }
-          : status === 403 ? { ...result, status: "not_allowed", error: PENDING_SYNC }
+          : status === 403 ? { ...result, status: "not_allowed", error: pendingSync(code === "OUT_OF_SCOPE" ? (error as Error).message : "本体拒绝") }
           : NOT_ALLOWED.has(code) ? { ...result, status: "not_allowed", error: worldErrorLabel(code) }
           : { ...result, status: "failed", error: worldErrorLabel(code) };
         message = error instanceof Error ? error.message : undefined;

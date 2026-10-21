@@ -20,12 +20,12 @@ const error = (status: number, code: string) => Response.json({ error: { code, m
  * 回执带 object_versions。refuse(body, path) 返回 Response 时修订照它回（模拟无权限、状态不允许、别人刚好改了）；
  * afterCommit(key) 在修订提交、回执返回前跑（模拟提交和读回之间别人的修改）；network() 为 true 时修订请求抛网络错误。
  */
-function ontology({ refuse, afterCommit, network = () => false, blockClass }:
-  { refuse?: (body: any, path: string) => Response | undefined; afterCommit?: (key: string) => void | Promise<void>; network?: () => boolean; blockClass?: string } = {}) {
+function ontology({ refuse, afterCommit, network = () => false, blockClass = "activity", objectType = "PeriodGoal" }:
+  { refuse?: (body: any, path: string) => Response | undefined; afterCommit?: (key: string) => void | Promise<void>; network?: () => boolean; blockClass?: string; objectType?: string } = {}) {
   const po = {
-    object_id: "obj-po-1", object_type: "PeriodGoal", title: "十月交付", revision_id: "obj-po-1-r5", object_version: 5, version: 5,
+    object_id: "obj-po-1", object_type: objectType, title: "十月交付", revision_id: "obj-po-1-r5", object_version: 5, version: 5,
     lifecycle: { status: "active" }, contract_version: "tkos.world/0.3", external_refs: [],
-    blocks: [{ id: "target", ...(blockClass ? { class: blockClass } : {}), components: [
+    blocks: [{ id: "target", class: blockClass, components: [
       { id: "acc-1", type: "acceptance_criterion", text: "十月底前 3 家客户上线" },
       { id: "acc-2", type: "acceptance_criterion", text: "接口用 v1" },
     ] }],
@@ -162,7 +162,7 @@ describe("对象修改逐个提交", () => {
       const view = await getCard(t, host, meetingId);
       expect(view.sync!.event).toMatchObject({ status: "succeeded", eventId: "ev-1" });
       expect(view.sync!.objects).toMatchObject([
-        { changeId: "chg-1", status: "not_allowed", error: "已确认、待同步", actualVersion: null },
+        { changeId: "chg-1", status: "not_allowed", error: "已确认、待同步 · 本体拒绝", actualVersion: null },
         { changeId: "chg-2", status: "not_allowed", error: "对象状态不允许", actualVersion: null },
       ]);
       expect(view.confirmed!.payload.objectChanges.map((change) => change.id)).toEqual(["chg-1", "chg-2"]);
@@ -187,6 +187,22 @@ describe("对象修改逐个提交", () => {
     }
   });
 
+  it("不在本期可写范围（FR-5.4）：不提交、不进台账，记「已确认、待同步 · 原因」", async () => {
+    for (const [options, reason] of [[{ blockClass: "dri_maintained", objectType: "Mission" }, "Mission 计划"], [{ objectType: "Company" }, "无门对象"],
+      [{ objectType: "Task" }, "无门对象"], [{ blockClass: "plan" }, "不在可写范围"]] as const) {
+      const world = ontology(options);
+      const { t, host, meetingId, run } = await setup(cardAgent(TWO_CHANGES.slice(0, 1)));
+      try {
+        await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
+        await run();
+        expect(await objectsOf(t, meetingId, 1)).toMatchObject([{ changeId: "chg-1", status: "not_allowed", error: `已确认、待同步 · ${reason}` }]);
+        expect(world.revisions()).toHaveLength(0);
+      } finally {
+        await t.close();
+      }
+    }
+  }, 30_000);
+
   it("目标是正式块：不提交，直接记「已确认、待同步」，台账不留记录；事件照写、不带 refs", async () => {
     const world = ontology({ blockClass: "formal" });
     const { t, host, meetingId, run } = await setup(cardAgent(TWO_CHANGES));
@@ -194,8 +210,8 @@ describe("对象修改逐个提交", () => {
       await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
       await run();
       expect(await objectsOf(t, meetingId, 1)).toMatchObject([
-        { changeId: "chg-1", status: "not_allowed", error: "已确认、待同步", actualVersion: null },
-        { changeId: "chg-2", status: "not_allowed", error: "已确认、待同步", actualVersion: null },
+        { changeId: "chg-1", status: "not_allowed", error: "已确认、待同步 · 正式块", actualVersion: null },
+        { changeId: "chg-2", status: "not_allowed", error: "已确认、待同步 · 正式块", actualVersion: null },
       ]);
       expect(world.revisions()).toHaveLength(0);
       expect(await t.sql("SELECT idempotency_key FROM world_sync_ledger WHERE idempotency_key LIKE $1", [`%:change:%`])).toEqual([]);

@@ -309,8 +309,8 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
     hooks.values = []; hooks.refs = [];
     // 天枢以自己身份改不了的正式块：已确认、待同步，不算失败。
     const pendingSync = render(view({ canEdit: false, confirmed: confirmedOf(draft()), sync: { ...SYNCED,
-      objects: [{ ...SYNCED.objects[0], status: "not_allowed", error: "已确认、待同步" }] } }));
-    expect(hasText(pendingSync, "接口全量切到 v2 · result · 已确认、待同步")).toBe(true);
+      objects: [{ ...SYNCED.objects[0], status: "not_allowed", error: "已确认、待同步 · 正式块" }] } }));
+    expect(hasText(pendingSync, "接口全量切到 v2 · result · 已确认、待同步 · 正式块")).toBe(true);
     hooks.values = []; hooks.refs = [];
     const generic = render(view({ canEdit: false, confirmed: confirmedOf(draft()), sync: { ...SYNCED, event: { status: "failed", eventId: null, error: "写入失败" } } }));
     expect(hasText(generic, "会议事件 · 写入失败")).toBe(true);

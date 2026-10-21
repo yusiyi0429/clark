@@ -143,8 +143,8 @@ export function syncRows(sync: TMeetingCardSync, changes: { id: string }[]): Syn
       case "updated": return row("已更新", "done");
       case "pending": return row("更新中", "wait");
       case "conflict": return row("待重新确认 · 目标已变", "warn");
-      // 天枢以自己身份改不了的（正式块等）：已经确认，等有权限的人同步。
-      case "not_allowed": return object.error === "已确认、待同步" ? row("已确认、待同步", "wait") : row(withReason("未更新", object.error), "warn");
+      // 天枢以自己身份改不了的（正式块、Mission 计划、无门对象等）：已经确认，等有权限的人同步；带服务端给的短原因。
+      case "not_allowed": return object.error?.startsWith("已确认、待同步") ? row(object.error, "wait") : row(withReason("未更新", object.error), "warn");
       case "failed": return row(withReason("待重新确认", object.error), "fail");
       default: return object.error && object.error !== "目标未定" ? row(withReason("未更新", object.error), object.error === "不写入" ? "off" : "warn") : row("目标未定", "fail");
     }
