@@ -191,7 +191,7 @@ export async function executeConfirmTranscriptCandidate(
       if (!known.has(mapping.speakerName)) return invalid(`未知说话人：${mapping.speakerName}`);
       if (mappingBySpeaker.has(mapping.speakerName)) return invalid(`说话人重复映射：${mapping.speakerName}`);
       if (!personById.has(mapping.personId)) return invalid(`personId 不在 company-people.v1：${mapping.personId}`);
-      if (usedPersonIds.has(mapping.personId)) return invalid(`同一人不能映射多个说话人：${mapping.personId}`);
+      // 飞书会把同一个人拆成几个说话人（「刘人豪」与「Speaker 1」），几个说话人可以对到同一人
       mappingBySpeaker.set(mapping.speakerName, mapping.personId);
       usedPersonIds.add(mapping.personId);
     }

@@ -295,9 +295,6 @@ describe("meeting.confirm_transcript_candidate", () => {
       const unknown = await execute(t, cookie, confirm, { speakerMappings: [...MAPPINGS.slice(0, 2), { speakerName: "测试丙", personId: "person-nope" }], confirmAddParticipants: true });
       expect(unknown.json().code).toBe("INVALID_SPEAKER_MAPPING");
 
-      const duplicated = await execute(t, cookie, confirm, { speakerMappings: [...MAPPINGS.slice(0, 2), { speakerName: "测试丙", personId: "person-fixture-001" }], confirmAddParticipants: true });
-      expect(duplicated.json().code).toBe("INVALID_SPEAKER_MAPPING");
-
       const unknownSpeaker = await execute(t, cookie, confirm, { speakerMappings: [...MAPPINGS, { speakerName: "测试丁", personId: "person-fixture-003" }], confirmAddParticipants: true });
       expect(unknownSpeaker.json().code).toBe("INVALID_SPEAKER_MAPPING");
 
@@ -338,6 +335,36 @@ describe("meeting.confirm_transcript_candidate", () => {
       expect(agent.calls[0].transcript.turns.map((turn) => turn.id)).toEqual(["turn-0001", "turn-0002", "turn-0003"]);
       // 确认后候选与后续候选 Action 一起消失
       expect(await actionId(t, cookie, meetingId, "meeting.confirm_transcript_candidate")).toBeUndefined();
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("lets several speakers map to the same person: each turn keeps that person and participants stay unique", async () => {
+    const t = await newApp();
+    try {
+      const { cookie, meetingId } = await readyMeeting(t, "confirm-same-person");
+      // 飞书把同一个人拆成两个说话人：测试丙 / Speaker 1 都是 003（确认时才补进参会人），Speaker 2 是已在会的 002
+      await upload(t, cookie, meetingId, `${MARKDOWN}\nSpeaker 1 00:50\n风险清单我今天发。\n\nSpeaker 2 01:05\n排期我再对一下。\n`);
+      const confirm = await actionId(t, cookie, meetingId, "meeting.confirm_transcript_candidate");
+      const res = await execute(t, cookie, confirm, {
+        speakerMappings: [...MAPPINGS, { speakerName: "Speaker 1", personId: "person-fixture-003" }, { speakerName: "Speaker 2", personId: "person-fixture-002" }],
+        confirmAddParticipants: true,
+      });
+      expect(res.statusCode).toBe(200);
+      const payload = res.json().cards[0].payload;
+      expect(payload.transcript.turns.map((turn: { id: string; speakerId: string }) => [turn.id, turn.speakerId])).toEqual([
+        ["turn-0001", "person-fixture-001"],
+        ["turn-0002", "person-fixture-002"],
+        ["turn-0003", "person-fixture-003"],
+        ["turn-0004", "person-fixture-003"],
+        ["turn-0005", "person-fixture-002"],
+      ]);
+      expect((payload.participants as { personId: string }[]).map((participant) => participant.personId)).toEqual([
+        "person-fixture-001",
+        "person-fixture-002",
+        "person-fixture-003",
+      ]);
     } finally {
       await t.close();
     }
