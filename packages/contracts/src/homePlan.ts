@@ -46,10 +46,14 @@ export const HomePlanMission = Type.Object(
   { additionalProperties: false },
 );
 
-/** Activity 就是执行事项；column 由服务端分好：已完成、本周、之后。overdue：没完成且截止早于本周一。 */
+/**
+ * Activity 就是执行事项；column 由服务端分好：已完成、本周、之后。overdue：没完成且截止早于本周一。
+ * missionId 是事项挂的 Mission，独立事项为 null；任务卡没确认时 item.mission 为空，按 Mission 归组看这里。
+ */
 export const HomePlanActivity = Type.Object(
   {
     item: TaskView,
+    missionId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     column: Type.Union([Type.Literal("done"), Type.Literal("week"), Type.Literal("later")]),
     overdue: Type.Boolean(),
   },

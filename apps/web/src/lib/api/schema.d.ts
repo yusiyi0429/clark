@@ -9128,6 +9128,7 @@ export interface components {
                 createdAt: string;
                 updatedAt: string;
             };
+            missionId: string | null;
             column: "done" | "week" | "later";
             overdue: boolean;
         };
@@ -9220,6 +9221,7 @@ export interface components {
                     createdAt: string;
                     updatedAt: string;
                 };
+                missionId: string | null;
                 column: "done" | "week" | "later";
                 overdue: boolean;
             }[];

@@ -37,9 +37,9 @@ const sample = {
   marks: [{ id: "7b0c3c1e-0000-4000-8000-000000000010", missionId: "sun-202610-1", date: "2026-10-24", label: "合入主干" }],
   tasks: [{ taskId: "task-1", missionId: "sun-202610-1", name: "会议写进本体", doneDefinition: "会后自动出会议卡，整卡确认后写进本体。", criteria: ["真实工作会走完全链路，读回一致", "飞书里直接开的会也接得住"] }],
   activities: [
-    { item: activity("7b0c3c1e-0000-4000-8000-000000000001", "回流方案定稿", { status: "done", startDate: null, dueDate: "2026-10-21", planTaskId: "task-1" }), column: "done", overdue: false },
-    { item: activity("7b0c3c1e-0000-4000-8000-000000000002", "真实会议跑通"), column: "week", overdue: false },
-    { item: activity("7b0c3c1e-0000-4000-8000-000000000003", "新 Chat 题库打分", { status: "not_started", startDate: "2026-10-27", dueDate: null }), column: "later", overdue: false },
+    { item: activity("7b0c3c1e-0000-4000-8000-000000000001", "回流方案定稿", { status: "done", startDate: null, dueDate: "2026-10-21", planTaskId: "task-1" }), missionId: "sun-202610-1", column: "done", overdue: false },
+    { item: activity("7b0c3c1e-0000-4000-8000-000000000002", "真实会议跑通"), missionId: "sun-202610-1", column: "week", overdue: false },
+    { item: activity("7b0c3c1e-0000-4000-8000-000000000003", "新 Chat 题库打分", { status: "not_started", startDate: "2026-10-27", dueDate: null, mission: null }), missionId: null, column: "later", overdue: false },
   ],
 };
 
@@ -63,6 +63,9 @@ describe("首页 Mission 计划视图契约", () => {
 
   it("Activity 的栏位只有三种；多出来的字段不收", () => {
     const [first] = sample.activities;
+    const { missionId: _missionId, ...withoutMissionId } = first!;
+    expect(Value.Check(HomePlanResponse, { ...sample, activities: [withoutMissionId] })).toBe(false);
+    expect(Value.Check(HomePlanResponse, { ...sample, activities: [{ ...first, missionId: "" }] })).toBe(false);
     expect(Value.Check(HomePlanResponse, { ...sample, activities: [{ ...first, column: "doing" }] })).toBe(false);
     expect(Value.Check(HomePlanResponse, { ...sample, activities: [{ ...first, extra: 1 }] })).toBe(false);
     expect(Value.Check(HomePlanResponse, { ...sample, days: [{ date: "2026-10-01", workday: true, holiday: false }] })).toBe(false);

@@ -50409,6 +50409,7 @@
         "type": "object",
         "required": [
           "item",
+          "missionId",
           "column",
           "overdue"
         ],
@@ -50785,6 +50786,17 @@
               }
             }
           },
+          "missionId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "column": {
             "anyOf": [
               {
@@ -51017,6 +51029,7 @@
               "type": "object",
               "required": [
                 "item",
+                "missionId",
                 "column",
                 "overdue"
               ],
@@ -51392,6 +51405,17 @@
                       "type": "string"
                     }
                   }
+                },
+                "missionId": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "column": {
                   "anyOf": [
