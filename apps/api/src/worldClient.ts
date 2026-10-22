@@ -21,7 +21,8 @@ export type WorldInstance = {
   reads?: boolean;
   writes?: boolean;
 };
-export const WORLD_INSTANCES = ["mvp", "demo", "formal", "tk"] as const;
+// preview：预发 tk-preview 写演示 scope（10/22 斯一定：预发不写 a92430fd）；demo 本身给集团演示站点只读用，不改。
+export const WORLD_INSTANCES = ["mvp", "demo", "formal", "tk", "preview"] as const;
 /** 写死只读的实例：0.2 没有技术上的只读（读身份按规则仍能记外部事件），只读由我们这一侧保证。 */
 export const WORLD_READ_ONLY_INSTANCES: readonly WorldInstanceName[] = ["tk"];
 export type WorldInstanceName = (typeof WORLD_INSTANCES)[number];
