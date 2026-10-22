@@ -893,4 +893,59 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
       await t.close();
     }
   });
+
+  it("过了预约结束记成等妙记的会，改期后妙记状态清回 none，会议卡不再是开完了", async () => {
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
+    try {
+      const meetingId = await scheduledMeeting(t);
+      const clock = new Date("2026-06-01T11:10:00+08:00");
+      await authorize(t, HOST, "ou_host", "测试乙", clock);
+      const api = fakeMinutesApi();
+      api.listEmpty = true;
+      await service(t, api, () => clock).tick();
+      expect(await live(t, meetingId)).toMatchObject({ minutes_status: "waiting", minutes_waiting_since: new Date("2026-06-01T03:00:00Z") });
+      await t.pool.query("UPDATE meetings SET minutes_status = 'failed', minutes_failure = 'fetch_failed', minutes_error = '读取失败' WHERE id = $1", [meetingId]);
+
+      const ceo = await t.loginCookie();
+      const card = (await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie: ceo } })).json().cards[0];
+      const action = card.actions.find((a: { actionType: string }) => a.actionType === "meeting.reschedule");
+      const moved = await post(t, ceo, "/api/actions/execute", { actionId: action.actionId, input: { scheduledAt: "2030-06-02T14:45:00.000+08:00" } });
+      expect(moved.statusCode).toBe(200);
+      expect((await t.pool.query("SELECT minutes_status, minutes_waiting_since, minutes_failure, minutes_error FROM meetings WHERE id = $1", [meetingId])).rows[0])
+        .toEqual({ minutes_status: "none", minutes_waiting_since: null, minutes_failure: null, minutes_error: null });
+      expect(moved.json().cards[0].payload).toMatchObject({ status: "scheduled", minutesStatus: "none", minutesWaitingSince: null, minutesFailure: null,
+        minutesManualImport: false, hasEnded: false, endedAt: null, startedAt: null });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("开会自愈：改期前留下的等妙记，第一次收到会议开始就清回 none 再记开始；有候选的、开过以后再来的开始事件不清", async () => {
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
+    try {
+      const stale = "UPDATE meetings SET minutes_status = 'waiting', minutes_waiting_since = '2026-06-01T03:00:00Z', minutes_error = '旧状态' WHERE id = $1";
+      const meetingId = await bookedMeeting(t);
+      await t.pool.query(stale, [meetingId]);
+      const minutes = service(t, fakeMinutesApi(), () => new Date("2026-06-01T10:01:00+08:00"));
+      await minutes.onMeetingStarted(sdkEvent("vc.meeting.all_meeting_started_v1", "ev-s1", { calendar_event_id: CALENDAR_EVENT, start_time: STARTED_AT }));
+      expect(await live(t, meetingId)).toMatchObject({ minutes_status: "none", minutes_waiting_since: null, started_at: new Date("2026-06-01T02:00:05Z") });
+      const card = (await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie: await t.loginCookie() } })).json().cards[0];
+      expect(card.payload).toMatchObject({ minutesStatus: "none", startedAt: "2026-06-01T02:00:05.000Z", endedAt: null, feishuEvent: { status: "booked" } });
+
+      // 已经开过（记了开始）、又进了等妙记：后来的开始事件（重投、另一份保底事件）不清。
+      await t.pool.query(stale, [meetingId]);
+      await minutes.onMeetingStarted(sdkEvent("vc.meeting.meeting_started_v1", "ev-s2", { calendar_event_id: CALENDAR_EVENT, start_time: STARTED_AT }));
+      expect(await live(t, meetingId)).toMatchObject({ minutes_status: "waiting" });
+
+      // 自己上传了会议记录（有候选）的会不清。
+      const uploaded = await bookedMeeting(t);
+      await t.pool.query("UPDATE meetings SET feishu_event_id = 'evt_2_0' WHERE id = $1", [uploaded]);
+      await uploadMarkdown(t, uploaded);
+      await t.pool.query(stale, [uploaded]);
+      await minutes.onMeetingStarted(sdkEvent("vc.meeting.meeting_started_v1", "ev-s3", { calendar_event_id: "evt_2_0", start_time: STARTED_AT }));
+      expect(await live(t, uploaded)).toMatchObject({ minutes_status: "waiting", started_at: new Date("2026-06-01T02:00:05Z") });
+    } finally {
+      await t.close();
+    }
+  });
 });

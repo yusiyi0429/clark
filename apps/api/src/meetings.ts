@@ -432,13 +432,20 @@ export async function executeEditMeetingDetails(
       if ("error" in resolved) return { error: resolved.error };
       participants = resolved.participants;
     }
+    // 改了开始时间：记过的开始、结束清掉；还没有逐字稿和候选的，等妙记、读取失败这些也清回 none，按新时间重新走。
+    const moved = "$4::timestamptz IS NOT NULL AND $4::timestamptz <> scheduled_at";
+    const unrecorded = `${moved} AND transcript IS NULL AND transcript_candidate IS NULL`;
     const updated = await updateMeeting(
       client,
       row.id,
       `title = COALESCE($3, title), scheduled_at = COALESCE($4, scheduled_at),
        lead_dri_id = COALESCE($5, lead_dri_id), participants = COALESCE($6::jsonb, participants),
-       ends_at = $7, ended_at = CASE WHEN $4::timestamptz IS NOT NULL AND $4::timestamptz <> scheduled_at THEN NULL ELSE ended_at END,
-       started_at = CASE WHEN $4::timestamptz IS NOT NULL AND $4::timestamptz <> scheduled_at THEN NULL ELSE started_at END,
+       ends_at = $7, ended_at = CASE WHEN ${moved} THEN NULL ELSE ended_at END,
+       started_at = CASE WHEN ${moved} THEN NULL ELSE started_at END,
+       minutes_status = CASE WHEN ${unrecorded} THEN 'none' ELSE minutes_status END,
+       minutes_waiting_since = CASE WHEN ${unrecorded} THEN NULL ELSE minutes_waiting_since END,
+       minutes_failure = CASE WHEN ${unrecorded} THEN NULL ELSE minutes_failure END,
+       minutes_error = CASE WHEN ${unrecorded} THEN NULL ELSE minutes_error END,
        version = version + 1, action_fingerprints = $2::jsonb`,
       [
         JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint)),

@@ -411,11 +411,16 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
       [found.meetingNo])).rows[0]?.id as string | undefined) ?? null;
   }
 
-  /** 「会议开始」：记真实开始时刻（只记第一次）和飞书会议 id；对不上天枢的会就不管（飞书里直接开的会以后另做）。 */
+  /**
+   * 「会议开始」：记真实开始时刻（只记第一次）和飞书会议 id；对不上天枢的会就不管（飞书里直接开的会以后另做）。
+   * 第一次开始时，还没有逐字稿和候选、却记着等妙记、读取失败这些（改期前留下的）：先清回 none，会议页回到会中。
+   */
   async function onMeetingStarted(payload: Record<string, unknown>): Promise<void> {
     const found = feishuMeetingFromEvent(payload);
     const meetingId = found && await liveMeetingId(found);
     if (!found || !meetingId) return;
+    await q(`UPDATE meetings SET minutes_status = 'none', minutes_waiting_since = NULL, minutes_failure = NULL, minutes_error = NULL
+      WHERE id = $1 AND started_at IS NULL AND minutes_status <> 'none' AND transcript IS NULL AND transcript_candidate IS NULL`, [meetingId]);
     await q("UPDATE meetings SET started_at = COALESCE(started_at, $2), feishu_meeting_id = COALESCE($3, feishu_meeting_id) WHERE id = $1",
       [meetingId, found.startTime ?? now(), found.feishuMeetingId]);
   }
