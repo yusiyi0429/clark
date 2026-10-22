@@ -6,14 +6,17 @@ export type TokenClient = AgentClient | "collector";
 
 export const clientName = (client: TokenClient) => client === "codex" ? "Codex" : client === "claude" ? "Claude Code" : client === "collector" ? "本机采集器" : "AI 工具";
 
-export const SYNC_INSTRUCTION = "用天枢 MCP 同步我本周的工作进展：先调用 tianshu 的 list_my_items（status=all）看我负责的执行事项；我已知的协作事项用 get_item 核对。再根据我这周实际做过的事（当前目录及其下各仓库的提交、文档，以及我们的对话），为每件有进展的事项调用一次 append_progress，写清做了什么、证据链接和下一步；做出来的文档、设计稿、PR 这类有链接的东西，用 add_link 放进对应事项。我推进的事项已经做完的，用 submit_for_acceptance 提交验收，对照完成标准逐条写明是否达到和依据，完成由我在天枢确认。没有进展的事项不要写，不要编造。最后列出你写了哪几条。";
+const syncInstruction = (span: "本周" | "今天") => `用天枢 MCP 同步我${span}的工作进展：先调用 tianshu 的 list_my_items（status=all）看我负责的执行事项；我已知的协作事项用 get_item 核对。再根据我${span === "本周" ? "这周" : "今天"}实际做过的事（当前目录及其下各仓库的提交、文档，以及我们的对话），为每件有进展的事项调用一次 append_progress，写清做了什么、证据链接和下一步；做出来的文档、设计稿、PR 这类有链接的东西，用 add_link 放进对应事项。实际推进了、但天枢里还没有对应事项的工作，先用 create_item 建一条（对得上 Mission 就挂上）再写进展；一次问答或顺手的小改动不建。我推进的事项已经做完的，用 submit_for_acceptance 提交验收，对照完成标准逐条写明是否达到和依据，完成由我在天枢确认。没有进展的事项不要写，不要编造。最后列出你写了哪几条、新建了哪几条。`;
+export const SYNC_INSTRUCTION = syncInstruction("本周");
+/** 每日补漏：会话里漏写的进展、漏建的事项，每天定时补一次。 */
+export const DAILY_SYNC_INSTRUCTION = syncInstruction("今天");
 
-const TOOLS = "mcp__tianshu__list_my_items,mcp__tianshu__get_item,mcp__tianshu__append_progress,mcp__tianshu__add_link,mcp__tianshu__submit_for_acceptance";
+const TOOLS = "mcp__tianshu__list_my_items,mcp__tianshu__create_item,mcp__tianshu__get_item,mcp__tianshu__append_progress,mcp__tianshu__add_link,mcp__tianshu__submit_for_acceptance";
 
 /** 手动运行或放进定时任务的同步命令；其他工具没有统一的命令行，用各自的非交互模式。Codex 默认只在 git 仓库里运行，工作目录常是装着多个仓库的上级目录。 */
-export const syncCommand = (client: "codex" | "claude") => client === "codex"
-  ? `codex exec --skip-git-repo-check "${SYNC_INSTRUCTION}"`
-  : `claude -p "${SYNC_INSTRUCTION}" --allowedTools "${TOOLS}"`;
+export const syncCommand = (client: "codex" | "claude", instruction = SYNC_INSTRUCTION) => client === "codex"
+  ? `codex exec --skip-git-repo-check "${instruction}"`
+  : `claude -p "${instruction}" --allowedTools "${TOOLS}"`;
 
 /** Codex 的天枢配置：令牌直接写请求头（桌面 App、IDE 插件、命令行、定时任务读同一份，不依赖环境变量）；
  *  放行天枢工具，否则无人值守的 codex exec 会拒绝调用 MCP 工具（2026-09-30 实测）。 */
@@ -40,21 +43,24 @@ export function connectCommands(client: AgentClient, endpoint: string, token: st
 
 export const GUIDE_FILE_NAME = "天枢连接说明.md";
 
-/** OAuth 步骤可直接分享：没有令牌，登录与权限由本人在浏览器确认。 */
+/** OAuth 步骤可直接分享：没有令牌，登录与权限由本人在浏览器确认。
+ *  天枢工具设为免确认：Agent 按 MCP 说明主动建事项、写进展，每次都弹窗问就谈不上自动。 */
 export function oauthConnectionGuide(role: "ceo" | "member", client: AgentClient, endpoint: string): string {
   const setup = client === "codex" ? [
     `codex mcp add tianshu --url ${endpoint}`,
     "codex mcp login tianshu",
+    '在 ~/.codex/config.toml 的 [mcp_servers.tianshu] 里加一行 default_tools_approval_mode = "approve"，天枢的工具不用每次确认。',
   ] : client === "claude" ? [
     `claude mcp add --transport http --scope user tianshu ${endpoint}`,
     "claude mcp login tianshu（旧版本可在 Claude Code 里输入 /mcp，选择天枢并登录）",
-  ] : [`在工具的远程 MCP 设置里添加：${endpoint}，名称用 tianshu，然后选择登录或授权。`];
+    '在 ~/.claude/settings.json 的 permissions.allow 里加 "mcp__tianshu"，天枢的工具不用每次确认。',
+  ] : [`在工具的远程 MCP 设置里添加：${endpoint}，名称用 tianshu，然后选择登录或授权；把天枢的工具设为不用每次确认。`];
   return [
     "请帮我把 AI 工具连到天枢，使用浏览器授权：", ...setup,
     "已有同名配置时更新地址，移除旧的 Authorization 请求头，再登录；保留其他服务配置。",
     "请让我在浏览器里登录天枢并点“允许连接”，不要代替我确认授权。",
     `登录后按工具要求重新加载连接，用 ${role === "ceo" ? "list_pending" : "list_my_items"} 验证能读取。`,
-    "这里只设置连接；自动同步需要单独配置。",
+    "这里只设置连接；每天定时补漏需要单独配置。",
   ].join("\n");
 }
 
@@ -117,7 +123,7 @@ export function connectionGuide({ role, client, endpoint, token, expires, weekly
       "- 用户问「这周各战场进展怎样？」时，调用 `company_progress`；可以按周、战场或人筛选。",
       `- 这些工具只读。要拍板、签发、确认，把结果里的 \`href\` 拼成完整链接给用户（天枢网址是 \`${endpoint.replace(/\/mcp\/me$/, "")}\`，例如 \`${endpoint.replace(/\/mcp\/me$/, "")}/issues/<id>\`），让用户回天枢网页处理。`,
     ] : [
-      "- 推进天枢里的执行事项时：开始前用 `list_my_items` 找到对应事项；收尾时用 `append_progress` 写一条进展（做了什么、证据链接、下一步或阻塞）；做出来的文档、设计稿、PR 用 `add_link` 放进这件事；做完用 `submit_for_acceptance` 提交验收（对照完成标准逐条写明是否达到和依据），由用户在天枢确认完成。只写真实做过的事。",
+      "- 不用等用户开口，主动把用户正在推进的工作同步进天枢：开始一件新工作时用 `list_my_items` 找到对应事项，没有就用 `create_item` 建一条（一次问答或顺手的小改动不建）；做出阶段成果（提交、PR、文档）或告一段落时用 `append_progress` 写一条进展（做了什么、证据链接、下一步或阻塞）；做出来的文档、设计稿、PR 用 `add_link` 放进这件事；做完用 `submit_for_acceptance` 提交验收（对照完成标准逐条写明是否达到和依据），由用户在天枢确认完成。只写真实做过的事。",
       `- 用户说「同步本周进展」时，照这段做：${SYNC_INSTRUCTION}`,
       "- 月末天枢会请每人对照自己的 Mission Card 做个人复盘，Co-Agent 会先起草一版。用户说「改写我的月度复盘」时：调用 `get_my_review` 看状态、Mission、现有草稿和写作要求，结合用户手边的周复盘、文档和提交记录补充改写四部分，用 `save_review_draft` 保存；不能替用户提交，写完请用户回天枢确认提交。`list_pending` 里出现待提交的个人复盘时，主动提醒用户。",
       "- 可以问用户要不要把上面两条写进常用项目的 AGENTS.md 或 CLAUDE.md（不要写令牌）。",

@@ -124,6 +124,13 @@ export async function missionAvailable(q: Query, ownerId: string, missionId: str
   [missionId, ownerId, companyPeriod(now)]);
   return !!result.rowCount;
 }
+/** 本人此刻能挂执行事项的 Mission（与 missionAvailable 同一口径）。 */
+export async function listAvailableMissions(q: Query, ownerId: string, now: Date): Promise<{ id: string; title: string; battlefield: string }[]> {
+  return (await q(`SELECT m.id,m.title,b.name AS battlefield FROM missions m JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id
+    JOIN mission_rounds r ON r.id=c.round_id JOIN battlefield_config b ON b.id=r.battlefield_id
+    WHERE c.owner_id=$1 AND r.status='confirmed' AND r.period >= $2 ORDER BY r.period,c.sort_order,m.code,m.id`,
+  [ownerId, companyPeriod(now)])).rows as { id: string; title: string; battlefield: string }[];
+}
 export async function renumberMission(client: PoolClient, missionId: string): Promise<void> {
   await client.query(`WITH numbered AS (SELECT id,row_number() OVER (ORDER BY step_order NULLS LAST,created_at,id)::int AS ord
     FROM tasks WHERE mission_id=$1) UPDATE tasks t SET step_order=n.ord FROM numbered n WHERE t.id=n.id AND t.step_order IS DISTINCT FROM n.ord`, [missionId]);
@@ -171,7 +178,8 @@ async function createInTransaction(client: PoolClient, ownerId: string, names: M
   await readThrough(client,id,ownerId,messageId);
   return { task: (await getTaskView(queryOf(client),id,names))! };
 }
-export async function createMyTask(pool: Pool, ownerId: string, names: Map<string,string>, input: TCreateMyTaskRequest, now: Date): Promise<TaskResult> {
+/** source=agent：外部工具通过 MCP 替本人建的，直接生效，和本人建的一样能改能删。 */
+export async function createMyTask(pool: Pool, ownerId: string, names: Map<string,string>, input: TCreateMyTaskRequest, now: Date, source: "self" | "agent" = "self"): Promise<TaskResult> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -179,7 +187,7 @@ export async function createMyTask(pool: Pool, ownerId: string, names: Map<strin
     if (!replay.rowCount && input.missionId && !await missionAvailable(queryOf(client),ownerId,input.missionId,now)) {
       await client.query("ROLLBACK"); return error(404,"MISSION_NOT_AVAILABLE","个人任务不可用于创建执行事项");
     }
-    const result = await createInTransaction(client,ownerId,names,{ ...input,source:"self" });
+    const result = await createInTransaction(client,ownerId,names,{ ...input,source });
     await client.query("COMMIT"); return result;
   } catch (e) { await client.query("ROLLBACK").catch(()=>undefined); throw e; } finally { client.release(); }
 }

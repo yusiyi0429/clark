@@ -48,7 +48,7 @@ describe("个人连接对话框", () => {
     const content = JSON.stringify(tree);
     expect(content).not.toContain("今天有什么要我拍板");
     expect(content).not.toContain("它只能看，拍板、签发、确认仍在天枢里做");
-    expect(content).not.toContain("每周同步进展");
+    expect(content).not.toContain("同步进展");
     expect(content).not.toContain("每周五 18:00 自动同步进展");
     expect(tree.some((node) => node.props.role === "switch")).toBe(false);
   });
@@ -72,14 +72,16 @@ describe("个人连接对话框", () => {
     expect(guide).toContain("本说明使用的 CEO 工具只读");
     expect(guide).not.toContain("每周五自动同步");
   });
-  it("没有令牌也显示每周同步，指令和定时命令收在折叠里，可复制", async () => {
+  it("没有令牌也显示同步进展，指令和每日定时命令收在折叠里，可复制；漏建的事项由 Agent 补建", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { clipboard: { writeText } });
     const tree = render();
     const content = JSON.stringify(tree);
-    expect(content).toContain("每周同步进展");
+    expect(content).toContain("同步进展");
     expect(content).not.toContain("连接授权本身不会创建任务");
     expect(content).toContain("codex exec");
+    expect(content).toContain("同步我今天的工作进展");
+    expect(content).toContain("mcp__tianshu__create_item");
     expect(content).toContain("mcp__tianshu__append_progress");
     const copyInstruction = tree.find((node) => node.props.children === "复制指令")!;
     await (copyInstruction.props.onClick as () => Promise<void>)();

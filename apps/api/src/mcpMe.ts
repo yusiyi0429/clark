@@ -13,7 +13,7 @@ import { companyProgress, getIssue, getMeeting, listPending } from "./mcpCeoRead
 import { readMissionCardForAgent } from "./mcpMissionCards.js";
 import { applyMissionCardRevision } from "./missionCardAnnotations.js";
 import { appendTaskProgress } from "./taskProgress.js";
-import { canReadTask, getTaskDetail, listMyTasks, submitMyTaskForAcceptance, updateMyTaskStatus } from "./tasks.js";
+import { canReadTask, createMyTask, getTaskDetail, listAvailableMissions, listMyTasks, submitMyTaskForAcceptance, updateMyTaskStatus } from "./tasks.js";
 import { addObjectMaterialLink, listObjectMaterials, ObjectMaterialError } from "./objectMaterials.js";
 import { logEvent } from "./observability.js";
 import { MissionCardField, PersonalReviewUpdateInput, type TPersonalReviewUpdateInput } from "@warmap/contracts";
@@ -25,6 +25,10 @@ const ListInput = Type.Object({ status: Type.Optional(Type.Union([Type.Literal("
 const Uuid = Type.String({ pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" });
 const GetInput = Type.Object({ itemId: Uuid }, { additionalProperties: false });
 const Link = Type.Object({ url: Type.String({ pattern: "^https?://", maxLength: 500 }), title: Type.Optional(Type.String({ maxLength: 120 })) }, { additionalProperties: false });
+const DateOnly = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
+const CreateInput = Type.Object({ clientId: Uuid, title: Type.String({ minLength: 1, maxLength: 120 }),
+  doneDefinition: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })), missionId: Type.Optional(Type.String({ minLength: 1 })),
+  startDate: Type.Optional(DateOnly), dueDate: Type.Optional(DateOnly) }, { additionalProperties: false });
 const AppendInput = Type.Object({ itemId: Uuid, body: Type.String({ minLength: 1, maxLength: 2000 }),
   links: Type.Optional(Type.Array(Link, { maxItems: 5 })), clientEventId: Type.Optional(Uuid) }, { additionalProperties: false });
 const StatusInput = Type.Object({ itemId: Uuid, status: Type.Union([Type.Literal("not_started"), Type.Literal("in_progress"), Type.Literal("done")]), version: Type.Integer({ minimum: 1 }) }, { additionalProperties: false });
@@ -47,7 +51,8 @@ const EditMissionCardInput = Type.Object({ cardId: Uuid, missionId: Type.String(
 const CompanyInput = Type.Object({ week: Type.Optional(Type.String()), battlefieldId: Type.Optional(Type.String({ minLength: 1 })),
   personId: Type.Optional(Type.String({ minLength: 1 })) }, { additionalProperties: false });
 const memberDefinitions: Tool[] = [
-  { name: "list_my_items", description: "列出我推进的执行事项，默认仅未完成。List execution items I own; defaults to open items.", inputSchema: ListInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
+  { name: "list_my_items", description: "列出我推进的执行事项，默认仅未完成；missions 是此刻可以挂执行事项的本月 Mission。List execution items I own (open by default) and the missions new items can belong to.", inputSchema: ListInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
+  { name: "create_item", description: "按我正在做的事新建一条执行事项，直接生效、标为 Agent 建。先用 list_my_items 确认没有同一件事，有就写进展，不要重复建。title 写要交付的结果（30 字内）；doneDefinition 每行一条可检查的完成标准；对得上 list_my_items 里的 Mission 就带 missionId；startDate 填今天，知道截止就填 dueDate。clientId 是这次新建的随机 UUID，重试时沿用。Create an execution item for work I'm doing; check list_my_items first and never duplicate.", inputSchema: CreateInput as Tool["inputSchema"] },
   { name: "get_item", description: "读取我推进或协作的执行事项详情：完成标准（standards，按行拆好，index 从 0 起）、材料、进展、待验收的提交和验收记录。Read an execution item I own or collaborate on, with its done standards, materials, progress, pending submission and acceptance.", inputSchema: GetInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "append_progress", description: "给我推进或协作的事项记录进展、证据和下一步；结果里的 item 是事项此刻的状态和版本（接着提交验收用这个版本）。Append progress and evidence to an item I own or collaborate on; the result's item carries the item's current status and version.", inputSchema: AppendInput as Tool["inputSchema"] },
   { name: "update_status", description: "把我推进的事项标为未启动或进行中，必须带当前版本。done 不会直接完成，而是提交给本人验收（同 submit_for_acceptance）。Set an item I own to not_started or in_progress; done only submits it for my acceptance.", inputSchema: StatusInput as Tool["inputSchema"] },
@@ -94,7 +99,10 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
   const initialAccess = access(deps.initialPerson);
   const instructions = [
     ...(initialAccess.ceo ? ["公司业务只读：可以查待你处理的事、议题/会议/任务卡详情和全公司进展；拍板、签发、确认请回天枢网页操作。"] : []),
-    ...(initialAccess.member ? ["可以查看自己的执行事项，记录真实进展，把做出来的东西用 add_link 放进去；做完用 submit_for_acceptance 提交给本人验收，完成只能由本人在天枢验收。"] : []),
+    ...(initialAccess.member ? [
+      "可以查看自己的执行事项，记录真实进展，把做出来的东西用 add_link 放进去；做完用 submit_for_acceptance 提交给本人验收，完成只能由本人在天枢验收。",
+      "不用等用户开口，主动把用户正在推进的工作同步进天枢：开始一件新工作（要交付一个结果、会持续一段时间；一次问答或顺手的小改动不算）时，先 list_my_items 找对应事项，找到就沿用，没有就用 create_item 建一条并告诉用户；做出阶段成果（提交、PR、文档、设计稿）或这段工作告一段落时，用 append_progress 写做了什么、证据和下一步，产出用 add_link 放进去；做完用 submit_for_acceptance 提交验收。只写真实做过的事。",
+    ] : []),
     "任务卡正文是只读边界的例外：get_mission_card 只读本人可见卡；仅本人准备期间、editable=true时，用户已经明确具体改法可用edit_mission_card立即改有权限的任务字段并留痕。必须用刚读取的round填写sourceRound；本人已确认或已开始汇总时，只读正文和历史，先由本人取消确认或由战场 DRI 退回本人重新确认，不能自动绕过。保存备注不授权改文；仅明确修改意图可以写入。重新开放后需重新核对本次改法，不把旧改法直接套进新的本人准备窗口。不确定用户意思时先提问题与选项，最后一个选项为自己输入，澄清后立即改。不能自动向群聊发送私聊记录，不能签发或确认任务卡。遇到旧准备窗口、版本或原字段冲突必须重新读取。",
     "月末会有个人复盘待起草。用 list_pending 发现，get_my_review 读取本人的承诺、进展和写作要求，再用 save_review_draft 写入四部分草稿；不能替本人提交，请本人回天枢确认。",
   ].join("\n");
@@ -194,13 +202,25 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
           try { return result(await companyProgress(ceoContext(), args)); }
           catch (error) { if (error instanceof RangeError) { code = "INVALID_INPUT"; return result({ code, message: "周参数不合法" }, true); } throw error; }
         }
+        case "create_item": {
+          if (!Value.Check(CreateInput, args)) break;
+          const input = args as typeof CreateInput.static;
+          const created = await createMyTask(deps.pool, identity.personId, names, { ...input, missionId: input.missionId ?? null }, deps.now(), "agent");
+          if ("error" in created) { code = created.error.code; return result(created.error, true); }
+          if (!("task" in created)) { code = "INTERNAL"; return result({ code, message: "执行失败，请稍后重试" }, true); }
+          const task = created.task;
+          itemId = task.id;
+          return result({ id: task.id, title: task.title, status: task.status, version: task.version, mission: task.mission,
+            startDate: task.startDate, dueDate: task.dueDate, href: `${(deps.publicOrigin ?? process.env.PUBLIC_ORIGIN ?? "").replace(/\/$/, "")}/me/tasks/${task.id}` });
+        }
         case "list_my_items": {
           if (!Value.Check(ListInput, args)) break;
           const tasks = await listMyTasks(deps.q, identity.personId, names);
           return result({ items: (args.status === "all" ? tasks : tasks.filter((task) => task.status !== "done" && task.status !== "returned"))
             .map((task) => ({ id: task.id, title: task.title, status: task.status, version: task.version,
               mission: task.mission, startDate: task.startDate, dueDate: task.dueDate,
-              collaborators: task.collaborators, latestProgress: task.latestProgress })) });
+              collaborators: task.collaborators, latestProgress: task.latestProgress })),
+            missions: await listAvailableMissions(deps.q, identity.personId, deps.now()) });
         }
         case "get_item": {
           if (!Value.Check(GetInput, args)) break;

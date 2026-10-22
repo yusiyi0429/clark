@@ -10,6 +10,7 @@ import { browserApi } from "@/lib/api/client";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { dayLabel, daysBeforeDue, monthDayClock, monthDayTime } from "@/lib/companyTime";
 import { TianshuMark } from "@/components/TianshuMark";
+import { taskSourceLabel } from "./taskSource";
 import { linkHost, type MaterialAreaApi } from "@/components/materials/ObjectMaterialArea";
 import s from "./task-detail.module.css";
 import c from "./task-cover.module.css";
@@ -70,7 +71,7 @@ function Identity({ detail, onInvite }: { detail: Detail; onInvite: () => void }
     {task.mission ? owner
       ? <Button variant="ghost" className={`${s.longLink} ${c.missionLink}`} onPress={() => workspace.navigate(`/me/mission-cards/${encodeURIComponent(task.mission!.cardId)}`)}>{task.mission.title}<ArrowUpRight size={15} aria-hidden /></Button>
       : <p className={c.missionText}>{task.mission.title}</p>
-      : <div className={s.paneRow}><StatusBadge tone="info"><span className={s.sourceBadge}>{task.source === "meeting" && task.origin ? `会后分派 · ${task.origin.meetingTitle}` : "独立事项"}</span></StatusBadge></div>}
+      : <div className={s.paneRow}><StatusBadge tone="info"><span className={s.sourceBadge}>{taskSourceLabel(task)}</span></StatusBadge></div>}
     <p className={s.paneNote}>{task.mission?.battlefieldName || "未关联战场"} · {owner ? "你在推进" : `${task.owner.name}在推进`}</p>
     {task.status === "returned" ? <p className={c.returned}>已退回{task.returnReason ? `：${task.returnReason}` : ""}</p> : null}
     <div className={c.titleRow}>

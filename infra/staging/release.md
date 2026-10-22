@@ -9,7 +9,7 @@
 - 现网 compose 组合：`infra/docker-compose.yml` + `infra/volcano.override.yml`。10/8 的发布把 api/web 的镜像、构建目录与 BUILD_SHA 写进了现网 `volcano.override.yml`（与仓库版不同，不要用仓库版覆盖它）。
 - 每个版本的源码解在 `releases/<短SHA>`，镜像在主机上构建；部署目录本身不是 Git 工作区。
 
-脚本首次运行时生成 `infra/compose-files`，记下现网 compose 组合；之后切换会把本次的 `infra/release.pin.yml`（固定镜像与构建目录）追加进去。**此后手工执行 compose 时也按这份清单带全部 `-f`**，否则会回到旧镜像或丢掉 M2 路由：
+脚本首次运行时生成 `infra/compose-files`，记下现网 compose 组合；之后切换会把本次的 `infra/release.pin.yml`（固定镜像与构建目录）追加进去。只发部分服务时，pin 里其他服务沿用现网 pin 原来的固定。**此后手工执行 compose 时也按这份清单带全部 `-f`**，否则会回到旧镜像或丢掉 M2 路由：
 
 ```bash
 cd /srv/tokenhub/apps/tianshu

@@ -8,7 +8,7 @@ import { authenticatePersonalToken } from "./personalTokens.js";
 import type { SessionPerson } from "./routes/shared.js";
 
 export const MCP_SCOPES = ["tianshu:read", "tianshu:write"];
-export const MCP_WRITE_TOOLS = new Set(["append_progress", "update_status", "submit_for_acceptance", "add_link", "save_review_draft", "edit_mission_card"]);
+export const MCP_WRITE_TOOLS = new Set(["create_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "save_review_draft", "edit_mission_card"]);
 const ACCESS_SECONDS = 15 * 60;
 const GRANT_MS = 90 * 86_400_000;
 const digest = (value: string, pepper: string) => createHmac("sha256", pepper).update(`mcp-oauth:${value}`).digest("hex");

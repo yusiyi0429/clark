@@ -64,6 +64,16 @@ export async function setMemberAccess(
   );
 }
 
+/** 本地开发固定测试账号 sunm / 8989：口令不对、被锁或要求改口令时重置；已经可用就不动（不踢掉已登录的会话）。只在本地开发启动时调用。 */
+export const LOCAL_DEV_LOGIN = { personId: "sun-mingze", loginId: "sunm", passcode: "8989" } as const;
+export async function ensureLocalDevLogin(q: Query, now: Date): Promise<void> {
+  const row = (await q("SELECT login_id, passcode_hash, must_change, locked_until FROM member_access WHERE person_id = $1", [LOCAL_DEV_LOGIN.personId])).rows[0] as
+    { login_id: string; passcode_hash: string; must_change: boolean; locked_until: Date | null } | undefined;
+  const usable = row && row.login_id === LOCAL_DEV_LOGIN.loginId && !row.must_change
+    && (!row.locked_until || row.locked_until <= now) && verifySecret(row.passcode_hash, LOCAL_DEV_LOGIN.passcode);
+  if (!usable) await setMemberAccess(q, { ...LOCAL_DEV_LOGIN, mustChange: false });
+}
+
 export type Verified = { kind: "verified"; row: AccessRow; person: MemoryPerson };
 export type Rejected = { kind: "invalid" } | { kind: "locked"; retryAfterSeconds: number };
 
