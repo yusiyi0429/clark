@@ -118,8 +118,8 @@ describe("上手流程的采集器与两个清单", () => {
         { key: `material:${material}`, kind: "material", title: "M2 战略解码.md", url: `/me/tasks/${task.id}`, revision: "v7", origin: "task", revisedAt: null, revisedBy: null, confirmed: false, supersededBy: null, keepUntil: null },
       ]);
       expect((await call(f, f.member, "PUT", "/api/me/work-basis", { keys: ["material:nope"] })).statusCode).toBe(400);
-      // 没列出的无标题文档也不收。
-      expect((await call(f, f.member, "PUT", "/api/me/work-basis", { keys: ["feishu_doc:https://example.feishu.cn/wiki/WikiToken99"] })).statusCode).toBe(400);
+      // 无标题的不列，但提交时照样认：列出时读到了标题、提交那一刻飞书读标题失败，已勾的不至于被当成「清单变了」。下一次提交没勾它就移出。
+      expect((await call(f, f.member, "PUT", "/api/me/work-basis", { keys: ["feishu_doc:https://example.feishu.cn/wiki/WikiToken99"] })).statusCode).toBe(200);
       const saved = await call(f, f.member, "PUT", "/api/me/work-basis", { keys: [`material:${material}`, `feishu_doc:${feishuUrl}`] });
       expect(saved.statusCode).toBe(200);
       expect(saved.json().candidates.map((row: { confirmed: boolean }) => row.confirmed)).toEqual([true, true]);

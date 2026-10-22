@@ -103,11 +103,12 @@ async function basisCandidates(q: Query, personId: string, feishu: FeishuDocRead
     add({ doc_kind: "feishu_doc", doc_ref: doc.url, title: doc.title || feishuFallbackTitle(doc.url), url: doc.url, revision: null, origin: "session", revised_at: null, revised_by: null, untitled: !doc.title });
   const list = [...rows.values()];
   await enrichFeishuDocs(q, personId, list, feishu, now);
-  return list.filter((row) => !row.untitled);
+  return list;
 }
 
 export async function readWorkBasis(q: Query, personId: string, feishu: FeishuDocReader | undefined, now: Date): Promise<TWorkBasisCandidate[]> {
-  const [rows, confirmed, superseded] = await Promise.all([basisCandidates(q, personId, feishu, now),
+  // 读不到标题的会话文档不列给本人看；提交时照样认（那一刻飞书读标题失败，已勾的不至于被当成「清单变了」）。
+  const [rows, confirmed, superseded] = await Promise.all([basisCandidates(q, personId, feishu, now).then((list) => list.filter((row) => !row.untitled)),
     q("SELECT doc_kind, doc_ref, to_char(keep_until, 'YYYY-MM-DD') AS keep_until FROM work_basis WHERE person_id=$1", [personId]),
     // 文档变更里确认取代了的旧文档：在清单里标出来，带上新文档。
     q(`SELECT DISTINCT ON (c.key) c.key, d.title, d.doc_ref FROM doc_change_candidates c JOIN doc_changes d ON d.id = c.doc_change_id
