@@ -44,7 +44,8 @@ import { RadarSettingsEditor, type RadarSavedSummary } from "@/components/radar/
 import { ConnectAgentForm } from "@/components/ConnectAgentForm";
 import { CollectorInstallPanel, collectorCommand, scanSteps, type CollectorStatus } from "./CollectorSetup";
 import { DelegationPanel } from "./DelegationPanel";
-import { revisedLabel } from "./ReviewLists";
+import { revisedLabel, reviewEmpty, ReviewSummary, submitReview, type ReviewLists, type ReviewPicks } from "./ReviewLists";
+import { MemoryImportPanel } from "./MemoryImportSlot";
 import { CollectorConsentSwitch } from "./CollectorConsentSwitch";
 import { browserApi } from "@/lib/api/client";
 
@@ -149,6 +150,8 @@ describe("真实数据的首次引导", () => {
     expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "radar", "voiceprint", ...tail]);
     // 委托授权这一步由配置打开，放在结束页之前。
     expect(onboardingSteps({ ...member, delegationStep: true }).slice(-3)).toEqual(["review", "delegation", "start"]);
+    // 扫完三项都没有可确认的：跳过确认清单。
+    expect(onboardingSteps(member, true).slice(-3)).toEqual(["collector", "scan", "start"]);
   });
   it("成员导览复用同一示意图，高亮通知后转向工作", () => {
     let tree = renderFlow(member);
@@ -358,12 +361,13 @@ describe("雷达步骤", () => {
     (button(renderFlow(ceo), "稍后").props.onClick as () => void)();
     expect(text(renderFlow(ceo))).toContain("安装本机采集器");
   });
-  it("最后一页三个标签都确认之前「完成」不能点；委托授权一步只在配置打开时出现", () => {
+  it("确认清单不用逐项确认，「完成」直接可点；委托授权一步只在配置打开时出现", () => {
     radarEditor(reachRadar(member)).onLater!();
     for (const label of ["稍后", "稍后", "下一步"]) (button(renderFlow(member), label).props.onClick as () => void)();
     const review = renderFlow(member);
     expect(text(review)).toContain("确认清单");
-    expect(button(review, "完成").props.disabled).toBe(true);
+    expect(button(review, "完成").props.disabled).toBe(false);
+    expect(elements(review).some((element) => element.props.role === "tablist")).toBe(false);
     hooks.reset();
     const flagged = { ...member, delegationStep: true };
     radarEditor(reachRadar(flagged)).onLater!();
@@ -404,5 +408,86 @@ describe("安装采集器与扫描", () => {
   it("飞书文档的修订写成「月/日 修订 · 修订人」", () => {
     expect(revisedLabel("2026-10-16T08:00:00.000Z", "编辑人")).toBe("10/16 修订 · 编辑人");
     expect(revisedLabel("2026-10-16T08:00:00.000Z", null)).toBe("10/16 修订");
+  });
+});
+
+describe("确认清单：一屏摘要", () => {
+  const doc = (key: string, patch: Partial<ReviewLists["basis"][number]> = {}): ReviewLists["basis"][number] => ({
+    key, kind: "feishu_doc", title: `文档 ${key}`, url: null, revision: null, origin: "session", revisedAt: null, revisedBy: null,
+    confirmed: false, supersededBy: null, keepUntil: null, ...patch });
+  const weekly: ReviewLists["schedules"][number] = { key: "dev:TianshuWeeklySync", name: "TianshuWeeklySync", cadence: "Weekly",
+    command: "powershell.exe -File tianshu-weekly-sync.ps1", deviceName: "工作机", imported: false };
+  const lists: ReviewLists = { basis: [doc("material:m1", { kind: "material", origin: "task", title: "M2 战略解码.md" }), doc("feishu_doc:w1")], schedules: [weekly] };
+  type SummaryProps = Parameters<typeof ReviewSummary>[0];
+  const summary = (patch: Partial<SummaryProps> = {}) => {
+    hooks.begin();
+    return ReviewSummary({ lists, reviewed: false, picks: {}, onPick: () => undefined, memoryFiles: 12, saving: false, error: null, ...patch });
+  };
+  const rows = (tree: ReactNode) => elements(tree).filter((element) => element.type === "button").map((element) => text(element.props.children as ReactNode));
+  const row = (tree: ReactNode, label: string) => {
+    const match = elements(tree).find((element) => element.type === "button" && text(element.props.children as ReactNode).startsWith(label));
+    expect(match, `应有「${label}」一行`).toBeDefined();
+    return match!;
+  };
+  const checklist = (tree: ReactNode, label: string) => elements(tree).find((element) => element.props.label === label && typeof element.props.onToggle === "function");
+
+  it("一项一行写帮本人选好的数：还没提交过时文档、定时任务全勾；默认全部收起", () => {
+    const tree = summary();
+    expect(rows(tree)).toEqual(["记忆文件12个", "文档2份", "定时任务1个"]);
+    expect(elements(tree).filter((element) => element.props["aria-expanded"] === true)).toEqual([]);
+    expect(checklist(tree, "文档")).toBeUndefined();
+    expect(text(tree)).not.toContain("飞书知识库 ·");
+  });
+
+  it("数量为 0 的那一项不显示；三项都没有时这一步跳过", () => {
+    expect(rows(summary({ lists: { basis: [], schedules: [weekly] }, memoryFiles: 0 }))).toEqual(["定时任务1个"]);
+    hooks.reset();
+    expect(rows(summary({ lists: { basis: [doc("feishu_doc:w1")], schedules: [] }, memoryFiles: null }))).toEqual(["文档1份"]);
+    expect(reviewEmpty({ basis: [], schedules: [] }, 0)).toBe(true);
+    expect(reviewEmpty({ basis: [], schedules: [] }, null)).toBe(true);
+    expect(reviewEmpty({ basis: [], schedules: [] }, 3)).toBe(false);
+    expect(reviewEmpty({ basis: [], schedules: [weekly] }, null)).toBe(false);
+  });
+
+  it("点开一行展开勾选明细，改了勾选摘要跟着变；提交过之后按入库的勾", () => {
+    let picks: ReviewPicks = {};
+    const onPick = vi.fn((key: string, checked: boolean) => { picks = { ...picks, [key]: checked }; });
+    (row(summary({ onPick }), "文档").props.onClick as () => void)();
+    let tree = summary({ onPick, picks });
+    expect(row(tree, "文档").props["aria-expanded"]).toBe(true);
+    const list = checklist(tree, "文档")!;
+    expect(list.props).toMatchObject({ items: lists.basis, selected: ["material:m1", "feishu_doc:w1"] });
+    (list.props.onToggle as (key: string, checked: boolean) => void)("feishu_doc:w1", false);
+    expect(onPick).toHaveBeenCalledWith("feishu_doc:w1", false);
+    tree = summary({ onPick, picks });
+    expect(rows(tree)).toContain("文档1份");
+    expect(checklist(tree, "文档")!.props.selected).toEqual(["material:m1"]);
+    // 再点一次收起；记忆文件那一行展开的是导入插槽。
+    (row(tree, "文档").props.onClick as () => void)();
+    expect(checklist(summary({ onPick, picks }), "文档")).toBeUndefined();
+    (row(summary({ onPick, picks }), "记忆文件").props.onClick as () => void)();
+    expect(elements(summary({ onPick, picks })).find((element) => element.type === MemoryImportPanel)?.props).toEqual({ localMemoryFiles: 12 });
+    hooks.reset();
+    const saved: ReviewLists = { basis: [{ ...lists.basis[0], confirmed: true }, lists.basis[1]], schedules: [{ ...weekly, imported: false }] };
+    expect(rows(summary({ lists: saved, reviewed: true }))).toEqual(["记忆文件12个", "文档1份", "定时任务0个"]);
+  });
+
+  it("点完成把两份清单按当前勾选分别提交；任一份没存上就抛错留在这一步", async () => {
+    const put = vi.spyOn(browserApi, "PUT").mockImplementation((async (path: string) => ({ data: { candidates: [`saved ${path}`] }, response: new Response(null, { status: 200 }) })) as never);
+    const saved = await submitReview(lists, false, { "feishu_doc:w1": false });
+    expect(put).toHaveBeenCalledTimes(2);
+    expect(put).toHaveBeenCalledWith("/api/me/work-basis", { body: { keys: ["material:m1"] } });
+    expect(put).toHaveBeenCalledWith("/api/me/schedule-migration", { body: { keys: ["dev:TianshuWeeklySync"] } });
+    expect(saved).toEqual({ basis: ["saved /api/me/work-basis"], schedules: ["saved /api/me/schedule-migration"] });
+    // 空的清单不提交。
+    put.mockClear();
+    await submitReview({ basis: [], schedules: [weekly] }, false, {});
+    expect(put).toHaveBeenCalledExactlyOnceWith("/api/me/schedule-migration", { body: { keys: ["dev:TianshuWeeklySync"] } });
+    put.mockImplementation((async () => ({ data: undefined, error: { message: "清单已经变了，请刷新后再确认" }, response: new Response(null, { status: 400 }) })) as never);
+    await expect(submitReview(lists, false, {})).rejects.toThrow("清单已经变了，请刷新后再确认");
+  });
+
+  it("提交失败在摘要里原位显示", () => {
+    expect(elements(summary({ error: "没有存上，请重试" })).find((element) => element.props.role === "alert")).toBeDefined();
   });
 });

@@ -9,8 +9,8 @@ import { readUserAccessToken } from "./feishu/tokens.js";
 
 /**
  * 上手最后一页的两个清单（前端交互说明 10a、第 7 节 ③ 搬家、第 8 节工作依据清单）。
- * 候选每次按本人的数据现算：工作依据来自本人参与的执行事项里的材料与链接、采集器盘点到的近 30 天读过的飞书文档；
- * 搬家来自每台设备最近一次盘点里的本机定时任务。已经确认入库的始终列在里面（confirmed / imported）。
+ * 候选每次按本人的数据现算：工作依据来自本人参与的执行事项里的材料与链接、采集器盘点到的近 30 天读过的飞书文档（读不到标题的不列）；
+ * 搬家来自每台设备最近一次盘点里的本机定时任务，只留工作用的（isWorkSchedule）。已经确认入库的始终列在里面（confirmed / imported）。
  * 提交时只收勾选的 key：候选里勾了的入库，候选里没勾的移出；不在候选里的 key 一律拒绝。
  */
 
@@ -34,6 +34,8 @@ export function feishuFallbackTitle(url: string): string {
 type BasisRow = {
   doc_kind: TWorkBasisCandidate["kind"]; doc_ref: string; title: string; url: string | null; revision: string | null; origin: TWorkBasisCandidate["origin"];
   revised_at: Date | null; revised_by: string | null;
+  /** 会话里读过的飞书文档，标题还是 feishuFallbackTitle 兜底的：读到元数据才算有标题，没有的不列。 */
+  untitled?: boolean;
 };
 const basisKey = (kind: string, ref: string) => `${kind}:${ref}`;
 
@@ -62,6 +64,7 @@ async function enrichFeishuDocs(q: Query, personId: string, rows: BasisRow[], fe
       const meta = metas.get(docToken);
       if (!meta) continue;
       row.title = meta.title || row.title;
+      if (meta.title) row.untitled = false;
       row.revised_at = meta.modifiedAt;
       row.revised_by = meta.modifiedBy ? names.get(meta.modifiedBy) ?? null : null;
     }
@@ -97,10 +100,10 @@ async function basisCandidates(q: Query, personId: string, feishu: FeishuDocRead
     else add({ doc_kind: "material", doc_ref: m.id, title: m.file_name, url: `/me/tasks/${m.task_id}`, revision: `v${m.current_version}`, origin: "task", revised_at: null, revised_by: null });
   }
   for (const doc of docs.rows as { url: string; title: string | null }[])
-    add({ doc_kind: "feishu_doc", doc_ref: doc.url, title: doc.title || feishuFallbackTitle(doc.url), url: doc.url, revision: null, origin: "session", revised_at: null, revised_by: null });
+    add({ doc_kind: "feishu_doc", doc_ref: doc.url, title: doc.title || feishuFallbackTitle(doc.url), url: doc.url, revision: null, origin: "session", revised_at: null, revised_by: null, untitled: !doc.title });
   const list = [...rows.values()];
   await enrichFeishuDocs(q, personId, list, feishu, now);
-  return list;
+  return list.filter((row) => !row.untitled);
 }
 
 export async function readWorkBasis(q: Query, personId: string, feishu: FeishuDocReader | undefined, now: Date): Promise<TWorkBasisCandidate[]> {
@@ -144,6 +147,35 @@ const OWN_TASKS = new Set(["TkosCollector", "com.tokenkingos.tkos-collector"]);
 type ScheduleRow = { device_id: string; name: string; cadence: string | null; command: string | null; device_name: string };
 const scheduleKey = (deviceId: string, name: string) => `${deviceId}:${name}`;
 
+/** 按时间跑的触发器：Windows 的 Daily/Weekly/Monthly/MonthlyDOW/Time，macOS 的「每 N 秒」/StartCalendarInterval，crontab 的五段时间。 */
+const TIMED_TRIGGER = /^(?:Daily|Weekly|Monthly|MonthlyDOW|Time)$/i;
+const CRON = /^[\d*/,A-Za-z-]+(?:\s+[\d*/,A-Za-z-]+){4}$/;
+function timed(cadence: string | null): boolean {
+  if (!cadence) return false;
+  if (/^每 \d+ 秒$/.test(cadence) || cadence === "StartCalendarInterval") return true;
+  if (CRON.test(cadence) && /[\d*]/.test(cadence)) return true;
+  return cadence.split(/,\s*/).some((trigger) => TIMED_TRIGGER.test(trigger));
+}
+/** 命令里的路径：引号里的整段（可带空格），其余按空白切。 */
+const TOKEN = /"([^"]*)"|'([^']*)'|(\S+)/g;
+const HOME = /^(?:[A-Za-z]:[\\/]Users[\\/][^\\/]+[\\/]|\/Users\/[^/]+\/|\/home\/[^/]+\/|~[\\/])/i;
+const SCRIPT = /\.(?:ps1|py|js|mjs|ts|sh|bat|cmd)$/i;
+/** 系统和厂商的目录；npm 全局装的 claude、codex 在 AppData\Roaming\npm，不算厂商。 */
+const VENDOR = /^(?:[A-Za-z]:[\\/](?:Program Files(?: \(x86\))?|Windows|ProgramData)[\\/]|[A-Za-z]:[\\/]Users[\\/][^\\/]+[\\/]AppData[\\/](?:Local[\\/]Microsoft|Roaming[\\/](?!npm[\\/])[^\\/]+)[\\/])/i;
+const AI_TOOL = /(?<![A-Za-z0-9])(?:claude|codex|tkos|tianshu|world)(?![A-Za-z0-9])/i;
+
+/**
+ * 搬家清单只列工作用的定时任务：按时间跑，且命令跑的是本人主目录下的脚本（不在厂商目录里），
+ * 或者提到 AI 工具而本身不是系统、厂商目录里的程序。只在登录、开机、事件时触发的不算。
+ */
+export function isWorkSchedule(row: { cadence: string | null; command: string | null }): boolean {
+  if (!timed(row.cadence) || !row.command) return false;
+  const tokens = [...row.command.matchAll(TOKEN)].map((match) => match[1] ?? match[2] ?? match[3]);
+  if (tokens.some((token) => HOME.test(token) && SCRIPT.test(token) && !VENDOR.test(token))) return true;
+  // 计划任务里的程序路径常不带引号（C:\Program Files\…），按命令开头判断。
+  return AI_TOOL.test(row.command) && !VENDOR.test(row.command.replace(/^["']/, ""));
+}
+
 async function scheduleCandidates(q: Query, personId: string): Promise<ScheduleRow[]> {
   const devices = `(SELECT device_id, max(device_name) AS device_name FROM collector_health WHERE person_id=$1 GROUP BY device_id)`;
   const [found, imported] = await Promise.all([
@@ -156,7 +188,8 @@ async function scheduleCandidates(q: Query, personId: string): Promise<ScheduleR
       WHERE c.person_id=$1 AND c.source='local' ORDER BY c.created_at`, [personId]),
   ]);
   const rows = new Map<string, ScheduleRow>();
-  for (const row of [...imported.rows, ...found.rows] as ScheduleRow[])
+  // 搬过的照旧列出；本机盘点到的只留工作用的。
+  for (const row of [...imported.rows, ...(found.rows as ScheduleRow[]).filter(isWorkSchedule)] as ScheduleRow[])
     if (!OWN_TASKS.has(row.name) && !rows.has(scheduleKey(row.device_id, row.name))) rows.set(scheduleKey(row.device_id, row.name), row);
   return [...rows.values()];
 }

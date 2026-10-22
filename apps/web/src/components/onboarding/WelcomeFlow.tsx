@@ -12,7 +12,7 @@ import { useRoundNow } from "@/components/missionCards/useRoundNow";
 import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import { ConnectAgentForm } from "@/components/ConnectAgentForm";
 import { CollectorInstallPanel, ScanProgress, scanSteps, useCollectorStatus } from "./CollectorSetup";
-import { loadReviewLists, REVIEW_TABS, ReviewTabs, type ReviewLists, type ReviewTab } from "./ReviewLists";
+import { loadReviewLists, reviewEmpty, ReviewSummary, submitReview, type ReviewLists, type ReviewPicks } from "./ReviewLists";
 import { DelegationPanel } from "./DelegationPanel";
 import { MorningCanvas } from "./MorningCanvas";
 import { CoAgentCapsule } from "./CoAgentCapsule";
@@ -28,11 +28,11 @@ type Step = "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "wo
 
 /**
  * 两种角色都先看工作台；成员接着看每月 Mission 的形成与执行。
- * 连上 AI 工具之后：安装本机采集器 → 后台扫描 → 最后一页三个清单（10a 第 2–4 步）；委托授权（第 7 步）由配置打开。
+ * 连上 AI 工具之后：安装本机采集器 → 后台扫描 → 确认清单（10a 第 2–4 步；扫完三项都没有可确认的就跳过）；委托授权（第 7 步）由配置打开。
  */
-export function onboardingSteps(data: OnboardingData): Step[] {
+export function onboardingSteps(data: OnboardingData, skipReview = false): Step[] {
   return ["hello", "tour-notifications", "tour-board", ...(data.role === "member" ? ["mission-flow" as const, "work" as const] : []), "radar", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "connect",
-    "collector", "scan", "review", ...(data.delegationStep ? ["delegation" as const] : []), "start"];
+    "collector", "scan", ...(skipReview ? [] : ["review" as const]), ...(data.delegationStep ? ["delegation" as const] : []), "start"];
 }
 
 /** 扫描等第一次盘点最多这么久；超时就停在那一步，用已有的数据整理清单，不让人卡在这一页。 */
@@ -91,7 +91,6 @@ export function WorkSnapshot({ data, onRefresh }: { data: Extract<OnboardingData
 
 export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData; nextPath?: string }) {
   const { data, refresh, refreshError } = useOnboardingData(initial);
-  const steps = onboardingSteps(data);
   const returnPath = onboardingReturnPath(data.role, nextPath);
   const [index, setIndex] = useState(0);
   const [acknowledge, setAcknowledge] = useState(0);
@@ -111,12 +110,20 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
   /** 本次上手生成的采集器令牌：前后翻页不丢，也不重复生成。 */
   const [collectorToken, setCollectorToken] = useState<string | null>(null);
   const [scanTimedOut, setScanTimedOut] = useState(false);
-  /** 扫描页结束时读好的两份清单；最后一页确认后换成服务端返回的最新一份。 */
+  /** 扫描页结束时读好的两份清单；确认清单提交后换成服务端返回的最新一份。 */
   const [reviewLists, setReviewLists] = useState<ReviewLists | null>(null);
-  const [reviewed, setReviewed] = useState<Record<ReviewTab, boolean>>({ memory: false, basis: false, schedules: false });
-  const step = steps[index];
-  const collector = useCollectorStatus(step === "collector" || step === "scan");
+  /** 确认清单提交过（之后默认勾选按入库的来）、明细里改过的勾选、提交中、提交失败。 */
+  const [reviewed, setReviewed] = useState(false);
+  const [reviewPicks, setReviewPicks] = useState<ReviewPicks>({});
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  // 确认清单在扫描之后：跳不跳过，采集器、扫描两步的位置都一样。
+  const unskipped = onboardingSteps(data)[index];
+  const collector = useCollectorStatus(unskipped === "collector" || unskipped === "scan");
   const collectorConnected = Boolean(collector?.devices.length);
+  const memoryFiles = collectorConnected && collector!.consent ? collector!.inventory.memoryFiles : null;
+  const steps = onboardingSteps(data, !reviewed && reviewLists !== null && reviewEmpty(reviewLists, memoryFiles));
+  const step = steps[index];
   const scanFinished = Boolean(collector) && (!collectorConnected || !collector?.consent || Boolean(collector?.scannedAt) || scanTimedOut);
   const scanReady = scanFinished && reviewLists !== null;
   const voice = useVoiceprintEnrollment({ initialStatus: data.voiceprint });
@@ -199,6 +206,21 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
 
   async function forward() {
     if (step === "start" || error) return finish();
+    if (step === "review" && reviewLists) {
+      setReviewSaving(true);
+      setReviewError(null);
+      try {
+        setReviewLists(await submitReview(reviewLists, reviewed, reviewPicks));
+        setReviewPicks({});
+        setReviewed(true);
+        move(1);
+      } catch (cause) {
+        setReviewError(cause instanceof Error ? cause.message : "没有存上，请重试");
+      } finally {
+        setReviewSaving(false);
+      }
+      return;
+    }
     if (step === "voiceprint" && voice.phase === "recorded") {
       const saved = await voice.save();
       if (saved) { setRerecord(false); move(1); }
@@ -216,18 +238,17 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
       : step === "connect" && !connectDownloaded ? connectPrimary?.querySelector<HTMLButtonElement>("button") : primary.current)?.click();
   }
 
-  const reviewDone = REVIEW_TABS.every((tab) => reviewed[tab.id]);
   const heading = step === "collector" ? "安装本机采集器" : step === "scan" ? scanReady ? "扫描完成" : "正在扫描" : step === "review" ? "确认清单" : step === "delegation" ? "授权天枢替你记进本体" : step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "work" ? "你这个月的工作" : step === "radar" ? data.role === "ceo" ? "公司雷达，还要看什么？" : "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : step === "connect" ? "连上你自己的 AI 工具" : "可以开始了";
   // 手机首页是一条滚动：最上面是通知，往下 CEO 是公司全局、成员是自己的工作。
   const phoneHeading = step === "tour-notifications" ? "最上面是通知" : step === "tour-board" ? data.role === "ceo" ? "往下是公司全局" : "往下是你的工作" : null;
-  const busy = finishing || voice.phase === "saving";
+  const busy = finishing || voice.phase === "saving" || reviewSaving;
   const voiceReady = voice.status?.enrolled && !rerecord && voice.phase === "idle";
   const primaryDisabled = busy || (!error && ((step === "voiceprint" && !voiceReady && (voice.phase !== "recorded" || voice.tooShort))
-    || (step === "collector" && !collectorConnected) || (step === "scan" && !scanReady) || (step === "review" && !reviewDone)));
+    || (step === "collector" && !collectorConnected) || (step === "scan" && !scanReady)));
   const disabledHint = step === "voiceprint" && primaryDisabled && !busy
     ? voice.recording ? "录好后再继续，也可以选「稍后」" : voice.tooShort ? "请重新录满 15 秒，或者选「稍后」" : voice.consent ? "录好一段 15–30 秒的朗读，或者选「稍后」" : "先勾选同意并录好，或者选「稍后」"
     : null;
-  const primaryLabel = finishing ? "正在进入…" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : step === "review" ? "完成" : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : "下一步";
+  const primaryLabel = finishing ? "正在进入…" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : step === "review" ? reviewSaving ? "正在保存…" : "完成" : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : "下一步";
 
   return <main className={s.page} onKeyDown={onKeyDown} style={{ "--direction": direction } as CSSProperties}>
     <MorningCanvas progress={index} />
@@ -289,9 +310,8 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
             </div> : null}
             {step === "collector" ? <CollectorInstallPanel token={collectorToken} onToken={setCollectorToken} status={collector} /> : null}
             {step === "scan" ? <ScanProgress steps={scanSteps(collector, reviewLists && { basis: reviewLists.basis.length, schedules: reviewLists.schedules.length }, scanTimedOut)} /> : null}
-            {step === "review" && reviewLists ? <ReviewTabs lists={reviewLists} onListsChange={setReviewLists} reviewed={reviewed}
-              onReviewedChange={(tab, confirmed) => setReviewed((current) => ({ ...current, [tab]: confirmed }))}
-              localMemoryFiles={collectorConnected && collector!.consent ? collector!.inventory.memoryFiles : null} /> : null}
+            {step === "review" && reviewLists ? <ReviewSummary lists={reviewLists} reviewed={reviewed} picks={reviewPicks} memoryFiles={memoryFiles}
+              onPick={(key, checked) => setReviewPicks((current) => ({ ...current, [key]: checked }))} saving={reviewSaving} error={reviewError} /> : null}
             {step === "delegation" ? <DelegationPanel /> : null}
             {step === "start" ? <p className={s.summary}>
               <span className={s.summaryItem}>{radarSummaryLine(data.role, radarSaved ?? data.radar)}</span>
