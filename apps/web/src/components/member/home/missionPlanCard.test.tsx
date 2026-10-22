@@ -372,9 +372,21 @@ describe("MissionPlanCard：三栏的卡片", () => {
     expect(small("a5")).toBe("你＋人豪");
     expect(small("a7")).toBe("10/23");
     expect(small("a1")).toBe("10/21");
-    expect(card("a6")).not.toContain("<small");
+    expect(small("a6")).toBe("10/27 起");
     expect(card("a4")).toMatch(/<span[^>]*data-overdue[^>]*>10\/16</);
     expect(card("a3")).not.toContain("data-overdue");
+  });
+
+  it("没有截止只有开始：本周、之后写「M/D 起」，和主体合成「主体 · M/D 起」；已完成不写开始日", () => {
+    const base = plan().activities;
+    const html = mount(plan({ activities: [
+      ...base.filter(({ item }) => !["a5", "a2"].includes(item.id)),
+      { ...base[4], item: { ...base[4].item, startDate: "2026-10-20" } },
+      { ...base[1], item: { ...base[1].item, dueDate: null, startDate: "2026-10-15" } },
+    ] })).html;
+    const card = (id: string) => html.match(new RegExp(`<button[^>]*data-activity="${id}"[^>]*>.*?</button>`))?.[0] ?? "";
+    expect(text(card("a5").match(/<small[^>]*>.*<\/small>/)?.[0] ?? "").trim()).toBe("你＋人豪 · 10/20 起");
+    expect(card("a2")).not.toContain("<small");
   });
 
   it("每栏按日期排，没日期的在后", () => {

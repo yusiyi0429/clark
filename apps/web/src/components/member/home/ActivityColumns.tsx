@@ -2,7 +2,7 @@
 
 /**
  * Mission 卡片的三栏：已完成 · N / 本周 M/D–M/D / 之后，右上角是「开启执行事项」。
- * 卡片 = 标题 + 一行小字：本周、之后写「你＋协作人 · 截止日」（有哪个写哪个），已完成只写日期；逾期的日期标红。
+ * 卡片 = 标题 + 一行小字：本周、之后写「你＋协作人 · 截止日」（没截止写「开始日 起」；有哪个写哪个），已完成只写截止日；逾期的日期标红。
  * 「全部」视图下卡片左边是 Mission 色条（行内 --bar）。每栏按日期排，没日期的在后。
  */
 import type { CSSProperties } from "react";
@@ -22,7 +22,8 @@ function ActivityCard({ activity, bar, onNavigate }: { activity: THomePlanActivi
   const { item, column } = activity;
   const href = `/me/tasks/${encodeURIComponent(item.id)}`;
   const who = column !== "done" && item.collaborators.length > 0 ? `你＋${item.collaborators.map((person) => person.name).join("、")}` : null;
-  const date = column === "done" ? item.dueDate ?? item.startDate : item.dueDate;
+  // 有截止写截止；本周、之后没截止但有开始，写「M/D 起」。已完成只写截止。
+  const date = item.dueDate ? shortDate(item.dueDate) : column !== "done" && item.startDate ? `${shortDate(item.startDate)} 起` : null;
   return (
     <button type="button" className={s.activity} data-activity={item.id} data-origin={href}
       style={bar ? ({ "--bar": bar } as CSSProperties) : undefined} onClick={(event) => onNavigate(href, event.currentTarget)}>
@@ -31,7 +32,7 @@ function ActivityCard({ activity, bar, onNavigate }: { activity: THomePlanActivi
         <small>
           {who}
           {who && date ? " · " : null}
-          {date && <span data-overdue={activity.overdue || undefined}>{shortDate(date)}</span>}
+          {date && <span data-overdue={activity.overdue || undefined}>{date}</span>}
         </small>
       )}
     </button>
