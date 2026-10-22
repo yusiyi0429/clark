@@ -92,6 +92,17 @@ describe("会前预审在后台跑时接着刷新", () => {
     expect(meetingPollMs(meeting({ preflightStatus: "running" }))).toBe(2_000);
   });
 
+  it("刚约完：飞书还在约（pending）时谁看都 5 秒取一次，约好了就交给等开会；成员视图里主持人看自己的会，预审中也取", () => {
+    const booking = meeting({ feishuEvent: { status: "pending", joinUrl: null, organizerId: "p1" } } as never);
+    expect(meetingNeedsPolling(booking)).toBe(true);
+    expect(meetingNeedsPolling(booking, true)).toBe(true);
+    expect(meetingPollMs(booking)).toBe(5_000);
+    expect(meetingNeedsPolling(meeting({ feishuEvent: { status: "failed", joinUrl: null, organizerId: "p1" } } as never), true)).toBe(false);
+    expect(meetingNeedsPolling(meeting({ status: "cancelled", feishuEvent: { status: "pending", joinUrl: null, organizerId: "p1" } } as never), true)).toBe(false);
+    expect(meetingNeedsPolling(meeting({ preflightStatus: "running" }), true, null, true)).toBe(true);
+    expect(meetingNeedsPolling(meeting({ preflightStatus: "ready" }), true, null, true)).toBe(false);
+  });
+
   it("首页左栏：有会在预审中 5 秒一次，其余待开的会 20 秒一次，没有要等的就不轮询", () => {
     expect(railRefreshInterval([card("meeting", meeting({ preflightStatus: "running" }))])).toBe(5_000);
     expect(railRefreshInterval([card("meeting", meeting({ preflightStatus: "ready" }))])).toBe(20_000);

@@ -437,12 +437,13 @@ function generatingCard(payload: MeetingPayload): boolean {
 const followingFeishu = (live: FeishuLive | null) => live === "waiting" || live === "live";
 
 /**
- * 会议页要不要重取卡片：会前预审还在跑、录音转写中、等妙记、会议卡生成中、在飞书约上的会还没开或开着。到下一阶段卡片自己出来，不用刷新页面。
- * 成员只读视图（卡片走成员接口）只跟等妙记、生成会议卡和飞书会议开始结束。
+ * 会议页要不要重取卡片：飞书还在约、会前预审还在跑、录音转写中、等妙记、会议卡生成中、在飞书约上的会还没开或开着。到下一阶段卡片自己出来，不用刷新页面。
+ * 成员只读视图（卡片走成员接口）跟飞书还在约、等妙记、生成会议卡和飞书会议开始结束；主持人看自己的会也跟预审和录音。
  */
-export function meetingNeedsPolling(payload: MeetingPayload, memberReadOnly = false, live: FeishuLive | null = null): boolean {
-  if (awaitingMinutes(payload) || generatingCard(payload) || followingFeishu(live)) return true;
-  if (memberReadOnly) return false;
+export function meetingNeedsPolling(payload: MeetingPayload, memberReadOnly = false, live: FeishuLive | null = null, host = false): boolean {
+  const booking = payload.status === "scheduled" && payload.feishuEvent?.status === "pending";
+  if (booking || awaitingMinutes(payload) || generatingCard(payload) || followingFeishu(live)) return true;
+  if (memberReadOnly && !host) return false;
   return preflightInFlight(payload) || recordingInFlight(payload.recording);
 }
 
@@ -678,8 +679,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
 
   const candidateKey = payload.transcriptCandidate?.createdAt ?? null;
 
-  // 录音转写中、会后抽取中、会前预审中、等妙记、等飞书会议开始和结束：定时取会议卡片，状态、候选、纪要、预审跟着更新；候选一到，下面那段就自动打开说话人对应。
-  const refreshing = meetingNeedsPolling(payload, memberReadOnly, live);
+  // 飞书还在约、录音转写中、会后抽取中、会前预审中、等妙记、等飞书会议开始和结束：定时取会议卡片，状态、候选、纪要、预审跟着更新；候选一到，下面那段就自动打开说话人对应。
+  const refreshing = meetingNeedsPolling(payload, memberReadOnly, live, isHost);
   const pollMs = meetingPollMs(payload);
   useEffect(() => {
     if (!refreshing) return;
