@@ -33,7 +33,8 @@ import { createCollectorHealthScheduler } from "./collector.js";
 import { createCollectorDistillAgent, createCollectorDistillScheduler } from "./collectorDistill.js";
 import { createWeeklyReviewDraftAgent } from "./weeklyReviewAgent.js";
 import { createWeeklyReviewScheduler, createWeeklyReviewService } from "./weeklyReviewService.js";
-import { canUseMemberView } from "./memberAccess.js";
+import { canUseMemberView, ensureLocalDevLogin } from "./memberAccess.js";
+import { isLoopbackHttpOrigin } from "./routes/shared.js";
 import { recoverStaleMissionDrafts } from "./missionRounds.js";
 import { recoverInterruptedOutcome } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
@@ -116,6 +117,9 @@ try {
 } finally {
   client.release();
 }
+
+// 本地开发（PUBLIC_ORIGIN 是本机 http）：固定测试账号 sunm / 8989 每次启动都可登录。
+if (isLoopbackHttpOrigin(env.publicOrigin)) await ensureLocalDevLogin(pool.query.bind(pool), new Date());
 
 const peopleDirectory = loadPeopleDirectory(env);
 const company = createCompanyContext(env);

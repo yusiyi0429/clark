@@ -176,9 +176,19 @@ export function createReadSession(env: AppEnv, q: Query, peopleDirectory: People
   };
 }
 
-/** CSRF 来源检查：正式地址，或本地开发额外列出的地址。 */
+/** 本机 http 地址（localhost / 127.0.0.1 / [::1]，任意端口）：PUBLIC_ORIGIN 是它时就是本地开发。 */
+export function isLoopbackHttpOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  } catch { return false; }
+}
+
+/** CSRF 来源检查：正式地址，或本地开发额外列出的地址；本地开发时任意本机端口都放行（各工作区端口不同）。 */
 export function isAllowedOrigin(env: AppEnv, origin: string | undefined): boolean {
-  return origin !== undefined && (origin === env.publicOrigin || (env.extraOrigins?.includes(origin) ?? false));
+  if (origin === undefined) return false;
+  if (origin === env.publicOrigin || (env.extraOrigins?.includes(origin) ?? false)) return true;
+  return isLoopbackHttpOrigin(env.publicOrigin) && isLoopbackHttpOrigin(origin);
 }
 
 /** 浏览器请求边界：有效会话 + 写请求同源 Origin（CSRF）。 */
