@@ -5,6 +5,7 @@ import type {
   TAdminQualitySignal, TAdminStatus, TAdminSubjectType,
 } from "@warmap/contracts";
 import { collectorHealthOf, workdayHours } from "./collector.js";
+import { REAUTH_AFTER_DAYS } from "./feishu/refresh.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import type { Query } from "./meetingStore.js";
 import { insertNotification } from "./notifications.js";
@@ -57,7 +58,7 @@ type CollectorRow = {
   person_id: string; device_name: string; platform: string; source: string; collector_version: string; source_status: string; error_code: string | null;
   first_seen_at: Date; last_attempt_at: Date; last_success_at: Date | null; coverage_until: Date | null; last_new_evidence_at: Date | null;
 };
-type FeishuRow = { person_id: string; status: "active" | "reauth_required"; authorized_at: Date; last_refreshed_at: Date | null; refresh_expires_at: Date | null; reauth_reminder_at: Date | null };
+type FeishuRow = { person_id: string; status: "active" | "reauth_required"; authorized_at: Date; last_refreshed_at: Date | null; reauth_reminder_at: Date | null };
 type WeeklyRow = { person_id: string; week_start: string; submitted_at: Date; world_sync_status: "pending" | "done" | "failed"; failed_targets: number; last_done_at: Date | null };
 
 /** 名单：能用天枢的真人（CEO、DRI、参与人），不含会议纪要一类的记录账号。 */
@@ -71,7 +72,7 @@ async function readPeople(q: Query, peopleDirectory: PeopleDirectory, marks: Mar
     q(`SELECT person_id, device_name, platform, source, collector_version, source_status, error_code,
         first_seen_at, last_attempt_at, last_success_at, coverage_until, last_new_evidence_at
        FROM collector_health WHERE source_status <> 'not_found' ORDER BY person_id, last_success_at DESC NULLS LAST, device_name, source`),
-    q("SELECT person_id, status, authorized_at, last_refreshed_at, refresh_expires_at, reauth_reminder_at FROM feishu_user_tokens"),
+    q("SELECT person_id, status, authorized_at, last_refreshed_at, reauth_reminder_at FROM feishu_user_tokens"),
     q(`SELECT DISTINCT ON (person_id) person_id, to_char(week_start, 'YYYY-MM-DD') AS week_start, submitted_at, world_sync_status,
         (SELECT count(*)::int FROM jsonb_array_elements(world_sync) AS item WHERE item->>'status' = 'failed') AS failed_targets,
         (SELECT max(submitted_at) FROM weekly_reviews done WHERE done.person_id = w.person_id AND done.world_sync_status = 'done') AS last_done_at
@@ -115,7 +116,7 @@ async function readPeople(q: Query, peopleDirectory: PeopleDirectory, marks: Mar
       feishu: {
         status: feishuStatus, lastSuccessAt: iso(token ? token.last_refreshed_at ?? token.authorized_at : null),
         acknowledged: markOf("feishu", id, feishuStatus), remindedAt: remindedAt("feishu", id),
-        tokenStatus: token?.status ?? null, authorizedAt: iso(token?.authorized_at), refreshExpiresAt: iso(token?.refresh_expires_at), reauthReminderAt: iso(token?.reauth_reminder_at),
+        tokenStatus: token?.status ?? null, authorizedAt: iso(token?.authorized_at), reauthDueAt: iso(token ? new Date(token.authorized_at.getTime() + REAUTH_AFTER_DAYS * 86_400_000) : null), reauthReminderAt: iso(token?.reauth_reminder_at),
       },
       world: {
         status: worldStatus, lastSuccessAt: iso(review?.last_done_at), acknowledged: markOf("world", id, worldStatus), remindedAt: remindedAt("world", id),

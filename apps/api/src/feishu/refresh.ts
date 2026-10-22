@@ -10,8 +10,9 @@ export const FEISHU_REFRESH_KIND = "feishu.token_refresh";
 /** 每 10 分钟扫一次；access token 15 分钟内到期（或已过期）的排进续期。 */
 const SCAN_EVERY_MS = 10 * 60_000;
 const REFRESH_AHEAD_MS = 15 * 60_000;
-/** 授权满 330 天打提醒（满 365 天飞书一律要求重新授权）。 */
+/** 授权满 330 天打提醒；满 365 天飞书一律要求重新授权。 */
 const REMIND_AFTER_DAYS = 330;
+export const REAUTH_AFTER_DAYS = 365;
 /**
  * refresh token 已不能再用、重试也没用的错误：20037 过期（含满 365 天）、20026 无效、20064 已撤销、20073 已用过。
  * 遇到就标「需重新授权」，不进 jobs 重试。

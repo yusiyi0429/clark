@@ -7850,7 +7850,7 @@ export interface components {
                     remindedAt: string | null;
                     tokenStatus: "active" | "reauth_required" | null;
                     authorizedAt: string | null;
-                    refreshExpiresAt: string | null;
+                    reauthDueAt: string | null;
                     reauthReminderAt: string | null;
                 };
                 world: {
