@@ -1,0 +1,122 @@
+/*
+ * 成员首页本月时间轴（components/member/home/DayTimeline.tsx），照样稿 home-timeline-days-v2 / home-layout-v4：
+ *   格子    未到工作日 #3d6fb6、未到休息日 #dbe4f0、过去统一 #c9d1dc；今天加一圈描边
+ *   格子上方 签定关口 = 实心菱形，计划点 = 空心圆，颜色由行内 --c 给（所属 Mission 的颜色）；淡掉的用浅灰
+ *   格子下方 少数日期；再下面一道本周括线
+ * 容器窄于 560px 时藏起格子，换成一根细线。
+ */
+.timeline {
+  container: day-timeline / inline-size;
+  min-width: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--days), minmax(0, 1fr));
+  gap: 4px;
+  margin: 0;
+  padding: 22px 0 18px;
+  list-style: none;
+}
+
+.day { position: relative; aspect-ratio: 1 / 1; border-radius: 5px; }
+.day[data-workday="true"] { background: #3d6fb6; }
+.day[data-workday="false"] { background: #dbe4f0; }
+.day[data-state="past"] { background: #c9d1dc; }
+.day[data-state="today"] { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #1f2a3d; }
+
+.hit {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  cursor: pointer;
+}
+.hit:hover { background: rgba(31, 42, 61, .14); }
+.hit:focus-visible { outline: 2px solid #215ba1; outline-offset: 2px; }
+
+.num {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  color: #8a93a3;
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.num[data-today] { color: #1f2a3d; font-weight: 700; }
+
+/* 同一天的点并排；菱形转 45° 后比盒子宽，间距留够不叠。 */
+.marks {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  display: flex;
+  gap: 5px;
+  transform: translateX(-50%);
+}
+
+.gate, .mark { --tone: var(--c); flex: none; box-sizing: border-box; width: 11px; height: 11px; }
+.gate { border-radius: 2px; background: var(--tone); transform: rotate(45deg); }
+.mark { border: 2.5px solid var(--tone); border-radius: 50%; background: #fff; }
+.gate[data-dim], .mark[data-dim] { --tone: #d5dbe4; }
+.mark[data-movable] { cursor: grab; touch-action: none; }
+.mark[data-dragging] { opacity: .35; cursor: grabbing; }
+.mark[data-ghost] { pointer-events: none; }
+
+.braceRow {
+  display: grid;
+  grid-template-columns: repeat(var(--days), minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 4px;
+}
+.brace { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.brace[data-edge="start"] { align-items: flex-start; }
+.brace[data-edge="end"] { align-items: flex-end; }
+.bracket {
+  align-self: stretch;
+  height: 8px;
+  border: 1.5px solid #215ba1;
+  border-top: 0;
+  border-radius: 0 0 6px 6px;
+}
+.braceText { margin-top: 2px; color: #215ba1; font-size: 12px; font-weight: 600; line-height: 18px; white-space: nowrap; }
+
+/* 窄容器：一根细线。位置都是行内百分比。 */
+.line { position: relative; display: none; height: 40px; }
+.band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-right: 1px dashed rgba(33, 91, 161, .25);
+  border-left: 1px dashed rgba(33, 91, 161, .25);
+  background: rgba(33, 91, 161, .07);
+}
+.lab {
+  position: absolute;
+  top: 0;
+  color: #8a93a3;
+  font-size: 10.5px;
+  line-height: 14px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+.lab[data-at="start"] { left: 0; transform: none; }
+.lab[data-at="end"] { right: 0; transform: none; }
+.weekLab { color: #215ba1; font-weight: 600; }
+.track { position: absolute; top: 22px; right: 0; left: 0; height: 4px; border-radius: 2px; background: #e1e6ed; }
+.past { position: absolute; top: 22px; left: 0; height: 4px; border-radius: 2px; background: #b9c8dc; }
+.now { position: absolute; top: 12px; bottom: 0; width: 2px; margin-left: -1px; background: #215ba1; }
+.lineMarks { position: absolute; top: 17px; display: flex; gap: 5px; transform: translateX(-50%); }
+.lineMarks > .gate, .lineMarks > .mark { width: 13px; height: 13px; }
+
+@container day-timeline (max-width: 559px) {
+  .days { display: none; }
+  .line { display: block; }
+}
