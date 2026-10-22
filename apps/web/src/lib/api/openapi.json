@@ -44260,7 +44260,7 @@
                     "remindedAt",
                     "tokenStatus",
                     "authorizedAt",
-                    "refreshExpiresAt",
+                    "reauthDueAt",
                     "reauthReminderAt"
                   ],
                   "properties": {
@@ -44356,7 +44356,7 @@
                         }
                       ]
                     },
-                    "refreshExpiresAt": {
+                    "reauthDueAt": {
                       "anyOf": [
                         {
                           "format": "date-time",
