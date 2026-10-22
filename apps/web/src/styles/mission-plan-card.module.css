@@ -58,12 +58,14 @@
   border-radius: var(--r-bar);
   background: var(--ink);
 }
-.hint { color: var(--ink-faint); font-size: var(--type-meta, 12px); line-height: 18px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* 小字行没有内容也占住一行，各项标题对得齐。 */
+.hint { min-height: 18px; color: var(--ink-faint); font-size: var(--type-meta, 12px); line-height: 18px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Mission 标题照样稿 17px：跟正文字号走（大屏随外壳一起放大），不跟外壳在 1000px 以下收小的标题字号。 */
 .name {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: calc(var(--type-title, 20px) - 3px);
+  font-size: calc(var(--type-body, 14px) + 3px);
   font-weight: 600;
   line-height: 1.45;
   letter-spacing: -.02em;
@@ -240,14 +242,14 @@
 .empty { padding: 2px 4px; color: var(--ink-faint); font-size: var(--type-meta, 12px); }
 
 @media (max-width: 759px) { .card { padding: 20px; } }
-/* 手持（≤959）字号下限，同首页其他卡片：标签 13px，说明性的辅助字 14px。 */
+/* 手持（≤959）字号下限，同首页其他卡片：标签 13px，说明性的辅助字 14px；Mission 标题收到 15px。 */
 @media (max-width: 959px) {
   .hint, .column h3, .popDate, .empty { font-size: 13px; }
   .activity small { font-size: 14px; }
+  .name { font-size: 15px; }
 }
 
 @container plan-card (max-width: 559px) {
-  .name { font-size: calc(var(--type-title, 20px) - 5px); }
   .columns { grid-template-columns: minmax(0, 1fr); }
   .column[data-column="week"] { order: -1; }
   .column[data-column="done"] { order: 1; }

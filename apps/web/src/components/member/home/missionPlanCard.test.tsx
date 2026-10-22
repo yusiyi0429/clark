@@ -230,6 +230,19 @@ describe("MissionPlanCard：Mission 行", () => {
     expect(cardsIn(view.html, "week")).toHaveLength(4);
   });
 
+  it("挂在之前月份 Mission 下没做完的（那个 Mission 不在行上）：只在「全部」里，聚焦哪个 Mission 都不出现", () => {
+    const earlier = { item: item("a8", "九月没收尾", { dueDate: "2026-09-28" }), missionId: "sep-1", column: "week", overdue: true } satisfies THomePlanActivity;
+    const view = mount(plan({ activities: [...plan().activities, earlier] }));
+    expect(cardsIn(view.html, "week")).toContain("a8");
+    expect(text(view.html)).toContain("其他 4");
+    for (const missionId of ["m1", "m2"]) {
+      view.mission(missionId);
+      expect([...cardsIn(view.html, "done"), ...cardsIn(view.html, "week"), ...cardsIn(view.html, "later")]).not.toContain("a8");
+    }
+    view.mission("all");
+    expect(cardsIn(view.html, "week")).toContain("a8");
+  });
+
   it("每个 Mission 上面的小字：今天起最近的一个签定关口「M/D 名字」；没有就什么都不写", () => {
     const html = mount().html;
     expect(text(html)).toContain("10/28 上线");
@@ -237,6 +250,11 @@ describe("MissionPlanCard：Mission 行", () => {
     expect(text(html)).not.toMatch(/需求冻结|10\/30 复盘/);
     const pastOnly = mount(plan({ gates: [{ missionId: "m1", date: "2026-10-12", label: "需求冻结" }] })).html;
     expect(text(pastOnly)).not.toContain("需求冻结");
+  });
+
+  it("标题上面那行小字没有内容时也空着占位，各项标题对得齐", () => {
+    const html = mount(plan({ gates: [] })).html;
+    for (const id of ["all", "m1", "m2"]) expect(html).toMatch(new RegExp(`data-mission="${id}"[^>]*><span class="[^"]*_hint_[^"]*"></span>`));
   });
 
   it("回退显示上个月：「全部」上面写「9 月」，时间轴不画本周括线", () => {
