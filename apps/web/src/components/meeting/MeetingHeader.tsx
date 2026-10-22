@@ -11,6 +11,7 @@
  * - `MeetingStatus`：材料上面一行灰字：谁主持、几人参会这类事实，再加这一刻的一件事。
  * - `MeetingTranscriptStatus`：页头下面那一行（MeetingWorldSection）末尾的会后阶段（等妙记、待确认说话人、生成会议卡，带已用时）
  *   和「再读一次」、贴妙记链接、等妙记时的「自己上传」。
+ * - `feishuLive` / `FeishuMeetingEnd`：在飞书约上的会跟着飞书会议真实开始和结束，页头右边是「进入飞书会议」和到点没开时的「重新安排会议」。
  *
  * 「开始会议」同时开始录音（useMeetingRecorder），计时只是这一页的状态；「这场会开完了」停下录音、交给服务端转写，
  * 并写进后台（meeting.end）。天枢没有会中 Co-Agent，所以不写「Co-Agent 在听」，写的是录没录上。
@@ -21,7 +22,7 @@ import { Button, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
 import { Check, ChevronDown, Radio } from "lucide-react";
 import { COMPANY_TIMEZONE } from "@/lib/companyTime";
-import type { TMeetingMinutesFailure, TMeetingMinutesFetchResponse, TMeetingMinutesStatus } from "@warmap/contracts";
+import type { TMeetingCardPayload, TMeetingMinutesFailure, TMeetingMinutesFetchResponse, TMeetingMinutesStatus } from "@warmap/contracts";
 import { feishuConnectHref, readFeishuConnection } from "@/lib/feishuLogin";
 import { readMeetingMinutesLink, refetchMeetingMinutes } from "./meetingDecisionApi";
 import s from "@/styles/meeting-header.module.css";
@@ -75,17 +76,43 @@ export function localClock(at: string): string {
   return date.toLocaleString("zh-CN", { timeZone: COMPANY_TIMEZONE, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
+/** 过了预约结束这么久还没收到飞书会议开始，算没开成。 */
+export const MISSED_AFTER_MS = 30 * 60_000;
+
+/**
+ * 在飞书约上的会（booked）跟着飞书会议真实开始和结束，不按预约时间：waiting 还没开（到了预约时间也是）、live 开着、
+ * ended 开完了（收到结束、主持人点了结束、或已进会后流程）、missed 没开成（过了预约结束 30 分钟还没开始，也没找到妙记）。
+ * 不在飞书约上的会为 null，照旧按预约时间算。
+ */
+export type FeishuLive = "waiting" | "live" | "ended" | "missed";
+
+export function feishuLive(
+  payload: Pick<TMeetingCardPayload, "status" | "endsAt" | "endedAt" | "startedAt" | "minutesStatus" | "transcriptCandidate" | "feishuEvent">,
+  now: number,
+): FeishuLive | null {
+  if (payload.status !== "scheduled" || payload.feishuEvent?.status !== "booked") return null;
+  if (payload.endedAt || payload.transcriptCandidate || (payload.minutesStatus ?? "none") !== "none") return "ended";
+  if (payload.startedAt) return "live";
+  return now >= Date.parse(payload.endsAt) + MISSED_AFTER_MS ? "missed" : "waiting";
+}
+
+/** 同上，每 30 秒重算一次：过了预约结束 30 分钟自己变成没开成。 */
+export function useFeishuLive(payload: Parameters<typeof feishuLive>[0]): FeishuLive | null {
+  return feishuLive(payload, useNow(30_000));
+}
+
 /**
  * 这场会在时间线上的哪一段，全站一个颜色（页头时间段、整页、通知栏黑卡的左条）：橙＝即将开、红＝进行中、灰＝已结束。
  * 已结束沿用 `meetingPhase`（后台记了开完、时间已过（hasEnded，含「待确认／待导入记录」）、已开完、已复核）；已取消也归这一段。
  * 没结束的：这一页按过「开始会议」，或者已经到了开始时刻，就是进行中；否则即将开。
+ * 在飞书约上的会（`live` 不为空）以飞书会议真的开始为准：到点没开、没开成都还在即将开这一段。
  */
 export type MeetingTimeline = "upcoming" | "live" | "ended";
 
-export function meetingTimeline(phase: MeetingPhase, scheduledAt: string, now: number, cancelled = false): MeetingTimeline {
+export function meetingTimeline(phase: MeetingPhase, scheduledAt: string, now: number, cancelled = false, live: FeishuLive | null = null): MeetingTimeline {
   if (phase === "ended" || cancelled) return "ended";
   if (phase === "live") return "live";
-  return Date.parse(scheduledAt) <= now ? "live" : "upcoming";
+  return live === null && Date.parse(scheduledAt) <= now ? "live" : "upcoming";
 }
 
 /** 即将开的相对时间：今天写「还有 3 小时」「还有 20 分钟」；不是今天写明天、后天、日期（公司时区的日历日）。 */
@@ -99,9 +126,10 @@ export function meetingCountdown(scheduledAt: string, now: Date): string {
 
 const monthDay = (iso: string) => new Date(iso).toLocaleDateString("zh-CN", { timeZone: COMPANY_TIMEZONE, month: "numeric", day: "numeric" });
 
-/** 时间段前面那几个字：「还有 3 小时」／「会议中」／「已结束 · 10/8」。 */
-export function meetingTimelineLabel(timeline: MeetingTimeline, scheduledAt: string, now: Date, cancelled = false): string {
-  if (timeline === "upcoming") return meetingCountdown(scheduledAt, now);
+/** 时间段前面那几个字：「还有 3 小时」／「未开始」（到点飞书会议还没开）／「没开成」／「会议中」／「已结束 · 10/8」。 */
+export function meetingTimelineLabel(timeline: MeetingTimeline, scheduledAt: string, now: Date, cancelled = false, live: FeishuLive | null = null): string {
+  if (live === "missed") return "没开成";
+  if (timeline === "upcoming") return Date.parse(scheduledAt) <= now.getTime() ? "未开始" : meetingCountdown(scheduledAt, now);
   if (timeline === "live") return "会议中";
   return `${cancelled ? "已取消" : "已结束"} · ${monthDay(scheduledAt)}`;
 }
@@ -116,11 +144,11 @@ function useNow(every: number): number {
   return now;
 }
 
-/** 页头时间段要用的阶段与那几个字；即将开的每 30 秒重算一次，到点自己变成进行中。 */
-export function useMeetingTimeline({ phase, scheduledAt, cancelled = false }: { phase: MeetingPhase; scheduledAt: string; cancelled?: boolean }) {
+/** 页头时间段要用的阶段与那几个字；即将开的每 30 秒重算一次，到点自己变成进行中（在飞书约上的会等飞书会议真的开始）。 */
+export function useMeetingTimeline({ phase, scheduledAt, cancelled = false, live = null }: { phase: MeetingPhase; scheduledAt: string; cancelled?: boolean; live?: FeishuLive | null }) {
   const now = useNow(30_000);
-  const timeline = meetingTimeline(phase, scheduledAt, now, cancelled);
-  return { timeline, label: meetingTimelineLabel(timeline, scheduledAt, new Date(now), cancelled) };
+  const timeline = meetingTimeline(phase, scheduledAt, now, cancelled, live);
+  return { timeline, label: meetingTimelineLabel(timeline, scheduledAt, new Date(now), cancelled, live) };
 }
 
 /** 开会以来过了几秒。时刻由定时器取，不在渲染里取；没在开会就不跑。 */
@@ -265,6 +293,25 @@ export function MeetingClock({
           </span>
         </span>
       )}
+    </div>
+  );
+}
+
+/**
+ * 在飞书约上的会，页头右边那一颗（data-header-end）：还没开、开着时是「进入飞书会议」（有链接时）；`children` 排在它前面
+ * （还没开、没开成时的「重新安排会议」）。两样都没有时不放。
+ */
+export function FeishuMeetingEnd({ live, joinUrl, children }: { live: FeishuLive; joinUrl: string | null; children?: ReactNode }) {
+  const join = joinUrl && (live === "waiting" || live === "live") ? joinUrl : null;
+  if (!join && !children) return null;
+  return (
+    <div className={s.feishuEnd} data-header-end>
+      {children}
+      {join ? (
+        <span className={s.capsule} data-phase="idle">
+          <a className={s.press} href={join} target="_blank" rel="noreferrer">进入飞书会议</a>
+        </span>
+      ) : null}
     </div>
   );
 }

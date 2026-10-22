@@ -515,6 +515,8 @@ export const MeetingCardPayload = Type.Object(
     endsAt: Type.String(),
     /** 「这场会开完了」的时刻；不改变 status，held 仍只表示已有确认的 Transcript。 */
     endedAt: Type.Union([Type.String(), Type.Null()]),
+    /** 在飞书约上的会：飞书会议真实开始的时刻（收到「会议开始」事件）；没开始或不在飞书约的会为 null。 */
+    startedAt: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     hasEnded: Type.Optional(Type.Boolean()),
     leadDriId: Type.String(),
     /** 建会的人（没记时为 null，按主持人算）：和主持人一样能再读妙记、贴妙记链接。 */

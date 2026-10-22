@@ -438,6 +438,7 @@ export async function executeEditMeetingDetails(
       `title = COALESCE($3, title), scheduled_at = COALESCE($4, scheduled_at),
        lead_dri_id = COALESCE($5, lead_dri_id), participants = COALESCE($6::jsonb, participants),
        ends_at = $7, ended_at = CASE WHEN $4::timestamptz IS NOT NULL AND $4::timestamptz <> scheduled_at THEN NULL ELSE ended_at END,
+       started_at = CASE WHEN $4::timestamptz IS NOT NULL AND $4::timestamptz <> scheduled_at THEN NULL ELSE started_at END,
        version = version + 1, action_fingerprints = $2::jsonb`,
       [
         JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint)),

@@ -8,7 +8,8 @@ import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPrefligh
 import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { saveAuthorizedToken } from "../src/feishu/tokens.js";
 import { createFeishuMinutesApi, type FeishuMinuteInfo, type FeishuMinutesApi } from "../src/feishu/minutes.js";
-import { createMeetingMinutesService, meetingMinutesReply, minuteFromEvent } from "../src/meetingMinutes.js";
+import { createMeetingMinutesService, feishuMeetingFromEvent, meetingMinutesJobs, meetingMinutesReply, minuteFromEvent } from "../src/meetingMinutes.js";
+import { FEISHU_SUBSCRIBED_EVENTS } from "../src/feishu/events.js";
 import { parseFeishuTranscriptText } from "../src/transcriptMarkdown.js";
 import { getMeetingRow } from "../src/meetingStore.js";
 import { minutesManualImport } from "../src/meetingDecisionView.js";
@@ -723,5 +724,172 @@ describe("妙记搜索按真飞书的请求与返回", () => {
       { token: "obcn_b", ownerOpenId: "ou_host", meetingId: "vc_obcn_b", durationSeconds: 3181 },
     ]);
     expect(minutes[0].createdAt?.toISOString()).toBe(new Date(1792380446082).toISOString());
+  });
+});
+
+// 在飞书约上的会跟着飞书会议真实开始和结束（应用身份事件 vc.meeting.meeting_started_v1 / meeting_ended_v1）。
+describe("在飞书约上的会跟着飞书会议开始和结束", () => {
+  const CALENDAR_EVENT = "efa67a98-06a8-4df5-8559-746c8f4477ef_0";
+  /** SDK 交来的拍平事件：header 字段与 event 字段同层，会在 meeting 下，时刻是秒级时间戳字符串。 */
+  const sdkEvent = (eventType: string, eventId: string, meeting: Record<string, unknown>) => ({
+    schema: "2.0", event_id: eventId, event_type: eventType, create_time: "1780279205000", app_id: "cli_test", tenant_key: "t1",
+    meeting: { id: "vc_live_1", topic: "接口切换会", meeting_no: "923851390", ...meeting },
+    operator: { id: { open_id: "ou_host" } },
+  });
+  const STARTED_AT = "1780279205"; // 2026-06-01T10:00:05+08:00
+  const ENDED_AT = "1780282800"; // 2026-06-01T11:00:00+08:00
+
+  async function bookedMeeting(t: TestApp): Promise<string> {
+    const meetingId = await scheduledMeeting(t);
+    await t.pool.query(`UPDATE meetings SET feishu_event_status = 'booked', feishu_calendar_id = 'cal_ceo', feishu_event_id = $2,
+      feishu_event_join_url = 'https://vc.feishu.cn/j/923851390' WHERE id = $1`, [meetingId, CALENDAR_EVENT]);
+    return meetingId;
+  }
+  const service = (t: TestApp, api: FeishuMinutesApi, clock: () => Date) => createMeetingMinutesService({ pool: t.pool, peopleDirectory: loadPeopleDirectory(t.env),
+    outcomeAgent: recordingOutcome(), secret: t.env.sessionSecret, feishu: { env: feishuEnv, api }, now: clock });
+  const live = async (t: TestApp, id: string) => (await t.pool.query(
+    "SELECT started_at, ended_at, feishu_meeting_id, minutes_status, minutes_waiting_since, status FROM meetings WHERE id = $1", [id])).rows[0];
+  const pollJobs = async (t: TestApp) =>
+    (await t.pool.query("SELECT dedupe_key FROM jobs WHERE kind = 'meeting.minutes_poll' AND dedupe_key LIKE 'meeting.minutes_poll:end:%'")).rows.map((row) => row.dedupe_key);
+
+  it("解析事件：SDK 拍平的、没拍平的、平铺 RFC3339 的都认；日程 id 和会议号都没有时不认；两个事件都订阅了、有处理函数", () => {
+    const flat = feishuMeetingFromEvent(sdkEvent("vc.meeting.meeting_ended_v1", "ev1", { calendar_event_id: CALENDAR_EVENT, start_time: STARTED_AT, end_time: ENDED_AT }));
+    expect(flat).toEqual({ feishuMeetingId: "vc_live_1", meetingNo: "923851390", calendarEventId: CALENDAR_EVENT,
+      startTime: new Date("2026-06-01T02:00:05Z"), endTime: new Date("2026-06-01T03:00:00Z") });
+    // 没拍平：{ header, event: { meeting } }；没有日程 id；开始事件里 end_time 是 "0"。
+    expect(feishuMeetingFromEvent({ schema: "2.0", header: { event_id: "ev2" }, event: { meeting: { id: "vc_2", meeting_no: "123456789", start_time: STARTED_AT, end_time: "0" } } }))
+      .toEqual({ feishuMeetingId: "vc_2", meetingNo: "123456789", calendarEventId: null, startTime: new Date("2026-06-01T02:00:05Z"), endTime: null });
+    // lark-cli 归一化后的平铺字段。
+    expect(feishuMeetingFromEvent({ event_id: "ev3", meeting_id: "vc_3", meeting_no: "1", calendar_event_id: "c_0", start_time: "2026-06-01T10:00:05+08:00" }))
+      .toMatchObject({ feishuMeetingId: "vc_3", calendarEventId: "c_0", startTime: new Date("2026-06-01T02:00:05Z"), endTime: null });
+    expect(feishuMeetingFromEvent({ event_id: "ev4", meeting: { id: "vc_4", topic: "随手开的会" } })).toBeNull();
+    const events = meetingMinutesJobs(createMeetingMinutesService({ pool: { query() {} } as unknown as TestApp["pool"], peopleDirectory: {} as never, outcomeAgent: recordingOutcome(), secret: "s" })).events;
+    for (const type of ["vc.meeting.meeting_started_v1", "vc.meeting.meeting_ended_v1"]) {
+      expect(FEISHU_SUBSCRIBED_EVENTS).toContain(type);
+      expect(events[type]).toBeTypeOf("function");
+    }
+  });
+
+  it("开始：按日程 id 对上，记真实开始和飞书会议 id，同一场会几份事件只记第一次；对不上的会不管；会议卡带 startedAt", async () => {
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
+    try {
+      const meetingId = await bookedMeeting(t);
+      const other = await scheduledMeeting(t);
+      const clock = new Date("2026-06-01T10:01:00+08:00");
+      const minutes = service(t, fakeMinutesApi(), () => clock);
+      await minutes.onMeetingStarted(sdkEvent("vc.meeting.meeting_started_v1", "ev-s1", { calendar_event_id: CALENDAR_EVENT, start_time: STARTED_AT }));
+      // 同一场会又来一份（重投、或开始时刻不同的一份）：不改。
+      await minutes.onMeetingStarted(sdkEvent("vc.meeting.meeting_started_v1", "ev-s2", { calendar_event_id: CALENDAR_EVENT, start_time: "1780279400" }));
+      // 对不上的会（飞书里直接开的）不管。
+      await minutes.onMeetingStarted(sdkEvent("vc.meeting.meeting_started_v1", "ev-s3", { id: "vc_other", meeting_no: "555", calendar_event_id: "other_0", start_time: STARTED_AT }));
+      expect(await live(t, meetingId)).toMatchObject({ started_at: new Date("2026-06-01T02:00:05Z"), ended_at: null, feishu_meeting_id: "vc_live_1", minutes_status: "none" });
+      expect(await live(t, other)).toMatchObject({ started_at: null, feishu_meeting_id: null });
+      const card = (await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie: await t.loginCookie() } })).json().cards[0];
+      expect(card.payload).toMatchObject({ startedAt: "2026-06-01T02:00:05.000Z", endedAt: null, feishuEvent: { status: "booked" } });
+      // 主持人的成员视图也带 startedAt。
+      const member = (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${meetingId}`, headers: { cookie: await t.memberCookie() } })).json();
+      expect(member.payload.startedAt).toBe("2026-06-01T02:00:05.000Z");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("结束：没有日程 id 时按会议号对上，记结束、排一次妙记轮询（与「结束会议」同一个去重键），从结束那一刻等妙记；几份事件只记一次", async () => {
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
+    try {
+      const meetingId = await bookedMeeting(t);
+      let clock = new Date("2026-06-01T10:30:00+08:00");
+      await authorize(t, HOST, "ou_host", "测试乙", clock);
+      const api = fakeMinutesApi();
+      api.listEmpty = true;
+      const minutes = service(t, api, () => clock);
+      await minutes.onMeetingStarted(sdkEvent("vc.meeting.meeting_started_v1", "ev-s1", { start_time: STARTED_AT }));
+      // 提前散会（10:40），预约到 11:00。
+      const early = "1780281600"; // 2026-06-01T10:40:00+08:00
+      await minutes.onMeetingEnded(sdkEvent("vc.meeting.meeting_ended_v1", "ev-e1", { start_time: STARTED_AT, end_time: early }));
+      await minutes.onMeetingEnded(sdkEvent("vc.meeting.meeting_ended_v1", "ev-e2", { start_time: STARTED_AT, end_time: ENDED_AT }));
+      expect(await live(t, meetingId)).toMatchObject({ started_at: new Date("2026-06-01T02:00:05Z"), ended_at: new Date("2026-06-01T02:40:00Z"), feishu_meeting_id: "vc_live_1" });
+      expect(await pollJobs(t)).toEqual([`meeting.minutes_poll:end:${meetingId}`]);
+      clock = new Date("2026-06-01T10:41:00+08:00");
+      await minutes.tick();
+      expect(await live(t, meetingId)).toMatchObject({ minutes_status: "waiting", minutes_waiting_since: new Date("2026-06-01T02:40:00Z") });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("开超了：过了预约结束先按预约结束进等妙记，收到结束事件后从真实结束算起", async () => {
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
+    try {
+      const meetingId = await bookedMeeting(t);
+      let clock = new Date("2026-06-01T11:10:00+08:00");
+      await authorize(t, HOST, "ou_host", "测试乙", clock);
+      const api = fakeMinutesApi();
+      api.listEmpty = true;
+      const minutes = service(t, api, () => clock);
+      await minutes.onMeetingStarted(sdkEvent("vc.meeting.meeting_started_v1", "ev-s1", { calendar_event_id: CALENDAR_EVENT, start_time: STARTED_AT }));
+      await minutes.tick();
+      expect(await live(t, meetingId)).toMatchObject({ minutes_status: "waiting", minutes_waiting_since: new Date("2026-06-01T03:00:00Z") });
+      clock = new Date("2026-06-01T11:31:00+08:00");
+      await minutes.onMeetingEnded(sdkEvent("vc.meeting.meeting_ended_v1", "ev-e1", { calendar_event_id: CALENDAR_EVENT, start_time: STARTED_AT, end_time: "1780284600" }));
+      expect(await live(t, meetingId)).toMatchObject({ ended_at: new Date("2026-06-01T03:30:00Z"), minutes_waiting_since: new Date("2026-06-01T03:30:00Z") });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("没开成：到点没收到开始也不进等妙记；预约结束后 2 小时内照样找妙记，找到了照常接管，过了就不找", async () => {
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
+    try {
+      const missed = await bookedMeeting(t);
+      let clock = new Date("2026-06-01T11:40:00+08:00");
+      await authorize(t, HOST, "ou_host", "测试乙", clock);
+      const api = fakeMinutesApi();
+      api.listEmpty = true;
+      const minutes = service(t, api, () => clock);
+      await minutes.tick();
+      expect(await live(t, missed)).toMatchObject({ minutes_status: "none", ended_at: null, started_at: null });
+      expect(api.calls.filter((call) => call.startsWith("list:"))).toHaveLength(1);
+      expect(await minutes.refetch(missed, HOST)).toMatchObject({ error: { code: "MINUTES_NOT_EXPECTED" } });
+      clock = new Date("2026-06-01T13:10:00+08:00");
+      await minutes.tick();
+      expect(api.calls.filter((call) => call.startsWith("list:"))).toHaveLength(1);
+      expect(await live(t, missed)).toMatchObject({ minutes_status: "none" });
+
+      // 事件丢了、会其实开过：轮询找到妙记照常接管。
+      const happened = await bookedMeeting(t);
+      await t.pool.query("UPDATE meetings SET feishu_event_id = 'evt_2_0' WHERE id = $1", [happened]);
+      api.listEmpty = false;
+      clock = new Date("2026-06-01T11:40:00+08:00");
+      await minutes.tick();
+      expect(await live(t, happened)).toMatchObject({ status: "held", minutes_status: "ready" });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("改期清掉记过的开始和结束；没在飞书约上的会照旧按预约结束进等妙记", async () => {
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
+    try {
+      const meetingId = await bookedMeeting(t);
+      await t.pool.query("UPDATE meetings SET started_at = $2, ended_at = $2 WHERE id = $1", [meetingId, new Date("2026-06-01T02:00:05Z")]);
+      const ceo = await t.loginCookie();
+      const card = (await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie: ceo } })).json().cards[0];
+      const action = card.actions.find((a: { actionType: string }) => a.actionType === "meeting.reschedule");
+      const moved = await post(t, ceo, "/api/actions/execute", { actionId: action.actionId, input: { scheduledAt: "2030-06-02T10:00:00.000+08:00" } });
+      expect(moved.statusCode).toBe(200);
+      expect(await live(t, meetingId)).toMatchObject({ started_at: null, ended_at: null });
+      expect(moved.json().cards[0].payload).toMatchObject({ startedAt: null, endedAt: null });
+
+      const plain = await scheduledMeeting(t);
+      const clock = new Date("2026-06-01T11:10:00+08:00");
+      await authorize(t, HOST, "ou_host", "测试乙", clock);
+      const api = fakeMinutesApi();
+      api.listEmpty = true;
+      await service(t, api, () => clock).tick();
+      expect(await live(t, plain)).toMatchObject({ minutes_status: "waiting", started_at: null });
+    } finally {
+      await t.close();
+    }
   });
 });

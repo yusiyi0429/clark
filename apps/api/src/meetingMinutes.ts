@@ -22,15 +22,21 @@ import { FEISHU_TRANSCRIPT_PARSER_VERSION, parseFeishuTranscriptText } from "./t
  *   原文还没好（not_ready）的照常跟着轮询和事件再取，主持人或创建人也可以「再读一次」或贴妙记链接；
  * - 拿到逐字稿先生成候选（与手动上传同一条路），直接确认并开始解读纪要：对得上人的说话人对到那个人，对不上的保留飞书原名（FR-4.2，不做发言人纠正）；
  * - 用户自己上传了（有候选或逐字稿）的会不再自动去拿，也不覆盖用户上传的内容；
- * - 实际参会名单从飞书会议拿（中途加入的也算），拿不到就退回手填的参会人。
+ * - 实际参会名单从飞书会议拿（中途加入的也算），拿不到就退回手填的参会人；
+ * - 在飞书约上的会跟着飞书会议真实开始和结束（「会议开始 / 会议结束」事件）：开始记 started_at，结束记 ended_at 并马上排一次轮询；
+ *   到点没开始的不进等妙记（页面上是还没开、过了预约结束 30 分钟是没开成），但预约结束后 2 小时内照样找妙记，防事件丢了、会其实开过。
  */
 export const MEETING_MINUTES_POLL_KIND = "meeting.minutes_poll";
 export const FEISHU_MINUTES_EVENT = "minutes.minute.generated_v1";
+export const FEISHU_MEETING_STARTED_EVENT = "vc.meeting.meeting_started_v1";
+export const FEISHU_MEETING_ENDED_EVENT = "vc.meeting.meeting_ended_v1";
 const POLL_EVERY_MS = 5 * 60_000;
 /** 妙记的开始时刻和会议计划开始时刻最多差多少还算同一场会。 */
 const MATCH_WINDOW_MS = 3 * 60 * 60_000;
 /** 还在等妙记的会：waiting，以及读的时候原文还没好的（failed / not_ready）。 */
 const STILL_WAITING = "(minutes_status = 'waiting' OR (minutes_status = 'failed' AND minutes_failure = 'not_ready'))";
+/** 在飞书约上、还没收到飞书会议开始或结束（主持人也没点「结束会议」）的会：到点不算开完。 */
+const UNSTARTED = "(feishu_event_status IS NOT DISTINCT FROM 'booked' AND started_at IS NULL AND ended_at IS NULL)";
 const NO_AUTH = "主持人和建会的人都没有可用的飞书授权";
 /** a44afae6 之前记下的同一原因。 */
 const LEGACY_NO_AUTH = "主持人没有可用的飞书授权";
@@ -103,6 +109,30 @@ export function minuteFromEvent(payload: Record<string, unknown>): { minuteToken
   return { minuteToken: token, feishuMeetingId: typeof source?.source_entity_id === "string" && source.source_entity_id ? source.source_entity_id : null };
 }
 
+type FeishuMeetingEvent = { feishuMeetingId: string | null; meetingNo: string | null; calendarEventId: string | null; startTime: Date | null; endTime: Date | null };
+
+const textOf = (value: unknown): string | null => (typeof value === "string" && value ? value : null);
+/** 事件里的时刻：飞书原始事件是秒级时间戳字符串，也认 RFC3339；没有或认不出（含 "0"）为 null。 */
+function eventTime(value: unknown): Date | null {
+  const raw = textOf(value);
+  const ms = raw === null ? NaN : /^\d+$/.test(raw) ? Number(raw) * 1000 : Date.parse(raw);
+  return ms > 0 ? new Date(ms) : null;
+}
+
+/**
+ * 「会议开始 / 会议结束」事件里的会：SDK 交来的是拍平后的事件（header 与 event 同层），会在 meeting 下（id、meeting_no、calendar_event_id，
+ * start_time / end_time 是秒级时间戳字符串）；也兼容没拍平的和平铺的（meeting_id、RFC3339 时刻）。日程 id 和会议号都没有时为 null。
+ */
+export function feishuMeetingFromEvent(payload: Record<string, unknown>): FeishuMeetingEvent | null {
+  const event = (payload.event as Record<string, unknown> | undefined) ?? payload;
+  const meeting = (event.meeting as Record<string, unknown> | undefined) ?? event;
+  const calendarEventId = textOf(meeting.calendar_event_id);
+  const meetingNo = textOf(meeting.meeting_no);
+  if (!calendarEventId && !meetingNo) return null;
+  return { feishuMeetingId: textOf(meeting.id) ?? textOf(meeting.meeting_id), meetingNo, calendarEventId,
+    startTime: eventTime(meeting.start_time), endTime: eventTime(meeting.end_time) };
+}
+
 export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   const { pool, peopleDirectory, outcomeAgent, secret, feishu } = deps;
   const feishuWebOrigin = deps.feishuWebOrigin?.replace(/\/+$/, "");
@@ -145,7 +175,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   async function markEnded(at: Date): Promise<void> {
     const ended = await q(
       `SELECT id, lead_dri_id, created_by, COALESCE(ended_at, ends_at) AS ended FROM meetings
-        WHERE status = 'scheduled' AND minutes_status = 'none' AND transcript IS NULL AND transcript_candidate IS NULL
+        WHERE status = 'scheduled' AND minutes_status = 'none' AND transcript IS NULL AND transcript_candidate IS NULL AND NOT ${UNSTARTED}
           AND COALESCE(ended_at, ends_at) <= $1 AND COALESCE(ended_at, ends_at) > $2`,
       [at, new Date(at.getTime() - MINUTES_RECENT_MS)],
     );
@@ -166,6 +196,15 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   async function waitingMeetings(): Promise<MeetingRow[]> {
     return (await q(`SELECT ${meetingColumns()} FROM meetings WHERE ${STILL_WAITING} AND status = 'scheduled'
       AND transcript IS NULL AND transcript_candidate IS NULL ORDER BY scheduled_at`)).rows as MeetingRow[];
+  }
+
+  /** 找妙记的会：等妙记的，加上在飞书约上、到点没收到开始事件、预约结束 2 小时以内的（不记等妙记，找到了照常接管）。 */
+  async function searchedMeetings(): Promise<MeetingRow[]> {
+    const at = now();
+    const unstarted = (await q(`SELECT ${meetingColumns()} FROM meetings WHERE status = 'scheduled' AND minutes_status = 'none' AND ${UNSTARTED}
+      AND transcript IS NULL AND transcript_candidate IS NULL AND ends_at <= $1 AND ends_at > $2 ORDER BY scheduled_at`,
+    [at, new Date(at.getTime() - MINUTES_GIVE_UP_MS)])).rows as MeetingRow[];
+    return [...await waitingMeetings(), ...unstarted];
   }
 
   /** 实际参会名单：飞书会议的参会人 open_id 换成天枢的人；一个都对不上时不改（退回手填名单）。 */
@@ -319,10 +358,11 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   /** 轮询兜底：每场还在等的会，先用主持人的授权列他名下这段时间的妙记，没找到再用建会的人的。 */
   async function poll(): Promise<void> {
     if (!feishu) return;
-    for (const meeting of await waitingMeetings()) {
+    for (const meeting of await searchedMeetings()) {
       const readers = await fetchers(meeting);
       if (!readers.length) {
-        await setStatus(meeting.id, "manual", NO_AUTH);
+        // 没开成的会没人能读也不改状态。
+        if (meeting.minutes_status !== "none") await setStatus(meeting.id, "manual", NO_AUTH);
         continue;
       }
       try {
@@ -357,6 +397,41 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
         break;
       }
     }
+  }
+
+  /** 事件对上的会（还没开完的 scheduled 会）：先按日程 id，对不上再按入会链接（https://vc.feishu.cn/j/<会议号>）的会议号；都对不上为 null。 */
+  async function liveMeetingId(found: FeishuMeetingEvent): Promise<string | null> {
+    const byCalendar = found.calendarEventId
+      ? (await q("SELECT id FROM meetings WHERE feishu_event_id = $1 AND status = 'scheduled' LIMIT 1", [found.calendarEventId])).rows[0] : undefined;
+    if (byCalendar || !found.meetingNo) return (byCalendar?.id as string | undefined) ?? null;
+    return ((await q("SELECT id FROM meetings WHERE substring(feishu_event_join_url from '/j/([0-9]+)') = $1 AND status = 'scheduled' LIMIT 1",
+      [found.meetingNo])).rows[0]?.id as string | undefined) ?? null;
+  }
+
+  /** 「会议开始」：记真实开始时刻（只记第一次）和飞书会议 id；对不上天枢的会就不管（飞书里直接开的会以后另做）。 */
+  async function onMeetingStarted(payload: Record<string, unknown>): Promise<void> {
+    const found = feishuMeetingFromEvent(payload);
+    const meetingId = found && await liveMeetingId(found);
+    if (!found || !meetingId) return;
+    await q("UPDATE meetings SET started_at = COALESCE(started_at, $2), feishu_meeting_id = COALESCE($3, feishu_meeting_id) WHERE id = $1",
+      [meetingId, found.startTime ?? now(), found.feishuMeetingId]);
+  }
+
+  /**
+   * 「会议结束」：记结束时刻（只记第一次）和飞书会议 id，马上排一次妙记轮询（与「结束会议」同一个去重键），从结束那一刻开始等妙记；
+   * 开超了时、已经按预约结束进了等妙记的，等待起点改成真实结束。
+   */
+  async function onMeetingEnded(payload: Record<string, unknown>): Promise<void> {
+    const found = feishuMeetingFromEvent(payload);
+    const meetingId = found && await liveMeetingId(found);
+    if (!found || !meetingId) return;
+    await q(
+      `UPDATE meetings SET ended_at = COALESCE(ended_at, $2), feishu_meeting_id = COALESCE($3, feishu_meeting_id),
+         minutes_waiting_since = CASE WHEN ended_at IS NULL AND minutes_status = 'waiting' THEN $2 ELSE minutes_waiting_since END
+       WHERE id = $1`,
+      [meetingId, found.endTime ?? now(), found.feishuMeetingId],
+    );
+    await enqueueJob(q, { kind: MEETING_MINUTES_POLL_KIND, dedupeKey: `${MEETING_MINUTES_POLL_KIND}:end:${meetingId}` });
   }
 
   /** 主持人和建会的人（没记时按主持人算）能再读、贴链接；别人一律当会议不存在。 */
@@ -458,6 +533,8 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     markEnded,
     poll,
     onMinuteGenerated,
+    onMeetingStarted,
+    onMeetingEnded,
     refetch,
     readLink,
     resumeFor,
@@ -475,6 +552,10 @@ export function meetingMinutesJobs(service: MeetingMinutesService): { handlers: 
   return {
     handlers: { [MEETING_MINUTES_POLL_KIND]: () => service.tick() },
     recurring: [{ kind: MEETING_MINUTES_POLL_KIND, everyMs: POLL_EVERY_MS }],
-    events: { [FEISHU_MINUTES_EVENT]: (payload) => service.onMinuteGenerated(payload) },
+    events: {
+      [FEISHU_MINUTES_EVENT]: (payload) => service.onMinuteGenerated(payload),
+      [FEISHU_MEETING_STARTED_EVENT]: (payload) => service.onMeetingStarted(payload),
+      [FEISHU_MEETING_ENDED_EVENT]: (payload) => service.onMeetingEnded(payload),
+    },
   };
 }

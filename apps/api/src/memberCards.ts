@@ -29,7 +29,7 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
   const attended = isHost || Boolean(viewerId && payload.attendees?.personIds.includes(viewerId));
   return { ...card, payload: {
     status: payload.status, scheduledAt: payload.scheduledAt, endsAt: payload.endsAt, endedAt: payload.endedAt,
-    hasEnded: payload.hasEnded,
+    startedAt: payload.startedAt ?? null, hasEnded: payload.hasEnded,
     ...(isHost ? { transcriptCandidate: payload.transcriptCandidate } : {}),
     leadDriId: payload.leadDriId, createdBy: payload.createdBy ?? null, participants: payload.participants,
     purpose: payload.preflight.taskDefinition?.reviewPurpose ?? null,

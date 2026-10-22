@@ -10,7 +10,7 @@ import { payloadOf, type IssuePayload, type MeetingPayload } from "./payloads";
 import { issueScopeLabel } from "./scopeNames";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { SelectionToolbar, useSelectionQuote } from "@/components/SelectionQuote";
-import { CARD_EXPECTED_MS, MeetingClock, MeetingHeaderActions, MeetingStatus, MeetingTranscriptStatus, PhaseLive, meetingDayWord, meetingPhase, meetingSlot, useMeetingTimeline } from "@/components/meeting/MeetingHeader";
+import { CARD_EXPECTED_MS, FeishuMeetingEnd, MeetingClock, MeetingHeaderActions, MeetingStatus, MeetingTranscriptStatus, PhaseLive, meetingDayWord, meetingPhase, meetingSlot, useFeishuLive, useMeetingTimeline, type FeishuLive } from "@/components/meeting/MeetingHeader";
 import { useMeetingRecorder, type RecorderState } from "@/components/meeting/useMeetingRecorder";
 import { MaterialPane, useMaterialPreview, type MaterialMeta } from "@/components/meeting/meetingMaterialPreview";
 import { IssueDecisionBlock } from "@/components/meeting/IssueDecisionBlock";
@@ -420,7 +420,7 @@ export const MEETING_POLL_MS = 5000;
 /** 会前预审进行中：每两秒取一次，过程一步一步跟上。 */
 export const PREFLIGHT_POLL_MS = 2000;
 
-/** 等飞书妙记时：30 秒取一次会议卡片，妙记一到就接着生成会议卡。 */
+/** 等飞书妙记、等飞书会议开始和结束时：30 秒取一次会议卡片，妙记一到就接着生成会议卡，会开了、散了页面自己换阶段。 */
 export const MINUTES_POLL_MS = 30_000;
 
 /** 自动同步还在等妙记（waiting，或读的时候原文还没好）。 */
@@ -440,20 +440,23 @@ function generatingSince(payload: MeetingPayload): string | null {
   return (payload.outcome?.status === "running" ? payload.outcome.startedAt : null) ?? payload.outcome?.pendingSince ?? null;
 }
 
+/** 在飞书约上的会还没开、开着：等飞书会议开始和结束。 */
+const followingFeishu = (live: FeishuLive | null) => live === "waiting" || live === "live";
+
 /**
- * 会议页要不要重取卡片：会前预审还在跑、录音转写中、等妙记、会议卡生成中。到下一阶段卡片自己出来，不用刷新页面。
- * 成员只读视图（卡片走成员接口）只跟等妙记、生成会议卡。
+ * 会议页要不要重取卡片：会前预审还在跑、录音转写中、等妙记、会议卡生成中、在飞书约上的会还没开或开着。到下一阶段卡片自己出来，不用刷新页面。
+ * 成员只读视图（卡片走成员接口）只跟等妙记、生成会议卡和飞书会议开始结束。
  */
-export function meetingNeedsPolling(payload: MeetingPayload, memberReadOnly = false): boolean {
-  if (awaitingMinutes(payload) || generatingCard(payload)) return true;
+export function meetingNeedsPolling(payload: MeetingPayload, memberReadOnly = false, live: FeishuLive | null = null): boolean {
+  if (awaitingMinutes(payload) || generatingCard(payload) || followingFeishu(live)) return true;
   if (memberReadOnly) return false;
   return preflightInFlight(payload) || recordingInFlight(payload.recording);
 }
 
-/** 多久取一次：预审 2 秒，等妙记 30 秒，其余 5 秒。 */
-export function meetingPollMs(payload: MeetingPayload): number {
+/** 多久取一次：预审 2 秒，等妙记、等飞书会议开始和结束 30 秒，其余 5 秒。 */
+export function meetingPollMs(payload: MeetingPayload, live: FeishuLive | null = null): number {
   if (preflightInFlight(payload)) return PREFLIGHT_POLL_MS;
-  return awaitingMinutes(payload) && !recordingInFlight(payload.recording) ? MINUTES_POLL_MS : MEETING_POLL_MS;
+  return (awaitingMinutes(payload) || followingFeishu(live)) && !recordingInFlight(payload.recording) ? MINUTES_POLL_MS : MEETING_POLL_MS;
 }
 
 export function recordingInFlight(recording: MeetingPayload["recording"]): boolean {
@@ -559,7 +562,10 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const [directory, setDirectory] = useState<DirectoryOption[]>([]);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   // 左侧阅读区看哪一份（cards/meetingView）：会前只有会前预审；会开完了、有待确认的会议记录或已在复核，页头出「会前预审 ｜ 会议记录」两段，默认会议记录（那是下一步要做的事）。
-  const meetingHeld = payload.status === "held" || payload.status === "reviewed" || (payload.status === "scheduled" && Boolean(payload.hasEnded || payload.endedAt || payload.transcriptCandidate));
+  // 在飞书约上的会跟着飞书会议真实开始和结束（还没开 / 开着 / 开完了 / 没开成）；其余为 null，按预约时间算。
+  const live = useFeishuLive(payload);
+  const meetingHeld = payload.status === "held" || payload.status === "reviewed"
+    || (payload.status === "scheduled" && (live ? live === "ended" : Boolean(payload.hasEnded || payload.endedAt || payload.transcriptCandidate)));
   const [view, setView] = useState<MeetingView>(() => initialMeetingView(meetingHeld));
   // 正在看某份材料（某份文件）时，Esc 先回到上次选中的那一段，再按一次才离开会议页（巡检 P1-14）。
   const viewingMaterialFile = selectedSegment(view) === null;
@@ -658,8 +664,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const candidateKey = payload.transcriptCandidate?.createdAt ?? null;
 
   // 录音转写中、会后抽取中、会前预审中、等妙记：定时取会议卡片，状态、候选、纪要、预审跟着更新；候选一到，下面那段就自动打开说话人对应。
-  const refreshing = meetingNeedsPolling(payload, memberReadOnly);
-  const pollMs = meetingPollMs(payload);
+  const refreshing = meetingNeedsPolling(payload, memberReadOnly, live);
+  const pollMs = meetingPollMs(payload, live);
   useEffect(() => {
     if (!refreshing) return;
     const timer = window.setInterval(async () => {
@@ -1107,10 +1113,12 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   );
 
   /* 页头：计划时段、会后「会前预审 ｜ 会议记录」两段、开始会议／计时（这一版不放；已取消的会也没有计时）。 */
-  const ended = Boolean(payload.hasEnded || payload.endedAt) || payload.status === "held" || payload.status === "reviewed";
-  const phase = meetingPhase(startedAt, ended);
-  const { timeline, label: timelineLabel } = useMeetingTimeline({ phase, scheduledAt: payload.scheduledAt, cancelled: payload.status === "cancelled" });
+  const ended = live ? live === "ended" : Boolean(payload.hasEnded || payload.endedAt) || payload.status === "held" || payload.status === "reviewed";
+  const phase = live === "live" ? "live" : meetingPhase(startedAt, ended);
+  const { timeline, label: timelineLabel } = useMeetingTimeline({ phase, scheduledAt: payload.scheduledAt, cancelled: payload.status === "cancelled", live });
   const endAction = actionOf("meeting.end");
+  // 在飞书约上的会不给「结束会议」：只有一直没收到飞书会议开始和结束、预约结束又已过了，才给它补救。
+  const showEnd = Boolean(endAction && isHost && !ended && (!live || live === "missed" || (live === "waiting" && payload.hasEnded)));
   const clock =
     !MEETING_CLOCK_ENABLED || (memberReadOnly && !isHost) || payload.status === "cancelled" ? undefined : (
       <MeetingClock
@@ -1200,6 +1208,22 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     </>
   );
 
+  // 在飞书约上、还没开或没开成：「重新安排会议」放到页头右边（表单浮层挂在它下面），工具栏里不再重复。
+  const rescheduleAction = actionOf("meeting.reschedule");
+  const headerReschedule = rescheduleAction && (live === "waiting" || live === "missed") ? (
+    <Popover isOpen={editOpen && rescheduling} onOpenChange={(open) => { if (!open) setEditOpen(false); }}>
+      <Button size="sm" variant="secondary" isDisabled={pending} onPress={() => void openEditDetails(true)}>重新安排会议</Button>
+      <Popover.Content placement="bottom end" className={s.editFloat}>
+        <TianshuPortalTheme>
+          <Popover.Dialog className={s.editDialog} aria-label="重新安排会议">
+            {editFields}
+          </Popover.Dialog>
+        </TianshuPortalTheme>
+      </Popover.Content>
+    </Popover>
+  ) : null;
+  const feishuEnd = live ? <FeishuMeetingEnd live={live} joinUrl={payload.feishuEvent?.joinUrl ?? null}>{headerReschedule}</FeishuMeetingEnd> : null;
+
   /** 标题右侧的铅笔：低调地放「编辑会议」，浮层跟着它出来。 */
   const titleEdit = payload.status === "scheduled" && actionOf("meeting.edit_details") ? (
     <Popover isOpen={editOpen && !rescheduling} onOpenChange={(open) => { if (!open) setEditOpen(false); }}>
@@ -1218,8 +1242,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
 
   const preflightToolbar = readOnly && !isHost ? null : (
     <div className={s.toolbar}>
-      {actionOf("meeting.reschedule") ? <button type="button" disabled={pending} onClick={() => void openEditDetails(true)}>重新安排会议</button> : null}
-      {endAction && isHost && !ended ? <button type="button" disabled={pending} onClick={() => void endMeeting()}>结束会议</button> : null}
+      {rescheduleAction && !headerReschedule ? <button type="button" disabled={pending} onClick={() => void openEditDetails(true)}>重新安排会议</button> : null}
+      {showEnd ? <button type="button" disabled={pending} onClick={() => void endMeeting()}>结束会议</button> : null}
       {actionOf("meeting.edit_materials") ? (
         <button
           type="button"
@@ -1239,7 +1263,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         </button>
       ) : null}
       {/* 「重新安排会议」仍挂在这一行下面；「编辑会议」在标题右侧的铅笔浮层里。 */}
-      {editOpen && rescheduling ? (
+      {editOpen && rescheduling && !headerReschedule ? (
         <div className={s.editPopover} role="dialog" aria-label="重新安排会议">
           {editFields}
         </div>
@@ -1520,11 +1544,11 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         <span className={s.feishuFailed}>飞书未约上</span>
         <button type="button" className={s.feishuAction} disabled={pending} onClick={() => void run(retryBooking, {})}>重试</button>
       </span>
-    ) : feishuEvent.joinUrl ? <a className={s.feishuLink} href={feishuEvent.joinUrl} target="_blank" rel="noreferrer">进入飞书会议</a> : null;
+    ) : feishuEvent.joinUrl && !live ? <a className={s.feishuLink} href={feishuEvent.joinUrl} target="_blank" rel="noreferrer">进入飞书会议</a> : null;
 
   const statusNow = memberReadOnly && ended
     ? outcomeItems.length ? "会后结论已确认" : generatingCard(payload) ? "生成会议卡" : awaitingMinutes(payload) ? "等妙记" : "会议已结束"
-    : phase === "live" ? recorderLine(recorder.state) : meetingNow(payload, ended);
+    : phase === "live" && startedAt !== undefined ? recorderLine(recorder.state) : meetingNow(payload, ended);
 
   // 会议卡这一块：会后整理（重新生成）失败时上面一行标出来，能重试的人有「重试会后抽取」。
   const retryOutcome = actionOf("meeting.retry_outcome");
@@ -1764,8 +1788,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         titleTag={titleEdit}
         onBack={() => onNavigate("/")}
         actions={
-          <MeetingHeaderActions day={meetingDayWord(payload.scheduledAt)} slot={meetingSlot(payload.scheduledAt, payload.endsAt)} clock={clock}
-            timeline={timeline} label={timelineLabel} since={startedAt ?? Date.parse(payload.scheduledAt)}>
+          <MeetingHeaderActions day={meetingDayWord(payload.scheduledAt)} slot={meetingSlot(payload.scheduledAt, payload.endsAt)} clock={feishuEnd ?? clock}
+            timeline={timeline} label={timelineLabel} since={startedAt ?? Date.parse(payload.startedAt ?? payload.scheduledAt)}>
             {meetingHeld ? <SegmentedSwitch data-header-switch="" label="会议视图" segments={meetingSegments(true)}
               selected={selectedSegment(view)} onSelect={(id) => setView(pickSegment(id))} /> : null}
           </MeetingHeaderActions>

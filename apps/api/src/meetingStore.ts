@@ -32,6 +32,8 @@ export type MeetingRow = {
   ends_at: Date;
   /** 「这场会开完了」的时刻；与 status 独立。 */
   ended_at: Date | null;
+  /** 飞书会议真实开始的时刻（202，在飞书约上的会收到「会议开始」事件时记）。 */
+  started_at?: Date | null;
   lead_dri_id: string;
   ceo_participant_id: string;
   participants: TMeetingParticipant[];
@@ -82,7 +84,7 @@ export type MeetingRow = {
 export type StoredWorldAnchor = { kind: "mission" | "unit"; id: string } | { kind: "lto" | "po"; id: string; title: string };
 
 const MEETING_COLUMNS = [
-  "id", "version", "title", "status", "scheduled_at", "ends_at", "ended_at", "lead_dri_id", "ceo_participant_id",
+  "id", "version", "title", "status", "scheduled_at", "ends_at", "ended_at", "started_at", "lead_dri_id", "ceo_participant_id",
   "participants", "issue_ids", "preflight", "draft", "materials", "transcript", "transcript_candidate", "outcome", "origin_ref", "external_id",
   "request_fingerprint", "action_fingerprints", "created_at", "updated_at",
   "feishu_meeting_id", "minute_token", "minutes_status", "minutes_failure", "minutes_waiting_since", "attendees_actual",
@@ -254,6 +256,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
       scheduledAt: row.scheduled_at.toISOString(),
       endsAt: row.ends_at.toISOString(),
       endedAt: row.ended_at?.toISOString() ?? null,
+      startedAt: row.started_at?.toISOString() ?? null,
       hasEnded: meetingHasEnded(row, at),
       leadDriId: row.lead_dri_id,
       createdBy: row.created_by,

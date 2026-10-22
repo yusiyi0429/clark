@@ -205,6 +205,10 @@
   from { opacity: 0; transform: translateY(3px); }
 }
 
+/* 在飞书约上的会：页头右边「进入飞书会议」那一颗（会前那颗的样子），旁边是「重新安排会议」。 */
+.feishuEnd { display: flex; align-items: center; gap: 8px; }
+.feishuEnd .press { text-decoration: none; }
+
 /* 计时弹出的那一小块。 */
 .popover { min-width: 260px; max-width: 320px; }
 .dialog { display: grid; gap: 8px; padding: 14px 16px 16px; }
