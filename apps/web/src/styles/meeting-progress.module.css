@@ -28,7 +28,8 @@
   white-space: nowrap;
 }
 
-.arrow { flex: none; margin: 0 4px 0 2px; color: #c3c8d0; }
+/* 箭头两侧收紧：600 宽的阅读栏里六步连同用时放得下一行。 */
+.arrow { flex: none; margin: 0 2px 0 0; color: #c3c8d0; }
 
 .dot {
   flex: none;
