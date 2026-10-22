@@ -6,12 +6,15 @@ import {
   canUseMemberView,
   changePasscode,
   currentSessionVersion,
+  ensureLocalDevLogin,
   loginIdFor,
   randomInitialPasscode,
   setMemberAccess,
   verifyCredentials,
 } from "../src/memberAccess.js";
 import { createSessionToken, readSessionToken } from "../src/session.js";
+import { isAllowedOrigin } from "../src/routes/shared.js";
+import type { AppEnv } from "../src/app.js";
 import { createTestDb } from "./helpers.js";
 
 const people = [
@@ -107,6 +110,36 @@ describe("凭据校验与锁定", () => {
       await setMemberAccess(q, { personId: "sun-mingze", loginId: "sunm", passcode: "4826", mustChange: true });
       expect(await currentSessionVersion(q, "sun-mingze")).toBe(3);
       expect(await currentSessionVersion(q, "nobody")).toBeNull();
+    });
+  });
+});
+
+describe("本地开发固定登录", () => {
+  it("正式地址是本机 http 时任意本机端口都放行；https 正式地址不放行未列出的本机端口", () => {
+    const local = { publicOrigin: "http://localhost:3300" } as AppEnv;
+    expect(isAllowedOrigin(local, "http://localhost:3400")).toBe(true);
+    expect(isAllowedOrigin(local, "http://127.0.0.1:3200")).toBe(true);
+    expect(isAllowedOrigin(local, "https://evil.example")).toBe(false);
+    expect(isAllowedOrigin(local, undefined)).toBe(false);
+    expect(isAllowedOrigin({ publicOrigin: "https://tianshu.example" } as AppEnv, "http://localhost:3400")).toBe(false);
+  });
+
+  it("sunm 口令不是 8989、被锁或要求改口令时重置；已经可用就不动会话版本", async () => {
+    await createTestDb(async ({ db }) => {
+      await migrate(db);
+      const q = db.query.bind(db);
+      const now = at("2026-10-21T02:00:00Z");
+      await ensureLocalDevLogin(q, now);
+      expect(await verifyCredentials(q, findPerson, "sunm", "8989", now)).toMatchObject({ kind: "verified", row: { must_change: false } });
+      const version = await currentSessionVersion(q, "sun-mingze");
+      await ensureLocalDevLogin(q, now);
+      expect(await currentSessionVersion(q, "sun-mingze")).toBe(version);
+      await setMemberAccess(q, { personId: "sun-mingze", loginId: "sunm", passcode: "2580", mustChange: true });
+      await ensureLocalDevLogin(q, now);
+      expect(await verifyCredentials(q, findPerson, "sunm", "8989", now)).toMatchObject({ kind: "verified", row: { must_change: false } });
+      for (let i = 0; i < LOCK_AFTER_FAILURES; i++) await verifyCredentials(q, findPerson, "sunm", "0001", now);
+      await ensureLocalDevLogin(q, now);
+      expect(await verifyCredentials(q, findPerson, "sunm", "8989", now)).toMatchObject({ kind: "verified" });
     });
   });
 });
