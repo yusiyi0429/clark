@@ -10,7 +10,7 @@ import { payloadOf, type IssuePayload, type MeetingPayload } from "./payloads";
 import { issueScopeLabel } from "./scopeNames";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { SelectionToolbar, useSelectionQuote } from "@/components/SelectionQuote";
-import { MeetingClock, MeetingHeaderActions, MeetingStatus, meetingDayWord, meetingPhase, meetingSlot, useFeishuLive, useMeetingTimeline, useNow, type FeishuLive } from "@/components/meeting/MeetingHeader";
+import { MeetingClock, MeetingHeaderActions, MeetingHeaderEnd, MeetingStatus, RESCHEDULE_CLASS, RescheduleLabel, meetingDayWord, meetingPhase, meetingSlot, useFeishuLive, useMeetingTimeline, useNow, type FeishuLive } from "@/components/meeting/MeetingHeader";
 import { MeetingProgress, MinutesRecovery, meetingProgress } from "@/components/meeting/MeetingProgress";
 import { useMeetingRecorder, type RecorderState } from "@/components/meeting/useMeetingRecorder";
 import { MaterialPane, useMaterialPreview, type MaterialMeta } from "@/components/meeting/meetingMaterialPreview";
@@ -1228,12 +1228,12 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     </>
   );
 
-  // 在飞书约上、还没开或没开成：「重新安排会议」是进度线上「等开会 / 没开成」后面的安静链接（表单浮层挂在它下面），工具栏里不再重复。
+  // 在飞书约上、还没开或没开成：「重新安排会议」在页头最右那一格、进入飞书会议左边（表单浮层挂在它下面），工具栏里不再重复。
   const rescheduleAction = actionOf("meeting.reschedule");
-  const progressReschedule = rescheduleAction && (live === "waiting" || live === "missed") ? (
+  const headerReschedule = rescheduleAction && (live === "waiting" || live === "missed") ? (
     <Popover isOpen={editOpen && rescheduling} onOpenChange={(open) => { if (!open) setEditOpen(false); }}>
-      <Button className={p.quiet} isDisabled={pending} onPress={() => void openEditDetails(true)}>重新安排会议</Button>
-      <Popover.Content placement="bottom start" className={s.editFloat}>
+      <Button className={RESCHEDULE_CLASS} aria-label="重新安排会议" isDisabled={pending} onPress={() => void openEditDetails(true)}><RescheduleLabel /></Button>
+      <Popover.Content placement="bottom end" className={s.editFloat}>
         <TianshuPortalTheme>
           <Popover.Dialog className={s.editDialog} aria-label="重新安排会议">
             {editFields}
@@ -1261,7 +1261,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
 
   const preflightToolbar = readOnly && !isHost ? null : (
     <div className={s.toolbar}>
-      {rescheduleAction && !progressReschedule ? <button type="button" disabled={pending} onClick={() => void openEditDetails(true)}>重新安排会议</button> : null}
+      {rescheduleAction && !headerReschedule ? <button type="button" disabled={pending} onClick={() => void openEditDetails(true)}>重新安排会议</button> : null}
       {showEnd ? <button type="button" disabled={pending} onClick={() => void endMeeting()}>结束会议</button> : null}
       {actionOf("meeting.edit_materials") ? (
         <button
@@ -1282,7 +1282,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         </button>
       ) : null}
       {/* 「重新安排会议」仍挂在这一行下面；「编辑会议」在标题右侧的铅笔浮层里。 */}
-      {editOpen && rescheduling && !progressReschedule ? (
+      {editOpen && rescheduling && !headerReschedule ? (
         <div className={s.editPopover} role="dialog" aria-label="重新安排会议">
           {editFields}
         </div>
@@ -1770,16 +1770,9 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   };
   // 能上传会议记录的人（CEO、主持人）：进度线上待交记录后面的「上传会议记录」打开这里的选文件。
   const canUpload = payload.status === "scheduled" && (!memberReadOnly || isHost);
-  // 进度线这一步后面的入口：等开会、进行中时「进入飞书会议」（这一行唯一的主按钮），等开会、没开成时「重新安排会议」；待交记录时上传会议记录。
+  // 等开会、进行中时「进入飞书会议」在页头最右那一格；进度线只在待交记录这一步后面给上传会议记录这几样补救。
   const joinUrl = live === "waiting" || live === "live" ? payload.feishuEvent?.joinUrl ?? null : null;
-  const progressActions = progress?.current === "waiting" || progress?.current === "live" ? (
-    joinUrl || progressReschedule ? (
-      <>
-        {joinUrl ? <a className={p.primary} href={joinUrl} target="_blank" rel="noreferrer">进入飞书会议</a> : null}
-        {progressReschedule}
-      </>
-    ) : null
-  ) : progress?.upload ? (
+  const progressActions = progress?.upload ? (
     <MinutesRecovery meetingId={meetingId} status={source.minutesStatus ?? "none"} failure={source.minutesFailure ?? null}
       canFetch={canFetchMinutes} onFetched={() => void reloadCard()} onUpload={canUpload ? () => uploadRef.current?.click() : undefined}
       uploading={uploading} uploadError={uploadError} />
@@ -1819,7 +1812,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         onBack={() => onNavigate("/")}
         actions={
           <MeetingHeaderActions day={meetingDayWord(payload.scheduledAt)} slot={meetingSlot(payload.scheduledAt, payload.endsAt)} clock={clock}
-            timeline={timeline} label={timelineLabel}>
+            timeline={timeline} label={timelineLabel} end={<MeetingHeaderEnd joinUrl={joinUrl} reschedule={headerReschedule} />}>
             {meetingHeld ? <SegmentedSwitch data-header-switch="" label="会议视图" segments={meetingSegments(true)}
               selected={selectedSegment(view)} onSelect={(id) => setView(pickSegment(id))} /> : null}
           </MeetingHeaderActions>
