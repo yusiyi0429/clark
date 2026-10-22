@@ -43,14 +43,17 @@ export function requestNotices(inbox: TRequestListItem[], sent: TRequestListItem
 export const waitingReplyCount = (sent: TRequestListItem[]) =>
   sent.filter((item) => item.status === "open" && item.recipientsDone < item.recipientNames.length).length;
 
-export function RequestNotices({ base, currentHref, onNavigate, header = true, onWaitingReplies }: {
+/** items：这两组（影响、请求）在通知栏里列出的条数；waitingReplies：我发出、还在等回复的条数。 */
+export type RequestCounts = { items: number; waitingReplies: number };
+
+export function RequestNotices({ base, currentHref, onNavigate, header = true, onCounts }: {
   base: string;
   currentHref?: string;
   onNavigate: Navigate;
   /** false：不要「请求」页头和 ＋（成员左栏）。 */
   header?: boolean;
-  /** 每次读完报出还在等回复的条数（成员首页「等回复 N」跟着这里的轮询走，不另取）。 */
-  onWaitingReplies?: (count: number) => void;
+  /** 读完后条数变了就报出来（成员左栏的空通知提示、首页「等回复 N」都跟着这里的轮询走，不另取）。 */
+  onCounts?: (counts: RequestCounts) => void;
 }) {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [impacts, setImpacts] = useState<Notice[]>([]);
@@ -78,7 +81,8 @@ export function RequestNotices({ base, currentHref, onNavigate, header = true, o
   }, [load]);
   // 打开过的请求服务端已标为已读：换页时重读一次。
   useEffect(() => { void load(); }, [currentHref, load]);
-  useEffect(() => { if (waiting !== null) onWaitingReplies?.(waiting); }, [waiting, onWaitingReplies]);
+  const items = notices.length + impacts.length;
+  useEffect(() => { if (waiting !== null) onCounts?.({ items, waitingReplies: waiting }); }, [items, waiting, onCounts]);
 
   const origin = (target: EventTarget) => (target as Element).closest("[data-notice]");
   const row = (notice: Notice) => {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TRequestListItem } from "@warmap/contracts";
@@ -29,7 +29,7 @@ const sentItem = (id: string, extra: Partial<TRequestListItem> = {}): TRequestLi
 });
 
 const render = (props: Partial<Parameters<typeof HomeActions>[0]> = {}) => renderToStaticMarkup(
-  <HomeActions battlefieldHref="/me/battlefields/growth" waitingReplies={0} today="2026-10-22" m2Available onBookMeeting={vi.fn()} onNavigate={vi.fn()} {...props} />,
+  <HomeActions waitingReplies={0} today="2026-10-22" m2Available onBookMeeting={vi.fn()} onNavigate={vi.fn()} {...props} />,
 );
 /** 页面上看得到的字（去掉标签和 React 的文本分隔注释）。 */
 const visible = (html: string) => html.replace(/<!--.*?-->/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -37,10 +37,9 @@ const visible = (html: string) => html.replace(/<!--.*?-->/g, "").replace(/<[^>]
 const button = (html: string, label: string) => html.match(/<button[^>]*>.*?<\/button>/g)?.find((part) => visible(part).includes(label)) ?? "";
 
 beforeEach(() => h.presses.clear());
-afterEach(() => vi.unstubAllGlobals());
 
 describe("等回复", () => {
-  it("3 条已发出、1 条全回了：显示「等回复 2」，点进请求列表", () => {
+  it("3 条已发出、1 条全回了：显示「等回复 2」，点进请求列表的「发出的」", () => {
     const sent = [sentItem("a"), sentItem("b", { recipientsDone: 1 }), sentItem("c", { recipientsDone: 2 })];
     expect(waitingReplyCount(sent)).toBe(2);
     const navigate = vi.fn();
@@ -48,7 +47,9 @@ describe("等回复", () => {
     expect(visible(html)).toContain("等回复 2");
     const target = {};
     h.presses.get("等回复2")!({ target });
-    expect(navigate).toHaveBeenCalledWith("/me/requests", target);
+    expect(navigate).toHaveBeenCalledWith("/me/requests?box=sent", target);
+    // 来源只记路径：关闭列表时外壳按路径找回这颗按钮。
+    expect(button(html, "等回复")).toContain('data-origin="/me/requests"');
   });
 
   it("草稿、已结束的不算；N 为 0 时只写「等回复」，没有角标", () => {
@@ -70,13 +71,13 @@ describe("约会议与战场进展", () => {
     expect(book).toHaveBeenCalledOnce();
   });
 
-  it("战场进展进第一个战场；没有战场就不显示", () => {
+  it("战场进展一直在，进原来那张战场进展页", () => {
     const navigate = vi.fn();
-    render({ onNavigate: navigate });
+    const html = render({ onNavigate: navigate });
+    expect(button(html, "战场进展")).toContain('data-origin="/me/progress"');
     const target = {};
     h.presses.get("战场进展")!({ target });
-    expect(navigate).toHaveBeenCalledWith("/me/battlefields/growth", target);
-    expect(visible(render({ battlefieldHref: null }))).not.toContain("战场进展");
+    expect(navigate).toHaveBeenCalledWith("/me/progress", target);
   });
 
   it("四个按钮的顺序：约会议、等回复、战场进展、复盘", () => {
@@ -85,17 +86,18 @@ describe("约会议与战场进展", () => {
 });
 
 describe("M 月复盘", () => {
-  it("10/22 置灰，写「10/29 开」；10/29 可以点，进 M2", () => {
-    const closed = button(render({ today: "2026-10-22" }), "复盘");
+  it("10/22 是置灰的按钮，写「10/29 开」；10/29 是去 M2 的链接，样子同旁边的胶囊", () => {
+    const closedHtml = render({ today: "2026-10-22" });
+    const closed = button(closedHtml, "复盘");
     expect(closed).toContain('disabled=""');
     expect(visible(closed)).toBe("10 月复盘 10/29 开");
-    const assign = vi.fn();
-    vi.stubGlobal("window", { location: { assign } });
-    const open = button(render({ today: "2026-10-29" }), "复盘");
-    expect(visible(open)).toBe("10 月复盘");
-    expect(open).not.toContain("disabled");
-    h.presses.get("10 月复盘")!({ target: {} });
-    expect(assign).toHaveBeenCalledWith("/m2/");
+    expect(closedHtml).not.toContain("<a ");
+    const openHtml = render({ today: "2026-10-29" });
+    expect(button(openHtml, "复盘")).toBe("");
+    const link = openHtml.match(/<a [^>]*>.*?<\/a>/)?.[0] ?? "";
+    expect(link).toContain('href="/m2/"');
+    expect(link).toMatch(/class="button button--sm button--tertiary [^"]*pill/);
+    expect(visible(link)).toBe("10 月复盘");
   });
 
   it("窗口：本月倒数第 3 天到月底复盘本月，下月 1–7 日复盘上个月，其余时间写下次开的日子", () => {

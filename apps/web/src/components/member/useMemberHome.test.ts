@@ -31,16 +31,9 @@ beforeEach(() => { hooks.values = []; hooks.effects = []; vi.clearAllMocks(); vi
 afterEach(() => vi.unstubAllGlobals());
 
 describe("常驻成员首页的网络恢复", () => {
-  it("首页读取同一份本月工作，断网保留卡，恢复后使用服务端新内容", async () => {
-    online(); expect(render().work).toBeNull(); await refresh();
-    expect(render().work).toEqual(work);
-    api.GET.mockRejectedValue(new TypeError("Failed to fetch"));
-    await refresh(); expect(render().work).toEqual(work);
-    online(); await refresh(); expect(render().work).toEqual(work);
-  });
-  it("首页HTTP失败区分加载失败与没有登记，重试成功后清除提示", async () => {
+  it("首页HTTP失败时提示连接问题，重试成功后清除提示", async () => {
     api.GET.mockResolvedValue({ response: { status: 503, ok: false } });
-    render(); await refresh(); expect(render().homeError).toContain("连接"); expect(render().work).toBeNull();
+    render(); await refresh(); expect(render().homeError).toContain("连接");
     online(); await refresh(); expect(render().homeError).toBeNull();
   });
   it("本人拍板后立即重取通知，等进行中的旧请求结束再取一次最新状态", async () => {

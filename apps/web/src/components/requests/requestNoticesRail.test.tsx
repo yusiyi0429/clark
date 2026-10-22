@@ -4,7 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { TRequestListItem } from "@warmap/contracts";
 
 /**
- * 通知栏里的请求一组：成员左栏不要「请求」页头和 ＋，只列通知条目；发出的请求里还在等回复的条数报给首页操作区。
+ * 通知栏里的请求一组：成员左栏不要「请求」页头和 ＋，只列通知条目；列出的条数和发出的请求里还在等回复的条数报出去
+ * （成员左栏的空通知提示、首页操作区「等回复 N」用）。
  * 没有 jsdom：useState/useEffect 换成按调用顺序记账的版本，读完再渲染一次（同 useMemberHome.test）。
  */
 const h = vi.hoisted(() => ({ states: [] as unknown[], index: 0, effects: [] as (() => unknown)[], api: { GET: vi.fn() } }));
@@ -78,9 +79,12 @@ describe("通知栏里的请求", () => {
     expect(await rendered({ header: false })).toBe("");
   });
 
-  it("读完把还在等回复的条数报出去：开着、还有人没完成的", async () => {
+  it("读完报出列出的条数（请求加影响）和还在等回复的条数（开着、还有人没完成的）", async () => {
+    h.api.GET.mockImplementation(async (_path: string, init: { params: { query: { box: string } } }) => ({ data: { items: init.params.query.box === "inbox"
+      ? [...inbox, item("会后影响", { kind: "impact", myStatus: "pending" })] : sent } }));
     const report = vi.fn();
-    await rendered({ header: false, onWaitingReplies: report });
-    expect(report).toHaveBeenLastCalledWith(2);
+    const html = await rendered({ header: false, onCounts: report });
+    expect(html).toContain("请求 会后影响");
+    expect(report).toHaveBeenLastCalledWith({ items: 4, waitingReplies: 2 });
   });
 });

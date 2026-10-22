@@ -2,13 +2,18 @@
 
 /**
  * 成员首页左上的操作区（样稿 home-layout-v4）：约会议、等回复、战场进展、M 月复盘，原「参与的战场」的位置。
- * 复盘按公司时区的今天（计划里的 today）算：本月倒数第 3 天到月底复盘本月，下月 1–7 日复盘上个月，这段时间能点，进 M2；
- * 其余时间置灰，写下次开的日子。
+ * 等回复进请求列表的「发出的」；战场进展进原来那张战场进展页（/me/progress）。
+ * 复盘按公司时区的今天（计划里的 today）算：本月倒数第 3 天到月底复盘本月，下月 1–7 日复盘上个月，这段时间是去 M2 的链接；
+ * 其余时间是置灰的按钮，写下次开的日子。
  */
 import { Plus } from "lucide-react";
+import { buttonVariants } from "@heroui/react";
 import { Button } from "ts-design/primitives";
 import type { Navigate } from "./planFormat";
 import s from "@/styles/home-actions.module.css";
+
+const REQUESTS = "/me/requests";
+const PROGRESS = "/me/progress";
 
 /** 复盘的是哪个月；opensOn 是下次开的日子（「10/29」），开着时为 null。 */
 export function reviewWindow(today: string): { month: number; opensOn: string | null } {
@@ -18,8 +23,7 @@ export function reviewWindow(today: string): { month: number; opensOn: string | 
   return { month, opensOn: day >= start ? null : `${month}/${start}` };
 }
 
-export function HomeActions({ battlefieldHref, waitingReplies, today, m2Available, onBookMeeting, onNavigate }: {
-  battlefieldHref: string | null;
+export function HomeActions({ waitingReplies, today, m2Available, onBookMeeting, onNavigate }: {
   waitingReplies: number;
   /** 计划还没读到时为 null，这时不出复盘。 */
   today: string | null;
@@ -32,14 +36,18 @@ export function HomeActions({ battlefieldHref, waitingReplies, today, m2Availabl
   return (
     <div className={s.actions} role="group" aria-label="常用操作">
       {onBookMeeting ? <Button variant="primary" size="sm" onPress={onBookMeeting}><Plus aria-hidden />约会议</Button> : null}
-      <Button variant="tertiary" size="sm" className={s.pill} data-origin="/me/requests" onPress={(event) => onNavigate("/me/requests", event.target as Element)}>
+      {/* data-origin 只写路径：关闭列表时外壳按路径找回这颗按钮。 */}
+      <Button variant="tertiary" size="sm" className={s.pill} data-origin={REQUESTS} onPress={(event) => onNavigate(`${REQUESTS}?box=sent`, event.target as Element)}>
         等回复{waitingReplies ? <span className={s.count}>{waitingReplies}</span> : null}
       </Button>
-      {battlefieldHref ? <Button variant="tertiary" size="sm" className={s.pill} data-origin={battlefieldHref} onPress={(event) => onNavigate(battlefieldHref, event.target as Element)}>战场进展</Button> : null}
-      {review ? (
-        <Button variant="tertiary" size="sm" className={s.pill} isDisabled={review.opensOn !== null} onPress={() => window.location.assign("/m2/")}>
-          {review.month} 月复盘{review.opensOn ? <span className={s.opens}>{review.opensOn} 开</span> : null}
+      <Button variant="tertiary" size="sm" className={s.pill} data-origin={PROGRESS} onPress={(event) => onNavigate(PROGRESS, event.target as Element)}>战场进展</Button>
+      {review?.opensOn ? (
+        <Button variant="tertiary" size="sm" className={s.pill} isDisabled>
+          {review.month} 月复盘<span className={s.opens}>{review.opensOn} 开</span>
         </Button>
+      ) : review ? (
+        // M2 是另一个应用：开着时是普通链接，样子和旁边的按钮一样。
+        <a href="/m2/" className={`${buttonVariants({ variant: "tertiary", size: "sm" })} ${s.pill}`}>{review.month} 月复盘</a>
       ) : null}
     </div>
   );

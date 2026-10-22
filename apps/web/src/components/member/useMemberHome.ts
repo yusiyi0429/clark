@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 成员工作台的数据：我的执行事项（通知卡上退回要用）、本月工作（首页「战场进展」）、我的通知、开着时的个人雷达摘要，以及卡上那几件事（退回、看过）。
+ * 成员工作台的数据：我的执行事项（通知卡上退回要用）、我的通知、开着时的个人雷达摘要，以及卡上那几件事（退回、看过）。
  * 通知每 20 秒刷新一次（页面在前台时）；在个人菜单里改了雷达设置时马上重读。
  */
 
@@ -13,7 +13,6 @@ import { RADAR_SETTINGS_CHANGED, type MemberRadarBrief } from "@/components/rada
 import type { WeeklySyncReminder } from "./weeklySyncNotice";
 
 type MemberTask = components["schemas"]["TaskView"];
-type MemberWork = components["schemas"]["MemberWork"];
 
 export interface MemberNotification {
   id: string;
@@ -39,7 +38,6 @@ export function useMemberHome() {
   const [unreadThreads, setUnreadThreads] = useState<components["schemas"]["UnreadThreadsResponse"]["threads"]>([]);
   const [unreadMissionGroups, setUnreadMissionGroups] = useState<UnreadMissionGroup[]>([]);
   const [rounds, setRounds] = useState<TMissionRoundSummary[]>([]);
-  const [work, setWork] = useState<MemberWork | null>(null);
   /** 雷达关着时为 null，首页整块不出现。 */
   const [radar, setRadar] = useState<MemberRadarBrief | null>(null);
   /** 周五 18:00 到周日本周还没同步时由服务端给出；其余时间为 null。 */
@@ -55,7 +53,7 @@ export function useMemberHome() {
         window.location.assign("/access?next=%2Fme");
         return;
       }
-      if (home.data) { setTasks(home.data.myTasks as MemberTask[]); setWork(home.data.work); setRadar(home.data.radar ?? null); setWeeklySync(home.data.weeklySync ?? null); }
+      if (home.data) { setTasks(home.data.myTasks as MemberTask[]); setRadar(home.data.radar ?? null); setWeeklySync(home.data.weeklySync ?? null); }
       setHomeError(home.data ? null : REFRESH_ERROR);
       if (list.data) setNotifications(list.data.notifications as MemberNotification[]);
       if (meetingList.data) setMeetings(meetingList.data.meetings);
@@ -152,5 +150,5 @@ export function useMemberHome() {
     [load],
   );
 
-  return { tasks, notifications, meetings, unreadThreads, unreadMissionGroups, rounds, work, radar, weeklySync, homeError, refresh: load, returnTask, markSeen, readRadarNotice, settle };
+  return { tasks, notifications, meetings, unreadThreads, unreadMissionGroups, rounds, radar, weeklySync, homeError, refresh: load, returnTask, markSeen, readRadarNotice, settle };
 }

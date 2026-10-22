@@ -9,7 +9,7 @@ vi.mock("@/components/HeroButton", () => ({ HeroButton: ({ children, onPress, is
 } }));
 const home = vi.hoisted(() => ({ radar: null as unknown }));
 vi.mock("./useMemberHome", () => ({
-  useMemberHome: () => ({ tasks: [], notifications: [], meetings: [], unreadThreads: [], unreadMissionGroups: [], rounds: [], work: { period: "2026-10", planStatus: "confirmed", battlefields: [], missions: [], missionCards: [] }, radar: home.radar, homeError: null, refresh: vi.fn(), busyId: null, setStatus: vi.fn(), returnTask: vi.fn(), markSeen: vi.fn(), readRadarNotice: vi.fn().mockResolvedValue(true), settle: vi.fn() }),
+  useMemberHome: () => ({ tasks: [], notifications: [], meetings: [], unreadThreads: [], unreadMissionGroups: [], rounds: [], radar: home.radar, homeError: null, refresh: vi.fn(), busyId: null, setStatus: vi.fn(), returnTask: vi.fn(), markSeen: vi.fn(), readRadarNotice: vi.fn().mockResolvedValue(true), settle: vi.fn() }),
 }));
 vi.mock("next/navigation", () => ({ usePathname: () => "/me", useSearchParams: () => null, useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 

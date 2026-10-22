@@ -25,7 +25,10 @@ describe("成员工作台外壳", () => {
     const html = renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽" viewerId="sun" />);
     expect(html).toContain('aria-label="常用操作"');
     expect(html).toContain("等回复");
-    for (const gone of ["我的本月卡", "参与的战场", "开启执行事项", 'aria-label="执行事项"', 'data-widget=']) expect(html).not.toContain(gone);
+    // 战场进展一直在，进原来那张战场进展页。
+    expect(html).toContain('data-origin="/me/progress"');
+    // 旧执行事项区的工具条（「N 项执行事项在推进」）和区块都不在了；「开启执行事项」现在在 Mission 卡片的三栏里。
+    for (const gone of ["我的本月卡", "参与的战场", "项执行事项在推进", 'aria-label="执行事项"', 'data-widget=']) expect(html).not.toContain(gone);
     expect(html).not.toContain('aria-label="打开请求列表"');
     expect(html).not.toContain('aria-label="新请求"');
     // 约会议只在操作区里有一个，右上角那个去掉了。

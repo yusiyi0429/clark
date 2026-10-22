@@ -18,9 +18,10 @@ import s from "./requests.module.css";
 
 const NO_CARDS: Card[] = [];
 
-export function RequestListScreen({ base }: { base: string }) {
+/** initialBox：先打开哪一段（成员首页「等回复」带 ?box=sent 进来）；不给时是「收到的」。 */
+export function RequestListScreen({ base, initialBox = "inbox" }: { base: string; initialBox?: TRequestBox }) {
   const workspace = useWorkspace();
-  const [box, setBox] = useState<TRequestBox>("inbox");
+  const [box, setBox] = useState<TRequestBox>(initialBox);
   const [items, setItems] = useState<TRequestListItem[] | null>(null);
   const [failed, setFailed] = useState(false);
   useRegisterDetail(useMemo(() => ({ scope: "global", label: "请求", mark: null, cards: NO_CARDS }), []));
