@@ -112,8 +112,8 @@ describe("常驻成员首页的网络恢复", () => {
     await expect(refresh()).resolves.toBeUndefined();
     const state = render();
     expect(state.tasks).toEqual([]); expect(state.notifications).toEqual([]);
-    expect(state.taskError).toContain("连接");
-    expect(state.taskError).not.toContain("Failed to fetch");
+    expect(state.homeError).toContain("连接");
+    expect(state.homeError).not.toContain("Failed to fetch");
   });
 
   it("轮询断网保留已有事项与通知，恢复连接后自动去掉连接错误", async () => {
@@ -122,11 +122,11 @@ describe("常驻成员首页的网络恢复", () => {
     render(); await expect(refresh()).resolves.toBeUndefined();
     const offline = render();
     expect(offline.tasks).toEqual([task]); expect(offline.notifications).toEqual([notification]);
-    expect(offline.taskError).toContain("保留");
+    expect(offline.homeError).toContain("保留");
     online(); await refresh();
     const recovered = render();
     expect(recovered.tasks).toEqual([task]); expect(recovered.notifications).toEqual([notification]);
-    expect(recovered.taskError).toBeNull();
+    expect(recovered.homeError).toBeNull();
   });
 
   it("雷达开着时读出小组件的数据，关着是 null；在个人菜单里改了雷达设置马上重读", async () => {

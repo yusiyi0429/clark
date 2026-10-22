@@ -1,0 +1,42 @@
+/*
+ * 成员首页左上的操作区（components/member/home/HomeActions.tsx），版式照样稿 home-layout-v4 的一排胶囊。
+ * 按钮是 ts-design Button（圆角、高度、按下、置灰都由它管）：约会议用 primary；其余是白底发丝边，和下面的 Mission 卡片同一套 token。
+ * 「等回复」的条数用主题的 --warning 小圆角标。
+ */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 约会议以外的胶囊：覆盖 tertiary 的底色和字色（HeroUI 的变体只设这几个变量）。 */
+.pill.pill {
+  --button-bg: var(--ts-surface, var(--surface));
+  --button-bg-hover: color-mix(in oklab, var(--ink) 4%, var(--ts-surface, var(--surface)));
+  --button-bg-pressed: var(--button-bg-hover);
+  --button-fg: var(--ink-muted);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--warning);
+  color: var(--warning-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.opens {
+  color: var(--ink-faint);
+  font-size: var(--type-meta, 12px);
+  font-variant-numeric: tabular-nums;
+}

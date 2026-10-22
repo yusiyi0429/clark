@@ -17,9 +17,19 @@ describe("成员工作台外壳", () => {
     // 声纹收进个人菜单，首页不再直接放声纹卡片
     expect(html).not.toContain("我的声纹");
     expect(html).not.toContain("发给你的信号");
-    // 采集到的工作全部自动归到执行事项，首页没有计划外；去战场进展的入口还在。
+    // 采集到的工作全部自动归到执行事项，首页没有计划外。
     expect(html).not.toContain("计划外");
-    expect(html).toContain('data-origin="/me/progress"');
+  });
+
+  it("首页换成操作区加 Mission 卡片：没有「我的本月卡」「参与的战场」和旧的执行事项网格，左栏没有「请求」页头和 ＋", () => {
+    const html = renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽" viewerId="sun" />);
+    expect(html).toContain('aria-label="常用操作"');
+    expect(html).toContain("等回复");
+    for (const gone of ["我的本月卡", "参与的战场", "开启执行事项", 'aria-label="执行事项"', 'data-widget=']) expect(html).not.toContain(gone);
+    expect(html).not.toContain('aria-label="打开请求列表"');
+    expect(html).not.toContain('aria-label="新请求"');
+    // 约会议只在操作区里有一个，右上角那个去掉了。
+    expect(html.match(/约会议/g)).toHaveLength(1);
   });
 
   it("首页底部是自己的 Agent（全局对话输入条）", () => {
@@ -39,7 +49,7 @@ describe("成员工作台外壳", () => {
     expect(html).toContain('data-testid="notice-strip"');
     expect(html).toContain('aria-hidden="true" inert=""');
     expect(html).toContain("任务卡正文");
-    expect(html).toContain('aria-label="执行事项"');
+    expect(html).toContain('aria-label="常用操作"');
     expect(html).not.toContain('aria-label="配置"');
     navigation.pathname = "/me";
   });

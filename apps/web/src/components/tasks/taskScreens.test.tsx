@@ -3,10 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
 import type { components } from "@/lib/api/schema";
 import type { TMaterialView } from "@warmap/contracts";
-import { MemberTasks, lastExternalSync, tasksByDue } from "@/components/member/MemberTasks";
 import { memberNoticeGroups } from "@/components/member/memberNotices";
 
-const state = vi.hoisted(() => ({ ask: vi.fn(), delete: vi.fn(), register: vi.fn(), press: new Map<string, () => void>(), cardClick: new Map<string, (event: unknown) => void>(), area: {} as Record<string, unknown> }));
+const state = vi.hoisted(() => ({ ask: vi.fn(), delete: vi.fn(), register: vi.fn(), press: new Map<string, () => void>(), area: {} as Record<string, unknown> }));
 vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ close: vi.fn(), navigate: vi.fn(), compose: vi.fn(), viewerId: "sun" }), useRegisterDetail: state.register }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => null }));
 vi.mock("@/components/shell/DetailFrame", () => ({ DetailFrame: ({ title, actions, children }: { title: string; actions?: ReactNode; children?: ReactNode }) => <main><h1>{title}</h1><header>{actions}</header>{children}</main> }));
@@ -35,7 +34,7 @@ vi.mock("ts-design", () => ({ FormField: ({ label }: { label: string }) => <labe
 vi.mock("@heroui/react", () => {
   const wrap = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
   const Modal = Object.assign(({ isOpen, children }: { isOpen: boolean; children?: ReactNode }) => isOpen ? <div>{children}</div> : null, { Backdrop: wrap, Container: wrap, Dialog: wrap, CloseTrigger: () => null, Header: wrap, Heading: wrap, Body: wrap, Footer: wrap });
-  return { Card: ({ children, onClick, ...props }: { children?: ReactNode; onClick?: (event: unknown) => void; "data-task"?: string }) => { if (onClick && props["data-task"]) state.cardClick.set(props["data-task"], onClick); return <article {...props}>{children}</article>; }, Modal };
+  return { Card: ({ children, ...props }: { children?: ReactNode }) => <article {...props}>{children}</article>, Modal };
 });
 
 import { CreateTaskScreen } from "./CreateTaskScreen";
@@ -58,49 +57,9 @@ const visible = (html: string) => html.replace(/<!--.*?-->/g, "").replace(/<[^>]
 const screen = (value: Detail) => renderToStaticMarkup(<TaskScreen initialDetail={value} />);
 
 beforeEach(() => {
-  vi.clearAllMocks(); state.press.clear(); state.cardClick.clear();
+  vi.clearAllMocks(); state.press.clear();
   state.area = { materials: [], canUpload: true, uploading: false, open: vi.fn(), pickFile: vi.fn(), pasteLink: vi.fn(), draft: vi.fn() };
   vi.stubGlobal("window", { dispatchEvent: vi.fn() });
-});
-
-describe("成员首页执行事项", () => {
-  it("最新进展仅在有记录时显示，并给悬停与读屏提供正文", () => {
-    const html = renderToStaticMarkup(<MemberTasks tasks={[task("new", { latestProgress: { body: "完成接口核对", source: "codex", author: { personId: "sun", name: "孙铭泽" }, createdAt: "2026-10-05T06:20:00Z" } })]} />);
-    expect(html).toContain("最新进展 · Codex");
-    expect(html).toContain('title="完成接口核对"');
-    expect(html).toContain('aria-label="最新进展：完成接口核对"');
-  });
-  it("执行事项区显示外部工具最近一次同步的时间和工具；网页里写的不算，没有就不显示", () => {
-    const entry = (source: "web" | "codex" | "claude", createdAt: string) => ({ body: "进展", source, author: { personId: "sun", name: "孙铭泽" }, createdAt });
-    const items = [task("a", { latestProgress: entry("codex", "2026-10-05T06:20:00Z") }), task("b", { latestProgress: entry("claude", "2026-10-06T02:18:00Z") }),
-      task("c", { latestProgress: entry("web", "2026-10-07T02:00:00Z") })];
-    expect(lastExternalSync(items)?.source).toBe("claude");
-    expect(renderToStaticMarkup(<MemberTasks tasks={items} />)).toMatch(/最近同步 .+ · Claude Code/);
-    expect(renderToStaticMarkup(<MemberTasks tasks={[task("c", { latestProgress: entry("web", "2026-10-07T02:00:00Z") })]} />)).not.toContain("最近同步");
-  });
-  it("按截止排并保留同截止顺序；卡上有归属、日期、协作者和新建入口，不写步骤、不写等上一步，也没有状态按钮", () => {
-    const items = [task("a", { dueDate: null }), task("b", { dueDate: "2026-10-12" }), task("c", { dueDate: "2026-10-02" })];
-    expect(tasksByDue(items).map((item) => item.id)).toEqual(["c", "b", "a"]);
-    const html = renderToStaticMarkup(<MemberTasks tasks={items} />);
-    expect(html).toContain("开启执行事项"); expect(html).toContain("上线验证"); expect(html).toContain("协作 · 林晓"); expect(html).toContain("计划开始 2026-10-01"); expect(html).toContain("未启动");
-    for (const gone of ["第 2 步", "等上一步", "进行中", "完成"]) expect(html).not.toContain(gone);
-  });
-  it("完成的事项不占卡片，收进默认折叠的「已完成 N」", () => {
-    const html = renderToStaticMarkup(<MemberTasks tasks={[task("open", { title: "还在推进" }), task("finished", { title: "已经收尾", status: "done" })]} />);
-    expect(html).toContain("还在推进");
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).toMatch(/已完成(<!-- -->)? ?1/);
-    expect(html).not.toContain("已经收尾");
-  });
-  it("点击卡片空白处打开详情，卡上的按钮不触发卡片导航", () => {
-    const navigate = vi.fn();
-    renderToStaticMarkup(<MemberTasks tasks={[task()]} onNavigate={navigate} />);
-    const card = {} as HTMLElement;
-    state.cardClick.get("task-1")?.({ target: { closest: () => null }, currentTarget: card });
-    expect(navigate).toHaveBeenCalledWith("/me/tasks/task-1", card);
-    state.cardClick.get("task-1")?.({ target: { closest: () => ({ tagName: "BUTTON" }) }, currentTarget: card });
-    expect(navigate).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe("执行事项封面", () => {

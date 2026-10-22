@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
 import { MeetingCard, outcomeItemState } from "@/cards/MeetingCard";
 import { meetingCard } from "@/cards/meetingWorkspace.test";
-import { MemberTasks, tasksByDue, type MemberTask } from "./member/MemberTasks";
 import { memberNoticeGroups } from "./member/memberNotices";
 
 vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ homeCards: [], closing: false }) }));
@@ -94,52 +93,7 @@ describe("旧格式会议的会后纪要（会议记录页，只读）", () => {
   });
 });
 
-describe("成员首页的执行事项", () => {
-  const task = (id: string, dueDate: string | null, extra: Partial<MemberTask> = {}): MemberTask => ({
-    id,
-    version: 1,
-    title: `事项 ${id}`,
-    status: "not_started",
-    source: "meeting",
-    startDate: null,
-    dueDate,
-    doneDefinition: null,
-    mission: null,
-    waitingOn: null,
-    awaitingAcceptance: false,
-    planTaskId: null,
-    owner: { personId: "p1", name: "孙铭泽" },
-    collaborators: [],
-    latestProgress: null,
-    returnReason: null,
-    origin: { type: "meeting", meetingId: "m1", meetingTitle: "灯塔项目：产品交互对齐会议", quote: "下周三前给我" },
-    createdAt: "2026-09-26T08:00:00.000Z",
-    updatedAt: "2026-09-26T08:00:00.000Z",
-    ...extra,
-  });
-
-  it("按截止排：截止近的在前，没有截止的放后面、保持原来的先后", () => {
-    expect(tasksByDue([task("a", null), task("b", "2026-10-02"), task("c", "2026-09-30"), task("d", null)]).map((item) => item.id)).toEqual(["c", "b", "a", "d"]);
-  });
-
-  it("卡上写状态、会后来源；退回的写原因；卡上没有状态按钮（状态跟着推进人的动作走）", () => {
-    const html = renderToStaticMarkup(
-      <MemberTasks tasks={[task("a", "2026-09-30"), task("b", null, { status: "returned", returnReason: "不归我，归白田田" })]} />,
-    );
-    expect(html).toContain("未启动");
-    expect(html).toContain("9 月 30 日前");
-    expect(html).toContain("会后分派 · 灯塔项目：产品交互对齐会议");
-    expect(html).toContain("已退回：不归我，归白田田");
-    expect(html).not.toContain("进行中");
-    expect(html).not.toContain("完成");
-  });
-
-  it("外部工具提交了验收的，状态写「等你验收」", () => {
-    const html = renderToStaticMarkup(<MemberTasks tasks={[task("a", null, { status: "in_progress", awaitingAcceptance: true })]} />);
-    expect(html).toContain("等你验收");
-    expect(html).not.toContain("进行中");
-  });
-
+describe("成员通知栏里的执行事项", () => {
   it("通知栏分两组：新的执行事项能接下或退回，回复与结果只要知道了；看过的不再列", () => {
     const groups = memberNoticeGroups(
       [

@@ -42,6 +42,10 @@ export type WorkspaceApi = {
   compose: (draft: string) => void;
   /** 当前登录 CEO 的 personId（战场卡据此判断「CEO 本人负责」）；测试桩默认 null。 */
   viewerId: string | null;
+  /** 打开外壳里的建会抽屉（成员首页操作区的「约会议」）；没有登录人时没有。 */
+  bookMeeting?: () => void;
+  /** M2（目标拆解与复盘）对当前登录人可用。 */
+  m2Available?: boolean;
 };
 
 export const WorkspaceContext = createContext<WorkspaceApi | null>(null);

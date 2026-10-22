@@ -1,7 +1,7 @@
 /*
  * 成员首页的 Mission 卡片（components/member/home/MissionPlanCard.tsx 及同目录的各块），版式照样稿 home-layout-v4。
  * 外观跟首页其他卡片走同一套 token，不另起一套：
- *   卡片     = member-home-widgets.module.css 的 .widget（发丝边、--onboarding-card-radius、--onboarding-highlight、内边距 22）
+ *   卡片     = 原首页卡片（已删的 member-home-widgets.module.css .widget）：发丝边、--onboarding-card-radius、--onboarding-highlight、内边距 22
  *   字号     = 外壳的 --type-title / --type-body / --type-meta；墨色 --ink / --ink-muted / --ink-faint；分隔线 --rule、--hairline
  *   浮层     = meeting-workspace.module.css 的 .editFloat / .editDialog（ts-design Popover）
  *   小卡     = --r-inset 圆角、发丝边；红字 --counter；链接 --onboarding-pressed

@@ -104,4 +104,10 @@ describe("CEO 与成员共享的工作区开合", () => {
     expect(navigation.push).toHaveBeenLastCalledWith("/me");
     expect(home.focus).toHaveBeenCalledWith({ preventScroll: true });
   });
+
+  it("成员首页右上角不再放「约会议」，建会抽屉交给首页操作区打开；CEO 首页照旧", () => {
+    expect(render("/me")).not.toContain("约会议");
+    expect(api.bookMeeting).toBeTypeOf("function");
+    expect(render("/")).toContain(">约会议</button>");
+  });
 });
