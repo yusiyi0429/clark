@@ -446,14 +446,13 @@ describe("妙记 Markdown 候选预览", () => {
     expect(html).not.toContain("上传会议逐字稿");
   });
 
-  it("候选存在时自动打开预览：来源摘要、时间锚点、抽样发言与告警", () => {
+  it("候选存在时自动打开预览：来源摘要、抽样发言与告警", () => {
     const html = render(meetingCard({ transcriptCandidate: candidateBase }));
     expect(html).toContain("确认会议记录");
     expect(html).toContain("本体建模 Part 2.md");
     expect(html).toContain("40 KB");
     expect(html).toContain("12 条发言 · 3 位说话人 · 时长 59:00");
-    expect(html).toContain("首段 +00:01");
-    expect(html).toContain("末段 +59:01");
+    expect(html).not.toContain("时间锚点");
     expect(html).toContain("先把结论说清楚。");
     expect(html).toContain("“外部顾问”未匹配到人员，请手动选择。");
     // 有候选时上传区切到重新上传。

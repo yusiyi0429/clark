@@ -182,13 +182,12 @@ export function confirmTranscriptInput(
 }
 
 /**
- * 妙记 Markdown 候选预览（设计 aB4pK）：只读来源摘要 + 说话人映射 + 时间锚点 + 抽样发言；
+ * 妙记 Markdown 候选预览（设计 aB4pK）：只读来源摘要 + 说话人映射 + 抽样发言；
  * 确认把 mapping 交给 opaque Action，全量 turns 不进入浏览器 Action input。
  */
 export function TranscriptCandidateDialog({
   dialogRef,
   candidate,
-  scheduledAt,
   participants,
   directory,
   directoryError,
@@ -203,7 +202,6 @@ export function TranscriptCandidateDialog({
 }: {
   dialogRef: { current: HTMLDialogElement | null };
   candidate: TTranscriptCandidateProjection;
-  scheduledAt: string;
   participants: { personId: string }[];
   directory: DirectoryOption[];
   directoryError: string | null;
@@ -238,13 +236,6 @@ export function TranscriptCandidateDialog({
         </button>
       </header>
       <div className={s.candidateBody}>
-        <section className={s.candidateSection}>
-          <h3>时间锚点</h3>
-          <p>
-            会议时间 {scheduledAt.slice(0, 16).replace("T", " ")} · 首段 +{offsetLabel(candidate.firstOffsetSeconds)} · 末段 +
-            {offsetLabel(candidate.lastOffsetSeconds)}
-          </p>
-        </section>
         <section className={s.candidateSection}>
           <h3>说话人映射</h3>
           <table className={s.mappingTable}>
@@ -1826,7 +1817,6 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           key={payload.transcriptCandidate.createdAt}
           dialogRef={candidateDialog}
           candidate={payload.transcriptCandidate}
-          scheduledAt={payload.scheduledAt}
           participants={payload.participants}
           directory={directory}
           directoryError={directoryError}

@@ -322,7 +322,7 @@
 .readerPaneFoot{display:flex;align-items:center;gap:10px;margin:0;padding:9px 16px;border-top:1px solid #eceef2;font-size:11px;color:#6e7681;flex:none}
 .readerPaneFoot a{margin-left:auto;color:#215ba1}
 
-/* 妙记 Markdown 候选预览（设计 aB4pK）：来源摘要 + 映射表 + 时间锚点 + 抽样发言；全量 turns 不落浏览器。 */
+/* 妙记 Markdown 候选预览（设计 aB4pK）：来源摘要 + 映射表 + 抽样发言；全量 turns 不落浏览器。 */
 .candidateDialog{width:min(880px,calc(100vw - 64px));max-height:min(860px,calc(100dvh - 64px));margin:auto;padding:0;border:1px solid #e1e4e9;border-radius:20px;background:#fff;color:#282c32;box-shadow:0 24px 70px #10151f2e}
 .candidateDialog[open]{display:flex;flex-direction:column}
 .candidateDialog::backdrop{background:#10151f4d}
