@@ -180,6 +180,11 @@ function participantsOf(meeting: MeetingRow, deps: MeetingCardDeps) {
 /** 行动项的负责人只能是这场会的人（会议成员或实际参会）。 */
 const memberIds = (meeting: MeetingRow) => new Set([...meeting.participants.map((person) => person.personId), ...attendeesOf(meeting).personIds]);
 
+/** 卡片按纯文本显示：去掉模型写进摘要和正文的 Markdown 加粗记号（**x**、__x__）；单个 * 和 _、列表的「- 」保留。 */
+export function stripEmphasis(text: string): string {
+  return text.replace(/\*\*(?=\S)(.+?)(?<=\S)\*\*/g, "$1").replace(/(?<![A-Za-z0-9_])__(?=\S)(.+?)(?<=\S)__(?![A-Za-z0-9_])/g, "$1");
+}
+
 /**
  * 模型候选 → 草稿和行动项：段落编号 sec-N，turnId 换成出处（连着的发言并成一处）；修改编号 chg-N，目标不在候选里的当未定；
  * 行动项编号 act-N，负责人不是这场会的人、日期不合法的当没填；依据段落序号换成段落 id，指不到的丢掉。候选不合 schema 返回 null。
@@ -204,7 +209,7 @@ export function buildCardDraft(pool: Pool, prepared: CardGeneration, candidate: 
     const sourceRefs = runs.length
       ? runs.map((run) => ({ sourceId: "src-1", locator: run.length === 1 ? run[0] : `${run[0]}..${run[run.length - 1]}` }))
       : [{ sourceId: "src-1", locator: null }];
-    return { id: sectionIds[index], heading: section.heading, body: section.body, sourceRefs };
+    return { id: sectionIds[index], heading: section.heading, body: stripEmphasis(section.body), sourceRefs };
   });
   const options = new Set(prepared.targetOptions.map((option) => option.targetRef));
   const objectChanges = value.objectChanges.map((change, index) => ({
@@ -226,7 +231,7 @@ export function buildCardDraft(pool: Pool, prepared: CardGeneration, candidate: 
   return {
     draft: {
       schemaVersion: "meeting-card.v1", meetingId: meeting.id, title: meeting.title, occurredAt: recordedStart(meeting)?.toISOString() ?? null,
-      participants: participantsOf(meeting, deps), relatedObjectRefs: prepared.relatedObjectRefs, summary: value.summary, sections,
+      participants: participantsOf(meeting, deps), relatedObjectRefs: prepared.relatedObjectRefs, summary: stripEmphasis(value.summary), sections,
       sources: [sourceOf(meeting, deps.publicOrigin ?? "")], objectChanges,
     },
     actionItems,

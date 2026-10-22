@@ -7,7 +7,7 @@ import { createTestApp, preflightCandidate, seedLegacyOutcome, TEST_CEO, TEST_ME
 import { runOutcome, type PostMeetingAgent, type PostMeetingAgentInput } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import { createJobWorker } from "../src/jobs.js";
-import { buildCardDraft, prepareCardGeneration } from "../src/meetingCard.js";
+import { buildCardDraft, prepareCardGeneration, stripEmphasis } from "../src/meetingCard.js";
 import { hashSecret } from "../src/session.js";
 import { signActionId } from "../src/actionToken.js";
 import { projection, stubWorld, worldEnv } from "./worldFixture.js";
@@ -187,6 +187,23 @@ describe("会议卡草稿", () => {
         [{ sourceId: "src-1", locator: "turn-001" }, { sourceId: "src-1", locator: "turn-003" }],
         [{ sourceId: "src-1", locator: "turn-001..turn-002" }],
       ]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("摘要和正文去掉 Markdown 加粗记号，单个星号、下划线和列表符号不动", async () => {
+    expect(stripEmphasis("- **会后记录改为自动获取**：本周跑通。\n- __接口__切到 v2")).toBe("- 会后记录改为自动获取：本周跑通。\n- 接口切到 v2");
+    expect(stripEmphasis("3 * 4 = 12，字段 owner_person_id、snake__case__name 照旧，** 不成对 **")).toBe("3 * 4 = 12，字段 owner_person_id、snake__case__name 照旧，** 不成对 **");
+    ontology();
+    const { agent } = cardAgent();
+    const { t, meetingId } = await setup(agent);
+    try {
+      const { candidate } = await agent.generate({} as PostMeetingAgentInput);
+      const built = buildCardDraft(t.pool, await prepareCardGeneration(t.pool, meetingId), { ...(candidate as object),
+        summary: "- **接口**：统一切到 v2", sections: [{ heading: "接口切换", body: "已定：- **接口**统一改成 v2", turnIds: ["turn-002"] }] });
+      expect(built!.draft.summary).toBe("- 接口：统一切到 v2");
+      expect(built!.draft.sections[0].body).toBe("已定：- 接口统一改成 v2");
     } finally {
       await t.close();
     }
