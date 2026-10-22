@@ -1,0 +1,285 @@
+/*
+ * 成员首页的 Mission 卡片（components/member/home/MissionPlanCard.tsx），照样稿 home-layout-v4：
+ *   Mission 行  平铺，「全部」在最前；选中的下面一道深色短线；聚焦某个 Mission 时其余变灰
+ *   Task 行     圆角胶囊；选中的描深边，后面出 ⓘ
+ *   三栏        已完成 / 本周 / 之后，本周最宽、打浅蓝底；「全部」视图下卡片左边是 Mission 色条（行内 --bar）
+ * 卡片窄于 560px 时三栏上下排，本周在最上面。
+ */
+.card {
+  container: plan-card / inline-size;
+  position: relative;
+  min-width: 0;
+  padding: 16px 20px 18px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(20, 30, 50, .05), 0 8px 24px rgba(20, 30, 50, .06);
+  color: #1f2a3d;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dot { flex: none; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+
+/* Mission 行：底线画在行的内阴影上，选中项的短线（::after）盖住它；放不下时横向滑动。 */
+.missions {
+  display: flex;
+  align-items: flex-end;
+  gap: 22px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+  box-shadow: inset 0 -1px #e6e9ef;
+  scrollbar-width: none;
+}
+.missions::-webkit-scrollbar { display: none; }
+
+.mission {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0 0 10px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.mission[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2.5px;
+  border-radius: 2px;
+  background: #1f2a3d;
+}
+.hint { color: #8a93a3; font-size: 11px; line-height: 16px; white-space: nowrap; }
+.name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 25px;
+  letter-spacing: -.01em;
+  white-space: nowrap;
+  transition: color 150ms;
+}
+.mission[data-mission="all"] .name { font-size: 14px; }
+.card[data-focus] .mission[aria-pressed="false"] .name { color: #8a93a3; font-weight: 500; }
+.card[data-focus] .mission[aria-pressed="false"]:hover .name { color: #4c5668; }
+
+.cardLink {
+  flex: none;
+  margin-left: auto;
+  padding: 0 0 12px;
+  border: 0;
+  background: none;
+  color: #215ba1;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cardLink:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* 时间轴：DayTimeline 用 inline-size 容器查询，这里给它一个有宽度的块；浮层相对它摆。 */
+.timeline { position: relative; margin-bottom: 14px; }
+
+.pop {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(20, 30, 50, .18), 0 0 0 1px rgba(20, 30, 50, .04);
+  color: #4c5668;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+/* 加点、删点的浮层：对准那一天（行内 --x），放在时间轴下面（不压本周括线），左右不出卡片。 */
+.pop[data-mark-pop] {
+  top: calc(100% + 4px);
+  left: clamp(0px, calc(var(--x) - 110px), calc(100% - 220px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 220px;
+}
+.pop[data-mark-pop="delete"] { flex-direction: row; align-items: center; justify-content: space-between; }
+.popDate { min-width: 0; overflow: hidden; color: #8a93a3; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+
+.picks { display: flex; flex-wrap: wrap; gap: 10px; }
+.pick {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--c);
+  cursor: pointer;
+  transition: box-shadow 150ms;
+}
+.pick[aria-checked="true"] { box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--c); }
+
+.nameRow { display: flex; align-items: center; gap: 6px; }
+/* 边、底色、聚焦用全站 --field-* 那套（globals.css），这里只管尺寸。 */
+.input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border-radius: 9px; line-height: 20px; }
+.ok {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: #215ba1;
+  color: #fff;
+  cursor: pointer;
+}
+.ok:disabled { background: #d5dbe4; cursor: default; }
+
+.delete {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #fdeceb;
+  color: #b3372f;
+  font-weight: 600;
+  cursor: pointer;
+}
+.delete:hover { background: #fadad7; }
+
+.error { margin: 2px 0 0; color: #b3372f; font-size: 12px; }
+
+/* Task 行 */
+.tasks { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.task {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  border: 1px solid #e6e9ef;
+  border-radius: 10px;
+  background: #fbfcfd;
+  color: #4c5668;
+  transition: border-color 150ms, background 150ms;
+}
+.task:hover { border-color: #cfd6e0; }
+.task[data-selected] {
+  border-color: #1f2a3d;
+  background: #fff;
+  color: #1f2a3d;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px #1f2a3d;
+}
+.taskName {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 100%;
+  padding: 0 12px;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.task:has(.info) .taskName { padding-right: 7px; }
+.count { margin-left: 5px; color: #8a93a3; font-weight: 500; font-variant-numeric: tabular-nums; }
+.info {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 10px;
+  padding: 0;
+  border: 1px solid #c3cad5;
+  border-radius: 50%;
+  background: #fff;
+  color: #8a93a3;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+.info[aria-expanded="true"] { border-color: #1f2a3d; background: #1f2a3d; color: #fff; }
+.infoPop { top: calc(100% + 8px); left: 0; width: 300px; max-width: calc(100cqw - 8px); font-weight: 400; }
+.infoPop b { display: block; margin-bottom: 4px; color: #1f2a3d; font-size: 12px; font-weight: 600; }
+.infoPop b + * { margin: 0; }
+.infoPop p + b { margin-top: 10px; }
+.infoPop ol { margin: 0; padding-left: 18px; list-style: decimal; }
+.infoPop li::marker { color: #8a93a3; font-variant-numeric: tabular-nums; }
+.infoPop li + li { margin-top: 2px; }
+
+/* 三栏：「开启执行事项」放在右上角，和栏名同一行。 */
+.board { position: relative; }
+.start { position: absolute; top: 5px; right: 6px; z-index: 1; }
+.start button { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+
+.columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 1fr); gap: 10px; align-items: start; }
+.column { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 8px; border-radius: 14px; }
+.column[data-column="week"] { background: rgba(33, 91, 161, .07); }
+.column h3 {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 2px;
+  color: #8a93a3;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.column[data-column="week"] h3 { color: #215ba1; font-weight: 700; }
+
+.activity {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  min-width: 0;
+  padding: 9px 11px 10px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(20, 30, 50, .05), 0 3px 10px rgba(20, 30, 50, .04);
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 150ms, transform 150ms;
+}
+/* Mission 色条：直的一道，上下留白、两头圆，不跟着卡片圆角弯。 */
+.activity::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--bar, transparent);
+}
+.activity:hover { box-shadow: 0 1px 2px rgba(20, 30, 50, .06), 0 6px 16px rgba(20, 30, 50, .08); transform: translateY(-1px); }
+.title { max-width: 100%; color: #1f2a3d; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.activity small { color: #8a93a3; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.activity small[data-overdue] { color: #b3372f; font-weight: 600; }
+.empty { padding: 4px 2px; color: #a5adba; font-size: 12px; }
+
+@container plan-card (max-width: 559px) {
+  .name { font-size: 15px; line-height: 22px; }
+  .columns { grid-template-columns: minmax(0, 1fr); }
+  .column[data-column="week"] { order: -1; }
+  .column[data-column="done"] { order: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .name, .pick, .task, .activity { transition: none; }
+  .activity:hover { transform: none; }
+}
