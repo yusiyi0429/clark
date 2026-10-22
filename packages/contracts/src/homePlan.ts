@@ -47,8 +47,9 @@ export const HomePlanMission = Type.Object(
 );
 
 /**
- * Activity 就是执行事项；column 由服务端分好：已完成、本周、之后。overdue：没完成且截止早于本周一。
+ * Activity 就是执行事项；column 由服务端分好：已完成、本周、之后。overdue：没完成，且截止早于本周一或挂在之前月份的 Mission 下。
  * missionId 是事项挂的 Mission，独立事项为 null；任务卡没确认时 item.mission 为空，按 Mission 归组看这里。
+ * 之前月份 Mission 下没做完的也在 activities 里（放本周），它的 missionId 不在 missions 里。
  */
 export const HomePlanActivity = Type.Object(
   {

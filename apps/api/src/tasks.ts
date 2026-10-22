@@ -94,6 +94,12 @@ export async function getTaskView(q: Query, id: string, names: Map<string, strin
   const row = await getTaskRow(q, id);
   return row ? projectTask(row, names) : null;
 }
+/** 一次取多条，按 ids 的顺序；不在了的跳过。 */
+export async function getTaskViews(q: Query, ids: string[], names: Map<string, string>): Promise<TTaskView[]> {
+  if (!ids.length) return [];
+  const rows = new Map(((await q(`${TASK_SELECT} WHERE t.id=ANY($1::uuid[])`, [ids])).rows as TaskRow[]).map((row) => [row.id, row]));
+  return ids.flatMap((id) => { const row = rows.get(id); return row ? [projectTask(row, names)] : []; });
+}
 export async function listMyTasks(q: Query, ownerId: string, names: Map<string, string>): Promise<TTaskView[]> {
   const rows = (await q(`${TASK_SELECT} WHERE t.owner_id=$1 ORDER BY t.created_at DESC,t.id`, [ownerId])).rows as TaskRow[];
   return rows.map((row) => projectTask(row, names));

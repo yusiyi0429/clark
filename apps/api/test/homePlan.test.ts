@@ -33,11 +33,13 @@ describe("首页计划",()=>{
       await create(f,f.member,null,{title:"没日期没开始"});
       const done=await create(f,f.member,"execution-two",{title:"已完成",dueDate:"2026-10-12"});
       await create(f,f.member,"execution-one",{title:"本周截止",dueDate:"2026-10-23"});
-      await f.t.sql("UPDATE tasks SET status='in_progress' WHERE id=$1",[running.id]);
+      await create(f,f.member,"execution-one",{title:"只有截止在下周没开始",dueDate:"2026-10-28"});
+      const dueLater=await create(f,f.member,"execution-two",{title:"只有截止在下周进行中",dueDate:"2026-10-28"});
+      await f.t.sql("UPDATE tasks SET status='in_progress' WHERE id=ANY($1::uuid[])",[[running.id,dueLater.id]]);
       await f.t.sql("UPDATE tasks SET status='done' WHERE id=$1",[done.id]);
       const plan=await read(f,f.member);
       expect(plan).toMatchObject({period:"2026-10",fallbackFrom:null,today:"2026-10-22",weekStart:"2026-10-19",weekEnd:"2026-10-25"});
-      expect(plan.activities).toHaveLength(6);
+      expect(plan.activities).toHaveLength(8);
       expect(byTitle(plan.activities)).toEqual({
         "只有截止已过期":{missionId:"execution-one",column:"week",overdue:true},
         "下周开始":{missionId:"execution-one",column:"later",overdue:false},
@@ -45,6 +47,8 @@ describe("首页计划",()=>{
         "没日期没开始":{missionId:null,column:"later",overdue:false},
         "已完成":{missionId:"execution-two",column:"done",overdue:false},
         "本周截止":{missionId:"execution-one",column:"week",overdue:false},
+        "只有截止在下周没开始":{missionId:"execution-one",column:"later",overdue:false},
+        "只有截止在下周进行中":{missionId:"execution-two",column:"week",overdue:false},
       });
     } finally { await f.t.close(); }
   });
@@ -56,9 +60,10 @@ describe("首页计划",()=>{
       await create(f,f.member,null,{title:"跨月",startDate:"2026-10-20",dueDate:"2026-11-05"});
       await create(f,f.member,null,{title:"下月初到期",dueDate:"2026-11-01"});
       await create(f,f.member,null,{title:"下月一号当天",startDate:"2026-11-01",dueDate:"2026-11-01"});
+      // 没开始、只写了截止：截止在本周以后的放「之后」。
       expect(byTitle((await read(f,f.member)).activities)).toEqual({
         "跨月":{missionId:null,column:"week",overdue:false},
-        "下月初到期":{missionId:null,column:"week",overdue:false},
+        "下月初到期":{missionId:null,column:"later",overdue:false},
       });
       const month=(await call(f,f.member,"GET","/api/me/plan?period=2026-10")).json();
       expect(month.groups.at(-1).items).toEqual([]);
@@ -73,6 +78,31 @@ describe("首页计划",()=>{
     } finally { await f.t.close(); }
   });
 
+  it("之前没做完的也列出，放本周算逾期：截止在 9 月的独立事项、挂在 9 月 Mission 下的；做完的不列，本月计划不变",async()=>{
+    const f=await executionFixture();
+    try {
+      f.setNow(OCT_22);
+      await f.t.sql(`INSERT INTO missions(id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,milestones,
+        source_ref,source_document_id,source_revision,source_title)
+        VALUES('september-one',1,'september-one','2026-09','九月',$1,'method','["growth"]','目标','[]','fixture://s','fixture',1,'fixture')`,[TEST_MEMBER.personId]);
+      await create(f,f.member,null,{title:"九月底到期没做完",dueDate:"2026-09-28"});
+      const doneLate=await create(f,f.member,null,{title:"九月底到期做完了",dueDate:"2026-09-28"});
+      await f.t.sql("UPDATE tasks SET status='done' WHERE id=$1",[doneLate.id]);
+      for (const [title,status] of [["九月 Mission 没做完","not_started"],["九月 Mission 进行中","in_progress"],["九月 Mission 做完了","done"]])
+        await f.t.sql(`INSERT INTO tasks(id,title,owner_id,created_by,status,mission_id,step_order,client_id)
+          VALUES($1,$2,$3,'self',$4,'september-one',1,$5)`,[randomUUID(),title,TEST_MEMBER.personId,status,randomUUID()]);
+      const plan=await read(f,f.member);
+      expect(plan.missions.map((m:{missionId:string})=>m.missionId)).toEqual(["execution-one","execution-two"]);
+      expect(byTitle(plan.activities)).toEqual({
+        "九月底到期没做完":{missionId:null,column:"week",overdue:true},
+        "九月 Mission 没做完":{missionId:"september-one",column:"week",overdue:true},
+        "九月 Mission 进行中":{missionId:"september-one",column:"week",overdue:true},
+      });
+      const month=(await call(f,f.member,"GET","/api/me/plan?period=2026-10")).json();
+      expect(month.groups.flatMap((group:{items:{title:string}[]})=>group.items.map((item)=>item.title))).toEqual([]);
+    } finally { await f.t.close(); }
+  });
+
   it("回退到上一个有 Mission 的月份",async()=>{
     const f=await executionFixture("confirmed","2026-09");
     try {
@@ -81,12 +111,20 @@ describe("首页计划",()=>{
         source_ref,source_document_id,source_revision,source_title)
         VALUES('august-one',1,'august-one','2026-08','八月',$1,'method','["growth"]','目标','[]','fixture://a','fixture',1,'fixture')`,[TEST_MEMBER.personId]);
       await create(f,f.member,null,{title:"本周到期的独立事项",dueDate:"2026-10-23"});
+      for (const [title,missionId] of [["八月 Mission 没做完","august-one"],["九月 Mission 没做完","execution-one"]])
+        await f.t.sql(`INSERT INTO tasks(id,title,owner_id,created_by,status,mission_id,step_order,client_id)
+          VALUES($1,$2,$3,'self','not_started',$4,1,$5)`,[randomUUID(),title,TEST_MEMBER.personId,missionId,randomUUID()]);
       const plan=await read(f,f.member);
       expect(plan).toMatchObject({period:"2026-09",fallbackFrom:"2026-09",today:"2026-10-22",weekStart:"2026-10-19",weekEnd:"2026-10-25"});
       expect(plan.missions.map((m:{missionId:string})=>m.missionId)).toEqual(["execution-one","execution-two"]);
       expect(plan.days).toHaveLength(30);
       expect(plan.days[0]).toEqual({date:"2026-09-01",workday:true});
-      expect(byTitle(plan.activities)).toEqual({"本周到期的独立事项":{missionId:null,column:"week",overdue:false}});
+      // 显示的是 9 月：9 月 Mission 下的照常分栏，更早（8 月）Mission 下没做完的放本周算逾期。
+      expect(byTitle(plan.activities)).toEqual({
+        "本周到期的独立事项":{missionId:null,column:"week",overdue:false},
+        "八月 Mission 没做完":{missionId:"august-one",column:"week",overdue:true},
+        "九月 Mission 没做完":{missionId:"execution-one",column:"later",overdue:false},
+      });
       const nobody=await read(f,f.third);
       expect(nobody).toMatchObject({period:"2026-10",fallbackFrom:null,missions:[],gates:[],activities:[]});
       expect(nobody.days).toHaveLength(31);
@@ -99,7 +137,7 @@ describe("首页计划",()=>{
     const f=await executionFixture("confirmed","2026-10",{planTasks:async(missions)=>{ calls.push(missions); return [task]; }});
     try {
       f.setNow(OCT_22);
-      await f.t.sql(`UPDATE missions SET milestones='["10/28 上线","没有日期","11/03 下月"]' WHERE id='execution-one'`);
+      await f.t.sql(`UPDATE missions SET milestones='["10/28 上线","没有日期","11/03 下月","10/29：试用","10/30: 收尾","10/31、复盘","10/27 - 联调"]' WHERE id='execution-one'`);
       await f.t.sql(`UPDATE missions SET milestones='[]' WHERE id='execution-two'`);
       await f.t.sql(`INSERT INTO missions(id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,milestones,
         source_ref,source_document_id,source_revision,source_title,placeholder)
@@ -108,7 +146,9 @@ describe("首页计划",()=>{
       const mark=(await call(f,f.member,"POST","/api/me/plan-marks",{missionId:"execution-one",date:"2026-10-26",label:"联调"})).json();
       await f.t.sql("INSERT INTO plan_marks(owner_id,mission_id,date,label) VALUES($1,'placeholder-one','2026-10-26','占位上的点')",[TEST_MEMBER.personId]);
       const plan=await read(f,f.member);
-      expect(plan.gates).toEqual([{missionId:"execution-one",date:"2026-10-28",label:"上线"}]);
+      // 日期后面的空白和分隔符（：: 、 -）一起去掉。
+      expect(plan.gates).toEqual([["2026-10-28","上线"],["2026-10-29","试用"],["2026-10-30","收尾"],["2026-10-31","复盘"],["2026-10-27","联调"]]
+        .map(([date,label])=>({missionId:"execution-one",date,label})));
       expect(plan.missions).toEqual([
         {missionId:"execution-one",code:"execution-one",title:"上线",cardId:f.card,color:"#2f63b0"},
         {missionId:"execution-two",code:"execution-two",title:"验证",cardId:f.card,color:"#2f8a7a"},
