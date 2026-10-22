@@ -23,6 +23,14 @@ export function tasksByDue(tasks: MemberTask[]): MemberTask[] {
       : a.task.dueDate ? -1 : b.task.dueDate ? 1 : a.index - b.index).map(({ task }) => task);
 }
 
+const PROGRESS_SOURCE: Record<NonNullable<MemberTask["latestProgress"]>["source"], string> = { web: "网页", codex: "Codex", claude: "Claude Code", github: "GitHub", other: "外部工具" };
+
+/** 外部工具最近一次写进来的进展：首页据此显示「最近同步」，不用手动刷新也知道新不新。 */
+export function lastExternalSync(tasks: MemberTask[]) {
+  return tasks.map((task) => task.latestProgress).filter((entry) => !!entry && entry.source !== "web")
+    .sort((a, b) => b!.createdAt.localeCompare(a!.createdAt))[0] ?? null;
+}
+
 export function dueLabel(date: string): string {
   const [, month, day] = date.split("-").map(Number);
   return `${month} 月 ${day} 日前`;
@@ -39,12 +47,13 @@ export function MemberTasks({ tasks, error, onNavigate }: {
 }) {
   const [showDone, setShowDone] = useState(false);
   const open = tasks.filter((task) => task.status !== "done" && task.status !== "returned").length;
+  const synced = lastExternalSync(tasks);
   const sorted = tasksByDue(tasks);
   const active = sorted.filter((task) => task.status !== "done");
   // 完成的收进「已完成」，默认折叠；最近更新的在前。
   const done = sorted.filter((task) => task.status === "done").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return <section className={s.tasks} aria-label="执行事项">
-    <div className={s.taskToolbar}><span>{open} 项执行事项在推进</span><StartTaskButton onNavigate={onNavigate} /></div>
+    <div className={s.taskToolbar}><span>{open} 项执行事项在推进{synced ? ` · 最近同步 ${monthDayTime(synced.createdAt)} · ${PROGRESS_SOURCE[synced.source]}` : ""}</span><StartTaskButton onNavigate={onNavigate} /></div>
     {error ? <p className={s.error} role="alert">{error}</p> : null}
     {active.length ? <div className={s.taskGrid}>{active.map((task) => {
       const href = `/me/tasks/${encodeURIComponent(task.id)}`;
@@ -56,7 +65,7 @@ export function MemberTasks({ tasks, error, onNavigate }: {
         {task.collaborators.length ? <p className={s.connections}>协作 · {task.collaborators.map((person) => person.name).join("、")}</p> : null}
         {task.status === "returned" && task.returnReason ? <p className={s.returned}>已退回：{task.returnReason}</p> : null}
         {task.latestProgress ? <p className={s.latestProgress} title={task.latestProgress.body.slice(0, 60)} aria-label={`最新进展：${task.latestProgress.body.slice(0, 60)}`}>
-          最新进展 · {({ web: "网页", codex: "Codex", claude: "Claude Code", github: "GitHub", other: "外部工具" })[task.latestProgress.source]} · {monthDayTime(task.latestProgress.createdAt)}
+          最新进展 · {PROGRESS_SOURCE[task.latestProgress.source]} · {monthDayTime(task.latestProgress.createdAt)}
         </p> : null}
       </Card>;
     })}</div> : tasks.length ? null : <p className={s.empty}>还没有执行事项</p>}

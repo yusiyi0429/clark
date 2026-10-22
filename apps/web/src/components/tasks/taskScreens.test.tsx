@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
 import type { components } from "@/lib/api/schema";
 import type { TMaterialView } from "@warmap/contracts";
-import { MemberTasks, tasksByDue } from "@/components/member/MemberTasks";
+import { MemberTasks, lastExternalSync, tasksByDue } from "@/components/member/MemberTasks";
 import { memberNoticeGroups } from "@/components/member/memberNotices";
 
 const state = vi.hoisted(() => ({ ask: vi.fn(), delete: vi.fn(), register: vi.fn(), press: new Map<string, () => void>(), cardClick: new Map<string, (event: unknown) => void>(), area: {} as Record<string, unknown> }));
@@ -69,6 +69,14 @@ describe("成员首页执行事项", () => {
     expect(html).toContain("最新进展 · Codex");
     expect(html).toContain('title="完成接口核对"');
     expect(html).toContain('aria-label="最新进展：完成接口核对"');
+  });
+  it("执行事项区显示外部工具最近一次同步的时间和工具；网页里写的不算，没有就不显示", () => {
+    const entry = (source: "web" | "codex" | "claude", createdAt: string) => ({ body: "进展", source, author: { personId: "sun", name: "孙铭泽" }, createdAt });
+    const items = [task("a", { latestProgress: entry("codex", "2026-10-05T06:20:00Z") }), task("b", { latestProgress: entry("claude", "2026-10-06T02:18:00Z") }),
+      task("c", { latestProgress: entry("web", "2026-10-07T02:00:00Z") })];
+    expect(lastExternalSync(items)?.source).toBe("claude");
+    expect(renderToStaticMarkup(<MemberTasks tasks={items} />)).toMatch(/最近同步 .+ · Claude Code/);
+    expect(renderToStaticMarkup(<MemberTasks tasks={[task("c", { latestProgress: entry("web", "2026-10-07T02:00:00Z") })]} />)).not.toContain("最近同步");
   });
   it("按截止排并保留同截止顺序；卡上有归属、日期、协作者和新建入口，不写步骤、不写等上一步，也没有状态按钮", () => {
     const items = [task("a", { dueDate: null }), task("b", { dueDate: "2026-10-12" }), task("c", { dueDate: "2026-10-02" })];
