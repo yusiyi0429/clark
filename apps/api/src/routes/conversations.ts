@@ -48,9 +48,7 @@ import { createCompanyMap, defaultFocus, scopeLabel } from "../companyMap.js";
 import { acceptIssueDraft, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, saveDraftMaterial } from "../issueDrafts.js";
 import { buildSceneAnchor } from "../sceneAnchor.js";
 import type { ConversationAnchor } from "../conversationAnchor.js";
-import { listMyTasks } from "../tasks.js";
-import { readMemberWork } from "../memberWork.js";
-import { readHomeCards } from "./cards.js";
+import { readHomeSnapshots } from "./cards.js";
 import { idParams, type AppInstance, type RouteContext, type SessionPerson } from "./shared.js";
 
 /** 场景锚点里对象页的叫法（按 scope 前缀）。 */
@@ -137,21 +135,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           }
           return [current.snapshot];
         }
-        if (person.role === "ceo") return (await readHomeCards(ctx, person)).cards.map((card) => ({
-          cardId: card.id, version: card.version, kind: card.kind, title: card.title, objectRef: card.objectRef, payload: card.payload,
-        }));
-        const names = personDisplayNames(peopleDirectory);
-        const [tasks, { work }] = await Promise.all([
-          listMyTasks(q, owner, names),
-          readMemberWork(q, peopleDirectory.searchPeople(undefined), env.sessionSecret, person, ctx.now()),
-        ]);
-        const item = (type: string, id: string, title: string, payload: unknown, version = 1): TReferenceSnapshot =>
-          ({ cardId: `${type}:${id}`, version, kind: type, title, objectRef: { type, id, version }, payload });
-        return [
-          ...tasks.map((task) => item("task", task.id, task.title, { task }, task.version)),
-          ...work.missionCards.map((card) => item("mission-card", card.cardId, `${card.battlefieldName} · ${card.period} 任务卡`, card)),
-          ...work.battlefields.map((field) => item("battlefield", field.id, field.name, { period: work.period, ...field })),
-        ];
+        return readHomeSnapshots(ctx, person);
       };
       const scene = {
         scene: req.params.scope === "global" ? (person.role === "ceo" ? "公司首页" : "我的工作台") : OBJECT_SCENES[req.params.scope.split(":", 1)[0]] ?? "对象详情",

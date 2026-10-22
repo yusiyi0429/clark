@@ -114,7 +114,7 @@ import { realDictationPolishDeps, type DictationPolishDeps } from "./dictationPo
 import { createThreadIntroAgent, type ThreadIntroAgent } from "./threadIntro.js";
 import { createTaskAcceptanceAgent, type TaskAcceptanceAgent } from "./taskAcceptanceDraft.js";
 import { personDisplayNames } from "./people.js";
-import { issueOriginFields } from "./dataOrigin.js";
+import { listPendingIssueSummaries } from "./issues.js";
 
 type ValidationItem = { instancePath?: string; dataPath?: string; message?: string };
 
@@ -415,21 +415,7 @@ export async function buildApp({
     readOntology,
     listMissions: (filters, viewer) => listConversationMissions(pool.query.bind(pool), filters, viewer),
     // 对话只读工具：实时待决策 Issue 清单（不含签名 Action，不可写入）。
-    listPendingIssues: async () => {
-      const result = await pool.query(
-        `SELECT id, title, location, urgency, research->>'status' AS research_status, created_at, origin_ref
-           FROM issues WHERE status = 'pending' ORDER BY created_at, id`,
-      );
-      return result.rows.map((row) => ({
-        id: String(row.id),
-        title: String(row.title),
-        location: row.location,
-        urgency: row.urgency,
-        researchStatus: String(row.research_status ?? "none"),
-        createdAt: new Date(row.created_at).toISOString(),
-        ...issueOriginFields(row.origin_ref),
-      }));
-    },
+    listPendingIssues: () => listPendingIssueSummaries(pool.query.bind(pool)),
   });
   const radar = radarService ?? {
     providerStatus: { web: false, wechat: false, outlets: false },

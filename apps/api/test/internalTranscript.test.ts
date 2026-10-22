@@ -40,7 +40,8 @@ function fakeApi(): FeishuMinutesApi & { calls: string[]; artifactsError: Error 
 
 const read = (t: TestApp, meetingId: string, headers: Record<string, string>) =>
   t.app.inject({ method: "GET", url: `/internal/confirmed-meetings/${meetingId}/transcript`, headers });
-const asOwner = (personId: string) => ({ authorization: `Bearer ${TOKEN}`, "x-owner-id": personId });
+/** 本轮视角（10/22 起必填）：CEO 用公司视角，其他人用成员视角。 */
+const asOwner = (personId: string) => ({ authorization: `Bearer ${TOKEN}`, "x-owner-id": personId, "x-viewer-role": personId === CEO ? "ceo" : "member" });
 async function authorize(t: TestApp, personId: string) {
   await t.sql("INSERT INTO feishu_identities (person_id, open_id, name) VALUES ($1, $2, $3)", [personId, `ou_${personId}`, personId]);
   await saveAuthorizedToken(t.pool.query.bind(t.pool), feishuEnv, personId, { accessToken: `u-${personId}`, expiresIn: 7200, scope: "offline_access" }, new Date());
@@ -76,6 +77,9 @@ describe("给独立 Chat 代读逐字稿", () => {
       // 服务凭据：不带、带错 → 401。
       expect((await read(t, meetingId, { "x-owner-id": HOST })).statusCode).toBe(401);
       expect((await read(t, meetingId, { authorization: "Bearer wrong", "x-owner-id": HOST })).statusCode).toBe(401);
+      // 没带视角 → 400（10/22 起必填），不去飞书读。
+      const noView = await read(t, meetingId, { authorization: `Bearer ${TOKEN}`, "x-owner-id": HOST });
+      expect([noView.statusCode, noView.json().code]).toEqual([400, "VIEW_REQUIRED"]);
 
       // 主持人：用他自己的 token 读，原样返回全文和两个摘要值。
       const ok = await read(t, meetingId, asOwner(HOST));

@@ -31,7 +31,8 @@ async function confirmThenEditDraft(t: TestApp, host: string, meetingId: string)
   await edit(t, host, meetingId, (draft) => { draft.sections[0].heading = DRAFT_ONLY; draft.summary = "草稿新改的摘要"; });
 }
 const internal = (t: TestApp, url: string, headers: Record<string, string>) => t.app.inject({ method: "GET", url, headers });
-const asOwner = (personId: string) => ({ authorization: `Bearer ${TOKEN}`, "x-owner-id": personId });
+/** 本轮视角（10/22 起必填）：CEO 用公司视角，其他人用成员视角。 */
+const asOwner = (personId: string) => ({ authorization: `Bearer ${TOKEN}`, "x-owner-id": personId, "x-viewer-role": personId === CEO ? "ceo" : "member" });
 /** 再复制 n 场已确认的会（目录上限用）。 */
 async function cloneConfirmed(t: TestApp, meetingId: string, n: number) {
   for (let i = 0; i < n; i++) {
@@ -135,6 +136,9 @@ describe("给独立 Chat 的确认会议只读接口", () => {
       expect((await internal(t, "/internal/confirmed-meetings", { "x-owner-id": CEO })).statusCode).toBe(401);
       expect((await internal(t, "/internal/confirmed-meetings", { authorization: "Bearer wrong", "x-owner-id": CEO })).statusCode).toBe(401);
       expect((await internal(t, `/internal/confirmed-meetings/${meetingId}`, { authorization: "Bearer wrong", "x-owner-id": CEO })).statusCode).toBe(401);
+      // 没带视角 → 400（10/22 起必填）。
+      const noView = await internal(t, "/internal/confirmed-meetings", { authorization: `Bearer ${TOKEN}`, "x-owner-id": CEO });
+      expect([noView.statusCode, noView.json().code]).toEqual([400, "VIEW_REQUIRED"]);
       // 带对凭据，没参会的成员 → 404；目录为空。
       expect((await internal(t, `/internal/confirmed-meetings/${meetingId}`, asOwner(OWNER))).statusCode).toBe(404);
       const memberList = await internal(t, "/internal/confirmed-meetings", asOwner(OWNER));
