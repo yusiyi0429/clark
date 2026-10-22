@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { THomePlanActivity, THomePlanResponse, TTaskView } from "@warmap/contracts";
 
@@ -7,6 +8,8 @@ import type { THomePlanActivity, THomePlanResponse, TTaskView } from "@warmap/co
  * 成员首页的 Mission 卡片与 useHomePlan。
  * 没有 jsdom（仓库惯例）：React 的 useState/useRef/useCallback/useEffect 换成按调用顺序记账的版本，renderToStaticMarkup 反复渲染到不再变；
  * 原生元素的 props 从 JSX 运行时截下来，按真实顺序直接调它们的处理器。时间轴换成桩，只收它拿到的 props。
+ * ts-design 的 Popover 换成按 isOpen 渲染内容的桩（Esc、点外面关由它负责，这里直接调 onOpenChange(false)）；
+ * Button 渲染成原生按钮，在 Popover 里又没有 onPress 时按一下就开合（同 DialogTrigger）。
  */
 type Props = Record<string, unknown>;
 const h = vi.hoisted(() => ({
@@ -15,6 +18,7 @@ const h = vi.hoisted(() => ({
   stateIndex: 0, refIndex: 0, callbackIndex: 0, effectIndex: 0, queued: [] as (() => void)[], dirty: false,
   elements: [] as { type: string; props: Record<string, unknown> }[],
   timeline: null as Record<string, unknown> | null,
+  popovers: [] as { open: boolean; change: (open: boolean) => void }[],
   api: { GET: vi.fn(), POST: vi.fn(), PATCH: vi.fn(), DELETE: vi.fn() },
 }));
 vi.mock("react", async (importOriginal) => {
@@ -61,6 +65,27 @@ vi.mock("react/jsx-dev-runtime", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react/jsx-dev-runtime")>();
   return { ...actual, jsxDEV: capture(actual.jsxDEV) };
 });
+vi.mock("ts-design", () => ({ TianshuPortalTheme: ({ children }: { children: ReactNode }) => <>{children}</> }));
+vi.mock("ts-design/primitives", async () => {
+  const { createContext, useContext } = await vi.importActual<typeof import("react")>("react");
+  type Control = { open: boolean; change: (open: boolean) => void };
+  const Open = createContext<Control>({ open: false, change: () => undefined });
+  const Popover = Object.assign(({ children, isOpen, onOpenChange }: { children: ReactNode; isOpen?: boolean; onOpenChange?: (open: boolean) => void }) => {
+    const control = { open: Boolean(isOpen), change: (open: boolean) => onOpenChange?.(open) };
+    h.popovers.push(control);
+    return <Open.Provider value={control}>{children}</Open.Provider>;
+  }, {
+    Content: ({ children }: { children: ReactNode }) => (useContext(Open).open ? <>{children}</> : null),
+    Dialog: ({ children, className: _className, ...props }: { children: ReactNode; className?: string }) => <div role="dialog" {...props}>{children}</div>,
+  });
+  const Button = ({ children, onPress, isDisabled, variant: _variant, size: _size, isIconOnly: _icon, ...props }: {
+    children: ReactNode; onPress?: (event: unknown) => void; isDisabled?: boolean; variant?: string; size?: string; isIconOnly?: boolean;
+  }) => {
+    const popover = useContext(Open);
+    return <button type="button" disabled={isDisabled} {...props} onClick={(event) => (onPress ? onPress(event) : popover.change(!popover.open))}>{children}</button>;
+  };
+  return { Button, Popover };
+});
 vi.mock("./DayTimeline", () => ({ DayTimeline: (props: Record<string, unknown>) => { h.timeline = props; return null; } }));
 vi.mock("@/components/tours/StartTaskButton", () => ({ StartTaskButton: () => null }));
 vi.mock("@/lib/api/client", () => ({ browserApi: h.api }));
@@ -102,7 +127,7 @@ const plan = (overrides: Partial<THomePlanResponse> = {}): THomePlanResponse => 
     { taskId: "t3", missionId: "m2", name: "Chat 客户版", doneDefinition: null, criteria: [] },
   ],
   activities: [
-    { item: item("a1", "回流方案定稿", { status: "done", dueDate: "2026-10-21", planTaskId: "t1", mission: confirmedRef }), missionId: "m1", column: "done", overdue: false },
+    { item: item("a1", "回流方案定稿", { status: "done", dueDate: "2026-10-21", planTaskId: "t1", mission: confirmedRef, collaborators: renhao }), missionId: "m1", column: "done", overdue: false },
     { item: item("a2", "对话架构与分工", { status: "done", dueDate: "2026-10-20", mission: confirmedRef }), missionId: "m1", column: "done", overdue: false },
     { item: item("a3", "真实会议跑通", { dueDate: "2026-10-24", planTaskId: "t1", collaborators: renhao }), missionId: "m1", column: "week", overdue: false },
     { item: item("a4", "Chat 服务抽出", { dueDate: "2026-10-16", planTaskId: "t2", mission: confirmedRef }), missionId: "m1", column: "week", overdue: true },
@@ -118,16 +143,11 @@ const event = () => ({ currentTarget: { id: "origin" }, target: { id: "origin" }
 function mount(initial = plan()) {
   let current = initial;
   const onNavigate = vi.fn();
-  const listeners = new Map<string, (event: unknown) => void>();
-  vi.stubGlobal("document", {
-    addEventListener: (name: string, listener: (event: unknown) => void) => listeners.set(name, listener),
-    removeEventListener: (name: string, listener: (event: unknown) => void) => { if (listeners.get(name) === listener) listeners.delete(name); },
-  });
   h.states = []; h.refs = []; h.callbacks = []; h.effects = [];
   let html = "";
   const render = () => {
     for (let pass = 0; pass < 8; pass++) {
-      h.stateIndex = 0; h.refIndex = 0; h.callbackIndex = 0; h.effectIndex = 0; h.dirty = false; h.queued = []; h.elements = [];
+      h.stateIndex = 0; h.refIndex = 0; h.callbackIndex = 0; h.effectIndex = 0; h.dirty = false; h.queued = []; h.elements = []; h.popovers = [];
       html = renderToStaticMarkup(<MissionPlanCard plan={current} onNavigate={onNavigate} />);
       h.queued.forEach((run) => run());
       if (!h.dirty) return html;
@@ -144,8 +164,12 @@ function mount(initial = plan()) {
   const call = (props: Props, handler: string, arg: unknown = event()) => { (props[handler] as (value: unknown) => unknown)(arg); return render(); };
   return {
     get html() { return html; },
-    onNavigate, listeners, render, find,
+    onNavigate, render, find,
     setPlan: (next: THomePlanResponse) => { current = next; return render(); },
+    /** 开着的浮层数（Popover 的 isOpen）。 */
+    openPopovers: () => h.popovers.filter((popover) => popover.open).length,
+    /** Esc 或点外面：Popover 调 onOpenChange(false)。 */
+    dismiss: () => { h.popovers.find((popover) => popover.open)!.change(false); return render(); },
     mission: (id: string) => call(get((props) => props["data-mission"] === id, `Mission ${id}`), "onClick"),
     task: (id: string) => call(get((props) => props["data-task"] === id, `Task ${id}`), "onClick"),
     info: () => call(get((props) => props["data-info"] !== undefined, "ⓘ"), "onClick"),
@@ -165,7 +189,7 @@ const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "
 const ok = (data: unknown = undefined) => ({ data, response: { ok: true, status: 200 } });
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   h.timeline = null;
   vi.stubGlobal("window", { dispatchEvent: vi.fn() });
 });
@@ -218,10 +242,10 @@ describe("MissionPlanCard：Mission 行", () => {
   it("回退显示上个月：「全部」上面写「9 月」，时间轴不画本周括线", () => {
     const html = mount(plan({ period: "2026-09", fallbackFrom: "2026-09", days: [{ date: "2026-09-30", workday: true }] })).html;
     expect(text(html)).toContain("9 月");
-    expect(h.timeline!.weekStart).toBe("");
-    expect(h.timeline!.weekEnd).toBe("");
+    expect(h.timeline!.showWeek).toBe(false);
     const current = mount().html;
     expect(text(current)).not.toMatch(/\d+ 月/);
+    expect(h.timeline!.showWeek).toBe(true);
     expect(h.timeline!.weekStart).toBe("2026-10-19");
   });
 
@@ -271,6 +295,17 @@ describe("MissionPlanCard：Task 行", () => {
     expect(view.find((props) => props["data-task"] === "t2")!["aria-pressed"]).toBe(false);
   });
 
+  it("所有 Activity 都挂上了 Task：不出「其他」；选着「其他」时重取变成 0，就当没选", () => {
+    const matched = plan({ activities: plan().activities.filter(({ item }) => ["t1", "t2", "t3"].includes(item.planTaskId ?? "")) });
+    expect(mount(matched).html).not.toContain('data-task="other"');
+    const view = mount();
+    view.task("other");
+    expect(cardsIn(view.html, "week")).toEqual(["a7"]);
+    view.setPlan(matched);
+    expect(view.html).not.toContain('data-task="other"');
+    expect(cardsIn(view.html, "week").sort()).toEqual(["a3", "a4", "a5"]);
+  });
+
   it("tasks 为空：没有 Task 行（连「其他」也没有），三栏照常", () => {
     const view = mount(plan({ tasks: [] }));
     expect(view.html).not.toContain("data-task-row");
@@ -305,16 +340,40 @@ describe("MissionPlanCard：Task 行", () => {
     view.task("t2");
     expect(view.find((props) => props["data-info"] !== undefined)).toBeUndefined();
   });
+
+  it("ⓘ 浮层 Esc 或点外面（Popover 的 onOpenChange(false)）就关", () => {
+    const view = mount();
+    view.task("t1");
+    view.info();
+    expect(view.openPopovers()).toBe(1);
+    expect(view.dismiss()).not.toContain('role="dialog"');
+    expect(view.openPopovers()).toBe(0);
+  });
+
+  it("ⓘ 浮层开着时重取回来那个 Task 没有完成定义和验收标准了：浮层关掉，状态清掉，内容回来也不重开", () => {
+    const view = mount();
+    view.task("t1");
+    view.info();
+    view.setPlan(plan({ tasks: plan().tasks.map((task) => ({ ...task, doneDefinition: null, criteria: [] })) }));
+    expect(view.html).not.toContain('role="dialog"');
+    expect(view.openPopovers()).toBe(0);
+    view.setPlan(plan());
+    expect(view.html).not.toContain('role="dialog"');
+    expect(view.openPopovers()).toBe(0);
+  });
 });
 
 describe("MissionPlanCard：三栏的卡片", () => {
-  it("一行小字：之后那栏写开始日期，其余写截止日期；没有日期写一起做的人；逾期的日期带 data-overdue", () => {
+  it("一行小字：本周、之后写「主体 · 截止日」，有哪个写哪个；已完成只写日期；逾期的日期带 data-overdue", () => {
     const html = mount().html;
     const card = (id: string) => html.match(new RegExp(`<button[^>]*data-activity="${id}"[^>]*>.*?</button>`))?.[0] ?? "";
-    expect(text(card("a3"))).toContain("10/24");
-    expect(text(card("a6"))).toContain("10/27");
-    expect(text(card("a5"))).toContain("你＋人豪");
-    expect(card("a4")).toMatch(/<small[^>]*data-overdue[^>]*>10\/16</);
+    const small = (id: string) => text(card(id).match(/<small[^>]*>.*<\/small>/)?.[0] ?? "").trim();
+    expect(small("a3")).toBe("你＋人豪 · 10/24");
+    expect(small("a5")).toBe("你＋人豪");
+    expect(small("a7")).toBe("10/23");
+    expect(small("a1")).toBe("10/21");
+    expect(card("a6")).not.toContain("<small");
+    expect(card("a4")).toMatch(/<span[^>]*data-overdue[^>]*>10\/16</);
     expect(card("a3")).not.toContain("data-overdue");
   });
 
@@ -387,15 +446,14 @@ describe("MissionPlanCard：计划点", () => {
     expect(view.html).toContain('data-mark-pop="add"');
   });
 
-  it("Escape 关掉浮层，并且不让外层工作区接着处理", () => {
+  it("加点浮层 Esc 或点外面（Popover 的 onOpenChange(false)）就关，不提交", () => {
     const view = mount();
     view.timeline("onAddMark", "2026-10-24");
-    const escape = { key: "Escape", isComposing: false, preventDefault: vi.fn(), stopPropagation: vi.fn() };
-    view.listeners.get("keydown")!(escape);
-    expect(view.render()).not.toContain("data-mark-pop");
-    expect(escape.preventDefault).toHaveBeenCalled();
-    expect(escape.stopPropagation).toHaveBeenCalled();
-    expect(view.listeners.has("keydown")).toBe(false);
+    view.type("评审");
+    expect(view.openPopovers()).toBe(1);
+    expect(view.dismiss()).not.toContain("data-mark-pop");
+    expect(view.openPopovers()).toBe(0);
+    expect(h.api.POST).not.toHaveBeenCalled();
   });
 
   it("右键或长按计划点：先出「删除」，点了才删；点之前时间轴上还在", async () => {
@@ -448,6 +506,91 @@ describe("MissionPlanCard：计划点", () => {
     const fresh = plan({ marks: [...plan().marks, { id: "k9", missionId: "m1", date: "2026-10-24", label: "评审" }] });
     view.setPlan(fresh);
     expect(h.timeline!.marks).toBe(fresh.marks);
+  });
+
+  const deferred = () => {
+    let resolve!: (value: unknown) => void;
+    return { promise: new Promise((done) => { resolve = done; }), resolve };
+  };
+  const markIds = () => (h.timeline!.marks as { id: string }[]).map((mark) => mark.id);
+  const markDates = () => Object.fromEntries((h.timeline!.marks as { id: string; date: string }[]).map((mark) => [mark.id, mark.date]));
+
+  it("删除还在路上时轮询回来的旧计划不会把点画回来；存好、重取看不到它之后这条才撤掉", async () => {
+    const sent = deferred();
+    h.api.DELETE.mockReturnValue(sent.promise);
+    const view = mount();
+    view.timeline("onDeleteMark", "k1");
+    view.click((props) => props["data-delete"] !== undefined, "删除");
+    expect(markIds()).toEqual([]);
+    view.setPlan(plan());
+    expect(markIds()).toEqual([]);
+    sent.resolve({ response: { ok: true, status: 204 } });
+    await settle();
+    view.render();
+    view.setPlan(plan());
+    expect(markIds()).toEqual([]);
+    view.setPlan(plan({ marks: [] }));
+    expect(markIds()).toEqual([]);
+    // 已经撤掉：之后服务端再有 k1，照服务端画。
+    view.setPlan(plan());
+    expect(markIds()).toEqual(["k1"]);
+  });
+
+  it("一条失败只撤它自己：另一条还在路上的照样画着", async () => {
+    const moving = deferred();
+    h.api.PATCH.mockReturnValue(moving.promise);
+    h.api.POST.mockResolvedValue({ error: { message: "一个 Mission 下最多 20 个计划点" }, response: { ok: false, status: 409 } });
+    const view = mount();
+    view.timeline("onMoveMark", "k1", "2026-10-27");
+    view.mission("m1");
+    view.timeline("onAddMark", "2026-10-24");
+    view.type("评审");
+    view.key("Enter");
+    expect(markDates()).toEqual({ k1: "2026-10-27", [markIds()[1]]: "2026-10-24" });
+    await settle();
+    const html = view.render();
+    expect(markDates()).toEqual({ k1: "2026-10-27" });
+    expect(html).toContain("一个 Mission 下最多 20 个计划点");
+    view.setPlan(plan());
+    expect(markDates()).toEqual({ k1: "2026-10-27" });
+    moving.resolve(ok({ id: "k1", missionId: "m1", date: "2026-10-27", label: "联调" }));
+    await settle();
+    view.render();
+    expect(markDates()).toEqual({ k1: "2026-10-27" });
+  });
+
+  it("新加的点在 POST 回来之前不能拖、不能删；回来后换成真 id，可以删", async () => {
+    const posting = deferred();
+    h.api.POST.mockReturnValue(posting.promise);
+    const view = mount();
+    view.mission("m1");
+    view.timeline("onAddMark", "2026-10-24");
+    view.type("评审");
+    view.key("Enter");
+    const temp = markIds()[1];
+    expect(temp).toMatch(/^pending-/);
+    view.timeline("onMoveMark", temp, "2026-10-27");
+    view.timeline("onDeleteMark", temp);
+    expect(h.api.PATCH).not.toHaveBeenCalled();
+    expect(view.html).not.toContain("data-mark-pop");
+    posting.resolve(ok({ id: "k9", missionId: "m1", date: "2026-10-24", label: "评审" }));
+    await settle();
+    view.render();
+    expect(markIds()).toEqual(["k1", "k9"]);
+    view.timeline("onDeleteMark", "k9");
+    expect(view.html).toContain('data-mark-pop="delete"');
+  });
+
+  it("删点浮层对着的点重取后不在了：浮层关掉、状态清掉，点再回来也不重开", () => {
+    const view = mount();
+    view.timeline("onDeleteMark", "k1");
+    expect(view.openPopovers()).toBe(1);
+    view.setPlan(plan({ marks: [] }));
+    expect(view.html).not.toContain("data-mark-pop");
+    expect(view.openPopovers()).toBe(0);
+    view.setPlan(plan());
+    expect(view.html).not.toContain("data-mark-pop");
+    expect(view.openPopovers()).toBe(0);
   });
 });
 

@@ -4,7 +4,7 @@
  * 成员首页的本月时间轴：一天一格，只管画和把操作交出去，不取数。
  *
  * - 格子：还没到的工作日深蓝、休息日浅蓝，过去的统一灰；今天加一圈描边，下面写「今天」。
- *   格子下面只标 1 号、逢 5、今天和月末；再下面一道括线圈出本周（截到本月以内），写「本周还剩 N 个工作日」。
+ *   格子下面只标 1 号、逢 5、今天和月末；再下面一道括线圈出本周（截到本月以内），写「本周还剩 N 个工作日」；showWeek=false 时不画本周。
  * - 格子上方按日期放签定关口（实心菱形）和计划点（空心圆），颜色是所属 Mission 的颜色；同一天的并排放。
  *   名字只在 title 和读屏文字里。聚焦某个 Mission 时，其他 Mission 的点淡掉。
  * - 计划点：按住拖到别的格子（按整格吸附，松手时改日期；拖出格子那一带或按 Esc 就放回原处）；右键或手指长按删除。点格子加计划点。
@@ -27,6 +27,8 @@ export type DayTimelineProps = {
   today: string;
   weekStart: string;
   weekEnd: string;
+  /** false 时不画本周（括线、细线上的本周底带和字），比如回退显示上个月时。默认画。 */
+  showWeek?: boolean;
   gates: THomePlanGate[];
   marks: THomePlanMark[];
   colorOf: (missionId: string) => string;
@@ -54,7 +56,7 @@ const shortDate = (date: string) => `${month(date)}/${dayOfMonth(date)}`;
 const pct = (fraction: number) => `${(fraction * 100).toFixed(2)}%`;
 const tone = (color: string) => ({ "--c": color }) as CSSProperties;
 
-export function DayTimeline({ days, today, weekStart, weekEnd, gates, marks, colorOf, focus, onAddMark, onMoveMark, onDeleteMark }: DayTimelineProps) {
+export function DayTimeline({ days, today, weekStart, weekEnd, showWeek = true, gates, marks, colorOf, focus, onAddMark, onMoveMark, onDeleteMark }: DayTimelineProps) {
   const gesture = useRef<Gesture | null>(null);
   const [drop, setDrop] = useState<{ id: string; date: string } | null>(null);
 
@@ -66,7 +68,7 @@ export function DayTimeline({ days, today, weekStart, weekEnd, gates, marks, col
   const dimmed = (missionId: string) => (focus !== null && missionId !== focus) || undefined;
 
   const todayIndex = days.findIndex((day) => day.date === today);
-  const weekIndexes = days.flatMap((day, index) => (day.date >= weekStart && day.date <= weekEnd ? [index] : []));
+  const weekIndexes = showWeek ? days.flatMap((day, index) => (day.date >= weekStart && day.date <= weekEnd ? [index] : [])) : [];
   const week = weekIndexes.length
     ? {
         first: weekIndexes[0],

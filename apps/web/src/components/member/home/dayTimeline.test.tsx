@@ -128,6 +128,14 @@ describe("DayTimeline：一天一格", () => {
     expect(brace).toContain("本周还剩 1 个工作日");
   });
 
+  it("showWeek=false：本周落在这个月里也不画括线，细线上没有本周底带和「本周」", () => {
+    const html = render({ showWeek: false });
+    expect(html).not.toContain("data-week");
+    expect(html).not.toContain("本周");
+    expect(dayTag(html, "2026-10-22")).toContain('data-state="today"');
+    expect(render()).toContain("data-week");
+  });
+
   it("本周不在这个月（回退显示上个月）：不画括线，也没有今天那格", () => {
     const html = render({ today: "2026-11-23", weekStart: "2026-11-23", weekEnd: "2026-11-29" });
     expect(html).not.toContain("data-week");
