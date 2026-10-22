@@ -11,7 +11,7 @@ import { BATTLEFIELD_MEMBERS, weekPeriod, weeklyReviewText } from "./weeklyRevie
 /**
  * 三层取用（已定设计 5a、议题 2）：每个页面的 Agent 都用同一套工具沿公司地图读，页面只决定默认焦点（focus）。
  * - read_mission_cards：Mission 卡（目标、计划），全员可读（个人卡准备期间仍只有本人看得到，canReadMission）；
- * - read_progress：执行事项进展（采集整理出的进展都已写进执行事项）、执行事项状态；
+ * - read_progress：执行事项进展（含采集整理后归到执行事项的进展）、执行事项状态；
  * - read_reviews：月度复盘（个人、战场 / 能力域，附评论）与周复盘；
  * - read_object_tree：从公司、战场、Mission、Task 或某个人出发，向上、向下、向旁边走。
  * 进展与复盘按 canReadProgress 判（CEO 全部，其他人同一战场）；看不到的不返回，只在结果里记 filtered 条数，Agent 必须说明。

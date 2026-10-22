@@ -217,7 +217,7 @@ const weeklyReviewService = createWeeklyReviewService({ pool, agent: createWeekl
   people: () => peopleDirectory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId) });
 const weeklyReviewScheduler = createWeeklyReviewScheduler(weeklyReviewService);
 // 采集器原文整理（D-02）：同一个 heavy 模型，每 5 分钟整理一次，原文 14 天后清空。TODO(jobs)：jobs 合入后迁成周期任务。
-const collectorDistillScheduler = createCollectorDistillScheduler(pool, createCollectorDistillAgent(reviewAgentOptions), () => personDisplayNames(peopleDirectory));
+const collectorDistillScheduler = createCollectorDistillScheduler(pool, createCollectorDistillAgent(reviewAgentOptions));
 const now = () => new Date();
 const missionRoundScheduler = createMissionRoundScheduler(pool, now);
 const collectorHealthScheduler = createCollectorHealthScheduler(pool, now);
