@@ -23,6 +23,12 @@ test('Legacy identity is server-verified; client member IDs and unrelated cookie
   await assert.rejects(auth({...req,headers:{...req.headers,host:'evil.example'}},'/api/data'),{status:403});
   assert.deepEqual(await auth({method:'POST',headers:{'x-m2-internal-token':env.M2_INTERNAL_TOKEN},socket:{remoteAddress:'127.0.0.1'}},'/api/nexus'),{internal:true});
   await assert.rejects(auth({method:'POST',headers:{'x-m2-internal-token':env.M2_INTERNAL_TOKEN},socket:{remoteAddress:'10.0.0.2'}},'/api/nexus'),{status:403});
+  // 复盘 → 拆解: the server starts the next round on itself through /api/rounds; no other path takes the internal token.
+  assert.deepEqual(await auth({method:'POST',headers:{'x-m2-internal-token':env.M2_INTERNAL_TOKEN},socket:{remoteAddress:'127.0.0.1'}},'/api/rounds'),{internal:true});
+  // Installing a review run from inside the container takes the same loopback + token check.
+  assert.deepEqual(await auth({method:'POST',headers:{'x-m2-internal-token':env.M2_INTERNAL_TOKEN},socket:{remoteAddress:'127.0.0.1'}},'/api/review-import'),{internal:true});
+  await assert.rejects(auth({method:'POST',headers:{'x-m2-internal-token':'wrong'},socket:{remoteAddress:'127.0.0.1'}},'/api/review-import'));
+  await assert.rejects(auth({method:'POST',headers:{'x-m2-internal-token':env.M2_INTERNAL_TOKEN},socket:{remoteAddress:'127.0.0.1'}},'/api/actions'),{status:403});
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 test('Duplicate identity and member bindings are rejected; roster roles are never supplied by the browser',()=>{

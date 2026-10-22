@@ -20,9 +20,22 @@ M2 是同站点 `/m2/` 的独立应用。主站入口、发布脚本、备份与
 
 - `M2_MODEL`、`M2_CHAT_MODEL`（容器内为 `DECODING_MODEL`、`DECODING_CHAT_MODEL`）缺省都是 `wangsu/claude-sonnet-5-5`。前者用于拆解生成，后者用于 Nexus 群聊和私人 Agent。Claude 在 TokenHub 上只走 Messages 接口，程序按 TokenHub 地址自动改用 `/api/anthropic/v1/messages`，不用另配地址；同一个 `M2_MODEL_KEY` 即可。
 - Messages 流断开时，`.runtime/stream-breaks.jsonl`（在 `m2_state` 卷里）记一行诊断：时间、模型、请求编号、持续时间、字节数、最后 15 个事件的类型名和原因，不含模型输出和密钥。需要排查时从卷里导出。
-- `M2_ROUND_OPERATORS` 写成员编号（逗号分隔，如 `member-04`）。名单里的人和 CEO 一样，可以在页面上开始、续跑、载入新一轮，并看到生成进度详情；不带确认计划或查看计划审核的权限。缺省为空，只有 CEO 能开新一轮。
+- `M2_ROUND_OPERATORS` 写成员编号（逗号分隔，如 `member-04`）。名单里的人和 CEO 一样，可以在页面上开始、续跑、载入新一轮，并看到生成进度详情；不带确认计划或查看计划审核的权限。缺省为 `member-04`（陈溪南）：她和 CEO 能开新一轮，也看得到页面上的“管理”入口。
 - `M2_CASCADE=off` 关闭下级对齐：上级卡片修订后，Nexus 不再按技能对照下级并出修订卡。缺省开启。
-- 技能随镜像固定为 `apps/m2/skill`（tkos-decoding 3.1.5，指纹 `01a9b1723261`）。新一轮从本体生成时，私有 seed 里的 `source-manifest.json` 要用 10/17 版本体选择清单（各单元 10 月 PO、Mission、Task 标为参考答案，不进入生成）。只阅读和协作已有计划时不受影响。
+- 技能随镜像固定：拆解 `apps/m2/skill`（tkos-decoding 3.1.7，指纹 `c07ad2c3defc`），复盘 `apps/m2/review-skill`（tkos-review 2.0.4，指纹 `7756dce16b5d`）。新一轮从本体生成时，私有 seed 里的 `source-manifest.json` 要用 11 月拆解的本体选择清单（`ontology-manifest-202611-20261022`，各单元 10 月 PO、Mission、Task 标为参考答案，不进入生成）。只阅读和协作已有计划时不受影响。
+- `M2_PLAN_HANDOFF` 缺省 `generate`：CEO 确认公司复盘后，服务按已确认的复盘自动开始下月拆解（要求 `M2_WORLD_READ_TOKEN` 已配置）。设为 `prepare` 时只准备输入包，不生成。
+
+## 上线一轮复盘
+
+复盘在服务器外生成，结果文件（复盘评测的 `state.json`）通过受控渠道放进私有 seed 目录（`M2_SEED_DIR`），再在 m2 容器里导入：
+
+```bash
+docker compose ... exec m2 node import-review.mjs <seed 里的文件名> --period 2026-10 --cutoff 2026-10-22T23:59:59+08:00 --label "10 月复盘 2.0.4（10/22）"
+```
+
+- 导入前把当前协作状态整份存到 `m2_state` 卷的 `archive/collaboration-before-review-<时间>.json`（另存一份 archives 附表），留作评测和追溯。
+- 导入后是一轮干净的复盘：之前的群聊、私聊、批注、修订卡和 Nexus 纪要移入归档；旧的复盘→拆解交接、单元完成标记和生成尝试记录清空。拆解页在复盘全部确认前不能切换。
+- 有生成任务在跑时会拒绝导入。命令只经本机回环和 `M2_INTERNAL_TOKEN` 调用正在运行的服务，不另起进程写状态文件。
 
 ## 从已上线版本升级
 

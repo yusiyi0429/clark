@@ -16,3 +16,5 @@ async function loadPublished(number){
  return value;
 }
 export function skillLocation(){return pathToFileURL(resolve(process.env.DECODING_SKILL_DIR||new URL('./skill/',import.meta.url).pathname)+'/');}
+// Review skill (tkos-review) the Nexus pass reads for review cards; shipped beside the decoding skill.
+export function reviewSkillLocation(){return pathToFileURL(resolve(process.env.DECODING_REVIEW_SKILL_DIR||new URL('./review-skill/',import.meta.url).pathname)+'/');}

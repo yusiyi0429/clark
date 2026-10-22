@@ -4,7 +4,7 @@ export const interventionCooldownMs=120000;
 // "改完了吗 / 还差什么 / 谁还没确认" asked to the group (not to a named person) is for Nexus to answer.
 export function progressQuestion(e){const t=String(e.text||'');return /(改完了吗|改好了吗|都改了吗|进度|还差|还剩|到哪了|谁还没|都确认了吗|确认了吗|完成了吗|搞定了吗|还有什么没)/.test(t)&&!/[@＠](?!\s*(Nexus|Co[- ]?agent))/i.test(t);}
 export function directQuestion(e){
- return progressQuestion(e)||/[@＠]\s*(Nexus|Co[- ]?agent)/i.test(e.text)||/(Nexus|Co[- ]?agent)[，,：:\s]*(请|帮|你|怎么看|是否|能否|总结|整理|核对|分析|回答)/i.test(e.text)||e.replyToAuthor==='Nexus'||e.answersNexus===true;
+ return progressQuestion(e)||/[@＠]\s*(Nexus|Co[- ]?agent)/i.test(e.text)||/(Nexus|Co[- ]?agent)[，,：:\s]*(请|帮|你|怎么看|是否|能否|总结|整理|核对|分析|回答)/i.test(e.text)||e.replyToAuthor==='Nexus'||e.answersNexus===true||!!e.answers;
 }
 export function participationDecision(value,{fresh=[],manual=false,lastIntervention,now=Date.now()}){
  const called=manual||fresh.some(directQuestion);

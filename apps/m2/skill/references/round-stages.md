@@ -50,6 +50,13 @@
 3. P0 Task 装不下时不推，也不压低估计凑数，写进 decisionsForCEO：缺多少人日，可选加人、推迟哪个 P0，或改由谁做。
 4. 每条改动写一句理由。只改这个人的 Task。
 
+**单条新增 Mission**（stage 为 mission-add，整轮生成之后，有人在讨论里要求给某个 PO 加一条 Mission 时调用。输入：这个 PO、它已有的 Mission、其他单元的 Mission 简表 otherUnitsMissions、每人本月已排人日和容量 ownerLoad、上月复盘的结论和给下月的输入、讨论原文、人员名单、本期和起排日）：
+1. 先判断要不要新增：讨论里要的事如果已经在本单元或 otherUnitsMissions 的某条 Mission 或 Task 里，或者只是某条 Mission 的一个阶段或侧面，不新增，mission 写 null，在 gaps 里写明应该并进哪条 Mission。主要为某个战场做的事，加在那个战场的 PO 下（method.md 第 3 节）。
+2. 写一条完整的结果线，写法和整轮生成一样：标题、成果、验收、负责人、档位、起止日期、风险。负责人首选 PO 的 RU DRI 指定的人，只能从 people 里选。
+3. 定档位要看这个 PO 已有的 Mission：一个 PO 下最多 2 条 P0；新增的一般是 P1 或 P2，只有讨论里写明这是本月成败所系，才定 P0，并在风险里写清它挤占了谁的时间。
+4. 下面写 2–4 个 Task（method.md 第 5 节）：按交付物分，能重叠的重叠，日期从起排日开始、不超出本期，投入只算人的时间。
+5. 新增会加重负责人的负荷：按 ownerLoad 看负责人加上这条以后是否超出容量。超出时换一个装得下、职责对口的人做负责人；没有合适的人，就在风险里写清超出多少人日、建议推迟或让出哪项工作，交 RU DRI 决定，不压低估时。
+
 **5. 总校验与修改**：三组同时查全部类型，重点查跨 RU 的重复、人日负荷（按程序给的 loadFacts）、日期和依赖（按 scheduleFacts）、悬空需求、上级要素覆盖（按 upstreamFacts）。修改时把程序实测超出字数的字段（lengthFindings）一并改短。
 
 ## 字段
@@ -77,7 +84,7 @@
 **怎样判断：**
 - **真重复**：两处承诺了同一个成果。同一事件里提供方和使用方各管一部分不算。
 - **拆散**：同一条结果线按阶段或侧面拆成了几个 Mission，常见于同一个人在同一个 RU 负责两条以上 Mission（看程序给的 splitFacts）；或 Task 拆得太碎：人的投入不到 1 人日、又是同一个人接着做，或一个 Mission 超过 4 个 Task（看 scheduleShapeFacts 的 smallTasks、crowdedMissions）。改法是合并，阶段和侧面改成 Task 或成功标准，碎 Task 并进相邻的 Task。
-- **档位倒挂**：Task 的档位高于所属 Mission；或档位没分出先后——全公司某一档明显多于三分之一或 P2 明显少于三分之一，或一个 P0 Mission 里 P0 Task 超过一半，或 Task 照抄 Mission 的档位（看程序给的 tierFacts）。
+- **档位倒挂**：Task 的档位高于所属 Mission；或档位没分出先后——全公司 P0 超过四成、P1 明显多于三分之一或 P2 明显少于五分之一，或一个 P0 Mission 里 P0 Task 超过一半，或 Task 照抄 Mission 的档位（看程序给的 tierFacts）。
 - **结构与表达**：用了要人再翻译的抽象说法（见 reader-format.md 第 0 条；程序会在 lengthFindings 里列出疑似的地方），或句子不通、重复。
 - **放错地方**：主要为某个战场做的事写成了能力域的 Mission 或供给（看程序给的 placementFacts：只回应了一个战场需求的能力域 Mission；也要看能力域自己写的、贡献只讲某一个战场的 Mission），或长期能力写在战场；或把本 RU 上月的欠账推给别的 RU。放错的要写两条问题：一条给能力域，删掉这条 Mission；一条给战场，写清要加什么 Mission 或 Task、负责人是谁（可以是能力域的人）、哪天交。
 - **漏接上级要素**：本月要跨过的那一步没有落到 Mission；或上月 CEO 点名的缺口没有着落；或程序给的 upstreamFacts 里没被引用的编号。

@@ -30,7 +30,9 @@ export default function EntryMetadata({data:incoming}){
  // Every row is one field and its value; the check row splits into data / decomposition / workload.
  return <section className="entry-metadata" aria-label="本轮数据与版本">
   <dl>
-   <div><dt>当前轮次</dt><dd>第 {data.round} 轮 · 资料读取于 {date}（北京时间）</dd></div>
+   {data.review&&<div><dt>本月复盘</dt><dd>{data.review.label} · 资料截至 {String(data.review.cutoff||'').slice(5,10).replace('-','/')} · 共 {data.review.total} 份，已确认 {data.review.confirmed}{data.review.problems>0&&` · ${data.review.problems} 份没生成`}</dd></div>}
+   {data.review&&!(String(data.generationTiming?.finishedAt||'')>String(data.review.loadedAt||''))&&<div><dt>本月拆解</dt><dd>复盘全部确认、CEO 确认公司复盘后自动生成；下面是上一版拆解的信息</dd></div>}
+   <div><dt>拆解轮次</dt><dd>第 {data.round} 轮 · 资料读取于 {date}（北京时间）</dd></div>
    <div><dt>技能版本</dt><dd>{skillLine(data)}</dd></div>
    <div><dt>当前模型</dt><dd>{modelLine(data)}</dd></div>
    <div><dt>数据来源</dt><dd>{sourceNames[data.sourceMode]||data.sourceMode||'旧轮未记录'}{data.sourceCoverage?<SourceCoverage coverage={data.sourceCoverage}/>:data.sourceTitles?.length>0&&<span className="entry-source-titles">{data.sourceTitles.join('、')}</span>}</dd></div>

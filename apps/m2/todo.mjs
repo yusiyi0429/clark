@@ -1,6 +1,13 @@
 // Display-only: what needs this member's attention now, so a review afternoon has a clear queue.
 // Order: proposals to accept → upper-level changes to check → versions the other side already signed →
 // @mentions → new comments on my cards → versions nobody has signed yet.
+import {disagrees,agrees} from './stance.mjs';
+// 签字方反对要有出路 (陈溪南 2026-10-22 走查第 2 条): someone else objecting on my card, with no word from me since, waits on me.
+export function openObjections(list=[],name){
+ const sorted=[...list].sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
+ const lastMine=sorted.filter(c=>c.author===name).at(-1)?.createdAt||'';
+ return sorted.filter(c=>c.author!==name&&c.author!=='Nexus'&&String(c.createdAt||'')>lastMine&&disagrees(c.text)&&!agrees(c.text));
+}
 const flat=units=>{const out=[];const walk=(n,parent)=>{out.push({n,parent});(n.children||[]).forEach(c=>walk(c,n));};(units||[]).forEach(u=>walk(u,null));return out;};
 const slotsOf=n=>n.level==='po'?['ceo','unitDri']:n.level==='mission'?['unitDri','missionDri']:[];
 const time=v=>Date.parse(v||'')||0;
@@ -19,10 +26,14 @@ export function todoItems({units,drafts={},records={},comments={},profile,name,s
  const upstream=new Map();
  for(const {n,parent} of nodes)if(n.upstreamChange&&mayCheck(n)&&!seen[upstreamKey(n)]){const key=n.level==='task'&&parent?parent.id:n.id;if(!upstream.has(key))upstream.set(key,{kind:'upstream',rank:1,cardId:n.id,groupId:key,count:0});upstream.get(key).count++;}
  items.push(...upstream.values());
+ // A card below mine changed what mine may quote (dates, checks, verdict): one line per card (2026-10-22).
+ for(const {n} of nodes)if(n.downstreamChange&&mine(n))items.push({kind:'downstream',rank:1,cardId:n.id,childId:n.downstreamChange.cardId,staleDates:n.downstreamChange.staleDates||[],at:time(n.downstreamChange.at)});
  for(const {n} of nodes){const slots=slotsOf(n);if(!slots.length||n.upstreamChange)continue;const signed=s=>(n.signatures||[]).some(x=>x.slot===s);
   for(const slot of slots)if(allowed(slot,n)&&!signed(slot)){const other=slots.some(s=>s!==slot&&signed(s));items.push({kind:'sign',rank:other?2:5,cardId:n.id,version:n.version,otherSigned:other});break;}}
  for(const [room,list] of Object.entries(records))if(room.startsWith('group:'))for(const m of list||[])
-  if(m.author!==name&&m.kind!=='notice'&&String(m.text||'').includes('@'+name)&&time(m.createdAt)>(seen[room]||0))items.push({kind:'mention',rank:3,scope:room.slice(6),id:m.id,author:m.author,text:m.text,at:time(m.createdAt)});
+  // Only lines that name this member; notices to everyone (@所有人) stay in the group, not the queue (陈溪南 2026-10-22).
+  if(m.author!==name&&m.kind!=='notice'&&!m.broadcast&&String(m.text||'').includes('@'+name)&&time(m.createdAt)>(seen[room]||0))items.push({kind:'mention',rank:3,scope:room.slice(6),id:m.id,author:m.author,text:m.text,at:time(m.createdAt)});
+ for(const {n} of nodes){const against=mine(n)?openObjections(comments[n.id],name):[];if(against.length)items.push({kind:'objection',rank:1,cardId:n.id,id:against.at(-1).id,author:against.at(-1).author,text:against.at(-1).text,count:against.length,at:time(against.at(-1).createdAt)});}
  for(const {n} of nodes){const fresh=(comments[n.id]||[]).filter(c=>c.author!==name&&time(c.createdAt)>(seen['card:'+n.id]||0));if(fresh.length&&mine(n))items.push({kind:'comment',rank:4,cardId:n.id,count:fresh.length,at:Math.max(...fresh.map(c=>time(c.createdAt)))});}
  return items.sort((a,b)=>a.rank-b.rank||(b.at||0)-(a.at||0));
 }

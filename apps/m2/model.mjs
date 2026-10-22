@@ -1,4 +1,5 @@
 import {request as httpRequest} from 'node:http';
+import {redactMessages} from './redact.mjs';
 import {request as httpsRequest} from 'node:https';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
@@ -84,7 +85,10 @@ export function patientTransport(url,{method,headers,body,signal}){
   req.end(body);
  });
 }
-export async function createModelGateway({env=process.env,readSecretFile=readFile,readLocalSecret=readLocalKey,transport=fetch}={}){
+// A refusal is its own failure (模型调用稳定性加固 2026-10-22): the same request retried gets refused again, so callers
+// handle it apart from a cut-off answer. diagnostics.finishReason stays 'refusal' for callers that already read it.
+function refusal(model,usage,id,extra={}){const e=Error('模型拒绝回答这次请求，未应用内容');e.status=502;e.code='MODEL_REFUSAL';e.diagnostics={model,finishReason:'refusal',usage,...extra};recordModelRun({channel:'model-failure',model,usage,providerRequestId:id,failure:e.diagnostics}).catch(()=>{});return e;}
+export async function createModelGateway({env=process.env,readSecretFile=readFile,readLocalSecret=readLocalKey,transport=fetch,redact=false}={}){
  const base=env.DECODING_API_BASE||TOKENHUB_BASE;
  const model=env.DECODING_MODEL||TOKENHUB_MODEL;
  const endpoint=new URL(base.replace(/\/?$/,'/')+'chat/completions');
@@ -98,10 +102,14 @@ export async function createModelGateway({env=process.env,readSecretFile=readFil
  async function messagesComplete(messages,{json,maxTokens,timeoutMs,thinking,reasoningEffort,onDelta,signal,startedAt}){
   const system=messages.filter(m=>m.role==='system').map(m=>m.content).join('\n\n');
   const turns=[];for(const m of messages.filter(m=>m.role!=='system')){const role=m.role==='assistant'?'assistant':'user';if(turns.at(-1)?.role===role)turns.at(-1).content+='\n\n'+m.content;else turns.push({role,content:String(m.content)});}
+  // TokenHub closes a stream after 60 s with no data. Without display the thinking block can stay silent past that
+  // (2026-10-22: the 维信诺 battlefield request, cut at 60.0 s every time); summarized thinking streams every few seconds.
+  // Only text deltas are read, so the summary never reaches an answer.
   const limit=maxTokens||(thinking?32000:json?4000:2400);
-  const response=await transport(messagesEndpoint,{method:'POST',redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),headers:{Authorization:`Bearer ${key}`,'anthropic-version':'2023-06-01','Content-Type':'application/json'},body:JSON.stringify({model,max_tokens:limit,stream:true,...(system?{system}:{}),messages:turns,...(thinking?{thinking:{type:'adaptive'},output_config:{effort:reasoningEffort||'high'}}:{})})});
+  const response=await transport(messagesEndpoint,{method:'POST',redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),headers:{Authorization:`Bearer ${key}`,'anthropic-version':'2023-06-01','Content-Type':'application/json'},body:JSON.stringify({model,max_tokens:limit,stream:true,...(system?{system}:{}),messages:turns,...(thinking?{thinking:{type:'adaptive',display:'summarized'},output_config:{effort:reasoningEffort||'high'}}:{})})});
   if(!response.ok){const e=Error(`模型接口返回 ${response.status}，未修改任何卡片。`);e.status=502;e.providerStatus=response.status;await recordModelRun({channel:'model-failure',model,failure:{httpStatus:response.status}}).catch(()=>{});throw e;}
   const r=await messagesResponse(response,onDelta,{model}),usage={prompt_tokens:r.usage?.input_tokens,completion_tokens:r.usage?.output_tokens,...r.usage};
+  if(r.stop==='refusal')throw refusal(model,usage,r.id,{reasoningEffort:thinking?reasoningEffort:'disabled'});
   if(!r.answer||r.stop==='max_tokens'){const e=Error('模型输出不完整，未应用修改。');e.status=502;e.code='MODEL_OUTPUT_INCOMPLETE';e.partialAnswer=r.answer||'';e.diagnostics={model,finishReason:r.stop||'empty',usage,reasoningEffort:thinking?reasoningEffort:'disabled',maxTokens:limit};await recordModelRun({channel:'model-failure',model,usage,providerRequestId:r.id,failure:e.diagnostics});throw e;}
   return {answer:json?bareJson(r.answer):r.answer,usage,providerRequestId:r.id,model,durationMs:Date.now()-startedAt};
  }
@@ -109,6 +117,8 @@ export async function createModelGateway({env=process.env,readSecretFile=readFil
   status:{ready:Boolean(key),provider:tokenhub?'TokenHub':ark?'Ark':'OpenAI-compatible',model},
   roundConcurrency:MODEL_PROFILES[model]?.roundConcurrency,
   async complete(messages,{json=false,maxTokens,timeoutMs=900000,thinking=Boolean(MODEL_PROFILES[model]),reasoningEffort='high',onDelta,signal}={}){
+   // Chat gateways (Nexus, private Agent) hide sensitive personal details before anything leaves the server.
+   if(redact)messages=redactMessages(messages).messages;
    if(!key){const e=Error('服务端未配置模型密钥');e.status=503;throw e;}
    const startedAt=Date.now();
    // JSON mode requires an explicit JSON instruction on compatible providers.
@@ -129,6 +139,7 @@ export async function createModelGateway({env=process.env,readSecretFile=readFil
     await recordModelRun({channel:'model-failure',model,failure:{httpStatus:response.status,retryAfterMs:e.retryAfterMs??null}}).catch(()=>{});throw e;
    }
    const result=await completionResponse(response,onDelta),answer=result.choices?.[0]?.message?.content;
+   if(result.choices?.[0]?.finish_reason==='content_filter')throw refusal(model,result.usage,result.id);
    if(!answer||result.choices?.[0]?.finish_reason==='length'){
     const e=Error('模型输出不完整，未应用修改。');e.status=502;e.code='MODEL_OUTPUT_INCOMPLETE';e.partialAnswer=answer||'';
     e.diagnostics={model,finishReason:result.choices?.[0]?.finish_reason||'empty',usage:result.usage,reasoningEffort:thinking?reasoningEffort:'disabled',maxTokens:maxTokens||(thinking?65536:json?4000:2400)};
