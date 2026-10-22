@@ -117,8 +117,9 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
     const card = meetingCard(payload, hostActions);
     return renderToStaticMarkup(<MeetingCard card={card} collection={[card]} onCard={() => undefined} onNavigate={() => undefined} readOnly />);
   };
-  const headerEnd = (html: string) => /<div[^>]*data-header-end[^>]*>([\s\S]*?)<\/div>/.exec(html)?.[1] ?? "";
-  /** 进度线上正在的那一步（连同它后面的入口）。 */
+  /** 页头最右那一格（进入飞书会议、重新安排会议）。 */
+  const headerEnd = (html: string) => /<span[^>]*data-header-end[^>]*>([\s\S]*?)<\/span><\/div>/.exec(html)?.[1] ?? "";
+  /** 进度线上正在的那一步（连同它后面的入口，只有待交记录才有）。 */
   const current = (html: string) => /<li [^>]*aria-current="step"[^>]*>[\s\S]*?<\/li>/.exec(html)?.[0] ?? "";
   const lead = (html: string) => /data-header-lead[^>]*data-timeline="(\w+)"/.exec(html)?.[1];
 
@@ -140,26 +141,26 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
     expect(feishuLive({ ...base, status: "held" }, now)).toBeNull();
   });
 
-  it("还没到预约时间：进度线上等开会是这一步（不呼吸），后面是唯一的主按钮「进入飞书会议」和安静的「重新安排会议」；页头右边空着", () => {
+  it("还没到预约时间：进度线上等开会是这一步（不呼吸），不插按钮；页头最右是安静的「重新安排会议」和唯一的主按钮「进入飞书会议」", () => {
     viewer.id = "p1";
     const html = render(booked(30 * MIN, 90 * MIN));
     expect(current(html)).toContain('data-step="waiting" data-state="current" data-tone="still"');
-    expect(current(html)).toMatch(new RegExp(`等开会</span><span[^>]*><a [^>]*href="${JOIN}"[^>]*>进入飞书会议</a><button[^>]*>重新安排会议</button>`));
-    expect(headerEnd(html)).toBe("");
+    expect(current(html)).not.toMatch(/<a |<button/);
+    expect(headerEnd(html)).toMatch(new RegExp(`<button[^>]*aria-label="重新安排会议"[^>]*>[\\s\\S]*?</button><a [^>]*href="${JOIN}"[^>]*>进入飞书会议</a>`));
   });
 
-  it("到了预约时间、飞书会议还没开：不显示进行中；进度线上等开会开始呼吸，后面是「进入飞书会议」和「重新安排会议」，没有「结束会议」；跟着取会议卡", () => {
+  it("到了预约时间、飞书会议还没开：不显示进行中；进度线上等开会开始呼吸，页头最右是「重新安排会议」「进入飞书会议」，没有「结束会议」；跟着取会议卡", () => {
     viewer.id = "p1";
     const html = render(booked(-10 * MIN, 50 * MIN));
     expect(lead(html)).toBe("upcoming");
     expect(html).toContain("未开始");
     expect(html).not.toContain("会议中");
     expect(current(html)).toContain('data-step="waiting" data-state="current" data-tone="breathe"');
-    expect(current(html)).toContain(`href="${JOIN}"`);
-    expect(current(html)).toContain("进入飞书会议");
-    expect(current(html)).toContain("重新安排会议");
-    expect(headerEnd(html)).toBe("");
-    expect(html.match(/重新安排会议/g)).toHaveLength(1);
+    expect(current(html)).not.toContain("进入飞书会议");
+    expect(headerEnd(html)).toContain(`href="${JOIN}"`);
+    expect(headerEnd(html)).toContain("进入飞书会议");
+    expect(headerEnd(html)).toContain("重新安排会议");
+    expect(html.match(/>重新安排会议</g)).toHaveLength(1);
     expect(html.match(/进入飞书会议/g)).toHaveLength(1);
     expect(html).not.toContain("结束会议");
     const payload = meetingCard(booked(-10 * MIN, 50 * MIN)).payload as Parameters<typeof meetingNeedsPolling>[0];
@@ -167,11 +168,11 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
     // 参会的人只看到进入飞书会议。
     viewer.id = "someone-else";
     const attendee = render(booked(-10 * MIN, 50 * MIN));
-    expect(current(attendee)).toContain("进入飞书会议");
+    expect(headerEnd(attendee)).toContain("进入飞书会议");
     expect(attendee).not.toContain("重新安排会议");
   });
 
-  it("飞书会议开始了：页头写会议中（不再另走一份计时）；进度线上进行中（红点）从真实开始走用时，后面只留「进入飞书会议」，没有「结束会议」", () => {
+  it("飞书会议开始了：页头写会议中（不再另走一份计时）；进度线上进行中（红点）从真实开始走用时，页头最右只留「进入飞书会议」，没有「结束会议」", () => {
     viewer.id = "p1";
     const startedAt = at(-3 * MIN);
     const html = render(booked(-10 * MIN, 50 * MIN, { startedAt }));
@@ -180,9 +181,8 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
     expect(current(html)).toContain('data-step="live" data-state="current" data-tone="live"');
     expect(current(html)).toContain(`role="timer" dateTime="${startedAt}"`);
     expect(html.match(/role="timer"/g)).toHaveLength(1);
-    expect(current(html)).toContain("进入飞书会议");
-    expect(current(html)).not.toContain("重新安排会议");
-    expect(headerEnd(html)).toBe("");
+    expect(headerEnd(html)).toContain("进入飞书会议");
+    expect(headerEnd(html)).not.toContain("重新安排会议");
     expect(html).not.toContain("结束会议");
   });
 
@@ -202,7 +202,7 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
     const overdue = render(booked(-70 * MIN, -10 * MIN, { hasEnded: true }));
     expect(lead(overdue)).toBe("upcoming");
     expect(overdue).toContain("结束会议");
-    expect(current(overdue)).toContain("重新安排会议");
+    expect(headerEnd(overdue)).toContain("重新安排会议");
 
     const missed = render(booked(-120 * MIN, -60 * MIN, { hasEnded: true }));
     expect(missed).toContain("没开成");
@@ -210,7 +210,7 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
     expect(current(missed)).toContain('data-step="waiting" data-state="current" data-tone="fail"');
     expect(current(missed)).toContain("没开成");
     expect(missed).toMatch(/data-step="record" data-state="todo"[^>]*>.*?等妙记</);
-    expect(current(missed)).toContain("重新安排会议");
+    expect(headerEnd(missed)).toContain("重新安排会议");
     expect(missed).not.toContain("进入飞书会议");
     expect(missed).toContain("结束会议");
     const payload = meetingCard(booked(-120 * MIN, -60 * MIN, { hasEnded: true })).payload as Parameters<typeof meetingNeedsPolling>[0];

@@ -18,7 +18,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { Check, ChevronDown, Radio } from "lucide-react";
+import { CalendarClock, Check, ChevronDown, Radio } from "lucide-react";
 import { COMPANY_TIMEZONE } from "@/lib/companyTime";
 import type { TMeetingCardPayload } from "@warmap/contracts";
 import s from "@/styles/meeting-header.module.css";
@@ -288,16 +288,44 @@ export function MeetingClock({
  * 会议页页头里的那几样，按页头的约定排好：标题前面是计划时段，右边是 `children`（会开完了的「会前预审 ｜ 会议记录」两段切换），
  * 页头右边单独一颗开始会议／计时（`clock` 为空时不放，例如已取消的会）。
  */
-export function MeetingHeaderActions({ day, slot, clock, children, timeline, label }: {
+export function MeetingHeaderActions({ day, slot, clock, children, timeline, label, end }: {
   day: string; slot: MeetingSlot; clock?: ReactNode; children?: ReactNode;
   /** 这场会的阶段（见 meetingTimeline）；给了就把日子换成阶段那几个字。 */
   timeline?: MeetingTimeline; label?: string;
+  /** 页头最右那一格（data-header-end）：会前会中的「重新安排会议」「进入飞书会议」。 */
+  end?: ReactNode;
 }) {
   return (
     <>
       <MeetingSlotLabel day={day} slot={slot} timeline={timeline} label={label} />
       {children}
       {clock}
+      {end}
+    </>
+  );
+}
+
+/**
+ * 页头最右那一格：进入飞书会议是这一页会前会中最要紧的动作，滚到哪都在；重新安排会议是它左边的安静链接
+ * （窄面板只留图标）。进度线只表示走到哪一步，不再插按钮。
+ */
+export function MeetingHeaderEnd({ joinUrl, reschedule }: { joinUrl: string | null; reschedule: ReactNode }) {
+  if (!joinUrl && !reschedule) return null;
+  return (
+    <span className={s.end} data-header-end>
+      {reschedule}
+      {joinUrl ? <a className={s.join} href={joinUrl} target="_blank" rel="noreferrer">进入飞书会议</a> : null}
+    </span>
+  );
+}
+
+/** 「重新安排会议」触发钮的样式和内容（MeetingCard 的 Popover 用 ts-design Button 挂浮层）。 */
+export const RESCHEDULE_CLASS = s.reschedule;
+export function RescheduleLabel() {
+  return (
+    <>
+      <CalendarClock size={16} aria-hidden className={s.rescheduleIcon} />
+      <span className={s.rescheduleText}>重新安排会议</span>
     </>
   );
 }
