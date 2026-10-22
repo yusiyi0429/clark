@@ -910,6 +910,8 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
       expect(await live(t, missed)).toMatchObject({ minutes_status: "none" });
 
       // 事件丢了、会其实开过：轮询找到妙记照常接管。
+      // 时钟要拨回 11:40，先把没开成那场挪到前一天，免得两场同一时刻的会按时间抢同一份妙记（谁先拿到看数据库排序）。
+      await t.pool.query("UPDATE meetings SET scheduled_at = scheduled_at - interval '1 day', ends_at = ends_at - interval '1 day' WHERE id = $1", [missed]);
       const happened = await bookedMeeting(t);
       await t.pool.query("UPDATE meetings SET feishu_event_id = 'evt_2_0' WHERE id = $1", [happened]);
       api.listEmpty = false;
