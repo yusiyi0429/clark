@@ -9,15 +9,15 @@ import { saveAuthorizedToken } from "./tokens.js";
 
 /** 在飞书约会最少要的权限：授权里缺任何一项，算建会的人还没连好飞书（等他重新连上再约）。 */
 export const FEISHU_CALENDAR_SCOPES = [
-  "calendar:calendar.calendar:readonly", "calendar:calendar.event:create", "calendar:calendar.event:update", "calendar:calendar.event:delete",
+  "calendar:calendar:readonly", "calendar:calendar.event:create", "calendar:calendar.event:update", "calendar:calendar.event:delete",
 ];
 /**
  * offline_access 才会返回 refresh token；drive:drive.metadata:readonly 用来读本人工作依据里飞书文档的标题、修订时间和修订人（不读正文）。
  * 会后自动拿妙记（meetingMinutes.ts）先用主持人、拿不到再用建会的人本人的授权：minutes:minutes:readonly 读妙记信息，minutes:minutes.basic:read 收「妙记生成」事件，
  * minutes:minutes.search:read 轮询兜底，minutes:minutes.artifacts:read 读逐字稿全文，minutes:minutes.transcript:export 退回导出，vc:meeting 读实际参会人（vc:meeting:readonly 只有应用身份，用户身份只能开 vc:meeting，10/21）；
  * 读实际参会名单还要 vc:meeting.meetingevent:read（10/21 实测 /vc/v1/meetings/:id 报缺 vc:meeting:readonly 或它）。
- * 天枢约会时自动在飞书约上（meetingFeishuEvent.ts）用建会的人本人的授权：calendar:calendar.calendar:readonly 读主日历，calendar:calendar.event:create 建日程，
- * calendar:calendar.event:update 改时间、加参与人，calendar:calendar.event:delete 取消时删日程（按 lark-cli schema 的 _meta.scopes 选的最细一项）。
+ * 天枢约会时自动在飞书约上（meetingFeishuEvent.ts）用建会的人本人的授权：calendar:calendar:readonly 读主日历，calendar:calendar.event:create 建日程，
+ * calendar:calendar.event:update 改时间、加参与人，calendar:calendar.event:delete 取消时删日程（读主日历用 calendar:calendar:readonly：更细的 calendar:calendar.calendar:readonly 在后台开不了，10/22 授权报 20027）。
  * 其余用户权限随后续功能加进来；在开发者后台开通的清单见 .scratch/tianshu-v1/飞书开发者后台配置清单.md。
  */
 export const FEISHU_OAUTH_SCOPE = [

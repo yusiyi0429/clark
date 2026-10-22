@@ -15,7 +15,7 @@ const CEO = TEST_CEO.personId; // 测试甲：建会的人，也就是组织者
 const HOST = TEST_MEMBER.personId; // 测试乙
 const OWNER = "person-fixture-003"; // 测试丙：没有飞书身份
 const feishu = { appId: "cli_test", appSecret: "test-secret", tokenKey: randomBytes(32), tokenKeyVersion: 1 };
-const CALENDAR_SCOPE = "offline_access calendar:calendar.calendar:readonly calendar:calendar.event:create calendar:calendar.event:update calendar:calendar.event:delete";
+const CALENDAR_SCOPE = "offline_access calendar:calendar:readonly calendar:calendar.event:create calendar:calendar.event:update calendar:calendar.event:delete";
 const START = "2030-06-01T10:00:00.000+08:00";
 
 const preflightAgent: PreflightAgent = { async generate(input: PreflightAgentInput) { return { candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)) }; } };

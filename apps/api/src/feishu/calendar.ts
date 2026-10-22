@@ -2,7 +2,7 @@ import { FeishuApiError } from "./client.js";
 
 /**
  * 飞书日历的适配层（天枢约会时自动在飞书约上，meetingFeishuEvent.ts）。都用建会的人本人的 user_access_token（用户身份），他就是组织者：
- * - 主日历：POST /calendar/v4/calendars/primary → data.calendars[0].calendar.calendar_id（calendar:calendar.calendar:readonly）
+ * - 主日历：POST /calendar/v4/calendars/primary → data.calendars[0].calendar.calendar_id（calendar:calendar:readonly）
  * - 建日程：POST /calendar/v4/calendars/{calendar_id}/events?idempotency_key=<会议 id>（calendar:calendar.event:create）；
  *   起止是秒级 timestamp 字符串 + timezone，vchat.vc_type = "vc" 是飞书视频会议，vchat.meeting_settings.auto_record 开自动录制；
  *   返回 data.event.event_id、vchat.meeting_url（会议链接；没有时用 app_link 打开日程）

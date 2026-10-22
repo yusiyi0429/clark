@@ -68,13 +68,13 @@ describe("飞书免登路由", () => {
     expect((await t.app.inject({ method: "GET", url: "/api/auth/feishu/config" })).json()).toEqual({
       enabled: true, appId: "cli_test",
       scopes: ["offline_access", "drive:drive.metadata:readonly", "minutes:minutes:readonly", "minutes:minutes.basic:read", "minutes:minutes.search:read", "minutes:minutes.artifacts:read", "minutes:minutes.transcript:export", "vc:meeting",
-        "vc:meeting.meetingevent:read", "calendar:calendar.calendar:readonly", "calendar:calendar.event:create", "calendar:calendar.event:update", "calendar:calendar.event:delete"],
+        "vc:meeting.meetingevent:read", "calendar:calendar:readonly", "calendar:calendar.event:create", "calendar:calendar.event:update", "calendar:calendar.event:delete"],
     });
 
     const { state, stateCookie, location } = await startFlow(t.app);
     expect(location.origin + location.pathname).toBe("https://accounts.feishu.cn/open-apis/authen/v1/authorize");
     expect(location.searchParams.get("redirect_uri")).toBe(`${t.publicOrigin}/api/auth/feishu/callback`);
-    expect(location.searchParams.get("scope")).toBe("offline_access drive:drive.metadata:readonly minutes:minutes:readonly minutes:minutes.basic:read minutes:minutes.search:read minutes:minutes.artifacts:read minutes:minutes.transcript:export vc:meeting vc:meeting.meetingevent:read calendar:calendar.calendar:readonly calendar:calendar.event:create calendar:calendar.event:update calendar:calendar.event:delete");
+    expect(location.searchParams.get("scope")).toBe("offline_access drive:drive.metadata:readonly minutes:minutes:readonly minutes:minutes.basic:read minutes:minutes.search:read minutes:minutes.artifacts:read minutes:minutes.transcript:export vc:meeting vc:meeting.meetingevent:read calendar:calendar:readonly calendar:calendar.event:create calendar:calendar.event:update calendar:calendar.event:delete");
 
     // state 不符、没有 cookie：都拒绝，不去换 token
     const wrong = await t.app.inject({ method: "GET", url: `/api/auth/feishu/callback?code=c1&state=${state}x`, headers: { cookie: stateCookie } });
