@@ -66,7 +66,8 @@ const card = async (t: TestApp, id: string) =>
   (await t.app.inject({ method: "GET", url: `/api/cards/meetings/${id}`, headers: { cookie: await t.loginCookie() } })).json().cards[0] as ActionCard;
 const row = async (t: TestApp, id: string) =>
   (await t.sql("SELECT feishu_event_status, feishu_calendar_id, feishu_event_id, feishu_event_join_url, feishu_event_organizer_id, feishu_event_error FROM meetings WHERE id = $1", [id]))[0];
-const runJobs = (t: TestApp) => createJobWorker({ pool: t.pool, handlers: meetingFeishuEventJobs(t.app.meetingFollowThrough.feishuEvents) }).tick();
+// 入队的 run_at 取数据库 now()，执行器领任务用 Node 时钟；两边差一两毫秒时刚排上的任务会被当成没到点跳过，执行器时钟拨快 1 秒。
+const runJobs = (t: TestApp) => createJobWorker({ pool: t.pool, handlers: meetingFeishuEventJobs(t.app.meetingFollowThrough.feishuEvents), now: () => new Date(Date.now() + 1000) }).tick();
 
 describe("飞书日历接口的请求", () => {
   it("主日历、建日程（视频会议、自动录制、时间带时区）、加参会人、改时间、删除", async () => {
