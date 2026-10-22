@@ -5,10 +5,15 @@ import type { THomePlanDay } from "@warmap/contracts";
 
 /**
  * 成员首页本月时间轴（一天一格）。
- * 没有 jsdom：结构用 renderToStaticMarkup 看；计划点的指针回调从 JSX 运行时截下来，按真实顺序直接调用。
+ * 没有 jsdom：结构用 renderToStaticMarkup 看；计划点的指针回调从 JSX 运行时截下来，按真实顺序直接调用；
+ * useEffect 收下来，卸载时的清理手动跑。
  */
 type Props = Record<string, unknown>;
-const h = vi.hoisted(() => ({ elements: [] as { type: string; props: Record<string, unknown> }[] }));
+const h = vi.hoisted(() => ({ elements: [] as { type: string; props: Record<string, unknown> }[], effects: [] as (() => unknown)[] }));
+vi.mock("react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react")>();
+  return { ...actual, useEffect: (effect: () => unknown) => void h.effects.push(effect) };
+});
 const { capture } = vi.hoisted(() => ({
   capture: <T,>(fn: T) => ((type: unknown, props: Record<string, unknown>, ...rest: unknown[]) => {
     if (typeof type === "string") h.elements.push({ type, props });
@@ -53,6 +58,7 @@ const base = {
 type TimelineProps = Parameters<typeof DayTimeline>[0];
 const render = (overrides: Partial<TimelineProps> = {}) => {
   h.elements = [];
+  h.effects = [];
   return renderToStaticMarkup(<DayTimeline {...base} {...overrides} />);
 };
 /** 一天那一格的开标签。 */
@@ -184,13 +190,13 @@ describe("DayTimeline：关口和计划点", () => {
 });
 
 describe("DayTimeline：加、拖、删计划点", () => {
-  /** 格子那一排 310px 宽，从 x=100 开始，一格 10px。 */
-  const list = { getBoundingClientRect: () => ({ left: 100, width: 310 }) };
+  /** 格子那一排（含上方的点和下方的日期）：x 从 100 到 410，一格 10px；y 从 20 到 80。 */
+  const list = { getBoundingClientRect: () => ({ left: 100, right: 410, top: 20, bottom: 80 }) };
   const pointer = (x: number, extra: Props = {}) => ({
     button: 0, pointerId: 1, pointerType: "mouse", clientX: x, clientY: 40,
     currentTarget: { setPointerCapture: vi.fn(), closest: () => list }, preventDefault: vi.fn(), ...extra,
   });
-  type Handlers = Record<"onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel" | "onContextMenu", (event: unknown) => void>;
+  type Handlers = Record<"onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel" | "onLostPointerCapture" | "onContextMenu", (event: unknown) => void>;
   const handlersOf = (title: string) => marker(title) as unknown as Handlers;
 
   beforeEach(() => vi.useFakeTimers());
@@ -216,14 +222,57 @@ describe("DayTimeline：加、拖、删计划点", () => {
     expect(onMoveMark).toHaveBeenCalledWith("k1", "2026-10-27");
   });
 
-  it("拖出格子那一排：吸到月初或月末那格", () => {
+  it("左右拖出格子那一排再松手：放回原处，不改", () => {
     const onMoveMark = vi.fn();
     render({ onMoveMark });
     const mark = handlersOf("10/23 联调");
     mark.onPointerDown(pointer(325));
+    mark.onPointerMove(pointer(365));
     mark.onPointerMove(pointer(900));
     mark.onPointerUp(pointer(900));
-    expect(onMoveMark).toHaveBeenLastCalledWith("k1", "2026-10-31");
+    mark.onPointerDown(pointer(325));
+    mark.onPointerMove(pointer(60));
+    mark.onPointerUp(pointer(60));
+    expect(onMoveMark).not.toHaveBeenCalled();
+  });
+
+  it("上下离开点和格子那一带再松手：不改；拖回来再松手照常改", () => {
+    const onMoveMark = vi.fn();
+    render({ onMoveMark });
+    const mark = handlersOf("10/23 联调");
+    mark.onPointerDown(pointer(325));
+    mark.onPointerMove(pointer(365, { clientY: 200 }));
+    mark.onPointerUp(pointer(365, { clientY: 200 }));
+    mark.onPointerDown(pointer(325));
+    mark.onPointerMove(pointer(365, { clientY: -40 }));
+    mark.onPointerUp(pointer(365, { clientY: -40 }));
+    expect(onMoveMark).not.toHaveBeenCalled();
+    mark.onPointerDown(pointer(325));
+    mark.onPointerMove(pointer(365, { clientY: -40 }));
+    mark.onPointerMove(pointer(365, { clientY: 15 }));
+    mark.onPointerUp(pointer(365, { clientY: 15 }));
+    expect(onMoveMark).toHaveBeenCalledWith("k1", "2026-10-27");
+  });
+
+  it("拖动中指针捕获被夺走：这一下作废，随后的松手不改", () => {
+    const onMoveMark = vi.fn();
+    render({ onMoveMark });
+    const mark = handlersOf("10/23 联调");
+    mark.onPointerDown(pointer(325));
+    mark.onPointerMove(pointer(365));
+    mark.onLostPointerCapture(pointer(365));
+    mark.onPointerUp(pointer(365));
+    expect(onMoveMark).not.toHaveBeenCalled();
+  });
+
+  it("长按还没到点组件就卸载：不再删", () => {
+    const onDeleteMark = vi.fn();
+    render({ onDeleteMark });
+    handlersOf("10/23 联调").onPointerDown(pointer(325, { pointerType: "touch" }));
+    const cleanups = h.effects.map((effect) => effect());
+    for (const cleanup of cleanups) if (typeof cleanup === "function") cleanup();
+    vi.advanceTimersByTime(1000);
+    expect(onDeleteMark).not.toHaveBeenCalled();
   });
 
   it("松手还在原来那天：不改", () => {
@@ -287,6 +336,17 @@ describe("DayTimeline：窄容器退成一根细线", () => {
     expect(line).toMatch(/data-week[^>]*left:58.06%;width:22.58%/);
     expect(tagOf(line, "10/28 上线")).toContain('role="img"');
     expect(line).toMatch(/left:88.71%[^>]*>(?:<[^>]+>)*?<[^>]*title="10\/28 上线"/);
+    expect(line).toMatch(/left:69.35%[^>]*>本周</);
+  });
+
+  it("细线上本周被月末或月初截断：「本周」跟着那头的日期写，不单独摆", () => {
+    const end = view(render({ today: "2026-10-30", weekStart: "2026-10-26", weekEnd: "2026-11-01" }), "line");
+    expect(end).toMatch(/data-at="end"[^>]*>(?:<[^>]+>)*本周(?:<[^>]+>)*10\/31</);
+    expect(end.match(/本周/g)).toHaveLength(1);
+    const november = Array.from({ length: 30 }, (_, index) => ({ date: `2026-11-${String(index + 1).padStart(2, "0")}`, workday: true }));
+    const start = view(render({ days: november, today: "2026-11-01", weekStart: "2026-10-26", weekEnd: "2026-11-01", gates: [], marks: [] }), "line");
+    expect(start).toMatch(/data-at="start"[^>]*>11\/1(?:<[^>]+>)*本周</);
+    expect(start.match(/本周/g)).toHaveLength(1);
   });
 
   it("容器宽度小于 560px 时显示细线、藏起格子", () => {

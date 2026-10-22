@@ -107,8 +107,9 @@
   white-space: nowrap;
   transform: translateX(-50%);
 }
-.lab[data-at="start"] { left: 0; transform: none; }
-.lab[data-at="end"] { right: 0; transform: none; }
+.lab[data-at] { display: flex; gap: 4px; transform: none; }
+.lab[data-at="start"] { left: 0; }
+.lab[data-at="end"] { right: 0; }
 .weekLab { color: #215ba1; font-weight: 600; }
 .track { position: absolute; top: 22px; right: 0; left: 0; height: 4px; border-radius: 2px; background: #e1e6ed; }
 .past { position: absolute; top: 22px; left: 0; height: 4px; border-radius: 2px; background: #b9c8dc; }
