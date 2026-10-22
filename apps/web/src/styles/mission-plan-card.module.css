@@ -187,10 +187,16 @@
 }
 .info[aria-expanded="true"] { border-color: var(--ink); background: var(--ink); color: var(--surface); }
 
-/* 三栏：「开启执行事项」放在右上角，和栏名同一行。 */
+/*
+ * 三栏上面的「开启执行事项」：默认单独一行、靠右；卡片够宽（「之后」那栏放得下栏名再加按钮）时挪进栏名那一行的右端。
+ * 宽度门槛按带「新」标记的按钮量过，任何宽度都不压栏名。
+ */
 .board { position: relative; }
-.start { position: absolute; top: 5px; right: 6px; z-index: 1; }
+.start { display: flex; justify-content: flex-end; margin: 0 0 6px; }
 .start button { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+@container plan-card (min-width: 760px) {
+  .start { position: absolute; top: 5px; right: 6px; z-index: 1; margin: 0; }
+}
 
 .columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 1fr); gap: 10px; align-items: start; }
 .column { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 8px; border-radius: var(--r-card); }
