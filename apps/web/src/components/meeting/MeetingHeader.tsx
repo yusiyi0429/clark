@@ -327,35 +327,3 @@ export function MeetingStatus({ phase, facts, now, endedAt, children }: { phase:
 export const MINUTES_EXPECTED_MS = 3 * 60_000;
 /** 生成会议卡的预计用时（联调时实测校准；10/21 基线：长会单次调用 17–30 秒）。 */
 export const CARD_EXPECTED_MS = 60_000;
-
-const spanWords = (ms: number): string => {
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds} 秒`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} 分钟`;
-  return `${Math.floor(minutes / 60)} 小时${minutes % 60 ? ` ${minutes % 60} 分钟` : ""}`;
-};
-
-/** 阶段已用时：「42 秒 / 约 1 分钟」；超过预计只写已用时；时钟偏差也不出负数。 */
-export function phaseElapsedLabel(since: string, now: number, expectedMs: number): string {
-  const spent = Math.max(0, now - Date.parse(since));
-  return spent > expectedMs ? spanWords(spent) : `${spanWords(spent)} / 约 ${spanWords(expectedMs)}`;
-}
-
-/** 阶段已用时，每秒走一次。 */
-export function PhaseTimer({ since, expectedMs }: { since: string; expectedMs: number }) {
-  const now = useNow(1000);
-  // role="timer"：读屏不每秒播报（外面的 role="status" 只报阶段变化）。
-  return <time className={s.phaseTime} role="timer" dateTime={since} suppressHydrationWarning>{phaseElapsedLabel(since, now, expectedMs)}</time>;
-}
-
-/** 进行中的阶段：呼吸点 + 短标签 + 已用时（会议记录区也用）。 */
-export function PhaseLive({ label, since, expectedMs, className }: { label: string; since: string | null; expectedMs: number; className?: string }) {
-  return (
-    <span className={[s.phase, className].filter(Boolean).join(" ")} role="status">
-      <i className={s.phaseDot} aria-hidden />
-      <span>{label}</span>
-      {since ? <PhaseTimer since={since} expectedMs={expectedMs} /> : null}
-    </span>
-  );
-}

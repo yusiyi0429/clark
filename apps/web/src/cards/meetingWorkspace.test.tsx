@@ -347,14 +347,12 @@ describe("Meeting 编辑会议弹层 CSS 基线", () => {
 });
 
 describe("Meeting Outcome 复核", () => {
-  it("会议记录还在生成：只有短状态；第一次生成失败：生成失败和重试，不显示报错原文", () => {
+  it("会议卡还在生成：会议记录区不再重复阶段和用时（只在进度线上）；第一次生成失败：生成失败和重试，不显示报错原文", () => {
     const outcome = (status: string) => ({ status, pendingSince: null, startedAt: null, runId: null, previousRunIds: [], summary: "", warnings: [], extractedAt: null, items: [],
       error: status === "failed" ? { code: "MODEL_TIMEOUT", message: "模型调用超时：upstream 504", at: "2025-09-25T00:00:00.000Z" } : null });
     for (const status of ["pending", "running"]) {
       const html = render(meetingCard({ status: "held", transcript: { turns: [{}] }, outcome: { ...outcome(status), pendingSince: "2025-09-25T00:00:00.000Z" } }));
-      expect(html).toContain("会议记录生成中");
-      // 带已用时（走字的 <time>）。
-      expect(html).toMatch(/会议记录生成中[\s\S]*?<time/);
+      expect(html).not.toContain("会议记录生成中");
       expect(html).not.toContain("抽取尚未产出摘要");
     }
     const failed = render(meetingCard({ status: "held", transcript: { turns: [{}] }, outcome: outcome("failed") },
@@ -425,7 +423,7 @@ describe("Meeting Outcome 复核", () => {
 });
 
 describe("妙记 Markdown 候选预览", () => {
-  it("自动同步失败才出「上传会议记录」：在飞书约上的会等妙记、刚开完时不出，失败后进度线和会议记录区都出；没在飞书约上的会到了待交记录只在进度线上出", () => {
+  it("自动同步失败才出「上传会议记录」：在飞书约上的会等妙记、刚开完时不出，失败后、没在飞书约上的会到了待交记录，都只在进度线上出一个", () => {
     const ended = { endedAt: "2025-09-24T15:40:00.000Z", feishuEvent: { status: "booked", joinUrl: null, organizerId: "p1" } };
     for (const waiting of [{}, { minutesStatus: "waiting", minutesWaitingSince: "2025-09-24T15:41:00.000Z" }, { minutesStatus: "failed", minutesFailure: "not_ready" }]) {
       const html = render(meetingCard({ ...ended, ...waiting, minutesManualImport: false }));
@@ -433,7 +431,7 @@ describe("妙记 Markdown 候选预览", () => {
       expect(html).toMatch(/data-step="record" data-state="current"[^>]*>.*?等妙记</);
     }
     const manual = render(meetingCard({ ...ended, minutesStatus: "manual", minutesManualImport: true }));
-    expect(manual.match(/>上传会议记录</g)).toHaveLength(2);
+    expect(manual.match(/>上传会议记录</g)).toHaveLength(1);
     expect(manual).toMatch(/data-step="record" data-state="current"[^>]*>.*?待交记录.*?>上传会议记录<\/button>/);
     const plain = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", minutesManualImport: false }));
     expect(plain.match(/>上传会议记录</g)).toHaveLength(1);

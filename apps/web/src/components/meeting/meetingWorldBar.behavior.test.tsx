@@ -17,7 +17,6 @@ const api = vi.hoisted(() => ({ put: vi.fn(), get: vi.fn(), post: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ browserApi: { PUT: api.put, GET: api.get, POST: api.post } }));
 
 import { MeetingWorldBar } from "./MeetingWorldBar";
-import { CARD_EXPECTED_MS, MINUTES_EXPECTED_MS, phaseElapsedLabel } from "./MeetingHeader";
 import { MinutesRecovery } from "./MeetingProgress";
 import { WorldAnchorPicker } from "./WorldAnchorPicker";
 import { WorldAnchors } from "./WorldAnchors";
@@ -206,18 +205,5 @@ describe("进度线：自动取妙记失败后的入口", () => {
     } finally {
       vi.unstubAllGlobals();
     }
-  });
-});
-
-describe("会议记录区：生成会议卡的用时", () => {
-  it("已用时 / 约多少；超过预计只写已用时，不出负数", () => {
-    const since = "2026-10-21T10:00:00.000Z";
-    const at = (seconds: number) => Date.parse(since) + seconds * 1000;
-    expect(phaseElapsedLabel(since, at(-30), CARD_EXPECTED_MS)).toBe("0 秒 / 约 1 分钟");
-    expect(phaseElapsedLabel(since, at(42), CARD_EXPECTED_MS)).toBe("42 秒 / 约 1 分钟");
-    expect(phaseElapsedLabel(since, at(75), CARD_EXPECTED_MS)).toBe("1 分钟");
-    expect(phaseElapsedLabel(since, at(95 * 60), CARD_EXPECTED_MS)).toBe("1 小时 35 分钟");
-    expect(MINUTES_EXPECTED_MS).toBe(3 * 60_000);
-    expect(CARD_EXPECTED_MS).toBe(60_000);
   });
 });

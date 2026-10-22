@@ -10,7 +10,7 @@ import { payloadOf, type IssuePayload, type MeetingPayload } from "./payloads";
 import { issueScopeLabel } from "./scopeNames";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { SelectionToolbar, useSelectionQuote } from "@/components/SelectionQuote";
-import { CARD_EXPECTED_MS, MeetingClock, MeetingHeaderActions, MeetingStatus, PhaseLive, meetingDayWord, meetingPhase, meetingSlot, useFeishuLive, useMeetingTimeline, useNow, type FeishuLive } from "@/components/meeting/MeetingHeader";
+import { MeetingClock, MeetingHeaderActions, MeetingStatus, meetingDayWord, meetingPhase, meetingSlot, useFeishuLive, useMeetingTimeline, useNow, type FeishuLive } from "@/components/meeting/MeetingHeader";
 import { MeetingProgress, MinutesRecovery, meetingProgress } from "@/components/meeting/MeetingProgress";
 import { useMeetingRecorder, type RecorderState } from "@/components/meeting/useMeetingRecorder";
 import { MaterialPane, useMaterialPreview, type MaterialMeta } from "@/components/meeting/meetingMaterialPreview";
@@ -431,12 +431,6 @@ function awaitingMinutes(payload: MeetingPayload): boolean {
 /** 会议卡正在生成（排队也算）。 */
 function generatingCard(payload: MeetingPayload): boolean {
   return payload.status === "held" && (payload.outcome?.status === "pending" || payload.outcome?.status === "running");
-}
-
-/** 会议卡生成从哪一刻算起：在跑的按开跑时刻，排队的按排上的时刻；不在生成时为 null。 */
-function generatingSince(payload: MeetingPayload): string | null {
-  if (!generatingCard(payload)) return null;
-  return (payload.outcome?.status === "running" ? payload.outcome.startedAt : null) ?? payload.outcome?.pendingSince ?? null;
 }
 
 /** 在飞书约上的会还没开、开着：等飞书会议开始和结束。 */
@@ -1646,14 +1640,14 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           ) : null}
         </section>
       ) : null}
-      {payload.minutesManualImport || payload.transcriptCandidate ? (
+      {payload.transcriptCandidate ? (
       <section className={s.reviewSection}>
-        {/* 一块轻的上传区：点它选文件，拖进主栏任何地方也行（FileDropZone）。 */}
+        {/* 第一次上传在进度线「待交记录」后面；这里只在已有候选时给重新上传，拖进主栏任何地方也行（FileDropZone）。 */}
         <button type="button" className={s.recordUpload} disabled={uploading} onClick={() => uploadRef.current?.click()}>
           <FileUp size={16} aria-hidden="true" />
-          {uploading ? "上传中…" : payload.transcriptCandidate ? "重新上传会议记录" : "上传会议记录"}
+          {uploading ? "上传中…" : "重新上传会议记录"}
         </button>
-        {payload.transcriptCandidate && !candidateOpen ? (
+        {!candidateOpen ? (
           <button type="button" className={s.candidateReopen} onClick={() => setCandidateOpen(true)}>
             查看会议记录候选
           </button>
@@ -1665,13 +1659,13 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     ) : (
       <section className={s.review}>
         {cardArea ?? (payload.outcome && payload.outcome.status !== "ready" ? (
-          /* 会议记录还在生成（或第一次生成失败）：只给短状态（不等会议卡接口问完），失败的和会议卡那边一样可以重试；生成好了换成会议卡。 */
+          /* 会议卡还在生成：阶段和用时只在进度线上一份，这里不再重复；第一次生成失败给重试；生成好了换成会议卡。 */
           payload.outcome.status === "failed" ? (
             <p className={s.error} role="alert">
               生成失败
               {retryOutcome ? <button type="button" disabled={pending} onClick={() => void run(retryOutcome, {})}>重试会后抽取</button> : null}
             </p>
-          ) : <p className={s.empty}><PhaseLive label="会议记录生成中" since={generatingSince(payload)} expectedMs={CARD_EXPECTED_MS} /></p>
+          ) : null
         ) : !legacyRecord ? null : payload.outcome ? (
           <>
             <section className={s.reviewSection} data-outline="summary">
