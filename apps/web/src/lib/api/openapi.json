@@ -14025,6 +14025,7 @@
               "returnReason",
               "origin",
               "awaitingAcceptance",
+              "planTaskId",
               "createdAt",
               "updatedAt"
             ],
@@ -14354,6 +14355,17 @@
               },
               "awaitingAcceptance": {
                 "type": "boolean"
+              },
+              "planTaskId": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "createdAt": {
                 "minLength": 1,
@@ -38884,6 +38896,7 @@
           "returnReason",
           "origin",
           "awaitingAcceptance",
+          "planTaskId",
           "createdAt",
           "updatedAt"
         ],
@@ -39214,6 +39227,17 @@
           "awaitingAcceptance": {
             "type": "boolean"
           },
+          "planTaskId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "minLength": 1,
             "type": "string"
@@ -39509,6 +39533,7 @@
                       "returnReason",
                       "origin",
                       "awaitingAcceptance",
+                      "planTaskId",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -39838,6 +39863,17 @@
                       },
                       "awaitingAcceptance": {
                         "type": "boolean"
+                      },
+                      "planTaskId": {
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "createdAt": {
                         "minLength": 1,
@@ -47287,6 +47323,10 @@
             "minLength": 1,
             "maxLength": 500,
             "type": "string"
+          },
+          "planTaskId": {
+            "minLength": 1,
+            "type": "string"
           }
         }
       },
@@ -47328,6 +47368,7 @@
               "returnReason",
               "origin",
               "awaitingAcceptance",
+              "planTaskId",
               "createdAt",
               "updatedAt"
             ],
@@ -47657,6 +47698,17 @@
               },
               "awaitingAcceptance": {
                 "type": "boolean"
+              },
+              "planTaskId": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "createdAt": {
                 "minLength": 1,
@@ -48290,6 +48342,7 @@
                 "returnReason",
                 "origin",
                 "awaitingAcceptance",
+                "planTaskId",
                 "createdAt",
                 "updatedAt"
               ],
@@ -48620,6 +48673,17 @@
                 "awaitingAcceptance": {
                   "type": "boolean"
                 },
+                "planTaskId": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "createdAt": {
                   "minLength": 1,
                   "type": "string"
@@ -48776,6 +48840,7 @@
                       "returnReason",
                       "origin",
                       "awaitingAcceptance",
+                      "planTaskId",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -49106,6 +49171,17 @@
                       "awaitingAcceptance": {
                         "type": "boolean"
                       },
+                      "planTaskId": {
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "createdAt": {
                         "minLength": 1,
                         "type": "string"
@@ -49238,6 +49314,7 @@
                 "returnReason",
                 "origin",
                 "awaitingAcceptance",
+                "planTaskId",
                 "createdAt",
                 "updatedAt"
               ],
@@ -49567,6 +49644,17 @@
                 },
                 "awaitingAcceptance": {
                   "type": "boolean"
+                },
+                "planTaskId": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "createdAt": {
                   "minLength": 1,
@@ -52998,6 +53086,17 @@
             ]
           },
           "missionId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "planTaskId": {
             "anyOf": [
               {
                 "minLength": 1,

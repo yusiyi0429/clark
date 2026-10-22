@@ -61,6 +61,7 @@ function projectTask(row: TaskRow, names: Map<string, string>): TTaskView {
     origin: row.origin_meeting_id ? { type: "meeting", meetingId: row.origin_meeting_id,
       meetingTitle: row.meeting_title ?? "", quote: row.source_quote } : null,
     awaitingAcceptance: row.submission !== null && (row.status === "not_started" || row.status === "in_progress"),
+    planTaskId: null,
     createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
   };
 }

@@ -3563,6 +3563,7 @@ export interface components {
                     quote: string | null;
                 } | null;
                 awaitingAcceptance: boolean;
+                planTaskId: string | null;
                 createdAt: string;
                 updatedAt: string;
             };
@@ -7367,6 +7368,7 @@ export interface components {
                 quote: string | null;
             } | null;
             awaitingAcceptance: boolean;
+            planTaskId: string | null;
             createdAt: string;
             updatedAt: string;
         };
@@ -7461,6 +7463,7 @@ export interface components {
                         quote: string | null;
                     } | null;
                     awaitingAcceptance: boolean;
+                    planTaskId: string | null;
                     createdAt: string;
                     updatedAt: string;
                 }[];
@@ -8615,6 +8618,7 @@ export interface components {
             startDate?: string;
             dueDate?: string;
             doneDefinition?: string;
+            planTaskId?: string;
         };
         TaskDetailResponse: {
             task: {
@@ -8665,6 +8669,7 @@ export interface components {
                     quote: string | null;
                 } | null;
                 awaitingAcceptance: boolean;
+                planTaskId: string | null;
                 createdAt: string;
                 updatedAt: string;
             };
@@ -8799,6 +8804,7 @@ export interface components {
                     quote: string | null;
                 } | null;
                 awaitingAcceptance: boolean;
+                planTaskId: string | null;
                 createdAt: string;
                 updatedAt: string;
             }[];
@@ -8867,6 +8873,7 @@ export interface components {
                         quote: string | null;
                     } | null;
                     awaitingAcceptance: boolean;
+                    planTaskId: string | null;
                     createdAt: string;
                     updatedAt: string;
                 }[];
@@ -8935,6 +8942,7 @@ export interface components {
                     quote: string | null;
                 } | null;
                 awaitingAcceptance: boolean;
+                planTaskId: string | null;
                 createdAt: string;
                 updatedAt: string;
             }[];
@@ -9461,6 +9469,7 @@ export interface components {
             doneDefinition?: string | null;
             judgment?: string | null;
             missionId?: string | null;
+            planTaskId?: string | null;
         };
         ReturnMyTaskRequest: {
             version: number;

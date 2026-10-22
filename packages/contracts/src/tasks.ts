@@ -13,9 +13,9 @@ export const TaskStatus = Type.Union([
 /** 执行事项从哪来：会后分派、自己点「+」新建、从本月计划拆出；agent 是外部工具（Codex、Claude Code 等）按用户正在做的事替用户建的。以后加 CEO 指派。 */
 export const TaskSource = Type.Union([Type.Literal("meeting"), Type.Literal("self"), Type.Literal("plan"), Type.Literal("agent")]);
 
-const DateOnly = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
+export const DateOnly = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
 const NullableDate = Type.Union([DateOnly, Type.Null()]);
-const Period = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
+export const Period = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
 
 export const TaskPerson = Type.Object(
   { personId: Type.String({ minLength: 1 }), name: Type.String({ minLength: 1 }) },
@@ -99,6 +99,8 @@ export const TaskView = Type.Object(
     origin: Type.Union([TaskOrigin, Type.Null()]),
     /** 外部工具替推进人提交了验收、推进人还没处理。不是状态：页头和首页卡片写「等你验收」。 */
     awaitingAcceptance: Type.Boolean(),
+    /** 挂在本月计划里的哪个 Task（本体里的 Task 对象 id）；没挂为 null。 */
+    planTaskId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     /** ISO 8601 */
     createdAt: Type.String({ minLength: 1 }),
     updatedAt: Type.String({ minLength: 1 }),
@@ -219,6 +221,8 @@ export const PatchMyTaskRequest = Type.Object(
     doneDefinition: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 500 }), Type.Null()])),
     judgment: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()])),
     missionId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
+    /** 挂到哪个 Task；null 取消挂靠。 */
+    planTaskId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -232,6 +236,7 @@ export const CreateMyTaskRequest = Type.Object(
     startDate: Type.Optional(DateOnly),
     dueDate: Type.Optional(DateOnly),
     doneDefinition: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+    planTaskId: Type.Optional(Type.String({ minLength: 1 })),
   },
   { additionalProperties: false },
 );

@@ -107,6 +107,7 @@ describe("成员首页的执行事项", () => {
     mission: null,
     waitingOn: null,
     awaitingAcceptance: false,
+    planTaskId: null,
     owner: { personId: "p1", name: "孙铭泽" },
     collaborators: [],
     latestProgress: null,
