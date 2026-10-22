@@ -83,7 +83,7 @@ export function CreateTaskScreen() {
   const [busy, setBusy] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const clientId = useRef<string | null>(null);
-  const planTasks = usePlanTasks();
+  const tasksOf = usePlanTasks();
   const change = (set: (value: string) => void, value: string) => { set(value); setError(""); clientId.current = null; };
   // 换了 Mission，选过的 Task 就不算了。
   const pickMission = (id: string) => { change(setMissionId, id); setPlanTaskId(""); };
@@ -104,7 +104,7 @@ export function CreateTaskScreen() {
   const current: Step = steps.includes(step) ? step : "when";
   const index = steps.indexOf(current);
   const chosen = linked ? missions.find((mission) => mission.id === missionId) : undefined;
-  const taskOptions = chosen ? planTasks.filter((task) => task.missionId === chosen.id) : [];
+  const taskOptions = chosen ? tasksOf(chosen.id) ?? [] : [];
 
   const toggle = () => {
     const next = !linked;

@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { describe,expect,it } from "vitest";
+import { describe,expect,it,vi } from "vitest";
 import type { THomePlanTask } from "@warmap/contracts";
+import { buildApp } from "../src/app.js";
+import { clearWorldReadCache } from "../src/worldReader.js";
 import { call,executionFixture,newTask,type Fixture } from "./executionFixture.js";
 import { TEST_MEMBER } from "./helpers.js";
+import { stubWorld } from "./worldFixture.js";
 
 const OCT_22=new Date("2026-10-22T02:00:00.000Z");
 const create=async(f:Fixture,cookie:string,missionId:string|null,extra:Record<string,unknown>)=>{
@@ -143,6 +146,52 @@ describe("首页计划",()=>{
       expect(titles(plan.activities)).toEqual(["照常列出"]);
     } finally { await f.t.close(); }
   });
+
+  it("Task 来源一直不回：首页按时出（约 2.5 秒），没有 Task 行，本地内容照常",async()=>{
+    const f=await executionFixture("confirmed","2026-10",{planTasks:()=>new Promise<THomePlanTask[]>(()=>undefined)});
+    try {
+      f.setNow(OCT_22);
+      await create(f,f.member,"execution-one",{title:"照常列出"});
+      const started=Date.now();
+      const plan=await read(f,f.member);
+      const elapsed=Date.now()-started;
+      expect(elapsed).toBeGreaterThanOrEqual(2_400);
+      expect(elapsed).toBeLessThan(8_000);
+      expect(plan.tasks).toEqual([]);
+      expect(plan.missions).toHaveLength(2);
+      expect(titles(plan.activities)).toEqual(["照常列出"]);
+    } finally { await f.t.close(); }
+  },20_000);
+
+  it("配了本体：实例开了读才从本体读 Task；没开读（mvp 实例）不去读",async()=>{
+    const f=await executionFixture();
+    const calls=stubWorld(({url})=>{
+      if (url.pathname==="/v1/world/objects") {
+        if (url.searchParams.get("external_id")==="mission:execution-one") return {items:[{object_id:"mission-1",object_type:"Mission",domain_id:"domain-eo"}],next_cursor:null};
+        if (url.searchParams.get("type")==="Task") return {items:[{object_id:"task-a",object_type:"Task"}],next_cursor:null};
+        return {items:[],next_cursor:null};
+      }
+      if (url.pathname==="/v1/world/objects/task-a") return {business:{object_id:"task-a",object_type:"Task",title:"回流方案定稿",
+        relations:[{field:"parent_ref",relation:"belongs_to",value:{object_id:"mission-1",ref:"mission-1@2"}}],
+        blocks:[{id:"definition",value:{components:[{type:"outcome",text:"会议结论写进本体"},{type:"acceptance_criterion",text:"纪要能读回"}]}}]}};
+      return {ok:true};
+    });
+    const runtime={ async run(){ return { assistantMessage:"test", runtimeEntries:[] }; } };
+    const world={worldApiUrl:"https://world.test",worldAgentToken:"fake-world-token-for-tests"};
+    try {
+      for (const [worldInstance,expected] of [["demo",[{taskId:"task-a",missionId:"execution-one",name:"回流方案定稿",doneDefinition:"会议结论写进本体",criteria:["纪要能读回"]}]],["mvp",[]]] as const) {
+        clearWorldReadCache();
+        const app=await buildApp({pool:f.t.pool,env:{...f.t.env,...world,worldInstance},conversationRuntime:runtime,now:()=>OCT_22});
+        try {
+          const res=await app.inject({method:"GET",url:"/api/me/home-plan",headers:{cookie:f.member,origin:f.t.publicOrigin}});
+          expect(res.statusCode).toBe(200);
+          expect(res.json().tasks).toEqual(expected);
+        } finally { await app.close(); }
+      }
+      expect(calls.filter(({url})=>url.searchParams.get("type")==="Task")).toHaveLength(1);
+      expect(calls.every(({method})=>method==="GET")).toBe(true);
+    } finally { vi.unstubAllGlobals(); clearWorldReadCache(); await f.t.close(); }
+  },30_000);
 
   it("别人的 Mission 和事项不出现",async()=>{
     const f=await executionFixture();

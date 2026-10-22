@@ -625,8 +625,8 @@ export async function buildApp({
     threadIntroAgent: threadIntroAgent ?? createThreadIntroAgent(pool, env),
     missionCardDraftAgent: missionCardDraftAgent ?? createMissionCardDraftAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.heavyModel }),
     taskAcceptanceAgent: taskAcceptanceAgent ?? createTaskAcceptanceAgent(pool, env),
-    // 首页 Task 行：配了本体就从本体读（只读），没配就没有 Task。
-    planTasks: planTasks ?? (worldConfigured(env) ? createWorldPlanTaskSource(new WorldClient(q, env)) : emptyPlanTaskSource),
+    // 首页 Task 行：本体配了、实例也开了读（和其他读本体的地方同一个开关）才从本体读（只读），否则没有 Task。
+    planTasks: planTasks ?? (world.enabled ? createWorldPlanTaskSource(new WorldClient(q, env)) : emptyPlanTaskSource),
     materialStorageDir,
     conversationAttachmentStorageDir,
     conversationTurnTimeoutMs,

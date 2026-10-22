@@ -1,10 +1,9 @@
-import type { THomePlanActivity, THomePlanResponse, THomePlanTask } from "@warmap/contracts";
+import type { THomePlanActivity, THomePlanResponse } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
 import { listPlanItems, milestoneDate, type PlanItem } from "./monthPlan.js";
 import { companyPeriod } from "./monthlyPlans.js";
-import { logEvent } from "./observability.js";
 import { listPlanMarks } from "./planMarks.js";
-import type { PlanTaskSource } from "./planTasks.js";
+import { readPlanTasks, type PlanTaskSource } from "./planTasks.js";
 import { monthDays, weekOf } from "./workCalendar.js";
 import { shanghaiDate } from "./workdays.js";
 
@@ -32,16 +31,6 @@ function placeActivity({ item, missionId }: PlanItem, weekStart: string, weekEnd
   if ((item.startDate !== null && item.startDate > weekEnd) || (item.startDate === null && item.dueDate === null && item.status === "not_started"))
     return { item, missionId, column: "later", overdue: false };
   return { item, missionId, column: "week", overdue: item.dueDate !== null && item.dueDate < weekStart };
-}
-
-/** Task 来源读不到时首页照常出，只是没有 Task 行。 */
-async function readPlanTasks(planTasks: PlanTaskSource, missions: { id: string; code: string }[]): Promise<THomePlanTask[]> {
-  try {
-    return await planTasks(missions);
-  } catch (cause) {
-    logEvent({ event: "home_plan.tasks_failed", status: "failed", errorCode: "PLAN_TASKS_FAILED", reason: String((cause as Error)?.message ?? cause).slice(0, 300) });
-    return [];
-  }
 }
 
 /**

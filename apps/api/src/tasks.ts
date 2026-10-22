@@ -128,11 +128,11 @@ export async function missionAvailable(q: Query, ownerId: string, missionId: str
   return !!result.rowCount;
 }
 /** 本人此刻能挂执行事项的 Mission（与 missionAvailable 同一口径）。 */
-export async function listAvailableMissions(q: Query, ownerId: string, now: Date): Promise<{ id: string; title: string; battlefield: string }[]> {
-  return (await q(`SELECT m.id,m.title,b.name AS battlefield FROM missions m JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id
+export async function listAvailableMissions(q: Query, ownerId: string, now: Date): Promise<{ id: string; code: string; title: string; battlefield: string }[]> {
+  return (await q(`SELECT m.id,m.code,m.title,b.name AS battlefield FROM missions m JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id
     JOIN mission_rounds r ON r.id=c.round_id JOIN battlefield_config b ON b.id=r.battlefield_id
     WHERE c.owner_id=$1 AND r.status='confirmed' AND r.period >= $2 ORDER BY r.period,c.sort_order,m.code,m.id`,
-  [ownerId, companyPeriod(now)])).rows as { id: string; title: string; battlefield: string }[];
+  [ownerId, companyPeriod(now)])).rows as { id: string; code: string; title: string; battlefield: string }[];
 }
 export async function renumberMission(client: PoolClient, missionId: string): Promise<void> {
   await client.query(`WITH numbered AS (SELECT id,row_number() OVER (ORDER BY step_order NULLS LAST,created_at,id)::int AS ord

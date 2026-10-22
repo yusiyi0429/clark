@@ -50,7 +50,7 @@ function findAll(node: unknown, match: (node: Node) => boolean): Node[] {
 }
 const render = (component: () => unknown, store: unknown[] = main) => { hooks.values = store; hooks.index = 0; hooks.effects = []; return component(); };
 let main: unknown[] = [];
-beforeEach(() => { main = []; hooks.values = main; hooks.index = 0; hooks.effects = []; vi.clearAllMocks(); vi.stubGlobal("crypto", { randomUUID: () => "00000000-0000-4000-8000-000000000001" }); vi.stubGlobal("window", { dispatchEvent: vi.fn() }); });
+beforeEach(() => { main = []; hooks.values = main; hooks.index = 0; hooks.effects = []; vi.clearAllMocks(); for (const action of Object.values(actions)) action.mockReset(); vi.stubGlobal("crypto", { randomUUID: () => "00000000-0000-4000-8000-000000000001" }); vi.stubGlobal("window", { dispatchEvent: vi.fn() }); });
 
 it("三步新建：回车逐步前进，最后一步才提交；失败保留草稿，重试复用 clientId，成功后进入详情", async () => {
   let tree = render(() => CreateTaskScreen());
@@ -80,7 +80,7 @@ it("三步新建：回车逐步前进，最后一步才提交；失败保留草�
 
 /** 本人两个 Mission，只有 m1 下有 Task（首页计划读本体）。 */
 const PLAN_TASKS = [{ taskId: "t1", missionId: "m1", name: "回流方案定稿", doneDefinition: null, criteria: [] }, { taskId: "t2", missionId: "m1", name: "真实会议跑通", doneDefinition: null, criteria: [] }];
-const answerGets = () => actions.get.mockImplementation(async (path: string) => path === "/api/me/home-plan" ? { data: { tasks: PLAN_TASKS } }
+const answerGets = (homePlan: unknown = { missions: [{ missionId: "m1" }, { missionId: "m2" }], tasks: PLAN_TASKS }) => actions.get.mockImplementation(async (path: string) => path === "/api/me/home-plan" ? { data: homePlan }
   : path === "/api/me/plan" ? { data: { editable: true, groups: [{ missionId: "m1", title: "上线", battlefieldName: "增长" }, { missionId: "m2", title: "验证", battlefieldName: "增长" }] } } : {});
 /** 跑一遍收起来的 effect，等它们发出的 GET 都回来。 */
 const settle = async (count: number) => { hooks.effects.forEach((effect) => effect()); await vi.waitFor(() => expect(actions.get).toHaveBeenCalledTimes(count)); await new Promise((resolve) => setTimeout(resolve, 0)); };
@@ -119,7 +119,6 @@ it("新建时选了有 Task 的 Mission 才出「挂到 Task」，默认不挂�
   }
   await vi.waitFor(() => expect(actions.post).toHaveBeenCalledOnce());
   expect(actions.post.mock.calls[0][1].body).toMatchObject({ missionId: "m1", planTaskId: "t2" });
-  actions.get.mockReset();
 });
 
 it("编辑表单：所属 Mission 有 Task 时能改「挂到 Task」，换 Mission 清掉；没有 Task 的 Mission 不出", async () => {
@@ -148,7 +147,48 @@ it("编辑表单：所属 Mission 有 Task 时能改「挂到 Task」，换 Miss
   expect(picker()).toBeUndefined();
   save();
   expect(onSave).toHaveBeenLastCalledWith({ missionId: "m2", planTaskId: null });
-  actions.get.mockReset();
+  // 换回打开时的 Mission：Task 回到打开时的，什么都不交。
+  (find(fields, (node) => node.props?.["aria-label"] === "所属个人任务")!.props!.onSelectionChange as (key: string) => void)("m1");
+  fields = render(() => TaskEditForm(props), form);
+  expect(picker()?.props?.selectedKey).toBe("t1");
+  save();
+  expect(props.onCancel).toHaveBeenCalledOnce();
+});
+
+it("编辑表单：挂着的 Task 已不在本体里时单列「已不存在的 Task」，能改成不挂；没读到 Task 时不出、换回 Mission 也不交 planTaskId", async () => {
+  const mission = { missionId: "m1", title: "上线", cardId: "card", period: "2026-10", battlefieldName: "增长", step: 1, steps: 1 };
+  const missionOptions = [{ missionId: "m1", title: "上线", battlefieldName: "增长", period: "2026-10" }, { missionId: "m2", title: "验证", battlefieldName: "增长", period: "2026-10" }];
+  const goneDetail = detailOf({ task: { ...task, mission, planTaskId: "t-gone" }, missionOptions }) as Parameters<typeof TaskEditForm>[0]["detail"];
+  const onSave = vi.fn(), onCancel = vi.fn();
+  answerGets();
+  let form: unknown[] = [];
+  let fields = render(() => TaskEditForm({ detail: goneDetail, busy: false, onSave, onCancel }), form);
+  await settle(1);
+  const picker = () => find(fields, (node) => node.props?.["aria-label"] === "挂到 Task");
+  fields = render(() => TaskEditForm({ detail: goneDetail, busy: false, onSave, onCancel }), form);
+  expect(picker()?.props?.selectedKey).toBe("t-gone");
+  expect(findAll(picker(), (node) => node.props?.id !== undefined).map((node) => node.props!.textValue)).toEqual(["不挂", "已不存在的 Task", "回流方案定稿", "真实会议跑通"]);
+  (picker()!.props!.onSelectionChange as (key: string) => void)("none");
+  fields = render(() => TaskEditForm({ detail: goneDetail, busy: false, onSave, onCancel }), form);
+  expect(picker()?.props?.selectedKey).toBe("none");
+  (find(fields, (node) => node.props?.children === "保存")!.props!.onPress as () => void)();
+  expect(onSave).toHaveBeenCalledWith({ planTaskId: null });
+
+  // 首页计划没读到：不出下拉；换个 Mission 再换回来，不会悄悄交 planTaskId: null。
+  actions.get.mockReset(); actions.get.mockResolvedValue({ error: { message: "暂时失败" } });
+  const linked = detailOf({ task: { ...task, mission, planTaskId: "t1" }, missionOptions }) as Parameters<typeof TaskEditForm>[0]["detail"];
+  form = [];
+  fields = render(() => TaskEditForm({ detail: linked, busy: false, onSave, onCancel }), form);
+  await settle(1);
+  fields = render(() => TaskEditForm({ detail: linked, busy: false, onSave, onCancel }), form);
+  expect(picker()).toBeUndefined();
+  for (const key of ["m2", "m1"]) {
+    (find(fields, (node) => node.props?.["aria-label"] === "所属个人任务")!.props!.onSelectionChange as (key: string) => void)(key);
+    fields = render(() => TaskEditForm({ detail: linked, busy: false, onSave, onCancel }), form);
+  }
+  (find(fields, (node) => node.props?.children === "保存")!.props!.onPress as () => void)();
+  expect(onSave).toHaveBeenCalledTimes(1);
+  expect(onCancel).toHaveBeenCalledOnce();
 });
 
 it("邀请只提交选中的 collaboratorOptions 人员", async () => {

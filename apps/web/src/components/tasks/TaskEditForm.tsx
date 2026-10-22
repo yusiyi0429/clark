@@ -25,8 +25,12 @@ export function TaskEditForm({ detail, busy, onSave, onCancel }: { detail: Detai
   const task = detail.task;
   const missionOptions = task.mission && !detail.missionOptions.some((option) => option.missionId === task.mission?.missionId)
     ? [task.mission, ...detail.missionOptions] : detail.missionOptions;
-  const planTasks = usePlanTasks();
-  const taskOptions = draft.missionId ? planTasks.filter((option) => option.missionId === draft.missionId) : [];
+  const tasksOf = usePlanTasks();
+  const known = draft.missionId ? tasksOf(draft.missionId) : null;
+  const taskOptions = known ?? [];
+  // 打开时挂着的 Task 不在这个 Mission 读到的 Task 里：单列一项，好改成「不挂」。没读到 Task 时不下这个结论。
+  const gone = known !== null && draft.missionId === opened.missionId && opened.planTaskId !== ""
+    && !known.some((option) => option.taskId === opened.planTaskId);
   useEffect(() => { root.current?.scrollIntoView({ block: "nearest" }); }, []);
   const set = (key: keyof Draft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
   const save = () => {
@@ -47,8 +51,11 @@ export function TaskEditForm({ detail, busy, onSave, onCancel }: { detail: Detai
   return <section ref={root} className={s.paneBlock} aria-label="编辑执行事项">
     <h3>编辑执行事项</h3>
     <FormField label="执行事项标题" value={draft.title} onChange={(value) => set("title", value)} />
-    {/* 换了 Mission，选过的 Task 就不算了。 */}
-    <Select aria-label="所属个人任务" selectedKey={draft.missionId || "independent"} onSelectionChange={(key) => setDraft((current) => ({ ...current, missionId: key === "independent" ? "" : String(key), planTaskId: "" }))}>
+    {/* 换了 Mission，选过的 Task 就不算了；换回打开时的 Mission，Task 也回到打开时的。 */}
+    <Select aria-label="所属个人任务" selectedKey={draft.missionId || "independent"} onSelectionChange={(key) => {
+      const missionId = key === "independent" ? "" : String(key);
+      setDraft((current) => ({ ...current, missionId, planTaskId: missionId === opened.missionId ? opened.planTaskId : "" }));
+    }}>
       <Label>所属个人任务</Label>
       <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
       <Select.Popover><TianshuPortalTheme><ListBox>
@@ -56,12 +63,13 @@ export function TaskEditForm({ detail, busy, onSave, onCancel }: { detail: Detai
         {missionOptions.map((option) => <ListBox.Item key={option.missionId} id={option.missionId} textValue={option.title}>{option.title} · {option.battlefieldName}<ListBox.ItemIndicator /></ListBox.Item>)}
       </ListBox></TianshuPortalTheme></Select.Popover>
     </Select>
-    {taskOptions.length ? <Select aria-label="挂到 Task" selectedKey={taskOptions.some((option) => option.taskId === draft.planTaskId) ? draft.planTaskId : "none"}
+    {taskOptions.length || gone ? <Select aria-label="挂到 Task" selectedKey={draft.planTaskId || "none"}
       onSelectionChange={(key) => set("planTaskId", key === "none" ? "" : String(key))}>
       <Label>挂到 Task</Label>
       <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
       <Select.Popover><TianshuPortalTheme><ListBox>
         <ListBox.Item id="none" textValue="不挂">不挂<ListBox.ItemIndicator /></ListBox.Item>
+        {gone ? <ListBox.Item id={opened.planTaskId} textValue="已不存在的 Task">已不存在的 Task<ListBox.ItemIndicator /></ListBox.Item> : null}
         {taskOptions.map((option) => <ListBox.Item key={option.taskId} id={option.taskId} textValue={option.name}>{option.name}<ListBox.ItemIndicator /></ListBox.Item>)}
       </ListBox></TianshuPortalTheme></Select.Popover>
     </Select> : null}

@@ -60,13 +60,22 @@ describe("个人令牌与执行事项 MCP", () => {
   });
 
   it("Agent 按正在做的事建执行事项：直接生效、标为 Agent 建、重试不重复、能挂本人 Mission、不能挂别人的", async () => {
-    const f = await executionFixture();
+    const asked: { id: string; code: string }[][] = [];
+    const f = await executionFixture("confirmed", "2026-10", { planTasks: async (missions) => {
+      asked.push(missions);
+      return [{ taskId: "t1", missionId: "execution-one", name: "回流方案定稿", doneDefinition: "会议结论写进本体", criteria: ["纪要能读回"] }];
+    } });
     try {
       const { token } = (await call(f, f.member, "POST", "/api/me/tokens", { name: "Claude", client: "claude", expiresInDays: 30 })).json();
       const invoke = async (id: number, name: string, args: Record<string, unknown>) => (await f.t.app.inject({ method: "POST", url: "/mcp/me",
         headers: { authorization: `Bearer ${token}`, accept: "application/json, text/event-stream" }, payload: rpc(id, "tools/call", { name, arguments: args }) })).json().result;
       const before = JSON.parse((await invoke(1, "list_my_items", {})).content[0].text);
-      expect(before.missions.map((mission: { id: string }) => mission.id)).toEqual(["execution-one", "execution-two"]);
+      // 每个 Mission 带它下面的 Task（和首页同一个来源），Agent 照着填 planTaskId。
+      expect(before.missions).toEqual([
+        { id: "execution-one", title: "上线", battlefield: "增长战场", tasks: [{ taskId: "t1", name: "回流方案定稿" }] },
+        { id: "execution-two", title: "验证", battlefield: "增长战场", tasks: [] },
+      ]);
+      expect(asked).toEqual([[{ id: "execution-one", code: "execution-one" }, { id: "execution-two", code: "execution-two" }]]);
       const clientId = randomUUID();
       const args = { clientId, title: "会议回流本体：设计+实现+测试", doneDefinition: "会议纪要写进本体\n天枢能读回", missionId: "execution-one", startDate: "2026-10-10" };
       const created = await invoke(2, "create_item", args);
@@ -82,6 +91,9 @@ describe("个人令牌与执行事项 MCP", () => {
       expect(foreign.isError).toBe(true); expect(foreign.content[0].text).toContain("MISSION_NOT_AVAILABLE");
       const onTask = JSON.parse((await invoke(5, "create_item", { clientId: randomUUID(), title: "挂到 Task", missionId: "execution-one", planTaskId: "t1" })).content[0].text);
       expect((await call(f, f.member, "GET", `/api/me/tasks/${onTask.id}`)).json().task.planTaskId).toBe("t1");
+      const lone = await invoke(6, "create_item", { clientId: randomUUID(), title: "独立事项挂 Task", planTaskId: "t1" });
+      expect(lone.isError).toBe(true);
+      expect(JSON.parse(lone.content[0].text)).toMatchObject({ code: "INVALID_INPUT", message: "独立事项不能挂 Task" });
       // Agent 建的和本人建的一样：未开始时本人能删。
       expect((await call(f, f.member, "DELETE", `/api/me/tasks/${item.id}?version=${detail.task.version}`)).statusCode).toBe(204);
     } finally { await f.t.close(); }
