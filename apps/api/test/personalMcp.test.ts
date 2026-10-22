@@ -80,6 +80,8 @@ describe("个人令牌与执行事项 MCP", () => {
       expect(detail.task).toMatchObject({ source: "agent", doneDefinition: args.doneDefinition, owner: { personId: TEST_MEMBER.personId } });
       const foreign = await invoke(4, "create_item", { clientId: randomUUID(), title: "挂别人的 Mission", missionId: "not-mine" });
       expect(foreign.isError).toBe(true); expect(foreign.content[0].text).toContain("MISSION_NOT_AVAILABLE");
+      const onTask = JSON.parse((await invoke(5, "create_item", { clientId: randomUUID(), title: "挂到 Task", missionId: "execution-one", planTaskId: "t1" })).content[0].text);
+      expect((await call(f, f.member, "GET", `/api/me/tasks/${onTask.id}`)).json().task.planTaskId).toBe("t1");
       // Agent 建的和本人建的一样：未开始时本人能删。
       expect((await call(f, f.member, "DELETE", `/api/me/tasks/${item.id}?version=${detail.task.version}`)).statusCode).toBe(204);
     } finally { await f.t.close(); }

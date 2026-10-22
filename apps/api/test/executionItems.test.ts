@@ -37,6 +37,39 @@ describe("执行事项",()=>{
     } finally { await f.t.close(); }
   });
 
+  it("挂 Task：新建带上、改成不挂、独立事项不能挂、换 Mission 时清掉",async()=>{
+    const f=await executionFixture();
+    try {
+      const input=newTask("execution-one",{planTaskId:"t1"});
+      const created=await call(f,f.member,"POST","/api/me/tasks",input);
+      expect(created.statusCode).toBe(200);
+      expect(created.json().planTaskId).toBe("t1");
+      expect((await call(f,f.member,"POST","/api/me/tasks",input)).json().id).toBe(created.json().id);
+      expect((await call(f,f.member,"POST","/api/me/tasks",{...input,planTaskId:"t2"})).json().code).toBe("CLIENT_ID_CONFLICT");
+      const id=created.json().id;
+      expect((await call(f,f.member,"GET",`/api/me/tasks/${id}`)).json().task.planTaskId).toBe("t1");
+      const cleared=await call(f,f.member,"PATCH",`/api/me/tasks/${id}`,{version:1,planTaskId:null});
+      expect(cleared.statusCode).toBe(200); expect(cleared.json().planTaskId).toBeNull();
+      const relinked=await call(f,f.member,"PATCH",`/api/me/tasks/${id}`,{version:2,planTaskId:"t2"});
+      expect(relinked.json().planTaskId).toBe("t2");
+      // 换 Mission：同一请求没带 Task 就清掉，带了就用带的。
+      const moved=await call(f,f.member,"PATCH",`/api/me/tasks/${id}`,{version:3,missionId:"execution-two"});
+      expect(moved.json()).toMatchObject({mission:{missionId:"execution-two"},planTaskId:null});
+      const movedBack=await call(f,f.member,"PATCH",`/api/me/tasks/${id}`,{version:4,missionId:"execution-one",planTaskId:"t1"});
+      expect(movedBack.json()).toMatchObject({mission:{missionId:"execution-one"},planTaskId:"t1"});
+      // 改别的字段不动 Task。
+      expect((await call(f,f.member,"PATCH",`/api/me/tasks/${id}`,{version:5,title:"改个标题"})).json().planTaskId).toBe("t1");
+      const independent=await call(f,f.member,"POST","/api/me/tasks",newTask(null,{planTaskId:"t1"}));
+      expect(independent.statusCode).toBe(400); expect(independent.json()).toMatchObject({code:"INVALID_INPUT",message:"独立事项不能挂 Task"});
+      const toIndependent=await call(f,f.member,"PATCH",`/api/me/tasks/${id}`,{version:6,missionId:null,planTaskId:"t1"});
+      expect(toIndependent.statusCode).toBe(400); expect(toIndependent.json().code).toBe("INVALID_INPUT");
+      const detached=await call(f,f.member,"PATCH",`/api/me/tasks/${id}`,{version:6,missionId:null});
+      expect(detached.json()).toMatchObject({mission:null,planTaskId:null});
+      const lone=(await call(f,f.member,"POST","/api/me/tasks",newTask(null))).json();
+      expect((await call(f,f.member,"PATCH",`/api/me/tasks/${lone.id}`,{version:1,planTaskId:"t1"})).json().code).toBe("INVALID_INPUT");
+    } finally { await f.t.close(); }
+  });
+
   it("邀请同步群组、通知、私有批注与 task 对话权限；只有 CEO 身份的人不在邀请名单里",async()=>{
     const f=await executionFixture();
     try {

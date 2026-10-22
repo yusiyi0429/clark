@@ -28,7 +28,7 @@ const Link = Type.Object({ url: Type.String({ pattern: "^https?://", maxLength: 
 const DateOnly = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
 const CreateInput = Type.Object({ clientId: Uuid, title: Type.String({ minLength: 1, maxLength: 120 }),
   doneDefinition: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })), missionId: Type.Optional(Type.String({ minLength: 1 })),
-  startDate: Type.Optional(DateOnly), dueDate: Type.Optional(DateOnly) }, { additionalProperties: false });
+  planTaskId: Type.Optional(Type.String({ minLength: 1 })), startDate: Type.Optional(DateOnly), dueDate: Type.Optional(DateOnly) }, { additionalProperties: false });
 const AppendInput = Type.Object({ itemId: Uuid, body: Type.String({ minLength: 1, maxLength: 2000 }),
   links: Type.Optional(Type.Array(Link, { maxItems: 5 })), clientEventId: Type.Optional(Uuid) }, { additionalProperties: false });
 const StatusInput = Type.Object({ itemId: Uuid, status: Type.Union([Type.Literal("not_started"), Type.Literal("in_progress"), Type.Literal("done")]), version: Type.Integer({ minimum: 1 }) }, { additionalProperties: false });
@@ -52,7 +52,7 @@ const CompanyInput = Type.Object({ week: Type.Optional(Type.String()), battlefie
   personId: Type.Optional(Type.String({ minLength: 1 })) }, { additionalProperties: false });
 const memberDefinitions: Tool[] = [
   { name: "list_my_items", description: "列出我推进的执行事项，默认仅未完成；missions 是此刻可以挂执行事项的本月 Mission。List execution items I own (open by default) and the missions new items can belong to.", inputSchema: ListInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
-  { name: "create_item", description: "按我正在做的事新建一条执行事项，直接生效、标为 Agent 建。先用 list_my_items 确认没有同一件事，有就写进展，不要重复建。title 写要交付的结果（30 字内）；doneDefinition 每行一条可检查的完成标准；对得上 list_my_items 里的 Mission 就带 missionId；startDate 填今天，知道截止就填 dueDate。clientId 是这次新建的随机 UUID，重试时沿用。Create an execution item for work I'm doing; check list_my_items first and never duplicate.", inputSchema: CreateInput as Tool["inputSchema"] },
+  { name: "create_item", description: "按我正在做的事新建一条执行事项，直接生效、标为 Agent 建。先用 list_my_items 确认没有同一件事，有就写进展，不要重复建。title 写要交付的结果（30 字内）；doneDefinition 每行一条可检查的完成标准；对得上 list_my_items 里的 Mission 就带 missionId，对得上这个 Mission 下的 Task 就带 planTaskId；startDate 填今天，知道截止就填 dueDate。clientId 是这次新建的随机 UUID，重试时沿用。Create an execution item for work I'm doing; check list_my_items first and never duplicate.", inputSchema: CreateInput as Tool["inputSchema"] },
   { name: "get_item", description: "读取我推进或协作的执行事项详情：完成标准（standards，按行拆好，index 从 0 起）、材料、进展、待验收的提交和验收记录。Read an execution item I own or collaborate on, with its done standards, materials, progress, pending submission and acceptance.", inputSchema: GetInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "append_progress", description: "给我推进或协作的事项记录进展、证据和下一步；结果里的 item 是事项此刻的状态和版本（接着提交验收用这个版本）。Append progress and evidence to an item I own or collaborate on; the result's item carries the item's current status and version.", inputSchema: AppendInput as Tool["inputSchema"] },
   { name: "update_status", description: "把我推进的事项标为未启动或进行中，必须带当前版本。done 不会直接完成，而是提交给本人验收（同 submit_for_acceptance）。Set an item I own to not_started or in_progress; done only submits it for my acceptance.", inputSchema: StatusInput as Tool["inputSchema"] },

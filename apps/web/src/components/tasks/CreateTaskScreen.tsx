@@ -11,6 +11,7 @@ import { browserApi } from "@/lib/api/client";
 import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { ExecutionItemsTour } from "@/components/tours/ExecutionItemsTour";
+import { usePlanTasks } from "./usePlanTasks";
 import c from "./create-task.module.css";
 
 type Plan = components["schemas"]["MonthPlanResponse"];
@@ -74,6 +75,7 @@ export function CreateTaskScreen() {
   const [title, setTitle] = useState("");
   const [linked, setLinked] = useState(false);
   const [missionId, setMissionId] = useState("");
+  const [planTaskId, setPlanTaskId] = useState("");
   const [startDate, setStartDate] = useState(todayIso);
   const [dueDate, setDueDate] = useState("");
   const [doneDefinition, setDoneDefinition] = useState("");
@@ -81,7 +83,10 @@ export function CreateTaskScreen() {
   const [busy, setBusy] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const clientId = useRef<string | null>(null);
+  const planTasks = usePlanTasks();
   const change = (set: (value: string) => void, value: string) => { set(value); setError(""); clientId.current = null; };
+  // 换了 Mission，选过的 Task 就不算了。
+  const pickMission = (id: string) => { change(setMissionId, id); setPlanTaskId(""); };
 
   useEffect(() => {
     let live = true;
@@ -99,12 +104,14 @@ export function CreateTaskScreen() {
   const current: Step = steps.includes(step) ? step : "when";
   const index = steps.indexOf(current);
   const chosen = linked ? missions.find((mission) => mission.id === missionId) : undefined;
+  const taskOptions = chosen ? planTasks.filter((task) => task.missionId === chosen.id) : [];
 
   const toggle = () => {
     const next = !linked;
     setLinked(next); setError(""); clientId.current = null;
     // 打开时默认选第一个（只有一个就是它）；关掉就是独立事项。
     setMissionId(next ? missionId || missions[0]?.id || "" : "");
+    setPlanTaskId("");
   };
   const go = (to: Step) => { setError(""); setStep(to); };
 
@@ -115,6 +122,7 @@ export function CreateTaskScreen() {
     try {
       const { data, error: failure } = await browserApi.POST("/api/me/tasks", { body: {
         clientId: clientId.current, title: title.trim(), missionId: chosen?.id ?? null, startDate,
+        ...(chosen && planTaskId ? { planTaskId } : {}),
         ...(dueDate ? { dueDate } : {}),
         ...(doneDefinition.trim() ? { doneDefinition: doneDefinition.trim() } : {}),
       } });
@@ -166,12 +174,19 @@ export function CreateTaskScreen() {
             </div>
             {linked && missions.length > 1 ? <div className={c.missions} role="radiogroup" aria-label="选择 Mission">
               {missions.map((mission) => <label key={mission.id} className={c.mission} data-selected={missionId === mission.id || undefined}>
-                <input type="radio" name="create-task-mission" value={mission.id} checked={missionId === mission.id} onChange={() => change(setMissionId, mission.id)} />
+                <input type="radio" name="create-task-mission" value={mission.id} checked={missionId === mission.id} onChange={() => pickMission(mission.id)} />
                 <span className={c.missionText}><span>{mission.title}</span><small>{mission.battlefield}</small></span>
               </label>)}
             </div> : null}
             {linked && missions.length === 1 ? <p className={c.only}>{missions[0].title}<small>{missions[0].battlefield}</small></p> : null}
           </div>
+          {taskOptions.length ? <div className={c.field} role="group" aria-label="挂到 Task">
+            <span className={c.label}>挂到 Task</span>
+            <div className={c.chips}>
+              {[{ taskId: "", name: "不挂" }, ...taskOptions].map((task) => <button key={task.taskId || "none"} type="button" className={`${c.chip} ${c.taskChip}`} title={task.name}
+                data-on={planTaskId === task.taskId || undefined} aria-pressed={planTaskId === task.taskId} onClick={() => change(setPlanTaskId, task.taskId)}><span>{task.name}</span></button>)}
+            </div>
+          </div> : null}
         </> : null}
 
         {current === "when" ? <>

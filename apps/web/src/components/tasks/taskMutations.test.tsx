@@ -78,6 +78,79 @@ it("三步新建：回车逐步前进，最后一步才提交；失败保留草�
   expect(actions.post.mock.calls[1][1].body.clientId).toBe(actions.post.mock.calls[0][1].body.clientId);
 });
 
+/** 本人两个 Mission，只有 m1 下有 Task（首页计划读本体）。 */
+const PLAN_TASKS = [{ taskId: "t1", missionId: "m1", name: "回流方案定稿", doneDefinition: null, criteria: [] }, { taskId: "t2", missionId: "m1", name: "真实会议跑通", doneDefinition: null, criteria: [] }];
+const answerGets = () => actions.get.mockImplementation(async (path: string) => path === "/api/me/home-plan" ? { data: { tasks: PLAN_TASKS } }
+  : path === "/api/me/plan" ? { data: { editable: true, groups: [{ missionId: "m1", title: "上线", battlefieldName: "增长" }, { missionId: "m2", title: "验证", battlefieldName: "增长" }] } } : {});
+/** 跑一遍收起来的 effect，等它们发出的 GET 都回来。 */
+const settle = async (count: number) => { hooks.effects.forEach((effect) => effect()); await vi.waitFor(() => expect(actions.get).toHaveBeenCalledTimes(count)); await new Promise((resolve) => setTimeout(resolve, 0)); };
+
+it("新建时选了有 Task 的 Mission 才出「挂到 Task」，默认不挂；选了就带 planTaskId", async () => {
+  answerGets();
+  let tree = render(() => CreateTaskScreen());
+  await settle(2);
+  const taskGroup = () => find(tree, (node) => node.props?.role === "group" && node.props?.["aria-label"] === "挂到 Task");
+  const chip = (title: string) => find(tree, (node) => node.type === "button" && node.props?.title === title)!;
+  tree = render(() => CreateTaskScreen());
+  (find(tree, (node) => node.props?.name === "title")!.props!.onChange as (event: { target: { value: string } }) => void)({ target: { value: "联系两家客户" } });
+  tree = render(() => CreateTaskScreen());
+  (find(tree, (node) => node.type === "form")!.props!.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault() {} });
+  tree = render(() => CreateTaskScreen());
+  expect(taskGroup()).toBeUndefined(); // 还没挂 Mission
+  (find(tree, (node) => node.props?.role === "switch")!.props!.onClick as () => void)();
+  tree = render(() => CreateTaskScreen());
+  expect(taskGroup()).toBeDefined();
+  expect(chip("不挂").props!["aria-pressed"]).toBe(true);
+  expect(chip("回流方案定稿")).toBeDefined(); expect(chip("真实会议跑通")).toBeDefined();
+  (chip("回流方案定稿").props!.onClick as () => void)();
+  // 换到没有 Task 的 Mission：整组不出，选过的 Task 作废。
+  tree = render(() => CreateTaskScreen());
+  (find(tree, (node) => node.type === "input" && node.props?.value === "m2")!.props!.onChange as () => void)();
+  tree = render(() => CreateTaskScreen());
+  expect(taskGroup()).toBeUndefined();
+  (find(tree, (node) => node.type === "input" && node.props?.value === "m1")!.props!.onChange as () => void)();
+  tree = render(() => CreateTaskScreen());
+  expect(chip("不挂").props!["aria-pressed"]).toBe(true);
+  (chip("真实会议跑通").props!.onClick as () => void)();
+  actions.post.mockResolvedValue({ data: { id: "task-new" } });
+  for (let step = 0; step < 2; step++) {
+    tree = render(() => CreateTaskScreen());
+    (find(tree, (node) => node.type === "form")!.props!.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault() {} });
+  }
+  await vi.waitFor(() => expect(actions.post).toHaveBeenCalledOnce());
+  expect(actions.post.mock.calls[0][1].body).toMatchObject({ missionId: "m1", planTaskId: "t2" });
+  actions.get.mockReset();
+});
+
+it("编辑表单：所属 Mission 有 Task 时能改「挂到 Task」，换 Mission 清掉；没有 Task 的 Mission 不出", async () => {
+  answerGets();
+  const onSave = vi.fn();
+  const form: unknown[] = [];
+  const mission = { missionId: "m1", title: "上线", cardId: "card", period: "2026-10", battlefieldName: "增长", step: 1, steps: 1 };
+  const opened = detailOf({ task: { ...task, mission, planTaskId: "t1" }, missionOptions: [
+    { missionId: "m1", title: "上线", battlefieldName: "增长", period: "2026-10" }, { missionId: "m2", title: "验证", battlefieldName: "增长", period: "2026-10" }] }) as Parameters<typeof TaskEditForm>[0]["detail"];
+  const props = { detail: opened, busy: false, onSave, onCancel: vi.fn() };
+  let fields = render(() => TaskEditForm(props), form);
+  await settle(1);
+  const picker = () => find(fields, (node) => node.props?.["aria-label"] === "挂到 Task");
+  const save = () => { fields = render(() => TaskEditForm(props), form); (find(fields, (node) => node.props?.children === "保存")!.props!.onPress as () => void)(); };
+  fields = render(() => TaskEditForm(props), form);
+  expect(picker()?.props?.selectedKey).toBe("t1");
+  expect(findAll(picker(), (node) => node.props?.id !== undefined).map((node) => [node.props!.id, node.props!.textValue])).toEqual([["none", "不挂"], ["t1", "回流方案定稿"], ["t2", "真实会议跑通"]]);
+  (picker()!.props!.onSelectionChange as (key: string) => void)("none");
+  save();
+  expect(onSave).toHaveBeenLastCalledWith({ planTaskId: null });
+  (picker()!.props!.onSelectionChange as (key: string) => void)("t2");
+  save();
+  expect(onSave).toHaveBeenLastCalledWith({ planTaskId: "t2" });
+  (find(fields, (node) => node.props?.["aria-label"] === "所属个人任务")!.props!.onSelectionChange as (key: string) => void)("m2");
+  fields = render(() => TaskEditForm(props), form);
+  expect(picker()).toBeUndefined();
+  save();
+  expect(onSave).toHaveBeenLastCalledWith({ missionId: "m2", planTaskId: null });
+  actions.get.mockReset();
+});
+
 it("邀请只提交选中的 collaboratorOptions 人员", async () => {
   const props = { taskId: "task-1", options: [{ personId: "bai", name: "白田田" }], isOpen: true, onClose: vi.fn(), onAdded: vi.fn() };
   let tree = render(() => CollaboratorsDialog(props));
