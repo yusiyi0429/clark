@@ -16,13 +16,12 @@ type TaskBusiness = WorldObject["business"] & {
 /** 同时取对象的上限。 */
 const READ_CONCURRENCY = 4;
 
-/** 父引用：读回是带 object_id 的引用对象（也接受写入时的「id@版本」字符串）。字段名以实际返回为准，先认这几种。 */
+/** 父引用：读回是带 object_id 的引用对象。字段名以实际返回为准，先认这几种。 */
 function parentIds(business: TaskBusiness): string[] {
   return (business.relations ?? [])
     .filter((item) => item.field === "parent_ref" || item.relation === "parent" || item.relation === "belongs_to")
     .flatMap((item) => Array.isArray(item.value) ? item.value : [item.value])
-    .flatMap((value) => typeof value === "string" ? [value.split("@")[0]]
-      : value && typeof value === "object" && typeof (value as { object_id?: unknown }).object_id === "string" ? [(value as { object_id: string }).object_id] : []);
+    .flatMap((value) => typeof (value as { object_id?: unknown } | null)?.object_id === "string" ? [(value as { object_id: string }).object_id] : []);
 }
 const texts = (components: Component[], type: string) =>
   components.flatMap((item) => item.type === type && typeof item.text === "string" && item.text.trim() ? [item.text.trim()] : []);
@@ -35,11 +34,8 @@ const texts = (components: Component[], type: string) =>
  */
 export function createWorldPlanTaskSource(world: PlanTaskWorld): PlanTaskSource {
   return async (missions) => {
-    const heads = await Promise.all(missions.map(async (mission) => {
-      const found = await world.listObjects({ external_system: "tianshu", external_id: `mission:${mission.code}` });
-      // 外部引用在 scope 内唯一；对不上唯一一个就当找不到。
-      return { mission, head: found.length === 1 ? found[0] : null };
-    }));
+    const heads = await Promise.all(missions.map(async (mission) =>
+      ({ mission, head: (await world.listObjects({ external_system: "tianshu", external_id: `mission:${mission.code}` }))[0] ?? null })));
     const localMission = new Map(heads.flatMap(({ mission, head }) => head ? [[head.object_id, mission.id] as const] : []));
     if (!localMission.size) return [];
     const domains = [...new Set(heads.flatMap(({ head }) => head ? [head.domain_id] : []))];
