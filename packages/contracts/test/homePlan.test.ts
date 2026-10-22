@@ -91,6 +91,11 @@ describe("首页 Mission 计划视图契约", () => {
     expect(Value.Check(PatchMyTaskRequest, { version: 3, planTaskId: "task-1" })).toBe(true);
     expect(Value.Check(PatchMyTaskRequest, { version: 3, planTaskId: null })).toBe(true);
     expect(Value.Check(PatchMyTaskRequest, { version: 3, planTaskId: "" })).toBe(false);
+    // 本体对象 id 不长；planTaskId 最多 200 字。
+    expect(Value.Check(CreateMyTaskRequest, { ...request, planTaskId: "t".repeat(200) })).toBe(true);
+    expect(Value.Check(CreateMyTaskRequest, { ...request, planTaskId: "t".repeat(201) })).toBe(false);
+    expect(Value.Check(PatchMyTaskRequest, { version: 3, planTaskId: "t".repeat(200) })).toBe(true);
+    expect(Value.Check(PatchMyTaskRequest, { version: 3, planTaskId: "t".repeat(201) })).toBe(false);
   });
 
   it("加计划点要写 Mission、日期和名字；改计划点至少带日期或名字之一", () => {

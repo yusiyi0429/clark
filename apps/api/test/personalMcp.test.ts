@@ -94,6 +94,9 @@ describe("个人令牌与执行事项 MCP", () => {
       const lone = await invoke(6, "create_item", { clientId: randomUUID(), title: "独立事项挂 Task", planTaskId: "t1" });
       expect(lone.isError).toBe(true);
       expect(JSON.parse(lone.content[0].text)).toMatchObject({ code: "INVALID_INPUT", message: "独立事项不能挂 Task" });
+      const tooLong = await invoke(7, "create_item", { clientId: randomUUID(), title: "Task id 太长", missionId: "execution-one", planTaskId: "t".repeat(201) });
+      expect(tooLong.isError).toBe(true);
+      expect(JSON.parse(tooLong.content[0].text)).toMatchObject({ code: "INVALID_INPUT" });
       // Agent 建的和本人建的一样：未开始时本人能删。
       expect((await call(f, f.member, "DELETE", `/api/me/tasks/${item.id}?version=${detail.task.version}`)).statusCode).toBe(204);
     } finally { await f.t.close(); }

@@ -222,7 +222,7 @@ export const PatchMyTaskRequest = Type.Object(
     judgment: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()])),
     missionId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
     /** 挂到哪个 Task；null 取消挂靠。 */
-    planTaskId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
+    planTaskId: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -236,7 +236,7 @@ export const CreateMyTaskRequest = Type.Object(
     startDate: Type.Optional(DateOnly),
     dueDate: Type.Optional(DateOnly),
     doneDefinition: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
-    planTaskId: Type.Optional(Type.String({ minLength: 1 })),
+    planTaskId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   },
   { additionalProperties: false },
 );

@@ -47569,6 +47569,7 @@
           },
           "planTaskId": {
             "minLength": 1,
+            "maxLength": 200,
             "type": "string"
           }
         }
@@ -54565,6 +54566,7 @@
             "anyOf": [
               {
                 "minLength": 1,
+                "maxLength": 200,
                 "type": "string"
               },
               {

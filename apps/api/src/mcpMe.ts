@@ -29,7 +29,7 @@ const Link = Type.Object({ url: Type.String({ pattern: "^https?://", maxLength: 
 const DateOnly = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
 const CreateInput = Type.Object({ clientId: Uuid, title: Type.String({ minLength: 1, maxLength: 120 }),
   doneDefinition: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })), missionId: Type.Optional(Type.String({ minLength: 1 })),
-  planTaskId: Type.Optional(Type.String({ minLength: 1 })), startDate: Type.Optional(DateOnly), dueDate: Type.Optional(DateOnly) }, { additionalProperties: false });
+  planTaskId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })), startDate: Type.Optional(DateOnly), dueDate: Type.Optional(DateOnly) }, { additionalProperties: false });
 const AppendInput = Type.Object({ itemId: Uuid, body: Type.String({ minLength: 1, maxLength: 2000 }),
   links: Type.Optional(Type.Array(Link, { maxItems: 5 })), clientEventId: Type.Optional(Uuid) }, { additionalProperties: false });
 const StatusInput = Type.Object({ itemId: Uuid, status: Type.Union([Type.Literal("not_started"), Type.Literal("in_progress"), Type.Literal("done")]), version: Type.Integer({ minimum: 1 }) }, { additionalProperties: false });
