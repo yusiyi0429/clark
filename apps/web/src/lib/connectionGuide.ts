@@ -43,21 +43,24 @@ export function connectCommands(client: AgentClient, endpoint: string, token: st
 
 export const GUIDE_FILE_NAME = "天枢连接说明.md";
 
-/** OAuth 步骤可直接分享：没有令牌，登录与权限由本人在浏览器确认。 */
+/** OAuth 步骤可直接分享：没有令牌，登录与权限由本人在浏览器确认。
+ *  天枢工具设为免确认：Agent 按 MCP 说明主动建事项、写进展，每次都弹窗问就谈不上自动。 */
 export function oauthConnectionGuide(role: "ceo" | "member", client: AgentClient, endpoint: string): string {
   const setup = client === "codex" ? [
     `codex mcp add tianshu --url ${endpoint}`,
     "codex mcp login tianshu",
+    '在 ~/.codex/config.toml 的 [mcp_servers.tianshu] 里加一行 default_tools_approval_mode = "approve"，天枢的工具不用每次确认。',
   ] : client === "claude" ? [
     `claude mcp add --transport http --scope user tianshu ${endpoint}`,
     "claude mcp login tianshu（旧版本可在 Claude Code 里输入 /mcp，选择天枢并登录）",
-  ] : [`在工具的远程 MCP 设置里添加：${endpoint}，名称用 tianshu，然后选择登录或授权。`];
+    '在 ~/.claude/settings.json 的 permissions.allow 里加 "mcp__tianshu"，天枢的工具不用每次确认。',
+  ] : [`在工具的远程 MCP 设置里添加：${endpoint}，名称用 tianshu，然后选择登录或授权；把天枢的工具设为不用每次确认。`];
   return [
     "请帮我把 AI 工具连到天枢，使用浏览器授权：", ...setup,
     "已有同名配置时更新地址，移除旧的 Authorization 请求头，再登录；保留其他服务配置。",
     "请让我在浏览器里登录天枢并点“允许连接”，不要代替我确认授权。",
     `登录后按工具要求重新加载连接，用 ${role === "ceo" ? "list_pending" : "list_my_items"} 验证能读取。`,
-    "这里只设置连接；自动同步需要单独配置。",
+    "这里只设置连接；每天定时补漏需要单独配置。",
   ].join("\n");
 }
 
