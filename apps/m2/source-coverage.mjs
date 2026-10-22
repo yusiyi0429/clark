@@ -8,13 +8,13 @@ const isSeptemberPO=f=>/^9 月 PO（上月/.test(f.title||'')||/含 9 月 PCO/.t
 const fields=[
  {key:'lto',label:'六个月目标（LTO）',pick:f=>f.kind==='lto',need:k=>k!=='organization'},
  {key:'strategy',label:'公司战略',pick:f=>f.kind==='strategy',need:k=>k==='company'},
- {key:'septemberPO',label:'9 月 PO（上月，历史）',pick:isSeptemberPO,need:k=>k!=='organization'},
- {key:'review',label:'9 月复盘',pick:f=>f.kind==='review'&&!isSeptemberPO(f),need:k=>k!=='organization'},
+ {key:'septemberPO',label:'{prev} 月 PO 与 Mission（上月计划，历史）',pick:f=>isSeptemberPO(f)||f.kind==='history',need:k=>k!=='organization'},
+ {key:'review',label:'{prev} 月复盘',pick:f=>f.kind==='review'&&!isSeptemberPO(f),need:k=>k!=='organization'},
  {key:'state',label:'截至拆解日的现状',pick:f=>f.kind==='state'&&!isSeptemberPO(f),need:k=>k!=='organization'},
  {key:'resource',label:'人员、投入与关键日期',pick:f=>f.kind==='resource',need:k=>k!=='organization'},
  {key:'organization',label:'职责与分工',pick:f=>f.kind==='organization',need:k=>k==='organization'},
  {key:'dependency',label:'跨领域供需（核心支撑，不是全部）',pick:f=>f.kind==='dependency',need:()=>false},
- {key:'intent',label:'公司 10 月整体方向',pick:f=>f.kind==='intent',need:()=>false},
+ {key:'intent',label:'公司 {cur} 月整体方向',pick:f=>f.kind==='intent',need:()=>false},
 ];
 // Chinese names for the ontology object types counted as reference answers.
 const typeLabels={PeriodGoal:'10 月 PO（周期目标）',Mission:'Mission',Task:'Task',Activity:'Activity'};
@@ -33,6 +33,8 @@ export function sourceCoverage(input){
  if(input?.mode!=='ontology-selected-facts'||!Array.isArray(input.sources))return null;
  const facts=input.sources.flatMap(s=>(s.facts||[]).map(f=>({...f,unit:f.unit||s.key})));
  const pending=input.audit?.pending||[];
+ // Labels follow the month being decomposed: "last month" is the month before input.period.
+ const cur=Number(String(input.period||'2026-10').slice(5))||10,prev=cur===1?12:cur-1,label=l=>l.replace('{prev}',prev).replace('{cur}',cur);
  const list=units.filter(([key])=>input.sources.some(s=>s.key===key)).map(([key,name])=>{
   const mine=facts.filter(f=>f.unit===key);
   const gaps=pending.filter(g=>g.unit===key||(/9 月 PO/.test(g.reason||'')&&key!=='organization'));
@@ -41,7 +43,7 @@ export function sourceCoverage(input){
    // The company-wide September PO gap is repeated on every unit in one short line.
    const notes=[...gaps.filter(g=>gapField(g,mine)===field.key).map(g=>/9 月 PO/.test(g.reason||'')?`本体还没有 9 月 PO 对象，这里用的是${key==='bf03'||key==='rearch'?'知识库摘录里的 9 月 PCO':'9 月复盘里的原目标'}；下周由于斯一补录`:g.reason),...(field.key==='resource'?items.flatMap(f=>unknownsIn(f.text)).filter(n=>!/^人员投入未知/.test(n)):[])];
    const status=!items.length?(field.need(key)?'missing':null):notes.length?'partial':'read';
-   return status&&{key:field.key,label:field.label,status,count:items.length,notes:[...new Set(notes)],items:items.map(f=>({title:f.title||null,sourceRef:f.sourceRef,factThrough:f.factThrough||null,confirmation:f.confirmation||null,preview:String(f.text||'').replace(/\s+/g,' ').slice(0,80)}))};
+   return status&&{key:field.key,label:label(field.label),status,count:items.length,notes:[...new Set(notes)],items:items.map(f=>({title:f.title||null,sourceRef:f.sourceRef,factThrough:f.factThrough||null,confirmation:f.confirmation||null,preview:String(f.text||'').replace(/\s+/g,' ').slice(0,80)}))};
   }).filter(Boolean);
   return {key,name,fields:rows,read:rows.filter(r=>r.status==='read').length,partial:rows.filter(r=>r.status==='partial').length,missing:rows.filter(r=>r.status==='missing').length};
  });

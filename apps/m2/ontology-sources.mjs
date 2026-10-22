@@ -83,11 +83,15 @@ export async function fetchOntologySources({reader=createOntologyReader(),manife
  // Public audit contains only safe gap descriptions, not quarantined raw answers.
  return {mode:'ontology-selected-facts',period:manifest.period,cutoff:manifest.cutoff,planningDate:manifest.planningDate,retrievedAt:new Date().toISOString(),sources,capacity:manifest.capacity,audit:{pending:manifest.pending,accepted:facts.length,reviewVersion:manifest.version,sourceRetries:retries,...(manifest.answerExclusions?{excludedAnswers:manifest.answerExclusions}:{})},versionNotices:[...versionNotices.values()],statusNotices:[...statusNotices.values()],model:null};
 }
+const codexBatch=15;
 export async function fetchCodexOntologySources({onProgress=()=>{}}={}){
  const manifest=await loadOntologyManifest();
  const paths=[...new Set(manifest.selections.map(s=>`/v1/world/objects/${s.objectId}${s.eventId?'/events':''}`))];
  let responses;
- try{responses=await retryRoundCall(()=>readThroughCodex(paths,{onProgress,timeoutMs:120000}),{onRetry:retry=>onProgress(0,paths.length,{retry})});}
+ // One Codex run stops early on a long list (2026-10-21: the November manifest's 69 objects read 0–1 of 69, five read fine), so read in batches.
+ try{responses=new Map();for(let i=0;i<paths.length;i+=codexBatch){const batch=paths.slice(i,i+codexBatch);
+  const part=await retryRoundCall(()=>readThroughCodex(batch,{onProgress:(done,total,meta)=>onProgress(i+done,paths.length,meta),timeoutMs:180000}),{onRetry:retry=>onProgress(i,paths.length,{retry})});
+  for(const [k,v] of part)responses.set(k,v);}}
  catch(error){if(transientRoundFailure(error)){error.code='ONTOLOGY_RETRIES_EXHAUSTED';error.diagnostics={...error.diagnostics,stage:'source-transport',attempts:3};}throw error;}
  const consumed=new Set();
  const input=await fetchOntologySources({manifest,onProgress,reader:{get:async p=>{

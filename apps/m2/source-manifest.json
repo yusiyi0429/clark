@@ -1,6 +1,6 @@
 {
   "source": "/Users/cooper/TKOS/apps/decoding-mvp",
-  "capturedAt": "2026-10-19",
+  "capturedAt": "2026-10-22",
   "files": [
     {
       "path": "ActivityGenerator.jsx",
@@ -28,23 +28,23 @@
     },
     {
       "path": "DocumentCanvas.jsx",
-      "sha256": "3b1f503d6a6111f0fae5fdced33520c46b10844aebc9edcacb52a964a4cad61d"
+      "sha256": "7e6bd7afc1db2fc93cc2db31844a841ea5843082e0212ad6b90b949090e55501"
     },
     {
       "path": "DocumentContent.jsx",
-      "sha256": "f020e24609bf9f91798a5150dd5a504f6d701885e224985a8adb0301bf7f0ced"
+      "sha256": "701818c93bb96074f5d47cc868a89902460462ac1e0b5e979a1c421ba5d1d36d"
     },
     {
       "path": "EntryMetadata.jsx",
-      "sha256": "71330c75a1a9e9a34b8cc40e4038cc52092269650dd213fe76aca689e8db61ec"
+      "sha256": "10af96a5ef3e428115460edfc928d69723501063b61bd146dbb1e7653f5135de"
     },
     {
       "path": "GenerationCanvas.jsx",
-      "sha256": "b5bd95c842335e375b0aac89e41d95dfeec6cf1067db7431b969960349a2d3e2"
+      "sha256": "b6d2c76572a62b48c33f62eb0b6ea2371cbaa2b55fbbcb0577b36d7bbadfb886"
     },
     {
       "path": "Handshake.jsx",
-      "sha256": "537837a3354c9e4f6e4345503604eb3cfa31a43a610fdc04429e67bebebfece3"
+      "sha256": "799418efc8194e8eb14f357244bc27f66c079e174663822179fd01a662ab64c5"
     },
     {
       "path": "MemberAvatar.jsx",
@@ -64,7 +64,11 @@
     },
     {
       "path": "ProposalCard.jsx",
-      "sha256": "6fd8c3f064657f7989a942a4e6ab3f92f2dc498b0347cf4c19410b3e5f4874cc"
+      "sha256": "eb025989fccbdd64721e4491ab8b73afc6419bbaf9e4fe3611b30d40092d55ae"
+    },
+    {
+      "path": "ReviewCanvas.jsx",
+      "sha256": "96904b662c072fb8d305b9c635320daa3e56dea26cbc3f9d6cdbbe603639b7a7"
     },
     {
       "path": "ReviewEditor.jsx",
@@ -88,7 +92,7 @@
     },
     {
       "path": "TodoPanel.jsx",
-      "sha256": "ba43b1d9f6b7b3d8947dc78033c34210885a094e4f82b3418da3a14a4dd456b5"
+      "sha256": "9b3705b15bd6e11bb2987f807457f3dad833cd7946c747fb9f27af064d3f45b0"
     },
     {
       "path": "UpstreamNotice.jsx",
@@ -112,7 +116,11 @@
     },
     {
       "path": "app.jsx",
-      "sha256": "e7a3c424885e2daa4c1600761004d00ba88896e4e75a788d123fd8a65651f8ba"
+      "sha256": "08250153cf40d025a8cb4ba61a2f13b445765c4c1f64705cca8d602d690ed236"
+    },
+    {
+      "path": "broadcasts.mjs",
+      "sha256": "ccbe4458da3c60cb3fc89aa225be24e8c82a0fe63bd7c4cfe04eadbab2c81a6e"
     },
     {
       "path": "card-issues.mjs",
@@ -128,7 +136,7 @@
     },
     {
       "path": "collaboration-store.mjs",
-      "sha256": "a3d386f456be91f36fa2ff554b78daea89c69150a1c6fde0190d0ecf37697ab2"
+      "sha256": "c26f9528af0ae9f1cd87b7d44734b1e286a698be558405802eb93bc69f40b361"
     },
     {
       "path": "conversation-context.mjs",
@@ -136,7 +144,7 @@
     },
     {
       "path": "decoding-gateway.mjs",
-      "sha256": "2564d86853b57e917799c96341c7549de8ae5d2d5636a71920850af9aa5c7e62"
+      "sha256": "90bb777f17d21b6fc970397770caae9d31332764bbdad08ffb0a56a21751d9aa"
     },
     {
       "path": "discussion-minutes.mjs",
@@ -148,7 +156,7 @@
     },
     {
       "path": "document-template.mjs",
-      "sha256": "94666fd5ca069a1b902e044282f56d357f8203d4ccab09ad63e559da83741b13"
+      "sha256": "5a31da783dadaad84efcaf2dce88d8495f8adb34541b6322d29e5d421dd11d54"
     },
     {
       "path": "domain.mjs",
@@ -168,15 +176,15 @@
     },
     {
       "path": "generation-progress.mjs",
-      "sha256": "3a6d817f61ffe16c7f43504d0083bcf012481dfdf2677ade46b40078a3762f4f"
+      "sha256": "014c4a853103211796bb8b388ddef8bcaeb6bf766c0b7073ac0f477ba65dacb4"
     },
     {
       "path": "governance.mjs",
-      "sha256": "199608b53540205b87e787e99016247f1efb4ff06e475fdee080a5b096b3d13b"
+      "sha256": "29fc04800313c363a5d84f855d55b0e38a92c739c00680757dfdeb41aa8b3d5a"
     },
     {
       "path": "index.html",
-      "sha256": "dec2f579801850b5ac9ebb1cf8345ba9bb90944b8a559140af469b15ca9a916d"
+      "sha256": "646b1a98cfbd7fbe6c23cf88c8d5563ba51d8a5a2c3d7a63b6b5fce5ad781321"
     },
     {
       "path": "layered-mock.mjs",
@@ -192,19 +200,27 @@
     },
     {
       "path": "mentions.mjs",
-      "sha256": "c159ab22d24f118e2eeb2e875e89f4fc7fac8da0158f683763c54e80eb084e64"
+      "sha256": "646e0dd8667877c380d52c4e6b9c6e638c9409f6b959c54121c62b13b4779c1a"
+    },
+    {
+      "path": "mission-draft.mjs",
+      "sha256": "746c893460eaf3dadd45e0394422e94fe024bce3a001b0ca7de56ab86e450eab"
+    },
+    {
+      "path": "mission-structure.mjs",
+      "sha256": "4a817135ab1caefdd2a05426580e21d911e47c57a1b4cfbd68ca87ae2180e310"
     },
     {
       "path": "model.mjs",
-      "sha256": "16fe15bb4835e8ca0fa5f72ad96b2794b3edef785107dc8daed691d5ec47936d"
+      "sha256": "307028bb184a97fc59b5794603b4561477a59adedd2a9fd936d4e9975fb23c04"
     },
     {
       "path": "nexus-cascade.mjs",
-      "sha256": "cc3a83ebd2f417828e060f907576ef0531305237b5a33050836e0cc1d9b11eb0"
+      "sha256": "f0bb79f2ec342bfe05c9edb6eacc96cd6f1081f3fa896edfa6ebc6e00cb3de15"
     },
     {
       "path": "nexus-context.mjs",
-      "sha256": "f18cc53772ae35e924c209d4f11bf15d023150bbad84007f8f8915e484834ee3"
+      "sha256": "27453e1b18043806b553f28ab010bbc158ea8f46ee9808fbf46ff26dc0f1cbb1"
     },
     {
       "path": "nexus-listen.mjs",
@@ -212,7 +228,7 @@
     },
     {
       "path": "nexus-memory.mjs",
-      "sha256": "41dbe6330204aa0e4411ccf2bd603382f44e95cab57341f66d495ec612f2cd0f"
+      "sha256": "e0374990504ad2daa726c0e528ae793497220a080f133614cf55b45bd5c8a86b"
     },
     {
       "path": "nexus-next-step.mjs",
@@ -220,19 +236,23 @@
     },
     {
       "path": "nexus-participation.mjs",
-      "sha256": "92627b08fb3f20a0f7be6e660830d77f6068721153d6dc5eab2c604ddddace78"
+      "sha256": "1e720eab7d96bc89d84d6bb64910f0e6f627012da67382f0699778f32babec2f"
     },
     {
       "path": "nexus-policy.mjs",
-      "sha256": "372dcca9e22722f14ba759bb02404bff40be18ca679cf0709ed2b2358007fc56"
+      "sha256": "a1cd5f3cd1c3e68b7900568eaab11d0c9e9880bcf370334ebbfdb15ad5cd9140"
     },
     {
       "path": "nexus-retry.mjs",
       "sha256": "6c1b3fa79ca768d98f299bd0503737642de6b2f1bede59e8a7e072e7f32eb228"
     },
     {
+      "path": "nexus-review.mjs",
+      "sha256": "9c5dfd4933fddc6f82f47bf4ce0b2fcca756d3343a24a9201ace663300eade70"
+    },
+    {
       "path": "ontology-sources.mjs",
-      "sha256": "f0b26294e6b4f55880eb28797296ef93bf616fd92b11aa427164eb4e48db6fa3"
+      "sha256": "9ff6be6007d3efc3958803bbdab035825b82e4711672d7d12f829e4befcbad5b"
     },
     {
       "path": "owner-name.mjs",
@@ -252,7 +272,7 @@
     },
     {
       "path": "private-agent-context.mjs",
-      "sha256": "fcbcb6aa2820a0234b0b5dd54f4dbd8699616189f88a11a3fd9e5a0843a5801c"
+      "sha256": "23fc2f1af4b92c287bdc618f2520cd4ffecb31bba227fc8efb56618c21bdee9b"
     },
     {
       "path": "proposal-confirmation.mjs",
@@ -275,12 +295,32 @@
       "sha256": "1ff575d8b1f3a76648454f281f5b786932781fc440b7b52edcf952dcdae55a70"
     },
     {
+      "path": "redact.mjs",
+      "sha256": "1e6a5f3590d30c2f4140cfc17f2d2aa9eeff9de00605699a818704621ac60fa5"
+    },
+    {
+      "path": "review-display.mjs",
+      "sha256": "fb7ad1238061533407eaf03da5df49284cc4e7767e61bbd052182de56e7bac44"
+    },
+    {
+      "path": "review-handoff.mjs",
+      "sha256": "afd928fac939e64399974cce4196cca0f03e0c0993f1cbd6502755d9c031d0c8"
+    },
+    {
+      "path": "review-round.mjs",
+      "sha256": "5f1300046dad0e7b2ad58f37c48261d3c07a301b875bf03cb452946ffdd46b77"
+    },
+    {
+      "path": "review-sources.mjs",
+      "sha256": "84d3e9baf58f966c0d56ccf76eac26a00f12de06aa468cdfc367c2ba6c6308aa"
+    },
+    {
       "path": "review-workflow.mjs",
       "sha256": "b4f687b2654fd3ac102ab092ffdb54a9b61acde6bd8551f6b7a9e8bac3c3e12b"
     },
     {
       "path": "round-activation.mjs",
-      "sha256": "0b82980b211499f57dbbb2c716b8191d0aebf141a5ffa18928c29a55f799a490"
+      "sha256": "10af38cba76792784254c7295826298bd974bc6de8d674195aaab0e7705817cd"
     },
     {
       "path": "round-audit.mjs",
@@ -312,7 +352,7 @@
     },
     {
       "path": "round-runner-v3.mjs",
-      "sha256": "b10ed5712f27f86c217750c31314b97673d408e85abc053ccb335df0dd57b713"
+      "sha256": "b7c3000a91bb0cafc39c2f20c3b602db09aa9ac654934e3900a923330db7862e"
     },
     {
       "path": "round-runner.mjs",
@@ -331,12 +371,16 @@
       "sha256": "3aab52e26288043a8d49e1a27b7d9f78d792a22eca47a7b88480c32ed667c213"
     },
     {
+      "path": "sensitive-rules.json",
+      "sha256": "103662f761d52f47e0ca9d39706014dd113f0705646ff7ba9c9c2f88cb41d46d"
+    },
+    {
       "path": "server.mjs",
-      "sha256": "2563236ab8484faa7c35588cf573801e85ae154b573d877f205d053cfafd76b0"
+      "sha256": "a276429131ca4cf1900f6f67b636f6152d5433ffc489136160996338003cd028"
     },
     {
       "path": "shared-projection.mjs",
-      "sha256": "0f7a34bd6206127c5415c627baf68a5f62de5499f37427f820901adfdca195b2"
+      "sha256": "e906d7580e9a0f8069955d2c0e6c6ca25bdadbb32a4db3cc6296f951392723ff"
     },
     {
       "path": "skill-snapshot.mjs",
@@ -344,19 +388,19 @@
     },
     {
       "path": "source-coverage.mjs",
-      "sha256": "63e0731a8235a49fca8e17f135e22370eec1ce5b063eb5702f508b5146c4af5b"
+      "sha256": "bf4b8d56e292cafc2a58c462ae9193e0135fba2eae75c7a0a651ab9baa3e2278"
     },
     {
       "path": "stance.mjs",
-      "sha256": "80b4983e52fab65ce0b44e4d825b5086a4bd688d746a950cdddc155766defb3e"
+      "sha256": "8ce701f717c530def16777e6e8981d239e762cc7e2c5b79ae66f894a5c11b4dc"
     },
     {
       "path": "style.css",
-      "sha256": "01cbedb17147e09c5068ec919274dc5d3802ad705126a40e025b1bd2b8a8f8ce"
+      "sha256": "bef07959e15d29c7c85f3e953cd8d6d626f4d1e74df0959e56f4fec05d01cfb1"
     },
     {
       "path": "todo.mjs",
-      "sha256": "626efbf641ef37bbe1170c9404218b08cffd97736b6d0701fad2aa7fcf3f87f7"
+      "sha256": "ec61424b47d89e90e2a16cdbb00020d4334822b5ce610dc201cfe210df1636fe"
     },
     {
       "path": "topic-lifecycle.mjs",
@@ -365,6 +409,10 @@
     {
       "path": "v3-display.mjs",
       "sha256": "8422126802cbbe470026fec8296b8315c3b2b8f0e7f06f2a48f2ea00ab5aa385"
+    },
+    {
+      "path": "AdminPanel.jsx",
+      "sha256": "369a19c06ae1a023126658103576b5b50ae199846248f9cd3a0eb47691ef36a8"
     }
   ],
   "excluded": [
@@ -374,9 +422,14 @@
     "lan-host.mjs and published-round.mjs (local-only; the server binds via M2_BIND_HOST and reads rounds from the private seed)"
   ],
   "skill": {
-    "version": "3.1.5",
-    "fingerprint": "01a9b1723261",
+    "version": "3.1.7",
+    "fingerprint": "c07ad2c3defc",
     "source": "~/.codex/skills/tkos-decoding"
   },
-  "mergeBase": "Demo copies of these files are kept outside Git at /Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261019 for the next three-way sync."
+  "reviewSkill": {
+    "version": "2.0.4",
+    "fingerprint": "7756dce16b5d",
+    "source": "apps/decoding-mvp/.runtime/eval/review/skills/tkos-review-2.0.4"
+  },
+  "mergeBase": "/Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261022c"
 }

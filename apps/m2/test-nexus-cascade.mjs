@@ -16,10 +16,16 @@ test('上级改了排进下级对齐，群里说明 Nexus 正在对照',()=>{
 });
 test('只给对不上的下级出卡，并 @ 负责人；对得上的说不用改',()=>{
  const s=applyAction(seed(),dri,{type:'revise',cardId:'bf01',baseVersion:1,patch:{result:'王总两周内用两次并做出决定'}});
- const checked=validateCascade({children:[{cardId:'bf01-m1',aligned:false,why:'验收还是只用一次',patch:{checks:['**两次使用：**两周内用两次']}},{cardId:'bf01-m2',aligned:true,why:'资料接入不受影响'},{cardId:'eo-m1',aligned:false,patch:{result:'x'}}]},{state:s,parentId:'bf01'});
+ const checked=validateCascade({children:[{cardId:'bf01-m1',aligned:false,conflict:true,why:'验收还是只用一次',patch:{checks:['**两次使用：**两周内用两次']}},{cardId:'bf01-m2',aligned:true,why:'资料接入不受影响'},{cardId:'eo-m1',aligned:false,patch:{result:'x'}}]},{state:s,parentId:'bf01'});
  assert.deepEqual(checked.proposals.map(p=>p.cardId),['bf01-m1']);assert.deepEqual(checked.aligned,['bf01-m2']);
  const text=cascadeMessage(s,'bf01',checked);
  assert.match(text,/M01（验收还是只用一次），已出修订卡，请 @孙铭泽 看看/);assert.match(text,/M02 对得上，不用改/);
+});
+test('能写得更贴切但不冲突的，只在群里提示，不出卡',()=>{
+ const s=applyAction(seed(),dri,{type:'revise',cardId:'bf01',baseVersion:1,patch:{result:'王总两周内用两次并做出决定'}});
+ const checked=validateCascade({children:[{cardId:'bf01-m1',aligned:false,conflict:false,why:'可以补一句两次使用',patch:{checks:['**两次使用：**两周内用两次']}},{cardId:'bf01-m2',aligned:true,why:'不受影响'}]},{state:s,parentId:'bf01'});
+ assert.equal(checked.proposals.length,0);assert.deepEqual(checked.hints,['bf01-m1']);
+ assert.match(cascadeMessage(s,'bf01',checked),/M01（可以补一句两次使用）可能要跟着改，请 @孙铭泽 看看，要改就 @Nexus/);
 });
 test('列表写成一句话、档位乱写都不出卡，并请负责人自己看',()=>{
  const s=applyAction(seed(),dri,{type:'revise',cardId:'bf01',baseVersion:1,patch:{result:'新'}});

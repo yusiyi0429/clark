@@ -1,0 +1,60 @@
+// 复盘 (陈溪南 2026-10-20): a review result becomes review cards in the same units and groups as the plan.
+// Card ids are rv:<ref> (rv:company, rv:eo, rv:eo-m1) so they never collide with plan cards; the review skill owns
+// the content, the program only stores it, shows it and runs the same handshake.
+import {broadcast} from './broadcasts.mjs';
+const levelOf=l=>l==='ru'?'po':l==='company'?'company':'mission';
+export const reviewId=ref=>'rv:'+ref;
+// 2.0.2 wrote causes as strings with the question at the end; 2.0.3 writes {text, ask}.
+export const causeOf=c=>typeof c==='string'?{text:c,ask:''}:{text:String(c?.text||''),ask:String(c?.ask||'')};
+export function reviewCards(file,{now=new Date().toISOString()}={}){
+ const reviews=Array.isArray(file.reviews)?file.reviews:Object.values(file.reviews||{});
+ const cards={};
+ for(const r of reviews){
+  const id=reviewId(r.ref||r.unit),level=levelOf(r.level),parent=r.parent?reviewId(r.parent):r.level==='mission'?reviewId(r.unit):r.level==='ru'&&reviews.some(x=>x.level==='company')?reviewId('company'):null;
+  const content={version:1,ref:r.ref||r.unit,unit:r.level==='company'?'company':r.unit,level,title:r.title,owner:r.owner,verdict:r.verdict,verdictReason:r.verdictReason,
+   targets:r.targets||[],causes:(r.causes||[]).map(causeOf),nextInputs:r.nextInputs||[],evidenceRefs:r.evidenceRefs||[],recordFacts:r.recordFacts||null,...(r.ltoReview?{ltoReview:r.ltoReview}:{})};
+  cards[id]={...content,id,kind:'review',parentId:parent,versions:[{number:1,content:structuredClone(content),author:'Review',signatures:[],createdAt:now}],confirmedVersion:null};
+ }
+ return cards;
+}
+// Install a review round: earlier review cards move to reviewArchives with their talk; plan cards are untouched.
+export function installReviewRound(state,file,{label,source,sample=false,now=new Date().toISOString()}={}){
+ const next=structuredClone(state),old=Object.values(next.cards).filter(c=>c.kind==='review');
+ if(old.length){const ids=new Set(old.map(c=>c.id));
+  // Comments on the old reviews go with them: the new round reuses the same card ids (rv:eo …).
+  const comments=next.comments.filter(c=>ids.has(c.cardId));next.comments=next.comments.filter(c=>!ids.has(c.cardId));
+  next.reviewArchives??=[];next.reviewArchives.push({round:next.reviewRound||null,cards:old,comments,archivedAt:now});for(const c of old)delete next.cards[c.id];
+  // Revision cards on the old reviews go with them too: left in the room they read as if the new round were already revised.
+  const proposals=(next.proposals||[]).filter(p=>ids.has(p.cardId));next.proposals=(next.proposals||[]).filter(p=>!ids.has(p.cardId));
+  next.reviewArchives.at(-1).proposals=proposals;
+  // Group talk about the old reviews: anything on those cards, and Nexus lines posted while that round was live.
+  const from=next.reviewRound?.loadedAt||'',talk=m=>ids.has(m.cardId)||ids.has(m.context?.selection?.id)||m.author==='Nexus'&&from&&String(m.createdAt||'')>=from&&/复盘|修订卡/.test(String(m.text||''));
+  next.reviewArchives.at(-1).messages=next.messages.filter(talk);next.messages=next.messages.filter(m=>!talk(m));}
+ // 复盘和拆解是一整轮 (陈溪南 2026-10-22): a new month-end round opens with clean rooms. Everything said before it —
+ // group and private chat, field comments, revision cards, Nexus minutes — goes to talkArchives, kept for tracing.
+ if(next.messages.length||next.comments.length||(next.proposals||[]).length){(next.talkArchives??=[]).push({archivedAt:now,reason:'新一轮复盘',messages:next.messages,comments:next.comments,proposals:next.proposals||[],nexus:next.nexus||{}});next.messages=[];next.comments=[];next.proposals=[];next.nexus={};}
+ Object.assign(next.cards,reviewCards(file,{now}));
+ // 失败要看得见 (2026-10-22): reviews the run could not write, or wrote without their background, are named on the page.
+ const problems=[...(file.failed||[]).map(f=>({ref:f.id,kind:'failed',reason:f.finishReason==='refusal'?'生成失败：模型拒答':`生成失败：${String(f.error||'').slice(0,60)}`})),...(file.dropped||[]).map(d=>({ref:d.id,kind:'degraded',reason:'背景资料未读入（模型拒答后去掉背景资料重写）'}))];
+ next.reviewRound={label:label||file.name||'复盘',...(problems.length?{problems}:{}),skill:file.skill?.version||file.skillFormat||file.skill||null,period:file.period||null,cutoff:file.cutoff||null,evidence:file.evidence||null,source:source||null,sample,loadedAt:now};
+ // Every unit with reviews is told they are ready (and, on a re-run, that the old round's talk is archived).
+ const month=(p=>{const m=String(p||'').match(/-(\d{2})$/);return m?`${Number(m[1])} 月`:'本月';})(file.period),units=[...new Set(Object.values(next.cards).filter(c=>c.kind==='review'&&c.unit!=='company').map(c=>c.unit))];
+ for(const u of units)broadcast(next,u,old.length?`${month}复盘已换成新一轮（${next.reviewRound.label}），上一轮的讨论已归档。请各位重新看自己负责的那份。`:`${month}复盘已生成，请各位看自己负责的那份；有不同意见直接在卡上批注，没问题就在卡底部确认。`,{kind:old.length?'review-regenerated':'review-ready',now});
+ next.sequence=(next.sequence||0)+1;
+ return next;
+}
+
+// 复盘 and 拆解 are one month-end flow (陈溪南 2026-10-22): a new plan round keeps the reviews, their talk in the unit
+// groups and the handoff. Only the previous plan's cards and plan talk go to the archive.
+export function carryReviewLayer(old,next){
+ const ids=new Set(Object.values(old.cards||{}).filter(c=>c.kind==='review').map(c=>c.id));
+ if(!ids.size&&!old.planHandoff)return next;
+ for(const id of ids)next.cards[id]=structuredClone(old.cards[id]);
+ for(const k of ['reviewRound','reviewArchives','planHandoff','unitsDone'])if(old[k]!==undefined)next[k]=structuredClone(old[k]);
+ const from=old.reviewRound?.loadedAt||'';
+ const talk=m=>ids.has(m.cardId)||ids.has(m.context?.selection?.id)||Boolean(m.broadcast)||m.author==='Nexus'&&from&&String(m.createdAt||'')>=from&&/复盘|修订卡/.test(String(m.text||''));
+ next.messages=[...(old.messages||[]).filter(talk).map(m=>structuredClone(m)),...(next.messages||[])];
+ next.comments=[...(old.comments||[]).filter(c=>ids.has(c.cardId)).map(c=>structuredClone(c)),...(next.comments||[])];
+ next.proposals=[...(old.proposals||[]).filter(p=>ids.has(p.cardId)).map(p=>structuredClone(p)),...(next.proposals||[])];
+ return next;
+}
