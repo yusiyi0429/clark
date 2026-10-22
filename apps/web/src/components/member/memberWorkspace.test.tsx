@@ -17,6 +17,9 @@ describe("成员工作台外壳", () => {
     // 声纹收进个人菜单，首页不再直接放声纹卡片
     expect(html).not.toContain("我的声纹");
     expect(html).not.toContain("发给你的信号");
+    // 采集到的工作全部自动归到执行事项，首页没有计划外；去战场进展的入口还在。
+    expect(html).not.toContain("计划外");
+    expect(html).toContain('data-origin="/me/progress"');
   });
 
   it("首页底部是自己的 Agent（全局对话输入条）", () => {

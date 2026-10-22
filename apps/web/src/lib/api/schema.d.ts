@@ -2406,61 +2406,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 全局进展：红线（比预期慢、按截止日做不完）、按计划在走、没有 Task 基线的人的进展摘要、计划外工作；CEO 看全部，其他人看同一战场的人 */
+        /** 全局进展：红线（比预期慢、按截止日做不完）、按计划在走、没有 Task 基线的人的进展摘要；CEO 看全部，其他人看同一战场的人 */
         get: operations["getProgressOverview"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/me/off-plan": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 本人的计划外工作（没处理的、已提出改计划的）与挂靠时可选的本人未完成执行事项 */
-        get: operations["getMyOffPlan"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/me/off-plan/{id}/attach": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 把一条计划外工作挂到本人的一件执行事项上（同时记成这件事的进展）；已挂过的 409 */
-        post: operations["attachMyOffPlan"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/me/off-plan/{id}/replan": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 对一条计划外工作提出改计划（先只记下来）；重复提出幂等，已挂过的 409 */
-        post: operations["proposeMyOffPlanReplan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3571,7 +3520,7 @@ export interface components {
                 version: number;
                 title: string;
                 status: "not_started" | "in_progress" | "done" | "returned";
-                source: "meeting" | "self" | "plan";
+                source: "meeting" | "self" | "plan" | "agent";
                 startDate: string | null;
                 dueDate: string | null;
                 doneDefinition: string | null;
@@ -7375,7 +7324,7 @@ export interface components {
             version: number;
             title: string;
             status: "not_started" | "in_progress" | "done" | "returned";
-            source: "meeting" | "self" | "plan";
+            source: "meeting" | "self" | "plan" | "agent";
             startDate: string | null;
             dueDate: string | null;
             doneDefinition: string | null;
@@ -7469,7 +7418,7 @@ export interface components {
                     version: number;
                     title: string;
                     status: "not_started" | "in_progress" | "done" | "returned";
-                    source: "meeting" | "self" | "plan";
+                    source: "meeting" | "self" | "plan" | "agent";
                     startDate: string | null;
                     dueDate: string | null;
                     doneDefinition: string | null;
@@ -8643,73 +8592,7 @@ export interface components {
                     }[];
                     coverageUntil: string | null;
                 }[];
-                offPlan: {
-                    /** Format: uuid */
-                    id: string;
-                    person: {
-                        personId: string;
-                        name: string;
-                    };
-                    kind: "attach" | "replan";
-                    text: string;
-                    candidateTask: {
-                        taskId: string;
-                        title: string;
-                    } | null;
-                    evidence: {
-                        source: string;
-                        repo: string | null;
-                        /** @description ISO 8601 */
-                        startedAt: string;
-                        /** @description ISO 8601 */
-                        endedAt: string;
-                        links: {
-                            url: string;
-                            title: string | null;
-                        }[];
-                    };
-                    spentMinutes: number;
-                    replanProposedAt: string | null;
-                }[];
             };
-        };
-        MyOffPlanResponse: {
-            items: {
-                /** Format: uuid */
-                id: string;
-                person: {
-                    personId: string;
-                    name: string;
-                };
-                kind: "attach" | "replan";
-                text: string;
-                candidateTask: {
-                    taskId: string;
-                    title: string;
-                } | null;
-                evidence: {
-                    source: string;
-                    repo: string | null;
-                    /** @description ISO 8601 */
-                    startedAt: string;
-                    /** @description ISO 8601 */
-                    endedAt: string;
-                    links: {
-                        url: string;
-                        title: string | null;
-                    }[];
-                };
-                spentMinutes: number;
-                replanProposedAt: string | null;
-            }[];
-            tasks: {
-                taskId: string;
-                title: string;
-            }[];
-        };
-        AttachOffPlanRequest: {
-            /** Format: uuid */
-            taskId: string;
         };
         TaskPerson: {
             personId: string;
@@ -8739,7 +8622,7 @@ export interface components {
                 version: number;
                 title: string;
                 status: "not_started" | "in_progress" | "done" | "returned";
-                source: "meeting" | "self" | "plan";
+                source: "meeting" | "self" | "plan" | "agent";
                 startDate: string | null;
                 dueDate: string | null;
                 doneDefinition: string | null;
@@ -8873,7 +8756,7 @@ export interface components {
                 version: number;
                 title: string;
                 status: "not_started" | "in_progress" | "done" | "returned";
-                source: "meeting" | "self" | "plan";
+                source: "meeting" | "self" | "plan" | "agent";
                 startDate: string | null;
                 dueDate: string | null;
                 doneDefinition: string | null;
@@ -8941,7 +8824,7 @@ export interface components {
                     version: number;
                     title: string;
                     status: "not_started" | "in_progress" | "done" | "returned";
-                    source: "meeting" | "self" | "plan";
+                    source: "meeting" | "self" | "plan" | "agent";
                     startDate: string | null;
                     dueDate: string | null;
                     doneDefinition: string | null;
@@ -9009,7 +8892,7 @@ export interface components {
                 version: number;
                 title: string;
                 status: "not_started" | "in_progress" | "done" | "returned";
-                source: "meeting" | "self" | "plan";
+                source: "meeting" | "self" | "plan" | "agent";
                 startDate: string | null;
                 dueDate: string | null;
                 doneDefinition: string | null;
@@ -18508,164 +18391,6 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    getMyOffPlan: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 本人的计划外 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MyOffPlanResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    attachMyOffPlan: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AttachOffPlanRequest"];
-            };
-        };
-        responses: {
-            /** @description 本人的计划外 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MyOffPlanResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    proposeMyOffPlanReplan: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 本人的计划外 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MyOffPlanResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };

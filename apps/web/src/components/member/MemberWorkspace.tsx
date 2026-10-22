@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Lock } from "lucide-react";
+import { ChevronRight, Lock } from "lucide-react";
+import { Button } from "ts-design/primitives";
 import { AccountMenu, type Account } from "@/components/AccountMenu";
 import { ActionNoticeCard } from "@/components/ActionNoticeCard";
 import { CycleCountdown } from "@/components/CycleCountdown";
@@ -16,7 +17,6 @@ import { MeetingCardNoticeList, useMyMeetingCards } from "@/components/meeting/M
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { logout } from "@/lib/logout";
-import { MemberOffPlan } from "@/components/progress/MemberOffPlan";
 import { MemberTasks } from "./MemberTasks";
 import { MemberHomeWidgets } from "./MemberHomeWidgets";
 import { MemberRadarWidget } from "./MemberRadarWidget";
@@ -94,7 +94,7 @@ function MemberHomeBody({ displayName, home, account }: { displayName: string; h
     {home.work || !home.homeError ? <div className={m.widgetsSlot}><MemberHomeWidgets work={home.work} onNavigate={navigate} onRefresh={home.refresh}
       radar={home.radar ? <MemberRadarWidget radar={home.radar} onNavigate={navigate} /> : undefined} /></div> : null}
     <MemberTasks tasks={home.tasks} error={home.taskError === home.homeError ? null : home.taskError} onNavigate={navigate} />
-    <MemberOffPlan onNavigate={navigate} onAttached={() => void home.refresh()} />
+    <div className={m.progressEntry}><Button variant="ghost" size="sm" data-origin="/me/progress" onPress={(event) => navigate("/me/progress", event.target as Element)}>战场进展<ChevronRight size={15} aria-hidden /></Button></div>
     <div className={m.phoneAccount}><AccountMenu account={account} onNavigate={navigate} /></div>
   </div>;
 }

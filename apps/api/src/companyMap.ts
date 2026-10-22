@@ -11,7 +11,7 @@ import { BATTLEFIELD_MEMBERS, weekPeriod, weeklyReviewText } from "./weeklyRevie
 /**
  * 三层取用（已定设计 5a、议题 2）：每个页面的 Agent 都用同一套工具沿公司地图读，页面只决定默认焦点（focus）。
  * - read_mission_cards：Mission 卡（目标、计划），全员可读（个人卡准备期间仍只有本人看得到，canReadMission）；
- * - read_progress：执行事项进展、本机采集整理出的进展（含计划外）、执行事项状态；
+ * - read_progress：执行事项进展（采集整理出的进展都已写进执行事项）、执行事项状态；
  * - read_reviews：月度复盘（个人、战场 / 能力域，附评论）与周复盘；
  * - read_object_tree：从公司、战场、Mission、Task 或某个人出发，向上、向下、向旁边走。
  * 进展与复盘按 canReadProgress 判（CEO 全部，其他人同一战场）；看不到的不返回，只在结果里记 filtered 条数，Agent 必须说明。
@@ -112,7 +112,7 @@ export const THREE_LAYER_RULES = `# 三层取用
 
 页面只是默认焦点，不是边界。\`anchor.range\` 是本页的默认读取范围（谁、哪个战场、哪个月），由 anchor 聚焦的对象决定。问到当前对象以外的人、Mission、执行情况或复盘时，用同一套工具沿公司地图读，不凭印象说：
 - \`read_mission_cards\`：Mission 卡（目标、计划），全员可读；
-- \`read_progress\`：执行事项的状态与进展、本机采集整理出的进展（含计划外工作）；
+- \`read_progress\`：执行事项的状态与进展（含本机采集整理出的进展）；
 - \`read_reviews\`：月度复盘（个人、战场与能力域，附评论）与周复盘；
 - \`read_object_tree\`：从公司、战场、Mission、Task 或某个人出发，向上（所属）、向下（下属）、向旁边（同级）走。
 people 填「all」（全员）、「me」或人名列表；from、to 是月份（YYYY-MM），不填按 anchor.range。要几个人、几个战场、几个月就一次读完（全员就填 all，不限战场就不填 battlefieldId），不按人、按战场或按月分多次读。
@@ -227,17 +227,12 @@ export function createCompanyMap(deps: CompanyMapDeps) {
              AND ($4::text IS NULL OR m.battlefield_ids @> jsonb_build_array($4::text)) AND ($5::uuid IS NULL OR t.id = $5)
              AND $6::text IS NOT NULL AND $7::text IS NOT NULL
            ORDER BY p.created_at DESC, p.id LIMIT 600`, params);
-      const collected = taskId ? { rows: [] } : await q(`SELECT c.id, c.person_id, c.source, c.repo, c.started_at, c.text, c.placement, c.links, t.title AS task_title, m.battlefield_ids
-            FROM collector_progress c LEFT JOIN missions m ON m.id = c.mission_id LEFT JOIN tasks t ON t.id = c.task_id
-           WHERE c.task_progress_id IS NULL AND c.started_at >= $1::timestamptz AND c.started_at < $2::timestamptz AND ($3::text[] IS NULL OR c.person_id = ANY($3))
-             AND ($4::text IS NULL OR m.battlefield_ids @> jsonb_build_array($4::text))
-           ORDER BY c.started_at DESC LIMIT 400`, params.slice(0, 4));
       let filtered = 0;
-      type Group = { person: string; tasks: unknown[]; updates: unknown[]; unplanned: unknown[]; moreUpdates: number };
+      type Group = { person: string; tasks: unknown[]; updates: unknown[]; moreUpdates: number };
       const groups = new Map<string, Group>();
       const group = (personId: string) => {
         let found = groups.get(personId);
-        if (!found) { found = { person: nameOf(personId), tasks: [], updates: [], unplanned: [], moreUpdates: 0 }; groups.set(personId, found); }
+        if (!found) { found = { person: nameOf(personId), tasks: [], updates: [], moreUpdates: 0 }; groups.set(personId, found); }
         return found;
       };
       const STATUS: Record<string, string> = { not_started: "未开始", in_progress: "进行中", done: "已完成", returned: "已退回" };
@@ -251,13 +246,6 @@ export function createCompanyMap(deps: CompanyMapDeps) {
         if (target.updates.length >= UPDATES_PER_PERSON) { target.moreUpdates += 1; continue; }
         target.updates.push({ cite: `task:${row.task_id}`, at: at(row.created_at), task: row.task_title, ...(row.author_id !== row.task_owner ? { by: nameOf(row.author_id) } : {}),
           body: clip(row.body, 400), links: (Array.isArray(row.links) ? row.links : []).slice(0, 3) });
-      }
-      for (const row of collected.rows as Record<string, any>[]) {
-        if (!await access({ personId: row.person_id, period: monthOf(row.started_at), battlefieldIds: row.battlefield_ids ?? undefined })) { filtered += 1; continue; }
-        const target = group(row.person_id);
-        if (target.unplanned.length >= UPDATES_PER_PERSON) { target.moreUpdates += 1; continue; }
-        target.unplanned.push({ at: at(row.started_at), text: clip(row.text, 300), kind: row.placement === "pending_attach" ? "待挂靠" : "待改计划",
-          ...(row.task_title ? { candidateTask: row.task_title } : {}), ...(row.repo ? { repo: row.repo } : {}) });
       }
       const people = [...groups.values()].slice(0, MAX_PEOPLE_PROGRESS).map(({ moreUpdates, ...rest }) => ({ ...rest, ...(moreUpdates ? { moreUpdates } : {}) }));
       return { ...scopeOf(scope), people, ...(groups.size > people.length ? { truncatedPeople: groups.size - people.length } : {}), filtered,

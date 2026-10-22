@@ -2,22 +2,21 @@
 
 /**
  * 全局进展（② 进展，前端交互实现说明第 5 节）。参照 Linear 的 Project 健康度、Jira 的风险标记、Asana 的 Portfolio：
- * 页头下一排计数，先列红线（Task 级：比预期慢 / 按截止日做不完，数字对比加一条进度条），再列计划外（待挂靠 / 待改计划），
+ * 页头下一排计数，先列红线（Task 级：比预期慢 / 按截止日做不完，数字对比加一条进度条），
  * 没有 Task 基线的人按人列周复盘与采集摘要，按计划在走的收起。每条带做出来的东西和信息截至时间。
  * 一号位看全部（/progress），二号位看同一战场的人（/me/progress）；可见范围在服务端判。
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight, Link2 } from "lucide-react";
-import type { TOffPlanItem, TProgressArtifact, TProgressOnTrack, TProgressOverview, TProgressPersonSummary, TProgressRedLine } from "@warmap/contracts";
+import type { TProgressArtifact, TProgressOnTrack, TProgressOverview, TProgressPersonSummary, TProgressRedLine } from "@warmap/contracts";
 import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { browserApi, type Card } from "@/lib/api/client";
-import { monthDayTime, relativeDayTime } from "@/lib/companyTime";
-import { artifactLabel, coverageText, dayRangeText, meterParts, spentText } from "./progressText";
+import { relativeDayTime } from "@/lib/companyTime";
+import { artifactLabel, coverageText, dayRangeText, meterParts } from "./progressText";
 import s from "./progress.module.css";
 
 const NO_CARDS: Card[] = [];
-export const SOURCE_NAMES: Record<string, string> = { codex: "Codex", claude: "Claude Code", github: "GitHub", web: "网页" };
 const STATUS_TEXT = { not_started: "未开始", in_progress: "进行中" } as const;
 
 export function ProgressScreen({ scope }: { scope: "ceo" | "member" }) {
@@ -62,12 +61,8 @@ const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ b
 
 export function ProgressBody({ progress, onNavigate }: { progress: TProgressOverview; onNavigate: (href: string, origin?: Element | null) => void }) {
   const [showOnTrack, setShowOnTrack] = useState(false);
-  const offPlanMinutes = progress.offPlan.reduce((sum, item) => sum + item.spentMinutes, 0);
-  const attach = progress.offPlan.filter((item) => item.kind === "attach");
-  const replan = progress.offPlan.filter((item) => item.kind === "replan");
   const tiles = [
     { id: "progress-red", label: "红线", value: progress.redLines.length, tone: progress.redLines.length ? "red" : "quiet" },
-    { id: "progress-off-plan", label: "计划外", value: progress.offPlan.length, tone: progress.offPlan.length ? "amber" : "quiet", extra: progress.offPlan.length ? spentText(offPlanMinutes) : null },
     { id: "progress-people", label: "按人", value: progress.summaries.length, tone: "quiet" },
     { id: "progress-on-track", label: "按计划", value: progress.onTrack.length, tone: progress.onTrack.length ? "green" : "quiet" },
   ];
@@ -79,7 +74,7 @@ export function ProgressBody({ progress, onNavigate }: { progress: TProgressOver
           scrollTo(tile.id);
         }}>
           <span className={s.tileLabel}>{tile.label}</span>
-          <span className={s.tileValue}>{tile.value}{tile.extra ? <small>{tile.extra}</small> : null}</span>
+          <span className={s.tileValue}>{tile.value}</span>
         </button>
       ))}
     </div>
@@ -88,17 +83,6 @@ export function ProgressBody({ progress, onNavigate }: { progress: TProgressOver
       <h2 id="progress-red-title" className={s.sectionHead}>红线<span className={s.count} data-tone={progress.redLines.length ? "red" : undefined}>{progress.redLines.length}</span></h2>
       {progress.redLines.length ? <ul className={s.list}>{progress.redLines.map((line) => <RedLineRow key={line.kind === "slow" ? `slow:${line.task.taskId}` : `deadline:${line.person.personId}:${line.mission.missionId}`} line={line} />)}</ul>
         : <p className={s.empty}>没有红线</p>}
-    </section>
-
-    <section className={s.section} id="progress-off-plan" aria-labelledby="progress-off-plan-title">
-      <h2 id="progress-off-plan-title" className={s.sectionHead}>计划外<span className={s.count} data-tone={progress.offPlan.length ? "amber" : undefined}>{progress.offPlan.length}</span>
-        {progress.offPlan.length ? <span className={s.sectionAside}>合计 {spentText(offPlanMinutes)}</span> : null}</h2>
-      {progress.offPlan.length ? [{ title: "待挂靠", items: attach }, { title: "待改计划", items: replan }].filter((group) => group.items.length).map((group) => (
-        <div key={group.title} className={s.group}>
-          <h3 className={s.groupHead}>{group.title}<span>{group.items.length}</span></h3>
-          <ul className={s.list}>{group.items.map((item) => <li key={item.id} className={s.item} data-off-plan={item.id}><OffPlanBody item={item} showPerson /></li>)}</ul>
-        </div>
-      )) : <p className={s.empty}>没有计划外工作</p>}
     </section>
 
     {progress.summaries.length ? <section className={s.section} id="progress-people" aria-labelledby="progress-people-title">
@@ -182,27 +166,6 @@ function RedLineRow({ line }: { line: TProgressRedLine }) {
     <Artifacts items={line.artifacts} />
     <Coverage at={line.coverageUntil} />
   </li>;
-}
-
-/** 一条计划外：谁、在做什么、证据、花了多久。一号位的全局进展和二号位首页共用。 */
-export function OffPlanBody({ item, showPerson, children }: { item: TOffPlanItem; showPerson?: boolean; children?: ReactNode }) {
-  const { evidence } = item;
-  const end = monthDayTime(evidence.endedAt);
-  return <>
-    <div className={s.itemHead}>
-      {showPerson ? <Person name={item.person.name} /> : null}
-      <p className={s.itemText}>{item.text}</p>
-      <span className={s.spent}>{spentText(item.spentMinutes)}</span>
-    </div>
-    <p className={s.meta}>
-      <span>{SOURCE_NAMES[evidence.source] ?? evidence.source}</span>{evidence.repo ? <span>{evidence.repo}</span> : null}
-      <span>{monthDayTime(evidence.startedAt)}–{end.slice(end.indexOf(" ") + 1)}</span>
-      {item.candidateTask ? <span className={s.candidate}>像「{item.candidateTask.title}」</span> : null}
-      {item.replanProposedAt ? <span className={s.tag} data-tone="wait">已提改计划 · {monthDayTime(item.replanProposedAt)}</span> : null}
-    </p>
-    <Artifacts items={evidence.links} />
-    {children}
-  </>;
 }
 
 function SummaryRow({ summary, onNavigate }: { summary: TProgressPersonSummary; onNavigate: (href: string, origin?: Element | null) => void }) {

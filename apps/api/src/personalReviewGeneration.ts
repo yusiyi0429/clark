@@ -31,7 +31,7 @@ export type PersonalReviewDraftInput = {
    * 没有周复盘的周，entries 是那一周的执行事项进展。review 和 entries 都空表示那一周没有记录。只列已经开始的周。
    */
   weeklyReviews: { week: string; from: string; to: string; review?: Cited & { text: string }; entries: WeeklyEntry[] }[];
-  /** 采集器原文经服务端整理后的进展（collector_progress），当月开始的，按时间排列；placement 是归到 Task、待挂靠还是待改计划。 */
+  /** 采集器原文经服务端整理后的进展（collector_progress），当月开始的，按时间排列；taskTitle 是归到的执行事项。 */
   collectorRecords: (Cited & { source: string; startedAt: string; endedAt: string; text: string; placement: string; repo: string | null; taskTitle: string | null })[];
   attachments: (Cited & { id: string; fileName: string; extractedText: string | null })[];
   messages: (Cited & { conversationId: string; sequence: number; content: string; createdAt: string })[];

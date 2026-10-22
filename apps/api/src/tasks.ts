@@ -143,7 +143,7 @@ async function readThrough(client: PoolClient, taskId: string, personId: string,
   [taskId, personId, messageId]);
 }
 async function createInTransaction(client: PoolClient, ownerId: string, names: Map<string, string>, input: {
-  clientId: string; title: string; missionId: string | null; startDate?: string; dueDate?: string; doneDefinition?: string; source: "self" | "plan";
+  clientId: string; title: string; missionId: string | null; startDate?: string; dueDate?: string; doneDefinition?: string; source: "self" | "plan" | "agent";
 }): Promise<TaskResult> {
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[`task-client:${ownerId}:${input.clientId}`]);
   const existing = await client.query<{ id: string; title: string; mission_id: string | null; start_date: string | null; due_date: string | null; done_definition: string | null; created_by: string }>(
