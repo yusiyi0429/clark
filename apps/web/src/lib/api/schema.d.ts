@@ -3367,7 +3367,7 @@ export interface components {
                 version: number;
                 title: string;
                 status: "not_started" | "in_progress" | "done" | "returned";
-                source: "meeting" | "self" | "plan";
+                source: "meeting" | "self" | "plan" | "agent";
                 startDate: string | null;
                 dueDate: string | null;
                 doneDefinition: string | null;
@@ -7007,7 +7007,7 @@ export interface components {
             version: number;
             title: string;
             status: "not_started" | "in_progress" | "done" | "returned";
-            source: "meeting" | "self" | "plan";
+            source: "meeting" | "self" | "plan" | "agent";
             startDate: string | null;
             dueDate: string | null;
             doneDefinition: string | null;
@@ -7101,7 +7101,7 @@ export interface components {
                     version: number;
                     title: string;
                     status: "not_started" | "in_progress" | "done" | "returned";
-                    source: "meeting" | "self" | "plan";
+                    source: "meeting" | "self" | "plan" | "agent";
                     startDate: string | null;
                     dueDate: string | null;
                     doneDefinition: string | null;
@@ -8371,7 +8371,7 @@ export interface components {
                 version: number;
                 title: string;
                 status: "not_started" | "in_progress" | "done" | "returned";
-                source: "meeting" | "self" | "plan";
+                source: "meeting" | "self" | "plan" | "agent";
                 startDate: string | null;
                 dueDate: string | null;
                 doneDefinition: string | null;
@@ -8505,7 +8505,7 @@ export interface components {
                 version: number;
                 title: string;
                 status: "not_started" | "in_progress" | "done" | "returned";
-                source: "meeting" | "self" | "plan";
+                source: "meeting" | "self" | "plan" | "agent";
                 startDate: string | null;
                 dueDate: string | null;
                 doneDefinition: string | null;
@@ -8573,7 +8573,7 @@ export interface components {
                     version: number;
                     title: string;
                     status: "not_started" | "in_progress" | "done" | "returned";
-                    source: "meeting" | "self" | "plan";
+                    source: "meeting" | "self" | "plan" | "agent";
                     startDate: string | null;
                     dueDate: string | null;
                     doneDefinition: string | null;
@@ -8641,7 +8641,7 @@ export interface components {
                 version: number;
                 title: string;
                 status: "not_started" | "in_progress" | "done" | "returned";
-                source: "meeting" | "self" | "plan";
+                source: "meeting" | "self" | "plan" | "agent";
                 startDate: string | null;
                 dueDate: string | null;
                 doneDefinition: string | null;

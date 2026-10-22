@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { call, executionFixture, newTask } from "./executionFixture.js";
+import { TEST_MEMBER } from "./helpers.js";
 
 const rpc = (id: number, method: string, params?: Record<string, unknown>) => ({ jsonrpc: "2.0", id, method, ...(params ? { params } : {}) });
 
@@ -27,7 +28,7 @@ describe("个人令牌与执行事项 MCP", () => {
       expect(initialized.statusCode).toBe(200);
       expect(initialized.json().result.serverInfo.name).toBe("tianshu");
       const tools = await send(2, "tools/list");
-      expect(tools.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_my_items", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "get_mission_card", "edit_mission_card", "list_pending", "get_my_review", "save_review_draft"]);
+      expect(tools.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_my_items", "create_item", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "get_mission_card", "edit_mission_card", "list_pending", "get_my_review", "save_review_draft"]);
       const invoke = async (id: number, name: string, args: Record<string, unknown>) => (await send(id, "tools/call", { name, arguments: args })).json().result;
       const listed = await invoke(3, "list_my_items", {});
       expect(JSON.parse(listed.content[0].text).items.some((item: { id: string }) => item.id === task.id)).toBe(true);
@@ -55,6 +56,32 @@ describe("个人令牌与执行事项 MCP", () => {
       expect((await call(f, f.member, "DELETE", `/api/me/tokens/${view.id}`)).statusCode).toBe(204);
       expect((await send(11, "tools/list")).statusCode).toBe(401);
       expect((await call(f, f.member, "GET", "/api/me/tokens")).json().tokens).toEqual([]);
+    } finally { await f.t.close(); }
+  });
+
+  it("Agent 按正在做的事建执行事项：直接生效、标为 Agent 建、重试不重复、能挂本人 Mission、不能挂别人的", async () => {
+    const f = await executionFixture();
+    try {
+      const { token } = (await call(f, f.member, "POST", "/api/me/tokens", { name: "Claude", client: "claude", expiresInDays: 30 })).json();
+      const invoke = async (id: number, name: string, args: Record<string, unknown>) => (await f.t.app.inject({ method: "POST", url: "/mcp/me",
+        headers: { authorization: `Bearer ${token}`, accept: "application/json, text/event-stream" }, payload: rpc(id, "tools/call", { name, arguments: args }) })).json().result;
+      const before = JSON.parse((await invoke(1, "list_my_items", {})).content[0].text);
+      expect(before.missions.map((mission: { id: string }) => mission.id)).toEqual(["execution-one", "execution-two"]);
+      const clientId = randomUUID();
+      const args = { clientId, title: "会议回流本体：设计+实现+测试", doneDefinition: "会议纪要写进本体\n天枢能读回", missionId: "execution-one", startDate: "2026-10-10" };
+      const created = await invoke(2, "create_item", args);
+      expect(created.isError).toBe(false);
+      const item = JSON.parse(created.content[0].text);
+      expect(item).toMatchObject({ title: args.title, status: "not_started", mission: { missionId: "execution-one" } });
+      expect(item.href).toContain(`/me/tasks/${item.id}`);
+      expect(JSON.parse((await invoke(3, "create_item", args)).content[0].text).id).toBe(item.id);
+      expect((await f.t.sql("SELECT count(*) AS n FROM tasks WHERE owner_id=$1 AND client_id=$2", [TEST_MEMBER.personId, clientId]))[0].n).toBe("1");
+      const detail = (await call(f, f.member, "GET", `/api/me/tasks/${item.id}`)).json();
+      expect(detail.task).toMatchObject({ source: "agent", doneDefinition: args.doneDefinition, owner: { personId: TEST_MEMBER.personId } });
+      const foreign = await invoke(4, "create_item", { clientId: randomUUID(), title: "挂别人的 Mission", missionId: "not-mine" });
+      expect(foreign.isError).toBe(true); expect(foreign.content[0].text).toContain("MISSION_NOT_AVAILABLE");
+      // Agent 建的和本人建的一样：未开始时本人能删。
+      expect((await call(f, f.member, "DELETE", `/api/me/tasks/${item.id}?version=${detail.task.version}`)).statusCode).toBe(204);
     } finally { await f.t.close(); }
   });
 

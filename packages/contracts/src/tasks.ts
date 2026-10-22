@@ -11,7 +11,8 @@ export const TaskStatus = Type.Union([
 ]);
 
 /** 执行事项从哪来：会后分派、自己点「+」新建、从本月计划拆出。以后加 CEO 指派。 */
-export const TaskSource = Type.Union([Type.Literal("meeting"), Type.Literal("self"), Type.Literal("plan")]);
+/** agent：外部工具（Codex、Claude Code 等）按用户正在做的事替用户建的。 */
+export const TaskSource = Type.Union([Type.Literal("meeting"), Type.Literal("self"), Type.Literal("plan"), Type.Literal("agent")]);
 
 const DateOnly = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
 const NullableDate = Type.Union([DateOnly, Type.Null()]);

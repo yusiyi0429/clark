@@ -7,6 +7,7 @@ import { Button } from "ts-design/primitives";
 import type { components } from "@/lib/api/schema";
 import { monthDayTime } from "@/lib/companyTime";
 import { StartTaskButton } from "@/components/tours/StartTaskButton";
+import { taskSourceLabel } from "@/components/tasks/taskSource";
 import s from "@/components/tasks/tasks.module.css";
 
 export type MemberTask = components["schemas"]["TaskView"];
@@ -50,7 +51,7 @@ export function MemberTasks({ tasks, error, onNavigate }: {
       return <Card key={task.id} className={s.taskCard} data-task={task.id} data-origin={href} onClick={(event) => { if (!(event.target as Element).closest("button,a")) onNavigate?.(href, event.currentTarget); }}>
         <div className={s.taskTop}><span className={s.status} data-status={task.status}><span className={s.statusDot} aria-hidden />{task.awaitingAcceptance ? "等你验收" : TASK_STATUS[task.status]}</span>{task.status === "not_started" && task.startDate ? <span>计划 {dueLabel(task.startDate).replace("前", "开始")}</span> : task.dueDate ? <span>{dueLabel(task.dueDate)}</span> : null}</div>
         <h3><Button variant="ghost" className={s.taskTitle} aria-label={`查看详情：${task.title}`} onPress={(event) => onNavigate?.(href, event.target)}><span>{task.title}</span><ChevronRight size={17} aria-hidden /></Button></h3>
-        {task.mission ? <Button variant="ghost" className={s.taskMission} aria-label={`横向切到个人任务：${task.mission.title}`} onPress={(event) => onNavigate?.(`/me/mission-cards/${encodeURIComponent(task.mission!.cardId)}`, event.target)}><span>{task.mission.title}</span><ArrowUpRight size={13} aria-hidden /></Button> : <span className={s.assignment}>{task.source === "meeting" && task.origin ? `会后分派 · ${task.origin.meetingTitle}` : "独立事项"}</span>}
+        {task.mission ? <Button variant="ghost" className={s.taskMission} aria-label={`横向切到个人任务：${task.mission.title}`} onPress={(event) => onNavigate?.(`/me/mission-cards/${encodeURIComponent(task.mission!.cardId)}`, event.target)}><span>{task.mission.title}</span><ArrowUpRight size={13} aria-hidden /></Button> : <span className={s.assignment}>{taskSourceLabel(task)}</span>}
         {task.startDate || task.dueDate ? <p className={s.dates}>{task.startDate ? `计划开始 ${task.startDate}` : ""}{task.startDate && task.dueDate ? " · " : ""}{task.dueDate ? `截止 ${task.dueDate}` : ""}</p> : null}
         {task.collaborators.length ? <p className={s.connections}>协作 · {task.collaborators.map((person) => person.name).join("、")}</p> : null}
         {task.status === "returned" && task.returnReason ? <p className={s.returned}>已退回：{task.returnReason}</p> : null}
@@ -67,7 +68,7 @@ export function MemberTasks({ tasks, error, onNavigate }: {
         const href = `/me/tasks/${encodeURIComponent(task.id)}`;
         return <li key={task.id} className={s.doneItem}><button type="button" className={s.doneRow} data-origin={href} aria-label={`查看详情：${task.title}（已完成）`} onClick={(event) => onNavigate?.(href, event.currentTarget)}>
           <Check size={14} aria-hidden /><span className={s.doneTitle}>{task.title}</span>
-          <span className={s.doneMeta}>{task.mission ? task.mission.title : task.source === "meeting" && task.origin ? `会后分派 · ${task.origin.meetingTitle}` : "独立事项"}</span>
+          <span className={s.doneMeta}>{task.mission ? task.mission.title : taskSourceLabel(task)}</span>
         </button></li>;
       })}</ul> : null}
     </div> : null}

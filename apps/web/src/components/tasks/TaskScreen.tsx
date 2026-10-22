@@ -120,7 +120,7 @@ export function TaskScreen({ initialDetail }: { initialDetail: Detail }) {
     finally { setBusy(false); }
   };
   const status = taskStatus(task, owner);
-  const deletable = task.status === "not_started" && (task.source === "self" || task.source === "plan");
+  const deletable = task.status === "not_started" && task.source !== "meeting";
   return <div className={c.screen}>
     <DetailFrame title={task.title} subtitle="执行事项" onBack={workspace.close} actions={<>
       <span data-task-status className={c.status} data-tone={status.tone}>
