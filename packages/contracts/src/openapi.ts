@@ -1308,6 +1308,47 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/me/plan-marks": {
+        post: {
+          operationId: "createMyPlanMark",
+          summary: "在本人的 Mission 下加一个计划点（只存天枢本地）：日期要在该 Mission 的月份里，一个 Mission 下最多 20 个",
+          requestBody: jsonBody({ $ref: "#/components/schemas/CreatePlanMarkRequest" }),
+          responses: {
+            "200": { description: "新建的计划点", content: { "application/json": { schema: { $ref: "#/components/schemas/HomePlanMark" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/me/plan-marks/{id}": {
+        patch: {
+          operationId: "patchMyPlanMark",
+          summary: "拖到别的日子或改名（至少带一个字段，不能换 Mission）；别人的点按不存在算",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/PatchPlanMarkRequest" }),
+          responses: {
+            "200": { description: "改后的计划点", content: { "application/json": { schema: { $ref: "#/components/schemas/HomePlanMark" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+          },
+        },
+        delete: {
+          operationId: "deleteMyPlanMark",
+          summary: "删掉一个计划点",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "204": { description: "已删除" },
+            "401": errorResponse,
+            "403": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
       "/api/me/battlefields/{id}": {
         get: {
           operationId: "getMyBattlefield",

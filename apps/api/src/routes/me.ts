@@ -1,11 +1,12 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
+import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
 import { acceptMyTask, addTaskCollaborators, clearMyTaskSubmission, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, reopenMyTask, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
 import { draftTaskAcceptance } from "../taskAcceptanceDraft.js";
 import { readMonthPlan, saveMonthPlan } from "../monthPlan.js";
 import { readHomePlan } from "../homePlan.js";
+import { createPlanMark, deletePlanMark, patchPlanMark, type PlanMarkError } from "../planMarks.js";
 import { companyPeriod } from "../monthlyPlans.js";
 import { personDisplayNames } from "../people.js";
 import { canUseMemberView } from "../memberAccess.js";
@@ -57,6 +58,17 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   });
   app.get("/api/me/home-plan", { preHandler: requireMember, schema: { response: { 200: HomePlanResponse } } }, async (req) =>
     readHomePlan(q, req.person!, ctx.now(), { planTasks: ctx.planTasks, names: names() }));
+  // 计划点只存天枢本地，不写本体。
+  const respondMark = <T extends object>(reply: FastifyReply, result: T | PlanMarkError): T | FastifyReply =>
+    "error" in result ? fail(reply, result.error.status, result.error.code, result.error.message) : result;
+  app.post("/api/me/plan-marks", { preHandler: requireMember, schema: { body: CreatePlanMarkRequest, response: { 200: HomePlanMark } } }, async (req, reply) =>
+    respondMark(reply, await createPlanMark(q, req.person!.personId, req.body)));
+  app.patch("/api/me/plan-marks/:id", { preHandler: requireMember, schema: { params: idParams, body: PatchPlanMarkRequest, response: { 200: HomePlanMark } } }, async (req, reply) => {
+    const result = await patchPlanMark(q, req.person!.personId, req.params.id, req.body);
+    return result ? respondMark(reply, result) : fail(reply, 404, "MARK_NOT_FOUND", "计划点不存在");
+  });
+  app.delete("/api/me/plan-marks/:id", { preHandler: requireMember, schema: { params: idParams } }, async (req, reply) =>
+    await deletePlanMark(q, req.person!.personId, req.params.id) ? reply.code(204).send() : fail(reply, 404, "MARK_NOT_FOUND", "计划点不存在"));
 
   app.get("/api/me/tokens", { preHandler: requirePerson, schema: { response: { 200: ListPersonalTokensResponse } } }, async (req) => ({
     tokens: await listPersonalTokens(q, req.person!.personId), mcpPath: "/mcp/me" as const, mcpUrl: `${ctx.env.publicOrigin.replace(/\/$/, "")}/mcp/me`,

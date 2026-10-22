@@ -102,13 +102,15 @@ describe("首页计划",()=>{
         source_ref,source_document_id,source_revision,source_title,placeholder)
         VALUES('placeholder-one',1,'a-placeholder','2026-10','占位',$1,'method','["growth"]','目标','["10/15 占位关口"]','fixture://p','fixture',1,'fixture',true)`,
       [TEST_MEMBER.personId]);
+      const mark=(await call(f,f.member,"POST","/api/me/plan-marks",{missionId:"execution-one",date:"2026-10-26",label:"联调"})).json();
+      await f.t.sql("INSERT INTO plan_marks(owner_id,mission_id,date,label) VALUES($1,'placeholder-one','2026-10-26','占位上的点')",[TEST_MEMBER.personId]);
       const plan=await read(f,f.member);
       expect(plan.gates).toEqual([{missionId:"execution-one",date:"2026-10-28",label:"上线"}]);
       expect(plan.missions).toEqual([
         {missionId:"execution-one",code:"execution-one",title:"上线",cardId:f.card,color:"#2f63b0"},
         {missionId:"execution-two",code:"execution-two",title:"验证",cardId:f.card,color:"#2f8a7a"},
       ]);
-      expect(plan.marks).toEqual([]);
+      expect(plan.marks).toEqual([mark]);
       expect(plan.tasks).toEqual([task]);
       expect(calls).toEqual([[{id:"execution-one",code:"execution-one"},{id:"execution-two",code:"execution-two"}]]);
     } finally { await f.t.close(); }

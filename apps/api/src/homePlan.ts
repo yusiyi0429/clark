@@ -3,6 +3,7 @@ import type { Query } from "./meetingStore.js";
 import { listPlanItems, milestoneDate, type PlanItem } from "./monthPlan.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { logEvent } from "./observability.js";
+import { listPlanMarks } from "./planMarks.js";
 import type { PlanTaskSource } from "./planTasks.js";
 import { monthDays, weekOf } from "./workCalendar.js";
 import { shanghaiDate } from "./workdays.js";
@@ -63,10 +64,11 @@ export async function readHomePlan(q: Query, person: { personId: string }, now: 
     const date = milestoneDate(text, period);
     return date?.startsWith(`${period}-`) ? [{ missionId: m.id, date, label: text.replace(LEADING_DATE, "").trim() }] : [];
   }));
-  const [tasks, items] = await Promise.all([
+  const [tasks, items, marks] = await Promise.all([
     readPlanTasks(deps.planTasks, rows.map(({ id, code }) => ({ id, code }))),
     listPlanItems(q, person.personId, rows.map((m) => m.id), windowStart, windowEnd, deps.names, "overlap"),
+    listPlanMarks(q, person.personId, rows.map((m) => m.id)),
   ]);
-  return { period, fallbackFrom, today, weekStart, weekEnd, days, missions, gates, marks: [], tasks,
+  return { period, fallbackFrom, today, weekStart, weekEnd, days, missions, gates, marks, tasks,
     activities: items.map((entry) => placeActivity(entry, weekStart, weekEnd)) };
 }
