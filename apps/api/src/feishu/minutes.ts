@@ -6,10 +6,12 @@ import { decryptTokenSecret } from "./crypto.js";
 /**
  * 飞书妙记与会议的适配层（会议链路 G）。都用主持人本人的 user_access_token（用户身份）：
  * - 妙记详情：GET /minutes/v1/minutes/{minute_token}（minutes:minutes:readonly）
- * - 逐字稿导出：GET /minutes/v1/minutes/{minute_token}/transcript?need_speaker=true&need_timestamp=true&file_format=txt（minutes:minutes.transcript:export）
+ * - 逐字稿全文：GET /minutes/v1/minutes/{minute_token}/artifacts 的 data.transcript（与 lark-cli minutes +detail --transcript 写出的逐字相同，Chat 侧按它核对摘要值）
+ * - 逐字稿导出（产物接口没权限时退回）：GET /minutes/v1/minutes/{minute_token}/transcript?need_speaker=true&need_timestamp=true&file_format=txt（minutes:minutes.transcript:export）
  * - 轮询兜底：POST /minutes/v1/minutes/search，按本人名下、时间段列妙记
- * - 实际参会名单：GET /vc/v1/meetings/{meeting_id}?with_participants=true（vc:meeting:readonly）
- * 后台权限和 OAuth scope 还没配好，这一层先用 mock 测；search 的请求字段、时间格式和参会名单的字段名要在联调时核实（标了「待联调」）。
+ * - 实际参会名单：GET /vc/v1/meetings/{meeting_id}?with_participants=true（用户身份 vc:meeting）
+ * search 10/21 对过真飞书：条件放在 filter 里（owner_ids、create_time 的起止），每页最多 30；结果只有 token 和展示文字，
+ * 开始时刻、所有者、来源会议要再逐条查详情。参会名单的字段名还没对过（标了「待联调」）。
  */
 const OPEN_API = "https://open.feishu.cn/open-apis";
 const TIMEOUT_MS = 15_000;
@@ -22,13 +24,18 @@ export type FeishuMinuteInfo = {
   createdAt: Date | null;
   durationSeconds: number | null;
   url: string | null;
-  /** 来源会议（事件里的 minute_source.source_entity_id）；详情接口不一定给。 */
+  /** 来源会议（详情里的 generated_source.source_entity_id）。 */
   meetingId: string | null;
 };
 
+/** 妙记还没转写完（待联调：按开放平台妙记错误码）。 */
+export const MINUTES_NOT_READY_CODE = 2091003;
+
 export type FeishuMinutesApi = {
   getMinute(userAccessToken: string, minuteToken: string): Promise<FeishuMinuteInfo>;
-  /** 逐字稿 txt 原文。 */
+  /** 妙记产物里的逐字稿全文（/artifacts 的 data.transcript）。 */
+  artifactTranscript(userAccessToken: string, minuteToken: string): Promise<string>;
+  /** 逐字稿 txt 原文（导出接口；产物接口没权限时退回用）。 */
   exportTranscript(userAccessToken: string, minuteToken: string): Promise<string>;
   /** 本人名下、时间段内的妙记（轮询兜底）。 */
   listMinutes(userAccessToken: string, owner: { openId: string }, range: { start: Date; end: Date }): Promise<FeishuMinuteInfo[]>;
@@ -54,7 +61,7 @@ function minuteOf(raw: Record<string, unknown>): FeishuMinuteInfo {
     createdAt: msDate(raw.create_time ?? raw.start_time),
     durationSeconds: Number.isFinite(duration) && duration > 0 ? Math.round(duration > 100_000 ? duration / 1000 : duration) : null,
     url: str(raw.url),
-    meetingId: str((raw.minute_source as { source_entity_id?: unknown } | undefined)?.source_entity_id),
+    meetingId: str(((raw.generated_source ?? raw.minute_source) as { source_entity_id?: unknown } | undefined)?.source_entity_id),
   };
 }
 
@@ -67,15 +74,21 @@ export function createFeishuMinutesApi({ fetch: fetchImpl = fetch }: { fetch?: F
     });
     const text = await response.text();
     let body: Record<string, unknown>;
-    try { body = JSON.parse(text) as Record<string, unknown>; } catch { throw new FeishuApiError(0, `飞书接口返回了非 JSON 响应（HTTP ${response.status}）`); }
+    try { body = JSON.parse(text) as Record<string, unknown>; } catch { throw new FeishuApiError(0, `飞书接口返回了非 JSON 响应（HTTP ${response.status}）`, response.status); }
     const code = Number(body.code ?? -1);
-    if (code !== 0) throw new FeishuApiError(code, String(body.msg ?? "飞书接口失败"));
+    if (code !== 0) throw new FeishuApiError(code, String(body.msg ?? "飞书接口失败"), response.status);
     return (body.data ?? {}) as Record<string, unknown>;
   }
+  async function getMinute(userAccessToken: string, minuteToken: string): Promise<FeishuMinuteInfo> {
+    const data = await call(userAccessToken, `/minutes/v1/minutes/${encodeURIComponent(minuteToken)}?user_id_type=open_id`);
+    return minuteOf({ ...((data.minute ?? data) as Record<string, unknown>), token: minuteToken });
+  }
   return {
-    async getMinute(userAccessToken, minuteToken) {
-      const data = await call(userAccessToken, `/minutes/v1/minutes/${encodeURIComponent(minuteToken)}?user_id_type=open_id`);
-      return minuteOf({ ...((data.minute ?? data) as Record<string, unknown>), token: minuteToken });
+    getMinute,
+    async artifactTranscript(userAccessToken, minuteToken) {
+      const data = await call(userAccessToken, `/minutes/v1/minutes/${encodeURIComponent(minuteToken)}/artifacts`);
+      if (typeof data.transcript !== "string" || !data.transcript) throw new FeishuApiError(MINUTES_NOT_READY_CODE, "妙记产物里还没有逐字稿");
+      return data.transcript;
     },
     async exportTranscript(userAccessToken, minuteToken) {
       const response = await fetchImpl(`${OPEN_API}/minutes/v1/minutes/${encodeURIComponent(minuteToken)}/transcript?need_speaker=true&need_timestamp=true&file_format=txt`, {
@@ -88,18 +101,24 @@ export function createFeishuMinutesApi({ fetch: fetchImpl = fetch }: { fetch?: F
         let code = 0, msg = `HTTP ${response.status}`;
         try { const body = JSON.parse(text) as { code?: number; msg?: string }; code = Number(body.code ?? 0); msg = body.msg ?? msg; } catch { /* 非 JSON */ }
         // 2091003 一类：妙记还没转写完。
-        throw new FeishuApiError(code, `导出妙记逐字稿失败：${msg}`);
+        throw new FeishuApiError(code, `导出妙记逐字稿失败：${msg}`, response.status);
       }
       return text;
     },
     async listMinutes(userAccessToken, owner, range) {
-      // 待联调：search 的过滤字段名与时间格式（这里按 RFC3339 写）。
-      const data = await call(userAccessToken, "/minutes/v1/minutes/search?page_size=50&user_id_type=open_id", {
-        method: "POST",
-        body: JSON.stringify({ owner_ids: [owner.openId], start_time: range.start.toISOString(), end_time: range.end.toISOString() }),
-      });
-      const items = (data.items ?? data.minutes ?? []) as Record<string, unknown>[];
-      return items.map(minuteOf).filter((minute) => minute.token);
+      const tokens: string[] = [];
+      let pageToken: string | undefined;
+      // 一场会前后几小时的窗口，本人名下通常就几份；最多翻 3 页。
+      for (let page = 0; page < 3; page += 1) {
+        const data = await call(userAccessToken, `/minutes/v1/minutes/search?page_size=30&user_id_type=open_id${pageToken ? `&page_token=${encodeURIComponent(pageToken)}` : ""}`, {
+          method: "POST",
+          body: JSON.stringify({ filter: { owner_ids: [owner.openId], create_time: { start_time: range.start.toISOString(), end_time: range.end.toISOString() } } }),
+        });
+        for (const item of (data.items ?? []) as Record<string, unknown>[]) if (str(item.token)) tokens.push(item.token as string);
+        pageToken = data.has_more === true ? str(data.page_token) ?? undefined : undefined;
+        if (!pageToken) break;
+      }
+      return Promise.all(tokens.map((token) => getMinute(userAccessToken, token)));
     },
     async meetingParticipants(userAccessToken, meetingId) {
       const data = await call(userAccessToken, `/vc/v1/meetings/${encodeURIComponent(meetingId)}?with_participants=true&user_id_type=open_id`);

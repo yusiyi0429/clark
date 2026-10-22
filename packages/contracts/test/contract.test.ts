@@ -18,9 +18,6 @@ import {
   DriMonthlyPlanFeedbackRequest,
   DriMonthlyPlanTodoFeedbackRequest,
   MeetingCardPayload,
-  MeetingConfirmItemInput,
-  MeetingDismissItemInput,
-  MeetingRevokeEffectInput,
   MissionAnchor,
   MissionCardPayload,
   CreateMissionRequest,
@@ -537,7 +534,7 @@ describe("meeting public contract", () => {
     expect(Value.Check(PostMeetingCandidate, { ...candidate, items: [{ ...candidate.items[0], judgmentKind: "budget" }] })).toBe(false);
   });
 
-  it("carries per-item effect details and accepts only versioned review commands", () => {
+  it("carries per-item effect details", () => {
     const confirmed = {
       status: "confirmed",
       effectRef: "meeting:00000000-0000-4000-8000-000000000001:todo:item-1",
@@ -547,12 +544,6 @@ describe("meeting public contract", () => {
     };
     expect(Value.Check(OutcomeReview, confirmed)).toBe(true);
     expect(Value.Check(OutcomeReview, { ...confirmed, status: "pending", handoff: { exportStatus: "sent", exportRef: null, error: null } })).toBe(false);
-    expect(Value.Check(MeetingConfirmItemInput, {})).toBe(true);
-    expect(Value.Check(MeetingConfirmItemInput, { itemId: "item-1" })).toBe(false);
-    expect(Value.Check(MeetingDismissItemInput, { reason: "不是本次决定" })).toBe(true);
-    expect(Value.Check(MeetingDismissItemInput, { reason: 3 })).toBe(false);
-    expect(Value.Check(MeetingRevokeEffectInput, {})).toBe(true);
-    expect(Value.Check(MeetingRevokeEffectInput, { effectRef: "x" })).toBe(false);
   });
 
   it("records a meeting-item source on an Issue Receipt", () => {

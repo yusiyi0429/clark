@@ -29,10 +29,13 @@ export function dateTimeLabel(value: string | null | undefined, now = new Date()
   return day && time ? `${day} ${time}` : day;
 }
 
-/** 时刻选项：每 step 分钟一档（默认 15），当前值不在档上也放进去，按时间排序。 */
-export function timeOptions(current = "", step = 15): string[] {
+/** 时刻选项：每 step 分钟一档（默认 15），给了 latest 时晚于它的不放；当前值不在档上也放进去，按时间排序。 */
+export function timeOptions(current = "", step = 15, latest = ""): string[] {
   const slots: string[] = [];
-  for (let minute = 0; minute < 24 * 60; minute += step) slots.push(`${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`);
+  for (let minute = 0; minute < 24 * 60; minute += step) {
+    const slot = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+    if (!latest || slot <= latest) slots.push(slot);
+  }
   if (/^\d{2}:\d{2}$/.test(current) && !slots.includes(current)) slots.push(current);
   return slots.sort();
 }

@@ -26,6 +26,10 @@ describe("pickerFormat（中文日期）", () => {
     expect(slots.slice(41, 44)).toEqual(["10:15", "10:20", "10:30"]);
     expect(timeOptions("", 30)).toHaveLength(48);
   });
+  it("给了最晚时刻：晚于它的不列（当前值照留）", () => {
+    expect(timeOptions("", 15, "09:05").at(-1)).toBe("09:00");
+    expect(timeOptions("10:00", 15, "09:05").at(-1)).toBe("10:00");
+  });
 });
 
 describe("Select（统一下拉）", () => {

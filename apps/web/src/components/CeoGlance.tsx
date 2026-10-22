@@ -84,7 +84,6 @@ export function CeoGlance({ cards, onNavigate }: Props) {
             <span className={g.icon} aria-hidden="true"><Activity size={16} /></span>
             <span className={g.text}>
               <span className={g.name}>全局进展</span>
-              {progress?.offPlan ? <small>{progress.offPlan} 条计划外</small> : null}
             </span>
             {progress?.redLines ? <span className={g.pending} data-urgency="red">{progress.redLines} 红线</span> : null}
             <ChevronRight size={16} className={g.arrow} aria-hidden="true" />

@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import type { TMyOffPlanResponse, TProgressOverview } from "@warmap/contracts";
+import type { TProgressOverview } from "@warmap/contracts";
 import {
   addWorkdays, coverageUntil, deadlineGap, missionDeadline, plainReviewText, remainingPlannedDays, slowReason, workdaysBetween, type PlanTask,
 } from "../src/progress.js";
 import { call, executionFixture, type Fixture } from "./executionFixture.js";
-import { TEST_CEO, TEST_MEMBER } from "./helpers.js";
+import { TEST_MEMBER } from "./helpers.js";
 
 const MEMBER = TEST_MEMBER.personId, THIRD = "person-fixture-003";
 const task = (extra: Partial<PlanTask> = {}): PlanTask => ({ status: "in_progress", startDate: "2026-10-12", dueDate: "2026-10-16", lastVerifiedAt: null, ...extra });
@@ -88,25 +88,12 @@ async function seedTask(f: Fixture, title: string, missionId: string, status: st
   await f.t.sql("INSERT INTO task_members(task_id,person_id,role,added_by) VALUES($1,$2,'owner',$2)", [id, owner]);
   return id;
 }
-async function seedOffPlan(f: Fixture, personId: string, placement: string, text: string, opts: { taskId?: string; minutes?: number[]; endedAt?: string; resolution?: string } = {}) {
-  const token = randomUUID();
-  await f.t.sql("INSERT INTO personal_tokens(id,person_id,name,client,secret_hash,created_at) VALUES($1,$2,'collector','collector',$3,$4)", [token, personId, randomUUID(), NOW]);
-  const ended = new Date(opts.endedAt ?? "2026-10-15T08:00:00Z");
-  const items: string[] = [];
-  for (const minutes of opts.minutes ?? [60]) {
-    const id = randomUUID();
-    items.push(id);
-    // 原文已清空（14 天后），只剩出处：时间段照样能算出花了多久。
-    await f.t.sql(`INSERT INTO collector_items(id,person_id,device_id,token_id,report_kind,client_event_id,source,started_at,ended_at,summary,links,task_hint,received_at,distill_status,raw_purged_at)
-      VALUES($1,$2,'device-01',$3,'digest',$4,'claude',$5,$6,NULL,'[]','Tianshu-MVP',$6,'done',$6)`,
-    [id, personId, token, randomUUID(), new Date(ended.getTime() - minutes * 60_000), ended]);
-  }
-  const id = randomUUID();
-  await f.t.sql(`INSERT INTO collector_progress(id,person_id,source,repo,started_at,ended_at,text,placement,confidence,task_id,item_ids,links,created_at,resolution,resolved_at,resolved_by)
-    VALUES($1,$2,'claude','Tianshu-MVP',$3,$4,$5,$6,0.6,$7,$8::uuid[],'[{"url":"https://github.com/TokenkingOS/Tianshu-MVP/pull/30","title":"PR 30"}]',$4,$9,$10,$11)`,
-  [id, personId, new Date(ended.getTime() - 3 * 3_600_000), ended, text, placement, opts.taskId ?? null, items,
-    opts.resolution ?? null, opts.resolution ? NOW : null, opts.resolution ? personId : null]);
-  return id;
+/** 采集整理结果（原文已清空，只剩出处）。 */
+async function seedCollected(f: Fixture, personId: string, text: string) {
+  const ended = new Date("2026-10-15T08:00:00Z");
+  await f.t.sql(`INSERT INTO collector_progress(id,person_id,source,repo,started_at,ended_at,text,placement,confidence,item_ids,links,created_at)
+    VALUES($1,$2,'claude','Tianshu-MVP',$3,$4,$5,'task',0.6,ARRAY[$6::uuid],'[{"url":"https://github.com/TokenkingOS/Tianshu-MVP/pull/30","title":"PR 30"}]',$4)`,
+  [randomUUID(), personId, new Date(ended.getTime() - 3 * 3_600_000), ended, text, randomUUID()]);
 }
 
 /** 甲是 CEO（growth 战场负责人），乙有 Task 基线，丙不在任何战场、只有周复盘和采集记录。 */
@@ -130,12 +117,8 @@ async function scenario() {
     VALUES($1,$2,'2026-10-12','submitted',$3::jsonb,$4,$4,$4)`, [randomUUID(), THIRD, JSON.stringify({
     overall: { text: "本周把采集器装上了[采集记录](cite:collector:1)。", sources: ["collector:1"] }, progress: { text: "装好两台机器。", sources: [] },
     issues: { text: "", sources: [] }, implications: { text: "", sources: [] }, actions: { text: "", sources: [] } }), new Date("2026-10-16T01:00:00Z")]);
-  const attach = await seedOffPlan(f, MEMBER, "pending_attach", "调研读回校验的写法", { taskId: verified, minutes: [60, 30] });
-  const replan = await seedOffPlan(f, MEMBER, "pending_replan", "重写上手流程的体验构想", { minutes: [120] });
-  const thirdItem = await seedOffPlan(f, THIRD, "pending_replan", "给方法部门搭表格");
-  await seedOffPlan(f, MEMBER, "pending_attach", "已经挂上的", { taskId: verified, resolution: "attached" });
-  await seedOffPlan(f, MEMBER, "pending_replan", "一个多月前的", { endedAt: "2026-09-10T08:00:00Z" });
-  return { f, overdue, verified, stalled, onTrack, attach, replan, thirdItem };
+  await seedCollected(f, THIRD, "给方法部门搭表格");
+  return { f, overdue, stalled, onTrack };
 }
 const overview = async (f: Fixture, cookie: string) => {
   const res = await call(f, cookie, "GET", "/api/progress");
@@ -144,8 +127,8 @@ const overview = async (f: Fixture, cookie: string) => {
 };
 
 describe("全局进展接口", () => {
-  it("一号位：先看红线（Task 级两种），按计划的单列；没有 Task 基线的人退回周复盘与采集摘要；计划外分待挂靠、待改计划", async () => {
-    const { f, overdue, stalled, onTrack, attach, replan, thirdItem } = await scenario();
+  it("一号位：先看红线（Task 级两种），按计划的单列；没有 Task 基线的人退回周复盘与采集摘要", async () => {
+    const { f, overdue, stalled, onTrack } = await scenario();
     try {
       const view = await overview(f, f.ceo);
       expect(view.today).toBe("2026-10-16");
@@ -165,65 +148,25 @@ describe("全局进展接口", () => {
         weeklyReview: { weekStart: "2026-10-12", weekEnd: "2026-10-18", overall: "本周把采集器装上了。", progress: "装好两台机器。" } });
       expect(view.summaries[0].weeklyReview!.href).toMatch(/^\/weekly-reviews\//);
       expect(view.summaries[0].recent.map((row) => row.text)).toEqual(["给方法部门搭表格"]);
-
-      expect(view.offPlan.map((item) => item.id).sort()).toEqual([attach, replan, thirdItem].sort());
-      expect(view.offPlan.find((item) => item.id === attach)).toMatchObject({ kind: "attach", text: "调研读回校验的写法", spentMinutes: 90,
-        candidateTask: { title: "读回校验" }, evidence: { source: "claude", repo: "Tianshu-MVP", links: [{ url: "https://github.com/TokenkingOS/Tianshu-MVP/pull/30", title: "PR 30" }] },
-        replanProposedAt: null });
-      expect(view.offPlan.find((item) => item.id === replan)).toMatchObject({ kind: "replan", spentMinutes: 120, candidateTask: null });
     } finally { await f.t.close(); }
   });
 
   it("可见范围：二号位看自己和同一战场的人；不在同一战场的看不到；加进战场后看得到", async () => {
-    const { f, thirdItem } = await scenario();
+    const { f } = await scenario();
     try {
       const member = await overview(f, f.member);
       expect(member.redLines.length).toBe(3);
       expect(member.summaries).toEqual([]);
-      expect(member.offPlan.map((item) => item.person.personId)).not.toContain(THIRD);
 
       const third = await overview(f, f.third);
       expect(third.redLines).toEqual([]);
       expect(third.onTrack).toEqual([]);
       expect(third.summaries.map((row) => row.person.personId)).toEqual([THIRD]);
       expect(third.summaries[0].weeklyReview!.href).toMatch(/^\/me\/weekly-reviews\//);
-      expect(third.offPlan.map((item) => item.id)).toEqual([thirdItem]);
 
       await f.t.sql(`UPDATE battlefield_config SET participant_ids=$1::jsonb WHERE id='growth'`, [JSON.stringify([MEMBER, THIRD])]);
       const peers = await overview(f, f.third);
       expect(peers.redLines.length).toBe(3);
-      expect((await overview(f, f.member)).offPlan.map((item) => item.id)).toContain(thirdItem);
-    } finally { await f.t.close(); }
-  });
-
-  it("二号位处理计划外：挂到自己的执行事项上（记成进展、从计划外消失），或提出改计划（只记下来，一号位看得到）", async () => {
-    const { f, verified, attach, replan, thirdItem } = await scenario();
-    try {
-      const mine = (await call(f, f.member, "GET", "/api/me/off-plan")).json() as TMyOffPlanResponse;
-      expect(mine.items.map((item) => item.id).sort()).toEqual([attach, replan].sort());
-      expect(mine.tasks.map((item) => item.title)).toContain("读回校验");
-
-      const ceoTask = await seedTask(f, "甲的事", "execution-one", "in_progress", "2026-10-12", "2026-10-30", TEST_CEO.personId);
-      expect((await call(f, f.member, "POST", `/api/me/off-plan/${attach}/attach`, { taskId: ceoTask })).statusCode).toBe(400);
-      expect((await call(f, f.member, "POST", `/api/me/off-plan/${thirdItem}/attach`, { taskId: verified })).statusCode).toBe(404);
-
-      const attached = await call(f, f.member, "POST", `/api/me/off-plan/${attach}/attach`, { taskId: verified });
-      expect(attached.statusCode).toBe(200);
-      expect((attached.json() as TMyOffPlanResponse).items.map((item) => item.id)).toEqual([replan]);
-      expect(await f.t.sql("SELECT body, source, links FROM task_progress WHERE client_event_id=$1", [attach]))
-        .toEqual([{ body: "调研读回校验的写法", source: "claude", links: [{ url: "https://github.com/TokenkingOS/Tianshu-MVP/pull/30", title: "PR 30" }] }]);
-      expect((await call(f, f.member, "POST", `/api/me/off-plan/${attach}/attach`, { taskId: verified })).statusCode).toBe(409);
-      expect((await call(f, f.member, "POST", `/api/me/off-plan/${attach}/replan`)).statusCode).toBe(409);
-
-      const proposed = await call(f, f.member, "POST", `/api/me/off-plan/${replan}/replan`);
-      expect(proposed.statusCode).toBe(200);
-      expect((proposed.json() as TMyOffPlanResponse).items[0].replanProposedAt).toBe(NOW.toISOString());
-      expect((await call(f, f.member, "POST", `/api/me/off-plan/${replan}/replan`)).statusCode).toBe(200);
-      const ceo = await overview(f, f.ceo);
-      expect(ceo.offPlan.find((item) => item.id === replan)?.replanProposedAt).toBe(NOW.toISOString());
-      expect(ceo.offPlan.find((item) => item.id === attach)).toBeUndefined();
-      // 改了计划之后照样能挂上。
-      expect((await call(f, f.member, "POST", `/api/me/off-plan/${replan}/attach`, { taskId: verified })).statusCode).toBe(200);
     } finally { await f.t.close(); }
   });
 });

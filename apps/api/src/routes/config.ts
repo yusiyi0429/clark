@@ -175,6 +175,7 @@ function parseConfigMeetingFields(fields: Map<string, string>): { value: TCreate
         if ("error" in result) {
           return fail(reply, result.error.status, result.error.code, result.error.message, result.error.fieldErrors ? { fieldErrors: result.error.fieldErrors } : undefined);
         }
+        await app.meetingFollowThrough.feishuEvents.schedule(result.card.objectRef.id, "create");
         return reply.status(201).send({ cards: [result.card] });
       } catch (error) {
         if (error instanceof MaterialParseError) return fail(reply, 400, error.code, error.message);

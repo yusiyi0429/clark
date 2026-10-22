@@ -16,6 +16,13 @@ describe("飞书免登", () => {
     expect(requestAccess.mock.calls[0][0]).toMatchObject({ appID: "cli_x", scopeList: [] });
   });
 
+  it("requestAccess 的 scopeList 用服务端给的用户权限，去掉 offline_access", async () => {
+    const requestAccess = vi.fn((options: { success: (res: { code: string }) => void }) => options.success({ code: "access-code" }));
+    const scopes = ["offline_access", "minutes:minutes:readonly", "vc:meeting:readonly"];
+    await requestFeishuCode({ h5sdk: ready, tt: { requestAccess } } as never, "cli_x", scopes);
+    expect(requestAccess.mock.calls[0][0]).toMatchObject({ scopeList: ["minutes:minutes:readonly", "vc:meeting:readonly"] });
+  });
+
   it("客户端太旧（errno 103）或没有 requestAccess 时退回 requestAuthCode", async () => {
     const requestAuthCode = vi.fn((options: { appId: string; success: (res: { code: string }) => void }) => options.success({ code: "legacy-code" }));
     const tooOld = vi.fn((options: { fail: (err: { errno: number }) => void }) => options.fail({ errno: 103 }));

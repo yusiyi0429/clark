@@ -15,7 +15,7 @@ import { MenuDialog } from "@/components/AccountMenu";
 import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { browserApi, type Card } from "@/lib/api/client";
-import { monthDayTime } from "@/lib/companyTime";
+import { monthDayTime, publishedDate } from "@/lib/companyTime";
 import { COUNTER_ISSUE, COUNTER_LABELS, COUNTER_SOURCE, SOURCES, age, isProblem, issueName, reminderDraft, runKindLabel, signalLabel, type Source } from "./adminText";
 import s from "./admin.module.css";
 
@@ -234,7 +234,7 @@ function SourceFacts({ row, source }: { row: TAdminPersonRow; source: Source }) 
       ["状态", cell.tokenStatus === "reauth_required" ? "需重新授权" : cell.tokenStatus === "active" ? "有效" : null],
       ["授权", monthDayTime(cell.authorizedAt) || null],
       ["续期", monthDayTime(cell.lastSuccessAt) || null],
-      ["到期", monthDayTime(cell.refreshExpiresAt) || null],
+      ["需重新授权", cell.tokenStatus === "active" && cell.reauthDueAt ? publishedDate(cell.reauthDueAt) : null],
       ["提醒重授权", monthDayTime(cell.reauthReminderAt) || null],
     ]} />;
   }

@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Card } from "@/lib/api/client";
-import { MEETING_POLL_MS, meetingNeedsPolling } from "./MeetingCard";
+import { MEETING_POLL_MS, followMeetingCard, meetingNeedsPolling, meetingPollMs } from "./MeetingCard";
 import { preflightInFlight } from "./meetingIssueModel";
 import { railRefreshInterval } from "@/components/NotificationRail";
 import type { MeetingPayload } from "./payloads";
@@ -10,6 +10,54 @@ const meeting = (overrides: Partial<MeetingPayload> & { preflightStatus?: string
   return { status: "scheduled", recording: null, outcome: null, preflight: { status: preflightStatus }, ...rest } as unknown as MeetingPayload;
 };
 const card = (kind: string, payload: unknown) => ({ id: `${kind}:1`, kind, payload, objectRef: { type: kind, id: "1" } }) as unknown as Card;
+
+describe("会议页跟着后台取会议卡", () => {
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+  const stubPage = () => {
+    const listeners = new Map<string, () => void>();
+    const page = { visibilityState: "hidden", addEventListener: vi.fn((name: string, fn: () => void) => listeners.set(`document:${name}`, fn)), removeEventListener: vi.fn() };
+    vi.stubGlobal("document", page);
+    vi.stubGlobal("window", { setInterval, clearInterval, addEventListener: vi.fn((name: string, fn: () => void) => listeners.set(`window:${name}`, fn)), removeEventListener: vi.fn() });
+    return { page, fire: (key: string) => listeners.get(key)!() };
+  };
+
+  it("每 5 秒取一次；撤掉以后不再取", async () => {
+    vi.useFakeTimers();
+    stubPage();
+    const refetch = vi.fn(async () => undefined);
+    const stop = followMeetingCard(5_000, refetch);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(refetch).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(refetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(refetch).toHaveBeenCalledTimes(2);
+    stop();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(refetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("从后台切回来（标签页变可见、窗口拿回焦点）马上取一次，不等下一拍；上一次没取回来时不叠着取", async () => {
+    vi.useFakeTimers();
+    const { page, fire } = stubPage();
+    let finish!: () => void;
+    const refetch = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    followMeetingCard(5_000, refetch);
+    // 还在后台：标签页的可见性变化不取。
+    fire("document:visibilitychange");
+    expect(refetch).not.toHaveBeenCalled();
+    page.visibilityState = "visible";
+    fire("document:visibilitychange");
+    expect(refetch).toHaveBeenCalledTimes(1);
+    // 切回来时可见性变化和拿回焦点一起来：只取一次。
+    fire("window:focus");
+    expect(refetch).toHaveBeenCalledTimes(1);
+    finish();
+    await Promise.resolve(); await Promise.resolve();
+    fire("window:focus");
+    expect(refetch).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe("会前预审在后台跑时接着刷新", () => {
   it("只有待开的会、预审进行中才算", () => {
@@ -25,6 +73,34 @@ describe("会前预审在后台跑时接着刷新", () => {
     expect(meetingNeedsPolling(meeting({ preflightStatus: "failed" }))).toBe(false);
     expect(meetingNeedsPolling(meeting({ preflightStatus: "running" }), true)).toBe(false);
     expect(meetingNeedsPolling(meeting({ status: "held", outcome: { status: "running" } } as never))).toBe(true);
+  });
+
+  it("等妙记、生成会议卡、等飞书会议开始和结束时都是 5 秒一次：到下一阶段卡片自己出来；成员视图的主持人也跟着取", () => {
+    const waiting = meeting({ minutesStatus: "waiting" });
+    expect(meetingNeedsPolling(waiting)).toBe(true);
+    expect(meetingPollMs(waiting)).toBe(5_000);
+    expect(meetingNeedsPolling(meeting({}), true, "waiting")).toBe(true);
+    expect(meetingNeedsPolling(meeting({}), true, "live")).toBe(true);
+    expect(meetingPollMs(meeting({}))).toBe(5_000);
+    expect(meetingNeedsPolling(meeting({ minutesStatus: "failed", minutesFailure: "not_ready" }))).toBe(true);
+    expect(meetingNeedsPolling(meeting({ minutesStatus: "failed", minutesFailure: "no_permission" }))).toBe(false);
+    expect(meetingNeedsPolling(meeting({ minutesStatus: "manual" }))).toBe(false);
+    expect(meetingNeedsPolling(waiting, true)).toBe(true);
+    const generating = meeting({ status: "held", outcome: { status: "pending" } } as never);
+    expect(meetingNeedsPolling(generating, true)).toBe(true);
+    expect(meetingPollMs(generating)).toBe(5_000);
+    expect(meetingPollMs(meeting({ preflightStatus: "running" }))).toBe(2_000);
+  });
+
+  it("刚约完：飞书还在约（pending）时谁看都 5 秒取一次，约好了就交给等开会；成员视图里主持人看自己的会，预审中也取", () => {
+    const booking = meeting({ feishuEvent: { status: "pending", joinUrl: null, organizerId: "p1" } } as never);
+    expect(meetingNeedsPolling(booking)).toBe(true);
+    expect(meetingNeedsPolling(booking, true)).toBe(true);
+    expect(meetingPollMs(booking)).toBe(5_000);
+    expect(meetingNeedsPolling(meeting({ feishuEvent: { status: "failed", joinUrl: null, organizerId: "p1" } } as never), true)).toBe(false);
+    expect(meetingNeedsPolling(meeting({ status: "cancelled", feishuEvent: { status: "pending", joinUrl: null, organizerId: "p1" } } as never), true)).toBe(false);
+    expect(meetingNeedsPolling(meeting({ preflightStatus: "running" }), true, null, true)).toBe(true);
+    expect(meetingNeedsPolling(meeting({ preflightStatus: "ready" }), true, null, true)).toBe(false);
   });
 
   it("首页左栏：有会在预审中 5 秒一次，其余待开的会 20 秒一次，没有要等的就不轮询", () => {

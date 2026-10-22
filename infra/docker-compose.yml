@@ -84,6 +84,7 @@ services:
       EXTRA_ALLOWED_ORIGINS: ${EXTRA_ALLOWED_ORIGINS:-}
       DRI_SERVICE_TOKEN: ${DRI_SERVICE_TOKEN:?DRI_SERVICE_TOKEN required}
       ONTOLOGY_SERVICE_TOKEN: ${ONTOLOGY_SERVICE_TOKEN:-}
+      INTERNAL_CHAT_TOKEN: ${INTERNAL_CHAT_TOKEN:-}
       TKOS_WORLD_API_URL: ${TKOS_WORLD_API_URL:-}
       TKOS_WORLD_AGENT_TOKEN: ${TKOS_WORLD_AGENT_TOKEN:-}
       # 本体可选项（worldClient.ts）：实例名缺省 mvp；凭证文件、本地人员补充文件与 TK 只读实例都写容器内路径（放进只读挂载的 /repo/seed）。
@@ -172,7 +173,8 @@ services:
       FEISHU_TOKEN_KEY_VERSION: ${FEISHU_TOKEN_KEY_VERSION:-1}
       # 采集表：live 才写真实多维表格，其余为 mock。影响卡：shadow 只在后台记录，其余为 live。
       FEISHU_BITABLE_MODE: ${FEISHU_BITABLE_MODE:-}
-      IMPACT_CARD_MODE: ${IMPACT_CARD_MODE:-}
+      # 飞书网页域名：会议事件写本体时拼妙记链接；留空不带链接。
+      FEISHU_WEB_ORIGIN: ${FEISHU_WEB_ORIGIN:-}
       # 管理员视图：逗号分隔的 personId；留空时没有人能看。
       TIANSHU_ADMIN_PERSON_IDS: ${TIANSHU_ADMIN_PERSON_IDS:-}
       MEETING_MATERIAL_STORAGE_DIR: /var/lib/warmap/meeting_materials

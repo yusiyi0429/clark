@@ -124,6 +124,9 @@ describe("管理员视图", () => {
       ["测试甲", "none", "yellow", "none"],
     ]);
     const second = view.people[1];
+    // 飞书授权给的是满 365 天要重新授权的那天，不是每次续期都往后挪 7 天的续期凭证到期时间。
+    expect(second.feishu.reauthDueAt).toBe("2027-10-15T02:00:00.000Z");
+    expect(second.feishu).not.toHaveProperty("refreshExpiresAt");
     expect(second.collector.lastSuccessAt).toBe("2026-10-12T02:00:00.000Z");
     expect(second.collector.devices).toHaveLength(1);
     expect(second.world).toMatchObject({ lastWeek: "2026-10-12", syncStatus: "failed", failedTargets: 1, lastSuccessAt: "2026-10-09T10:00:00.000Z" });

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Lock } from "lucide-react";
+import { ChevronRight, Lock } from "lucide-react";
+import { Button } from "ts-design/primitives";
 import { AccountMenu, type Account } from "@/components/AccountMenu";
 import { ActionNoticeCard } from "@/components/ActionNoticeCard";
 import { CycleCountdown } from "@/components/CycleCountdown";
@@ -12,17 +13,16 @@ import { MonthlyReviewNotices } from "@/components/monthlyReview/MonthlyReviewNo
 import { PersonalReviewBoard } from "@/components/monthlyReview/PersonalReviewBoard";
 import { useWeeklyReviewBoard, WeeklyReviewBoard } from "@/components/weeklyReview/WeeklyReviewBoard";
 import { RequestNotices } from "@/components/requests/RequestNotices";
-import { HostDecisionNotices } from "@/components/meeting/HostDecisionNotices";
+import { MeetingCardNoticeList, useMyMeetingCards } from "@/components/meeting/MeetingCardNotices";
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { logout } from "@/lib/logout";
-import { MemberOffPlan } from "@/components/progress/MemberOffPlan";
 import { MemberTasks } from "./MemberTasks";
 import { MemberHomeWidgets } from "./MemberHomeWidgets";
 import { MemberRadarWidget } from "./MemberRadarWidget";
 import { MemberRadarNotices, noteworthySignals } from "./MemberRadarNotices";
 import { MemberMeetingSchedule } from "./MemberMeetingSchedule";
-import { memberNoticeGroups } from "./memberNotices";
+import { memberNoticeGroups, quietNoticeCount } from "./memberNotices";
 import { useMemberHome } from "./useMemberHome";
 import { weeklySyncNotices } from "./weeklySyncNotice";
 import n from "@/styles/notifications.module.css";
@@ -33,6 +33,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
   const [leaving, setLeaving] = useState(false);
   const home = useMemberHome();
   const weeklyReviews = useWeeklyReviewBoard();
+  const meetingCards = useMyMeetingCards();
   const radarSignals = noteworthySignals(home.radar);
   const account = { displayName, loginId, role: "member" as const };
   return (
@@ -55,7 +56,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
           />
           <div className={n.noticeList}>
             <CycleCountdown />
-            <HostDecisionNotices meetingBase="/me/meetings" onNavigate={api.navigate} />
+            <MeetingCardNoticeList meetings={meetingCards} meetingBase="/me/meetings" onNavigate={api.navigate} />
             <ActionNoticeCard id="weekly-sync" title="每周同步" subtitle="把本周进展写进天枢" mark="meeting" notices={weeklySyncNotices(home.weeklySync)} onSettled={() => undefined} />
             <MemberMeetingSchedule meetings={home.meetings} onNavigate={api.navigate} />
             <WeeklyReviewBoard onNavigate={api.navigate} state={weeklyReviews} />
@@ -73,7 +74,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
               api.navigate(`${item.href}?channel=group`, from);
             }, buttons: [] })))} onSettled={() => undefined} />
             <MemberRadarNotices signals={radarSignals} currentHref={currentHref} onNavigate={api.navigate} onRead={home.readRadarNotice} />
-            {home.rounds.length + home.meetings.length + home.unreadThreads.length + home.unreadMissionGroups.length + home.notifications.filter((item) => !item.readAt).length + radarSignals.length + (home.weeklySync ? 1 : 0) + (weeklyReviews.board?.rows.length ?? 0) === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
+            {meetingCards.length + home.rounds.length + home.meetings.length + home.unreadThreads.length + home.unreadMissionGroups.length + quietNoticeCount(home.notifications) + radarSignals.length + (home.weeklySync ? 1 : 0) + (weeklyReviews.board?.rows.length ?? 0) === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
           </div>
           <div className={n.railFoot}>
             <AccountMenu account={account} onNavigate={api.navigate} />
@@ -93,7 +94,7 @@ function MemberHomeBody({ displayName, home, account }: { displayName: string; h
     {home.work || !home.homeError ? <div className={m.widgetsSlot}><MemberHomeWidgets work={home.work} onNavigate={navigate} onRefresh={home.refresh}
       radar={home.radar ? <MemberRadarWidget radar={home.radar} onNavigate={navigate} /> : undefined} /></div> : null}
     <MemberTasks tasks={home.tasks} error={home.taskError === home.homeError ? null : home.taskError} onNavigate={navigate} />
-    <MemberOffPlan onNavigate={navigate} onAttached={() => void home.refresh()} />
+    <div className={m.progressEntry}><Button variant="ghost" size="sm" data-origin="/me/progress" onPress={(event) => navigate("/me/progress", event.target as Element)}>战场进展<ChevronRight size={15} aria-hidden /></Button></div>
     <div className={m.phoneAccount}><AccountMenu account={account} onNavigate={navigate} /></div>
   </div>;
 }

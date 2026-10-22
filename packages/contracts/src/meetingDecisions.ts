@@ -1,11 +1,20 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 /**
- * 会后链路：妙记状态、实际参会名单、分层确认的「会上定了 X」。
- * - 妙记：none（会还没开完）/ waiting（开完了，等飞书妙记生成）/ manual（拿不到，退回手动上传）/ ready（已拿到）。
- * - 分层：strategic 推给 CEO（不代判）；host 由主持人确认，每场最多 5 条，满一个工作日没确认由 Agent 按推荐判断代判。
+ * 会后链路：妙记状态、实际参会名单、会议记录待确认清单；旧格式会议的逐条决定只读。
+ * - 妙记：none（会还没开完）/ waiting（开完了，等飞书妙记生成）/ manual（拿不到，退回手动上传）/ ready（已拿到）/ failed（读取失败，带原因）。
+ * - 旧会议的逐条决定（strategic / host）只读显示，不再确认、提醒或代判；新会议会后只有会议卡一个入口（整卡确认）。
  */
-export const MeetingMinutesStatus = Type.Union([Type.Literal("none"), Type.Literal("waiting"), Type.Literal("manual"), Type.Literal("ready")]);
+export const MeetingMinutesStatus = Type.Union([Type.Literal("none"), Type.Literal("waiting"), Type.Literal("manual"), Type.Literal("ready"), Type.Literal("failed")]);
+/** 妙记读取失败（failed）的原因：没权限 / 原文还没好 / 没找到 / 其他失败。主持人或创建人可以再读一次。 */
+export const MeetingMinutesFailure = Type.Union([Type.Literal("no_permission"), Type.Literal("not_ready"), Type.Literal("not_found"), Type.Literal("fetch_failed")]);
+/** 主持人或创建人贴妙记链接：https://<租户>.feishu.cn/minutes/<token>。 */
+export const MeetingMinutesLinkRequest = Type.Object({ url: Type.String({ minLength: 1, maxLength: 1000 }) }, { additionalProperties: false });
+/** 再读一次、贴链接之后的妙记状态。 */
+export const MeetingMinutesFetchResponse = Type.Object(
+  { minutesStatus: MeetingMinutesStatus, minutesFailure: Type.Union([MeetingMinutesFailure, Type.Null()]) },
+  { additionalProperties: false },
+);
 
 /** 实际参会的人：飞书参会名单（中途加入的也算）；拿不到时退回手填的参会人。 */
 export const MeetingAttendees = Type.Object(
@@ -26,6 +35,28 @@ export const MeetingDecisionStatus = Type.Union([
   Type.Literal("agent_judged"),
 ]);
 export const MeetingDecisionRecommendation = Type.Union([Type.Literal("confirmed"), Type.Literal("not_decided")]);
+
+/**
+ * 落点：写进本体时挂到的对象（LTO / 本月 PO / Mission / Task / 责任单元 / 公司）。
+ * lto、po 的 id 是本体 object_id；其余是天枢里的 id（Mission 按 mission:<code>、单元按 capability:<code> 对本体；公司是 company）。
+ */
+export const WorldAnchorKind = Type.Union([
+  Type.Literal("lto"), Type.Literal("po"), Type.Literal("mission"), Type.Literal("task"), Type.Literal("unit"), Type.Literal("company"),
+]);
+/** 预约、改挂点时能挑的挂点：LTO、本月 PO、本月 Mission、责任单元。 */
+export const PickedWorldAnchor = Type.Object(
+  { kind: Type.Union([Type.Literal("lto"), Type.Literal("po"), Type.Literal("mission"), Type.Literal("unit")]), id: Type.String({ minLength: 1, maxLength: 200 }) },
+  { additionalProperties: false },
+);
+export const WorldAnchor = Type.Object(
+  { kind: WorldAnchorKind, id: Type.String({ minLength: 1 }), title: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+/**
+ * 一条生效的决定在本体里（只给能看会议记录状态的人）：决定随整场会议事件写，跟着会议记录走——
+ * waiting 还没写，committed 已写入，failed 写入失败，off 选了不写入。
+ */
+export const MeetingDecisionWorld = Type.Union([Type.Literal("waiting"), Type.Literal("committed"), Type.Literal("failed"), Type.Literal("off")]);
 
 export const MeetingDecisionView = Type.Object(
   {
@@ -48,44 +79,112 @@ export const MeetingDecisionView = Type.Object(
     reviewedAt: Type.Union([Type.String(), Type.Null()]),
     /** 到点由 Agent 代判（只有 host）。 */
     dueAt: Type.Union([Type.String(), Type.Null()]),
-    /** 看的人能不能在这里确认（主持人确认 host 条目）。 */
+    /** 旧字段：逐条确认已停，总是 false。 */
     canReview: Type.Boolean(),
   },
   { additionalProperties: false },
 );
 
-export const MeetingDecisionVerdict = Type.Union([Type.Literal("confirmed"), Type.Literal("edited"), Type.Literal("not_decided")]);
-export const MeetingDecisionReviewRequest = Type.Object(
+/**
+ * 会议记录（B 方案）：整卡确认后写一条整场会议事件。只给主持人、创建人和 CEO，其他人为 null。
+ * status：pending 待确认（还没确认过）；writing 已确认、会议事件还在写；committed 已写入（读回核对过）；excluded 选了不写入；
+ * failed 写入失败；edit_pending 确认之后又改了，要重新确认。
+ * version 是当前确认版本（会议卡 revision，同一草稿再确认不加）；eventId 是最近一次写进去的会议事件；由整卡确认表和同步回执算出。
+ */
+export const MeetingRecordStatus = Type.Union([
+  Type.Literal("pending"), Type.Literal("writing"), Type.Literal("committed"), Type.Literal("excluded"), Type.Literal("failed"), Type.Literal("edit_pending"),
+]);
+export const MeetingRecordView = Type.Object(
   {
-    verdict: MeetingDecisionVerdict,
-    /** verdict = edited 时必填：改后的说法。 */
-    statement: Type.Optional(Type.String({ minLength: 1, maxLength: 300 })),
+    status: MeetingRecordStatus,
+    version: Type.Integer({ minimum: 0 }),
+    eventId: Type.Union([Type.String(), Type.Null()]),
+    confirmedAt: Type.Union([Type.String({ minLength: 1, maxLength: 100 }), Type.Null()]),
   },
   { additionalProperties: false },
 );
-export const MeetingDecisionResponse = Type.Object({ decision: MeetingDecisionView }, { additionalProperties: false });
+/** 这场会在本体里：挂点、是否选了不写入、会议记录的状态。 */
+export const MeetingWorldView = Type.Object(
+  {
+    excluded: Type.Boolean(),
+    /** 谁选的不写入（名字）。 */
+    excludedBy: Type.Union([Type.String(), Type.Null()]),
+    record: Type.Union([MeetingRecordView, Type.Null()]),
+    /** 最近一次写进本体的时刻（只给能看记录状态的人）。 */
+    at: Type.Union([Type.String(), Type.Null()]),
+    /** 已写入且确认后没改过时是写进去的挂点，否则是现在会挂的。 */
+    anchors: Type.Array(WorldAnchor),
+    /** 主持人或 CEO 改过挂点。 */
+    edited: Type.Boolean(),
+    /** 看的人能不能改挂点（主持人和建会的人）。 */
+    canEdit: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+/** 一条生效的决定在本体里：落到的对象（影响卡里受影响的 Mission、Task）和写入状态（看不到会议记录状态的人为 null）。 */
+export const MeetingDecisionWorldItem = Type.Object(
+  { id: Type.String({ minLength: 1 }), anchors: Type.Array(WorldAnchor), world: Type.Union([MeetingDecisionWorld, Type.Null()]) },
+  { additionalProperties: false },
+);
+/** 会议页单独取（不进会议卡）：这场会在本体里，和每条生效的决定落到哪。 */
+export const MeetingWorldResponse = Type.Object({ world: MeetingWorldView, decisions: Type.Array(MeetingDecisionWorldItem) }, { additionalProperties: false });
+/** 改挂点：挑 LTO、本月 PO、本月 Mission、责任单元；null 回到自动（主持人负责的单元，没有就挂公司）。 */
+export const MeetingWorldAnchorsRequest = Type.Object(
+  { anchors: Type.Union([Type.Array(PickedWorldAnchor, { minItems: 1, maxItems: 10 }), Type.Null()]) },
+  { additionalProperties: false },
+);
+/**
+ * 预约、改挂点时的一个候选：名称、类型，加对象已确认的内容（brief，截 80 字）——LTO、PO 是目标块的结果，Mission 是定义的结果，
+ * 单元是名称；草稿或读不到时为 null。lifecycle 照本体（LTO、PO）或 Mission 轮次（draft / confirmed），单元为 null。
+ */
+export const WorldAnchorOption = Type.Object(
+  {
+    kind: PickedWorldAnchor.properties.kind,
+    id: Type.String({ minLength: 1 }),
+    title: Type.String({ minLength: 1 }),
+    brief: Type.Union([Type.String({ maxLength: 80 }), Type.Null()]),
+    lifecycle: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+export const MeetingWorldAnchorOptionsResponse = Type.Object({ options: Type.Array(WorldAnchorOption) }, { additionalProperties: false });
 
-/** 我要确认的会后决定（通知栏置顶）：按会议分组，只列还没确认的。 */
-export const MyMeetingDecisionGroup = Type.Object(
+/**
+ * 我要处理的会议记录（通知栏置顶，一场会一条）：我是主持人或创建人、草稿已生成的会里，
+ * pending 还没确认过、edit_pending 确认后又改了、failed 写入失败。提醒只提示，不改状态。
+ */
+export const MyMeetingCardStatus = Type.Union([Type.Literal("pending"), Type.Literal("edit_pending"), Type.Literal("failed")]);
+export const MyMeetingCard = Type.Object(
   {
     meetingId: Type.String({ minLength: 1 }),
-    meetingTitle: Type.String({ minLength: 1 }),
-    scheduledAt: Type.String({ minLength: 1 }),
-    dueAt: Type.Union([Type.String(), Type.Null()]),
-    decisions: Type.Array(MeetingDecisionView),
+    title: Type.String({ minLength: 1 }),
+    /** 会议结束时刻（没记下实际结束时用预约的结束时刻）。 */
+    endedAt: Type.String({ minLength: 1 }),
+    status: MyMeetingCardStatus,
   },
   { additionalProperties: false },
 );
-export const MyMeetingDecisionsResponse = Type.Object({ groups: Type.Array(MyMeetingDecisionGroup) }, { additionalProperties: false });
+export const MyMeetingCardsResponse = Type.Object({ meetings: Type.Array(MyMeetingCard) }, { additionalProperties: false });
 
 export type TMeetingMinutesStatus = Static<typeof MeetingMinutesStatus>;
+export type TMeetingMinutesFailure = Static<typeof MeetingMinutesFailure>;
+export type TMeetingMinutesLinkRequest = Static<typeof MeetingMinutesLinkRequest>;
+export type TMeetingMinutesFetchResponse = Static<typeof MeetingMinutesFetchResponse>;
 export type TMeetingAttendees = Static<typeof MeetingAttendees>;
 export type TMeetingDecisionTier = Static<typeof MeetingDecisionTier>;
 export type TMeetingDecisionStatus = Static<typeof MeetingDecisionStatus>;
 export type TMeetingDecisionRecommendation = Static<typeof MeetingDecisionRecommendation>;
 export type TMeetingDecisionView = Static<typeof MeetingDecisionView>;
-export type TMeetingDecisionVerdict = Static<typeof MeetingDecisionVerdict>;
-export type TMeetingDecisionReviewRequest = Static<typeof MeetingDecisionReviewRequest>;
-export type TMeetingDecisionResponse = Static<typeof MeetingDecisionResponse>;
-export type TMyMeetingDecisionGroup = Static<typeof MyMeetingDecisionGroup>;
-export type TMyMeetingDecisionsResponse = Static<typeof MyMeetingDecisionsResponse>;
+export type TMyMeetingCardStatus = Static<typeof MyMeetingCardStatus>;
+export type TMyMeetingCard = Static<typeof MyMeetingCard>;
+export type TMyMeetingCardsResponse = Static<typeof MyMeetingCardsResponse>;
+export type TWorldAnchor = Static<typeof WorldAnchor>;
+export type TWorldAnchorOption = Static<typeof WorldAnchorOption>;
+export type TMeetingDecisionWorld = Static<typeof MeetingDecisionWorld>;
+export type TMeetingRecordStatus = Static<typeof MeetingRecordStatus>;
+export type TMeetingRecordView = Static<typeof MeetingRecordView>;
+export type TMeetingWorldView = Static<typeof MeetingWorldView>;
+export type TMeetingWorldResponse = Static<typeof MeetingWorldResponse>;
+export type TMeetingDecisionWorldItem = Static<typeof MeetingDecisionWorldItem>;
+export type TMeetingWorldAnchorsRequest = Static<typeof MeetingWorldAnchorsRequest>;
+export type TPickedWorldAnchor = Static<typeof PickedWorldAnchor>;

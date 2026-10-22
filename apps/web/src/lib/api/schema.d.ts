@@ -107,6 +107,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/feishu": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人的飞书连好了没有（授权有效、带着会后拿妙记要的权限）；没接飞书时 enabled=false */
+        get: operations["getMyFeishuConnection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/feishu/start": {
         parameters: {
             query?: never;
@@ -114,7 +131,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 浏览器打开：已登录直接跳到 next；否则写 state cookie 后跳飞书授权页。飞书消息里的深链接都指向这里 */
+        /** 浏览器打开：已登录直接跳到 next；否则写 state cookie 后跳飞书授权页。飞书消息里的深链接都指向这里。connect=1：已登录的人也去授权，连接飞书 */
         get: operations["startFeishuAuth"];
         put?: never;
         post?: never;
@@ -184,6 +201,23 @@ export interface paths {
         };
         /** 只读人员目录（Meeting 创建表单使用） */
         get: operations["listPeople"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/people/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 人员名册（CEO 和成员）：真人的 personId 和名字，约会议选参会人用 */
+        get: operations["listPersonDirectory"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1162,15 +1196,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/me/meeting-decisions": {
+    "/api/me/meeting-cards": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 我主持的会里还没确认的「会上定了 X」，按会议分组 */
-        get: operations["listMyMeetingDecisions"];
+        /** 我主持或创建的会里待处理的会议记录：待确认、修改待确认、写入失败，一场会一条 */
+        get: operations["listMyMeetingCards"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1179,7 +1213,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/meetings/{id}/decisions/{decisionId}/review": {
+    "/api/meetings/{id}/minutes": {
         parameters: {
             query?: never;
             header?: never;
@@ -1188,8 +1222,178 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 主持人确认一条会后决定：对 / 改一下 / 其实没定；Agent 代判之后改判会给已收卡的人出更正卡 */
-        post: operations["reviewMeetingDecision"];
+        /** 主持人或创建人贴飞书妙记链接，按这个妙记读逐字稿（别人一律 404） */
+        post: operations["readMeetingMinutesLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/minutes/refetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 主持人或创建人再读一次妙记（等待中、没拿到、读取失败时）；已读完 409 */
+        post: operations["refetchMeetingMinutes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 会议卡：草稿（读时目标变过就刷新差异）、行动项、确认版与同步回执；主持人、创建人、CEO、实际参会人能读，别人 404 */
+        get: operations["getMeetingRecordCard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/card/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 主持人或创建人整份保存会议卡草稿；draftVersion 过期 409 DRAFT_CHANGED（带 view），校验不过 400（fieldErrors 按字段路径） */
+        put: operations["saveMeetingCardDraft"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/card/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 主持人或创建人整卡确认：冻结一个确认版本并排写本体（选了不写入只留天枢）；draftVersion 过期 409 DRAFT_CHANGED（带 view），同一草稿再确认不出新版本；已有确认版时 kind 必填（400 KIND_REQUIRED），没有实际时间或在将来 400 OCCURRED_AT_REQUIRED */
+        post: operations["confirmMeetingCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/card/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 主持人或创建人重试当前确认版的会议事件写入（失败或还在等的）；已写成或选了不写入 409 */
+        post: operations["retryMeetingCardSync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/world": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 这场会在本体里：挂点、会议记录状态（主持人、创建人和 CEO）、每条生效的决定落到哪；参会人只看挂点和落点 */
+        get: operations["getMeetingWorld"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/world-anchors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 主持人或 CEO 改会议挂到的 LTO、本月 PO、Mission、责任单元；null 回到自动 */
+        put: operations["setMeetingWorldAnchors"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/world-anchor-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 改挂点时可选的对象：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元 */
+        get: operations["listMeetingWorldAnchorOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人 */
+        post: operations["bookMeeting"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/world-anchor-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 预约时可选的挂点：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元 */
+        get: operations["listWorldAnchorOptions"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2202,61 +2406,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 全局进展：红线（比预期慢、按截止日做不完）、按计划在走、没有 Task 基线的人的进展摘要、计划外工作；CEO 看全部，其他人看同一战场的人 */
+        /** 全局进展：红线（比预期慢、按截止日做不完）、按计划在走、没有 Task 基线的人的进展摘要；CEO 看全部，其他人看同一战场的人 */
         get: operations["getProgressOverview"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/me/off-plan": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 本人的计划外工作（没处理的、已提出改计划的）与挂靠时可选的本人未完成执行事项 */
-        get: operations["getMyOffPlan"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/me/off-plan/{id}/attach": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 把一条计划外工作挂到本人的一件执行事项上（同时记成这件事的进展）；已挂过的 409 */
-        post: operations["attachMyOffPlan"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/me/off-plan/{id}/replan": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 对一条计划外工作提出改计划（先只记下来）；重复提出幂等，已挂过的 409 */
-        post: operations["proposeMyOffPlanReplan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3413,6 +3566,147 @@ export interface components {
                 createdAt: string;
                 updatedAt: string;
             };
+            view?: {
+                draft: {
+                    /** @constant */
+                    schemaVersion: "meeting-card.v1";
+                    meetingId: string;
+                    title: string;
+                    occurredAt: string | null;
+                    participants: {
+                        name: string;
+                        personRef: string | null;
+                    }[];
+                    relatedObjectRefs: string[];
+                    summary: string;
+                    sections: {
+                        id: string;
+                        heading: string;
+                        body: string;
+                        sourceRefs: {
+                            sourceId: string;
+                            locator: string | null;
+                        }[];
+                    }[];
+                    sources: {
+                        id: string;
+                        url: string;
+                        title: string;
+                        contentHash: string;
+                        sourceVersion: string | null;
+                        capturedAt: string;
+                    }[];
+                    objectChanges: {
+                        id: string;
+                        targetRef: string | null;
+                        targetTitle: string | null;
+                        expectedVersion: number | null;
+                        before: {
+                            text: string;
+                        } | null;
+                        after: {
+                            text: string;
+                        };
+                        basisSectionIds: string[];
+                        stale: boolean;
+                    }[];
+                } | null;
+                draftVersion: number;
+                draftStatus: "created" | "draft_ready";
+                actionItems: {
+                    id: string;
+                    text: string;
+                    ownerPersonId: string | null;
+                    dueDate: string | null;
+                    basisSectionIds: string[];
+                    taskId: string | null;
+                }[];
+                confirmed: {
+                    payload: {
+                        /** @constant */
+                        schemaVersion: "meeting-card.v1";
+                        meetingId: string;
+                        title: string;
+                        occurredAt: string | null;
+                        participants: {
+                            name: string;
+                            personRef: string | null;
+                        }[];
+                        relatedObjectRefs: string[];
+                        summary: string;
+                        sections: {
+                            id: string;
+                            heading: string;
+                            body: string;
+                            sourceRefs: {
+                                sourceId: string;
+                                locator: string | null;
+                            }[];
+                        }[];
+                        sources: {
+                            id: string;
+                            url: string;
+                            title: string;
+                            contentHash: string;
+                            sourceVersion: string | null;
+                            capturedAt: string;
+                        }[];
+                        objectChanges: {
+                            id: string;
+                            targetRef: string | null;
+                            targetTitle: string | null;
+                            expectedVersion: number | null;
+                            before: {
+                                text: string;
+                            } | null;
+                            after: {
+                                text: string;
+                            };
+                            basisSectionIds: string[];
+                        }[];
+                        revision: number;
+                    };
+                    confirmation: {
+                        revision: number;
+                        confirmedBy: string;
+                        confirmedAt: string;
+                        payloadHash: string;
+                    };
+                    kind: "first" | "correction" | "followup";
+                    actionItems: {
+                        id: string;
+                        text: string;
+                        ownerPersonId: string | null;
+                        dueDate: string | null;
+                        basisSectionIds: string[];
+                        taskId: string | null;
+                    }[];
+                } | null;
+                sync: {
+                    revision: number;
+                    writeToWorld: boolean;
+                    event: {
+                        status: "pending" | "succeeded" | "failed" | "skipped";
+                        eventId: string | null;
+                        error: string | null;
+                    };
+                    objects: {
+                        changeId: string;
+                        title: string;
+                        status: "pending" | "updated" | "failed" | "not_allowed" | "conflict" | "superseded" | "blocked";
+                        actualVersion: number | null;
+                        error: string | null;
+                    }[];
+                } | null;
+                targetOptions: {
+                    targetRef: string;
+                    title: string;
+                    componentType: string;
+                    text: string;
+                }[];
+                canEdit: boolean;
+                draftChange: "none" | "items" | "content";
+            };
         };
         LoginRequest: {
             loginId: string;
@@ -3430,9 +3724,14 @@ export interface components {
         FeishuAuthConfigResponse: {
             enabled: boolean;
             appId?: string;
+            scopes?: string[];
         };
         FeishuCodeLoginRequest: {
             code: string;
+        };
+        FeishuConnectionResponse: {
+            enabled: boolean;
+            connected: boolean;
         };
         ChangePasscodeRequest: {
             loginId: string;
@@ -3454,6 +3753,12 @@ export interface components {
                 personId: string;
                 displayName: string;
                 roles: string[];
+            }[];
+        };
+        PersonDirectoryResponse: {
+            people: {
+                personId: string;
+                displayName: string;
             }[];
         };
         ExecuteActionRequest: {
@@ -6521,6 +6826,17 @@ export interface components {
             participants: string[];
             issueIds: string[];
         };
+        MeetingBookingRequest: {
+            title: string;
+            scheduledAt: string;
+            endsAt: string;
+            leadDriId?: string;
+            participants?: string[];
+            anchors: {
+                kind: "lto" | "po" | "mission" | "unit";
+                id: string;
+            }[];
+        };
         JoinMeetingRequest: {
             meetingId: string;
         };
@@ -6793,13 +7109,21 @@ export interface components {
             }[];
             importedAt: string;
             source?: {
-                format: "miaoji_markdown" | "warmap_json" | "volc_asr" | "feishu_minutes";
+                format: "miaoji_markdown" | "warmap_json" | "volc_asr" | "feishu_minutes" | "feishu_text" | "speaker_lines" | "meeting_notes";
                 fileName: string;
                 sizeBytes: number;
                 sha256: string;
                 parserVersion: string;
                 timeAnchor: string | null;
+                url?: string;
+                title?: string;
+                contentHash?: string;
+                capturedAt?: string;
             };
+            unmappedSpeakers?: {
+                id: string;
+                name: string;
+            }[];
         };
         PostMeetingCandidate: {
             summary: string;
@@ -6878,13 +7202,6 @@ export interface components {
             };
             /** @constant */
             confirmReplace: true;
-        };
-        MeetingConfirmItemInput: Record<string, never>;
-        MeetingDismissItemInput: {
-            reason?: string;
-        };
-        MeetingRevokeEffectInput: {
-            reason?: string;
         };
         ThreadView: {
             members: {
@@ -7850,7 +8167,7 @@ export interface components {
                     remindedAt: string | null;
                     tokenStatus: "active" | "reauth_required" | null;
                     authorizedAt: string | null;
-                    refreshExpiresAt: string | null;
+                    reauthDueAt: string | null;
                     reauthReminderAt: string | null;
                 };
                 world: {
@@ -8275,73 +8592,7 @@ export interface components {
                     }[];
                     coverageUntil: string | null;
                 }[];
-                offPlan: {
-                    /** Format: uuid */
-                    id: string;
-                    person: {
-                        personId: string;
-                        name: string;
-                    };
-                    kind: "attach" | "replan";
-                    text: string;
-                    candidateTask: {
-                        taskId: string;
-                        title: string;
-                    } | null;
-                    evidence: {
-                        source: string;
-                        repo: string | null;
-                        /** @description ISO 8601 */
-                        startedAt: string;
-                        /** @description ISO 8601 */
-                        endedAt: string;
-                        links: {
-                            url: string;
-                            title: string | null;
-                        }[];
-                    };
-                    spentMinutes: number;
-                    replanProposedAt: string | null;
-                }[];
             };
-        };
-        MyOffPlanResponse: {
-            items: {
-                /** Format: uuid */
-                id: string;
-                person: {
-                    personId: string;
-                    name: string;
-                };
-                kind: "attach" | "replan";
-                text: string;
-                candidateTask: {
-                    taskId: string;
-                    title: string;
-                } | null;
-                evidence: {
-                    source: string;
-                    repo: string | null;
-                    /** @description ISO 8601 */
-                    startedAt: string;
-                    /** @description ISO 8601 */
-                    endedAt: string;
-                    links: {
-                        url: string;
-                        title: string | null;
-                    }[];
-                };
-                spentMinutes: number;
-                replanProposedAt: string | null;
-            }[];
-            tasks: {
-                taskId: string;
-                title: string;
-            }[];
-        };
-        AttachOffPlanRequest: {
-            /** Format: uuid */
-            taskId: string;
         };
         TaskPerson: {
             personId: string;
@@ -9279,7 +9530,7 @@ export interface components {
         NotificationList: {
             notifications: {
                 id: string;
-                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned" | "request_received" | "request_answered" | "request_done" | "request_asked" | "collection_reminder";
+                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned" | "request_received" | "request_answered" | "request_done" | "request_asked" | "collection_reminder" | "meeting_card_pending";
                 text: string;
                 objectType: "task" | "meeting" | "issue" | "request";
                 objectId: string;
@@ -9933,54 +10184,265 @@ export interface components {
             dueAt: string | null;
             canReview: boolean;
         };
-        MeetingDecisionReviewRequest: {
-            verdict: "confirmed" | "edited" | "not_decided";
-            statement?: string;
-        };
-        MeetingDecisionResponse: {
-            decision: {
-                id: string;
+        MyMeetingCardsResponse: {
+            meetings: {
                 meetingId: string;
-                tier: "strategic" | "host";
-                ordinal: number;
-                statement: string;
-                originalStatement: string;
-                quote: string | null;
-                speakerName: string | null;
-                recommendation: "confirmed" | "not_decided";
-                why: string | null;
-                status: "pending" | "confirmed" | "edited" | "not_decided" | "rejected" | "agent_judged";
-                revision: number;
-                reviewerName: string | null;
-                reviewedAt: string | null;
-                dueAt: string | null;
-                canReview: boolean;
-            };
+                title: string;
+                endedAt: string;
+                status: "pending" | "edit_pending" | "failed";
+            }[];
         };
-        MyMeetingDecisionsResponse: {
-            groups: {
-                meetingId: string;
-                meetingTitle: string;
-                scheduledAt: string;
-                dueAt: string | null;
-                decisions: {
+        MeetingWorldResponse: {
+            world: {
+                excluded: boolean;
+                excludedBy: string | null;
+                record: {
+                    status: "pending" | "writing" | "committed" | "excluded" | "failed" | "edit_pending";
+                    version: number;
+                    eventId: string | null;
+                    confirmedAt: string | null;
+                } | null;
+                at: string | null;
+                anchors: {
+                    kind: "lto" | "po" | "mission" | "task" | "unit" | "company";
                     id: string;
-                    meetingId: string;
-                    tier: "strategic" | "host";
-                    ordinal: number;
-                    statement: string;
-                    originalStatement: string;
-                    quote: string | null;
-                    speakerName: string | null;
-                    recommendation: "confirmed" | "not_decided";
-                    why: string | null;
-                    status: "pending" | "confirmed" | "edited" | "not_decided" | "rejected" | "agent_judged";
-                    revision: number;
-                    reviewerName: string | null;
-                    reviewedAt: string | null;
-                    dueAt: string | null;
-                    canReview: boolean;
+                    title: string;
                 }[];
+                edited: boolean;
+                canEdit: boolean;
+            };
+            decisions: {
+                id: string;
+                anchors: {
+                    kind: "lto" | "po" | "mission" | "task" | "unit" | "company";
+                    id: string;
+                    title: string;
+                }[];
+                world: ("waiting" | "committed" | "failed" | "off") | null;
+            }[];
+        };
+        MeetingCardView: {
+            draft: {
+                /** @constant */
+                schemaVersion: "meeting-card.v1";
+                meetingId: string;
+                title: string;
+                occurredAt: string | null;
+                participants: {
+                    name: string;
+                    personRef: string | null;
+                }[];
+                relatedObjectRefs: string[];
+                summary: string;
+                sections: {
+                    id: string;
+                    heading: string;
+                    body: string;
+                    sourceRefs: {
+                        sourceId: string;
+                        locator: string | null;
+                    }[];
+                }[];
+                sources: {
+                    id: string;
+                    url: string;
+                    title: string;
+                    contentHash: string;
+                    sourceVersion: string | null;
+                    capturedAt: string;
+                }[];
+                objectChanges: {
+                    id: string;
+                    targetRef: string | null;
+                    targetTitle: string | null;
+                    expectedVersion: number | null;
+                    before: {
+                        text: string;
+                    } | null;
+                    after: {
+                        text: string;
+                    };
+                    basisSectionIds: string[];
+                    stale: boolean;
+                }[];
+            } | null;
+            draftVersion: number;
+            draftStatus: "created" | "draft_ready";
+            actionItems: {
+                id: string;
+                text: string;
+                ownerPersonId: string | null;
+                dueDate: string | null;
+                basisSectionIds: string[];
+                taskId: string | null;
+            }[];
+            confirmed: {
+                payload: {
+                    /** @constant */
+                    schemaVersion: "meeting-card.v1";
+                    meetingId: string;
+                    title: string;
+                    occurredAt: string | null;
+                    participants: {
+                        name: string;
+                        personRef: string | null;
+                    }[];
+                    relatedObjectRefs: string[];
+                    summary: string;
+                    sections: {
+                        id: string;
+                        heading: string;
+                        body: string;
+                        sourceRefs: {
+                            sourceId: string;
+                            locator: string | null;
+                        }[];
+                    }[];
+                    sources: {
+                        id: string;
+                        url: string;
+                        title: string;
+                        contentHash: string;
+                        sourceVersion: string | null;
+                        capturedAt: string;
+                    }[];
+                    objectChanges: {
+                        id: string;
+                        targetRef: string | null;
+                        targetTitle: string | null;
+                        expectedVersion: number | null;
+                        before: {
+                            text: string;
+                        } | null;
+                        after: {
+                            text: string;
+                        };
+                        basisSectionIds: string[];
+                    }[];
+                    revision: number;
+                };
+                confirmation: {
+                    revision: number;
+                    confirmedBy: string;
+                    confirmedAt: string;
+                    payloadHash: string;
+                };
+                kind: "first" | "correction" | "followup";
+                actionItems: {
+                    id: string;
+                    text: string;
+                    ownerPersonId: string | null;
+                    dueDate: string | null;
+                    basisSectionIds: string[];
+                    taskId: string | null;
+                }[];
+            } | null;
+            sync: {
+                revision: number;
+                writeToWorld: boolean;
+                event: {
+                    status: "pending" | "succeeded" | "failed" | "skipped";
+                    eventId: string | null;
+                    error: string | null;
+                };
+                objects: {
+                    changeId: string;
+                    title: string;
+                    status: "pending" | "updated" | "failed" | "not_allowed" | "conflict" | "superseded" | "blocked";
+                    actualVersion: number | null;
+                    error: string | null;
+                }[];
+            } | null;
+            targetOptions: {
+                targetRef: string;
+                title: string;
+                componentType: string;
+                text: string;
+            }[];
+            canEdit: boolean;
+            draftChange: "none" | "items" | "content";
+        };
+        MeetingCardDraftRequest: {
+            draftVersion: number;
+            draft: {
+                /** @constant */
+                schemaVersion: "meeting-card.v1";
+                meetingId: string;
+                title: string;
+                occurredAt: string | null;
+                participants: {
+                    name: string;
+                    personRef: string | null;
+                }[];
+                relatedObjectRefs: string[];
+                summary: string;
+                sections: {
+                    id: string;
+                    heading: string;
+                    body: string;
+                    sourceRefs: {
+                        sourceId: string;
+                        locator: string | null;
+                    }[];
+                }[];
+                sources: {
+                    id: string;
+                    url: string;
+                    title: string;
+                    contentHash: string;
+                    sourceVersion: string | null;
+                    capturedAt: string;
+                }[];
+                objectChanges: {
+                    id: string;
+                    targetRef: string | null;
+                    targetTitle: string | null;
+                    expectedVersion: number | null;
+                    before: {
+                        text: string;
+                    } | null;
+                    after: {
+                        text: string;
+                    };
+                    basisSectionIds: string[];
+                    stale: boolean;
+                }[];
+            };
+            actionItems?: {
+                id: string;
+                text: string;
+                ownerPersonId: string | null;
+                dueDate: string | null;
+                basisSectionIds: string[];
+                taskId: string | null;
+            }[];
+        };
+        MeetingCardConfirmRequest: {
+            draftVersion: number;
+            writeToWorld: boolean;
+            kind?: "correction" | "followup";
+            reason?: string;
+        };
+        MeetingMinutesLinkRequest: {
+            url: string;
+        };
+        MeetingMinutesFetchResponse: {
+            minutesStatus: "none" | "waiting" | "manual" | "ready" | "failed";
+            minutesFailure: ("no_permission" | "not_ready" | "not_found" | "fetch_failed") | null;
+        };
+        MeetingWorldAnchorsRequest: {
+            anchors: {
+                kind: "lto" | "po" | "mission" | "unit";
+                id: string;
+            }[] | null;
+        };
+        MeetingWorldAnchorOptionsResponse: {
+            options: {
+                kind: "lto" | "po" | "mission" | "unit";
+                id: string;
+                title: string;
+                brief: string | null;
+                lifecycle: string | null;
             }[];
         };
         ImpactCardView: {
@@ -10922,11 +11384,42 @@ export interface operations {
             };
         };
     };
+    getMyFeishuConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 飞书连接状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeishuConnectionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     startFeishuAuth: {
         parameters: {
             query?: {
                 /** @description 登录后回到的站内路径，只接受以 / 开头的相对路径 */
                 next?: string;
+                /** @description 已登录的人连接飞书：授权完回到 next，不换会话 */
+                connect?: "1";
             };
             header?: never;
             path?: never;
@@ -11165,6 +11658,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PeopleDirectoryResponse"];
+                };
+            };
+        };
+    };
+    listPersonDirectory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 人员名册 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonDirectoryResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
         };
@@ -14006,7 +14528,7 @@ export interface operations {
             };
         };
     };
-    listMyMeetingDecisions: {
+    listMyMeetingCards: {
         parameters: {
             query?: never;
             header?: never;
@@ -14015,13 +14537,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 待确认的会后决定 */
+            /** @description 待处理的会议记录 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MyMeetingDecisionsResponse"];
+                    "application/json": components["schemas"]["MyMeetingCardsResponse"];
                 };
             };
             /** @description ApiError 统一错误 */
@@ -14035,29 +14557,28 @@ export interface operations {
             };
         };
     };
-    reviewMeetingDecision: {
+    readMeetingMinutesLink: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 id: string;
-                decisionId: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MeetingDecisionReviewRequest"];
+                "application/json": components["schemas"]["MeetingMinutesLinkRequest"];
             };
         };
         responses: {
-            /** @description 这条决定的最新状态 */
+            /** @description 读完之后的妙记状态 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MeetingDecisionResponse"];
+                    "application/json": components["schemas"]["MeetingMinutesFetchResponse"];
                 };
             };
             /** @description ApiError 统一错误 */
@@ -14089,6 +14610,503 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    refetchMeetingMinutes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 读完之后的妙记状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingMinutesFetchResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMeetingRecordCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 会议卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingCardView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    saveMeetingCardDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingCardDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description 保存后的会议卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingCardView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    confirmMeetingCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingCardConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description 确认后的会议卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingCardView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    retryMeetingCardSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 重排后的会议卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingCardView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMeetingWorld: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 这场会在本体里 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingWorldResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    setMeetingWorldAnchors: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingWorldAnchorsRequest"];
+            };
+        };
+        responses: {
+            /** @description 这场会在本体里的最新状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingWorldResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMeetingWorldAnchorOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 可选的挂点 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingWorldAnchorOptionsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    bookMeeting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingBookingRequest"];
+            };
+        };
+        responses: {
+            /** @description 新建的会议卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        card: components["schemas"]["Card"];
+                    };
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listWorldAnchorOptions: {
+        parameters: {
+            query: {
+                period: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 可选的挂点 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingWorldAnchorOptionsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -17373,164 +18391,6 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    getMyOffPlan: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 本人的计划外 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MyOffPlanResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    attachMyOffPlan: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AttachOffPlanRequest"];
-            };
-        };
-        responses: {
-            /** @description 本人的计划外 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MyOffPlanResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    proposeMyOffPlanReplan: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 本人的计划外 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MyOffPlanResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };

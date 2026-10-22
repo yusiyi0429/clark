@@ -12,7 +12,7 @@ const SRC = fileURLToPath(new URL("..", import.meta.url));
 const FILES = [
   "cards/IssueCard.tsx", "cards/MeetingCard.tsx", "cards/BattlefieldCard.tsx", "cards/battlefieldDisplay.tsx", "cards/RadarCard.tsx",
   "cards/SignalCard.tsx", "cards/SignalArticle.tsx", "cards/SignalStory.tsx", "cards/meetingIssueModel.ts",
-  "components/NotificationRail.tsx", "components/CeoGlance.tsx", "components/StrategicConfirmCard.tsx",
+  "components/NotificationRail.tsx", "components/CeoGlance.tsx",
   "components/NoticeActions.tsx", "components/ActionNoticeCard.tsx", "components/IssueRow.tsx", "components/coagent/PresenceCapsule.tsx",
   "components/shell/MaterialTabs.tsx", "components/materials/ObjectMaterialArea.tsx",
   "app/(ceo)/battlefields/[id]/BattlefieldDetailScreen.tsx",

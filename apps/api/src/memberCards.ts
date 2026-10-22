@@ -29,27 +29,33 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
   const attended = isHost || Boolean(viewerId && payload.attendees?.personIds.includes(viewerId));
   return { ...card, payload: {
     status: payload.status, scheduledAt: payload.scheduledAt, endsAt: payload.endsAt, endedAt: payload.endedAt,
-    hasEnded: payload.hasEnded,
+    startedAt: payload.startedAt ?? null, hasEnded: payload.hasEnded,
     ...(isHost ? { transcriptCandidate: payload.transcriptCandidate } : {}),
-    leadDriId: payload.leadDriId, participants: payload.participants,
+    leadDriId: payload.leadDriId, createdBy: payload.createdBy ?? null, participants: payload.participants,
     purpose: payload.preflight.taskDefinition?.reviewPurpose ?? null,
     materials: payload.materials,
     preflight: { status: payload.preflight.status, brief: payload.preflight.brief,
       readiness: payload.preflight.readiness ?? null, summary: payload.preflight.summary ?? null },
     outcome: payload.outcome ? {
-      ...(attended ? { summary: payload.outcome.summary, status: payload.outcome.status } : {}),
+      // 生成会议卡的阶段和用时（排上、开跑的时刻）参会的人也看得到。
+      ...(attended ? { summary: payload.outcome.summary, status: payload.outcome.status,
+        pendingSince: payload.outcome.pendingSince ?? null, startedAt: payload.outcome.startedAt ?? null } : {}),
       items: payload.outcome.items
         .filter((item) => (item.kind === "decision" || item.kind === "todo") && item.review?.status === "confirmed")
         .map((item) => ({ id: item.id, kind: item.kind, text: item.text, ownerPersonId: item.ownerPersonId })) } : null,
     minutesStatus: payload.minutesStatus ?? "none",
+    minutesFailure: payload.minutesFailure ?? null,
+    minutesWaitingSince: payload.minutesWaitingSince ?? null,
+    minutesManualImport: payload.minutesManualImport ?? false,
+    feishuEvent: payload.feishuEvent ?? null,
     attended,
     ...(attended ? {
       // 原文只在已有逐字稿时带上（会前没有这一格）。
       ...(payload.transcript ? { transcript: payload.transcript } : {}),
-      // 主持人确认 host 条目；战略项给 CEO，这里只看不点。
-      decisions: (payload.decisions ?? []).map((decision) => ({ ...decision, canReview: isHost && decision.tier === "host" })),
+      // 旧会议的逐条决定只读。
+      decisions: payload.decisions ?? [],
     } : {}),
   },
-    actions: isHost ? card.actions.filter((action) => ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate"].includes(action.actionType)) : [],
+    actions: isHost ? card.actions.filter((action) => ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate", "meeting.retry_feishu_booking"].includes(action.actionType)) : [],
     navigation: [{ href: `/me/meetings/${card.objectRef.id}`, label: "会议" }] };
 }

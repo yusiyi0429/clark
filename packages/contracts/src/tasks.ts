@@ -10,8 +10,7 @@ export const TaskStatus = Type.Union([
   Type.Literal("returned"),
 ]);
 
-/** 执行事项从哪来：会后分派、自己点「+」新建、从本月计划拆出。以后加 CEO 指派。 */
-/** agent：外部工具（Codex、Claude Code 等）按用户正在做的事替用户建的。 */
+/** 执行事项从哪来：会后分派、自己点「+」新建、从本月计划拆出；agent 是外部工具（Codex、Claude Code 等）按用户正在做的事替用户建的。以后加 CEO 指派。 */
 export const TaskSource = Type.Union([Type.Literal("meeting"), Type.Literal("self"), Type.Literal("plan"), Type.Literal("agent")]);
 
 const DateOnly = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
@@ -368,6 +367,8 @@ export const NotificationKind = Type.Union([
   Type.Literal("request_asked"),
   /** ③ 信息收集：截止前固定时间提醒还没确认的人；objectType=request（kind = collection 的那一轮）。 */
   Type.Literal("collection_reminder"),
+  /** 会议卡草稿生成好了：主持人和创建人各一条，一场会只发一次；objectType=meeting。 */
+  Type.Literal("meeting_card_pending"),
 ]);
 
 /** 通知只指向对象；text 在读取时按对象当前状态组合。 */

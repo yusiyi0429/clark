@@ -13,6 +13,11 @@ import type { MemberNotification } from "./useMemberHome";
 
 type Result = { ok: true } | { ok: false; error: string };
 
+/** 通知栏空状态里算的未读通知：会议记录待确认（meeting_card_pending）在「会议记录」那一组按会议列，不算在这里。 */
+export function quietNoticeCount(notifications: MemberNotification[]): number {
+  return notifications.filter((item) => !item.readAt && item.kind !== "meeting_card_pending").length;
+}
+
 export function memberNoticeGroups(
   notifications: MemberNotification[],
   handlers: { markSeen: (ids: string[]) => Promise<Result>; returnTask: (taskId: string, reason: string) => Promise<Result>; openTask?: (id: string, from: Element | null) => void; openAcceptance?: (id: string, from: Element | null) => void; openGroup?: (type: "issue" | "meeting", id: string, from: Element | null) => void },

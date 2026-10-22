@@ -1,18 +1,20 @@
 import type { FastifyReply } from "fastify";
-import { PeopleDirectoryResponse, type TCard, type TCardCollection } from "@warmap/contracts";
+import { PeopleDirectoryResponse, PersonDirectoryResponse, type TCard, type TCardCollection, type TReferenceSnapshot } from "@warmap/contracts";
 import { listBattlefieldCards } from "../battlefields.js";
 import { listCapabilityCards } from "../capabilities.js";
 import { canReadMission, getMissionRow, listMissionCards, projectMissionCard } from "../missions.js";
-import { listMissionRoundCards } from "../missionRounds.js";
+import { listMissionRoundCards, type MissionRoundPerson } from "../missionRounds.js";
 import { getIssueRow, listPendingIssueCards, projectIssueCard } from "../issues.js";
-import { getMeetingRow, hasMeetingNotice, hasPendingStrategicItem, listMeetingRows, projectMeetingCard } from "../meetingStore.js";
+import { getMeetingRow, hasMeetingNotice, listMeetingRows, projectMeetingCard } from "../meetingStore.js";
 import { companyPeriod, getMonthlyPlanNotice, getMonthlyPlanRow, listMonthlyPlanRows, projectMonthlyPlanCard } from "../monthlyPlans.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
 import { projectRadarCard } from "../signals.js";
-import { idParams, type AppInstance, type RouteContext, type SessionPerson } from "./shared.js";
+import { listMyTasks } from "../tasks.js";
+import { readMemberWork } from "../memberWork.js";
+import { idParams, type AppInstance, type RouteContext } from "./shared.js";
 
 /** CEO 首页的 Card 集合（首页与对话的场景锚点共用同一份投影，不另写一套汇总）。 */
-export async function readHomeCards(ctx: RouteContext, person: SessionPerson): Promise<TCardCollection> {
+export async function readHomeCards(ctx: RouteContext, person: MissionRoundPerson): Promise<TCardCollection> {
   const { q, env, now, peopleDirectory, radar } = ctx;
   const at = now();
   const period = companyPeriod(at);
@@ -28,12 +30,34 @@ export async function readHomeCards(ctx: RouteContext, person: SessionPerson): P
     getMonthlyPlanNotice(q, env.sessionSecret, at),
     listMissionRoundCards(q, people, env.sessionSecret, person, undefined, at),
   ]);
-  // 会前通知看 scheduled；会后有待 CEO 确认的战略议题的会议也进首页（通知栏「需要你确认」）
+  // 会前通知看 scheduled；会后的会议记录待确认走 /api/me/meeting-cards（不再单列给 CEO 确认的战略项）
   const meetings = meetingRows
-    .filter((row) => hasMeetingNotice(row, person.personId, at) || hasPendingStrategicItem(row.outcome))
+    .filter((row) => hasMeetingNotice(row, person.personId, at))
     .map((row) => projectMeetingCard(row, env.sessionSecret, at));
   const monthly = monthlyNotice && (monthlyNotice.payload as { status?: string }).status !== "confirmed" ? [monthlyNotice] : [];
   return { cards: [radarCard, ...battlefields, ...capabilities, ...issues, ...meetings, ...missions, ...monthly, ...rounds] };
+}
+
+/**
+ * 首页上本人能看到的东西（对话的场景锚点与给独立 Chat 的 /internal/home-cards 共用，不带 Action）：
+ * CEO 是公司首页的 Card；成员是我的工作台上本人的执行事项、任务卡与战场。
+ */
+export async function readHomeSnapshots(ctx: RouteContext, person: MissionRoundPerson): Promise<TReferenceSnapshot[]> {
+  const { q, env, peopleDirectory } = ctx;
+  if (person.role === "ceo") return (await readHomeCards(ctx, person)).cards.map((card) => ({
+    cardId: card.id, version: card.version, kind: card.kind, title: card.title, objectRef: card.objectRef, payload: card.payload,
+  }));
+  const [tasks, { work }] = await Promise.all([
+    listMyTasks(q, person.personId, personDisplayNames(peopleDirectory)),
+    readMemberWork(q, peopleDirectory.searchPeople(undefined), env.sessionSecret, person, ctx.now()),
+  ]);
+  const item = (type: string, id: string, title: string, payload: unknown, version = 1): TReferenceSnapshot =>
+    ({ cardId: `${type}:${id}`, version, kind: type, title, objectRef: { type, id, version }, payload });
+  return [
+    ...tasks.map((task) => item("task", task.id, task.title, { task }, task.version)),
+    ...work.missionCards.map((card) => item("mission-card", card.cardId, `${card.battlefieldName} · ${card.period} 任务卡`, card)),
+    ...work.battlefields.map((field) => item("battlefield", field.id, field.name, { period: work.period, ...field })),
+  ];
 }
 
 export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -45,6 +69,10 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
       displayName: person.displayName,
       roles: [...person.roles],
     })),
+  }));
+  // 人员名册：CEO 和成员约会议选参会人；只给真人的 personId 和名字（角色、来源不出去）。
+  app.get("/api/people/directory", { preHandler: ctx.requirePerson, schema: { response: { 200: PersonDirectoryResponse } } }, async () => ({
+    people: peopleDirectory.searchPeople(undefined).filter(isRealPerson).map(({ personId, displayName }) => ({ personId, displayName })),
   }));
   app.get("/api/cards/home", { preHandler: requireCEO }, async (req): Promise<TCardCollection> => readHomeCards(ctx, req.person!));
   app.get(

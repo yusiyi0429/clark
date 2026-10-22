@@ -2,14 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, FileUp, Loader2, Pencil, RefreshCw, X } from "lucide-react";
-import { browserApi, type CardAction } from "@/lib/api/client";
+import { browserApi } from "@/lib/api/client";
+import { feishuConnectHref } from "@/lib/feishuLogin";
 import type { TMeetingDecisionHistoryResponse, TTranscriptCandidateProjection } from "@warmap/contracts";
 import type { CardRenderProps } from "./registry";
 import { payloadOf, type IssuePayload, type MeetingPayload } from "./payloads";
 import { issueScopeLabel } from "./scopeNames";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { SelectionToolbar, useSelectionQuote } from "@/components/SelectionQuote";
-import { MeetingClock, MeetingHeaderActions, MeetingStatus, meetingDayWord, meetingPhase, meetingSlot, useMeetingTimeline } from "@/components/meeting/MeetingHeader";
+import { MeetingClock, MeetingHeaderActions, MeetingHeaderEnd, MeetingStatus, RESCHEDULE_CLASS, RescheduleLabel, meetingDayWord, meetingPhase, meetingSlot, useFeishuLive, useMeetingTimeline, useNow, type FeishuLive } from "@/components/meeting/MeetingHeader";
+import { MeetingProgress, MinutesRecovery, meetingProgress } from "@/components/meeting/MeetingProgress";
 import { useMeetingRecorder, type RecorderState } from "@/components/meeting/useMeetingRecorder";
 import { MaterialPane, useMaterialPreview, type MaterialMeta } from "@/components/meeting/meetingMaterialPreview";
 import { IssueDecisionBlock } from "@/components/meeting/IssueDecisionBlock";
@@ -17,6 +19,9 @@ import type { HistoryView } from "@/components/meeting/DecisionHistoryLayers";
 import { MeetingOutline, saveReadingPosition, useOutlineSpy, useReadingAnchor, useRestoreReadingPosition, type OutlineItem } from "@/components/meeting/MeetingOutline";
 import { SourceList, SourceNavigatorProvider, useSourceNavigator, type SourceObject } from "@/components/meeting/SourceViewer";
 import { DECISION_HISTORY_CHANGED, useDecisionHistory } from "@/components/meeting/useDecisionHistory";
+import { MeetingWorldSection } from "@/components/meeting/MeetingWorldBar";
+import { MeetingRecordCard } from "@/components/meeting/MeetingRecordCard";
+import { useMeetingCardProbe } from "@/components/meeting/useMeetingCardProbe";
 import { PreflightProgress } from "@/components/meeting/PreflightProgress";
 import { DivergencesSection, LensAnswers, MaterialQuestionsSection } from "@/components/meeting/PreflightReviewExtras";
 import { announceMeetingCard, listenMeetingCard } from "@/lib/meetingSync";
@@ -28,18 +33,19 @@ import { useRememberedScroll, type MaterialTab } from "@/components/shell/Materi
 import { SegmentedSwitch } from "@/components/SegmentedSwitch";
 import { escapeToSegment, initialMeetingView, meetingSegments, noPreflightContent, pickMaterial, pickSegment, selectedSegment, type MeetingView } from "./meetingView";
 import { ObjectMaterialArea } from "@/components/materials/ObjectMaterialArea";
+import { FileDropZone } from "@/components/FileDropZone";
+import { MEETING_RECORD_ACCEPT, uploadMeetingRecord } from "@/lib/meetingRecordUpload";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { calendarDate, COMPANY_TIMEZONE } from "@/lib/companyTime";
 import { cleanDisplayText, isPastDue, materialTitle, stripInternalRefs } from "@/lib/displayText";
 import { ActionFeedback, useCardAction, type ActionState } from "@/lib/useCardAction";
-import { useUndoWindow } from "@/lib/undoWindow";
 import { DateTimePicker } from "@/components/ui/DatePicker";
 import { Select } from "@/components/ui/Select";
 import { groupPreflight } from "./preflightOutline";
-import { attributeEntries, groupOutcomeByIssue, ISSUE_STATUS_LABEL, outcomeIssueId, preflightInFlight, preflightStatusText, speakerLabel, type PreflightEntry } from "./meetingIssueModel";
+import { attributeEntries, groupOutcomeByIssue, ISSUE_STATUS_LABEL, preflightInFlight, preflightStatusText, speakerLabel, type PreflightEntry } from "./meetingIssueModel";
 import { buildHistoryIndex, outcomeAnchorId, type SourceContext, type SourceMaterial } from "./meetingSources";
-import { MeetingDecisions } from "@/components/meeting/MeetingDecisions";
 import s from "@/styles/meeting-workspace.module.css";
+import p from "@/styles/meeting-progress.module.css";
 
 export { MaterialPane, materialMeta, previewKind, type MaterialMeta, type MaterialPreview } from "@/components/meeting/meetingMaterialPreview";
 
@@ -127,7 +133,7 @@ export type SpeakerMappingRow = {
   status: "existing" | "add" | "unmapped";
 };
 
-/** 映射表状态：已参与 / 确认后加入 / 未映射；同一个人不能映射多个说话人。 */
+/** 映射表状态：已参与 / 确认后加入 / 未映射；几个说话人可以对到同一个人。 */
 export function speakerMappingRows(
   candidate: TTranscriptCandidateProjection,
   participantIds: string[],
@@ -149,8 +155,6 @@ export function speakerMappingRows(
 export function speakerMappingError(rows: SpeakerMappingRow[]): string | null {
   const unmapped = rows.filter((row) => !row.personId).length;
   if (unmapped > 0) return `还有 ${unmapped} 位说话人未映射，确认不可用`;
-  const ids = rows.map((row) => row.personId);
-  if (new Set(ids).size !== ids.length) return "同一个人不能映射多个说话人";
   return null;
 }
 
@@ -180,13 +184,12 @@ export function confirmTranscriptInput(
 }
 
 /**
- * 妙记 Markdown 候选预览（设计 aB4pK）：只读来源摘要 + 说话人映射 + 时间锚点 + 抽样发言；
+ * 妙记 Markdown 候选预览（设计 aB4pK）：只读来源摘要 + 说话人映射 + 抽样发言；
  * 确认把 mapping 交给 opaque Action，全量 turns 不进入浏览器 Action input。
  */
 export function TranscriptCandidateDialog({
   dialogRef,
   candidate,
-  scheduledAt,
   participants,
   directory,
   directoryError,
@@ -201,7 +204,6 @@ export function TranscriptCandidateDialog({
 }: {
   dialogRef: { current: HTMLDialogElement | null };
   candidate: TTranscriptCandidateProjection;
-  scheduledAt: string;
   participants: { personId: string }[];
   directory: DirectoryOption[];
   directoryError: string | null;
@@ -223,7 +225,7 @@ export function TranscriptCandidateDialog({
     <dialog ref={dialogRef} className={s.candidateDialog} aria-label="妙记会议记录候选">
       <header className={s.candidateHeader}>
         <div>
-          <h2>确认妙记会议记录</h2>
+          <h2>确认会议记录</h2>
           <p>
             {candidate.source.fileName} · {Math.ceil(candidate.source.sizeBytes / 1024)} KB · SHA-256 {candidate.source.sha256.slice(0, 12)}…
           </p>
@@ -236,13 +238,6 @@ export function TranscriptCandidateDialog({
         </button>
       </header>
       <div className={s.candidateBody}>
-        <section className={s.candidateSection}>
-          <h3>时间锚点</h3>
-          <p>
-            会议时间 {scheduledAt.slice(0, 16).replace("T", " ")} · 首段 +{offsetLabel(candidate.firstOffsetSeconds)} · 末段 +
-            {offsetLabel(candidate.lastOffsetSeconds)}
-          </p>
-        </section>
         <section className={s.candidateSection}>
           <h3>说话人映射</h3>
           <table className={s.mappingTable}>
@@ -377,9 +372,9 @@ export function outcomeItemState(item: OutcomeItem, payload: MeetingPayload, nam
   const status = item.review?.status;
   if (item.kind === "open") return { state: "open", label: "仅展示，不产生效果" };
   if (item.kind === "strategic") {
-    if (status === "confirmed") return { state: "confirmed", label: "CEO 已确认 · 本体待 Co-Agent 更新" };
+    if (status === "confirmed") return { state: "confirmed", label: "CEO 已确认" };
     if (status === "dismissed") return { state: "dismissed", label: "CEO 不同意" };
-    return { state: "pending", label: "待 CEO 确认" };
+    return { state: "pending", label: "未处理" };
   }
   if (item.kind === "todo") {
     const owner = actionOwner(item, payload);
@@ -389,7 +384,7 @@ export function outcomeItemState(item: OutcomeItem, payload: MeetingPayload, nam
   }
   if (status === "confirmed") return { state: "confirmed", label: "已确认" };
   if (status === "dismissed") return { state: "dismissed", label: "已忽略" };
-  return { state: "pending", label: "待处理" };
+  return { state: "pending", label: "未处理" };
 }
 
 /** 待办事项的一行总结：按实际推送情况写，不把没推送的也说成「已推给负责人」（巡检 P2-22）。待办会后自动推给负责人，这里只看不办。 */
@@ -405,18 +400,11 @@ export function decisionGroups(decisions: OutcomeItem[], all: OutcomeItem[]): { 
     .map((item) => ({ item, children: all.filter((child) => child.parentItemId === item.id && isChildDecision(all, child)) }));
 }
 
-/** 子决定此刻写什么：跟着主决定走——主决定在撤回窗口里时写它的结果，否则写自己的（待处理时不写）。 */
-export function childDecisionLabel(child: OutcomeItem, parentHeld: "confirm" | "dismiss" | null): { state: "confirmed" | "dismissed"; label: string } | null {
-  if (parentHeld) return parentHeld === "confirm" ? { state: "confirmed", label: "已确认" } : { state: "dismissed", label: "已忽略" };
+/** 子决定写什么：已确认、已忽略照写，未处理时不写。 */
+export function childDecisionLabel(child: OutcomeItem): { state: "confirmed" | "dismissed"; label: string } | null {
   if (child.review?.status === "confirmed") return { state: "confirmed", label: "已确认" };
   if (child.review?.status === "dismissed") return { state: "dismissed", label: "已忽略" };
   return null;
-}
-
-/** 撤回窗口里（还没提交）这一条写什么：和提交后的说法一致。 */
-export function heldItemLabel(item: OutcomeItem, kind: "confirm" | "dismiss", name: (personId: string) => string, payload: MeetingPayload): string {
-  if (kind === "dismiss") return item.kind === "strategic" ? "不同意" : "已忽略";
-  return item.kind === "todo" ? `推送给${name(actionOwner(item, payload))}` : "已确认";
 }
 
 /** 会议录音的几步（服务端实际先后：转码 → 上传 → 识别）。 */
@@ -434,12 +422,57 @@ export const MEETING_POLL_MS = 5000;
 /** 会前预审进行中：每两秒取一次，过程一步一步跟上。 */
 export const PREFLIGHT_POLL_MS = 2000;
 
-/** 会议页要不要每 5 秒重取卡片：会前预审还在跑、录音转写中、会后抽取中（成员只读视图不取，它的卡片走成员接口）。 */
-export function meetingNeedsPolling(payload: MeetingPayload, memberReadOnly = false): boolean {
-  if (memberReadOnly) return false;
-  if (preflightInFlight(payload)) return true;
-  const extracting = payload.status === "held" && (payload.outcome?.status === "pending" || payload.outcome?.status === "running");
-  return recordingInFlight(payload.recording) || extracting;
+/** 自动同步还在等妙记（waiting，或读的时候原文还没好）。 */
+function awaitingMinutes(payload: MeetingPayload): boolean {
+  return payload.status === "scheduled" && !payload.transcriptCandidate
+    && (payload.minutesStatus === "waiting" || (payload.minutesStatus === "failed" && payload.minutesFailure === "not_ready"));
+}
+
+/** 会议卡正在生成（排队也算）。 */
+function generatingCard(payload: MeetingPayload): boolean {
+  return payload.status === "held" && (payload.outcome?.status === "pending" || payload.outcome?.status === "running");
+}
+
+/** 在飞书约上的会还没开、开着：等飞书会议开始和结束。 */
+const followingFeishu = (live: FeishuLive | null) => live === "waiting" || live === "live";
+
+/**
+ * 会议页要不要重取卡片：飞书还在约、会前预审还在跑、录音转写中、等妙记、会议卡生成中、在飞书约上的会还没开或开着。到下一阶段卡片自己出来，不用刷新页面。
+ * 成员只读视图（卡片走成员接口）跟飞书还在约、等妙记、生成会议卡和飞书会议开始结束；主持人看自己的会也跟预审和录音。
+ */
+export function meetingNeedsPolling(payload: MeetingPayload, memberReadOnly = false, live: FeishuLive | null = null, host = false): boolean {
+  const booking = payload.status === "scheduled" && payload.feishuEvent?.status === "pending";
+  if (booking || awaitingMinutes(payload) || generatingCard(payload) || followingFeishu(live)) return true;
+  if (memberReadOnly && !host) return false;
+  return preflightInFlight(payload) || recordingInFlight(payload.recording);
+}
+
+/** 多久取一次：预审 2 秒，其余（等飞书会议开始和结束、等妙记、生成会议卡、录音转写）5 秒。 */
+export function meetingPollMs(payload: MeetingPayload): number {
+  return preflightInFlight(payload) ? PREFLIGHT_POLL_MS : MEETING_POLL_MS;
+}
+
+/**
+ * 跟着后台取会议卡：每 `pollMs` 取一次；页面从后台切回来（切回这个标签页、窗口拿回焦点）马上取一次，不等下一拍
+ * （浏览器会放慢后台页的定时器）。上一次还没取回来时不叠着取。返回撤掉的函数。
+ */
+export function followMeetingCard(pollMs: number, refetch: () => Promise<void>): () => void {
+  let busy = false;
+  const run = () => {
+    if (busy) return;
+    busy = true;
+    const done = () => { busy = false; };
+    void refetch().then(done, done);
+  };
+  const back = () => { if (document.visibilityState === "visible") run(); };
+  const timer = window.setInterval(run, pollMs);
+  document.addEventListener("visibilitychange", back);
+  window.addEventListener("focus", back);
+  return () => {
+    window.clearInterval(timer);
+    document.removeEventListener("visibilitychange", back);
+    window.removeEventListener("focus", back);
+  };
 }
 
 export function recordingInFlight(recording: MeetingPayload["recording"]): boolean {
@@ -450,15 +483,15 @@ export function recordingInFlight(recording: MeetingPayload["recording"]): boole
 export function meetingNow(payload: MeetingPayload, ended: boolean): string {
   if (payload.status === "cancelled") return "已取消";
   if (payload.status === "reviewed") return "会后事项已处理完";
+  // 和页头那一行的会后阶段用同一套词：等妙记、待确认说话人、生成会议卡。
   if (payload.status === "held") {
-    if (payload.outcome?.status !== "ready") return "正在整理纪要";
-    return payload.outcome.items.some((item) => item.kind === "strategic" && item.review?.status === "pending") ? "纪要已生成 · 待 CEO 确认战略议题" : "纪要已生成";
+    return payload.outcome?.status === "ready" ? "纪要已生成" : "生成会议卡";
   }
-  if (ended && payload.transcriptCandidate) return "会议记录待确认说话人";
+  if (ended && payload.transcriptCandidate) return "待确认说话人";
   if (ended && recordingInFlight(payload.recording)) return "录音转写中";
   if (ended && payload.recording?.status === "failed") return "录音转写失败，可导入妙记";
-  if (ended && payload.minutesStatus === "waiting") return "妙记生成中";
-  if (ended) return "待导入会议记录";
+  if (ended && payload.minutesManualImport) return "待交记录";
+  if (ended) return "等妙记";
   return preflightStatusText(payload.preflight);
 }
 
@@ -497,7 +530,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   } : source;
   const { homeCards } = workspace;
   const { ask, dialog: confirmDialog } = useConfirm();
-  // 会后事项先留 5 秒撤回再提交：到点时从最新的会议 Card 取动作（每处理一条版本 +1），并且一条接一条地发。
+  // 最新的会议 Card（版本只增不减）。
   const latestCard = useRef(card);
   if (card.version >= latestCard.current.version) latestCard.current = card;
   const updateCard = (updated: CardRenderProps["card"]) => {
@@ -520,14 +553,14 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       .finally(() => window.dispatchEvent(new CustomEvent(DECISION_HISTORY_CHANGED, { detail: { issueId: issueIds[0] } })));
   };
   useEffect(() => listenMeetingCard("page", (updated) => syncRef.current(updated)), []);
-  const itemUndo = useUndoWindow<"confirm" | "dismiss">();
-  const commitChain = useRef<Promise<unknown>>(Promise.resolve());
   const [note, setNote] = useState(payload.draft.note);
   const [supplementText, setSupplementText] = useState("");
   const [supplementEntry, setSupplementEntry] = useState("");
   const [supplementTarget, setSupplementTarget] = useState(payload.leadDriId);
   const [cancelArmed, setCancelArmed] = useState(false);
   const [replaceArmed, setReplaceArmed] = useState(false);
+  // 替换逐字稿是少用的危险操作：平时只是一个不显眼的链接，点开才出确认。
+  const [replaceOpen, setReplaceOpen] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   // 补充材料：仅 scheduled 渲染入口；状态只存内存，成功后由后端返回的新 Card 驱动。
@@ -545,7 +578,10 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const [directory, setDirectory] = useState<DirectoryOption[]>([]);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   // 左侧阅读区看哪一份（cards/meetingView）：会前只有会前预审；会开完了、有待确认的会议记录或已在复核，页头出「会前预审 ｜ 会议记录」两段，默认会议记录（那是下一步要做的事）。
-  const meetingHeld = payload.status === "held" || payload.status === "reviewed" || (payload.status === "scheduled" && Boolean(payload.hasEnded || payload.endedAt || payload.transcriptCandidate));
+  // 在飞书约上的会跟着飞书会议真实开始和结束（还没开 / 开着 / 开完了 / 没开成）；其余为 null，按预约时间算。
+  const live = useFeishuLive(payload);
+  const meetingHeld = payload.status === "held" || payload.status === "reviewed"
+    || (payload.status === "scheduled" && (live ? live === "ended" : Boolean(payload.hasEnded || payload.endedAt || payload.transcriptCandidate)));
   const [view, setView] = useState<MeetingView>(() => initialMeetingView(meetingHeld));
   // 正在看某份材料（某份文件）时，Esc 先回到上次选中的那一段，再按一次才离开会议页（巡检 P1-14）。
   const viewingMaterialFile = selectedSegment(view) === null;
@@ -565,19 +601,24 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const materialRef = useRef<HTMLInputElement>(null);
   const candidateDialog = useRef<HTMLDialogElement>(null);
 
-  const actions = memberReadOnly ? card.actions.filter((action) => isHost && ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate"].includes(action.actionType)) : card.actions;
+  const actions = memberReadOnly ? card.actions.filter((action) => isHost && ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate", "meeting.retry_feishu_booking"].includes(action.actionType)) : card.actions;
   const actionOf = (type: string) => actions.find((action) => action.actionType === type);
-  const itemAction = (type: string, itemId: string) =>
-    actions.find((action) => action.actionType === type && action.itemId === itemId);
 
   const issues = collection.filter((item) => item.kind === "issue");
   const issueById = new Map(issues.map((item) => [item.objectRef.id, item]));
-  const people = new Map(payload.participants.map((person) => [person.personId, person.displayName]));
+  // 说话人的名字：参会人；对不上人的说话人退回飞书原名。
+  const people = new Map([
+    ...payload.participants.map((person) => [person.personId, person.displayName] as [string, string]),
+    ...(source.transcript?.unmappedSpeakers ?? []).map((speaker) => [speaker.id, speaker.name] as [string, string]),
+  ]);
   const dri = payload.participants.filter((person) => person.roles.includes("dri"));
   const readOnly = memberReadOnly || payload.status !== "scheduled";
   const viewedMaterial = payload.materials.find((material) => material.id === view.current) ?? null;
 
   const meetingId = card.objectRef.id;
+  // 会议记录用会议卡还是旧格式的会后条目：问会议卡接口（有草稿或确认版就是会议卡）；还没问到时这块先空着。
+  // 问到是会议卡以后不再问、不重新挂载；旧格式时会议状态或会后整理状态变了再问一次（刚生成了草稿）。
+  const recordCard = useMeetingCardProbe(meetingId, `${payload.status}|${source.outcome?.status ?? ""}`);
   const readingKey = `meeting:${meetingId}|${view.current}`;
   useRememberedScroll(`${card.objectRef.id}|${view.current}`);
   // 跳到外部信号、别的会议后再回来：回到离开前读到的议题（必须在 useRememberedScroll 之后）。
@@ -638,21 +679,22 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
 
   const candidateKey = payload.transcriptCandidate?.createdAt ?? null;
 
-  // 录音转写中、会后抽取中、会前预审中：每 5 秒取一次会议卡片，状态、候选、纪要、预审跟着更新；候选一到，下面那段就自动打开说话人对应。
-  const refreshing = meetingNeedsPolling(payload, memberReadOnly);
-  const pollMs = preflightInFlight(payload) ? PREFLIGHT_POLL_MS : MEETING_POLL_MS;
+  // 飞书还在约、录音转写中、会后抽取中、会前预审中、等妙记、等飞书会议开始和结束：定时取会议卡片，状态、候选、纪要、预审跟着更新；候选一到，下面那段就自动打开说话人对应。
+  const refreshing = meetingNeedsPolling(payload, memberReadOnly, live, isHost);
+  const pollMs = meetingPollMs(payload);
   useEffect(() => {
     if (!refreshing) return;
-    const timer = window.setInterval(async () => {
-      const { data } = await browserApi.GET("/api/cards/meetings/{id}", { params: { path: { id: card.objectRef.id } } });
-      const next = data?.cards?.[0];
+    const id = card.objectRef.id;
+    return followMeetingCard(pollMs, async () => {
+      const next = memberReadOnly
+        ? (await browserApi.GET("/api/me/cards/meetings/{id}", { params: { path: { id } } })).data
+        : (await browserApi.GET("/api/cards/meetings/{id}", { params: { path: { id } } })).data?.cards?.[0];
       if (!next) return;
       onCard(next);
       // 预审出结果：左栏会议卡跟着从「会前预审中」换成结论。
       if (!preflightInFlight(payloadOf<MeetingPayload>(next))) window.dispatchEvent(new Event("meeting-changed"));
-    }, pollMs);
-    return () => window.clearInterval(timer);
-  }, [refreshing, pollMs, card.objectRef.id, onCard]);
+    });
+  }, [refreshing, pollMs, card.objectRef.id, onCard, memberReadOnly]);
 
   // 候选出现或重上传后自动打开预览；关闭只收起，不回滚服务端候选。
   useEffect(() => {
@@ -762,42 +804,15 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     if (await run(action, patch)) setEditOpen(false);
   }
 
-  /** JSON 直导：multipart 单文件；与 DRI service API 共用同一校验边界。 */
-  async function uploadTranscript(file: File) {
-    setUploading(true);
-    setUploadError(null);
-    const form = new FormData();
-    form.append("file", file);
-    const response = await fetch(`/api/meetings/${card.objectRef.id}/transcript`, { method: "POST", body: form });
-    setUploading(false);
-    if (response.status === 401) {
-      onNavigate("/access");
-      return;
-    }
-    const body = (await response.json().catch(() => ({}))) as { message?: string; cards?: typeof collection };
-    if (response.ok && body.cards?.[0]) {
-      updateCard(body.cards[0]);
-      return;
-    }
-    setUploadError(body.message ?? "逐字稿整份被拒绝");
-  }
-
-  /** 会议记录入口按扩展名分流：.md 只生成候选，.json 走既有 immediate import。 */
+  /** 会议记录（txt、md、pdf、docx、html 由服务端认；.json 直导）：点选和拖进来共用。 */
   async function importTranscriptFile(file: File) {
-    if (!/\.md$/i.test(file.name)) return uploadTranscript(file);
     setUploading(true);
     setUploadError(null);
-    const form = new FormData();
-    form.append("file", file);
-    const response = await fetch(`/api/meetings/${card.objectRef.id}/transcript-candidate`, { method: "POST", body: form });
+    const result = await uploadMeetingRecord<(typeof collection)[number]>(card.objectRef.id, file);
     setUploading(false);
-    if (response.status === 401) {
-      onNavigate("/access");
-      return;
-    }
-    const body = (await response.json().catch(() => ({}))) as { message?: string; cards?: typeof collection };
-    if (response.ok && body.cards?.[0]) return updateCard(body.cards[0]);
-    setUploadError(body.message ?? "妙记 Markdown 整份被拒绝");
+    if (result.ok) return result.card ? updateCard(result.card) : undefined;
+    if (result.status === 401) return onNavigate("/access");
+    setUploadError(result.message);
   }
 
   /** 确认候选：只提交 speakerMappings 与显式标记，全量 turns 留在服务端。 */
@@ -895,33 +910,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     others: items.filter((item) => !["decision", "todo", "strategic"].includes(item.kind)),
   });
   const minutes = minutesOf(memberReadOnly ? outcomeItems : outcomeGroups.others);
-  /**
-   * 会后确认 / 忽略 / 撤回走原生 meeting Action，返回的是会议 Card；决定被确认后议题的回执和状态也变了，
-   * 所以成功后按议题再读一次议题 Card（只读），历史分层跟着重读；演示里再通知首页刷新。
-   */
-  const runItem = async (action: CardAction, item: (typeof outcomeItems)[number]) => {
-    if (!(await run(action, {}))) return;
-    // 会议页确认的决定同样写到战场（没有倒计时：会议页上一直留着撤回；撤回时服务端把战场恢复）。docs/superpowers/specs/2026-10-12-confirm-to-battlefield.md §6
-    if (action.actionType === "meeting.confirm_item" && item.kind === "decision") {
-      const apply = latestCard.current.actions.find((candidate) => candidate.actionType === "meeting.apply_battlefield");
-      if (apply) await run(apply, {});
-    }
-    const issueId = outcomeIssueId(item, payload.issueIds);
-    if (issueId) {
-      const { data } = await browserApi.GET("/api/cards/issues/{id}", { params: { path: { id: issueId } } });
-      const next = data?.cards?.[0];
-      if (next) onCard(next);
-    }
-    window.dispatchEvent(new CustomEvent(DECISION_HISTORY_CHANGED, { detail: { issueId } }));
-  };
-  /** 确认 / 推送 / 忽略：先显示结果并给 5 秒「撤回」，到点才提交（和左栏一致，巡检 P1-9）。 */
-  const holdItem = (kind: "confirm" | "dismiss", item: (typeof outcomeItems)[number]) => itemUndo.hold(item.id, kind, () => {
-    const type = kind === "confirm" ? "meeting.confirm_item" : "meeting.dismiss_item";
-    commitChain.current = commitChain.current.then(async () => {
-      const action = latestCard.current.actions.find((candidate) => candidate.actionType === type && candidate.itemId === item.id);
-      if (action) await runItem(action, item);
-    }).catch(() => undefined);
-  });
+  /** 旧格式会议的会后条目只读：会后只有会议卡一个入口，不再逐条确认、忽略、撤回。 */
   const renderItem = (item: (typeof outcomeItems)[number]) => {
     // 子决定画在主决定下面（缩进、没有自己的按钮），不单独成条
     if (isChildDecision(outcomeItems, item)) return null;
@@ -930,7 +919,6 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     const itemText = cleanDisplayText(item.kind === "strategic" && item.title ? item.title : item.text);
     const quote = cleanDisplayText(item.quote);
     const overdue = item.kind === "todo" && item.review?.status === "pending" && isPastDue(item.dueDate, item.text, calendarDate(new Date().toISOString()));
-    const held = item.review?.status === "pending" ? itemUndo.pending(item.id) : null;
     return (
       <article key={item.id} id={outcomeAnchorId(item.id)} className={s.decisionRecord} data-kind={item.kind}>
         <div className={s.itemHead}>
@@ -950,37 +938,13 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
             {item.kind === "todo" && payload.issueIds.length ? <span>负责人 {people.get(actionOwner(item, payload)) ?? "待确认"}</span> : null}
             {item.dueDate ? <span>{item.dueDate.slice(5).replace("-", "/")} 前</span> : null}
             {overdue ? <span className={s.overdue}>已过期</span> : null}
-            <span className={s.itemState} data-state={held ? (held === "confirm" ? "confirmed" : "dismissed") : itemState.state}>
-              {held ? heldItemLabel(item, held, (id) => people.get(id) ?? id, payload) : itemState.label}
-            </span>
+            <span className={s.itemState} data-state={itemState.state}>{itemState.label}</span>
           </div>
-          {/* 待办会后已自动推给负责人：这里只看，不再逐条推送、忽略或撤回 */}
-          {item.kind === "todo" ? null : <div className={s.itemActions}>
-            {held ? (
-              <button type="button" aria-label={`撤回：${itemText}`} onClick={() => itemUndo.undo(item.id)}>撤回</button>
-            ) : <>
-            {itemAction("meeting.confirm_item", item.id) ? (
-              <button type="button" data-variant="confirm" disabled={pending} onClick={() => holdItem("confirm", item)}>
-                确认
-              </button>
-            ) : null}
-            {itemAction("meeting.dismiss_item", item.id) ? (
-              <button type="button" disabled={pending} onClick={() => holdItem("dismiss", item)}>
-                {item.kind === "strategic" ? "不同意" : "忽略"}
-              </button>
-            ) : null}
-            </>}
-            {itemAction("meeting.revoke_effect", item.id) ? (
-              <button type="button" disabled={pending} onClick={() => void runItem(itemAction("meeting.revoke_effect", item.id)!, item)}>
-                撤回
-              </button>
-            ) : null}
-          </div>}
         </div>
         {children.length ? (
           <ul className={s.subDecisions} aria-label={`含 ${children.length} 项`}>
             {children.map((child) => {
-              const childState = childDecisionLabel(child, held);
+              const childState = childDecisionLabel(child);
               return (
                 <li key={child.id} id={outcomeAnchorId(child.id)} className={s.subDecision}>
                   <p>{cleanDisplayText(child.text)}</p>
@@ -1041,14 +1005,15 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const recordShown = view.current === RECORD_TAB.id;
   const issueOutline = (focus: "decision" | "outcome"): OutlineItem[] => payload.issueIds.map((issueId, index) => {
     const status = issueStatusOf(issueId);
-    const waiting = (outcomeGroups.byIssue.get(issueId) ?? []).filter((item) => item.review?.status === "pending" && item.kind !== "todo" && !isChildDecision(outcomeItems, item)).length;
+    // 旧会议的会后结论只读：目录里只写条数，不按待确认标。
+    const concluded = (outcomeGroups.byIssue.get(issueId) ?? []).filter((item) => item.kind !== "todo" && !isChildDecision(outcomeItems, item)).length;
     const base = `issue:${issueId}`;
     return {
       key: base,
       label: issueById.get(issueId)?.title ?? sourceContext.issueTitle(issueId) ?? `议题 ${index + 1}`,
       short: `议题 ${index + 1}${payload.issueIds.length > 1 ? ` / ${payload.issueIds.length}` : ""}`,
-      hint: focus === "outcome" && waiting ? `${waiting} 条待确认` : ISSUE_STATUS_LABEL[status],
-      tone: focus === "outcome" && waiting ? "pending" : status === "decided" ? "decided" : status === "dismissed" ? "dismissed" : "pending",
+      hint: focus === "outcome" && concluded ? `${concluded} 条` : ISSUE_STATUS_LABEL[status],
+      tone: focus === "outcome" && concluded ? "neutral" : status === "decided" ? "decided" : status === "dismissed" ? "dismissed" : "pending",
       children: focus === "outcome"
         ? [{ key: `${base}:outcome`, label: "会上结论" }, { key: `${base}:result`, label: "实际结果" }, { key: `${base}:history`, label: "历史与变化" }]
         : [{ key: `${base}:judgment`, label: "核心判断" }, { key: `${base}:history`, label: "历史与变化" }, { key: `${base}:evidence`, label: "事实与依据" },
@@ -1065,7 +1030,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     ...(showMeetingSection ? [{ key: "meeting", label: payload.issueIds.length ? "会议层面的判断" : "预审判断", short: "预审判断" }] : []),
     ...(!readOnly ? [{ key: "prep", label: "会前准备", short: "会前准备" }] : []),
   ] : null;
-  const recordOutline: OutlineItem[] | null = !memberReadOnly && payload.issueIds.length && payload.outcome && (payload.status === "held" || payload.status === "reviewed") ? [
+  const recordOutline: OutlineItem[] | null = !memberReadOnly && recordCard.status === "legacy" && payload.issueIds.length && payload.outcome && (payload.status === "held" || payload.status === "reviewed") ? [
     { key: "summary", label: "会议纪要", short: "会议纪要" },
     ...issueOutline("outcome"),
     ...(outcomeGroups.others.length ? [{ key: "others", label: "其他事项", short: "其他事项", hint: `${outcomeGroups.others.length} 条` }] : []),
@@ -1163,10 +1128,17 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   );
 
   /* 页头：计划时段、会后「会前预审 ｜ 会议记录」两段、开始会议／计时（这一版不放；已取消的会也没有计时）。 */
-  const ended = Boolean(payload.hasEnded || payload.endedAt) || payload.status === "held" || payload.status === "reviewed";
-  const phase = meetingPhase(startedAt, ended);
-  const { timeline, label: timelineLabel } = useMeetingTimeline({ phase, scheduledAt: payload.scheduledAt, cancelled: payload.status === "cancelled" });
+  const ended = live ? live === "ended" : Boolean(payload.hasEnded || payload.endedAt) || payload.status === "held" || payload.status === "reviewed";
+  const phase = live === "live" ? "live" : meetingPhase(startedAt, ended);
+  const { timeline, label: timelineLabel } = useMeetingTimeline({ phase, scheduledAt: payload.scheduledAt, cancelled: payload.status === "cancelled", live });
+  // 主持人和建会的人：确认会议卡、再读妙记、贴妙记链接的人。
+  const canFetchMinutes = Boolean(workspace.viewerId) && (isHost || (source.createdBy ?? source.leadDriId) === workspace.viewerId);
+  // 这场会走到哪一步（挂到下面那条进度线）；每 30 秒重算一次，到了预约时间等开会那一格开始呼吸。
+  const progressNow = useNow(30_000);
+  const progress = meetingProgress(payload, { live, ended, now: progressNow, mine: canFetchMinutes });
   const endAction = actionOf("meeting.end");
+  // 在飞书约上的会不给「结束会议」：只有一直没收到飞书会议开始和结束、预约结束又已过了，才给它补救。
+  const showEnd = Boolean(endAction && isHost && !ended && (!live || live === "missed" || (live === "waiting" && payload.hasEnded)));
   const clock =
     !MEETING_CLOCK_ENABLED || (memberReadOnly && !isHost) || payload.status === "cancelled" ? undefined : (
       <MeetingClock
@@ -1256,6 +1228,21 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     </>
   );
 
+  // 在飞书约上、还没开或没开成：「重新安排会议」在页头最右那一格、进入飞书会议左边（表单浮层挂在它下面），工具栏里不再重复。
+  const rescheduleAction = actionOf("meeting.reschedule");
+  const headerReschedule = rescheduleAction && (live === "waiting" || live === "missed") ? (
+    <Popover isOpen={editOpen && rescheduling} onOpenChange={(open) => { if (!open) setEditOpen(false); }}>
+      <Button className={RESCHEDULE_CLASS} aria-label="重新安排会议" isDisabled={pending} onPress={() => void openEditDetails(true)}><RescheduleLabel /></Button>
+      <Popover.Content placement="bottom end" className={s.editFloat}>
+        <TianshuPortalTheme>
+          <Popover.Dialog className={s.editDialog} aria-label="重新安排会议">
+            {editFields}
+          </Popover.Dialog>
+        </TianshuPortalTheme>
+      </Popover.Content>
+    </Popover>
+  ) : null;
+
   /** 标题右侧的铅笔：低调地放「编辑会议」，浮层跟着它出来。 */
   const titleEdit = payload.status === "scheduled" && actionOf("meeting.edit_details") ? (
     <Popover isOpen={editOpen && !rescheduling} onOpenChange={(open) => { if (!open) setEditOpen(false); }}>
@@ -1274,8 +1261,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
 
   const preflightToolbar = readOnly && !isHost ? null : (
     <div className={s.toolbar}>
-      {actionOf("meeting.reschedule") ? <button type="button" disabled={pending} onClick={() => void openEditDetails(true)}>重新安排会议</button> : null}
-      {endAction && isHost && !ended ? <button type="button" disabled={pending} onClick={() => void endMeeting()}>结束会议</button> : null}
+      {rescheduleAction && !headerReschedule ? <button type="button" disabled={pending} onClick={() => void openEditDetails(true)}>重新安排会议</button> : null}
+      {showEnd ? <button type="button" disabled={pending} onClick={() => void endMeeting()}>结束会议</button> : null}
       {actionOf("meeting.edit_materials") ? (
         <button
           type="button"
@@ -1295,7 +1282,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         </button>
       ) : null}
       {/* 「重新安排会议」仍挂在这一行下面；「编辑会议」在标题右侧的铅笔浮层里。 */}
-      {editOpen && rescheduling ? (
+      {editOpen && rescheduling && !headerReschedule ? (
         <div className={s.editPopover} role="dialog" aria-label="重新安排会议">
           {editFields}
         </div>
@@ -1564,21 +1551,56 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     </div>
   );
 
-  const statusNow = memberReadOnly && ended
-    ? outcomeItems.length ? "会后结论已确认" : payload.minutesStatus === "waiting" ? "妙记生成中" : "会议已结束"
-    : phase === "live" ? recorderLine(recorder.state) : meetingNow(payload, ended);
+  // 在飞书约上的会（还没开完）：约的人还没连飞书时给他「连接飞书」，没约上给短状态和「重试」，有入会链接时一个安静的「进入飞书会议」。
+  const feishuEvent = !ended && payload.status === "scheduled" ? source.feishuEvent ?? null : null;
+  const retryBooking = actionOf("meeting.retry_feishu_booking");
+  const feishuEntry = !feishuEvent ? null
+    : feishuEvent.status === "waiting_auth" && feishuEvent.organizerId === workspace.viewerId ? (
+      <button type="button" className={s.feishuAction}
+        onClick={() => window.location.assign(feishuConnectHref(`${window.location.pathname}${window.location.search}`))}>连接飞书</button>
+    ) : feishuEvent.status === "failed" && retryBooking ? (
+      <span className={s.feishuEntry}>
+        <span className={s.feishuFailed}>飞书未约上</span>
+        <button type="button" className={s.feishuAction} disabled={pending} onClick={() => void run(retryBooking, {})}>重试</button>
+      </span>
+    ) : feishuEvent.joinUrl && !live ? <a className={s.feishuLink} href={feishuEvent.joinUrl} target="_blank" rel="noreferrer">进入飞书会议</a> : null;
+
+  // 会开完以后走到哪一步看进度线，这一行不再重复写。
+  const statusNow = progress && ended ? undefined
+    : phase === "live" && startedAt !== undefined ? recorderLine(recorder.state) : meetingNow(payload, ended);
+
+  // 会议卡这一块：会后整理（重新生成）失败时上面一行标出来，能重试的人有「重试会后抽取」。
+  const retryOutcome = actionOf("meeting.retry_outcome");
+  const cardArea = recordCard.status === "card" ? (
+    <>
+      {source.outcome?.status === "failed" ? (
+        <p className={s.error} role="alert">
+          生成失败
+          {retryOutcome ? <button type="button" disabled={pending} onClick={() => void run(retryOutcome, {})}>重试会后抽取</button> : null}
+        </p>
+      ) : null}
+      <MeetingRecordCard key={meetingId} meetingId={meetingId} initial={recordCard.initial}
+        onView={(view) => {
+          recordCard.remember(view);
+          // 整卡确认了：重取会议卡（会议记为已处理完），进度线最后一步换成已确认。
+          if (view.confirmed && source.status === "held") void reloadCard();
+        }}
+        turns={source.transcript?.turns ?? []} speakerName={(speakerId) => speakerLabel(speakerId, people)} people={payload.participants} />
+    </>
+  ) : null;
+  const legacyRecord = recordCard.status === "legacy";
 
   const recordView =
     memberReadOnly && !(isHost && payload.status === "scheduled") ? (
       <section className={s.review}>
-        {/* 实际参会的人能看完整纪要和「会上定了」；主持人在这里确认。 */}
+        {cardArea ?? (legacyRecord ? <>
+        {/* 实际参会的人能看完整纪要。 */}
         {memberOutcomeSummary(source) ? (
           <section className={s.reviewSection} data-outline="summary">
             <header><h3>会议纪要</h3></header>
             <p className={s.entryBody}>{memberOutcomeSummary(source)}</p>
           </section>
         ) : null}
-        <MeetingDecisions decisions={payload.decisions ?? []} />
         <section className={s.reviewSection}>
           <header><h3>会后结论</h3></header>
           {outcomeItems.length ? (
@@ -1600,6 +1622,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
             </>
           ) : <p className={s.empty}>暂无已确认的会后结论。</p>}
         </section>
+        </> : null)}
       </section>
     ) : payload.status === "cancelled" ? (
       <p className={s.empty}>该会议已取消，无会议记录。</p>
@@ -1618,58 +1641,40 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           ) : null}
         </section>
       ) : null}
+      {payload.transcriptCandidate ? (
       <section className={s.reviewSection}>
-        <header>
-          <h3>导入会议记录</h3>
-          {payload.minutesStatus === "waiting" ? <span>飞书妙记生成中</span> : null}
-        </header>
-        <div className={s.stageActions}>
-          <input
-            ref={uploadRef}
-            type="file"
-            accept=".md,.json,application/json,text/markdown"
-            className={s.hiddenInput}
-            aria-label="选择会议记录文件"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) void importTranscriptFile(file);
-            }}
-          />
-          <button type="button" className={s.primaryAction} disabled={uploading} onClick={() => uploadRef.current?.click()}>
-            <FileUp size={13} aria-hidden="true" />
-            {uploading ? "上传中…" : payload.transcriptCandidate ? "重新导入会议记录" : "导入会议记录"}
+        {/* 第一次上传在进度线「待交记录」后面；这里只在已有候选时给重新上传，拖进主栏任何地方也行（FileDropZone）。 */}
+        <button type="button" className={s.recordUpload} disabled={uploading} onClick={() => uploadRef.current?.click()}>
+          <FileUp size={16} aria-hidden="true" />
+          {uploading ? "上传中…" : "重新上传会议记录"}
+        </button>
+        {!candidateOpen ? (
+          <button type="button" className={s.candidateReopen} onClick={() => setCandidateOpen(true)}>
+            查看会议记录候选
           </button>
-          {payload.transcriptCandidate && !candidateOpen ? (
-            <button type="button" className={s.candidateReopen} onClick={() => setCandidateOpen(true)}>
-              查看会议记录候选
-            </button>
-          ) : null}
-        </div>
+        ) : null}
         {uploadError ? <p className={s.error} role="alert">{uploadError}</p> : null}
       </section>
+      ) : null}
       </>
     ) : (
       <section className={s.review}>
-        {payload.outcome ? (
+        {cardArea ?? (payload.outcome && payload.outcome.status !== "ready" ? (
+          /* 会议卡还在生成：阶段和用时只在进度线上一份，这里不再重复；第一次生成失败给重试；生成好了换成会议卡。 */
+          payload.outcome.status === "failed" ? (
+            <p className={s.error} role="alert">
+              生成失败
+              {retryOutcome ? <button type="button" disabled={pending} onClick={() => void run(retryOutcome, {})}>重试会后抽取</button> : null}
+            </p>
+          ) : null
+        ) : !legacyRecord ? null : payload.outcome ? (
           <>
             <section className={s.reviewSection} data-outline="summary">
               <header>
                 <h3>会议纪要</h3>
               </header>
-              <p className={s.entryBody}>{payload.outcome.summary || "抽取尚未产出摘要。"}</p>
+              <p className={s.entryBody}>{payload.outcome.summary}</p>
             </section>
-            <MeetingDecisions decisions={payload.decisions ?? []} />
-            {payload.outcome.error ? (
-              <p className={s.error} role="alert" title={payload.outcome.error.code}>
-                {payload.outcome.error.message}
-                {actionOf("meeting.retry_outcome") ? (
-                  <button type="button" disabled={pending} onClick={() => void run(actionOf("meeting.retry_outcome")!, {})}>
-                    重试会后抽取
-                  </button>
-                ) : null}
-              </p>
-            ) : null}
             {payload.issueIds.length ? (
               /* 会后条目收回到各自的议题块里确认（feedback 15）；没有议题的放在后面的「其他事项」。 */
               <div className={s.issueList} aria-label="按议题确认会后结论">{issueBlocks("outcome")}</div>
@@ -1723,7 +1728,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           </>
         ) : (
           <p className={s.empty}>逐字稿已保存，会后抽取尚未开始。</p>
-        )}
+        ))}
         <section className={s.reviewSection} data-outline="transcript">
           <header>
             <h3>逐字稿</h3>
@@ -1732,7 +1737,10 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
             {payload.transcript ? `${payload.transcript.turns.length} 条发言已保存` : "尚未导入逐字稿"}
           </p>
         </section>
-        {actionOf("meeting.replace_transcript") ? (
+        {actionOf("meeting.replace_transcript") && !replaceOpen ? (
+          <button type="button" className={s.replaceLink} onClick={() => setReplaceOpen(true)}>替换逐字稿</button>
+        ) : null}
+        {actionOf("meeting.replace_transcript") && replaceOpen ? (
           <section className={`${s.reviewSection} ${s.dangerSection}`}>
             <header>
               <h3>替换逐字稿 · 危险操作</h3>
@@ -1740,7 +1748,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
             <input ref={replaceRef} type="file" accept="application/json,.json" aria-label="选择替换用的逐字稿文件" />
             <label className={s.summaryEdit}>
               <input type="checkbox" checked={replaceArmed} onChange={(event) => setReplaceArmed(event.target.checked)} />
-              我确认整份替换，现有会后候选随之作废
+              我确认整份替换，会议记录草稿随之作废
             </label>
             <div className={s.stageActions}>
               <button type="button" disabled={pending || !replaceArmed} onClick={() => void replaceTranscript()}>
@@ -1753,6 +1761,41 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       </section>
     );
 
+  // 页头下面一块（会前会后都在）：挂点一行、进度线一行。再读、贴妙记链接只给主持人和建会的人；读完重取会议卡。
+  const reloadCard = async () => {
+    const next = memberReadOnly
+      ? (await browserApi.GET("/api/me/cards/meetings/{id}", { params: { path: { id: meetingId } } })).data
+      : (await browserApi.GET("/api/cards/meetings/{id}", { params: { path: { id: meetingId } } })).data?.cards?.[0];
+    if (next) onCard(next);
+  };
+  // 能上传会议记录的人（CEO、主持人）：进度线上待交记录后面的「上传会议记录」打开这里的选文件。
+  const canUpload = payload.status === "scheduled" && (!memberReadOnly || isHost);
+  // 等开会、进行中时「进入飞书会议」在页头最右那一格；进度线只在待交记录这一步后面给上传会议记录这几样补救。
+  const joinUrl = live === "waiting" || live === "live" ? payload.feishuEvent?.joinUrl ?? null : null;
+  const progressActions = progress?.upload ? (
+    <MinutesRecovery meetingId={meetingId} status={source.minutesStatus ?? "none"} failure={source.minutesFailure ?? null}
+      canFetch={canFetchMinutes} onFetched={() => void reloadCard()} onUpload={canUpload ? () => uploadRef.current?.click() : undefined}
+      uploading={uploading} uploadError={uploadError} />
+  ) : null;
+  const worldLine = <MeetingWorldSection meetingId={meetingId} progress={progress ? <MeetingProgress model={progress} actions={progressActions} /> : null} />;
+  // 会开完、还没有确认的逐字稿时，主栏整块能拖会议记录进来（FileDropZone）。
+  const recordDrop = canUpload && ended && !source.transcript;
+  // 选会议记录文件：会议记录区的「上传会议记录」和进度线上的共用，上传块不出现时也在。
+  const uploadInput = canUpload ? (
+    <input
+      ref={uploadRef}
+      type="file"
+      accept={MEETING_RECORD_ACCEPT}
+      className={s.hiddenInput}
+      aria-label="选择会议记录文件"
+      onChange={(event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (file) void importTranscriptFile(file);
+      }}
+    />
+  ) : null;
+
   const recordTab = memberReadOnly && !isHost ? { ...RECORD_TAB, title: "会议记录：已确认的决定与待办" } : RECORD_TAB;
   const showing = view.current === RECORD_TAB.id ? recordTab : viewedMaterial ? materialTab(viewedMaterial) : meetingHeld ? { ...PREFLIGHT_TAB, title: "会前预审" } : PREFLIGHT_TAB;
 
@@ -1760,6 +1803,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     <section ref={workspaceRef} className={s.workspace} data-testid="meeting-workspace" data-status={payload.status} data-timeline={timeline}
       {...{ [ESCAPE_BACK_ATTR]: viewingMaterialFile ? "true" : undefined }}>
       {confirmDialog}
+      {uploadInput}
       <SourceNavigatorProvider value={sourceApi}>
       <DetailFrame
         headingId="meeting-title"
@@ -1768,7 +1812,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         onBack={() => onNavigate("/")}
         actions={
           <MeetingHeaderActions day={meetingDayWord(payload.scheduledAt)} slot={meetingSlot(payload.scheduledAt, payload.endsAt)} clock={clock}
-            timeline={timeline} label={timelineLabel} since={startedAt ?? Date.parse(payload.scheduledAt)}>
+            timeline={timeline} label={timelineLabel} end={<MeetingHeaderEnd joinUrl={joinUrl} reschedule={headerReschedule} />}>
             {meetingHeld ? <SegmentedSwitch data-header-switch="" label="会议视图" segments={meetingSegments(true)}
               selected={selectedSegment(view)} onSelect={(id) => setView(pickSegment(id))} /> : null}
           </MeetingHeaderActions>
@@ -1782,7 +1826,9 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
             <div className={s.readingGrid} data-toc={outline ? "true" : undefined} data-type-pair={view.current === PREFLIGHT_TAB.id && !viewedMaterial ? "preflight" : undefined}>
               {outline ? <MeetingOutline items={outline} active={outlineActive} onJump={jumpOutline} label={recordShown ? "会后目录" : "议题目录"} /> : null}
               <div className={s.readingMain} data-material-column ref={mainRef} onMouseUp={onQuoteMouseUp}>
-                <MeetingStatus phase={phase} facts={facts} now={statusNow} endedAt={payload.endedAt} />
+                <FileDropZone disabled={!recordDrop} busy={recordDrop && uploading} onFile={(file) => void importTranscriptFile(file)}>
+                {worldLine}
+                <MeetingStatus phase={phase} facts={facts} now={statusNow} endedAt={payload.endedAt}>{feishuEntry}</MeetingStatus>
                 {(memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose) ?
                   <p className={s.agenda}>{stripInternalRefs(memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose)}</p> : null}
                 {preflightToolbar}
@@ -1795,6 +1841,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
                     preflightView
                   )}
                 </section>
+                </FileDropZone>
                 <SelectionToolbar
                   selected={quoteSelection}
                   onQuote={() => {
@@ -1817,7 +1864,6 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           key={payload.transcriptCandidate.createdAt}
           dialogRef={candidateDialog}
           candidate={payload.transcriptCandidate}
-          scheduledAt={payload.scheduledAt}
           participants={payload.participants}
           directory={directory}
           directoryError={directoryError}

@@ -64,7 +64,6 @@
 
 .slotMark { flex: none; color: var(--meeting-ended); }
 .slotWord { font-variant-numeric: tabular-nums; }
-.slotElapsed { font-weight: 600; }
 
 .slot[data-timeline='upcoming'] .slotWord { color: var(--meeting-upcoming-ink); }
 .slot[data-timeline='live'] .slotDot { background: var(--meeting-live); animation: livePulse 1.6s ease-in-out infinite; }
@@ -262,4 +261,59 @@
 /* 点触下限（手机端规范 §2 / §3.5）：计时弹层里的「结束会议」高 44、最小宽 72；胶囊本身手持下已是 44 高。鼠标的电脑不变。 */
 @media (max-width: 959px), (pointer: coarse) {
   .end.end { min-height: var(--touch-hit, 44px); min-width: 72px; font-size: 14px; }
+}
+
+/*
+ * 页头最右那一格（MeetingHeaderEnd，data-header-end）：会前会中「进入飞书会议」是唯一的主按钮，和页头其他控件一样高 32；
+ * 「重新安排会议」是它左边的安静链接，窄面板只留图标。原来插在进度线中间，会把进度线挤成两行（用户 10/22）。
+ */
+.end { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
+
+.join {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  min-height: var(--touch-hit, 32px);
+  padding: 0 14px;
+  border-radius: 8px;
+  background: #215ba1;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.join:hover { background: #1b4c86; }
+.join:focus-visible { outline: 2px solid #215ba1; outline-offset: 2px; }
+
+/* 双类名：触发钮是 ts-design 的 Button，压过它自带的样式。 */
+.reschedule.reschedule {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 32px;
+  min-height: var(--touch-hit, 32px);
+  padding: 0 2px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: #4c545e;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: #c7ccd4;
+  text-underline-offset: 3px;
+}
+.reschedule.reschedule:hover { color: #1f2937; text-decoration-color: currentColor; }
+.reschedule.reschedule:disabled { opacity: 0.45; cursor: default; }
+.rescheduleIcon { display: none; }
+
+@container pane (max-width: 599px) {
+  .end { gap: 4px; }
+  .join { padding: 0 12px; }
+  .reschedule.reschedule { min-width: var(--touch-hit, 32px); text-decoration: none; }
+  .rescheduleIcon { display: block; }
+  .rescheduleText { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }

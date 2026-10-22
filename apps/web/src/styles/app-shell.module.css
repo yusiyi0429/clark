@@ -247,6 +247,7 @@
  .historySheet,.shell:not([data-detail-open=true]) .historySheet{left:var(--main-start);right:8px}
 }
 
-.m2Entry{display:flex;justify-content:flex-end;padding:8px 16px 0}
-.m2Entry a{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border,rgba(0,0,0,.12));border-radius:12px;color:inherit;font-size:14px;text-decoration:none;background:var(--surface,#fff)}
-.m2Entry a:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+.m2Entry{display:flex;justify-content:flex-end;gap:8px;padding:8px 16px 0}
+.m2Entry a,.m2Entry button{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border,rgba(0,0,0,.12));border-radius:12px;color:inherit;font:inherit;font-size:14px;text-decoration:none;background:var(--surface,#fff);cursor:pointer}
+.m2Entry a:focus-visible,.m2Entry button:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+@media (max-width:959px),(pointer:coarse){.m2Entry a,.m2Entry button{min-height:44px}}

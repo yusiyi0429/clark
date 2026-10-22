@@ -19,7 +19,7 @@ import {
 import { signActionId, type ActionScope } from "./actionToken.js";
 import { battlefieldSetOf, getRegisteredBattlefieldIds, normalizeBattlefieldSet } from "./battlefields.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
-import { issueNatureOf } from "./dataOrigin.js";
+import { issueNatureOf, issueOriginFields } from "./dataOrigin.js";
 import { withSupplementaryEvidence } from "./radarDedupe.js";
 import { revokeEffect } from "./effects.js";
 import { insertNotification } from "./notifications.js";
@@ -360,6 +360,30 @@ export async function listPendingIssueCards(q: Query, secret: string): Promise<T
       ORDER BY created_at, id`,
   );
   return (result.rows as IssueRow[]).map((row) => projectIssueCard(row, secret));
+}
+
+/**
+ * 待决议题摘要（对话工具 list_pending_issues 与给独立 Chat 的 /internal/pending-issues 共用，不含签名 Action）。
+ * 给了 memberId 时只列他在议题群里的。
+ */
+export async function listPendingIssueSummaries(q: Query, memberId?: string) {
+  const result = await q(
+    `SELECT id, title, location, urgency, research->>'status' AS research_status, created_at, origin_ref
+       FROM issues WHERE status = 'pending'
+        AND ($1::text IS NULL OR EXISTS (SELECT 1 FROM thread_members tm
+          WHERE tm.object_type = 'issue' AND tm.object_id = issues.id::text AND tm.person_id = $1 AND tm.left_at IS NULL))
+      ORDER BY created_at, id`,
+    [memberId ?? null],
+  );
+  return result.rows.map((row) => ({
+    id: String(row.id),
+    title: String(row.title),
+    location: row.location,
+    urgency: row.urgency,
+    researchStatus: String(row.research_status ?? "none"),
+    createdAt: new Date(row.created_at).toISOString(),
+    ...issueOriginFields(row.origin_ref),
+  }));
 }
 
 /**

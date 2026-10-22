@@ -1,7 +1,5 @@
-import { randomUUID } from "node:crypto";
-import type { Pool } from "pg";
 import type {
-  TMyOffPlanResponse, TOffPlanItem, TProgressArtifact, TProgressMissionRef, TProgressOnTrack, TProgressOverview, TProgressPerson,
+  TProgressArtifact, TProgressMissionRef, TProgressOnTrack, TProgressOverview, TProgressPerson,
   TProgressPersonSummary, TProgressRedLine, TProgressSlowReason, TProgressTask,
 } from "@warmap/contracts";
 import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
@@ -20,18 +18,15 @@ import { addDays, BATTLEFIELD_MEMBERS, visibleOwners, weeklyReviewHref, weekStar
  * - 按截止日做不完：同一项个人任务下，未完成的执行事项还需的计划工作日之和，超过今天到卡片截止日（最晚的里程碑日期，没有就是月底）的工作日。
  *   还需的工作日：没开始的按原计划（开始到截止）；进行中的按今天（或开始日，取晚的）到截止，至少 1 天。
  * 工作日是周一到周五，节假日不计入。没有 Task 基线的人，退回按人的进展摘要（已提交的周复盘、采集器整理结果）。
- * 计划外工作：采集器整理时归不上 Task 的进展（待挂靠、待改计划），本人挂上之前一直列着；提出改计划后照样列着，带上提出时间。
  */
 
 const NO_PROGRESS_WORKDAYS = 3;
-/** 摘要读最近几周的周复盘、最近几天的采集整理结果；计划外列最近 30 天的。 */
+/** 摘要读最近几周的周复盘、最近几天的采集整理结果。 */
 const WEEKLY_REVIEW_LOOKBACK_DAYS = 35;
 const RECENT_DAYS = 14;
-const OFF_PLAN_DAYS = 30;
 const RECENT_PER_PERSON = 5;
 const ARTIFACTS_PER_ROW = 6;
 const DAY_MS = 86_400_000;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ---------- 工作日 ----------
 
@@ -100,12 +95,6 @@ type TaskRow = {
   id: string; title: string; status: "not_started" | "in_progress"; owner_id: string; start_date: string; due_date: string;
   mission_id: string; mission_title: string; period: string; milestones: string[]; last_verified_at: Date | null;
 };
-type OffPlanRow = {
-  id: string; person_id: string; placement: "pending_attach" | "pending_replan"; text: string; source: string; repo: string | null;
-  started_at: Date; ended_at: Date; links: { url: string; title?: string }[]; task_id: string | null; task_title: string | null;
-  resolution: "replan" | null; resolved_at: Date | null; spent_seconds: string | number;
-};
-
 const artifact = (link: { url: string; title?: string | null }): TProgressArtifact => ({ url: link.url, title: link.title || null });
 function uniqueArtifacts(links: { url: string; title?: string | null }[], limit = ARTIFACTS_PER_ROW): TProgressArtifact[] {
   const seen = new Map<string, TProgressArtifact>();
@@ -117,27 +106,6 @@ function uniqueArtifacts(links: { url: string; title?: string | null }[], limit 
 async function visiblePeople(q: Query, viewer: ReviewViewer, now: Date): Promise<string[] | null> {
   const owners = await visibleOwners(q, viewer, weekStartOf(now));
   return owners ? [...owners] : null;
-}
-
-async function readOffPlanRows(q: Query, owners: string[] | null, now: Date): Promise<OffPlanRow[]> {
-  return (await q(`SELECT cp.id::text AS id, cp.person_id, cp.placement, cp.text, cp.source, cp.repo, cp.started_at, cp.ended_at, cp.links,
-      CASE WHEN cp.placement = 'pending_attach' THEN t.id::text END AS task_id, CASE WHEN cp.placement = 'pending_attach' THEN t.title END AS task_title,
-      cp.resolution, cp.resolved_at,
-      (SELECT COALESCE(sum(EXTRACT(EPOCH FROM (ci.ended_at - ci.started_at))), 0) FROM collector_items ci WHERE ci.id = ANY(cp.item_ids)) AS spent_seconds
-    FROM collector_progress cp LEFT JOIN tasks t ON t.id = cp.task_id
-    WHERE cp.placement <> 'task' AND cp.resolution IS DISTINCT FROM 'attached' AND cp.ended_at >= $2
-      AND ($1::text[] IS NULL OR cp.person_id = ANY($1))
-    ORDER BY cp.ended_at DESC, cp.id`, [owners, new Date(now.getTime() - OFF_PLAN_DAYS * DAY_MS)])).rows as OffPlanRow[];
-}
-
-function projectOffPlan(row: OffPlanRow, person: (id: string) => TProgressPerson): TOffPlanItem {
-  return {
-    id: row.id, person: person(row.person_id), kind: row.placement === "pending_attach" ? "attach" : "replan", text: row.text,
-    candidateTask: row.task_id && row.task_title ? { taskId: row.task_id, title: row.task_title } : null,
-    evidence: { source: row.source, repo: row.repo, startedAt: row.started_at.toISOString(), endedAt: row.ended_at.toISOString(), links: uniqueArtifacts(row.links ?? []) },
-    spentMinutes: Math.round(Number(row.spent_seconds) / 60),
-    replanProposedAt: row.resolution === "replan" ? row.resolved_at!.toISOString() : null,
-  };
 }
 
 export async function readProgressOverview(q: Query, viewer: ReviewViewer, people: MemoryPerson[], now: Date): Promise<TProgressOverview> {
@@ -237,57 +205,5 @@ export async function readProgressOverview(q: Query, viewer: ReviewViewer, peopl
   summaries.sort((a, b) => Number(!!b.weeklyReview || b.recent.length > 0) - Number(!!a.weeklyReview || a.recent.length > 0)
     || a.person.name.localeCompare(b.person.name, "zh-CN"));
 
-  const offPlan = (await readOffPlanRows(q, owners, now)).map((row) => projectOffPlan(row, person));
-  return { today, redLines: redLines.map((entry) => entry.line), onTrack, summaries, offPlan };
-}
-
-// ---------- 本人的计划外 ----------
-
-export async function readMyOffPlan(q: Query, personId: string, names: Map<string, string>, now: Date): Promise<TMyOffPlanResponse> {
-  const person = (id: string): TProgressPerson => ({ personId: id, name: names.get(id) ?? id });
-  const items = (await readOffPlanRows(q, [personId], now)).map((row) => projectOffPlan(row, person));
-  const tasks = (await q(`SELECT DISTINCT t.id::text AS "taskId", t.title, t.created_at FROM tasks t
-      LEFT JOIN task_members tm ON tm.task_id = t.id AND tm.person_id = $1 AND tm.left_at IS NULL
-    WHERE (t.owner_id = $1 OR tm.person_id IS NOT NULL) AND t.status IN ('not_started', 'in_progress')
-    ORDER BY t.created_at DESC LIMIT 100`, [personId])).rows as { taskId: string; title: string }[];
-  return { items, tasks: tasks.map(({ taskId, title }) => ({ taskId, title })) };
-}
-
-export type OffPlanError = { status: number; code: string; message: string };
-const TASK_PROGRESS_SOURCES = new Set(["codex", "claude", "github", "web", "other"]);
-
-/** 挂到本人的一件执行事项上：同一事务里写一条执行事项进展（时间取这段工作的结束时间），整理结果记成已挂上。 */
-export async function attachOffPlan(pool: Pool, personId: string, id: string, taskId: string, now: Date): Promise<OffPlanError | null> {
-  if (!UUID.test(id)) return { status: 404, code: "OFF_PLAN_NOT_FOUND", message: "计划外工作不存在" };
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const row = (await client.query(`SELECT placement, resolution, text, source, links, ended_at FROM collector_progress WHERE id = $1 AND person_id = $2 FOR UPDATE`, [id, personId]))
-      .rows[0] as { placement: string; resolution: string | null; text: string; source: string; links: unknown[]; ended_at: Date } | undefined;
-    const fail = async (error: OffPlanError) => { await client.query("ROLLBACK"); return error; };
-    if (!row) return await fail({ status: 404, code: "OFF_PLAN_NOT_FOUND", message: "计划外工作不存在" });
-    if (row.placement === "task" || row.resolution === "attached") return await fail({ status: 409, code: "OFF_PLAN_RESOLVED", message: "这条已经挂到执行事项上了" });
-    const task = (await client.query(`SELECT t.mission_id FROM tasks t LEFT JOIN task_members tm ON tm.task_id = t.id AND tm.person_id = $2 AND tm.left_at IS NULL
-      WHERE t.id = $1 AND (t.owner_id = $2 OR tm.person_id IS NOT NULL) AND t.status IN ('not_started', 'in_progress')`, [taskId, personId])).rows[0] as { mission_id: string | null } | undefined;
-    if (!task) return await fail({ status: 400, code: "TASK_NOT_ATTACHABLE", message: "只能挂到你在推进、还没完成的执行事项上" });
-    const progressId = randomUUID();
-    await client.query(`INSERT INTO task_progress (id, task_id, author_id, source, body, links, client_event_id, created_at) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)`,
-      [progressId, taskId, personId, TASK_PROGRESS_SOURCES.has(row.source) ? row.source : "other", row.text, JSON.stringify((row.links ?? []).slice(0, 5)), id, row.ended_at]);
-    await client.query(`UPDATE collector_progress SET task_id = $2, mission_id = $3, task_progress_id = $4, resolution = 'attached', resolved_at = $5, resolved_by = $6 WHERE id = $1`,
-      [id, taskId, task.mission_id, progressId, now, personId]);
-    await client.query("COMMIT");
-    return null;
-  } catch (cause) { await client.query("ROLLBACK").catch(() => undefined); throw cause; }
-  finally { client.release(); }
-}
-
-/** 提出改计划：先只记下来。重复提出幂等；已挂上的 409。 */
-export async function proposeOffPlanReplan(q: Query, personId: string, id: string, now: Date): Promise<OffPlanError | null> {
-  if (!UUID.test(id)) return { status: 404, code: "OFF_PLAN_NOT_FOUND", message: "计划外工作不存在" };
-  const updated = await q(`UPDATE collector_progress SET resolution = 'replan', resolved_at = $3, resolved_by = $2
-    WHERE id = $1 AND person_id = $2 AND placement <> 'task' AND resolution IS NULL`, [id, personId, now]);
-  if (updated.rowCount) return null;
-  const row = (await q("SELECT placement, resolution FROM collector_progress WHERE id = $1 AND person_id = $2", [id, personId])).rows[0] as { placement: string; resolution: string | null } | undefined;
-  if (!row) return { status: 404, code: "OFF_PLAN_NOT_FOUND", message: "计划外工作不存在" };
-  return row.resolution === "replan" ? null : { status: 409, code: "OFF_PLAN_RESOLVED", message: "这条已经挂到执行事项上了" };
+  return { today, redLines: redLines.map((entry) => entry.line), onTrack, summaries };
 }

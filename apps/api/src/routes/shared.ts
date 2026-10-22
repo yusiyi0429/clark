@@ -13,7 +13,7 @@ import type { ConversationRuntime } from "../conversations.js";
 import type { ConversationCompaction } from "../conversationCompaction.js";
 import type { DriExporter, MeetingActionOutcome, Query } from "../meetingStore.js";
 import type { PreflightAgent } from "../meetingPreflight.js";
-import type { OntologyUpdater, PostMeetingAgent, TranscriptImportResult } from "../outcome.js";
+import type { PostMeetingAgent, TranscriptImportResult } from "../outcome.js";
 import type { RadarService } from "../radar.js";
 import type { PersonalRadarService } from "../personalRadar.js";
 import type { ResearchService } from "../research.js";
@@ -85,7 +85,6 @@ export type RouteContext = {
   personalRadar: PersonalRadarService;
   research: ResearchService;
   driExporter?: DriExporter;
-  ontologyUpdater: OntologyUpdater;
   monthlyPlanService?: MonthlyPlanService;
   monthlyReviewService?: MonthlyReviewService;
   /** 周复盘生成；缺省时重新生成返回 503（server.ts 注入真实服务）。 */

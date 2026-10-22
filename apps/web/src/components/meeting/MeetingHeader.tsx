@@ -9,6 +9,7 @@
  *   分:秒）；点计时弹出一小块，里面是「这场会开完了」。开完之后写「已开完」和几点，不能再按。
  * - `MeetingHeaderActions`：把上面两样和页头右边那一样（会开完了是「会前预审 ｜ 会议记录」两段切换）按页头的约定排好。
  * - `MeetingStatus`：材料上面一行灰字：谁主持、几人参会这类事实，再加这一刻的一件事。
+ * - `feishuLive`：在飞书约上的会跟着飞书会议真实开始和结束（会开到哪一步、入会和改期入口在进度线 MeetingProgress 上）。
  *
  * 「开始会议」同时开始录音（useMeetingRecorder），计时只是这一页的状态；「这场会开完了」停下录音、交给服务端转写，
  * 并写进后台（meeting.end）。天枢没有会中 Co-Agent，所以不写「Co-Agent 在听」，写的是录没录上。
@@ -17,8 +18,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { Check, ChevronDown, Radio } from "lucide-react";
+import { CalendarClock, Check, ChevronDown, Radio } from "lucide-react";
 import { COMPANY_TIMEZONE } from "@/lib/companyTime";
+import type { TMeetingCardPayload } from "@warmap/contracts";
 import s from "@/styles/meeting-header.module.css";
 
 export type MeetingPhase = "idle" | "live" | "ended";
@@ -70,17 +72,43 @@ export function localClock(at: string): string {
   return date.toLocaleString("zh-CN", { timeZone: COMPANY_TIMEZONE, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
+/** 过了预约结束这么久还没收到飞书会议开始，算没开成。 */
+export const MISSED_AFTER_MS = 30 * 60_000;
+
+/**
+ * 在飞书约上的会（booked）跟着飞书会议真实开始和结束，不按预约时间：waiting 还没开（到了预约时间也是）、live 开着、
+ * ended 开完了（收到结束、主持人点了结束、或已进会后流程）、missed 没开成（过了预约结束 30 分钟还没开始，也没找到妙记）。
+ * 不在飞书约上的会为 null，照旧按预约时间算。
+ */
+export type FeishuLive = "waiting" | "live" | "ended" | "missed";
+
+export function feishuLive(
+  payload: Pick<TMeetingCardPayload, "status" | "endsAt" | "endedAt" | "startedAt" | "minutesStatus" | "transcriptCandidate" | "feishuEvent">,
+  now: number,
+): FeishuLive | null {
+  if (payload.status !== "scheduled" || payload.feishuEvent?.status !== "booked") return null;
+  if (payload.endedAt || payload.transcriptCandidate || (payload.minutesStatus ?? "none") !== "none") return "ended";
+  if (payload.startedAt) return "live";
+  return now >= Date.parse(payload.endsAt) + MISSED_AFTER_MS ? "missed" : "waiting";
+}
+
+/** 同上，每 30 秒重算一次：过了预约结束 30 分钟自己变成没开成。 */
+export function useFeishuLive(payload: Parameters<typeof feishuLive>[0]): FeishuLive | null {
+  return feishuLive(payload, useNow(30_000));
+}
+
 /**
  * 这场会在时间线上的哪一段，全站一个颜色（页头时间段、整页、通知栏黑卡的左条）：橙＝即将开、红＝进行中、灰＝已结束。
  * 已结束沿用 `meetingPhase`（后台记了开完、时间已过（hasEnded，含「待确认／待导入记录」）、已开完、已复核）；已取消也归这一段。
  * 没结束的：这一页按过「开始会议」，或者已经到了开始时刻，就是进行中；否则即将开。
+ * 在飞书约上的会（`live` 不为空）以飞书会议真的开始为准：到点没开、没开成都还在即将开这一段。
  */
 export type MeetingTimeline = "upcoming" | "live" | "ended";
 
-export function meetingTimeline(phase: MeetingPhase, scheduledAt: string, now: number, cancelled = false): MeetingTimeline {
+export function meetingTimeline(phase: MeetingPhase, scheduledAt: string, now: number, cancelled = false, live: FeishuLive | null = null): MeetingTimeline {
   if (phase === "ended" || cancelled) return "ended";
   if (phase === "live") return "live";
-  return Date.parse(scheduledAt) <= now ? "live" : "upcoming";
+  return live === null && Date.parse(scheduledAt) <= now ? "live" : "upcoming";
 }
 
 /** 即将开的相对时间：今天写「还有 3 小时」「还有 20 分钟」；不是今天写明天、后天、日期（公司时区的日历日）。 */
@@ -94,15 +122,16 @@ export function meetingCountdown(scheduledAt: string, now: Date): string {
 
 const monthDay = (iso: string) => new Date(iso).toLocaleDateString("zh-CN", { timeZone: COMPANY_TIMEZONE, month: "numeric", day: "numeric" });
 
-/** 时间段前面那几个字：「还有 3 小时」／「会议中」／「已结束 · 10/8」。 */
-export function meetingTimelineLabel(timeline: MeetingTimeline, scheduledAt: string, now: Date, cancelled = false): string {
-  if (timeline === "upcoming") return meetingCountdown(scheduledAt, now);
+/** 时间段前面那几个字：「还有 3 小时」／「未开始」（到点飞书会议还没开）／「没开成」／「会议中」／「已结束 · 10/8」。 */
+export function meetingTimelineLabel(timeline: MeetingTimeline, scheduledAt: string, now: Date, cancelled = false, live: FeishuLive | null = null): string {
+  if (live === "missed") return "没开成";
+  if (timeline === "upcoming") return Date.parse(scheduledAt) <= now.getTime() ? "未开始" : meetingCountdown(scheduledAt, now);
   if (timeline === "live") return "会议中";
   return `${cancelled ? "已取消" : "已结束"} · ${monthDay(scheduledAt)}`;
 }
 
 /** 这一刻（毫秒），每 `every` 毫秒走一次；首帧就是渲染那一刻。 */
-function useNow(every: number): number {
+export function useNow(every: number): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), every);
@@ -111,11 +140,11 @@ function useNow(every: number): number {
   return now;
 }
 
-/** 页头时间段要用的阶段与那几个字；即将开的每 30 秒重算一次，到点自己变成进行中。 */
-export function useMeetingTimeline({ phase, scheduledAt, cancelled = false }: { phase: MeetingPhase; scheduledAt: string; cancelled?: boolean }) {
+/** 页头时间段要用的阶段与那几个字；即将开的每 30 秒重算一次，到点自己变成进行中（在飞书约上的会等飞书会议真的开始）。 */
+export function useMeetingTimeline({ phase, scheduledAt, cancelled = false, live = null }: { phase: MeetingPhase; scheduledAt: string; cancelled?: boolean; live?: FeishuLive | null }) {
   const now = useNow(30_000);
-  const timeline = meetingTimeline(phase, scheduledAt, now, cancelled);
-  return { timeline, label: meetingTimelineLabel(timeline, scheduledAt, new Date(now), cancelled) };
+  const timeline = meetingTimeline(phase, scheduledAt, now, cancelled, live);
+  return { timeline, label: meetingTimelineLabel(timeline, scheduledAt, new Date(now), cancelled, live) };
 }
 
 /** 开会以来过了几秒。时刻由定时器取，不在渲染里取；没在开会就不跑。 */
@@ -136,20 +165,17 @@ function useElapsed(startedAt: number | undefined): number {
 
 /**
  * 页头胶囊里标题前面那一段：日子一小段灰字，时段是整排最醒目的字。读屏读「计划时间 今天 14:00 至 15:30」。
- * 给了 `timeline` 时，日子那一段换成这场会的阶段：橙点 + 相对时间（即将开）、红点呼吸 +「会议中 mm:ss」（进行中）、
- * 灰色对勾 +「已结束 · 10/8」（已结束，时段也跟着变灰）。
+ * 给了 `timeline` 时，日子那一段换成这场会的阶段：橙点 + 相对时间（即将开）、红点呼吸 +「会议中」（进行中；走着的用时只在
+ * 进度线上那一份）、灰色对勾 +「已结束 · 10/8」（已结束，时段也跟着变灰）。
  */
-export function MeetingSlotLabel({ day, slot, timeline, label, since }: { day: string; slot: MeetingSlot; timeline?: MeetingTimeline; label?: string; since?: number }) {
+export function MeetingSlotLabel({ day, slot, timeline, label }: { day: string; slot: MeetingSlot; timeline?: MeetingTimeline; label?: string }) {
   return (
     <span className={s.slot} data-header-lead data-timeline={timeline}>
       <span className={s.sr}>计划时间</span>
       {timeline ? (
         <span className={s.slotState}>
           {timeline === "ended" ? <Check size={13} strokeWidth={2.4} aria-hidden className={s.slotMark} /> : <i className={s.slotDot} aria-hidden />}
-          <span className={s.slotWord}>
-            {label}
-            {timeline === "live" && since !== undefined ? <LiveElapsed since={since} /> : null}
-          </span>
+          <span className={s.slotWord}>{label}</span>
         </span>
       ) : (
         <span className={s.slotDay}>{day}</span>
@@ -162,12 +188,6 @@ export function MeetingSlotLabel({ day, slot, timeline, label, since }: { day: s
       </span>
     </span>
   );
-}
-
-/** 「会议中」后面走着的分:秒（和 MeetingClock 同一个写法）。 */
-function LiveElapsed({ since }: { since: number }) {
-  const seconds = useElapsed(since);
-  return <time className={s.slotElapsed} suppressHydrationWarning> {elapsed(seconds)}</time>;
 }
 
 export function MeetingClock({
@@ -268,22 +288,53 @@ export function MeetingClock({
  * 会议页页头里的那几样，按页头的约定排好：标题前面是计划时段，右边是 `children`（会开完了的「会前预审 ｜ 会议记录」两段切换），
  * 页头右边单独一颗开始会议／计时（`clock` 为空时不放，例如已取消的会）。
  */
-export function MeetingHeaderActions({ day, slot, clock, children, timeline, label, since }: {
+export function MeetingHeaderActions({ day, slot, clock, children, timeline, label, end }: {
   day: string; slot: MeetingSlot; clock?: ReactNode; children?: ReactNode;
   /** 这场会的阶段（见 meetingTimeline）；给了就把日子换成阶段那几个字。 */
-  timeline?: MeetingTimeline; label?: string; since?: number;
+  timeline?: MeetingTimeline; label?: string;
+  /** 页头最右那一格（data-header-end）：会前会中的「重新安排会议」「进入飞书会议」。 */
+  end?: ReactNode;
 }) {
   return (
     <>
-      <MeetingSlotLabel day={day} slot={slot} timeline={timeline} label={label} since={since} />
+      <MeetingSlotLabel day={day} slot={slot} timeline={timeline} label={label} />
       {children}
       {clock}
+      {end}
     </>
   );
 }
 
-/** 材料上面那一行灰字。`facts` 会前会中都写（谁主持、几人参会）；`now` 是这一刻的一件事（待预审、待导入会议记录）。 */
-export function MeetingStatus({ phase, facts, now, endedAt }: { phase: MeetingPhase; facts: (string | undefined)[]; now?: string; endedAt?: string | null }) {
+/**
+ * 页头最右那一格：进入飞书会议是这一页会前会中最要紧的动作，滚到哪都在；重新安排会议是它左边的安静链接
+ * （窄面板只留图标）。进度线只表示走到哪一步，不再插按钮。
+ */
+export function MeetingHeaderEnd({ joinUrl, reschedule }: { joinUrl: string | null; reschedule: ReactNode }) {
+  if (!joinUrl && !reschedule) return null;
+  return (
+    <span className={s.end} data-header-end>
+      {reschedule}
+      {joinUrl ? <a className={s.join} href={joinUrl} target="_blank" rel="noreferrer">进入飞书会议</a> : null}
+    </span>
+  );
+}
+
+/** 「重新安排会议」触发钮的样式和内容（MeetingCard 的 Popover 用 ts-design Button 挂浮层）。 */
+export const RESCHEDULE_CLASS = s.reschedule;
+export function RescheduleLabel() {
+  return (
+    <>
+      <CalendarClock size={16} aria-hidden className={s.rescheduleIcon} />
+      <span className={s.rescheduleText}>重新安排会议</span>
+    </>
+  );
+}
+
+/**
+ * 材料上面那一行灰字。`facts` 会前会中都写（谁主持、几人参会）；`now` 是这一刻的一件事（待预审、待导入会议记录）；
+ * `children` 跟在会前会中那一行后面（飞书会议的入口）。
+ */
+export function MeetingStatus({ phase, facts, now, endedAt, children }: { phase: MeetingPhase; facts: (string | undefined)[]; now?: string; endedAt?: string | null; children?: ReactNode }) {
   if (phase === "ended") {
     const at = endedAt ? localClock(endedAt) : "";
     return (
@@ -295,6 +346,12 @@ export function MeetingStatus({ phase, facts, now, endedAt }: { phase: MeetingPh
   return (
     <p className={s.status} data-phase={phase}>
       {[...facts, now].filter(Boolean).join(" · ")}
+      {children ? <> · {children}</> : null}
     </p>
   );
 }
+
+/** 等妙记的预计用时：飞书妙记一般会后 1–3 分钟生成（10/22 实测）。 */
+export const MINUTES_EXPECTED_MS = 3 * 60_000;
+/** 生成会议卡的预计用时（联调时实测校准；10/21 基线：长会单次调用 17–30 秒）。 */
+export const CARD_EXPECTED_MS = 60_000;

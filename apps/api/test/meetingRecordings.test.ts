@@ -208,6 +208,8 @@ describe("会议录音 → 会议记录候选", () => {
           sizeBytes: 8,
           sha256: createHash("sha256").update("fake mp3").digest("hex"),
           timeAnchor: done.createdAt,
+          url: `${t.publicOrigin}/meetings/${meetingId}#transcript`,
+          contentHash: expect.stringMatching(/^[0-9a-f]{64}$/),
         },
       });
       expect(card.payload.transcriptCandidate.source.fileName).toMatch(/^会议录音 \d{1,2}月\d{1,2}日 \d{2}:\d{2}\.mp3$/);

@@ -50,7 +50,7 @@ function kindFor(name: string, mime: string, allowHtml: boolean): ObjectParsedMa
     : "仅支持 PDF、DOCX 和 Markdown（.md）", "UNSUPPORTED_MATERIAL_TYPE");
 }
 
-function runWorker(path: string, kind: MeetingMime): Promise<{ text: string; pageCount?: number }> {
+export function runWorker(path: string, kind: MeetingMime): Promise<{ text: string; pageCount?: number }> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ["--max-old-space-size=256", fileURLToPath(new URL("./materialParserWorker.mjs", import.meta.url)), path, kind], {
       stdio: ["ignore", "pipe", "pipe"],

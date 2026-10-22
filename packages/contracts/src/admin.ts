@@ -72,7 +72,8 @@ export const AdminFeishuCell = Type.Object({
   ...cell,
   tokenStatus: Type.Union([Type.Literal("active"), Type.Literal("reauth_required"), Type.Null()]),
   authorizedAt: NullableInstant,
-  refreshExpiresAt: NullableInstant,
+  /** 满 365 天飞书一律要求重新授权的那天（授权时刻加 365 天）；续期凭证每次续期都往后挪 7 天，不在这里。 */
+  reauthDueAt: NullableInstant,
   reauthReminderAt: NullableInstant,
 }, { additionalProperties: false });
 export const AdminWorldCell = Type.Object({

@@ -21,7 +21,7 @@ vi.mock("react", async (original) => {
 });
 vi.mock("@/lib/api/client", () => ({ browserApi: api }));
 
-import { AccountMenu } from "./AccountMenu";
+import { AccountMenu, FeishuConnectItem } from "./AccountMenu";
 
 type Element = ReactElement<Record<string, unknown>>;
 function elements(node: ReactNode): Element[] {
@@ -45,7 +45,8 @@ async function open(role: "ceo" | "member" = "ceo") {
   const tree = render(role);
   const popover = elements(tree).find((element) => typeof element.props.onOpenChange === "function")!;
   (popover.props.onOpenChange as (next: boolean) => void)(true);
-  await vi.waitFor(() => expect(api.GET).toHaveBeenCalledTimes(2));
+  // 打开时读三样：会话、声纹、飞书连接。
+  await vi.waitFor(() => expect(api.GET).toHaveBeenCalledTimes(3));
   await Promise.resolve();
   return render(role);
 }
@@ -57,10 +58,11 @@ describe("个人菜单视角和首次引导", () => {
     const assign = vi.fn();
     vi.stubGlobal("window", { location: { assign } });
     api.GET.mockImplementation(async (path: string) => ({ response: { ok: true }, data: path === "/api/auth/session"
-      ? { authenticated: true, canSwitchView: true } : { configured: false } }));
+      ? { authenticated: true, canSwitchView: true } : path === "/api/me/feishu" ? { enabled: true, connected: false } : { configured: false } }));
     api.POST.mockResolvedValue({ response: { ok: true } });
     const tree = await open();
     expect(item(tree, "我的声纹")).toBeUndefined();
+    expect(elements(tree).find((element) => element.type === FeishuConnectItem)?.props).toEqual({ connected: false });
     expect(item(tree, "切换到负责人工作台")).toBeDefined();
     (item(tree, "切换到负责人工作台")!.props.onPress as () => void)();
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/me"));

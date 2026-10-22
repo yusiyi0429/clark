@@ -12,7 +12,6 @@ import { payloadOf, type BattlefieldPayload, type CapabilityPayload, type IssueP
 import { ContextMark, type ContextMarkKind } from "./ContextMark";
 import { HeroButton } from "./HeroButton";
 import { ReferenceButton } from "@/conversation/references";
-import { StrategicConfirmCard, pendingStrategicItems } from "./StrategicConfirmCard";
 import { TianshuMark } from "./TianshuMark";
 import { COMPANY_TIMEZONE, monthDayTime } from "@/lib/companyTime";
 import { MissionCardNoticeGroup } from "./missionCards/MissionCardNoticeGroup";
@@ -21,7 +20,8 @@ import { MonthlyReviewNotices } from "./monthlyReview/MonthlyReviewNotices";
 import { PersonalReviewBoard } from "./monthlyReview/PersonalReviewBoard";
 import { useWeeklyReviewBoard, WeeklyReviewBoard } from "./weeklyReview/WeeklyReviewBoard";
 import { RequestNotices } from "./requests/RequestNotices";
-import { HostDecisionNotices } from "./meeting/HostDecisionNotices";
+import { MeetingCardNotices } from "./meeting/MeetingCardNotices";
+import { MeetingRecordDrop } from "./meeting/MeetingRecordDrop";
 import { CycleCountdown } from "./CycleCountdown";
 import { RADAR_ORIGIN_LABEL, RadarOriginIcon } from "./OriginTag";
 import { preflightInFlight } from "@/cards/meetingIssueModel";
@@ -29,7 +29,7 @@ import n from "@/styles/notifications.module.css";
 
 type RailKind = "decisions" | "meetings" | "research";
 type Tone = "red" | "amber" | "neutral";
-type RailItem = { id: string; title: string; meta: string; tone: Tone; href: string; missionRound?: Card; followUp?: boolean; canReschedule?: boolean };
+type RailItem = { id: string; title: string; meta: string; tone: Tone; href: string; missionRound?: Card; followUp?: boolean; canReschedule?: boolean; meetingId?: string };
 type RailGroup = { kind: RailKind; title: string; subtitle: ReactNode; mark: ContextMarkKind; items: RailItem[] };
 
 const RAIL: Record<RailKind, { title: string; mark: ContextMarkKind }> = {
@@ -127,8 +127,9 @@ export function railGroups(cards: Card[], now: Date = new Date(), viewerId?: str
     return {
       id: card.id,
       title: card.title,
-      meta: followUp ? "会议已结束，待提交记录或重新安排" : sameCompanyDay(new Date(at), now) ? clock(new Date(at)).time : monthDayTime(at),
+      meta: followUp ? "待交记录" : sameCompanyDay(new Date(at), now) ? clock(new Date(at)).time : monthDayTime(at),
       followUp,
+      meetingId: card.objectRef.id,
       canReschedule: card.actions.some((action) => action.actionType === "meeting.reschedule"),
       tone: "neutral",
       href: `/meetings/${card.objectRef.id}`,
@@ -227,14 +228,11 @@ export function NotificationRail({
   onHome,
   homeActive = true,
   currentHref,
-  onCard,
   account,
   viewerId,
 }: {
   cards: Card[];
   onNavigate: (href: string, origin?: Element | null) => void;
-  /** 在通知栏卡上办完的动作（战略议题确认）返回的新 Card。 */
-  onCard?: (card: Card) => void;
   /** 左下角自己的名字：个人菜单。 */
   account?: Account;
   viewerId?: string;
@@ -248,8 +246,7 @@ export function NotificationRail({
   const rail = useRef<HTMLElement>(null);
   const positions = useRef(new Map<string, number>());
   const weeklyReviews = useWeeklyReviewBoard();
-  const strategic = pendingStrategicItems(cards).length;
-  const layoutKey = [`strategic:${strategic}`, ...groups.map((group) => `${group.kind}:${group.items.length}`)].join("|");
+  const layoutKey = groups.map((group) => `${group.kind}:${group.items.length}`).join("|");
 
   // 同成员工作台同步其他拍板人的变更；倒计时本身由分组与卡页共享分钟时钟。会前预审在跑时 5 秒一次，预审一出结果左栏就换上结论。
   const refreshEvery = railRefreshInterval(cards);
@@ -291,8 +288,7 @@ export function NotificationRail({
       />
       <div className={n.noticeList}>
         <CycleCountdown />
-        {onCard ? <StrategicConfirmCard cards={cards} onCard={onCard} onNavigate={onNavigate} /> : null}
-        <HostDecisionNotices meetingBase="/meetings" onNavigate={onNavigate} />
+        <MeetingCardNotices meetingBase="/meetings" onNavigate={onNavigate} />
         <WeeklyReviewBoard onNavigate={onNavigate} state={weeklyReviews} />
         <PersonalReviewBoard onNavigate={onNavigate} />
         <RequestNotices base="/requests" currentHref={currentHref} onNavigate={onNavigate} />
@@ -325,7 +321,7 @@ export function NotificationRail({
                 {group.items.map((item) => item.missionRound ? (
                   <MissionCardNoticeGroup key={item.id} round={payloadOf<TMissionRoundSummary>(item.missionRound)} entry="ceo" embedded currentHref={currentHref} onNavigate={onNavigate} onRefresh={refreshRound} />
                 ) : (
-                  <div key={item.id}>
+                  <RailItemFrame key={item.id} item={item} onNavigate={onNavigate}>{(pick, busy) => <>
                   <HeroButton
                     variant="ghost"
                     size="sm"
@@ -347,9 +343,9 @@ export function NotificationRail({
                   </HeroButton>
                   {item.followUp ? <div className={n.meetingFollowUp}>
                     {item.canReschedule ? <button type="button" onClick={(event) => onNavigate(`${item.href}?meetingAction=reschedule`, event.currentTarget)}>重新安排</button> : null}
-                    <button type="button" onClick={(event) => onNavigate(`${item.href}?meetingAction=transcript`, event.currentTarget)}>上传文字纪要</button>
+                    <button type="button" disabled={busy} onClick={pick}>{busy ? "上传中…" : "上传"}</button>
                   </div> : null}
-                  </div>
+                  </>}</RailItemFrame>
                 ))}
               </div>
             </HeroCard>
@@ -363,4 +359,12 @@ export function NotificationRail({
       ) : null}
     </aside>
   );
+}
+
+/** 通知栏一行：开完待交记录的会整行能拖文件上传（MeetingRecordDrop）；其余照旧。 */
+function RailItemFrame({ item, onNavigate, children }: { item: RailItem; onNavigate: (href: string, from?: Element | null) => void; children: (pick: () => void, busy: boolean) => ReactNode }) {
+  if (!item.followUp || !item.meetingId) return <div>{children(() => undefined, false)}</div>;
+  return <MeetingRecordDrop meetingId={item.meetingId} title={item.title} href={item.href} onNavigate={onNavigate} className={n.meetingDrop} errorClassName={n.meetingDropError}>
+    {children}
+  </MeetingRecordDrop>;
 }

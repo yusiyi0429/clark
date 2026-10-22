@@ -322,7 +322,7 @@
 .readerPaneFoot{display:flex;align-items:center;gap:10px;margin:0;padding:9px 16px;border-top:1px solid #eceef2;font-size:11px;color:#6e7681;flex:none}
 .readerPaneFoot a{margin-left:auto;color:#215ba1}
 
-/* 妙记 Markdown 候选预览（设计 aB4pK）：来源摘要 + 映射表 + 时间锚点 + 抽样发言；全量 turns 不落浏览器。 */
+/* 妙记 Markdown 候选预览（设计 aB4pK）：来源摘要 + 映射表 + 抽样发言；全量 turns 不落浏览器。 */
 .candidateDialog{width:min(880px,calc(100vw - 64px));max-height:min(860px,calc(100dvh - 64px));margin:auto;padding:0;border:1px solid #e1e4e9;border-radius:20px;background:#fff;color:#282c32;box-shadow:0 24px 70px #10151f2e}
 .candidateDialog[open]{display:flex;flex-direction:column}
 .candidateDialog::backdrop{background:#10151f4d}
@@ -421,6 +421,8 @@
   .staleNotice button, .chooseButton, .confirmDecision, .cancelDecision, .revokeButton, .editCancel, .editSave, .candidateReopen {
     min-height: var(--touch-hit, 44px);
   }
+  /* 报错条里的「重试会后抽取」：原来 26 高。 */
+  .error button { min-height: var(--touch-hit, 44px); padding: 0 14px; font-size: 14px; }
   .staleNotice button, .chooseButton, .cancelDecision, .revokeButton, .editCancel, .editSave, .candidateReopen { font-size: 14px; }
   .confirmDecision { min-width: 72px; font-size: 14px; }
   .issueLink { display: inline-flex; align-items: center; min-height: var(--touch-hit, 44px); font-size: 14px; }
@@ -432,6 +434,8 @@
   .itemActions { gap: 8px; }
   .itemActions button { min-height: var(--touch-hit, 44px); padding: 0 14px; border-radius: 10px; font-size: 14px; }
   .actionDigest > summary { min-height: var(--touch-hit, 44px); }
+  /* 会前那一行后面的飞书会议入口：24 → 44 高。 */
+  .feishuAction, .feishuLink { display: inline-flex; align-items: center; min-height: var(--touch-hit, 44px); font-size: 14px; }
 }
 /* 会后页的类型角标与区块计数：手持 13（原来 11–12）。 */
 @media (max-width: 959px) {
@@ -467,3 +471,22 @@
 .divergenceGroup>small{display:block;padding:6px 0 0;color:#4f5866;font-size:12px;font-weight:600}
 .lensAnswers{display:flex;flex-direction:column;gap:4px;margin:6px 0 0;padding:0;list-style:none;color:#8a6220;font-size:12px;line-height:18px}
 .lensAnswers b{margin-right:6px;font-weight:600}
+/* 会后要自己交会议记录时的上传区：一整块虚线，点它选文件；拖文件到主栏任何地方也行。字号、颜色沿用本页已有的。 */
+.recordUpload{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:72px;padding:14px;border:1.5px dashed #d9dde5;border-radius:14px;background:#f7f8fa;color:#215ba1;font:inherit;font-size:13px;font-weight:500;cursor:pointer}
+.recordUpload:hover{border-color:#215ba1;background:#fff}
+.recordUpload:disabled{cursor:default;opacity:.7}
+.recordUpload:focus-visible{outline:2px solid #96beff;outline-offset:2px}
+.recordUpload+.candidateReopen{margin-top:10px}
+/* 替换逐字稿：平时只是一行不显眼的链接，点开才出危险操作区。 */
+.replaceLink{align-self:flex-start;margin-top:4px;padding:4px 0;border:0;background:none;color:#4c545e;font:inherit;font-size:12px;text-decoration:underline;text-decoration-color:#d9dde5;text-underline-offset:3px;cursor:pointer}
+.replaceLink:hover{color:#215ba1;text-decoration-color:currentColor}
+.replaceLink:focus-visible{outline:2px solid #96beff;outline-offset:2px}
+/* 会前那一行灰字后面的飞书会议入口：进入会议是一个安静的链接；没约上是短状态加「重试」，等连飞书是「连接飞书」。 */
+.feishuEntry{display:inline-flex;align-items:center;gap:8px}
+.feishuLink{color:#215ba1;font-size:13px;text-decoration:none}
+.feishuLink:hover{text-decoration:underline;text-underline-offset:3px}
+.feishuFailed{color:#4c545e}
+.feishuAction{min-height:24px;padding:0 10px;border:1px solid #d9dde5;border-radius:999px;background:#f7f8fa;color:#215ba1;font:inherit;font-size:12px;cursor:pointer}
+.feishuAction:hover{border-color:#215ba1;background:#fff}
+.feishuAction:disabled{cursor:default;opacity:.6}
+.feishuLink:focus-visible,.feishuAction:focus-visible{outline:2px solid #96beff;outline-offset:2px}

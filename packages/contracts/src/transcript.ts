@@ -32,6 +32,12 @@ export const TranscriptSourceFormat = Type.Union([
   Type.Literal("volc_asr"),
   /** 飞书妙记开放接口导出的逐字稿（txt，带说话人和时间戳）；timeAnchor 是妙记记下的会议开始时刻。 */
   Type.Literal("feishu_minutes"),
+  /** 主持人上传的飞书妙记 txt 导出（「姓名 hh:mm:ss.mmm」，第一行日期可有可无）。 */
+  Type.Literal("feishu_text"),
+  /** 主持人上传的通用说话人格式：「姓名：内容」行，或没有 `### 文字记录` 标题的「姓名 mm:ss」发言头。 */
+  Type.Literal("speaker_lines"),
+  /** 认不出说话人的会议记录：按段落导入为一个未对上人的说话人「会议纪要」，上传即确认。 */
+  Type.Literal("meeting_notes"),
 ]);
 
 export const TranscriptSource = Type.Object(
@@ -43,6 +49,23 @@ export const TranscriptSource = Type.Object(
     parserVersion: Type.String({ minLength: 1, maxLength: 50 }),
     /** 绝对时间锚点：妙记为生成 turns 时的 Meeting scheduledAt，volc_asr 为录音开始时刻；无锚点时为 null。 */
     timeAnchor: Type.Union([Type.String({ minLength: 1, maxLength: 100 }), Type.Null()]),
+    /** 来源地址：飞书妙记为 FEISHU_WEB_ORIGIN/minutes/<token>；手动上传、录音转写为天枢会议页的逐字稿。旧数据没有。 */
+    url: Type.Optional(Type.String({ minLength: 1, maxLength: 2000 })),
+    /** 来源标题：飞书妙记取妙记标题。 */
+    title: Type.Optional(Type.String({ minLength: 1, maxLength: 300 })),
+    /** 原文全文的摘要值（transcriptContentHash：只统一换行为 LF，UTF-8 SHA-256 hex）；Chat 侧用同一算法核对。 */
+    contentHash: Type.Optional(Type.String({ pattern: "^[0-9a-f]{64}$" })),
+    /** 读取完成时刻（+08:00）。 */
+    capturedAt: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+  },
+  { additionalProperties: false },
+);
+
+/** 飞书妙记里没对上人的说话人（FR-4.2 保留飞书导出的说话人）：id 是合成编号 speaker:<n>，name 是飞书原名；不是参会人。 */
+export const UnmappedSpeaker = Type.Object(
+  {
+    id: Type.String({ pattern: "^speaker:\\d+$", maxLength: 50 }),
+    name: Type.String({ minLength: 1, maxLength: 200 }),
   },
   { additionalProperties: false },
 );
@@ -56,6 +79,8 @@ export const StoredTranscript = Type.Object(
     importedAt: Type.String({ minLength: 1 }),
     /** 来源留痕；原始 Markdown 不落库，只看正文已进入 turns。 */
     source: Type.Optional(TranscriptSource),
+    /** 没对上人的说话人：这些发言的 speakerId 是这里的合成编号。旧数据没有。 */
+    unmappedSpeakers: Type.Optional(Type.Array(UnmappedSpeaker, { maxItems: 50 })),
   },
   { additionalProperties: false },
 );
@@ -282,22 +307,12 @@ export const ReplaceTranscriptRequest = Type.Object(
   { additionalProperties: false },
 );
 
-/** 逐项处理 Action 的输入；itemId 由确定性 actionId 携带，不重复提交。 */
-export const MeetingConfirmItemInput = Type.Object({}, { additionalProperties: false });
-export const MeetingDismissItemInput = Type.Object(
-  { reason: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })) },
-  { additionalProperties: false },
-);
-export const MeetingRevokeEffectInput = Type.Object(
-  { reason: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })) },
-  { additionalProperties: false },
-);
-
 export type TTranscriptSchemaVersion = Static<typeof TranscriptSchemaVersion>;
 export type TTranscriptTurn = Static<typeof TranscriptTurn>;
 export type TWarmapTranscript = Static<typeof WarmapTranscript>;
 export type TTranscriptSourceFormat = Static<typeof TranscriptSourceFormat>;
 export type TTranscriptSource = Static<typeof TranscriptSource>;
+export type TUnmappedSpeaker = Static<typeof UnmappedSpeaker>;
 export type TStoredTranscript = Static<typeof StoredTranscript>;
 export type TTranscriptCandidateTurn = Static<typeof TranscriptCandidateTurn>;
 export type TTranscriptCandidateSpeaker = Static<typeof TranscriptCandidateSpeaker>;
@@ -314,9 +329,6 @@ export type TOutcomeReviewStatus = Static<typeof OutcomeReviewStatus>;
 export type THandoffExportStatus = Static<typeof HandoffExportStatus>;
 export type TOutcomeHandoff = Static<typeof OutcomeHandoff>;
 export type TOutcomeReview = Static<typeof OutcomeReview>;
-export type TMeetingConfirmItemInput = Static<typeof MeetingConfirmItemInput>;
-export type TMeetingDismissItemInput = Static<typeof MeetingDismissItemInput>;
-export type TMeetingRevokeEffectInput = Static<typeof MeetingRevokeEffectInput>;
 export type TMeetingOutcomeItem = Static<typeof MeetingOutcomeItem>;
 export type TOutcomeWarning = Static<typeof OutcomeWarning>;
 export type TOutcomeError = Static<typeof OutcomeError>;

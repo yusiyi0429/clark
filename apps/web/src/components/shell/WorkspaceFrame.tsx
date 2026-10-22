@@ -16,6 +16,7 @@ import { appendQuote, restoreQuotes, type QuotePrefill, type QuoteSource, type T
 import { NARROW_COLUMN_QUERY, saveColumnMode } from "@/conversation/useColumnMode";
 import { prefersReducedMotion, runRouteTransition, supportsViewTransition, type TransitionDirection } from "@/lib/viewTransition";
 import { WhatsNewCard } from "@/components/whatsNew/WhatsNewCard";
+import { MeetingBookingSheet } from "@/components/meeting/MeetingBookingSheet";
 import { ESCAPE_BACK_ATTR, ESCAPE_BACK_EVENT, escapeStep } from "./escapeChain";
 import { popReturn, trimReturns } from "./returnStack";
 import { LoadingMask } from "./LoadingMask";
@@ -69,6 +70,8 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   /** 已发起、新路由还没提交的目标：二级页先打开，右侧盖加载蒙版。路由提交（包括被重定向到别处）就清掉。 */
   const [pending, setPending] = useState<string | null>(null);
   const [m2Available, setM2Available] = useState(false);
+  /** 顶栏「约会议」打开的建会抽屉（CEO 和成员都有）。 */
+  const [booking, setBooking] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
     setM2Available(false);
@@ -583,7 +586,10 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
             data-covered={(detailOpen && !noticeTransition && !closing && !entering && !peek) || undefined}
             style={noticeTransition && !openingEmpty ? { viewTransitionName: "home-board" } : undefined}
           >
-            {m2Available ? <div className={s.m2Entry}><a href="/m2/">目标拆解与协作 <span aria-hidden="true">→</span></a></div> : null}
+            <div className={s.m2Entry}>
+              {viewerId ? <button type="button" onClick={() => setBooking(true)}>约会议</button> : null}
+              {m2Available ? <a href="/m2/">目标拆解与协作 <span aria-hidden="true">→</span></a> : null}
+            </div>
             {home}
           </div>
           {detailOpen ? (
@@ -635,6 +641,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
           </div>
         ) : null}
         <WhatsNewCard />
+        {booking && viewerId ? <MeetingBookingSheet open onClose={() => setBooking(false)} viewer={{ personId: viewerId, role: account.role, displayName: account.displayName }} /> : null}
       </div>
       </ReferenceProvider>
     </WorkspaceContext.Provider>
