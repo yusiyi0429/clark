@@ -1,0 +1,122 @@
+/*
+ * 会议页「挂到」下面那一条进度线（components/meeting/MeetingProgress.tsx）：靠左一行，放不下按步折行，每一步的字不拆开。
+ *   走过的  实心小灰点 + 灰字
+ *   这一步  品牌蓝的点呼吸（进行中用页头时间段同一个红），粗字，后面走着的用时，再后面是这一步的入口
+ *   没到的  浅灰空心点 + 浅灰字
+ * 减少动效时点不呼吸，只留颜色。
+ */
+.progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.step {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+  color: #a3aab5;
+  white-space: nowrap;
+}
+
+.arrow { flex: none; margin: 0 4px 0 2px; color: #c3c8d0; }
+
+.dot {
+  flex: none;
+  box-sizing: border-box;
+  width: 7px;
+  height: 7px;
+  border: 1px solid #c3c8d0;
+  border-radius: 50%;
+}
+
+.step[data-state='done'] { color: #8a919c; }
+.step[data-state='done'] .dot { border-color: #9aa1ac; background: #9aa1ac; }
+
+.step[data-state='current'] { color: #1f2a3d; font-weight: 600; }
+.step[data-state='current'] .dot { width: 8px; height: 8px; border: 0; background: #215ba1; }
+.step[data-tone='breathe'] .dot { animation: progressBreathe 1.6s ease-in-out infinite; }
+.step[data-tone='live'] .dot { background: #e5484d; animation: progressLive 1.6s ease-in-out infinite; }
+.step[data-tone='fail'] .dot { background: #be123c; }
+
+.clock { color: #4c545e; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+@keyframes progressBreathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(33 91 161 / 40%); }
+  50% { box-shadow: 0 0 0 4px rgb(33 91 161 / 0%); opacity: 0.75; }
+}
+
+@keyframes progressLive {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(229 72 77 / 45%); }
+  50% { box-shadow: 0 0 0 4px rgb(229 72 77 / 0%); opacity: 0.75; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step[data-tone] .dot { animation: none; }
+}
+
+:global([data-reduce-motion='true']) .step[data-tone] .dot { animation: none; }
+
+/* 这一步的入口：进入飞书会议是唯一的主按钮，其余是安静的文字链接。 */
+.actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-left: 6px; font-weight: 400; }
+
+.primary {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: #215ba1;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.primary:hover { background: #1b4c86; }
+.primary:focus-visible { outline: 2px solid #215ba1; outline-offset: 2px; }
+
+/* 双类名：重新安排会议的触发钮是 ts-design 的 Button，压过它自带的样式。 */
+.quiet.quiet {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: auto;
+  min-height: 26px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: #4c545e;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: #c7ccd4;
+  text-underline-offset: 3px;
+}
+
+.quiet.quiet:hover { color: #1f2937; text-decoration-color: currentColor; }
+.quiet.quiet:disabled { opacity: 0.45; cursor: default; }
+
+.link { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.link input { width: min(240px, 60vw); height: 28px; padding: 0 10px; border: 1px solid #d9dde5; border-radius: 8px; background: #fff; font: inherit; font-size: 13px; }
+
+.error { color: #be123c; font-size: 12px; }
+
+/* 点触下限（手机端规范 §2 / §3.5）：手持与触屏时入口高 44，贴链接的输入框占满一行。鼠标的电脑不变。 */
+@media (max-width: 959px), (pointer: coarse) {
+  .primary, .quiet.quiet, .link input { min-height: var(--touch-hit, 28px); }
+  .link { flex: 1 1 100%; }
+  .link input { flex: 1; width: auto; }
+}

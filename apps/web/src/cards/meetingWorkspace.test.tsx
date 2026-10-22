@@ -168,7 +168,9 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     ] } });
     const html = render(card, true);
     expect(html).toContain("会议共识");
-    expect(html).toContain("会后结论已确认");
+    // 走到哪一步看进度线：成员不是确认会议卡的人，最后一步是待确认。
+    expect(html).toMatch(/data-step="confirm" data-state="current"[^>]*>.*?待确认</);
+    expect(html).not.toContain("待你确认");
     expect(html).toContain("批准预算");
     expect(html).toContain("提交排期");
     expect(html).toContain("林晓");
@@ -423,17 +425,22 @@ describe("Meeting Outcome 复核", () => {
 });
 
 describe("妙记 Markdown 候选预览", () => {
-  it("自动同步失败才出「上传会议记录」：等妙记、刚开完时不出，失败后出", () => {
-    const ended = { endedAt: "2025-09-24T15:40:00.000Z" };
+  it("自动同步失败才出「上传会议记录」：在飞书约上的会等妙记、刚开完时不出，失败后进度线和会议记录区都出；没在飞书约上的会到了待交记录只在进度线上出", () => {
+    const ended = { endedAt: "2025-09-24T15:40:00.000Z", feishuEvent: { status: "booked", joinUrl: null, organizerId: "p1" } };
     for (const waiting of [{}, { minutesStatus: "waiting", minutesWaitingSince: "2025-09-24T15:41:00.000Z" }, { minutesStatus: "failed", minutesFailure: "not_ready" }]) {
       const html = render(meetingCard({ ...ended, ...waiting, minutesManualImport: false }));
       expect(html).not.toContain(">上传会议记录<");
+      expect(html).toMatch(/data-step="record" data-state="current"[^>]*>.*?等妙记</);
     }
     const manual = render(meetingCard({ ...ended, minutesStatus: "manual", minutesManualImport: true }));
-    expect(manual).toContain(">上传会议记录<");
+    expect(manual.match(/>上传会议记录</g)).toHaveLength(2);
+    expect(manual).toMatch(/data-step="record" data-state="current"[^>]*>.*?待交记录.*?>上传会议记录<\/button>/);
+    const plain = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", minutesManualImport: false }));
+    expect(plain.match(/>上传会议记录</g)).toHaveLength(1);
+    expect(plain).toMatch(/data-step="record" data-state="current"[^>]*>.*?待交记录.*?>上传会议记录<\/button>/);
   });
 
-  it("等妙记时没有大块导入，选文件仍在（页头「自己上传」用）", () => {
+  it("等妙记时没有大块导入，选文件仍在（进度线上的上传用）", () => {
     const html = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", minutesStatus: "waiting", minutesWaitingSince: "2025-09-24T15:41:00.000Z", minutesManualImport: false }));
     expect(html).toContain('aria-label="选择会议记录文件"');
     expect(html).not.toContain(">上传会议记录<");
