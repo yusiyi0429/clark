@@ -30,6 +30,9 @@ export const MEETING_MINUTES_POLL_KIND = "meeting.minutes_poll";
 export const FEISHU_MINUTES_EVENT = "minutes.minute.generated_v1";
 export const FEISHU_MEETING_STARTED_EVENT = "vc.meeting.meeting_started_v1";
 export const FEISHU_MEETING_ENDED_EVENT = "vc.meeting.meeting_ended_v1";
+/** 企业会议开始 / 结束：结构和上面相同、全公司的会都推，作为天枢日历建的会收不到上面两个事件时的保底。 */
+export const FEISHU_ALL_MEETING_STARTED_EVENT = "vc.meeting.all_meeting_started_v1";
+export const FEISHU_ALL_MEETING_ENDED_EVENT = "vc.meeting.all_meeting_ended_v1";
 const POLL_EVERY_MS = 5 * 60_000;
 /** 妙记的开始时刻和会议计划开始时刻最多差多少还算同一场会。 */
 const MATCH_WINDOW_MS = 3 * 60 * 60_000;
@@ -556,6 +559,8 @@ export function meetingMinutesJobs(service: MeetingMinutesService): { handlers: 
       [FEISHU_MINUTES_EVENT]: (payload) => service.onMinuteGenerated(payload),
       [FEISHU_MEETING_STARTED_EVENT]: (payload) => service.onMeetingStarted(payload),
       [FEISHU_MEETING_ENDED_EVENT]: (payload) => service.onMeetingEnded(payload),
+      [FEISHU_ALL_MEETING_STARTED_EVENT]: (payload) => service.onMeetingStarted(payload),
+      [FEISHU_ALL_MEETING_ENDED_EVENT]: (payload) => service.onMeetingEnded(payload),
     },
   };
 }

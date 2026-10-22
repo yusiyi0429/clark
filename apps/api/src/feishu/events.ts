@@ -8,9 +8,11 @@ export const FEISHU_EVENT_KIND = "feishu.event";
  * 长连接订阅的事件；开发者后台「事件与回调」里也要勾上同样的事件。这里只接入、落库、去重，业务处理按事件类型交给 jobs 里注册的处理函数。
  * minutes.minute.generated_v1（妙记生成）是用户身份事件，要主持人授权 minutes:minutes.basic:read 之一；收不到时靠会议链路每 5 分钟的轮询兜底。
  * vc.meeting.meeting_started_v1 / meeting_ended_v1（会议开始 / 结束）是应用身份事件，应用要开 vc:meeting.meetingevent:read 或 vc:meeting:readonly；
- * 飞书只对通过开放平台预约的会发，在飞书约上的会靠它跟着真实开始和结束（meetingMinutes.ts）。
+ * 飞书文档说只对通过开放平台预约的会发；天枢用日历接口建的会不一定算，所以同时订 vc.meeting.all_meeting_started_v1 / all_meeting_ended_v1
+ * （企业会议开始 / 结束，全公司的会都推，结构相同），对不上天枢会议的直接忽略，同一场会两种事件都来时按幂等处理（meetingMinutes.ts）。
  */
-export const FEISHU_SUBSCRIBED_EVENTS = ["im.message.receive_v1", "minutes.minute.generated_v1", "vc.meeting.meeting_started_v1", "vc.meeting.meeting_ended_v1"] as const;
+export const FEISHU_SUBSCRIBED_EVENTS = ["im.message.receive_v1", "minutes.minute.generated_v1", "vc.meeting.meeting_started_v1", "vc.meeting.meeting_ended_v1",
+  "vc.meeting.all_meeting_started_v1", "vc.meeting.all_meeting_ended_v1"] as const;
 export type FeishuEventHandlers = Record<string, (payload: Record<string, unknown>) => Promise<void>>;
 
 /** 至少投递一次：消息类按 message_id，其余按 event_id（1.0 版事件是 uuid）去重。 */

@@ -764,7 +764,8 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
       .toMatchObject({ feishuMeetingId: "vc_3", calendarEventId: "c_0", startTime: new Date("2026-06-01T02:00:05Z"), endTime: null });
     expect(feishuMeetingFromEvent({ event_id: "ev4", meeting: { id: "vc_4", topic: "随手开的会" } })).toBeNull();
     const events = meetingMinutesJobs(createMeetingMinutesService({ pool: { query() {} } as unknown as TestApp["pool"], peopleDirectory: {} as never, outcomeAgent: recordingOutcome(), secret: "s" })).events;
-    for (const type of ["vc.meeting.meeting_started_v1", "vc.meeting.meeting_ended_v1"]) {
+    // 企业会议开始 / 结束作保底：天枢日历建的会收不到上面两个时也能跟上。
+    for (const type of ["vc.meeting.meeting_started_v1", "vc.meeting.meeting_ended_v1", "vc.meeting.all_meeting_started_v1", "vc.meeting.all_meeting_ended_v1"]) {
       expect(FEISHU_SUBSCRIBED_EVENTS).toContain(type);
       expect(events[type]).toBeTypeOf("function");
     }
