@@ -72,13 +72,3 @@ export function weekOf(today: string): { weekStart: string; weekEnd: string } {
   const weekStart = ms - sinceMonday * DAY_MS;
   return { weekStart: toDate(weekStart), weekEnd: toDate(weekStart + 6 * DAY_MS) };
 }
-
-/** 从 today（含）到本周日与 period（YYYY-MM）月末中较早那天，还剩几个工作日。 */
-export function workdaysLeftThisWeek(today: string, period: string): number {
-  const { weekEnd } = weekOf(today);
-  const monthEnd = monthDays(period).at(-1)!.date;
-  const last = weekEnd < monthEnd ? weekEnd : monthEnd;
-  let count = 0;
-  for (let ms = toMs(today), end = toMs(last); ms <= end; ms += DAY_MS) if (isWorkday(toDate(ms))) count += 1;
-  return count;
-}

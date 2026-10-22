@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HOLIDAYS_2026, MAKEUP_2026, isWorkday, monthDays, weekOf, workdaysLeftThisWeek } from "../src/workCalendar.js";
+import { HOLIDAYS_2026, MAKEUP_2026, isWorkday, monthDays, weekOf } from "../src/workCalendar.js";
 
 describe("工作日历", () => {
   it("平常的周一到周五是工作日，周末不是", () => {
@@ -39,21 +39,5 @@ describe("工作日历", () => {
     expect(weekOf("2026-10-19")).toEqual({ weekStart: "2026-10-19", weekEnd: "2026-10-25" });
     expect(weekOf("2026-10-22")).toEqual({ weekStart: "2026-10-19", weekEnd: "2026-10-25" });
     expect(weekOf("2026-12-31")).toEqual({ weekStart: "2026-12-28", weekEnd: "2027-01-03" });
-  });
-
-  it("workdaysLeftThisWeek 从今天（含）数到本周日与月末中较早的那天", () => {
-    expect(workdaysLeftThisWeek("2026-10-22", "2026-10")).toBe(2);
-    expect(workdaysLeftThisWeek("2026-10-25", "2026-10")).toBe(0);
-    expect(workdaysLeftThisWeek("2026-10-30", "2026-10")).toBe(1);
-    expect(workdaysLeftThisWeek("2026-10-26", "2026-10")).toBe(5);
-  });
-
-  it("本周里的法定假日不算、周六补班要算", () => {
-    expect(workdaysLeftThisWeek("2026-10-01", "2026-10")).toBe(0);
-    expect(workdaysLeftThisWeek("2026-10-05", "2026-10")).toBe(3);
-  });
-
-  it("今天已过月末时没有剩余工作日", () => {
-    expect(workdaysLeftThisWeek("2026-11-02", "2026-10")).toBe(0);
   });
 });

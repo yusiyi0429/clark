@@ -41,7 +41,7 @@ export type DayTimelineProps = {
 
 /**
  * 本周还剩几个工作日：从今天（含）数到本周日，只数 days 里的日子（即截到月末）。
- * 和 api 的 workdaysLeftThisWeek 同一算法；工作日直接用 days 上按节假日日历算好的标记，前端不另存假期表。
+ * 工作日直接用 days 上按节假日日历算好的标记，前端不另存假期表。
  */
 export function workdaysLeftThisWeek(days: THomePlanDay[], today: string, weekEnd: string): number {
   return days.filter((day) => day.workday && day.date >= today && day.date <= weekEnd).length;
