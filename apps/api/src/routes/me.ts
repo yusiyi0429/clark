@@ -1,10 +1,11 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
+import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
 import { acceptMyTask, addTaskCollaborators, clearMyTaskSubmission, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, reopenMyTask, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
 import { draftTaskAcceptance } from "../taskAcceptanceDraft.js";
 import { readMonthPlan, saveMonthPlan } from "../monthPlan.js";
+import { readHomePlan } from "../homePlan.js";
 import { companyPeriod } from "../monthlyPlans.js";
 import { personDisplayNames } from "../people.js";
 import { canUseMemberView } from "../memberAccess.js";
@@ -54,6 +55,8 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     ]);
     return { myTasks, work, radar, weeklySync };
   });
+  app.get("/api/me/home-plan", { preHandler: requireMember, schema: { response: { 200: HomePlanResponse } } }, async (req) =>
+    readHomePlan(q, req.person!, ctx.now(), { planTasks: ctx.planTasks, names: names() }));
 
   app.get("/api/me/tokens", { preHandler: requirePerson, schema: { response: { 200: ListPersonalTokensResponse } } }, async (req) => ({
     tokens: await listPersonalTokens(q, req.person!.personId), mcpPath: "/mcp/me" as const, mcpUrl: `${ctx.env.publicOrigin.replace(/\/$/, "")}/mcp/me`,

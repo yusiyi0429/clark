@@ -1829,6 +1829,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/home-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 成员首页的 Mission 计划：本月 Mission、签定关口、计划点、Task 与分好三栏的执行事项；本月没有 Mission 时回退到最近一个有的月份 */
+        get: operations["getMyHomePlan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/battlefields/{id}": {
         parameters: {
             query?: never;
@@ -9027,6 +9044,194 @@ export interface components {
             weeklySync: {
                 reason: "no_connection" | "not_synced";
             } | null;
+        };
+        HomePlanDay: {
+            date: string;
+            workday: boolean;
+        };
+        HomePlanGate: {
+            missionId: string;
+            date: string;
+            label: string;
+        };
+        HomePlanMark: {
+            /** Format: uuid */
+            id: string;
+            missionId: string;
+            date: string;
+            label: string;
+        };
+        HomePlanTask: {
+            taskId: string;
+            missionId: string;
+            name: string;
+            doneDefinition: string | null;
+            criteria: string[];
+        };
+        HomePlanMission: {
+            missionId: string;
+            code: string;
+            title: string;
+            cardId: string | null;
+            color: string;
+        };
+        HomePlanActivity: {
+            item: {
+                id: string;
+                version: number;
+                title: string;
+                status: "not_started" | "in_progress" | "done" | "returned";
+                source: "meeting" | "self" | "plan" | "agent";
+                startDate: string | null;
+                dueDate: string | null;
+                doneDefinition: string | null;
+                mission: {
+                    missionId: string;
+                    title: string;
+                    cardId: string;
+                    period: string;
+                    battlefieldName: string;
+                    step: number;
+                    steps: number;
+                } | null;
+                waitingOn: {
+                    taskId: string;
+                    title: string;
+                } | null;
+                owner: {
+                    personId: string;
+                    name: string;
+                };
+                collaborators: {
+                    personId: string;
+                    name: string;
+                }[];
+                latestProgress: {
+                    body: string;
+                    source: "web" | "codex" | "claude" | "github" | "other";
+                    author: {
+                        personId: string;
+                        name: string;
+                    };
+                    createdAt: string;
+                } | null;
+                returnReason: string | null;
+                origin: {
+                    /** @constant */
+                    type: "meeting";
+                    meetingId: string;
+                    meetingTitle: string;
+                    quote: string | null;
+                } | null;
+                awaitingAcceptance: boolean;
+                planTaskId: string | null;
+                createdAt: string;
+                updatedAt: string;
+            };
+            column: "done" | "week" | "later";
+            overdue: boolean;
+        };
+        HomePlanResponse: {
+            period: string;
+            fallbackFrom: string | null;
+            today: string;
+            weekStart: string;
+            weekEnd: string;
+            days: {
+                date: string;
+                workday: boolean;
+            }[];
+            missions: {
+                missionId: string;
+                code: string;
+                title: string;
+                cardId: string | null;
+                color: string;
+            }[];
+            gates: {
+                missionId: string;
+                date: string;
+                label: string;
+            }[];
+            marks: {
+                /** Format: uuid */
+                id: string;
+                missionId: string;
+                date: string;
+                label: string;
+            }[];
+            tasks: {
+                taskId: string;
+                missionId: string;
+                name: string;
+                doneDefinition: string | null;
+                criteria: string[];
+            }[];
+            activities: {
+                item: {
+                    id: string;
+                    version: number;
+                    title: string;
+                    status: "not_started" | "in_progress" | "done" | "returned";
+                    source: "meeting" | "self" | "plan" | "agent";
+                    startDate: string | null;
+                    dueDate: string | null;
+                    doneDefinition: string | null;
+                    mission: {
+                        missionId: string;
+                        title: string;
+                        cardId: string;
+                        period: string;
+                        battlefieldName: string;
+                        step: number;
+                        steps: number;
+                    } | null;
+                    waitingOn: {
+                        taskId: string;
+                        title: string;
+                    } | null;
+                    owner: {
+                        personId: string;
+                        name: string;
+                    };
+                    collaborators: {
+                        personId: string;
+                        name: string;
+                    }[];
+                    latestProgress: {
+                        body: string;
+                        source: "web" | "codex" | "claude" | "github" | "other";
+                        author: {
+                            personId: string;
+                            name: string;
+                        };
+                        createdAt: string;
+                    } | null;
+                    returnReason: string | null;
+                    origin: {
+                        /** @constant */
+                        type: "meeting";
+                        meetingId: string;
+                        meetingTitle: string;
+                        quote: string | null;
+                    } | null;
+                    awaitingAcceptance: boolean;
+                    planTaskId: string | null;
+                    createdAt: string;
+                    updatedAt: string;
+                };
+                column: "done" | "week" | "later";
+                overdue: boolean;
+            }[];
+        };
+        CreatePlanMarkRequest: {
+            missionId: string;
+            date: string;
+            label: string;
+        };
+        PatchPlanMarkRequest: {
+            date?: string;
+            label?: string;
         };
         WeeklySyncReminder: {
             reason: "no_connection" | "not_synced";
@@ -16397,6 +16602,44 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyHomePlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 首页计划 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomePlanResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -113,6 +113,7 @@ import { realRealtimeSessionDeps, type RealtimeSessionDeps } from "./tencentAsrR
 import { realDictationPolishDeps, type DictationPolishDeps } from "./dictationPolish.js";
 import { createThreadIntroAgent, type ThreadIntroAgent } from "./threadIntro.js";
 import { createTaskAcceptanceAgent, type TaskAcceptanceAgent } from "./taskAcceptanceDraft.js";
+import { emptyPlanTaskSource, type PlanTaskSource } from "./planTasks.js";
 import { personDisplayNames } from "./people.js";
 import { listPendingIssueSummaries } from "./issues.js";
 
@@ -231,6 +232,7 @@ export async function buildApp({
   dictationPolishDeps = realDictationPolishDeps,
   threadIntroAgent,
   taskAcceptanceAgent,
+  planTasks,
   materialAnnotationAgent,
   missionCardAnnotationAgent,
   missionCardReviewAgent,
@@ -284,6 +286,8 @@ export async function buildApp({
   dictationPolishDeps?: DictationPolishDeps;
   threadIntroAgent?: ThreadIntroAgent;
   taskAcceptanceAgent?: TaskAcceptanceAgent;
+  /** 首页 Task 行的来源；缺省一个 Task 都没有（测试注入假实现）。 */
+  planTasks?: PlanTaskSource;
   materialAnnotationAgent?: MaterialAnnotationAgent;
   missionCardAnnotationAgent?: MissionCardAnnotationAgent;
   missionCardReviewAgent?: MissionCardReviewAgent;
@@ -621,6 +625,7 @@ export async function buildApp({
     threadIntroAgent: threadIntroAgent ?? createThreadIntroAgent(pool, env),
     missionCardDraftAgent: missionCardDraftAgent ?? createMissionCardDraftAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.heavyModel }),
     taskAcceptanceAgent: taskAcceptanceAgent ?? createTaskAcceptanceAgent(pool, env),
+    planTasks: planTasks ?? emptyPlanTaskSource,
     materialStorageDir,
     conversationAttachmentStorageDir,
     conversationTurnTimeoutMs,
