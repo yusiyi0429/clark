@@ -1,6 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { MeetingOutcomeState, StoredTranscript, TranscriptCandidateProjection } from "./transcript.js";
-import { MeetingAttendees, MeetingDecisionView, MeetingMinutesStatus } from "./meetingDecisions.js";
+import { MeetingAttendees, MeetingDecisionView, MeetingMinutesFailure, MeetingMinutesStatus, PickedWorldAnchor } from "./meetingDecisions.js";
+import { RequestPerson } from "./requests.js";
 
 export const MeetingStatus = Type.Union([
   Type.Literal("scheduled"),
@@ -496,6 +497,16 @@ export const MemberMeetingsResponse = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * 天枢建会后自动在飞书约上（用建会的人本人的授权，他是组织者）：pending 排上了 / booked 约上了 / waiting_auth 等他连飞书 /
+ * failed 飞书报错（可重试）/ cancelled 会取消了、日程已删。joinUrl 是进入飞书会议的链接；organizerId 是约的人（天枢 person_id）。
+ */
+export const MeetingFeishuEventStatus = Type.Union([Type.Literal("pending"), Type.Literal("booked"), Type.Literal("waiting_auth"), Type.Literal("failed"), Type.Literal("cancelled")]);
+export const MeetingFeishuEvent = Type.Object(
+  { status: MeetingFeishuEventStatus, joinUrl: Type.Union([Type.String(), Type.Null()]), organizerId: Type.String() },
+  { additionalProperties: false },
+);
+
 export const MeetingCardPayload = Type.Object(
   {
     status: MeetingStatus,
@@ -504,8 +515,12 @@ export const MeetingCardPayload = Type.Object(
     endsAt: Type.String(),
     /** 「这场会开完了」的时刻；不改变 status，held 仍只表示已有确认的 Transcript。 */
     endedAt: Type.Union([Type.String(), Type.Null()]),
+    /** 在飞书约上的会：飞书会议真实开始的时刻（收到「会议开始」事件）；没开始或不在飞书约的会为 null。 */
+    startedAt: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     hasEnded: Type.Optional(Type.Boolean()),
     leadDriId: Type.String(),
+    /** 建会的人（没记时为 null，按主持人算）：和主持人一样能再读妙记、贴妙记链接。 */
+    createdBy: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     ceoParticipantId: Type.String(),
     participants: Type.Array(MeetingParticipant),
     issueIds: Type.Array(Type.String()),
@@ -520,10 +535,18 @@ export const MeetingCardPayload = Type.Object(
     recording: Type.Union([MeetingRecordingSummary, Type.Null()]),
     /** 妙记：开完会后等飞书生成（waiting），拿不到时退回手动上传（manual）。 */
     minutesStatus: Type.Optional(MeetingMinutesStatus),
+    /** 妙记读取失败（failed）时的原因；其余为 null。 */
+    minutesFailure: Type.Optional(Type.Union([MeetingMinutesFailure, Type.Null()])),
+    /** 开始等妙记的时刻（waiting、读取失败时记下）；没等过为 null。 */
+    minutesWaitingSince: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    /** 自动同步失败、要手动导入会议记录：manual；读取失败且不是原文还没好；开完超过 48 小时还没有逐字稿和候选。 */
+    minutesManualImport: Type.Optional(Type.Boolean()),
     /** 实际参会的人（飞书名单；拿不到时是手填的参会人）。 */
     attendees: Type.Optional(MeetingAttendees),
     /** 会后分层确认的「会上定了 X」。 */
     decisions: Type.Optional(Type.Array(MeetingDecisionView)),
+    /** 在飞书约上这场会：没配飞书、旧会为 null。 */
+    feishuEvent: Type.Optional(Type.Union([MeetingFeishuEvent, Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -543,6 +566,22 @@ export const CreateMeetingRequest = Type.Object(
     ceoParticipantId: PersonId,
     participants: ParticipantIds,
     issueIds: IssueIdList,
+  },
+  { additionalProperties: false },
+);
+
+/**
+ * 预约建会（POST /api/meetings）：带起止、挂点（1..10）；只存天枢，不写本体。
+ * 成员只能给自己建（leadDriId 缺省或等于本人）；CEO 必须从 DRI 里指定主持人。
+ */
+export const MeetingBookingRequest = Type.Object(
+  {
+    title: Type.String({ minLength: 1, maxLength: 200 }),
+    scheduledAt: IsoDateTime,
+    endsAt: IsoDateTime,
+    leadDriId: Type.Optional(PersonId),
+    participants: Type.Optional(Type.Array(PersonId, { maxItems: 50 })),
+    anchors: Type.Array(PickedWorldAnchor, { minItems: 1, maxItems: 10 }),
   },
   { additionalProperties: false },
 );
@@ -567,6 +606,9 @@ export const PeopleDirectoryResponse = Type.Object(
   },
   { additionalProperties: false },
 );
+
+/** 人员名册（CEO 和成员都能读）：只有真人的 personId 和名字，约会议选参会人用；同传话起草里的 directory。 */
+export const PersonDirectoryResponse = Type.Object({ people: Type.Array(RequestPerson, { maxItems: 200 }) }, { additionalProperties: false });
 
 export const UpdateMeetingDraftRequest = Type.Object(
   {
@@ -674,7 +716,10 @@ export type TMeetingRecordingSummary = Static<typeof MeetingRecordingSummary>;
 export type TMeetingRecording = Static<typeof MeetingRecording>;
 export type TStartMeetingRecordingResponse = Static<typeof StartMeetingRecordingResponse>;
 export type TMeetingCardPayload = Static<typeof MeetingCardPayload>;
+export type TMeetingFeishuEvent = Static<typeof MeetingFeishuEvent>;
 export type TCreateMeetingRequest = Static<typeof CreateMeetingRequest>;
+export type TMeetingBookingRequest = Static<typeof MeetingBookingRequest>;
+export type TPersonDirectoryResponse = Static<typeof PersonDirectoryResponse>;
 export type TJoinMeetingRequest = Static<typeof JoinMeetingRequest>;
 export type TUpdateMeetingDraftRequest = Static<typeof UpdateMeetingDraftRequest>;
 export type TRequestSupplementRequest = Static<typeof RequestSupplementRequest>;

@@ -1,0 +1,555 @@
+{
+  "id": "S001",
+  "title": "co-agent 交互评审（脱敏样例）",
+  "date": "2026-10-20 14:00",
+  "type": "产品会",
+  "organizer": "林晓",
+  "turns": 19,
+  "speakers": {
+    "smoke-ceo": "周明远",
+    "smoke-pm": "林晓",
+    "smoke-fe": "陈一凡",
+    "smoke-be": "吴桐",
+    "smoke-pilot": "许诺",
+    "smoke-ops": "郑可"
+  },
+  "strippedIssueIds": 12,
+  "timings": {
+    "extractMs": 51068,
+    "layerMs": 11995,
+    "impactMs": 45380
+  },
+  "summary": "- **交互与接口形成候选安排**：桌面端拟采用左右两栏，手机端保留单栏；交互新稿、页面重排和纪要接口切换均有明确期限。\n- **企业微信接入暂缓**：候选重启条件为形成试点数据后重新讨论。\n- **试点扩容待一号位判断**：将本月试点从 3 家扩大到 10 家会改变许诺当前战役范围，并增加交付、服务和数据隔离投入。\n- **另有上线事项**：官网活动页计划于 10 月 26 日上线，与本次产品事项无关。",
+  "items": [
+    {
+      "id": "item-1",
+      "kind": "decision",
+      "text": "候选决策：桌面端会议内容与对话采用左右两栏，手机端采用单栏，对话从底部入口全屏打开。",
+      "turnId": "turn-0006",
+      "quote": "co-agent 改成左右两栏，手机单栏",
+      "speakerId": "smoke-pm",
+      "ownerPersonId": "smoke-pm",
+      "issueId": null,
+      "judgmentKind": null,
+      "parentItemId": null,
+      "review": {
+        "status": "pending",
+        "effectRef": null
+      }
+    },
+    {
+      "id": "item-2",
+      "kind": "todo",
+      "text": "林晓于 2026 年 10 月 23 日前将交互新稿交给陈一凡。",
+      "turnId": "turn-0006",
+      "quote": "我这周五前把新稿给一凡。",
+      "speakerId": "smoke-pm",
+      "ownerPersonId": "smoke-pm",
+      "issueId": null,
+      "judgmentKind": null,
+      "parentItemId": null,
+      "review": {
+        "status": "pending",
+        "effectRef": null
+      },
+      "dueDate": "2026-10-23"
+    },
+    {
+      "id": "item-3",
+      "kind": "todo",
+      "text": "陈一凡于 2026 年 10 月 31 日前完成会议页重排，拆分纪要区和对话区。",
+      "turnId": "turn-0005",
+      "quote": "月底前能做完",
+      "speakerId": "smoke-fe",
+      "ownerPersonId": "smoke-fe",
+      "issueId": null,
+      "judgmentKind": null,
+      "parentItemId": null,
+      "review": {
+        "status": "pending",
+        "effectRef": null
+      },
+      "dueDate": "2026-10-31"
+    },
+    {
+      "id": "item-4",
+      "kind": "decision",
+      "text": "候选决策：纪要区切换至包含说话人和时间戳的新接口。",
+      "turnId": "turn-0011",
+      "quote": "纪要接口切到 v2",
+      "speakerId": "smoke-pm",
+      "ownerPersonId": "smoke-pm",
+      "issueId": null,
+      "judgmentKind": null,
+      "parentItemId": "item-1",
+      "review": {
+        "status": "pending",
+        "effectRef": null
+      }
+    },
+    {
+      "id": "item-5",
+      "kind": "todo",
+      "text": "吴桐于 2026 年 10 月 28 日前提供包含说话人和时间戳的新纪要接口。",
+      "turnId": "turn-0010",
+      "quote": "28 号前给。",
+      "speakerId": "smoke-be",
+      "ownerPersonId": "smoke-be",
+      "issueId": null,
+      "judgmentKind": null,
+      "parentItemId": null,
+      "review": {
+        "status": "pending",
+        "effectRef": null
+      },
+      "dueDate": "2026-10-28"
+    },
+    {
+      "id": "item-6",
+      "kind": "todo",
+      "text": "吴桐将旧纪要接口保留至 2026 年 10 月 31 日，并在此后下线。",
+      "turnId": "turn-0010",
+      "quote": "旧接口我保留到 31 号，31 号之后下线。",
+      "speakerId": "smoke-be",
+      "ownerPersonId": "smoke-be",
+      "issueId": null,
+      "judgmentKind": null,
+      "parentItemId": null,
+      "review": {
+        "status": "pending",
+        "effectRef": null
+      },
+      "dueDate": "2026-10-31"
+    },
+    {
+      "id": "item-8",
+      "kind": "decision",
+      "text": "候选决策：暂缓企业微信接入。",
+      "turnId": "turn-0013",
+      "quote": "企业微信这个先不急",
+      "speakerId": "smoke-ceo",
+      "ownerPersonId": "smoke-ceo",
+      "issueId": null,
+      "judgmentKind": null,
+      "parentItemId": "item-1",
+      "review": {
+        "status": "pending",
+        "effectRef": null
+      }
+    },
+    {
+      "id": "item-9",
+      "kind": "reopenWhen",
+      "text": "重启条件：形成可供判断的试点数据后，重新讨论企业微信接入。",
+      "turnId": "turn-0013",
+      "quote": "看试点数据再说。",
+      "speakerId": "smoke-ceo",
+      "ownerPersonId": "smoke-ceo",
+      "issueId": null,
+      "judgmentKind": null,
+      "parentItemId": "item-8",
+      "review": {
+        "status": "pending",
+        "effectRef": null
+      }
+    },
+    {
+      "id": "item-10",
+      "kind": "strategic",
+      "text": "待一号位判断：是否将本月试点客户从 3 家扩大到 10 家。该改动超出许诺当前战役的 3 家客户范围，并增加交付、服务和数据隔离工作的投入。",
+      "turnId": "turn-0014",
+      "quote": "我想把试点从 3 家扩到 10 家",
+      "speakerId": "smoke-pilot",
+      "ownerPersonId": "smoke-pilot",
+      "issueId": null,
+      "judgmentKind": "resource_allocation",
+      "parentItemId": null,
+      "review": {
+        "status": "pending",
+        "effectRef": null
+      },
+      "title": "试点范围扩大至10家",
+      "brief": "拟将本月试点范围从 3 家扩大到 10 家，会增加交付与服务人力，并要求重新评估数据隔离。"
+    },
+    {
+      "id": "item-11",
+      "kind": "open",
+      "text": "待澄清事项：试点若扩大到 10 家，吴桐需重新评估数据隔离方案。",
+      "turnId": "turn-0016",
+      "quote": "数据隔离这块我现在是按 3 家做的，要重新评估。",
+      "speakerId": "smoke-be",
+      "ownerPersonId": "smoke-be",
+      "issueId": null,
+      "judgmentKind": null,
+      "parentItemId": null,
+      "review": null
+    },
+    {
+      "id": "item-12",
+      "kind": "todo",
+      "text": "郑可负责的官网活动页计划于 2026 年 10 月 26 日上线。",
+      "turnId": "turn-0018",
+      "quote": "官网活动页 26 号上线",
+      "speakerId": "smoke-ops",
+      "ownerPersonId": "smoke-ops",
+      "issueId": null,
+      "judgmentKind": null,
+      "parentItemId": null,
+      "review": {
+        "status": "pending",
+        "effectRef": null
+      },
+      "dueDate": "2026-10-26"
+    }
+  ],
+  "warnings": [
+    {
+      "candidate": {
+        "dueDate": "2026-10-31",
+        "kind": "todo",
+        "ownerPersonId": "smoke-fe",
+        "quote": "一凡月底前切过去。",
+        "text": "陈一凡于 2026 年 10 月 31 日前完成纪要区的新接口切换。",
+        "turnId": "turn-0011"
+      },
+      "reason": "owner 无法由该 turn 确定: smoke-fe"
+    }
+  ],
+  "layered": {
+    "decisions": [
+      {
+        "affects": [
+          "smoke-pm",
+          "smoke-fe"
+        ],
+        "itemIds": [
+          "item-1",
+          "item-2",
+          "item-3"
+        ],
+        "recommendation": "confirmed",
+        "recommendationReason": "林晓说“那就定了”，周明远随后确认“可以，就这么定”。",
+        "statement": "桌面端改为左右两栏、手机端保留单栏；林晓23日前交稿，陈一凡月底前完成重排。",
+        "why": "林晓的交互稿交付时间和陈一凡的会议页开发方案、工期随之确定。"
+      },
+      {
+        "affects": [
+          "smoke-be",
+          "smoke-fe"
+        ],
+        "itemIds": [
+          "item-4",
+          "item-5",
+          "item-6"
+        ],
+        "recommendation": "confirmed",
+        "recommendationReason": "林晓明确总结接口切换安排，吴桐和陈一凡均未反对。",
+        "statement": "纪要区切换至含说话人和时间戳的新接口，吴桐28日前交付，旧接口月底后下线。",
+        "why": "吴桐的新旧接口交付安排和陈一凡月底前的联调、切换计划随之确定。"
+      },
+      {
+        "affects": [
+          "smoke-pilot"
+        ],
+        "itemIds": [
+          "item-8",
+          "item-9"
+        ],
+        "recommendation": "confirmed",
+        "recommendationReason": "周明远明确说“先不急”，并将形成试点数据作为重新讨论的条件。",
+        "statement": "企业微信接入暂缓，形成可供判断的试点数据后再讨论。",
+        "why": "许诺对提出企业微信需求的试点客户需调整接入安排和预期。"
+      }
+    ]
+  },
+  "hostRows": [
+    {
+      "statement": "桌面端改为左右两栏、手机端保留单栏；林晓23日前交稿，陈一凡月底前完成重排。",
+      "itemIds": [
+        "item-1",
+        "item-2",
+        "item-3"
+      ],
+      "primary": {
+        "id": "item-1",
+        "kind": "decision",
+        "text": "候选决策：桌面端会议内容与对话采用左右两栏，手机端采用单栏，对话从底部入口全屏打开。",
+        "turnId": "turn-0006",
+        "quote": "co-agent 改成左右两栏，手机单栏",
+        "speakerId": "smoke-pm",
+        "ownerPersonId": "smoke-pm",
+        "issueId": null,
+        "judgmentKind": null,
+        "parentItemId": null,
+        "review": {
+          "status": "pending",
+          "effectRef": null
+        }
+      },
+      "recommendation": "confirmed",
+      "why": "林晓说“那就定了”，周明远随后确认“可以，就这么定”。",
+      "speaker": "林晓"
+    },
+    {
+      "statement": "纪要区切换至含说话人和时间戳的新接口，吴桐28日前交付，旧接口月底后下线。",
+      "itemIds": [
+        "item-4",
+        "item-5",
+        "item-6"
+      ],
+      "primary": {
+        "id": "item-4",
+        "kind": "decision",
+        "text": "候选决策：纪要区切换至包含说话人和时间戳的新接口。",
+        "turnId": "turn-0011",
+        "quote": "纪要接口切到 v2",
+        "speakerId": "smoke-pm",
+        "ownerPersonId": "smoke-pm",
+        "issueId": null,
+        "judgmentKind": null,
+        "parentItemId": "item-1",
+        "review": {
+          "status": "pending",
+          "effectRef": null
+        }
+      },
+      "recommendation": "confirmed",
+      "why": "林晓明确总结接口切换安排，吴桐和陈一凡均未反对。",
+      "speaker": "林晓"
+    },
+    {
+      "statement": "企业微信接入暂缓，形成可供判断的试点数据后再讨论。",
+      "itemIds": [
+        "item-8",
+        "item-9"
+      ],
+      "primary": {
+        "id": "item-8",
+        "kind": "decision",
+        "text": "候选决策：暂缓企业微信接入。",
+        "turnId": "turn-0013",
+        "quote": "企业微信这个先不急",
+        "speakerId": "smoke-ceo",
+        "ownerPersonId": "smoke-ceo",
+        "issueId": null,
+        "judgmentKind": null,
+        "parentItemId": "item-1",
+        "review": {
+          "status": "pending",
+          "effectRef": null
+        }
+      },
+      "recommendation": "confirmed",
+      "why": "周明远明确说“先不急”，并将形成试点数据作为重新讨论的条件。",
+      "speaker": "周明远"
+    }
+  ],
+  "impacts": [
+    {
+      "statement": "CEO 同意：试点范围扩大至10家（拟将本月试点范围从 3 家扩大到 10 家，会增加交付与服务人力，并要求重新评估数据隔离。）",
+      "tier": "strategic",
+      "cards": [
+        {
+          "action": {
+            "due": "2026-10-31",
+            "kind": "do",
+            "text": "按 10 家试点客户重排开发与投用计划，确保月底前完成 co-agent 会议、任务两个场景并投入试用"
+          },
+          "confidence": "high",
+          "impact": "会上确认本月试点范围从 3 家扩大到 10 家。你负责的「Co-agent 第一版交互定稿」中，前后端开发完成后的试用范围随之扩大到 10 家客户。",
+          "personId": "smoke-pm",
+          "targets": [
+            {
+              "id": "m-pm",
+              "index": 0,
+              "type": "mission"
+            }
+          ],
+          "title": "交互定稿要支持10家试点",
+          "why": "扩大试点需要新增 7 家客户的交付与服务投入。你的战役原定只让 3 家客户用起来，月底前的开发与投用安排需要按 10 家重新排定。"
+        },
+        {
+          "action": {
+            "due": "2026-10-30",
+            "kind": "do",
+            "text": "按 10 家客户重新评估数据隔离方案，补齐各客户独立数据库设计并完成安全评审"
+          },
+          "confidence": "high",
+          "impact": "会上确认本月试点从 3 家扩大到 10 家，并要求重新评估数据隔离。你负责的「试点客户数据隔离」需要按 10 家客户检查独立数据库方案和安全评审范围。",
+          "personId": "smoke-be",
+          "targets": [
+            {
+              "id": "t-be-2",
+              "index": 0,
+              "type": "task"
+            },
+            {
+              "id": "t-be-2",
+              "index": 0,
+              "type": "acceptance"
+            },
+            {
+              "id": "t-be-2",
+              "index": 1,
+              "type": "acceptance"
+            }
+          ],
+          "title": "数据隔离按10家重新评估",
+          "why": "客户数量增加后，独立数据库的数量和隔离边界随之扩大，原方案的投入与风险判断可能不再适用。该任务的两项验收均受影响，需要在原截止日前按新范围完成。"
+        },
+        {
+          "action": {
+            "due": "2026-10-25",
+            "kind": "do",
+            "text": "把签约、培训和月底使用计划扩到 10 家客户，按各任务原截止日完成对应材料与协议"
+          },
+          "confidence": "high",
+          "impact": "会上确认本月试点范围从 3 家扩大到 10 家。你负责的「B 端试点上线」及「试点客户培训材料」「试点客户签约」中的 3 家客户范围都改为 10 家。",
+          "personId": "smoke-pilot",
+          "targets": [
+            {
+              "id": "m-pilot",
+              "index": 0,
+              "type": "mission"
+            },
+            {
+              "id": "t-pilot-1",
+              "index": 0,
+              "type": "acceptance"
+            },
+            {
+              "id": "t-pilot-2",
+              "index": 0,
+              "type": "acceptance"
+            }
+          ],
+          "title": "试点签约和培训扩到10家",
+          "why": "新增 7 家客户会直接增加签约、培训和服务工作。签约最早于 10 月 25 日到期，需要从该节点开始按 10 家执行，并确保月底使用目标覆盖扩大后的试点范围。"
+        }
+      ]
+    },
+    {
+      "statement": "桌面端改为左右两栏、手机端保留单栏；林晓23日前交稿，陈一凡月底前完成重排。",
+      "tier": "host",
+      "cards": [
+        {
+          "action": {
+            "due": "2026-10-23",
+            "kind": "do",
+            "text": "按桌面端左右两栏、手机端单栏修改『co-agent 交互新稿』并交给陈一凡"
+          },
+          "confidence": "high",
+          "impact": "会上确定桌面端改为左右两栏、手机端保留单栏。你负责的『co-agent 交互新稿』和『Co-agent 第一版交互定稿』需采用这一方案，交稿时间提前到 10 月 23 日。",
+          "personId": "smoke-pm",
+          "targets": [
+            {
+              "id": "t-pm-1",
+              "index": 0,
+              "type": "task"
+            },
+            {
+              "id": "t-pm-1",
+              "index": 0,
+              "type": "acceptance"
+            },
+            {
+              "id": "m-pm",
+              "index": 0,
+              "type": "mission"
+            }
+          ],
+          "title": "交互新稿23日前按双端方案交付",
+          "why": "评审已确定桌面端和手机端采用不同布局，并明确林晓在 10 月 23 日前交稿。该决定直接限定了『co-agent 交互新稿』的方案，也影响『Co-agent 第一版交互定稿』中会议场景的交付。"
+        },
+        {
+          "action": {
+            "due": "2026-10-31",
+            "kind": "do",
+            "text": "按桌面端左右两栏、手机端单栏完成『会议页改版』重排，并验证手机 390 宽度下可用"
+          },
+          "confidence": "high",
+          "impact": "会上确定桌面端改为左右两栏、手机端保留单栏。你负责的『会议页改版』需据此拆分纪要区和对话区，同时满足『会议页在手机 390 宽度下可用』。",
+          "personId": "smoke-fe",
+          "targets": [
+            {
+              "id": "t-fe-1",
+              "index": 0,
+              "type": "task"
+            },
+            {
+              "id": "t-fe-1",
+              "index": 0,
+              "type": "acceptance"
+            }
+          ],
+          "title": "会议页按桌面双栏、手机单栏重排",
+          "why": "交互评审已确定双端布局，并要求陈一凡在 10 月 31 日前完成页面重排。布局决定直接改变『会议页改版』的实现方式，手机端仍需符合现有 390 宽度验收要求。"
+        }
+      ]
+    },
+    {
+      "statement": "纪要区切换至含说话人和时间戳的新接口，吴桐28日前交付，旧接口月底后下线。",
+      "tier": "host",
+      "cards": [
+        {
+          "action": {
+            "due": "2026-10-31",
+            "kind": "do",
+            "text": "把会议页纪要区接到含说话人和时间戳的新接口，并在旧接口下线前停止调用旧接口"
+          },
+          "confidence": "high",
+          "impact": "会上确定纪要区改用含说话人和时间戳的新接口，旧接口在10月31日后下线。你负责的「会议页改版」需按说话人显示纪要，并停止调用旧的纪要接口。",
+          "personId": "smoke-fe",
+          "targets": [
+            {
+              "id": "t-fe-1",
+              "index": 1,
+              "type": "acceptance"
+            },
+            {
+              "id": "t-fe-1",
+              "index": 2,
+              "type": "acceptance"
+            }
+          ],
+          "title": "会议页改接新纪要接口",
+          "why": "新接口会在10月28日前交付，旧接口只保留到10月31日。会议页若未在月底前切换，将无法继续获取纪要，两个相关验收项也不能通过。"
+        },
+        {
+          "action": {
+            "due": "2026-10-31",
+            "kind": "do",
+            "text": "在10月28日前交付含说话人和时间戳的接口，保留旧接口至10月31日并在此后下线"
+          },
+          "confidence": "high",
+          "impact": "会上确定纪要区切换至含说话人和时间戳的新接口，并明确旧接口月底后下线。你负责的「纪要接口 v2」需按10月28日交付，旧接口兼容期限明确为10月31日。",
+          "personId": "smoke-be",
+          "targets": [
+            {
+              "id": "t-be-1",
+              "index": 0,
+              "type": "task"
+            },
+            {
+              "id": "t-be-1",
+              "index": 0,
+              "type": "acceptance"
+            },
+            {
+              "id": "t-be-1",
+              "index": 1,
+              "type": "acceptance"
+            }
+          ],
+          "title": "纪要接口28日前交付",
+          "why": "会议页需要在月底前完成接口切换，因此新接口要提前交付，并留出接入时间。旧接口的兼容截止日已经明确，月底后需要执行下线。"
+        }
+      ]
+    },
+    {
+      "statement": "企业微信接入暂缓，形成可供判断的试点数据后再讨论。",
+      "tier": "host",
+      "cards": []
+    }
+  ]
+}

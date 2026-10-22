@@ -7,7 +7,9 @@ describe("主持人会后通知", () => {
     const item = { meetingId: "m", title: "核对排期", startsAt: "2026-09-30T07:00:00Z", endsAt: "2026-09-30T08:00:00Z", hostName: "主持人", href: "/me/meetings/m" };
     const render = (followUp: boolean) => renderToStaticMarkup(<MemberMeetingSchedule meetings={[{ ...item, followUp }]} onNavigate={() => undefined} />);
     expect(render(true)).toContain("重新安排");
-    expect(render(true)).toContain("上传文字纪要");
-    expect(render(false)).not.toContain("上传文字纪要");
+    expect(render(true)).toContain("待交记录");
+    expect(render(true)).toContain(">上传<");
+    expect(render(true)).toContain('accept=".md,');
+    expect(render(false)).not.toContain(">上传<");
   });
 });

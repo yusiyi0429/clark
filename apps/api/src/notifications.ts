@@ -7,17 +7,19 @@ import { personDisplayNames } from "./people.js";
 
 /**
  * 通知只存指向哪个对象：object_type/object_id 指向执行事项、会议、议题或请求，
- * strategic_rejected 另用 item_id 指向会议里的战略项；文案读取时按对象当前状态组合。
+ * strategic_rejected（旧会议的战略项，已不再发）另用 item_id 指向会议里的战略项；文案读取时按对象当前状态组合。
+ * 有唯一约束的（meeting_card_pending 一人一场会一条）重复时不插，返回 false。
  */
 export async function insertNotification(
   client: PoolClient,
   input: { personId: string; kind: TNotificationKind; objectType: "task" | "meeting" | "issue" | "request"; objectId: string; itemId?: string; actorId?: string },
-): Promise<void> {
-  await client.query(
+): Promise<boolean> {
+  const inserted = await client.query(
     `INSERT INTO notifications (id, person_id, kind, object_type, object_id, item_id, actor_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`,
     [randomUUID(), input.personId, input.kind, input.objectType, input.objectId, input.itemId ?? null, input.actorId ?? null],
   );
+  return inserted.rowCount === 1;
 }
 
 type NotificationRow = {
@@ -77,6 +79,8 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"}完成了：${row.request_title ?? ""}`;
     case "collection_reminder":
       return `截止前提醒：${row.request_title ?? ""}`;
+    case "meeting_card_pending":
+      return `${row.meeting_title ?? ""} · 会议记录待确认`;
   }
 }
 

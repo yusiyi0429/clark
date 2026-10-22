@@ -2,9 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type {
   TCard,
+  TMeetingBookingRequest,
   TMeetingDraft,
   TMeetingParticipant,
   TSupplementRequest,
+  TWorldAnchor,
 } from "@warmap/contracts";
 import type { ActionScope } from "./actionToken.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
@@ -14,6 +16,8 @@ import { replaceMeetingMaterials } from "./meetingMaterials.js";
 import { syncMeetingMembers, threadIntroInput } from "./threads.js";
 import { postThreadIntro, type ThreadIntroAgent } from "./threadIntro.js";
 import { startPreflight, type PreflightAgent } from "./meetingPreflight.js";
+import { storedAnchor } from "./meetingWorld.js";
+import { shanghaiDate } from "./workdays.js";
 import {
   appendFingerprint,
   commit,
@@ -31,12 +35,15 @@ import {
   type MeetingActionOutcome,
   type MeetingRow,
   type Query,
+  type StoredWorldAnchor,
 } from "./meetingStore.js";
+
+type ResolvedParticipants = { participants: TMeetingParticipant[]; ceo: TMeetingParticipant; lead: TMeetingParticipant };
 
 function resolveParticipants(
   peopleDirectory: PeopleDirectory,
   input: { leadDriId: string; ceoParticipantId: string; participants: string[] },
-): { participants: TMeetingParticipant[]; ceo: TMeetingParticipant; lead: TMeetingParticipant } | { error: MeetingActionError } {
+): ResolvedParticipants | { error: MeetingActionError } {
   const byId = new Map(peopleDirectory.searchPeople(undefined).map((person) => [person.personId, person]));
   const ids = unique([input.ceoParticipantId, input.leadDriId, ...input.participants]);
   const missing = ids.filter((id) => !byId.has(id));
@@ -111,6 +118,8 @@ export async function executeCreateMeeting(
   scope: ActionScope,
   input: { title: string; scheduledAt: string; endsAt?: string; leadDriId: string; ceoParticipantId: string; participants: string[]; issueIds: string[] },
   fingerprint: string,
+  /** 建会的人（议题建会是操作的 CEO）。 */
+  createdBy: string,
   introAgent?: ThreadIntroAgent,
 ): Promise<MeetingActionOutcome> {
   if (scope.objectType !== "issue") return { error: { status: 404, code: "UNKNOWN_ACTION", message: "无效 actionId" } };
@@ -151,8 +160,8 @@ export async function executeCreateMeeting(
       const inserted = await client.query<MeetingRow>(
         `INSERT INTO meetings
            (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
-            participants, issue_ids, preflight, draft, materials, origin_ref, action_fingerprints, ends_at)
-         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, '[]'::jsonb, $10::jsonb, $11::jsonb, $12)
+            participants, issue_ids, preflight, draft, materials, origin_ref, action_fingerprints, ends_at, created_by)
+         VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, '[]'::jsonb, $10::jsonb, $11::jsonb, $12, $13)
          RETURNING ${meetingColumns()}`,
         [
           meetingId,
@@ -167,6 +176,7 @@ export async function executeCreateMeeting(
           JSON.stringify({ type: "issue", issueId: scope.objectId }),
           JSON.stringify([fingerprint]),
           endsAt,
+          createdBy,
         ],
       );
       created = inserted.rows[0];
@@ -215,24 +225,94 @@ export async function createConfigMeeting(
   if (!(await issuesExist(pool.query.bind(pool), issueIds))) {
     return { error: { status: 400, code: "INVALID_ISSUE", message: "issueIds 包含不存在的 Issue", fieldErrors: { issueIds: "unknown issue" } } };
   }
+  return insertScheduledMeeting(pool, peopleDirectory, preflightAgent, secret,
+    { title: input.title, scheduledAt, endsAt, resolved, issueIds, originRef: { type: "config" }, createdBy: ceo.personId }, introAgent,
+    input.materials?.length ? { items: input.materials, storageDir: input.materialStorageDir } : undefined);
+}
+
+/**
+ * 预约建会：带起止、挂点，只存天枢。成员只能给自己建（leadDriId 缺省或等于本人，否则 403）；
+ * CEO 必须从 DRI 里指定主持人（同配置页）。挂点要在开会那个月的选项里。
+ */
+export async function bookMeeting(
+  deps: {
+    pool: Pool;
+    peopleDirectory: PeopleDirectory;
+    preflightAgent: PreflightAgent;
+    secret: string;
+    introAgent?: ThreadIntroAgent;
+    /** 某月能挑的挂点（本月 PO、LTO、本月 Mission、责任单元）。 */
+    anchorOptions: (period: string) => Promise<TWorldAnchor[]>;
+  },
+  viewer: { personId: string; role: "ceo" | "member" },
+  input: TMeetingBookingRequest,
+): Promise<{ card: TCard } | { error: MeetingActionError }> {
+  let leadDriId = input.leadDriId;
+  if (viewer.role === "ceo") {
+    if (!leadDriId) return { error: { status: 400, code: "INVALID_LEAD_DRI", message: "要指定主持人", fieldErrors: { leadDriId: "required" } } };
+  } else {
+    if (leadDriId !== undefined && leadDriId !== viewer.personId) return { error: { status: 403, code: "FORBIDDEN", message: "只能给自己建会" } };
+    leadDriId = viewer.personId;
+  }
+  const scheduledAt = parseScheduledAt(input.scheduledAt);
+  if (!scheduledAt) return { error: { status: 400, code: "INVALID_INPUT", message: "scheduledAt 不是可解析时间", fieldErrors: { scheduledAt: "unparsable" } } };
+  const endsAt = resolveEndsAt(scheduledAt, input.endsAt);
+  if (!(endsAt instanceof Date)) return { error: endsAt };
+  const ceo = deps.peopleDirectory.searchPeople(undefined).find((person) => person.roles.includes("ceo"));
+  if (!ceo) return { error: { status: 400, code: "INVALID_CEO", message: "company-people.v1 中没有 ceo 角色", fieldErrors: { leadDriId: "ceo missing" } } };
+  const resolved = resolveParticipants(deps.peopleDirectory, { leadDriId, ceoParticipantId: ceo.personId, participants: input.participants ?? [] });
+  if ("error" in resolved) return resolved;
+  const options = await deps.anchorOptions(shanghaiDate(scheduledAt).slice(0, 7));
+  const anchors: StoredWorldAnchor[] = [];
+  for (const anchor of input.anchors) {
+    if (anchors.some((other) => other.kind === anchor.kind && other.id === anchor.id)) continue;
+    const option = options.find((candidate) => candidate.kind === anchor.kind && candidate.id === anchor.id);
+    if (!option) return { error: { status: 400, code: "ANCHOR_NOT_FOUND", message: "挂点只能是 LTO、本月 PO、本月 Mission 或责任单元", fieldErrors: { anchors: "unknown anchor" } } };
+    anchors.push(storedAnchor(option));
+  }
+  return insertScheduledMeeting(deps.pool, deps.peopleDirectory, deps.preflightAgent, deps.secret, {
+    title: input.title, scheduledAt, endsAt, resolved, issueIds: [], originRef: { type: "booking" },
+    worldAnchors: anchors, createdBy: viewer.personId,
+  }, deps.introAgent);
+}
+
+/** 建一场 scheduled 会（配置页、预约共用）：落库、同步成员、邀请介绍、可选会前材料，再跑首次预审。 */
+async function insertScheduledMeeting(
+  pool: Pool,
+  peopleDirectory: PeopleDirectory,
+  preflightAgent: PreflightAgent,
+  secret: string,
+  input: {
+    title: string; scheduledAt: Date; endsAt: Date; resolved: ResolvedParticipants; issueIds: string[]; originRef: Record<string, unknown>;
+    worldAnchors?: StoredWorldAnchor[];
+    /** 建会的人（预约的人；配置页是 CEO）：整卡确认只给主持人和他。 */
+    createdBy: string;
+  },
+  introAgent?: ThreadIntroAgent,
+  materials?: { items: ParsedMaterial[]; storageDir: string },
+): Promise<{ card: TCard } | { error: MeetingActionError }> {
+  const { resolved } = input;
   const inserted = await pool.query<MeetingRow>(
     `INSERT INTO meetings
        (id, version, title, status, scheduled_at, lead_dri_id, ceo_participant_id,
-        participants, issue_ids, preflight, draft, origin_ref, action_fingerprints, ends_at)
-     VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb, $11)
+        participants, issue_ids, preflight, draft, origin_ref, action_fingerprints, ends_at,
+        world_anchors, created_by)
+     VALUES ($1, 1, $2, 'scheduled', $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb, $11, $12::jsonb, $13)
      RETURNING ${meetingColumns()}`,
     [
       randomUUID(),
       input.title,
-      scheduledAt,
+      input.scheduledAt,
       resolved.lead.personId,
       resolved.ceo.personId,
       JSON.stringify(resolved.participants),
-      JSON.stringify(issueIds),
+      JSON.stringify(input.issueIds),
       JSON.stringify(emptyPreflight()),
       JSON.stringify(emptyDraft()),
-      JSON.stringify({ type: "config" }),
-      endsAt,
+      JSON.stringify(input.originRef),
+      input.endsAt,
+      input.worldAnchors ? JSON.stringify(input.worldAnchors) : null,
+      input.createdBy,
     ],
   );
   const created = inserted.rows[0];
@@ -241,8 +321,8 @@ export async function createConfigMeeting(
   finally { memberClient.release(); }
   scheduleMeetingIntro(pool, peopleDirectory, introAgent, created.id, created.lead_dri_id,
     created.participants.map((person) => person.personId).filter((id) => id !== created.lead_dri_id), [created.lead_dri_id]);
-  if (input.materials?.length) {
-    const stored = await replaceMeetingMaterials(pool, secret, created.id, input.materials, input.materialStorageDir);
+  if (materials) {
+    const stored = await replaceMeetingMaterials(pool, secret, created.id, materials.items, materials.storageDir);
     if ("error" in stored) return stored;
   }
   await startPreflight(pool, peopleDirectory, preflightAgent, created.id);
@@ -352,12 +432,20 @@ export async function executeEditMeetingDetails(
       if ("error" in resolved) return { error: resolved.error };
       participants = resolved.participants;
     }
+    // 改了开始时间：记过的开始、结束清掉；还没有逐字稿和候选的，等妙记、读取失败这些也清回 none，按新时间重新走。
+    const moved = "$4::timestamptz IS NOT NULL AND $4::timestamptz <> scheduled_at";
+    const unrecorded = `${moved} AND transcript IS NULL AND transcript_candidate IS NULL`;
     const updated = await updateMeeting(
       client,
       row.id,
       `title = COALESCE($3, title), scheduled_at = COALESCE($4, scheduled_at),
        lead_dri_id = COALESCE($5, lead_dri_id), participants = COALESCE($6::jsonb, participants),
-       ends_at = $7, ended_at = CASE WHEN $4::timestamptz IS NOT NULL AND $4::timestamptz <> scheduled_at THEN NULL ELSE ended_at END,
+       ends_at = $7, ended_at = CASE WHEN ${moved} THEN NULL ELSE ended_at END,
+       started_at = CASE WHEN ${moved} THEN NULL ELSE started_at END,
+       minutes_status = CASE WHEN ${unrecorded} THEN 'none' ELSE minutes_status END,
+       minutes_waiting_since = CASE WHEN ${unrecorded} THEN NULL ELSE minutes_waiting_since END,
+       minutes_failure = CASE WHEN ${unrecorded} THEN NULL ELSE minutes_failure END,
+       minutes_error = CASE WHEN ${unrecorded} THEN NULL ELSE minutes_error END,
        version = version + 1, action_fingerprints = $2::jsonb`,
       [
         JSON.stringify(appendFingerprint(row.action_fingerprints, fingerprint)),

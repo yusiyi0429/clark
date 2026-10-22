@@ -1,20 +1,17 @@
 import { randomUUID } from "node:crypto";
-import type { PoolClient } from "pg";
 import type {
   TImpactAction, TImpactAskWho, TImpactBasisChoice, TImpactCardView, TImpactConfidence, TImpactPlanWrite, TImpactSource, TImpactTarget, TImpactTrigger, TRequestStep,
 } from "@warmap/contracts";
-import type { FeishuNotify } from "./feishu/notify.js";
 import type { ImpactAgent, ImpactAskInput } from "./impactAgent.js";
 import { decisionStatement, type MeetingDecisionRow } from "./meetingDecisionView.js";
 import { impactCandidates, type InterpretationContext } from "./meetingContext.js";
 import type { Query } from "./meetingStore.js";
-import { insertNotification } from "./notifications.js";
 import { shanghaiDate } from "./workdays.js";
 
 /**
- * 影响卡的落库、推送、读取、追问与「和我无关」。
- * 推送复用送达通道：delivered 的卡对应一条 kind = impact 的请求（发起人是拍板的人：主持人，战略项是 CEO；接收人是收卡的人），
- * 通知栏用 request_received，飞书通知用 feishu.notify。影子卡（shadow）只落库，不建请求、不打扰人。
+ * 影响卡的读取、追问与「和我无关」。
+ * delivered 的卡对应一条 kind = impact 的请求（接收人是收卡的人）。会议决定不再往下推新卡（会后只有会议卡一个入口）；
+ * 旧会议推过的卡照旧能读、追问；文档变更卡的落库在 docChanges.ts。
  */
 /** 文档变更卡（trigger_kind = doc_change）：这个人依据的旧文档、确认依据时的版本，推送时的作者与确认人。 */
 export type ImpactDocBasis = {
@@ -44,58 +41,6 @@ export function impactRequestBody(card: Pick<NewImpactCard, "impact" | "action" 
     "",
     card.action.kind === "do" ? `**要做**：${card.action.text}${due}` : card.action.text,
   ].join("\n");
-}
-
-/**
- * 一版卡同一个事务里落库并推送：live 且置信度不是 low 的推送（建请求、通知、飞书），其余记成影子卡。
- * 同一个人、同一个触发、同一版只出一张（唯一约束兜底，重放不重复推）。
- */
-export async function insertImpactCards(client: PoolClient, input: {
-  decision: Pick<MeetingDecisionRow, "id" | "revision" | "meeting_id" | "statement" | "final_statement">;
-  initiatorId: string;
-  cards: NewImpactCard[];
-  mode: "live" | "shadow";
-  notify?: FeishuNotify;
-  pathFor: (personId: string, kind: "request" | "meeting", id: string) => string;
-  meetingTitle: string;
-}): Promise<ImpactCardRow[]> {
-  const inserted: ImpactCardRow[] = [];
-  for (const card of input.cards) {
-    const live = input.mode === "live" && card.confidence !== "low";
-    const id = randomUUID();
-    let requestId: string | null = null;
-    if (live) {
-      requestId = randomUUID();
-      await client.query(
-        `INSERT INTO requests (id, kind, initiator_id, prompt, title, body, status, sent_at) VALUES ($1, 'impact', $2, $3, $4, $5, 'open', now())`,
-        [requestId, input.initiatorId, decisionStatement(input.decision).slice(0, 2000), card.title.slice(0, 200), impactRequestBody(card).slice(0, 20000)],
-      );
-      await client.query("INSERT INTO request_recipients (request_id, person_id) VALUES ($1, $2)", [requestId, card.person_id]);
-    }
-    const row = await client.query<ImpactCardRow>(
-      `INSERT INTO impact_cards (id, person_id, trigger_kind, trigger_id, trigger_revision, meeting_id, status, title, impact, action, targets, why, sources, ask_who,
-         confidence, agent_judged, correction_of, correction_note, request_id)
-       VALUES ($1, $2, 'meeting_decision', $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17, $18)
-       ON CONFLICT (person_id, trigger_kind, trigger_id, trigger_revision) DO NOTHING RETURNING *`,
-      [id, card.person_id, input.decision.id, input.decision.revision, input.decision.meeting_id, live ? "delivered" : "shadow",
-        card.title, card.impact, JSON.stringify(card.action), JSON.stringify(card.targets), card.why, JSON.stringify(card.sources),
-        JSON.stringify(card.ask_who), card.confidence, card.agent_judged, card.correction_of, card.correction_note, requestId],
-    );
-    if (!row.rowCount) {
-      if (requestId) await client.query("DELETE FROM requests WHERE id = $1", [requestId]);
-      continue;
-    }
-    inserted.push(row.rows[0]);
-    if (!requestId) continue;
-    await insertNotification(client, { personId: card.person_id, kind: "request_received", objectType: "request", objectId: requestId, actorId: input.initiatorId });
-    await input.notify?.({
-      personId: card.person_id,
-      title: card.correction_of ? `更正 · ${card.title}` : card.title,
-      body: `${impactRequestBody({ ...card, correction_note: card.correction_note })}\n\n来自会议「${input.meetingTitle}」`,
-      links: [{ label: "查看", path: input.pathFor(card.person_id, "request", requestId) }],
-    }, `impact:${row.rows[0].id}`);
-  }
-  return inserted;
 }
 
 export function projectImpactCard(row: ImpactCardRow, ctx: {

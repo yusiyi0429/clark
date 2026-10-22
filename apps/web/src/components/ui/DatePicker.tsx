@@ -107,16 +107,20 @@ export type DateTimePickerProps = Omit<DatePickerProps, "clearable"> & {
   step?: number;
 };
 
-/** 日期 + 时刻两枚触发器排一行：「📅 10 月 15 日 周四 ⌄」「10:00 ⌄」。先选时刻没有日期时，日期取今天。 */
+/**
+ * 日期 + 时刻两枚触发器排一行：「📅 10 月 15 日 周四 ⌄」「10:00 ⌄」。先选时刻没有日期时，日期取今天。
+ * max 带时刻（「2026-10-21T14:30」）时，选到那一天的时刻只列到那个时刻为止。
+ */
 export function DateTimePicker({ value, onChange, label, placeholder, min, max, disabled, size = "md", className, step = 15, required }: DateTimePickerProps) {
   const { date, time } = splitDateTime(value);
   const minDay = min ? splitDateTime(min).date || min.slice(0, 10) : undefined;
   const maxDay = max ? splitDateTime(max).date || max.slice(0, 10) : undefined;
+  const latest = max && (date || companyToday()) === maxDay ? splitDateTime(max).time : "";
   return <div className={[p.dateTime, className].filter(Boolean).join(" ")} role="group" aria-label={label}>
     <DatePicker label={`${label}日期`} required={required} value={date} min={minDay} max={maxDay} placeholder={placeholder} disabled={disabled} size={size} className={p.dateTimeDate}
       onChange={(next) => onChange(next ? `${next}T${time || "10:00"}` : "")} />
     <Select aria-label={`${label}时间`} sheetTitle={`${label}时间`} placeholder="时间" value={time} disabled={disabled} size={size} className={p.dateTimeTime}
-      options={timeOptions(time, step).map((slot) => ({ value: slot, label: slot }))}
+      options={timeOptions(time, step, latest).map((slot) => ({ value: slot, label: slot }))}
       onChange={(next) => onChange(`${date || companyToday()}T${next}`)} />
   </div>;
 }

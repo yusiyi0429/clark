@@ -5,7 +5,8 @@ import {
   DraftRequestRequest, DraftRequestResponse, RequestListItem, RequestListResponse, PrepareRequestQuestionRequest,
   PrepareRequestQuestionResponse, DraftRequestAnswerResponse, RequestSendInput, RequestAskInput, RequestAnswerInput, ExecuteRequestActionRequest,
 } from "./requests.js";
-import { MeetingDecisionView, MeetingDecisionReviewRequest, MeetingDecisionResponse, MyMeetingDecisionsResponse } from "./meetingDecisions.js";
+import { MeetingCardConfirmRequest, MeetingCardDraftRequest, MeetingCardView } from "./meetingCard.js";
+import { MeetingDecisionView, MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse } from "./meetingDecisions.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
@@ -63,6 +64,7 @@ import {
   BattlefieldManagementResponse,
   CreateConfigMeetingRequest,
   CreateMeetingRequest,
+  MeetingBookingRequest,
   DriIssueImportRequest,
   DriMeetingImportRequest,
   HealthResponse,
@@ -81,6 +83,7 @@ import {
   DemoEntryResponse,
   ChangePasscodeRequest,
   PeopleDirectoryResponse,
+  PersonDirectoryResponse,
   MonthlyDraftCandidate,
   MonthlyPlanCapability,
   MonthlyPlanCardPayload,
@@ -112,9 +115,6 @@ import {
   PostMeetingCandidate,
   StoredTranscript,
   WarmapTranscript,
-  MeetingConfirmItemInput,
-  MeetingDismissItemInput,
-  MeetingRevokeEffectInput,
   MeetingRecording,
   StartMeetingRecordingResponse,
   MarkThreadReadRequest,
@@ -140,7 +140,7 @@ import {
   CollectorConsentResponse, UpdateCollectorConsentRequest, CollectorStatusResponse,
   WorkBasisResponse, UpdateWorkBasisRequest, ScheduleMigrationResponse, UpdateScheduleMigrationRequest,
   WeeklyReviewBoardResponse, WeeklyReviewResponse, ExecuteWeeklyReviewActionRequest, ExecuteWeeklyReviewActionResponse, WeeklyReviewUpdateInput,
-  ProgressOverviewResponse, MyOffPlanResponse, AttachOffPlanRequest,
+  ProgressOverviewResponse,
   OAuthConsentRequest,
   OAuthConsentResponse,
   OAuthConsentDecisionResponse,
@@ -208,6 +208,7 @@ import {
   WeeklyProgressResponse,
   FeishuAuthConfigResponse,
   FeishuCodeLoginRequest,
+  FeishuConnectionResponse,
 } from "./index.js";
 
 const errorResponse = {
@@ -319,11 +320,24 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "飞书配置", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuAuthConfigResponse" } } } } },
         },
       },
+      "/api/me/feishu": {
+        get: {
+          operationId: "getMyFeishuConnection",
+          summary: "本人的飞书连好了没有（授权有效、带着会后拿妙记要的权限）；没接飞书时 enabled=false",
+          responses: {
+            "200": { description: "飞书连接状态", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuConnectionResponse" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
       "/api/auth/feishu/start": {
         get: {
           operationId: "startFeishuAuth",
-          summary: "浏览器打开：已登录直接跳到 next；否则写 state cookie 后跳飞书授权页。飞书消息里的深链接都指向这里",
-          parameters: [{ name: "next", in: "query", required: false, schema: { type: "string" }, description: "登录后回到的站内路径，只接受以 / 开头的相对路径" }],
+          summary: "浏览器打开：已登录直接跳到 next；否则写 state cookie 后跳飞书授权页。飞书消息里的深链接都指向这里。connect=1：已登录的人也去授权，连接飞书",
+          parameters: [
+            { name: "next", in: "query", required: false, schema: { type: "string" }, description: "登录后回到的站内路径，只接受以 / 开头的相对路径" },
+            { name: "connect", in: "query", required: false, schema: { type: "string", enum: ["1"] }, description: "已登录的人连接飞书：授权完回到 next，不换会话" },
+          ],
           responses: { "302": { description: "跳到 next 或飞书授权页" }, "404": errorResponse, "429": errorResponse },
         },
       },
@@ -384,6 +398,16 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
                 "application/json": { schema: { $ref: "#/components/schemas/PeopleDirectoryResponse" } },
               },
             },
+          },
+        },
+      },
+      "/api/people/directory": {
+        get: {
+          operationId: "listPersonDirectory",
+          summary: "人员名册（CEO 和成员）：真人的 personId 和名字，约会议选参会人用",
+          responses: {
+            "200": { description: "人员名册", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonDirectoryResponse" } } } },
+            "401": errorResponse,
           },
         },
       },
@@ -843,18 +867,95 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "定时任务", content: { "application/json": { schema: { $ref: "#/components/schemas/ScheduleListResponse" } } } }, "401": errorResponse },
         },
       },
-      "/api/me/meeting-decisions": {
+      "/api/me/meeting-cards": {
         get: {
-          operationId: "listMyMeetingDecisions", summary: "我主持的会里还没确认的「会上定了 X」，按会议分组",
-          responses: { "200": { description: "待确认的会后决定", content: { "application/json": { schema: { $ref: "#/components/schemas/MyMeetingDecisionsResponse" } } } }, "401": errorResponse },
+          operationId: "listMyMeetingCards", summary: "我主持或创建的会里待处理的会议记录：待确认、修改待确认、写入失败，一场会一条",
+          responses: { "200": { description: "待处理的会议记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MyMeetingCardsResponse" } } } }, "401": errorResponse },
         },
       },
-      "/api/meetings/{id}/decisions/{decisionId}/review": {
+      "/api/meetings/{id}/minutes": {
         post: {
-          operationId: "reviewMeetingDecision", summary: "主持人确认一条会后决定：对 / 改一下 / 其实没定；Agent 代判之后改判会给已收卡的人出更正卡",
-          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }, { name: "decisionId", in: "path", required: true, schema: { type: "string" } }],
-          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingDecisionReviewRequest" }),
-          responses: { "200": { description: "这条决定的最新状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingDecisionResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+          operationId: "readMeetingMinutesLink", summary: "主持人或创建人贴飞书妙记链接，按这个妙记读逐字稿（别人一律 404）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingMinutesLinkRequest" }),
+          responses: { "200": { description: "读完之后的妙记状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingMinutesFetchResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/minutes/refetch": {
+        post: {
+          operationId: "refetchMeetingMinutes", summary: "主持人或创建人再读一次妙记（等待中、没拿到、读取失败时）；已读完 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "读完之后的妙记状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingMinutesFetchResponse" } } } }, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/card": {
+        get: {
+          operationId: "getMeetingRecordCard", summary: "会议卡：草稿（读时目标变过就刷新差异）、行动项、确认版与同步回执；主持人、创建人、CEO、实际参会人能读，别人 404",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/card/draft": {
+        put: {
+          operationId: "saveMeetingCardDraft", summary: "主持人或创建人整份保存会议卡草稿；draftVersion 过期 409 DRAFT_CHANGED（带 view），校验不过 400（fieldErrors 按字段路径）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingCardDraftRequest" }),
+          responses: { "200": { description: "保存后的会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/card/confirm": {
+        post: {
+          operationId: "confirmMeetingCard",
+          summary: "主持人或创建人整卡确认：冻结一个确认版本并排写本体（选了不写入只留天枢）；draftVersion 过期 409 DRAFT_CHANGED（带 view），同一草稿再确认不出新版本；已有确认版时 kind 必填（400 KIND_REQUIRED），没有实际时间或在将来 400 OCCURRED_AT_REQUIRED",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingCardConfirmRequest" }),
+          responses: { "200": { description: "确认后的会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/card/retry": {
+        post: {
+          operationId: "retryMeetingCardSync", summary: "主持人或创建人重试当前确认版的会议事件写入（失败或还在等的）；已写成或选了不写入 409",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "重排后的会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/world": {
+        get: {
+          operationId: "getMeetingWorld", summary: "这场会在本体里：挂点、会议记录状态（主持人、创建人和 CEO）、每条生效的决定落到哪；参会人只看挂点和落点",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "这场会在本体里", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingWorldResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/world-anchors": {
+        put: {
+          operationId: "setMeetingWorldAnchors", summary: "主持人或 CEO 改会议挂到的 LTO、本月 PO、Mission、责任单元；null 回到自动",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingWorldAnchorsRequest" }),
+          responses: { "200": { description: "这场会在本体里的最新状态", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingWorldResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/world-anchor-options": {
+        get: {
+          operationId: "listMeetingWorldAnchorOptions", summary: "改挂点时可选的对象：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "200": { description: "可选的挂点", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingWorldAnchorOptionsResponse" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/meetings": {
+        post: {
+          operationId: "bookMeeting", summary: "预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人",
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingBookingRequest" }),
+          responses: {
+            "200": { description: "新建的会议卡", content: { "application/json": { schema: { type: "object", required: ["card"], additionalProperties: false, properties: { card: { $ref: "#/components/schemas/Card" } } } } } },
+            "400": errorResponse, "401": errorResponse, "403": errorResponse,
+          },
+        },
+      },
+      "/api/world-anchor-options": {
+        get: {
+          operationId: "listWorldAnchorOptions", summary: "预约时可选的挂点：本月 PO、LTO（本体读得到时）、本月 Mission、责任单元",
+          parameters: [{ name: "period", in: "query", required: true, schema: { type: "string", pattern: "^\\d{4}-(0[1-9]|1[0-2])$" } }],
+          responses: { "200": { description: "可选的挂点", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingWorldAnchorOptionsResponse" } } } }, "400": errorResponse, "401": errorResponse },
         },
       },
       "/api/cards/radar": {
@@ -1625,29 +1726,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       "/api/progress": {
         get: {
-          operationId: "getProgressOverview", summary: "全局进展：红线（比预期慢、按截止日做不完）、按计划在走、没有 Task 基线的人的进展摘要、计划外工作；CEO 看全部，其他人看同一战场的人",
+          operationId: "getProgressOverview", summary: "全局进展：红线（比预期慢、按截止日做不完）、按计划在走、没有 Task 基线的人的进展摘要；CEO 看全部，其他人看同一战场的人",
           responses: { "200": { description: "全局进展", content: { "application/json": { schema: { $ref: "#/components/schemas/ProgressOverviewResponse" } } } }, "401": errorResponse },
-        },
-      },
-      "/api/me/off-plan": {
-        get: {
-          operationId: "getMyOffPlan", summary: "本人的计划外工作（没处理的、已提出改计划的）与挂靠时可选的本人未完成执行事项",
-          responses: { "200": { description: "本人的计划外", content: { "application/json": { schema: { $ref: "#/components/schemas/MyOffPlanResponse" } } } }, "401": errorResponse },
-        },
-      },
-      "/api/me/off-plan/{id}/attach": {
-        post: {
-          operationId: "attachMyOffPlan", summary: "把一条计划外工作挂到本人的一件执行事项上（同时记成这件事的进展）；已挂过的 409",
-          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-          requestBody: jsonBody({ $ref: "#/components/schemas/AttachOffPlanRequest" }),
-          responses: { "200": { description: "本人的计划外", content: { "application/json": { schema: { $ref: "#/components/schemas/MyOffPlanResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
-        },
-      },
-      "/api/me/off-plan/{id}/replan": {
-        post: {
-          operationId: "proposeMyOffPlanReplan", summary: "对一条计划外工作提出改计划（先只记下来）；重复提出幂等，已挂过的 409",
-          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-          responses: { "200": { description: "本人的计划外", content: { "application/json": { schema: { $ref: "#/components/schemas/MyOffPlanResponse" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/me/tokens/{id}": {
@@ -2649,9 +2729,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         DemoEntryResponse: DemoEntryResponse as JsonSchema,
         FeishuAuthConfigResponse: FeishuAuthConfigResponse as JsonSchema,
         FeishuCodeLoginRequest: FeishuCodeLoginRequest as JsonSchema,
+        FeishuConnectionResponse: FeishuConnectionResponse as JsonSchema,
         ChangePasscodeRequest: ChangePasscodeRequest as JsonSchema,
         SessionResponse: SessionResponse as JsonSchema,
         PeopleDirectoryResponse: PeopleDirectoryResponse as JsonSchema,
+        PersonDirectoryResponse: PersonDirectoryResponse as JsonSchema,
         ExecuteActionRequest: ExecuteActionRequest as JsonSchema,
         ConversationHistory: ConversationHistory as JsonSchema,
         ConversationMessageRequest: ConversationMessageRequest as JsonSchema,
@@ -2757,6 +2839,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         IssueRevokeReceiptInput: IssueRevokeReceiptInput as JsonSchema,
         DriMeetingImportRequest: DriMeetingImportRequest as JsonSchema,
         CreateMeetingRequest: CreateMeetingRequest as JsonSchema,
+        MeetingBookingRequest: MeetingBookingRequest as JsonSchema,
         JoinMeetingRequest: JoinMeetingRequest as JsonSchema,
         UpdateMeetingDraftRequest: UpdateMeetingDraftRequest as JsonSchema,
         EditMeetingDetailsRequest: EditMeetingDetailsRequest as JsonSchema,
@@ -2778,9 +2861,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         PostMeetingCandidate: PostMeetingCandidate as JsonSchema,
         MeetingOutcomeState: MeetingOutcomeState as JsonSchema,
         ReplaceTranscriptRequest: ReplaceTranscriptRequest as JsonSchema,
-        MeetingConfirmItemInput: MeetingConfirmItemInput as JsonSchema,
-        MeetingDismissItemInput: MeetingDismissItemInput as JsonSchema,
-        MeetingRevokeEffectInput: MeetingRevokeEffectInput as JsonSchema,
         ThreadView: ThreadView as JsonSchema,
         SetViewRequest: SetViewRequest as JsonSchema,
         AddThreadMembersRequest: AddThreadMembersRequest as JsonSchema,
@@ -2844,8 +2924,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ExecuteWeeklyReviewActionResponse: ExecuteWeeklyReviewActionResponse as JsonSchema,
         WeeklyReviewUpdateInput: WeeklyReviewUpdateInput as JsonSchema,
         ProgressOverviewResponse: ProgressOverviewResponse as JsonSchema,
-        MyOffPlanResponse: MyOffPlanResponse as JsonSchema,
-        AttachOffPlanRequest: AttachOffPlanRequest as JsonSchema,
         TaskPerson: TaskPerson as JsonSchema,
         TaskMissionRef: TaskMissionRef as JsonSchema,
         CreateMyTaskRequest: CreateMyTaskRequest as JsonSchema,
@@ -2919,9 +2997,15 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         RequestAnswerInput: RequestAnswerInput as JsonSchema,
         ExecuteRequestActionRequest: ExecuteRequestActionRequest as JsonSchema,
         MeetingDecisionView: MeetingDecisionView as JsonSchema,
-        MeetingDecisionReviewRequest: MeetingDecisionReviewRequest as JsonSchema,
-        MeetingDecisionResponse: MeetingDecisionResponse as JsonSchema,
-        MyMeetingDecisionsResponse: MyMeetingDecisionsResponse as JsonSchema,
+        MyMeetingCardsResponse: MyMeetingCardsResponse as JsonSchema,
+        MeetingWorldResponse: MeetingWorldResponse as JsonSchema,
+        MeetingCardView: MeetingCardView as JsonSchema,
+        MeetingCardDraftRequest: MeetingCardDraftRequest as JsonSchema,
+        MeetingCardConfirmRequest: MeetingCardConfirmRequest as JsonSchema,
+        MeetingMinutesLinkRequest: MeetingMinutesLinkRequest as JsonSchema,
+        MeetingMinutesFetchResponse: MeetingMinutesFetchResponse as JsonSchema,
+        MeetingWorldAnchorsRequest: MeetingWorldAnchorsRequest as JsonSchema,
+        MeetingWorldAnchorOptionsResponse: MeetingWorldAnchorOptionsResponse as JsonSchema,
         ImpactCardView: ImpactCardView as JsonSchema,
         ImpactCardResponse: ImpactCardResponse as JsonSchema,
         ImpactAskRequest: ImpactAskRequest as JsonSchema,

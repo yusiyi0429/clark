@@ -48,6 +48,7 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | 任务卡 | `MISSION_CARD_DRAFTS_DIR` | 讨论候选目录；Compose 缺省 `/repo/seed/placeholders` |
 | | `MISSION_CARD_KNOWN_MISSIONS_FILE` | 起草时参考的已知本月任务；文件缺失照常起草 |
 | 服务令牌 | `ONTOLOGY_SERVICE_TOKEN` | 本体拉每周进展的只读令牌；不填时对应接口返回 503 |
+| | `INTERNAL_CHAT_TOKEN` | 独立 Chat 读确认会议（`/internal/confirmed-meetings`）的服务凭据；不填时接口一律 404 |
 | 本体 | `TKOS_WORLD_API_URL`、`TKOS_WORLD_AGENT_TOKEN` | 都不填时本体相关能力如实显示未配置 |
 | | `TKOS_WORLD_AGENT_TOKEN_FILE` | 从文件读凭证（只在内存里）；读失败时健康接口报告错误码 |
 | | `TKOS_WORLD_INSTANCE` | `mvp`；可选 `demo`、`formal`、`tk`，对应 `apps/api/config/world-instance*.json` |
@@ -75,7 +76,7 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | 飞书 | `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_TOKEN_KEY` | 三项都留空＝关闭飞书（路由 404，不起长连接）；只填一部分 API 启动失败。`FEISHU_TOKEN_KEY` 为 base64 的 32 字节，与 `SESSION_SECRET` 分开 |
 | | `FEISHU_TOKEN_KEY_VERSION` | 1；换密钥时递增，空串会被判非法 |
 | | `FEISHU_BITABLE_MODE` | 只有 `live` 才写真实多维表格，其余为 mock |
-| | `IMPACT_CARD_MODE` | 只有 `shadow` 时影响卡只在后台记录，其余为 live 推送 |
+| | `FEISHU_WEB_ORIGIN` | 飞书网页域名（如 `https://tokenking.feishu.cn`）；会议事件写本体时拼妙记链接，留空不带链接 |
 | 观测 | `LANGSMITH_TRACING`、`LANGSMITH_API_KEY` | 只有 `LANGSMITH_TRACING=true` 且有 key 才上报 |
 | | `LANGSMITH_PROJECT` | Compose 缺省 `warmap`，代码缺省 `default` |
 | | `LANGSMITH_ENDPOINT` | SDK 默认端点 |

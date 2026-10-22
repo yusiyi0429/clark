@@ -31,7 +31,7 @@ import { resumeResearch, type ResearchService } from "./research.js";
 import { resumePreflights, type PreflightAgent } from "./meetingPreflight.js";
 import { createPreflightAgent, createPreflightThoughtTranslator, preflightThinkingLevel } from "./preflightAgent.js";
 import { agentModel, type AgentModelEnv } from "./agentModels.js";
-import { pendingOntologyUpdater, type OntologyUpdater, type PostMeetingAgent } from "./outcome.js";
+import type { PostMeetingAgent } from "./outcome.js";
 import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { createWorldReader, mergeWorldGoalsIntoContext, ontologyToolResult, type OntologyQuery } from "./worldReader.js";
@@ -48,10 +48,11 @@ import type { FeishuEnv } from "./feishu/config.js";
 import { createFeishuClient, type FeishuClient } from "./feishu/client.js";
 import { registerFeishuAuthRoutes } from "./routes/feishu.js";
 import { createMeetingFollowThrough, type MeetingFollowThrough } from "./meetingFollowThrough.js";
-import type { DecisionLayeringAgent } from "./meetingDecisionAgent.js";
 import type { ImpactAgent } from "./impactAgent.js";
+import type { FeishuCalendarApi } from "./feishu/calendar.js";
 import type { FeishuMinutesApi } from "./feishu/minutes.js";
 import { registerMeetingFollowThroughRoutes } from "./routes/meetingFollowThrough.js";
+import { registerInternalMeetingRoutes } from "./routes/internalMeetings.js";
 import { createDocChangeAgent, type DocChangeAgent } from "./docChangeAgent.js";
 import { createDocChangeService, type DocChangeService } from "./docChanges.js";
 import { registerDocChangeRoutes } from "./routes/docChanges.js";
@@ -113,7 +114,7 @@ import { realDictationPolishDeps, type DictationPolishDeps } from "./dictationPo
 import { createThreadIntroAgent, type ThreadIntroAgent } from "./threadIntro.js";
 import { createTaskAcceptanceAgent, type TaskAcceptanceAgent } from "./taskAcceptanceDraft.js";
 import { personDisplayNames } from "./people.js";
-import { issueOriginFields } from "./dataOrigin.js";
+import { listPendingIssueSummaries } from "./issues.js";
 
 type ValidationItem = { instancePath?: string; dataPath?: string; message?: string };
 
@@ -153,6 +154,8 @@ export type AppEnv = {
   missionCardKnownMissionsFile?: string;
   driServiceToken: string;
   ontologyServiceToken?: string;
+  /** 独立 Chat 读确认会议的服务凭据（INTERNAL_CHAT_TOKEN）；不配时 /internal/confirmed-meetings 不注册。 */
+  internalChatToken?: string;
   buildSha: string;
   piBaseUrl: string;
   piApiKey: string;
@@ -188,8 +191,8 @@ export type AppEnv = {
   feishu?: FeishuEnv;
   /** 管理员（TIANSHU_ADMIN_PERSON_IDS，逗号分隔的 personId）：能看管理员视图；不配时没有人能看。 */
   adminPersonIds?: string[];
-  /** 影响卡：live 推送（缺省；置信度低的仍只记影子）、shadow 只在后台记录（IMPACT_CARD_MODE）。 */
-  impactCardMode?: "live" | "shadow";
+  /** 飞书网页域名（FEISHU_WEB_ORIGIN）：会议事件里拼妙记链接用；不配时不带链接。 */
+  feishuWebOrigin?: string;
   /** ③ 信息收集的飞书多维表格：live 以发起人身份调开放接口（要先在飞书后台开通 base 权限，见 feishu/bitable.ts）；缺省 mock，不调飞书（FEISHU_BITABLE_MODE）。 */
   collectionBitable?: "live" | "mock";
 } & PeopleDirectoryEnv & WorldEnv & CompanyContextEnv;
@@ -218,7 +221,6 @@ export async function buildApp({
   preflightAgent,
   outcomeAgent,
   driExporter,
-  ontologyUpdater = pendingOntologyUpdater,
   monthlyPlanService,
   monthlyReviewService,
   weeklyReviewService,
@@ -265,8 +267,6 @@ export async function buildApp({
   preflightAgent?: PreflightAgent;
   outcomeAgent?: PostMeetingAgent;
   driExporter?: DriExporter;
-  /** CEO 确认战略议题后的本体更新；缺省不做事、请求保持 pending（co-agent 同事实现真实 Agent）。 */
-  ontologyUpdater?: OntologyUpdater;
   monthlyPlanService?: MonthlyPlanService;
   /** 月末复盘的起草、评估、汇总；缺省时 open 返回 503，其余生成不运行。 */
   monthlyReviewService?: MonthlyReviewService;
@@ -301,8 +301,8 @@ export async function buildApp({
   outlets?: RadarOutletAdapter;
   /** 飞书开放接口；缺省按 env.feishu 装配真实客户端（测试注入假实现）。 */
   feishuClient?: FeishuClient;
-  /** 会后分层、影响分析与妙记接口（测试注入假实现）；缺省用 heavy 模型与真实飞书接口。 */
-  meetingFollowThroughAgents?: { layering?: DecisionLayeringAgent; impact?: ImpactAgent; minutesApi?: FeishuMinutesApi };
+  /** 影响卡追问、妙记与日历接口（测试注入假实现）；缺省用 heavy 模型与真实飞书接口。 */
+  meetingFollowThroughAgents?: { impact?: ImpactAgent; minutesApi?: FeishuMinutesApi; calendarApi?: FeishuCalendarApi };
   /** 文档变更找候选的 Agent（测试注入假实现）；缺省用快模型。 */
   docChangeAgent?: DocChangeAgent;
   conversationTurnTimeoutMs?: number;
@@ -415,21 +415,7 @@ export async function buildApp({
     readOntology,
     listMissions: (filters, viewer) => listConversationMissions(pool.query.bind(pool), filters, viewer),
     // 对话只读工具：实时待决策 Issue 清单（不含签名 Action，不可写入）。
-    listPendingIssues: async () => {
-      const result = await pool.query(
-        `SELECT id, title, location, urgency, research->>'status' AS research_status, created_at, origin_ref
-           FROM issues WHERE status = 'pending' ORDER BY created_at, id`,
-      );
-      return result.rows.map((row) => ({
-        id: String(row.id),
-        title: String(row.title),
-        location: row.location,
-        urgency: row.urgency,
-        researchStatus: String(row.research_status ?? "none"),
-        createdAt: new Date(row.created_at).toISOString(),
-        ...issueOriginFields(row.origin_ref),
-      }));
-    },
+    listPendingIssues: () => listPendingIssueSummaries(pool.query.bind(pool)),
   });
   const radar = radarService ?? {
     providerStatus: { web: false, wechat: false, outlets: false },
@@ -507,7 +493,6 @@ export async function buildApp({
     now,
   };
   app.decorate("collectionJobs", collectionJobs(collectionDeps));
-  app.addHook("onClose", async () => { followThrough.close(); });
   // 周复盘提交后按关联的 Mission、Task 写进展到本体：同样只在实例配置允许写时启用；不写时提交照常，等配好后补发。
   let weeklyReviewWorld: WeeklyReviewWorldSync | undefined;
   if (worldConfigured(env) && world.status().writes) {
@@ -554,7 +539,7 @@ export async function buildApp({
   await ensureMaterialStorage(conversationAttachmentStorageDir);
   const recordingStorageDir = env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR;
   await ensureMaterialStorage(recordingStorageDir);
-  const recordings = recordingService ?? createMeetingRecordingService({ pool, storageDir: recordingStorageDir, peopleDirectory });
+  const recordings = recordingService ?? createMeetingRecordingService({ pool, storageDir: recordingStorageDir, peopleDirectory, publicOrigin: env.publicOrigin });
   // 关闭时只停轮询：在途的识别停在 transcribing，下次启动 recoverInterrupted 接着轮询
   app.addHook("onClose", async () => recordings.close());
 
@@ -622,7 +607,6 @@ export async function buildApp({
     personalRadar,
     research,
     driExporter,
-    ontologyUpdater,
     monthlyPlanService,
     monthlyReviewService,
     weeklyReviewService,
@@ -690,6 +674,7 @@ export async function buildApp({
   registerAdminRoutes(app, ctx);
   registerProgressRoutes(app, ctx);
   registerMeetingFollowThroughRoutes(app, ctx, followThrough);
+  registerInternalMeetingRoutes(app, ctx);
   // 文档变更：找候选用快模型；按作者身份读飞书文档元数据（不读正文）；后台任务与群消息事件由 server.ts 按 app.docChanges.jobs() 注册。
   const isCeo = (personId: string) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false;
   const docChanges = createDocChangeService({

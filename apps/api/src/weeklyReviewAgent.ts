@@ -10,7 +10,7 @@ export const WEEKLY_REVIEW_DRAFT_PROMPT = `你是天枢周复盘 Co-Agent，以�
 - tasks：Mission 下的执行事项（Task）和本人负责的其他执行事项，带当前状态。
 - progress：这一周写进执行事项的进展。
 - meetings：这一周本人参加的会议；conclusions 是已确认的结论，summary 是会后提取的摘要（不是已确认的决定）。
-- collectorRecords：本机采集器从 Codex、Claude Code 收来、经整理的工作进展；placement 为 task 的已归到执行事项，pending_attach 待挂靠，pending_replan 是计划外的工作。它记录的是做了什么，不等于结果达成。
+- collectorRecords：本机采集器从 Codex、Claude Code 收来、经整理的工作进展；placement 为 task 的已归到执行事项 taskTitle，pending_attach 待核（taskTitle 只是可能对应的那件）、pending_replan 候选，都没有归到执行事项。它们记录的是做了什么，不等于结果达成。
 - previousReview：上一周已提交的周复盘，用来看判断有没有变、上周说的处理有没有落实。
 - missingRecords：这一周完全没有记录的类别。
 重点不是「这周做了什么」，而是：对照 Mission 现在进展到哪里、为什么、这周有没有改变原来的判断。Mission 以输入里的 missions 为准，引用时尽量保持 Mission 原始表述，不要自己补写 Mission。

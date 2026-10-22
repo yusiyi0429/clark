@@ -72,10 +72,9 @@ export function capabilitySections(cards: Card[]): CapabilitySection[] {
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
 }
 
-/** 「全局进展」入口的读屏名称：带上红线、计划外的条数。首页手持的「公司全局」同用。 */
-export function progressEntryLabel(counts: { redLines: number; offPlan: number } | null): string {
-  const parts = counts ? [counts.redLines ? `${counts.redLines} 条红线` : "", counts.offPlan ? `${counts.offPlan} 条计划外` : ""].filter(Boolean) : [];
-  return parts.length ? `全局进展，${parts.join("，")}` : "全局进展";
+/** 「全局进展」入口的读屏名称：带上红线条数。首页手持的「公司全局」同用。 */
+export function progressEntryLabel(counts: { redLines: number } | null): string {
+  return counts?.redLines ? `全局进展，${counts.redLines} 条红线` : "全局进展";
 }
 
 function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
@@ -147,7 +146,6 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
           >
             全局进展
             {progress?.redLines ? <span className={b.progressBadge} data-tone="red">{progress.redLines} 红线</span> : null}
-            {progress?.offPlan ? <span className={b.progressBadge}>{progress.offPlan} 计划外</span> : null}
             <ChevronRight size={14} aria-hidden="true" />
           </HeroButton>
           <ToggleButtonGroup

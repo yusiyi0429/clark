@@ -1,0 +1,6 @@
+[
+  {"name": "01-主持人首页-会上定了待确认", "login": "lin", "path": "/me"},
+  {"name": "02-主持人首页-改一下", "login": "lin", "path": "/me", "script": "const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='改一下'); b?.click();"},
+  {"name": "03-主持人会议页-三选一", "login": "lin", "path": "/me/meetings/b96f38b3-4fb3-4925-86f5-9cdca35fe335", "script": "document.querySelector('[data-outline=decisions]')?.scrollIntoView({block:'start'});"},
+  {"name": "04-主持人会议页-改一下", "login": "lin", "path": "/me/meetings/b96f38b3-4fb3-4925-86f5-9cdca35fe335", "script": "const sec=document.querySelector('[data-outline=decisions]'); const b=[...sec.querySelectorAll('button')].find(x=>x.textContent.trim()==='改一下'); b?.click(); await new Promise(r=>setTimeout(r,300)); sec.querySelector('textarea')?.scrollIntoView({block:'center'});"}
+]

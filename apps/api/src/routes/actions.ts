@@ -7,19 +7,20 @@ import {
   EditMeetingDetailsRequest,
   ExecuteActionRequest,
   JoinMeetingRequest,
-  MeetingConfirmItemInput,
-  MeetingDismissItemInput,
-  MeetingRevokeEffectInput,
   MissionEditInput,
   ReplaceTranscriptRequest,
   RequestSupplementRequest,
   SignMonthlyPlanRequest,
   UpdateMeetingDraftRequest,
   UpdateMonthlyPlanDraftRequest,
+  type TCard,
   type TCardCollection,
+  type TMeetingCardPayload,
   type TUpdateMonthlyPlanDraftRequest,
 } from "@warmap/contracts";
 import { actionFingerprint, verifyActionId } from "../actionToken.js";
+import { enqueueJob } from "../jobs.js";
+import { MEETING_MINUTES_POLL_KIND } from "../meetingMinutes.js";
 import { executeIssueAction } from "../issues.js";
 import { executeCancelMeeting, executeCreateMeeting, executeEditMeetingDetails, executeEndMeeting, executeJoinMeeting, executeRequestSupplement, executeUpdateDraft } from "../meetings.js";
 import { executeEditMaterials } from "../meetingMaterials.js";
@@ -28,14 +29,14 @@ import { executeEditMission } from "../missions.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
 import { executeRetryMonthlyPlanDraft, executeSignMonthlyPlan, executeUpdateMonthlyPlanDraft } from "../monthlyPlans.js";
 import { startSignedMissionDrafts } from "../missionRounds.js";
-import { executeConfirmItem, executeDismissItem, executeReplaceTranscript, executeRetryOutcome, executeRevokeEffect } from "../outcome.js";
+import { executeReplaceTranscript, executeRetryOutcome } from "../outcome.js";
 import { executeConfirmTranscriptCandidate, executeDiscardTranscriptCandidate } from "../transcriptCandidate.js";
 import { getMeetingRow, type MeetingActionOutcome } from "../meetingStore.js";
 import { projectMemberMeetingCardFromCard } from "../memberCards.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { pool, q, env, fail, requirePerson, requestContext, peopleDirectory, preflight, driExporter, ontologyUpdater, outcome, monthlyPlanService, research, invalidInput, respond } = ctx;
+  const { pool, q, env, fail, requirePerson, requestContext, peopleDirectory, preflight, driExporter, outcome, monthlyPlanService, research, invalidInput, respond } = ctx;
 
   app.post(
     "/api/actions/execute",
@@ -46,7 +47,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
         return fail(reply, 404, "UNKNOWN_ACTION", "无效 actionId");
       }
       if (req.person!.role !== "ceo") {
-        if (!["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate"].includes(scope.actionType) || scope.objectType !== "meeting")
+        if (!["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate", "meeting.retry_feishu_booking"].includes(scope.actionType) || scope.objectType !== "meeting")
           return fail(reply, 403, "FORBIDDEN", "只有 CEO 可以访问");
         const meeting = await getMeetingRow(q, scope.objectId);
         if (!meeting || meeting.lead_dri_id !== req.person!.personId)
@@ -56,6 +57,9 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       const fingerprint = actionFingerprint(env.sessionSecret, req.body.actionId, req.body.input);
       const input = req.body.input;
       const hostId = req.person!.role === "ceo" ? undefined : req.person!.personId;
+      // 建会、改时间、取消之后对齐飞书日程（后台任务；没在飞书约的会不排）。
+      const feishuEvents = app.meetingFollowThrough.feishuEvents;
+      const changed = (result: MeetingActionOutcome): result is { card: TCard } => "card" in result && !result.replayed;
       const respondMeeting = (result: MeetingActionOutcome) => {
         if (hostId === undefined || "error" in result) return respond(reply, result);
         return respond(reply, "card" in result
@@ -66,7 +70,9 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       // Ticket 09：Issue 侧 Meeting Action 先于 Ticket 08 的通用 Issue Action 分派
       if (scope.actionType === "issue.create_meeting") {
         if (!Value.Check(CreateMeetingRequest, input)) return invalidInput(reply, CreateMeetingRequest, input);
-        return respond(reply, await executeCreateMeeting(pool, peopleDirectory, preflight, env.sessionSecret, scope, input, fingerprint, ctx.threadIntroAgent));
+        const result = await executeCreateMeeting(pool, peopleDirectory, preflight, env.sessionSecret, scope, input, fingerprint, req.person!.personId, ctx.threadIntroAgent);
+        if ("card" in result) await feishuEvents.schedule(result.card.objectRef.id, "create");
+        return respond(reply, result);
       }
       if (scope.actionType === "issue.join_meeting") {
         if (!Value.Check(JoinMeetingRequest, input)) return invalidInput(reply, JoinMeetingRequest, input);
@@ -78,13 +84,20 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       }
       if (scope.actionType === "meeting.edit_details") {
         if (!Value.Check(EditMeetingDetailsRequest, input)) return invalidInput(reply, EditMeetingDetailsRequest, input);
-        return respond(reply, await executeEditMeetingDetails(pool, peopleDirectory, env.sessionSecret, scope, input, fingerprint, ctx.threadIntroAgent));
+        // 换主持会带进新参会人：在飞书补发邀请。
+        const before = (await getMeetingRow(q, scope.objectId))?.participants.map((person) => person.personId) ?? [];
+        const result = await executeEditMeetingDetails(pool, peopleDirectory, env.sessionSecret, scope, input, fingerprint, ctx.threadIntroAgent);
+        if (changed(result)) await feishuEvents.schedule(scope.objectId, `v${result.card.version}`,
+          (result.card.payload as TMeetingCardPayload).participants.map((person) => person.personId).filter((id) => !before.includes(id)));
+        return respond(reply, result);
       }
       if (scope.actionType === "meeting.reschedule") {
         if (!Value.Check(EditMeetingDetailsRequest, input)) return invalidInput(reply, EditMeetingDetailsRequest, input);
         if (!input.scheduledAt || Object.keys(input).some((key) => key !== "scheduledAt" && key !== "endsAt"))
           return fail(reply, 400, "INVALID_INPUT", "重新安排只接受开始和结束时间，且必须填写开始时间");
-        return respondMeeting(await executeEditMeetingDetails(pool, peopleDirectory, env.sessionSecret, scope, input, fingerprint, undefined, { hostId, futureOnly: true, now: ctx.now() }));
+        const result = await executeEditMeetingDetails(pool, peopleDirectory, env.sessionSecret, scope, input, fingerprint, undefined, { hostId, futureOnly: true, now: ctx.now() });
+        if (changed(result)) await feishuEvents.schedule(scope.objectId, `v${result.card.version}`);
+        return respondMeeting(result);
       }
       if (scope.actionType === "meeting.request_supplement") {
         if (!Value.Check(RequestSupplementRequest, input)) return invalidInput(reply, RequestSupplementRequest, input);
@@ -97,10 +110,17 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
         return respond(reply, await executeRunPreflight(pool, peopleDirectory, preflight, env.sessionSecret, scope, fingerprint));
       }
       if (scope.actionType === "meeting.cancel") {
-        return respond(reply, await executeCancelMeeting(pool, env.sessionSecret, scope, fingerprint));
+        const result = await executeCancelMeeting(pool, env.sessionSecret, scope, fingerprint);
+        if (changed(result)) await feishuEvents.schedule(scope.objectId, "cancel");
+        return respond(reply, result);
+      }
+      if (scope.actionType === "meeting.retry_feishu_booking") {
+        return respondMeeting(await feishuEvents.retry(env.sessionSecret, scope, fingerprint, hostId));
       }
       if (scope.actionType === "meeting.end") {
         const result = await executeEndMeeting(pool, env.sessionSecret, scope, fingerprint, hostId);
+        // 开完马上排一次妙记轮询：几秒内进入「等妙记」，不等下一个 5 分钟。
+        if ("card" in result) await enqueueJob(q, { kind: MEETING_MINUTES_POLL_KIND, dedupeKey: `${MEETING_MINUTES_POLL_KIND}:end:${scope.objectId}` });
         if (req.person!.role === "ceo" || "error" in result) return respond(reply, result);
         const viewerId = req.person!.personId;
         return respond(reply, "card" in result
@@ -131,21 +151,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
         if (!Value.Check(DiscardTranscriptCandidateRequest, discardInput)) return invalidInput(reply, DiscardTranscriptCandidateRequest, discardInput);
         return respondMeeting(await executeDiscardTranscriptCandidate(pool, env.sessionSecret, scope, fingerprint, hostId));
       }
-      // Ticket 11：逐项确认/忽略/撤回；itemId 由签名 actionId 携带
-      if (scope.actionType === "meeting.confirm_item") {
-        if (!Value.Check(MeetingConfirmItemInput, input ?? {})) return invalidInput(reply, MeetingConfirmItemInput, input ?? {});
-        return respond(reply, await executeConfirmItem(pool, ontologyUpdater, env.sessionSecret, scope, fingerprint));
-      }
-      if (scope.actionType === "meeting.dismiss_item") {
-        const dismissInput = input ?? {};
-        if (!Value.Check(MeetingDismissItemInput, dismissInput)) return invalidInput(reply, MeetingDismissItemInput, dismissInput);
-        return respond(reply, await executeDismissItem(pool, env.sessionSecret, scope, fingerprint, dismissInput.reason));
-      }
-      if (scope.actionType === "meeting.revoke_effect") {
-        const revokeInput = input ?? {};
-        if (!Value.Check(MeetingRevokeEffectInput, revokeInput)) return invalidInput(reply, MeetingRevokeEffectInput, revokeInput);
-        return respond(reply, await executeRevokeEffect(pool, env.sessionSecret, scope, fingerprint, revokeInput.reason));
-      }
+      // 会后逐条确认 / 忽略 / 撤回已停（会后只有会议卡一个入口）：旧的签名动作落到下面的 UNKNOWN_ACTION。
 
       if (scope.actionType === "monthly-plan.update_draft") {
         const monthlyInput = input ?? {};

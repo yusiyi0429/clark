@@ -7,54 +7,42 @@
 .error { margin: 0; color: var(--counter); font-size: 14px; line-height: 1.7; }
 
 /* 页头下一排计数（Asana Portfolio 的状态汇总）：点一下跳到那一段。 */
-.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .tile { display: grid; gap: 4px; min-width: 0; padding: 12px 14px; border: 1px solid var(--hairline); border-radius: var(--r-inset); background: var(--surface); color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background .14s ease, border-color .14s ease; }
 .tile:hover { background: var(--neutral-wash); }
 .tile:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
 .tileLabel { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-muted); font-size: 13px; font-weight: 500; }
 .tileLabel::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--hairline-strong); }
 .tile[data-tone='red'] .tileLabel::before { background: var(--counter); }
-.tile[data-tone='amber'] .tileLabel::before { background: var(--judgment); }
 .tile[data-tone='green'] .tileLabel::before { background: var(--confirmed); }
 .tileValue { display: flex; align-items: baseline; gap: 8px; color: var(--ink); font-size: 24px; line-height: 1.2; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tile[data-tone='red'] .tileValue { color: var(--counter); }
-.tileValue small { color: var(--ink-faint); font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* 段落：标题 + 计数；计划外按待挂靠、待改计划分两组。 */
+/* 段落：标题 + 计数。 */
 .section { display: grid; gap: 12px; min-width: 0; scroll-margin-top: 96px; }
 .sectionHead { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--ink); font-size: 17px; font-weight: 600; line-height: 1.5; }
-.sectionAside { margin-left: auto; color: var(--ink-faint); font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .count { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 7px; box-sizing: border-box; border-radius: 11px; color: var(--ink-muted); background: var(--neutral-wash); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .count[data-tone='red'] { color: var(--solid-fg); background: var(--counter); }
-.count[data-tone='amber'] { color: var(--judgment); background: var(--judgment-wash); }
 .count[data-tone='green'] { color: var(--confirmed); background: var(--confirmed-wash); }
-.group { display: grid; gap: 8px; min-width: 0; }
-.groupHead { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; color: var(--ink-muted); font-size: 13px; font-weight: 600; }
-.groupHead span { color: var(--ink-faint); font-weight: 500; font-variant-numeric: tabular-nums; }
 
 /* 一条：卡片式，左边一道色条表示状态（Linear 的健康度色）。 */
 .list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .item { position: relative; display: grid; gap: 10px; min-width: 0; padding: 14px 16px 12px 18px; border: 1px solid var(--hairline); border-radius: var(--r-inset); background: var(--surface); }
 .item::before { content: ""; position: absolute; left: -1px; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--hairline-strong); }
 .item[data-red]::before { background: var(--counter); }
-.item[data-off-plan]::before { background: var(--judgment); }
 .item[data-compact]::before { background: var(--confirmed); }
 .itemHead { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .itemTitle { flex: 1; min-width: 0; margin: 0; color: var(--ink); font-size: 15px; line-height: 1.5; font-weight: 600; overflow-wrap: anywhere; }
-.itemText { flex: 1; min-width: 0; margin: 0; color: var(--ink); font-size: 15px; line-height: 1.6; font-weight: 500; overflow-wrap: anywhere; }
 .flag { flex: none; display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .flag[data-tone='red'] { color: var(--counter); background: var(--counter-wash); }
 .flag[data-tone='green'] { color: var(--confirmed); background: var(--confirmed-wash); }
 .person { flex: none; display: inline-flex; align-items: center; gap: 6px; color: var(--ink-muted); font-size: 13px; font-weight: 500; white-space: nowrap; }
 .avatar { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: color-mix(in oklab, var(--onboarding-blue) 12%, var(--surface)); color: var(--brand-deep); font-size: 10px; font-weight: 600; letter-spacing: -.02em; }
-.spent { flex: none; color: var(--judgment); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; margin: 0; color: var(--ink-faint); font-size: 13px; line-height: 1.6; }
 .meta > span:not(.tag):has(+ span:not(.tag))::after { content: "·"; margin: 0 6px; color: var(--hairline-strong); }
 .meta > .tag { margin-left: 8px; }
 .tag { display: inline-flex; align-items: center; padding: 0 8px; border-radius: var(--onboarding-pill-radius); font-size: 12px; line-height: 20px; font-weight: 500; white-space: nowrap; color: var(--ink-muted); background: var(--neutral-wash); justify-self: start; }
 .tag[data-tone='red'] { color: var(--counter); background: var(--counter-wash); }
-.tag[data-tone='wait'] { color: var(--brand-deep); background: color-mix(in oklab, var(--onboarding-blue) 11%, var(--surface)); }
-.candidate { color: var(--ink-muted); }
 
 /* 数字对比 + 进度条：超出预计 / 剩下的部分标红，竖线是预计的位置。 */
 .meter { display: grid; grid-template-columns: auto minmax(80px, 1fr); align-items: center; gap: 12px; min-width: 0; }
@@ -99,14 +87,12 @@
 @media (max-width: 759px) {
   .content { padding: 16px 16px 152px; }
   .stack { gap: 24px; }
-  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tiles { gap: 8px; }
   .tileValue { font-size: 22px; }
   .itemHead { flex-wrap: wrap; row-gap: 6px; }
   .itemTitle { flex-basis: calc(100% - 90px); }
-  .itemText { order: 3; flex-basis: 100%; }
-  .spent { margin-left: auto; }
   .meter { grid-template-columns: minmax(0, 1fr); gap: 6px; }
-  .meterText, .tag, .person, .coverage, .groupHead, .subList small, .recent small { font-size: 13px; }
+  .meterText, .tag, .person, .coverage, .subList small, .recent small { font-size: 13px; }
   .subList li, .recent li { flex-direction: column; gap: 0; }
   .artifacts a { max-width: 100%; }
 }

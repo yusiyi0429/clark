@@ -1,5 +1,7 @@
 import type { TWeeklyReviewBody, TWeeklyReviewGenerationStep } from "@warmap/contracts";
-import type { Query } from "./meetingStore.js";
+import { canReadMeetingCard } from "./meetingCard.js";
+import { meetingCardFacts } from "./meetingCardRead.js";
+import type { MeetingRow, Query } from "./meetingStore.js";
 import { CITATION_SCHEME } from "./sourceCitations.js";
 import { distinctLabels, readCollectorProgress, type Cited } from "./personalReviewGeneration.js";
 import { addDays, weekPeriod, weeklyReviewText, weekWindow, type WeeklyReviewRow } from "./weeklyReviews.js";
@@ -100,17 +102,23 @@ export async function buildWeeklyReviewDraftInput(q: Query, row: Pick<WeeklyRevi
   await step("progress", "done", progress.length ? `${progress.length} 条进展，${tasks.length} 件执行事项` : tasks.length ? `${tasks.length} 件执行事项，本周没有进展` : MISSING_RECORDS);
 
   await step("meetings", "running");
-  const meetingRows = (await q(`SELECT id::text AS id, title, scheduled_at AS "scheduledAt", outcome FROM meetings
+  const meetingRows = (await q(`SELECT id::text AS id, title, scheduled_at AS "scheduledAt", outcome, lead_dri_id, created_by, attendees_actual, participants FROM meetings
     WHERE scheduled_at >= $1 AND scheduled_at < $2 AND outcome->>'status' = 'ready'
       AND (lead_dri_id=$3 OR ceo_participant_id=$3 OR participants @> jsonb_build_array(jsonb_build_object('personId', $3::text)))
     ORDER BY scheduled_at, id LIMIT ${MEETING_LIMIT}`, [start, end, personId])).rows as
-    { id: string; title: string; scheduledAt: Date; outcome: { summary?: string; items?: { text: string; review: { status: string } | null }[] } }[];
-  const meetings = meetingRows.map((meeting) => ({
-    cite: `${CITATION_SCHEME}meeting:${meeting.id}`, label: `${day(meeting.scheduledAt)} 会议 · ${clip(meeting.title, 20)}`,
-    date: meeting.scheduledAt.toISOString(), title: meeting.title,
-    conclusions: (meeting.outcome.items ?? []).filter((item) => item.review?.status === "confirmed").map((item) => item.text),
-    summary: clip(meeting.outcome.summary ?? "", TEXT_CHARS),
-  })).filter((meeting) => meeting.conclusions.length || meeting.summary);
+    (Pick<MeetingRow, "lead_dri_id" | "created_by" | "attendees_actual" | "participants"> &
+      { id: string; title: string; scheduledAt: Date; outcome: { summary?: string; items?: { text: string; review: { status: string } | null }[] } })[];
+  const meetings: WeeklyReviewDraftInput["meetings"] = [];
+  for (const meeting of meetingRows) {
+    // 有会议卡的会只读确认版（本人读得了会议卡时），只有草稿不算结论；旧会议照旧读已确认的条目。
+    const card = await meetingCardFacts(q, meeting.id);
+    const confirmed = card?.status === "confirmed" && canReadMeetingCard(meeting, { personId, isCeo: false }) ? card : null;
+    const conclusions = card ? confirmed?.sections.map((section) => `${section.heading}：${section.body}`) ?? []
+      : (meeting.outcome.items ?? []).filter((item) => item.review?.status === "confirmed").map((item) => item.text);
+    const summary = clip((card ? confirmed?.summary : meeting.outcome.summary) ?? "", TEXT_CHARS);
+    if (conclusions.length || summary) meetings.push({ cite: `${CITATION_SCHEME}meeting:${meeting.id}`, label: `${day(meeting.scheduledAt)} 会议 · ${clip(meeting.title, 20)}`,
+      date: meeting.scheduledAt.toISOString(), title: meeting.title, conclusions, summary });
+  }
   const concluded = meetings.filter((meeting) => meeting.conclusions.length).length;
   await step("meetings", "done", meetings.length ? `${meetings.length} 场${concluded < meetings.length ? `，${concluded} 场有已确认的结论` : ""}` : MISSING_RECORDS);
 

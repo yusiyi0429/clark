@@ -1,6 +1,6 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import type { TCardCollection } from "@warmap/contracts";
+import { MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, type TCardCollection } from "@warmap/contracts";
 import { MAX_MATERIAL_FILES, MAX_MATERIAL_FILE_BYTES, MaterialParseError, cleanupMaterialTemp, parseMaterialBatch, readStoredMaterial } from "../materialParser.js";
 import { renderMaterialPreview } from "../materialPreview.js";
 import { appendSupplementMaterial, replaceMeetingMaterials } from "../meetingMaterials.js";
@@ -49,32 +49,48 @@ export function registerMeetingRoutes(app: AppInstance, ctx: RouteContext): void
     },
   );
 
-  // 妙记 Markdown 只生成 Meeting 内嵌候选；确认是独立 opaque Action，不在此直接写 Transcript。
+  // 会议记录（md/txt/html/docx/pdf）：认得出说话人的只生成候选，确认是独立 opaque Action；认不出的按纪要直接确认。
   app.post(
     "/api/meetings/:id/transcript-candidate",
-    { preHandler: requirePerson, schema: { params: idParams }, bodyLimit: maxTranscriptBytes * 2 },
+    { preHandler: requirePerson, schema: { params: idParams }, bodyLimit: MAX_MATERIAL_FILE_BYTES * 2 },
     async (req, reply): Promise<TCardCollection | FastifyReply> => {
       let file: { fileName: string; buffer: Buffer } | null = null;
       const hostId = req.person!.role === "ceo" ? undefined : req.person!.personId;
       if (hostId !== undefined && (await getMeetingRow(q, req.params.id))?.lead_dri_id !== hostId)
         return fail(reply, 404, "MEETING_NOT_FOUND", "Meeting 不存在");
       try {
-        const upload = await req.file({ limits: { fileSize: maxTranscriptBytes, files: 1 } });
+        const upload = await req.file({ limits: { fileSize: MAX_MATERIAL_FILE_BYTES, files: 1 } });
         if (!upload) return fail(reply, 400, "INVALID_TRANSCRIPT", "multipart 缺少会议记录文件");
-        if (!/\.md$/i.test(upload.filename ?? "")) return fail(reply, 400, "INVALID_TRANSCRIPT", "会议记录候选只接受 .md 妙记 Markdown");
         file = { fileName: upload.filename, buffer: await upload.toBuffer() };
       } catch (err) {
         const code = (err as { code?: string }).code;
         if (code === "FST_REQ_FILE_TOO_LARGE" || code === "FST_FILES_LIMIT") {
-          return fail(reply, 413, "TRANSCRIPT_TOO_LARGE", `会议记录超过 ${maxTranscriptBytes} 字节上限`);
+          return fail(reply, 413, "TRANSCRIPT_TOO_LARGE", "会议记录不能超过 20 MB");
         }
         throw err;
       }
-      const result = await createTranscriptCandidate(pool, peopleDirectory, env.sessionSecret, req.params.id, file, hostId);
+      const result = await createTranscriptCandidate(pool, peopleDirectory, outcome, env.sessionSecret, env.publicOrigin, req.params.id, file, hostId);
       if (result.status === 200) return { cards: [hostId === undefined ? result.card : projectMemberMeetingCardFromCard(result.card, hostId)] };
       return fail(reply, result.status, result.code, result.message, result.fieldErrors ? { fieldErrors: result.fieldErrors } : undefined);
     },
   );
+
+  // 飞书妙记：主持人或创建人「再读一次」、贴妙记链接（别人一律 404）。
+  app.post("/api/meetings/:id/minutes/refetch", {
+    preHandler: requirePerson, schema: { params: idParams, response: { 200: MeetingMinutesFetchResponse } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "meeting.minutes_refetch", objectRef: `meeting:${req.params.id}` });
+    const result = await app.meetingFollowThrough.minutes.refetch(req.params.id, req.person!.personId);
+    return "error" in result ? fail(reply, result.error.status, result.error.code, result.error.message) : result;
+  });
+
+  app.post("/api/meetings/:id/minutes", {
+    preHandler: requirePerson, schema: { params: idParams, body: MeetingMinutesLinkRequest, response: { 200: MeetingMinutesFetchResponse } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "meeting.minutes_link", objectRef: `meeting:${req.params.id}` });
+    const result = await app.meetingFollowThrough.minutes.readLink(req.params.id, req.person!.personId, req.body.url);
+    return "error" in result ? fail(reply, result.error.status, result.error.code, result.error.message) : result;
+  });
 
   // Meeting Material 使用独立 endpoint，绝不复用 Transcript 语义或 DRI service 身份。
   app.post(

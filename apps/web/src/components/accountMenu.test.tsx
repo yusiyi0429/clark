@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AccountMenu, PasscodeForm, avatarInitial } from "./AccountMenu";
+import { AccountMenu, FeishuConnectItem, PasscodeForm, avatarInitial } from "./AccountMenu";
 
 describe("个人菜单（左下角自己的名字）", () => {
   it("头像写名里的第一个字，两个字的名字写头一个", () => {
@@ -16,6 +16,15 @@ describe("个人菜单（左下角自己的名字）", () => {
     const compact = renderToStaticMarkup(<AccountMenu account={{ displayName: "孙铭泽", role: "member" }} compact />);
     expect(compact).not.toContain(">孙铭泽<");
     expect(compact).toContain(">铭<");
+  });
+
+  it("接了飞书：没连好是「连接飞书」，连好了只显示「飞书已连接」、点不了", () => {
+    const pending = renderToStaticMarkup(<FeishuConnectItem connected={false} />);
+    expect(pending).toContain("连接飞书");
+    expect(pending).not.toContain("disabled");
+    const done = renderToStaticMarkup(<FeishuConnectItem connected />);
+    expect(done).toContain("飞书已连接");
+    expect(done).toContain("disabled");
   });
 
   it("修改口令：三个 4 位数字框，没填完不能提交", () => {

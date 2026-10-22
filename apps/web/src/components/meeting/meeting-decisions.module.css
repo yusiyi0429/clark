@@ -1,23 +1,4 @@
-/* 会议页「会上定了」：一条一行，序号 + 状态标 + 一句话 + 原话，主持人的三个按钮在下面。 */
-.list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
-.row { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; padding: 14px 0; border-top: 1px solid #eef0f3; }
-.row:first-child { border-top: 0; padding-top: 4px; }
-.ordinal { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #f1f3f6; color: #4f5866; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.body { display: grid; gap: 6px; min-width: 0; }
-.head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 24px; }
-.tier { padding: 0 8px; border-radius: 999px; background: #f3eefe; color: #5b3fb3; font-size: 12px; line-height: 22px; font-weight: 600; }
-.status { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 999px; background: #f1f3f6; color: #4f5866; font-size: 12px; line-height: 22px; font-weight: 600; white-space: nowrap; }
-.status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .7; }
-.status[data-tone='wait'] { background: #eaf2ff; color: #1f5fd6; }
-.status[data-tone='agent'] { background: #fff4de; color: #8a5a00; }
-.status[data-tone='done'] { background: #e9f7ef; color: #1c7a43; }
-.status[data-tone='off'] { background: #f3f4f6; color: #6b7280; }
-.hint { color: #8a5a00; font-size: 12px; }
-.statement { margin: 0; color: #111827; font-size: 15px; line-height: 1.7; font-weight: 500; overflow-wrap: anywhere; }
-.row[data-status='not_decided'] .statement, .row[data-status='rejected'] .statement { color: #6b7280; text-decoration: line-through; text-decoration-color: #c5cad3; }
-.was { margin: 0; color: #6b7280; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
-.quote { margin: 0; color: #4f5866; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
-.quote span { color: #8a93a2; }
+/* 会议页挂点那一行（MeetingWorldBar、WorldAnchors）：挂点、「改」、改挂点的选择框；下面一行是进度线。 */
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 2px; }
 .primary, .ghost, .link { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 6px 14px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background .14s ease, border-color .14s ease; }
 .primary { border: 0; background: #1f5fd6; color: #fff; }
@@ -27,11 +8,66 @@
 .link { min-height: 28px; padding: 2px 4px; border: 0; background: transparent; color: #1f5fd6; font-weight: 500; }
 .primary:disabled, .ghost:disabled { opacity: .45; cursor: default; }
 .primary:focus-visible, .ghost:focus-visible, .link:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; }
-.edit { display: grid; gap: 8px; }
-.edit textarea { width: 100%; min-height: 64px; field-sizing: content; max-height: 200px; font-size: 15px; line-height: 1.6; }
+
+
+/* 落点（回流设计稿 2）：类型 名称 + 写入状态点；样子同影响卡的「落到」一排。 */
+.anchors { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.anchor { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; padding: 2px 10px 2px 8px; border: 1px solid #dfe3e8; border-radius: 12px; background: #fff; color: #4f5866; font-size: 13px; line-height: 20px; }
+.anchor svg { flex: none; }
+.anchorKind { flex: none; color: #8a93a2; }
+.anchorTitle { min-width: 0; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anchorRemove { flex: none; margin-right: -4px; padding: 0 2px; border: 0; background: none; color: #8a93a2; font: inherit; font-size: 15px; line-height: 1; cursor: pointer; }
+/* 「改」：紧跟在挂点后面的安静文字链接。 */
+.anchorEdit { min-height: 26px; padding: 0 2px; border: 0; background: none; color: #4c545e; font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; text-decoration-color: #c7ccd4; text-underline-offset: 3px; }
+.anchorEdit:hover { color: #1f2937; text-decoration-color: currentColor; }
+
+/* 头部一块：挂到一行（靠左）+ 进度线。 */
+.worldBar { display: grid; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: #f6f7f9; }
+.worldLine { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+.worldLabel { flex: none; color: #8a93a2; font-size: 12px; }
+.picker { display: grid; gap: 8px; padding: 10px; border: 1px solid #e3e6eb; border-radius: 12px; background: #fff; }
+.picker input { height: 34px; padding: 0 10px; border: 1px solid #dfe3e8; border-radius: 10px; font: inherit; font-size: 14px; }
+.pickList { display: grid; gap: 10px; max-height: 320px; overflow-y: auto; }
+.pickGroup h4 { margin: 0 0 4px; padding: 0 4px; color: #8a93a2; font-size: 12px; font-weight: 600; }
+.pickGroup ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.pickOption { display: grid; gap: 2px; width: 100%; padding: 6px 10px; border: 1px solid transparent; border-radius: 10px; background: none; font: inherit; text-align: left; cursor: pointer; }
+.pickHead { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pickTitle { min-width: 0; color: #1f2937; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pickKind, .pickDraft { flex: none; padding: 0 6px; border-radius: 6px; font-size: 11px; line-height: 18px; }
+.pickKind { background: #f1f3f6; color: #6b7280; }
+.pickDraft { background: #fff4e0; color: #9a5b00; }
+.pickBrief { color: #8a93a2; font-size: 12px; line-height: 18px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.pickerPanel { display: grid; gap: 8px; }
+.worldError { margin: 0; color: #be123c; font-size: 13px; }
+.pickOption:hover { background: #f4f6fa; }
+.pickOption[aria-pressed='true'] { border-color: #9fb6e3; background: #eef3fd; }
+.spacer { flex: 1; }
+
+/* 约会议：右侧抽屉（二级页同一个外壳 DetailFrame），手持铺满。 */
+.sheetScrim { position: fixed; inset: 0; z-index: 60; background: rgba(15, 23, 42, .28); }
+.sheet { position: fixed; top: 0; right: 0; bottom: 0; display: flex; width: min(480px, 100vw); background: #fff; box-shadow: -12px 0 32px rgba(15, 23, 42, .12); }
+.sheetDialog { display: flex; flex: 1; min-width: 0; outline: none; }
+.booking { display: grid; gap: 16px; padding: 16px 20px 24px; overflow-y: auto; }
+.bookField { display: grid; gap: 6px; min-width: 0; }
+.bookField > span:first-child { color: #4f5866; font-size: 13px; font-weight: 600; }
+.bookField > input { height: 40px; padding: 0 12px; border: 1px solid #dfe3e8; border-radius: 10px; font: inherit; font-size: 14px; }
+.bookTime { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* 开始、横线、结束一行（手持也是）。 */
+.bookSpan { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; }
+.bookHost { color: #1f2937; font-size: 14px; line-height: 40px; }
+.bookPeople { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.bookPeople li { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border: 1px solid #dfe3e8; border-radius: 12px; font-size: 13px; }
+.bookPeople button { padding: 0 4px; border: 0; background: none; color: #8a93a2; font: inherit; font-size: 15px; cursor: pointer; }
+.bookActions { display: flex; justify-content: flex-end; gap: 8px; }
+
+@media (max-width: 959px), (pointer: coarse) {
+  .sheet { width: 100vw; box-shadow: none; }
+  .pickOption, .anchorEdit, .bookPeople button, .primary, .ghost, .picker input { min-height: 44px; }
+  .anchorRemove { min-width: 44px; min-height: 44px; }
+  .bookField > input { height: 44px; }
+  .pickList { max-height: none; }
+}
 
 @media (max-width: 759px) {
-  .row { grid-template-columns: 20px minmax(0, 1fr); gap: 10px; }
-  .ordinal { width: 20px; height: 20px; font-size: 11px; }
   .actions > .primary, .actions > .ghost { flex: 1 1 0; min-width: 0; min-height: 40px; padding-inline: 8px; }
 }

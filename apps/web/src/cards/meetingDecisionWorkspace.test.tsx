@@ -13,6 +13,8 @@ vi.mock("@/components/meeting/useDecisionHistory", () => ({
 }));
 vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ homeCards: [], closing: false, quote: () => undefined, compose: () => undefined }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
+// 会议记录用会议卡还是旧格式，由会议卡接口决定（静态渲染问不到）：这里的会议都是旧格式。
+vi.mock("@/components/meeting/useMeetingCardProbe", () => ({ useMeetingCardProbe: () => ({ status: "legacy" }) }));
 
 const ISSUE = "22222222-2222-4222-8222-222222222222";
 const MATERIAL = "11111111-1111-4111-8111-111111111111";
@@ -209,7 +211,7 @@ describe("会后：会上形成的结论回到议题块里确认", () => {
   const item = (id: string, kind: string, issueId: string | null, extra: Record<string, unknown> = {}) =>
     ({ id, kind, text: `${id} 的内容`, quote: `${id} 原话`, turnId: "t1", speakerId: "p1", ownerPersonId: null, issueId, judgmentKind: null, parentItemId: null, review: { status: "pending" }, ...extra });
 
-  it("指向议题的决定候选在议题块里，带原生确认 / 忽略；没有议题的进「其他事项」", () => {
+  it("指向议题的决定候选在议题块里（只读，没有确认 / 忽略）；没有议题的进「其他事项」", () => {
     const held = meeting({
       status: "held",
       transcript: { turns: [{}, {}] },
@@ -227,13 +229,15 @@ describe("会后：会上形成的结论回到议题块里确认", () => {
     const decision = html.indexOf('id="outcome-d1"');
     expect(decision).toBeGreaterThan(block);
     expect(decision).toBeLessThan(others);
-    expect(html.slice(decision, others)).toMatch(/data-variant="confirm"[^>]*>确认</);
+    expect(html.slice(decision, others)).not.toContain(">确认<");
+    expect(html.slice(decision, others)).not.toContain(">忽略<");
     expect(html.indexOf('id="outcome-a1"')).toBeGreaterThan(others);
     expect(html.indexOf("华东改为主战场")).toBeGreaterThan(others);
     expect(html).toContain("会上形成的结论");
     expect(html).not.toContain("未确认的候选不构成决定");
-    // 会后目录：纪要 → 议题 → 其他 → 原文。
+    // 会后目录：纪要 → 议题 → 其他 → 原文；旧会议的结论只读，议题那一行写条数，不标待确认。
     expect(html).toContain('aria-label="会后目录"');
+    expect(html).not.toContain("条待确认");
   });
 
   it("原话里的 Markdown 表格行改写成一句、和条目重复时不再摆两遍；过了截止的待办标「已过期」", () => {

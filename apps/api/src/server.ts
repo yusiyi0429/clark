@@ -61,6 +61,7 @@ const env: AppEnv = {
   extraOrigins: (process.env.EXTRA_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean),
   driServiceToken: requiredEnv("DRI_SERVICE_TOKEN"),
   ontologyServiceToken: process.env.ONTOLOGY_SERVICE_TOKEN,
+  internalChatToken: process.env.INTERNAL_CHAT_TOKEN || undefined,
   // 本体：TKOS_WORLD_API_URL；凭证 TKOS_WORLD_AGENT_TOKEN 或 TKOS_WORLD_AGENT_TOKEN_FILE（只在内存里）；TKOS_WORLD_INSTANCE 选实例配置（缺省 mvp）。
   ...resolveWorldEnv(process.env),
   // 第二个只读实例（词元云集 TK scope）：TKOS_WORLD_TK_INSTANCE=tk 加 TKOS_WORLD_TK_TOKEN_FILE；不设就关闭。
@@ -102,8 +103,8 @@ const env: AppEnv = {
   feishu: resolveFeishuEnv(process.env),
   // 管理员视图：TIANSHU_ADMIN_PERSON_IDS（逗号分隔的 personId）；不配时没有人能看。
   adminPersonIds: parseAdminPersonIds(process.env.TIANSHU_ADMIN_PERSON_IDS),
-  // 影响卡：live（缺省）推送；shadow 只在后台记录，不打扰人。
-  impactCardMode: process.env.IMPACT_CARD_MODE === "shadow" ? "shadow" : "live",
+  // 会议事件的妙记链接：FEISHU_WEB_ORIGIN（如 https://tokenking.feishu.cn）；不配时不带链接。
+  feishuWebOrigin: process.env.FEISHU_WEB_ORIGIN?.trim() || undefined,
   collectionBitable: process.env.FEISHU_BITABLE_MODE === "live" ? "live" : "mock",
 };
 
@@ -243,6 +244,7 @@ const recordingService = createMeetingRecordingService({
   pool,
   storageDir: env.recordingStorageDir ?? DEFAULT_RECORDING_STORAGE_DIR,
   peopleDirectory,
+  publicOrigin: env.publicOrigin,
 });
 await recordingService.recoverInterrupted();
 // 飞书（配了才启用）：一个开放接口客户端，免登路由与后台任务共用。

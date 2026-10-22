@@ -64,7 +64,6 @@
 
 .slotMark { flex: none; color: var(--meeting-ended); }
 .slotWord { font-variant-numeric: tabular-nums; }
-.slotElapsed { font-weight: 600; }
 
 .slot[data-timeline='upcoming'] .slotWord { color: var(--meeting-upcoming-ink); }
 .slot[data-timeline='live'] .slotDot { background: var(--meeting-live); animation: livePulse 1.6s ease-in-out infinite; }

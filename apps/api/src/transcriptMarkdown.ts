@@ -152,3 +152,63 @@ export function parseMiaojiMarkdown(input: string | Buffer): TranscriptParseResu
   }
   return { ok: true, transcript: { turns } };
 }
+
+export const SPEAKER_LINES_PARSER_VERSION = "speaker-lines.v1";
+export const MEETING_NOTES_PARSER_VERSION = "meeting-notes.v1";
+export const MEETING_NOTES_SPEAKER = "会议纪要";
+/** 说话人行：姓名不超过 20 字、不带句读；「姓名：内容」或独占一行的「姓名 mm:ss / hh:mm:ss(.mmm)」。 */
+const COLON_LINE = /^([^，。？！,.?!：:；;]{1,20}?)\s*[：:]\s*(\S.*)$/;
+const TIME_HEADER = /^([^，。？！,.?!：:；;]{1,20}?)\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.\d{1,3})?\s*$/;
+/** 说话人行至少占非空行的这个比例才算逐字稿（时间头算上它后面那行正文）。 */
+const SPEAKER_COVERAGE = 0.6;
+
+/**
+ * 没有 `### 文字记录` 标题的通用说话人格式（确定性，不猜）：每行「姓名：内容」，或「姓名 00:01:02」独占一行后接正文。
+ * 至少 2 段、说话人行覆盖大部分非空行才认；否则返回 null 交给下一种。第一段之前的内容（标题、日期）不要。
+ */
+export function parseSpeakerLines(text: string): ParsedTranscriptTurn[] | null {
+  const lines = text.split(/\r?\n/);
+  const nonEmpty = lines.filter((line) => line.trim()).length;
+  for (const style of ["colon", "time"] as const) {
+    const raw: { speakerName: string; offsetSeconds: number; body: string[] }[] = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      const colon = style === "colon" ? COLON_LINE.exec(trimmed) : null;
+      const time = style === "time" ? TIME_HEADER.exec(trimmed) : null;
+      const speakerName = (colon ?? time)?.[1].trim();
+      if (speakerName && !(time && (Number(time[3]) > 59 || Number(time[4] ?? 0) > 59))) {
+        const offsetSeconds = !time ? 0 : time[4] === undefined ? Number(time[2]) * 60 + Number(time[3])
+          : Number(time[2]) * 3600 + Number(time[3]) * 60 + Number(time[4]);
+        raw.push({ speakerName, offsetSeconds, body: colon ? [colon[2]] : [] });
+      } else if (raw.length) raw.at(-1)!.body.push(line);
+    }
+    const turns = raw.map((turn) => ({ speakerName: turn.speakerName, offsetSeconds: turn.offsetSeconds, text: turn.body.join("\n").trim() }));
+    const covered = raw.length * (style === "time" ? 2 : 1);
+    if (raw.length < 2 || covered < nonEmpty * SPEAKER_COVERAGE) continue;
+    if (turns.length > MAX_TRANSCRIPT_TURNS || turns.some((turn, index) => !turn.text || turn.text.length > MAX_TURN_TEXT_LENGTH
+      || (index > 0 && turn.offsetSeconds < turns[index - 1].offsetSeconds))) continue;
+    return turns;
+  }
+  return null;
+}
+
+/**
+ * 认不出说话人的会议记录按纪要导入：空行分段，每段一个「会议纪要」发言、offset 都是 0；
+ * 超过单段上限的段按上限切开，段数超过上限时把相邻段并到单段上限以内。
+ */
+export function splitMeetingNotes(text: string): TranscriptParseResult {
+  const pieces = text.split(/\r?\n[ \t]*\r?\n/).map((part) => part.trim()).filter(Boolean)
+    .flatMap((part) => Array.from({ length: Math.ceil(part.length / MAX_TURN_TEXT_LENGTH) }, (_, index) => part.slice(index * MAX_TURN_TEXT_LENGTH, (index + 1) * MAX_TURN_TEXT_LENGTH)));
+  let paragraphs = pieces;
+  if (paragraphs.length > MAX_TRANSCRIPT_TURNS) {
+    paragraphs = [];
+    for (const piece of pieces) {
+      const last = paragraphs.at(-1);
+      if (last !== undefined && last.length + piece.length + 2 <= MAX_TURN_TEXT_LENGTH) paragraphs[paragraphs.length - 1] = `${last}\n\n${piece}`;
+      else paragraphs.push(piece);
+    }
+  }
+  if (!paragraphs.length) return fail("EMPTY_TRANSCRIPT", "会议记录没有文字", null);
+  if (paragraphs.length > MAX_TRANSCRIPT_TURNS) return fail("TOO_MANY_TURNS", `会议记录最多 ${MAX_TRANSCRIPT_TURNS} 段`, null);
+  return { ok: true, transcript: { turns: paragraphs.map((paragraph) => ({ speakerName: MEETING_NOTES_SPEAKER, offsetSeconds: 0, text: paragraph })) } };
+}

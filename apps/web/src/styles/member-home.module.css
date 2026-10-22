@@ -17,6 +17,10 @@
 .heading { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .error { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--counter); font-size: 13px; line-height: 1.6; }
 
+/* 去战场进展的入口：执行事项下方右对齐的一行。 */
+.progressEntry { display: flex; justify-content: flex-end; min-height: 30px; }
+.progressEntry button { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+
 /* 个人菜单在桌面上随通知栏；手机上放到首页最后（见下方 959px）。 */
 .phoneAccount { display: none; }
 
@@ -39,4 +43,5 @@
   .widgetsSlot { order: 1; }
   .phoneAccount { display: block; order: 2; margin-top: 4px; }
   .quiet { color: var(--ink-muted); text-shadow: none; }
+  :global([data-detail-open="false"]) .progressEntry button { color: #cfe0ff; }
 }

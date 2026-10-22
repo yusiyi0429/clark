@@ -1,0 +1,26 @@
+/* 能接文件的区域：拖着文件时内缩一圈浅蓝虚线圆角框；拖到上方时框内铺一层淡蓝、正文隐约可见，中间一枚白色小胶囊写「松开上传」。
+   外面可改 --drop-radius / --drop-inset / --drop-fill / --drop-line（深色底用）。 */
+.zone { position: relative; }
+.zone::before {
+  content: ""; position: absolute; inset: var(--drop-inset, 5px); z-index: 5;
+  border: 1.5px dashed var(--drop-line, rgba(33, 91, 161, 0.5)); border-radius: var(--drop-radius, 14px);
+  opacity: 0; pointer-events: none; transition: opacity 150ms ease, background-color 150ms ease, border-color 150ms ease;
+}
+.zone[data-drop]::before { opacity: 1; background-color: var(--drop-tint, rgba(33, 91, 161, 0.03)); }
+.zone[data-drop="over"]::before, .zone[data-drop="busy"]::before {
+  border-style: solid; background-color: var(--drop-fill, rgba(33, 91, 161, 0.07));
+  -webkit-backdrop-filter: blur(var(--drop-blur, 2px)); backdrop-filter: blur(var(--drop-blur, 2px));
+}
+.hint {
+  position: absolute; inset: var(--drop-inset, 5px); z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+/* 区域比屏幕高时，胶囊停在可见范围里。 */
+.hint > span {
+  position: sticky; top: 48px; bottom: 24px; padding: 8px 18px; border: 1px solid rgba(33, 91, 161, 0.14); border-radius: 999px;
+  background: #fff; color: #215ba1; font-size: 13px; font-weight: 500; line-height: 18px; white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(33, 91, 161, 0.14); animation: drop-hint-in 150ms ease-out;
+}
+@keyframes drop-hint-in { from { opacity: 0; transform: translateY(3px) scale(0.96); } }
+@media (prefers-reduced-motion: reduce) { .zone::before { transition: none; } .hint > span { animation: none; } }
+@media (prefers-reduced-transparency: reduce) { .zone { --drop-blur: 0px; } }

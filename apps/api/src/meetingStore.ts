@@ -13,9 +13,9 @@ import type {
   TTranscriptCandidateProjection,
   TMeetingRecordingSummary,
 } from "@warmap/contracts";
-import type { TMeetingMinutesStatus } from "@warmap/contracts";
+import type { TMeetingFeishuEvent, TMeetingMinutesFailure, TMeetingMinutesStatus } from "@warmap/contracts";
 import { signActionId, type ActionScope } from "./actionToken.js";
-import { attendeesOf, minutesStatusOf, projectMeetingDecision, type MeetingDecisionRow } from "./meetingDecisionView.js";
+import { attendeesOf, minutesManualImport, minutesStatusOf, projectMeetingDecision, type MeetingDecisionRow } from "./meetingDecisionView.js";
 import { computeStaleInputs, type GroupInputVersions } from "./preflightStaleness.js";
 
 export type Query = (sql: string, params?: unknown[]) => Promise<QueryResult>;
@@ -32,6 +32,8 @@ export type MeetingRow = {
   ends_at: Date;
   /** 「这场会开完了」的时刻；与 status 独立。 */
   ended_at: Date | null;
+  /** 飞书会议真实开始的时刻（202，在飞书约上的会收到「会议开始」事件时记）。 */
+  started_at?: Date | null;
   lead_dri_id: string;
   ceo_participant_id: string;
   participants: TMeetingParticipant[];
@@ -56,16 +58,38 @@ export type MeetingRow = {
   feishu_meeting_id?: string | null;
   minute_token?: string | null;
   minutes_status?: TMeetingMinutesStatus;
+  /** 妙记读取失败的原因（200）；不是 failed 时为 null。 */
+  minutes_failure?: TMeetingMinutesFailure | null;
+  /** 开始等妙记的时刻（086）。 */
+  minutes_waiting_since?: Date | null;
   attendees_actual?: string[] | null;
   /** 会后分层确认（meeting_decisions 另表，随 meetingColumns 带出）；`SELECT *` 读出的行没有这一格。 */
   decisions?: MeetingDecisionRow[];
+  /** 会议卡已有确认效果（有确认版，或行动项推出过执行事项；随 meetingColumns 带出）：不再给替换逐字稿。`SELECT *` 读出的行没有这一格。 */
+  card_confirmed?: boolean;
+  /** 会议入本体（200）：建会的人、挂点（确认版本和写入回执在 meeting_card_confirmations / meeting_card_syncs）。 */
+  created_by: string | null;
+  world_anchors: StoredWorldAnchor[] | null;
+  /** 在飞书约上这场会（201）：没配飞书、旧会为 null。 */
+  feishu_event_status?: TMeetingFeishuEvent["status"] | null;
+  feishu_calendar_id?: string | null;
+  feishu_event_id?: string | null;
+  feishu_event_join_url?: string | null;
+  feishu_event_organizer_id?: string | null;
+  feishu_event_error?: string | null;
 };
 
+
+/** 选过的挂点：Mission、单元存天枢 id；LTO、PO 天枢里没有表，连同选时的标题一起存（本体读不到时照样能显示）。 */
+export type StoredWorldAnchor = { kind: "mission" | "unit"; id: string } | { kind: "lto" | "po"; id: string; title: string };
+
 const MEETING_COLUMNS = [
-  "id", "version", "title", "status", "scheduled_at", "ends_at", "ended_at", "lead_dri_id", "ceo_participant_id",
+  "id", "version", "title", "status", "scheduled_at", "ends_at", "ended_at", "started_at", "lead_dri_id", "ceo_participant_id",
   "participants", "issue_ids", "preflight", "draft", "materials", "transcript", "transcript_candidate", "outcome", "origin_ref", "external_id",
   "request_fingerprint", "action_fingerprints", "created_at", "updated_at",
-  "feishu_meeting_id", "minute_token", "minutes_status", "attendees_actual",
+  "feishu_meeting_id", "minute_token", "minutes_status", "minutes_failure", "minutes_waiting_since", "attendees_actual",
+  "created_by", "world_anchors",
+  "feishu_event_status", "feishu_calendar_id", "feishu_event_id", "feishu_event_join_url", "feishu_event_organizer_id", "feishu_event_error",
 ];
 /** 会后分层确认不 bump Meeting version（主持人确认走自己的接口），每次读取现查。 */
 const decisionsColumn = (prefix: string) =>
@@ -95,7 +119,12 @@ const groupInputsColumn = (prefix: string) => {
     'newDiscussionCount', (SELECT count(*) ${discussions} AND gm.id > COALESCE((${m}preflight #>> '{inputCoverage,evidence,discussionMaxId}')::bigint, 0))
   ) END) AS group_inputs`;
 };
-export const meetingColumns = (prefix = "") => [...MEETING_COLUMNS.map((column) => `${prefix}${column}`), latestRecordingColumn(prefix), groupInputsColumn(prefix), decisionsColumn(prefix)].join(", ");
+/** 会议卡确认不 bump Meeting version，每次读取现查。 */
+const cardConfirmedColumn = (prefix: string) =>
+  `EXISTS (SELECT 1 FROM meeting_cards k WHERE k.meeting_id = ${prefix || "meetings."}id
+     AND (k.current_revision IS NOT NULL OR jsonb_path_exists(k.action_items, '$[*] ? (@.taskId != null)'))) AS card_confirmed`;
+export const meetingColumns = (prefix = "") => [...MEETING_COLUMNS.map((column) => `${prefix}${column}`), latestRecordingColumn(prefix), groupInputsColumn(prefix), decisionsColumn(prefix),
+  cardConfirmedColumn(prefix)].join(", ");
 
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export type MeetingActionError = { status: number; code: string; message: string; fieldErrors?: Record<string, string> };
@@ -152,22 +181,6 @@ export async function listMeetingRows(q: Query): Promise<MeetingRow[]> {
   const result = await q(`SELECT ${meetingColumns()} FROM meetings ORDER BY scheduled_at DESC, created_at DESC`);
   return result.rows as MeetingRow[];
 }
-/**
- * 子决定：parentItemId 指向同场会里的一条主决定。子决定不单独确认／忽略／撤回，
- * 随主决定一起处理（主决定确认 → 子项确认；忽略 → 一并忽略；撤回 → 一起恢复待处理）。
- */
-export function isChildDecision(items: TMeetingOutcomeItem[], item: TMeetingOutcomeItem): boolean {
-  if (item.kind !== "decision" || !item.parentItemId) return false;
-  return items.some((candidate) => candidate.id === item.parentItemId && candidate.kind === "decision");
-}
-export function childDecisionsOf(items: TMeetingOutcomeItem[], parentId: string): TMeetingOutcomeItem[] {
-  return items.filter((candidate) => candidate.kind === "decision" && candidate.parentItemId === parentId);
-}
-function parentConfirmed(outcome: TMeetingOutcomeState, item: TMeetingOutcomeItem): boolean {
-  const parent = item.parentItemId ? outcome.items.find((candidate) => candidate.id === item.parentItemId) : undefined;
-  return parent?.review?.status === "confirmed";
-}
-
 /** 候选只向 Card 投影摘要与抽样；完整 turns 留在服务端 JSONB。 */
 export function projectTranscriptCandidate(candidate: TStoredTranscriptCandidate | null): TTranscriptCandidateProjection | null {
   if (!candidate || candidate.turns.length === 0) return null;
@@ -196,9 +209,9 @@ export function hasMeetingNotice(row: MeetingRow, viewerId: string, at: Date): b
 }
 
 export function projectMeetingCard(row: MeetingRow, secret: string, at = new Date()): TCard {
-  const action = (actionType: string, label: string, itemId?: string): TActionDescriptor => {
-    const scope: ActionScope = { actionType, objectType: "meeting", objectId: row.id, objectVersion: row.version, itemId };
-    return { actionId: signActionId(secret, scope), actionType, label, ...(itemId ? { itemId } : {}) };
+  const action = (actionType: string, label: string): TActionDescriptor => {
+    const scope: ActionScope = { actionType, objectType: "meeting", objectId: row.id, objectVersion: row.version };
+    return { actionId: signActionId(secret, scope), actionType, label };
   };
   const actions: TActionDescriptor[] = [];
   if (row.status === "scheduled") {
@@ -215,6 +228,7 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
     if (!row.ended_at) actions.push(action("meeting.end", "结束会议"));
     if (row.preflight.status === "failed") actions.push(action("meeting.retry_preflight", "重试预审"));
     if (row.preflight.status === "ready") actions.push(action("meeting.regenerate_preflight", "重新预审"));
+    if (row.feishu_event_status === "failed") actions.push(action("meeting.retry_feishu_booking", "重试飞书预约"));
   }
   if (row.status === "scheduled" && row.transcript_candidate) {
     actions.push(
@@ -222,29 +236,12 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
       action("meeting.discard_transcript_candidate", "清除会议记录候选"),
     );
   }
-  // Ticket 10：held 后只能显式重试失败的抽取；无 confirmed effect 时才允许危险替换 Transcript（reviewed 同样适用）
+  // Ticket 10：held 后只能显式重试失败的抽取；无 confirmed effect（含会议卡确认过）时才允许危险替换 Transcript（reviewed 同样适用）
   if (row.status === "held" && row.outcome?.status === "failed") actions.push(action("meeting.retry_outcome", "重试会后抽取"));
-  if ((row.status === "held" || row.status === "reviewed") && !hasConfirmedEffect(row.outcome)) {
+  if ((row.status === "held" || row.status === "reviewed") && !hasConfirmedEffect(row.outcome) && !row.card_confirmed) {
     actions.push(action("meeting.replace_transcript", "替换 Transcript"));
   }
-  // Ticket 11：逐项确认/忽略/撤回；open item 与已 delivered 的外部效果不提供撤回
-  if ((row.status === "held" || row.status === "reviewed") && row.outcome?.status === "ready") {
-    for (const item of row.outcome.items) {
-      if (!item.review) continue;
-      // 子决定没有自己的动作，跟着主决定走
-      if (isChildDecision(row.outcome.items, item)) continue;
-      if (item.review.status === "pending") {
-        // 无法产生精确效果时不暴露确认：父 decision 未确认的 reopenWhen。
-        // 无可解析 Issue 的 decision 也能确认：只记为会上已确认的决定，不写任何议题。
-        const confirmable = item.kind !== "reopenWhen" || parentConfirmed(row.outcome, item);
-        if (confirmable) actions.push(action("meeting.confirm_item", "确认", item.id));
-        actions.push(action("meeting.dismiss_item", item.kind === "strategic" ? "不同意" : "忽略", item.id));
-      } else if (item.review.status === "confirmed" && item.kind !== "strategic") {
-        // 战略项确认后已交给本体更新，不提供撤回；已推送 todo 的撤回由服务端按执行事项状态判定
-        actions.push(action("meeting.revoke_effect", "撤回", item.id));
-      }
-    }
-  }
+  // 会后只有会议卡一个入口（FR-5.1、拍板 4）：不再逐条确认、忽略、撤回；旧会议的逐条条目只读。
   return {
     schemaVersion: 1,
     id: `meeting:${row.id}`,
@@ -259,8 +256,10 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
       scheduledAt: row.scheduled_at.toISOString(),
       endsAt: row.ends_at.toISOString(),
       endedAt: row.ended_at?.toISOString() ?? null,
+      startedAt: row.started_at?.toISOString() ?? null,
       hasEnded: meetingHasEnded(row, at),
       leadDriId: row.lead_dri_id,
+      createdBy: row.created_by,
       ceoParticipantId: row.ceo_participant_id,
       participants: row.participants,
       issueIds: row.issue_ids,
@@ -273,10 +272,15 @@ export function projectMeetingCard(row: MeetingRow, secret: string, at = new Dat
       outcome: row.outcome,
       recording: row.latest_recording ?? null,
       minutesStatus: minutesStatusOf(row),
+      minutesFailure: minutesStatusOf(row) === "failed" ? row.minutes_failure ?? null : null,
+      minutesWaitingSince: row.minutes_waiting_since?.toISOString() ?? null,
+      minutesManualImport: minutesManualImport(row, at),
       attendees: attendeesOf(row),
-      // 主持人在自己的会议卡上确认；CEO 卡上只有 CEO 自己主持时才能点。
-      decisions: (row.decisions ?? []).map((decision) => projectMeetingDecision(decision, row.participants,
-        decision.tier === "host" && row.lead_dri_id === row.ceo_participant_id)),
+      feishuEvent: row.feishu_event_status
+        ? { status: row.feishu_event_status, joinUrl: row.feishu_event_join_url ?? null, organizerId: row.feishu_event_organizer_id ?? row.created_by ?? row.lead_dri_id }
+        : null,
+      // 旧会议的逐条决定只读。
+      decisions: (row.decisions ?? []).map((decision) => projectMeetingDecision(decision, row.participants, false)),
     },
     navigation: [{ href: `/meetings/${row.id}`, label: "Meeting" }],
     conversation: { scope: `meeting:${row.id}` },
@@ -352,11 +356,6 @@ export async function updateMeeting(client: PoolClient, id: string, assignments:
 /** 只有 confirmed 的 item 才能真正阻止替换；pending/dismissed 不算已生效效果。 */
 export function hasConfirmedEffect(outcome: TMeetingOutcomeState | null): boolean {
   return outcome?.items.some((item) => item.review?.status === "confirmed" || item.review?.effectRef != null) ?? false;
-}
-
-/** CEO 通知栏「需要你确认」：抽取已完成且还有未处理的战略议题。 */
-export function hasPendingStrategicItem(outcome: TMeetingOutcomeState | null): boolean {
-  return outcome?.status === "ready" && outcome.items.some((item) => item.kind === "strategic" && item.review?.status === "pending");
 }
 
 /** decision 的关联 Issue：显式 issueId 优先，否则只有单一关联 Issue 时才无歧义。 */

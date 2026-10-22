@@ -1,0 +1,4 @@
+[
+  {"name": "09-影响卡-追问", "login": "chen", "path": "/me/requests/676d7b69-9f25-4e15-835d-3b0f22f4401a", "script": "document.querySelector('[aria-label=追问]')?.scrollIntoView({block:'end'});"},
+  {"name": "10-影响卡-和我无关", "login": "lin", "path": "/me/requests/1ddb3542-e362-4aaa-9d41-eee1da6df616"}
+]

@@ -8,13 +8,6 @@ export function meterParts(capacity: number, demand: number): { fill: number; ov
   return { fill: pct(Math.min(capacity, demand)), over: pct(Math.max(0, demand - capacity)), mark: demand > capacity ? pct(capacity) : null };
 }
 
-/** 「45 分钟」「1.5 小时」「12 小时」。 */
-export function spentText(minutes: number): string {
-  if (minutes < 60) return `${minutes} 分钟`;
-  const hours = Math.round((minutes / 60) * 10) / 10;
-  return `${hours} 小时`;
-}
-
 /** 「10/12–10/14」。 */
 export function dayRangeText(start: string, end: string): string {
   const short = (day: string) => `${Number(day.slice(5, 7))}/${Number(day.slice(8, 10))}`;

@@ -34,7 +34,8 @@ _SECRETS = [
     (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "[已隐去]"),
 ]
 _LONG = re.compile(r"[A-Za-z0-9_+=-]{32,}")
-_URL = re.compile(r"https?://[^\s<>\"'）)\]]+")
+# 只认网址里合法的字符（不含 ' ) ]），碰到中文标点、反引号就截断。
+_URL = re.compile(r"https?://[A-Za-z0-9\-._~:/?#\[@!$&(*+,;=%]+")
 
 
 def _long(match: re.Match[str]) -> str:

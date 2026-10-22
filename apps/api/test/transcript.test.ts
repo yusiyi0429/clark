@@ -6,9 +6,11 @@ import {
   MeetingCardPayload,
   MeetingOutcomeState,
   StoredTranscript,
+  type TMeetingCardCandidate,
+  type TMeetingParticipant,
   type TPostMeetingCandidate,
 } from "@warmap/contracts";
-import { createTestApp, createTestDb, preflightCandidate, testEnv, type TestApp } from "./helpers.js";
+import { createTestApp, createTestDb, preflightCandidate, seedLegacyOutcome, testEnv, type TestApp } from "./helpers.js";
 import { assessOutcomeCandidate, recoverInterruptedOutcome, type PostMeetingAgent, type PostMeetingAgentInput } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import { migrate } from "../src/migrate.js";
@@ -32,8 +34,21 @@ function transcript(meetingId: string, turns: unknown = TURNS): Record<string, u
   return { schemaVersion: "warmap-transcript.v1", meetingId, turns };
 }
 
-/** 待办归 CEO 自己：不推送执行事项、保持 pending，替换 Transcript 的用例依赖没有已确认效果。 */
-function defaultCandidate(): TPostMeetingCandidate {
+/** 会后整理的会议卡候选：两段（已定、未定），一条行动项。 */
+function defaultCandidate(): TMeetingCardCandidate {
+  return {
+    summary: "灯塔项目优先，外部承诺先不签",
+    sections: [
+      { heading: "资源", body: "已定：灯塔项目优先，TokenOps 保留最低验证力量。", turnIds: ["turn-001"] },
+      { heading: "外部承诺", body: "未定：外部承诺先不签，六月前看风险清单再定。", turnIds: ["turn-003"] },
+    ],
+    objectChanges: [],
+    actionItems: [{ text: "周五前提交资源排期", ownerPersonId: "person-fixture-002", dueDate: null, basisSections: [1] }],
+  };
+}
+
+/** 旧格式会议的逐条条目（seedLegacyOutcome 写入）。待办归 CEO 自己：不推送执行事项、保持 pending，替换 Transcript 的用例依赖没有已确认效果。 */
+function legacyCandidate(): TPostMeetingCandidate {
   return {
     summary: "会议形成一项方向决定与一项待办",
     items: [
@@ -169,16 +184,13 @@ describe("warmap-transcript.v1 import boundary", () => {
       expect(Value.Check(StoredTranscript, card.payload.transcript)).toBe(true);
       expect(Value.Check(MeetingOutcomeState, card.payload.outcome)).toBe(true);
       expect(card.payload).toMatchObject({ status: "held", transcript: { meetingId } });
-      expect(card.payload.outcome).toMatchObject({ status: "ready", error: null });
-
-      const items = card.payload.outcome.items as { id: string; kind: string; turnId: string; quote: string; speakerId: string; parentItemId: string | null; review: { status: string } | null }[];
-      expect(items.map((item) => item.id)).toEqual(["item-1", "item-2", "item-3", "item-4", "item-5"]);
-      expect(items[0]).toMatchObject({ kind: "decision", turnId: "turn-001", quote: "灯塔项目优先", speakerId: "person-fixture-001", parentItemId: null });
-      expect(items[1]).toMatchObject({ kind: "todo", ownerPersonId: "person-fixture-001", review: { status: "pending" } });
-      expect(items[2]).toMatchObject({ kind: "ceoJudgment", speakerId: "person-fixture-001", judgmentKind: "external_commitment" });
-      expect(items[3]).toMatchObject({ kind: "reopenWhen", parentItemId: "item-1" });
-      // open 只展示，不带 Review
-      expect(items[4]).toMatchObject({ kind: "open", review: null });
+      // 会后整理只记进度：卡片内容在会议卡草稿里，没有逐条条目
+      expect(card.payload.outcome).toMatchObject({ status: "ready", error: null, items: [], summary: "" });
+      const view = (await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/card`, headers: { cookie } })).json();
+      expect(view).toMatchObject({ draftStatus: "draft_ready", draftVersion: 1, actionItems: [{ id: "act-1", ownerPersonId: "person-fixture-002", taskId: null }] });
+      expect(view.draft.sections.map((section: { id: string; sourceRefs: unknown[] }) => [section.id, section.sourceRefs])).toEqual([
+        ["sec-1", [{ sourceId: "src-1", locator: "turn-001" }]], ["sec-2", [{ sourceId: "src-1", locator: "turn-003" }]],
+      ]);
       // Agent 收到已保存的 turns 与关联 Issue，不吃原始上传对象
       expect(agent.calls).toHaveLength(1);
       expect(agent.calls[0].transcript.turns.map((turn) => turn.id)).toEqual(["turn-001", "turn-002", "turn-003"]);
@@ -307,8 +319,19 @@ describe("warmap-transcript.v1 import boundary", () => {
   });
 });
 
+/** 旧格式会议的逐条候选校验（assessOutcomeCandidate）：会后整理已改成会议卡，这里直接校验候选。 */
+const PARTICIPANTS: TMeetingParticipant[] = [
+  { personId: "person-fixture-001", displayName: "测试甲", roles: ["ceo"], sourceRef: "t", updatedAt: "2026-10-19T00:00:00Z" },
+  { personId: "person-fixture-002", displayName: "测试乙", roles: ["dri"], sourceRef: "t", updatedAt: "2026-10-19T00:00:00Z" },
+];
+const assess = (candidate: TPostMeetingCandidate) => {
+  const assessed = assessOutcomeCandidate({ candidate, turns: TURNS, participants: PARTICIPANTS, ceoParticipantId: "person-fixture-001", issueIds: [] });
+  if (!assessed.ok) throw new Error(assessed.message);
+  return assessed;
+};
+
 describe("deterministic PostMeeting candidate validation", () => {
-  it("keeps a candidate whose quote only exists in another turn out of review items and records a warning", async () => {
+  it("keeps a candidate whose quote only exists in another turn out of review items and records a warning", () => {
     const candidate: TPostMeetingCandidate = {
       summary: "x",
       items: [
@@ -317,22 +340,14 @@ describe("deterministic PostMeeting candidate validation", () => {
         { kind: "todo", text: "保留最低验证力量", turnId: "turn-001", quote: "TokenOps 保留最低验证力量" },
       ],
     };
-    const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: fakeOutcomeAgent(candidate) });
-    try {
-      const { cookie, meetingId } = await readyMeeting(t, "quote-turn");
-      const res = await importVia(t, "web", meetingId, cookie, transcript(meetingId));
-      const outcome = res.json().cards[0].payload.outcome;
-      expect(outcome.status).toBe("ready");
-      expect(outcome.items.map((item: { id: string }) => item.id)).toEqual(["item-2"]);
-      expect(outcome.warnings).toHaveLength(1);
-      expect(outcome.warnings[0].reason).toContain("连续引文");
-      expect(outcome.warnings[0].candidate).toMatchObject({ turnId: "turn-001" });
-    } finally {
-      await t.close();
-    }
+    const outcome = assess(candidate);
+    expect(outcome.items.map((item) => item.id)).toEqual(["item-2"]);
+    expect(outcome.warnings).toHaveLength(1);
+    expect(outcome.warnings[0].reason).toContain("连续引文");
+    expect(outcome.warnings[0].candidate).toMatchObject({ turnId: "turn-001" });
   });
 
-  it("rejects unknown owners, owners not derivable from the turn and non-CEO judgments; keeps an item whose issueId is out of scope, unlinked", async () => {
+  it("rejects unknown owners, owners not derivable from the turn and non-CEO judgments; keeps an item whose issueId is out of scope, unlinked", () => {
     const candidate: TPostMeetingCandidate = {
       summary: "x",
       items: [
@@ -343,20 +358,13 @@ describe("deterministic PostMeeting candidate validation", () => {
         { kind: "todo", text: "合法待办", turnId: "turn-002", quote: "我周五前提交资源排期", ownerPersonId: "person-fixture-002" },
       ],
     };
-    const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: fakeOutcomeAgent(candidate) });
-    try {
-      const { cookie, meetingId } = await readyMeeting(t, "owner");
-      const res = await importVia(t, "service", meetingId, cookie, transcript(meetingId));
-      const outcome = res.json().cards[0].payload.outcome;
-      expect(outcome.items.map((item: { id: string; issueId: string | null }) => [item.id, item.issueId])).toEqual([["item-4", null], ["item-5", null]]);
-      expect(outcome.warnings.map((warning: { reason: string }) => warning.reason)).toEqual([
-        "owner 不是该 Meeting 的 participant: person-not-in-seed",
-        "owner 无法由该 turn 确定: person-fixture-001",
-        "CEO 判断必须来自 CEO turn",
-      ]);
-    } finally {
-      await t.close();
-    }
+    const outcome = assess(candidate);
+    expect(outcome.items.map((item) => [item.id, item.issueId])).toEqual([["item-4", null], ["item-5", null]]);
+    expect(outcome.warnings.map((warning) => warning.reason)).toEqual([
+      "owner 不是该 Meeting 的 participant: person-not-in-seed",
+      "owner 无法由该 turn 确定: person-fixture-001",
+      "CEO 判断必须来自 CEO turn",
+    ]);
   });
 
   it("没挂议题的会：模型把会议 id 填进 issueId 时当没填，条目照常抽出", () => {
@@ -383,7 +391,7 @@ describe("deterministic PostMeeting candidate validation", () => {
     expect(assessed.warnings).toEqual([]);
   });
 
-  it("accepts an owner explicitly named in the quote and a reopenWhen only for an accepted parent decision", async () => {
+  it("accepts an owner explicitly named in the quote and a reopenWhen only for an accepted parent decision", () => {
     const candidate: TPostMeetingCandidate = {
       summary: "x",
       items: [
@@ -391,18 +399,11 @@ describe("deterministic PostMeeting candidate validation", () => {
         { kind: "reopenWhen", text: "孤儿条件", turnId: "turn-001", quote: "灯塔项目优先", parentIndex: 7 },
       ],
     };
-    const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: fakeOutcomeAgent(candidate) });
-    try {
-      const { cookie, meetingId } = await readyMeeting(t, "named-owner");
-      // 引文不含 speaker 之外的显示名 → 拒绝
-      const res = await importVia(t, "web", meetingId, cookie, transcript(meetingId));
-      const outcome = res.json().cards[0].payload.outcome;
-      expect(outcome.items).toHaveLength(0);
-      expect(outcome.warnings).toHaveLength(2);
-      expect(outcome.warnings[1].reason).toContain("父 decision");
-    } finally {
-      await t.close();
-    }
+    // 引文不含 speaker 之外的显示名 → 拒绝
+    const outcome = assess(candidate);
+    expect(outcome.items).toHaveLength(0);
+    expect(outcome.warnings).toHaveLength(2);
+    expect(outcome.warnings[1].reason).toContain("父 decision");
   });
 
   it("fails the whole extraction on a schema-invalid candidate and keeps the transcript", async () => {
@@ -483,9 +484,11 @@ const TURNS_B = [
   { id: "turn-003", speakerId: "person-fixture-001", startedAt: "2026-06-01T10:01:00+08:00", text: "外部承诺先不签，六月前给我风险清单。" },
 ];
 
-const CANDIDATE_B: TPostMeetingCandidate = {
+const CANDIDATE_B: TMeetingCardCandidate = {
   summary: "替换后的抽取",
-  items: [{ kind: "todo", text: "下周三前提交排期", turnId: "turn-002", quote: "我下周三前提交资源排期", ownerPersonId: "person-fixture-002" }],
+  sections: [{ heading: "排期", body: "已定：测试乙下周三前提交资源排期。", turnIds: ["turn-002"] }],
+  objectChanges: [],
+  actionItems: [{ text: "下周三前提交排期", ownerPersonId: "person-fixture-002", dueDate: null, basisSections: [1] }],
 };
 
 describe("dangerous Transcript replacement", () => {
@@ -494,9 +497,9 @@ describe("dangerous Transcript replacement", () => {
     const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: agent });
     try {
       const { cookie, meetingId } = await readyMeeting(t, "replace");
-      const imported = await importVia(t, "web", meetingId, cookie, transcript(meetingId));
-      const before = imported.json().cards[0];
-      expect((before.payload.outcome.items as unknown[]).length).toBe(5);
+      await importVia(t, "web", meetingId, cookie, transcript(meetingId));
+      const draftOf = async () => (await t.sql("SELECT draft, draft_version FROM meeting_cards WHERE meeting_id = $1", [meetingId]))[0];
+      expect((await draftOf()).draft.summary).toBe(defaultCandidate().summary);
       const staleReplace = await meetingAction(t, cookie, meetingId, "meeting.replace_transcript");
       expect(staleReplace).toBeTruthy();
 
@@ -511,14 +514,15 @@ describe("dangerous Transcript replacement", () => {
       const replaced = await execute(t, cookie, replaceAction, { transcript: transcript(meetingId, TURNS_B), confirmReplace: true });
       expect(replaced.statusCode).toBe(200);
       const payload = replaced.json().cards[0].payload;
-      // 新抽取只有一条 todo 且已推送成执行事项，没有待处理条目
-      expect(payload.status).toBe("reviewed");
+      // 重新整理出新的会议卡草稿（版本加一），会议停在 held 等整卡确认
+      expect(payload.status).toBe("held");
       expect(payload.transcript.turns[1].text).toContain("下周三");
-      expect(payload.outcome.status).toBe("ready");
-      // 旧 candidate 整体作废，只保留新一次抽取的 items
-      expect(payload.outcome.items.map((item: { id: string }) => item.id)).toEqual(["item-1"]);
-      expect(payload.outcome.items[0]).toMatchObject({ kind: "todo", quote: "我下周三前提交资源排期" });
-      expect(payload.outcome.summary).toBe("替换后的抽取");
+      expect(payload.outcome).toMatchObject({ status: "ready", items: [] });
+      // 旧草稿整体作废，只留新一次整理的内容
+      const replacedDraft = await draftOf();
+      expect(replacedDraft.draft_version).toBe(2);
+      expect(replacedDraft.draft.summary).toBe("替换后的抽取");
+      expect(replacedDraft.draft.sections.map((section: { body: string }) => section.body)).toEqual(["已定：测试乙下周三前提交资源排期。"]);
     } finally {
       await t.close();
     }
@@ -528,9 +532,11 @@ describe("dangerous Transcript replacement", () => {
     const t = await createTestApp({}, undefined, { preflightAgent, outcomeAgent: fakeOutcomeAgent() });
     try {
       const { cookie, meetingId } = await readyMeeting(t, "replace-guard");
-      const imported = await importVia(t, "web", meetingId, cookie, transcript(meetingId));
+      await importVia(t, "web", meetingId, cookie, transcript(meetingId));
+      // 旧格式会议：逐条条目里有一条已确认
+      await seedLegacyOutcome(t.pool, meetingId, legacyCandidate());
       const replaceAction = await meetingAction(t, cookie, meetingId, "meeting.replace_transcript");
-      const outcome = imported.json().cards[0].payload.outcome;
+      const outcome = (await t.sql("SELECT outcome FROM meetings WHERE id = $1", [meetingId]))[0].outcome;
       outcome.items[0].review = { status: "confirmed", effectRef: `meeting:${meetingId}:decision:item-1` };
       await t.sql("UPDATE meetings SET outcome = $2::jsonb WHERE id = $1", [meetingId, JSON.stringify(outcome)]);
 

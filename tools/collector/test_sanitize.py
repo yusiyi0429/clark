@@ -103,13 +103,15 @@ class Upload(unittest.TestCase):
         session = cs.Session("Claude Code", "s1", cwd="C:\\Users\\someone\\Desktop\\clark\\Tianshu-MVP")
         session.requests.append((datetime(2026, 10, 16, 1, 5, tzinfo=timezone.utc), f"用 {secret} 推一下\n```\n" + "x\n" * 20 + "```"))
         session.answers.append((datetime(2026, 10, 16, 1, 9, tzinfo=timezone.utc), "推好了 https://github.com/TokenkingOS/Tianshu-MVP/pull/20"))
+        session.answers.append((datetime(2026, 10, 16, 1, 10, tzinfo=timezone.utc), "预发在 https://tk-preview.tokenkingos.com，入口 `https://tk.tokenkingos.com/me`。"))
         item = tkos_collector.to_item(session, "device-1", start, datetime(2026, 10, 16, 3, 0, tzinfo=timezone.utc))
         self.assertTrue(item["summary"].startswith("仓库：Tianshu-MVP\n"))
         self.assertNotIn("someone", item["summary"])
         self.assertNotIn(secret, item["summary"])
         self.assertIn("[代码已略去]", item["summary"])
         self.assertEqual(item["taskHint"], "Tianshu-MVP")
-        self.assertEqual(item["links"], [{"url": "https://github.com/TokenkingOS/Tianshu-MVP/pull/20"}])
+        self.assertEqual(item["links"], [{"url": "https://github.com/TokenkingOS/Tianshu-MVP/pull/20"},
+                                         {"url": "https://tk-preview.tokenkingos.com"}, {"url": "https://tk.tokenkingos.com/me"}])
 
 
 if __name__ == "__main__":

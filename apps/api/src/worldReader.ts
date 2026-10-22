@@ -118,7 +118,7 @@ const battlefieldIdOf = (head: WorldHead): string | null => {
   return null;
 };
 /** 同一单元有多个时：生效的（已确认）优先，其次草稿；撤销 / 作废的不用。 */
-const usable = (head: WorldHead) => !/withdrawn|cancel|archiv|superseded|void/i.test(String((head.lifecycle as { status?: string } | null)?.status ?? ""));
+export const usableWorldHead = (head: Pick<WorldHead, "lifecycle">) => !/withdrawn|cancel|archiv|superseded|void/i.test(String((head.lifecycle as { status?: string } | null)?.status ?? ""));
 
 /** 本期目标：优先当前公司月，没有当前月的就用最近一个周期的全部。 */
 export function choosePeriodGoals(goals: WorldGoal[], period: string): WorldGoal[] {
@@ -157,7 +157,7 @@ export async function loadWorldSnapshot(client: WorldClient, at: Date): Promise<
     const battlefieldId = battlefieldIdOf(head);
     return battlefieldId ? [{ head, battlefieldId }] : [];
   });
-  const inDomain = (heads: WorldHead[], domainId: string | undefined) => heads.filter((head) => usable(head) && domainId && head.domain_id === domainId);
+  const inDomain = (heads: WorldHead[], domainId: string | undefined) => heads.filter((head) => usableWorldHead(head) && domainId && head.domain_id === domainId);
   const company = companies[0] ? worldDocOf(await read(companies[0].object_id)) : null;
   const strategy = strategies[0] ? worldDocOf(await read(strategies[0].object_id)) : null;
   const unitGoals: WorldUnitGoals[] = [];

@@ -11,6 +11,8 @@ vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ h
 
 // useCardAction 需要 Next 路由上下文；这里只渲染静态标记。
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
+// 会议记录用会议卡还是旧格式，由会议卡接口决定（静态渲染问不到）：这里的会议都是旧格式。
+vi.mock("@/components/meeting/useMeetingCardProbe", () => ({ useMeetingCardProbe: () => ({ status: "legacy" }) }));
 
 const participants = [
   { personId: "p1", displayName: "林晓", roles: ["dri"], sourceRef: "person:p1", updatedAt: "2025-09-01" },
@@ -154,7 +156,7 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     expect(html).toContain("data-header-tools");
     expect(html).toContain("预审摘要");
     expect(html).toContain("对齐预算");
-    for (const label of ["开始会议", "编辑会议", "导入会议记录", "请求补充材料", "会前备注", "替换材料集", "标记已核对", "保存准备状态"]) {
+    for (const label of ["开始会议", "编辑会议", "上传会议记录", "请求补充材料", "会前备注", "替换材料集", "标记已核对", "保存准备状态"]) {
       expect(html).not.toContain(label);
     }
   });
@@ -166,11 +168,13 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     ] } });
     const html = render(card, true);
     expect(html).toContain("会议共识");
-    expect(html).toContain("会后结论已确认");
+    // 走到哪一步看进度线：成员不是确认会议卡的人，最后一步是待确认。
+    expect(html).toMatch(/data-step="confirm" data-state="current"[^>]*>.*?待确认</);
+    expect(html).not.toContain("待你确认");
     expect(html).toContain("批准预算");
     expect(html).toContain("提交排期");
     expect(html).toContain("林晓");
-    for (const label of ["Transcript", "逐字稿", "替换", "忽略", "录音", "导入会议记录"]) expect(html).not.toContain(label);
+    for (const label of ["Transcript", "逐字稿", "替换", "忽略", "录音", "上传会议记录"]) expect(html).not.toContain(label);
     expect(html).not.toMatch(/<button[^>]*>确认/);
   });
 
@@ -256,16 +260,18 @@ describe("Meeting 页头（clark 会议页，C-08）", () => {
     expect(transcribing).toContain("会议录音");
     expect(transcribing).toContain("正在识别");
     expect(transcribing).not.toContain("一小时会议约需数分钟");
-    const failed = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", recording: { id: "r1", status: "failed", error: "识别服务没有返回结果。" } }));
+    const failed = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", minutesManualImport: true, recording: { id: "r1", status: "failed", error: "识别服务没有返回结果。" } }));
     expect(failed).toContain("识别服务没有返回结果。");
     expect(failed).not.toContain("可以改用下面的妙记导入");
-    expect(failed).toContain("导入会议记录");
+    expect(failed).toContain("上传会议记录");
   });
 
   it("这一刻的一件事随会议状态走", () => {
     const payload = (overrides: Record<string, unknown>) => meetingCard(overrides).payload as never;
-    expect(meetingNow(payload({}), true)).toBe("待导入会议记录");
-    expect(meetingNow(payload({ status: "held" }), true)).toBe("正在整理纪要");
+    // 和页头会后阶段同一套词：没失败就是等妙记，自动同步失败才是待交记录。
+    expect(meetingNow(payload({}), true)).toBe("等妙记");
+    expect(meetingNow(payload({ minutesManualImport: true }), true)).toBe("待交记录");
+    expect(meetingNow(payload({ status: "held" }), true)).toBe("生成会议卡");
     expect(meetingNow(payload({ status: "cancelled" }), false)).toBe("已取消");
   });
 
@@ -341,6 +347,33 @@ describe("Meeting 编辑会议弹层 CSS 基线", () => {
 });
 
 describe("Meeting Outcome 复核", () => {
+  it("会议卡还在生成：会议记录区不再重复阶段和用时（只在进度线上）；第一次生成失败：生成失败和重试，不显示报错原文", () => {
+    const outcome = (status: string) => ({ status, pendingSince: null, startedAt: null, runId: null, previousRunIds: [], summary: "", warnings: [], extractedAt: null, items: [],
+      error: status === "failed" ? { code: "MODEL_TIMEOUT", message: "模型调用超时：upstream 504", at: "2025-09-25T00:00:00.000Z" } : null });
+    for (const status of ["pending", "running"]) {
+      const html = render(meetingCard({ status: "held", transcript: { turns: [{}] }, outcome: { ...outcome(status), pendingSince: "2025-09-25T00:00:00.000Z" } }));
+      expect(html).not.toContain("会议记录生成中");
+      expect(html).not.toContain("抽取尚未产出摘要");
+    }
+    const failed = render(meetingCard({ status: "held", transcript: { turns: [{}] }, outcome: outcome("failed") },
+      [{ actionId: "r1", actionType: "meeting.retry_outcome", label: "重试会后抽取" }]));
+    expect(failed).toContain("生成失败");
+    expect(failed).toContain(">重试会后抽取</button>");
+    expect(failed).not.toContain("upstream 504");
+    expect(failed).not.toContain("抽取尚未产出摘要");
+  });
+
+  it("对不上人的说话人写飞书原名，不写内部编号", () => {
+    const html = render(meetingCard({
+      status: "held",
+      transcript: { turns: [{ id: "turn-0001", speakerId: "speaker:3", text: "我来把预算表发给大家。" }], unmappedSpeakers: [{ id: "speaker:3", name: "Speaker 3" }] },
+      outcome: { status: "ready", pendingSince: null, startedAt: null, runId: null, previousRunIds: [], error: null, summary: "预算", warnings: [], extractedAt: "2025-09-25T00:00:00.000Z",
+        items: [{ id: "i1", kind: "open", text: "预算表待发", quote: "我来把预算表发给大家", speakerId: "speaker:3", review: null }] },
+    }));
+    expect(html).toContain("Speaker 3");
+    expect(html).not.toContain("speaker:3");
+  });
+
   it("逐项处理按 kind 与真实状态渲染徽标、状态色与操作", () => {
     const html = render(
       meetingCard(
@@ -381,33 +414,54 @@ describe("Meeting Outcome 复核", () => {
     expect(html).toContain("3 条发言已保存");
     // 会议记录页不出现英文内部名词。
     for (const term of ["Transcript", "warmap-transcript", "Action Item", "Outcome candidate", "confirmed effect"]) expect(html).not.toContain(term);
-    // 每条只渲染服务端下发的真实 Action；待办会后自动推给负责人，这里只看，不出确认 / 忽略按钮。
-    expect(html).toContain(">撤回<");
+    // 会后只有会议卡一个入口：旧会议的条目只读，带着旧的逐条动作也不出确认 / 忽略 / 撤回按钮。
+    expect(html).not.toContain(">撤回<");
+    expect(html).not.toContain(">确认<");
     expect(html).not.toContain(">忽略<");
     expect(html).not.toContain(">推送<");
   });
 });
 
 describe("妙记 Markdown 候选预览", () => {
-  it("会开完了默认打开会议记录：入口同时接受 .md 与 .json", () => {
-    const html = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z" }));
-    expect(html).toContain('accept=".md,.json,application/json,text/markdown"');
-    expect(html).toContain("导入会议记录");
+  it("自动同步失败才出「上传会议记录」：在飞书约上的会等妙记、刚开完时不出，失败后、没在飞书约上的会到了待交记录，都只在进度线上出一个", () => {
+    const ended = { endedAt: "2025-09-24T15:40:00.000Z", feishuEvent: { status: "booked", joinUrl: null, organizerId: "p1" } };
+    for (const waiting of [{}, { minutesStatus: "waiting", minutesWaitingSince: "2025-09-24T15:41:00.000Z" }, { minutesStatus: "failed", minutesFailure: "not_ready" }]) {
+      const html = render(meetingCard({ ...ended, ...waiting, minutesManualImport: false }));
+      expect(html).not.toContain(">上传会议记录<");
+      expect(html).toMatch(/data-step="record" data-state="current"[^>]*>.*?等妙记</);
+    }
+    const manual = render(meetingCard({ ...ended, minutesStatus: "manual", minutesManualImport: true }));
+    expect(manual.match(/>上传会议记录</g)).toHaveLength(1);
+    expect(manual).toMatch(/data-step="record" data-state="current"[^>]*>.*?待交记录.*?>上传会议记录<\/button>/);
+    const plain = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", minutesManualImport: false }));
+    expect(plain.match(/>上传会议记录</g)).toHaveLength(1);
+    expect(plain).toMatch(/data-step="record" data-state="current"[^>]*>.*?待交记录.*?>上传会议记录<\/button>/);
+  });
+
+  it("等妙记时没有大块导入，选文件仍在（进度线上的上传用）", () => {
+    const html = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", minutesStatus: "waiting", minutesWaitingSince: "2025-09-24T15:41:00.000Z", minutesManualImport: false }));
+    expect(html).toContain('aria-label="选择会议记录文件"');
+    expect(html).not.toContain(">上传会议记录<");
+  });
+
+  it("会开完了默认打开会议记录：入口接受 txt、md、pdf、docx、html 和 .json", () => {
+    const html = render(meetingCard({ endedAt: "2025-09-24T15:40:00.000Z", minutesManualImport: true }));
+    expect(html).toContain('accept=".md,.markdown,.txt,.pdf,.docx,.html,.htm,.json,');
+    expect(html).toContain(">上传会议记录<");
     expect(html).not.toContain("上传会议逐字稿");
   });
 
-  it("候选存在时自动打开预览：来源摘要、时间锚点、抽样发言与告警", () => {
+  it("候选存在时自动打开预览：来源摘要、抽样发言与告警", () => {
     const html = render(meetingCard({ transcriptCandidate: candidateBase }));
-    expect(html).toContain("确认妙记会议记录");
+    expect(html).toContain("确认会议记录");
     expect(html).toContain("本体建模 Part 2.md");
     expect(html).toContain("40 KB");
     expect(html).toContain("12 条发言 · 3 位说话人 · 时长 59:00");
-    expect(html).toContain("首段 +00:01");
-    expect(html).toContain("末段 +59:01");
+    expect(html).not.toContain("时间锚点");
     expect(html).toContain("先把结论说清楚。");
     expect(html).toContain("“外部顾问”未匹配到人员，请手动选择。");
-    // 有候选时 Header 切到重新导入文案。
-    expect(html).toContain("重新导入会议记录");
+    // 有候选时上传区切到重新上传。
+    expect(html).toContain("重新上传会议记录");
   });
 
   it("未映射说话人时给出行内错误并禁用确认，全部唯一映射后放行", () => {
@@ -422,6 +476,11 @@ describe("妙记 Markdown 候选预览", () => {
     expect(html).not.toContain("未映射，确认不可用");
     expect(html).not.toContain('data-status="unmapped"');
     expect(buttonMarkup(html, "确认并写入逐字稿")).not.toContain("disabled");
+
+    const samePerson = { ...candidateBase, speakers: candidateBase.speakers.map((speaker) => ({ ...speaker, suggestedPersonId: speaker.suggestedPersonId ?? "p1" })) };
+    const merged = render(meetingCard({ transcriptCandidate: samePerson }, [confirmAction]));
+    expect(merged).not.toContain('role="alert"');
+    expect(buttonMarkup(merged, "确认并写入逐字稿")).not.toContain("disabled");
   });
 
   it("清除与确认按钮只按服务端下发的 opaque action 渲染", () => {
@@ -444,8 +503,10 @@ describe("妙记 Markdown 候选预览", () => {
     expect(rows.map((row) => row.status)).toEqual(["existing", "add", "unmapped"]);
     expect(speakerMappingError(rows)).toContain("未映射");
 
-    const duplicated = speakerMappingRows(candidateBase, ["p1"], { 外部顾问: "p1" });
-    expect(speakerMappingError(duplicated)).toBe("同一个人不能映射多个说话人");
+    // 飞书会把同一个人拆成两个说话人：两行选同一人照常放行
+    const samePerson = speakerMappingRows(candidateBase, ["p1"], { 外部顾问: "p1" });
+    expect(samePerson.map((row) => [row.personId, row.status])).toEqual([["p1", "existing"], ["p2", "add"], ["p1", "existing"]]);
+    expect(speakerMappingError(samePerson)).toBeNull();
     expect(speakerMappingRows({ ...candidateBase, speakers: candidateBase.speakers.slice(0, 2) }, ["p1", "p2"], {})).toHaveLength(2);
   });
 

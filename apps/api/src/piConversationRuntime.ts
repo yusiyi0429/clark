@@ -962,7 +962,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           parameters: Type.Object(scopeParams, { additionalProperties: false }),
           execute: async (_id, args) => textResult(await map.readMissionCards(args as Parameters<typeof map.readMissionCards>[0])) }),
         defineTool({ name: "read_progress", label: "读进展",
-          description: "读执行情况：执行事项的状态与进展记录（带产出链接）、本机采集整理出的进展（含计划外：待挂靠 / 待改计划）。CEO 能看全部，其他人只能看同一战场的；看不到的记在 filtered。taskId 只读一件执行事项。",
+          description: "读执行情况：执行事项的状态与进展记录（带产出链接，含本机采集整理出的进展）。CEO 能看全部，其他人只能看同一战场的；看不到的记在 filtered。taskId 只读一件执行事项。",
           parameters: Type.Object({ ...scopeParams, taskId: Type.Optional(Type.String({ maxLength: 64 })) }, { additionalProperties: false }),
           execute: async (_id, args) => textResult(await map.readProgress(args as Parameters<typeof map.readProgress>[0])) }),
         defineTool({ name: "read_reviews", label: "读复盘",

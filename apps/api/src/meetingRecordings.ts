@@ -23,6 +23,7 @@ import { transcodeToMp3 } from "./recordingMedia.js";
 import { presignGet, putFile } from "./recordingTos.js";
 import { recordingFileName, utterancesToTurns } from "./recordingTranscript.js";
 import { buildTranscriptCandidate, saveTranscriptCandidate, type SpeakerSuggestion } from "./transcriptCandidate.js";
+import { capturedAtOf, meetingTranscriptUrl, transcriptContentHash } from "./transcriptHash.js";
 import { realVoiceprintDeps, suggestSpeakersByVoiceprint, type VoiceprintDeps } from "./voiceprints.js";
 import { queryTask, submitTask, type QueryResult, type SubmitOptions } from "./volcAsr.js";
 
@@ -140,11 +141,14 @@ export function createMeetingRecordingService({
   pool,
   storageDir,
   peopleDirectory,
+  publicOrigin,
   deps = realRecordingDeps,
 }: {
   pool: Pool;
   storageDir: string;
   peopleDirectory: PeopleDirectory;
+  /** 候选来源地址：天枢会议页的逐字稿。 */
+  publicOrigin: string;
   deps?: RecordingDeps;
 }): MeetingRecordingService {
   const q = pool.query.bind(pool);
@@ -253,6 +257,10 @@ export function createMeetingRecordingService({
       sha256: await sha256File(mp3),
       parserVersion: RECORDING_PARSER_VERSION,
       timeAnchor: current.created_at.toISOString(),
+      // 录音没有文字原文：摘要值按识别出的发言（说话人、相对秒数、正文）拼成的全文算。
+      url: meetingTranscriptUrl(publicOrigin, current.meeting_id),
+      contentHash: transcriptContentHash(turns.map((turn) => `${turn.speakerName} ${turn.offsetSeconds}\n${turn.text}`).join("\n\n")),
+      capturedAt: capturedAtOf(new Date()),
     };
     const people = peopleDirectory.searchPeople(undefined);
     const candidate = buildTranscriptCandidate(turns, people, source, await voiceprintSuggestions(current.id, out, mp3, people));

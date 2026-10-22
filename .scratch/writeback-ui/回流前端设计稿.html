@@ -1,0 +1,889 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>回流前端设计稿</title>
+<style>
+:root {
+  --ink: #17171b; --ink-muted: #535358; --ink-faint: #6b6b70; --paper: #f1f1f3; --surface: #fdfdfe;
+  --hairline: color-mix(in oklab, #17171b 9%, transparent); --hairline-strong: color-mix(in oklab, #17171b 16%, transparent);
+  --brand: #1f5fd6; --brand-deep: #075ccb; --blue: #3a83f7; --confirmed: #0f766e; --danger: #be123c; --warning: #b45309;
+  --r-inset: 12px; --r-control: 16px;
+  --rail-a: #6d7f9b; --rail-b: #2f3d57;
+  --doc-bg: #e9ebef; --doc-card: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  color: var(--ink);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--doc-bg); }
+button { font: inherit; }
+
+/* ---------- 文档外壳（设计稿说明，不是产品界面） ---------- */
+.doc { max-width: 1240px; margin: 0 auto; padding: 32px 24px 80px; }
+.doc > header h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -.01em; }
+.doc > header p { margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 1.7; }
+.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 8px; }
+.toc a { padding: 5px 12px; border-radius: 999px; background: #fff; color: var(--ink-muted); font-size: 13px; text-decoration: none; border: 1px solid var(--hairline); }
+.toc a:hover { color: var(--brand-deep); border-color: #b9c9e6; }
+section.part { margin-top: 40px; }
+section.part > h2 { margin: 0 0 4px; font-size: 20px; }
+section.part > .lede { margin: 0 0 16px; color: var(--ink-muted); font-size: 14px; line-height: 1.7; max-width: 860px; }
+.design { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; margin-top: 18px; padding: 20px; border-radius: 18px; background: var(--doc-card); box-shadow: 0 1px 2px rgb(16 24 40 / 5%); }
+.design > header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.design > header h3 { margin: 0; font-size: 17px; }
+.design > header .where { color: var(--ink-faint); font-size: 13px; }
+.design > header code, .notes code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: #f1f3f6; padding: 1px 5px; border-radius: 5px; color: #3f4754; }
+.gapTag { padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.gapTag[data-k="none"] { background: #fde8ec; color: var(--danger); }
+.gapTag[data-k="part"] { background: #fff4de; color: #8a5a00; }
+.gapTag[data-k="have"] { background: #e9f7ef; color: #1c7a43; }
+.stage { min-width: 0; display: grid; gap: 12px; }
+.states { display: flex; flex-wrap: wrap; gap: 6px; }
+.states button { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--hairline-strong); background: #fff; color: var(--ink-muted); font-size: 13px; cursor: pointer; }
+.states button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.canvas { min-width: 0; padding: 20px; border-radius: 14px; background: var(--paper); }
+.canvas.dark { background: linear-gradient(160deg, #1d2a44, #121a2c); }
+.notes { display: grid; gap: 12px; font-size: 13.5px; line-height: 1.7; color: #2b2f36; }
+.notes h4 { margin: 0; font-size: 13px; color: var(--ink-faint); font-weight: 600; letter-spacing: .02em; }
+.notes ul { margin: 0; padding-left: 18px; }
+.notes li + li { margin-top: 4px; }
+.ask { padding: 12px 14px; border-radius: 12px; background: #f6f8fc; border: 1px solid #dfe6f3; }
+.ask h4 { color: var(--brand-deep); }
+.ask ol { margin: 6px 0 0; padding-left: 18px; }
+.ask li + li { margin-top: 6px; }
+.ask b { color: var(--ink); }
+.rec { display: inline-block; margin-left: 2px; padding: 0 6px; border-radius: 6px; background: #e9f7ef; color: #1c7a43; font-size: 12px; font-weight: 600; }
+
+/* ---------- 盘点表 ---------- */
+table.inv { width: 100%; border-collapse: collapse; background: #fff; border-radius: 14px; overflow: hidden; font-size: 13px; }
+table.inv th, table.inv td { padding: 9px 12px; border-bottom: 1px solid #eef0f3; text-align: left; vertical-align: top; line-height: 1.6; }
+table.inv th { background: #f7f8fa; color: var(--ink-faint); font-weight: 600; font-size: 12px; }
+table.inv td:first-child { white-space: nowrap; font-weight: 600; }
+table.inv code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #4f5866; }
+table.inv tr.chain td { background: #fafbfc; color: var(--ink-faint); font-size: 12px; font-weight: 600; padding: 6px 12px; }
+.tableWrap { overflow-x: auto; border-radius: 14px; box-shadow: 0 1px 2px rgb(16 24 40 / 5%); }
+
+/* ========== 以下是产品界面样稿（沿用天枢现有组件的样子） ========== */
+
+/* 落点标签：对象类型 · 名称 · 组件 + 写入状态点 */
+.anchors { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.anchor { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; padding: 3px 10px 3px 8px; border: 1px solid var(--hairline-strong); border-radius: var(--r-control); background: var(--surface); color: var(--ink-muted); font-size: 13px; line-height: 20px; }
+.anchor svg { flex: none; width: 14px; height: 14px; }
+.anchor .k { flex: none; color: var(--ink-faint); font-weight: 500; }
+.anchor .t { min-width: 0; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.anchor .c { flex: none; color: var(--ink-faint); }
+.anchor .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; margin-left: 2px; }
+.anchor[data-s="wait"] .dot { background: #b8bfca; }
+.anchor[data-s="ok"] .dot { background: #1c9a55; }
+.anchor[data-s="miss"] .dot { background: #e0a100; }
+.anchor[data-s="fail"] .dot { background: var(--danger); }
+.anchor[data-s="off"] { opacity: .55; }
+.anchor[data-s="off"] .t { text-decoration: line-through; }
+.anchor.add { border-style: dashed; color: var(--brand-deep); cursor: pointer; background: transparent; }
+.anchor.x { padding-right: 6px; }
+.anchor .rm { border: 0; background: none; color: var(--ink-faint); cursor: pointer; padding: 0 2px; font-size: 14px; line-height: 1; }
+.lbl { color: var(--ink-faint); font-size: 12px; flex: none; }
+
+/* 状态小标（与会议页 status 同一套） */
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 999px; background: #f1f3f6; color: #4f5866; font-size: 12px; line-height: 22px; font-weight: 600; white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .7; }
+.pill[data-tone="wait"] { background: #eaf2ff; color: #1f5fd6; }
+.pill[data-tone="agent"] { background: #fff4de; color: #8a5a00; }
+.pill[data-tone="done"] { background: #e9f7ef; color: #1c7a43; }
+.pill[data-tone="off"] { background: #f3f4f6; color: #6b7280; }
+.pill[data-tone="fail"] { background: #fde8ec; color: var(--danger); }
+.pill[data-tone="tier"] { background: #f3eefe; color: #5b3fb3; }
+.pill[data-tone="tier"]::before { display: none; }
+.pill.plain::before { display: none; }
+
+/* 按钮（会议页 / 请求页同一套） */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 6px 14px; border-radius: 999px; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; border: 1px solid #d9dde3; background: #fff; color: #1f2937; }
+.btn.primary { border: 0; background: var(--brand); color: #fff; }
+.btn.link { min-height: 28px; padding: 2px 4px; border: 0; background: transparent; color: var(--brand); font-weight: 500; }
+.btn.small { min-height: 28px; padding: 3px 10px; font-size: 13px; }
+.btn:disabled { opacity: .45; cursor: default; }
+.row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* 会议页卡片 */
+.mcard { padding: 18px 20px; border-radius: 18px; background: #fff; box-shadow: 0 1px 2px rgb(16 24 40 / 4%); }
+.mcard > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.mcard > header h3 { margin: 0; font-size: 16px; }
+.count { color: var(--ink-faint); font-size: 13px; }
+.worldbar { display: grid; gap: 8px; padding: 10px 12px; margin: 0 0 12px; border-radius: 12px; background: #f6f7f9; }
+.worldbar .line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.worldbar .end { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.switch { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-muted); font-size: 13px; cursor: pointer; user-select: none; }
+.switch i { position: relative; width: 34px; height: 20px; border-radius: 999px; background: #cfd4dc; transition: background .15s; }
+.switch i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px #0003; transition: left .15s; }
+.switch[aria-checked="true"] i { background: #4f5866; }
+.switch[aria-checked="true"] i::after { left: 16px; }
+.picker { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--hairline-strong); border-radius: 12px; background: #fff; box-shadow: 0 8px 24px rgb(16 24 40 / 10%); }
+.picker input { height: 34px; padding: 0 10px; border: 1px solid #dfe3e8; border-radius: 10px; font: inherit; font-size: 14px; }
+.picker .opt { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; font-size: 13.5px; cursor: pointer; }
+.picker .opt:hover { background: #f4f6fa; }
+.picker .opt small { color: var(--ink-faint); margin-left: auto; }
+
+.dlist { margin: 0; padding: 0; list-style: none; }
+.drow { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; padding: 14px 0; border-top: 1px solid #eef0f3; }
+.drow:first-child { border-top: 0; padding-top: 4px; }
+.ord { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #f1f3f6; color: #4f5866; font-size: 12px; font-weight: 600; }
+.dbody { display: grid; gap: 6px; min-width: 0; }
+.dhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.stmt { margin: 0; font-size: 15px; line-height: 1.7; font-weight: 500; }
+.drow[data-off] .stmt { color: #6b7280; text-decoration: line-through; text-decoration-color: #c5cad3; }
+.quote { margin: 0; color: #4f5866; font-size: 13px; line-height: 1.6; }
+.quote span { color: #8a93a2; }
+
+/* 影响卡 */
+.face { display: grid; gap: 14px; padding: 20px 20px 16px; border: 1px solid var(--hairline); border-radius: 12px; background: var(--surface); box-shadow: 0 1px 2px rgb(16 24 40 / 4%), 0 8px 24px rgb(16 24 40 / 6%); }
+.flags { display: flex; flex-wrap: wrap; gap: 6px; }
+.flag { display: inline-flex; align-items: center; padding: 0 10px; border-radius: 999px; font-size: 12px; line-height: 22px; font-weight: 600; color: var(--ink-muted); background: color-mix(in oklab, var(--ink) 6%, var(--surface)); }
+.flag[data-tone="fix"] { color: var(--brand-deep); background: color-mix(in oklab, var(--blue) 12%, var(--surface)); }
+.flag[data-tone="ok"] { color: #1c7a43; background: #e9f7ef; }
+.impact { margin: 0; font-size: 16px; line-height: 1.75; font-weight: 500; }
+.todo { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: 10px 12px; border-radius: 16px; background: color-mix(in oklab, var(--blue) 6%, var(--surface)); }
+.todo b { color: var(--brand-deep); font-size: 13px; }
+.todo span { flex: 1 1 200px; font-size: 15px; line-height: 1.6; }
+.todo time { margin-left: auto; color: var(--brand-deep); font-size: 13px; font-weight: 600; }
+.faceBar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 6px; border-top: 1px solid var(--hairline); }
+.reasons { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; width: 100%; }
+.chipBtn { min-height: 30px; padding: 0 12px; border: 1px solid #e3e6eb; border-radius: 999px; background: #fff; color: #3f4754; font-size: 13px; cursor: pointer; }
+.chipBtn[aria-pressed="true"] { border-color: #9fb6e3; background: #eef3fd; color: var(--brand-deep); }
+.facts { display: grid; gap: 6px; margin: 0; }
+.facts > div { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; }
+.facts dt { color: var(--ink-faint); font-size: 13px; line-height: 1.7; }
+.facts dd { margin: 0; font-size: 14px; line-height: 1.7; }
+
+/* 对话 */
+.conv { display: grid; gap: 14px; max-width: 720px; }
+.msg { display: grid; gap: 4px; }
+.msg.me { justify-self: end; max-width: 80%; padding: 10px 14px; border-radius: 18px 18px 4px 18px; background: #e8effd; font-size: 15px; line-height: 1.65; }
+.msg.ai p { margin: 0; font-size: 15px; line-height: 1.75; }
+.ecard { display: grid; gap: 12px; padding: 14px 16px; border: 1px solid #e6e9ee; border-radius: 14px; background: #fbfbfc; font-size: 14px; line-height: 1.6; }
+.ecard .head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ecard .item { margin: 0; font-size: 15px; line-height: 1.7; font-weight: 600; }
+.ecard textarea { width: 100%; padding: 10px 12px; border: 1px solid #dfe3e8; border-radius: 10px; font: inherit; font-size: 15px; line-height: 1.65; resize: none; field-sizing: content; }
+.was { margin: 0; color: #6b7280; font-size: 13.5px; line-height: 1.6; }
+.was s { text-decoration-color: #c5cad3; }
+.done { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: #178a6b; font-size: 13px; font-weight: 500; }
+.done time { color: #9599a1; font-weight: 400; }
+details.snip { border-top: 1px solid #eceef2; padding-top: 8px; }
+details.snip > summary { display: flex; align-items: center; gap: 8px; color: var(--ink-muted); font-size: 13px; cursor: pointer; list-style: none; }
+details.snip > summary::-webkit-details-marker { display: none; }
+details.snip > summary::after { content: "▾"; color: var(--ink-faint); }
+details.snip[open] > summary::after { content: "▴"; }
+.snipList { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.snipList li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; padding: 6px 8px; border-radius: 8px; font-size: 13.5px; line-height: 1.6; }
+.snipList li .who { color: var(--ink-faint); font-size: 12px; padding-top: 2px; }
+.snipList li[data-m] { background: #f4f7fd; }
+.snipList li[data-m="trigger"] { background: #eef3fd; box-shadow: inset 3px 0 0 var(--brand); }
+.snipList li[data-m="old"] { background: #fff7e8; box-shadow: inset 3px 0 0 #e0a100; }
+.snipList li[data-m="basis"] { background: #eef8f2; box-shadow: inset 3px 0 0 #1c9a55; }
+.snipList li em { font-style: normal; display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 6px; font-size: 11.5px; font-weight: 600; }
+.snipList li[data-m="trigger"] em { background: #dbe6fb; color: var(--brand-deep); }
+.snipList li[data-m="old"] em { background: #fbe9c4; color: #8a5a00; }
+.snipList li[data-m="basis"] em { background: #d5efdf; color: #1c7a43; }
+.snipList .gap { display: block; text-align: center; color: var(--ink-faint); font-size: 12px; grid-template-columns: none; }
+
+/* 通知栏（首页左栏，深色玻璃） */
+.rail { width: 340px; max-width: 100%; padding: 12px; border-radius: 26px; background: linear-gradient(180deg, var(--rail-a), var(--rail-b)); }
+.ncard { border-radius: 20px; overflow: hidden; background: #eef0f4; }
+.ncard > header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: linear-gradient(180deg, #3d4b66, #33405a); color: #fff; font-size: 15px; }
+.ncard > header .ic { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: #fff; color: #33405a; }
+.ncard > header .n { display: grid; place-items: center; min-width: 20px; height: 20px; border-radius: 999px; background: #fff; color: #33405a; font-size: 12px; font-weight: 700; }
+.nitem { display: grid; gap: 4px; padding: 12px 14px; border-top: 1px solid #dfe3ea; }
+.nitem:first-of-type { border-top: 0; }
+.nitem .t { margin: 0; font-size: 14.5px; line-height: 1.55; font-weight: 700; color: #1d2330; }
+.nitem .t::before { content: ""; display: inline-block; width: 7px; height: 7px; margin: 0 8px 2px 0; border-radius: 50%; background: #d4a23c; }
+.nitem .d { color: #6b7280; font-size: 12.5px; }
+.nbtns { display: flex; gap: 6px; margin-top: 4px; }
+.nbtns button { min-height: 28px; padding: 0 12px; border: 0; border-radius: 10px; background: #e2e7f0; color: #33405a; font-size: 13px; font-weight: 600; cursor: pointer; }
+.nbtns button.on { background: #dbe6fb; color: var(--brand-deep); }
+
+/* 进展 / 复盘 / 签发 */
+.panel { padding: 18px 20px; border-radius: 18px; background: #fff; box-shadow: 0 1px 2px rgb(16 24 40 / 4%); display: grid; gap: 12px; }
+.panel > header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.panel > header h3 { margin: 0; font-size: 16px; }
+.panel > header .end { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.prow { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid #eef0f3; }
+.prow:first-of-type { border-top: 0; padding-top: 0; }
+.prow .top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.prow .top .end { margin-left: auto; display: flex; gap: 4px; }
+.prow ul { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.7; }
+.prow ul.anchors { padding-left: 0; }
+.prow ul a { color: var(--brand-deep); text-decoration: none; font-size: 12.5px; margin-left: 6px; }
+.prow[data-off] ul { color: #9aa1ad; text-decoration: line-through; }
+.submitBar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 14px; background: #f6f7f9; }
+.submitBar .end { margin-left: auto; display: flex; gap: 8px; }
+.result { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.check input { width: 16px; height: 16px; }
+
+/* 管理员 */
+.adm { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border-radius: 14px; overflow: hidden; }
+.adm th, .adm td { padding: 9px 12px; border-bottom: 1px solid #eef0f3; text-align: left; vertical-align: middle; }
+.adm th { color: var(--ink-faint); font-weight: 600; font-size: 12px; background: #fafbfc; }
+.adm td code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--danger); }
+.adm .sub { color: var(--ink-faint); font-size: 12px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 8px 16px; border-radius: 999px; background: #1d2330; color: #fff; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.on { opacity: 1; }
+[hidden] { display: none !important; }
+
+@media (max-width: 960px) {
+  .design { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .doc { padding: 20px 16px 60px; }
+  .design { padding: 14px; }
+  .canvas { padding: 12px; }
+  .mcard, .panel { padding: 14px; }
+  .worldbar .end { margin-left: 0; }
+  .rail { width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="doc">
+  <header>
+    <h1>回流前端：盘点与设计稿</h1>
+    <p>天枢写进本体（world-02 · tkos.world/0.3）的每个环节，现在有没有前端、缺什么；缺的部分给出可点的样稿。依据是《对话质量联调架构》第 2、4 节和 Content Pact v0.6 的 9 个对象。代码基线 origin/main a7ad0b8。样稿里的界面按「不写解释句」来做，说明都写在右侧。</p>
+    <nav class="toc">
+      <a href="#inv">1 盘点</a><a href="#anchor">2 统一的落点标签</a><a href="#meeting">3 会议链</a><a href="#chat">4 对话链</a><a href="#progress">5 进展链</a><a href="#other">6 签发与失败</a><a href="#decide">7 要你拍板</a>
+    </nav>
+  </header>
+
+  <!-- 1 盘点 -->
+  <section class="part" id="inv">
+    <h2>1　环节 × 前端现状</h2>
+    <p class="lede">只有会议链有前端；对话链整条没有；进展链里天枢只写周复盘。所有已有的界面都没说「这条会写到本体哪个对象、写没写成」。完整盘点（带行号和证据）见同目录 <code>回流前端盘点_2026-10-19.md</code>。</p>
+    <div class="tableWrap">
+    <table class="inv">
+      <thead><tr><th>环节</th><th>前端</th><th>谁、什么时候、确认什么</th><th>缺什么</th><th>写到哪个对象</th><th>样稿</th></tr></thead>
+      <tbody>
+        <tr class="chain"><td colspan="6">会议链</td></tr>
+        <tr><td>主持人确认 3–5 条</td><td><span class="gapTag" data-k="have">有</span></td><td>主持人，散会后到下一个工作日同一时刻；三选一。<code>MeetingDecisions.tsx</code> <code>HostDecisionNotices.tsx</code></td><td>看不到落点和写入结果</td><td>Mission / Task（实际按影响卡推）</td><td><a href="#d-row">3.2</a></td></tr>
+        <tr><td>CEO 确认战略项</td><td><span class="gapTag" data-k="have">有</span></td><td>CEO，不代判，无期限。<code>StrategicConfirmCard.tsx</code></td><td>文案写「交给 Co-Agent 更新本体」，实际对象不改，只记事件</td><td>设计是 PO / LTO / Strategy，实际同上</td><td><a href="#d-strategic">3.3</a></td></tr>
+        <tr><td>Agent 超时代判</td><td><span class="gapTag" data-k="have">有</span></td><td>满一个工作日按推荐生效，标「Agent 代判，Host 尚未确认」</td><td>分不出代判成「定了」还是「没定」；代判后通知栏不再列</td><td>同上</td><td><a href="#d-row">3.2</a></td></tr>
+        <tr><td>影响卡</td><td><span class="gapTag" data-k="have">有</span></td><td>受影响的人知悉；可追问、和我无关。<code>ImpactCard.tsx</code></td><td>落点是天枢本地对象；「和我无关」原因永远为空，不进质量信号</td><td>天枢的 Task / Mission / 验收项</td><td><a href="#d-impact">3.4</a></td></tr>
+        <tr><td>改判 → 更正卡</td><td><span class="gapTag" data-k="have">有</span></td><td>主持人改判；收过卡的人收到更正卡</td><td>不说本体那条已更正</td><td>原事件被 correction 替代</td><td><a href="#d-impact">3.4</a></td></tr>
+        <tr><td>「不写进本体」</td><td><span class="gapTag" data-k="none">没有</span></td><td>计划：CEO 或主持人</td><td>迁移、路由、契约、界面都没有</td><td>—</td><td><a href="#d-bar">3.1</a></td></tr>
+        <tr><td>会议挂到哪些对象</td><td><span class="gapTag" data-k="none">没有</span></td><td>—</td><td>会议本身不连任何对象；对不上就静默跳过；没有整场会议事件</td><td>Mission / 单元 / Company</td><td><a href="#d-bar">3.1</a></td></tr>
+        <tr class="chain"><td colspan="6">对话链</td></tr>
+        <tr><td>触发后对话里的确认</td><td><span class="gapTag" data-k="none">没有</span></td><td>本人</td><td>识别、确认卡、写入都没有</td><td>话里说到的对象</td><td><a href="#d-chat">4.1</a></td></tr>
+        <tr><td>无权时推给对象 DRI</td><td><span class="gapTag" data-k="none">没有</span></td><td>对象 DRI</td><td>全部</td><td>被纠正的对象</td><td><a href="#d-dri">4.2</a></td></tr>
+        <tr><td>片段预览</td><td><span class="gapTag" data-k="none">没有</span></td><td>本人在确认卡上看</td><td>全部</td><td>—</td><td><a href="#d-chat">4.1</a></td></tr>
+        <tr class="chain"><td colspan="6">进展链</td></tr>
+        <tr><td>日进展、状态快照</td><td><span class="gapTag" data-k="none">没有</span></td><td>skill 直接写；定时运行不经本人看</td><td>天枢里看不到、改不了、撤不了</td><td>Mission / PO / 单元的快照</td><td><a href="#d-daily">5.1</a></td></tr>
+        <tr><td>计划外</td><td><span class="gapTag" data-k="part">部分</span></td><td>本人挂到事项或提改计划（只在天枢里）</td><td>不写进本体</td><td>本人所在单元</td><td><a href="#d-daily">5.1</a></td></tr>
+        <tr><td>周复盘提交</td><td><span class="gapTag" data-k="part">部分</span></td><td>本人提交即确认</td><td>提交前不知道写到哪；提交后看不到结果；跳过算成功</td><td>Mission、Task 的事件 + 执行快照</td><td><a href="#d-weekly">5.2</a></td></tr>
+        <tr class="chain"><td colspan="6">其他</td></tr>
+        <tr><td>签发 → 代 CEO 确认 PO</td><td><span class="gapTag" data-k="part">部分</span></td><td>CEO 签发月度计划</td><td>签发界面不提本体；只覆盖 company、E&amp;O</td><td>PO（门：确认）</td><td><a href="#d-sign">6.1</a></td></tr>
+        <tr><td>写入失败：用户</td><td><span class="gapTag" data-k="none">没有</span></td><td>—</td><td>主持人、本人都看不到失败或跳过</td><td>—</td><td><a href="#d-row">3.2</a> <a href="#d-weekly">5.2</a></td></tr>
+        <tr><td>写入失败：管理员</td><td><span class="gapTag" data-k="part">部分</span></td><td>管理员视图</td><td>只认台账；跳过的看不见；不能重试；「卡住的会议」是占位</td><td>—</td><td><a href="#d-admin">6.2</a></td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- 2 落点标签 -->
+  <section class="part" id="anchor">
+    <h2>2　统一的落点标签</h2>
+    <p class="lede">每一处写入都用同一种小标签，写清「对象类型 · 名称 · 组件」；右侧的点表示写入状态。它沿用影响卡上已有的「落到」一排（<code>ImpactFace</code> 的 targets），只是从天枢本地对象换成本体的 9 个对象。下面每张样稿都用它。</p>
+    <div class="design" style="grid-template-columns: 1fr">
+      <div class="canvas">
+        <div class="legend" id="legend9"></div>
+        <div style="height:12px"></div>
+        <div class="legend" id="legendS"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 会议链 -->
+  <section class="part" id="meeting">
+    <h2>3　会议链</h2>
+    <p class="lede">会议事件写一条（摘要 + 条目 + 挂点），条目里的每条决定再按现有做法各记一条（D-39）。会议页「会上定了」区上面加一条「挂到」，每条决定下面加它的落点；影响卡显示本体落点。</p>
+
+    <div class="design" id="d-bar">
+      <header><h3>3.1 会议挂点 + 不写进本体</h3><span class="gapTag" data-k="none">没有</span><span class="where">会议页「会上定了」区头部 · <code>MeetingDecisions.tsx</code> header；主持人和 CEO 可改</span></header>
+      <div class="stage">
+        <div class="states" data-for="bar">
+          <button aria-pressed="true" data-s="wait">待确认</button><button data-s="edit">改挂点</button><button data-s="ok">已记进本体</button><button data-s="off">不写进本体</button><button data-s="none">对不上任何 Mission</button>
+        </div>
+        <div class="canvas"><div class="mcard" id="barMock"></div></div>
+      </div>
+      <div class="notes">
+        <h4>怎么用</h4>
+        <ul>
+          <li>挂点默认 = 决定影响到的 Mission ∪ 会议议题关联的 Mission；都没有就挂主持人的单元。</li>
+          <li>「改」打开对象选择：按 9 个对象搜，列本月 Mission、单元、PO。</li>
+          <li>主持人确认完（或代判生效）后 30 分钟内写；写之前开关随时可开。</li>
+          <li>已写入后再开「不写进本体」：在本体记一条撤回更正，原事件不删（本体只能追加）。</li>
+        </ul>
+        <div class="ask"><h4>要你拍板</h4><ol>
+          <li><b>没有 Mission 时挂哪</b>：主持人的单元<span class="rec">推荐</span> / Company</li>
+          <li><b>谁能改挂点、开开关</b>：主持人和 CEO<span class="rec">推荐</span> / 只有 CEO</li>
+          <li><b>已写入后开开关</b>：记撤回更正<span class="rec">推荐</span> / 写入后不能再关</li>
+          <li><b>会议加「关联 Mission」字段</b>：不加，挂点直接存在会议上<span class="rec">推荐</span> / 加到建会表单</li>
+        </ol></div>
+      </div>
+    </div>
+
+    <div class="design" id="d-row">
+      <header><h3>3.2 每条决定的落点 + 写入状态</h3><span class="gapTag" data-k="part">补在已有的行上</span><span class="where"><code>DecisionRow</code>；契约 <code>TMeetingDecisionView</code> 加 world 状态和落点</span></header>
+      <div class="stage">
+        <div class="states" data-for="row">
+          <button aria-pressed="true" data-s="pending">待确认</button><button data-s="confirmed">已确认 · 已记</button><button data-s="agentYes">代判 · 定了</button><button data-s="agentNo">代判 · 没定</button><button data-s="miss">没对上 → 挂会议</button><button data-s="fail">写入失败</button>
+        </div>
+        <div class="canvas"><div class="mcard"><header><h3>会上定了</h3><span class="count" id="rowCount">1 条待确认</span></header><ol class="dlist" id="rowMock"></ol></div></div>
+      </div>
+      <div class="notes">
+        <h4>怎么用</h4>
+        <ul>
+          <li>落点在主持人点完之后出现（影响分析算出来的），确认之前不猜。</li>
+          <li>代判拆成两种状态：「Agent 代判 · 定了」已推卡、已记；「Agent 代判 · 没定」什么都没推。两种都还能三选一。</li>
+          <li>代判之后这条继续留在首页「会上定了」，标「代判」，直到主持人点过。</li>
+          <li>对不上本体对象的决定不再静默跳过，挂到 3.1 的会议挂点上，标黄点。</li>
+          <li>写入失败显示红点，自动重试；重试到头进管理员视图（6.2）。</li>
+        </ul>
+        <div class="ask"><h4>要你拍板</h4><ol>
+          <li><b>落点和状态给谁看</b>：主持人和 CEO<span class="rec">推荐</span>，参会人只看落点 / 只给 CEO 和管理员</li>
+          <li><b>代判后是否继续留在首页待办</b>：留到主持人点过<span class="rec">推荐</span> / 只在会议页</li>
+        </ol></div>
+      </div>
+    </div>
+
+    <div class="design" id="d-strategic">
+      <header><h3>3.3 战略项：文案和实际一致</h3><span class="gapTag" data-k="part">改已有文案</span><span class="where"><code>StrategicConfirmCard.tsx:74</code>、<code>MeetingCard.tsx:380</code></span></header>
+      <div class="stage">
+        <div class="states" data-for="strat">
+          <button aria-pressed="true" data-s="now">现在</button><button data-s="next">改后</button>
+        </div>
+        <div class="canvas"><div class="mcard"><ol class="dlist" id="stratMock"></ol></div></div>
+      </div>
+      <div class="notes">
+        <h4>怎么用</h4>
+        <ul>
+          <li>月底前不改树（架构页第 3 节「不动」），CEO 确认后记一条事件挂到被改的 PO / LTO / Strategy，状态写「已记到 PO」。</li>
+          <li>Co-Agent 真正改对象以后，再加「对象已修订」一态。</li>
+        </ul>
+        <div class="ask"><h4>要你拍板</h4><ol>
+          <li><b>战略项月底前怎么写</b>：只记事件挂到 PO / LTO<span class="rec">推荐</span> / 继续等 Co-Agent 改对象，文案改成「待更新」</li>
+        </ol></div>
+      </div>
+    </div>
+
+    <div class="design" id="d-impact">
+      <header><h3>3.4 影响卡：本体落点、「和我无关」原因、更正已同步</h3><span class="gapTag" data-k="part">补在已有的卡上</span><span class="where"><code>ImpactFace</code>、「前因后果」；管理员质量信号读 <code>impact_cards.status='irrelevant'</code></span></header>
+      <div class="stage">
+        <div class="states" data-for="impact">
+          <button aria-pressed="true" data-s="card">卡面 + 前因后果</button><button data-s="irr">和我无关 → 原因</button><button data-s="irrDone">已记和我无关</button><button data-s="fix">更正卡</button>
+        </div>
+        <div class="canvas" id="impactMock"></div>
+      </div>
+      <div class="notes">
+        <h4>怎么用</h4>
+        <ul>
+          <li>卡面落点一排不变（Task、验收项，本人看得懂的）；「前因后果」里加一行「本体」，写这条决定挂到的本体对象和状态。</li>
+          <li>「和我无关」点了先出三个原因，点一个就收起；不点原因也能收（再点一次「和我无关」）。</li>
+          <li>更正卡加一个「本体已更正」标，说明本体那条已被替代。</li>
+        </ul>
+        <div class="ask"><h4>要你拍板</h4><ol>
+          <li><b>「和我无关」要不要原因</b>：三个快选，可不选<span class="rec">推荐</span> / 不要原因</li>
+          <li><b>和我无关后改不改本体挂点</b>：不改，只进质量信号<span class="rec">推荐</span> / 去掉他的对象，记一条更正</li>
+        </ol></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 对话链 -->
+  <section class="part" id="chat">
+    <h2>4　对话链</h2>
+    <p class="lede">架构页：规则本期定，实现排在会议之后。四类触发（纠错、拍板、要求记下、深聊成型）命中后，在那条回答下面挂一张确认卡；本人点了才往下走。片段按起止规则自动切，在卡里折叠。卡的外框沿用回答后面挂的卡（<code>EntryCards</code>、转议题建议卡）。</p>
+
+    <div class="design" id="d-chat">
+      <header><h3>4.1 对话里的确认卡 + 片段预览</h3><span class="gapTag" data-k="none">没有</span><span class="where">回答后面挂的卡 · 复用 <code>entry-cards.module.css</code>、<code>IssueSuggestCard</code> 的三选项</span></header>
+      <div class="stage">
+        <div class="states" data-for="chat">
+          <button aria-pressed="true" data-s="fix">纠错 · 本人有权</button><button data-s="edit">改一下</button><button data-s="done">已记</button><button data-s="dri">纠错 · 无权 → 交给 DRI</button><button data-s="sent">已交给 DRI</button><button data-s="deep">深聊成型（候选）</button><button data-s="mem">记一下 · 个人偏好</button>
+        </div>
+        <div class="canvas"><div class="conv" id="chatMock"></div></div>
+      </div>
+      <div class="notes">
+        <h4>怎么用</h4>
+        <ul>
+          <li>卡上四样：类型、提炼出的一句、替代了哪句（纠错才有）、挂到哪个对象。</li>
+          <li>「片段 · N 条」折叠，点开看切出来的原文，标出触发句、旧说法、依据三类。</li>
+          <li>本人对对象有权（DRI、上级、CEO）：主按钮「写进本体」。无权：主按钮变成「交给 林晓 确认」，DRI 确认后才写。</li>
+          <li>无权的「拍板」不出卡（不算决定）。</li>
+          <li>深聊成型只出一行候选，本人选是哪一类后展开成上面的卡。</li>
+          <li>「记一下」里的个人偏好照旧进个人记忆，句尾留记忆小标，不出卡。</li>
+        </ul>
+        <div class="ask"><h4>要你拍板</h4><ol>
+          <li><b>本期做到哪</b>：规则 + 这版原型，实现排在会议之后<span class="rec">推荐</span> / 本期就实现纠错一类</li>
+          <li><b>二号位也出确认卡</b>：出，对自己有权的对象<span class="rec">推荐</span> / 只给一号位（和转议题卡一致）</li>
+          <li><b>片段原文给谁看</b>：对话本人、CEO、挂点对象的 DRI<span class="rec">推荐</span>（架构页待定第 2 条）</li>
+        </ol></div>
+      </div>
+    </div>
+
+    <div class="design" id="d-dri">
+      <header><h3>4.2 推给对象 DRI 的待确认</h3><span class="gapTag" data-k="none">没有</span><span class="where">首页左栏通知卡（<code>ActionNoticeCard</code>，和「会上定了」同一种）；点开进二级页看片段</span></header>
+      <div class="stage">
+        <div class="states" data-for="dri">
+          <button aria-pressed="true" data-s="wait">待确认</button><button data-s="edit">改一下</button><button data-s="ok">已采纳</button>
+        </div>
+        <div class="canvas dark"><div class="rail" id="driMock"></div></div>
+      </div>
+      <div class="notes">
+        <h4>怎么用</h4>
+        <ul>
+          <li>和主持人确认「会上定了」一样在卡上直接办：采纳 / 改一下 / 不采纳。</li>
+          <li>卡上写提出人和对象；点开是二级页（同一个外壳），显示 4.1 的片段。</li>
+          <li>采纳后写一条对话事件，提出人在原对话里看到卡变成「林晓 已采纳」。</li>
+          <li>参照 Mission 卡的「申请更正 → 采纳 / 不采纳」（<code>CorrectionPanel.tsx</code>）。</li>
+        </ul>
+        <div class="ask"><h4>要你拍板</h4><ol>
+          <li><b>DRI 不处理怎么办</b>：两次提醒后保持待办，不代判<span class="rec">推荐</span> / 和会议一样一个工作日后代判</li>
+        </ol></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 进展链 -->
+  <section class="part" id="progress">
+    <h2>5　进展链</h2>
+    <p class="lede">日进展现在由 skill 直接写，天枢里看不到。改成经天枢写以后，在本人首页给一个「今天写进本体」的预览：每个目标一行，可以改、可以不写。周复盘在提交区列出要写的对象，提交后显示结果。</p>
+
+    <div class="design" id="d-daily">
+      <header><h3>5.1 日进展：写之前能看、能改、能不写</h3><span class="gapTag" data-k="none">没有</span><span class="where">本人首页 /me，20:30 起草后出现；计划外复用 <code>MemberOffPlan.tsx</code></span></header>
+      <div class="stage">
+        <div class="states" data-for="daily">
+          <button aria-pressed="true" data-s="draft">20:30 草稿</button><button data-s="edit">改一条</button><button data-s="ok">已写</button><button data-s="fix">写后更正</button>
+        </div>
+        <div class="canvas"><div class="panel" id="dailyMock"></div></div>
+      </div>
+      <div class="notes">
+        <h4>怎么用</h4>
+        <ul>
+          <li>每个目标一行：落点 + 两三条事实，每条带采集条目的出处。</li>
+          <li>「不写」只去掉这一行；全部不动，21:30 按草稿写（架构页：不需要确认，读时标「未经确认」）。</li>
+          <li>对不上目标的工作单独一行，落点是本人所在单元，标「计划外」。</li>
+          <li>写了以后只能「更正」：本体追加一条更正，不删原条。</li>
+        </ul>
+        <div class="ask"><h4>要你拍板</h4><ol>
+          <li><b>写之前给不给预览窗口</b>：20:30 起草，21:30 写<span class="rec">推荐</span> / 现在这样直接写，事后可更正</li>
+          <li><b>计划外写不写进本体</b>：写到本人所在单元，标计划外<span class="rec">推荐</span> / 只留在天枢</li>
+          <li><b>skill 停写会议事件</b>：本周请斯一停<span class="rec">推荐</span>（和「会议事件只由天枢写」冲突）</li>
+        </ol></div>
+      </div>
+    </div>
+
+    <div class="design" id="d-weekly">
+      <header><h3>5.2 周复盘：提交前列出写到哪，提交后看结果</h3><span class="gapTag" data-k="part">补在已有的提交区</span><span class="where"><code>WeeklyReviewScreen.tsx:167</code>；仿 <code>MonthlyPlanCard</code> 的 <code>SignRecipients</code></span></header>
+      <div class="stage">
+        <div class="states" data-for="weekly">
+          <button aria-pressed="true" data-s="before">提交前</button><button data-s="after">提交后</button><button data-s="fail">部分失败</button>
+        </div>
+        <div class="canvas"><div class="panel" id="weeklyMock"></div></div>
+      </div>
+      <div class="notes">
+        <h4>怎么用</h4>
+        <ul>
+          <li>提交区上面一行落点：这次会写到的对象，按「关键进展与 Evidence」里引用到的 Mission、Task 算。</li>
+          <li>本体里没有的对象标黄点「没对上」，不再算成功。</li>
+          <li>提交后同一行变成结果；失败的红点自动重试，管理员能看到。</li>
+          <li>只写进展行和链接，不写全文（D-01），不用另外说明。</li>
+        </ul>
+        <div class="ask"><h4>要你拍板</h4><ol>
+          <li><b>没对上的对象</b>：挂到本人所在单元<span class="rec">推荐</span> / 只标黄点不写</li>
+        </ol></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 签发与失败 -->
+  <section class="part" id="other">
+    <h2>6　签发月度计划、写入失败</h2>
+
+    <div class="design" id="d-sign">
+      <header><h3>6.1 签发月度计划：列出要代确认的 PO</h3><span class="gapTag" data-k="part">补在已有的签发区</span><span class="where"><code>MonthlyPlanCard.tsx:424</code> 的 <code>SignRecipients</code> 下面</span></header>
+      <div class="stage">
+        <div class="states" data-for="sign">
+          <button aria-pressed="true" data-s="before">签发前</button><button data-s="after">签发后</button>
+        </div>
+        <div class="canvas"><div class="panel" id="signMock"></div></div>
+      </div>
+      <div class="notes">
+        <h4>怎么用</h4>
+        <ul>
+          <li>「我确认签发」上面加一行：签发时一起确认的 PO。</li>
+          <li>签发后这一行变成结果；没登记委托导致被拒的显示红点。</li>
+        </ul>
+        <div class="ask"><h4>要你拍板</h4><ol>
+          <li><b>确认哪些域的 PO</b>：所有已承诺的 PO（含 Method）<span class="rec">推荐</span> / 维持只确认公司和 E&amp;O</li>
+        </ol></div>
+      </div>
+    </div>
+
+    <div class="design" id="d-admin">
+      <header><h3>6.2 管理员：本体写入的跳过、失败和重试</h3><span class="gapTag" data-k="part">补在已有的管理员视图</span><span class="where"><code>AdminScreen.tsx</code> 新增一区；<code>admin.ts</code> 读 <code>meeting_decisions.world_status</code> 替掉已停写的 <code>world_meeting_events</code></span></header>
+      <div class="stage">
+        <div class="states" data-for="admin">
+          <button aria-pressed="true" data-s="list">列表</button><button data-s="retried">重试后</button>
+        </div>
+        <div class="canvas" id="adminMock"></div>
+      </div>
+      <div class="notes">
+        <h4>怎么用</h4>
+        <ul>
+          <li>按来源列：会议名 / 周复盘 / 签发，而不是原始对象 id。</li>
+          <li>失败的可以「重试」；跳过的（没对上对象）单列一个数，可以点进去改挂点。</li>
+          <li>用户侧只看到状态点；错误码只在这里。</li>
+        </ul>
+        <div class="ask"><h4>要你拍板</h4><ol>
+          <li><b>本体写入失败给不给「重试」</b>：给<span class="rec">推荐</span> / 只能接手、解决</li>
+        </ol></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 要你拍板 -->
+  <section class="part" id="decide">
+    <h2>7　要你拍板（按月底底线排序）</h2>
+    <p class="lede">前 6 条决定会议回流怎么做，月底前要定；后面几条可以晚一点。推荐项是我按「MVP、会议链先跑通、和架构页一致」选的。</p>
+    <div class="design" style="grid-template-columns: 1fr"><div class="notes"><ol id="decideAll" style="margin:0;padding-left:20px"></ol></div></div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const ICON = {
+  Company: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></svg>',
+  Strategy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z"/></svg>',
+  Unit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></svg>',
+  Mission: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+  Task: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4M13 6h8M13 12h8M13 18h8"/></svg>',
+  Activity: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
+  LTO: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7"/></svg>',
+  PO: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h8"/></svg>',
+  Entity: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>',
+  Spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></svg>',
+};
+const KIND = { Company: "公司", Strategy: "战略", Unit: "单元", Mission: "Mission", Task: "Task", Activity: "Activity", LTO: "长期目标", PO: "周期目标", Entity: "责任主体" };
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+/** 落点标签：type 是 9 个对象之一，comp 是组件，s 是写入状态（wait/ok/miss/fail/off）。 */
+function anchor(type, title, comp, s, extra = "") {
+  return `<li class="anchor ${extra}" data-s="${s || ""}">${ICON[type]}<span class="k">${KIND[type]}</span><span class="t">${esc(title)}</span>${comp ? `<span class="c">· ${esc(comp)}</span>` : ""}${s ? '<span class="dot"></span>' : ""}</li>`;
+}
+const toast = (text) => { const t = document.getElementById("toast"); t.textContent = text; t.classList.add("on"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("on"), 1600); };
+
+// 2 图例
+document.getElementById("legend9").innerHTML = `<ul class="anchors">${[
+  ["Company", "词元云集"], ["Strategy", "2026 下半年战略"], ["Unit", "Agents"], ["Mission", "Co-agent 第一版交互定稿", "Task 全景"], ["Task", "会议页改版", "验收"],
+  ["Activity", "390 宽回归"], ["LTO", "Agents 六个月目标"], ["PO", "Agents 10 月目标"], ["Entity", "林晓", "履责记录"],
+].map(([t, n, c]) => anchor(t, n, c)).join("")}</ul>`;
+document.getElementById("legendS").innerHTML = `<ul class="anchors">
+  ${anchor("Mission", "待写", "", "wait")}${anchor("Mission", "已记", "", "ok")}${anchor("Mission", "没对上", "", "miss")}${anchor("Mission", "写入失败", "", "fail")}${anchor("Mission", "不写", "", "off")}</ul>`;
+
+// 状态切换
+const renderers = {};
+document.querySelectorAll(".states").forEach((group) => {
+  group.addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (!button) return;
+    group.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+    renderers[group.dataset.for](button.dataset.s);
+  });
+});
+const setState = (key, s) => { const group = document.querySelector(`.states[data-for="${key}"]`); group.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.s === s))); renderers[key](s); };
+
+// 3.1 会议挂点
+const BAR = {
+  anchors: [["Mission", "Co-agent 第一版交互定稿"], ["Mission", "B 端试点上线"], ["Unit", "Agents"]],
+};
+renderers.bar = (s) => {
+  const status = { wait: "wait", edit: "wait", ok: "ok", off: "off", none: "wait" }[s];
+  const list = s === "none" ? [["Unit", "Agents"]] : BAR.anchors;
+  const editing = s === "edit";
+  const chips = list.map(([t, n]) => anchor(t, n, "", status, editing ? "x" : "").replace("</li>", editing ? '<button class="rm" aria-label="去掉">×</button></li>' : "</li>")).join("");
+  const right = s === "ok" ? '<span class="pill" data-tone="done">已记进本体 · 18:42</span>'
+    : s === "off" ? '<span class="pill" data-tone="off">不写进本体 · 林晓</span>' : '<span class="pill" data-tone="wait">确认后写入</span>';
+  document.getElementById("barMock").innerHTML = `
+    <header><h3>会上定了</h3><span class="count">${s === "wait" || s === "edit" || s === "none" ? "3 条待确认" : "4 条"}</span></header>
+    <div class="worldbar">
+      <div class="line"><span class="lbl">挂到</span><ul class="anchors">${chips}${editing ? "" : s === "off" || s === "ok" ? "" : '<li class="anchor add" data-act="edit">＋ 改</li>'}</ul>
+        <span class="end">${right}<span class="switch" role="switch" aria-checked="${s === "off"}" data-act="toggle"><i></i>不写进本体</span></span></div>
+      ${editing ? `<div class="picker"><input placeholder="搜 Mission、单元、周期目标" value="试点">
+        <div class="opt">${ICON.Mission}<span>B 端试点上线</span><small>许诺 · 已挂</small></div>
+        <div class="opt">${ICON.PO}<span>Agents 10 月目标</span><small>周期目标</small></div>
+        <div class="opt">${ICON.Task}<span>试点客户签约</span><small>许诺</small></div>
+        <div class="row-actions" style="justify-content:flex-end"><button class="btn small" data-act="cancel">取消</button><button class="btn primary small" data-act="cancel">保存</button></div></div>` : ""}
+    </div>
+    <ol class="dlist">
+      <li class="drow"><span class="ord">1</span><div class="dbody"><div class="dhead"><span class="pill" data-tone="tier">战略 · CEO</span><span class="pill" data-tone="${s === "ok" ? "done" : "wait"}">${s === "ok" ? "CEO 已确认" : "待 CEO 确认"}</span></div><p class="stmt">试点范围扩大至10家</p></div></li>
+      <li class="drow"><span class="ord">2</span><div class="dbody"><div class="dhead"><span class="pill" data-tone="${s === "ok" ? "done" : "wait"}">${s === "ok" ? "已确认" : "待确认"}</span></div><p class="stmt">桌面端改为左右两栏、手机端保留单栏；林晓23日前交稿，陈一凡月底前完成重排。</p></div></li>
+    </ol>`;
+};
+document.getElementById("barMock").addEventListener("click", (event) => {
+  const act = event.target.closest("[data-act]")?.dataset.act;
+  if (act === "edit") setState("bar", "edit");
+  if (act === "cancel") setState("bar", "wait");
+  if (act === "toggle") setState("bar", document.querySelector('#barMock .switch').getAttribute("aria-checked") === "true" ? "wait" : "off");
+});
+
+// 3.2 决定行
+const STMT = "纪要区切换至含说话人和时间戳的新接口，吴桐28日前交付，旧接口月底后下线。";
+renderers.row = (s) => {
+  const pills = {
+    pending: '<span class="pill" data-tone="wait">待确认</span>',
+    confirmed: '<span class="pill" data-tone="done">已确认</span>',
+    agentYes: '<span class="pill" data-tone="agent">Agent 代判 · 定了</span>',
+    agentNo: '<span class="pill" data-tone="off">Agent 代判 · 没定</span>',
+    miss: '<span class="pill" data-tone="done">已确认</span>',
+    fail: '<span class="pill" data-tone="done">已确认</span>',
+  }[s];
+  const anchors = {
+    pending: "",
+    confirmed: [anchor("Mission", "Co-agent 第一版交互定稿", "Task 全景", "ok"), anchor("Task", "纪要接口 v2", "", "ok")].join(""),
+    agentYes: [anchor("Mission", "Co-agent 第一版交互定稿", "Task 全景", "ok"), anchor("Task", "纪要接口 v2", "", "ok")].join(""),
+    agentNo: "",
+    miss: [anchor("Unit", "Agents", "会议事件", "miss")].join(""),
+    fail: [anchor("Mission", "Co-agent 第一版交互定稿", "Task 全景", "fail"), anchor("Task", "纪要接口 v2", "", "fail")].join(""),
+  }[s];
+  const open = s === "pending" || s === "agentYes" || s === "agentNo";
+  const btns = open
+    ? `<div class="row-actions"><button class="btn primary">对</button><button class="btn">改一下</button><button class="btn">其实没定</button></div>`
+    : '<div class="row-actions"><button class="btn link">改判</button></div>';
+  document.getElementById("rowCount").textContent = s === "pending" ? "1 条待确认" : s.startsWith("agent") ? "1 条代判" : "1 条";
+  document.getElementById("rowMock").innerHTML = `
+    <li class="drow" ${s === "agentNo" ? "data-off" : ""}><span class="ord">3</span><div class="dbody">
+      <div class="dhead">${pills}</div>
+      <p class="stmt">${STMT}</p>
+      <p class="quote">「纪要接口切到 v2」<span> — 林晓</span></p>
+      ${anchors ? `<ul class="anchors">${anchors}</ul>` : ""}
+      ${btns}
+    </div></li>`;
+};
+
+// 3.3 战略项
+renderers.strat = (s) => {
+  document.getElementById("stratMock").innerHTML = `
+    <li class="drow"><span class="ord">1</span><div class="dbody">
+      <div class="dhead"><span class="pill" data-tone="tier">战略 · CEO</span>${s === "now" ? '<span class="pill" data-tone="done">CEO 已确认 · 本体待 Co-Agent 更新</span>' : '<span class="pill" data-tone="done">CEO 已确认</span>'}</div>
+      <p class="stmt">试点范围扩大至10家</p>
+      <p class="quote">「我想把试点从 3 家扩到 10 家」<span> — 许诺</span></p>
+      ${s === "next" ? `<ul class="anchors">${anchor("PO", "Agents 10 月目标", "结果承诺", "ok")}${anchor("Mission", "B 端试点上线", "", "ok")}</ul>` : ""}
+    </div></li>`;
+};
+
+// 3.4 影响卡
+renderers.impact = (s) => {
+  const fix = s === "fix";
+  const flags = [fix ? '<span class="flag" data-tone="fix">更正</span><span class="flag" data-tone="ok">本体已更正</span>' : ""].join("");
+  const bar = s === "irrDone" ? "" : s === "irr"
+    ? `<div class="reasons"><button class="chipBtn" data-act="r">不是我的事</button><button class="chipBtn" data-act="r">已经做完</button><button class="chipBtn" data-act="r">理解错了</button></div>
+       <button class="btn" data-act="back">取消</button><button class="btn link" data-act="r">直接收起</button>`
+    : '<button class="btn primary">✓ 知道了</button><button class="btn link" data-act="irr">⊘ 和我无关</button>';
+  document.getElementById("impactMock").innerHTML = `
+    <div style="display:grid;gap:14px;max-width:760px">
+    <div style="display:flex;align-items:center;gap:10px"><b style="font-size:15px">会议页按桌面双栏、手机单栏重排</b><span class="pill" data-tone="${s === "irrDone" ? "off" : "wait"}" style="margin-left:auto">${s === "irrDone" ? "和我无关 · 不是我的事" : "待处理"}</span></div>
+    <article class="face">
+      ${flags ? `<div class="flags">${flags}</div>` : ""}
+      ${fix ? '<p class="was" style="padding:8px 12px;border-left:3px solid var(--blue);background:#f3f7fe;border-radius:0 12px 12px 0;color:var(--ink)">林晓把「…林晓23日前交稿…」改为「…林晓24日前交稿…」</p>' : ""}
+      <p class="impact">会上确定桌面端改为左右两栏、手机端保留单栏。你负责的『会议页改版』需据此拆分纪要区和对话区，同时满足『会议页在手机 390 宽度下可用』。</p>
+      <div class="todo"><b>要做</b><span>按桌面端左右两栏、手机端单栏完成『会议页改版』重排，并验证手机 390 宽度下可用</span><time>10月31日前</time></div>
+      <ul class="anchors">${anchor("Task", "会议页改版")}${anchor("Task", "会议页改版", "验收 · 手机 390 可用")}</ul>
+      ${bar ? `<footer class="faceBar">${bar}</footer>` : ""}
+    </article>
+    ${s === "card" || s === "fix" ? `<div style="border-bottom:1px solid var(--hairline);padding-bottom:14px;display:grid;gap:10px">
+      <b style="font-size:15px">前因后果 ▴</b>
+      <dl class="facts">
+        <div><dt>会上定了</dt><dd>桌面端改为左右两栏、手机端保留单栏；林晓${fix ? "24" : "23"}日前交稿，陈一凡月底前完成重排。</dd></div>
+        <div><dt>拍板</dt><dd>主持人确认</dd></div>
+        <div><dt>会议</dt><dd>co-agent 交互评审</dd></div>
+        <div><dt>本体</dt><dd><ul class="anchors">${anchor("Mission", "Co-agent 第一版交互定稿", "Task 全景", "ok")}</ul></dd></div>
+      </dl></div>` : ""}
+    </div>`;
+};
+document.getElementById("impactMock").addEventListener("click", (event) => {
+  const act = event.target.closest("[data-act]")?.dataset.act;
+  if (act === "irr") setState("impact", "irr");
+  if (act === "back") setState("impact", "card");
+  if (act === "r") { setState("impact", "irrDone"); toast("已记下：和我无关"); }
+});
+
+// 4.1 对话确认卡
+const SNIP = `<details class="snip"><summary>片段 · 9 条 · 10/19 15:02–15:31</summary><ol class="snipList">
+  <li class="gap">前文省略 3 条</li>
+  <li><span class="who">陈一凡</span><span>试点这周要给 3 家客户演示，会议和任务两个场景都要吗？</span></li>
+  <li data-m="old"><span class="who">Agent</span><span><em>旧说法</em>按 Mission「Co-agent 第一版交互定稿」，10 月 31 日前会议、任务两个场景都要定稿并给试点用。</span></li>
+  <li data-m="basis"><span class="who">周明远</span><span><em>依据</em>试点客户反馈只在开会时用，任务场景没人点开过。</span></li>
+  <li data-m="trigger"><span class="who">周明远</span><span><em>触发</em>不对，月底试点只做会议场景，任务场景放到 11 月。</span></li>
+  <li><span class="who">Agent</span><span>明白：10 月只交会议场景，任务场景挪到 11 月。要写进本体吗？</span></li>
+</ol></details>`;
+renderers.chat = (s) => {
+  const who = s === "dri" || s === "sent" ? "陈一凡" : "周明远";
+  const me = s === "deep" ? "那就这么做吧，试点先只上会议，任务等数据。"
+    : s === "mem" ? "以后给我的回答都先说结论，记一下。"
+    : `不对，月底试点只做会议场景，任务场景放到 11 月。`;
+  const ai = s === "mem" ? "记下了：以后先给结论，再说原因。<sup style='color:#7a7f89'>ⓘ</sup>"
+    : s === "deep" ? "这段我们聊了 7 轮，结论是：10 月试点只上会议场景，任务场景等试点数据再定。"
+    : "明白：10 月只交会议场景，任务场景挪到 11 月。";
+  const typeLbl = s === "deep" ? "" : '<span class="pill plain" data-tone="wait">纠错</span>';
+  let card = "";
+  if (s === "fix" || s === "edit") {
+    card = `<section class="ecard">
+      <div class="head">${typeLbl}<span style="color:#7a7f89;font-size:13px">写进本体</span></div>
+      ${s === "edit" ? '<textarea rows="2">10 月试点只交会议场景；任务场景挪到 11 月，等试点数据再定。</textarea>' : '<p class="item">10 月试点只交会议场景，任务场景挪到 11 月。</p>'}
+      <p class="was">替代 <s>10 月 31 日前会议、任务两个场景都定稿并给试点用</s></p>
+      <ul class="anchors"><span class="lbl">挂到</span>${anchor("Mission", "Co-agent 第一版交互定稿", "结果目标", "wait")}</ul>
+      ${SNIP}
+      <div class="row-actions">${s === "edit" ? '<button class="btn primary" data-act="ok">保存并写进本体</button><button class="btn" data-act="back">取消</button>' : '<button class="btn primary" data-act="ok">写进本体</button><button class="btn" data-act="edit">改一下</button><button class="btn link">不用</button>'}</div>
+    </section>`;
+  } else if (s === "done") {
+    card = `<section class="ecard"><div class="done">✓ 已写进本体 <ul class="anchors" style="display:inline-flex">${anchor("Mission", "Co-agent 第一版交互定稿", "结果目标", "ok")}</ul><time>15:32</time></div></section>`;
+  } else if (s === "dri") {
+    card = `<section class="ecard">
+      <div class="head">${typeLbl}<span style="color:#7a7f89;font-size:13px">写进本体</span></div>
+      <p class="item">10 月试点只交会议场景，任务场景挪到 11 月。</p>
+      <p class="was">替代 <s>10 月 31 日前会议、任务两个场景都定稿并给试点用</s></p>
+      <ul class="anchors"><span class="lbl">挂到</span>${anchor("Mission", "Co-agent 第一版交互定稿", "结果目标", "wait")}</ul>
+      ${SNIP.replace(/周明远/g, "陈一凡")}
+      <div class="row-actions"><button class="btn primary" data-act="sent">交给 林晓 确认</button><button class="btn" data-act="x">改一下</button><button class="btn link">不用</button></div>
+    </section>`;
+  } else if (s === "sent") {
+    card = `<section class="ecard"><div class="done" style="color:#1f5fd6">等 林晓 确认 <ul class="anchors" style="display:inline-flex">${anchor("Mission", "Co-agent 第一版交互定稿", "结果目标", "wait")}</ul><time>15:33</time></div></section>`;
+  } else if (s === "deep") {
+    card = `<section class="ecard"><div class="head" style="gap:6px">
+      <span style="font-size:14px;font-weight:600">有结论</span><span style="flex:1"></span>
+      <button class="chipBtn" data-act="pick">纠错</button><button class="chipBtn" data-act="pick">拍板</button><button class="chipBtn">记下</button><button class="btn link small">不用</button></div></section>`;
+  }
+  document.getElementById("chatMock").innerHTML = `
+    <div class="msg me">${me}<div style="font-size:11px;color:#7a7f89;margin-top:2px">${who}</div></div>
+    <div class="msg ai"><p>${ai}</p></div>${card}`;
+};
+document.getElementById("chatMock").addEventListener("click", (event) => {
+  const act = event.target.closest("[data-act]")?.dataset.act;
+  if (act === "ok") setState("chat", "done");
+  if (act === "edit") setState("chat", "edit");
+  if (act === "back") setState("chat", "fix");
+  if (act === "sent") setState("chat", "sent");
+  if (act === "pick") setState("chat", "fix");
+});
+
+// 4.2 DRI 待确认
+renderers.dri = (s) => {
+  const item = s === "ok" ? "" : `
+    <div class="nitem">
+      <p class="t">10 月试点只交会议场景，任务场景挪到 11 月。</p>
+      <span class="d">陈一凡 · 对话 · Mission「Co-agent 第一版交互定稿」· 结果目标</span>
+      ${s === "edit" ? `<div style="display:grid;gap:6px;margin-top:6px"><span class="d">改成</span><textarea style="width:100%;padding:8px 10px;border:1px solid #d5dae3;border-radius:10px;font:inherit;font-size:14px;field-sizing:content">10 月试点只交会议场景，任务场景挪到 11 月。</textarea><div class="nbtns" style="justify-content:flex-end"><button>取消</button><button class="on" data-act="ok">保存</button></div></div>`
+        : '<div class="nbtns"><button class="on" data-act="ok">采纳</button><button>不采纳</button><button data-act="edit">改一下</button></div>'}
+    </div>`;
+  document.getElementById("driMock").innerHTML = `
+    <div class="ncard"><header><span class="ic">${ICON.Mission}</span>待你确认<span class="n">${s === "ok" ? 0 : 1}</span></header>
+      ${s === "ok" ? '<div class="nitem"><span class="d" style="color:#1c7a43;font-weight:600">✓ 已采纳 · 已写进本体</span></div>' : item}
+    </div>
+    <div style="height:10px"></div>
+    <div class="ncard"><header><span class="ic">${ICON.Task}</span>会上定了<span class="n">1</span></header>
+      <div class="nitem"><p class="t">企业微信接入暂缓，形成可供判断的试点数据后再讨论。</p><span class="d">co-agent 交互评审 · 10/20 18:02 前</span><div class="nbtns"><button class="on">对</button><button>其实没定</button><button>改一下</button></div></div>
+    </div>`;
+};
+document.getElementById("driMock").addEventListener("click", (event) => {
+  const act = event.target.closest("[data-act]")?.dataset.act;
+  if (act === "ok") { setState("dri", "ok"); toast("已采纳"); }
+  if (act === "edit") setState("dri", "edit");
+});
+
+// 5.1 日进展
+const DAILY = [
+  { id: "a", a: ["Task", "会议页改版", "进展"], facts: [["拆好纪要区和对话区两栏布局", "PR #31"], ["手机 390 宽下对话从底部全屏打开", "采集 16:10"]] },
+  { id: "b", a: ["Mission", "Co-agent 第一版交互定稿", "Task 全景"], facts: [["和林晓对齐会议页新稿，确认 23 日交稿", "采集 11:20"]] },
+  { id: "c", a: ["Unit", "Agents", ""], facts: [["帮吴桐排查纪要接口的时间戳时区", "采集 18:40"]], off: true },
+];
+renderers.daily = (s) => {
+  const status = s === "ok" || s === "fix" ? "ok" : "wait";
+  const rows = DAILY.map((row, i) => {
+    const editing = s === "edit" && i === 0;
+    const removed = s !== "draft" && s !== "edit" ? false : false;
+    const fixRow = s === "fix" && i === 0;
+    return `<div class="prow" ${removed ? "data-off" : ""}>
+      <div class="top"><ul class="anchors">${anchor(row.a[0], row.a[1], row.a[2], status)}</ul>${row.off ? '<span class="pill plain" data-tone="agent">计划外</span>' : ""}
+        <span class="end">${s === "draft" || s === "edit" ? '<button class="btn link small">改</button><button class="btn link small">不写</button>' : s === "ok" || s === "fix" ? (fixRow ? '<span class="pill plain" data-tone="wait">已更正</span>' : '<button class="btn link small">更正</button>') : ""}</span></div>
+      ${editing ? `<textarea style="width:100%;padding:8px 10px;border:1px solid #dfe3e8;border-radius:10px;font:inherit;font-size:14px;line-height:1.7;field-sizing:content">拆好纪要区和对话区两栏布局（PR #31）\n手机 390 宽下对话从底部全屏打开</textarea><div class="row-actions" style="justify-content:flex-end"><button class="btn small">取消</button><button class="btn primary small">保存</button></div>`
+        : `<ul>${row.facts.map(([f, src]) => `<li>${fixRow && f.startsWith("手机") ? "<s style='color:#9aa1ad'>" + f + "</s> 手机 390 宽下对话从底部入口打开（未全屏）" : f}<a href="#">${src}</a></li>`).join("")}</ul>`}
+    </div>`;
+  }).join("");
+  const head = s === "ok" || s === "fix" ? '<span class="pill" data-tone="done">已写 · 21:30</span>' : '<span class="pill" data-tone="wait">21:30 写入</span><button class="btn small">现在写</button>';
+  document.getElementById("dailyMock").innerHTML = `<header><h3>今天写进本体</h3><span class="count">10/19 · 陈一凡</span><span class="end">${head}</span></header>${rows}`;
+};
+
+// 5.2 周复盘
+renderers.weekly = (s) => {
+  const st = s === "before" ? "wait" : "ok";
+  const anchors = [
+    anchor("Mission", "Co-agent 第一版交互定稿", "进展", st),
+    anchor("Task", "会议页改版", "进展", s === "fail" ? "fail" : st),
+    anchor("Task", "任务卡列表性能优化", "", s === "before" ? "miss" : "miss"),
+  ].join("");
+  document.getElementById("weeklyMock").innerHTML = `
+    <header><h3>周复盘 · 10/12–10/18</h3><span class="end">${s === "before" ? '<span class="pill" data-tone="wait">草稿</span>' : '<span class="pill" data-tone="done">已提交</span>'}</span></header>
+    <div style="color:#535358;font-size:14px;line-height:1.7">关键进展与 Evidence · 最重要的问题及 Why · 判断变化 · 当前处理 …</div>
+    <div class="submitBar"><span class="lbl">写到</span><ul class="anchors">${anchors}</ul>
+      <span class="end">${s === "before" ? '<button class="btn primary">提交</button>' : s === "fail" ? '<span class="pill" data-tone="fail">1 个没写成 · 重试中</span>' : '<span class="pill" data-tone="done">已写 2 · 没对上 1</span>'}</span></div>`;
+};
+
+// 6.1 签发
+renderers.sign = (s) => {
+  const st = s === "before" ? "wait" : "ok";
+  document.getElementById("signMock").innerHTML = `
+    <header><h3>签发 11 月计划</h3></header>
+    <div style="display:grid;gap:8px">
+      <div class="top" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span class="lbl">任务卡发给</span><span style="font-size:14px">林晓、许诺、陈一凡、吴桐 · 4 人</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"><span class="lbl">同时确认</span><ul class="anchors">${anchor("PO", "公司 11 月目标", "", st)}${anchor("PO", "Agents 11 月目标", "", st)}${anchor("PO", "Method 11 月目标", "", s === "after" ? "fail" : st)}</ul></div>
+    </div>
+    <div class="submitBar">${s === "before" ? '<label class="check"><input type="checkbox" checked>我确认签发</label><span class="end"><button class="btn primary">签发计划</button></span>' : '<span class="pill" data-tone="done">已签发 · 11/1 09:12</span><span class="end"><span class="pill" data-tone="fail">Method 11 月目标 · 未登记委托</span></span>'}</div>`;
+};
+
+// 6.2 管理员
+renderers.admin = (s) => {
+  const rows = [
+    ["会议「co-agent 交互评审」", "纪要区切换至含说话人和时间戳的新接口…", anchor("Mission", "Co-agent 第一版交互定稿", "", s === "retried" ? "ok" : "fail"), s === "retried" ? '<span class="pill" data-tone="done">已重试 · 成功</span>' : "<code>VALIDATION_FAILED</code>", s === "retried" ? "" : '<button class="btn small">重试</button><button class="btn link small">接手</button>'],
+    ["周复盘 · 吴桐 10/12–10/18", "3 行进展", anchor("Task", "纪要接口 v2", "", "fail"), "<code>FORBIDDEN · scope</code>", '<button class="btn small">重试</button><button class="btn link small">接手</button>'],
+    ["签发 11 月计划", "代 CEO 确认", anchor("PO", "Method 11 月目标", "", "fail"), "<code>DELEGATION_MISSING</code>", '<button class="btn link small">提醒 周明远</button>'],
+  ];
+  document.getElementById("adminMock").innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"><span class="pill" data-tone="fail">失败 ${s === "retried" ? 2 : 3}</span><span class="pill" data-tone="agent">没对上 5</span><span class="pill" data-tone="done">今天已写 41</span></div>
+    <div class="tableWrap"><table class="adm"><thead><tr><th>来源</th><th>内容</th><th>落点</th><th>原因</th><th></th></tr></thead><tbody>
+      ${rows.map((r) => `<tr><td>${r[0]}</td><td class="sub">${r[1]}</td><td><ul class="anchors">${r[2]}</ul></td><td>${r[3]}</td><td><div class="row-actions">${r[4]}</div></td></tr>`).join("")}
+    </tbody></table></div>`;
+};
+
+// 7 汇总
+const DECIDE = [
+  ["会议没有 Mission 时挂哪", "主持人的单元", "Company"],
+  ["谁能改会议挂点、开「不写进本体」", "主持人和 CEO", "只有 CEO"],
+  ["已写入后再开「不写进本体」", "本体记撤回更正", "写入后不能再关"],
+  ["决定的落点和写入状态给谁看", "主持人和 CEO（参会人只看落点）", "只给 CEO 和管理员"],
+  ["代判后是否继续留在首页待办", "留到主持人点过，状态拆成「代判 · 定了 / 没定」", "只在会议页"],
+  ["战略项月底前怎么写本体", "只记事件，挂到 PO / LTO；文案改成「已记到 PO」", "继续等 Co-Agent 改对象，文案改「待更新」"],
+  ["「和我无关」要不要原因、改不改本体挂点", "三个快选可不选；不改挂点，只进质量信号", "去掉他的对象，记一条更正"],
+  ["本体写入失败给管理员「重试」", "给", "只能接手、解决"],
+  ["对话链本期做到哪", "规则 + 这版原型，实现排在会议之后", "本期实现纠错一类"],
+  ["二号位也出对话确认卡", "出，对自己有权的对象", "只给一号位"],
+  ["DRI 不处理对话纠错", "两次提醒后保持待办，不代判", "一个工作日后代判"],
+  ["日进展写之前给预览窗口", "20:30 起草，21:30 写", "直接写，事后更正"],
+  ["计划外写不写进本体", "写到本人所在单元，标计划外", "只留在天枢"],
+  ["周复盘里本体没有的对象", "挂到本人所在单元", "只标黄点不写"],
+  ["签发时确认哪些域的 PO", "所有已承诺的 PO（含 Method）", "维持公司和 E&O"],
+  ["请斯一停掉 skill 写会议事件", "本周停", "等天枢会议事件上线后再停"],
+];
+document.getElementById("decideAll").innerHTML = DECIDE.map(([q, a, b]) => `<li style="margin-bottom:8px"><b>${q}</b>：${a}<span class="rec">推荐</span> / ${b}</li>`).join("");
+
+for (const key of Object.keys(renderers)) renderers[key](document.querySelector(`.states[data-for="${key}"] button[aria-pressed="true"]`).dataset.s);
+</script>
+</body>
+</html>

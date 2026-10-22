@@ -3,12 +3,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
 import { MeetingCard, outcomeItemState } from "@/cards/MeetingCard";
 import { meetingCard } from "@/cards/meetingWorkspace.test";
-import { StrategicConfirmCard, pendingStrategicItems } from "./StrategicConfirmCard";
 import { MemberTasks, tasksByDue, type MemberTask } from "./member/MemberTasks";
 import { memberNoticeGroups } from "./member/memberNotices";
 
 vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ homeCards: [], closing: false }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
+// 会议记录用会议卡还是旧格式，由会议卡接口决定（静态渲染问不到）：这里的会议都是旧格式。
+vi.mock("@/components/meeting/useMeetingCardProbe", () => ({ useMeetingCardProbe: () => ({ status: "legacy" }) }));
 
 const noop = () => undefined;
 
@@ -29,7 +30,7 @@ function heldMeeting(items: unknown[], actions: Card["actions"] = []): Card {
 
 const STRATEGIC = item("s1", "strategic", { title: "东南亚改为主战场", brief: "把东南亚从试点升级为主战场，下季度预算向它倾斜。", judgmentKind: "company_direction" });
 
-describe("会后纪要（会议记录页）", () => {
+describe("旧格式会议的会后纪要（会议记录页，只读）", () => {
   it("分成会议纪要、会议共识、按负责人分组的待办事项、提给 CEO 的战略议题", () => {
     const html = renderToStaticMarkup(
       <MeetingCard
@@ -53,10 +54,11 @@ describe("会后纪要（会议记录页）", () => {
     expect(html).toContain("一号位事项，仅记入纪要");
     expect(html).toContain("提给 CEO 的战略议题");
     expect(html).toContain("东南亚改为主战场");
-    expect(html).toContain("待 CEO 确认");
+    expect(html).toContain("未处理");
+    expect(html).not.toContain("待 CEO 确认");
   });
 
-  it("会议共识以主决定分组：子项缩进、没有自己的按钮；待办收成一行「N 项待办已推给负责人」，没有推送按钮", () => {
+  it("会议共识以主决定分组、子项缩进；待办收成一行「N 项待办已推给负责人」；旧的逐条动作即使带着也不出按钮", () => {
     const pushed = (id: string) => item(id, "todo", { ownerPersonId: "p1", review: { status: "confirmed", effectRef: `task:${id}` } });
     const sign = (actionType: string, itemId: string) => ({ actionId: `${actionType}:${itemId}`, actionType, label: actionType, itemId });
     const html = renderToStaticMarkup(
@@ -75,46 +77,20 @@ describe("会后纪要（会议记录页）", () => {
     expect(html.match(/>2 条</g)).toHaveLength(1);
     expect(html).toContain("c1 的内容");
     expect((html.match(/aria-label="含 2 项"/g) ?? [])).toHaveLength(1);
-    // 子项那一层没有按钮：确认 / 忽略只出现两次（两条主决定各一组）
-    expect(html.match(/>确认</g)).toHaveLength(2);
-    expect(html.match(/>忽略</g)).toHaveLength(2);
+    // 会后只有会议卡一个入口：没有逐条确认、忽略、撤回
+    expect(html).not.toContain(">确认<");
+    expect(html).not.toContain(">忽略<");
     expect(html).toContain("2 项待办已推给负责人");
     expect(html).not.toContain(">推送<");
     expect(html).not.toContain(">撤回<");
   });
 
-  it("战略议题确认后写明交给 Co-Agent 更新本体；不同意写明", () => {
+  it("战略议题照当时的处理写：CEO 已确认、CEO 不同意、未处理", () => {
     const payload = heldMeeting([]).payload as never;
     const name = (id: string) => id;
-    expect(outcomeItemState({ ...STRATEGIC, review: { status: "confirmed", effectRef: "ontology:1" } } as never, payload, name).label).toBe("CEO 已确认 · 本体待 Co-Agent 更新");
+    expect(outcomeItemState({ ...STRATEGIC, review: { status: "confirmed", effectRef: "ontology:1" } } as never, payload, name).label).toBe("CEO 已确认");
     expect(outcomeItemState({ ...STRATEGIC, review: { status: "dismissed" } } as never, payload, name).label).toBe("CEO 不同意");
-  });
-});
-
-describe("CEO 通知栏「待一号位确认」", () => {
-  const actions = [
-    { actionId: "c1", actionType: "meeting.confirm_item", label: "确认", itemId: "s1" },
-    { actionId: "d1", actionType: "meeting.dismiss_item", label: "不同意", itemId: "s1" },
-  ] as Card["actions"];
-
-  it("只收还没表态的战略议题，带上两颗动作", () => {
-    const found = pendingStrategicItems([heldMeeting([STRATEGIC, item("a1", "todo")], actions), heldMeeting([{ ...STRATEGIC, id: "s2", review: { status: "confirmed" } }])]);
-    expect(found).toHaveLength(1);
-    expect(found[0].confirm?.actionId).toBe("c1");
-    expect(found[0].dismiss?.actionId).toBe("d1");
-  });
-
-  it("标题加一两句话把事情说全，卡上直接确认或不同意", () => {
-    const html = renderToStaticMarkup(<StrategicConfirmCard cards={[heldMeeting([STRATEGIC], actions)]} onCard={noop} onNavigate={noop} />);
-    expect(html).toContain("待一号位确认");
-    expect(html).toContain("东南亚改为主战场");
-    expect(html).toContain("把东南亚从试点升级为主战场");
-    expect(html).toContain(">确认<");
-    expect(html).toContain(">不同意<");
-  });
-
-  it("没有要确认的就不出现", () => {
-    expect(renderToStaticMarkup(<StrategicConfirmCard cards={[heldMeeting([item("a1", "todo")])]} onCard={noop} onNavigate={noop} />)).toBe("");
+    expect(outcomeItemState(STRATEGIC as never, payload, name).label).toBe("未处理");
   });
 });
 

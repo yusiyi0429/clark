@@ -45,7 +45,7 @@ API 把业务对象投影为固定类型的 Card，带展示数据、导航、�
 
 - 会前材料由 `materialParser.ts` 在受限子进程里解析，供会前预审使用；材料替换受会议阶段与版本约束。
 - 逐字稿可来自标准 [`warmap-transcript.v1`](../contracts/warmap-transcript.v1.md)、妙记 Markdown 转换（人员歧义由 CEO 映射、确认后才写入），或会议录音转写（TOS + 火山 ASR，本人声纹用腾讯云与 ffmpeg）。
-- 会后提取生成候选，CEO 逐项确认。会后链路（`meetingFollowThrough.ts`）还负责飞书妙记轮询、分层确认与同步、提醒与代判、向下推送影响卡（`IMPACT_CARD_MODE`）和写本体。
+- 会后整理生成一张会议卡草稿，主持人或创建人整卡确认。会后链路（`meetingFollowThrough.ts`）还负责飞书妙记轮询、会议卡待确认提醒和整卡确认后写本体；会后只有会议卡一个入口，不逐条确认、不代判。
 
 ### 目标、任务卡与复盘
 
