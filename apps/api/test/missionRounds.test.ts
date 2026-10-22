@@ -99,10 +99,10 @@ async function feedback(t: TestDb, f: Fixture, at: Date, late = false): Promise<
   [id, f.roundId, f.cardIds[0], randomUUID(), late, at]);
   return id;
 }
-async function waitForRoundLock(t: TestDb): Promise<void> {
+async function waitForRoundLock(t: TestDb, waiters = 1): Promise<void> {
   for (let attempt = 0; attempt < 200; attempt++) {
-    const waiting = await t.pool.query("SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%mission_rounds%' LIMIT 1");
-    if (waiting.rowCount) return;
+    const waiting = await t.pool.query("SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%mission_rounds%'");
+    if ((waiting.rowCount ?? 0) >= waiters) return;
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("轮次写入未等待预期行锁");
@@ -270,11 +270,15 @@ describe("Mission 轮次仓储与状态机", () => {
       await t.db.query("BEGIN"); await t.db.query("SELECT id FROM mission_rounds WHERE id=$1 FOR UPDATE", [f.roundId]);
       let clockRead = false; let at = START;
       const pending = executeOpenMissionRound(t.pool, people, SECRET, dri, request.scope, request.fingerprint, () => { clockRead = true; return at; });
+      let replaying: ReturnType<typeof executeOpenMissionRound> | undefined;
       try {
         await waitForRoundLock(t); expect(clockRead).toBe(false);
+        // 第二个请求必须在提交前排进行锁队列；提交后才发出的请求会被 Postgres 放行插队到第一个等待者之前。
+        replaying = executeOpenMissionRound(t.pool, people, SECRET, dri, request.scope, request.fingerprint, () => at);
+        await waitForRoundLock(t, 2);
         at = new Date(START.getTime() + 10_000);
       } finally { await t.db.query("COMMIT"); }
-      const [first, replay] = await Promise.all([pending, executeOpenMissionRound(t.pool, people, SECRET, dri, request.scope, request.fingerprint, () => at)]);
+      const [first, replay] = await Promise.all([pending, replaying]);
       expect(first).toHaveProperty("card"); expect(replay).toMatchObject({ replayed: true });
       expect((await t.db.query("SELECT opened_at,version FROM mission_rounds")).rows).toEqual([{ opened_at: at, version: 2 }]);
     });
