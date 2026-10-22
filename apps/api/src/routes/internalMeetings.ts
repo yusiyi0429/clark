@@ -1,7 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
 import type { TMeetingParticipant } from "@warmap/contracts";
-import { feishuConnected } from "../feishu/oauth.js";
 import { listPendingIssueSummaries } from "../issues.js";
 import type { Viewer } from "../meetingCard.js";
 import { listConfirmedMeetings, PayloadHashMismatchError, readConfirmedMeeting } from "../meetingCardRead.js";
@@ -145,24 +144,5 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
     if (!view) return reply;
     const cards = await readHomeSnapshots(ctx, view);
     return { viewerRole: view.role, scene: view.role === "ceo" ? "公司首页" : "我的工作台", cards: cards.map((card) => ({ ...card, label: "页面" })) };
-  });
-
-  // 工具清单：只说本轮这个人、这个视角能不能用；说明和 Prompt 在 chat-core。代读逐字稿要本人连着飞书且授权里有妙记读权限。
-  app.get("/internal/tools", { onRequest }, async (req, reply) => {
-    const view = viewOf(req, reply);
-    if (!view) return reply;
-    const transcript = !env.feishu ? { available: false, reason: "FEISHU_UNAVAILABLE" }
-      : await feishuConnected(q, env.feishu, view.personId, ctx.now()) ? { available: true } : { available: false, reason: "FEISHU_NOT_CONNECTED" };
-    return {
-      viewerRole: view.role,
-      tools: [
-        { name: "list_confirmed_meetings", available: true },
-        { name: "read_confirmed_meeting", available: true },
-        { name: "read_meeting_transcript", ...transcript },
-        { name: "list_pending_issues", available: true },
-        { name: "list_scheduled_meetings", available: true },
-        { name: "read_home_cards", available: true },
-      ],
-    };
   });
 }

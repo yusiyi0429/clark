@@ -1,16 +1,12 @@
-import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FEISHU_MINUTES_READ_SCOPES } from "../src/feishu/oauth.js";
-import { saveAuthorizedToken } from "../src/feishu/tokens.js";
 import type { TestApp } from "./helpers.js";
 import { CEO, confirm, HOST, OWNER, ready, setup } from "./meetingCardFixture.js";
 import { projection, stubWorld } from "./worldFixture.js";
 
-// 给独立 Chat 的宿主只读接口（10/22 与人豪定稿）：X-Viewer-Role 必填并按人员目录核对；待决议题、预约会议、首页卡片、工具清单。
+// 给独立 Chat 的宿主只读接口（10/22 与人豪定稿）：X-Viewer-Role 必填并按人员目录核对；待决议题、预约会议、首页卡片（工具清单 10/22 人豪定为不做）。
 const TOKEN = "internal-chat-test";
-const feishuEnv = { tokenKey: randomBytes(32), tokenKeyVersion: 1 };
 const HOUR = 60 * 60 * 1000;
-const NEW_ROUTES = ["/internal/pending-issues", "/internal/scheduled-meetings", "/internal/home-cards", "/internal/tools"];
+const NEW_ROUTES = ["/internal/pending-issues", "/internal/scheduled-meetings", "/internal/home-cards"];
 
 const get = (t: TestApp, url: string, personId: string, role?: string) => t.app.inject({ method: "GET", url,
   headers: { authorization: `Bearer ${TOKEN}`, "x-owner-id": personId, ...(role ? { "x-viewer-role": role } : {}) } });
@@ -159,38 +155,6 @@ describe("给独立 Chat 的宿主只读接口", () => {
       expect(member.body).not.toContain("actionId");
     } finally {
       await t.close();
-    }
-  });
-
-  it("工具清单：本人没连飞书时代读逐字稿不可用，连上了可用；没接飞书的部署是 FEISHU_UNAVAILABLE", async () => {
-    const { t } = await setup(undefined, { internalChatToken: TOKEN, feishu: { appId: "cli_test", appSecret: "test-secret", ...feishuEnv } });
-    try {
-      const transcriptTool = async (personId: string, role: string) => {
-        const body = (await get(t, "/internal/tools", personId, role)).json();
-        expect(body.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_confirmed_meetings", "read_confirmed_meeting", "read_meeting_transcript",
-          "list_pending_issues", "list_scheduled_meetings", "read_home_cards"]);
-        expect(body.tools.filter((tool: { available: boolean }) => !tool.available).map((tool: { name: string }) => tool.name))
-          .toEqual(body.tools[2].available ? [] : ["read_meeting_transcript"]);
-        expect(body.viewerRole).toBe(role);
-        return body.tools[2];
-      };
-      expect(await transcriptTool(CEO, "ceo")).toEqual({ name: "read_meeting_transcript", available: false, reason: "FEISHU_NOT_CONNECTED" });
-      await t.sql("INSERT INTO feishu_identities (person_id, open_id, name) VALUES ($1, $2, $3)", [HOST, `ou_${HOST}`, HOST]);
-      // 授权里缺妙记读权限也算没连好。
-      await saveAuthorizedToken(t.pool.query.bind(t.pool), feishuEnv, HOST, { accessToken: "u-host", expiresIn: 7200, scope: "offline_access" }, new Date());
-      expect(await transcriptTool(HOST, "member")).toMatchObject({ available: false, reason: "FEISHU_NOT_CONNECTED" });
-      await saveAuthorizedToken(t.pool.query.bind(t.pool), feishuEnv, HOST,
-        { accessToken: "u-host", expiresIn: 7200, scope: ["offline_access", ...FEISHU_MINUTES_READ_SCOPES].join(" ") }, new Date());
-      expect(await transcriptTool(HOST, "member")).toEqual({ name: "read_meeting_transcript", available: true });
-    } finally {
-      await t.close();
-    }
-    const plain = await setup(undefined, { internalChatToken: TOKEN });
-    try {
-      const body = (await get(plain.t, "/internal/tools", CEO, "ceo")).json();
-      expect(body.tools[2]).toEqual({ name: "read_meeting_transcript", available: false, reason: "FEISHU_UNAVAILABLE" });
-    } finally {
-      await plain.t.close();
     }
   });
 });
