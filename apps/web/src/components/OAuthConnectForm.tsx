@@ -81,7 +81,7 @@ export function OAuthConnectForm({ role, activeCount = 0, actionsTarget, onCreat
     catch { setError("复制失败，请选择下方步骤手动复制"); setShowSteps(true); }
   };
   // Claude Code 注册了 claude-cli:// 链接：新开终端、把步骤填进输入框，用户按回车才发送。本机没注册时点了没反应，所以复制仍是主路径。
-  const launch = () => { setAttempt((value) => value + 1); setError(""); setStatus("已在 Claude Code 中打开"); onDownloaded?.(); };
+  const launch = () => { setAttempt((value) => value + 1); setError(""); setStatus("已在 Claude Code CLI 中打开"); onDownloaded?.(); };
   const action = actionsTarget === undefined
     ? <Button variant="primary" isDisabled={activeCount >= 5} onPress={() => void copy()}>{copied ? "已复制" : "复制连接步骤"}</Button>
     : actionsTarget ? createPortal(<button type="button" className={f.primary} disabled={activeCount >= 5} onClick={() => void copy()}>{copied ? "已复制" : "复制连接步骤"}</button>, actionsTarget) : null;
@@ -90,7 +90,7 @@ export function OAuthConnectForm({ role, activeCount = 0, actionsTarget, onCreat
       onSelectionChange={(keys) => { const next = [...keys][0]; if (next === "codex" || next === "claude" || next === "other") setClient(next); }}>
       <ToggleButton id="codex">Codex</ToggleButton><ToggleButton id="claude">Claude Code</ToggleButton><ToggleButton id="other">其他工具</ToggleButton>
     </ToggleButtonGroup></div>
-    {client === "claude" ? <a className={s.launch} href={`claude-cli://open?q=${encodeURIComponent(guide)}`} onClick={launch}><SquareTerminal size={15} aria-hidden />在 Claude Code 中打开</a> : null}
+    {client === "claude" ? <a className={s.launch} href={`claude-cli://open?q=${encodeURIComponent(guide)}`} onClick={launch}><SquareTerminal size={15} aria-hidden />在 Claude Code CLI 中打开</a> : null}
     {action}
     <details className={s.manual} open={showSteps} onToggle={(event) => setShowSteps(event.currentTarget.open)}><summary>查看步骤</summary>
       <div className={`${s.command} ${s.steps}`}><code>{guide}</code><button type="button" aria-label={copied ? "已复制" : "复制步骤"} title="复制" onClick={() => void copy()}>{copied ? <><Check size={13} aria-hidden />已复制</> : <Copy size={13} aria-hidden />}</button></div>

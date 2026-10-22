@@ -13589,6 +13589,10 @@
                   {
                     "const": "plan",
                     "type": "string"
+                  },
+                  {
+                    "const": "agent",
+                    "type": "string"
                   }
                 ]
               },
@@ -37221,6 +37225,10 @@
               {
                 "const": "plan",
                 "type": "string"
+              },
+              {
+                "const": "agent",
+                "type": "string"
               }
             ]
           },
@@ -37841,6 +37849,10 @@
                           },
                           {
                             "const": "plan",
+                            "type": "string"
+                          },
+                          {
+                            "const": "agent",
                             "type": "string"
                           }
                         ]
@@ -46020,6 +46032,10 @@
                   {
                     "const": "plan",
                     "type": "string"
+                  },
+                  {
+                    "const": "agent",
+                    "type": "string"
                   }
                 ]
               },
@@ -46978,6 +46994,10 @@
                     {
                       "const": "plan",
                       "type": "string"
+                    },
+                    {
+                      "const": "agent",
+                      "type": "string"
                     }
                   ]
                 },
@@ -47460,6 +47480,10 @@
                           {
                             "const": "plan",
                             "type": "string"
+                          },
+                          {
+                            "const": "agent",
+                            "type": "string"
                           }
                         ]
                       },
@@ -47917,6 +47941,10 @@
                     },
                     {
                       "const": "plan",
+                      "type": "string"
+                    },
+                    {
+                      "const": "agent",
                       "type": "string"
                     }
                   ]

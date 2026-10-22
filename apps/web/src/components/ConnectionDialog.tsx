@@ -7,7 +7,7 @@ import type { components } from "@/lib/api/schema";
 import { browserApi } from "@/lib/api/client";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { ConnectAgentForm, connectionState, expiryText } from "@/components/ConnectAgentForm";
-import { SYNC_INSTRUCTION, syncCommand } from "@/lib/connectionGuide";
+import { DAILY_SYNC_INSTRUCTION, SYNC_INSTRUCTION, syncCommand } from "@/lib/connectionGuide";
 import s from "@/styles/connection-dialog.module.css";
 
 type TokenView = components["schemas"]["PersonalTokenView"];
@@ -65,11 +65,11 @@ export function ConnectionDialog({ role }: { role: "ceo" | "member" }) {
       </section>
       <details className={s.more}><summary>连接另一个工具</summary><div className={s.moreBody}>{form}</div></details>
     </> : form}
-    {role === "member" ? <details className={s.more}><summary>每周同步进展</summary>
+    {role === "member" ? <details className={s.more}><summary>同步进展</summary>
       <div className={s.manualBody}>
         <div className={s.commandBlock}><strong>同步指令</strong><div className={s.command}><code>{SYNC_INSTRUCTION}</code><button type="button" onClick={() => void copy("同步指令", SYNC_INSTRUCTION)}>复制指令</button></div></div>
-        {commandBlock("Codex 定时运行", syncCommand("codex"))}
-        {commandBlock("Claude Code 定时运行", syncCommand("claude"))}
+        {commandBlock("Codex 每天定时运行", syncCommand("codex", DAILY_SYNC_INSTRUCTION))}
+        {commandBlock("Claude Code 每天定时运行", syncCommand("claude", DAILY_SYNC_INSTRUCTION))}
       </div>
     </details> : null}
     {others.length ? <details className={s.more}><summary>未连上 {others.length}</summary>
