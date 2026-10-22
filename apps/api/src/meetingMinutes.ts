@@ -17,6 +17,7 @@ import { FEISHU_TRANSCRIPT_PARSER_VERSION, parseFeishuTranscriptText } from "./t
 /**
  * 会议链路 G：会开完以后自动拿飞书妙记。
  * - 订阅「妙记生成」（minutes.minute.generated_v1，长连接收进 feishu_events，再由 jobs 交到这里），另有每 5 分钟一次的轮询兜底；
+ *   刚开完的会（开始等妙记 15 分钟以内）另外每 30 秒找一次；
  * - 妙记还没生成时会议记为 waiting（对话里问到就答「还在生成」）；飞书没接、主持人和建会的人都没授权、或等了 2 小时还没有，记为 manual，退回现有的手动上传；
  * - 全文取 /artifacts 的 data.transcript（与 lark-cli 读到的逐字相同，来源记下摘要值）；读取失败记 failed 和原因，
  *   原文还没好（not_ready）的照常跟着轮询和事件再取，主持人或创建人也可以「再读一次」或贴妙记链接；
@@ -34,6 +35,10 @@ export const FEISHU_MEETING_ENDED_EVENT = "vc.meeting.meeting_ended_v1";
 export const FEISHU_ALL_MEETING_STARTED_EVENT = "vc.meeting.all_meeting_started_v1";
 export const FEISHU_ALL_MEETING_ENDED_EVENT = "vc.meeting.all_meeting_ended_v1";
 const POLL_EVERY_MS = 5 * 60_000;
+/** 刚开完的会：开始等妙记后的 15 分钟内，每 30 秒再找一次（只找这些会）。 */
+export const MEETING_MINUTES_FAST_POLL_KIND = "meeting.minutes_fast_poll";
+const FAST_POLL_EVERY_MS = 30_000;
+const FAST_POLL_WINDOW_MS = 15 * 60_000;
 /** 妙记的开始时刻和会议计划开始时刻最多差多少还算同一场会。 */
 const MATCH_WINDOW_MS = 3 * 60 * 60_000;
 /** 还在等妙记的会：waiting，以及读的时候原文还没好的（failed / not_ready）。 */
@@ -361,7 +366,21 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   /** 轮询兜底：每场还在等的会，先用主持人的授权列他名下这段时间的妙记，没找到再用建会的人的。 */
   async function poll(): Promise<void> {
     if (!feishu) return;
-    for (const meeting of await searchedMeetings()) {
+    await pollMeetings(await searchedMeetings());
+  }
+
+  /** 刚开完的会（开始等妙记 15 分钟以内）：每 30 秒单独找一次，妙记一般会后 1–3 分钟就有；找到了、过了 15 分钟就回到 5 分钟一次。 */
+  async function pollRecent(): Promise<void> {
+    if (!feishu) return;
+    const recent = (await q(`SELECT ${meetingColumns()} FROM meetings WHERE ${STILL_WAITING} AND status = 'scheduled'
+      AND transcript IS NULL AND transcript_candidate IS NULL AND minutes_waiting_since > $1 ORDER BY scheduled_at`,
+    [new Date(now().getTime() - FAST_POLL_WINDOW_MS)])).rows as MeetingRow[];
+    await pollMeetings(recent);
+  }
+
+  async function pollMeetings(meetings: MeetingRow[]): Promise<void> {
+    if (!feishu) return;
+    for (const meeting of meetings) {
       const readers = await fetchers(meeting);
       if (!readers.length) {
         // 没开成的会没人能读也不改状态。
@@ -540,6 +559,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   return {
     markEnded,
     poll,
+    pollRecent,
     onMinuteGenerated,
     onMeetingStarted,
     onMeetingEnded,
@@ -558,8 +578,8 @@ export type MeetingMinutesService = ReturnType<typeof createMeetingMinutesServic
 
 export function meetingMinutesJobs(service: MeetingMinutesService): { handlers: Record<string, JobHandler>; recurring: RecurringJob[]; events: Record<string, (payload: Record<string, unknown>) => Promise<void>> } {
   return {
-    handlers: { [MEETING_MINUTES_POLL_KIND]: () => service.tick() },
-    recurring: [{ kind: MEETING_MINUTES_POLL_KIND, everyMs: POLL_EVERY_MS }],
+    handlers: { [MEETING_MINUTES_POLL_KIND]: () => service.tick(), [MEETING_MINUTES_FAST_POLL_KIND]: () => service.pollRecent() },
+    recurring: [{ kind: MEETING_MINUTES_POLL_KIND, everyMs: POLL_EVERY_MS }, { kind: MEETING_MINUTES_FAST_POLL_KIND, everyMs: FAST_POLL_EVERY_MS }],
     events: {
       [FEISHU_MINUTES_EVENT]: (payload) => service.onMinuteGenerated(payload),
       [FEISHU_MEETING_STARTED_EVENT]: (payload) => service.onMeetingStarted(payload),

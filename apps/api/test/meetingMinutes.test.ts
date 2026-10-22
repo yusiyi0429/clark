@@ -565,6 +565,58 @@ async function uploadMarkdown(t: TestApp, meetingId: string, markdown = "### 文
   expect(upload.statusCode).toBe(200);
 }
 
+describe("刚开完的会快一点找妙记", () => {
+  it("开始等妙记后 15 分钟内每 30 秒找一次；过了 15 分钟回到 5 分钟一次的轮询，拿到妙记后不再找", async () => {
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
+    try {
+      const meetingId = await scheduledMeeting(t); // 10:00–11:00
+      let clock = new Date("2026-06-01T11:00:30+08:00");
+      await authorize(t, HOST, "ou_host", "测试乙", clock);
+      const api = fakeMinutesApi();
+      api.listEmpty = true;
+      const minutes = createMeetingMinutesService({ pool: t.pool, peopleDirectory: loadPeopleDirectory(t.env), outcomeAgent: recordingOutcome(), secret: t.env.sessionSecret,
+        feishu: { env: feishuEnv, api }, now: () => clock });
+      const jobs = meetingMinutesJobs(minutes);
+      expect(jobs.recurring).toEqual([{ kind: "meeting.minutes_poll", everyMs: 300_000 }, { kind: "meeting.minutes_fast_poll", everyMs: 30_000 }]);
+      expect(jobs.handlers["meeting.minutes_fast_poll"]).toBeTypeOf("function");
+      const lists = () => api.calls.filter((call) => call.startsWith("list:")).length;
+
+      // 还没进等妙记的会不快找。
+      await minutes.pollRecent();
+      expect(lists()).toBe(0);
+      await minutes.tick();
+      expect((await getMeetingRow(t.pool.query.bind(t.pool), meetingId))).toMatchObject({ minutes_status: "waiting", minutes_waiting_since: new Date("2026-06-01T03:00:00Z") });
+      expect(lists()).toBe(1);
+      clock = new Date("2026-06-01T11:01:00+08:00");
+      await jobs.handlers["meeting.minutes_fast_poll"]({}, {} as never);
+      expect(lists()).toBe(2);
+      clock = new Date("2026-06-01T11:14:30+08:00");
+      await minutes.pollRecent();
+      expect(lists()).toBe(3);
+      // 开始等 15 分钟以后：快找不再找它，5 分钟一次的轮询照常，仍在等妙记（2 小时退回手动不受影响）。
+      clock = new Date("2026-06-01T11:15:30+08:00");
+      await minutes.pollRecent();
+      expect(lists()).toBe(3);
+      await minutes.tick();
+      expect(lists()).toBe(4);
+      expect((await getMeetingRow(t.pool.query.bind(t.pool), meetingId))?.minutes_status).toBe("waiting");
+
+      // 窗口里拿到了妙记：读完、生成会议卡，之后快找不再碰它。
+      await t.pool.query("UPDATE meetings SET minutes_waiting_since = $2 WHERE id = $1", [meetingId, new Date("2026-06-01T03:15:00Z")]);
+      api.listEmpty = false;
+      clock = new Date("2026-06-01T11:16:00+08:00");
+      await minutes.pollRecent();
+      expect((await getMeetingRow(t.pool.query.bind(t.pool), meetingId))).toMatchObject({ status: "held", minutes_status: "ready" });
+      const calls = api.calls.length;
+      clock = new Date("2026-06-01T11:16:30+08:00");
+      await minutes.pollRecent();
+      expect(api.calls).toHaveLength(calls);
+    } finally {
+      await t.close();
+    }
+  });
+});
+
 describe("自动同步失败才给手动导入", () => {
   const ENDS = Date.parse("2026-06-01T11:00:00+08:00");
   const row = (overrides: Record<string, unknown> = {}) => ({
