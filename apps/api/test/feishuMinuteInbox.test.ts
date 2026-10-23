@@ -4,7 +4,8 @@ import { preflightCandidate, TEST_MEMBER, type TestApp } from "./helpers.js";
 import { emptyDraft, emptyPreflight } from "../src/meetingStore.js";
 import { FeishuApiError } from "../src/feishu/client.js";
 import type { FeishuMinuteInfo, FeishuMinutesApi } from "../src/feishu/minutes.js";
-import type { PreflightAgent } from "../src/meetingPreflight.js";
+import { recoverInterruptedPreflight, resumePreflights, type PreflightAgent } from "../src/meetingPreflight.js";
+import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { shanghaiDate } from "../src/workdays.js";
 import { authorize, CEO, connect, HOST, inboxApp, loginAs, OWNER, TRANSCRIPT } from "./feishuMinutesFixtures.js";
 
@@ -250,7 +251,7 @@ describe("飞书妙记待整理：整理成一场天枢会", () => {
   async function setup() {
     const api = fakeApi([minute(TOKEN)]);
     api.participants = async () => ["ou_owner", "ou_host", "ou_guest"];
-    const preflight = { calls: 0, async generate() { preflight.calls += 1; return { candidate: preflightCandidate([]) }; } } satisfies PreflightAgent & { calls: number };
+    const preflight = { meetingIds: [] as string[], async generate(input) { preflight.meetingIds.push(input.meeting.id); return { candidate: preflightCandidate([]) }; } } satisfies PreflightAgent & { meetingIds: string[] };
     const t = await inboxApp(api, { preflightAgent: preflight });
     const period = shanghaiDate(api.minutes[0].createdAt!).slice(0, 7);
     await t.pool.query("INSERT INTO capability_config (id, version, name, \"group\", six_month_outcome, code, owner_id) VALUES ('unit-inbox', 1, '待整理单元', 'test', '', '98', $1)", [TEST_MEMBER.personId]);
@@ -281,7 +282,7 @@ describe("飞书妙记待整理：整理成一场天枢会", () => {
       expect(row.participants.map((person: { personId: string }) => person.personId)).toEqual([CEO, OWNER, HOST]);
       // 不跑预审、不在飞书约会。
       expect(row.preflight.status).toBe("pending");
-      expect(preflight.calls).toBe(0);
+      expect(preflight.meetingIds).toEqual([]);
       expect(await t.sql("SELECT 1 FROM jobs WHERE kind = 'meeting.feishu_event'")).toEqual([]);
       expect(await inboxRow(t)).toEqual({ status: "organized", meeting_id: meetingId });
       expect(await ingestJobs(t)).toEqual([{ kind: "meeting.minute_inbox_ingest", dedupe_key: `meeting.minute_inbox_ingest:${TOKEN}` }]);
@@ -292,6 +293,25 @@ describe("飞书妙记待整理：整理成一场天枢会", () => {
         payload: { url: `https://example.feishu.cn/minutes/${TOKEN}` } });
       expect(pasted.statusCode).toBe(409);
       expect(pasted.json().code).toBe("MINUTE_TAKEN");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("重启时的预审恢复和补跑不碰整理出来的会", async () => {
+    const { t, preflight, owner } = await setup();
+    try {
+      const organized = (await organize(t, owner)).json().meetingId as string;
+      const booked = await insertMeeting(t);
+      // 两场会的预审都停在 pending 超过 15 分钟。
+      await t.sql("UPDATE meetings SET preflight = jsonb_set(preflight, '{pendingSince}', to_jsonb((now() - interval '20 minutes')::text))");
+      const before = (await t.sql("SELECT version, preflight FROM meetings WHERE id = $1", [organized]))[0];
+      expect(await recoverInterruptedPreflight(t.pool.query.bind(t.pool))).toBe(1);
+      expect((await t.sql("SELECT preflight FROM meetings WHERE id = $1", [booked]))[0].preflight).toMatchObject({ status: "failed", error: { code: "preflight_interrupted" } });
+      expect(await resumePreflights(t.pool, loadPeopleDirectory(t.env), preflight)).toBe(1);
+      expect(preflight.meetingIds).toEqual([booked]);
+      expect((await t.sql("SELECT version, preflight FROM meetings WHERE id = $1", [organized]))[0]).toEqual(before);
+      expect(before.preflight.status).toBe("pending");
     } finally {
       await t.close();
     }
