@@ -5,7 +5,7 @@
  * 只提示，不在这里办；状态由服务端算（GET /api/me/meeting-cards）：待确认、修改待确认、写入失败。
  * 同一组里排在前面的是飞书里直接开的会待整理（GET /api/me/feishu-minutes）：卡上就能整理、记到天枢里约好的会、忽略。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { TFeishuMinuteInboxItem, TMyMeetingCard } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import { daySpan } from "@/lib/companyTime";
@@ -64,8 +64,11 @@ export function MeetingCardNoticeList({ meetings, minutes = [], meetingBase, onN
 }) {
   /** 正在整理的那一份：表单整理成了或关掉时，兑现卡上那颗按钮。 */
   const [organizing, setOrganizing] = useState<{ minute: TFeishuMinuteInboxItem; settle(outcome: NoticeOutcome): void }>();
-  /** 办完、回执也淡出了的：重新取回来之前先不显示，免得按钮又闪出来。 */
-  const [settled, setSettled] = useState<string[]>([]);
+  /** 办完、回执也淡出了的：下一次取回新数据之前先不显示，免得按钮又闪出来；新数据到了就不再拦。 */
+  const [settled, setSettled] = useState<{ ids: string[]; minutes: TFeishuMinuteInboxItem[] }>({ ids: [], minutes });
+  const hidden = settled.minutes === minutes ? settled.ids : [];
+  /** 记到成功的：回执淡出后才通知别处（meeting-changed），免得立刻重取把回执冲掉。 */
+  const attached = useRef(new Set<string>());
   const finish = (outcome: NoticeOutcome) => {
     organizing?.settle(outcome);
     setOrganizing(undefined);
@@ -75,7 +78,7 @@ export function MeetingCardNoticeList({ meetings, minutes = [], meetingBase, onN
     attach: async (minute) => {
       const result = await attachFeishuMinute(minute.minuteToken, minute.suggestion?.meetingId ?? "");
       if ("code" in result) return minuteError(result.code);
-      window.dispatchEvent(new Event("meeting-changed"));
+      attached.current.add(`feishu-minute:${minute.minuteToken}`);
       return { ok: true, settled: `已记到「${minute.suggestion?.title}」` };
     },
     ignore: async (minute) => {
@@ -84,10 +87,11 @@ export function MeetingCardNoticeList({ meetings, minutes = [], meetingBase, onN
     },
   };
   const onSettled = useCallback((noticeId: string) => {
-    setSettled((current) => [...current, noticeId]);
+    setSettled((current) => ({ ids: [...(current.minutes === minutes ? current.ids : []), noticeId], minutes }));
+    if (attached.current.delete(noticeId)) window.dispatchEvent(new Event("meeting-changed"));
     onChanged?.();
-  }, [onChanged]);
-  const notices = [...minuteNotices(minutes, act), ...meetingCardNotices(meetings, meetingBase, onNavigate)].filter((notice) => !settled.includes(notice.id));
+  }, [minutes, onChanged]);
+  const notices = [...minuteNotices(minutes, act), ...meetingCardNotices(meetings, meetingBase, onNavigate)].filter((notice) => !hidden.includes(notice.id));
   return (
     <>
       <ActionNoticeCard id="meeting-cards" title="会议记录" mark="meeting" notices={notices} onSettled={onSettled} />
