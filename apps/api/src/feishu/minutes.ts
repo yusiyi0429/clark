@@ -67,7 +67,8 @@ function minuteOf(raw: Record<string, unknown>): FeishuMinuteInfo {
     title: String(raw.title ?? raw.topic ?? ""),
     ownerOpenId: str(raw.owner_id),
     createdAt: msDate(raw.create_time ?? raw.start_time),
-    durationSeconds: Number.isFinite(duration) && duration > 0 ? Math.round(duration > 100_000 ? duration / 1000 : duration) : null,
+    // 飞书详情的 duration 是毫秒（字符串）。
+    durationSeconds: Number.isFinite(duration) && duration > 0 ? Math.round(duration / 1000) : null,
     url: str(raw.url),
     meetingId: str(source?.source_entity_id),
     sourceType: str(source?.source_type),
@@ -127,7 +128,11 @@ export function createFeishuMinutesApi({ fetch: fetchImpl = fetch }: { fetch?: F
         pageToken = data.has_more === true ? str(data.page_token) ?? undefined : undefined;
         if (!pageToken) break;
       }
-      return Promise.all(tokens.map((token) => getMinute(userAccessToken, token)));
+      // 一份详情读不到（删了、没权限、临时故障）不连累别的，下一轮再查；全都读不到才报错。
+      const settled = await Promise.allSettled(tokens.map((token) => getMinute(userAccessToken, token)));
+      const read = settled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+      if (tokens.length && !read.length) throw (settled[0] as PromiseRejectedResult).reason;
+      return read;
     },
     async meetingParticipants(userAccessToken, meetingId) {
       const data = await call(userAccessToken, `/vc/v1/meetings/${encodeURIComponent(meetingId)}?with_participants=true&user_id_type=open_id`);

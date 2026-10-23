@@ -796,6 +796,29 @@ describe("妙记搜索按真飞书的请求与返回", () => {
     ]);
     expect(minutes[0].createdAt?.toISOString()).toBe(new Date(1792380446082).toISOString());
   });
+
+  /** 搜到 obcn_a、obcn_b 两份；details 给每份详情的返回（Feishu 错误码不为 0 时是错误体）。 */
+  const searchApi = (details: Record<string, { code: number; duration?: string }>) => createFeishuMinutesApi({ fetch: (async (url: string) => {
+    const json = (code: number, data: unknown) => new Response(JSON.stringify({ code, msg: code ? "failed" : "success", data }), { headers: { "content-type": "application/json" } });
+    if (url.includes("/minutes/search")) return json(0, { has_more: false, items: Object.keys(details).map((token) => ({ token })) });
+    const token = Object.keys(details).find((item) => url.includes(item))!;
+    const { code, duration = "3181000" } = details[token];
+    return json(code, code ? {} : { minute: { token, title: token, owner_id: "ou_host", create_time: "1792380446082", duration,
+      generated_source: { source_entity_id: `vc_${token}`, source_type: "meeting" } } });
+  }) as typeof fetch });
+  const range = { start: new Date("2026-10-19T02:00:00.000Z"), end: new Date("2026-10-19T06:00:00.000Z") };
+
+  it("一份详情读不到不连累别的；全都读不到才报错", async () => {
+    const partial = await searchApi({ obcn_a: { code: 2091002 }, obcn_b: { code: 0 } }).listMinutes("u-token", { openId: "ou_host" }, range);
+    expect(partial.map((item) => item.token)).toEqual(["obcn_b"]);
+    await expect(searchApi({ obcn_a: { code: 2091002 }, obcn_b: { code: 2091005 } }).listMinutes("u-token", { openId: "ou_host" }, range))
+      .rejects.toMatchObject({ code: 2091002 });
+  });
+
+  it("时长是毫秒", async () => {
+    const [short] = await searchApi({ obcn_a: { code: 0, duration: "45000" } }).listMinutes("u-token", { openId: "ou_host" }, range);
+    expect(short.durationSeconds).toBe(45);
+  });
 });
 
 // 在飞书约上的会跟着飞书会议真实开始和结束（应用身份事件 vc.meeting.meeting_started_v1 / meeting_ended_v1）。
