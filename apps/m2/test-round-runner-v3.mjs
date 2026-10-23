@@ -120,3 +120,53 @@ test('a replacement card that leaves out demands keeps them; a domain Mission se
  const units=[{po:{key:'bf01',demands:[{id:'bf01-D1',to:'agents'}]},missions:[]},{po:{key:'agents',responses:[{demandId:'bf01-D1',response:'部分接',missionTitle:'先行版验收'}]},missions:[{title:'先行版验收'},{title:'长线能力'}]}];
  assert.deepEqual(placementFacts(units).map(x=>[x.unit,x.mission,x.onlyServes]),[['agents','m1','bf01']]);
 });
+
+test('a dropped stream is retried up to eight times with short waits; other transient errors keep three',async()=>{
+ const {retryRoundCall}=await import('./round-retry.mjs');
+ const waits=[];let n=0;
+ const value=await retryRoundCall(async()=>{if(++n<6)throw Error('模型响应提前结束，未应用内容');return 'ok';},{sleep:async ms=>{waits.push(ms);}});
+ assert.equal(value,'ok');assert.deepEqual(waits,[5000,10000,20000,30000,30000]);
+ n=0;await assert.rejects(()=>retryRoundCall(async()=>{n++;throw Object.assign(Error('x'),{providerStatus:502});},{sleep:async()=>{}}));assert.equal(n,3);
+});
+
+test('planning next month before it starts: capacity counts only the period workdays',()=>{
+ assert.equal(workdaysLeft('2026-11-02','2026-11'),21);
+ const from=['2026-10-21','2026-11-01'].sort().at(-1);assert.equal(from,'2026-11-01');
+ assert.equal(capacityFacts([],{from,period:'2026-11'})[0]?.capacityDays??workdaysLeft(from,'2026-11'),21);
+});
+
+test('after two silence cuts a decoding call retries at medium effort and says so',async()=>{
+ const {createDecodingGateway}=await import('./decoding-gateway.mjs');
+ const efforts=[];let n=0;
+ const base={roundConcurrency:1,complete:async(messages,opts)=>{efforts.push(opts.reasoningEffort);if(++n<=2)throw Error('模型响应提前结束，未应用内容');return {answer:'{"ok":1}'};}};
+ const skill={rules:'\n--- SKILL.md ---\nx\n--- references/reader-format.md ---\ny\n',hash:'h',scheduleValidator:null};
+ const g=createDecodingGateway(base,skill);
+ const warn=console.warn;console.warn=()=>{};
+ try{
+  const r=await g.complete([{role:'system',content:'s\n--- SKILL.md ---\nx'},{role:'user',content:JSON.stringify({task:'写战场',stage:'battlefield-generate'})}],{});
+  assert.deepEqual(efforts,['high','high','medium']);assert.equal(r.effortFallback.to,'medium');
+ }finally{console.warn=warn;}
+});
+
+test('a unit the model refuses twice is marked failed and the round goes on; one refusal is retried with less background; pay details are hidden',async()=>{
+ const temp=await mkdtemp(tmpdir()+'/v3-refuse-');process.env.DECODING_RUNS_DIR=temp;
+ try{
+  const log=[],base=fakeGateway(log),refuse=()=>Object.assign(Error('模型拒绝回答这次请求，未应用内容'),{code:'MODEL_REFUSAL'});let eoTries=0,eoContext=[];const seen=[];
+  const gateway={...base,async complete(messages,opts){
+   const p=JSON.parse(messages[1].content);seen.push(messages[1].content);
+   if(p.stage==='domain-generate'&&p.key==='talent'){log.push('refused:talent');throw refuse();}
+   if(p.stage==='domain-generate'&&p.key==='eo'&&eoTries++===0){eoContext.push(p.context.length);throw refuse();}
+   if(p.stage==='domain-generate'&&p.key==='eo')eoContext.push(p.context.length);
+   return base.complete(messages,opts);
+  }};
+  const result=await generateRoundV3({gateway,rules,fetchSources:async()=>({period:'2026-10',planningDate:'2026-10-09',audit:{},sources:keys.map(key=>({key,content:`${key} 资料\n【本月意图】${key} 10 月目标（草稿）· 成果\n原文。${key==='talent'?'候选人谈薪差距 20%，背调结果为绿灯。10/12 入职。':''}`}))})});
+  const talent=result.raw.find(u=>u.key==='talent');
+  assert.match(talent.title,/生成失败（模型拒答）/);assert.equal(talent.missions.length,0);assert.equal(talent.generationFailed,'模型拒答','页面靠这个字段显示原因');assert.equal(JSON.stringify(result.units).includes('"generationFailed":"模型拒答"'),true,'页面读的 units 里也带着这个字段');
+  assert.deepEqual(eoContext,[10,1],'第二次只带本单元（这份测试资料里没有公司单元）');
+  assert.ok(result.raw.find(u=>u.key==='eo').missions.length>0,'eo 第二次通过');
+  assert.deepEqual(result.audit.refusals.map(r=>[r.key,r.handled]).sort(),[['eo','retried-without-background'],['talent','marked-failed']]);
+  assert.deepEqual(result.audit.redactions.byUnit,{talent:{'薪酬细节':1,'背调细节':1}});
+  assert.ok(seen.every(t=>!t.includes('谈薪差距')),'发给模型的内容里没有谈薪细节');
+  assert.ok(seen.some(t=>t.includes('10/12 入职')),'入职这类结果保留');
+ }finally{await rm(temp,{recursive:true,force:true});delete process.env.DECODING_RUNS_DIR;}
+});

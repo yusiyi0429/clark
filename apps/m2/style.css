@@ -885,3 +885,235 @@ body.is-col-resizing{cursor:col-resize;user-select:none}
 .doc-path-step,.doc-path-step span{color:#102c46;font-weight:600}
 .doc-path-step span{font-weight:600}
 .doc-path-step:hover{background:none;text-decoration:underline;text-underline-offset:4px;text-decoration-color:#a9b6c3}
+/* ── 复盘 (陈溪南 2026-10-20/21): same cards as the plan; 判定 is the loudest thing on the card. ── */
+.review-verdict{display:inline-flex;align-items:center;font-size:14px;font-weight:700;padding:2px 11px;border-radius:8px;flex-shrink:0;line-height:22px}
+.review-verdict.is-small{font-size:11px;font-weight:600;padding:0 7px;border-radius:5px;line-height:18px;margin-right:6px}
+.review-verdict.tone-no{background:#fdecec;color:#b42318}.review-verdict.tone-part{background:#fff1dc;color:#8a5a12}.review-verdict.tone-ok{background:#e6f4ea;color:#1a7f37}.review-verdict.tone-none{background:#eef2f6;color:#60768a}
+.review-record{font-size:12px;color:#71869a;white-space:nowrap}.review-record.is-warn{color:#b26b00}
+.review-verdict-line{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0}
+.review-table{width:100%;border-collapse:collapse}
+.review-table th{width:96px;text-align:left;vertical-align:top;font-size:13px;font-weight:600;color:#102c46;padding:14px 0;border-bottom:1px solid #eef2f6}
+.review-table td{padding:10px 0;font-size:13px;line-height:1.75;border-bottom:1px solid #eef2f6}
+.review-table tr:last-child th,.review-table tr:last-child td{border-bottom:0}
+.review-table .plan-doc-field{position:relative;padding-right:30px}
+.review-row-heading{position:absolute;right:0;top:0}
+.review-list{margin:0;padding-left:18px}.review-list li{margin:3px 0}
+.review-owner{margin:0}
+.review-evidence{font-size:10px;color:#234e82;background:#eef3fa;border-radius:4px;padding:0 3px;margin-left:2px;cursor:help}
+.review-ask{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin:6px 0 4px;padding:8px 12px;border-radius:12px;background:#f5f8fd;border:1px dashed #c9d7ea}
+.review-ask-q{flex:1;min-width:200px;color:#102c46}
+.review-ask.is-answered{border-style:solid;background:#f7faf8;border-color:#d5e8db}
+.review-ask-a{flex-basis:100%;color:#28445f}
+.review-ask-button{font-size:12px;font-weight:600;color:#fff;background:var(--brand,#234e82);border-radius:8px;padding:4px 12px;min-height:0;height:auto}
+.review-ask-form{flex-basis:100%}
+.review-ask-form textarea{width:100%;box-sizing:border-box;border:1px solid #dce4eb;border-radius:10px;padding:8px 10px;font:inherit;font-size:13px;background:#fff;resize:vertical}
+.review-ask-actions{display:flex;gap:8px;margin-top:6px}
+.review-type{display:inline-block;font-size:11px;font-weight:600;padding:0 7px;border-radius:5px;margin-right:8px;line-height:19px;border:1px solid}
+.review-type.tone-debt{color:#b42318;border-color:#f3c2bd}.review-type.tone-decide{color:#6941c6;border-color:#d6c8f5}.review-type.tone-verify{color:#175cd3;border-color:#bcd3f5}.review-type.tone-stop{color:#60768a;border-color:#d5dde5}.review-type.tone-limit{color:#8a5a12;border-color:#ecd3a8}
+.review-next>h3 small{font-weight:400;color:#71869a}
+.review-none{font-size:13px;color:#71869a;margin:4px 4px 16px}
+.review-sample-note{font-size:12px;color:#8a5a12;background:#fff8ec;border:1px solid #f1dfbf;border-radius:12px;padding:8px 12px;margin:0 0 14px}
+.review-todo{display:flex;flex-direction:column;gap:6px}
+.review-todo-item{text-align:left;background:none;border:0;padding:6px 0;font:inherit;font-size:13px;color:#28445f;cursor:pointer}
+.review-todo-item small{display:block;color:#71869a;font-size:11px}
+.review-todo-item:hover{color:var(--brand,#234e82)}
+.review-empty{padding:60px 20px;text-align:center;color:#71869a}
+.review-summary .card-meta{align-items:center}
+/* Review table: label and first line share one baseline (陈溪南 2026-10-21). */
+.review-table th,.review-table td{padding:12px 0;line-height:24px;vertical-align:top}
+.review-table .plan-doc-field{margin:0;padding:0 30px 0 0;border:0;min-height:24px}
+.review-table .plan-doc-field>*:not(.review-row-heading){margin-top:0}
+.review-table p{margin:0;line-height:24px}
+.review-verdict{line-height:24px;padding:0 10px}
+.review-verdict-line{align-items:flex-start}
+.review-verdict-line>span:not(.review-verdict):not(.review-record){flex:1;min-width:240px}
+.review-record{line-height:24px}
+.review-list li{line-height:24px;margin:0 0 4px}
+.review-list li:last-child{margin-bottom:0}
+.review-verdict.is-small{line-height:18px;vertical-align:2px}
+.review-row-heading{top:0;margin:0}
+.review-table .plan-doc-field{padding-right:48px}
+/* 目标对照: no tags — the short title and its verdict word carry the colour, the rest reads as plain text. */
+.review-target.tone-no .review-target-name,.review-target.tone-no .review-target-verdict{color:#b42318}
+.review-target.tone-part .review-target-name,.review-target.tone-part .review-target-verdict{color:#a15c07}
+.review-target.tone-ok .review-target-name,.review-target.tone-ok .review-target-verdict{color:#1a7f37}
+.review-target-verdict{font-weight:400;margin-right:2px}
+/* 下月输入: the type follows the short title as a coloured word, like the verdict in 目标对照 (陈溪南 2026-10-21). */
+.review-type-word{margin-right:2px}
+.review-next-input.tone-debt .review-type-word{color:#b42318}.review-next-input.tone-decide .review-type-word{color:#6941c6}.review-next-input.tone-verify .review-type-word{color:#175cd3}.review-next-input.tone-stop .review-type-word{color:#60768a}.review-next-input.tone-limit .review-type-word{color:#a15c07}
+/* Only the short title is coloured; the verdict / type word reads like the text after it (陈溪南 2026-10-21). */
+.review-target .review-target-verdict,.review-next-input .review-type-word{color:inherit!important;font-weight:400}
+.review-next-input.tone-debt strong{color:#b42318}.review-next-input.tone-decide strong{color:#6941c6}.review-next-input.tone-verify strong{color:#175cd3}.review-next-input.tone-stop strong{color:#60768a}.review-next-input.tone-limit strong{color:#a15c07}
+.review-target .review-target-verdict,.review-next-input .review-type-word{margin-right:0}
+/* Verdict tags look like the confirmation pill (待确认 / 已确认): same height, radius, size and weight (陈溪南 2026-10-21). */
+.review-verdict,.review-verdict.is-small{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;font-size:11px;font-weight:400;line-height:20px;vertical-align:1px;margin:0}
+.review-verdict-line .review-verdict{margin-top:2px}
+/* 待我处理 in the title row. */
+.todo-menu{position:relative}
+.todo-menu-button{display:inline-flex;align-items:center;gap:6px;border:0;cursor:pointer;font:inherit;font-size:13px}
+.todo-menu-button.is-open{background:#e3e9f0}
+.todo-menu-count{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e5484d;color:#fff;font-size:11px;font-weight:600}
+.todo-menu-quiet{font-size:12px;color:#71869a}
+.todo-menu-panel{position:absolute;right:0;top:calc(100% + 8px);width:420px;max-height:70vh;overflow:auto;z-index:40;border-radius:18px;box-shadow:0 12px 32px #102c4626,0 0 0 1px #e3e9ef;background:#fff}
+.todo-menu-panel .todo-panel{margin:0;border:0;box-shadow:none}
+.todo-baseline-heading{margin:10px 0 4px;font-size:12px;font-weight:500;color:#71869a}
+/* Calmer page (陈溪南 2026-10-21): level tags keep their colour; every tag has the same small radius;
+   colour on the page is left to the 判定 tag and the confirmation state. */
+.level-tag,.card-head .state,.review-verdict,.review-verdict.is-small{border-radius:6px!important}
+.review-target .review-target-name,.review-next-input strong{color:#102c46!important}
+/* 追问: one quiet line under its cause, a text button to answer. */
+.review-ask,.review-ask.is-answered{display:flex;align-items:baseline;gap:4px 12px;flex-wrap:wrap;margin:2px 0 4px;padding:0 0 0 12px;border:0;border-left:2px solid #d5dde5;border-radius:0;background:none;font-size:12px;line-height:20px;color:#60768a}
+.review-ask-q{flex:0 1 auto;min-width:0;color:#60768a}
+.review-ask-a{flex-basis:auto;color:#28445f}
+.review-ask-a::before{content:'· ';color:#a9b6c3}
+.review-ask-button{border:0;background:none;padding:0;font:inherit;font-size:12px;font-weight:600;color:var(--brand,#234e82);cursor:pointer}
+.review-ask-button:hover{text-decoration:underline;text-underline-offset:3px}
+.review-ask-wait{font-size:12px;color:#a9b6c3}
+.review-ask-form{flex-basis:100%;margin-top:4px}
+.todo-flat{padding:6px 14px!important}
+.todo-flat ul{margin:0;padding:0;list-style:none}
+.todo-flat .todo-item{border-top:0;padding:9px 2px;gap:12px}
+.todo-flat .todo-text{flex-shrink:0;font-weight:500}
+.todo-flat .todo-card{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:#60768a}
+/* 复盘 → 拆解 (陈溪南 2026-10-21) */
+.review-gate,.review-handoff{margin:0 0 14px;padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.7;color:#28445f;background:#f5f8fd;border:1px solid #dfe7f2}
+.review-gate button,.review-handoff button{border:0;background:none;padding:0;font:inherit;color:var(--brand,#234e82);cursor:pointer}
+.review-gate button:hover,.review-handoff button:hover{text-decoration:underline;text-underline-offset:3px}
+.review-handoff button{margin-left:8px;font-weight:600}
+.home-handoff{margin-bottom:16px}
+.review-handoff-confirm{margin:-6px 0 18px;padding:14px 16px;border-radius:14px;background:#fff;border:1px solid #c9d7ea;box-shadow:0 8px 24px #102c461a;font-size:13px;line-height:1.7;color:#102c46}
+.review-handoff-confirm p{margin:0 0 10px}
+.handoff-backdrop{position:fixed;inset:0;z-index:60;background:#102c4633;display:flex;align-items:center;justify-content:center}
+.handoff-panel{width:min(720px,92vw);max-height:84vh;display:flex;flex-direction:column;background:#fff;border-radius:20px;box-shadow:0 20px 50px #102c4640;overflow:hidden}
+.handoff-panel header{display:flex;align-items:baseline;gap:12px;padding:16px 20px;border-bottom:1px solid #eef2f6}
+.handoff-panel header small{color:#71869a;flex:1}
+.handoff-body{overflow:auto;padding:8px 20px 18px}
+.handoff-review h4{margin:14px 0 6px;font-size:13px;color:#102c46;display:flex;gap:8px;align-items:baseline}
+.handoff-review h4 span{font-size:11px;font-weight:400;color:#71869a}
+.handoff-review ol{margin:0;padding-left:18px;font-size:13px;line-height:1.7;color:#28445f}
+.handoff-review em{font-style:normal;color:#71869a;margin-right:6px}
+.handoff-lto{margin:0 0 4px;font-size:13px;color:#28445f}
+.app-toast.is-notice{background:#102c46;color:#fff}
+.app-toast.is-notice button{color:#fff}
+.review-open-note{display:flex;align-items:flex-start;gap:10px;margin:-6px 0 18px;padding:10px 14px;border-radius:12px;background:#fff;border:1px solid #f1dfbf;box-shadow:0 8px 24px #102c4614;font-size:13px;line-height:1.7;color:#28445f}
+.review-open-note span{flex:1}
+.review-open-note button{border:0;background:none;padding:0;font:inherit;color:var(--brand,#234e82);cursor:pointer}
+.review-open-note .icon{color:#71869a;font-size:16px;line-height:1}
+.handshake-confirm-wrap{display:inline-flex;align-items:center;gap:10px}
+.handshake-locked{font-size:12px;color:#71869a;cursor:help}
+.handshake-confirm[disabled],.handshake-confirm[data-disabled=true]{background:#d5dde5!important;color:#fff!important;cursor:not-allowed}
+/* A notice (e.g. the plan has started) shows at the top, under the title row. */
+.app-toast.is-notice{top:76px;bottom:auto}
+.catalog-group+.catalog-group{margin-top:0}
+/* Title row edges line up with the cards below: the arrow glyph on the left edge, the last button on the right edge (陈溪南 2026-10-21). */
+.canvas>header,.canvas header{padding-left:22px!important;padding-right:28px!important}
+.review-primary{padding:0!important;margin:0!important;border:0!important;background:none!important;box-shadow:none!important}
+/* One spacing rule everywhere (陈溪南 2026-10-21): an element sits as far from the side of its container as from its top. */
+.canvas>header,.canvas header{padding-left:16px!important;padding-right:16px!important}
+.canvas header .icon{margin-left:-6px}
+.plan-doc-canvas{padding-left:16px!important;padding-right:16px!important;padding-top:16px!important}
+:root .plan-doc-canvas .plan-doc-node.doc-summary,.document-catalog>.doc-summary,.document-catalog .catalog-group>.doc-summary{padding:20px!important}
+:root .plan-doc-node,:root .document-page>.document-primary,.review-card{padding:22px!important}
+.chat-top{padding:12px!important}
+.canvas header .icon{margin-left:0!important}
+.chat-top{height:64px;display:flex;align-items:center;padding:0 12px!important}
+.chat-top>*{min-height:40px;box-sizing:border-box}
+.chat-top .tabs{height:40px;padding:3px}
+.chat-top .agent-chat-heading{height:40px;display:flex;align-items:center}
+.canvas header .tools{align-items:center}.canvas header .tools>*{height:32px;box-sizing:border-box}.canvas header .tools>.view-switch{padding:3px}.canvas header .tools>.view-switch>button{height:26px}
+.canvas header .tools>*{height:32px!important;min-height:32px!important}.canvas header .document-review-actions{display:flex;align-items:center;gap:8px}.canvas header .document-review-actions .icon{height:32px!important;width:32px!important}
+/* Title-row controls share one size: 32 high, radius 10; segments inside a switch 26 high, radius 7 (陈溪南 2026-10-21). */
+.canvas header .tools .todo-menu-button,.canvas header .tools>button,.canvas header .tools>.toolbar-chip,.canvas header .document-review-actions .icon{height:32px!important;border-radius:10px!important;padding-top:0!important;padding-bottom:0!important}
+.canvas header .tools>.view-switch{border-radius:10px!important}
+.canvas header .tools>.view-switch>button{border-radius:7px!important}
+.review-edit select{height:30px;border:1px solid #dce4eb;border-radius:8px;padding:0 8px;font:inherit;font-size:13px;margin-bottom:6px;background:#fff}
+.review-edit textarea{width:100%;box-sizing:border-box}
+.review-edit .proposal-actions{margin-top:12px}
+.review-edit-toggle{width:28px;height:28px;margin-right:8px}
+
+/* Long group names cut off with … so the badge stays on the same line. */
+.communication .tabs button{display:flex;align-items:center;justify-content:center;min-width:0}.communication .tabs .tab-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.communication .tabs .tab-action,.communication .tabs .tab-unread{flex-shrink:0}
+
+/* The sender name starts flush with the avatar top, in the group and the private Agent (陈溪南 2026-10-22). */
+.message>div>small:first-child{display:block;line-height:10px;margin:0 0 2px}
+
+/* 新增 / 撤掉 / 恢复 Mission cards. */
+.proposal-mission .proposal-mission-meta{color:#7a8a9a;font-size:12px;margin:2px 0 6px}.proposal-mission .proposal-mission-result{font-size:13px;line-height:1.6;margin:4px 0 8px}.proposal-mission strong{display:block;font-size:12px;margin:8px 0 4px;color:#4a5d70}
+
+/* 纪要 title: text centred in its box, level with the header controls (陈溪南 2026-10-22). */
+.chat-top .minutes-panel-title{display:flex;align-items:center;justify-content:center;align-self:center}
+
+/* Short revision card (陈溪南 2026-10-22): the new text with the changed words marked, old text on demand. */
+.revision-message-card .proposal-diff{margin:10px 0}.proposal-field{display:block;font-size:12px;color:#7a8a9a;margin-bottom:2px}
+.change-now,.change-add,.change-del{margin:2px 0;font-size:13px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.change-now .diff-mark{background:#fbefc4;color:inherit;padding:0 1px;border-radius:2px}
+.see-before,.proposal-more{border:0;background:none;color:#315e88;font-size:12px;padding:0;cursor:pointer}.proposal-more{display:block;margin:6px 0 2px}
+.change-before{display:block;color:#8a9aaa;text-decoration:line-through;text-decoration-color:#c5cfd9;margin-top:2px}
+.change-add>span{color:#16804b;margin-right:6px;font-weight:600}.change-del{color:#8a9aaa}.change-del>span{margin-right:6px}
+.revision-message-card .proposal-diff{background:none;border:0;box-shadow:none;padding:0;border-radius:0}.revision-message-card .change-before{background:none;padding:0;border:0;font-size:12px}
+.revision-message-card .proposal-diff p{background:none;box-shadow:none;padding:0;border-radius:0;margin:2px 0}
+
+/* Reviews that failed or were written without background: named at the top of the review home. */
+.review-problems{margin:0 0 12px;padding:10px 14px;border-radius:12px;background:#fff6e6;color:#7a5a1f;font-size:13px;line-height:1.6}.review-problems p{margin:0}.review-problems strong{font-weight:600;margin-right:8px}
+
+.generation-failed{margin:6px 0 0;padding:8px 12px;border-radius:10px;background:#fff6e6;color:#7a5a1f;font-size:13px;line-height:1.6}
+
+/* 待你确认 stands out on home cards; 待某人确认 stays quiet. */
+.doc-summary .state.is-mine{background:#002fa7;color:#fff;border-radius:999px;padding:2px 10px;font-weight:600}
+
+.handshake.is-pointed{box-shadow:0 0 0 3px #002fa733;transition:box-shadow .3s}
+
+/* 判定标签字加粗 (陈溪南 2026-10-22). */
+.review-verdict,.review-verdict.is-small{font-weight:600}
+
+/* Revision card as a task card (陈溪南 2026-10-22): header colour = state, one-line title, changes, answers. */
+.nexus-revision-message .revision-message-card.proposal-task{padding:0;overflow:hidden;border:1px solid #c9d8f2;border-radius:12px;box-shadow:none}
+.proposal-task .proposal-head{display:flex;align-items:center;gap:6px;padding:8px 12px;font-size:12px;background:#e8effb;color:#1d3f8a}
+.proposal-task .proposal-head strong{font-weight:600;margin:0}.proposal-task .proposal-head-dot{opacity:.6}
+.proposal-task .proposal-head-ref{border:0;background:none;padding:0;color:inherit;font-size:12px;cursor:pointer;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proposal-task .proposal-head-who{margin-left:auto;white-space:nowrap;padding-left:8px}
+.proposal-task.is-accepted{border-color:#bfe3c9}.proposal-task.is-accepted .proposal-head{background:#e6f4ea;color:#1a6b36}
+.proposal-task.is-rejected{border-color:#c4ccd4}.proposal-task.is-rejected .proposal-head{background:#d5dbe1;color:#33424f}
+.proposal-task.is-archived{border-color:#dfe5eb;opacity:1}.proposal-task.is-archived .proposal-head{background:#eef1f4;color:#6b7b8a}
+.proposal-task .proposal-body{padding:10px 12px 4px}
+.proposal-task .proposal-body p.proposal-title{margin:0 0 6px;font-size:14px;font-weight:600;line-height:1.55;color:#102c46}
+.proposal-task.is-rejected .proposal-title,.proposal-task.is-archived .proposal-title{color:#4a5a69}
+.proposal-task .proposal-body p.proposal-reason{margin:0 0 6px;font-size:13px;color:#33424f}
+.proposal-task .proposal-diff{margin:8px 0 0}
+.proposal-task .proposal-field{display:block;font-size:12px;font-weight:600;color:#33475b;margin:0 0 1px}
+.proposal-task .change-now,.proposal-task .change-add,.proposal-task .change-del{color:#6b7b8a}
+.proposal-task .change-now .diff-mark{background:#fbefc4;color:#102c46;font-weight:600}
+.proposal-task .change-old{color:#9aa8b5;text-decoration-color:#9aa8b5}
+.proposal-task .proposal-foot{padding:8px 12px 10px;margin:0}
+.proposal-task .proposal-actions{display:flex;gap:8px}
+.proposal-task details.proposal-handled{border-top:0}.proposal-task details.proposal-handled summary{color:#315e88;font-size:12px;cursor:pointer}
+.proposal-task p{background:none;box-shadow:none;padding:0;border-radius:0}
+.proposal-task .proposal-head strong,.proposal-task .proposal-head-who{white-space:nowrap;flex-shrink:0}.proposal-task .proposal-head-ref{flex:1 1 auto}
+.proposal-task .proposal-body p.proposal-title{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.proposal-task .proposal-head-ref{text-align:left}
+.proposal-task .proposal-head{justify-content:space-between}.proposal-task p.proposal-card-ref{margin:6px 0 0;font-size:12px;color:#7a8a9a}.proposal-task .proposal-card-ref .proposal-head-ref{color:#7a8a9a;font-size:12px;white-space:normal}
+.proposal-task .proposal-mission .proposal-mission-meta{color:#9aa8b5;font-size:12px;margin:0}
+/* One change per line: old struck → new marked (陈溪南 2026-10-22). */
+.proposal-task .change-pair{margin:2px 0 0;font-size:14px;line-height:1.6;color:#102c46;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px}
+.proposal-task .change-pair .change-old{color:#8a98a6}.proposal-task .change-arrow{color:#8a98a6}
+.proposal-task .change-pair .diff-mark{background:#fbefc4;color:#102c46;font-weight:600;padding:0 3px;border-radius:3px}
+.proposal-task .change-full{margin:2px 0 0;font-size:13px;line-height:1.6;color:#33475b}
+.proposal-task .proposal-diff+.proposal-diff{margin-top:10px}
+/* Same type scale as the chat bubbles (陈溪南 2026-10-22): the card is a GUI frame, not bigger text. */
+.proposal-task .proposal-body p.proposal-title{font-size:13px;font-weight:500;line-height:1.6}
+.proposal-task .proposal-field{font-size:12px;font-weight:500}
+.proposal-task .change-pair{font-size:13px}.proposal-task .change-pair .diff-mark,.proposal-task .change-now .diff-mark{font-weight:500}
+.proposal-task .change-plus{color:#16804b;font-weight:600}
+.proposal-task .proposal-head{font-size:12px}.proposal-task .proposal-head strong{font-weight:500}
+.proposal-task .proposal-actions .proposal-confirm,.proposal-task .proposal-actions .proposal-reject{font-size:13px}
+.proposal-task .change-pair{display:block}.proposal-task .change-pair .change-arrow{margin:0 6px}.proposal-task .change-pair .change-plus{margin-right:6px}.proposal-task .change-pair .diff-mark{padding:0 2px}
+.verdict-changed{flex:0 0 auto!important;min-width:0!important;align-self:center;font-size:12px;font-weight:600;color:#8a5a12;background:#fff1dc;border-radius:6px;padding:0 8px;line-height:20px}
+.review-summary .card-head-end{display:inline-flex;align-items:center;gap:8px}
+/* 管理 panel (陈溪南 2026-10-22). */
+.admin-panel{width:760px}.admin-head{display:flex;align-items:center;justify-content:space-between}.admin-head h2{margin:0;font-size:18px}
+.admin-block{margin-top:18px;padding-top:14px;border-top:1px solid #e3e9ef}.admin-block h3{margin:0 0 8px;font-size:14px;color:#102c46}
+.admin-line{margin:4px 0;font-size:13px;color:#33475b}.admin-line.is-running{color:#315e88}.admin-line.is-failed{color:#b42318}
+.admin-note{margin:8px 0 0;font-size:12px;color:#7a8a9a}.admin-confirm p{margin:6px 0;font-size:13px;color:#33475b}
+.admin-panel .entry-metadata{margin-top:12px}
+.admin-confirm p.admin-warn{color:#b42318;font-weight:600}.admin-checks{margin:4px 0 8px;padding-left:18px;font-size:12px;color:#7a5a1f}.admin-checks strong{margin-right:6px}
+.proposal-task .proposal-verdict{padding:6px 8px;margin:6px 0 4px;border-radius:8px;background:#fff6e6}.proposal-task .proposal-verdict-who{margin:2px 0 0;font-size:12px;color:#7a5a1f}

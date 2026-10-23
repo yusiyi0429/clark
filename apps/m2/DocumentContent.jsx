@@ -10,7 +10,7 @@ const EditingContext=createContext(null);
 // Who is reading and how to remove their own comment; comments have no edit, only delete.
 const CommentActions=createContext(null);
 function FieldAnnotation({field}){const a=useContext(AnnotationContext);return a?.anchor===field?a.content:null;}
-function CommentBubble({node,field,label,comments,onDetail}){
+export function CommentBubble({node,field,label,comments,onDetail}){
  const a=useContext(AnnotationContext),active=a?.anchor===field,actions=useContext(CommentActions);
  const entries=comments.filter(c=>c.block===field||field==='title'&&(!c.block||c.block==='card'));
  const [hover,setHover]=useState(false),[position,setPosition]=useState(null);
@@ -59,6 +59,8 @@ function MilestoneTimeline({value,original=value}){
  const entries=Array.isArray(value)?value:String(value||'').split('\n').filter(Boolean);
  return <ul className="milestone-timeline">{entries.map((entry,i)=>{const {date,label}=milestoneParts(entry);return <li key={i} title={Array.isArray(original)?original[i]:String(original)}>{date&&<time>{date}</time>}<span>{label}</span></li>;})}</ul>;
 }
+// The comment and annotation contexts, for pages that lay out their own fields (the review card).
+export function CommentScope({me,onDeleteComment,annotation,children}){return <CommentActions.Provider value={{me,onDelete:onDeleteComment}}><AnnotationContext.Provider value={annotation}>{children}</AnnotationContext.Provider></CommentActions.Provider>;}
 export default function DocumentContent(props){return <CommentActions.Provider value={{me:props.me,onDelete:props.onDeleteComment}}><EditingContext.Provider value={props.editing}><AnnotationContext.Provider value={props.annotation}><Content {...props}/></AnnotationContext.Provider></EditingContext.Provider></CommentActions.Provider>;}
 const filled=v=>v!=null&&(Array.isArray(v)?v.some(x=>String(x).trim()):String(v).trim()!=='');
 // Upstream elements this RU listed as not taken on this month, read from the round's own list.

@@ -8,7 +8,8 @@ export function privateAgentContext(state,actor,requested={},sourceFallback=[]){
  const selected=requested.selection?.id?byId.get(requested.selection.id):null;
  if(requested.selection?.id&&!selected)fail('当前页面不在成员可见范围内');
  const scope=selected?(selected.unit||selected.id):requested.scope||null;
- if(scope&&!byId.has(scope))fail('当前领域不在成员可见范围内');
+ // The company review has no plan card named 'company'; a scope is visible when any readable card belongs to it.
+ if(scope&&!byId.has(scope)&&!readable.some(c=>(c.unit||c.id)===scope))fail('当前领域不在成员可见范围内');
  const selection=selected?{id:selected.id,version:currentVersion(selected).number,level:selected.level}:null;
  const view={scope,selection,canvasView:requested.canvasView==='gantt'?'gantt':'document',expanded:(Array.isArray(requested.expanded)?requested.expanded:[]).filter(id=>byId.has(id)).slice(0,100)};
  const pageCards=selected?[selected,...readable.filter(c=>c.parentId===selected.id)]:scope?readable.filter(c=>(c.unit||c.id)===scope):view.canvasView==='document'&&!actor.ceo?readable.filter(c=>!c.parentId&&actor.unitDri?.includes(c.id)||c.level==='mission'&&actor.missionDri?.includes(c.id)&&!actor.unitDri?.includes(c.unit)):readable.filter(c=>!c.parentId);

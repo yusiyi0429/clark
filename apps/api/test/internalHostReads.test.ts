@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TestApp } from "./helpers.js";
+import { planItemDates, readMissionPlans, type MissionPlanWorld } from "../src/missionPlanRead.js";
+import { createTestApp, type TestApp } from "./helpers.js";
 import { CEO, confirm, HOST, OWNER, ready, setup } from "./meetingCardFixture.js";
-import { projection, stubWorld } from "./worldFixture.js";
+import { projection, stubWorld, worldEnv } from "./worldFixture.js";
 
 // 给独立 Chat 的宿主只读接口（10/22 与人豪定稿）：X-Viewer-Role 必填并按人员目录核对；待决议题、预约会议、首页卡片（工具清单 10/22 人豪定为不做）。
 const TOKEN = "internal-chat-test";
 const HOUR = 60 * 60 * 1000;
-const NEW_ROUTES = ["/internal/pending-issues", "/internal/scheduled-meetings", "/internal/home-cards"];
+const NEW_ROUTES = ["/internal/pending-issues", "/internal/scheduled-meetings", "/internal/home-cards", "/internal/mission-plans"];
 
 const get = (t: TestApp, url: string, personId: string, role?: string) => t.app.inject({ method: "GET", url,
   headers: { authorization: `Bearer ${TOKEN}`, "x-owner-id": personId, ...(role ? { "x-viewer-role": role } : {}) } });
@@ -38,6 +39,56 @@ async function cloneScheduled(t: TestApp, meetingId: string, startOffset: number
   await place(t, id, startOffset, endOffset);
   return id;
 }
+
+/** Mission 计划的用例把「现在」定在 2026-10（公司时区），没写年的日期按它推。 */
+const MONTH = "2026-10";
+const LAST_MONTH = "2026-09";
+const planApp = (env: Parameters<typeof createTestApp>[0] = {}) =>
+  createTestApp({ ...env, internalChatToken: TOKEN }, undefined, { monthlyNow: () => new Date("2026-10-23T02:00:00Z") });
+
+/** 主持人（测试乙）的 Mission：本月两条（rehearsal-a 本体里有，rehearsal-b 没关联）；占位的和上月的不列。 */
+async function seedMissions(t: TestApp) {
+  const insert = (id: string, code: string, period: string, placeholder = false) => t.sql(`INSERT INTO missions
+    (id, version, code, period, title, owner_id, capability_id, outcome, placeholder, source_ref, source_document_id, source_revision, source_title)
+    VALUES ($1, 1, $2, $3, $4, $5, 'unit-test', '结果', $6, 'test://m', 'test', 1, '测试')`, [id, code, period, `Mission ${code}`, HOST, placeholder]);
+  await insert("m-a", "rehearsal-a", MONTH);
+  await insert("m-b", "rehearsal-b", MONTH);
+  await insert("m-c", "rehearsal-c", MONTH, true);
+  await insert("m-d", "rehearsal-d", LAST_MONTH);
+}
+/** 本体里 rehearsal-a 对应的 Mission（0.3 读回：组件既在块上也在 value 里，Task 全景块只挂在块上）。 */
+const missionObject = {
+  object_id: "obj-mission-a", object_type: "Mission", title: "冒烟 Mission", revision_id: "rev-4", object_version: 4, version: 4,
+  lifecycle: { status: "active" }, contract_version: "tkos.world/0.3", domain_id: "domain-aidc", external_refs: [{ system: "tianshu", id: "mission:rehearsal-a" }],
+  blocks: [
+    { id: "definition", components: [{ id: "m-ac1", type: "acceptance_criterion", text: "预发可用" }] },
+    { id: "mission_plan", value: { components: [{ id: "mp-path", type: "core_path", text: "先预发后上线" }, { id: "mp-ms1", type: "milestone", text: "2026年10月28日 正式上线" }] },
+      components: [{ id: "mp-path", type: "core_path", text: "先预发后上线" }, { id: "mp-ms1", type: "milestone", text: "2026年10月28日 正式上线" }] },
+    { id: "execution_plan", value: null, components: [
+      { id: "pi-preview-teardown", type: "plan_item", text: "预发环境回收：10/27 前停服务、删卷和站点" },
+      { id: "pi-notes", type: "plan_item", text: "整理 TK 的接入说明" },
+    ] },
+  ],
+};
+/** 假本体：按外部引用列对象、取对象；unreachable 时列对象就断网。 */
+function missionWorld(options: { unreachable?: boolean } = {}) {
+  return stubWorld((call) => {
+    if (call.url.pathname === "/v1/world/objects") {
+      if (options.unreachable && call.url.searchParams.has("external_id")) throw new TypeError("fetch failed");
+      return { items: call.url.searchParams.get("external_id") === "mission:rehearsal-a" ? [missionObject] : [], next_cursor: null };
+    }
+    if (call.url.pathname === `/v1/world/objects/${missionObject.object_id}`) return projection(missionObject);
+    return { ok: true };
+  });
+}
+const statuses = (body: { missions: { code: string; planStatus: string; plan: unknown }[] }) =>
+  body.missions.map(({ code, planStatus, plan }) => ({ code, planStatus, plan }));
+const missionPlanCalls = (calls: { url: URL }[]) => calls.filter((call) => call.url.searchParams.get("external_id")?.startsWith("mission:"));
+const missionPlans = async (t: TestApp, personId: string, role: string) => {
+  const res = await get(t, "/internal/mission-plans", personId, role);
+  expect(res.statusCode).toBe(200);
+  return res.json();
+};
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -156,5 +207,107 @@ describe("给独立 Chat 的宿主只读接口", () => {
     } finally {
       await t.close();
     }
+  });
+
+  it("Mission 计划：本人本月的 Mission 带本体计划块里的条目和日期，只读本体；没关联的 plan 为 null", async () => {
+    const calls = missionWorld();
+    const t = await planApp({ ...worldEnv, worldInstance: "demo" });
+    try {
+      await seedMissions(t);
+      expect(await missionPlans(t, HOST, "member")).toEqual({ viewerRole: "member", period: MONTH, missions: [
+        { missionId: "m-a", code: "rehearsal-a", title: "Mission rehearsal-a", planStatus: "ok", plan: {
+          objectRef: "obj-mission-a@4", title: "冒烟 Mission", items: [
+            { block: "mission_plan", componentId: "mp-ms1", type: "milestone", text: "2026年10月28日 正式上线", dates: ["2026-10-28"] },
+            { block: "execution_plan", componentId: "pi-preview-teardown", type: "plan_item", text: "预发环境回收：10/27 前停服务、删卷和站点", dates: ["2026-10-27"] },
+            { block: "execution_plan", componentId: "pi-notes", type: "plan_item", text: "整理 词元云集 的接入说明", dates: [] },
+          ] } },
+        { missionId: "m-b", code: "rehearsal-b", title: "Mission rehearsal-b", planStatus: "not_linked", plan: null },
+      ] });
+      // CEO 视角也只是本人的（CEO 名下没有 Mission）。
+      expect(await missionPlans(t, CEO, "ceo")).toEqual({ viewerRole: "ceo", period: MONTH, missions: [] });
+      // 只读：对本体只发 GET。
+      expect(missionPlanCalls(calls).map((call) => call.url.searchParams.get("external_id"))).toEqual(["mission:rehearsal-a", "mission:rehearsal-b"]);
+      expect(calls.every((call) => call.method === "GET")).toBe(true);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("Mission 计划：本体没配、实例没开读时照样给本地 Mission，plan 为 null 并说原因，不读本体", async () => {
+    const calls = missionWorld();
+    for (const [env, planStatus] of [[{}, "world_not_configured"], [worldEnv, "world_reads_off"]] as const) {
+      const t = await planApp(env);
+      try {
+        await seedMissions(t);
+        expect(statuses(await missionPlans(t, HOST, "member"))).toEqual([
+          { code: "rehearsal-a", planStatus, plan: null }, { code: "rehearsal-b", planStatus, plan: null }]);
+      } finally {
+        await t.close();
+      }
+    }
+    expect(missionPlanCalls(calls)).toEqual([]);
+  }, 20_000);
+
+  it("Mission 计划：开了读但本体连不上，第一条读失败后剩下的不再读，不报 500", async () => {
+    const calls = missionWorld({ unreachable: true });
+    const t = await planApp({ ...worldEnv, worldInstance: "demo" });
+    try {
+      await seedMissions(t);
+      expect(statuses(await missionPlans(t, HOST, "member"))).toEqual([
+        { code: "rehearsal-a", planStatus: "world_unreachable", plan: null }, { code: "rehearsal-b", planStatus: "world_unreachable", plan: null }]);
+      expect(missionPlanCalls(calls)).toHaveLength(1);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("Mission 计划读取：引用重复算 world_error 并接着读下一个；整次超过时限后剩下的不读；条目截字、限条数", async () => {
+    const t = await planApp();
+    try {
+      await seedMissions(t);
+      const q = t.pool.query.bind(t.pool);
+      const plan = (body: { code: string; planStatus: string }[]) => body.map(({ code, planStatus }) => ({ code, planStatus }));
+      const world = (heads: (code: string) => unknown[], object: unknown, delayMs = 0) => ({
+        async listObjects(filters: { external_id?: string }) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          return heads(filters.external_id!.replace("mission:", ""));
+        },
+        async getObject() { return projection(object); },
+      }) as unknown as MissionPlanWorld;
+
+      // 同一引用对应两个对象：这个 Mission 是 world_error，下一个照读。
+      const duplicate = world((code) => code === "rehearsal-a" ? [missionObject, { ...missionObject, object_id: "obj-mission-a2" }] : [], missionObject);
+      expect(plan(await readMissionPlans(q, HOST, MONTH, duplicate))).toEqual([
+        { code: "rehearsal-a", planStatus: "world_error" }, { code: "rehearsal-b", planStatus: "not_linked" }]);
+
+      // 整次时限 20 毫秒、每次列对象 50 毫秒：第一个读完，第二个不再读。
+      const slow = world((code) => code === "rehearsal-a" ? [missionObject] : [], missionObject, 50);
+      expect(plan(await readMissionPlans(q, HOST, MONTH, slow, 20))).toEqual([
+        { code: "rehearsal-a", planStatus: "ok" }, { code: "rehearsal-b", planStatus: "world_unreachable" }]);
+
+      // 里程碑在前、Task 全景在后，合计最多 50 条；每条文字最多 600 字。
+      const many = { ...missionObject, blocks: [
+        { id: "execution_plan", components: Array.from({ length: 30 }, (_, i) => ({ id: `pi-${i}`, type: "plan_item", text: i === 0 ? "长".repeat(700) : `条目 ${i}` })) },
+        { id: "mission_plan", components: Array.from({ length: 30 }, (_, i) => ({ id: `mp-${i}`, type: "milestone", text: `里程碑 ${i}` })) },
+      ] };
+      const [read] = await readMissionPlans(q, HOST, MONTH, world((code) => code === "rehearsal-a" ? [many] : [], many));
+      const items = read.plan!.items;
+      expect(items).toHaveLength(50);
+      expect(items.slice(0, 30).every((item) => item.block === "mission_plan")).toBe(true);
+      expect(items.slice(30).map((item) => item.componentId)).toEqual(Array.from({ length: 20 }, (_, i) => `pi-${i}`));
+      expect(items[30].text).toBe(`${"长".repeat(600)}…`);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("计划条目的日期：全部按序、去重，跳过无效的接着找，没写年取离本月最近的年份", () => {
+    expect(planItemDates("由 10/28 改到 10/27", "2026-10")).toEqual(["2026-10-28", "2026-10-27"]);
+    expect(planItemDates("回收时间由10月28日前调整为10月27日前，10/27 停服务", "2026-10")).toEqual(["2026-10-28", "2026-10-27"]);
+    expect(planItemDates("2026/10/27、2026-10-26、2026年10月25日", "2026-10")).toEqual(["2026-10-27", "2026-10-26", "2026-10-25"]);
+    expect(planItemDates("1/5 前完成年度复盘", "2026-12")).toEqual(["2027-01-05"]);
+    expect(planItemDates("12/28 已完成", "2027-01")).toEqual(["2026-12-28"]);
+    expect(planItemDates("50/50 分工，10/27 前完成", "2026-10")).toEqual(["2026-10-27"]);
+    expect(planItemDates("2/30 和 13/1 都不是日期，v2/3 是版本", "2026-10")).toEqual([]);
   });
 });

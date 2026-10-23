@@ -1,7 +1,7 @@
 // Use the same stage-specific skill routing as the verified ontology run.
 // Keep the complete skill snapshot for provenance, not as every call's input.
 export const decodingThinking={thinking:true,reasoningEffort:'high',timeoutMs:900000};
-import {retryRoundCall,parseRoundJSON} from './round-retry.mjs';
+import {retryRoundCall,parseRoundJSON,streamDropped} from './round-retry.mjs';
 import {runSkillScheduleCheck} from './schedule-check.mjs';
 import {createHash} from 'node:crypto';
 import {readerPolicy} from './reader-quality.mjs';
@@ -25,9 +25,16 @@ export function createDecodingGateway(gateway,skill){
   const request=messages.map((m,i)=>i===0?{...m,content:prefix+'\n仅返回有效 JSON 对象，不加代码围栏。\n'+rules+'\n字符串数组每项写成“**短标题：**正文”，数组内不写序号，序号由界面生成。'}:m);
   const instructionSnapshot={hash:createHash('sha256').update(request[0].content).digest('hex'),skillHash:skill.hash,files:[...keep]};
   const invoke=async opts=>{
-   const result=await retryRoundCall(()=>gateway.complete(request,opts),{onRetry:options?.onRetry});
+   // TokenHub closes a stream that stays silent for 60 s (2026-10-22: one unit's calls all cut at 60.0 s right after
+   // the thinking block opened, while other units went through). After two such cuts the call thinks at medium,
+   // which opens its answer sooner; the round records that it did.
+   let dropped=0,lowered=false;
+   const result=await retryRoundCall(async()=>{
+    const settings=dropped>=2&&opts.reasoningEffort==='high'?(lowered||console.warn(`${stage||task.slice(0,20)}：连续 ${dropped} 次 60 秒无数据被断开，改用 medium 思考强度重试`),lowered=true,{...opts,reasoningEffort:'medium'}):opts;
+    try{return await gateway.complete(request,settings);}catch(error){if(streamDropped(error))dropped++;throw error;}
+   },{onRetry:options?.onRetry});
    parseRoundJSON(result.answer,{audit});
-   return {...result,instructionSnapshot};
+   return {...result,instructionSnapshot,...(lowered?{effortFallback:{from:'high',to:'medium',reason:'stream-silence-cut',dropsBefore:dropped}}:{})};
   };
   try{return await invoke({...options,...decodingThinking,maxTokens:global?32768:65536});}
   catch(error){
