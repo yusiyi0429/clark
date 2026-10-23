@@ -1,5 +1,7 @@
 import type { Pool } from "pg";
-import type { TFeishuMinuteInboxItem, TFeishuMinuteMeetingResponse, TFeishuMinutePerson, TOrganizeFeishuMinuteRequest, TWorldAnchor } from "@warmap/contracts";
+import type {
+  TFeishuMinuteInboxItem, TFeishuMinuteMeetingResponse, TFeishuMinutePerson, TFeishuMinuteSuggestion, TOrganizeFeishuMinuteRequest, TWorldAnchor,
+} from "@warmap/contracts";
 import { FeishuApiError } from "./feishu/client.js";
 import type { FeishuEnv } from "./feishu/config.js";
 import { activeUserAccessToken, isMeetingMinute, type FeishuMinutesApi } from "./feishu/minutes.js";
@@ -18,6 +20,7 @@ import { shanghaiDate } from "./workdays.js";
  *   只收视频会议生成的、本人名下的、上线以后生成的，已登记或已挂在天枢会上的不再查；
  * - 列表：本人待整理、7 天以内的，新的在前；参会人按飞书实际参会名单对到人员目录，所有者排第一；
  * - 整理：本人待整理的建成一场已开完的会（所有者主持，参会人按飞书实际参会名单），再排一次后台任务用所有者本人的授权读妙记；
+ * - 记到：属于天枢里约好的会的（列表里带建议），本人记到那场会上，同样排一次后台任务读妙记；轮询自动挂上的也记为已记到（meetingMinutes.ts）；
  * - 忽略：本人待整理的置为已忽略，不再提示。
  */
 export const MINUTE_INBOX_SCAN_KIND = "meeting.minute_inbox_scan";
@@ -32,8 +35,29 @@ const MINUTE_NOT_FOUND: MinuteInboxError = { status: 404, code: "MINUTE_NOT_FOUN
 const MINUTE_NOT_PENDING: MinuteInboxError = { status: 409, code: "MINUTE_NOT_PENDING", message: "这份妙记已经整理过了" };
 const MINUTE_TAKEN: MinuteInboxError = { status: 409, code: "MINUTE_TAKEN", message: "这份妙记已经对到别的会上了" };
 
-type InboxRow = { minute_token: string; title: string; starts_at: Date; ends_at: Date; attendee_open_ids: string[] };
-type OwnedRow = InboxRow & { status: string; meeting_id: string | null; feishu_meeting_id: string };
+const SUGGESTION_CHANGED: MinuteInboxError = { status: 409, code: "SUGGESTION_CHANGED", message: "这份妙记对得上的会变了" };
+/** 妙记的开始时刻和会议计划开始时刻最多差多少还算同一场会（与自动挂一致）。 */
+const SUGGESTION_WINDOW = "interval '3 hours'";
+/** 能记妙记的会：待开、还没对上妙记、用户也没上传过记录（不覆盖用户上传的）。 */
+const OPEN_FOR_MINUTE = "status = 'scheduled' AND minute_token IS NULL AND transcript IS NULL AND transcript_candidate IS NULL";
+
+type InboxRow = { minute_token: string; title: string; starts_at: Date; ends_at: Date; attendee_open_ids: string[]; feishu_meeting_id: string };
+type OwnedRow = InboxRow & { status: string; meeting_id: string | null };
+
+/**
+ * 这份妙记属于天枢里约好的哪场会（只在能记妙记的会里找）：先按飞书会议号对（不看所有者是谁，取最早的一场）；
+ * 没有时，在还没有飞书会议号、所有者主持或建的会里取计划开始离妙记开始最近的一场（3 小时以内）。都没有为 null。
+ */
+export async function suggestionFor(q: Query, row: { owner_id: string; feishu_meeting_id: string; starts_at: Date }): Promise<TFeishuMinuteSuggestion | null> {
+  const byFeishuId = (await q(`SELECT id, title FROM meetings WHERE ${OPEN_FOR_MINUTE} AND feishu_meeting_id = $1 ORDER BY scheduled_at LIMIT 1`,
+    [row.feishu_meeting_id])).rows[0];
+  const found = byFeishuId ?? (await q(
+    `SELECT id, title FROM meetings WHERE ${OPEN_FOR_MINUTE} AND feishu_meeting_id IS NULL AND (lead_dri_id = $1 OR COALESCE(created_by, lead_dri_id) = $1)
+       AND scheduled_at BETWEEN $2::timestamptz - ${SUGGESTION_WINDOW} AND $2::timestamptz + ${SUGGESTION_WINDOW}
+     ORDER BY abs(extract(epoch FROM scheduled_at - $2::timestamptz)), scheduled_at LIMIT 1`,
+    [row.owner_id, row.starts_at])).rows[0];
+  return found ? { meetingId: found.id as string, title: found.title as string } : null;
+}
 
 export function createFeishuMinuteInboxService(deps: {
   pool: Pool;
@@ -102,7 +126,7 @@ export function createFeishuMinuteInboxService(deps: {
   /** 本人待整理的妙记（7 天以内，新的在前）。 */
   async function listFor(ownerId: string): Promise<TFeishuMinuteInboxItem[]> {
     const rows = (await q(
-      `SELECT minute_token, title, starts_at, ends_at, attendee_open_ids FROM feishu_minute_inbox
+      `SELECT minute_token, title, starts_at, ends_at, attendee_open_ids, feishu_meeting_id FROM feishu_minute_inbox
         WHERE owner_id = $1 AND status = 'pending' AND starts_at > $2 ORDER BY starts_at DESC`,
       [ownerId, new Date(now().getTime() - MINUTE_INBOX_WINDOW_MS)],
     )).rows as InboxRow[];
@@ -112,7 +136,7 @@ export function createFeishuMinuteInboxService(deps: {
       ? (await q("SELECT open_id, person_id FROM feishu_identities WHERE open_id = ANY($1::text[])", [openIds])).rows.map((row) => [row.open_id as string, row.person_id as string])
       : []);
     const people = directory();
-    return rows.map((row) => {
+    return Promise.all(rows.map(async (row) => {
       const attendees: TFeishuMinutePerson[] = [];
       const add = (personId: string) => {
         const person = people.get(personId);
@@ -126,8 +150,8 @@ export function createFeishuMinuteInboxService(deps: {
         else otherAttendees += 1;
       }
       return { minuteToken: row.minute_token, title: row.title, startsAt: row.starts_at.toISOString(), endsAt: row.ends_at.toISOString(),
-        attendees, otherAttendees, suggestion: null };
-    });
+        attendees, otherAttendees, suggestion: await suggestionFor(q, { owner_id: ownerId, feishu_meeting_id: row.feishu_meeting_id, starts_at: row.starts_at }) };
+    }));
   }
 
   const ownedRow = async (query: Query, ownerId: string, minuteToken: string, lock = "") => ((await query(
@@ -184,8 +208,58 @@ export function createFeishuMinuteInboxService(deps: {
     } finally {
       client.release();
     }
-    await enqueueJob(q, { kind: MINUTE_INBOX_INGEST_KIND, dedupeKey: `${MINUTE_INBOX_INGEST_KIND}:${minuteToken}`, payload: { minuteToken } });
+    await enqueueIngest(minuteToken);
     logEvent({ event: "feishu_minute_inbox", objectRef: `feishu_minute:${minuteToken}`, status: "organized", meetingId });
+    return { meetingId };
+  }
+
+  /** 整理、记到以后排一次读妙记（同一份妙记只排一次）。 */
+  const enqueueIngest = (minuteToken: string) =>
+    enqueueJob(q, { kind: MINUTE_INBOX_INGEST_KIND, dedupeKey: `${MINUTE_INBOX_INGEST_KIND}:${minuteToken}`, payload: { minuteToken } });
+
+  /**
+   * 记到：本人待整理的妙记记到建议的那场天枢里约好的会（会议号完全一致时，妙记所有者不是主持人也能记），一个事务里行锁重判；
+   * 已记到同一场会的返回那场会；建议已经不是这场 409 SUGGESTION_CHANGED；妙记已被别的会挂走 409 MINUTE_TAKEN。记好后排一次读妙记。
+   */
+  async function attach(ownerId: string, minuteToken: string, meetingId: string): Promise<TFeishuMinuteMeetingResponse | { error: MinuteInboxError }> {
+    const client = await pool.connect();
+    const cq: Query = client.query.bind(client);
+    const settle = async (result: TFeishuMinuteMeetingResponse | { error: MinuteInboxError }) => {
+      await client.query("ROLLBACK");
+      return result;
+    };
+    try {
+      await client.query("BEGIN");
+      const row = await ownedRow(cq, ownerId, minuteToken, "FOR UPDATE");
+      if (!row) return await settle({ error: MINUTE_NOT_FOUND });
+      if (row.status === "attached" && row.meeting_id === meetingId) return await settle({ meetingId });
+      if (row.status !== "pending") return await settle({ error: MINUTE_NOT_PENDING });
+      if ((await suggestionFor(cq, { owner_id: ownerId, feishu_meeting_id: row.feishu_meeting_id, starts_at: row.starts_at }))?.meetingId !== meetingId) {
+        return await settle({ error: SUGGESTION_CHANGED });
+      }
+      let updated;
+      try {
+        updated = await cq(
+          `UPDATE meetings SET minute_token = $2, feishu_meeting_id = COALESCE(feishu_meeting_id, $3), minutes_status = 'waiting', minutes_waiting_since = $4,
+             minutes_failure = NULL, minutes_error = NULL
+           WHERE id = $1 AND ${OPEN_FOR_MINUTE}`,
+          [meetingId, minuteToken, row.feishu_meeting_id, now()],
+        );
+      } catch (error) {
+        if ((error as { code?: string }).code === "23505") return await settle({ error: MINUTE_TAKEN });
+        throw error;
+      }
+      if (!updated.rowCount) return await settle({ error: SUGGESTION_CHANGED });
+      await cq("UPDATE feishu_minute_inbox SET status = 'attached', meeting_id = $2, updated_at = now() WHERE minute_token = $1", [minuteToken, meetingId]);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+    await enqueueIngest(minuteToken);
+    logEvent({ event: "feishu_minute_inbox", objectRef: `feishu_minute:${minuteToken}`, status: "attached", meetingId });
     return { meetingId };
   }
 
@@ -214,7 +288,7 @@ export function createFeishuMinuteInboxService(deps: {
     return status === "ignored" ? { ok: true } : { error: MINUTE_NOT_PENDING };
   }
 
-  return { scan, afterMinuteEvent, listFor, organize, ingestQueued, ignore };
+  return { scan, afterMinuteEvent, listFor, organize, attach, ingestQueued, ignore };
 }
 
 export type FeishuMinuteInboxService = ReturnType<typeof createFeishuMinuteInboxService>;

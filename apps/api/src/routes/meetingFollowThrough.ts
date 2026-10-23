@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import {
-  FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardView,
+  AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardView,
   MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse, OrganizeFeishuMinuteRequest,
 } from "@warmap/contracts";
 import { askImpactCard, markImpactCardIrrelevant, readImpactCardByRequest } from "../impactCards.js";
@@ -33,6 +33,15 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
       return ctx.fail(reply, result.error.status, result.error.code, result.error.message, result.error.fieldErrors ? { fieldErrors: result.error.fieldErrors } : undefined);
     }
     return result;
+  });
+
+  // 记到：记到建议的那场天枢里约好的会，后台用所有者本人的授权读妙记。
+  app.post("/api/me/feishu-minutes/:token/attach", {
+    preHandler: ctx.requirePerson, schema: { params: tokenParams, body: AttachFeishuMinuteRequest, response: { 200: FeishuMinuteMeetingResponse } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "feishu_minute.attach", objectRef: `feishu_minute:${req.params.token}` });
+    const result = await followThrough.minuteInbox.attach(req.person!.personId, req.params.token, req.body.meetingId);
+    return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : result;
   });
 
   app.post("/api/me/feishu-minutes/:token/ignore", { preHandler: ctx.requirePerson, schema: { params: tokenParams } }, async (req, reply) => {

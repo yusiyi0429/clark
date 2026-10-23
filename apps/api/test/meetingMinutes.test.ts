@@ -704,6 +704,66 @@ describe("用户自己上传了，自动同步就停下", () => {
   });
 });
 
+describe("自动挂按飞书会议号收紧，待整理跟着变", () => {
+  it("自动挂收紧", async () => {
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
+    try {
+      await authorize(t, HOST, "ou_host", "测试乙", new Date());
+      const api = fakeMinutesApi();
+      const minutesOf = async (id: string) => (await t.pool.query("SELECT minutes_status, minute_token FROM meetings WHERE id = $1", [id])).rows[0];
+      const setSource = (id: string, feishuMeetingId: string) => t.pool.query("UPDATE meetings SET feishu_meeting_id = $2 WHERE id = $1", [id, feishuMeetingId]);
+      // 轮询：会议已有飞书会议号、妙记来自别的飞书会（vc_1）就不挂；对上了照常挂。
+      const meetingId = await scheduledMeeting(t);
+      await setSource(meetingId, "vc_other");
+      await tickAfterMeeting(t, api);
+      expect(await minutesOf(meetingId)).toEqual({ minutes_status: "waiting", minute_token: null });
+      await setSource(meetingId, "vc_1");
+      await tickAfterMeeting(t, api);
+      expect(await minutesOf(meetingId)).toEqual({ minutes_status: "ready", minute_token: "obcn_minute_1" });
+
+      // 「妙记生成」事件按时间对的那支：妙记来自 vc_2、会议是 vc_other，不读全文；会议号对上了才读。
+      const second = await scheduledMeeting(t);
+      await setSource(second, "vc_other");
+      api.listEmpty = true;
+      await tickAfterMeeting(t, api);
+      expect((await minutesOf(second)).minutes_status).toBe("waiting");
+      const getMinute = api.getMinute;
+      api.getMinute = async (token, minuteToken) => ({ ...await getMinute(token, minuteToken), meetingId: "vc_2" });
+      const minutes = createMeetingMinutesService({ pool: t.pool, peopleDirectory: loadPeopleDirectory(t.env), outcomeAgent: recordingOutcome(), secret: t.env.sessionSecret,
+        feishu: { env: feishuEnv, api }, now: () => new Date("2026-06-01T11:15:00+08:00") });
+      api.calls.length = 0;
+      await minutes.onMinuteGenerated({ event_id: "ev1", minute_token: "obcn_minute_2" });
+      expect(api.calls.filter((call) => call.startsWith("artifacts:") || call.startsWith("export:"))).toEqual([]);
+      expect(await minutesOf(second)).toEqual({ minutes_status: "waiting", minute_token: null });
+      await setSource(second, "vc_2");
+      await minutes.onMinuteGenerated({ event_id: "ev2", minute_token: "obcn_minute_2" });
+      expect(await minutesOf(second)).toEqual({ minutes_status: "ready", minute_token: "obcn_minute_2" });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("自动挂上后待整理消失，放手后回来", async () => {
+    for (const userUploads of [false, true]) {
+      const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
+      try {
+        await authorize(t, HOST, "ou_host", "测试乙", new Date());
+        await t.pool.query(`INSERT INTO feishu_minute_inbox (minute_token, owner_id, title, starts_at, ends_at, feishu_meeting_id)
+          VALUES ('obcn_minute_1', $1, '接口切换会', '2026-06-01T10:02:10+08:00', '2026-06-01T11:00:13+08:00', 'vc_1')`, [HOST]);
+        const meetingId = await scheduledMeeting(t);
+        const api = fakeMinutesApi();
+        // 另起一场：自动拉取读全文时用户上传了候选，自动拉取放手。
+        if (userUploads) api.onRead = async () => { await uploadMarkdown(t, meetingId); };
+        await tickAfterMeeting(t, api);
+        const row = (await t.pool.query("SELECT status, meeting_id FROM feishu_minute_inbox WHERE minute_token = 'obcn_minute_1'")).rows[0];
+        expect(row).toEqual(userUploads ? { status: "pending", meeting_id: null } : { status: "attached", meeting_id: meetingId });
+      } finally {
+        await t.close();
+      }
+    }
+  });
+});
+
 // 10/21 对真飞书：search 条件在 filter 里、每页最多 30，结果只有 token 和展示文字；开始时刻、所有者、来源会议逐条查详情补上。
 describe("妙记搜索按真飞书的请求与返回", () => {
   it("按本人和时间段搜，再逐条查详情；来源会议取 generated_source", async () => {

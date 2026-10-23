@@ -84,6 +84,10 @@ function isTransient(error: unknown): boolean {
   return !(error instanceof FeishuApiError) || (error.httpStatus ?? 0) >= 500;
 }
 
+/** 会议已有飞书会议号、妙记来自别的飞书会议：不自动挂。 */
+const sourceConflicts = (meeting: Pick<MeetingRow, "feishu_meeting_id">, minuteMeetingId: string | null) =>
+  Boolean(meeting.feishu_meeting_id && minuteMeetingId && minuteMeetingId !== meeting.feishu_meeting_id);
+
 /** 妙记链接里的 token：只认 https://<租户>.feishu.cn/minutes/<token>，token 只收小写字母和数字；不对时为 null。 */
 function minuteTokenFromUrl(url: string): string | null {
   let parsed: URL;
@@ -263,6 +267,10 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
       [meeting.id, minute.token, feishuMeetingId ?? minute.meetingId, replace],
     );
     if (!claimed.rowCount) return { kind: "taken" };
+    // 待整理里有这份妙记的：已挂上，不再提示。
+    const inbox = await q("UPDATE feishu_minute_inbox SET status = 'attached', meeting_id = $1, updated_at = now() WHERE minute_token = $2 AND status = 'pending'",
+      [meeting.id, minute.token]);
+    if (inbox.rowCount) logEvent({ event: "feishu_minute_inbox", objectRef: `feishu_minute:${minute.token}`, status: "auto_attached", meetingId: meeting.id });
     let text: string;
     try {
       text = await readFullText(api, meeting.id, token, minute.token);
@@ -298,6 +306,9 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     const saved = await saveTranscriptCandidate(pool, meeting.id, candidate, undefined, { keepExisting: !manual });
     if (!("row" in saved)) {
       await q("UPDATE meetings SET minute_token = $3 WHERE id = $1 AND minute_token = $2", [meeting.id, minute.token, meeting.minute_token]);
+      // 妙记还回去了、也没有别的会挂着：回到待整理。
+      await q(`UPDATE feishu_minute_inbox SET status = 'pending', meeting_id = NULL, updated_at = now()
+        WHERE minute_token = $1 AND status = 'attached' AND NOT EXISTS (SELECT 1 FROM meetings WHERE minute_token = $1)`, [minute.token]);
       return { kind: "rejected", status: saved.status, code: saved.code, message: saved.message };
     }
     await setStatus(meeting.id, "ready");
@@ -338,12 +349,12 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     return scored[0] ?? null;
   }
 
-  /** 这个人名下、这场会前后的妙记里开始时刻最近的一份（已对到别的会的不算）。 */
+  /** 这个人名下、这场会前后的妙记里开始时刻最近的一份（已对到别的会的、来自别的飞书会议的不算）。 */
   async function findMinute(api: FeishuMinutesApi, meeting: MeetingRow, openId: string, token: string): Promise<FeishuMinuteInfo | null> {
     const listed = await api.listMinutes(token, { openId }, {
       start: new Date(meeting.scheduled_at.getTime() - MATCH_WINDOW_MS), end: new Date(meeting.ends_at.getTime() + MATCH_WINDOW_MS) });
     const used = new Set((await q("SELECT minute_token FROM meetings WHERE minute_token IS NOT NULL AND id <> $1", [meeting.id])).rows.map((row) => row.minute_token as string));
-    return closest(meeting, listed.filter((item) => !used.has(item.token)));
+    return closest(meeting, listed.filter((item) => !used.has(item.token) && !sourceConflicts(meeting, item.meetingId)));
   }
 
   /** 按授权顺序找：谁名下先找到就用谁的授权；都没找到时，只有每个人都出错才带上错误（否则算妙记还没生成）。 */
@@ -399,7 +410,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
 
   /**
    * 「妙记生成」事件：先按飞书会议 id 对；对不上就拿每场 waiting 的会的主持人（再是建会的人）授权去读这份妙记，
-   * 读得到、属于这个人、开始时刻对得上的就是它。
+   * 读得到、属于这个人、开始时刻对得上、不是别的飞书会议的就是它。
    */
   async function onMinuteGenerated(payload: Record<string, unknown>): Promise<void> {
     if (!feishu) return;
@@ -413,7 +424,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
       for (const { openId, token } of await fetchers(meeting)) {
         const minute = await feishu.api.getMinute(token, found.minuteToken).catch(() => null);
         if (!minute || (minute.ownerOpenId && minute.ownerOpenId !== openId)) continue;
-        if (!byFeishuId && !closest(meeting, [minute])) break;
+        if (!byFeishuId && (!closest(meeting, [minute]) || sourceConflicts(meeting, minute.meetingId ?? found.feishuMeetingId))) break;
         const result = await ingest(feishu.api, meeting, { ...minute, meetingId: minute.meetingId ?? found.feishuMeetingId }, token, found.feishuMeetingId);
         if (result.kind !== "taken") return;
         break;
