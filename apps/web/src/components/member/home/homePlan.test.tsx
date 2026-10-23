@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { THomePlanActivity, THomePlanResponse, TTaskView } from "@warmap/contracts";
 
 /**
- * 成员首页主区（HomePlan：月历、Mission、快捷、Mission 详情、最近进展）与 useHomePlan。
+ * 成员首页主区（HomePlan：月历、Mission、快捷、Mission 详情）与 useHomePlan。
  * 没有 jsdom（仓库惯例）：React 的 useState/useRef/useCallback/useEffect 换成按调用顺序记账的版本，renderToStaticMarkup 反复渲染到不再变；
  * 原生元素的 props 从 JSX 运行时截下来，按真实顺序直接调它们的处理器。月历换成桩，只收它拿到的 props。
  * ts-design 的 Popover 换成按 isOpen 渲染内容的桩（Esc、点外面关由它负责，这里直接调 onOpenChange(false)）；
@@ -129,13 +129,13 @@ const plan = (overrides: Partial<THomePlanResponse> = {}): THomePlanResponse => 
     { taskId: "t3", missionId: "m2", name: "Chat 客户版", doneDefinition: null, criteria: [] },
   ],
   activities: [
-    { item: item("a1", "回流方案定稿", { status: "done", dueDate: "2026-10-21", planTaskId: "t1", mission: confirmedRef, collaborators: renhao, latestProgress: progress("方案定稿", "2026-10-22T03:40:00Z") }), missionId: "m1", column: "done", overdue: false },
-    { item: item("a2", "对话架构与分工", { status: "done", dueDate: "2026-10-20", mission: confirmedRef }), missionId: "m1", column: "done", overdue: false },
-    { item: item("a3", "真实会议跑通", { dueDate: "2026-10-24", planTaskId: "t1", collaborators: renhao, latestProgress: progress("最终评审修复合入，等预发实测", "2026-10-22T05:08:00Z") }), missionId: "m1", column: "week", overdue: false },
-    { item: item("a4", "Chat 服务抽出", { dueDate: "2026-10-16", planTaskId: "t2", mission: confirmedRef, latestProgress: progress("拆出进程", "2026-10-19T02:00:00Z") }), missionId: "m1", column: "week", overdue: true },
-    { item: item("a5", "客户版演示", { planTaskId: "t3", collaborators: renhao, latestProgress: progress("演示稿写完", "2026-10-21T12:26:00Z") }), missionId: "m2", column: "week", overdue: false },
-    { item: item("a6", "新 Chat 题库打分", { status: "not_started", startDate: "2026-10-27", planTaskId: "t-gone", mission: confirmedRef, latestProgress: progress("题库整理", "2026-10-18T02:00:00Z") }), missionId: "m1", column: "later", overdue: false },
-    { item: item("a7", "报销", { dueDate: "2026-10-23", latestProgress: progress("\n发票交了\n还差一张", "2026-10-20T01:00:00Z") }), missionId: null, column: "week", overdue: false },
+    { item: item("a1", "回流方案定稿", { status: "done", dueDate: "2026-10-21", planTaskId: "t1", mission: confirmedRef, collaborators: renhao, latestProgress: progress("方案定稿", "2026-10-22T03:40:00Z") }), missionId: "m1", column: "done", overdue: false, lastActivityAt: "2026-10-22T03:40:00Z", idleDays: null },
+    { item: item("a2", "对话架构与分工", { status: "done", dueDate: "2026-10-20", mission: confirmedRef }), missionId: "m1", column: "done", overdue: false, lastActivityAt: "2026-10-01T00:00:00Z", idleDays: null },
+    { item: item("a3", "真实会议跑通", { dueDate: "2026-10-24", planTaskId: "t1", collaborators: renhao, latestProgress: progress("最终评审修复合入，等预发实测", "2026-10-22T05:08:00Z") }), missionId: "m1", column: "week", overdue: false, lastActivityAt: "2026-10-22T05:08:00Z", idleDays: null },
+    { item: item("a4", "Chat 服务抽出", { dueDate: "2026-10-16", planTaskId: "t2", mission: confirmedRef, latestProgress: progress("拆出进程", "2026-10-19T02:00:00Z") }), missionId: "m1", column: "week", overdue: true, lastActivityAt: "2026-10-19T02:00:00Z", idleDays: 3 },
+    { item: item("a5", "客户版演示", { planTaskId: "t3", collaborators: renhao, latestProgress: progress("演示稿写完", "2026-10-21T12:26:00Z") }), missionId: "m2", column: "week", overdue: false, lastActivityAt: "2026-10-21T12:26:00Z", idleDays: null },
+    { item: item("a6", "新 Chat 题库打分", { status: "not_started", startDate: "2026-10-27", planTaskId: "t-gone", mission: confirmedRef, latestProgress: progress("题库整理", "2026-10-18T02:00:00Z") }), missionId: "m1", column: "later", overdue: false, lastActivityAt: "2026-10-18T02:00:00Z", idleDays: null },
+    { item: item("a7", "报销", { dueDate: "2026-10-23", latestProgress: progress("\n发票交了\n还差一张", "2026-10-20T01:00:00Z") }), missionId: null, column: "week", overdue: false, lastActivityAt: "2026-10-20T01:00:00Z", idleDays: null },
   ] satisfies THomePlanActivity[],
   ...overrides,
 });
@@ -208,21 +208,22 @@ afterEach(() => vi.unstubAllGlobals());
 const tab = (view: ReturnType<typeof mount>, id: string) => view.find((props) => props["data-mission"] === id)!;
 
 describe("HomePlan：版式", () => {
-  it("从前到后：快捷、月历、Mission、Mission 详情、最近进展（手持一列时就是这个顺序）", () => {
+  it("从前到后：快捷、月历、Mission、Mission 详情（手持一列时就是这个顺序）；没有「最近进展」卡", () => {
     const html = mount().html;
     const at = (needle: string) => {
       const index = html.indexOf(needle);
       expect(index, needle).toBeGreaterThan(-1);
       return index;
     };
-    const order = [at('data-actions="quick"'), at('aria-label="月历"'), at('aria-label="本月 Mission"'), at('aria-label="Mission 详情"'), at('aria-label="最近进展"')];
+    const order = [at('data-actions="quick"'), at('aria-label="月历"'), at('aria-label="本月 Mission"'), at('aria-label="Mission 详情"')];
     expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(html).not.toContain("最近进展");
   });
 
   it("计划还没读到：快捷卡照样出，其余不出", () => {
     const html = mount(null).html;
     expect(html).toContain('data-actions="quick"');
-    expect(html).not.toMatch(/aria-label="(月历|本月 Mission|Mission 详情|最近进展)"/);
+    expect(html).not.toMatch(/aria-label="(月历|本月 Mission|Mission 详情)"/);
   });
 
   it("去掉的东西：没有横条时间轴、Task 胶囊行、「全部 Task」、「Mission 卡 ›」", () => {
@@ -305,7 +306,7 @@ describe("HomePlan：选「全部」时的详情", () => {
   });
 
   it("挂在之前月份 Mission 下没做完的：只在「全部」里，小字写它任务卡上的 Mission 名", () => {
-    const earlier = { item: item("a8", "九月没收尾", { dueDate: "2026-09-28", mission: { ...confirmedRef, missionId: "sep-1", title: "九月的 Mission" } }), missionId: "sep-1", column: "week", overdue: true } satisfies THomePlanActivity;
+    const earlier = { item: item("a8", "九月没收尾", { dueDate: "2026-09-28", mission: { ...confirmedRef, missionId: "sep-1", title: "九月的 Mission" } }), missionId: "sep-1", column: "week", overdue: true, lastActivityAt: "2026-10-01T00:00:00Z", idleDays: null } satisfies THomePlanActivity;
     const view = mount(plan({ activities: [...plan().activities, earlier] }));
     expect(text(view.html.match(/<button[^>]*data-activity="a8"[^>]*>.*?<\/button>/)![0])).toContain("九月的 Mission · 9/28");
     for (const missionId of ["m1", "m2"]) {
@@ -446,7 +447,7 @@ describe("HomePlan：选某个 Mission 时的详情", () => {
 });
 
 describe("HomePlan：三栏的卡片", () => {
-  it("只写标题和日期：有截止写截止日，没有截止写「M/D 起」，已完成只写截止日；不写协作人；逾期的日期带 data-overdue", () => {
+  it("标题、日期（进行中的再加最近一次动静）：有截止写截止日，没有截止写「M/D 起」，已完成只写截止日；不写协作人；逾期的日期带 data-overdue", () => {
     const view = mount();
     view.mission("m1");
     view.task("loose");
@@ -454,7 +455,7 @@ describe("HomePlan：三栏的卡片", () => {
     expect(text(card("a6")).trim()).toBe("新 Chat 题库打分 10/27 起");
     expect(text(card("a2")).trim()).toBe("对话架构与分工 10/20");
     view.task("t1");
-    expect(text(card("a3")).trim()).toBe("真实会议跑通 10/24");
+    expect(text(card("a3")).trim()).toBe("真实会议跑通 13:08 10/24");
     expect(text(column(view.html, "week"))).not.toContain("人豪");
     view.task("t2");
     expect(card("a4")).toMatch(/<span data-overdue="true">10\/16</);
@@ -472,32 +473,25 @@ describe("HomePlan：三栏的卡片", () => {
   });
 });
 
-describe("HomePlan：最近进展", () => {
-  it("全部事项里各自最新的一条进展，最新在前，最多 5 行；时间写「今天 HH:MM」或「M/D HH:MM」（公司时区），只写进展的第一行", () => {
-    const html = mount().html;
-    const rows = [...html.matchAll(/<button[^>]*data-progress="([^"]+)"[^>]*>(.*?)<\/button>/g)].map((match) => [match[1], text(match[2]).trim()]);
-    expect(rows).toEqual([
-      ["a3", "今天 13:08 真实会议跑通 · 最终评审修复合入，等预发实测"],
-      ["a1", "今天 11:40 回流方案定稿 · 方案定稿"],
-      ["a5", "10/21 20:26 客户版演示 · 演示稿写完"],
-      ["a7", "10/20 09:00 报销 · 发票交了"],
-      ["a4", "10/19 10:00 Chat 服务抽出 · 拆出进程"],
-    ]);
-    expect(text(html)).toContain("最近进展 全部执行事项");
-  });
-
-  it("选了某个 Mission 也照样列全部事项的进展", () => {
+describe("HomePlan：事项卡上的最近一次动静", () => {
+  it("进行中的卡右上角写最近一次动静：今天写 HH:MM，更早写 M/D（公司时区）；停滞的写「N 天没动」；未开始、已完成的不写", () => {
     const view = mount();
-    view.mission("m2");
-    expect(view.html.match(/data-progress=/g)).toHaveLength(5);
-  });
-
-  it("点一行进那个事项；一条进展都没有时不出这张卡", () => {
-    const view = mount();
-    view.click((props) => props["data-progress"] === "a5", "a5 那一行");
-    expect(view.onNavigate).toHaveBeenCalledWith("/me/tasks/a5", expect.anything());
-    const none = mount(plan({ activities: plan().activities.map((activity) => ({ ...activity, item: { ...activity.item, latestProgress: null } })) }));
-    expect(none.html).not.toContain('aria-label="最近进展"');
+    view.mission("m1");
+    view.task("t1");
+    const signal = (id: string) => {
+      const match = view.html.match(new RegExp(`data-activity="${id}"[^>]*>(.*?)</button>`));
+      expect(match, id).toBeTruthy();
+      return match![1].match(/data-signal="true"[^>]*>([^<]*)</)?.[1] ?? null;
+    };
+    expect(signal("a3")).toBe("13:08");
+    expect(signal("a1")).toBeNull();
+    view.task("t2");
+    expect(signal("a4")).toBe("3 天没动");
+    expect(view.html).toMatch(/data-activity="a4"[^>]*data-idle="true"/);
+    view.mission("all");
+    expect(signal("a5")).toBe("10/21");
+    expect(signal("a7")).toBe("10/20");
+    expect(signal("a6")).toBeNull();
   });
 });
 

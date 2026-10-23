@@ -214,35 +214,20 @@
 }
 .activity:hover { border-color: var(--hairline-strong); }
 .title { max-width: 100%; color: var(--ink); font-size: 13px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+/* 进行中的卡：标题右边是最近一次动静，前面一个深灰小点；停滞的换琥珀小点（同等回复角标），标题降一档。 */
+.cardTop { display: flex; align-items: flex-start; gap: 10px; width: 100%; }
+.cardTop .title { flex: 1; }
+.signal { display: inline-flex; flex: none; align-items: center; gap: 5px; margin-top: 2px; color: var(--ink-faint); font-size: 11px; line-height: 16px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.signal::before { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-muted); content: ""; }
+.activity[data-idle] .signal { color: var(--ink-muted); }
+.activity[data-idle] .signal::before { background: var(--warning); }
+.activity[data-idle] .title { color: var(--ink-muted); }
 .activity small { color: var(--ink-faint); font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
 /* 逾期的日期：加粗、用正文墨色，不染红。 */
 .activity [data-overdue] { color: var(--ink); font-weight: 600; }
 .column[data-column="done"] .activity { border-style: dashed; background: transparent; }
 .column[data-column="done"] .title { color: var(--ink-muted); font-weight: 500; }
 .empty { padding: 2px 0; color: var(--ink-faint); font-size: 12px; }
-
-/* 最近进展：左列时间等宽对齐，右边粗体事项名 · 一句进展（最多两行）。 */
-.log { margin: 0; padding: 0; list-style: none; }
-.log li + li { border-top: 1px solid color-mix(in oklab, var(--ink) 6%, transparent); }
-.log button {
-  display: grid;
-  grid-template-columns: 84px minmax(0, 1fr);
-  gap: 14px;
-  width: 100%;
-  padding: 9px 0;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  color: var(--ink-muted);
-  font-size: 13px;
-  line-height: 1.5;
-  text-align: left;
-  cursor: pointer;
-}
-.log button:hover { background: color-mix(in oklab, var(--ink) 3%, transparent); box-shadow: -8px 0 color-mix(in oklab, var(--ink) 3%, transparent), 8px 0 color-mix(in oklab, var(--ink) 3%, transparent); }
-.log time { color: color-mix(in oklab, var(--ink-faint) 70%, transparent); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.logText { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
-.logText b { color: var(--ink); font-weight: 600; }
 
 /* 浮层：和会议页的编辑浮层同一个样子。 */
 .float.float { z-index: 1000; }
@@ -336,14 +321,12 @@
 /* 手持（≤959）字号下限，同首页其他卡片：标签 13px，说明性的辅助字 14px。 */
 @media (max-width: 959px) {
   .head small, .month, .mission small, .taskMeta, .column h3, .popDate, .empty { font-size: 13px; }
-  .mission, .taskName, .title, .log button { font-size: 14px; }
+  .mission, .taskName, .title { font-size: 14px; }
   .activity small { font-size: 14px; }
-  .log button { grid-template-columns: 92px minmax(0, 1fr); }
 }
 /* 点触下限：手持与触屏热区 44（--touch-hit 只在那时定义）。 */
 @media (max-width: 959px), (pointer: coarse) {
   .mission { min-height: var(--touch-hit, 32px); padding-top: calc((var(--touch-hit, 32px) - 1.45em) / 2); padding-bottom: calc((var(--touch-hit, 32px) - 1.45em) / 2); }
-  .log button { min-height: var(--touch-hit, 32px); align-items: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -351,5 +334,5 @@
 }
 @media (prefers-contrast: more) {
   .card, .activity, .task[data-selected] { border-color: var(--ink-muted); }
-  .head small, .month, .mission, .mission small, .taskMeta, .column h3, .activity small, .log time, .sep { color: var(--ink); }
+  .head small, .month, .mission, .mission small, .taskMeta, .column h3, .activity small, .sep { color: var(--ink); }
 }

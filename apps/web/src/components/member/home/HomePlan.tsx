@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 成员首页主区（第六版，样稿 home-layout-v9）：顶行三张同高卡「月历 · Mission · 快捷」，下面 Mission 详情卡、最近进展卡。
+ * 成员首页主区（第六版，样稿 home-layout-v9）：顶行三张同高卡「月历 · Mission · 快捷」，下面 Mission 详情卡。
  * - 只展示 plan，取数在 useHomePlan；计划点的加、改名、删在 usePlanMarks（先画上再发请求）。快捷卡（actions）由外面给，plan 还没读到时也先出。
  * - 按 Mission 归组一律看 activity.missionId（任务卡没确认时 item.mission 为空）。
  * - 选中的 Task 默认是：有本周事项的第一个 Task，没有就第一个 Task，没有 Task 就「未归入 Task」；重取后选中的不在了也回到默认。
@@ -15,7 +15,6 @@ import { AddMarkPopover, EditMarkPopover, type MarkDraft } from "./MarkPopovers"
 import { MissionDetail } from "./MissionDetail";
 import { MissionList } from "./MissionList";
 import { MonthCalendar } from "./MonthCalendar";
-import { RecentProgress } from "./RecentProgress";
 import { LOOSE, TaskList, hasInfo } from "./TaskList";
 import { isPending, usePlanMarks } from "./usePlanMarks";
 import type { Navigate } from "./planFormat";
@@ -136,12 +135,12 @@ export function HomePlan({ plan, actions, onNavigate }: { plan: THomePlanRespons
               onInfo={(next) => setPopover(next ? { kind: "info" } : null)} />
           ) : null}
           activities={shown}
+          today={plan.today}
           weekStart={plan.weekStart}
           weekEnd={plan.weekEnd}
           missionOf={focus === null ? missionOf : undefined}
           onNavigate={onNavigate}
         />
-        <RecentProgress activities={plan.activities} today={plan.today} onNavigate={onNavigate} />
       </>}
     </div></div>
   );

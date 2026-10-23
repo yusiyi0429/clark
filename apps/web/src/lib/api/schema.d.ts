@@ -9166,6 +9166,8 @@ export interface components {
             missionId: string | null;
             column: "done" | "week" | "later";
             overdue: boolean;
+            lastActivityAt: string;
+            idleDays: number | null;
         };
         HomePlanResponse: {
             period: string;
@@ -9259,6 +9261,8 @@ export interface components {
                 missionId: string | null;
                 column: "done" | "week" | "later";
                 overdue: boolean;
+                lastActivityAt: string;
+                idleDays: number | null;
             }[];
         };
         CreatePlanMarkRequest: {

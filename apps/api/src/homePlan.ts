@@ -4,7 +4,7 @@ import { listPlanItems, milestoneDate, type PlanItem } from "./monthPlan.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { listPlanMarks } from "./planMarks.js";
 import { readPlanTasks, type PlanTaskSource } from "./planTasks.js";
-import { monthDays, weekOf } from "./workCalendar.js";
+import { isWorkday, monthDays, weekOf } from "./workCalendar.js";
 import { shanghaiDate } from "./workdays.js";
 
 /** Mission 颜色按列表里的顺序取，第 5 个起循环。 */
@@ -25,11 +25,27 @@ async function ownMissions(q: Query, ownerId: string, current: string): Promise<
   return { period: previous, fallbackFrom: previous, rows: (await q(select, [ownerId, previous])).rows as MissionRow[] };
 }
 
+/** 进行中的事项最近一次动静之后过了几个工作日算停滞（只看有没有动静，和战场进展红线的「核实过的进展」是两回事）。 */
+const IDLE_WORKDAYS = 3;
+const DAY_MS = 86_400_000;
+
+/** 最近一次动静的时间，和停滞时那天到今天的自然日数（没停滞为 null）。已提交等验收的球在验收人那边，不算停滞。 */
+function activitySignal(item: PlanItem["item"], today: string): Pick<THomePlanActivity, "lastActivityAt" | "idleDays"> {
+  const lastActivityAt = item.latestProgress?.createdAt ?? item.createdAt;
+  if (item.status !== "in_progress" || item.awaitingAcceptance) return { lastActivityAt, idleDays: null };
+  const last = shanghaiDate(new Date(lastActivityAt));
+  let workdays = 0;
+  for (let ms = Date.parse(`${last}T00:00:00Z`) + DAY_MS, end = Date.parse(`${today}T00:00:00Z`); ms <= end; ms += DAY_MS)
+    if (isWorkday(new Date(ms).toISOString().slice(0, 10))) workdays += 1;
+  const days = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${last}T00:00:00Z`)) / DAY_MS);
+  return { lastActivityAt, idleDays: workdays >= IDLE_WORKDAYS ? days : null };
+}
+
 /**
  * 已完成；挂在之前月份 Mission 下没做完的放本周、算逾期；
  * 之后＝开始在本周之后，或还没开始、没写开始日、截止在本周之后或没写；其余都在本周，截止早于本周一的算逾期。
  */
-function placeActivity({ item, missionId }: PlanItem, weekStart: string, weekEnd: string, earlierMission: boolean): THomePlanActivity {
+function placeActivity({ item, missionId }: PlanItem, weekStart: string, weekEnd: string, earlierMission: boolean): Pick<THomePlanActivity, "item" | "missionId" | "column" | "overdue"> {
   if (item.status === "done") return { item, missionId, column: "done", overdue: false };
   if (earlierMission) return { item, missionId, column: "week", overdue: true };
   if ((item.startDate !== null && item.startDate > weekEnd) ||
@@ -66,5 +82,6 @@ export async function readHomePlan(q: Query, person: { personId: string }, now: 
   ]);
   const shown = new Set(rows.map((m) => m.id));
   return { period, fallbackFrom, today, weekStart, weekEnd, days, missions, gates, marks, tasks,
-    activities: items.map((entry) => placeActivity(entry, weekStart, weekEnd, entry.missionId !== null && !shown.has(entry.missionId))) };
+    activities: items.map((entry) => ({ ...placeActivity(entry, weekStart, weekEnd, entry.missionId !== null && !shown.has(entry.missionId)),
+      ...activitySignal(entry.item, today) })) };
 }

@@ -50680,7 +50680,9 @@
           "item",
           "missionId",
           "column",
-          "overdue"
+          "overdue",
+          "lastActivityAt",
+          "idleDays"
         ],
         "properties": {
           "item": {
@@ -51091,6 +51093,21 @@
           },
           "overdue": {
             "type": "boolean"
+          },
+          "lastActivityAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "idleDays": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -51307,7 +51324,9 @@
                 "item",
                 "missionId",
                 "column",
-                "overdue"
+                "overdue",
+                "lastActivityAt",
+                "idleDays"
               ],
               "properties": {
                 "item": {
@@ -51718,6 +51737,21 @@
                 },
                 "overdue": {
                   "type": "boolean"
+                },
+                "lastActivityAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "idleDays": {
+                  "anyOf": [
+                    {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
