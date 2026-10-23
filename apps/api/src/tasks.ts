@@ -29,7 +29,7 @@ type StoredAcceptance = Omit<TTaskAcceptance, "by"> & { by: string };
 const TASK_SELECT = `SELECT t.id::text,t.version,t.title,t.status,t.created_by,t.start_date::text AS start_date,
  t.due_date::text AS due_date,t.done_definition,t.judgment,t.judgment_at,t.return_reason,t.origin_meeting_id::text,
  t.source_quote,mt.title AS meeting_title,mt.lead_dri_id,t.owner_id,t.mission_id,t.plan_task_id,t.step_order,
- CASE WHEN r.status='confirmed' THEN m.title ELSE NULL END AS mission_title,c.id::text AS card_id,r.period,b.name AS battlefield_name,
+ m.title AS mission_title,c.id::text AS card_id,m.period,COALESCE(b.name,mb.name,cap.name,'') AS battlefield_name,
  (SELECT count(*)::int FROM tasks s WHERE s.mission_id=t.mission_id) AS steps,
  prev.id::text AS previous_id,prev.title AS previous_title,prev.status AS previous_status,
  ARRAY(SELECT tm.person_id FROM task_members tm WHERE tm.task_id=t.id AND tm.role='collaborator' AND tm.left_at IS NULL ORDER BY tm.added_at,tm.person_id) AS collaborators,
@@ -41,6 +41,8 @@ const TASK_SELECT = `SELECT t.id::text,t.version,t.title,t.status,t.created_by,t
  LEFT JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id
  LEFT JOIN mission_rounds r ON r.id=c.round_id
  LEFT JOIN battlefield_config b ON b.id=r.battlefield_id
+ LEFT JOIN battlefield_config mb ON mb.id=m.battlefield_ids->>0
+ LEFT JOIN capability_config cap ON cap.id=m.capability_id
  LEFT JOIN tasks prev ON prev.mission_id=t.mission_id AND prev.step_order=t.step_order-1
  LEFT JOIN LATERAL (SELECT body,source,author_id,created_at FROM task_progress WHERE task_id=t.id ORDER BY created_at DESC,id DESC LIMIT 1) lp ON true`;
 
@@ -50,7 +52,7 @@ function projectTask(row: TaskRow, names: Map<string, string>): TTaskView {
   return {
     id: row.id, version: row.version, title: row.title, status: row.status, source: row.created_by,
     startDate: row.start_date, dueDate: row.due_date, doneDefinition: row.done_definition,
-    mission: row.mission_id && row.card_id && row.period && row.mission_title && row.step_order
+    mission: row.mission_id && row.period && row.mission_title && row.step_order
       ? { missionId: row.mission_id, title: row.mission_title, cardId: row.card_id, period: row.period,
           battlefieldName: row.battlefield_name ?? "", step: row.step_order, steps: row.steps ?? 1 } : null,
     waitingOn: row.previous_id && row.previous_status !== "done" ? { taskId: row.previous_id, title: row.previous_title! } : null,
@@ -126,19 +128,22 @@ export const validDate = (value:string):boolean => {
 const validDates = (start: string | null, due: string | null) =>
   (!start || validDate(start)) && (!due || validDate(due)) && (!start || !due || start <= due);
 
-/** 归属校验与计划共用；卡必须属于本人且该月轮次已经确定。 */
+/**
+ * 本人能挂执行事项的 Mission：和首页计划同一口径——本人的、不是占位、月份未过，不要求任务卡已确认
+ * （10 月的 Mission 从本体导入，没有任务卡）。战场名取任务卡轮次的战场，没有卡时取 Mission 的第一个战场，再没有取能力域名。
+ */
+const AVAILABLE_MISSIONS = `SELECT m.id,m.code,m.title,m.period,COALESCE(rb.name,mb.name,cap.name,'') AS battlefield FROM missions m
+  LEFT JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id LEFT JOIN mission_rounds r ON r.id=c.round_id
+  LEFT JOIN battlefield_config rb ON rb.id=r.battlefield_id LEFT JOIN battlefield_config mb ON mb.id=m.battlefield_ids->>0
+  LEFT JOIN capability_config cap ON cap.id=m.capability_id
+  WHERE m.owner_id=$1 AND NOT m.placeholder AND m.period >= $2`;
+type AvailableMission = { id: string; code: string; title: string; period: string; battlefield: string };
 export async function missionAvailable(q: Query, ownerId: string, missionId: string, now: Date): Promise<boolean> {
-  const result = await q(`SELECT 1 FROM missions m JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id
-    JOIN mission_rounds r ON r.id=c.round_id WHERE m.id=$1 AND c.owner_id=$2 AND r.status='confirmed' AND r.period >= $3`,
-  [missionId, ownerId, companyPeriod(now)]);
-  return !!result.rowCount;
+  return !!(await q(`${AVAILABLE_MISSIONS} AND m.id=$3`, [ownerId, companyPeriod(now), missionId])).rowCount;
 }
 /** 本人此刻能挂执行事项的 Mission（与 missionAvailable 同一口径）。 */
-export async function listAvailableMissions(q: Query, ownerId: string, now: Date): Promise<{ id: string; code: string; title: string; battlefield: string }[]> {
-  return (await q(`SELECT m.id,m.code,m.title,b.name AS battlefield FROM missions m JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id
-    JOIN mission_rounds r ON r.id=c.round_id JOIN battlefield_config b ON b.id=r.battlefield_id
-    WHERE c.owner_id=$1 AND r.status='confirmed' AND r.period >= $2 ORDER BY r.period,c.sort_order,m.code,m.id`,
-  [ownerId, companyPeriod(now)])).rows as { id: string; code: string; title: string; battlefield: string }[];
+export async function listAvailableMissions(q: Query, ownerId: string, now: Date): Promise<AvailableMission[]> {
+  return (await q(`${AVAILABLE_MISSIONS} ORDER BY m.period,m.code,m.id`, [ownerId, companyPeriod(now)])).rows as AvailableMission[];
 }
 export async function renumberMission(client: PoolClient, missionId: string): Promise<void> {
   await client.query(`WITH numbered AS (SELECT id,row_number() OVER (ORDER BY step_order NULLS LAST,created_at,id)::int AS ord
@@ -357,10 +362,8 @@ export async function getTaskDetail(q: Query, taskId: string, viewerId: string, 
   const row = (await getTaskRow(q,taskId))!;
   const owner = row.owner_id === viewerId;
   const note = owner ? null : (await q("SELECT note,updated_at FROM task_notes WHERE task_id=$1 AND person_id=$2",[taskId,viewerId])).rows[0] as { note: string; updated_at: Date } | undefined;
-  const missionOptions = owner ? (await q(`SELECT m.id AS "missionId",m.title,b.name AS "battlefieldName",r.period FROM missions m
-    JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id JOIN mission_rounds r ON r.id=c.round_id
-    JOIN battlefield_config b ON b.id=r.battlefield_id WHERE c.owner_id=$1 AND r.status='confirmed' AND r.period >= $2 ORDER BY r.period,m.code,m.id`,
-  [viewerId,companyPeriod(now)])).rows : [];
+  const missionOptions = owner ? (await listAvailableMissions(q,viewerId,now))
+    .map((m)=>({ missionId:m.id,title:m.title,battlefieldName:m.battlefield,period:m.period })) : [];
   const excluded = new Set([row.owner_id,...row.collaborators]);
   const collaboratorOptions = owner ? [...names].filter(([id])=>!excluded.has(id) && invitable.has(id)).map(([id])=>person(id,names)) : [];
   return { task:projectTask(row,names),judgment:row.judgment,judgmentAt:row.judgment_at?.toISOString() ?? null,

@@ -68,8 +68,8 @@ function Identity({ detail, onInvite }: { detail: Detail; onInvite: () => void }
   const start = dateLabel(task.startDate);
   const early = acceptance && task.dueDate ? daysBeforeDue(acceptance.at, task.dueDate) : null;
   return <section className={`${s.paneBlock} ${c.identity}`} aria-label="这件事">
-    {task.mission ? owner
-      ? <Button variant="ghost" className={`${s.longLink} ${c.missionLink}`} onPress={() => workspace.navigate(`/me/mission-cards/${encodeURIComponent(task.mission!.cardId)}`)}>{task.mission.title}<ArrowUpRight size={15} aria-hidden /></Button>
+    {task.mission ? owner && task.mission.cardId
+      ? <Button variant="ghost" className={`${s.longLink} ${c.missionLink}`} onPress={() => workspace.navigate(`/me/mission-cards/${encodeURIComponent(task.mission!.cardId!)}`)}>{task.mission.title}<ArrowUpRight size={15} aria-hidden /></Button>
       : <p className={c.missionText}>{task.mission.title}</p>
       : <div className={s.paneRow}><StatusBadge tone="info"><span className={s.sourceBadge}>{taskSourceLabel(task)}</span></StatusBadge></div>}
     <p className={s.paneNote}>{task.mission?.battlefieldName || "未关联战场"} · {owner ? "你在推进" : `${task.owner.name}在推进`}</p>

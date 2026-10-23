@@ -101,7 +101,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
   const missionsWithTasks = async (personId: string) => {
     const missions = await listAvailableMissions(deps.q, personId, deps.now());
     const tasks = await readPlanTasks(deps.planTasks, missions.map(({ id, code }) => ({ id, code })));
-    return missions.map(({ code: _code, ...mission }) => ({ ...mission,
+    return missions.map(({ code: _code, period: _period, ...mission }) => ({ ...mission,
       tasks: tasks.filter((task) => task.missionId === mission.id).map(({ taskId, name }) => ({ taskId, name })) }));
   };
   const initialAccess = access(deps.initialPerson);
