@@ -15,6 +15,10 @@
   #verdict[data-state="partial"] { color:var(--bad); border-color:#efc2bd; }
   .bar { display:flex; gap:8px; margin-bottom:12px; }
   button { font:inherit; padding:6px 14px; border-radius:10px; border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer; }
+  .bar { align-items:center; }
+  #copied { color:var(--muted); font-size:14px; }
+  #text { display:block; width:100%; box-sizing:border-box; min-height:140px; margin-bottom:12px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; font:13px/1.5 ui-monospace, Consolas, monospace; }
+  #text[hidden] { display:none; }
   table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); border-radius:12px; overflow:hidden; font-size:14px; }
   th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
   th { color:var(--muted); font-weight:500; background:#fafbfc; }
@@ -27,9 +31,10 @@
   <h1>按键检测</h1>
   <p>先点一下这页空白处，再按键。最新的在最上面。</p>
   <div id="verdict">还没收到按键</div>
-  <div class="bar"><button id="clear" type="button">清空</button></div>
+  <div class="bar"><button id="clear" type="button">清空</button><button id="copy" type="button">复制记录</button><span id="copied"></span></div>
+  <textarea id="text" readonly hidden></textarea>
   <table>
-    <thead><tr><th>时间</th><th>动作</th><th>key</th><th>code</th><th>同时按着</th></tr></thead>
+    <thead><tr><th>时间</th><th>动作</th><th>key</th><th>code</th><th>keyCode</th><th>同时按着</th></tr></thead>
     <tbody id="rows"></tbody>
   </table>
 </main>
@@ -38,8 +43,11 @@
   const verdict = document.getElementById("verdict");
   const t0 = performance.now();
   let sawCtrl = false, sawWin = false, sawCombo = false;
-  function stamp() { return ((performance.now() - t0) / 1000).toFixed(2) + "s"; }
+  /** 按发生顺序的纯文本记录，「复制记录」用。 */
+  const lines = [];
+  function stamp() { return ((performance.now() - t0) / 1000).toFixed(3) + "s"; }
   function add(cells, cls) {
+    lines.push(cells.filter(Boolean).join(" | "));
     const tr = document.createElement("tr");
     if (cls) tr.className = cls;
     for (const text of cells) { const td = document.createElement("td"); td.textContent = text; tr.appendChild(td); }
@@ -56,17 +64,27 @@
       if (e.key === "Control") sawCtrl = true;
       if (e.key === "Meta" || e.key === "OS") sawWin = true;
       if (combo) sawCombo = true;
-      add([stamp(), type + (e.repeat ? "（重复）" : ""), e.key === " " ? "空格" : e.key, e.code, held], combo ? "combo" : "");
+      add([stamp(), type + (e.repeat ? "（重复）" : ""), e.key === " " ? "空格" : e.key === "" ? "（空）" : e.key, e.code || "（空）", String(e.keyCode), held], combo ? "combo" : "");
       update();
     };
   }
   window.addEventListener("keydown", onKey("按下"), true);
   window.addEventListener("keyup", onKey("松开"), true);
-  window.addEventListener("blur", () => add([stamp(), "窗口失去焦点", "", "", ""], "focus"));
-  window.addEventListener("focus", () => add([stamp(), "窗口回到前台", "", "", ""], "focus"));
+  window.addEventListener("blur", () => add([stamp(), "窗口失去焦点", "", "", "", ""], "focus"));
+  window.addEventListener("focus", () => add([stamp(), "窗口回到前台", "", "", "", ""], "focus"));
+  document.addEventListener("compositionstart", () => add([stamp(), "输入法开始组词", "", "", "", ""], "focus"), true);
+  const text = document.getElementById("text");
+  const copied = document.getElementById("copied");
   document.getElementById("clear").addEventListener("click", () => {
-    rows.textContent = ""; sawCtrl = sawWin = sawCombo = false;
+    rows.textContent = ""; lines.length = 0; sawCtrl = sawWin = sawCombo = false; text.hidden = true; copied.textContent = "";
     verdict.removeAttribute("data-state"); verdict.textContent = "还没收到按键";
+  });
+  document.getElementById("copy").addEventListener("click", async () => {
+    text.value = [verdict.textContent, ...lines].join("\n");
+    text.hidden = false;
+    text.select();
+    try { await navigator.clipboard.writeText(text.value); copied.textContent = "已复制，直接粘贴给 Claude"; }
+    catch { copied.textContent = "已选中下面的文字，按 Ctrl+C 复制"; }
   });
 </script>
 </body>

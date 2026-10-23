@@ -124,6 +124,20 @@ describe("唤醒输入框（外壳）", () => {
     expect(field.focus).toHaveBeenCalledOnce();
   });
 
+  it("按真机记录重放：Win 按下 16 毫秒后微信补发假按键（Unidentified，keyCode 252）——不打断计时，0.3 秒照样唤醒", () => {
+    const { press, release, wait } = setup();
+    const mask = { key: "Unidentified", code: "", metaKey: true, keyCode: 252 };
+    press(WIN);
+    wait(16);
+    press(mask);
+    release(mask);
+    wait(283);
+    expect(h.ui!.historyOpen).toBe(false);
+    wait(1);
+    expect(h.ui!.historyOpen).toBe(true);
+    expect(field.focus).toHaveBeenCalledOnce();
+  });
+
   it("按住 Win 时再按 Shift（微信免提）、按住不放的自动重复：照样唤醒，只唤醒一次", () => {
     const { press, wait } = setup();
     press(WIN);

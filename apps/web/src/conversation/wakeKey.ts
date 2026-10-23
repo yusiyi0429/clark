@@ -31,8 +31,11 @@ function otherEditableFocused(active: FocusLike): boolean {
 }
 
 const isWin = (key: string) => key === "Meta" || key === "OS";
-/** 修饰键：按住 Win 时再按它们（微信免提的 Shift、没被拦住的 Ctrl）不算「按了别的键」。 */
-const isModifier = (key: string) => isWin(key) || key === "Control" || key === "Shift" || key === "Alt";
+/**
+ * 按住 Win 时不算「按了别的键」的：修饰键（微信免提的 Shift、没被拦住的 Ctrl），以及说不出名字的键——微信为了不让开始菜单
+ * 弹出来，在 Win 按下后、松开前各补发一个（实测 keyCode 252，浏览器里是 Unidentified）。
+ */
+const keepsWinHold = (key: string) => isWin(key) || key === "Control" || key === "Shift" || key === "Alt" || key === "Unidentified";
 
 /** 这一下是不是 F13 / Ctrl+Shift+Space。按住不放的自动重复、组词中不算。 */
 export function isWakeKey(event: WakeKeyEvent, active: FocusLike): boolean {
@@ -82,7 +85,7 @@ export function useWakeKey(onWake: () => void) {
         }
         return;
       }
-      if (!isModifier(event.key)) cancelHold();
+      if (!keepsWinHold(event.key)) cancelHold();
       if (event.defaultPrevented || !isWakeKey(event, active) || modalOpen(document)) return;
       event.preventDefault();
       wake();
