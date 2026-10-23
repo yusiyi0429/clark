@@ -96,12 +96,19 @@ describe("执行事项封面", () => {
     expect(text).toContain("添加"); expect(text).not.toContain("文件也可以直接拖进这一页。");
     expect(statusOf(html)).toBe("进行中");
   });
-  it("执行过程默认折叠成一行：几条进展、最近一句；判断不再单独成块", () => {
-    const entry = { id: "00000000-0000-4000-8000-000000000001", taskId: "task-1", author: { personId: "lin", name: "林晓" }, source: "claude" as const, body: "完成测试\n附了 PR", links: [{ url: "https://example.com/pr", title: "证据" }], createdAt: "2026-10-05T06:20:00Z" };
-    const html = screen(detail("collaborator", { progress: [entry], judgment: "先验证两家", judgmentAt: "2026-10-03T02:05:00.000Z" }));
-    expect(visible(html)).toContain("执行过程 · 1 条进展 · 最近：完成测试 附了 PR");
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).not.toContain("先验证两家"); expect(html).not.toContain("https://example.com/pr");
+  it("执行过程默认展开：一行一条、最新的在前，左边是时间；有链接或不止一行的那条能点开，别的行不能点；判断不显示", () => {
+    const linked = { id: "00000000-0000-4000-8000-000000000001", taskId: "task-1", author: { personId: "lin", name: "林晓" }, source: "claude" as const, body: "完成测试\n附了 PR", links: [{ url: "https://example.com/pr", title: "证据" }], createdAt: "2026-10-05T06:20:00Z" };
+    const plain = { id: "00000000-0000-4000-8000-000000000002", taskId: "task-1", author: { personId: "sun", name: "孙铭泽" }, source: "web" as const, body: "约好两家客户", links: [], createdAt: "2026-10-04T08:39:00Z" };
+    const html = screen(detail("collaborator", { progress: [linked, plain], judgment: "先验证两家", judgmentAt: "2026-10-03T02:05:00.000Z" }));
+    const text = visible(html);
+    expect(text).toContain("执行过程2 条");
+    expect(text.indexOf("10/5 14:20完成测试")).toBeGreaterThan(-1);
+    expect(text.indexOf("10/5 14:20完成测试")).toBeLessThan(text.indexOf("10/4 16:39约好两家客户"));
+    // 带链接的那条是收着的按钮，展开前看不到第二行和链接；没有细节的那条不是按钮。
+    expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>.*?完成测试/);
+    expect(html).not.toMatch(/<button[^>]*>(?:(?!<\/button>).)*约好两家客户/);
+    expect(text).not.toContain("附了 PR"); expect(html).not.toContain("https://example.com/pr");
+    expect(html).not.toContain("先验证两家"); expect(text).not.toContain("判断");
   });
   it("外部工具提交了验收：推进人看到「等你验收」，验收变成实心主按钮；协作者看到「待验收」，没有验收、⋯ 和让 Agent 推进", () => {
     const submitted = { task: task("task-1", { status: "in_progress", awaitingAcceptance: true }) };
@@ -123,7 +130,7 @@ describe("执行事项封面", () => {
     const meeting = task("meeting", { source: "meeting", origin: { type: "meeting", meetingId: "m-1", meetingTitle: "周会", quote: "核对试点" } });
     const owner = screen(detail("owner", { task: meeting }));
     expect(owner).toContain(">退回<"); expect(owner).not.toContain(">删除<");
-    expect(visible(owner)).toContain("执行过程 · 会议原话");
+    expect(visible(owner)).toContain("执行过程写一条进展会议原话 · 周会核对试点");
     expect(screen(detail("collaborator", { task: meeting }))).not.toContain(">退回<");
   });
   it("完成后的封面：验收记录和结论、交付结果大卡、逐条打勾的完成标准；不再有验收，⋯ 里能重新打开", () => {

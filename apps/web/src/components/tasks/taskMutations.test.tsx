@@ -32,6 +32,7 @@ import { CreateTaskScreen } from "./CreateTaskScreen";
 import { CollaboratorsDialog } from "./CollaboratorsDialog";
 import { TaskScreen } from "./TaskScreen";
 import { TaskEditForm } from "./TaskEditForm";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { AcceptDialog } from "./AcceptDialog";
 import a from "./accept-dialog.module.css";
 
@@ -223,27 +224,31 @@ it("⋯ → 编辑：表单只把改过的字段交给保存；页面 PATCH 带�
   const form: unknown[] = [];
   const onSave = vi.fn();
   let fields = render(() => TaskEditForm({ ...(editor.props as Parameters<typeof TaskEditForm>[0]), onSave }), form);
-  (find(fields, (node) => node.props?.label === "这件事的判断 · 可选")!.props!.onChange as (value: string) => void)("更新判断");
+  // 不再有「这件事的判断」；日期用全站的日期选择，不是原生日期框。
+  expect(find(fields, (node) => typeof node.props?.label === "string" && (node.props.label as string).includes("判断"))).toBeUndefined();
+  expect(find(fields, (node) => node.props?.type === "date")).toBeUndefined();
+  (find(fields, (node) => node.type === DatePicker && node.props?.label === "截止日期")!.props!.onChange as (value: string) => void)("2026-10-20");
   fields = render(() => TaskEditForm({ ...(editor.props as Parameters<typeof TaskEditForm>[0]), onSave }), form);
+  expect(find(fields, (node) => node.type === DatePicker && node.props?.label === "计划开始日期")!.props!.max).toBe("2026-10-20");
   (find(fields, (node) => node.props?.children === "保存")!.props!.onPress as () => void)();
-  expect(onSave).toHaveBeenCalledWith({ judgment: "更新判断" });
+  expect(onSave).toHaveBeenCalledWith({ dueDate: "2026-10-20" });
   actions.patch.mockResolvedValue({ data: { ...task, version: 3 } }); actions.get.mockResolvedValue({ data: detail });
-  (editor.props!.onSave as (body: unknown) => void)({ judgment: "更新判断" });
-  await vi.waitFor(() => expect(actions.patch).toHaveBeenCalledWith("/api/me/tasks/{id}", { params: { path: { id: "task-1" } }, body: { version: 2, judgment: "更新判断" } }));
+  (editor.props!.onSave as (body: unknown) => void)({ dueDate: "2026-10-20" });
+  await vi.waitFor(() => expect(actions.patch).toHaveBeenCalledWith("/api/me/tasks/{id}", { params: { path: { id: "task-1" } }, body: { version: 2, dueDate: "2026-10-20" } }));
   expect(actions.put).not.toHaveBeenCalled();
 });
 
-it("编辑表单只交人改过的字段：别处同时改了截止日期，保存判断时不把旧的截止日期盖回去", () => {
+it("编辑表单只交人改过的字段：别处同时改了截止日期，保存完成标准时不把旧的截止日期盖回去", () => {
   const onSave = vi.fn();
   const form: unknown[] = [];
   const opened = detailOf({ task: { ...task, dueDate: "2026-10-12" } }) as Parameters<typeof TaskEditForm>[0]["detail"];
   let fields = render(() => TaskEditForm({ detail: opened, busy: false, onSave, onCancel: vi.fn() }), form);
-  (find(fields, (node) => node.props?.label === "这件事的判断 · 可选")!.props!.onChange as (value: string) => void)("更新判断");
+  (find(fields, (node) => node.props?.label === "完成标准 · 可选")!.props!.onChange as (value: string) => void)("两家客户都确认");
   // 页面在表单开着时重读了一次：截止日期被别处改成了 10/20。
   const latest = detailOf({ task: { ...task, version: 3, dueDate: "2026-10-20" } }) as Parameters<typeof TaskEditForm>[0]["detail"];
   fields = render(() => TaskEditForm({ detail: latest, busy: false, onSave, onCancel: vi.fn() }), form);
   (find(fields, (node) => node.props?.children === "保存")!.props!.onPress as () => void)();
-  expect(onSave).toHaveBeenCalledWith({ judgment: "更新判断" });
+  expect(onSave).toHaveBeenCalledWith({ doneDefinition: "两家客户都确认" });
 });
 
 it("会后事项退回：⋯ → 退回，写原因、再确认，才调用原退回接口", async () => {
@@ -342,20 +347,28 @@ it("「还要继续做」清掉这次提交（DELETE 带版本）；关弹窗不
   expect(actions.delete).toHaveBeenCalledWith("/api/me/tasks/{id}/submission", { params: { path: { id: "task-1" }, query: { version: 2 } } });
 });
 
-it("执行过程展开后：会议原话和推进人的判断置顶，进展写明来源和证据链接", () => {
-  const entry = { id: "00000000-0000-4000-8000-000000000002", taskId: "task-1", author: { personId: "lin", name: "林晓" }, source: "claude", body: "完成测试", links: [{ url: "https://example.com/pr", title: "证据" }], createdAt: "2026-10-05T06:20:00Z" };
+it("执行过程：会议原话置顶、不显示推进人的判断；点有链接的那一行展开全文、来源和证据链接，再点收起", () => {
+  const entry = { id: "00000000-0000-4000-8000-000000000002", taskId: "task-1", author: { personId: "lin", name: "林晓" }, source: "claude", body: "完成测试\n\n两家都跑通了", links: [{ url: "https://example.com/pr", title: "证据" }], createdAt: "2026-10-05T06:20:00Z" };
   const detail = detailOf({ task: { ...task, source: "meeting", origin: { type: "meeting", meetingId: "m-1", meetingTitle: "周会", quote: "下周三前给我" } }, progress: [entry] });
   const cover = coverOf(render(() => TaskScreen({ initialDetail: detail })));
   const process = find((cover.type as (props: unknown) => unknown)(cover.props), (node) => typeof node.type === "function" && (node.type as { name: string }).name === "Process")!;
+  const section = render(() => (process.type as (props: unknown) => unknown)(process.props), []);
+  const text = JSON.stringify(section);
+  expect(text).not.toContain("原判断");
+  expect(text.indexOf("下周三前给我")).toBeGreaterThan(-1);
+  expect(text.indexOf("下周三前给我")).toBeLessThan(text.indexOf('"type":"ol"'));
+  const row = find(section, (node) => typeof node.type === "function" && (node.type as { name: string }).name === "ProgressRow")!;
   const store: unknown[] = [];
-  let tree = render(() => (process.type as (props: unknown) => unknown)(process.props), store);
-  const toggle = find(tree, (node) => node.props?.["aria-controls"] === "task-process")!;
-  expect(toggle.props!["aria-expanded"]).toBe(false);
-  (toggle.props!.onClick as () => void)();
-  tree = render(() => (process.type as (props: unknown) => unknown)(process.props), store);
-  const section = find(tree, (node) => node.props?.id === "task-process")!;
-  const text = JSON.stringify(section.props!.children);
-  expect(text.indexOf("下周三前给我")).toBeLessThan(text.indexOf("原判断"));
-  expect(text.indexOf("原判断")).toBeLessThan(text.indexOf("完成测试"));
-  expect(text).toContain("Claude Code"); expect(text).toContain("https://example.com/pr"); expect(text).toContain("noopener noreferrer");
+  let tree = render(() => (row.type as (props: unknown) => unknown)(row.props), store);
+  const toggle = () => find(tree, (node) => node.props?.["aria-controls"] === `progress-${entry.id}`)!;
+  expect(toggle().props!["aria-expanded"]).toBe(false);
+  expect(JSON.stringify(tree)).not.toContain("https://example.com/pr");
+  (toggle().props!.onClick as () => void)();
+  tree = render(() => (row.type as (props: unknown) => unknown)(row.props), store);
+  expect(toggle().props!["aria-expanded"]).toBe(true);
+  const opened = JSON.stringify(tree);
+  expect(opened).toContain("两家都跑通了"); expect(opened).toContain("Claude Code"); expect(opened).toContain("https://example.com/pr"); expect(opened).toContain("noopener noreferrer");
+  (toggle().props!.onClick as () => void)();
+  tree = render(() => (row.type as (props: unknown) => unknown)(row.props), store);
+  expect(JSON.stringify(tree)).not.toContain("https://example.com/pr");
 });

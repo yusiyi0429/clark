@@ -5,9 +5,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { THomePlanActivity, THomePlanResponse, TTaskView } from "@warmap/contracts";
 
 /**
- * 成员首页的 Mission 卡片与 useHomePlan。
+ * 成员首页主区（HomePlan：月历、Mission、快捷、Mission 详情、最近进展）与 useHomePlan。
  * 没有 jsdom（仓库惯例）：React 的 useState/useRef/useCallback/useEffect 换成按调用顺序记账的版本，renderToStaticMarkup 反复渲染到不再变；
- * 原生元素的 props 从 JSX 运行时截下来，按真实顺序直接调它们的处理器。时间轴换成桩，只收它拿到的 props。
+ * 原生元素的 props 从 JSX 运行时截下来，按真实顺序直接调它们的处理器。月历换成桩，只收它拿到的 props。
  * ts-design 的 Popover 换成按 isOpen 渲染内容的桩（Esc、点外面关由它负责，这里直接调 onOpenChange(false)）；
  * Button 渲染成原生按钮，在 Popover 里又没有 onPress 时按一下就开合（同 DialogTrigger）。
  */
@@ -17,7 +17,7 @@ const h = vi.hoisted(() => ({
   effects: [] as { deps?: readonly unknown[]; cleanup?: unknown }[],
   stateIndex: 0, refIndex: 0, callbackIndex: 0, effectIndex: 0, queued: [] as (() => void)[], dirty: false,
   elements: [] as { type: string; props: Record<string, unknown> }[],
-  timeline: null as Record<string, unknown> | null,
+  calendar: null as Record<string, unknown> | null,
   popovers: [] as { open: boolean; change: (open: boolean) => void }[],
   api: { GET: vi.fn(), POST: vi.fn(), PATCH: vi.fn(), DELETE: vi.fn() },
 }));
@@ -86,12 +86,13 @@ vi.mock("ts-design/primitives", async () => {
   };
   return { Button, Popover };
 });
-vi.mock("./DayTimeline", () => ({ DayTimeline: (props: Record<string, unknown>) => { h.timeline = props; return null; } }));
+vi.mock("./MonthCalendar", () => ({ MonthCalendar: (props: Record<string, unknown>) => { h.calendar = props; return null; } }));
 vi.mock("@/components/tours/StartTaskButton", () => ({ StartTaskButton: () => null }));
 vi.mock("@/lib/api/client", () => ({ browserApi: h.api }));
 
-import { MissionPlanCard } from "./MissionPlanCard";
+import { HomePlan } from "./HomePlan";
 import { HOME_PLAN_CHANGED, useHomePlan } from "./useHomePlan";
+
 
 const item = (id: string, title: string, extra: Partial<TTaskView> = {}): TTaskView => ({
   id, version: 1, title, status: "in_progress", source: "self", startDate: null, dueDate: null, doneDefinition: null,
@@ -101,6 +102,7 @@ const item = (id: string, title: string, extra: Partial<TTaskView> = {}): TTaskV
 });
 const confirmedRef = { missionId: "m1", title: "CEO / DRI Agent 从能用到在用", cardId: "card-1", period: "2026-10", battlefieldName: "天枢", step: 1, steps: 1 };
 const renhao = [{ personId: "renhao", name: "人豪" }];
+const progress = (body: string, createdAt: string) => ({ body, createdAt, source: "web" as const, author: { personId: "sun", name: "孙铭泽" } });
 
 /** 2026 年 10 月，今天 10/22（周四）。a3 的任务卡还没确认（item.mission 为空），按 activity.missionId 仍归 m1。 */
 const plan = (overrides: Partial<THomePlanResponse> = {}): THomePlanResponse => ({
@@ -127,20 +129,20 @@ const plan = (overrides: Partial<THomePlanResponse> = {}): THomePlanResponse => 
     { taskId: "t3", missionId: "m2", name: "Chat 客户版", doneDefinition: null, criteria: [] },
   ],
   activities: [
-    { item: item("a1", "回流方案定稿", { status: "done", dueDate: "2026-10-21", planTaskId: "t1", mission: confirmedRef, collaborators: renhao }), missionId: "m1", column: "done", overdue: false },
+    { item: item("a1", "回流方案定稿", { status: "done", dueDate: "2026-10-21", planTaskId: "t1", mission: confirmedRef, collaborators: renhao, latestProgress: progress("方案定稿", "2026-10-22T03:40:00Z") }), missionId: "m1", column: "done", overdue: false },
     { item: item("a2", "对话架构与分工", { status: "done", dueDate: "2026-10-20", mission: confirmedRef }), missionId: "m1", column: "done", overdue: false },
-    { item: item("a3", "真实会议跑通", { dueDate: "2026-10-24", planTaskId: "t1", collaborators: renhao }), missionId: "m1", column: "week", overdue: false },
-    { item: item("a4", "Chat 服务抽出", { dueDate: "2026-10-16", planTaskId: "t2", mission: confirmedRef }), missionId: "m1", column: "week", overdue: true },
-    { item: item("a5", "客户版演示", { planTaskId: "t3", collaborators: renhao }), missionId: "m2", column: "week", overdue: false },
-    { item: item("a6", "新 Chat 题库打分", { status: "not_started", startDate: "2026-10-27", planTaskId: "t-gone", mission: confirmedRef }), missionId: "m1", column: "later", overdue: false },
-    { item: item("a7", "报销", { dueDate: "2026-10-23" }), missionId: null, column: "week", overdue: false },
+    { item: item("a3", "真实会议跑通", { dueDate: "2026-10-24", planTaskId: "t1", collaborators: renhao, latestProgress: progress("最终评审修复合入，等预发实测", "2026-10-22T05:08:00Z") }), missionId: "m1", column: "week", overdue: false },
+    { item: item("a4", "Chat 服务抽出", { dueDate: "2026-10-16", planTaskId: "t2", mission: confirmedRef, latestProgress: progress("拆出进程", "2026-10-19T02:00:00Z") }), missionId: "m1", column: "week", overdue: true },
+    { item: item("a5", "客户版演示", { planTaskId: "t3", collaborators: renhao, latestProgress: progress("演示稿写完", "2026-10-21T12:26:00Z") }), missionId: "m2", column: "week", overdue: false },
+    { item: item("a6", "新 Chat 题库打分", { status: "not_started", startDate: "2026-10-27", planTaskId: "t-gone", mission: confirmedRef, latestProgress: progress("题库整理", "2026-10-18T02:00:00Z") }), missionId: "m1", column: "later", overdue: false },
+    { item: item("a7", "报销", { dueDate: "2026-10-23", latestProgress: progress("\n发票交了\n还差一张", "2026-10-20T01:00:00Z") }), missionId: null, column: "week", overdue: false },
   ] satisfies THomePlanActivity[],
   ...overrides,
 });
 
 const event = () => ({ currentTarget: { id: "origin" }, target: { id: "origin" }, preventDefault: vi.fn(), stopPropagation: vi.fn() });
 
-function mount(initial = plan()) {
+function mount(initial: THomePlanResponse | null = plan()) {
   let current = initial;
   const onNavigate = vi.fn();
   h.states = []; h.refs = []; h.callbacks = []; h.effects = [];
@@ -148,11 +150,11 @@ function mount(initial = plan()) {
   const render = () => {
     for (let pass = 0; pass < 8; pass++) {
       h.stateIndex = 0; h.refIndex = 0; h.callbackIndex = 0; h.effectIndex = 0; h.dirty = false; h.queued = []; h.elements = []; h.popovers = [];
-      html = renderToStaticMarkup(<MissionPlanCard plan={current} onNavigate={onNavigate} />);
+      html = renderToStaticMarkup(<HomePlan plan={current} actions={<span data-actions="quick" />} onNavigate={onNavigate} />);
       h.queued.forEach((run) => run());
       if (!h.dirty) return html;
     }
-    throw new Error("卡片没有稳定下来");
+    throw new Error("首页没有稳定下来");
   };
   render();
   const find = (predicate: (props: Props) => boolean) => h.elements.find((element) => predicate(element.props))?.props;
@@ -177,7 +179,7 @@ function mount(initial = plan()) {
     click: (predicate: (props: Props) => boolean, what: string) => call(get(predicate, what), "onClick"),
     type: (value: string) => call(get((props) => props["data-mark-name"] !== undefined, "名字输入框"), "onChange", { target: { value } }),
     key: (key: string, isComposing = false) => call(get((props) => props["data-mark-name"] !== undefined, "名字输入框"), "onKeyDown", { key, nativeEvent: { isComposing }, preventDefault: vi.fn() }),
-    timeline: (handler: "onAddMark" | "onMoveMark" | "onDeleteMark", ...args: string[]) => { (h.timeline![handler] as (...values: string[]) => void)(...args); return render(); },
+    calendar: (handler: "onAddMark" | "onEditMark", ...args: string[]) => { (h.calendar![handler] as (...values: string[]) => void)(...args); return render(); },
   };
 }
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -185,272 +187,281 @@ const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 /** 一栏的整段（栏不嵌套）。 */
 const column = (html: string, name: "done" | "week" | "later") => html.match(new RegExp(`<section[^>]*data-column="${name}"[^>]*>.*?</section>`))?.[0] ?? "";
 const cardsIn = (html: string, name: "done" | "week" | "later") => [...column(html, name).matchAll(/data-activity="([^"]+)"/g)].map((match) => match[1]);
+const allCards = (html: string) => [...cardsIn(html, "done"), ...cardsIn(html, "week"), ...cardsIn(html, "later")].sort();
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+/** 详情卡头部（h2）的字。 */
+const heading = (html: string) => text(html.match(/<section[^>]*aria-label="Mission 详情"[^>]*>.*?<\/h2>/)?.[0] ?? "").trim();
+/** 一张 Task 小卡（按 data-task）的整段。 */
+const taskCard = (html: string, id: string) => html.match(new RegExp(`<button[^>]*data-task="${id}"[^>]*>.*?</button>`))?.[0] ?? "";
+/** 一个 Mission 项的字。 */
+const missionText = (html: string, id: string) => text(html.match(new RegExp(`<button[^>]*data-mission="${id}"[^>]*>.*?</button>`))?.[0] ?? "").trim();
 const ok = (data: unknown = undefined) => ({ data, response: { ok: true, status: 200 } });
 
 beforeEach(() => {
   vi.resetAllMocks();
-  h.timeline = null;
+  h.calendar = null;
   vi.stubGlobal("window", { dispatchEvent: vi.fn() });
 });
 afterEach(() => vi.unstubAllGlobals());
 
-/** Mission 切换里一项的 props。 */
+/** Mission 卡里一项的 props。 */
 const tab = (view: ReturnType<typeof mount>, id: string) => view.find((props) => props["data-mission"] === id)!;
 
-describe("MissionPlanCard：Mission 切换", () => {
-  it("卡片里从上到下：时间轴、Mission 切换、Task 行、三栏（切换紧挨着它管的东西）", () => {
+describe("HomePlan：版式", () => {
+  it("从前到后：快捷、月历、Mission、Mission 详情、最近进展（手持一列时就是这个顺序）", () => {
     const html = mount().html;
     const at = (needle: string) => {
       const index = html.indexOf(needle);
       expect(index, needle).toBeGreaterThan(-1);
       return index;
     };
-    const order = [at("_timeline_"), at('role="tablist"'), at("data-task-row"), at('data-column="done"')];
+    const order = [at('data-actions="quick"'), at('aria-label="月历"'), at('aria-label="本月 Mission"'), at('aria-label="Mission 详情"'), at('aria-label="最近进展"')];
     expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 
-  it("页签的读屏语义：tablist 里每项是 tab，选中的 aria-selected", () => {
+  it("计划还没读到：快捷卡照样出，其余不出", () => {
+    const html = mount(null).html;
+    expect(html).toContain('data-actions="quick"');
+    expect(html).not.toMatch(/aria-label="(月历|本月 Mission|Mission 详情|最近进展)"/);
+  });
+
+  it("去掉的东西：没有横条时间轴、Task 胶囊行、「全部 Task」、「Mission 卡 ›」", () => {
     const view = mount();
-    expect(view.html).toMatch(/role="tablist" aria-label="Mission"/);
-    for (const id of ["all", "m1", "m2"]) expect(tab(view, id).role).toBe("tab");
-    expect(tab(view, "all")["aria-selected"]).toBe(true);
-    expect(tab(view, "m1")["aria-selected"]).toBe(false);
     view.mission("m1");
-    expect(tab(view, "all")["aria-selected"]).toBe(false);
-    expect(tab(view, "m1")["aria-selected"]).toBe(true);
+    expect(view.html).not.toMatch(/本月时间轴|data-task-row|全部 Task|Mission 卡 ›/);
   });
+});
 
-  it("只靠字号分选中：选「全部」时它大、其余 Mission 中号；选 m1 时 m1 大、其余（含「全部」）小", () => {
+describe("HomePlan：月历", () => {
+  it("月历拿到本月的日子、本周、关口、计划点、Mission 颜色；聚焦跟着 Mission 卡走", () => {
     const view = mount();
-    expect([tab(view, "all"), tab(view, "m1"), tab(view, "m2")].map((props) => props["data-size"])).toEqual(["large", "medium", "medium"]);
+    expect(h.calendar).toMatchObject({ period: "2026-10", today: "2026-10-22", weekStart: "2026-10-19", weekEnd: "2026-10-25", current: true, focus: null });
+    const colorOf = h.calendar!.colorOf as (id: string) => string;
+    expect([colorOf("m1"), colorOf("m2")]).toEqual(["#2f63b0", "#2f8a7a"]);
     view.mission("m1");
-    expect([tab(view, "all"), tab(view, "m1"), tab(view, "m2")].map((props) => props["data-size"])).toEqual(["small", "large", "small"]);
-    view.mission("all");
-    expect(tab(view, "all")["data-size"]).toBe("large");
+    expect(h.calendar!.focus).toBe("m1");
   });
 
-  it("「全部」后面是 Mission 个数；每个 Mission 带色点，悬停看全名", () => {
+  it("回退显示上个月：月历 current=false（不画本周、不写还剩几个工作日），Mission 标题旁写「9 月」", () => {
+    const html = mount(plan({ period: "2026-09", fallbackFrom: "2026-09", days: [{ date: "2026-09-30", workday: true }] })).html;
+    expect(h.calendar!.current).toBe(false);
+    expect(html).toMatch(/<h2>Mission<span class="[^"]*_month_[^"]*">9 月<\/span><\/h2>/);
+    expect(mount().html).not.toMatch(/\d+ 月<\/span>/);
+    expect(h.calendar!.current).toBe(true);
+  });
+});
+
+describe("HomePlan：Mission 卡", () => {
+  it("竖排的一组按钮：第一行「全部」写执行事项件数，每个 Mission 写完整名字和下一个关口（今天及以后最近的那个）", () => {
     const view = mount();
-    expect(view.html).toMatch(/data-mission="all"[^>]*><span class="[^"]*_name_[^"]*">全部<\/span><span class="[^"]*_total_[^"]*">2<\/span><\/button>/);
-    expect(view.html).toMatch(/data-mission="m2"[^>]*><i class="[^"]*_dot_[^"]*" style="--c:#2f8a7a"/);
-    expect(tab(view, "m1").title).toBe("CEO / DRI Agent 从能用到在用");
+    expect(view.html).toMatch(/role="group" aria-label="Mission"/);
+    expect(view.html).not.toMatch(/role="tab(list)?"/);
+    expect(missionText(view.html, "all")).toBe("全部 7 件");
+    expect(missionText(view.html, "m1")).toBe("CEO / DRI Agent 从能用到在用 10/28 上线");
+    expect(missionText(view.html, "m2")).toBe("灯塔首次会面 10/22 首次会面");
+    for (const id of ["all", "m1", "m2"]) expect(tab(view, id).type).toBe("button");
   });
 
-  it("默认「全部」：三栏的卡片数等于 activities 按 column 分组的数目；栏名照写", () => {
+  it("色点和选中底色用 Mission 色（行内 --c），「全部」是中性灰；名字本身不带颜色", () => {
     const view = mount();
-    expect(tab(view, "all")["aria-selected"]).toBe(true);
+    expect(String((tab(view, "m2").style as Record<string, string>)["--c"])).toBe("#2f8a7a");
+    expect(String((tab(view, "all").style as Record<string, string>)["--c"])).toBe("var(--ink-faint)");
+    expect(view.html).not.toMatch(/_missionName_[^"]*" style=/);
+  });
+
+  it("默认「全部」；点哪个选哪个（aria-pressed，和 Task 列一样）", () => {
+    const view = mount();
+    expect(tab(view, "all")["aria-pressed"]).toBe(true);
+    view.mission("m1");
+    expect(tab(view, "all")["aria-pressed"]).toBe(false);
+    expect(tab(view, "m1")["aria-pressed"]).toBe(true);
+  });
+
+  it("没有关口的 Mission 不写右边小字；关口都过去了也不写", () => {
+    const html = mount(plan({ gates: [{ missionId: "m1", date: "2026-10-12", label: "需求冻结" }] })).html;
+    expect(missionText(html, "m1")).toBe("CEO / DRI Agent 从能用到在用");
+    expect(missionText(html, "m2")).toBe("灯塔首次会面");
+  });
+});
+
+describe("HomePlan：选「全部」时的详情", () => {
+  it("头部写「全部 Mission」，不出 Task 列；三栏是全部事项", () => {
+    const view = mount();
+    expect(heading(view.html)).toBe("全部 Mission");
+    expect(view.html).not.toContain("data-task-list");
     expect(cardsIn(view.html, "done")).toHaveLength(2);
     expect(cardsIn(view.html, "week")).toHaveLength(4);
     expect(cardsIn(view.html, "later")).toHaveLength(1);
     expect(text(view.html)).toContain("已完成 · 2");
     expect(text(view.html)).toContain("本周 10/19–10/25");
-    expect(text(column(view.html, "later"))).toContain("之后");
-    expect(view.html).not.toContain("Mission 卡 ›");
   });
 
-  it("选 Mission m1：只剩 m1 的 Activity（按 activity.missionId，任务卡没确认的也在），出现「Mission 卡 ›」并进 Mission 卡页", () => {
-    const view = mount();
-    view.mission("m1");
-    expect(cardsIn(view.html, "done").sort()).toEqual(["a1", "a2"]);
-    expect(cardsIn(view.html, "week").sort()).toEqual(["a3", "a4"]);
-    expect(cardsIn(view.html, "later")).toEqual(["a6"]);
-    expect(h.timeline!.focus).toBe("m1");
-    expect(view.html).toContain("Mission 卡 ›");
-    view.click((props) => props["data-mission-card"] !== undefined, "Mission 卡 ›");
-    expect(view.onNavigate).toHaveBeenCalledWith("/me/mission-cards/card-1", expect.anything());
+  it("卡片小字写它属于哪个 Mission；不属于任何 Mission 的写「不属于 Mission」", () => {
+    const html = mount().html;
+    const small = (id: string) => text(html.match(new RegExp(`<button[^>]*data-activity="${id}"[^>]*>.*?</button>`))![0].match(/<small[^>]*>.*<\/small>/)?.[0] ?? "").trim();
+    expect(small("a3")).toBe("CEO / DRI Agent 从能用到在用 · 10/24");
+    expect(small("a5")).toBe("灯塔首次会面");
+    expect(small("a7")).toBe("不属于 Mission · 10/23");
   });
 
-  it("聚焦的 Mission 没有 cardId：不出「Mission 卡 ›」；点回「全部」恢复所有 Activity", () => {
-    const view = mount();
-    view.mission("m2");
-    expect(cardsIn(view.html, "week")).toEqual(["a5"]);
-    expect(view.html).not.toContain("Mission 卡 ›");
-    view.mission("all");
-    expect(h.timeline!.focus).toBeNull();
-    expect(cardsIn(view.html, "week")).toHaveLength(4);
-  });
-
-  it("挂在之前月份 Mission 下没做完的（那个 Mission 不在行上）：只在「全部」里，聚焦哪个 Mission 都不出现", () => {
-    const earlier = { item: item("a8", "九月没收尾", { dueDate: "2026-09-28" }), missionId: "sep-1", column: "week", overdue: true } satisfies THomePlanActivity;
+  it("挂在之前月份 Mission 下没做完的：只在「全部」里，小字写它任务卡上的 Mission 名", () => {
+    const earlier = { item: item("a8", "九月没收尾", { dueDate: "2026-09-28", mission: { ...confirmedRef, missionId: "sep-1", title: "九月的 Mission" } }), missionId: "sep-1", column: "week", overdue: true } satisfies THomePlanActivity;
     const view = mount(plan({ activities: [...plan().activities, earlier] }));
-    expect(cardsIn(view.html, "week")).toContain("a8");
-    expect(text(view.html)).toContain("其他 4");
+    expect(text(view.html.match(/<button[^>]*data-activity="a8"[^>]*>.*?<\/button>/)![0])).toContain("九月的 Mission · 9/28");
     for (const missionId of ["m1", "m2"]) {
       view.mission(missionId);
-      expect([...cardsIn(view.html, "done"), ...cardsIn(view.html, "week"), ...cardsIn(view.html, "later")]).not.toContain("a8");
+      expect(allCards(view.html)).not.toContain("a8");
     }
-    view.mission("all");
-    expect(cardsIn(view.html, "week")).toContain("a8");
-  });
-
-  it("Mission 上面不再写最近关口的小字（关口在时间轴上）", () => {
-    const html = mount().html;
-    expect(text(html)).not.toMatch(/10\/28 上线|10\/22 首次会面|上线|需求冻结|复盘/);
-    expect(html).not.toContain("_hint_");
-  });
-
-  it("回退显示上个月：切换行尾写「9 月」，时间轴不画本周", () => {
-    const html = mount(plan({ period: "2026-09", fallbackFrom: "2026-09", days: [{ date: "2026-09-30", workday: true }] })).html;
-    expect(text(html)).toContain("9 月");
-    expect(h.timeline!.showWeek).toBe(false);
-    const current = mount().html;
-    expect(text(current)).not.toMatch(/\d+ 月/);
-    expect(h.timeline!.showWeek).toBe(true);
-    expect(h.timeline!.weekStart).toBe("2026-10-19");
-  });
-
-  it("时间轴拿到 Mission 的颜色", () => {
-    mount();
-    const colorOf = h.timeline!.colorOf as (id: string) => string;
-    expect(colorOf("m1")).toBe("#2f63b0");
-    expect(colorOf("m2")).toBe("#2f8a7a");
   });
 });
 
-describe("MissionPlanCard：Task 行", () => {
-  it("选 Task t1：只剩 planTaskId = t1 的；再点一次取消", () => {
+describe("HomePlan：选某个 Mission 时的详情", () => {
+  it("头部「● Mission 名 / Task 名」；默认选有本周事项的第一个 Task，三栏只剩它的事项", () => {
     const view = mount();
-    view.task("t1");
+    view.mission("m1");
+    expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用 / 会议写进本体");
+    expect(view.find((props) => props["data-task"] === "t1")!["aria-pressed"]).toBe(true);
     expect(cardsIn(view.html, "done")).toEqual(["a1"]);
     expect(cardsIn(view.html, "week")).toEqual(["a3"]);
     expect(cardsIn(view.html, "later")).toEqual([]);
     expect(text(column(view.html, "later"))).toContain("—");
-    view.task("t1");
-    expect(cardsIn(view.html, "week")).toHaveLength(4);
   });
 
-  it("「其他 N」：N = 没挂 Task 或挂的 Task 对不上的 Activity 数；选中只看它们", () => {
-    const view = mount();
-    expect(text(view.html)).toContain("其他 3");
-    view.task("other");
-    expect([...cardsIn(view.html, "done"), ...cardsIn(view.html, "week"), ...cardsIn(view.html, "later")].sort()).toEqual(["a2", "a6", "a7"]);
+  it("默认 Task：前面的 Task 没有本周事项就往后找；都没有就第一个", () => {
+    const quiet = { taskId: "t0", missionId: "m1", name: "先放着", doneDefinition: null, criteria: [] };
+    const view = mount(plan({ tasks: [quiet, ...plan().tasks] }));
     view.mission("m1");
-    expect(text(view.html)).toContain("其他 2");
+    expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用 / 会议写进本体");
+    const other = mount(plan({ tasks: [quiet, ...plan().tasks], activities: plan().activities.filter((activity) => activity.column !== "week") }));
+    other.mission("m1");
+    expect(heading(other.html)).toBe("CEO / DRI Agent 从能用到在用 / 先放着");
   });
 
-  it("「全部」视图下 Task 前有 Mission 色点；聚焦后只列这个 Mission 的 Task、不带色点", () => {
+  it("Task 小卡：名字、「已完成 a / b」、最近的未完成截止日、进度线；没有「全部 Task」", () => {
     const view = mount();
-    expect(view.html).toMatch(/data-task="t3"[^>]*>(?:<[^>]+>)*?<[^>]*--c:#2f8a7a/);
     view.mission("m1");
-    expect(view.html).not.toContain('data-task="t3"');
-    expect(view.html).not.toMatch(/data-task="t1"[^>]*>(?:<[^>]+>)*?<[^>]*--c:/);
+    expect(text(taskCard(view.html, "t1")).trim()).toBe("会议写进本体 已完成 1 / 2 10/24");
+    expect(taskCard(view.html, "t1")).toMatch(/_bar_[^>]*aria-hidden="true"><span style="width:50%"/);
+    expect(text(taskCard(view.html, "t2")).trim()).toBe("对话质量达标 已完成 0 / 1 10/16");
+    expect(view.html).not.toContain("全部 Task");
   });
 
-  it("重取回来选中的 Task 不在了：当没选，三栏回到全部", () => {
+  it("点另一个 Task：它浮起来（aria-pressed、data-selected），头部换名字，三栏换成它的事项；再点一次不取消", () => {
     const view = mount();
-    view.task("t1");
-    view.setPlan(plan({ tasks: plan().tasks.filter((task) => task.taskId !== "t1") }));
-    expect(cardsIn(view.html, "week")).toHaveLength(4);
-    expect(view.html).not.toContain('aria-pressed="true" data-task');
-    expect(view.find((props) => props["data-task"] === "t2")!["aria-pressed"]).toBe(false);
+    view.mission("m1");
+    view.task("t2");
+    expect(view.find((props) => props["data-task"] === "t2")!["aria-pressed"]).toBe(true);
+    expect(view.html).toMatch(/<div class="[^"]*_task_[^"]*" data-selected="true"><button[^>]*data-task="t2"/);
+    expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用 / 对话质量达标");
+    expect(allCards(view.html)).toEqual(["a4"]);
+    view.task("t2");
+    expect(allCards(view.html)).toEqual(["a4"]);
   });
 
-  it("所有 Activity 都挂上了 Task：不出「其他」；选着「其他」时重取变成 0，就当没选", () => {
+  it("「未归入 Task」在最后，写件数：这个 Mission 下没挂 Task、或挂的 Task 不在这里的；选中只看它们", () => {
+    const view = mount();
+    view.mission("m1");
+    expect(view.html.indexOf('data-task="loose"')).toBeGreaterThan(view.html.indexOf('data-task="t2"'));
+    expect(text(taskCard(view.html, "loose")).trim()).toBe("未归入 Task 2 件");
+    view.task("loose");
+    expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用 / 未归入 Task");
+    expect(allCards(view.html)).toEqual(["a2", "a6"]);
+  });
+
+  it("所有事项都挂上了 Task：不出「未归入 Task」；选着它时重取变成 0，回到默认 Task", () => {
     const matched = plan({ activities: plan().activities.filter(({ item }) => ["t1", "t2", "t3"].includes(item.planTaskId ?? "")) });
-    expect(mount(matched).html).not.toContain('data-task="other"');
     const view = mount();
-    view.task("other");
-    expect(cardsIn(view.html, "week")).toEqual(["a7"]);
+    view.mission("m1");
+    view.task("loose");
     view.setPlan(matched);
-    expect(view.html).not.toContain('data-task="other"');
-    expect(cardsIn(view.html, "week").sort()).toEqual(["a3", "a4", "a5"]);
+    expect(view.html).not.toContain('data-task="loose"');
+    expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用 / 会议写进本体");
   });
 
-  it("tasks 为空：没有 Task 行（连「其他」也没有），三栏照常", () => {
-    const view = mount(plan({ tasks: [] }));
-    expect(view.html).not.toContain("data-task-row");
-    expect(text(view.html)).not.toContain("其他");
-    expect(cardsIn(view.html, "week")).toHaveLength(4);
-  });
-
-  it("聚焦的 Mission 一个 Task 都没有：Task 行不渲染", () => {
-    const view = mount(plan({ tasks: plan().tasks.filter((task) => task.missionId === "m1") }));
-    expect(view.html).toContain("data-task-row");
-    view.mission("m2");
-    expect(view.html).not.toContain("data-task-row");
-    expect(cardsIn(view.html, "week")).toEqual(["a5"]);
-  });
-
-  it("ⓘ 选中 Task 后才出现；浮层默认不渲染，点开后有「做到什么算完」和每一条验收标准", () => {
+  it("重取回来选中的 Task 不在了：回到默认 Task", () => {
     const view = mount();
-    expect(view.find((props) => props["data-info"] !== undefined)).toBeUndefined();
-    view.task("t1");
+    view.mission("m1");
+    view.task("t2");
+    view.setPlan(plan({ tasks: plan().tasks.filter((task) => task.taskId !== "t2") }));
+    expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用 / 会议写进本体");
+    expect(allCards(view.html)).toEqual(["a1", "a3"]);
+  });
+
+  it("Mission 没有任何 Task：不出 Task 列，头部只写 Mission 名，三栏是这个 Mission 的全部事项", () => {
+    const view = mount(plan({ tasks: plan().tasks.filter((task) => task.missionId === "m2") }));
+    view.mission("m1");
+    expect(view.html).not.toContain("data-task-list");
+    expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用");
+    expect(allCards(view.html)).toEqual(["a1", "a2", "a3", "a4", "a6"]);
+  });
+
+  it("切换 Mission：Task 回到新 Mission 的默认；跨月重取后聚焦的 Mission 不在了，回到「全部」", () => {
+    const view = mount();
+    view.mission("m1");
+    view.task("t2");
+    view.mission("m2");
+    expect(heading(view.html)).toBe("灯塔首次会面 / Chat 客户版");
+    expect(view.html).not.toContain('data-task="loose"');
+    view.setPlan(plan({ missions: plan().missions.filter((mission) => mission.missionId !== "m2") }));
+    expect(heading(view.html)).toBe("全部 Mission");
+  });
+
+  it("详情卡底色用 Mission 色（行内 --c），「全部」不带；Mission 有任务卡时名字点进 Mission 卡页", () => {
+    const view = mount();
+    expect(view.html).toMatch(/<section class="[^"]*" data-detail="all" aria-label="Mission 详情">/);
+    view.mission("m1");
+    expect(view.html).toMatch(/data-detail="m1" style="--c:#2f63b0" aria-label="Mission 详情"/);
+    view.click((props) => props["data-mission-card"] !== undefined, "Mission 名");
+    expect(view.onNavigate).toHaveBeenCalledWith("/me/mission-cards/card-1", expect.anything());
+    view.mission("m2");
+    expect(view.find((props) => props["data-mission-card"] !== undefined)).toBeUndefined();
+  });
+
+  it("ⓘ 只在选中且有完成定义或验收标准的 Task 上；点开有「做到什么算完」和每一条验收标准，再点收起", () => {
+    const view = mount();
+    view.mission("m1");
     expect(view.html).not.toContain("会后自动出会议卡");
-    expect(view.html).not.toContain("飞书里直接开的会也接得住");
     view.info();
     expect(text(view.html)).toContain("会后自动出会议卡，整卡确认后写进本体。");
     expect(text(view.html)).toContain("真实工作会走完全链路，读回一致");
     expect(text(view.html)).toContain("飞书里直接开的会也接得住");
     view.info();
     expect(view.html).not.toContain("飞书里直接开的会也接得住");
-  });
-
-  it("没有完成定义也没有验收标准的 Task，选中也不出 ⓘ", () => {
-    const view = mount();
     view.task("t2");
     expect(view.find((props) => props["data-info"] !== undefined)).toBeUndefined();
   });
 
-  it("ⓘ 浮层 Esc 或点外面（Popover 的 onOpenChange(false)）就关", () => {
+  it("ⓘ 浮层 Esc 或点外面就关；开着时重取回来那个 Task 没有说明了：关掉、状态清掉，内容回来也不重开", () => {
     const view = mount();
-    view.task("t1");
+    view.mission("m1");
     view.info();
     expect(view.openPopovers()).toBe(1);
     expect(view.dismiss()).not.toContain('role="dialog"');
-    expect(view.openPopovers()).toBe(0);
-  });
-
-  it("ⓘ 浮层开着时重取回来那个 Task 没有完成定义和验收标准了：浮层关掉，状态清掉，内容回来也不重开", () => {
-    const view = mount();
-    view.task("t1");
     view.info();
     view.setPlan(plan({ tasks: plan().tasks.map((task) => ({ ...task, doneDefinition: null, criteria: [] })) }));
-    expect(view.html).not.toContain('role="dialog"');
     expect(view.openPopovers()).toBe(0);
     view.setPlan(plan());
     expect(view.html).not.toContain('role="dialog"');
-    expect(view.openPopovers()).toBe(0);
   });
 });
 
-describe("MissionPlanCard：三栏的卡片", () => {
-  it("一行小字：本周、之后写「主体 · 截止日」，有哪个写哪个；已完成只写日期；逾期的日期带 data-overdue", () => {
-    const html = mount().html;
-    const card = (id: string) => html.match(new RegExp(`<button[^>]*data-activity="${id}"[^>]*>.*?</button>`))?.[0] ?? "";
-    const small = (id: string) => text(card(id).match(/<small[^>]*>.*<\/small>/)?.[0] ?? "").trim();
-    expect(small("a3")).toBe("你＋人豪 · 10/24");
-    expect(small("a5")).toBe("你＋人豪");
-    expect(small("a7")).toBe("10/23");
-    expect(small("a1")).toBe("10/21");
-    expect(small("a6")).toBe("10/27 起");
-    expect(card("a4")).toMatch(/<span[^>]*data-overdue[^>]*>10\/16</);
-    expect(card("a3")).not.toContain("data-overdue");
-  });
-
-  it("没有截止只有开始：本周、之后写「M/D 起」，和主体合成「主体 · M/D 起」；已完成不写开始日", () => {
-    const base = plan().activities;
-    const html = mount(plan({ activities: [
-      ...base.filter(({ item }) => !["a5", "a2"].includes(item.id)),
-      { ...base[4], item: { ...base[4].item, startDate: "2026-10-20" } },
-      { ...base[1], item: { ...base[1].item, dueDate: null, startDate: "2026-10-15" } },
-    ] })).html;
-    const card = (id: string) => html.match(new RegExp(`<button[^>]*data-activity="${id}"[^>]*>.*?</button>`))?.[0] ?? "";
-    expect(text(card("a5").match(/<small[^>]*>.*<\/small>/)?.[0] ?? "").trim()).toBe("你＋人豪 · 10/20 起");
-    expect(card("a2")).not.toContain("<small");
+describe("HomePlan：三栏的卡片", () => {
+  it("只写标题和日期：有截止写截止日，没有截止写「M/D 起」，已完成只写截止日；不写协作人；逾期的日期带 data-overdue", () => {
+    const view = mount();
+    view.mission("m1");
+    view.task("loose");
+    const card = (id: string) => view.html.match(new RegExp(`<button[^>]*data-activity="${id}"[^>]*>.*?</button>`))?.[0] ?? "";
+    expect(text(card("a6")).trim()).toBe("新 Chat 题库打分 10/27 起");
+    expect(text(card("a2")).trim()).toBe("对话架构与分工 10/20");
+    view.task("t1");
+    expect(text(card("a3")).trim()).toBe("真实会议跑通 10/24");
+    expect(text(column(view.html, "week"))).not.toContain("人豪");
+    view.task("t2");
+    expect(card("a4")).toMatch(/<span data-overdue="true">10\/16</);
   });
 
   it("每栏按日期排，没日期的在后", () => {
     expect(cardsIn(mount().html, "week")).toEqual(["a4", "a7", "a3", "a5"]);
-  });
-
-  it("「全部」视图下卡片左边是 Mission 色条，独立事项没有；聚焦后不画色条", () => {
-    const view = mount();
-    expect(String((view.activity("a3").style as Record<string, string>)["--bar"])).toBe("#2f63b0");
-    expect(String((view.activity("a5").style as Record<string, string>)["--bar"])).toBe("#2f8a7a");
-    expect(view.activity("a7").style).toBeUndefined();
-    view.mission("m1");
-    expect(view.activity("a3").style).toBeUndefined();
   });
 
   it("点卡片进事项详情", () => {
@@ -459,21 +470,44 @@ describe("MissionPlanCard：三栏的卡片", () => {
     (view.activity("a3").onClick as (value: unknown) => void)(origin);
     expect(view.onNavigate).toHaveBeenCalledWith("/me/tasks/a3", origin.currentTarget);
   });
+});
 
-  it("页面里不出现 Mission 描述（outcome），Task 的完成定义收起", () => {
+describe("HomePlan：最近进展", () => {
+  it("全部事项里各自最新的一条进展，最新在前，最多 5 行；时间写「今天 HH:MM」或「M/D HH:MM」（公司时区），只写进展的第一行", () => {
     const html = mount().html;
-    expect(html).not.toMatch(/outcome/i);
-    expect(html).not.toContain("会后自动出会议卡");
+    const rows = [...html.matchAll(/<button[^>]*data-progress="([^"]+)"[^>]*>(.*?)<\/button>/g)].map((match) => [match[1], text(match[2]).trim()]);
+    expect(rows).toEqual([
+      ["a3", "今天 13:08 真实会议跑通 · 最终评审修复合入，等预发实测"],
+      ["a1", "今天 11:40 回流方案定稿 · 方案定稿"],
+      ["a5", "10/21 20:26 客户版演示 · 演示稿写完"],
+      ["a7", "10/20 09:00 报销 · 发票交了"],
+      ["a4", "10/19 10:00 Chat 服务抽出 · 拆出进程"],
+    ]);
+    expect(text(html)).toContain("最近进展 全部执行事项");
+  });
+
+  it("选了某个 Mission 也照样列全部事项的进展", () => {
+    const view = mount();
+    view.mission("m2");
+    expect(view.html.match(/data-progress=/g)).toHaveLength(5);
+  });
+
+  it("点一行进那个事项；一条进展都没有时不出这张卡", () => {
+    const view = mount();
+    view.click((props) => props["data-progress"] === "a5", "a5 那一行");
+    expect(view.onNavigate).toHaveBeenCalledWith("/me/tasks/a5", expect.anything());
+    const none = mount(plan({ activities: plan().activities.map((activity) => ({ ...activity, item: { ...activity.item, latestProgress: null } })) }));
+    expect(none.html).not.toContain('aria-label="最近进展"');
   });
 });
 
-describe("MissionPlanCard：计划点", () => {
+describe("HomePlan：计划点", () => {
   const radios = () => h.elements.filter((element) => element.props.role === "radio");
 
-  it("「全部」视图下点某一格：浮层里有 Mission 色点可选，提交挂到选中的 Mission", async () => {
+  it("「全部」视图下点某一天：浮层里有 Mission 色点可选，提交挂到选中的 Mission", async () => {
     h.api.POST.mockResolvedValue(ok({ id: "k9", missionId: "m2", date: "2026-10-24", label: "演示" }));
     const view = mount();
-    view.timeline("onAddMark", "2026-10-24");
+    view.calendar("onAddMark", "2026-10-24");
     expect(view.html).toContain('role="radiogroup"');
     expect(radios()).toHaveLength(2);
     view.click((props) => props["data-pick"] === "m2", "m2 色点");
@@ -482,79 +516,96 @@ describe("MissionPlanCard：计划点", () => {
     expect(h.api.POST).toHaveBeenCalledWith("/api/me/plan-marks", { body: { missionId: "m2", date: "2026-10-24", label: "演示" } });
   });
 
-  it("聚焦 m1 时点某一格：浮层里没有 Mission 选择，提交的 missionId 是 m1；先画上再等接口，存好后通知重取", async () => {
+  it("聚焦 m1 时点某一天：没有 Mission 选择，挂到 m1；先画上再等接口，存好后通知重取", async () => {
     h.api.POST.mockResolvedValue(ok({ id: "k9", missionId: "m1", date: "2026-10-24", label: "评审" }));
     const view = mount();
     view.mission("m1");
-    view.timeline("onAddMark", "2026-10-24");
+    view.calendar("onAddMark", "2026-10-24");
     expect(view.html).toContain('data-mark-pop="add"');
     expect(view.html).not.toContain('role="radiogroup"');
     view.type("评审");
     view.key("Enter");
     expect(h.api.POST).toHaveBeenCalledWith("/api/me/plan-marks", { body: { missionId: "m1", date: "2026-10-24", label: "评审" } });
     expect(view.html).not.toContain("data-mark-pop");
-    expect((h.timeline!.marks as { label: string; date: string }[]).map((mark) => `${mark.date} ${mark.label}`)).toContain("2026-10-24 评审");
+    expect((h.calendar!.marks as { label: string; date: string }[]).map((mark) => `${mark.date} ${mark.label}`)).toContain("2026-10-24 评审");
     await settle();
     expect(window.dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: HOME_PLAN_CHANGED }));
   });
 
-  it("中文输入法还在拼字时按 Enter 不提交；空名字不提交；名字最多 10 个字", () => {
+  it("中文输入法还在拼字时按 Enter 不提交；空名字不提交；名字最多 10 个字；Esc 关掉不提交", () => {
     const view = mount();
-    view.timeline("onAddMark", "2026-10-24");
+    view.calendar("onAddMark", "2026-10-24");
     expect(view.find((props) => props["data-mark-name"] !== undefined)!.maxLength).toBe(10);
     view.key("Enter");
     view.type("评审");
     view.key("Enter", true);
     expect(h.api.POST).not.toHaveBeenCalled();
-    expect(view.html).toContain('data-mark-pop="add"');
-  });
-
-  it("加点浮层 Esc 或点外面（Popover 的 onOpenChange(false)）就关，不提交", () => {
-    const view = mount();
-    view.timeline("onAddMark", "2026-10-24");
-    view.type("评审");
     expect(view.openPopovers()).toBe(1);
     expect(view.dismiss()).not.toContain("data-mark-pop");
-    expect(view.openPopovers()).toBe(0);
     expect(h.api.POST).not.toHaveBeenCalled();
   });
 
-  it("右键或长按计划点：先出「删除」，点了才删；点之前时间轴上还在", async () => {
-    h.api.DELETE.mockResolvedValue({ response: { ok: true, status: 204 } });
+  it("没有 Mission 时点日期不加点（月历不给加点回调）", () => {
+    mount(plan({ missions: [] }));
+    expect(h.calendar!.onAddMark).toBeUndefined();
+  });
+
+  it("点计划点：浮层里是它的名字，可以改名；改了才发 PATCH，先改上再等接口", async () => {
+    h.api.PATCH.mockResolvedValue(ok({ id: "k1", missionId: "m1", date: "2026-10-23", label: "联调二" }));
     const view = mount();
-    view.timeline("onDeleteMark", "k1");
-    expect(view.html).toContain('data-mark-pop="delete"');
-    expect(h.api.DELETE).not.toHaveBeenCalled();
-    expect((h.timeline!.marks as { id: string }[]).map((mark) => mark.id)).toEqual(["k1"]);
-    view.click((props) => props["data-delete"] !== undefined, "删除");
-    expect(h.api.DELETE).toHaveBeenCalledWith("/api/me/plan-marks/{id}", { params: { path: { id: "k1" } } });
-    expect(h.timeline!.marks).toEqual([]);
+    view.calendar("onEditMark", "k1");
+    expect(view.html).toContain('data-mark-pop="edit"');
+    expect(view.find((props) => props["data-mark-name"] !== undefined)!.value).toBe("联调");
+    // 浮层按钮深灰：确认和「开启执行事项」同一个样子，删除是深灰字（主题蓝只留给约会议，不用红）。
+    expect(String(view.find((props) => props["aria-label"] === "存好")!.className)).toContain("_plainButton_");
+    expect(String(view.find((props) => props["data-delete"] !== undefined)!.className)).toContain("_popDelete_");
+    view.key("Enter");
+    expect(h.api.PATCH).not.toHaveBeenCalled();
+    expect(view.html).not.toContain("data-mark-pop");
+    view.calendar("onEditMark", "k1");
+    view.type("联调二");
+    view.key("Enter");
+    expect(h.api.PATCH).toHaveBeenCalledWith("/api/me/plan-marks/{id}", { params: { path: { id: "k1" } }, body: { label: "联调二" } });
+    expect((h.calendar!.marks as { label: string }[])[0].label).toBe("联调二");
     await settle();
     expect(window.dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: HOME_PLAN_CHANGED }));
   });
 
-  it("拖到别的日子：马上挪；接口失败退回原处并写一句错", async () => {
-    h.api.PATCH.mockResolvedValue({ error: { message: "日期不在这个 Mission 的月份里" }, response: { ok: false, status: 400 } });
+  it("改名失败：退回原名并写一句错；下次开浮层时那句错收起来", async () => {
+    h.api.PATCH.mockResolvedValue({ error: { message: "名字最多 10 个字" }, response: { ok: false, status: 400 } });
     const view = mount();
-    view.timeline("onMoveMark", "k1", "2026-10-27");
-    expect(h.api.PATCH).toHaveBeenCalledWith("/api/me/plan-marks/{id}", { params: { path: { id: "k1" } }, body: { date: "2026-10-27" } });
-    expect((h.timeline!.marks as { date: string }[])[0].date).toBe("2026-10-27");
+    view.calendar("onEditMark", "k1");
+    view.type("新名字");
+    view.key("Enter");
     await settle();
     const html = view.render();
-    expect((h.timeline!.marks as { date: string }[])[0].date).toBe("2026-10-23");
-    expect(html).toMatch(/role="alert"[^>]*>日期不在这个 Mission 的月份里</);
+    expect((h.calendar!.marks as { label: string }[])[0].label).toBe("联调");
+    expect(html).toMatch(/role="alert"[^>]*>.*?名字最多 10 个字<\/p>/);
     expect(window.dispatchEvent).not.toHaveBeenCalled();
-    expect(view.timeline("onAddMark", "2026-10-24")).not.toContain('role="alert"');
+    expect(view.calendar("onAddMark", "2026-10-24")).not.toContain('role="alert"');
+  });
+
+  it("浮层里点「删除」才删；点之前月历上还在", async () => {
+    h.api.DELETE.mockResolvedValue({ response: { ok: true, status: 204 } });
+    const view = mount();
+    view.calendar("onEditMark", "k1");
+    expect(h.api.DELETE).not.toHaveBeenCalled();
+    expect((h.calendar!.marks as { id: string }[]).map((mark) => mark.id)).toEqual(["k1"]);
+    view.click((props) => props["data-delete"] !== undefined, "删除");
+    expect(h.api.DELETE).toHaveBeenCalledWith("/api/me/plan-marks/{id}", { params: { path: { id: "k1" } } });
+    expect(h.calendar!.marks).toEqual([]);
+    await settle();
+    expect(window.dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: HOME_PLAN_CHANGED }));
   });
 
   it("断网：退回并写「没存上」", async () => {
     h.api.DELETE.mockRejectedValue(new TypeError("Failed to fetch"));
     const view = mount();
-    view.timeline("onDeleteMark", "k1");
+    view.calendar("onEditMark", "k1");
     view.click((props) => props["data-delete"] !== undefined, "删除");
     await settle();
     const html = view.render();
-    expect((h.timeline!.marks as { id: string }[]).map((mark) => mark.id)).toEqual(["k1"]);
+    expect((h.calendar!.marks as { id: string }[]).map((mark) => mark.id)).toEqual(["k1"]);
     expect(text(html)).toContain("没存上");
   });
 
@@ -562,27 +613,27 @@ describe("MissionPlanCard：计划点", () => {
     h.api.POST.mockResolvedValue(ok({ id: "k9", missionId: "m1", date: "2026-10-24", label: "评审" }));
     const view = mount();
     view.mission("m1");
-    view.timeline("onAddMark", "2026-10-24");
+    view.calendar("onAddMark", "2026-10-24");
     view.type("评审");
     view.key("Enter");
     await settle();
     const fresh = plan({ marks: [...plan().marks, { id: "k9", missionId: "m1", date: "2026-10-24", label: "评审" }] });
     view.setPlan(fresh);
-    expect(h.timeline!.marks).toBe(fresh.marks);
+    expect(h.calendar!.marks).toBe(fresh.marks);
   });
 
   const deferred = () => {
     let resolve!: (value: unknown) => void;
     return { promise: new Promise((done) => { resolve = done; }), resolve };
   };
-  const markIds = () => (h.timeline!.marks as { id: string }[]).map((mark) => mark.id);
-  const markDates = () => Object.fromEntries((h.timeline!.marks as { id: string; date: string }[]).map((mark) => [mark.id, mark.date]));
+  const markIds = () => (h.calendar!.marks as { id: string }[]).map((mark) => mark.id);
+  const markLabels = () => Object.fromEntries((h.calendar!.marks as { id: string; label: string }[]).map((mark) => [mark.id, mark.label]));
 
   it("删除还在路上时轮询回来的旧计划不会把点画回来；存好、重取看不到它之后这条才撤掉", async () => {
     const sent = deferred();
     h.api.DELETE.mockReturnValue(sent.promise);
     const view = mount();
-    view.timeline("onDeleteMark", "k1");
+    view.calendar("onEditMark", "k1");
     view.click((props) => props["data-delete"] !== undefined, "删除");
     expect(markIds()).toEqual([]);
     view.setPlan(plan());
@@ -600,105 +651,66 @@ describe("MissionPlanCard：计划点", () => {
   });
 
   it("一条失败只撤它自己：另一条还在路上的照样画着", async () => {
-    const moving = deferred();
-    h.api.PATCH.mockReturnValue(moving.promise);
+    const renaming = deferred();
+    h.api.PATCH.mockReturnValue(renaming.promise);
     h.api.POST.mockResolvedValue({ error: { message: "一个 Mission 下最多 20 个计划点" }, response: { ok: false, status: 409 } });
     const view = mount();
-    view.timeline("onMoveMark", "k1", "2026-10-27");
+    view.calendar("onEditMark", "k1");
+    view.type("联调二");
+    view.key("Enter");
     view.mission("m1");
-    view.timeline("onAddMark", "2026-10-24");
+    view.calendar("onAddMark", "2026-10-24");
     view.type("评审");
     view.key("Enter");
-    expect(markDates()).toEqual({ k1: "2026-10-27", [markIds()[1]]: "2026-10-24" });
+    expect(markLabels()).toEqual({ k1: "联调二", [markIds()[1]]: "评审" });
     await settle();
     const html = view.render();
-    expect(markDates()).toEqual({ k1: "2026-10-27" });
+    expect(markLabels()).toEqual({ k1: "联调二" });
     expect(html).toContain("一个 Mission 下最多 20 个计划点");
     view.setPlan(plan());
-    expect(markDates()).toEqual({ k1: "2026-10-27" });
-    moving.resolve(ok({ id: "k1", missionId: "m1", date: "2026-10-27", label: "联调" }));
+    expect(markLabels()).toEqual({ k1: "联调二" });
+    renaming.resolve(ok({ id: "k1", missionId: "m1", date: "2026-10-23", label: "联调二" }));
     await settle();
     view.render();
-    expect(markDates()).toEqual({ k1: "2026-10-27" });
+    expect(markLabels()).toEqual({ k1: "联调二" });
   });
 
-  it("新加的点在 POST 回来之前不能拖、不能删；回来后换成真 id，可以删", async () => {
+  it("新加的点在 POST 回来之前点不开；回来后换成真 id，可以改", async () => {
     const posting = deferred();
     h.api.POST.mockReturnValue(posting.promise);
     const view = mount();
     view.mission("m1");
-    view.timeline("onAddMark", "2026-10-24");
+    view.calendar("onAddMark", "2026-10-24");
     view.type("评审");
     view.key("Enter");
     const temp = markIds()[1];
     expect(temp).toMatch(/^pending-/);
-    view.timeline("onMoveMark", temp, "2026-10-27");
-    view.timeline("onDeleteMark", temp);
-    expect(h.api.PATCH).not.toHaveBeenCalled();
+    view.calendar("onEditMark", temp);
     expect(view.html).not.toContain("data-mark-pop");
     posting.resolve(ok({ id: "k9", missionId: "m1", date: "2026-10-24", label: "评审" }));
     await settle();
     view.render();
     expect(markIds()).toEqual(["k1", "k9"]);
-    view.timeline("onDeleteMark", "k9");
-    expect(view.html).toContain('data-mark-pop="delete"');
+    view.calendar("onEditMark", "k9");
+    expect(view.html).toContain('data-mark-pop="edit"');
   });
 
-  it("删点浮层对着的点重取后不在了：浮层关掉、状态清掉，点再回来也不重开", () => {
+  it("改点浮层对着的点重取后不在了：浮层关掉、状态清掉，点再回来也不重开", () => {
     const view = mount();
-    view.timeline("onDeleteMark", "k1");
+    view.calendar("onEditMark", "k1");
     expect(view.openPopovers()).toBe(1);
     view.setPlan(plan({ marks: [] }));
     expect(view.html).not.toContain("data-mark-pop");
     expect(view.openPopovers()).toBe(0);
     view.setPlan(plan());
     expect(view.html).not.toContain("data-mark-pop");
-    expect(view.openPopovers()).toBe(0);
   });
 });
 
-describe("Mission 卡片样式", () => {
-  const css = readFileSync(new URL("../../../styles/mission-plan-card.module.css", import.meta.url), "utf8");
-  const handheld = css.match(/@media \(max-width: 959px\) \{([\s\S]*?)\r?\n\}/)?.[1] ?? "";
-  /** 一条规则的声明块（选择器原样给）。 */
-  const rule = (selector: string) => css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{([^}]*)\\}`))?.[1] ?? "";
-  it("Mission 切换：选中 22（正文 +8）、写全，最宽到两边渐隐之间再省略号；中号 15；小号 14 更淡；没有底线；字号有过渡、减少动效时关掉", () => {
-    expect(rule(".mission")).toMatch(/max-width: 15em;[\s\S]*font-size: calc\(var\(--type-body, 14px\) \+ 1px\);[\s\S]*transition: font-size/);
-    expect(rule('.mission[data-size="large"]')).toMatch(/max-width: calc\(100% - 2 \* var\(--fade\)\);[\s\S]*font-size: calc\(var\(--type-body, 14px\) \+ 8px\);/);
-    expect(rule('.mission[data-size="small"]')).toContain("font-size: var(--type-body, 14px);");
-    expect(rule(".name")).toContain("text-overflow: ellipsis;");
-    expect(css).not.toMatch(/\.mission[^{]*::after/);
-    expect(rule(".missions")).toMatch(/gap: 26px;[\s\S]*overflow-x: auto;/);
-    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\.mission, \.mission \.dot,[^}]*transition: none;/);
-  });
-  it("溢出时哪边还有没露出来的就在哪边渐隐（data-less 左、data-more 右），带 -webkit- 前缀", () => {
-    expect(rule(".missions[data-less]")).toContain("--fade-left: var(--fade);");
-    expect(rule(".missions[data-more]")).toContain("--fade-right: var(--fade);");
-    const mask = rule(".missions:is([data-less], [data-more])");
-    expect(mask).toContain("-webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fade-left), #000 calc(100% - var(--fade-right)), transparent);");
-    expect(mask).toMatch(/(?:^|\s)mask-image: linear-gradient/);
-  });
-  it("高对比模式：各档字号的切换项都用主墨、色点不淡", () => {
-    const contrast = css.match(/@media \(prefers-contrast: more\) \{([\s\S]*?)\r?\n\}/)?.[1] ?? "";
-    expect(contrast).toMatch(/\.mission, \.mission\[data-size\], \.mission\[data-size\]:hover,[^{]*\{ color: var\(--ink\); \}/);
-    expect(contrast).toContain(".mission[data-size] .dot { opacity: 1; }");
-  });
-  it("手持（≤959）按比例缩小：选中 19、中号 14、小号 13；点触热区 44", () => {
-    expect(handheld).toContain(".mission { font-size: 14px; }");
-    expect(handheld).toContain('.mission[data-size="large"] { font-size: 19px; }');
-    expect(handheld).toContain('.mission[data-size="small"] { font-size: 13px; }');
-    expect(css).toMatch(/@media \(max-width: 959px\), \(pointer: coarse\) \{\s*\.mission \{ min-height: var\(--touch-hit, 32px\);/);
-  });
-  it("本周那栏最宽、打浅蓝底", () => {
-    expect(css).toMatch(/grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1\.35fr\) minmax\(0, 1fr\);/);
-    expect(css).toMatch(/\.column\[data-column="week"\] \{[^}]*background: rgba\(33, 91, 161, \.07\);/);
-  });
-  it("卡片窄于 560px：三栏上下排，本周、之后、已完成", () => {
-    expect(css).toContain("container: plan-card / inline-size;");
-    const narrow = css.match(/@container plan-card \(max-width: 559px\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
-    expect(narrow).toContain(".columns { grid-template-columns: minmax(0, 1fr); }");
-    expect(narrow).toContain('.column[data-column="week"] { order: -1; }');
-    expect(narrow).toContain('.column[data-column="done"] { order: 1; }');
+describe("首页样式的护栏", () => {
+  it("Mission 色只在若有若无的底色里：没有侧边色条，本周栏不用主题蓝", () => {
+    const css = readFileSync(new URL("../../../styles/home-plan.module.css", import.meta.url), "utf8");
+    expect(css).not.toMatch(/--bar|#215ba1|rgba\(33, 91, 161/);
   });
 });
 

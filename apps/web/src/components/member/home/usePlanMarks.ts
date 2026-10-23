@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * 首页计划点的加、拖、删：先在本地画上，再发请求。
+ * 首页计划点的加、改名、删：先在本地画上，再发请求。
  * - 每个改动记成一条待定操作，按先后叠在当前的 plan.marks 上重放，中途轮询回来的新 plan 冲不掉它。
  * - 失败的那条撤掉并给一句错，别的待定操作不动。
  * - 存好的那条，等 plan.marks 里看得到它（或者后面又有一条存好、也已落定的操作改了同一个点）再撤，存好后发 HOME_PLAN_CHANGED 让 useHomePlan 重取。
- * - 新加的点在 POST 回来之前 id 是 pending-…，这时不能拖、不能删（isPending）；回来后换成真 id。
+ * - 新加的点在 POST 回来之前 id 是 pending-…，这时不能改、不能删（isPending）；回来后换成真 id。
  */
 import { useEffect, useRef, useState } from "react";
 import type { THomePlanMark } from "@warmap/contracts";
@@ -14,19 +14,19 @@ import { HOME_PLAN_CHANGED } from "./useHomePlan";
 
 const PENDING = "pending-";
 
-type Change = { kind: "add"; mark: THomePlanMark } | { kind: "move"; id: string; date: string } | { kind: "delete"; id: string };
+type Change = { kind: "add"; mark: THomePlanMark } | { kind: "rename"; id: string; label: string } | { kind: "delete"; id: string };
 type Op = Change & { key: number; saved: boolean };
 type Sent = { data?: THomePlanMark; error?: unknown; response: Response };
 
 const target = (op: Change) => (op.kind === "add" ? op.mark.id : op.id);
 const replay = (marks: THomePlanMark[], op: Change) =>
   op.kind === "add" ? [...marks, op.mark]
-    : op.kind === "move" ? marks.map((mark) => (mark.id === op.id ? { ...mark, date: op.date } : mark))
+    : op.kind === "rename" ? marks.map((mark) => (mark.id === op.id ? { ...mark, label: op.label } : mark))
       : marks.filter((mark) => mark.id !== op.id);
 /** 这条改动已经落进 marks 里了。 */
 const landed = (op: Change, marks: THomePlanMark[]) => {
   const found = marks.find((mark) => mark.id === target(op));
-  return op.kind === "delete" ? !found : op.kind === "add" ? Boolean(found) : found?.date === op.date;
+  return op.kind === "delete" ? !found : op.kind === "add" ? Boolean(found) : found?.label === op.label;
 };
 /** 可以撤掉的操作：存好了，并且自己已落定，或后面有一条存好且已落定的操作改了同一个点。 */
 const settled = (ops: Op[], marks: THomePlanMark[]) => {
@@ -77,9 +77,9 @@ export function usePlanMarks(base: THomePlanMark[]) {
       void send({ kind: "add", mark: { id: `${PENDING}${counter.current + 1}`, missionId, date, label } },
         () => browserApi.POST("/api/me/plan-marks", { body: { missionId, date, label } }));
     },
-    move: (id: string, date: string) => {
+    rename: (id: string, label: string) => {
       if (isPending(id)) return;
-      void send({ kind: "move", id, date }, () => browserApi.PATCH("/api/me/plan-marks/{id}", { params: { path: { id } }, body: { date } }));
+      void send({ kind: "rename", id, label }, () => browserApi.PATCH("/api/me/plan-marks/{id}", { params: { path: { id } }, body: { label } }));
     },
     remove: (id: string) => {
       if (isPending(id)) return;

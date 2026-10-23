@@ -138,7 +138,7 @@ export function TaskScreen({ initialDetail }: { initialDetail: Detail }) {
         ]} disabled={busy} />
       </div> : null}
     </>}>
-      <ObjectMaterialArea objectType="task" objectId={task.id} baseTabs={[{ id: COVER, label: "封面", title: "封面" }]}
+      <ObjectMaterialArea objectType="task" objectId={task.id} baseTabs={[{ id: COVER, label: "预览", title: "预览" }]}
         selected={materialTab} onSelect={setMaterialTab} links onDraft={() => workspace.compose("帮我在这件事里起草一份：")}
         deliverables={done && detail.acceptance ? detail.acceptance.deliverableMaterialIds : null} onChanged={() => void refresh()}>
         {(area) => <>

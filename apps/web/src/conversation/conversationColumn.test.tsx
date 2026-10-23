@@ -7,7 +7,7 @@ import { readColumnMode } from "./useColumnMode";
 import type { ConversationData } from "./useConversation";
 
 const noop = () => undefined;
-const agent: ConversationChannel[] = [{ id: "agent", kind: "agent", label: "天枢", title: "天枢", subtitle: "围绕：灯塔议题", unread: 0 }];
+const agent: ConversationChannel[] = [{ id: "agent", kind: "agent", label: "天枢", title: "我的对话", unread: 0 }];
 
 function data(patch: Partial<ConversationData> = {}): ConversationData {
   return { scope: "issue:1", streaming: false, attachments: [], removeAttachment: noop, send: async () => true, stop: noop, ...patch } as unknown as ConversationData;
@@ -32,14 +32,14 @@ function composer(patch: Partial<Parameters<typeof ColumnComposer>[0]> = {}) {
 }
 
 describe("二级页右列（clark ConversationColumn）", () => {
-  it("页头写明天枢和当前对话对象；收起后留一颗「天枢」频道钮", () => {
+  it("页头只写「我的对话」一行，不再写当前对话对象；收起后留一颗「天枢」频道钮", () => {
     const html = renderToStaticMarkup(
       <ConversationColumn channels={agent} channel="agent" onChannel={noop} mode="expanded" onMode={noop} mobileOpen={false} onMobileOpen={noop} composerHeight={90} ariaLabel="灯塔 · 对话" testId="rail">
         <p>正文</p>
       </ConversationColumn>,
     );
-    expect(html).toContain("天枢");
-    expect(html).toContain("围绕：灯塔议题");
+    expect(html).toContain("我的对话");
+    expect(html).not.toContain("围绕");
     expect(html).toContain('data-mode="expanded"');
     expect(html).toContain('aria-label="收起对话栏"');
     expect(html).toContain("展开对话栏：天枢");
@@ -117,8 +117,7 @@ describe("深度讨论（并排）在右列里", () => {
     expect(html).toContain('aria-label="收起"');
     expect(html).toContain('aria-expanded="true"');
     expect(html).not.toContain("收起对话栏");
-    expect(html).toContain("天枢");
-    expect(html).toContain("围绕：灯塔议题");
+    expect(html).toContain("我的对话");
     expect(html).not.toContain("data-desk-stage");
     expect(html).not.toContain("data-drawer");
     expect(html).not.toContain("对象与台账");

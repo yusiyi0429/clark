@@ -56,33 +56,51 @@
 
 /* 成员工作台沿用相同的玻璃外框与左右高亮，只换内部的缩影。 */
 .root[data-role="member"] .desktop { height: 282px; }
-.memberHeading { color: #657b98; font-size: 10px; font-weight: 650; line-height: 1; }
-.memberActions { display: flex; gap: 5px; min-width: 0; overflow: hidden; }
-.actionPill { flex: none; padding: 3px 8px; border: 1px solid #dce4ef; border-radius: 99px; background: #fff; color: #4e607a; font-size: 9px; font-weight: 600; line-height: 1.3; white-space: nowrap; }
-.actionPill[data-primary] { border-color: #3a83f7; background: #3a83f7; color: #fff; }
-/* Mission 卡片：一天一格的本月（未到工作日 / 未到休息日 / 已过去 / 今天描边）、Mission 切换（只靠字号分选中，不画底线）、三栏（本周浅蓝底）。 */
-.missionCard { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; padding: 9px 10px 10px; border: 1px solid #dce4ef; border-radius: 15px; background: #ffffffed; box-shadow: 0 2px 7px #29334c0a; }
-.missionRow { display: flex; align-items: baseline; gap: 12px; min-width: 0; overflow: hidden; }
-.missionTab { display: inline-flex; align-items: center; gap: 4px; flex: none; color: #657b98; font-size: 9px; font-weight: 600; white-space: nowrap; }
-.missionTab[data-selected] { color: #283952; font-size: 13px; font-weight: 650; }
-.missionDot { width: 6px; height: 6px; border-radius: 50%; }
-.days { display: grid; grid-template-columns: repeat(31, minmax(0, 1fr)); gap: 2px; }
-.days i { height: 8px; border-radius: 2px; background: #3d6fb6; }
-.days i[data-rest] { background: #dbe4f0; }
-.days i[data-past] { background: #c9d1dc; }
-.days i[data-today] { box-shadow: 0 0 0 1px #fff, 0 0 0 2px #283952; }
-.columns { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 1fr); gap: 6px; flex: 1; min-height: 0; }
-.addButton { display: grid; place-items: center; flex: none; width: 18px; height: 18px; border-radius: 6px; background: #3a83f7; color: #fff; font-size: 15px; font-style: normal; line-height: 1; box-shadow: 0 2px 5px #3a83f73b; }
-.columns > .addButton { position: absolute; top: 2px; right: 4px; width: 15px; height: 15px; border-radius: 5px; font-size: 12px; }
-.root[data-focus="board"] .columns > .addButton { animation: addGlow 560ms 300ms var(--onboarding-ease-brand) both; }
-.column { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 4px; border-radius: 9px; }
-.column[data-week] { background: rgba(33, 91, 161, .07); }
-.column strong { color: #7a8ca6; font-size: 9px; font-weight: 600; line-height: 15px; white-space: nowrap; }
-.column[data-week] strong { color: #215ba1; }
-/* 小卡：左边一道直的 Mission 色条（同首页卡片），里面一道灰线代替标题。 */
-.columnCard { position: relative; display: block; height: 18px; padding: 7px 8px 0 9px; border: 1px solid #dce4ef; border-radius: 6px; background: #fff; }
-.columnCard::before { content: ""; position: absolute; top: 4px; bottom: 4px; left: -1px; width: 2px; border-radius: 0 2px 2px 0; background: var(--bar); }
-.columnCard i { display: block; width: 62%; height: 3px; border-radius: 9px; background: #e0e9f5; }
+/*
+ * 成员首页第六版的缩影：顶行月历（淡蓝底、本周一行浅底托、今天细框）· Mission 竖排（选中项淡底）· 快捷 2×2（约会议主题蓝）；
+ * 下面 Mission 详情（Mission 色若有若无的底；左边 Task 小卡、选中的浮起来；三栏，本周中性浅灰底）；再下面最近进展。
+ */
+.homeTop { display: grid; grid-template-columns: 84px minmax(0, 1fr) 84px; gap: 7px; height: 84px; flex: none; }
+.miniCalendar, .miniMissions, .miniQuick, .missionCard, .progressCard { min-width: 0; border: 1px solid #dfe4e9; border-radius: 12px; background: linear-gradient(145deg, #fff, #fbfcfe 70%); box-shadow: 0 2px 7px #29334c08; }
+.miniCalendar { display: flex; flex-direction: column; gap: 3px; padding: 6px 7px; background: linear-gradient(145deg, #f1f7ff, #f8fafd 75%); }
+.miniCalendar strong, .miniMissions strong, .progressCard strong { color: #283952; font-size: 8px; font-weight: 650; line-height: 1.2; }
+.calendarDays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: 1fr; flex: 1; gap: 1px 0; }
+.calendarDays i { position: relative; border-radius: 0; }
+.calendarDays i::before { content: ""; position: absolute; inset: 3px; border-radius: 1px; background: #8b97a8; }
+.calendarDays i[data-rest]::before { background: #c9d1dc; }
+.calendarDays i[data-past]::before { background: #dde2e9; }
+.calendarDays i[data-week] { background: rgba(61, 111, 182, .1); }
+.calendarDays i[data-today] { box-shadow: inset 0 0 0 1px #283952; border-radius: 2px; }
+.miniMissions { display: flex; flex-direction: column; gap: 2px; padding: 6px 7px; }
+.missionLine { display: flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 5px; color: #4e607a; font-size: 8px; line-height: 1.25; white-space: nowrap; }
+.missionLine > .missionDot { background: var(--c, #a7b1bf); }
+.missionLine[data-selected] { background: color-mix(in oklab, var(--c) 9%, white); color: #283952; font-weight: 650; }
+.miniQuick { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 3px; padding: 5px; }
+.quickTile { display: grid; place-items: center; min-width: 0; border: 1px solid #e6eaf0; border-radius: 6px; background: #ffffffcc; color: #4e607a; font-size: 7px; font-weight: 600; white-space: nowrap; }
+.quickTile[data-primary] { border-color: #3a83f7; background: #3a83f7; color: #fff; }
+.missionDot { flex: none; width: 5px; height: 5px; border-radius: 50%; background: var(--c); }
+.missionCard { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; padding: 7px 9px 8px; background: linear-gradient(160deg, color-mix(in oklab, var(--c) 8%, white), #fcfdfe 40%, #fbfcfe); }
+.detailHead { display: flex; align-items: center; gap: 5px; color: #283952; font-size: 9px; font-weight: 650; line-height: 1.2; }
+.detailHead .addButton { margin-left: auto; }
+.detailBody { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 7px; flex: 1; min-height: 0; }
+.taskColumn { display: flex; flex-direction: column; gap: 3px; }
+.taskCard { display: flex; flex-direction: column; gap: 4px; padding: 5px 6px; border: 1px solid transparent; border-radius: 6px; }
+.taskCard[data-selected] { border-color: #e3e7ee; background: #fff; box-shadow: 0 1px 3px #29334c0d; }
+.taskCard i { display: block; width: 80%; height: 3px; border-radius: 9px; background: #c9d1dc; }
+.taskCard b { display: block; height: 2px; border-radius: 2px; background: linear-gradient(90deg, #8b97a8 40%, #e8ebf0 40%); }
+.columns { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr); gap: 5px; min-height: 0; }
+/* 「开启执行事项」：白底细边、深灰字（同首页）。 */
+.addButton { display: grid; place-items: center; flex: none; width: 15px; height: 15px; border: 1px solid #dfe3e9; border-radius: 5px; background: #fff; color: #283952; font-size: 12px; font-style: normal; line-height: 1; }
+.root[data-focus="board"] .detailHead .addButton { animation: addGlow 560ms 300ms var(--onboarding-ease-brand) both; }
+.column { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 3px; border-radius: 7px; }
+.column[data-week] { background: rgba(29, 36, 51, .045); }
+.column strong { color: #7a8ca6; font-size: 8px; font-weight: 600; line-height: 12px; white-space: nowrap; }
+.column[data-week] strong { color: #283952; }
+/* 小卡：白底细边，里面一道灰线代替标题。 */
+.columnCard { display: block; height: 15px; padding: 6px 6px 0; border: 1px solid #edf0f4; border-radius: 5px; background: #fff; }
+.columnCard i { display: block; width: 62%; height: 3px; border-radius: 9px; background: #dfe5ee; }
+.progressCard { display: flex; align-items: center; gap: 8px; flex: none; height: 22px; padding: 0 9px; }
+.progressCard .rule { width: 60%; height: 3px; }
 .root[data-role="member"] .agent { flex: none; }
 .memberPhone { background: #f0f6ff; }
 .memberPhoneScroll { height: 100%; padding: 11px 9px; transition: transform 350ms var(--onboarding-ease-brand); }
