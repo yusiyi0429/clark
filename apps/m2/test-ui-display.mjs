@@ -141,7 +141,7 @@ import {validateNexusResult,cardAliases,wholeSentences} from './nexus-policy.mjs
 import {mergeTopics} from './nexus-memory.mjs';
 import {verifiedIntervention} from './nexus-next-step.mjs';
 test('Nexus：认得 M03 这类简称；列表字段必须给列表；已握手的卡不主动出建议',()=>{
- assert.deepEqual(cardAliases('bf01-m3'),['M03','Mission 03','M3']);assert.deepEqual(cardAliases('bf01-m3-t2'),['T02','Task 02','T2']);
+ assert.deepEqual(cardAliases('bf01-m3'),['M03','Mission 03','M3','Mission 3']);assert.deepEqual(cardAliases('bf01-m3-t2'),['T02','Task 02','T2','Task 2']);
  const cards=[{id:'bf01',level:'po',title:'灯塔',version:1},{id:'bf01-m3',level:'mission',title:'管理者承接经营责任并跨轮纠偏',aliases:cardAliases('bf01-m3'),version:2,result:'旧成果',dependencies:['甲','乙']},{id:'bf01-m2',level:'mission',title:'正式部署',aliases:cardAliases('bf01-m2'),version:2,status:'已确认',result:'r'}];
  const ask={id:'a',author:'陈溪南',kind:'chat',text:'请把灯塔 M03 的成果改成经CEO/DRI Agent承接'};
  let r=validateNexusResult({topics:[],proposals:[{cardId:'bf01-m3',baseVersion:2,basis:'request',sourceIds:['a'],patch:{result:'新成果'}}]},{cards,evidence:[ask]});

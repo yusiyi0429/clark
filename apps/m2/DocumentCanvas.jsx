@@ -1,4 +1,4 @@
-import {confirmState} from './review-display.mjs';
+import {confirmState,unitShort} from './review-display.mjs';
 import React,{useState,useMemo} from 'react';
 import {ChevronRight,MessageCircle,AlertCircle} from 'lucide-react';
 import {canHandshake,allNodes} from './domain.mjs';
@@ -21,7 +21,7 @@ function GenerationFailed({reason}){return <p className="generation-failed" role
 function Summary({node,display,comments,onOpen,unitName,issues,showTime=false,stateOf}){
  const d=display(node),count=(comments[node.id]||[]).length;
  return <article role="button" tabIndex={0} aria-label={`打开 ${d.title}`} onClick={()=>onOpen(node)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen(node);}}} className={`plan-doc-node doc-summary doc-${node.level} tone-${levelTone(node)}`} data-document-node={node.id}>
-  <div className="card-head"><span className="level-tag">{d.planLabel||types[node.level]}</span><TierTag tier={d.tier}/>{unitName&&<span className="card-context">{unitName}</span>}<span className="card-meta"><span className="person">{d.owner}</span>{node.children.length>0&&<span>{node.children.length} {types[node.children[0].level]}</span>}{count>0&&<span className="card-comments"><MessageCircle size={14}/> {count}</span>}</span><span className="card-head-end"><IssueChip count={issues?.subtree(node).length}/>{(()=>{const st=stateOf?stateOf(node):{text:d.status,mine:false};return <span className={`state${st.mine?' is-mine':''}`} data-confirmed={d.status==='已确认'}>{st.text}</span>;})()}</span></div>
+  <div className="card-head"><span className="level-tag">{node.level==='mission'&&unitName?`${unitShort(unitName)} · ${d.planLabel||types[node.level]}`:d.planLabel||types[node.level]}</span><TierTag tier={d.tier}/>{unitName&&node.level!=='mission'&&<span className="card-context">{unitName}</span>}<span className="card-meta"><span className="person">{d.owner}</span>{node.children.length>0&&<span>{node.children.length} {types[node.children[0].level]}</span>}{count>0&&<span className="card-comments"><MessageCircle size={14}/> {count}</span>}</span><span className="card-head-end"><IssueChip count={issues?.subtree(node).length}/>{(()=>{const st=stateOf?stateOf(node):{text:d.status,mine:false};return <span className={`state${st.mine?' is-mine':''}`} data-confirmed={d.status==='已确认'}>{st.text}</span>;})()}</span></div>
   <h2>{d.title}</h2>{(d.generationFailed||node.generationFailed)?<GenerationFailed reason={d.generationFailed||node.generationFailed}/>:<p className="doc-description">{d.result||d.description}</p>}
   {showTime&&<p className="doc-summary-time">时间边界：{d.time||'待补充'}</p>}
  </article>;

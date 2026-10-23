@@ -39,7 +39,7 @@ export function answersNexus(state,scope,actorId,now=new Date().toISOString()){
 // Accepting a 新增/撤掉/恢复 Mission card changes the plan's shape, never the PO; the group hears what changed and who confirms.
 function applyMissionCard(previous,actor,proposal){
  const state=structuredClone(previous),po=state.cards[proposal.cardId],me=nameOf(actor.id),now=new Date().toISOString();
- const label=id=>{const at=findInTree(state.round?.units,id);return at?`Mission ${String(at.index+1).padStart(2,'0')}`:'Mission';};
+ const label=id=>{const at=findInTree(state.round?.units,id);return at?`Mission ${at.index+1}`:'Mission';};
  const size=node=>{const k=(node.children||[]).length,d=missionDays(node);return `${k} 个 Task${d?`，约 ${+d.toFixed(1)} 人日`:''}`;};
  if(proposal.op==='add-mission'){const node=addMission(state,po.id,proposal.mission,{now});const signers=[...new Set([currentVersion(po).content.owner,node.owner].flatMap(o=>String(o||'').split(/[、,，]/)).filter(Boolean))];
   groupNotice(state,po,`${me}接受了新增 ${label(node.id)}「${node.title}」（${size(node)}）。请 ${mentionList(signers)} 确认这条 Mission。`);}
@@ -224,6 +224,12 @@ export function applyAction(previous,actor,action){
   const target=action.type==='comment'&&action.baseVersion!==undefined?card.versions.find(x=>x.number===action.baseVersion):v;
   if(!target)fail(400,'批注关联的版本不存在');
   const entry={id:`event-${state.sequence+1}`,createdSequence:state.sequence+1,author:actor.id,scope:unitOf(card),cardId:card.id,version:target.number,text:action.text.trim(),block:typeof action.block==='string'?action.block.slice(0,80):'card',createdAt:now,channel:'group'};
+  // A comment can sit on one item of a list field (陈溪南 2026-10-23); it keeps which item and that item's text,
+  // so whoever reads it (Nexus first) sees exactly what was pointed at.
+  if(action.type==='comment'){const val=target.content[entry.block],pick=Array.isArray(val)&&Number.isInteger(action.item)&&action.item>=0&&action.item<val.length?val[action.item]:undefined;
+   if(pick!==undefined)entry.item=action.item;
+   const raw=pick!==undefined?pick:Array.isArray(val)?undefined:val,txt=typeof raw==='string'?raw:raw&&typeof raw==='object'?(raw.text??[raw.choice,raw.reason].filter(Boolean).join('：')):'';
+   if(txt)entry.quote=String(txt).replace(/\*\*/g,'').replace(/\s*(\[E\d+\])+/g,'').trim().slice(0,400);}
   if(action.replyTo){
    const source=[...state.comments,...state.messages,...(state.proposals||[]).map(p=>({...p,channel:'group',author:'Nexus',cardId:p.cardId,version:p.baseVersion,block:'card',text:'拟修改确认：'+Object.entries(p.patch).map(([key,value])=>key+'：'+(Array.isArray(value)?value.join('；'):value)).join('；')}))].find(e=>e.id===action.replyTo&&e.channel==='group'&&e.scope===unitOf(card));
    if(!source)fail(400,'引用消息不在当前领域或已不可用');

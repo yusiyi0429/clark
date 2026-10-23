@@ -25,7 +25,7 @@ test('新增 Mission：一张卡，PO 负责人接受后挂到 PO 下、带 Task
  assert.deepEqual(s.round.units[0].children.map(m=>m.id),['talent-m1','talent-m2','talent-m3']);
  assert.equal(s.cards['talent-m3'].parentId,'talent');assert.equal(s.cards['talent-m3-t2'].parentId,'talent-m3');
  assert.equal(cardStatus(s.cards['talent-m3']),'待确认');assert.equal(cardStatus(s.cards.talent),'已确认');assert.equal(currentVersion(s.cards.talent).number,1);
- const notice=s.messages.at(-1);assert.equal(notice.kind,'notice');assert.match(notice.text,/新增 Mission 03「Harness 和 Re-arch IC 到岗」（2 个 Task，约 3 人日）/);
+ const notice=s.messages.at(-1);assert.equal(notice.kind,'notice');assert.match(notice.text,/新增 Mission 3「Harness 和 Re-arch IC 到岗」（2 个 Task，约 3 人日）/);
  // From here it is an ordinary Mission: the unit DRI and the Mission DRI confirm it.
  s=applyAction(s,qin,{type:'confirm',cardId:'talent-m3',baseVersion:1,slot:'unitDri'});assert.equal(cardStatus(s.cards['talent-m3']),'待另一方确认');
  const view=sharedProjection(s,ceo);assert.ok(view.drafts['talent-m3-t1']);assert.ok(view.round.units[0].children.some(m=>m.id==='talent-m3'));

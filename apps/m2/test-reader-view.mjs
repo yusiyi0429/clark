@@ -20,7 +20,7 @@ test('日期易读；仅移除重复候选前缀，不移除条件候选；PO汇
  assert.equal(cleanCandidatePrefix('条件候选：外部窗口未确认'),'条件候选：外部窗口未确认');
  const node={level:'po',children:[{dependencies:'供应商通道未确认；未满足则调用受阻',milestones:['通道验收，2026-10-28 完成'],humanView:{milestones:['通道验收']}}]};
  assert.deepEqual(inheritedPlanField(node,'milestones').value,['10/28 通道验收']);
- assert.match(inheritedPlanField(node,'dependencies').value[0],/Mission 01：供应商通道未确认/);
+ assert.match(inheritedPlanField(node,'dependencies').value[0],/Mission 1：供应商通道未确认/);
  assert.equal(inheritedPlanField({...node,dependencies:['原始依赖']},'dependencies'),null);
  assert.equal(node.dependencies,undefined);
 });
