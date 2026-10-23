@@ -103,7 +103,7 @@ describe("对话端点与附件", () => {
 });
 
 describe("全局输入条（clark workspace 614–640）", () => {
-  it("收起时只有一颗主按钮「输入文字」：没有天枢自己的语音入口（语音交给微信输入法）", () => {
+  it("收起时只有一颗主按钮「输入文字」：没有「点击说话」、切换键和麦克风", () => {
     const html = dock();
     expect(html).toContain("输入文字");
     expect(html).toContain('aria-expanded="false"');
@@ -117,8 +117,8 @@ describe("全局输入条（clark workspace 614–640）", () => {
   it("键盘面：首页占位「输入问题或指令…」，二级页「继续讨论…」，批注后改为围绕批注", () => {
     expect(dock({ keyboard: true })).toContain('placeholder="输入问题或指令…"');
     expect(dock({ keyboard: true })).toContain('aria-label="全局对话输入"');
-    // 展开后也没有麦克风。
-    expect(dock({ keyboard: true })).not.toContain("语音输入");
+    // 展开后附件旁边是小麦克风（天枢自己的听写，存在感放低）。
+    expect(dock({ keyboard: true })).toContain('aria-label="语音输入"');
     const detail = dock({ keyboard: true, detail: true, global: false, label: "交付力量先支持灯塔" });
     expect(detail).toContain('placeholder="继续讨论…"');
     expect(detail).toContain('aria-label="交付力量先支持灯塔对话输入"');

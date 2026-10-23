@@ -47,11 +47,11 @@ describe("对话层收起", () => {
     expect(shell).toMatch(/\.historyBackdrop\[data-leaving\]\{animation:historyVeilOut/);
   });
 
-  it("语音面的内容区填满输入条（不固定 136），附件键收起时收窄淡出", () => {
+  it("收起时内容区填满输入条（不固定 136），附件键、小麦克风收起时收窄淡出", () => {
     const dock = css("conversation-dock.module.css");
     expect(dock).not.toMatch(/\.layer \.dock:not\(\.typing\) \.content\{flex:none;width:136px\}/);
     expect(dock).toMatch(/\.layer \.dock:not\(\.typing\) \.content\{flex:1 1 0;width:auto;min-width:0\}/);
-    expect(dock).toMatch(/\.attachButton\.attachLeaving\{width:0;min-width:0;margin-left:-5px;opacity:0/);
+    expect(dock).toMatch(/\.dock \.attachLeaving\{width:0;min-width:0;margin-left:-5px;opacity:0/);
     expect(dock).toMatch(/prefers-reduced-motion:reduce\) \{ \.layer \* \{ animation:none!important; transition:none!important; \} \}/);
   });
 });

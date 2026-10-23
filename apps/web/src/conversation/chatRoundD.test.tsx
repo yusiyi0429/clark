@@ -64,19 +64,21 @@ describe("D1 对话层没有页头横条", () => {
   });
 });
 
-describe("D2 输入条：没有历史键，附件贴左边", () => {
-  it("键盘面：[附件] 输入框；没有历史键、没有麦克风", () => {
+describe("D2 输入条：没有历史键；打字面左边是 [附件] [小麦克风]", () => {
+  it("键盘面：[附件] [小麦克风] 输入框；没有历史键", () => {
     const html = dock({ keyboard: true });
     const attach = html.indexOf("上传附件（PDF/DOCX/Markdown）");
+    const mic = html.indexOf('aria-label="语音输入"');
     expect(attach).toBeGreaterThan(-1);
-    expect(html.indexOf("<textarea")).toBeGreaterThan(attach);
+    expect(mic).toBeGreaterThan(attach);
+    expect(html.indexOf("<textarea")).toBeGreaterThan(mic);
     expect(html).not.toContain("对话记录");
-    expect(html).not.toContain("语音输入");
   });
-  it("收起时：只有主按钮，没有历史键、没有附件键", () => {
+  it("收起时：只有主按钮，没有历史键、附件键、麦克风", () => {
     const html = dock();
     expect(html).not.toContain("对话记录");
     expect(html).not.toContain("上传附件");
+    expect(html).not.toContain("语音输入");
     expect(css("conversation-dock.module.css")).toMatch(/\.layer \.dock:not\(\.typing\)\{width:calc\(10px \+ 136px \+ 2px\)/);
   });
   it("主按钮不用主题蓝（主题蓝只留给约会议）", () => {
@@ -165,9 +167,11 @@ describe("D6 输入条上方没有气泡：消息都在对话层里", () => {
   it("样式里没有气泡那一套", () => {
     expect(css("conversation-dock.module.css")).not.toMatch(/caption/i);
   });
-  it("发送失败的说明在对话层里", () => {
-    const html = renderToStaticMarkup(<ConversationHistorySheet data={data({ error: "和模型服务的网络连接中断了，已自动恢复 3 次仍未成功（多半是本机网络或代理切换）。已写出的部分保留在上方，点「继续」从断点接着写。" })} label="天枢" global onClose={noop} />);
+  it("听写出错的提示、发送失败的说明在对话层里", () => {
+    const html = renderToStaticMarkup(<ConversationHistorySheet data={data({ error: "和模型服务的网络连接中断了，已自动恢复 3 次仍未成功（多半是本机网络或代理切换）。已写出的部分保留在上方，点「继续」从断点接着写。" })} label="天枢" global onClose={noop}
+      notice="麦克风未授权，无法语音输入。可在浏览器地址栏左侧开启麦克风权限。" />);
     expect(html).toContain("和模型服务的网络连接中断了，已自动恢复 3 次仍未成功（多半是本机网络或代理切换）。已写出的部分保留在上方，点「继续」从断点接着写。");
+    expect(html).toContain("麦克风未授权，无法语音输入。");
   });
   it("对话层升起与输入条展开是同一个动作：同一时长、同一缓动", () => {
     const rise = css("app-shell.module.css").match(/\.historySheet\{[^}]*animation:historyRise (\d+ms) ([^ ]+\)) both/);

@@ -8,7 +8,7 @@ const h = vi.hoisted(() => ({ states: [] as unknown[], refs: [] as { current: un
   stateIndex: 0, refIndex: 0, effectIndex: 0, queued: [] as (() => unknown)[], dirty: false,
   field: null as { value: string; onChange: (event: { target: { value: string } }) => void } | null,
   form: null as { onSubmit: () => void } | null, frames: [] as (() => void)[],
-  inputElement: { value: "", focus: vi.fn(), setSelectionRange: vi.fn() }, storage: new Map<string, string>(),
+  inputElement: { value: "", focus: vi.fn(), setSelectionRange: vi.fn() }, storage: new Map<string, string>(), dictationStart: vi.fn(),
 }));
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
@@ -40,6 +40,8 @@ vi.mock("./ComposerPill", () => ({ pillStyles: {}, usePillRows: () => 1,
 vi.mock("./QuoteChips", () => ({ QuoteChips: ({ quotes }: { quotes: TextQuote[] }) => <span data-quote-count={quotes.length}>引用</span> }));
 vi.mock("./ConversationColumn", () => ({ columnComposerClass: "column", pressChannel: vi.fn() }));
 vi.mock("./ConversationAttachments", () => ({ AttachButton: () => null }));
+vi.mock("./DictationControls", () => ({ DictationControls: () => null }));
+vi.mock("./useDictation", () => ({ useDictation: () => ({ active: false, polishing: false, phase: "idle", marks: [], clearError: vi.fn(), change: () => false, composition: vi.fn(), keyDown: () => false, start: h.dictationStart }), withDictation: (input: string, text: string) => input + text }));
 
 import { ColumnComposer } from "./ColumnComposer";
 import { readQuotedMessage } from "./quotes";
@@ -130,11 +132,12 @@ describe("文字引用不混进二级页输入", () => {
 });
 
 describe("月度计划逐段评审：就地入口只是召唤这一个输入条", () => {
-  it("新引用挂上：光标进输入框，不发送、不动草稿", () => {
+  it("新引用挂上：光标进输入框，不进听写、不发送、不动草稿（语音交给微信输入法）", () => {
     h.storage.set("tianshu-conversation-draft-v1:sun:mission-card:card-01", "我自己的问题");
     const { send, render } = setup({ text: quote.text, nonce: 2 });
     render(); h.frames.forEach((frame) => frame());
     expect(h.inputElement.focus).toHaveBeenCalledOnce();
+    expect(h.dictationStart).not.toHaveBeenCalled();
     expect(h.field!.value).toBe("我自己的问题");
     expect(send).not.toHaveBeenCalled();
   });
@@ -150,6 +153,7 @@ describe("月度计划逐段评审：就地入口只是召唤这一个输入条"
     expect(h.field!.value).toBe("还没发的话");
     expect(props.onRemoveQuotes).not.toHaveBeenCalled();
     expect(onResult).toHaveBeenCalledWith(true);
+    expect(h.dictationStart).not.toHaveBeenCalled();
   });
   it("回答进行中不代发，回报没接下", () => {
     const onResult = vi.fn();

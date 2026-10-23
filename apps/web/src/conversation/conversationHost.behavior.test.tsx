@@ -13,9 +13,9 @@ const harness = vi.hoisted(() => ({
   column: { mode: "strip" as "strip" | "expanded", narrow: false, setMode: vi.fn() },
   conversation: {} as Record<string, unknown>,
   anchor: undefined as { cardId: string; version: number } | undefined,
-  sheet: null as { onQuote?: (text: string) => void; onClose: () => void; composerRef?: unknown } | null,
+  sheet: null as { onQuote?: (text: string) => void; onClose: () => void; composerRef?: unknown; notice?: string | null } | null,
   dock: null as { dockRef?: unknown; onRestoreQuotes?: unknown; keyboard: boolean; onKeyboardChange: (keyboard: boolean) => void;
-    wide?: boolean; onWideExit?: () => void } | null,
+    onDictationError?: (error: string | null) => void; wide?: boolean; onWideExit?: () => void } | null,
   viewport: 1440,
   jumps: [] as { streaming?: boolean; visible: boolean }[],
   selected: null as { top: number; left: number; text: string } | null,
@@ -365,6 +365,14 @@ describe("打字面与对话层一起开合（D6）", () => {
     expect(rail.ui.setHistoryOpen).not.toHaveBeenCalled();
   });
 
+  it("听写出错的提示交给对话层显示", () => {
+    const { ui, render } = home();
+    ui.historyOpen = true; render();
+    expect(harness.sheet!.notice ?? null).toBeNull();
+    harness.dock!.onDictationError!("未识别到语音，请靠近麦克风后重试。");
+    render();
+    expect(harness.sheet!.notice).toBe("未识别到语音，请靠近麦克风后重试。");
+  });
 });
 
 describe("议题群聊（巡检 P0-3）", () => {

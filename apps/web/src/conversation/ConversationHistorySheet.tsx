@@ -22,7 +22,7 @@ import t from "@/styles/conversation-transcript.module.css";
  * 对话记录（clark `ConversationHistorySheet`）：从输入条升起的浅色阅读面，非模态。
  * 没有页头横条（D1）：正文从顶部开始；左上一颗圆形液态玻璃的星标（只是标识），右上一颗同样的「收起 ⌄」。
  * 点对话层外的空白处、Esc 也收起（宿主在对话层外放一层透明的点击区，不盖遮罩）。附件键在输入条上（D2）。记录归谁写在 data-conversation-owner 上。
- * 输入条上方没有气泡（D6）：发送失败（data.error）作为轻提示写在这里。
+ * 输入条上方没有气泡（D6）：听写出错（notice）、发送失败（data.error）都作为轻提示写在这里。
  * 载入中、没读到、真的没有记录分开画。提案卡插在触发它的那轮回答之后（ConversationTimeline，B5）。
  * 一条连续的对话（已定设计第 1 节）：没有「新建对话」「+」，也没有历史对话列表；换话题说一句话就行。
  * 划词引用（B4）：选中消息正文浮出「引用」，交给 onQuote 进本对话的输入框上方，对话层不关。
@@ -34,7 +34,7 @@ import t from "@/styles/conversation-transcript.module.css";
  * 滚动区一开始就是终态尺寸、贴着外框左上角，正文只在第一帧按终值排一次；流式上屏、思考追加、各处 ResizeObserver
  * 都等过渡结束再一次补齐（resizeGate）。
  */
-export function ConversationHistorySheet({ data, label, global, onClose, anchor = "end", onQuote, composerRef, leaving = false, wide = false, onWide }: {
+export function ConversationHistorySheet({ data, label, global, onClose, anchor = "end", onQuote, composerRef, notice, leaving = false, wide = false, onWide }: {
   data: ConversationData; label: string; global: boolean; onClose: () => void;
   /** 打开时停在哪：底部（默认），或最后一条回答的开头（从首页气泡点开）。 */
   anchor?: ScrollAnchor;
@@ -42,6 +42,8 @@ export function ConversationHistorySheet({ data, label, global, onClose, anchor 
   onQuote?: (text: string) => void;
   /** 全局输入条那一块（含其中的引用行）：↓ 贴着它的上沿。 */
   composerRef?: RefObject<HTMLElement | null>;
+  /** 输入条交上来的轻提示（听写没授权、没听清）。 */
+  notice?: string | null;
   /** 正在收起（退场动画中）：不再可交互，播完由宿主卸载。 */
   leaving?: boolean;
   /** 放大着（宿主只在 ≥1280 时给 true）。 */
@@ -97,6 +99,7 @@ export function ConversationHistorySheet({ data, label, global, onClose, anchor 
             <div className={w.chatWelcome} />
           } />
           {data.error && !data.streaming ? <ConversationNotice text={data.error} action={data.recovery} /> : null}
+          {notice ? <ConversationNotice text={notice} /> : null}
           <AttachmentStatus data={data} className={t.meta} />
           {/* 回答进行中，思考与进度排在时间线里本轮正文之后、本轮卡片之前（ConversationTimeline）；这里只在没有回答进行时留出同样高度的空位。 */}
           {data.streaming ? null : <ConversationStatusSlot />}

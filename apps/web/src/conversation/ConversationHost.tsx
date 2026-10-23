@@ -138,6 +138,8 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, subject, ui 
     ui.setHistoryOpen(true);
   });
 
+  /** 听写出错（没授权、没听清）：输入条交上来，在对话层里说（D6）。 */
+  const [dictationError, setDictationError] = useState<string | null>(null);
   // 新引用 / 起草（引用提问、划词引用、起草文档）在没有右列的页面上：打字面和对话层一起出来。
   const usesDock = !rail || ui.historyOpen;
   useEffect(() => {
@@ -184,7 +186,7 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, subject, ui 
             data-leaving={sheet.leaving || undefined} tabIndex={sheet.leaving ? -1 : undefined} />
           <ConversationHistorySheet data={data} label={target.label} global={global} onClose={closeHistory} composerRef={dockRef} leaving={sheet.leaving}
             wide={canWide && sheetWide} onWide={canWide ? setSheetWide : undefined}
-            onQuote={(text) => ui.quoteInConversation(text, { scope: target.scope, intent: MESSAGE_REPLY })} />
+            notice={dictationError} onQuote={(text) => ui.quoteInConversation(text, { scope: target.scope, intent: MESSAGE_REPLY })} />
         </>
       ) : null}
       <ConversationDock
@@ -195,6 +197,7 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, subject, ui 
         keyboard={ui.historyOpen}
         onKeyboardChange={keyboardChange}
         historyOpen={ui.historyOpen}
+        onDictationError={setDictationError}
         references={items}
         onRemoveReference={removeReference}
         onClearReferences={clearReferences}

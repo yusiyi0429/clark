@@ -4,7 +4,7 @@
  * 二级页的输入条（clark `conversation/composer-pill.tsx`），一直是两行：
  * - 上面一行是文字；写多了往上长，最多 7 行，再多在框里滚。有附件时附件条在最上面。
  * - 下面一行是操作区：左边频道开关（当前那颗实心频道色、白字，整张卡的底色和占位文字跟着换 ——「这句话发给谁」
- *   一眼看得到）；右边一颗钮两态：发送（空着时灰着），回答中是停止。语音交给微信输入法，这里没有麦克风。
+ *   一眼看得到）；右边是调用方给的工具键（附件、小麦克风）和一颗两态钮：发送（空着时灰着），回答中是停止。
  * - 点卡片上的空白处就是点文字框。
  *
  * 这里只管样子和排布；文字框、发送、停止由调用方给（ColumnComposer）。颜色读 conversation-column.module.css
@@ -35,8 +35,10 @@ export const ComposerPill = forwardRef<
     onSubmit: () => void;
     /** 输入条此刻多高：宿主据此给右列正文让位。 */
     onHeight?: (height: number) => void;
+    /** 听写中：频道开关先收起，底行整行给听写控件（✕ · 点阵 · ■ · ↑）。 */
+    dictating?: boolean;
   }
->(function ComposerPill({ tone, references, leading, field, action, onSubmit, onHeight }, ref) {
+>(function ComposerPill({ tone, references, leading, field, action, onSubmit, onHeight, dictating }, ref) {
   const form = useRef<HTMLFormElement | null>(null);
   // 每次渲染后量一次（附件条出现、行数变化都在渲染里发生），再加一个 ResizeObserver 接住宽度变化。
   useLayoutEffect(() => {
@@ -59,6 +61,7 @@ export const ComposerPill = forwardRef<
       className={p.pill}
       data-tone={tone}
       data-references={references ? true : undefined}
+      data-dictating={dictating || undefined}
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit();
