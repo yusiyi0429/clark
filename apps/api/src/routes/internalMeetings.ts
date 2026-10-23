@@ -6,12 +6,15 @@ import type { Viewer } from "../meetingCard.js";
 import { listConfirmedMeetings, PayloadHashMismatchError, readConfirmedMeeting } from "../meetingCardRead.js";
 import { meetingHasEnded } from "../meetingStore.js";
 import { canUseMemberView, roleOf, type SessionRole } from "../memberAccess.js";
+import { MISSION_PLAN_TIMEOUT_MS, readMissionPlans, type MissionPlanWorld, type MissionPlanWorldOff } from "../missionPlanRead.js";
+import { companyPeriod } from "../monthlyPlans.js";
 import { personDisplayNames } from "../people.js";
+import { WorldClient, worldConfigured } from "../worldClient.js";
 import { readHomeSnapshots } from "./cards.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 const catalogQuery = Type.Object({
-  query: Type.Optional(Type.String()),
+  query: Type.Optional(Type.String({ maxLength: 200 })),
   from: Type.Optional(Type.String()),
   to: Type.Optional(Type.String()),
   participantId: Type.Optional(Type.String()),
@@ -144,5 +147,16 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
     if (!view) return reply;
     const cards = await readHomeSnapshots(ctx, view);
     return { viewerRole: view.role, scene: view.role === "ceo" ? "公司首页" : "我的工作台", cards: cards.map((card) => ({ ...card, label: "页面" })) };
+  });
+
+  // 本人本月 Mission 的本体计划（10/23 诊断方案二）：两种视角都是本人的；本体配了、实例也开了读才读（只读，每次请求 2.5 秒、整次 5 秒），否则 plan 为 null。
+  const planWorld: MissionPlanWorld | MissionPlanWorldOff = ctx.world?.enabled
+    ? new WorldClient(q, env, undefined, { timeoutMs: MISSION_PLAN_TIMEOUT_MS })
+    : worldConfigured(env) ? "world_reads_off" : "world_not_configured";
+  app.get("/internal/mission-plans", { onRequest }, async (req, reply) => {
+    const view = viewOf(req, reply);
+    if (!view) return reply;
+    const period = companyPeriod(ctx.now());
+    return { viewerRole: view.role, period, missions: await readMissionPlans(q, view.personId, period, planWorld) };
   });
 }
