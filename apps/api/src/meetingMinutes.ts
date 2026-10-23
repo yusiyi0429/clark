@@ -507,6 +507,23 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   }
 
   /**
+   * 待整理的妙记整理或记到会上以后读（feishuMinuteInbox.ts 的后台任务）：只用妙记所有者本人的授权，按 token 走和「再读一次」同一条路。
+   * 会不在、不是 scheduled、已有逐字稿或候选、记着的不是这份妙记 → rejected；原文还没好 → not_ready（交给任务退避重试）。
+   */
+  async function ingestForOwner(meetingId: string, minuteToken: string, ownerId: string): Promise<"ready" | "not_ready" | "failed" | "taken" | "rejected"> {
+    const meeting = await getMeetingRow(q, meetingId);
+    if (!meeting || meeting.status !== "scheduled" || meeting.transcript || meeting.transcript_candidate || meeting.minute_token !== minuteToken) return "rejected";
+    const token = await tokenFor(ownerId);
+    if (!feishu || !token) {
+      await fail(meetingId, "no_permission", "妙记所有者没有可用的飞书授权");
+      return "failed";
+    }
+    const result = await ingestByToken(feishu.api, meeting, [{ token }], minuteToken, false);
+    if (result.kind !== "failed") return result.kind;
+    return (await getMeetingRow(q, meetingId))?.minutes_failure === "not_ready" ? "not_ready" : "failed";
+  }
+
+  /**
    * 有人刚连上飞书：他主持或建的会里，因为没有可用授权退回手动（或读的时候没权限）、还没有逐字稿和候选、开完 48 小时以内的，
    * 回到等妙记（从现在起再等 2 小时），并马上排一次轮询，不等下一个 5 分钟。返回接着等的会有几场。
    */
@@ -567,6 +584,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     readLink,
     resumeFor,
     transcriptFor,
+    ingestForOwner,
     async tick(): Promise<void> {
       await markEnded(now());
       await poll();

@@ -1,7 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import {
-  FeishuMinuteInboxResponse, ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardView,
-  MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse,
+  FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardView,
+  MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse, OrganizeFeishuMinuteRequest,
 } from "@warmap/contracts";
 import { askImpactCard, markImpactCardIrrelevant, readImpactCardByRequest } from "../impactCards.js";
 import type { MeetingFollowThrough } from "../meetingFollowThrough.js";
@@ -22,6 +22,18 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
   // 飞书里直接开的会待整理：只认本人（列表只有本人名下的，别人的妙记一律 404）。
   app.get("/api/me/feishu-minutes", { preHandler: ctx.requirePerson, schema: { response: { 200: FeishuMinuteInboxResponse } } },
     async (req) => ({ minutes: await followThrough.minuteInbox.listFor(req.person!.personId) }));
+
+  // 整理：建一场已开完的会，后台用所有者本人的授权读妙记；不约飞书日程。
+  app.post("/api/me/feishu-minutes/:token/organize", {
+    preHandler: ctx.requirePerson, schema: { params: tokenParams, body: OrganizeFeishuMinuteRequest, response: { 200: FeishuMinuteMeetingResponse } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "feishu_minute.organize", objectRef: `feishu_minute:${req.params.token}` });
+    const result = await followThrough.minuteInbox.organize(req.person!.personId, req.params.token, req.body);
+    if ("error" in result) {
+      return ctx.fail(reply, result.error.status, result.error.code, result.error.message, result.error.fieldErrors ? { fieldErrors: result.error.fieldErrors } : undefined);
+    }
+    return result;
+  });
 
   app.post("/api/me/feishu-minutes/:token/ignore", { preHandler: ctx.requirePerson, schema: { params: tokenParams } }, async (req, reply) => {
     ctx.requestContext.set(req, { actionType: "feishu_minute.ignore", objectRef: `feishu_minute:${req.params.token}` });

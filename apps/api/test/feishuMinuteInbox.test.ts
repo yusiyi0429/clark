@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import type { TestApp } from "./helpers.js";
+import { preflightCandidate, TEST_MEMBER, type TestApp } from "./helpers.js";
 import { emptyDraft, emptyPreflight } from "../src/meetingStore.js";
+import { FeishuApiError } from "../src/feishu/client.js";
 import type { FeishuMinuteInfo, FeishuMinutesApi } from "../src/feishu/minutes.js";
-import { authorize, CEO, connect, HOST, inboxApp, loginAs, OWNER } from "./feishuMinutesFixtures.js";
+import type { PreflightAgent } from "../src/meetingPreflight.js";
+import { shanghaiDate } from "../src/workdays.js";
+import { authorize, CEO, connect, HOST, inboxApp, loginAs, OWNER, TRANSCRIPT } from "./feishuMinutesFixtures.js";
 
-// 飞书里直接开的会待整理：扫描登记、妙记生成事件、列表与忽略（只认本人）。
+// 飞书里直接开的会待整理：扫描登记、妙记生成事件、列表与忽略（只认本人）、整理成一场天枢会。
 const MINUTE_MS = 60_000;
 
 function minute(token: string, options: { sourceType?: string | null; meetingId?: string | null; ownerOpenId?: string | null; createdAt?: Date } = {}): FeishuMinuteInfo {
@@ -16,15 +19,29 @@ function minute(token: string, options: { sourceType?: string | null; meetingId?
   };
 }
 
-/** 假妙记接口：列出全部未在 skip 里的妙记（不按所有者、不按时间），让服务自己的判断被测到。 */
+/** 假妙记接口：列出全部未在 skip 里的妙记（不按所有者、不按时间），让服务自己的判断被测到；读原文时有 readError 就抛它。 */
 function fakeApi(minutes: FeishuMinuteInfo[] = []) {
   const api = {
     calls: [] as string[],
     minutes,
+    readError: null as Error | null,
     participants: async (_meetingId: string): Promise<string[]> => [],
-    async getMinute(): Promise<never> { throw new Error("不该调用"); },
-    async artifactTranscript(): Promise<never> { throw new Error("不该调用"); },
-    async exportTranscript(): Promise<never> { throw new Error("不该调用"); },
+    async getMinute(token: string, minuteToken: string) {
+      api.calls.push(`get:${token}:${minuteToken}`);
+      const found = api.minutes.find((item) => item.token === minuteToken);
+      if (!found) throw new FeishuApiError(2091002, "not found");
+      return found;
+    },
+    async artifactTranscript(token: string, minuteToken: string) {
+      api.calls.push(`artifacts:${token}:${minuteToken}`);
+      if (api.readError) throw api.readError;
+      return TRANSCRIPT;
+    },
+    async exportTranscript(token: string, minuteToken: string) {
+      api.calls.push(`export:${token}:${minuteToken}`);
+      if (api.readError) throw api.readError;
+      return TRANSCRIPT;
+    },
     async listMinutes(token: string, _owner: { openId: string }, _range: { start: Date; end: Date }, skip?: ReadonlySet<string>) {
       api.calls.push(`list:${token}`);
       return api.minutes.filter((item) => !skip?.has(item.token));
@@ -160,6 +177,7 @@ describe("飞书妙记待整理：扫描登记", () => {
         { kind: "meeting.minute_inbox_scan", dedupe_key: "meeting.minute_inbox_scan:event:minuteevt" },
       ]);
       expect(jobs.handlers["meeting.minute_inbox_scan"]).toBeTypeOf("function");
+      expect(jobs.handlers["meeting.minute_inbox_ingest"]).toBeTypeOf("function");
       expect(jobs.recurring).toContainEqual({ kind: "meeting.minute_inbox_scan", everyMs: 300_000 });
     } finally {
       await t.close();
@@ -211,6 +229,154 @@ describe("飞书妙记待整理：列表与忽略", () => {
       const conflict = await ignore(t, owner, "minuteattached");
       expect(conflict.statusCode).toBe(409);
       expect(conflict.json().code).toBe("MINUTE_NOT_PENDING");
+    } finally {
+      await t.close();
+    }
+  });
+});
+
+describe("飞书妙记待整理：整理成一场天枢会", () => {
+  const TOKEN = "minuteorg";
+  const MISSION = "m-inbox";
+  const body = (extra: Record<string, unknown> = {}) => ({ title: "改过的会名", anchors: [{ kind: "mission", id: MISSION }], ...extra });
+  const organize = (t: TestApp, cookie: string, payload: Record<string, unknown> = body()) =>
+    t.app.inject({ method: "POST", url: `/api/me/feishu-minutes/${TOKEN}/organize`, headers: { cookie, origin: t.publicOrigin }, payload });
+  const ingestQueued = (t: TestApp) => t.app.meetingFollowThrough.minuteInbox.ingestQueued({ minuteToken: TOKEN });
+  const inboxRow = async (t: TestApp) => (await t.sql("SELECT status, meeting_id FROM feishu_minute_inbox WHERE minute_token = $1", [TOKEN]))[0];
+  const meetingCount = async (t: TestApp) => (await t.sql("SELECT count(*)::int AS count FROM meetings"))[0].count as number;
+  const ingestJobs = (t: TestApp) => t.sql("SELECT kind, dedupe_key FROM jobs WHERE kind = 'meeting.minute_inbox_ingest'");
+
+  /** OWNER（只有 participant 角色）连好飞书、扫描登记了一份待整理；挂点是妙记所在月的 Mission；预审用计数的假实现。 */
+  async function setup() {
+    const api = fakeApi([minute(TOKEN)]);
+    api.participants = async () => ["ou_owner", "ou_host", "ou_guest"];
+    const preflight = { calls: 0, async generate() { preflight.calls += 1; return { candidate: preflightCandidate([]) }; } } satisfies PreflightAgent & { calls: number };
+    const t = await inboxApp(api, { preflightAgent: preflight });
+    const period = shanghaiDate(api.minutes[0].createdAt!).slice(0, 7);
+    await t.pool.query("INSERT INTO capability_config (id, version, name, \"group\", six_month_outcome, code, owner_id) VALUES ('unit-inbox', 1, '待整理单元', 'test', '', '98', $1)", [TEST_MEMBER.personId]);
+    await t.pool.query(`INSERT INTO missions (id, version, code, period, title, owner_id, capability_id, outcome, source_ref, source_document_id, source_revision, source_title)
+      VALUES ($1, 1, 'inbox-mission', $2, '待整理挂点 Mission', $3, 'unit-inbox', '跑通待整理', 'test://m', 'test', 1, '测试')`, [MISSION, period, TEST_MEMBER.personId]);
+    await authorize(t, HOST, "ou_host", "测试乙", new Date());
+    await connect(t, OWNER, "ou_owner", "测试丙");
+    expect(await scan(t)).toBe(1);
+    const owner = await loginAs(t, OWNER, "ceshib", "8642");
+    return { t, api, preflight, owner };
+  }
+
+  it("整理：建一场已开完的会", async () => {
+    const { t, api, preflight, owner } = await setup();
+    try {
+      const response = await organize(t, owner);
+      expect(response.statusCode).toBe(200);
+      expect(Object.keys(response.json())).toEqual(["meetingId"]);
+      const meetingId = response.json().meetingId as string;
+      const [row] = await t.sql(`SELECT title, lead_dri_id, created_by, scheduled_at, ends_at, started_at, ended_at, status, minutes_status, minute_token,
+        feishu_meeting_id, external_id, origin_ref, world_anchors, participants, preflight FROM meetings WHERE id = $1`, [meetingId]);
+      expect(row).toMatchObject({ title: "改过的会名", lead_dri_id: OWNER, created_by: OWNER, status: "scheduled", minutes_status: "waiting",
+        minute_token: TOKEN, feishu_meeting_id: `vc_${TOKEN}`, external_id: `feishu-minute:${TOKEN}`, world_anchors: [{ kind: "mission", id: MISSION }] });
+      expect(row.origin_ref.type).toBe("feishu_minute");
+      const start = api.minutes[0].createdAt!.getTime();
+      expect([row.scheduled_at, row.started_at].map((at: Date) => at.getTime())).toEqual([start, start]);
+      expect([row.ends_at, row.ended_at].map((at: Date) => at.getTime())).toEqual([start + 4200_000, start + 4200_000]);
+      expect(row.participants.map((person: { personId: string }) => person.personId)).toEqual([CEO, OWNER, HOST]);
+      // 不跑预审、不在飞书约会。
+      expect(row.preflight.status).toBe("pending");
+      expect(preflight.calls).toBe(0);
+      expect(await t.sql("SELECT 1 FROM jobs WHERE kind = 'meeting.feishu_event'")).toEqual([]);
+      expect(await inboxRow(t)).toEqual({ status: "organized", meeting_id: meetingId });
+      expect(await ingestJobs(t)).toEqual([{ kind: "meeting.minute_inbox_ingest", dedupe_key: `meeting.minute_inbox_ingest:${TOKEN}` }]);
+      expect((await list(t, owner)).json().minutes).toEqual([]);
+      // 另一场会的主持人贴这份妙记链接：已经对到这场会上了。
+      const other = await insertMeeting(t);
+      const pasted = await t.app.inject({ method: "POST", url: `/api/meetings/${other}/minutes`, headers: { cookie: await t.memberCookie(), origin: t.publicOrigin },
+        payload: { url: `https://example.feishu.cn/minutes/${TOKEN}` } });
+      expect(pasted.statusCode).toBe(409);
+      expect(pasted.json().code).toBe("MINUTE_TAKEN");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("读妙记只用所有者本人的授权，之后同一条链路", async () => {
+    const { t, api, owner } = await setup();
+    try {
+      const meetingId = (await organize(t, owner)).json().meetingId as string;
+      api.calls = [];
+      await ingestQueued(t);
+      expect(api.calls.length).toBeGreaterThan(0);
+      for (const call of api.calls) expect(call).toContain("u-person-fixture-003");
+      const [row] = await t.sql("SELECT status, minutes_status, transcript, outcome FROM meetings WHERE id = $1", [meetingId]);
+      expect(row).toMatchObject({ status: "held", minutes_status: "ready" });
+      expect(row.transcript.source.format).toBe("feishu_minutes");
+      expect(row.outcome.status).toBe("ready");
+      const cards = await t.app.inject({ method: "GET", url: "/api/me/meeting-cards", headers: { cookie: owner } });
+      expect(cards.json().meetings).toEqual([expect.objectContaining({ meetingId, status: "pending" })]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("同一份妙记并发整理只成一场", async () => {
+    const { t, owner } = await setup();
+    try {
+      const [first, second] = await Promise.all([organize(t, owner), organize(t, owner)]);
+      expect([first.statusCode, second.statusCode]).toEqual([200, 200]);
+      expect(second.json().meetingId).toBe(first.json().meetingId);
+      expect(await t.sql("SELECT id FROM meetings WHERE external_id = $1", [`feishu-minute:${TOKEN}`])).toHaveLength(1);
+      expect(await ingestJobs(t)).toHaveLength(1);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("原文还没好时整理", async () => {
+    const { t, api, owner } = await setup();
+    try {
+      api.readError = new FeishuApiError(2091003, "not ready");
+      const meetingId = (await organize(t, owner)).json().meetingId as string;
+      await expect(ingestQueued(t)).rejects.toThrow("MINUTES_NOT_READY");
+      expect(await t.sql("SELECT minutes_status, minutes_failure FROM meetings WHERE id = $1", [meetingId])).toEqual([{ minutes_status: "failed", minutes_failure: "not_ready" }]);
+      api.readError = null;
+      await ingestQueued(t);
+      expect((await t.sql("SELECT minutes_status FROM meetings WHERE id = $1", [meetingId]))[0].minutes_status).toBe("ready");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("整理时妙记已被挂走", async () => {
+    const { t, owner } = await setup();
+    try {
+      const other = await insertMeeting(t);
+      await t.sql("UPDATE meetings SET minute_token = $2 WHERE id = $1", [other, TOKEN]);
+      const response = await organize(t, owner);
+      expect(response.statusCode).toBe(409);
+      expect(response.json().code).toBe("MINUTE_TAKEN");
+      expect(await meetingCount(t)).toBe(1);
+      expect(await inboxRow(t)).toEqual({ status: "pending", meeting_id: null });
+      expect(await ingestJobs(t)).toEqual([]);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("不能整理的", async () => {
+    const { t, owner } = await setup();
+    try {
+      const expectRejected = async (response: Awaited<ReturnType<typeof organize>>, status: number, code: string, inboxStatus = "pending") => {
+        expect(response.statusCode).toBe(status);
+        expect(response.json().code).toBe(code);
+        expect(await meetingCount(t)).toBe(0);
+        expect((await inboxRow(t)).status).toBe(inboxStatus);
+      };
+      await expectRejected(await organize(t, await t.memberCookie()), 404, "MINUTE_NOT_FOUND");
+      await expectRejected(await organize(t, owner, body({ anchors: [{ kind: "mission", id: "not-a-mission" }] })), 400, "ANCHOR_NOT_FOUND");
+      const blank = await organize(t, owner, body({ title: "   " }));
+      await expectRejected(blank, 400, "INVALID_INPUT");
+      expect(blank.json().fieldErrors).toHaveProperty("title");
+      expect((await ignore(t, owner, TOKEN)).statusCode).toBe(204);
+      await expectRejected(await organize(t, owner), 409, "MINUTE_NOT_PENDING", "ignored");
+      expect(await ingestJobs(t)).toEqual([]);
     } finally {
       await t.close();
     }

@@ -5,6 +5,7 @@ import { createTestApp, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js
 import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
 import { saveAuthorizedToken } from "../src/feishu/tokens.js";
 import type { FeishuMinutesApi } from "../src/feishu/minutes.js";
+import type { PreflightAgent } from "../src/meetingPreflight.js";
 import { FEISHU_MINUTES_READ_SCOPES } from "../src/feishu/oauth.js";
 import { hashSecret } from "../src/session.js";
 
@@ -61,9 +62,9 @@ export async function loginAs(t: TestApp, personId: string, loginId: string, pas
 }
 
 /** 接了飞书的天枢（妙记接口用假实现），上线时刻拨到一天前。 */
-export async function inboxApp(api: FeishuMinutesApi): Promise<TestApp> {
+export async function inboxApp(api: FeishuMinutesApi, options: { preflightAgent?: PreflightAgent } = {}): Promise<TestApp> {
   const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, feishu: { appId: "cli_test", appSecret: "test-secret", ...feishuEnv } }, undefined,
-    { outcomeAgent: recordingOutcome(), meetingFollowThroughAgents: { minutesApi: api } });
+    { outcomeAgent: recordingOutcome(), meetingFollowThroughAgents: { minutesApi: api }, ...options });
   await t.pool.query("UPDATE feishu_minute_inbox_launch SET launched_at = now() - interval '1 day'");
   return t;
 }
