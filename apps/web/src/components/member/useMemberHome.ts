@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 成员首页的数据：我的执行事项、我的通知、开着时的个人雷达小组件，以及卡上那几件事（改状态、退回、看过）。
+ * 成员工作台的数据：我的执行事项（通知卡上退回要用）、我的通知、开着时的个人雷达摘要，以及卡上那几件事（退回、看过）。
  * 通知每 20 秒刷新一次（页面在前台时）；在个人菜单里改了雷达设置时马上重读。
  */
 
@@ -10,9 +10,9 @@ import type { TMissionRoundSummary } from "@warmap/contracts";
 import type { components } from "@/lib/api/schema";
 import { browserApi } from "@/lib/api/client";
 import { RADAR_SETTINGS_CHANGED, type MemberRadarBrief } from "@/components/radar/personalRadar";
-import type { MemberTask } from "./MemberTasks";
-import type { MemberWork } from "./MemberHomeWidgets";
 import type { WeeklySyncReminder } from "./weeklySyncNotice";
+
+type MemberTask = components["schemas"]["TaskView"];
 
 export interface MemberNotification {
   id: string;
@@ -38,13 +38,11 @@ export function useMemberHome() {
   const [unreadThreads, setUnreadThreads] = useState<components["schemas"]["UnreadThreadsResponse"]["threads"]>([]);
   const [unreadMissionGroups, setUnreadMissionGroups] = useState<UnreadMissionGroup[]>([]);
   const [rounds, setRounds] = useState<TMissionRoundSummary[]>([]);
-  const [work, setWork] = useState<MemberWork | null>(null);
   /** 雷达关着时为 null，首页整块不出现。 */
   const [radar, setRadar] = useState<MemberRadarBrief | null>(null);
   /** 周五 18:00 到周日本周还没同步时由服务端给出；其余时间为 null。 */
   const [weeklySync, setWeeklySync] = useState<WeeklySyncReminder | null>(null);
   const [homeError, setHomeError] = useState<string | null>(null);
-  const [taskError, setTaskError] = useState<string | null>(null);
   const loadInFlight = useRef<Promise<void> | null>(null);
 
   const load = useCallback(() => {
@@ -55,7 +53,7 @@ export function useMemberHome() {
         window.location.assign("/access?next=%2Fme");
         return;
       }
-      if (home.data) { setTasks(home.data.myTasks as MemberTask[]); setWork(home.data.work); setRadar(home.data.radar ?? null); setWeeklySync(home.data.weeklySync ?? null); }
+      if (home.data) { setTasks(home.data.myTasks as MemberTask[]); setRadar(home.data.radar ?? null); setWeeklySync(home.data.weeklySync ?? null); }
       setHomeError(home.data ? null : REFRESH_ERROR);
       if (list.data) setNotifications(list.data.notifications as MemberNotification[]);
       if (meetingList.data) setMeetings(meetingList.data.meetings);
@@ -72,10 +70,8 @@ export function useMemberHome() {
         }));
         setUnreadMissionGroups(missionUnread.filter((item): item is UnreadMissionGroup => item !== null));
       }
-      if (home.data && list.data && missionCards.data) setTaskError((current) => current === REFRESH_ERROR ? null : current);
     } catch {
       // 首页在详情背后仍保持挂载；后台轮询断网不能打断当前阅读与讨论。
-      setTaskError(REFRESH_ERROR);
       setHomeError(REFRESH_ERROR);
     } finally { loadInFlight.current = null; } })();
     return loadInFlight.current;
@@ -154,5 +150,5 @@ export function useMemberHome() {
     [load],
   );
 
-  return { tasks, notifications, meetings, unreadThreads, unreadMissionGroups, rounds, work, radar, weeklySync, homeError, refresh: load, taskError, returnTask, markSeen, readRadarNotice, settle };
+  return { tasks, notifications, meetings, unreadThreads, unreadMissionGroups, rounds, radar, weeklySync, homeError, refresh: load, returnTask, markSeen, readRadarNotice, settle };
 }

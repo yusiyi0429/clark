@@ -70,8 +70,9 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   /** 已发起、新路由还没提交的目标：二级页先打开，右侧盖加载蒙版。路由提交（包括被重定向到别处）就清掉。 */
   const [pending, setPending] = useState<string | null>(null);
   const [m2Available, setM2Available] = useState(false);
-  /** 顶栏「约会议」打开的建会抽屉（CEO 和成员都有）。 */
+  /** 建会抽屉：CEO 从顶栏「约会议」打开，成员从首页操作区打开（经 WorkspaceContext 的 bookMeeting）。 */
   const [booking, setBooking] = useState(false);
+  const bookMeeting = useCallback(() => setBooking(true), []);
   useEffect(() => {
     const controller = new AbortController();
     setM2Available(false);
@@ -533,8 +534,8 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   );
 
   const api: WorkspaceApi = useMemo(
-    () => ({ navigate, close, detailOpen, closing, registerDetail, showToast, homeCards, quote, ask, compose, viewerId }),
-    [homeCards, ask, close, closing, compose, detailOpen, navigate, quote, registerDetail, showToast, viewerId],
+    () => ({ navigate, close, detailOpen, closing, registerDetail, showToast, homeCards, quote, ask, compose, viewerId, bookMeeting: viewerId ? bookMeeting : undefined, m2Available }),
+    [homeCards, ask, bookMeeting, close, closing, compose, detailOpen, m2Available, navigate, quote, registerDetail, showToast, viewerId],
   );
 
   const conversationUi: ConversationUiState = {
@@ -586,10 +587,13 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
             data-covered={(detailOpen && !noticeTransition && !closing && !entering && !peek) || undefined}
             style={noticeTransition && !openingEmpty ? { viewTransitionName: "home-board" } : undefined}
           >
-            <div className={s.m2Entry}>
-              {viewerId ? <button type="button" onClick={() => setBooking(true)}>约会议</button> : null}
-              {m2Available ? <a href="/m2/">目标拆解与协作 <span aria-hidden="true">→</span></a> : null}
-            </div>
+            {/* 成员首页的约会议、复盘在首页左上的操作区里（HomeActions）。 */}
+            {homeHref === "/" ? (
+              <div className={s.m2Entry}>
+                {viewerId ? <button type="button" onClick={bookMeeting}>约会议</button> : null}
+                {m2Available ? <a href="/m2/">目标拆解与协作 <span aria-hidden="true">→</span></a> : null}
+              </div>
+            ) : null}
             {home}
           </div>
           {detailOpen ? (

@@ -14,7 +14,7 @@ type TaskRow = {
   id: string; version: number; title: string; status: TTaskView["status"]; created_by: TTaskView["source"];
   start_date: string | null; due_date: string | null; done_definition: string | null; judgment: string | null; judgment_at: Date | null;
   return_reason: string | null; origin_meeting_id: string | null; source_quote: string | null;
-  meeting_title: string | null; lead_dri_id: string | null; owner_id: string; mission_id: string | null;
+  meeting_title: string | null; lead_dri_id: string | null; owner_id: string; mission_id: string | null; plan_task_id: string | null;
   mission_title: string | null; card_id: string | null; period: string | null; battlefield_name: string | null;
   step_order: number | null; steps: number | null; previous_id: string | null; previous_title: string | null; previous_status: string | null;
   collaborators: string[]; created_at: Date; updated_at: Date;
@@ -28,7 +28,7 @@ type StoredAcceptance = Omit<TTaskAcceptance, "by"> & { by: string };
 
 const TASK_SELECT = `SELECT t.id::text,t.version,t.title,t.status,t.created_by,t.start_date::text AS start_date,
  t.due_date::text AS due_date,t.done_definition,t.judgment,t.judgment_at,t.return_reason,t.origin_meeting_id::text,
- t.source_quote,mt.title AS meeting_title,mt.lead_dri_id,t.owner_id,t.mission_id,t.step_order,
+ t.source_quote,mt.title AS meeting_title,mt.lead_dri_id,t.owner_id,t.mission_id,t.plan_task_id,t.step_order,
  CASE WHEN r.status='confirmed' THEN m.title ELSE NULL END AS mission_title,c.id::text AS card_id,r.period,b.name AS battlefield_name,
  (SELECT count(*)::int FROM tasks s WHERE s.mission_id=t.mission_id) AS steps,
  prev.id::text AS previous_id,prev.title AS previous_title,prev.status AS previous_status,
@@ -61,6 +61,7 @@ function projectTask(row: TaskRow, names: Map<string, string>): TTaskView {
     origin: row.origin_meeting_id ? { type: "meeting", meetingId: row.origin_meeting_id,
       meetingTitle: row.meeting_title ?? "", quote: row.source_quote } : null,
     awaitingAcceptance: row.submission !== null && (row.status === "not_started" || row.status === "in_progress"),
+    planTaskId: row.plan_task_id,
     createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
   };
 }
@@ -93,6 +94,12 @@ export async function getTaskView(q: Query, id: string, names: Map<string, strin
   const row = await getTaskRow(q, id);
   return row ? projectTask(row, names) : null;
 }
+/** 一次取多条，按 ids 的顺序；不在了的跳过。 */
+export async function getTaskViews(q: Query, ids: string[], names: Map<string, string>): Promise<TTaskView[]> {
+  if (!ids.length) return [];
+  const rows = new Map(((await q(`${TASK_SELECT} WHERE t.id=ANY($1::uuid[])`, [ids])).rows as TaskRow[]).map((row) => [row.id, row]));
+  return ids.flatMap((id) => { const row = rows.get(id); return row ? [projectTask(row, names)] : []; });
+}
 export async function listMyTasks(q: Query, ownerId: string, names: Map<string, string>): Promise<TTaskView[]> {
   const rows = (await q(`${TASK_SELECT} WHERE t.owner_id=$1 ORDER BY t.created_at DESC,t.id`, [ownerId])).rows as TaskRow[];
   return rows.map((row) => projectTask(row, names));
@@ -109,6 +116,8 @@ export async function canReadTask(q: Query, id: string, personId: string): Promi
 }
 export type TaskResult = { task: TTaskView } | { notFound: true } | { conflict: TTaskView } | { error: { status: number; code: string; message: string } };
 const error = (status: number, code: string, message: string): TaskResult => ({ error: { status, code, message } });
+/** Task 挂在 Mission 下，独立事项没有 Task 可挂。planTaskId 不回本体核对，原样存。 */
+const independentWithTask = error(400, "INVALID_INPUT", "独立事项不能挂 Task");
 const title = (text: string) => Array.from(text).slice(0, 120).join("");
 export const validDate = (value:string):boolean => {
   const parsed=new Date(`${value}T00:00:00Z`);
@@ -125,11 +134,11 @@ export async function missionAvailable(q: Query, ownerId: string, missionId: str
   return !!result.rowCount;
 }
 /** 本人此刻能挂执行事项的 Mission（与 missionAvailable 同一口径）。 */
-export async function listAvailableMissions(q: Query, ownerId: string, now: Date): Promise<{ id: string; title: string; battlefield: string }[]> {
-  return (await q(`SELECT m.id,m.title,b.name AS battlefield FROM missions m JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id
+export async function listAvailableMissions(q: Query, ownerId: string, now: Date): Promise<{ id: string; code: string; title: string; battlefield: string }[]> {
+  return (await q(`SELECT m.id,m.code,m.title,b.name AS battlefield FROM missions m JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id
     JOIN mission_rounds r ON r.id=c.round_id JOIN battlefield_config b ON b.id=r.battlefield_id
     WHERE c.owner_id=$1 AND r.status='confirmed' AND r.period >= $2 ORDER BY r.period,c.sort_order,m.code,m.id`,
-  [ownerId, companyPeriod(now)])).rows as { id: string; title: string; battlefield: string }[];
+  [ownerId, companyPeriod(now)])).rows as { id: string; code: string; title: string; battlefield: string }[];
 }
 export async function renumberMission(client: PoolClient, missionId: string): Promise<void> {
   await client.query(`WITH numbered AS (SELECT id,row_number() OVER (ORDER BY step_order NULLS LAST,created_at,id)::int AS ord
@@ -150,24 +159,25 @@ async function readThrough(client: PoolClient, taskId: string, personId: string,
   [taskId, personId, messageId]);
 }
 async function createInTransaction(client: PoolClient, ownerId: string, names: Map<string, string>, input: {
-  clientId: string; title: string; missionId: string | null; startDate?: string; dueDate?: string; doneDefinition?: string; source: "self" | "plan" | "agent";
+  clientId: string; title: string; missionId: string | null; startDate?: string; dueDate?: string; doneDefinition?: string; planTaskId?: string; source: "self" | "plan" | "agent";
 }): Promise<TaskResult> {
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[`task-client:${ownerId}:${input.clientId}`]);
-  const existing = await client.query<{ id: string; title: string; mission_id: string | null; start_date: string | null; due_date: string | null; done_definition: string | null; created_by: string }>(
-    "SELECT id::text,title,mission_id,start_date::text,due_date::text,done_definition,created_by FROM tasks WHERE owner_id=$1 AND client_id=$2", [ownerId,input.clientId]);
+  const existing = await client.query<{ id: string; title: string; mission_id: string | null; start_date: string | null; due_date: string | null; done_definition: string | null; plan_task_id: string | null; created_by: string }>(
+    "SELECT id::text,title,mission_id,start_date::text,due_date::text,done_definition,plan_task_id,created_by FROM tasks WHERE owner_id=$1 AND client_id=$2", [ownerId,input.clientId]);
   if (existing.rows[0]) {
     const row = existing.rows[0];
     if (row.title !== input.title || row.mission_id !== input.missionId || row.start_date !== (input.startDate ?? null)
-      || row.due_date !== (input.dueDate ?? null) || row.done_definition !== (input.doneDefinition ?? null) || row.created_by !== input.source)
+      || row.due_date !== (input.dueDate ?? null) || row.done_definition !== (input.doneDefinition ?? null)
+      || row.plan_task_id !== (input.planTaskId ?? null) || row.created_by !== input.source)
       return error(409,"CLIENT_ID_CONFLICT","此创建请求已用于另一项执行事项");
     return { task: (await getTaskView(queryOf(client),row.id,names))! };
   }
   if (!validDates(input.startDate ?? null,input.dueDate ?? null)) return error(400,"TASK_DATES_INVALID","计划开始不能晚于截止");
   const step = await appendStep(client,input.missionId);
   const id = randomUUID();
-  await client.query(`INSERT INTO tasks(id,title,owner_id,created_by,status,mission_id,step_order,client_id,start_date,due_date,done_definition)
-    VALUES($1,$2,$3,$4,'not_started',$5,$6,$7,$8,$9,$10)`,
-  [id,input.title,ownerId,input.source,input.missionId,step,input.clientId,input.startDate ?? null,input.dueDate ?? null,input.doneDefinition ?? null]);
+  await client.query(`INSERT INTO tasks(id,title,owner_id,created_by,status,mission_id,step_order,client_id,start_date,due_date,done_definition,plan_task_id)
+    VALUES($1,$2,$3,$4,'not_started',$5,$6,$7,$8,$9,$10,$11)`,
+  [id,input.title,ownerId,input.source,input.missionId,step,input.clientId,input.startDate ?? null,input.dueDate ?? null,input.doneDefinition ?? null,input.planTaskId ?? null]);
   await client.query("INSERT INTO task_members(task_id,person_id,role,added_by) VALUES($1,$2,'owner',$2)",[id,ownerId]);
   await client.query("INSERT INTO thread_members(object_type,object_id,person_id,added_by) VALUES('task',$1,$2,$2)",[id,ownerId]);
   const row = (await getTaskRow(queryOf(client),id))!;
@@ -180,6 +190,7 @@ async function createInTransaction(client: PoolClient, ownerId: string, names: M
 }
 /** source=agent：外部工具通过 MCP 替本人建的，直接生效，和本人建的一样能改能删。 */
 export async function createMyTask(pool: Pool, ownerId: string, names: Map<string,string>, input: TCreateMyTaskRequest, now: Date, source: "self" | "agent" = "self"): Promise<TaskResult> {
+  if (input.planTaskId && !input.missionId) return independentWithTask;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -218,14 +229,17 @@ export function updateMyTaskStatus(pool: Pool, ownerId: string, taskId: string, 
     const due = input.dueDate === undefined ? row.due_date : input.dueDate;
     if (!validDates(start,due)) return error(400,"TASK_DATES_INVALID","计划开始不能晚于截止");
     const missionId = input.missionId === undefined ? row.mission_id : input.missionId;
+    // 换了 Mission，原来的 Task 不再对得上：同一请求没带新的就清掉。
+    const planTaskId = input.planTaskId !== undefined ? input.planTaskId : missionId === row.mission_id ? row.plan_task_id : null;
+    if (planTaskId && !missionId) return independentWithTask;
     if (missionId && missionId !== row.mission_id && !await missionAvailable(queryOf(client),ownerId,missionId,now))
       return error(404,"MISSION_NOT_AVAILABLE","个人任务不可用于执行事项");
     const step = missionId === row.mission_id ? row.step_order : await appendStep(client,missionId);
     await client.query(`UPDATE tasks SET status=COALESCE($2,status),title=COALESCE($3,title),start_date=$4,due_date=$5,
       done_definition=$6,judgment=$7,judgment_at=CASE WHEN $7::text IS NULL THEN NULL WHEN $7::text IS DISTINCT FROM judgment THEN now() ELSE judgment_at END,mission_id=$8,step_order=$9,return_reason=CASE WHEN $2 IS NOT NULL THEN NULL ELSE return_reason END,
-      version=version+1,updated_at=now() WHERE id=$1`,
+      plan_task_id=$10,version=version+1,updated_at=now() WHERE id=$1`,
     [taskId,input.status ?? null,input.title ?? null,start,due,input.doneDefinition === undefined ? row.done_definition : input.doneDefinition,
-      input.judgment === undefined ? row.judgment : input.judgment,missionId,step]);
+      input.judgment === undefined ? row.judgment : input.judgment,missionId,step,planTaskId]);
     if (row.mission_id && row.mission_id !== missionId) await renumberMission(client,row.mission_id);
   });
 }

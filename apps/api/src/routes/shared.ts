@@ -30,6 +30,7 @@ import type { DictationPolishDeps } from "../dictationPolish.js";
 import type { ThreadIntroAgent } from "../threadIntro.js";
 import type { MissionCardDraftAgent } from "../missionCardDraftAgent.js";
 import type { TaskAcceptanceAgent } from "../taskAcceptanceDraft.js";
+import type { PlanTaskSource } from "../planTasks.js";
 import type { AppEnv } from "../app.js";
 import type { WorldReader } from "../worldReader.js";
 import type { PersonalMemory } from "../personalMemory.js";
@@ -106,6 +107,8 @@ export type RouteContext = {
   missionCardDraftAgent: MissionCardDraftAgent;
   /** 验收弹窗里我的 Agent 起草（只读）；测试注入假实现。 */
   taskAcceptanceAgent: TaskAcceptanceAgent;
+  /** 首页 Task 行的来源（只读）；缺省一个都没有，测试注入假实现。 */
+  planTasks: PlanTaskSource;
   materialStorageDir: string;
   conversationAttachmentStorageDir: string;
   conversationTurnTimeoutMs: number;

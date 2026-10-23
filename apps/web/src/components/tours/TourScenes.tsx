@@ -42,8 +42,8 @@ function SceneStart() {
   return <div className={`${x.scene} ${x.split}`}>
     <MissionCard />
     <section className={x.panel}>
-      <div className={x.toolbar}><span>0 项执行事项在推进</span><span className={x.ghostButton}>+ 开启执行事项<Tap start={2300} /></span></div>
-      <p className={x.empty}>暂无执行事项。你可以开启一件事，会后分派也会显示在这里。</p>
+      <div className={x.toolbar}><span>本周 10/5–10/11</span><span className={x.ghostButton}>+ 开启执行事项<Tap start={2300} /></span></div>
+      <p className={x.empty}>—</p>
     </section>
   </div>;
 }
@@ -61,7 +61,7 @@ function SceneCreate() {
       <span className={x.primaryButton}>开启执行事项<Tap start={3600} /></span>
     </section>
     <div className={`${x.landing} ${x.arrive}`} style={at(4300)}>
-      <p className={x.meta}>1 项执行事项在推进</p>
+      <p className={x.meta}>本周 10/5–10/11</p>
       <article className={`${x.panel} ${x.taskCard}`}>
       <div className={x.taskTop}><span className={x.status}><i />未启动</span><span>10 月 15 日前</span></div>
       <h4 className={x.heading}>整理 Q3 流失客户名单</h4>

@@ -3,6 +3,7 @@
 /**
  * 通知栏里的「请求」一组（参照 Linear Inbox 的待处理）：收到还没完成的待办卡、我发出的有问题待回答的（点开落到问答区）、有人完成或回答了还没看的。
  * 打开那条请求即读；页头右上角「+」发起新请求，点页头进列表。CEO 和成员共用，各自传入路径前缀。
+ * 成员左栏不要页头和 ＋（新请求在对话里说，request_help 处处可用），只列条目；没有条目时整组不出现。
  */
 import { useCallback, useEffect, useState } from "react";
 import { Card as HeroCard } from "@heroui/react";
@@ -38,9 +39,25 @@ export function requestNotices(inbox: TRequestListItem[], sent: TRequestListItem
   return [...received, ...mine];
 }
 
-export function RequestNotices({ base, currentHref, onNavigate }: { base: string; currentHref?: string; onNavigate: Navigate }) {
+/** 我发出、还在等回复的：还开着，还有人没完成。 */
+export const waitingReplyCount = (sent: TRequestListItem[]) =>
+  sent.filter((item) => item.status === "open" && item.recipientsDone < item.recipientNames.length).length;
+
+/** items：这两组（影响、请求）在通知栏里列出的条数；waitingReplies：我发出、还在等回复的条数。 */
+export type RequestCounts = { items: number; waitingReplies: number };
+
+export function RequestNotices({ base, currentHref, onNavigate, header = true, onCounts }: {
+  base: string;
+  currentHref?: string;
+  onNavigate: Navigate;
+  /** false：不要「请求」页头和 ＋（成员左栏）。 */
+  header?: boolean;
+  /** 读完后条数变了就报出来（成员左栏的空通知提示、首页「等回复 N」都跟着这里的轮询走，不另取）。 */
+  onCounts?: (counts: RequestCounts) => void;
+}) {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [impacts, setImpacts] = useState<Notice[]>([]);
+  const [waiting, setWaiting] = useState<number | null>(null);
   const load = useCallback(async () => {
     try {
       const [inbox, sent] = await Promise.all([
@@ -50,6 +67,7 @@ export function RequestNotices({ base, currentHref, onNavigate }: { base: string
       if (inbox.data && sent.data) {
         setNotices(requestNotices(inbox.data.items, sent.data.items));
         setImpacts(impactNotices(inbox.data.items));
+        setWaiting(waitingReplyCount(sent.data.items));
       }
     } catch { /* 下次再取 */ }
   }, []);
@@ -63,6 +81,8 @@ export function RequestNotices({ base, currentHref, onNavigate }: { base: string
   }, [load]);
   // 打开过的请求服务端已标为已读：换页时重读一次。
   useEffect(() => { void load(); }, [currentHref, load]);
+  const items = notices.length + impacts.length;
+  useEffect(() => { if (waiting !== null) onCounts?.({ items, waitingReplies: waiting }); }, [items, waiting, onCounts]);
 
   const origin = (target: EventTarget) => (target as Element).closest("[data-notice]");
   const row = (notice: Notice) => {
@@ -87,18 +107,22 @@ export function RequestNotices({ base, currentHref, onNavigate }: { base: string
         <div className={n.tray}>{impacts.map(row)}</div>
       </HeroCard>
     ) : null}
-    <HeroCard<"section"> render={(props) => <section {...props} />} className={n.card} data-notice="requests" aria-label="请求">
-      <HeroCard.Header<"header"> render={(props) => <header {...props} />} className={n.glassHeader}>
-        <span className={`${n.glyph} ${s.glyph}`} aria-hidden="true"><Send size={17} /></span>
-        <button type="button" className={`${n.identity} ${s.headerOpen}`} onClick={(event) => onNavigate(base, origin(event.target))} aria-label="打开请求列表">
-          <strong>请求{notices.length ? <b className={n.count}>{notices.length}</b> : null}</strong>
-        </button>
-        <button type="button" className={s.corner} onClick={(event) => onNavigate(`${base}/new`, origin(event.target))} aria-label="新请求" title="新请求">
-          <Plus size={18} aria-hidden="true" />
-        </button>
-      </HeroCard.Header>
-      {notices.length ? <div className={n.tray}>{notices.map(row)}</div> : null}
-    </HeroCard>
+    {header || notices.length ? (
+      <HeroCard<"section"> render={(props) => <section {...props} />} className={n.card} data-notice="requests" aria-label="请求">
+        {header ? (
+          <HeroCard.Header<"header"> render={(props) => <header {...props} />} className={n.glassHeader}>
+            <span className={`${n.glyph} ${s.glyph}`} aria-hidden="true"><Send size={17} /></span>
+            <button type="button" className={`${n.identity} ${s.headerOpen}`} onClick={(event) => onNavigate(base, origin(event.target))} aria-label="打开请求列表">
+              <strong>请求{notices.length ? <b className={n.count}>{notices.length}</b> : null}</strong>
+            </button>
+            <button type="button" className={s.corner} onClick={(event) => onNavigate(`${base}/new`, origin(event.target))} aria-label="新请求" title="新请求">
+              <Plus size={18} aria-hidden="true" />
+            </button>
+          </HeroCard.Header>
+        ) : null}
+        {notices.length ? <div className={n.tray}>{notices.map(row)}</div> : null}
+      </HeroCard>
+    ) : null}
     </>
   );
 }

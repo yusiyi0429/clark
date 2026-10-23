@@ -280,6 +280,8 @@ export async function createTestApp(
     threadIntroAgent?: ThreadIntroAgent;
     /** 验收草稿的假 Agent；不注入时起草失败（接口 503，手填照样能验收）。 */
     taskAcceptanceAgent?: TaskAcceptanceAgent;
+    /** 首页 Task 行的假来源；不注入时一个 Task 都没有。 */
+    planTasks?: Parameters<typeof buildApp>[0]["planTasks"];
     materialAnnotationAgent?: MaterialAnnotationAgent;
     missionCardAnnotationAgent?: MissionCardAnnotationAgent;
     missionCardReviewAgent?: MissionCardReviewAgent;

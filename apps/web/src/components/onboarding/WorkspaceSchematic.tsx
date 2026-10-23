@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import s from "./WorkspaceSchematic.module.css";
 
 type Props = {
@@ -8,8 +9,15 @@ type Props = {
 
 const notices = ["需要你确认", "战略决策更新", "战略会议安排", "战略问题研究"];
 const memberNotices = ["本月 Mission Card", "新的执行事项", "回复与结果", "雷达 · 值得注意"];
-/** 手持首页通知下面那一段：CEO 是精简的公司全局（战场一行一个、雷达），成员是自己的工作（与真实首页同序）。 */
-const phoneWork = { ceo: ["战场 1", "战场 2", "战场 3", "雷达信号"], member: ["执行事项", "我的本月卡", "参与的战场", "雷达信号"] };
+/** 手持首页通知下面那一段：CEO 是精简的公司全局（战场一行一个、雷达），成员是自己的工作（与真实首页同序，本周排在三栏最前）。 */
+const phoneWork = { ceo: ["战场 1", "战场 2", "战场 3", "雷达信号"], member: ["约会议 · 等回复", "本月 Mission", "本周", "之后"] };
+/** 成员首页的缩影：操作区一行；Mission 卡片里是一天一格的本月（第 22 天是今天）、下面的 Mission 切换（色板前两色，选中的字大）、三栏。 */
+const memberActions = ["＋ 约会议", "等回复", "战场进展", "雷达", "复盘"];
+const missionColors = ["#2f63b0", "#2f8a7a"];
+const TODAY = 21;
+/** 2026 年 10 月 1 日是周四：周六、周日算休息日。 */
+const monthDays = Array.from({ length: 31 }, (_, index) => ({ rest: [2, 3].includes(index % 7), past: index < TODAY, today: index === TODAY }));
+const columns = [["已完成", 2], ["本周", 3], ["之后", 1]] as const;
 
 /** 无真实数据的工作台缩影；mobile 可覆盖默认的响应式布局。 */
 export function WorkspaceSchematic({ role, focus, mobile }: Props) {
@@ -30,16 +38,20 @@ export function WorkspaceSchematic({ role, focus, mobile }: Props) {
       <div className={s.board} data-region="board">
         {role === "member" ? <>
           <div className={s.memberHeading}>我的工作台</div>
-          <div className={s.memberTop}>
-            <div className={s.memberTile}><strong>参与的战场</strong><span className={s.rule} /><span className={s.ruleShort} /></div>
-            <div className={s.memberTile}><strong>我的本月卡</strong><span className={s.rule} /><span className={s.ruleShort} /></div>
-            <div className={s.radar}><strong>雷达信号</strong><span className={s.radarScope}><i /></span></div>
-          </div>
-          <div className={s.memberTaskHeading}><strong>执行事项</strong><span className={s.addButton}>+</span></div>
-          <div className={s.memberTasks}>
-            <div className={s.memberTask}><span className={s.activeTaskDot} />进行中<span className={s.taskRule} /></div>
-            <div className={s.memberTask}><span className={s.activeTaskDot} />等你验收<span className={s.taskRule} /></div>
-            <div className={s.memberTask}>独立事项<span className={s.taskRule} /></div>
+          <div className={s.memberActions}>{memberActions.map((label, index) => <span className={s.actionPill} data-primary={index === 0 || undefined} key={label}>{label}</span>)}</div>
+          <div className={s.missionCard}>
+            <div className={s.days}>{monthDays.map((day, index) => <i key={index} data-rest={day.rest || undefined} data-past={day.past || undefined} data-today={day.today || undefined} />)}</div>
+            <div className={s.missionRow}>
+              <span className={s.missionTab} data-selected="true">全部</span>
+              {missionColors.map((color, index) => <span className={s.missionTab} key={color}><i className={s.missionDot} style={{ background: color }} />Mission {index + 1}</span>)}
+            </div>
+            <div className={s.columns}>
+              <span className={s.addButton}>+</span>
+              {columns.map(([label, count]) => <div className={s.column} data-week={label === "本周" || undefined} key={label}>
+                <strong>{label}</strong>
+                {Array.from({ length: count }, (_, index) => <span className={s.columnCard} key={index} style={{ "--bar": missionColors[index % 2] } as CSSProperties}><i /></span>)}
+              </div>)}
+            </div>
           </div>
           <div className={s.agent}><span className={s.agentSpark}>✦</span><span>我的 Agent</span><span className={s.agentSend}>↑</span></div>
         </> : <>
@@ -60,7 +72,7 @@ export function WorkspaceSchematic({ role, focus, mobile }: Props) {
           <div className={s.phoneNotices}>{noticeCards.slice(0, 2)}</div>
         </div>
         <div className={s.memberPhoneWork} data-region="board">
-          {phoneWork[role].map((label, index) => <div className={s.phoneWorkCard} key={label}><strong>{label}</strong>{role === "member" && index === 0 ? <span className={s.addButton}>+</span> : null}<span className={s.phoneWorkRule} /></div>)}
+          {phoneWork[role].map((label) => <div className={s.phoneWorkCard} key={label}><strong>{label}</strong>{role === "member" && label === "本周" ? <span className={s.addButton}>+</span> : null}<span className={s.phoneWorkRule} /></div>)}
         </div>
       </div>
     </div>

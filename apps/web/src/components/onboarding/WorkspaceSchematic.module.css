@@ -57,18 +57,32 @@
 /* 成员工作台沿用相同的玻璃外框与左右高亮，只换内部的缩影。 */
 .root[data-role="member"] .desktop { height: 282px; }
 .memberHeading { color: #657b98; font-size: 10px; font-weight: 650; line-height: 1; }
-.memberTop { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, .85fr); gap: 8px; height: 78px; }
-.memberTile { display: flex; flex-direction: column; min-width: 0; padding: 11px; border: 1px solid #dce4ef; border-radius: 15px; background: #ffffffed; box-shadow: 0 2px 7px #29334c0a; }
-.memberTile strong { font-size: 11px; font-weight: 650; white-space: nowrap; }
-.memberTile .rule { margin-top: 10px; }
-.memberTaskHeading { display: flex; align-items: center; justify-content: space-between; padding: 0 2px; color: #60748e; font-size: 10px; line-height: 15px; }
-.memberTaskHeading strong { font-weight: 650; }
+.memberActions { display: flex; gap: 5px; min-width: 0; overflow: hidden; }
+.actionPill { flex: none; padding: 3px 8px; border: 1px solid #dce4ef; border-radius: 99px; background: #fff; color: #4e607a; font-size: 9px; font-weight: 600; line-height: 1.3; white-space: nowrap; }
+.actionPill[data-primary] { border-color: #3a83f7; background: #3a83f7; color: #fff; }
+/* Mission 卡片：一天一格的本月（未到工作日 / 未到休息日 / 已过去 / 今天描边）、Mission 切换（只靠字号分选中，不画底线）、三栏（本周浅蓝底）。 */
+.missionCard { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; padding: 9px 10px 10px; border: 1px solid #dce4ef; border-radius: 15px; background: #ffffffed; box-shadow: 0 2px 7px #29334c0a; }
+.missionRow { display: flex; align-items: baseline; gap: 12px; min-width: 0; overflow: hidden; }
+.missionTab { display: inline-flex; align-items: center; gap: 4px; flex: none; color: #657b98; font-size: 9px; font-weight: 600; white-space: nowrap; }
+.missionTab[data-selected] { color: #283952; font-size: 13px; font-weight: 650; }
+.missionDot { width: 6px; height: 6px; border-radius: 50%; }
+.days { display: grid; grid-template-columns: repeat(31, minmax(0, 1fr)); gap: 2px; }
+.days i { height: 8px; border-radius: 2px; background: #3d6fb6; }
+.days i[data-rest] { background: #dbe4f0; }
+.days i[data-past] { background: #c9d1dc; }
+.days i[data-today] { box-shadow: 0 0 0 1px #fff, 0 0 0 2px #283952; }
+.columns { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 1fr); gap: 6px; flex: 1; min-height: 0; }
 .addButton { display: grid; place-items: center; flex: none; width: 18px; height: 18px; border-radius: 6px; background: #3a83f7; color: #fff; font-size: 15px; font-style: normal; line-height: 1; box-shadow: 0 2px 5px #3a83f73b; }
-.root[data-focus="board"] .memberTaskHeading .addButton { animation: addGlow 560ms 300ms var(--onboarding-ease-brand) both; }
-.memberTasks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; flex: 1; min-height: 0; }
-.memberTask { min-width: 0; padding: 10px; border: 1px solid #dce4ef; border-radius: 13px; background: #fff; color: #4e607a; box-shadow: 0 2px 7px #29334c0a; font-size: 10px; font-weight: 600; white-space: nowrap; }
-.activeTaskDot { display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: #3a83f7; }
-.taskRule { display: block; width: 70%; height: 3px; margin-top: 10px; border-radius: 9px; background: #e0e9f5; }
+.columns > .addButton { position: absolute; top: 2px; right: 4px; width: 15px; height: 15px; border-radius: 5px; font-size: 12px; }
+.root[data-focus="board"] .columns > .addButton { animation: addGlow 560ms 300ms var(--onboarding-ease-brand) both; }
+.column { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 4px; border-radius: 9px; }
+.column[data-week] { background: rgba(33, 91, 161, .07); }
+.column strong { color: #7a8ca6; font-size: 9px; font-weight: 600; line-height: 15px; white-space: nowrap; }
+.column[data-week] strong { color: #215ba1; }
+/* 小卡：左边一道直的 Mission 色条（同首页卡片），里面一道灰线代替标题。 */
+.columnCard { position: relative; display: block; height: 18px; padding: 7px 8px 0 9px; border: 1px solid #dce4ef; border-radius: 6px; background: #fff; }
+.columnCard::before { content: ""; position: absolute; top: 4px; bottom: 4px; left: -1px; width: 2px; border-radius: 0 2px 2px 0; background: var(--bar); }
+.columnCard i { display: block; width: 62%; height: 3px; border-radius: 9px; background: #e0e9f5; }
 .root[data-role="member"] .agent { flex: none; }
 .memberPhone { background: #f0f6ff; }
 .memberPhoneScroll { height: 100%; padding: 11px 9px; transition: transform 350ms var(--onboarding-ease-brand); }

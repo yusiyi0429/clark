@@ -6,7 +6,7 @@ import { LinkedTaskRows } from "./MonthPlan";
 const task: TTaskView = {
   id: "00000000-0000-4000-8000-000000000001", version: 1, title: "准备上线", status: "in_progress", source: "plan",
   startDate: null, dueDate: "2026-10-08", doneDefinition: null, mission: { missionId: "m", title: "上线", cardId: "c", period: "2026-10", battlefieldName: "增长", step: 1, steps: 2 },
-  waitingOn: null, awaitingAcceptance: false, owner: { personId: "owner", name: "孙铭泽" }, collaborators: [],
+  waitingOn: null, awaitingAcceptance: false, planTaskId: null, owner: { personId: "owner", name: "孙铭泽" }, collaborators: [],
   latestProgress: { body: "完成接口核对", source: "codex", author: { personId: "owner", name: "孙铭泽" }, createdAt: "2026-10-05T06:20:00Z" },
   returnReason: null, origin: null, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-05T06:20:00Z",
 };

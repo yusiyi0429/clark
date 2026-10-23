@@ -10,6 +10,7 @@ const { ExecutionItemsTourView, EXECUTION_TOUR_KEY } = await import("./Execution
 const { MissionCardTourView, MISSION_CARD_TOUR_KEY } = await import("./MissionCardTour");
 const { MISSION_CARD_TOUR_STEPS } = await import("./MissionCardScenes");
 const { StartTaskButton } = await import("./StartTaskButton");
+const { TOUR_STEPS } = await import("./TourScenes");
 
 describe("更新说明卡片", () => {
   it("列出这一版的每一条更新，只有「知道了」和关闭两个出口", () => {
@@ -28,6 +29,15 @@ describe("执行事项演示", () => {
     expect(html).toMatch(/data-ready="false" aria-disabled="true"/);
     expect(html).toContain("跳过，直接进入");
     for (const exit of ["稍后再说", "开启我的第一件", "关闭"]) expect(html).not.toContain(exit);
+  });
+
+  it("开头两幕照新首页：「开启执行事项」在三栏那一行，开好的事落在「本周」", () => {
+    const [start, create] = TOUR_STEPS.map(({ Scene }) => renderToStaticMarkup(<Scene />));
+    for (const html of [start, create]) {
+      expect(html).toContain("本周 10/5–10/11");
+      expect(html).not.toContain("项执行事项在推进");
+    }
+    expect(start).toContain("开启执行事项");
   });
 });
 

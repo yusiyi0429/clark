@@ -2,7 +2,7 @@ import type { Pool } from "pg";
 import type { TMonthPlanResponse, TSaveMonthPlanRequest, TTaskView } from "@warmap/contracts";
 import { companyPeriod } from "./monthlyPlans.js";
 import type { Query } from "./meetingStore.js";
-import { createInTransaction, getTaskView, queryOf, validDate } from "./tasks.js";
+import { createInTransaction, getTaskViews, queryOf, validDate } from "./tasks.js";
 
 type Mission = { id:string; title:string; card_id:string; battlefield_name:string; milestones:string[] };
 type PlanError = { status:number; code:string; message:string; latestTask?:TTaskView };
@@ -21,6 +21,31 @@ export function milestoneDate(text:string,period:string):string|null {
   const parsed = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0,10) === value ? value : null;
 }
+export type PlanItem = { item:TTaskView; missionId:string|null };
+/**
+ * 计划里的执行事项：本人挂在这些 Mission 下的；独立事项要没写日期且没完成，或日期和 firstDay–lastDay 对得上。
+ * 本月计划（home 不传）：起止都落在区间里。
+ * 首页计划（home.period 是显示的月份）：和区间有交集就算（跨月的也列出）；另外带上之前没做完的——截止早于区间的独立事项，和挂在更早月份 Mission 下的。
+ * missionId 取 tasks.mission_id：任务卡没确认时 item.mission 为空，但事项仍挂在这个 Mission 下。
+ */
+export async function listPlanItems(q:Query,ownerId:string,missionIds:string[],firstDay:string,lastDay:string,names:Map<string,string>,
+  home?:{ period:string }):Promise<PlanItem[]> {
+  const dated=home
+    ? "(start_date IS NULL OR start_date<=$4) AND (due_date IS NULL OR due_date>=$3)"
+    : "(start_date IS NULL OR start_date BETWEEN $3 AND $4) AND (due_date IS NULL OR due_date BETWEEN $3 AND $4)";
+  const earlier=home
+    ? " OR (status<>'done' AND ((mission_id IS NULL AND due_date<$3) OR mission_id IN (SELECT id FROM missions WHERE period<$5)))" : "";
+  const result=await q(`SELECT id::text,mission_id
+    FROM tasks WHERE owner_id=$1 AND (mission_id=ANY($2::text[]) OR (mission_id IS NULL AND
+      ((${dated} AND (start_date IS NOT NULL OR due_date IS NOT NULL)) OR
+       (start_date IS NULL AND due_date IS NULL AND status<>'done')))${earlier})
+    ORDER BY step_order NULLS LAST,created_at,id`,[ownerId,missionIds,firstDay,lastDay,...(home ? [home.period] : [])]);
+  const views=new Map((await getTaskViews(q,result.rows.map((row)=>row.id as string),names)).map((item)=>[item.id,item]));
+  return result.rows.flatMap((row)=>{
+    const item=views.get(row.id as string);
+    return item ? [{item,missionId:row.mission_id as string|null}] : [];
+  });
+}
 async function monthMissions(q:Query,ownerId:string,period:string):Promise<{ cards:{status:string}[]; missions:Mission[] }> {
   const cards = (await q(`SELECT r.status FROM personal_mission_cards c JOIN mission_rounds r ON r.id=c.round_id
     WHERE c.owner_id=$1 AND r.period=$2 ORDER BY c.sort_order,c.id`,[ownerId,period])).rows as {status:string}[];
@@ -38,14 +63,7 @@ export async function readMonthPlan(q:Query,ownerId:string,period:string,names:M
   // 已确定的卡就能拆；同月别的战场还在讨论的卡，确定后再出现在计划里。
   const closedReason=!cards.length ? "这个月还没有你的任务卡" : !cards.some((card)=>card.status==="confirmed")
     ? "任务卡确定之后才能拆成执行事项" : period<companyPeriod(now) ? "月份已过，计划只读" : null;
-  const result=await q(`SELECT id::text
-    FROM tasks WHERE owner_id=$1 AND (mission_id=ANY($2::text[]) OR (mission_id IS NULL AND
-      (((start_date IS NULL OR start_date BETWEEN $3 AND $4) AND (due_date IS NULL OR due_date BETWEEN $3 AND $4)
-        AND (start_date IS NOT NULL OR due_date IS NOT NULL)) OR
-       (start_date IS NULL AND due_date IS NULL AND status<>'done'))))
-    ORDER BY step_order NULLS LAST,created_at,id`,[ownerId,missions.map((m)=>m.id),firstDay,lastDay]);
-  const tasks=await Promise.all(result.rows.map((row)=>getTaskView(q,row.id as string,names)));
-  const views=tasks.filter((task):task is TTaskView=>!!task);
+  const views=(await listPlanItems(q,ownerId,missions.map((m)=>m.id),firstDay,lastDay,names)).map(({item})=>item);
   const groups: TMonthPlanResponse["groups"] = missions.map((m)=>({missionId:m.id,title:m.title,battlefieldName:m.battlefield_name,
     cardId:m.card_id,milestones:m.milestones.map((text)=>({date:milestoneDate(text,period),text})),
     items:views.filter((task)=>task.mission?.missionId===m.id)}));

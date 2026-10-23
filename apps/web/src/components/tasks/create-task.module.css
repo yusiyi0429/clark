@@ -66,6 +66,9 @@ textarea.input { resize: vertical; min-height: 76px; }
 .chip:hover { border-color: #cfd6e2; color: var(--ink, #1c2030); }
 .chip[data-on] { border-color: var(--onboarding-blue, #3e82f7); background: color-mix(in oklab, var(--onboarding-blue, #3e82f7) 8%, #fff); color: var(--onboarding-blue, #3e82f7); font-weight: 560; }
 .chip[data-on] svg { color: inherit; }
+/* Task 名可能长：胶囊不超出一行宽，超出的字用省略号。 */
+.taskChip { max-width: 100%; }
+.taskChip > span { overflow: hidden; text-overflow: ellipsis; }
 
 /* 月历浮层：和输入框同一套细边框、圆角、品牌蓝；里面套主题层（TianshuPortalTheme）拿到同一套字体和聚焦框，它自带的底色去掉。 */
 .popover {
