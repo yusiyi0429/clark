@@ -519,9 +519,9 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
 
   /**
    * 待整理的妙记整理或记到会上以后读（feishuMinuteInbox.ts 的后台任务）：只用妙记所有者本人的授权，按 token 走和「再读一次」同一条路。
-   * 会不在、不是 scheduled、已有逐字稿或候选、记着的不是这份妙记 → rejected；原文还没好 → not_ready（交给任务退避重试）。
+   * 会不在、不是 scheduled、已有逐字稿或候选、记着的不是这份妙记 → rejected；原文还没好 → not_ready、临时读不到 → fetch_failed（都交给任务退避重试）。
    */
-  async function ingestForOwner(meetingId: string, minuteToken: string, ownerId: string): Promise<"ready" | "not_ready" | "failed" | "taken" | "rejected"> {
+  async function ingestForOwner(meetingId: string, minuteToken: string, ownerId: string): Promise<"ready" | "not_ready" | "fetch_failed" | "failed" | "taken" | "rejected"> {
     const meeting = await getMeetingRow(q, meetingId);
     if (!meeting || meeting.status !== "scheduled" || meeting.transcript || meeting.transcript_candidate || meeting.minute_token !== minuteToken) return "rejected";
     const token = await tokenFor(ownerId);
@@ -531,7 +531,8 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     }
     const result = await ingestByToken(feishu.api, meeting, [{ token }], minuteToken, false);
     if (result.kind !== "failed") return result.kind;
-    return (await getMeetingRow(q, meetingId))?.minutes_failure === "not_ready" ? "not_ready" : "failed";
+    const failure = (await getMeetingRow(q, meetingId))?.minutes_failure;
+    return failure === "not_ready" || failure === "fetch_failed" ? failure : "failed";
   }
 
   /**

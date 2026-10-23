@@ -46,13 +46,13 @@ type OwnedRow = InboxRow & { status: string; meeting_id: string | null };
 
 /**
  * 这份妙记属于天枢里约好的哪场会（只在能记妙记的会里找）：先按飞书会议号对（不看所有者是谁，取最早的一场）；
- * 没有时，在还没有飞书会议号、所有者主持或建的会里取计划开始离妙记开始最近的一场（3 小时以内）。都没有为 null。
+ * 没有时，在所有者主持或建的会里取计划开始离妙记开始最近的一场（3 小时以内；会上已有别的飞书会议号也算，由本人确认）。都没有为 null。
  */
 export async function suggestionFor(q: Query, row: { owner_id: string; feishu_meeting_id: string; starts_at: Date }): Promise<TFeishuMinuteSuggestion | null> {
   const byFeishuId = (await q(`SELECT id, title FROM meetings WHERE ${OPEN_FOR_MINUTE} AND feishu_meeting_id = $1 ORDER BY scheduled_at LIMIT 1`,
     [row.feishu_meeting_id])).rows[0];
   const found = byFeishuId ?? (await q(
-    `SELECT id, title FROM meetings WHERE ${OPEN_FOR_MINUTE} AND feishu_meeting_id IS NULL AND (lead_dri_id = $1 OR COALESCE(created_by, lead_dri_id) = $1)
+    `SELECT id, title FROM meetings WHERE ${OPEN_FOR_MINUTE} AND (lead_dri_id = $1 OR COALESCE(created_by, lead_dri_id) = $1)
        AND scheduled_at BETWEEN $2::timestamptz - ${SUGGESTION_WINDOW} AND $2::timestamptz + ${SUGGESTION_WINDOW}
      ORDER BY abs(extract(epoch FROM scheduled_at - $2::timestamptz)), scheduled_at LIMIT 1`,
     [row.owner_id, row.starts_at])).rows[0];
@@ -123,11 +123,12 @@ export function createFeishuMinuteInboxService(deps: {
     await enqueueJob(q, { kind: MINUTE_INBOX_SCAN_KIND, dedupeKey: `${MINUTE_INBOX_SCAN_KIND}:event:${found.minuteToken}` });
   }
 
-  /** 本人待整理的妙记（7 天以内，新的在前）。 */
+  /** 本人待整理的妙记（7 天以内，新的在前；妙记已挂在天枢会上的不列）。 */
   async function listFor(ownerId: string): Promise<TFeishuMinuteInboxItem[]> {
     const rows = (await q(
       `SELECT minute_token, title, starts_at, ends_at, attendee_open_ids, feishu_meeting_id FROM feishu_minute_inbox
-        WHERE owner_id = $1 AND status = 'pending' AND starts_at > $2 ORDER BY starts_at DESC`,
+        WHERE owner_id = $1 AND status = 'pending' AND starts_at > $2
+          AND NOT EXISTS (SELECT 1 FROM meetings m WHERE m.minute_token = feishu_minute_inbox.minute_token) ORDER BY starts_at DESC`,
       [ownerId, new Date(now().getTime() - MINUTE_INBOX_WINDOW_MS)],
     )).rows as InboxRow[];
     if (!rows.length) return [];
@@ -194,7 +195,9 @@ export function createFeishuMinuteInboxService(deps: {
         await client.query("ROLLBACK");
         return again;
       }
-      meetingId = await insertMinuteMeeting(client, { title, startsAt: locked!.starts_at, endsAt: locked!.ends_at, resolved, worldAnchors: anchors,
+      // 会议要求结束晚于开始：妙记没有时长时，会议结束取开始后 1 分钟（待整理那条照飞书记）。
+      const endsAt = new Date(Math.max(locked!.ends_at.getTime(), locked!.starts_at.getTime() + 60_000));
+      meetingId = await insertMinuteMeeting(client, { title, startsAt: locked!.starts_at, endsAt, resolved, worldAnchors: anchors,
         minuteToken, feishuMeetingId: locked!.feishu_meeting_id, now: now() });
       if (!meetingId) {
         await client.query("ROLLBACK");
@@ -263,14 +266,16 @@ export function createFeishuMinuteInboxService(deps: {
     return { meetingId };
   }
 
-  /** 后台读妙记：已整理、已记到的才读，只用所有者本人的授权；原文还没好时抛错，交给任务退避重试。 */
+  /** 后台读妙记：已整理、已记到的才读，只用所有者本人的授权；原文还没好、临时读不到时抛错，交给任务退避重试。 */
   async function ingestQueued(payload: unknown): Promise<void> {
     const minuteToken = (payload as { minuteToken?: unknown } | null)?.minuteToken;
     if (typeof minuteToken !== "string") return;
     const row = (await q("SELECT owner_id, status, meeting_id FROM feishu_minute_inbox WHERE minute_token = $1", [minuteToken])).rows[0] as
       { owner_id: string; status: string; meeting_id: string | null } | undefined;
     if (!row || (row.status !== "organized" && row.status !== "attached")) return;
-    if (await deps.minutes.ingestForOwner(row.meeting_id!, minuteToken, row.owner_id) === "not_ready") throw new Error("MINUTES_NOT_READY");
+    const result = await deps.minutes.ingestForOwner(row.meeting_id!, minuteToken, row.owner_id);
+    if (result === "not_ready") throw new Error("MINUTES_NOT_READY");
+    if (result === "fetch_failed") throw new Error("MINUTES_FETCH_FAILED");
   }
 
   /** 忽略：本人待整理的置为已忽略（已忽略的再点照样成功）；已整理、已记到的 409；别人的或没有的 404。 */
