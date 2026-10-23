@@ -55232,6 +55232,10 @@
                     {
                       "const": "meeting_card_pending",
                       "type": "string"
+                    },
+                    {
+                      "const": "task_progress_added",
+                      "type": "string"
                     }
                   ]
                 },

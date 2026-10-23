@@ -374,6 +374,8 @@ export const NotificationKind = Type.Union([
   Type.Literal("collection_reminder"),
   /** 会议卡草稿生成好了：主持人和创建人各一条，一场会只发一次；objectType=meeting。 */
   Type.Literal("meeting_card_pending"),
+  /** 别人在你推进或协作的执行事项上写了进展；同一件事没看过的只留一条，文案取最新一条；objectType=task。 */
+  Type.Literal("task_progress_added"),
 ]);
 
 /** 通知只指向对象；text 在读取时按对象当前状态组合。 */
