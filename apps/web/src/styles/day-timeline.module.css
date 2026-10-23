@@ -1,6 +1,7 @@
 /*
  * 成员首页本月时间轴（components/member/home/DayTimeline.tsx），照样稿 home-tabs-v5（W1 浅底托），尺寸和存在感压低：
- *   格子    定宽小方块靠左排（31 天约 500px），同一套色相、调淡：未到工作日 #3d6fb6 的六成、未到休息日 #dbe4f0、过去 #c9d1dc 都往卡片底色靠；
+ *   格子    定宽小方块靠左排（31 天约 500px），同一套色相、调淡：未到工作日 #3d6fb6 的六成、未到休息日 #dbe4f0 的七成半（本周浅底里也看得见）、
+ *           过去 #c9d1dc 都往卡片底色靠；
  *           今天一圈 1.5px 细描边；不用阴影、渐变
  *   格子上方 签定关口 = 实心菱形，计划点 = 空心圆，颜色由行内 --c 给（所属 Mission 的颜色）；淡掉的用浅灰
  *   格子下方 只标 1 号、今天、月末
@@ -32,7 +33,7 @@
 
 .day { position: relative; aspect-ratio: 1 / 1; border-radius: 3px; }
 .day[data-workday="true"] { background: color-mix(in oklab, #3d6fb6 58%, var(--ts-surface, var(--surface))); }
-.day[data-workday="false"] { background: color-mix(in oklab, #dbe4f0 60%, var(--ts-surface, var(--surface))); }
+.day[data-workday="false"] { background: color-mix(in oklab, #dbe4f0 75%, var(--ts-surface, var(--surface))); }
 .day[data-state="past"] { background: color-mix(in oklab, #c9d1dc 60%, var(--ts-surface, var(--surface))); }
 .day[data-state="today"] { outline: 1.5px solid var(--ink); outline-offset: 1.5px; }
 
@@ -86,7 +87,8 @@
   gap: var(--gap);
   width: fit-content;
 }
-.weekText { justify-self: start; color: #3d6fb6; font-size: 11px; line-height: 14px; white-space: nowrap; }
+/* 字和三栏「本周」表头同色（#215ba1），不加粗。 */
+.weekText { justify-self: start; color: #215ba1; font-size: var(--type-note, 11px); line-height: 14px; white-space: nowrap; }
 .weekText[data-edge="end"] { justify-self: end; }
 .weekBand {
   position: absolute;
@@ -98,7 +100,7 @@
   background: rgba(61, 111, 182, .08);
 }
 
-/* 窄容器：一根细线。位置都是行内百分比。 */
+/* 窄容器：一根细线。位置都是行内百分比。和格子视图一样压低：轨道 3px，今天一根 1.5px 的 --ink-muted 细线（格子视图今天是墨色细描边），点 9px。 */
 .line { position: relative; display: none; height: 40px; }
 .band { position: absolute; top: 0; bottom: 0; border-radius: 6px; background: rgba(61, 111, 182, .08); }
 .lab {
@@ -113,12 +115,12 @@
 .lab[data-at] { display: flex; gap: 4px; transform: none; }
 .lab[data-at="start"] { left: 0; }
 .lab[data-at="end"] { right: 0; }
-.weekLab { color: #3d6fb6; }
-.track { position: absolute; top: 22px; right: 0; left: 0; height: 4px; border-radius: 2px; background: #e1e6ed; }
-.past { position: absolute; top: 22px; left: 0; height: 4px; border-radius: 2px; background: #b9c8dc; }
-.now { position: absolute; top: 12px; bottom: 0; width: 2px; margin-left: -1px; background: #215ba1; }
-.lineMarks { position: absolute; top: 17px; display: flex; gap: 5px; transform: translateX(-50%); }
-.lineMarks > .gate, .lineMarks > .mark { width: 13px; height: 13px; }
+.weekLab { color: #215ba1; }
+.track { position: absolute; top: 22px; right: 0; left: 0; height: 3px; border-radius: 1.5px; background: #e1e6ed; }
+.past { position: absolute; top: 22px; left: 0; height: 3px; border-radius: 1.5px; background: #b9c8dc; }
+.now { position: absolute; top: 12px; bottom: 0; width: 1.5px; margin-left: -.75px; background: var(--ink-muted); }
+.lineMarks { position: absolute; top: 19px; display: flex; gap: 3px; transform: translateX(-50%); }
+.lineMarks > .gate, .lineMarks > .mark { width: 9px; height: 9px; }
 
 @container day-timeline (max-width: 559px) {
   .days { display: none; }

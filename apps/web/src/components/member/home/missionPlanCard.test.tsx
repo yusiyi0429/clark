@@ -660,15 +660,28 @@ describe("MissionPlanCard：计划点", () => {
 describe("Mission 卡片样式", () => {
   const css = readFileSync(new URL("../../../styles/mission-plan-card.module.css", import.meta.url), "utf8");
   const handheld = css.match(/@media \(max-width: 959px\) \{([\s\S]*?)\r?\n\}/)?.[1] ?? "";
-  it("Mission 切换：选中 22（正文 +8）半粗主墨、写全；中号 15；小号 14 更淡；没有底线；字号有过渡、减少动效时关掉", () => {
-    expect(css).toMatch(/\.mission \{[^}]*max-width: 15em;[^}]*font-size: calc\(var\(--type-body, 14px\) \+ 1px\);[^}]*transition: font-size/);
-    expect(css).toContain('.mission[data-size="large"] { max-width: none; color: var(--ink); font-size: calc(var(--type-body, 14px) + 8px); font-weight: 600;');
-    expect(css).toMatch(/\.mission\[data-size="small"\] \{[^}]*font-size: var\(--type-body, 14px\);/);
-    expect(css).toMatch(/\.name \{[^}]*overflow: hidden; text-overflow: ellipsis;/);
+  /** 一条规则的声明块（选择器原样给）。 */
+  const rule = (selector: string) => css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{([^}]*)\\}`))?.[1] ?? "";
+  it("Mission 切换：选中 22（正文 +8）、写全，最宽到两边渐隐之间再省略号；中号 15；小号 14 更淡；没有底线；字号有过渡、减少动效时关掉", () => {
+    expect(rule(".mission")).toMatch(/max-width: 15em;[\s\S]*font-size: calc\(var\(--type-body, 14px\) \+ 1px\);[\s\S]*transition: font-size/);
+    expect(rule('.mission[data-size="large"]')).toMatch(/max-width: calc\(100% - 2 \* var\(--fade\)\);[\s\S]*font-size: calc\(var\(--type-body, 14px\) \+ 8px\);/);
+    expect(rule('.mission[data-size="small"]')).toContain("font-size: var(--type-body, 14px);");
+    expect(rule(".name")).toContain("text-overflow: ellipsis;");
     expect(css).not.toMatch(/\.mission[^{]*::after/);
-    expect(css).toMatch(/\.missions \{[^}]*gap: 26px;[^}]*overflow-x: auto;/);
-    expect(css).toMatch(/\.missions\[data-more\] \{ mask-image: linear-gradient/);
+    expect(rule(".missions")).toMatch(/gap: 26px;[\s\S]*overflow-x: auto;/);
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\.mission, \.mission \.dot,[^}]*transition: none;/);
+  });
+  it("溢出时哪边还有没露出来的就在哪边渐隐（data-less 左、data-more 右），带 -webkit- 前缀", () => {
+    expect(rule(".missions[data-less]")).toContain("--fade-left: var(--fade);");
+    expect(rule(".missions[data-more]")).toContain("--fade-right: var(--fade);");
+    const mask = rule(".missions:is([data-less], [data-more])");
+    expect(mask).toContain("-webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fade-left), #000 calc(100% - var(--fade-right)), transparent);");
+    expect(mask).toMatch(/(?:^|\s)mask-image: linear-gradient/);
+  });
+  it("高对比模式：各档字号的切换项都用主墨、色点不淡", () => {
+    const contrast = css.match(/@media \(prefers-contrast: more\) \{([\s\S]*?)\r?\n\}/)?.[1] ?? "";
+    expect(contrast).toMatch(/\.mission, \.mission\[data-size\], \.mission\[data-size\]:hover,[^{]*\{ color: var\(--ink\); \}/);
+    expect(contrast).toContain(".mission[data-size] .dot { opacity: 1; }");
   });
   it("手持（≤959）按比例缩小：选中 19、中号 14、小号 13；点触热区 44", () => {
     expect(handheld).toContain(".mission { font-size: 14px; }");

@@ -26,14 +26,18 @@
 
 /*
  * Mission 切换（时间轴下面一行，样稿 home-tabs-v5）：只靠字号分选中，不画底线；各项按基线对齐，间距 26 免得读成一句话。
- *   data-size large  = 选中的：正文 +8（22），半粗，主墨，名字写全
+ *   data-size large  = 选中的：正文 +8（22），半粗，主墨，名字写全；最宽到两边渐隐之间（行宽减两段 --fade），再长就省略号
  *   data-size medium = 选「全部」时的其余 Mission：正文 +1（15），灰
  *   data-size small  = 选某个 Mission 时的其余（含「全部」）：正文（14），更淡，色点也淡
- * 没选中的长名字截到 15em；一行放不下时横向滑动，右边还有没露出来的（data-more）用遮罩渐隐。
+ * 没选中的长名字截到 15em；一行放不下时横向滑动，右边 / 左边还有没露出来的（data-more / data-less）各用遮罩渐隐 --fade 宽。
+ * 选中后组件把它滚到行中间，加上上面的最宽限制，选中的名字不会落进渐隐里。
  * 滑动区四周留 4px（再用负外边距抵掉），键盘焦点框不被裁掉。
  */
 .switcher { display: flex; align-items: baseline; gap: 16px; min-width: 0; margin: 0 0 16px; }
 .missions {
+  --fade: 48px;
+  --fade-left: 0px;
+  --fade-right: 0px;
   flex: 1;
   display: flex;
   align-items: baseline;
@@ -45,7 +49,12 @@
   scrollbar-width: none;
 }
 .missions::-webkit-scrollbar { display: none; }
-.missions[data-more] { mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent); }
+.missions[data-less] { --fade-left: var(--fade); }
+.missions[data-more] { --fade-right: var(--fade); }
+.missions:is([data-less], [data-more]) {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fade-left), #000 calc(100% - var(--fade-right)), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 var(--fade-left), #000 calc(100% - var(--fade-right)), transparent);
+}
 
 .mission {
   flex: none;
@@ -66,7 +75,7 @@
   transition: font-size var(--dur-base) var(--ease-swift), color var(--dur-base) var(--ease-swift);
 }
 .mission:hover { color: var(--ink-muted); }
-.mission[data-size="large"] { max-width: none; color: var(--ink); font-size: calc(var(--type-body, 14px) + 8px); font-weight: 600; letter-spacing: -.02em; }
+.mission[data-size="large"] { max-width: calc(100% - 2 * var(--fade)); color: var(--ink); font-size: calc(var(--type-body, 14px) + 8px); font-weight: 600; letter-spacing: -.02em; }
 .mission[data-size="small"] { color: color-mix(in oklab, var(--ink-faint) 60%, transparent); font-size: var(--type-body, 14px); }
 .mission[data-size="small"]:hover { color: var(--ink-faint); }
 /* 色点底边落在字的基线上，再按字号往上提到字身中间（手持时按钮有 44 的热区，不能按整个按钮居中）。 */
@@ -257,6 +266,7 @@
   .mission { font-size: 14px; }
   .mission[data-size="large"] { font-size: 19px; }
   .mission[data-size="small"] { font-size: 13px; }
+  .missions { --fade: 32px; }
 }
 /* 点触下限：手持与触屏热区 44（--touch-hit 只在那时定义）；上内边距按字号算，字落在热区中间，各项仍按基线对齐。 */
 @media (max-width: 959px), (pointer: coarse) {
@@ -274,5 +284,6 @@
 }
 @media (prefers-contrast: more) {
   .card, .activity, .task { border-color: var(--ink-muted); }
-  .mission, .total, .month, .column h3, .activity small, .count { color: var(--ink); }
+  .mission, .mission[data-size], .mission[data-size]:hover, .total, .month, .column h3, .activity small, .count { color: var(--ink); }
+  .mission[data-size] .dot { opacity: 1; }
 }

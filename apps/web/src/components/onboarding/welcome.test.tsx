@@ -170,7 +170,9 @@ describe("真实数据的首次引导", () => {
     for (const gone of ["参与的战场", "本月任务卡", "执行事项点「+」"]) expect(text(tree)).not.toContain(gone);
     expect(elements(tree).find((element) => element.type === WorkspaceSchematic)?.props).toMatchObject({ role: "member", focus: "board" });
     const diagram = renderToStaticMarkup(<WorkspaceSchematic role="member" focus="board" />);
-    for (const label of ["新的执行事项", "约会议", "等回复", "战场进展", "复盘", "全部", "已完成", "本周", "之后", "+", "我的 Agent"]) expect(diagram).toContain(label);
+    for (const label of ["新的执行事项", "约会议", "等回复", "战场进展", "雷达", "复盘", "全部", "已完成", "本周", "之后", "+", "我的 Agent"]) expect(diagram).toContain(label);
+    // 和首页同序：每一天在上，Mission 切换在下。
+    expect(diagram.indexOf("_days_")).toBeLessThan(diagram.indexOf("_missionRow_"));
     for (const gone of ["我的本月卡", "参与的战场", "等你验收"]) expect(diagram).not.toContain(gone);
   });
   it("Mission 六步按顺序呈现，之后才能看本月工作，也能返回", () => {

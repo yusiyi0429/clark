@@ -4,7 +4,7 @@
  * 成员首页的本月时间轴：一天一格，只管画和把操作交出去，不取数。
  *
  * - 格子是定宽的小方块，靠左排（不随卡片拉宽）：还没到的工作日蓝、休息日浅蓝，过去的统一浅灰；今天加一圈细描边，下面写「今天」。
- *   格子下面只标 1 号、今天和月末。本周（截到本月以内）的格子后面垫一块浅蓝底，上方左端写「本周 · 还剩 N 个工作日」；showWeek=false 时不画本周。
+ *   格子下面只标 1 号、今天和月末（今天紧挨着 1 号或月末时，那一头不标，免得挤成一串）。本周（截到本月以内）的格子后面垫一块浅蓝底，上方左端写「本周 · 还剩 N 个工作日」；showWeek=false 时不画本周。
  * - 格子上方按日期放签定关口（实心菱形）和计划点（空心圆），颜色是所属 Mission 的颜色；同一天的并排放。
  *   名字只在 title 和读屏文字里。聚焦某个 Mission 时，其他 Mission 的点淡掉。
  * - 计划点：按住拖到别的格子（按整格吸附，松手时改日期；拖出格子那一带或按 Esc 就放回原处）；右键或手指长按删除。点格子加计划点。
@@ -191,7 +191,8 @@ export function DayTimeline({ days, today, weekStart, weekEnd, showWeek = true, 
             const onDay = markers.filter((marker) => marker.date === day.date);
             const ghost = dragged && drop?.date === day.date ? dragged : undefined;
             const number = dayOfMonth(day.date);
-            const labelled = number === 1 || state === "today" || index === count - 1;
+            const besideToday = todayIndex >= 0 && Math.abs(index - todayIndex) === 1;
+            const labelled = state === "today" || ((number === 1 || index === count - 1) && !besideToday);
             return (
               <li
                 key={day.date}
