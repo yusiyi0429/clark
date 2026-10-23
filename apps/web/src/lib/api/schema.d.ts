@@ -3616,6 +3616,14 @@ export interface components {
                 } | null;
                 awaitingAcceptance: boolean;
                 planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
                 createdAt: string;
                 updatedAt: string;
             };
@@ -7421,6 +7429,14 @@ export interface components {
             } | null;
             awaitingAcceptance: boolean;
             planTaskId: string | null;
+            blocker: {
+                reason: string;
+                waitingOn: {
+                    personId: string;
+                    name: string;
+                } | null;
+                since: string;
+            } | null;
             createdAt: string;
             updatedAt: string;
         };
@@ -7516,6 +7532,14 @@ export interface components {
                     } | null;
                     awaitingAcceptance: boolean;
                     planTaskId: string | null;
+                    blocker: {
+                        reason: string;
+                        waitingOn: {
+                            personId: string;
+                            name: string;
+                        } | null;
+                        since: string;
+                    } | null;
                     createdAt: string;
                     updatedAt: string;
                 }[];
@@ -8722,6 +8746,14 @@ export interface components {
                 } | null;
                 awaitingAcceptance: boolean;
                 planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
                 createdAt: string;
                 updatedAt: string;
             };
@@ -8857,6 +8889,14 @@ export interface components {
                 } | null;
                 awaitingAcceptance: boolean;
                 planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
                 createdAt: string;
                 updatedAt: string;
             }[];
@@ -8926,6 +8966,14 @@ export interface components {
                     } | null;
                     awaitingAcceptance: boolean;
                     planTaskId: string | null;
+                    blocker: {
+                        reason: string;
+                        waitingOn: {
+                            personId: string;
+                            name: string;
+                        } | null;
+                        since: string;
+                    } | null;
                     createdAt: string;
                     updatedAt: string;
                 }[];
@@ -8995,6 +9043,14 @@ export interface components {
                 } | null;
                 awaitingAcceptance: boolean;
                 planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
                 createdAt: string;
                 updatedAt: string;
             }[];
@@ -9160,6 +9216,14 @@ export interface components {
                 } | null;
                 awaitingAcceptance: boolean;
                 planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
                 createdAt: string;
                 updatedAt: string;
             };
@@ -9255,6 +9319,14 @@ export interface components {
                     } | null;
                     awaitingAcceptance: boolean;
                     planTaskId: string | null;
+                    blocker: {
+                        reason: string;
+                        waitingOn: {
+                            personId: string;
+                            name: string;
+                        } | null;
+                        since: string;
+                    } | null;
                     createdAt: string;
                     updatedAt: string;
                 };
@@ -9716,6 +9788,8 @@ export interface components {
             judgment?: string | null;
             missionId?: string | null;
             planTaskId?: string | null;
+            blockedReason?: string | null;
+            waitingOn?: string | null;
         };
         ReturnMyTaskRequest: {
             version: number;

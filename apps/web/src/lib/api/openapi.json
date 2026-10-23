@@ -14269,6 +14269,7 @@
               "origin",
               "awaitingAcceptance",
               "planTaskId",
+              "blocker",
               "createdAt",
               "updatedAt"
             ],
@@ -14611,6 +14612,58 @@
                   {
                     "minLength": 1,
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "blocker": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "reason",
+                      "waitingOn",
+                      "since"
+                    ],
+                    "properties": {
+                      "reason": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      "waitingOn": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "name"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "since": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
                   },
                   {
                     "type": "null"
@@ -39147,6 +39200,7 @@
           "origin",
           "awaitingAcceptance",
           "planTaskId",
+          "blocker",
           "createdAt",
           "updatedAt"
         ],
@@ -39495,6 +39549,58 @@
               }
             ]
           },
+          "blocker": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "reason",
+                  "waitingOn",
+                  "since"
+                ],
+                "properties": {
+                  "reason": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "waitingOn": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "personId",
+                          "name"
+                        ],
+                        "properties": {
+                          "personId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "name": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "since": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "minLength": 1,
             "type": "string"
@@ -39791,6 +39897,7 @@
                       "origin",
                       "awaitingAcceptance",
                       "planTaskId",
+                      "blocker",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -40133,6 +40240,58 @@
                           {
                             "minLength": 1,
                             "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "blocker": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "reason",
+                              "waitingOn",
+                              "since"
+                            ],
+                            "properties": {
+                              "reason": {
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "type": "string"
+                              },
+                              "waitingOn": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "personId",
+                                      "name"
+                                    ],
+                                    "properties": {
+                                      "personId": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "since": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
                           },
                           {
                             "type": "null"
@@ -47648,6 +47807,7 @@
               "origin",
               "awaitingAcceptance",
               "planTaskId",
+              "blocker",
               "createdAt",
               "updatedAt"
             ],
@@ -47990,6 +48150,58 @@
                   {
                     "minLength": 1,
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "blocker": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "reason",
+                      "waitingOn",
+                      "since"
+                    ],
+                    "properties": {
+                      "reason": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      "waitingOn": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "name"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "since": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
                   },
                   {
                     "type": "null"
@@ -48629,6 +48841,7 @@
                 "origin",
                 "awaitingAcceptance",
                 "planTaskId",
+                "blocker",
                 "createdAt",
                 "updatedAt"
               ],
@@ -48977,6 +49190,58 @@
                     }
                   ]
                 },
+                "blocker": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "reason",
+                        "waitingOn",
+                        "since"
+                      ],
+                      "properties": {
+                        "reason": {
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "waitingOn": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "personId",
+                                "name"
+                              ],
+                              "properties": {
+                                "personId": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "since": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "createdAt": {
                   "minLength": 1,
                   "type": "string"
@@ -49134,6 +49399,7 @@
                       "origin",
                       "awaitingAcceptance",
                       "planTaskId",
+                      "blocker",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -49482,6 +49748,58 @@
                           }
                         ]
                       },
+                      "blocker": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "reason",
+                              "waitingOn",
+                              "since"
+                            ],
+                            "properties": {
+                              "reason": {
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "type": "string"
+                              },
+                              "waitingOn": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "personId",
+                                      "name"
+                                    ],
+                                    "properties": {
+                                      "personId": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "since": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "createdAt": {
                         "minLength": 1,
                         "type": "string"
@@ -49615,6 +49933,7 @@
                 "origin",
                 "awaitingAcceptance",
                 "planTaskId",
+                "blocker",
                 "createdAt",
                 "updatedAt"
               ],
@@ -49957,6 +50276,58 @@
                     {
                       "minLength": 1,
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "blocker": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "reason",
+                        "waitingOn",
+                        "since"
+                      ],
+                      "properties": {
+                        "reason": {
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "waitingOn": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "personId",
+                                "name"
+                              ],
+                              "properties": {
+                                "personId": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "since": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
                     },
                     {
                       "type": "null"
@@ -50706,6 +51077,7 @@
               "origin",
               "awaitingAcceptance",
               "planTaskId",
+              "blocker",
               "createdAt",
               "updatedAt"
             ],
@@ -51054,6 +51426,58 @@
                   }
                 ]
               },
+              "blocker": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "reason",
+                      "waitingOn",
+                      "since"
+                    ],
+                    "properties": {
+                      "reason": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      "waitingOn": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "name"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "since": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "createdAt": {
                 "minLength": 1,
                 "type": "string"
@@ -51350,6 +51774,7 @@
                     "origin",
                     "awaitingAcceptance",
                     "planTaskId",
+                    "blocker",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -51692,6 +52117,58 @@
                         {
                           "minLength": 1,
                           "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "blocker": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "reason",
+                            "waitingOn",
+                            "since"
+                          ],
+                          "properties": {
+                            "reason": {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            "waitingOn": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "personId",
+                                    "name"
+                                  ],
+                                  "properties": {
+                                    "personId": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "since": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
                         },
                         {
                           "type": "null"
@@ -54678,6 +55155,29 @@
               {
                 "minLength": 1,
                 "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "blockedReason": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "waitingOn": {
+            "anyOf": [
+              {
+                "minLength": 1,
                 "type": "string"
               },
               {

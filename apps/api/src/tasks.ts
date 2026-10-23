@@ -21,6 +21,7 @@ type TaskRow = {
   latest_progress_body: string | null; latest_progress_source: "web" | "codex" | "claude" | "github" | "other" | null;
   latest_progress_author_id: string | null; latest_progress_created_at: Date | null;
   submission: StoredSubmission | null; acceptance: StoredAcceptance | null;
+  blocked_reason: string | null; waiting_on: string | null; blocked_at: Date | null;
 };
 /** tasks.submission / tasks.acceptance 里存的是人的 id，读的时候换成名字。 */
 type StoredSubmission = Omit<TTaskSubmission, "by"> & { by: string };
@@ -34,7 +35,8 @@ const TASK_SELECT = `SELECT t.id::text,t.version,t.title,t.status,t.created_by,t
  prev.id::text AS previous_id,prev.title AS previous_title,prev.status AS previous_status,
  ARRAY(SELECT tm.person_id FROM task_members tm WHERE tm.task_id=t.id AND tm.role='collaborator' AND tm.left_at IS NULL ORDER BY tm.added_at,tm.person_id) AS collaborators,
  t.created_at,t.updated_at,lp.body AS latest_progress_body,lp.source AS latest_progress_source,
- lp.author_id AS latest_progress_author_id,lp.created_at AS latest_progress_created_at,t.submission,t.acceptance
+ lp.author_id AS latest_progress_author_id,lp.created_at AS latest_progress_created_at,t.submission,t.acceptance,
+ t.blocked_reason,t.waiting_on,t.blocked_at
  FROM tasks t
  LEFT JOIN meetings mt ON mt.id=t.origin_meeting_id
  LEFT JOIN missions m ON m.id=t.mission_id
@@ -64,6 +66,8 @@ function projectTask(row: TaskRow, names: Map<string, string>): TTaskView {
       meetingTitle: row.meeting_title ?? "", quote: row.source_quote } : null,
     awaitingAcceptance: row.submission !== null && (row.status === "not_started" || row.status === "in_progress"),
     planTaskId: row.plan_task_id,
+    blocker: row.blocked_reason && row.blocked_at && row.status !== "done"
+      ? { reason: row.blocked_reason, waitingOn: row.waiting_on ? person(row.waiting_on, names) : null, since: row.blocked_at.toISOString() } : null,
     createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
   };
 }
@@ -237,14 +241,19 @@ export function updateMyTaskStatus(pool: Pool, ownerId: string, taskId: string, 
     // 换了 Mission，原来的 Task 不再对得上：同一请求没带新的就清掉。
     const planTaskId = input.planTaskId !== undefined ? input.planTaskId : missionId === row.mission_id ? row.plan_task_id : null;
     if (planTaskId && !missionId) return independentWithTask;
+    // 卡住：清掉卡在哪就连同在等谁一起清；在等谁要是名单里的另一个人。
+    const blockedReason = input.blockedReason === undefined ? row.blocked_reason : input.blockedReason;
+    const waitingOn = blockedReason === null ? null : input.waitingOn === undefined ? row.waiting_on : input.waitingOn;
+    if (waitingOn && (waitingOn === ownerId || !names.has(waitingOn))) return error(400,"INVALID_INPUT","在等的人不在人员名单里");
     if (missionId && missionId !== row.mission_id && !await missionAvailable(queryOf(client),ownerId,missionId,now))
       return error(404,"MISSION_NOT_AVAILABLE","个人任务不可用于执行事项");
     const step = missionId === row.mission_id ? row.step_order : await appendStep(client,missionId);
     await client.query(`UPDATE tasks SET status=COALESCE($2,status),title=COALESCE($3,title),start_date=$4,due_date=$5,
       done_definition=$6,judgment=$7,judgment_at=CASE WHEN $7::text IS NULL THEN NULL WHEN $7::text IS DISTINCT FROM judgment THEN now() ELSE judgment_at END,mission_id=$8,step_order=$9,return_reason=CASE WHEN $2 IS NOT NULL THEN NULL ELSE return_reason END,
-      plan_task_id=$10,version=version+1,updated_at=now() WHERE id=$1`,
+      plan_task_id=$10,blocked_reason=$11,waiting_on=$12,blocked_at=CASE WHEN $11::text IS NULL THEN NULL ELSE COALESCE(blocked_at,now()) END,
+      version=version+1,updated_at=now() WHERE id=$1`,
     [taskId,input.status ?? null,input.title ?? null,start,due,input.doneDefinition === undefined ? row.done_definition : input.doneDefinition,
-      input.judgment === undefined ? row.judgment : input.judgment,missionId,step,planTaskId]);
+      input.judgment === undefined ? row.judgment : input.judgment,missionId,step,planTaskId,blockedReason,waitingOn]);
     if (row.mission_id && row.mission_id !== missionId) await renumberMission(client,row.mission_id);
   });
 }
@@ -292,7 +301,7 @@ export function acceptMyTask(pool: Pool, ownerId: string, taskId: string, input:
         const check = checks.get(index);
         return { text, met: check?.met ?? false, evidence: check?.evidence?.trim() || null, materialId: check?.materialId ?? null };
       }) };
-    await client.query("UPDATE tasks SET status='done',acceptance=$2,submission=NULL,version=version+1,updated_at=now() WHERE id=$1",
+    await client.query("UPDATE tasks SET status='done',acceptance=$2,submission=NULL,blocked_reason=NULL,waiting_on=NULL,blocked_at=NULL,version=version+1,updated_at=now() WHERE id=$1",
       [taskId,JSON.stringify(acceptance)]);
     await settleSubmissionNotices(client,taskId);
     await tellGroup(client,taskId,ownerId,`${names.get(ownerId) ?? ownerId}验收了这件事${verdict ? `：${verdict}` : "。"}`);
