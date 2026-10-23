@@ -2,19 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ActionButton, FormField, TianshuPortalTheme } from "ts-design";
-import { Button, Input, Label, ListBox, Select, TextField } from "ts-design/primitives";
+import { Button, Label, ListBox, Select } from "ts-design/primitives";
 import type { components } from "@/lib/api/schema";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { usePlanTasks } from "./usePlanTasks";
 import s from "./task-detail.module.css";
 
 type Detail = components["schemas"]["TaskDetailResponse"];
 export type TaskPatch = Omit<components["schemas"]["PatchMyTaskRequest"], "version">;
-type Draft = { title: string; missionId: string; planTaskId: string; startDate: string; dueDate: string; doneDefinition: string; judgment: string };
+type Draft = { title: string; missionId: string; planTaskId: string; startDate: string; dueDate: string; doneDefinition: string };
 const draftOf = (detail: Detail): Draft => ({ title: detail.task.title, missionId: detail.task.mission?.missionId ?? "", planTaskId: detail.task.planTaskId ?? "", startDate: detail.task.startDate ?? "",
-  dueDate: detail.task.dueDate ?? "", doneDefinition: detail.task.doneDefinition ?? "", judgment: detail.judgment ?? "" });
+  dueDate: detail.task.dueDate ?? "", doneDefinition: detail.task.doneDefinition ?? "" });
 
 /**
- * ⋯ → 编辑（推进人）：标题、所属个人任务、挂到哪个 Task（这个 Mission 有 Task 时）、日期、完成标准、这件事的判断。
+ * ⋯ → 编辑（推进人）：标题、所属个人任务、挂到哪个 Task（这个 Mission 有 Task 时）、日期、完成标准。
  * 只把这张表单里改过的字段交给保存（和打开时比）：别处同时改了别的字段，不会被表单里的旧值盖回去。
  */
 export function TaskEditForm({ detail, busy, onSave, onCancel }: { detail: Detail; busy: boolean; onSave: (body: TaskPatch) => void; onCancel: () => void }) {
@@ -44,7 +45,6 @@ export function TaskEditForm({ detail, busy, onSave, onCancel }: { detail: Detai
     if (draft.startDate !== opened.startDate) body.startDate = draft.startDate || null;
     if (draft.dueDate !== opened.dueDate) body.dueDate = draft.dueDate || null;
     if (draft.doneDefinition.trim() !== opened.doneDefinition.trim()) body.doneDefinition = draft.doneDefinition.trim() || null;
-    if (draft.judgment.trim() !== opened.judgment.trim()) body.judgment = draft.judgment.trim() || null;
     if (!Object.keys(body).length) return onCancel();
     onSave(body);
   };
@@ -74,11 +74,10 @@ export function TaskEditForm({ detail, busy, onSave, onCancel }: { detail: Detai
       </ListBox></TianshuPortalTheme></Select.Popover>
     </Select> : null}
     <div className={s.twoFields}>
-      <TextField><Label>计划开始日期 · 可选</Label><Input type="date" value={draft.startDate} onChange={(event) => set("startDate", event.target.value)} /></TextField>
-      <TextField><Label>截止日期 · 可选</Label><Input type="date" value={draft.dueDate} onChange={(event) => set("dueDate", event.target.value)} /></TextField>
+      <div className={s.dateField}><Label>计划开始日期 · 可选</Label><DatePicker label="计划开始日期" clearable value={draft.startDate} max={draft.dueDate || undefined} onChange={(value) => set("startDate", value)} /></div>
+      <div className={s.dateField}><Label>截止日期 · 可选</Label><DatePicker label="截止日期" clearable value={draft.dueDate} min={draft.startDate || undefined} onChange={(value) => set("dueDate", value)} /></div>
     </div>
     <FormField label="完成标准 · 可选" value={draft.doneDefinition} onChange={(value) => set("doneDefinition", value)} multiline rows={3} maxLength={500} />
-    <FormField label="这件事的判断 · 可选" value={draft.judgment} onChange={(value) => set("judgment", value)} multiline rows={2} maxLength={2000} />
     <div className={s.paneRow}>
       <ActionButton intent="secondary" isDisabled={busy} onPress={save}>保存</ActionButton>
       <Button variant="ghost" onPress={onCancel}>取消</Button>

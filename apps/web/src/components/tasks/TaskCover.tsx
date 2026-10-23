@@ -215,40 +215,51 @@ function Deliverables({ ids, area }: { ids: string[]; area: MaterialAreaApi }) {
 }
 
 /**
- * 执行过程：默认折叠成一行。有进展、推进人的判断、会议原话任一样时才有这一块；三样都没有时只留一行「写一条进展」——
- * 进展是本体每周拉取（工单 13）和月度复盘起草读的数据，入口不能没有。
+ * 执行过程：默认展开，一行一条进展、最新的在前；左边一列等宽的时间，右边进展的第一行。
+ * 有链接或不止一行的那条点开看全文、链接和谁从哪写的，再点收起；别的行不能点。会议原话置顶。
+ * 没有进展也没有会议原话时只留一行「写一条进展」——进展是本体每周拉取（工单 13）和月度复盘起草读的数据，入口不能没有。
  */
 function Process({ detail, area, onProgress }: { detail: Detail; area: MaterialAreaApi; onProgress: (entry: Progress) => void }) {
   const task = detail.task;
   const quote = task.origin?.quote ?? null;
-  const has = detail.progress.length > 0 || !!detail.judgment || !!quote;
-  const [open, setOpen] = useState(false);
   const [writing, setWriting] = useState(false);
   const reference = task.status === "done" && detail.acceptance
     ? area.materials.filter((material) => !detail.acceptance!.deliverableMaterialIds.includes(material.id)).length : 0;
-  const latest = detail.progress[0];
-  const summary = [
-    detail.progress.length ? `${detail.progress.length} 条进展` : detail.judgment ? "推进人的判断" : quote ? "会议原话" : "",
-    latest ? `最近：${latest.body.replace(/\s+/g, " ").slice(0, 40)}` : "",
-    reference ? `另有 ${reference} 份参考材料` : "",
-  ].filter(Boolean).join(" · ");
-  if (!has) return writing
-    ? <ProgressComposer taskId={task.id} onSaved={(entry) => { setWriting(false); setOpen(true); onProgress(entry); }} onCancel={() => setWriting(false)} />
-    : <button type="button" className={c.toggle} onClick={() => setWriting(true)}><Plus size={14} strokeWidth={2} aria-hidden /><span className={c.toggleText}>写一条进展</span></button>;
-  return <>
-    <button type="button" className={c.toggle} aria-expanded={open} aria-controls="task-process" onClick={() => setOpen((value) => !value)}>
-      <ChevronRight size={14} strokeWidth={2} aria-hidden /><span className={c.toggleText}>执行过程 · {summary}</span>
+  const composer = writing ? <ProgressComposer taskId={task.id} onSaved={(entry) => { setWriting(false); onProgress(entry); }} onCancel={() => setWriting(false)} /> : null;
+  if (!detail.progress.length && !quote) return composer
+    ?? <button type="button" className={c.toggle} onClick={() => setWriting(true)}><Plus size={14} strokeWidth={2} aria-hidden /><span className={c.toggleText}>写一条进展</span></button>;
+  const count = [detail.progress.length ? `${detail.progress.length} 条` : "", reference ? `另有 ${reference} 份参考材料` : ""].filter(Boolean).join(" · ");
+  return <section className={`${s.paneBlock} ${c.process}`} aria-label="执行过程">
+    <div className={c.blockHead}>
+      <h3>执行过程</h3>{count ? <span className={c.count}>{count}</span> : null}
+      {writing ? null : <Button variant="ghost" size="sm" className={c.write} onPress={() => setWriting(true)}><Plus size={14} strokeWidth={2} aria-hidden />写一条进展</Button>}
+    </div>
+    {composer}
+    {quote ? <div className={c.pinned}><small>会议原话 · {task.origin?.meetingTitle}</small><p>{quote}</p></div> : null}
+    {detail.progress.length ? <ol className={c.log}>{detail.progress.map((entry) => <ProgressRow key={entry.id} entry={entry} />)}</ol> : null}
+  </section>;
+}
+
+/** 一条进展：时间 + 第一行。有链接或后面还有话时整行可点，展开全文、链接和谁从哪写的。 */
+function ProgressRow({ entry }: { entry: Progress }) {
+  const [open, setOpen] = useState(false);
+  const body = entry.body.trim();
+  const cut = body.indexOf("\n");
+  const first = cut < 0 ? body : body.slice(0, cut);
+  const rest = cut < 0 ? "" : body.slice(cut + 1).trim();
+  const time = <time className={c.logTime} dateTime={entry.createdAt}>{monthDayTime(entry.createdAt)}</time>;
+  if (!rest && !entry.links.length) return <li className={c.logItem}><div className={c.logRow}>{time}<span className={c.logText}>{first}</span></div></li>;
+  const id = `progress-${entry.id}`;
+  return <li className={c.logItem}>
+    <button type="button" className={c.logRow} aria-expanded={open} aria-controls={id} onClick={() => setOpen((value) => !value)}>
+      {time}<span className={c.logText}>{first}</span><ChevronRight className={c.logChevron} size={14} strokeWidth={2} aria-hidden />
     </button>
-    {open ? <section id="task-process" className={`${s.paneBlock} ${c.process}`} aria-label="执行过程">
-      {quote ? <div className={c.pinned}><small>会议原话 · {task.origin?.meetingTitle}</small><p>{quote}</p></div> : null}
-      {detail.judgment ? <div className={c.pinned}><small>推进人的判断{detail.judgmentAt ? ` · ${task.owner.name}写于 ${monthDayTime(detail.judgmentAt)}` : ""}</small><p>{detail.judgment}</p></div> : null}
-      {detail.progress.length ? <div className={s.progressList}>{detail.progress.map((entry) => <article key={entry.id} className={s.progressEntry}>
-        <div className={s.progressMeta}><span className={s.progressSource}>{SOURCE[entry.source]}</span><span>{entry.author.name}</span><time dateTime={entry.createdAt}>{monthDayTime(entry.createdAt)}</time></div>
-        <p>{entry.body}</p>{entry.links.length ? <div className={s.progressLinks}>{entry.links.map((link) => <a key={link.url} href={link.url} target="_blank" rel="noopener noreferrer">{link.title || link.url}</a>)}</div> : null}
-      </article>)}</div> : null}
-      <ProgressComposer taskId={task.id} onSaved={onProgress} />
-    </section> : null}
-  </>;
+    {open ? <div id={id} className={c.logDetail}>
+      {rest ? <p>{rest}</p> : null}
+      {entry.links.length ? <div className={c.logLinks}>{entry.links.map((link) => <a key={link.url} href={link.url} target="_blank" rel="noopener noreferrer">{link.title || link.url}</a>)}</div> : null}
+      <small>{entry.author.name} · {SOURCE[entry.source]}</small>
+    </div> : null}
+  </li>;
 }
 
 /** 写一条进展（推进人和协作者都能写；只有推进人写的会让未启动的事项进行中）。按 clientEventId 幂等，失败保留输入。 */
