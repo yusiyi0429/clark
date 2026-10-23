@@ -531,7 +531,6 @@ describe("Research Override", () => {
 
   it("allows override only while research is pending or failed", async () => {
     await createTestDb(async ({ db, pool }) => {
-      await migrate(db);
       const reachedModels = queueRunner([structuredClone(RESEARCH_DOC)]);
       const { app, research } = await setupWithResearch(pool, reachedModels.runner);
       try {
@@ -553,10 +552,9 @@ describe("Research Override", () => {
       } finally {
         await app.close();
       }
-    });
+    }, { migrated: true });
 
     await createTestDb(async ({ db, pool }) => {
-      await migrate(db);
       // 未注入 researchService 时 App 默认不启动预研：Issue 保持 pending，override 可用且记录 pending
       const app = await buildApp({ pool, env: testEnv, conversationRuntime: fakeRuntime });
       try {
@@ -577,7 +575,7 @@ describe("Research Override", () => {
       } finally {
         await app.close();
       }
-    });
+    }, { migrated: true });
   });
 });
 
