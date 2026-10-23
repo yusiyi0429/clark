@@ -72,7 +72,6 @@ function splitProse(text: string, maxBytes: number): string[] {
   if (chunk) result.push(chunk);
   return result;
 }
-const SINGLE_HAN = /^\p{Script=Han}$/u;
 /**
  * 检索词：转小写，拉丁字母和数字按词切，汉字段切成二元组，单字汉字段保留为一个词；去重。其余字符（空白、标点）都当分隔。
  * 公司事实检索和确认会议检索（meetingCardRead）共用。
@@ -85,7 +84,7 @@ export function queryTokens(query: string): string[] {
 function relevantEntries(entries: CompanyEntry[], query?: string): { entries: CompanyEntry[]; fallback: boolean } {
   if (!query?.trim()) return { entries, fallback: false };
   // 公司事实检索照旧不用单字汉字。
-  const tokens = queryTokens(query).filter((token) => !SINGLE_HAN.test(token));
+  const tokens = queryTokens(query).filter((token) => !(token.length === 1 && /\p{Script=Han}/u.test(token)));
   const scores = new Map<string, number>();
   const chunkScores = new Map<string, number>();
   for (const entry of entries) {
