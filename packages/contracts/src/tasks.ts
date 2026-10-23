@@ -49,12 +49,12 @@ export const AppendTaskProgressRequest = Type.Object({
   links: Type.Optional(Type.Array(TaskProgressLink, { maxItems: 5 })),
 }, { additionalProperties: false });
 
-/** 所属个人任务：本人已确定任务卡上的一项；同一项个人任务下的执行事项按先后排成第 1..steps 步。 */
+/** 所属 Mission；同一个 Mission 下的执行事项按先后排成第 1..steps 步。从本体导入、没有任务卡的 Mission cardId 为 null。 */
 export const TaskMissionRef = Type.Object(
   {
     missionId: Type.String({ minLength: 1 }),
     title: Type.String({ minLength: 1 }),
-    cardId: Type.String({ minLength: 1 }),
+    cardId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     period: Period,
     battlefieldName: Type.String(),
     step: Type.Integer({ minimum: 1 }),
@@ -253,7 +253,7 @@ export const TaskDetailResponse = Type.Object(
     myNote: Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()]),
     myNoteAt: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     role: Type.Union([Type.Literal("owner"), Type.Literal("collaborator")]),
-    /** 可挂的个人任务：本人已确定、月份未过的任务卡上的条目。 */
+    /** 可挂的 Mission：本人的、不是占位、月份未过（和首页同一口径，不要求任务卡已确认）。 */
     missionOptions: Type.Array(Type.Object(
       { missionId: Type.String({ minLength: 1 }), title: Type.String({ minLength: 1 }), battlefieldName: Type.String(), period: Period },
       { additionalProperties: false },

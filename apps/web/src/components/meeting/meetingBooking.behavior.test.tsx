@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TFeishuMinuteInboxItem, TWorldAnchorOption } from "@warmap/contracts";
-import { Dialog } from "react-aria-components";
+import { SidePanel } from "@/components/ui/SidePanel";
 
 /* 把表单当函数调用：hooks 用按调用顺序存值的小仓库代替；useEffect 在依赖变了时同步跑一次（同 meetingWorldBar.behavior.test）。 */
 const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0, deps: [] as (unknown[] | undefined)[], effectIndex: 0,
@@ -177,7 +177,7 @@ describe("整理会议", () => {
 
   it("整理：会名预填，时间只读带「飞书」，没有主持人和添加参会人", () => {
     const tree = renderOrganize();
-    expect(tree.find((node) => node.type === Dialog)!.props!["aria-label"]).toBe("整理会议");
+    expect(tree.find((node) => node.type === SidePanel)!.props!.label).toBe("整理会议");
     expect(field(tree, "名称").props!.value).toBe("产品周会");
     expect(text(field(tree, "时间"))).toBe("10 月 23 日 14:00–15:10飞书");
     expect(tree.some((node) => node.props?.["aria-label"] === "主持人" || node.props?.["aria-label"] === "添加参会人")).toBe(false);

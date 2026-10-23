@@ -3647,7 +3647,7 @@ export interface components {
                 mission: {
                     missionId: string;
                     title: string;
-                    cardId: string;
+                    cardId: string | null;
                     period: string;
                     battlefieldName: string;
                     step: number;
@@ -7452,7 +7452,7 @@ export interface components {
             mission: {
                 missionId: string;
                 title: string;
-                cardId: string;
+                cardId: string | null;
                 period: string;
                 battlefieldName: string;
                 step: number;
@@ -7547,7 +7547,7 @@ export interface components {
                     mission: {
                         missionId: string;
                         title: string;
-                        cardId: string;
+                        cardId: string | null;
                         period: string;
                         battlefieldName: string;
                         step: number;
@@ -8077,7 +8077,7 @@ export interface components {
                     mission: {
                         missionId: string;
                         title: string;
-                        cardId: string;
+                        cardId: string | null;
                         period: string;
                         battlefieldName: string;
                         step: number;
@@ -8724,7 +8724,7 @@ export interface components {
         TaskMissionRef: {
             missionId: string;
             title: string;
-            cardId: string;
+            cardId: string | null;
             period: string;
             battlefieldName: string;
             step: number;
@@ -8753,7 +8753,7 @@ export interface components {
                 mission: {
                     missionId: string;
                     title: string;
-                    cardId: string;
+                    cardId: string | null;
                     period: string;
                     battlefieldName: string;
                     step: number;
@@ -8888,7 +8888,7 @@ export interface components {
                 mission: {
                     missionId: string;
                     title: string;
-                    cardId: string;
+                    cardId: string | null;
                     period: string;
                     battlefieldName: string;
                     step: number;
@@ -8957,7 +8957,7 @@ export interface components {
                     mission: {
                         missionId: string;
                         title: string;
-                        cardId: string;
+                        cardId: string | null;
                         period: string;
                         battlefieldName: string;
                         step: number;
@@ -9026,7 +9026,7 @@ export interface components {
                 mission: {
                     missionId: string;
                     title: string;
-                    cardId: string;
+                    cardId: string | null;
                     period: string;
                     battlefieldName: string;
                     step: number;
@@ -9191,7 +9191,7 @@ export interface components {
                 mission: {
                     missionId: string;
                     title: string;
-                    cardId: string;
+                    cardId: string | null;
                     period: string;
                     battlefieldName: string;
                     step: number;
@@ -9284,7 +9284,7 @@ export interface components {
                     mission: {
                         missionId: string;
                         title: string;
-                        cardId: string;
+                        cardId: string | null;
                         period: string;
                         battlefieldName: string;
                         step: number;

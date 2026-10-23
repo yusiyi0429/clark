@@ -159,7 +159,7 @@ describe("首页计划",()=>{
     } finally { await f.t.close(); }
   });
 
-  it("任务卡没确认时 Mission 和关口照常出，事项带上 missionId",async()=>{
+  it("任务卡没确认时 Mission 和关口照常出，事项也挂得上",async()=>{
     const f=await executionFixture("open");
     try {
       f.setNow(OCT_22);
@@ -171,7 +171,7 @@ describe("首页计划",()=>{
         {missionId,date:"2026-10-12",label:"交付"},{missionId,date:"2026-10-20",label:"复盘"},
       ]));
       expect(plan.activities).toHaveLength(1);
-      expect(plan.activities[0]).toMatchObject({item:{title:"未确认卡上的事项",mission:null},missionId:"execution-one",column:"later"});
+      expect(plan.activities[0]).toMatchObject({item:{title:"未确认卡上的事项",mission:{missionId:"execution-one"}},missionId:"execution-one",column:"later"});
     } finally { await f.t.close(); }
   });
 

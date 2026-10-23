@@ -1,13 +1,13 @@
 "use client";
 
 /**
- * 约会议（FR-4.1）：顶栏「约会议」打开的右侧抽屉，外壳和二级页同一个（DetailFrame）；手持上铺满。
+ * 约会议（FR-4.1）：顶栏或首页「约会议」打开的右侧浮出面板（SidePanel，形状同通知栏），页头和二级页同一个（DetailFrame）。
+ * 外壳一直挂着它、每次打开换一个 key：表单从空白开始，关时面板能原路滑出。
  * 名称、日期 + 起止、主持人（成员只能是本人，CEO 从 DRI 里选）、参会人（可空）、挂到（WorldAnchorPicker，至少一个）。
  * 「约好」建会（只存天枢，不写本体），成功后跳到会议页。
  * 整理模式（organize）：飞书里直接开的会待整理，用这份妙记建会；时间、参会人取自妙记只读，没有主持人一栏，挂点按妙记那个月取。
  */
 import { useEffect, useState } from "react";
-import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import type { TFeishuMinuteInboxItem, TPickedWorldAnchor, TWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
 import { COMPANY_TIMEZONE, companyMonth, dateSpan } from "@/lib/companyTime";
 import { refreshWorkspace } from "@/lib/toast";
@@ -15,6 +15,7 @@ import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Select } from "@/components/ui/Select";
+import { SidePanel } from "@/components/ui/SidePanel";
 import { timeOptions } from "@/components/ui/pickerFormat";
 import { bookMeeting, listPeople, listPersonDirectory, listWorldAnchorOptions, organizeFeishuMinute, type DirectoryPerson } from "./meetingDecisionApi";
 import { WorldAnchorPicker } from "./WorldAnchorPicker";
@@ -126,74 +127,70 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize }: { open:
   const invitable = people.filter((person) => person.personId !== leadDriId && !participants.includes(person.personId));
 
   return (
-    <ModalOverlay isOpen={open} onOpenChange={(next) => { if (!next) onClose(); }} isDismissable className={d.sheetScrim}>
-      <Modal className={d.sheet}>
-        <Dialog className={d.sheetDialog} aria-label={organize ? "整理会议" : "约会议"}>
-          <DetailFrame title={organize ? "整理会议" : "约会议"} onBack={onClose} backLabel="关闭">
-            <div className={d.booking}>
-              <label className={d.bookField}>
-                <span>名称</span>
-                <input aria-label="名称" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} />
-              </label>
-              {organize ? (
-                <div className={d.bookField}>
-                  <span>时间</span>
-                  <output aria-label="时间" className={d.bookHost}>{dateSpan(organize.minute.startsAt, organize.minute.endsAt)}<small className={d.bookSource}>飞书</small></output>
-                </div>
-              ) : <div className={d.bookField}>
-                <span>时间</span>
-                <div className={d.bookTime}>
-                  <DatePicker label="日期" value={slot.date} onChange={(date) => setSlot((current) => ({ ...current, date }))} />
-                  <div className={d.bookSpan}>
-                    <Select aria-label="开始" value={slot.start} options={timeOptions(slot.start).map((time) => ({ value: time, label: time }))}
-                      onChange={(start) => setSlot((current) => ({ ...current, start }))} />
-                    <span aria-hidden="true">–</span>
-                    <Select aria-label="结束" value={slot.end} options={timeOptions(slot.end).map((time) => ({ value: time, label: time }))}
-                      onChange={(end) => setSlot((current) => ({ ...current, end }))} />
-                  </div>
-                </div>
-              </div>}
-              {viewer ? <div className={d.bookField}>
-                <span>主持人</span>
-                {viewer.role === "member"
-                  ? <output aria-label="主持人" className={d.bookHost}>{viewer.displayName}</output>
-                  : <Select aria-label="主持人" value={leadDriId} placeholder="选主持人" options={hosts.map((person) => ({ value: person.personId, label: person.displayName }))}
-                    onChange={(next) => { setLeadDriId(next); setParticipants((current) => current.filter((id) => id !== next)); }} />}
-              </div> : null}
-              <div className={d.bookField}>
-                <span>参会人</span>
-                {organize ? (
-                  <ul className={d.bookPeople} data-readonly>
-                    {organize.minute.attendees.map((person) => <li key={person.personId}>{person.displayName}</li>)}
-                    {organize.minute.otherAttendees > 0 ? <li data-off>{`+${organize.minute.otherAttendees}`}</li> : null}
-                  </ul>
-                ) : participants.length ? (
-                  <ul className={d.bookPeople}>
-                    {participants.map((personId) => (
-                      <li key={personId}>
-                        {nameOf(personId)}
-                        <button type="button" aria-label={`去掉 ${nameOf(personId)}`} onClick={() => setParticipants((current) => current.filter((id) => id !== personId))}>×</button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                {organize ? null : <Select aria-label="添加参会人" value="" placeholder="添加参会人" options={invitable.map((person) => ({ value: person.personId, label: person.displayName }))}
-                  onChange={(personId) => { if (personId) setParticipants((current) => [...current, personId]); }} />}
-              </div>
-              <div className={d.bookField}>
-                <span>挂到</span>
-                {options ? <WorldAnchorPicker options={options} value={anchors} onChange={setAnchors} /> : null}
-                {optionsError ? <p className={d.worldError} role="alert">没有读到对象</p> : null}
-              </div>
-              {error ? <p className={d.worldError} role="alert">{error}</p> : null}
-              <div className={d.bookActions}>
-                <button type="button" className={d.ghost} disabled={busy} onClick={onClose}>取消</button>
-                <button type="button" className={d.primary} disabled={busy || !valid} onClick={() => void (organize ? submitOrganize(organize) : submit(viewer))}>{organize ? "整理" : "约好"}</button>
+    <SidePanel open={open} onClose={onClose} label={organize ? "整理会议" : "约会议"}>
+      <DetailFrame title={organize ? "整理会议" : "约会议"} onBack={onClose} backLabel="关闭">
+        <div className={d.booking}>
+          <label className={d.bookField}>
+            <span>名称</span>
+            <input aria-label="名称" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} />
+          </label>
+          {organize ? (
+            <div className={d.bookField}>
+              <span>时间</span>
+              <output aria-label="时间" className={d.bookHost}>{dateSpan(organize.minute.startsAt, organize.minute.endsAt)}<small className={d.bookSource}>飞书</small></output>
+            </div>
+          ) : <div className={d.bookField}>
+            <span>时间</span>
+            <div className={d.bookTime}>
+              <DatePicker label="日期" value={slot.date} onChange={(date) => setSlot((current) => ({ ...current, date }))} />
+              <div className={d.bookSpan}>
+                <Select aria-label="开始" value={slot.start} options={timeOptions(slot.start).map((time) => ({ value: time, label: time }))}
+                  onChange={(start) => setSlot((current) => ({ ...current, start }))} />
+                <span aria-hidden="true">–</span>
+                <Select aria-label="结束" value={slot.end} options={timeOptions(slot.end).map((time) => ({ value: time, label: time }))}
+                  onChange={(end) => setSlot((current) => ({ ...current, end }))} />
               </div>
             </div>
-          </DetailFrame>
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+          </div>}
+          {viewer ? <div className={d.bookField}>
+            <span>主持人</span>
+            {viewer.role === "member"
+              ? <output aria-label="主持人" className={d.bookHost}>{viewer.displayName}</output>
+              : <Select aria-label="主持人" value={leadDriId} placeholder="选主持人" options={hosts.map((person) => ({ value: person.personId, label: person.displayName }))}
+                onChange={(next) => { setLeadDriId(next); setParticipants((current) => current.filter((id) => id !== next)); }} />}
+          </div> : null}
+          <div className={d.bookField}>
+            <span>参会人</span>
+            {organize ? (
+              <ul className={d.bookPeople} data-readonly>
+                {organize.minute.attendees.map((person) => <li key={person.personId}>{person.displayName}</li>)}
+                {organize.minute.otherAttendees > 0 ? <li data-off>{`+${organize.minute.otherAttendees}`}</li> : null}
+              </ul>
+            ) : participants.length ? (
+              <ul className={d.bookPeople}>
+                {participants.map((personId) => (
+                  <li key={personId}>
+                    {nameOf(personId)}
+                    <button type="button" aria-label={`去掉 ${nameOf(personId)}`} onClick={() => setParticipants((current) => current.filter((id) => id !== personId))}>×</button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {organize ? null : <Select aria-label="添加参会人" value="" placeholder="添加参会人" options={invitable.map((person) => ({ value: person.personId, label: person.displayName }))}
+              onChange={(personId) => { if (personId) setParticipants((current) => [...current, personId]); }} />}
+          </div>
+          <div className={d.bookField}>
+            <span>挂到</span>
+            {options ? <WorldAnchorPicker options={options} value={anchors} onChange={setAnchors} /> : null}
+            {optionsError ? <p className={d.worldError} role="alert">没有读到对象</p> : null}
+          </div>
+          {error ? <p className={d.worldError} role="alert">{error}</p> : null}
+          <div className={d.bookActions}>
+            <button type="button" className={d.ghost} disabled={busy} onClick={onClose}>取消</button>
+            <button type="button" className={d.primary} disabled={busy || !valid} onClick={() => void (organize ? submitOrganize(organize) : submit(viewer))}>{organize ? "整理" : "约好"}</button>
+          </div>
+        </div>
+      </DetailFrame>
+    </SidePanel>
   );
 }

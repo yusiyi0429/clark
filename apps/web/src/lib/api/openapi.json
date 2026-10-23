@@ -14609,8 +14609,15 @@
                         "type": "string"
                       },
                       "cardId": {
-                        "minLength": 1,
-                        "type": "string"
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "period": {
                         "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -39480,8 +39487,15 @@
                     "type": "string"
                   },
                   "cardId": {
-                    "minLength": 1,
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "period": {
                     "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -40117,8 +40131,15 @@
                                 "type": "string"
                               },
                               "cardId": {
-                                "minLength": 1,
-                                "type": "string"
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               },
                               "period": {
                                 "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -43429,8 +43450,15 @@
                                 "type": "string"
                               },
                               "cardId": {
-                                "minLength": 1,
-                                "type": "string"
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               },
                               "period": {
                                 "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -47730,8 +47758,15 @@
             "type": "string"
           },
           "cardId": {
-            "minLength": 1,
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "period": {
             "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -47953,8 +47988,15 @@
                         "type": "string"
                       },
                       "cardId": {
-                        "minLength": 1,
-                        "type": "string"
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "period": {
                         "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -48927,8 +48969,15 @@
                           "type": "string"
                         },
                         "cardId": {
-                          "minLength": 1,
-                          "type": "string"
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "period": {
                           "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -49425,8 +49474,15 @@
                                 "type": "string"
                               },
                               "cardId": {
-                                "minLength": 1,
-                                "type": "string"
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               },
                               "period": {
                                 "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -49899,8 +49955,15 @@
                           "type": "string"
                         },
                         "cardId": {
-                          "minLength": 1,
-                          "type": "string"
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "period": {
                           "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -50981,8 +51044,15 @@
                         "type": "string"
                       },
                       "cardId": {
-                        "minLength": 1,
-                        "type": "string"
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "period": {
                         "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -51601,8 +51671,15 @@
                               "type": "string"
                             },
                             "cardId": {
-                              "minLength": 1,
-                              "type": "string"
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "period": {
                               "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
