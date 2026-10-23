@@ -61,6 +61,42 @@ describe("执行事项",()=>{
     } finally { await f.t.close(); }
   });
 
+  it("协作进展通知：别人写进展，推进人和其他协作者各一条（不含作者）；同一件事没看过的只留一条、顶到最前、文案取最新一条",async()=>{
+    const f=await executionFixture();
+    try {
+      const task=(await call(f,f.member,"POST","/api/me/tasks",newTask(null,{title:"路线图"}))).json();
+      await call(f,f.member,"POST",`/api/me/tasks/${task.id}/collaborators`,{personIds:["person-fixture-003"]});
+      const progress=(cookie:string,body:string)=>call(f,cookie,"POST",`/api/me/tasks/${task.id}/progress`,{clientEventId:randomUUID(),body});
+      const mine=async(cookie:string)=>((await call(f,cookie,"GET","/api/me/notifications")).json().notifications as {id:string;kind:string;text:string;objectId:string;readAt:string|null}[])
+        .filter((n)=>n.kind==="task_progress_added");
+      // 推进人写的：自己不收，协作者收。
+      expect((await progress(f.member,"自己写的")).statusCode).toBe(200);
+      expect(await mine(f.member)).toEqual([]);
+      expect((await mine(f.third)).map((n)=>n.text)).toEqual([expect.stringMatching(/写了进展：自己写的$/)]);
+      // 协作者写：推进人收到，作者本人不收。
+      expect((await progress(f.third,"补了竞品\n第二行不进文案")).statusCode).toBe(200);
+      const first=await mine(f.member);
+      expect(first).toHaveLength(1);
+      expect(first[0]).toMatchObject({objectId:task.id,readAt:null});
+      expect(first[0].text).toMatch(/在「路线图」写了进展：补了竞品$/);
+      // 协作者自己写的不顶掉他那条：文案仍是推进人写的那条。
+      expect((await mine(f.third)).map((n)=>n.text)).toEqual([expect.stringMatching(/写了进展：自己写的$/)]);
+      // 再写一条：还是一条，文案换成最新的；推进人再写一条，协作者收到。
+      expect((await progress(f.third,"竞品表定稿")).statusCode).toBe(200);
+      const second=await mine(f.member);
+      expect(second).toHaveLength(1);
+      expect(second[0].text).toMatch(/写了进展：竞品表定稿$/);
+      expect((await progress(f.member,"和明华过了一遍")).statusCode).toBe(200);
+      expect((await mine(f.third))[0].text).toMatch(/写了进展：和明华过了一遍$/);
+      // 看过之后再有新进展，另起一条。
+      expect((await call(f,f.member,"POST","/api/me/seen",{notificationIds:[second[0].id]})).statusCode).toBeLessThan(300);
+      expect((await progress(f.third,"补了一张图")).statusCode).toBe(200);
+      const third=await mine(f.member);
+      expect(third.filter((n)=>n.readAt===null)).toHaveLength(1);
+      expect(third).toHaveLength(2);
+    } finally { await f.t.close(); }
+  });
+
   it("挂 Task：新建带上、改成不挂、独立事项不能挂、换 Mission 时清掉",async()=>{
     const f=await executionFixture();
     try {

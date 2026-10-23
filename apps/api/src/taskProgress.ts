@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { TAppendTaskProgressRequest, TTaskProgressEntry, TTaskProgressSource } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
+import { notifyTaskProgress } from "./notifications.js";
 import { canReadTask, startTaskByOwner } from "./tasks.js";
 
 type Row = { id: string; task_id: string; author_id: string; source: TTaskProgressSource; body: string;
@@ -40,6 +41,7 @@ export async function appendTaskProgress(pool: Pool, taskId: string, authorId: s
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,now()) RETURNING id::text,task_id::text,author_id,source,body,links,created_at`,
     [randomUUID(), taskId, authorId, source, input.body, JSON.stringify(links), tokenId, input.clientEventId])).rows[0] as Row;
     await startTaskByOwner(q, { objectType: "task", objectId: taskId }, authorId);
+    await notifyTaskProgress(client, taskId, authorId);
     await client.query("COMMIT");
     return { entry: projectTaskProgress(row, names) };
   } catch (e) { await client.query("ROLLBACK").catch(() => undefined); throw e; }

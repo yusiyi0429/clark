@@ -7,6 +7,7 @@ import { runCandidateAgent } from "./candidateAgentRuntime.js";
 import type { Query } from "./meetingStore.js";
 import { redactSecretText } from "./observability.js";
 import { HUMAN_WRITING_STYLE } from "./promptStyle.js";
+import { notifyTaskProgress } from "./notifications.js";
 import { queryOf, startTaskByOwner } from "./tasks.js";
 
 /**
@@ -152,6 +153,7 @@ async function insertTaskProgress(client: PoolClient, taskId: string, personId: 
   const id = randomUUID();
   await client.query(`INSERT INTO task_progress (id, task_id, author_id, source, body, links, client_event_id, created_at) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)`,
     [id, taskId, personId, TASK_PROGRESS_SOURCES.has(source) ? source : "other", body, JSON.stringify(links), clientEventId, at]);
+  await notifyTaskProgress(client, taskId, personId);
   return id;
 }
 

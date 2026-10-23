@@ -1,0 +1,78 @@
+/*
+ * 成员「战场进展」：外壳、段落标题、计数沿用 progress.module.css（二级页同一张阅读面）；
+ * 这里只加三列卡片、页头盘点、状态小标。字一律墨色，状态只靠小点（卡住 --counter、慢了 --warning），按钮深灰描边。
+ */
+.content { padding-bottom: 96px; }
+.stack { display: grid; gap: 28px; min-width: 0; max-width: 1080px; margin-inline: auto; }
+
+.summary { display: grid; gap: 6px; }
+.goal { margin: 0; color: var(--ink); font-size: 15px; line-height: 1.6; }
+.counts { display: flex; flex-wrap: wrap; gap: 18px; margin: 0; color: var(--ink-muted); font-size: 13px; }
+.counts b { margin-right: 3px; color: var(--ink); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin: 0; padding: 0; list-style: none; }
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-inset);
+  background: var(--surface);
+}
+.card[data-me] { background: color-mix(in oklab, var(--neutral-wash) 55%, var(--surface)); }
+
+.who { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--ink-muted); font-size: 12.5px; }
+.sep { color: var(--ink-faint); }
+.mission { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title { color: var(--ink); font-size: 14px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.line { margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+
+.flag { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); font-size: 12px; white-space: nowrap; }
+.flag::before { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--warning); content: ""; }
+.flag[data-kind="blocked"]::before { background: var(--counter); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.actions:empty { display: none; }
+.action {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background var(--dur-base) var(--ease-swift);
+}
+.action:hover { background: var(--neutral-wash); }
+.action:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 2px; }
+
+.head { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--ink); font-size: 14px; }
+.head b { font-weight: 600; }
+.head small { margin-left: auto; color: var(--ink-faint); font-size: 12px; white-space: nowrap; }
+.missions { display: grid; margin: 4px 0 0; padding: 0; list-style: none; }
+.missions li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--hairline); color: var(--ink); font-size: 13px; }
+.missions li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.missions small { flex: none; color: var(--ink-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.latest { margin: 4px 0 0; color: var(--ink-faint); font-size: 12px; line-height: 1.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--neutral-wash);
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+@media (max-width: 959px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .action { height: var(--touch-hit, 32px); }
+}

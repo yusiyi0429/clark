@@ -73,6 +73,7 @@ function Identity({ detail, onInvite }: { detail: Detail; onInvite: () => void }
       : <p className={c.missionText}>{task.mission.title}</p>
       : <div className={s.paneRow}><StatusBadge tone="info"><span className={s.sourceBadge}>{taskSourceLabel(task)}</span></StatusBadge></div>}
     <p className={s.paneNote}>{task.mission?.battlefieldName || "未关联战场"} · {owner ? "你在推进" : `${task.owner.name}在推进`}</p>
+    {task.blocker ? <p className={c.blocker} data-blocker>卡在：{task.blocker.reason}{task.blocker.waitingOn ? ` · 在等 ${task.blocker.waitingOn.name}` : ""}</p> : null}
     {task.status === "returned" ? <p className={c.returned}>已退回{task.returnReason ? `：${task.returnReason}` : ""}</p> : null}
     <div className={c.titleRow}>
       <h2 className={c.title}>{task.title}</h2>

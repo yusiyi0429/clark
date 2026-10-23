@@ -50,6 +50,8 @@ export const HomePlanMission = Type.Object(
  * Activity 就是执行事项；column 由服务端分好：已完成、本周、之后。overdue：没完成，且截止早于本周一或挂在之前月份的 Mission 下。
  * missionId 是事项挂的 Mission，独立事项为 null；任务卡没确认时 item.mission 为空，按 Mission 归组看这里。
  * 之前月份 Mission 下没做完的也在 activities 里（放本周），它的 missionId 不在 missions 里。
+ * lastActivityAt：最近一次动静（最新一条进展的时间，没有进展用创建时间）。
+ * idleDays：进行中、没在等验收、且最近一次动静之后已过 3 个工作日时，是那天到今天的自然日数；其余为 null。
  */
 export const HomePlanActivity = Type.Object(
   {
@@ -57,6 +59,8 @@ export const HomePlanActivity = Type.Object(
     missionId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     column: Type.Union([Type.Literal("done"), Type.Literal("week"), Type.Literal("later")]),
     overdue: Type.Boolean(),
+    lastActivityAt: Type.String({ minLength: 1 }),
+    idleDays: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
   },
   { additionalProperties: false },
 );

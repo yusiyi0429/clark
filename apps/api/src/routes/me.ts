@@ -1,11 +1,12 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
+import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, BattlefieldProgressResponse, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
 import { acceptMyTask, addTaskCollaborators, clearMyTaskSubmission, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, reopenMyTask, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
 import { draftTaskAcceptance } from "../taskAcceptanceDraft.js";
 import { readMonthPlan, saveMonthPlan } from "../monthPlan.js";
 import { readHomePlan } from "../homePlan.js";
+import { readBattlefieldProgress } from "../battlefieldProgress.js";
 import { createPlanMark, deletePlanMark, patchPlanMark, type PlanMarkError } from "../planMarks.js";
 import { companyPeriod } from "../monthlyPlans.js";
 import { personDisplayNames } from "../people.js";
@@ -58,6 +59,9 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   });
   app.get("/api/me/home-plan", { preHandler: requireMember, schema: { response: { 200: HomePlanResponse } } }, async (req) =>
     readHomePlan(q, req.person!, ctx.now(), { planTasks: ctx.planTasks, names: names() }));
+  // 战场进展：可见范围在 battlefieldProgress.ts 判（同战场；没有战场时同业务域，只这一页）。
+  app.get("/api/me/battlefield-progress", { preHandler: requireMember, schema: { response: { 200: BattlefieldProgressResponse } } }, async (req) =>
+    readBattlefieldProgress(q, req.person!.personId, peopleDirectory.searchPeople(undefined), ctx.now()));
   // 计划点只存天枢本地，不写本体。
   const respondMark = <T extends object>(reply: FastifyReply, result: T | PlanMarkError): T | FastifyReply =>
     "error" in result ? fail(reply, result.error.status, result.error.code, result.error.message) : result;

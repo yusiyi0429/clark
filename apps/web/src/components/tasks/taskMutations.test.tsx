@@ -83,7 +83,7 @@ it("三步新建：回车逐步前进，最后一步才提交；失败保留草�
 const PLAN_TASKS = [{ taskId: "t1", missionId: "m1", name: "回流方案定稿", doneDefinition: null, criteria: [] }, { taskId: "t2", missionId: "m1", name: "真实会议跑通", doneDefinition: null, criteria: [] }];
 const answerGets = (homePlan: unknown = { missions: [{ missionId: "m1" }, { missionId: "m2" }], tasks: PLAN_TASKS }) => actions.get.mockImplementation(async (path: string) => path === "/api/me/home-plan" ? { data: homePlan }
   : path === "/api/me/plan" ? { data: { editable: true, groups: [{ missionId: "m1", title: "上线", battlefieldName: "增长" }, { missionId: "m2", title: "验证", battlefieldName: "增长" }] } } : {});
-/** 跑一遍收起来的 effect，等它们发出的 GET 都回来。 */
+/** 跑一遍收起来的 effect，等它们发出的 GET 都回来（编辑表单读首页计划和人员名册两次）。 */
 const settle = async (count: number) => { hooks.effects.forEach((effect) => effect()); await vi.waitFor(() => expect(actions.get).toHaveBeenCalledTimes(count)); await new Promise((resolve) => setTimeout(resolve, 0)); };
 
 it("新建时选了有 Task 的 Mission 才出「挂到 Task」，默认不挂；选了就带 planTaskId", async () => {
@@ -131,7 +131,7 @@ it("编辑表单：所属 Mission 有 Task 时能改「挂到 Task」，换 Miss
     { missionId: "m1", title: "上线", battlefieldName: "增长", period: "2026-10" }, { missionId: "m2", title: "验证", battlefieldName: "增长", period: "2026-10" }] }) as Parameters<typeof TaskEditForm>[0]["detail"];
   const props = { detail: opened, busy: false, onSave, onCancel: vi.fn() };
   let fields = render(() => TaskEditForm(props), form);
-  await settle(1);
+  await settle(2);
   const picker = () => find(fields, (node) => node.props?.["aria-label"] === "挂到 Task");
   const save = () => { fields = render(() => TaskEditForm(props), form); (find(fields, (node) => node.props?.children === "保存")!.props!.onPress as () => void)(); };
   fields = render(() => TaskEditForm(props), form);
@@ -164,7 +164,7 @@ it("编辑表单：挂着的 Task 已不在本体里时单列「已不存在的 
   answerGets();
   let form: unknown[] = [];
   let fields = render(() => TaskEditForm({ detail: goneDetail, busy: false, onSave, onCancel }), form);
-  await settle(1);
+  await settle(2);
   const picker = () => find(fields, (node) => node.props?.["aria-label"] === "挂到 Task");
   fields = render(() => TaskEditForm({ detail: goneDetail, busy: false, onSave, onCancel }), form);
   expect(picker()?.props?.selectedKey).toBe("t-gone");
@@ -180,7 +180,7 @@ it("编辑表单：挂着的 Task 已不在本体里时单列「已不存在的 
   const linked = detailOf({ task: { ...task, mission, planTaskId: "t1" }, missionOptions }) as Parameters<typeof TaskEditForm>[0]["detail"];
   form = [];
   fields = render(() => TaskEditForm({ detail: linked, busy: false, onSave, onCancel }), form);
-  await settle(1);
+  await settle(2);
   fields = render(() => TaskEditForm({ detail: linked, busy: false, onSave, onCancel }), form);
   expect(picker()).toBeUndefined();
   for (const key of ["m2", "m1"]) {

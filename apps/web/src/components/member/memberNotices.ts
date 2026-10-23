@@ -3,6 +3,7 @@
  * - 新的执行事项：会后分给我的事 —— 「接下」（看过，事已经在我的执行事项里），或「退回」（写原因，告诉主持人）。
  * - 回复与结果：我主持的会里有人退回、CEO 不同意战略议题 —— 「知道了」；外部工具替我提交了验收（design-12）——
  *   点开直接弹出验收。打开不等于处理：验收完或点「还要继续做」，服务端才把它标为已读。
+ * - 协作进展：别人在我推进或协作的事项上写了进展（同一件事只一条，文案是最新一条）—— 点开进事项并算看过，或「知道了」。
  * 只列没看过的；看过的从通知栏退掉（通知只指向对象，文案按对象此刻的状态写，C-05）。
  */
 
@@ -21,7 +22,7 @@ export function quietNoticeCount(notifications: MemberNotification[]): number {
 export function memberNoticeGroups(
   notifications: MemberNotification[],
   handlers: { markSeen: (ids: string[]) => Promise<Result>; returnTask: (taskId: string, reason: string) => Promise<Result>; openTask?: (id: string, from: Element | null) => void; openAcceptance?: (id: string, from: Element | null) => void; openGroup?: (type: "issue" | "meeting", id: string, from: Element | null) => void },
-): { assigned: ActionNotice[]; results: ActionNotice[] } {
+): { assigned: ActionNotice[]; results: ActionNotice[]; progress: ActionNotice[] } {
   const unread = notifications.filter((item) => !item.readAt);
   const seen = async (id: string, settled?: string): Promise<NoticeOutcome> => {
     const result = await handlers.markSeen([id]);
@@ -77,5 +78,15 @@ export function memberNoticeGroups(
       onOpen: (from) => item.objectType === "task" ? handlers.openTask?.(item.objectId, from) : handlers.openGroup?.(item.objectType as "issue" | "meeting", item.objectId, from),
       buttons: [{ label: "知道了", emphasis: true, run: () => seen(item.id) }],
     }));
-  return { assigned, results };
+  const progress = unread
+    .filter((item) => item.kind === "task_progress_added")
+    .map<ActionNotice>((item) => ({
+      id: item.id,
+      title: item.text,
+      detail: `协作进展 · ${monthDayTime(item.createdAt)}`,
+      tone: "neutral",
+      onOpen: (from) => { void handlers.markSeen([item.id]); handlers.openTask?.(item.objectId, from); },
+      buttons: [{ label: "知道了", emphasis: true, run: () => seen(item.id) }],
+    }));
+  return { assigned, results, progress };
 }

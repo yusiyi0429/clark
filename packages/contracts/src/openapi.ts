@@ -153,6 +153,7 @@ import {
   HomePlanMission,
   HomePlanActivity,
   HomePlanResponse,
+  BattlefieldProgressResponse,
   CreatePlanMarkRequest,
   PatchPlanMarkRequest,
   WeeklySyncReminder,
@@ -1333,6 +1334,17 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           summary: "成员首页的 Mission 计划：本月 Mission、签定关口、计划点、Task 与分好三栏的执行事项；本月没有 Mission 时回退到最近一个有的月份",
           responses: {
             "200": { description: "首页计划", content: { "application/json": { schema: { $ref: "#/components/schemas/HomePlanResponse" } } } },
+            "401": errorResponse,
+            "403": errorResponse,
+          },
+        },
+      },
+      "/api/me/battlefield-progress": {
+        get: {
+          operationId: "getMyBattlefieldProgress",
+          summary: "成员的战场进展：按我所在的战场分组（本月没有战场时按我本月 Mission 的业务域）；需要搭把手的事和每人一张卡",
+          responses: {
+            "200": { description: "战场进展", content: { "application/json": { schema: { $ref: "#/components/schemas/BattlefieldProgressResponse" } } } },
             "401": errorResponse,
             "403": errorResponse,
           },
@@ -3033,6 +3045,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         HomePlanMission: HomePlanMission as JsonSchema,
         HomePlanActivity: HomePlanActivity as JsonSchema,
         HomePlanResponse: HomePlanResponse as JsonSchema,
+        BattlefieldProgressResponse: BattlefieldProgressResponse as JsonSchema,
         CreatePlanMarkRequest: CreatePlanMarkRequest as JsonSchema,
         PatchPlanMarkRequest: PatchPlanMarkRequest as JsonSchema,
         WeeklySyncReminder: WeeklySyncReminder as JsonSchema,

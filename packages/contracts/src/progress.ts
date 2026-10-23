@@ -134,6 +134,65 @@ export const ProgressOverview = Type.Object(
 );
 export const ProgressOverviewResponse = Type.Object({ progress: ProgressOverview }, { additionalProperties: false });
 
+/**
+ * 成员的「战场进展」（GET /api/me/battlefield-progress）：按我所在的战场分组；本月一个战场都对不上时，按我本月 Mission 的业务域分组。
+ * 只看同组的人、同组的 Mission（这一页放宽到业务域，周复盘和 Agent 读进展的范围不变）。
+ * - help（需要搭把手）：卡住 > 按截止做不完 > 比预期慢，同类早的在前。红线判法与全局进展同一套（progress.ts）。
+ * - people：每人一张卡，我排第一，其余卡住、慢了的在前再按名字；movedThisWeek 是本周有进展的事项件数。
+ */
+const BattlefieldMissionFlag = Type.Union([Type.Literal("blocked"), Type.Literal("deadline"), Type.Literal("slow"), Type.Null()]);
+export const BattlefieldHelpItem = Type.Object(
+  {
+    kind: Type.Union([Type.Literal("blocked"), Type.Literal("deadline"), Type.Literal("overdue"), Type.Literal("no_progress")]),
+    person: ProgressPerson,
+    mission: Type.Object({ missionId: Type.String({ minLength: 1 }), title: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+    /** 按截止做不完是整个 Mission 的事，为 null。 */
+    task: Type.Union([Type.Object({ taskId: Type.String({ minLength: 1 }), title: Type.String({ minLength: 1 }) }, { additionalProperties: false }), Type.Null()]),
+    /** 卡在哪（blocked）。 */
+    reason: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    waitingOn: Type.Union([ProgressPerson, Type.Null()]),
+    waitingOnMe: Type.Boolean(),
+    /** blocked：卡住的自然日数；overdue：已过截止的工作日数；其余为 null。 */
+    days: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+    dueDate: Type.Union([Day, Type.Null()]),
+    neededDays: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+    leftDays: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+    /** 我是推进人或协作者，点得开详情。 */
+    canOpen: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+export const BattlefieldPersonCard = Type.Object(
+  {
+    person: ProgressPerson,
+    me: Type.Boolean(),
+    movedThisWeek: Type.Integer({ minimum: 0 }),
+    latest: Type.Union([Type.Object({ text: Type.String({ minLength: 1 }), at: DateTime }, { additionalProperties: false }), Type.Null()]),
+    missions: Type.Array(Type.Object(
+      { missionId: Type.String({ minLength: 1 }), title: Type.String({ minLength: 1 }), done: Type.Integer({ minimum: 0 }), total: Type.Integer({ minimum: 0 }), flag: BattlefieldMissionFlag },
+      { additionalProperties: false },
+    )),
+  },
+  { additionalProperties: false },
+);
+export const BattlefieldProgressGroup = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    name: Type.String({ minLength: 1 }),
+    kind: Type.Union([Type.Literal("battlefield"), Type.Literal("capability")]),
+    /** 战场本月的目标（月度计划里写的）；业务域没有，为 null。 */
+    goal: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    counts: Type.Object(
+      { missions: Type.Integer({ minimum: 0 }), onTrack: Type.Integer({ minimum: 0 }), slow: Type.Integer({ minimum: 0 }), blocked: Type.Integer({ minimum: 0 }) },
+      { additionalProperties: false },
+    ),
+    help: Type.Array(BattlefieldHelpItem),
+    people: Type.Array(BattlefieldPersonCard),
+  },
+  { additionalProperties: false },
+);
+export const BattlefieldProgressResponse = Type.Object({ today: Day, groups: Type.Array(BattlefieldProgressGroup) }, { additionalProperties: false });
+
 export type TProgressPerson = Static<typeof ProgressPerson>;
 export type TProgressArtifact = Static<typeof ProgressArtifact>;
 export type TProgressMissionRef = Static<typeof ProgressMissionRef>;
@@ -144,3 +203,7 @@ export type TProgressOnTrack = Static<typeof ProgressOnTrack>;
 export type TProgressPersonSummary = Static<typeof ProgressPersonSummary>;
 export type TProgressOverview = Static<typeof ProgressOverview>;
 export type TProgressOverviewResponse = Static<typeof ProgressOverviewResponse>;
+export type TBattlefieldHelpItem = Static<typeof BattlefieldHelpItem>;
+export type TBattlefieldPersonCard = Static<typeof BattlefieldPersonCard>;
+export type TBattlefieldProgressGroup = Static<typeof BattlefieldProgressGroup>;
+export type TBattlefieldProgressResponse = Static<typeof BattlefieldProgressResponse>;

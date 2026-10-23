@@ -22,6 +22,23 @@ export async function insertNotification(
   return inserted.rowCount === 1;
 }
 
+/**
+ * 有人在执行事项上写了进展：推进人和在场协作者（不含作者）各一条「协作进展」；
+ * 那人这件事已有没看过的，就把它顶到最前、记下最新的作者（文案读取时按最新进展组）。
+ */
+export async function notifyTaskProgress(client: PoolClient, taskId: string, authorId: string): Promise<void> {
+  await client.query(
+    `INSERT INTO notifications (id, person_id, kind, object_type, object_id, actor_id)
+     SELECT gen_random_uuid(), p.person_id, 'task_progress_added', 'task', $1, $2
+       FROM (SELECT owner_id AS person_id FROM tasks WHERE id = $1::uuid
+             UNION SELECT person_id FROM task_members WHERE task_id = $1::uuid AND role = 'collaborator' AND left_at IS NULL) p
+      WHERE p.person_id <> $2
+     ON CONFLICT (person_id, object_id) WHERE kind = 'task_progress_added' AND read_at IS NULL
+     DO UPDATE SET created_at = clock_timestamp(), actor_id = EXCLUDED.actor_id`,
+    [taskId, authorId],
+  );
+}
+
 type NotificationRow = {
   id: string;
   kind: TNotificationKind;
@@ -40,6 +57,8 @@ type NotificationRow = {
   request_title: string | null;
   request_kind: string | null;
   impact_trigger: string | null;
+  progress_author: string | null;
+  progress_body: string | null;
 };
 
 function composeText(row: NotificationRow, names: Map<string, string>): string {
@@ -81,6 +100,11 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
       return `截止前提醒：${row.request_title ?? ""}`;
     case "meeting_card_pending":
       return `${row.meeting_title ?? ""} · 会议记录待确认`;
+    case "task_progress_added": {
+      const author = row.progress_author ?? row.actor_id;
+      const line = row.progress_body?.split(/\r?\n/).map((text) => text.trim()).find(Boolean);
+      return `${author ? (names.get(author) ?? author) : "同事"} 在「${row.task_title ?? ""}」写了进展${line ? `：${line}` : ""}`;
+    }
   }
 }
 
@@ -90,12 +114,16 @@ export async function listMyNotifications(q: Query, peopleDirectory: PeopleDirec
     `SELECT n.id::text, n.kind, n.object_type, n.object_id, n.item_id, n.actor_id, n.created_at, n.read_at,
             t.title AS task_title, t.return_reason, m.title AS meeting_title, i.title AS issue_title, i.assignments AS issue_assignments, r.title AS request_title, r.kind AS request_kind,
             (SELECT ic.trigger_kind FROM impact_cards ic WHERE ic.request_id = r.id) AS impact_trigger,
-            (SELECT item->>'title' FROM jsonb_array_elements(m.outcome->'items') AS item WHERE item->>'id' = n.item_id) AS item_title
+            (SELECT item->>'title' FROM jsonb_array_elements(m.outcome->'items') AS item WHERE item->>'id' = n.item_id) AS item_title,
+            lp.author_id AS progress_author, lp.body AS progress_body
        FROM notifications n
        LEFT JOIN tasks t ON n.object_type = 'task' AND t.id::text = n.object_id
        LEFT JOIN meetings m ON m.id::text = CASE WHEN n.object_type = 'task' THEN t.origin_meeting_id::text ELSE n.object_id END
        LEFT JOIN issues i ON n.object_type = 'issue' AND i.id::text = n.object_id
        LEFT JOIN requests r ON n.object_type = 'request' AND r.id::text = n.object_id
+       LEFT JOIN LATERAL (SELECT tp.author_id, tp.body FROM task_progress tp
+                           WHERE n.kind = 'task_progress_added' AND tp.task_id = t.id AND tp.author_id <> n.person_id
+                           ORDER BY tp.created_at DESC, tp.id DESC LIMIT 1) lp ON true
       WHERE n.person_id = $1
       ORDER BY n.read_at IS NOT NULL, n.created_at DESC
       LIMIT 50`,

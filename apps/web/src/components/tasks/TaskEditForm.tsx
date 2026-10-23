@@ -5,17 +5,18 @@ import { ActionButton, FormField, TianshuPortalTheme } from "ts-design";
 import { Button, Label, ListBox, Select } from "ts-design/primitives";
 import type { components } from "@/lib/api/schema";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { listPersonDirectory } from "@/components/meeting/meetingDecisionApi";
 import { usePlanTasks } from "./usePlanTasks";
 import s from "./task-detail.module.css";
 
 type Detail = components["schemas"]["TaskDetailResponse"];
 export type TaskPatch = Omit<components["schemas"]["PatchMyTaskRequest"], "version">;
-type Draft = { title: string; missionId: string; planTaskId: string; startDate: string; dueDate: string; doneDefinition: string };
+type Draft = { title: string; missionId: string; planTaskId: string; startDate: string; dueDate: string; doneDefinition: string; blockedReason: string; waitingOn: string };
 const draftOf = (detail: Detail): Draft => ({ title: detail.task.title, missionId: detail.task.mission?.missionId ?? "", planTaskId: detail.task.planTaskId ?? "", startDate: detail.task.startDate ?? "",
-  dueDate: detail.task.dueDate ?? "", doneDefinition: detail.task.doneDefinition ?? "" });
+  dueDate: detail.task.dueDate ?? "", doneDefinition: detail.task.doneDefinition ?? "", blockedReason: detail.task.blocker?.reason ?? "", waitingOn: detail.task.blocker?.waitingOn?.personId ?? "" });
 
 /**
- * ⋯ → 编辑（推进人）：标题、所属个人任务、挂到哪个 Task（这个 Mission 有 Task 时）、日期、完成标准。
+ * ⋯ → 编辑（推进人）：标题、所属个人任务、挂到哪个 Task（这个 Mission 有 Task 时）、日期、完成标准、卡在哪和在等谁（战场进展「需要搭把手」读这两项）。
  * 只把这张表单里改过的字段交给保存（和打开时比）：别处同时改了别的字段，不会被表单里的旧值盖回去。
  */
 export function TaskEditForm({ detail, busy, onSave, onCancel }: { detail: Detail; busy: boolean; onSave: (body: TaskPatch) => void; onCancel: () => void }) {
@@ -27,6 +28,9 @@ export function TaskEditForm({ detail, busy, onSave, onCancel }: { detail: Detai
   const missionOptions = task.mission && !detail.missionOptions.some((option) => option.missionId === task.mission?.missionId)
     ? [task.mission, ...detail.missionOptions] : detail.missionOptions;
   const tasksOf = usePlanTasks();
+  const [people, setPeople] = useState<{ personId: string; displayName: string }[]>([]);
+  useEffect(() => { void listPersonDirectory().then(setPeople).catch(() => undefined); }, []);
+  const waitable = people.filter((person) => person.personId !== task.owner.personId);
   const known = draft.missionId ? tasksOf(draft.missionId) : null;
   const taskOptions = known ?? [];
   // 打开时挂着的 Task 不在这个 Mission 读到的 Task 里：单列一项，好改成「不挂」。没读到 Task 时不下这个结论。
@@ -45,6 +49,8 @@ export function TaskEditForm({ detail, busy, onSave, onCancel }: { detail: Detai
     if (draft.startDate !== opened.startDate) body.startDate = draft.startDate || null;
     if (draft.dueDate !== opened.dueDate) body.dueDate = draft.dueDate || null;
     if (draft.doneDefinition.trim() !== opened.doneDefinition.trim()) body.doneDefinition = draft.doneDefinition.trim() || null;
+    if (draft.blockedReason.trim() !== opened.blockedReason.trim()) body.blockedReason = draft.blockedReason.trim() || null;
+    if (draft.blockedReason.trim() && draft.waitingOn !== opened.waitingOn) body.waitingOn = draft.waitingOn || null;
     if (!Object.keys(body).length) return onCancel();
     onSave(body);
   };
@@ -78,6 +84,15 @@ export function TaskEditForm({ detail, busy, onSave, onCancel }: { detail: Detai
       <div className={s.dateField}><Label>截止日期 · 可选</Label><DatePicker label="截止日期" clearable value={draft.dueDate} min={draft.startDate || undefined} onChange={(value) => set("dueDate", value)} /></div>
     </div>
     <FormField label="完成标准 · 可选" value={draft.doneDefinition} onChange={(value) => set("doneDefinition", value)} multiline rows={3} maxLength={500} />
+    <FormField label="卡在哪 · 可选" value={draft.blockedReason} onChange={(value) => set("blockedReason", value)} maxLength={200} />
+    {draft.blockedReason.trim() ? <Select aria-label="在等谁" selectedKey={draft.waitingOn || "none"} onSelectionChange={(key) => set("waitingOn", key === "none" ? "" : String(key))}>
+      <Label>在等谁 · 可选</Label>
+      <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
+      <Select.Popover><TianshuPortalTheme><ListBox>
+        <ListBox.Item id="none" textValue="不等谁">不等谁<ListBox.ItemIndicator /></ListBox.Item>
+        {waitable.map((person) => <ListBox.Item key={person.personId} id={person.personId} textValue={person.displayName}>{person.displayName}<ListBox.ItemIndicator /></ListBox.Item>)}
+      </ListBox></TianshuPortalTheme></Select.Popover>
+    </Select> : null}
     <div className={s.paneRow}>
       <ActionButton intent="secondary" isDisabled={busy} onPress={save}>保存</ActionButton>
       <Button variant="ghost" onPress={onCancel}>取消</Button>

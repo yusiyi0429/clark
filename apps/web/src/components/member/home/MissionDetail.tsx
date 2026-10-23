@@ -14,7 +14,7 @@ import { ActivityColumns } from "./ActivityColumns";
 import { tone, type Navigate } from "./planFormat";
 import s from "@/styles/home-plan.module.css";
 
-export function MissionDetail({ mission, taskName, tasks, activities, weekStart, weekEnd, missionOf, onNavigate }: {
+export function MissionDetail({ mission, taskName, tasks, activities, today, weekStart, weekEnd, missionOf, onNavigate }: {
   /** 聚焦的 Mission；null 是「全部」。 */
   mission: THomePlanMission | null;
   /** 头部「/」后面的名字（选中的 Task 或「未归入 Task」）；没有 Task 列时为 null。 */
@@ -22,6 +22,7 @@ export function MissionDetail({ mission, taskName, tasks, activities, weekStart,
   /** Task 列；没有时为 null。 */
   tasks: ReactNode;
   activities: THomePlanActivity[];
+  today: string;
   weekStart: string;
   weekEnd: string;
   missionOf?: (activity: THomePlanActivity) => string | null;
@@ -42,7 +43,7 @@ export function MissionDetail({ mission, taskName, tasks, activities, weekStart,
       </header>
       <div className={s.split} data-split={tasks ? true : undefined}>
         {tasks}
-        <ActivityColumns activities={activities} weekStart={weekStart} weekEnd={weekEnd} missionOf={missionOf} onNavigate={onNavigate} />
+        <ActivityColumns activities={activities} today={today} weekStart={weekStart} weekEnd={weekEnd} missionOf={missionOf} onNavigate={onNavigate} />
       </div>
     </section>
   );
