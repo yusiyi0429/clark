@@ -72,6 +72,20 @@ export async function organizeFeishuMinute(minuteToken: string, body: TOrganizeF
   return response.ok && data ? { meetingId: data.meetingId } : { code: (error as { code?: string } | undefined)?.code ?? "FAILED" };
 }
 
+/** 把妙记记到天枢里约好的那场会：成功给会议 id，失败给错误码。 */
+export async function attachFeishuMinute(minuteToken: string, meetingId: string): Promise<{ meetingId: string } | { code: string }> {
+  const { data, error, response } = await browserApi.POST("/api/me/feishu-minutes/{token}/attach", { params: { path: { token: minuteToken } }, body: { meetingId } });
+  if (response.status === 401) { window.location.assign("/access"); return { code: "UNAUTHENTICATED" }; }
+  return response.ok && data ? { meetingId: data.meetingId } : { code: (error as { code?: string } | undefined)?.code ?? "FAILED" };
+}
+
+/** 忽略这份妙记，不再提示。 */
+export async function ignoreFeishuMinute(minuteToken: string): Promise<{ ok: true } | { code: string }> {
+  const { error, response } = await browserApi.POST("/api/me/feishu-minutes/{token}/ignore", { params: { path: { token: minuteToken } } });
+  if (response.status === 401) { window.location.assign("/access"); return { code: "UNAUTHENTICATED" }; }
+  return response.ok ? { ok: true } : { code: (error as { code?: string } | undefined)?.code ?? "FAILED" };
+}
+
 type MinutesResult = TMeetingMinutesFetchResponse | { code: string };
 async function settleMinutes(promise: Promise<{ data?: TMeetingMinutesFetchResponse; error?: unknown; response: Response }>): Promise<MinutesResult> {
   const { data, error, response } = await promise;

@@ -14,7 +14,8 @@ import { useRef, useState, type KeyboardEvent } from "react";
 import { Button, Label, TextArea, TextField } from "ts-design/primitives";
 import a from "@/styles/notice-actions.module.css";
 
-export type NoticeOutcome = { ok: true; settled?: string } | { ok: false; error: string };
+/** cancelled：用户自己收回（关了表单），按钮恢复，不写错误、不收这一条。 */
+export type NoticeOutcome = { ok: true; settled?: string } | { ok: false; error: string } | { ok: false; cancelled: true };
 
 export interface NoticeButton {
   label: string;
@@ -57,7 +58,7 @@ export function NoticeActions({
     setError(undefined);
     const outcome = await run().catch((): NoticeOutcome => ({ ok: false, error: "操作未完成：网络连接中断，请重试。" }));
     setBusy(false);
-    if (!outcome.ok) return setError(outcome.error);
+    if (!outcome.ok) return setError("error" in outcome ? outcome.error : undefined);
     setOpen(false);
     onSettled(outcome.settled);
   };

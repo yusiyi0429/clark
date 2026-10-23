@@ -37,7 +37,8 @@
 .actions.actions > button[data-emphasis] { background: #e4eaf2; color: #334d70; font-weight: 600; }
 .actions.actions > button[aria-expanded='true'] { background: #d9e3f0; color: #2b4466; box-shadow: inset 0 0 0 1px rgb(51 77 112 / 22%); }
 .formActions.formActions > button[data-emphasis] { background: #334d70; color: #fff; font-weight: 600; }
-/* 「接下，10 月 10 日前回传」在最窄的通知栏（290px）里放不下一行：让它折行，不顶出卡外。 */
+/* 「接下，10 月 10 日前回传」「记到天枢里的「会名」」在最窄的通知栏（290px）里放不下一行：让它折行，不顶出卡外。 */
+.actions.actions > button,
 .formActions.formActions > button { max-width: 100%; white-space: normal; text-align: center; }
 .formActions.formActions > button[data-emphasis]:hover { background: #2b4466; }
 
