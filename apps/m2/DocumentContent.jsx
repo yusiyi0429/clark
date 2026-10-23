@@ -10,9 +10,12 @@ const EditingContext=createContext(null);
 // Who is reading and how to remove their own comment; comments have no edit, only delete.
 const CommentActions=createContext(null);
 function FieldAnnotation({field}){const a=useContext(AnnotationContext);return a?.anchor===field?a.content:null;}
+// field may name one item of a list ("nextInputs#1" = 第 2 条, 陈溪南 2026-10-23); the field's own bubble holds the rest.
+export const anchorParts=f=>{const [block,i]=String(f||'').split('#');return {block,item:i===undefined?null:Number(i)};};
 export function CommentBubble({node,field,label,comments,onDetail}){
  const a=useContext(AnnotationContext),active=a?.anchor===field,actions=useContext(CommentActions);
- const entries=comments.filter(c=>c.block===field||field==='title'&&(!c.block||c.block==='card'));
+ const {block,item}=anchorParts(field);
+ const entries=comments.filter(c=>(c.block===block&&(item===null?!Number.isInteger(c.item):c.item===item))||field==='title'&&(!c.block||c.block==='card'));
  const [hover,setHover]=useState(false),[position,setPosition]=useState(null);
  const trigger=useRef(null),timer=useRef(null);
  function show(){clearTimeout(timer.current);const r=trigger.current?.getBoundingClientRect();if(r)setPosition({right:Math.max(12,window.innerWidth-r.right),top:Math.max(12,Math.min(r.bottom+8,window.innerHeight-300))});setHover(true);}

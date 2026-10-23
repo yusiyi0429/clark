@@ -1,107 +1,7 @@
 {
   "source": "/Users/cooper/TKOS/apps/decoding-mvp",
-  "capturedAt": "2026-10-22",
+  "capturedAt": "2026-10-23",
   "files": [
-    {
-      "path": "ActivityGenerator.jsx",
-      "sha256": "753bc0fcaf71663a00a1118ceba80f2da49cc97ff00e5c6cfef54ea30d9304ac"
-    },
-    {
-      "path": "AuditStatus.jsx",
-      "sha256": "4b5adc012a06e40b5c65253515b5400403add0dfd3368bb589e8565281b66384"
-    },
-    {
-      "path": "BotAvatar.jsx",
-      "sha256": "228997dcf584dccc46d31a359c059f97e450fa8d5c791a3d51448218de6a112c"
-    },
-    {
-      "path": "ChatComposer.jsx",
-      "sha256": "302b2e73dbede790194d55e8d38d32791bbadc95b3b4a1f6f16316c881d026b5"
-    },
-    {
-      "path": "ChatMessage.jsx",
-      "sha256": "0dfa186992c744f813355bbfe8d2c0b73f2299ee74aaa48f521edbe86ebdbc2d"
-    },
-    {
-      "path": "DiscussionMinutes.jsx",
-      "sha256": "40da4dfbefcc199590fd491e97260b4a1cdc80a6588fd22a8fccd450b425a2d0"
-    },
-    {
-      "path": "DocumentCanvas.jsx",
-      "sha256": "7e6bd7afc1db2fc93cc2db31844a841ea5843082e0212ad6b90b949090e55501"
-    },
-    {
-      "path": "DocumentContent.jsx",
-      "sha256": "701818c93bb96074f5d47cc868a89902460462ac1e0b5e979a1c421ba5d1d36d"
-    },
-    {
-      "path": "EntryMetadata.jsx",
-      "sha256": "10af96a5ef3e428115460edfc928d69723501063b61bd146dbb1e7653f5135de"
-    },
-    {
-      "path": "GenerationCanvas.jsx",
-      "sha256": "b6d2c76572a62b48c33f62eb0b6ea2371cbaa2b55fbbcb0577b36d7bbadfb886"
-    },
-    {
-      "path": "Handshake.jsx",
-      "sha256": "799418efc8194e8eb14f357244bc27f66c079e174663822179fd01a662ab64c5"
-    },
-    {
-      "path": "MemberAvatar.jsx",
-      "sha256": "d72577d28aad8f3acf4a0a99cc2377cc682bc6a7f885b7e6189732c52039a935"
-    },
-    {
-      "path": "NexusIsland.jsx",
-      "sha256": "682e25249707eb861cdf7c8a895d9b40ae1c82510d861ddec70c50e69985a83f"
-    },
-    {
-      "path": "NexusOrb.jsx",
-      "sha256": "1c58465bc0173d096528b578c7c89946ba20ac7ecd0365ecf2a21ed0dbabf1fc"
-    },
-    {
-      "path": "PlanTimeline.jsx",
-      "sha256": "5a3544981b6f3bc06ca9f020d1174094706676daa2a0e50bcde3de247a1b22bd"
-    },
-    {
-      "path": "ProposalCard.jsx",
-      "sha256": "eb025989fccbdd64721e4491ab8b73afc6419bbaf9e4fe3611b30d40092d55ae"
-    },
-    {
-      "path": "ReviewCanvas.jsx",
-      "sha256": "96904b662c072fb8d305b9c635320daa3e56dea26cbc3f9d6cdbbe603639b7a7"
-    },
-    {
-      "path": "ReviewEditor.jsx",
-      "sha256": "f15c2a016f5717259ea65e398f9f66f391615c891e9d1bdb8d5660f1547333f4"
-    },
-    {
-      "path": "RevisionOverlay.jsx",
-      "sha256": "f4c70c3897a52c010ccc0641ef20f818e2dfd793c364e241c3ea4f9e9ef0a595"
-    },
-    {
-      "path": "RoundPanel.jsx",
-      "sha256": "f7a7a8efa384070fe88738f98e56c7b8f003da180e548856819d87dabc2f53e7"
-    },
-    {
-      "path": "RoundStatusBar.jsx",
-      "sha256": "8ca2c0029fe770336f73cfb9f6f105e5b4ccda59e75fb832a9eb82b01a2598df"
-    },
-    {
-      "path": "SourceCoverage.jsx",
-      "sha256": "b27818fd1a6c6ccf5f84a50a80676ffea757e1211e41cb31fe0ee74696f27932"
-    },
-    {
-      "path": "TodoPanel.jsx",
-      "sha256": "9b3705b15bd6e11bb2987f807457f3dad833cd7946c747fb9f27af064d3f45b0"
-    },
-    {
-      "path": "UpstreamNotice.jsx",
-      "sha256": "8c0c9cf7ec0a8766df6538a0905ee629de71a67e2c3d548b2d356f58d65b59b2"
-    },
-    {
-      "path": "V3Blocks.jsx",
-      "sha256": "e456d6630234a2ee72f213a7599cbe1a10cdc1dac0de2aae128599dd6ac54da8"
-    },
     {
       "path": "account-responsibilities.pending.json",
       "sha256": "eba3e6ef5bb2a296d62e8d0b61a75aaf69830b2d1fb2632d9c298dd3fe23aa34"
@@ -111,12 +11,28 @@
       "sha256": "963dd5ca35856c18da5744757200d69c4574535cd94ff973b24f30cca67aaca6"
     },
     {
+      "path": "ActivityGenerator.jsx",
+      "sha256": "753bc0fcaf71663a00a1118ceba80f2da49cc97ff00e5c6cfef54ea30d9304ac"
+    },
+    {
+      "path": "AdminPanel.jsx",
+      "sha256": "3a489f88653b330645931a6dab2712971db04048b9bad3502cd829e823342c91"
+    },
+    {
       "path": "agent-prompts.mjs",
       "sha256": "6bc95181b9f773745582256bb38ffaa70e14fd8b0eac6006281b90d83c86f1ee"
     },
     {
       "path": "app.jsx",
-      "sha256": "08250153cf40d025a8cb4ba61a2f13b445765c4c1f64705cca8d602d690ed236"
+      "sha256": "96857f08a7fb2ad390ee7850d3cef99f894353705b88704f4db20f4e40e72c67"
+    },
+    {
+      "path": "AuditStatus.jsx",
+      "sha256": "4b5adc012a06e40b5c65253515b5400403add0dfd3368bb589e8565281b66384"
+    },
+    {
+      "path": "BotAvatar.jsx",
+      "sha256": "228997dcf584dccc46d31a359c059f97e450fa8d5c791a3d51448218de6a112c"
     },
     {
       "path": "broadcasts.mjs",
@@ -129,6 +45,14 @@
     {
       "path": "chat-stream.mjs",
       "sha256": "d699aa2f47d2cf71784d44819c3644afd869fc3b7a9f168bdb5785d7836612f7"
+    },
+    {
+      "path": "ChatComposer.jsx",
+      "sha256": "302b2e73dbede790194d55e8d38d32791bbadc95b3b4a1f6f16316c881d026b5"
+    },
+    {
+      "path": "ChatMessage.jsx",
+      "sha256": "0dfa186992c744f813355bbfe8d2c0b73f2299ee74aaa48f521edbe86ebdbc2d"
     },
     {
       "path": "codex-ontology-bridge.mjs",
@@ -151,12 +75,24 @@
       "sha256": "dd4b079fb691e4650e80e86105cbc0ea163f9efccfe7b3eba3b70606ba31ee75"
     },
     {
+      "path": "DiscussionMinutes.jsx",
+      "sha256": "40da4dfbefcc199590fd491e97260b4a1cdc80a6588fd22a8fccd450b425a2d0"
+    },
+    {
       "path": "document-navigation.mjs",
       "sha256": "7ebdea721b496ca847724b8eb46f43c0991bcf5285741ed1ca525c7daa0f531b"
     },
     {
       "path": "document-template.mjs",
       "sha256": "5a31da783dadaad84efcaf2dce88d8495f8adb34541b6322d29e5d421dd11d54"
+    },
+    {
+      "path": "DocumentCanvas.jsx",
+      "sha256": "895d719712c6954270dd34a0388e4772be91d0a1aa616cf57f1120f4e1dbe23f"
+    },
+    {
+      "path": "DocumentContent.jsx",
+      "sha256": "f23487d91527d924f92ca23b34a8fa35edc3f68777780f08b780669b484c3537"
     },
     {
       "path": "domain.mjs",
@@ -171,6 +107,10 @@
       "sha256": "7786160ac92ce1437377603091c52929bd26437c4e92f208408c6c058c6ab315"
     },
     {
+      "path": "EntryMetadata.jsx",
+      "sha256": "fe7f2d1ccac46f19c72ccaa5da3b58e4274022b4a7400d654944b0a07d601cc9"
+    },
+    {
       "path": "gantt-time.mjs",
       "sha256": "c075db35622fe0e62759bce222d7f3ccbc1a8e5319ee74fd807a5fe4f973ab9e"
     },
@@ -179,8 +119,16 @@
       "sha256": "014c4a853103211796bb8b388ddef8bcaeb6bf766c0b7073ac0f477ba65dacb4"
     },
     {
+      "path": "GenerationCanvas.jsx",
+      "sha256": "b6d2c76572a62b48c33f62eb0b6ea2371cbaa2b55fbbcb0577b36d7bbadfb886"
+    },
+    {
       "path": "governance.mjs",
-      "sha256": "29fc04800313c363a5d84f855d55b0e38a92c739c00680757dfdeb41aa8b3d5a"
+      "sha256": "64a6cd12c6d1e0c42b0d39246d2a63f95845ac09e414f1ecef0a0f7dbbb9e1e9"
+    },
+    {
+      "path": "Handshake.jsx",
+      "sha256": "799418efc8194e8eb14f357244bc27f66c079e174663822179fd01a662ab64c5"
     },
     {
       "path": "index.html",
@@ -193,6 +141,10 @@
     {
       "path": "member-profiles.mjs",
       "sha256": "6813ba7784a2b1755e2e05e11d137bdb3ca9010dc4ddf76a745190e06b61e61f"
+    },
+    {
+      "path": "MemberAvatar.jsx",
+      "sha256": "d72577d28aad8f3acf4a0a99cc2377cc682bc6a7f885b7e6189732c52039a935"
     },
     {
       "path": "mention-input.mjs",
@@ -224,7 +176,7 @@
     },
     {
       "path": "nexus-listen.mjs",
-      "sha256": "f4199d2e5bb1f0667766c8f6b937525d79bfffa7d2b34e0fffe5da20af6494a1"
+      "sha256": "a2fb684b561ceeeab87c646ef3aa4455f02b5731a245dd7b1f6fde0b23c8cecd"
     },
     {
       "path": "nexus-memory.mjs",
@@ -236,11 +188,11 @@
     },
     {
       "path": "nexus-participation.mjs",
-      "sha256": "1e720eab7d96bc89d84d6bb64910f0e6f627012da67382f0699778f32babec2f"
+      "sha256": "4f8df3f7eac12008a8fa2fac644c5a5f13a4460e476240d32a551cd106dccdb6"
     },
     {
       "path": "nexus-policy.mjs",
-      "sha256": "a1cd5f3cd1c3e68b7900568eaab11d0c9e9880bcf370334ebbfdb15ad5cd9140"
+      "sha256": "f6d5a0cbd98a14a2bfb9b42ddf33209617452343322e823590d0c3c86f466d14"
     },
     {
       "path": "nexus-retry.mjs",
@@ -249,6 +201,14 @@
     {
       "path": "nexus-review.mjs",
       "sha256": "9c5dfd4933fddc6f82f47bf4ce0b2fcca756d3343a24a9201ace663300eade70"
+    },
+    {
+      "path": "NexusIsland.jsx",
+      "sha256": "682e25249707eb861cdf7c8a895d9b40ae1c82510d861ddec70c50e69985a83f"
+    },
+    {
+      "path": "NexusOrb.jsx",
+      "sha256": "1c58465bc0173d096528b578c7c89946ba20ac7ecd0365ecf2a21ed0dbabf1fc"
     },
     {
       "path": "ontology-sources.mjs",
@@ -264,11 +224,15 @@
     },
     {
       "path": "plan-labels.mjs",
-      "sha256": "2003139d23bba8c97f05e974db8b4126b1773c0d4e5b77017015a816c0b90dd9"
+      "sha256": "e216367717245db2f73b79a83bdc2b6abd626b63078fef94f747b261a503c02f"
     },
     {
       "path": "plan-track.mjs",
       "sha256": "fc37894261d498914b626c0fbbff1197fb611416421bad3fdf90f0b2041d35fb"
+    },
+    {
+      "path": "PlanTimeline.jsx",
+      "sha256": "5a3544981b6f3bc06ca9f020d1174094706676daa2a0e50bcde3de247a1b22bd"
     },
     {
       "path": "private-agent-context.mjs",
@@ -283,6 +247,10 @@
       "sha256": "bc9908affc98195aa972d3a49d74875dde1b91fa036cd6d9776d88a679811223"
     },
     {
+      "path": "ProposalCard.jsx",
+      "sha256": "eb025989fccbdd64721e4491ab8b73afc6419bbaf9e4fe3611b30d40092d55ae"
+    },
+    {
       "path": "reader-format.mjs",
       "sha256": "c1174c26ec2348ae417398a5f964ab01898186e6681854861eafdc2a8a3c2617"
     },
@@ -292,7 +260,7 @@
     },
     {
       "path": "reader-view.mjs",
-      "sha256": "1ff575d8b1f3a76648454f281f5b786932781fc440b7b52edcf952dcdae55a70"
+      "sha256": "cce4994b49908db59a48804ad33ffd08a68ccc0f6774556fda260a8e68428682"
     },
     {
       "path": "redact.mjs",
@@ -300,15 +268,19 @@
     },
     {
       "path": "review-display.mjs",
-      "sha256": "fb7ad1238061533407eaf03da5df49284cc4e7767e61bbd052182de56e7bac44"
+      "sha256": "35a773d9c9bb691103d8e44e0ba96cdf4ad70e483dd234cb69dfaa6ea2d6f57c"
+    },
+    {
+      "path": "review-generation.mjs",
+      "sha256": "11c9cdb3b4e8fe7ab3692c25c3d71ca2826303a3ed20e1bc10da10c609480620"
     },
     {
       "path": "review-handoff.mjs",
-      "sha256": "afd928fac939e64399974cce4196cca0f03e0c0993f1cbd6502755d9c031d0c8"
+      "sha256": "33dd7b9b9c6425875a998cdc8686f602213259db86a2b77eee0545fb024aa7da"
     },
     {
       "path": "review-round.mjs",
-      "sha256": "5f1300046dad0e7b2ad58f37c48261d3c07a301b875bf03cb452946ffdd46b77"
+      "sha256": "39906c8674a8c8ada18e65e16f720d52610dd326c87cdd03b85155e2336be522"
     },
     {
       "path": "review-sources.mjs",
@@ -317,6 +289,18 @@
     {
       "path": "review-workflow.mjs",
       "sha256": "b4f687b2654fd3ac102ab092ffdb54a9b61acde6bd8551f6b7a9e8bac3c3e12b"
+    },
+    {
+      "path": "ReviewCanvas.jsx",
+      "sha256": "70e310a8203165f3d5d2f3c1620f17e6a588343e0841000c8c4c648df8c2265b"
+    },
+    {
+      "path": "ReviewEditor.jsx",
+      "sha256": "f15c2a016f5717259ea65e398f9f66f391615c891e9d1bdb8d5660f1547333f4"
+    },
+    {
+      "path": "RevisionOverlay.jsx",
+      "sha256": "f4c70c3897a52c010ccc0641ef20f818e2dfd793c364e241c3ea4f9e9ef0a595"
     },
     {
       "path": "round-activation.mjs",
@@ -367,6 +351,14 @@
       "sha256": "b5a955eb6a2570368f78ab3ec7abb6f07fb6aa139f700e68298c40b4b9e5f2c7"
     },
     {
+      "path": "RoundPanel.jsx",
+      "sha256": "f7a7a8efa384070fe88738f98e56c7b8f003da180e548856819d87dabc2f53e7"
+    },
+    {
+      "path": "RoundStatusBar.jsx",
+      "sha256": "8ca2c0029fe770336f73cfb9f6f105e5b4ccda59e75fb832a9eb82b01a2598df"
+    },
+    {
       "path": "schedule-check.mjs",
       "sha256": "3aab52e26288043a8d49e1a27b7d9f78d792a22eca47a7b88480c32ed667c213"
     },
@@ -376,11 +368,11 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "a276429131ca4cf1900f6f67b636f6152d5433ffc489136160996338003cd028"
+      "sha256": "8d16e573e5890c357cf11dd8c93c615d25ce038558190ce30efaadbf22850b7a"
     },
     {
       "path": "shared-projection.mjs",
-      "sha256": "e906d7580e9a0f8069955d2c0e6c6ca25bdadbb32a4db3cc6296f951392723ff"
+      "sha256": "50d75bdfa536f58e615b5f98c195a41aba61549de0c6a3bf619f967ebf5bda7b"
     },
     {
       "path": "skill-snapshot.mjs",
@@ -391,35 +383,48 @@
       "sha256": "bf4b8d56e292cafc2a58c462ae9193e0135fba2eae75c7a0a651ab9baa3e2278"
     },
     {
+      "path": "SourceCoverage.jsx",
+      "sha256": "b27818fd1a6c6ccf5f84a50a80676ffea757e1211e41cb31fe0ee74696f27932"
+    },
+    {
       "path": "stance.mjs",
       "sha256": "8ce701f717c530def16777e6e8981d239e762cc7e2c5b79ae66f894a5c11b4dc"
     },
     {
       "path": "style.css",
-      "sha256": "bef07959e15d29c7c85f3e953cd8d6d626f4d1e74df0959e56f4fec05d01cfb1"
+      "sha256": "d507aaff9b4f86c4abaf5672639a95d5f85d05ab6a78b51431b35d7dfa611ea7"
     },
     {
       "path": "todo.mjs",
       "sha256": "ec61424b47d89e90e2a16cdbb00020d4334822b5ce610dc201cfe210df1636fe"
     },
     {
+      "path": "TodoPanel.jsx",
+      "sha256": "9b3705b15bd6e11bb2987f807457f3dad833cd7946c747fb9f27af064d3f45b0"
+    },
+    {
       "path": "topic-lifecycle.mjs",
       "sha256": "194283636d79eb45de7ec6417e4edd1c962ed947c482850da0db5e921a9fc2e2"
+    },
+    {
+      "path": "UpstreamNotice.jsx",
+      "sha256": "8c0c9cf7ec0a8766df6538a0905ee629de71a67e2c3d548b2d356f58d65b59b2"
     },
     {
       "path": "v3-display.mjs",
       "sha256": "8422126802cbbe470026fec8296b8315c3b2b8f0e7f06f2a48f2ea00ab5aa385"
     },
     {
-      "path": "AdminPanel.jsx",
-      "sha256": "369a19c06ae1a023126658103576b5b50ae199846248f9cd3a0eb47691ef36a8"
+      "path": "V3Blocks.jsx",
+      "sha256": "e456d6630234a2ee72f213a7599cbe1a10cdc1dac0de2aae128599dd6ac54da8"
     }
   ],
   "excluded": [
     "world-snapshot.json (ontology snapshot not used by the trial service)",
     "runtime state, histories and private inputs (deployment-only)",
     "tests that need this machine's seed, eval skills, browser, Codex or real model (run them in the demo workspace)",
-    "lan-host.mjs and published-round.mjs (local-only; the server binds via M2_BIND_HOST and reads rounds from the private seed)"
+    "lan-host.mjs and published-round.mjs (local-only; the server binds via M2_BIND_HOST and reads rounds from the private seed)",
+    "round-runner-v3.mjs and ontology-sources.mjs stay on the 2026-10-22 Tianshu version (capacity fix waits for 10/27; Tianshu reads the ontology with the product token only)"
   ],
   "skill": {
     "version": "3.1.7",

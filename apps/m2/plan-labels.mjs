@@ -7,7 +7,8 @@ export function planLabels(units){
  const labels=new Map();
  const visit=(node,index)=>{
   const kind=node.level==='po'?(node.name?.startsWith('Battlefield')?'Battlefield':'Domain'):{mission:'Mission',task:'Task',activity:'Activity'}[node.level]||'文档';
-  const referenceLabel=`${kind} ${node.level==='po'?index+1:String(index+1).padStart(2,'0')}`;
+  // Mission and Task numbers have no leading zero (陈溪南 2026-10-23: a unit never has ten).
+  const referenceLabel=`${kind} ${index+1}`;
   const groupName=node.level==='po'?String(node.name||'').replace(/^(?:Battlefield|Domain)\s*/,'').trim():undefined;
   labels.set(node.id,{referenceLabel,planLabel:node.level==='po'?`${referenceLabel} ${groupName}`:referenceLabel,...(groupName?{groupName}:{})});
   (node.children||[]).forEach(visit);

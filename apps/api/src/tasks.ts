@@ -285,8 +285,10 @@ const settleSubmissionNotices = (client: PoolClient, taskId: string) => client.q
 const tellGroup = (client: PoolClient, taskId: string, ownerId: string, text: string) =>
   postCoAgentMessage(queryOf(client), { objectType: "task", objectId: taskId }, text, [ownerId]);
 
-/** 推进人验收：存完成标准的文字快照和逐条判断、交付结果、一句结论；清掉待验收的提交。 */
-export function acceptMyTask(pool: Pool, ownerId: string, taskId: string, input: TAcceptMyTaskRequest, names: Map<string,string>, now: Date): Promise<TaskResult> {
+/** 推进人验收：存完成标准的文字快照和逐条判断、交付结果、一句结论；清掉待验收的提交。
+ *  viaAgent：本人在对话里说了验收通过，由他自己的外部工具代为确认；群里记下工具和本人原话。 */
+export function acceptMyTask(pool: Pool, ownerId: string, taskId: string, input: TAcceptMyTaskRequest, names: Map<string,string>, now: Date,
+  viaAgent?: { client: TTaskProgressSource; userConfirmation: string }): Promise<TaskResult> {
   return ownerMutation(pool,ownerId,taskId,input.version,names,async(client,row)=>{
     if (row.status === "done") return error(409,"TASK_ALREADY_DONE","这件事已经验收过了");
     if (row.status === "returned") return error(409,"TASK_RETURNED","已退回的事项不能验收");
@@ -304,7 +306,10 @@ export function acceptMyTask(pool: Pool, ownerId: string, taskId: string, input:
     await client.query("UPDATE tasks SET status='done',acceptance=$2,submission=NULL,blocked_reason=NULL,waiting_on=NULL,blocked_at=NULL,version=version+1,updated_at=now() WHERE id=$1",
       [taskId,JSON.stringify(acceptance)]);
     await settleSubmissionNotices(client,taskId);
-    await tellGroup(client,taskId,ownerId,`${names.get(ownerId) ?? ownerId}验收了这件事${verdict ? `：${verdict}` : "。"}`);
+    const who = names.get(ownerId) ?? ownerId;
+    await tellGroup(client,taskId,ownerId,viaAgent
+      ? `${who}在${TOOL_NAME[viaAgent.client]}里确认验收（“${viaAgent.userConfirmation.trim()}”）${verdict ? `：${verdict}` : "。"}`
+      : `${who}验收了这件事${verdict ? `：${verdict}` : "。"}`);
   });
 }
 /** 「还要继续做」：清掉外部工具提交的验收，状态不变。 */
@@ -348,18 +353,19 @@ export function submitMyTaskForAcceptance(pool: Pool, ownerId: string, taskId: s
     await tellGroup(client,taskId,ownerId,`${names.get(ownerId) ?? ownerId}用${TOOL_NAME[via]}提交了验收。`);
   });
 }
-export async function deleteMyTask(pool: Pool, ownerId: string, taskId: string, version: number, names: Map<string,string>): Promise<TaskResult | { deleted:true }> {
+/** 网页上只删未启动的；anyStatus：推进人自己的外部工具整理事项（合并过碎、重复、过时的），什么状态都能删。会后分派的只能退回。 */
+export async function deleteMyTask(pool: Pool, ownerId: string, taskId: string, version: number, names: Map<string,string>, anyStatus = false): Promise<TaskResult | { deleted:true }> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const row = await lockedOwnerTask(client,ownerId,taskId);
     if (!row) { await client.query("ROLLBACK"); return { notFound:true }; }
     if (row.version !== version) { await client.query("ROLLBACK"); return { conflict:projectTask(row,names) }; }
-    if (row.status !== "not_started" || row.created_by === "meeting") {
-      await client.query("ROLLBACK"); return error(409,"TASK_NOT_DELETABLE","只有未启动的自建或计划事项可以删除");
-    }
+    if (row.created_by === "meeting") { await client.query("ROLLBACK"); return error(409,"TASK_NOT_DELETABLE","会后分派的事项不能删除，只能退回"); }
+    if (row.status !== "not_started" && !anyStatus) { await client.query("ROLLBACK"); return error(409,"TASK_NOT_DELETABLE","只有未启动的自建或计划事项可以删除"); }
     for (const table of ["thread_reads","thread_messages","thread_members"]) await client.query(`DELETE FROM ${table} WHERE object_type='task' AND object_id=$1`,[taskId]);
     await client.query("DELETE FROM notifications WHERE object_type='task' AND object_id=$1",[taskId]);
+    await client.query("UPDATE object_materials SET deleted_at=now() WHERE object_type='task' AND object_id=$1 AND deleted_at IS NULL",[taskId]);
     await client.query("DELETE FROM tasks WHERE id=$1",[taskId]);
     if (row.mission_id) await renumberMission(client,row.mission_id);
     await client.query("COMMIT"); return { deleted:true };

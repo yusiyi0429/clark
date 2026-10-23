@@ -13,7 +13,7 @@ import { companyProgress, getIssue, getMeeting, listPending } from "./mcpCeoRead
 import { readMissionCardForAgent } from "./mcpMissionCards.js";
 import { applyMissionCardRevision } from "./missionCardAnnotations.js";
 import { appendTaskProgress } from "./taskProgress.js";
-import { canReadTask, createMyTask, getTaskDetail, listAvailableMissions, listMyTasks, submitMyTaskForAcceptance, updateMyTaskStatus } from "./tasks.js";
+import { acceptMyTask, canReadTask, createMyTask, deleteMyTask, getTaskDetail, listAvailableMissions, listMyTasks, returnMyTask, submitMyTaskForAcceptance, updateMyTaskStatus, type TaskResult } from "./tasks.js";
 import { addObjectMaterialLink, listObjectMaterials, ObjectMaterialError } from "./objectMaterials.js";
 import { logEvent } from "./observability.js";
 import { readPlanTasks, type PlanTaskSource } from "./planTasks.js";
@@ -37,6 +37,15 @@ const StandardCheck = Type.Object({ index: Type.Integer({ minimum: 0, maximum: 4
   evidence: Type.Optional(Type.String({ minLength: 1, maxLength: 300 })), materialId: Type.Optional(Uuid) }, { additionalProperties: false });
 const SubmitInput = Type.Object({ itemId: Uuid, version: Type.Integer({ minimum: 1 }), verdict: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   standards: Type.Optional(Type.Array(StandardCheck, { maxItems: 50 })), deliverables: Type.Optional(Type.Array(Uuid, { maxItems: 30 })) }, { additionalProperties: false });
+const Nullable = <T extends ReturnType<typeof Type.String>>(schema: T) => Type.Union([schema, Type.Null()]);
+const UpdateInput = Type.Object({ itemId: Uuid, version: Type.Integer({ minimum: 1 }), title: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+  doneDefinition: Type.Optional(Nullable(Type.String({ minLength: 1, maxLength: 500 }))), startDate: Type.Optional(Nullable(DateOnly)), dueDate: Type.Optional(Nullable(DateOnly)),
+  missionId: Type.Optional(Nullable(Type.String({ minLength: 1 }))), planTaskId: Type.Optional(Nullable(Type.String({ minLength: 1, maxLength: 200 }))) }, { additionalProperties: false });
+const VersionInput = Type.Object({ itemId: Uuid, version: Type.Integer({ minimum: 1 }) }, { additionalProperties: false });
+const ReturnInput = Type.Object({ itemId: Uuid, version: Type.Integer({ minimum: 1 }), reason: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false });
+const AcceptInput = Type.Object({ itemId: Uuid, version: Type.Integer({ minimum: 1 }), userConfirmation: Type.String({ minLength: 1, maxLength: 200 }),
+  verdict: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })), standards: Type.Optional(Type.Array(StandardCheck, { maxItems: 50 })),
+  deliverables: Type.Optional(Type.Array(Uuid, { maxItems: 30 })) }, { additionalProperties: false });
 const LinkInput = Type.Object({ itemId: Uuid, url: Type.String({ pattern: "^[Hh][Tt][Tt][Pp][Ss]?://", maxLength: 2000 }),
   title: Type.Optional(Type.String({ minLength: 1, maxLength: 240 })) }, { additionalProperties: false });
 const EmptyInput = Type.Object({}, { additionalProperties: false });
@@ -52,13 +61,17 @@ const EditMissionCardInput = Type.Object({ cardId: Uuid, missionId: Type.String(
 const CompanyInput = Type.Object({ week: Type.Optional(Type.String()), battlefieldId: Type.Optional(Type.String({ minLength: 1 })),
   personId: Type.Optional(Type.String({ minLength: 1 })) }, { additionalProperties: false });
 const memberDefinitions: Tool[] = [
-  { name: "list_my_items", description: "列出我推进的执行事项，默认仅未完成；missions 是此刻可以挂执行事项的本月 Mission，tasks 是挂在它下面的 Task。List execution items I own (open by default) and the missions new items can belong to.", inputSchema: ListInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
-  { name: "create_item", description: "按我正在做的事新建一条执行事项，直接生效、标为 Agent 建。先用 list_my_items 确认没有同一件事，有就写进展，不要重复建。title 写要交付的结果（30 字内）；doneDefinition 每行一条可检查的完成标准；对得上 list_my_items 里的 Mission 就带 missionId，对得上它 tasks 里的 Task 就把 taskId 填进 planTaskId；startDate 填今天，知道截止就填 dueDate。clientId 是这次新建的随机 UUID，重试时沿用。Create an execution item for work I'm doing; check list_my_items first and never duplicate.", inputSchema: CreateInput as Tool["inputSchema"] },
+  { name: "list_my_items", description: "列出我推进的执行事项，默认仅未完成；awaitingAcceptance=true 的在等本人验收，source=meeting 的是会后分派；missions 是此刻可以挂执行事项的本月 Mission，tasks 是挂在它下面的 Task。List execution items I own (open by default) and the missions new items can belong to.", inputSchema: ListInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
+  { name: "create_item", description: "按我正在做的事新建一条执行事项，直接生效、标为 Agent 建。只为里程碑级成果建：一个要几天才能交付的结果，大约是 Mission 下一个 Task 里的一步；过程步骤、配置、修小问题写进最接近的已有事项的进展，拿不准就写进展、不新建。先用 list_my_items 确认没有同一件事，有就写进展，不要重复建。title 写要交付的结果（30 字内），不写「已完成…」「已合入…」这类进展句；doneDefinition 每行一条可检查的完成标准；对得上 list_my_items 里的 Mission 就带 missionId，对得上它 tasks 里的 Task 就把 taskId 填进 planTaskId；startDate 填今天，知道截止就填 dueDate。clientId 是这次新建的随机 UUID，重试时沿用。Create an execution item for work I'm doing; check list_my_items first and never duplicate.", inputSchema: CreateInput as Tool["inputSchema"] },
   { name: "get_item", description: "读取我推进或协作的执行事项详情：完成标准（standards，按行拆好，index 从 0 起）、材料、进展、待验收的提交和验收记录。Read an execution item I own or collaborate on, with its done standards, materials, progress, pending submission and acceptance.", inputSchema: GetInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "append_progress", description: "给我推进或协作的事项记录进展、证据和下一步；结果里的 item 是事项此刻的状态和版本（接着提交验收用这个版本）。Append progress and evidence to an item I own or collaborate on; the result's item carries the item's current status and version.", inputSchema: AppendInput as Tool["inputSchema"] },
   { name: "update_status", description: "把我推进的事项标为未启动或进行中，必须带当前版本。done 不会直接完成，而是提交给本人验收（同 submit_for_acceptance）。Set an item I own to not_started or in_progress; done only submits it for my acceptance.", inputSchema: StatusInput as Tool["inputSchema"] },
-  { name: "submit_for_acceptance", description: "我推进的事项做完了，提交给本人验收，必须带当前版本；完成只能由本人在天枢验收。可附草稿：对 get_item 返回的 standards 逐条（index）写是否达到和一句依据（依据是材料时带 materialId）、一句结论、建议作为交付结果的材料 id。Submit an item I own for my acceptance; only I can mark it done in Tianshu.", inputSchema: SubmitInput as Tool["inputSchema"] },
+  { name: "submit_for_acceptance", description: "我推进的事项做完了，提交给本人验收，必须带当前版本；完成要本人确认：本人在天枢点，或本人在对话里说了之后用 accept_item 代为确认。可附草稿：对 get_item 返回的 standards 逐条（index）写是否达到和一句依据（依据是材料时带 materialId）、一句结论、建议作为交付结果的材料 id。Submit an item I own for my acceptance.", inputSchema: SubmitInput as Tool["inputSchema"] },
   { name: "add_link", description: "把外部工具做出来的东西（文档、原型、PR 等）以链接放进我推进或协作的事项，出现在事项封面上；只收 http/https，同一个地址不会重复放；结果里的 item 是事项此刻的状态和版本。Attach a link (http/https) to an item I own or collaborate on; the result's item carries the item's current status and version.", inputSchema: LinkInput as Tool["inputSchema"] },
+  { name: "update_item", description: "改我推进的事项：标题、完成标准（每行一条，null 清空）、开始/截止日期（null 清空）、挂哪个 Mission 和 Task（null 取消挂靠），必须带当前版本，只传要改的字段。Edit an item I own (title, done standards, dates, mission/task).", inputSchema: UpdateInput as Tool["inputSchema"] },
+  { name: "delete_item", description: "删掉我推进的一件事（任何状态都行），用来整理过碎、重复、过时的事项：先把有用的进展用 append_progress 写进要保留的那件，再删，删完告诉用户删了哪几件。会后分派的不能删，用 return_item 退回。Delete an item I own; meeting-assigned items can only be returned.", inputSchema: VersionInput as Tool["inputSchema"] },
+  { name: "return_item", description: "退回会后分派给我的事（会通知分派的人），reason 写一句原因；只有本人说了不做或不该归他时才退。Return a meeting-assigned item with a reason.", inputSchema: ReturnInput as Tool["inputSchema"] },
+  { name: "accept_item", description: "本人在对话里明确说了这件事验收通过（如「通过」「算完成」）后，代本人确认完成；userConfirmation 填本人原话，群里会记下。本人没说就不能调用，自己判断达标也不行——只能 submit_for_acceptance 并提醒本人。没传 standards/deliverables/verdict 时沿用待验收提交里的。Mark an item done only after I explicitly said so in the conversation.", inputSchema: AcceptInput as Tool["inputSchema"] },
 ];
 const ceoDefinitions: Tool[] = [
   { name: "get_issue", description: "读取议题详情与关联会议。", inputSchema: IssueInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
@@ -89,6 +102,10 @@ function limited(tokenId: string, write: boolean, now: Date): boolean {
   return bucket.total > 60 || bucket.writes > 20;
 }
 const result = (value: unknown, isError = false) => ({ isError, content: [{ type: "text" as const, text: JSON.stringify(value) }] });
+/** 推进人自己的事项操作没成：找不到、版本变了、规则不允许，统一成工具错误。 */
+const taskFailure = (outcome: TaskResult | { deleted: true }) => "notFound" in outcome ? { code: "TASK_NOT_FOUND", message: "找不到这件执行事项" }
+  : "conflict" in outcome ? { code: "VERSION_CONFLICT", message: "版本已变化，请读取最新状态后重试", currentVersion: outcome.conflict.version, currentStatus: outcome.conflict.status }
+  : "error" in outcome ? outcome.error : null;
 
 export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: string; now: () => Date;
   names: () => Map<string, string>; findPerson: (personId: string) => MemoryPerson | undefined;
@@ -109,7 +126,9 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     ...(initialAccess.ceo ? ["公司业务只读：可以查待你处理的事、议题/会议/任务卡详情和全公司进展；拍板、签发、确认请回天枢网页操作。"] : []),
     ...(initialAccess.member ? [
       "可以查看自己的执行事项，记录真实进展，把做出来的东西用 add_link 放进去；做完用 submit_for_acceptance 提交给本人验收，完成只能由本人在天枢验收。",
-      "不用等用户开口，主动把用户正在推进的工作同步进天枢：开始一件新工作（要交付一个结果、会持续一段时间；一次问答或顺手的小改动不算）时，先 list_my_items 找对应事项，找到就沿用，没有就用 create_item 建一条并告诉用户；做出阶段成果（提交、PR、文档、设计稿）或这段工作告一段落时，用 append_progress 写做了什么、证据和下一步，产出用 add_link 放进去；做完用 submit_for_acceptance 提交验收。只写真实做过的事。",
+      "不用等用户开口，主动把用户正在推进的工作同步进天枢：开始一件新工作时，先 list_my_items 找对应事项，找到就沿用；没有、而且是里程碑级成果（要几天才能交付的结果；过程步骤、配置、修小问题、一次问答都不算）时才用 create_item 建一条并告诉用户，否则写进最接近的已有事项的进展。做出阶段成果（提交、PR、文档、设计稿）或这段工作告一段落时，用 append_progress 写做了什么、证据和下一步，产出用 add_link 放进去；做完用 submit_for_acceptance 提交验收。只写真实做过的事。",
+      "替用户维护天枢里事项的实时性，不要留给用户去点：发现过碎、重复、过时或标题写成进展句的事项，自己用 update_item 改、用 append_progress 把有用的进展并进要保留的那件、再用 delete_item 删掉，做完告诉用户改了什么。会后分派的事不删，本人说不做时用 return_item 退回。",
+      "完成要本人确认，但不要让用户进天枢去点：list_my_items 里有 awaitingAcceptance=true 的事，在对话开头或聊到相关的事时提醒一句（「有 N 件等你验收：…，说一声就帮你确认」）；本人明确说通过后用 accept_item 代为确认，没说就只提醒、不代确认。",
     ] : []),
     "任务卡正文是只读边界的例外：get_mission_card 只读本人可见卡；仅本人准备期间、editable=true时，用户已经明确具体改法可用edit_mission_card立即改有权限的任务字段并留痕。必须用刚读取的round填写sourceRound；本人已确认或已开始汇总时，只读正文和历史，先由本人取消确认或由战场 DRI 退回本人重新确认，不能自动绕过。保存备注不授权改文；仅明确修改意图可以写入。重新开放后需重新核对本次改法，不把旧改法直接套进新的本人准备窗口。不确定用户意思时先提问题与选项，最后一个选项为自己输入，澄清后立即改。不能自动向群聊发送私聊记录，不能签发或确认任务卡。遇到旧准备窗口、版本或原字段冲突必须重新读取。",
     "月末会有个人复盘待起草。用 list_pending 发现，get_my_review 读取本人的承诺、进展和写作要求，再用 save_review_draft 写入四部分草稿；不能替本人提交，请本人回天枢确认。",
@@ -226,7 +245,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
           const tasks = await listMyTasks(deps.q, identity.personId, names);
           return result({ items: (args.status === "all" ? tasks : tasks.filter((task) => task.status !== "done" && task.status !== "returned"))
             .map((task) => ({ id: task.id, title: task.title, status: task.status, version: task.version,
-              mission: task.mission, startDate: task.startDate, dueDate: task.dueDate,
+              source: task.source, awaitingAcceptance: task.awaitingAcceptance, mission: task.mission, startDate: task.startDate, dueDate: task.dueDate,
               collaborators: task.collaborators, latestProgress: task.latestProgress })),
             missions: await missionsWithTasks(identity.personId) });
         }
@@ -281,6 +300,47 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
           if ("conflict" in submitted) { code = "VERSION_CONFLICT"; return result({ code, message: "版本已变化，请读取最新状态后重试", currentVersion: submitted.conflict.version, currentStatus: submitted.conflict.status }, true); }
           if ("error" in submitted) { code = submitted.error.code; return result(submitted.error, true); }
           return result({ status: submitted.task.status, version: submitted.task.version, submittedForAcceptance: true, message: "已提交验收，等本人在天枢确认" });
+        }
+        case "update_item": {
+          if (!Value.Check(UpdateInput, args)) break;
+          const { itemId: id, ...input } = args as typeof UpdateInput.static;
+          itemId = id;
+          const updated = await updateMyTaskStatus(deps.pool, identity.personId, id, input, names, deps.now());
+          const failed = taskFailure(updated);
+          if (failed || !("task" in updated)) { code = failed?.code ?? "INTERNAL"; return result(failed, true); }
+          return result(updated.task);
+        }
+        case "delete_item": {
+          if (!Value.Check(VersionInput, args)) break;
+          itemId = args.itemId as string;
+          const deleted = await deleteMyTask(deps.pool, identity.personId, itemId, args.version as number, names, true);
+          const failed = taskFailure(deleted);
+          if (failed) { code = failed.code; return result(failed, true); }
+          return result({ deleted: true });
+        }
+        case "return_item": {
+          if (!Value.Check(ReturnInput, args)) break;
+          const input = args as typeof ReturnInput.static;
+          itemId = input.itemId;
+          const returned = await returnMyTask(deps.pool, identity.personId, itemId, { version: input.version, reason: input.reason }, names);
+          const failed = taskFailure(returned);
+          if (failed || !("task" in returned)) { code = failed?.code ?? "INTERNAL"; return result(failed, true); }
+          return result({ status: returned.task.status, version: returned.task.version });
+        }
+        case "accept_item": {
+          if (!Value.Check(AcceptInput, args)) break;
+          const input = args as typeof AcceptInput.static;
+          itemId = input.itemId;
+          if (!input.userConfirmation.trim()) { code = "INVALID_INPUT"; return result({ code, message: "请填本人确认验收的原话" }, true); }
+          const submission = (await getTaskDetail(deps.q, itemId, identity.personId, names, deps.now(), new Set()))?.submission;
+          const accepted = await acceptMyTask(deps.pool, identity.personId, itemId, { version: input.version,
+            verdict: input.verdict ?? submission?.verdict ?? null,
+            standards: input.standards?.map((check) => ({ ...check, evidence: check.evidence ?? null, materialId: check.materialId ?? null })) ?? submission?.standards ?? [],
+            deliverableMaterialIds: input.deliverables ?? submission?.deliverableMaterialIds ?? [] },
+          names, deps.now(), { client: identity.client, userConfirmation: input.userConfirmation });
+          const failed = taskFailure(accepted);
+          if (failed || !("task" in accepted)) { code = failed?.code ?? "INTERNAL"; return result(failed, true); }
+          return result({ status: accepted.task.status, version: accepted.task.version });
         }
         case "add_link": {
           if (!Value.Check(LinkInput, args)) break;

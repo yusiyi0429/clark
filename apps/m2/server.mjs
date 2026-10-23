@@ -6,7 +6,7 @@ import {createModelGateway,recordModelRun,patientTransport} from './model.mjs';
 import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,ownerAnnotation,isChildCard,reconcileReply} from './nexus-policy.mjs';
 import {createCollaborationState,currentVersion,canRead,cardStatus,confirmationSummary} from './governance.mjs';
 import {disagrees} from './stance.mjs';
-import {openCollaborationStore} from './collaboration-store.mjs';
+import {openCollaborationStore,archivesPath} from './collaboration-store.mjs';
 import {memberActor,sharedProjection} from './shared-projection.mjs';
 import {randomUUID,createHash} from 'node:crypto';
 import {generateRound,validateRound} from './round-runner.mjs';
@@ -25,7 +25,7 @@ import {createDecodingGateway} from './decoding-gateway.mjs';
 import {loadSkillSnapshot} from './skill-snapshot.mjs';
 import {canGenerateActivities,activityRequest,readActivities,attachActivities} from './activity-plan.mjs';
 import {roundMetadata} from './round-metadata.mjs';
-import {fetchDeploymentOntologySources,ontologyConnectionStatus} from './ontology-sources.mjs';
+import {fetchDeploymentOntologySources,ontologyConnectionStatus,loadOntologyManifest} from './ontology-sources.mjs';
 import {mergeTopics,rememberedEvidence,queueProposals,applyOwnerAnnotations} from './nexus-memory.mjs';
 import {directQuestion,quietWindowMs} from './nexus-participation.mjs';
 import {listenSystemPrompt,listenInput,parseListen,applyListen} from './nexus-listen.mjs';
@@ -34,8 +34,9 @@ import {cascadeSystem,cascadeInput,validateCascade,cascadeMessage,childrenOf} fr
 import {bareJson} from './model.mjs';
 import {loadReviewRules,reviewPromptBlock,reviewCardsFor} from './nexus-review.mjs';
 import {handoffPackage,monthOf,handoffGenerated,reviewSummary} from './review-handoff.mjs';
-import {carryReviewLayer} from './review-round.mjs';
+import {carryReviewLayer,installReviewRound} from './review-round.mjs';
 import {importReviewRound} from './deployment-review-import.mjs';
+import {createReviewJobs,httpReviewReader} from './review-generation.mjs';
 import {withdrawnFor} from './mission-structure.mjs';
 import {draftMission} from './mission-draft.mjs';
 import {withReviewSources} from './review-sources.mjs';
@@ -94,6 +95,15 @@ async function cascadeOnce(job){
 async function cascadeFailed(job,e){await store.transact(s=>{const card=s.cards[job.cardId];if(!card)return s;const scope=unitOfCard(s,job.cardId),owners=[...new Set(childrenOf(s,job.cardId).map(c=>currentVersion(c).content.owner).filter(Boolean))];s.messages.push({id:randomUUID(),author:'Nexus',channel:'group',scope,cardId:job.cardId,text:`下级对照这次没做成（${String(e.message).slice(0,60)}），请 ${owners.map(n=>'@'+n).join('、')} 自己核对一下是否需要调整。`,createdAt:new Date().toISOString()});s.sequence++;return s;}).catch(()=>{});}
 // Review cards are read by the same Nexus pass; their rules come from the review skill (DECODING_REVIEW_SKILL_DIR, default apps/m2/review-skill).
 const reviewSkillRoot=reviewSkillLocation();
+// 生成复盘 (陈溪南 2026-10-23): started from 管理 by the CEO or a round operator; reads the month's POs, Missions and progress
+// from the ontology with the deployment's read-only credential and installs only if it passes the checks (review-generation.mjs).
+const reviewJobs=createReviewJobs({store,gateway,skillRoot:reviewSkillRoot,statePath:process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)),
+ reader:async()=>httpReviewReader({token:process.env.TKOS_WORLD_PRODUCT_TOKEN}),busy:()=>roundFlight||auditFlight,
+ isOperator:actor=>Boolean(actor)&&mayRunRounds(actor),roster:Object.values(handoffProfiles).map(p=>p.name),ceoName:Object.values(handoffProfiles).find(p=>p.ceo)?.name||'',
+ // Without a company PO in the ontology, the company review is held against the month's company direction the manifest records.
+ companyDirection:async period=>{try{const m=await loadOntologyManifest();return m.selections.filter(x=>x.unit==='company'&&(x.kind==='intent'||x.kind==='history'&&x.historyPeriod===period)).map(x=>x.text).join('\n\n');}catch{return '';}},
+ installReviewRound,archivesPath});
+await reviewJobs.recover();
 // 复盘 → 拆解. Until the full run is wanted (DECODING_PLAN_HANDOFF=generate), only the input package is prepared and
 // the groups are told; the current plan round stays as it is (陈溪南 2026-10-21: click through the flow first).
 async function prepareHandoff(){
@@ -160,6 +170,8 @@ export const server=createServer(async(req,res)=>{
   if(route.pathname==='/api/review-import'&&req.method==='POST'){if(!req.m2Session.internal)return json(res,403,{error:'只能在服务器内部导入复盘'});const b=await body(req);return json(res,200,await importReviewRound(store,b,{seedDir:seedRoot(),statePath:process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)),busy:roundFlight||auditFlight}));}
   if(route.pathname==='/api/session'&&req.method==='GET')return json(res,200,{authenticated:true,...req.m2Session});
   if(route.pathname==='/api/ontology/status'&&req.method==='GET')return json(res,200,await ontologyConnectionStatus());
+  if(route.pathname==='/api/reviews'&&req.method==='GET')return json(res,200,{job:reviewJobs.view()});
+  if(route.pathname==='/api/reviews'&&req.method==='POST'){const b=await body(req);try{return json(res,200,{job:await reviewJobs.start(actorFor(b.memberId),{regenerate:b.regenerate===true,resume:b.resume===true})});}catch(e){return json(res,e.status||500,{error:e.message,...(e.code?{code:e.code,total:e.total,confirmed:e.confirmed}:{})});}}
   if(route.pathname==='/api/collaboration'&&req.method==='GET'){const state=store.snapshot(),member=route.searchParams.get('member');return revalidated(req,res,cachedRead(state,'collaboration:'+member,()=>sharedProjection(state,memberActor(member,state))));}
   if(req.url==='/api/rounds/import-published'&&req.method==='POST'){
    const b=await body(req);if(!actorFor(b.memberId).ceo)return json(res,403,{error:'请由公司负责人载入新轮'});
@@ -172,6 +184,7 @@ export const server=createServer(async(req,res)=>{
   if(route.pathname==='/api/rounds'&&req.method==='GET'){const state=store.snapshot(),member=req.m2Session.memberId;return revalidated(req,res,cachedRead(state,'rounds:'+member,()=>{const actor=memberActor(member,state);return {auditJob:actor.ceo?state.roundAuditJob||null:null,job:generationView(state.roundJob,mayRunRounds(actor)?{...actor,ceo:true}:actor)};}));}
   if(req.url==='/api/rounds'&&req.method==='POST'){
    const b=await body(req);if(!mayRunRounds(actorFor(b.memberId)))return json(res,403,{error:'请由公司负责人或轮次操作人开始新轮次'});
+   if(store.snapshot().reviewJob?.status==='running')return json(res,409,{error:'复盘正在生成，等它结束再重开拆解'});
    if(b.sourceMode&&!['ontology','feishu'].includes(b.sourceMode))return json(res,400,{error:'请选择本体或飞书基础资料'});
    if(!b.resume&&(b.sourceMode||'ontology')==='ontology'&&!(await ontologyConnectionStatus()).configured)return json(res,503,{error:'服务器尚未配置本体只读凭证，无法重新读取；当前计划保留。'});
    if(!ready)return json(res,503,{error:'模型服务尚未配置'});
@@ -294,7 +307,8 @@ export const server=createServer(async(req,res)=>{
      try{const heard=await chatGateway.complete([{role:'system',content:listenSystemPrompt},{role:'user',content:JSON.stringify(listenInput({scope:scope.id,fresh,evidence,topics:previousTopics,cards,nexusLast,units:liveUnits()}))}],{json:true,thinking:true,reasoningEffort:'medium',maxTokens:4000});const heardValue=JSON.parse(heard.answer);listened=Array.isArray(heardValue?.events)?parseListen(heardValue,{fresh,topics:previousTopics}):null;}catch{listened=null;}
      if(listened){
       topicsNow=applyListen(previousTopics,listened,fresh);
-      const ownerAsks=fresh.some(e=>revisionRequest(e.text)||ownerAnnotation(e,cards.find(c=>c.id===e.context?.selection?.id)));
+      // A question on a card is answered even when listening thought it a stray line (2026-10-23: 「这是啥」 went unanswered).
+      const ownerAsks=fresh.some(e=>revisionRequest(e.text)||ownerAnnotation(e,cards.find(c=>c.id===e.context?.selection?.id))||directQuestion(e));
       if(listened.act==='none'&&!ownerAsks){
        await store.transact(s=>{if(s.round?.id!==roundAtStart)return s;const n=s.nexus[scope.id];n.topics=topicsNow;n.running=false;n.error=null;n.lastListen={act:'none',reason:listened.reason,at:new Date().toISOString()};n.pendingSourceIds=(n.pendingSourceIds||[]).filter(id=>!pendingSourceIds.includes(id));if(!n.pendingSourceIds.length)delete n.pendingSince;s.sequence++;return s;});
        return json(res,200,{collaboration:sharedProjection(store.snapshot(),actor),topics:topicsNow,answer:'',proposals:[],listened});

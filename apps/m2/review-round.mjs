@@ -35,8 +35,12 @@ export function installReviewRound(state,file,{label,source,sample=false,now=new
  if(next.messages.length||next.comments.length||(next.proposals||[]).length){(next.talkArchives??=[]).push({archivedAt:now,reason:'新一轮复盘',messages:next.messages,comments:next.comments,proposals:next.proposals||[],nexus:next.nexus||{}});next.messages=[];next.comments=[];next.proposals=[];next.nexus={};}
  Object.assign(next.cards,reviewCards(file,{now}));
  // 失败要看得见 (2026-10-22): reviews the run could not write, or wrote without their background, are named on the page.
- const problems=[...(file.failed||[]).map(f=>({ref:f.id,kind:'failed',reason:f.finishReason==='refusal'?'生成失败：模型拒答':`生成失败：${String(f.error||'').slice(0,60)}`})),...(file.dropped||[]).map(d=>({ref:d.id,kind:'degraded',reason:'背景资料未读入（模型拒答后去掉背景资料重写）'}))];
- next.reviewRound={label:label||file.name||'复盘',...(problems.length?{problems}:{}),skill:file.skill?.version||file.skillFormat||file.skill||null,period:file.period||null,cutoff:file.cutoff||null,evidence:file.evidence||null,source:source||null,sample,loadedAt:now};
+ const problems=[...(file.failed||[]).map(f=>({ref:f.id,...(f.title?{title:f.title}:{}),kind:'failed',reason:f.finishReason==='refusal'?'生成失败：模型拒答':`生成失败：${String(f.error||'').slice(0,60)}`})),...(file.dropped||[]).map(d=>({ref:d.id,kind:'degraded',reason:'背景资料未读入（模型拒答后去掉背景资料重写）'}))];
+ // Units left out because the ontology lacks their material (数据缺失) — the only gap members are told about.
+ const skipped=(file.skipped||[]).map(x=>typeof x==='string'?x:`${x.unit||''}${x.reason?`：${x.reason}`:''}`).filter(Boolean);
+ next.reviewRound={label:label||file.name||'复盘',...(problems.length?{problems}:{}),...(skipped.length?{skipped}:{}),skill:file.skill?.version||file.skillFormat||file.skill||null,period:file.period||null,cutoff:file.cutoff||null,evidence:file.evidence||null,source:source||null,sample,loadedAt:now,
+  // When the ontology was read and when the reviews were written (首页 shows both; 陈溪南 2026-10-23).
+  readAt:file.readAt||null,generatedAt:file.generatedAt||null,startedAt:file.startedAt||null,durationMs:file.durationMs??null};
  // Every unit with reviews is told they are ready (and, on a re-run, that the old round's talk is archived).
  const month=(p=>{const m=String(p||'').match(/-(\d{2})$/);return m?`${Number(m[1])} 月`:'本月';})(file.period),units=[...new Set(Object.values(next.cards).filter(c=>c.kind==='review'&&c.unit!=='company').map(c=>c.unit))];
  for(const u of units)broadcast(next,u,old.length?`${month}复盘已换成新一轮（${next.reviewRound.label}），上一轮的讨论已归档。请各位重新看自己负责的那份。`:`${month}复盘已生成，请各位看自己负责的那份；有不同意见直接在卡上批注，没问题就在卡底部确认。`,{kind:old.length?'review-regenerated':'review-ready',now});
