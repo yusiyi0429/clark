@@ -256,7 +256,7 @@ PY
 }
 
 # 每次发布都会留下镜像（warmap-api/web、tianshu-m2 各一个标签）、releases/<短SHA> 源码目录和 releases/before-<短SHA> 回退目录。
-# 只保留最近 KEEP_RELEASES 次发布（当前发布一定保留），其余删除；正被任何容器使用的镜像不删。
+# 只保留最近 KEEP_RELEASES 次发布（当前发布一定保留），其余删除；正被任何容器使用的镜像、留下的回退目录要用的镜像不删。
 # 只动本脚本建的东西：带 tianshu.revision 标签的镜像和 releases/ 下的目录。其他项目的镜像、构建缓存、数据卷和备份（备份按 backup.sh 的保留天数）一概不碰。
 cleanup() {
   local dry=${DRY_RUN:-0} keep dir name tag repo id ids in_use f
@@ -267,18 +267,27 @@ cleanup() {
   echo "cleanup keep=$(echo $keep) dry_run=$dry"
   is_kept() { grep -qx "$1" <<< "$keep"; }
   remove() { echo "remove $*"; if [ "$dry" != 1 ]; then "$@"; fi; }
+  local survivors=()
   for dir in "$app"/releases/*/; do
     [ -d "$dir" ] || continue
     name=$(basename "$dir"); tag=${name#before-}
-    [[ "$tag" =~ ^[0-9a-f]{7}$ ]] || continue
-    is_kept "$tag" || remove rm -rf -- "$app/releases/$name"
+    if [[ "$tag" =~ ^[0-9a-f]{7}$ ]] && ! is_kept "$tag"; then remove rm -rf -- "$app/releases/$name"; continue; fi
+    [[ "$name" == before-* ]] && survivors+=("$dir")
   done
+  # 留下的回退目录（含 M2 单独切换留下的 before-m2-<短SHA>/）回退时要用的镜像也不删：
+  # 它们的固定文件、回退脚本里写的 仓库:短SHA 标签，以及 images.txt 记的镜像 ID。
+  local rollback_tags='' rollback_ids=''
+  if (( ${#survivors[@]} )); then
+    rollback_tags=$(grep -rhoE '(warmap-api|warmap-web|tianshu-m2):[0-9a-f]{7}' "${survivors[@]}" 2>/dev/null | sort -u || true)
+    rollback_ids=$(grep -rhoE 'sha256:[0-9a-f]{64}' "${survivors[@]}" 2>/dev/null | sort -u || true)
+  fi
   ids=$(docker ps -aq)
-  in_use=$([ -z "$ids" ] || docker inspect --format '{{.Image}}' $ids | sort -u)
+  in_use=$({ [ -z "$ids" ] || docker inspect --format '{{.Image}}' $ids; echo "$rollback_ids"; } | sort -u)
   for repo in warmap-api warmap-web tianshu-m2; do
     for tag in $(docker image ls "$repo" --format '{{.Tag}}'); do
       [[ "$tag" =~ ^[0-9a-f]{7}$ ]] || continue
       is_kept "$tag" && continue
+      if grep -qx "$repo:$tag" <<< "$rollback_tags"; then echo "keep $repo:$tag rollback"; continue; fi
       [ -n "$(docker image inspect "$repo:$tag" --format '{{index .Config.Labels "tianshu.revision"}}' 2>/dev/null)" ] || continue
       id=$(docker image inspect "$repo:$tag" --format '{{.Id}}')
       if grep -qx "$id" <<< "$in_use"; then echo "keep $repo:$tag in_use"; continue; fi
