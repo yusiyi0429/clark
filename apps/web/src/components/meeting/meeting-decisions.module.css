@@ -43,10 +43,7 @@
 .pickOption[aria-pressed='true'] { border-color: #9fb6e3; background: #eef3fd; }
 .spacer { flex: 1; }
 
-/* 约会议：右侧抽屉（二级页同一个外壳 DetailFrame），手持铺满。 */
-.sheetScrim { position: fixed; inset: 0; z-index: 60; background: rgba(15, 23, 42, .28); }
-.sheet { position: fixed; top: 0; right: 0; bottom: 0; display: flex; width: min(480px, 100vw); background: #fff; box-shadow: -12px 0 32px rgba(15, 23, 42, .12); }
-.sheetDialog { display: flex; flex: 1; min-width: 0; outline: none; }
+/* 约会议：表单（外框是 components/ui/SidePanel，页头 DetailFrame）。 */
 .booking { display: grid; gap: 16px; padding: 16px 20px 24px; overflow-y: auto; }
 .bookField { display: grid; gap: 6px; min-width: 0; }
 .bookField > span:first-child { color: #4f5866; font-size: 13px; font-weight: 600; }
@@ -61,7 +58,6 @@
 .bookActions { display: flex; justify-content: flex-end; gap: 8px; }
 
 @media (max-width: 959px), (pointer: coarse) {
-  .sheet { width: 100vw; box-shadow: none; }
   .pickOption, .anchorEdit, .bookPeople button, .primary, .ghost, .picker input { min-height: 44px; }
   .anchorRemove { min-width: 44px; min-height: 44px; }
   .bookField > input { height: 44px; }

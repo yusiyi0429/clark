@@ -70,9 +70,10 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   /** 已发起、新路由还没提交的目标：二级页先打开，右侧盖加载蒙版。路由提交（包括被重定向到别处）就清掉。 */
   const [pending, setPending] = useState<string | null>(null);
   const [m2Available, setM2Available] = useState(false);
-  /** 建会抽屉：CEO 从顶栏「约会议」打开，成员从首页操作区打开（经 WorkspaceContext 的 bookMeeting）。 */
+  /** 建会面板：CEO 从顶栏「约会议」打开，成员从首页操作区打开（经 WorkspaceContext 的 bookMeeting）。每次打开换一个 key，表单从空白开始。 */
   const [booking, setBooking] = useState(false);
-  const bookMeeting = useCallback(() => setBooking(true), []);
+  const [bookingRun, setBookingRun] = useState(0);
+  const bookMeeting = useCallback(() => { setBookingRun((run) => run + 1); setBooking(true); }, []);
   useEffect(() => {
     const controller = new AbortController();
     setM2Available(false);
@@ -643,7 +644,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
           </div>
         ) : null}
         <WhatsNewCard />
-        {booking && viewerId ? <MeetingBookingSheet open onClose={() => setBooking(false)} viewer={{ personId: viewerId, role: account.role, displayName: account.displayName }} /> : null}
+        {viewerId ? <MeetingBookingSheet key={bookingRun} open={booking} onClose={() => setBooking(false)} viewer={{ personId: viewerId, role: account.role, displayName: account.displayName }} /> : null}
       </div>
       </ReferenceProvider>
     </WorkspaceContext.Provider>

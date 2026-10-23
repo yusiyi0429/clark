@@ -12,6 +12,7 @@ import { MonthlyReviewNotices } from "@/components/monthlyReview/MonthlyReviewNo
 import { PersonalReviewBoard } from "@/components/monthlyReview/PersonalReviewBoard";
 import { useWeeklyReviewBoard, WeeklyReviewBoard } from "@/components/weeklyReview/WeeklyReviewBoard";
 import { RequestNotices, type RequestCounts } from "@/components/requests/RequestNotices";
+import { RequestListPanel } from "@/components/requests/RequestListScreen";
 import { MeetingCardNoticeList, useMyMeetingCards } from "@/components/meeting/MeetingCardNotices";
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
@@ -92,13 +93,16 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
 function MemberHomeBody({ displayName, home, account, waitingReplies }: { displayName: string; home: ReturnType<typeof useMemberHome>; account: Account; waitingReplies: number }) {
   const { navigate, bookMeeting, m2Available = false } = useWorkspace();
   const plan = useHomePlan();
+  /** 等回复面板开着时记着按下的那颗键：面板里点进详情时从它展开，详情关了回到它。 */
+  const [requestsFrom, setRequestsFrom] = useState<Element | null>(null);
   // 首页两份数据（工作台、计划）谁没连上都提示一次，重试两份都重取。
   const error = home.homeError ?? plan.error;
   return <div className={m.board}>
     <header className={m.heading}><h1>{displayName}</h1><span>我的工作台</span></header>
     {error ? <div className={m.error} role="alert"><span>{error}</span><HeroButton variant="ghost" size="sm" onPress={() => { void home.refresh(); void plan.refresh(); }}>重试</HeroButton></div> : null}
     <HomePlan plan={plan.plan} onNavigate={navigate}
-      actions={<HomeActions waitingReplies={waitingReplies} radarUnread={home.radar ? home.radar.unreadCount : null} today={plan.plan?.today ?? null} m2Available={m2Available} onBookMeeting={bookMeeting} onNavigate={navigate} />} />
+      actions={<HomeActions waitingReplies={waitingReplies} radarUnread={home.radar ? home.radar.unreadCount : null} today={plan.plan?.today ?? null} m2Available={m2Available} onBookMeeting={bookMeeting} onOpenRequests={setRequestsFrom} onNavigate={navigate} />} />
+    <RequestListPanel open={requestsFrom !== null} onClose={() => setRequestsFrom(null)} base="/me/requests" onNavigate={(href) => navigate(href, requestsFrom)} />
     <div className={m.phoneAccount}><AccountMenu account={account} onNavigate={navigate} /></div>
   </div>;
 }

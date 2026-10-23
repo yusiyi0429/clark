@@ -29,7 +29,7 @@ const sentItem = (id: string, extra: Partial<TRequestListItem> = {}): TRequestLi
 });
 
 const render = (props: Partial<Parameters<typeof HomeActions>[0]> = {}) => renderToStaticMarkup(
-  <HomeActions waitingReplies={0} radarUnread={null} today="2026-10-22" m2Available onBookMeeting={vi.fn()} onNavigate={vi.fn()} {...props} />,
+  <HomeActions waitingReplies={0} radarUnread={null} today="2026-10-22" m2Available onBookMeeting={vi.fn()} onOpenRequests={vi.fn()} onNavigate={vi.fn()} {...props} />,
 );
 /** 页面上看得到的字（去掉标签和 React 的文本分隔注释）。 */
 const visible = (html: string) => html.replace(/<!--.*?-->/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -39,17 +39,17 @@ const button = (html: string, label: string) => html.match(/<button[^>]*>.*?<\/b
 beforeEach(() => h.presses.clear());
 
 describe("等回复", () => {
-  it("3 条已发出、1 条全回了：显示「等回复 2」，点进请求列表的「发出的」", () => {
+  it("3 条已发出、1 条全回了：显示「等回复 2」，按下在右侧打开请求面板（带上这颗键），不跳二级页", () => {
     const sent = [sentItem("a"), sentItem("b", { recipientsDone: 1 }), sentItem("c", { recipientsDone: 2 })];
     expect(waitingReplyCount(sent)).toBe(2);
     const navigate = vi.fn();
-    const html = render({ waitingReplies: waitingReplyCount(sent), onNavigate: navigate });
+    const openRequests = vi.fn();
+    const html = render({ waitingReplies: waitingReplyCount(sent), onNavigate: navigate, onOpenRequests: openRequests });
     expect(visible(html)).toContain("等回复 2");
     const target = {};
     h.presses.get("等回复2")!({ target });
-    expect(navigate).toHaveBeenCalledWith("/me/requests?box=sent", target);
-    // 来源只记路径：关闭列表时外壳按路径找回这颗按钮。
-    expect(button(html, "等回复")).toContain('data-origin="/me/requests"');
+    expect(openRequests).toHaveBeenCalledWith(target);
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it("草稿、已结束的不算；N 为 0 时只写「等回复」，没有角标", () => {
