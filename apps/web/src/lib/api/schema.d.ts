@@ -1846,6 +1846,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/battlefield-progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 成员的战场进展：按我所在的战场分组（本月没有战场时按我本月 Mission 的业务域）；需要搭把手的事和每人一张卡 */
+        get: operations["getMyBattlefieldProgress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/plan-marks": {
         parameters: {
             query?: never;
@@ -9337,6 +9354,67 @@ export interface components {
                 idleDays: number | null;
             }[];
         };
+        BattlefieldProgressResponse: {
+            today: string;
+            groups: {
+                id: string;
+                name: string;
+                kind: "battlefield" | "capability";
+                goal: string | null;
+                counts: {
+                    missions: number;
+                    onTrack: number;
+                    slow: number;
+                    blocked: number;
+                };
+                help: {
+                    kind: "blocked" | "deadline" | "overdue" | "no_progress";
+                    person: {
+                        personId: string;
+                        name: string;
+                    };
+                    mission: {
+                        missionId: string;
+                        title: string;
+                    };
+                    task: {
+                        taskId: string;
+                        title: string;
+                    } | null;
+                    reason: string | null;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    waitingOnMe: boolean;
+                    days: number | null;
+                    dueDate: string | null;
+                    neededDays: number | null;
+                    leftDays: number | null;
+                    canOpen: boolean;
+                }[];
+                people: {
+                    person: {
+                        personId: string;
+                        name: string;
+                    };
+                    me: boolean;
+                    movedThisWeek: number;
+                    latest: {
+                        text: string;
+                        /** @description ISO 8601 */
+                        at: string;
+                    } | null;
+                    missions: {
+                        missionId: string;
+                        title: string;
+                        done: number;
+                        total: number;
+                        flag: "blocked" | "deadline" | "slow" | null;
+                    }[];
+                }[];
+            }[];
+        };
         CreatePlanMarkRequest: {
             missionId: string;
             date: string;
@@ -16742,6 +16820,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HomePlanResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyBattlefieldProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 战场进展 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BattlefieldProgressResponse"];
                 };
             };
             /** @description ApiError 统一错误 */

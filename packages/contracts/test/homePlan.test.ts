@@ -16,7 +16,7 @@ const mission = { missionId: "sun-202610-1", title: "CEO / DRI Agent 从能用�
 const activity = (id: string, title: string, extra: Record<string, unknown> = {}) => ({
   id, version: 2, title, status: "in_progress", source: "plan", startDate: "2026-10-19", dueDate: "2026-10-25", doneDefinition: null,
   mission, waitingOn: null, owner: person, collaborators: [], latestProgress: null, returnReason: null, origin: null,
-  awaitingAcceptance: false, planTaskId: null, createdAt: now, updatedAt: now, ...extra,
+  awaitingAcceptance: false, planTaskId: null, blocker: null, createdAt: now, updatedAt: now, ...extra,
 });
 const day = (n: number) => `2026-10-${String(n).padStart(2, "0")}`;
 /** 10 月 31 天；2026-10-01 是周四，周六周日休息。 */
@@ -37,9 +37,9 @@ const sample = {
   marks: [{ id: "7b0c3c1e-0000-4000-8000-000000000010", missionId: "sun-202610-1", date: "2026-10-24", label: "合入主干" }],
   tasks: [{ taskId: "task-1", missionId: "sun-202610-1", name: "会议写进本体", doneDefinition: "会后自动出会议卡，整卡确认后写进本体。", criteria: ["真实工作会走完全链路，读回一致", "飞书里直接开的会也接得住"] }],
   activities: [
-    { item: activity("7b0c3c1e-0000-4000-8000-000000000001", "回流方案定稿", { status: "done", startDate: null, dueDate: "2026-10-21", planTaskId: "task-1" }), missionId: "sun-202610-1", column: "done", overdue: false },
-    { item: activity("7b0c3c1e-0000-4000-8000-000000000002", "真实会议跑通"), missionId: "sun-202610-1", column: "week", overdue: false },
-    { item: activity("7b0c3c1e-0000-4000-8000-000000000003", "新 Chat 题库打分", { status: "not_started", startDate: "2026-10-27", dueDate: null, mission: null }), missionId: null, column: "later", overdue: false },
+    { item: activity("7b0c3c1e-0000-4000-8000-000000000001", "回流方案定稿", { status: "done", startDate: null, dueDate: "2026-10-21", planTaskId: "task-1" }), missionId: "sun-202610-1", column: "done", overdue: false, lastActivityAt: now, idleDays: null },
+    { item: activity("7b0c3c1e-0000-4000-8000-000000000002", "真实会议跑通"), missionId: "sun-202610-1", column: "week", overdue: false, lastActivityAt: now, idleDays: null },
+    { item: activity("7b0c3c1e-0000-4000-8000-000000000003", "新 Chat 题库打分", { status: "not_started", startDate: "2026-10-27", dueDate: null, mission: null }), missionId: null, column: "later", overdue: false, lastActivityAt: now, idleDays: null },
   ],
 };
 

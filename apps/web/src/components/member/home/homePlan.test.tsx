@@ -97,7 +97,7 @@ import { HOME_PLAN_CHANGED, useHomePlan } from "./useHomePlan";
 const item = (id: string, title: string, extra: Partial<TTaskView> = {}): TTaskView => ({
   id, version: 1, title, status: "in_progress", source: "self", startDate: null, dueDate: null, doneDefinition: null,
   mission: null, waitingOn: null, owner: { personId: "sun", name: "孙铭泽" }, collaborators: [], latestProgress: null,
-  returnReason: null, origin: null, awaitingAcceptance: false, planTaskId: null,
+  returnReason: null, origin: null, awaitingAcceptance: false, planTaskId: null, blocker: null,
   createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", ...extra,
 });
 const confirmedRef = { missionId: "m1", title: "CEO / DRI Agent 从能用到在用", cardId: "card-1", period: "2026-10", battlefieldName: "天枢", step: 1, steps: 1 };

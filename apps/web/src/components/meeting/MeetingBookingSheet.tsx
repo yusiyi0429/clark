@@ -31,8 +31,10 @@ function nextSlot(now = new Date()): { date: string; start: string; end: string 
   return { date, start: `${pad(hour)}:00`, end: hour >= 23 ? "23:45" : `${pad(hour + 1)}:00` };
 }
 
-export function MeetingBookingSheet({ open, onClose, viewer }: {
+export function MeetingBookingSheet({ open, onClose, viewer, initialParticipants = [] }: {
   open: boolean; onClose(): void;
+  /** 打开时先填好的参会人（战场进展「约会议」）。 */
+  initialParticipants?: string[];
   /** 登录的人；成员的主持人一栏就是 displayName。 */
   viewer: { personId: string; role: "ceo" | "member"; displayName: string };
 }) {
@@ -40,7 +42,7 @@ export function MeetingBookingSheet({ open, onClose, viewer }: {
   const [title, setTitle] = useState("");
   const [slot, setSlot] = useState(nextSlot);
   const [leadDriId, setLeadDriId] = useState(viewer.role === "member" ? viewer.personId : "");
-  const [participants, setParticipants] = useState<string[]>([]);
+  const [participants, setParticipants] = useState<string[]>(() => initialParticipants.filter((id) => id !== viewer.personId));
   const [anchors, setAnchors] = useState<TWorldAnchor[]>([]);
   const [options, setOptions] = useState<TWorldAnchorOption[] | null>(null);
   /** 人员名册（选参会人）；CEO 另取带角色的目录选主持人。 */
