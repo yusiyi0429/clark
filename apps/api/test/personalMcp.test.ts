@@ -28,7 +28,7 @@ describe("个人令牌与执行事项 MCP", () => {
       expect(initialized.statusCode).toBe(200);
       expect(initialized.json().result.serverInfo.name).toBe("tianshu");
       const tools = await send(2, "tools/list");
-      expect(tools.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_my_items", "create_item", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "get_mission_card", "edit_mission_card", "list_pending", "get_my_review", "save_review_draft"]);
+      expect(tools.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_my_items", "create_item", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "update_item", "delete_item", "return_item", "accept_item", "get_mission_card", "edit_mission_card", "list_pending", "get_my_review", "save_review_draft"]);
       const invoke = async (id: number, name: string, args: Record<string, unknown>) => (await send(id, "tools/call", { name, arguments: args })).json().result;
       const listed = await invoke(3, "list_my_items", {});
       expect(JSON.parse(listed.content[0].text).items.some((item: { id: string }) => item.id === task.id)).toBe(true);
@@ -99,6 +99,50 @@ describe("个人令牌与执行事项 MCP", () => {
       expect(JSON.parse(tooLong.content[0].text)).toMatchObject({ code: "INVALID_INPUT" });
       // Agent 建的和本人建的一样：未开始时本人能删。
       expect((await call(f, f.member, "DELETE", `/api/me/tasks/${item.id}?version=${detail.task.version}`)).statusCode).toBe(204);
+    } finally { await f.t.close(); }
+  });
+
+  it("Agent 维护事项：改、删进行中的（材料一并收起）、会后分派只能退回、本人说了才代为验收并记下原话", async () => {
+    const f = await executionFixture();
+    try {
+      const { token } = (await call(f, f.member, "POST", "/api/me/tokens", { name: "Claude", client: "claude", expiresInDays: 30 })).json();
+      const invoke = async (id: number, name: string, args: Record<string, unknown>) => {
+        const out = (await f.t.app.inject({ method: "POST", url: "/mcp/me",
+          headers: { authorization: `Bearer ${token}`, accept: "application/json, text/event-stream" }, payload: rpc(id, "tools/call", { name, arguments: args }) })).json().result;
+        return { isError: out.isError as boolean, body: JSON.parse(out.content[0].text) };
+      };
+      const created = (await invoke(1, "create_item", { clientId: randomUUID(), title: "已合入主线的配置", startDate: "2026-10-10" })).body;
+      const renamed = await invoke(2, "update_item", { itemId: created.id, version: created.version, title: "外部工具自动记录进天枢", doneDefinition: "Agent 能建事项\n能写进展", dueDate: null });
+      expect(renamed.isError).toBe(false);
+      expect(renamed.body).toMatchObject({ title: "外部工具自动记录进天枢", doneDefinition: "Agent 能建事项\n能写进展", dueDate: null });
+      // 写进展让它进行中，再挂一个链接材料；Agent 整理时进行中的也能删，材料一并收起。
+      const progressed = await invoke(3, "append_progress", { itemId: created.id, body: "接通了" });
+      await invoke(4, "add_link", { itemId: created.id, url: "https://example.com/pr/1" });
+      const version = (await invoke(5, "get_item", { itemId: created.id })).body.task.version;
+      expect(progressed.body.item.status).toBe("in_progress");
+      expect((await invoke(6, "delete_item", { itemId: created.id, version })).body).toEqual({ deleted: true });
+      expect((await f.t.sql("SELECT count(*) AS n FROM tasks WHERE id=$1", [created.id]))[0].n).toBe("0");
+      expect((await f.t.sql("SELECT count(*) AS n FROM object_materials WHERE object_type='task' AND object_id=$1 AND deleted_at IS NULL", [created.id]))[0].n).toBe("0");
+      // 网页上进行中的仍不能删。
+      const web = (await call(f, f.member, "POST", "/api/me/tasks", newTask())).json();
+      await call(f, f.member, "PATCH", `/api/me/tasks/${web.id}`, { version: 1, status: "in_progress" });
+      expect((await call(f, f.member, "DELETE", `/api/me/tasks/${web.id}?version=2`)).json().code).toBe("TASK_NOT_DELETABLE");
+      // 会后分派的不能删，只能退回。
+      const assigned = randomUUID();
+      await f.t.sql("INSERT INTO tasks(id,title,owner_id,created_by,status) VALUES($1,'会后分派的事',$2,'meeting','not_started')", [assigned, TEST_MEMBER.personId]);
+      const refused = await invoke(7, "delete_item", { itemId: assigned, version: 1 });
+      expect(refused.isError).toBe(true); expect(refused.body.code).toBe("TASK_NOT_DELETABLE");
+      expect((await invoke(8, "return_item", { itemId: assigned, version: 1, reason: "不归我" })).body).toMatchObject({ status: "returned" });
+      // 提交验收后列表里标出等验收；本人说了「通过」才代为确认，群里记下工具和原话。
+      const done = (await call(f, f.member, "POST", "/api/me/tasks", newTask(null, { title: "要验收的事" }))).json();
+      const submitted = await invoke(9, "submit_for_acceptance", { itemId: done.id, version: done.version, verdict: "做完了" });
+      expect((await invoke(10, "list_my_items", {})).body.items.find((item: { id: string }) => item.id === done.id)).toMatchObject({ awaitingAcceptance: true, source: "self" });
+      expect((await invoke(11, "accept_item", { itemId: done.id, version: submitted.body.version, userConfirmation: " " })).isError).toBe(true);
+      const accepted = await invoke(12, "accept_item", { itemId: done.id, version: submitted.body.version, userConfirmation: "通过" });
+      expect(accepted.body).toMatchObject({ status: "done" });
+      const detail = (await call(f, f.member, "GET", `/api/me/tasks/${done.id}`)).json();
+      expect(detail.acceptance).toMatchObject({ verdict: "做完了", by: { personId: TEST_MEMBER.personId } });
+      expect(JSON.stringify((await call(f, f.member, "GET", `/api/threads/task/${done.id}`)).json())).toContain("Claude Code 里确认验收（“通过”）");
     } finally { await f.t.close(); }
   });
 
