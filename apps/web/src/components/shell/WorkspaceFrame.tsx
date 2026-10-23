@@ -89,8 +89,6 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   const railAllowed = routeOpen && pathname !== `${homeHref === "/" ? "" : homeHref}/radar` && !(homeHref === "/me" && (pathname.startsWith("/me/battlefields/") || pathname.startsWith("/me/radar/")));
 
   const [detail, setDetail] = useState<DetailInfo | null>(null);
-  // 战场页共用全局对话，右列页头标题下写「围绕：<战场名>战场」。
-  const battlefieldSubject = detail?.scope === "global" && detail.label && /\/battlefields\/[^/]+/.test(pathname) ? (detail.label.endsWith("战场") ? detail.label : `${detail.label}战场`) : null;
   const registerDetail = useCallback((info: DetailInfo | null) => setDetail(info), []);
 
   const [noticeTransition, setNoticeTransition] = useState<TransitionDirection | null>(null);
@@ -629,7 +627,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
         <div className={s.notificationArea} data-testid="notification-only" style={noticeTransition ? { viewTransitionName: "notice-rail" } : undefined}>
           {notifications(api, pathname)}
         </div>
-        <ConversationHost page={detail} detailOpen={detailOpen} rail={railAllowed} agentTitle={agentTitle} pageSubject={battlefieldSubject} ui={conversationUi} />
+        <ConversationHost page={detail} detailOpen={detailOpen} rail={railAllowed} agentTitle={agentTitle} ui={conversationUi} />
         <CitationPanel active={deskOpen || sheetWide} />
         {toast ? (
           <div className={s.noticeToast} role="status">

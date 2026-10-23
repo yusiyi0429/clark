@@ -40,7 +40,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
   const radarSignals = noteworthySignals(home.radar);
   const account = { displayName, loginId, role: "member" as const };
   return (
-    <WorkspaceFrame homeHref="/me" viewerId={viewerId} account={account} agentTitle="我的 Agent"
+    <WorkspaceFrame homeHref="/me" viewerId={viewerId} account={account} agentTitle="我的对话"
       home={<MemberHomeBody displayName={displayName} home={home} account={account} waitingReplies={requests.waitingReplies} />}
       notifications={(api, currentHref) => (
         <aside className={n.rail} aria-label="通知">

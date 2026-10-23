@@ -82,7 +82,6 @@ export function ConversationHost({
   detailOpen,
   rail = detailOpen,
   agentTitle,
-  pageSubject,
   ui,
 }: {
   page: ConversationTarget | null;
@@ -91,18 +90,14 @@ export function ConversationHost({
   rail?: boolean;
   /** 右列页头上 Agent 的名字：统一「天枢」。 */
   agentTitle: string;
-  /** 页面本身是全局对话、但有明确对象时（战场页）右列页头写的对象名，如「增长战场」；不给就不写。 */
-  pageSubject?: string | null;
   ui: ConversationUiState;
 }) {
   const onPage = Boolean(detailOpen && page && !ui.globalView);
   const target = onPage && page ? page : GLOBAL;
-  // 右列页头标题下那一行：这条对话围绕谁。对象页 = 对象标题；战场页 = 战场名；二级页里改看全局对话 = 全局；其余全局页不写。
-  const subject = !onPage ? "全局" : target.scope !== "global" ? target.label : pageSubject ?? null;
-  return <ScopedConversation key={target.scope} target={target} detailOpen={detailOpen} rail={rail} agentTitle={agentTitle} subject={subject} ui={ui} />;
+  return <ScopedConversation key={target.scope} target={target} detailOpen={detailOpen} rail={rail} agentTitle={agentTitle} ui={ui} />;
 }
 
-function ScopedConversation({ target, detailOpen, rail, agentTitle, subject, ui }: { target: ConversationTarget; detailOpen: boolean; rail: boolean; agentTitle: string; subject: string | null; ui: ConversationUiState }) {
+function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { target: ConversationTarget; detailOpen: boolean; rail: boolean; agentTitle: string; ui: ConversationUiState }) {
   const router = useRouter();
   const [viewingMaterial, setViewingMaterial] = useState<{ id: string; editable: boolean; format?: string } | null>(null);
   useEffect(() => {
@@ -175,7 +170,7 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, subject, ui 
   const scopeQuotes = useMemo(() => ui.quotes.filter((item) => item.source?.scope === target.scope), [ui.quotes, target.scope]);
 
   if (rail && !ui.historyOpen) {
-    return <RailConversation data={data} target={target} agentTitle={agentTitle} subject={subject} ui={ui} references={global ? [] : items} onDiscussGlobal={discussGlobal} />;
+    return <RailConversation data={data} target={target} agentTitle={agentTitle} ui={ui} references={global ? [] : items} onDiscussGlobal={discussGlobal} />;
   }
 
   return (
@@ -226,7 +221,6 @@ function RailConversation({
   data,
   target,
   agentTitle,
-  subject,
   ui,
   references,
   onDiscussGlobal,
@@ -234,7 +228,6 @@ function RailConversation({
   data: ConversationData;
   target: ConversationTarget;
   agentTitle: string;
-  subject: string | null;
   ui: ConversationUiState;
   references: Card[];
   onDiscussGlobal: () => void;
@@ -283,7 +276,7 @@ function RailConversation({
   const members = threadGroup ? (thread.view?.members ?? threadGroup.members) : (group.view?.members ?? missionGroup?.members ?? []);
   const groupLabel = otherThread?.objectType === "issue" ? "议题群聊" : otherThread?.objectType === "meeting" ? "会议群聊" : "事项群组";
   const channels: ConversationChannel[] = [
-    { id: "agent", kind: "agent", label: "天枢", title: agentTitle, ...(subject ? { subtitle: `围绕：${subject}` } : {}), unread: 0 },
+    { id: "agent", kind: "agent", label: "天枢", title: agentTitle, unread: 0 },
     ...(hasGroup ? [{ id: "group", kind: "group" as const, label: `${groupLabel} · ${members.length + (missionGroup ? 1 : 0)}`,
       title: otherThread ? `${target.label} · ${members.length} 人` : `${groupLabel} · ${members.length + (missionGroup ? 1 : 0)}`,
       unread: threadGroup ? (thread.view?.unread ?? 0) : (group.view?.unread ?? 0) }] : []),
@@ -402,7 +395,7 @@ function RailConversation({
           : undefined}
       >
         {channel === "agent" ? <AttachmentStatus data={data} className={cs.error} /> : null}
-        <div className={cs.log} ref={scroll.scrollRef} onMouseUp={channel === "agent" ? selection.onMouseUp : undefined} role="log" aria-label={channel === "group" ? `${groupLabel}公开讨论` : `与${agentTitle}的对话`} aria-live="polite" aria-relevant="additions text">
+        <div className={cs.log} ref={scroll.scrollRef} onMouseUp={channel === "agent" ? selection.onMouseUp : undefined} role="log" aria-label={channel === "group" ? `${groupLabel}公开讨论` : agentTitle} aria-live="polite" aria-relevant="additions text">
           <div ref={scroll.contentRef}>
           {channel === "group" ? threadGroup ? <TaskGroupTranscript messages={thread.view?.messages ?? []} highlightId={catchUp?.id} /> : <MissionGroupTranscript entries={group.view?.entries ?? []} />
             : <>

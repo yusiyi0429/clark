@@ -41,8 +41,6 @@ export interface ConversationChannel {
   unread: number;
   /** 右列页头上写的名字：CEO 和成员都是「天枢」；不给就用 label。 */
   title?: string;
-  /** 页头标题下的一行弱色小字：当前对话对象（「围绕：<议题标题>」）；只有天枢频道用。 */
-  subtitle?: string;
 }
 
 /** 宿主根节点加上它：右列的宽度、外沿和收起态都在这一层算，左侧内容据此让位。 */
@@ -324,20 +322,10 @@ export function ConversationColumn({
         <div className={c.panel} inert={strip || undefined} aria-hidden={strip || undefined}>
           {current ? (
             <header className={c.header} data-kind={current.kind} data-has-desk-key={onDesk ? true : undefined}>
-              {current.kind === "agent" && current.subtitle ? (
-                <div className={c.headerStack}>
-                  <h2 className={c.headerTitle}>
-                    <TianshuMark className={c.headerMark} />
-                    <span className={c.wordmark}>{current.title ?? current.label}</span>
-                  </h2>
-                  <p className={c.headerSub} title={current.subtitle}>{current.subtitle}</p>
-                </div>
-              ) : (
-                <h2 className={c.headerTitle}>
-                  {current.kind === "agent" ? <TianshuMark className={c.headerMark} /> : <Users size={16} strokeWidth={1.8} aria-hidden />}
-                  <span className={current.kind === "agent" ? c.wordmark : undefined}>{current.title ?? current.label}</span>
-                </h2>
-              )}
+              <h2 className={c.headerTitle}>
+                {current.kind === "agent" ? <TianshuMark className={c.headerMark} /> : <Users size={16} strokeWidth={1.8} aria-hidden />}
+                <span className={current.kind === "agent" ? c.wordmark : undefined}>{current.title ?? current.label}</span>
+              </h2>
               {headerAction}
               {onDesk ? (
                 <HeroButton
