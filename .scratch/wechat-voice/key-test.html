@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>按键检测</title>
+<style>
+  :root { --ink:#17171b; --muted:#6b6b70; --line:#e3e6eb; --ok:#1f7a3f; --bad:#b3261e; --bg:#f6f7f9; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.6 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:32px 16px 48px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p { margin:0 0 16px; color:var(--muted); }
+  #verdict { padding:14px 16px; border-radius:12px; background:#fff; border:1px solid var(--line); font-size:17px; font-weight:600; margin-bottom:12px; }
+  #verdict[data-state="ok"] { color:var(--ok); border-color:#b7dcc4; }
+  #verdict[data-state="partial"] { color:var(--bad); border-color:#efc2bd; }
+  .bar { display:flex; gap:8px; margin-bottom:12px; }
+  button { font:inherit; padding:6px 14px; border-radius:10px; border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer; }
+  table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); border-radius:12px; overflow:hidden; font-size:14px; }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:500; background:#fafbfc; }
+  tr.combo td { background:#eef7f1; }
+  tr.focus td { color:var(--muted); font-style:italic; }
+</style>
+</head>
+<body>
+<main>
+  <h1>按键检测</h1>
+  <p>先点一下这页空白处，再按键。最新的在最上面。</p>
+  <div id="verdict">还没收到按键</div>
+  <div class="bar"><button id="clear" type="button">清空</button></div>
+  <table>
+    <thead><tr><th>时间</th><th>动作</th><th>key</th><th>code</th><th>同时按着</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</main>
+<script>
+  const rows = document.getElementById("rows");
+  const verdict = document.getElementById("verdict");
+  const t0 = performance.now();
+  let sawCtrl = false, sawWin = false, sawCombo = false;
+  function stamp() { return ((performance.now() - t0) / 1000).toFixed(2) + "s"; }
+  function add(cells, cls) {
+    const tr = document.createElement("tr");
+    if (cls) tr.className = cls;
+    for (const text of cells) { const td = document.createElement("td"); td.textContent = text; tr.appendChild(td); }
+    rows.prepend(tr);
+  }
+  function update() {
+    if (sawCombo) { verdict.dataset.state = "ok"; verdict.textContent = "收到了 Ctrl+Win：浏览器看得到微信的语音键"; }
+    else if (sawCtrl || sawWin) { verdict.dataset.state = "partial"; verdict.textContent = "只收到了 " + [sawCtrl && "Ctrl", sawWin && "Win"].filter(Boolean).join(" 和 ") + "，没收到两个同时按着"; }
+  }
+  function onKey(type) {
+    return (e) => {
+      const held = [e.ctrlKey && "Ctrl", e.metaKey && "Win", e.shiftKey && "Shift", e.altKey && "Alt"].filter(Boolean).join("+") || "—";
+      const combo = type === "按下" && e.ctrlKey && e.metaKey;
+      if (e.key === "Control") sawCtrl = true;
+      if (e.key === "Meta" || e.key === "OS") sawWin = true;
+      if (combo) sawCombo = true;
+      add([stamp(), type + (e.repeat ? "（重复）" : ""), e.key === " " ? "空格" : e.key, e.code, held], combo ? "combo" : "");
+      update();
+    };
+  }
+  window.addEventListener("keydown", onKey("按下"), true);
+  window.addEventListener("keyup", onKey("松开"), true);
+  window.addEventListener("blur", () => add([stamp(), "窗口失去焦点", "", "", ""], "focus"));
+  window.addEventListener("focus", () => add([stamp(), "窗口回到前台", "", "", ""], "focus"));
+  document.getElementById("clear").addEventListener("click", () => {
+    rows.textContent = ""; sawCtrl = sawWin = sawCombo = false;
+    verdict.removeAttribute("data-state"); verdict.textContent = "还没收到按键";
+  });
+</script>
+</body>
+</html>

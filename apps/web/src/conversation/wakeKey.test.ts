@@ -1,54 +1,54 @@
 import { describe, expect, it } from "vitest";
-import { isWakeKey, keepsDefault, modalOpen } from "./wakeKey";
+import { isWakeKey, modalOpen, startsWinHold } from "./wakeKey";
 
 const key = (patch: Partial<Parameters<typeof isWakeKey>[0]>) => ({
   key: "", code: "", ctrlKey: false, shiftKey: false, altKey: false, metaKey: false, repeat: false, isComposing: false, keyCode: 0, ...patch,
 });
 const F13 = key({ key: "F13", code: "F13" });
 const COMBO = key({ key: " ", code: "Space", ctrlKey: true, shiftKey: true, keyCode: 32 });
-/** Windows 上按下 Ctrl 再按 Win（微信语音键）：凑齐的那一下是 Meta 的 keydown。 */
-const CTRL_WIN = key({ key: "Meta", code: "MetaLeft", ctrlKey: true, metaKey: true, keyCode: 91 });
+/** 按住微信语音键 Ctrl+Win：微信拦掉了 Ctrl，浏览器只收到 Win 按下（实测）。 */
+const WIN = key({ key: "Meta", code: "MetaLeft", metaKey: true, keyCode: 91 });
 const field = (inComposer: boolean) => ({ tagName: "TEXTAREA", isContentEditable: false, closest: (selector: string) => (inComposer && selector.includes("global-controls") ? {} : null) });
 
-describe("唤醒键：哪些按法算", () => {
-  it("F13、Ctrl+Shift+Space 在哪个系统上都算", () => {
-    for (const windows of [true, false]) {
-      expect(isWakeKey(F13, null, windows)).toBe(true);
-      expect(isWakeKey(COMBO, null, windows)).toBe(true);
-    }
-    expect(isWakeKey(key({ key: " ", code: "Space", ctrlKey: true, keyCode: 32 }), null, true)).toBe(false);
-    expect(isWakeKey(key({ key: " ", code: "Space", ctrlKey: true, shiftKey: true, metaKey: true, keyCode: 32 }), null, false)).toBe(false);
-  });
-
-  it("微信的语音键 Ctrl+Win（含免提 Ctrl+Win+Shift）只在 Windows 上算，且不挡默认行为", () => {
-    expect(isWakeKey(CTRL_WIN, null, true)).toBe(true);
-    expect(isWakeKey(key({ key: "Control", code: "ControlLeft", ctrlKey: true, metaKey: true, keyCode: 17 }), null, true)).toBe(true);
-    expect(isWakeKey(key({ key: "Shift", code: "ShiftLeft", ctrlKey: true, metaKey: true, shiftKey: true, keyCode: 16 }), null, true)).toBe(true);
-    expect(keepsDefault(CTRL_WIN)).toBe(true);
-    expect(keepsDefault(F13)).toBe(false);
-    expect(keepsDefault(COMBO)).toBe(false);
-    // macOS 上 Control+Command 是系统组合键的前半截（全屏、锁屏、表情），不算。
-    expect(isWakeKey(CTRL_WIN, null, false)).toBe(false);
-  });
-
-  it("Ctrl+Win 再加别的键（切虚拟桌面的箭头、Alt）不算", () => {
-    expect(isWakeKey(key({ key: "ArrowRight", code: "ArrowRight", ctrlKey: true, metaKey: true, keyCode: 39 }), null, true)).toBe(false);
-    expect(isWakeKey(key({ key: "Meta", code: "MetaLeft", ctrlKey: true, metaKey: true, altKey: true, keyCode: 91 }), null, true)).toBe(false);
+describe("唤醒键：F13 / Ctrl+Shift+Space", () => {
+  it("两颗都算；只按 Ctrl+Space、多按了 Win 的不算", () => {
+    expect(isWakeKey(F13, null)).toBe(true);
+    expect(isWakeKey(COMBO, null)).toBe(true);
+    expect(isWakeKey(key({ key: " ", code: "Space", ctrlKey: true, keyCode: 32 }), null)).toBe(false);
+    expect(isWakeKey(key({ key: " ", code: "Space", ctrlKey: true, shiftKey: true, metaKey: true, keyCode: 32 }), null)).toBe(false);
   });
 
   it("按住不放的自动重复、输入法组词中都不算", () => {
-    expect(isWakeKey({ ...CTRL_WIN, repeat: true }, null, true)).toBe(false);
-    expect(isWakeKey({ ...COMBO, isComposing: true }, null, true)).toBe(false);
-    expect(isWakeKey({ ...COMBO, key: "Process", keyCode: 229 }, null, true)).toBe(false);
+    expect(isWakeKey({ ...COMBO, repeat: true }, null)).toBe(false);
+    expect(isWakeKey({ ...COMBO, isComposing: true }, null)).toBe(false);
+    expect(isWakeKey({ ...COMBO, key: "Process", keyCode: 229 }, null)).toBe(false);
+  });
+});
+
+describe("按住 Win（微信语音键）", () => {
+  it("Win 按下开始计时；Ctrl 没被拦住时一起按着也算", () => {
+    expect(startsWinHold(WIN, null)).toBe(true);
+    expect(startsWinHold({ ...WIN, ctrlKey: true }, null)).toBe(true);
+    expect(startsWinHold({ ...WIN, key: "OS" }, null)).toBe(true);
   });
 
-  it("焦点在别的输入框里不抢（微信语音照常写进那个框）；输入条自己的输入框不算「别的」", () => {
-    for (const event of [F13, COMBO, CTRL_WIN]) {
-      expect(isWakeKey(event, field(false), true)).toBe(false);
-      expect(isWakeKey(event, { tagName: "DIV", isContentEditable: true, closest: () => null }, true)).toBe(false);
-      expect(isWakeKey(event, field(true), true)).toBe(true);
-      expect(isWakeKey(event, { tagName: "BUTTON", closest: () => null }, true)).toBe(true);
-    }
+  it("自动重复、带 Alt、组词中、按的不是 Win：不开始", () => {
+    expect(startsWinHold({ ...WIN, repeat: true }, null)).toBe(false);
+    expect(startsWinHold({ ...WIN, altKey: true }, null)).toBe(false);
+    expect(startsWinHold({ ...WIN, isComposing: true }, null)).toBe(false);
+    expect(startsWinHold(key({ key: "Control", code: "ControlLeft", ctrlKey: true }), null)).toBe(false);
+  });
+});
+
+describe("焦点在别的输入框里不抢（微信语音照常写进那个框）", () => {
+  it("三种按法都不算；输入条自己的输入框、按钮上不算「别的」", () => {
+    const contentEditable = { tagName: "DIV", isContentEditable: true, closest: () => null };
+    expect(isWakeKey(F13, field(false))).toBe(false);
+    expect(isWakeKey(COMBO, contentEditable)).toBe(false);
+    expect(startsWinHold(WIN, field(false))).toBe(false);
+    expect(isWakeKey(F13, field(true))).toBe(true);
+    expect(startsWinHold(WIN, field(true))).toBe(true);
+    expect(startsWinHold(WIN, { tagName: "BUTTON", closest: () => null })).toBe(true);
   });
 });
 

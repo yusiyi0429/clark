@@ -20,6 +20,13 @@ vi.mock("react", async (importOriginal) => {
       h.states[index] = next;
     }];
   }, useRef: (initial: unknown) => h.refs[h.refIndex++] ??= { current: initial },
+  // 和 React 一样按依赖记住回调：唤醒键的监听不会每次渲染都重挂（重挂会清掉按住 Win 的计时）。
+  useCallback: (fn: unknown, deps?: readonly unknown[]) => {
+    const slot = (h.refs[h.refIndex++] ??= { current: { fn, deps } }) as { current: { fn: unknown; deps?: readonly unknown[] } };
+    const previous = slot.current.deps;
+    if (!deps || !previous || deps.length !== previous.length || deps.some((value, offset) => !Object.is(value, previous[offset]))) slot.current = { fn, deps };
+    return slot.current.fn;
+  },
   useEffect: (effect: () => unknown, deps?: readonly unknown[]) => {
     const index = h.effectIndex++, previous = h.dependencies[index];
     if (!previous || !deps || deps.some((value, offset) => !Object.is(value, previous[offset]))) {
@@ -60,8 +67,9 @@ beforeEach(() => {
   vi.stubGlobal("localStorage", { getItem: () => null, setItem: vi.fn() });
   vi.stubGlobal("requestAnimationFrame", () => 1); vi.stubGlobal("cancelAnimationFrame", vi.fn());
   vi.stubGlobal("HTMLElement", class {});
+  vi.useFakeTimers();
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 function setup(homeHref: "/" | "/me" = "/") {
   const props: ComponentProps<typeof WorkspaceFrame> = { homeHref, viewerId: "sun", account: { displayName: "孙铭泽", role: homeHref === "/" ? "ceo" : "member" },
@@ -76,18 +84,22 @@ function setup(homeHref: "/" | "/me" = "/") {
     throw new Error("Workspace did not settle");
   };
   render();
-  const press = (patch: Record<string, unknown>) => {
+  const fire = (type: "keydown" | "keyup", patch: Record<string, unknown>) => {
     const event = { key: "", code: "", ctrlKey: false, shiftKey: false, altKey: false, metaKey: false, repeat: false, isComposing: false, keyCode: 0,
       defaultPrevented: false, preventDefault: vi.fn(), ...patch };
-    for (const listener of [...(listeners.get("keydown") ?? [])]) listener(event);
+    for (const listener of [...(listeners.get(type) ?? [])]) listener(event);
     render();
     return event;
   };
-  return { render, press };
+  const press = (patch: Record<string, unknown>) => fire("keydown", patch);
+  const release = (patch: Record<string, unknown>) => fire("keyup", patch);
+  const wait = (ms: number) => { vi.advanceTimersByTime(ms); render(); };
+  return { render, press, release, wait };
 }
 
 const COMBO = { key: " ", code: "Space", ctrlKey: true, shiftKey: true, keyCode: 32 };
-const CTRL_WIN = { key: "Meta", code: "MetaLeft", ctrlKey: true, metaKey: true, keyCode: 91 };
+/** 按住微信语音键 Ctrl+Win：微信拦掉了 Ctrl，浏览器只收到 Win 按下（实测）。 */
+const WIN = { key: "Meta", code: "MetaLeft", metaKey: true, keyCode: 91 };
 
 describe("唤醒输入框（外壳）", () => {
   it.each(["/", "/me"] as const)("首页（%s）按 Ctrl+Shift+Space：展开输入条、升起对话层，光标放进输入框末尾", (home) => {
@@ -101,18 +113,49 @@ describe("唤醒输入框（外壳）", () => {
     expect(field.setSelectionRange).toHaveBeenCalledWith(field.value.length, field.value.length);
   });
 
-  it("Windows 上按微信语音键 Ctrl+Win：同样展开并聚焦，但不挡默认行为（交给微信）", () => {
-    const { press } = setup();
-    const event = press(CTRL_WIN);
+  it("Windows 上按住微信语音键（浏览器只看到 Win）0.3 秒：展开并聚焦，不挡默认行为（交给微信）", () => {
+    const { press, wait } = setup();
+    const event = press(WIN);
+    wait(299);
+    expect(h.ui!.historyOpen).toBe(false);
+    wait(1);
     expect(event.preventDefault).not.toHaveBeenCalled();
     expect(h.ui!.historyOpen).toBe(true);
     expect(field.focus).toHaveBeenCalledOnce();
   });
 
-  it("macOS 上 Control+Command 不算唤醒", () => {
+  it("按住 Win 时再按 Shift（微信免提）、按住不放的自动重复：照样唤醒，只唤醒一次", () => {
+    const { press, wait } = setup();
+    press(WIN);
+    wait(100);
+    press({ key: "Shift", code: "ShiftLeft", metaKey: true, shiftKey: true, keyCode: 16 });
+    press({ ...WIN, repeat: true });
+    wait(250);
+    expect(h.ui!.historyOpen).toBe(true);
+    expect(field.focus).toHaveBeenCalledOnce();
+  });
+
+  it("Win+E、截图这类快捷键（0.3 秒内按了别的键）和单按 Win（0.3 秒内松开）：不唤醒", () => {
+    const { press, release, wait } = setup();
+    press(WIN);
+    wait(80);
+    press({ key: "e", code: "KeyE", metaKey: true, keyCode: 69 });
+    wait(500);
+    expect(h.ui!.historyOpen).toBe(false);
+    release(WIN);
+    press(WIN);
+    wait(150);
+    release(WIN);
+    wait(500);
+    expect(h.ui!.historyOpen).toBe(false);
+    expect(field.focus).not.toHaveBeenCalled();
+  });
+
+  it("macOS 上按住 Command 不算唤醒", () => {
     vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" });
-    const { press } = setup();
-    press(CTRL_WIN);
+    const { press, wait } = setup();
+    press(WIN);
+    wait(1000);
     expect(h.ui!.historyOpen).toBe(false);
     expect(field.focus).not.toHaveBeenCalled();
   });
@@ -139,12 +182,13 @@ describe("唤醒输入框（外壳）", () => {
   });
 
   it("焦点在别的输入框里：不抢焦点、不挡按键，微信语音照常写进那个框", () => {
-    const { press } = setup();
+    const { press, wait } = setup();
     Object.assign(document, { activeElement: { tagName: "TEXTAREA", isContentEditable: false, closest: () => null } });
-    for (const keys of [COMBO, CTRL_WIN, { key: "F13", code: "F13" }]) {
+    for (const keys of [COMBO, WIN, { key: "F13", code: "F13" }]) {
       const event = press(keys);
       expect(event.preventDefault).not.toHaveBeenCalled();
     }
+    wait(1000);
     expect(h.ui!.historyOpen).toBe(false);
     expect(field.focus).not.toHaveBeenCalled();
   });
@@ -161,9 +205,11 @@ describe("唤醒输入框（外壳）", () => {
 
   it("有模态对话框（确认框等）开着：不触发；关掉后照常", () => {
     modal = true;
-    const { press } = setup();
+    const { press, wait } = setup();
     const event = press(COMBO);
     expect(event.preventDefault).not.toHaveBeenCalled();
+    press(WIN);
+    wait(1000);
     expect(h.ui!.historyOpen).toBe(false);
     modal = false;
     press(COMBO);
@@ -173,7 +219,7 @@ describe("唤醒输入框（外壳）", () => {
   it("组词中、按住不放的自动重复：不触发", () => {
     const { press } = setup();
     press({ ...COMBO, key: "Process", isComposing: true, keyCode: 229 });
-    press({ ...CTRL_WIN, repeat: true });
+    press({ ...COMBO, repeat: true });
     expect(h.ui!.historyOpen).toBe(false);
   });
 });

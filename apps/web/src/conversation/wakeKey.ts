@@ -7,11 +7,15 @@ import { useStableCallback } from "./stableCallback";
  * 唤醒输入框（外壳）：语音交给微信输入法，天枢只负责展开输入条、把光标放进输入框，说出来的字就落在这里。
  * 三种按法（配法见 .scratch/wechat-voice/AU05与微信语音输入配置.md）：
  * - F13、Ctrl+Shift+Space（macOS 同样是 Control，不用 Cmd）：给小键盘上单独一颗键，或「先唤醒、再开微信语音」的组合动作用；
- * - Windows 上微信的语音键 Ctrl+Win（按住说话，加 Shift 是免提）：按下那一刻就聚焦，微信紧跟着开始听。
+ * - Windows 上按住微信的语音键 Ctrl+Win：微信在系统层把 Ctrl 拦掉，浏览器只看得到 Win，所以认「单独按住 Win 一小会儿」
+ *   （WIN_HOLD_MS）。Win+E、截图这类快捷键在这之前就按了别的键，单按 Win 开开始菜单在这之前就松开了，都不算；也不拦这一下。
  * 焦点已在别的输入框里（会议页编辑框、批注框……）、输入法正在组词、有模态对话框开着时都不触发：不抢焦点，
  * 微信语音照常写进当时那个框。输入条（data-testid="global-controls"）自己的输入框不算「别的」。
  */
 export const WAKE_KEY = "F13";
+
+/** 单独按住 Win 多久算唤醒（微信语音是按住说话，远比这长）。 */
+export const WIN_HOLD_MS = 300;
 
 /** 当前页输入条里的输入框（首页输入条、右列私聊 / 群聊输入条，同一时刻只有一个）。 */
 export const COMPOSER_FIELD = '[data-testid="global-controls"] textarea:not(:disabled)';
@@ -26,23 +30,22 @@ function otherEditableFocused(active: FocusLike): boolean {
   return editable && !active.closest?.('[data-testid="global-controls"]');
 }
 
-/** Ctrl+Win（含免提的 Ctrl+Win+Shift）刚凑齐：只有修饰键，没有别的键（Ctrl+Win+→ 切桌面不算，那一下按的是箭头）。 */
-function wechatVoiceChord(event: WakeKeyEvent): boolean {
-  return event.ctrlKey && event.metaKey && !event.altKey && ["Control", "Meta", "OS", "Shift"].includes(event.key);
-}
+const isWin = (key: string) => key === "Meta" || key === "OS";
+/** 修饰键：按住 Win 时再按它们（微信免提的 Shift、没被拦住的 Ctrl）不算「按了别的键」。 */
+const isModifier = (key: string) => isWin(key) || key === "Control" || key === "Shift" || key === "Alt";
 
-/** 这一下按键是不是唤醒。按住不放的自动重复不算；windows = 这台电脑是 Windows（Ctrl+Win 只在那里是微信的语音键）。 */
-export function isWakeKey(event: WakeKeyEvent, active: FocusLike, windows: boolean): boolean {
+/** 这一下是不是 F13 / Ctrl+Shift+Space。按住不放的自动重复、组词中不算。 */
+export function isWakeKey(event: WakeKeyEvent, active: FocusLike): boolean {
   if (event.repeat || event.isComposing || event.keyCode === 229) return false;
   const explicit = event.key === WAKE_KEY || event.code === WAKE_KEY
     || (event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey && (event.code === "Space" || event.key === " " || event.key === "Spacebar"));
-  if (!explicit && !(windows && wechatVoiceChord(event))) return false;
-  return !otherEditableFocused(active);
+  return explicit && !otherEditableFocused(active);
 }
 
-/** 只有修饰键的那一种（微信的语音键）不挡默认行为：交给系统和微信。 */
-export function keepsDefault(event: WakeKeyEvent): boolean {
-  return wechatVoiceChord(event);
+/** 这一下是不是开始按住 Win（只在 Windows 上由调用方采用）：之后 WIN_HOLD_MS 内没松开、没按别的键才唤醒。 */
+export function startsWinHold(event: WakeKeyEvent, active: FocusLike): boolean {
+  if (!isWin(event.key) || event.repeat || event.altKey || event.isComposing) return false;
+  return !otherEditableFocused(active);
 }
 
 /**
@@ -62,12 +65,37 @@ export function useWakeKey(onWake: () => void) {
   const wake = useStableCallback(onWake);
   useEffect(() => {
     const windows = /Windows/i.test(navigator.userAgent);
-    const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !isWakeKey(event, document.activeElement as FocusLike, windows) || modalOpen(document)) return;
-      if (!keepsDefault(event)) event.preventDefault();
+    let hold: ReturnType<typeof setTimeout> | undefined;
+    const cancelHold = () => {
+      clearTimeout(hold);
+      hold = undefined;
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      const active = document.activeElement as FocusLike;
+      if (windows && isWin(event.key)) {
+        if (hold === undefined && startsWinHold(event, active) && !modalOpen(document)) {
+          hold = setTimeout(() => {
+            hold = undefined;
+            // 这 0.3 秒里点进了别的输入框、开了弹窗：不动。
+            if (!otherEditableFocused(document.activeElement as FocusLike) && !modalOpen(document)) wake();
+          }, WIN_HOLD_MS);
+        }
+        return;
+      }
+      if (!isModifier(event.key)) cancelHold();
+      if (event.defaultPrevented || !isWakeKey(event, active) || modalOpen(document)) return;
+      event.preventDefault();
       wake();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (isWin(event.key)) cancelHold();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      cancelHold();
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
   }, [wake]);
 }
