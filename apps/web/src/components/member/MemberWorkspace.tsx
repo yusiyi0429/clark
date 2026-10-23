@@ -12,7 +12,7 @@ import { MonthlyReviewNotices } from "@/components/monthlyReview/MonthlyReviewNo
 import { PersonalReviewBoard } from "@/components/monthlyReview/PersonalReviewBoard";
 import { useWeeklyReviewBoard, WeeklyReviewBoard } from "@/components/weeklyReview/WeeklyReviewBoard";
 import { RequestNotices, type RequestCounts } from "@/components/requests/RequestNotices";
-import { MeetingCardNoticeList, useMyMeetingCards } from "@/components/meeting/MeetingCardNotices";
+import { MeetingCardNoticeList, useMeetingRecords } from "@/components/meeting/MeetingCardNotices";
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { logout } from "@/lib/logout";
@@ -36,7 +36,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
   const [requests, setRequests] = useState(NO_REQUESTS);
   const home = useMemberHome();
   const weeklyReviews = useWeeklyReviewBoard();
-  const meetingCards = useMyMeetingCards();
+  const records = useMeetingRecords();
   const radarSignals = noteworthySignals(home.radar);
   const account = { displayName, loginId, role: "member" as const };
   return (
@@ -59,7 +59,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
           />
           <div className={n.noticeList}>
             <CycleCountdown />
-            <MeetingCardNoticeList meetings={meetingCards} meetingBase="/me/meetings" onNavigate={api.navigate} />
+            <MeetingCardNoticeList meetings={records.meetings} minutes={records.minutes} meetingBase="/me/meetings" onNavigate={api.navigate} onChanged={records.reload} />
             <ActionNoticeCard id="weekly-sync" title="每周同步" subtitle="把本周进展写进天枢" mark="meeting" notices={weeklySyncNotices(home.weeklySync)} onSettled={() => undefined} />
             <MemberMeetingSchedule meetings={home.meetings} onNavigate={api.navigate} />
             <WeeklyReviewBoard onNavigate={api.navigate} state={weeklyReviews} />
@@ -77,7 +77,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
               api.navigate(`${item.href}?channel=group`, from);
             }, buttons: [] })))} onSettled={() => undefined} />
             <MemberRadarNotices signals={radarSignals} currentHref={currentHref} onNavigate={api.navigate} onRead={home.readRadarNotice} />
-            {requests.items + meetingCards.length + home.rounds.length + home.meetings.length + home.unreadThreads.length + home.unreadMissionGroups.length + quietNoticeCount(home.notifications) + radarSignals.length + (home.weeklySync ? 1 : 0) + (weeklyReviews.board?.rows.length ?? 0) === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
+            {requests.items + records.meetings.length + records.minutes.length + home.rounds.length + home.meetings.length + home.unreadThreads.length + home.unreadMissionGroups.length + quietNoticeCount(home.notifications) + radarSignals.length + (home.weeklySync ? 1 : 0) + (weeklyReviews.board?.rows.length ?? 0) === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
           </div>
           <div className={n.railFoot}>
             <AccountMenu account={account} onNavigate={api.navigate} />

@@ -44,3 +44,4 @@ export * from "./impact.js";
 export * from "./docChanges.js";
 export * from "./collections.js";
 export * from "./homePlan.js";
+export * from "./feishuMinuteInbox.js";

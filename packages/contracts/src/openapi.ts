@@ -7,6 +7,7 @@ import {
 } from "./requests.js";
 import { MeetingCardConfirmRequest, MeetingCardDraftRequest, MeetingCardView } from "./meetingCard.js";
 import { MeetingDecisionView, MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse } from "./meetingDecisions.js";
+import { AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, OrganizeFeishuMinuteRequest } from "./feishuMinuteInbox.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
@@ -880,6 +881,35 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         get: {
           operationId: "listMyMeetingCards", summary: "我主持或创建的会里待处理的会议记录：待确认、修改待确认、写入失败，一场会一条",
           responses: { "200": { description: "待处理的会议记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MyMeetingCardsResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/me/feishu-minutes": {
+        get: {
+          operationId: "listMyFeishuMinutes", summary: "我在飞书里直接开的会待整理：只列我是所有者、近 7 天、还没对上天枢会议的视频会议妙记",
+          responses: { "200": { description: "待整理的妙记", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuMinuteInboxResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/me/feishu-minutes/{token}/organize": {
+        post: {
+          operationId: "organizeFeishuMinute", summary: "妙记所有者用这份妙记新建一场会（别人 404 MINUTE_NOT_FOUND）；已整理过的再整理返回同一个 meetingId；400 INVALID_INPUT / ANCHOR_NOT_FOUND / INVALID_CEO / INVALID_PARTICIPANT，409 MINUTE_NOT_PENDING / MINUTE_TAKEN",
+          parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/OrganizeFeishuMinuteRequest" }),
+          responses: { "200": { description: "妙记所在的会", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuMinuteMeetingResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/me/feishu-minutes/{token}/attach": {
+        post: {
+          operationId: "attachFeishuMinute", summary: "妙记所有者把妙记记到建议的那场天枢里约好的会（别人 404 MINUTE_NOT_FOUND）；已记到同一场会的再记返回同一个 meetingId；409 MINUTE_NOT_PENDING / SUGGESTION_CHANGED / MINUTE_TAKEN",
+          parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/AttachFeishuMinuteRequest" }),
+          responses: { "200": { description: "妙记所在的会", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuMinuteMeetingResponse" } } } }, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/me/feishu-minutes/{token}/ignore": {
+        post: {
+          operationId: "ignoreFeishuMinute", summary: "妙记所有者忽略这份妙记，不再提示（别人 404 MINUTE_NOT_FOUND）；已忽略的再忽略 204；409 MINUTE_NOT_PENDING",
+          parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "204": { description: "已忽略" }, "401": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/meetings/{id}/minutes": {
@@ -3068,6 +3098,10 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ExecuteRequestActionRequest: ExecuteRequestActionRequest as JsonSchema,
         MeetingDecisionView: MeetingDecisionView as JsonSchema,
         MyMeetingCardsResponse: MyMeetingCardsResponse as JsonSchema,
+        FeishuMinuteInboxResponse: FeishuMinuteInboxResponse as JsonSchema,
+        OrganizeFeishuMinuteRequest: OrganizeFeishuMinuteRequest as JsonSchema,
+        AttachFeishuMinuteRequest: AttachFeishuMinuteRequest as JsonSchema,
+        FeishuMinuteMeetingResponse: FeishuMinuteMeetingResponse as JsonSchema,
         MeetingWorldResponse: MeetingWorldResponse as JsonSchema,
         MeetingCardView: MeetingCardView as JsonSchema,
         MeetingCardDraftRequest: MeetingCardDraftRequest as JsonSchema,

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { TWorldAnchorOption } from "@warmap/contracts";
+import type { TFeishuMinuteInboxItem, TWorldAnchorOption } from "@warmap/contracts";
+import { Dialog } from "react-aria-components";
 
 /* 把表单当函数调用：hooks 用按调用顺序存值的小仓库代替；useEffect 在依赖变了时同步跑一次（同 meetingWorldBar.behavior.test）。 */
 const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0, deps: [] as (unknown[] | undefined)[], effectIndex: 0,
@@ -153,5 +154,69 @@ describe("约会议", () => {
     change(render(MEMBER).find((node) => node.type === DatePicker)!, "2026-11-04");
     await vi.waitFor(() => expect(render(MEMBER).some((node) => node.props?.["aria-pressed"] !== undefined)).toBe(true));
     expect(render(MEMBER).some((node) => node.props?.role === "alert")).toBe(false);
+  });
+});
+
+describe("整理会议", () => {
+  /** 10/23 14:00–15:10（上海）飞书里直接开的会；孙铭泽、刘人豪对得上，另有 1 人对不上。 */
+  const MINUTE: TFeishuMinuteInboxItem = {
+    minuteToken: "obcn-minute-1", title: "产品周会", startsAt: "2026-10-23T06:00:00.000Z", endsAt: "2026-10-23T07:10:00.000Z",
+    attendees: [{ personId: "p-sun", displayName: "孙铭泽" }, { personId: "p-liu", displayName: "刘人豪" }], otherAttendees: 1, suggestion: null,
+  };
+  const onClose = vi.fn(), onOrganized = vi.fn();
+  const renderOrganize = () => {
+    hooks.index = 0;
+    hooks.effectIndex = 0;
+    return nodes(expand(MeetingBookingSheet({ open: true, onClose, organize: { minute: MINUTE, meetingBase: "/me/meetings", onOrganized } })));
+  };
+  const pickPo = async () => {
+    await vi.waitFor(() => expect(renderOrganize().some((node) => node.props?.["aria-pressed"] !== undefined)).toBe(true));
+    (renderOrganize().find((node) => node.props?.["aria-pressed"] === false && nodes(node).some((child) => text(child) === PO.title))!.props!.onClick as () => void)();
+  };
+  beforeEach(() => { onClose.mockReset(); onOrganized.mockReset(); });
+
+  it("整理：会名预填，时间只读带「飞书」，没有主持人和添加参会人", () => {
+    const tree = renderOrganize();
+    expect(tree.find((node) => node.type === Dialog)!.props!["aria-label"]).toBe("整理会议");
+    expect(field(tree, "名称").props!.value).toBe("产品周会");
+    expect(text(field(tree, "时间"))).toBe("10 月 23 日 14:00–15:10飞书");
+    expect(tree.some((node) => node.props?.["aria-label"] === "主持人" || node.props?.["aria-label"] === "添加参会人")).toBe(false);
+    expect(api.get).not.toHaveBeenCalledWith("/api/people/directory");
+    expect(api.get).not.toHaveBeenCalledWith("/api/people");
+  });
+
+  it("参会人只读，对不上的置灰", () => {
+    const tree = renderOrganize();
+    const items = tree.filter((node) => node.type === "li");
+    expect(items.map(text)).toEqual(["孙铭泽", "刘人豪", "+1"]);
+    expect(items.map((node) => Boolean(node.props!["data-off"]))).toEqual([false, false, true]);
+    expect(tree.some((node) => node.type === "button" && String(node.props?.["aria-label"] ?? "").startsWith("去掉"))).toBe(false);
+  });
+
+  it("挂到按妙记那个月取；整理后跳到会议页", async () => {
+    renderOrganize();
+    expect(api.get).toHaveBeenCalledWith("/api/world-anchor-options", { params: { query: { period: "2026-10" } } });
+    await vi.waitFor(() => expect(renderOrganize().some((node) => node.props?.["aria-pressed"] !== undefined)).toBe(true));
+    expect(button(renderOrganize(), "整理").props!.disabled).toBe(true);
+    await pickPo();
+    api.post.mockResolvedValue({ data: { meetingId: "m-new" }, response: { ok: true, status: 200 } });
+    (button(renderOrganize(), "整理").props!.onClick as () => void)();
+    await vi.waitFor(() => expect(workspace.navigate).toHaveBeenCalledWith("/me/meetings/m-new"));
+    const [path, init] = api.post.mock.calls[0] as [string, { params: { path: { token: string } }; body: unknown }];
+    expect(path).toBe("/api/me/feishu-minutes/{token}/organize");
+    expect(init.params.path.token).toBe(MINUTE.minuteToken);
+    expect(init.body).toEqual({ title: "产品周会", anchors: [{ kind: "po", id: PO.id }] });
+    expect(onOrganized).toHaveBeenCalledWith("m-new");
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("整理失败写原因", async () => {
+    await pickPo();
+    api.post.mockResolvedValue({ data: undefined, error: { code: "MINUTE_TAKEN" }, response: { ok: false, status: 409 } });
+    (button(renderOrganize(), "整理").props!.onClick as () => void)();
+    await vi.waitFor(() => expect(renderOrganize().some((node) => node.props?.role === "alert" && text(node) === "已经记到别的会上了")).toBe(true));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onOrganized).not.toHaveBeenCalled();
+    expect(workspace.navigate).not.toHaveBeenCalled();
   });
 });

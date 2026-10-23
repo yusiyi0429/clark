@@ -67,6 +67,15 @@ export function monthDayClock(iso: string | null | undefined): string {
   return `${month} 月 ${dayOfMonth} 日 ${clock(date)}`;
 }
 
+/** 「10 月 23 日 14:00–15:10」：同一天里的起止。 */
+export const dateSpan = (startIso: string, endIso: string): string => `${monthDayClock(startIso)}–${clock(new Date(endIso))}`;
+
+/** 「今天 14:00–15:10」，不是今天的写「10/23 14:00–15:10」：通知栏里一场会的起止。 */
+export function daySpan(startIso: string, endIso: string, now = new Date()): string {
+  const start = new Date(startIso);
+  return `${companyDay(start) === companyDay(now) ? `今天 ${clock(start)}` : monthDayTime(startIso)}–${clock(new Date(endIso))}`;
+}
+
 /** 某个时刻（公司时区的那一天）比截止日早几天：正数早、负数晚、0 按期。 */
 export function daysBeforeDue(iso: string, dueDate: string): number | null {
   const date = valid(iso);

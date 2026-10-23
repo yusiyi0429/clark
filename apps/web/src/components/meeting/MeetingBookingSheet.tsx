@@ -4,22 +4,24 @@
  * 约会议（FR-4.1）：顶栏「约会议」打开的右侧抽屉，外壳和二级页同一个（DetailFrame）；手持上铺满。
  * 名称、日期 + 起止、主持人（成员只能是本人，CEO 从 DRI 里选）、参会人（可空）、挂到（WorldAnchorPicker，至少一个）。
  * 「约好」建会（只存天枢，不写本体），成功后跳到会议页。
+ * 整理模式（organize）：飞书里直接开的会待整理，用这份妙记建会；时间、参会人取自妙记只读，没有主持人一栏，挂点按妙记那个月取。
  */
 import { useEffect, useState } from "react";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
-import type { TPickedWorldAnchor, TWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
-import { COMPANY_TIMEZONE } from "@/lib/companyTime";
+import type { TFeishuMinuteInboxItem, TPickedWorldAnchor, TWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
+import { COMPANY_TIMEZONE, companyMonth, dateSpan } from "@/lib/companyTime";
 import { refreshWorkspace } from "@/lib/toast";
 import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Select } from "@/components/ui/Select";
 import { timeOptions } from "@/components/ui/pickerFormat";
-import { bookMeeting, listPeople, listPersonDirectory, listWorldAnchorOptions, type DirectoryPerson } from "./meetingDecisionApi";
+import { bookMeeting, listPeople, listPersonDirectory, listWorldAnchorOptions, organizeFeishuMinute, type DirectoryPerson } from "./meetingDecisionApi";
 import { WorldAnchorPicker } from "./WorldAnchorPicker";
 import d from "./meeting-decisions.module.css";
 
 const BOOK_ERROR: Record<string, string> = { ANCHOR_NOT_FOUND: "挂点已失效", FORBIDDEN: "没有权限", INVALID_LEAD_DRI: "主持人不可选", INVALID_PARTICIPANT: "参会人不可选" };
+const ORGANIZE_ERROR: Record<string, string> = { MINUTE_TAKEN: "已经记到别的会上了", MINUTE_NOT_PENDING: "已经处理过了", ANCHOR_NOT_FOUND: "挂点已失效" };
 const pad = (value: number) => String(value).padStart(2, "0");
 
 /** 默认下一个整点开、开一小时（公司时区）。 */
@@ -30,15 +32,19 @@ function nextSlot(now = new Date()): { date: string; start: string; end: string 
   return { date, start: `${pad(hour)}:00`, end: hour >= 23 ? "23:45" : `${pad(hour + 1)}:00` };
 }
 
-export function MeetingBookingSheet({ open, onClose, viewer }: {
-  open: boolean; onClose(): void;
-  /** 登录的人；成员的主持人一栏就是 displayName。 */
-  viewer: { personId: string; role: "ceo" | "member"; displayName: string };
-}) {
+type Viewer = { personId: string; role: "ceo" | "member"; displayName: string };
+
+export function MeetingBookingSheet({ open, onClose, viewer, organize }: { open: boolean; onClose(): void } & (
+  /** 约会议：登录的人；成员的主持人一栏就是 displayName。 */
+  | { viewer: Viewer; organize?: undefined }
+  /** 整理会议：待整理的那份妙记；整理好后跳到 `${meetingBase}/${meetingId}`。 */
+  | { organize: { minute: TFeishuMinuteInboxItem; meetingBase: string; onOrganized(meetingId: string): void }; viewer?: undefined }
+)) {
   const { navigate } = useWorkspace();
-  const [title, setTitle] = useState("");
+  const role = viewer?.role;
+  const [title, setTitle] = useState(organize?.minute.title ?? "");
   const [slot, setSlot] = useState(nextSlot);
-  const [leadDriId, setLeadDriId] = useState(viewer.role === "member" ? viewer.personId : "");
+  const [leadDriId, setLeadDriId] = useState(viewer?.role === "member" ? viewer.personId : "");
   const [participants, setParticipants] = useState<string[]>([]);
   const [anchors, setAnchors] = useState<TWorldAnchor[]>([]);
   const [options, setOptions] = useState<TWorldAnchorOption[] | null>(null);
@@ -48,15 +54,16 @@ export function MeetingBookingSheet({ open, onClose, viewer }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [optionsError, setOptionsError] = useState(false);
-  const period = slot.date.slice(0, 7);
+  const period = organize ? companyMonth(new Date(organize.minute.startsAt)) : slot.date.slice(0, 7);
 
+  // 整理会议不取人员名册（参会人取自妙记）。
   useEffect(() => {
-    if (!open) return;
+    if (!open || !role) return;
     let live = true;
     void listPersonDirectory().then((next) => { if (live) setPeople(next); }, () => undefined);
-    if (viewer.role === "ceo") void listPeople().then((next) => { if (live) setHosts(next.filter((person) => person.roles.includes("dri"))); }, () => undefined);
+    if (role === "ceo") void listPeople().then((next) => { if (live) setHosts(next.filter((person) => person.roles.includes("dri"))); }, () => undefined);
     return () => { live = false; };
-  }, [open, viewer.role]);
+  }, [open, role]);
   // 挂点按开会那个月取：换了月份先收起旧选项再重取，已选的不在新选项里就去掉。
   useEffect(() => {
     if (!open) return;
@@ -72,8 +79,28 @@ export function MeetingBookingSheet({ open, onClose, viewer }: {
   }, [open, period]);
 
   const nameOf = (personId: string) => people.find((person) => person.personId === personId)?.displayName ?? "";
-  const valid = Boolean(title.trim() && slot.date && slot.start && slot.end && slot.end > slot.start && leadDriId && options && anchors.length);
-  const submit = async () => {
+  const valid = organize
+    ? Boolean(title.trim() && options && anchors.length)
+    : Boolean(title.trim() && slot.date && slot.start && slot.end && slot.end > slot.start && leadDriId && options && anchors.length);
+  const submitOrganize = async ({ minute, meetingBase, onOrganized }: NonNullable<typeof organize>) => {
+    setBusy(true); setError("");
+    try {
+      const result = await organizeFeishuMinute(minute.minuteToken, {
+        title: title.trim(),
+        anchors: anchors.map(({ kind, id }) => ({ kind: kind as TPickedWorldAnchor["kind"], id })),
+      });
+      if ("code" in result) { setError(ORGANIZE_ERROR[result.code] ?? "没有整理成"); return; }
+      window.dispatchEvent(new Event("meeting-changed"));
+      refreshWorkspace();
+      onOrganized(result.meetingId);
+      navigate(`${meetingBase}/${result.meetingId}`);
+    } catch {
+      setError("没有整理成");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const submit = async (viewer: Viewer) => {
     setBusy(true); setError("");
     try {
       const result = await bookMeeting({
@@ -101,14 +128,19 @@ export function MeetingBookingSheet({ open, onClose, viewer }: {
   return (
     <ModalOverlay isOpen={open} onOpenChange={(next) => { if (!next) onClose(); }} isDismissable className={d.sheetScrim}>
       <Modal className={d.sheet}>
-        <Dialog className={d.sheetDialog} aria-label="约会议">
-          <DetailFrame title="约会议" onBack={onClose} backLabel="关闭">
+        <Dialog className={d.sheetDialog} aria-label={organize ? "整理会议" : "约会议"}>
+          <DetailFrame title={organize ? "整理会议" : "约会议"} onBack={onClose} backLabel="关闭">
             <div className={d.booking}>
               <label className={d.bookField}>
                 <span>名称</span>
                 <input aria-label="名称" value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} />
               </label>
-              <div className={d.bookField}>
+              {organize ? (
+                <div className={d.bookField}>
+                  <span>时间</span>
+                  <output aria-label="时间" className={d.bookHost}>{dateSpan(organize.minute.startsAt, organize.minute.endsAt)}<small className={d.bookSource}>飞书</small></output>
+                </div>
+              ) : <div className={d.bookField}>
                 <span>时间</span>
                 <div className={d.bookTime}>
                   <DatePicker label="日期" value={slot.date} onChange={(date) => setSlot((current) => ({ ...current, date }))} />
@@ -120,17 +152,22 @@ export function MeetingBookingSheet({ open, onClose, viewer }: {
                       onChange={(end) => setSlot((current) => ({ ...current, end }))} />
                   </div>
                 </div>
-              </div>
-              <div className={d.bookField}>
+              </div>}
+              {viewer ? <div className={d.bookField}>
                 <span>主持人</span>
                 {viewer.role === "member"
                   ? <output aria-label="主持人" className={d.bookHost}>{viewer.displayName}</output>
                   : <Select aria-label="主持人" value={leadDriId} placeholder="选主持人" options={hosts.map((person) => ({ value: person.personId, label: person.displayName }))}
                     onChange={(next) => { setLeadDriId(next); setParticipants((current) => current.filter((id) => id !== next)); }} />}
-              </div>
+              </div> : null}
               <div className={d.bookField}>
                 <span>参会人</span>
-                {participants.length ? (
+                {organize ? (
+                  <ul className={d.bookPeople} data-readonly>
+                    {organize.minute.attendees.map((person) => <li key={person.personId}>{person.displayName}</li>)}
+                    {organize.minute.otherAttendees > 0 ? <li data-off>{`+${organize.minute.otherAttendees}`}</li> : null}
+                  </ul>
+                ) : participants.length ? (
                   <ul className={d.bookPeople}>
                     {participants.map((personId) => (
                       <li key={personId}>
@@ -140,8 +177,8 @@ export function MeetingBookingSheet({ open, onClose, viewer }: {
                     ))}
                   </ul>
                 ) : null}
-                <Select aria-label="添加参会人" value="" placeholder="添加参会人" options={invitable.map((person) => ({ value: person.personId, label: person.displayName }))}
-                  onChange={(personId) => { if (personId) setParticipants((current) => [...current, personId]); }} />
+                {organize ? null : <Select aria-label="添加参会人" value="" placeholder="添加参会人" options={invitable.map((person) => ({ value: person.personId, label: person.displayName }))}
+                  onChange={(personId) => { if (personId) setParticipants((current) => [...current, personId]); }} />}
               </div>
               <div className={d.bookField}>
                 <span>挂到</span>
@@ -151,7 +188,7 @@ export function MeetingBookingSheet({ open, onClose, viewer }: {
               {error ? <p className={d.worldError} role="alert">{error}</p> : null}
               <div className={d.bookActions}>
                 <button type="button" className={d.ghost} disabled={busy} onClick={onClose}>取消</button>
-                <button type="button" className={d.primary} disabled={busy || !valid} onClick={() => void submit()}>约好</button>
+                <button type="button" className={d.primary} disabled={busy || !valid} onClick={() => void (organize ? submitOrganize(organize) : submit(viewer))}>{organize ? "整理" : "约好"}</button>
               </div>
             </div>
           </DetailFrame>
