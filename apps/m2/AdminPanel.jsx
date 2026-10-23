@@ -16,7 +16,8 @@ export default function AdminPanel({memberId,review,onClose,plan}){
   <div className="admin-head"><h2>管理</h2><Button className="icon" aria-label="关闭" onPress={onClose}><X size={18}/></Button></div>
   <section className="admin-block">
    <h3>复盘</h3>
-   <p className="admin-line">{has?`${review.label} · 资料截至 ${cutoff} · 共 ${review.total} 份，已确认 ${review.confirmed}${review.problems?` · ${review.problems} 份没生成`:''}`:'本月还没有复盘'}</p>
+   <p className="admin-line">{has?`${review.label} · 资料截至 ${cutoff} · 共 ${review.total} 份，已确认 ${review.confirmed}${review.failed?` · ${review.failed} 份没生成，这次不上`:''}${review.degraded?` · ${review.degraded} 份没读入月初背景`:''}`:'本月还没有复盘'}</p>
+   {(review?.failedList||[]).length>0&&<ul className="admin-checks">{review.failedList.map(f=><li key={f.ref}><strong>{f.ref}</strong>{f.title?`${f.title}：`:''}{f.reason}，这次不上</li>)}</ul>}
    {running&&<p className="admin-line is-running">正在生成复盘{job.stage?` · ${job.stage}`:''}{job.total?`（${job.done||0}/${job.total}）`:''}</p>}
    {job?.status==='failed'&&<><p className="admin-line is-failed">上次生成没完成：{job.error||'原因未记录'}</p>{(job.checks||[]).length>0&&<ul className="admin-checks">{job.checks.map((c,i)=><li key={i}><strong>{c.unit||'全局'}</strong>{c.problem}</li>)}</ul>}<Button className="plain" isDisabled={busy} onPress={()=>start({resume:true})}>用上次的资料续跑</Button></>}
    {(job?.skipped||[]).length>0&&<ul className="admin-checks admin-skipped">{job.skipped.map((t,i)=><li key={i}>{typeof t==='string'?t:`${t.unit||''}${t.reason?`：${t.reason}`:''}`}</li>)}</ul>}

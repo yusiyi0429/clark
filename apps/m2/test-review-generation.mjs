@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {unitKeyOfTitle,buildReviewInput,runReviewSkill,reviewProblems,createReviewJobs,collectReviewSources,httpReviewReader} from './review-generation.mjs';
+import {unitKeyOfTitle,buildReviewInput,runReviewSkill,reviewProblems,reviewFile,createReviewJobs,collectReviewSources,httpReviewReader} from './review-generation.mjs';
 import {openCollaborationStore,archivesPath} from './collaboration-store.mjs';
 import {createCollaborationState} from './governance.mjs';
 import {installReviewRound} from './review-round.mjs';
@@ -173,7 +173,14 @@ test('拒答：同样的请求先再试一次；仍失败的单元续跑时重�
  assert.ok(ok.reviews['eo-m1']);assert.deepEqual(ok.failed,[]);assert.ok(ok.raw['eo-m1']&&!ok.raw['eo-m1#nobg']);assert.deepEqual(ok.dropped,[]);
  const g=fakeGateway({refuseAlways:new Set(['eo-m1'])});const run=await runReviewSkill({gateway:g,skill,input});
  assert.deepEqual(run.failed.map(f=>f.id),['eo-m1']);assert.ok(run.reviews.eo&&run.reviews.company);
- assert.match(JSON.stringify(reviewProblems(run,input,{roster:['刘人豪','于斯一','刘明华']})),/eo-m1.*没有生成出来（模型拒答）/);
+ // 陈溪南 2026-10-23: a refused unit does not hold back the round; it is named in 管理 and left out this time.
+ assert.deepEqual(reviewProblems(run,input,{roster:['刘人豪','于斯一','刘明华']}),[]);assert.equal(run.failed[0].title,'Context 建模');
+ const {reviewSummary}=await import('./review-handoff.mjs');
+ const installed=installReviewRound({cards:{},comments:[],messages:[],sequence:1},reviewFile(run,input,{skill,model:'fake',label:'10 月复盘'}),{label:'10 月复盘'});
+ assert.deepEqual(reviewSummary(installed).failedList.map(f=>[f.ref,f.title]),[['eo-m1','Context 建模']]);assert.equal(reviewSummary(installed).failed,1);
+ // Other gaps still block: a unit missing for any other reason, and the company review even when refused.
+ assert.match(JSON.stringify(reviewProblems({...run,failed:[{id:'eo-m1',finishReason:null}]},input)),/eo-m1.*没有生成出来/);
+ assert.match(JSON.stringify(reviewProblems({...run,reviews:Object.fromEntries(Object.entries(run.reviews).filter(([k])=>k!=='company')),failed:[...run.failed,{id:'company',finishReason:'refusal'}]},input)),/公司 PO 复盘没有生成出来/);
  const again=fakeGateway();await runReviewSkill({gateway:again,skill,input,run});
  assert.ok(again.calls.includes('eo-m1')&&again.calls.includes('eo')&&again.calls.includes('company'));
  assert.deepEqual(run.failed,[]);assert.deepEqual(reviewProblems(run,input,{roster:['刘人豪','于斯一','刘明华']}),[]);

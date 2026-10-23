@@ -35,7 +35,7 @@ export function installReviewRound(state,file,{label,source,sample=false,now=new
  if(next.messages.length||next.comments.length||(next.proposals||[]).length){(next.talkArchives??=[]).push({archivedAt:now,reason:'新一轮复盘',messages:next.messages,comments:next.comments,proposals:next.proposals||[],nexus:next.nexus||{}});next.messages=[];next.comments=[];next.proposals=[];next.nexus={};}
  Object.assign(next.cards,reviewCards(file,{now}));
  // 失败要看得见 (2026-10-22): reviews the run could not write, or wrote without their background, are named on the page.
- const problems=[...(file.failed||[]).map(f=>({ref:f.id,kind:'failed',reason:f.finishReason==='refusal'?'生成失败：模型拒答':`生成失败：${String(f.error||'').slice(0,60)}`})),...(file.dropped||[]).map(d=>({ref:d.id,kind:'degraded',reason:'背景资料未读入（模型拒答后去掉背景资料重写）'}))];
+ const problems=[...(file.failed||[]).map(f=>({ref:f.id,...(f.title?{title:f.title}:{}),kind:'failed',reason:f.finishReason==='refusal'?'生成失败：模型拒答':`生成失败：${String(f.error||'').slice(0,60)}`})),...(file.dropped||[]).map(d=>({ref:d.id,kind:'degraded',reason:'背景资料未读入（模型拒答后去掉背景资料重写）'}))];
  // Units left out because the ontology lacks their material (数据缺失) — the only gap members are told about.
  const skipped=(file.skipped||[]).map(x=>typeof x==='string'?x:`${x.unit||''}${x.reason?`：${x.reason}`:''}`).filter(Boolean);
  next.reviewRound={label:label||file.name||'复盘',...(problems.length?{problems}:{}),...(skipped.length?{skipped}:{}),skill:file.skill?.version||file.skillFormat||file.skill||null,period:file.period||null,cutoff:file.cutoff||null,evidence:file.evidence||null,source:source||null,sample,loadedAt:now,

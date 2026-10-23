@@ -250,7 +250,7 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
    // Refusals come and go (10/23: finance-m2 passed in one run and was refused in the next), so the same request is tried once more first.
    if(e.refusal){try{return await ask(c.id,user);}catch(e1){e=e1;}}
    if(e.refusal&&user.unit?.evidence?.some(x=>x.kind==='月初起点')){run.dropped.push({id:c.id,reason:'model refusal; background evidence removed'});try{return await ask(c.id+'#nobg',{...user,unit:{...user.unit,evidence:user.unit.evidence.filter(x=>x.kind!=='月初起点'),missing:[...(user.unit.missing||[]),'月初背景资料这次没有读入（模型拒答）']}});}catch(e2){e=e2;}}
-   run.failed.push({id:c.id,error:String(e.message).slice(0,200),finishReason:e.diagnostics?.finishReason||null});await save(run);return null;
+   run.failed.push({id:c.id,title:c.title,error:String(e.message).slice(0,200),finishReason:e.diagnostics?.finishReason||null});await save(run);return null;
   }
  };
  const put=(c,res)=>{if(res?.review)run.reviews[c.id]={...res.review,unit:c.unit,level:c.level,ref:c.id,title:c.title,owner:c.owner,...(c.parent?{parent:c.parent==='company'?'company':c.parent}:{})};};
@@ -293,7 +293,9 @@ export function reviewProblems(run,input,{roster=[]}={}){
  const out=[],filled=v=>v!=null&&(Array.isArray(v)?v.length>0:String(v).trim()!=='');
  const expected=input.stages.flat();
  if(!run.reviews.company)out.push({unit:'company',problem:'公司 PO 复盘没有生成出来，CEO 确认后才会开始拆解，必须有'});
- for(const c of expected)if(!run.reviews[c.id]&&c.id!=='company')out.push({unit:c.id,problem:'没有生成出来'+(run.failed.find(f=>f.id===c.id)?.finishReason==='refusal'?'（模型拒答）':'')});
+ // A unit the model refused is left out of this round and named in 管理; it does not hold back the rest (陈溪南 2026-10-23). Other gaps still block.
+ const refused=id=>run.failed.some(f=>f.id===id&&f.finishReason==='refusal');
+ for(const c of expected)if(!run.reviews[c.id]&&c.id!=='company'&&!refused(c.id))out.push({unit:c.id,problem:'没有生成出来'});
  for(const [id,r] of Object.entries(run.reviews)){
   if(!tiers.includes(r.verdict))out.push({unit:id,problem:`判定写成“${r.verdict??'空'}”，只能是达成、部分达成、未达成`});
   const miss=['verdictReason','targets','causes','nextInputs'].filter(f=>!filled(r[f]));if(miss.length)out.push({unit:id,problem:`缺 ${miss.join('、')}`});
