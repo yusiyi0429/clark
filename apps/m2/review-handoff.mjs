@@ -31,5 +31,5 @@ export function handoffGenerated(s){
 export function reviewSummary(state){
  const r=state.reviewRound;if(!r)return null;
  const cards=Object.values(state.cards).filter(isReviewCard);
- return {label:r.label,skill:r.skill,period:r.period,cutoff:r.cutoff,loadedAt:r.loadedAt,total:cards.length,confirmed:cards.filter(c=>c.confirmedVersion===currentVersion(c).number).length,problems:(r.problems||[]).length};
+ return {label:r.label,skill:r.skill,period:r.period,cutoff:r.cutoff,loadedAt:r.loadedAt,readAt:r.readAt||null,generatedAt:r.generatedAt||null,startedAt:r.startedAt||null,durationMs:r.durationMs??null,total:cards.length,confirmed:cards.filter(c=>c.confirmedVersion===currentVersion(c).number).length,problems:(r.problems||[]).length,failed:(r.problems||[]).filter(p=>p.kind==='failed').length,degraded:(r.problems||[]).filter(p=>p.kind==='degraded').length,skipped:(r.skipped||[]).length};
 }

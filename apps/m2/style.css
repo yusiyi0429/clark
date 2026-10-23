@@ -1117,3 +1117,22 @@ body.is-col-resizing{cursor:col-resize;user-select:none}
 .admin-panel .entry-metadata{margin-top:12px}
 .admin-confirm p.admin-warn{color:#b42318;font-weight:600}.admin-checks{margin:4px 0 8px;padding-left:18px;font-size:12px;color:#7a5a1f}.admin-checks strong{margin-right:6px}
 .proposal-task .proposal-verdict{padding:6px 8px;margin:6px 0 4px;border-radius:8px;background:#fff6e6}.proposal-task .proposal-verdict-who{margin:2px 0 0;font-size:12px;color:#7a5a1f}
+/* Home cards (陈溪南 2026-10-23): only the type tag (Battlefield / Domain / Mission / Task) has a colour fill;
+   verdict, tier and status read as plain, unbolded text so the list stays quiet. */
+.doc-summary .card-head .review-verdict,.doc-summary .card-head .review-verdict.is-small,.doc-summary .card-head .tier-tag,.doc-summary .card-head .tier-tag.tier-p0{background:none!important;border:0!important;padding:0!important;height:auto;font-size:12px;font-weight:400!important;color:#6b7b8a!important}
+.doc-summary .card-head .state,.doc-summary .card-head .state[data-confirmed=true]{background:none!important;border:0!important;padding:0!important;font-size:12px;font-weight:400;color:#6b7b8a}
+.doc-summary .card-head .state.is-mine{background:none!important;color:#002fa7!important;font-weight:400;padding:0!important}
+/* Card heads, home and inside (陈溪南 2026-10-23): only the type tag has a fill; verdict, tier and status are small
+   unbolded text that keeps its colour. The verdict sentence is the card's conclusion, so it is bold. */
+.plan-doc-node .card-head .review-verdict,.plan-doc-node .card-head .review-verdict.is-small{background:none!important;border:0!important;padding:0!important;height:auto;font-size:12px;font-weight:400!important}
+.plan-doc-node .card-head .review-verdict.tone-no{color:#b42318!important}.plan-doc-node .card-head .review-verdict.tone-part{color:#a0600f!important}.plan-doc-node .card-head .review-verdict.tone-ok{color:#1a7f37!important}.plan-doc-node .card-head .review-verdict.tone-none{color:#6b7b8a!important}
+.plan-doc-node .card-head .state{background:none!important;border:0!important;padding:0!important;font-size:12px;font-weight:400!important;color:#6b7b8a!important}
+.plan-doc-node .card-head .state[data-confirmed=true]{color:#1a7f37!important}.plan-doc-node .card-head .state.is-mine{color:#002fa7!important}
+.plan-doc-node .card-head .tier-tag,.plan-doc-node .card-head .tier-tag.tier-p0{background:none!important;border:0!important;padding:0!important;height:auto;font-size:12px;font-weight:400!important;color:#6b7b8a!important}
+.plan-doc-node .card-head .card-head-end{display:inline-flex;align-items:center;gap:10px}
+.review-verdict-reason{font-weight:600;color:#102c46}
+/* Item comments (陈溪南 2026-10-23): a bubble at the right of each list item, on hover or when it has comments. */
+.review-list>li.review-item{position:relative;padding-right:34px}
+.review-item-bubble{position:absolute;right:0;top:0;opacity:0;transition:opacity .15s}
+.review-list>li.review-item:hover .review-item-bubble,.review-item-bubble:focus-within,.review-item-bubble:has(.has-comments){opacity:1}
+.admin-skipped{color:#6b7b8a}

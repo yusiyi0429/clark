@@ -35,7 +35,7 @@ export function formatPlanDate(value){
 export function inheritedPlanField(node,field){
  if(node.level!=='po'||fieldPoints(node[field]).length)return null;
  if(field==='dependencies'){
-  const value=(node.children||[]).flatMap((child,i)=>fieldPoints(child.dependencies).map(text=>`Mission ${String(i+1).padStart(2,'0')}：${text}`));
+  const value=(node.children||[]).flatMap((child,i)=>fieldPoints(child.dependencies).map(text=>`Mission ${i+1}：${text}`));
   return value.length?{value,source:'汇总自下属 Mission 的约束与依赖'}:null;
  }
  if(field==='milestones'){

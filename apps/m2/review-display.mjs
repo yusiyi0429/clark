@@ -52,7 +52,7 @@ export function targetParts(t){const m=String(t).match(/^\*\*(.+?)（(达成|部
 // Evidence marks ([E5]) are for checking the generation, not for readers: they are dropped from the page.
 export function richParts(text){return String(text||'').replace(/\s*\[E\d+\]/g,'').split(/(\*\*[^*]+\*\*|\[E\d+\])/g).filter(Boolean).map(s=>s.startsWith('**')&&s.endsWith('**')?{bold:s.slice(2,-2)}:/^\[E\d+\]$/.test(s)?{evidence:s.slice(1,-1)}:{text:s});}
 export function recordLine(f,cutoff='2026-10-15'){if(!f||!f.latestRecord)return {text:'本月没有进展记录',warn:true};const d=f.latestRecord.slice(5).replace('-','/').replace(/^0/,'').replace('/0','/');return {text:`记录截至 ${d} · ${f.progressRecords} 条`,warn:f.latestRecord<cutoff};}
-export const reviewLabel=n=>n.level==='company'?'公司复盘':n.level==='po'?'PO 复盘':`Mission ${String(n.ref).match(/-m(\d+)$/)?.[1]?.padStart(2,'0')||''}`;
+export const reviewLabel=n=>n.level==='company'?'公司复盘':n.level==='po'?'PO 复盘':`Mission ${Number(String(n.ref).match(/-m(\d+)$/)?.[1])||''}`;
 // 2026-10 → 2026-11, and how a month reads on the page (10 月).
 export const nextPeriod=period=>{const m=String(period||'').match(/^(\d{4})-(\d{2})$/);if(!m)return null;const y=+m[1],mo=+m[2]+1;return mo>12?`${y+1}-01`:`${y}-${String(mo).padStart(2,'0')}`;};
 export const monthOf=period=>{const m=String(period||'').match(/-(\d{2})$/);return m?`${Number(m[1])} 月`:'';};
@@ -67,3 +67,6 @@ export function confirmState({status,version,signatures=[],slots,holder,mine}){
  const names=[...new Set(missing.map(holder).flatMap(n=>String(n||'').split(/[、,，]/)).map(x=>x.trim()).filter(Boolean))];
  return {text:`待 ${names.join('、')||'对方'} 确认${ver}`,mine:false};
 }
+
+// One tag for a Mission: its unit's short name and its number, e.g. “Agents · Mission 3” (陈溪南 2026-10-23).
+export const unitShort=label=>String(label||'').replace(/^(Battlefield|Domain)\s*\d+\s*/,'').trim()||String(label||'');
