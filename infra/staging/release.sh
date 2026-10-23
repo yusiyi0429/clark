@@ -2,7 +2,8 @@
 # 天枢火山主机发布：先备份、留回退，再切换并核对。整理自 2026-10-08 实际执行的三次发布。
 #
 #   sudo infra/staging/release.sh prepare <完整提交SHA> <源码包.tgz>   # 解包、构建候选镜像，不碰现网
-#   sudo infra/staging/release.sh switch  <完整提交SHA>                # 备份 → 切换 → 健康与数据核对，失败自动回退
+#   sudo infra/staging/release.sh switch  <完整提交SHA>                # 备份 → 切换 → 健康与数据核对，失败自动回退；成功后清理旧版本
+#   sudo infra/staging/release.sh cleanup <当前完整提交SHA>            # 只清理旧版本；DRY_RUN=1 只列出、不删除
 #
 # 源码包在本机生成后上传：git archive --format=tar.gz -o source-<短SHA>.tgz <完整SHA>
 # 本脚本不读取、不打印 infra/.env 里的任何值；compose 只做 config --quiet。
@@ -14,11 +15,14 @@
 #   COPY_INFRA      从本次发布装到现网 infra 的文件，例如 M2："infra/m2.override.yml infra/caddy/Caddyfile.m2"
 #   BACKUP_ROOT     备份目录，默认 /srv/tokenhub/backups/tianshu
 #   ALLOW_MIGRATION 本次含新迁移时必须显式设为 1；含迁移时失败不自动回退（旧镜像不能跑新 schema）
+#   KEEP_RELEASES   保留最近几次发布（含当前）的镜像、源码目录和回退目录，默认 3，最少 2
 set -Eeuo pipefail
 umask 077
 
 usage() { sed -n '2,8p' "$0" >&2; exit 2; }
 [ $# -ge 2 ] || usage
+keep_releases=${KEEP_RELEASES:-3}
+[[ "$keep_releases" =~ ^[0-9]+$ ]] && (( keep_releases >= 2 )) || { echo "KEEP_RELEASES 至少为 2（当前版本 + 一次回退）" >&2; exit 2; }
 action=$1
 revision=$2
 [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || { echo "需要 40 位完整提交 SHA" >&2; exit 2; }
@@ -259,8 +263,54 @@ PY
   echo "release=deployed api=$expect_api web=$expect_web backup=$batch rollback=$previous/rollback.sh"
 }
 
+# 每次发布都会留下镜像（warmap-api/web、tianshu-m2 各一个标签）、releases/<短SHA> 源码目录和 releases/before-<短SHA> 回退目录。
+# 只保留最近 KEEP_RELEASES 次发布（当前发布一定保留），其余删除；正被任何容器使用的镜像、留下的回退目录要用的镜像不删。
+# 只动本脚本建的东西：带 tianshu.revision 标签的镜像和 releases/ 下的目录。其他项目的镜像、构建缓存、数据卷和备份（备份按 backup.sh 的保留天数）一概不碰。
+cleanup() {
+  local dry=${DRY_RUN:-0} keep dir name tag repo id ids in_use f
+  test -f "$release/REVISION"
+  # 按发布时间（REVISION 文件的修改时间）从新到旧排，当前发布放第一位
+  keep=$({ echo "$short"; for f in $(ls -1t "$app"/releases/*/REVISION 2>/dev/null); do basename "$(dirname "$f")"; done; } \
+    | grep -E '^[0-9a-f]{7}$' | awk '!seen[$0]++' | head -n "$keep_releases")
+  echo "cleanup keep=$(echo $keep) dry_run=$dry"
+  is_kept() { grep -qx "$1" <<< "$keep"; }
+  remove() { echo "remove $*"; if [ "$dry" != 1 ]; then "$@"; fi; }
+  local survivors=()
+  for dir in "$app"/releases/*/; do
+    [ -d "$dir" ] || continue
+    name=$(basename "$dir"); tag=${name#before-}
+    if [[ "$tag" =~ ^[0-9a-f]{7}$ ]] && ! is_kept "$tag"; then remove rm -rf -- "$app/releases/$name"; continue; fi
+    [[ "$name" == before-* ]] && survivors+=("$dir")
+  done
+  # 留下的回退目录（含 M2 单独切换留下的 before-m2-<短SHA>/）回退时要用的镜像也不删：
+  # 它们的固定文件、回退脚本里写的 仓库:短SHA 标签，以及 images.txt 记的镜像 ID。
+  local rollback_tags='' rollback_ids=''
+  if (( ${#survivors[@]} )); then
+    rollback_tags=$(grep -rhoE '(warmap-api|warmap-web|tianshu-m2):[0-9a-f]{7}' "${survivors[@]}" 2>/dev/null | sort -u || true)
+    rollback_ids=$(grep -rhoE 'sha256:[0-9a-f]{64}' "${survivors[@]}" 2>/dev/null | sort -u || true)
+  fi
+  ids=$(docker ps -aq)
+  in_use=$({ [ -z "$ids" ] || docker inspect --format '{{.Image}}' $ids; echo "$rollback_ids"; } | sort -u)
+  for repo in warmap-api warmap-web tianshu-m2; do
+    for tag in $(docker image ls "$repo" --format '{{.Tag}}'); do
+      [[ "$tag" =~ ^[0-9a-f]{7}$ ]] || continue
+      is_kept "$tag" && continue
+      if grep -qx "$repo:$tag" <<< "$rollback_tags"; then echo "keep $repo:$tag rollback"; continue; fi
+      [ -n "$(docker image inspect "$repo:$tag" --format '{{index .Config.Labels "tianshu.revision"}}' 2>/dev/null)" ] || continue
+      id=$(docker image inspect "$repo:$tag" --format '{{.Id}}')
+      if grep -qx "$id" <<< "$in_use"; then echo "keep $repo:$tag in_use"; continue; fi
+      remove docker image rm "$repo:$tag"
+    done
+  done
+  # 本脚本构建后失去标签的悬空镜像
+  if [ "$dry" = 1 ]; then docker image ls -f dangling=true -f label=tianshu.revision --format 'dangling {{.ID}}'
+  else docker image prune -f --filter label=tianshu.revision > /dev/null; fi
+  df -h "$app" | tail -1
+}
+
 case $action in
   prepare) [ $# -eq 3 ] || usage; prepare "$3" ;;
-  switch) [ $# -eq 2 ] || usage; switch ;;
+  switch) [ $# -eq 2 ] || usage; switch; cleanup || echo "cleanup=failed release_unaffected=true" >&2 ;;
+  cleanup) [ $# -eq 2 ] || usage; cleanup ;;
   *) usage ;;
 esac
