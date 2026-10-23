@@ -28,8 +28,8 @@ export function MissionList({ plan, focus, onChoose }: {
         <h2>Mission{plan.fallbackFrom ? <span className={s.month}>{Number(plan.fallbackFrom.slice(5, 7))} 月</span> : null}</h2>
         <small>{plan.missions.length}</small>
       </header>
-      <div className={s.missionList} role="tablist" aria-orientation="vertical" aria-label="Mission">
-        <button type="button" role="tab" className={s.mission} data-mission="all" aria-selected={focus === null} style={tone(ALL_TONE)} onClick={() => onChoose(null)}>
+      <div className={s.missionList} role="group" aria-label="Mission">
+        <button type="button" className={s.mission} data-mission="all" aria-pressed={focus === null} style={tone(ALL_TONE)} onClick={() => onChoose(null)}>
           <i className={s.dot} aria-hidden />
           <span className={s.missionName}>全部</span>
           <small>{plan.activities.length} 件</small>
@@ -37,8 +37,8 @@ export function MissionList({ plan, focus, onChoose }: {
         {plan.missions.map((mission) => {
           const gate = nextGate(plan, mission.missionId);
           return (
-            <button key={mission.missionId} type="button" role="tab" className={s.mission} data-mission={mission.missionId}
-              aria-selected={focus === mission.missionId} style={tone(mission.color)} onClick={() => onChoose(mission.missionId)}>
+            <button key={mission.missionId} type="button" className={s.mission} data-mission={mission.missionId}
+              aria-pressed={focus === mission.missionId} style={tone(mission.color)} onClick={() => onChoose(mission.missionId)}>
               <i className={s.dot} aria-hidden />
               <span className={s.missionName}>{mission.title}</span>
               {gate ? <small title={gate}>{gate}</small> : null}

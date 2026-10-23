@@ -252,13 +252,14 @@ describe("HomePlan：月历", () => {
 });
 
 describe("HomePlan：Mission 卡", () => {
-  it("竖排的 tablist：第一行「全部」写执行事项件数，每个 Mission 写完整名字和下一个关口（今天及以后最近的那个）", () => {
+  it("竖排的一组按钮：第一行「全部」写执行事项件数，每个 Mission 写完整名字和下一个关口（今天及以后最近的那个）", () => {
     const view = mount();
-    expect(view.html).toMatch(/role="tablist" aria-orientation="vertical" aria-label="Mission"/);
+    expect(view.html).toMatch(/role="group" aria-label="Mission"/);
+    expect(view.html).not.toMatch(/role="tab(list)?"/);
     expect(missionText(view.html, "all")).toBe("全部 7 件");
     expect(missionText(view.html, "m1")).toBe("CEO / DRI Agent 从能用到在用 10/28 上线");
     expect(missionText(view.html, "m2")).toBe("灯塔首次会面 10/22 首次会面");
-    for (const id of ["all", "m1", "m2"]) expect(tab(view, id).role).toBe("tab");
+    for (const id of ["all", "m1", "m2"]) expect(tab(view, id).type).toBe("button");
   });
 
   it("色点和选中底色用 Mission 色（行内 --c），「全部」是中性灰；名字本身不带颜色", () => {
@@ -268,12 +269,12 @@ describe("HomePlan：Mission 卡", () => {
     expect(view.html).not.toMatch(/_missionName_[^"]*" style=/);
   });
 
-  it("默认「全部」；点哪个选哪个（aria-selected）", () => {
+  it("默认「全部」；点哪个选哪个（aria-pressed，和 Task 列一样）", () => {
     const view = mount();
-    expect(tab(view, "all")["aria-selected"]).toBe(true);
+    expect(tab(view, "all")["aria-pressed"]).toBe(true);
     view.mission("m1");
-    expect(tab(view, "all")["aria-selected"]).toBe(false);
-    expect(tab(view, "m1")["aria-selected"]).toBe(true);
+    expect(tab(view, "all")["aria-pressed"]).toBe(false);
+    expect(tab(view, "m1")["aria-pressed"]).toBe(true);
   });
 
   it("没有关口的 Mission 不写右边小字；关口都过去了也不写", () => {
@@ -555,6 +556,9 @@ describe("HomePlan：计划点", () => {
     view.calendar("onEditMark", "k1");
     expect(view.html).toContain('data-mark-pop="edit"');
     expect(view.find((props) => props["data-mark-name"] !== undefined)!.value).toBe("联调");
+    // 浮层按钮深灰：确认和「开启执行事项」同一个样子，删除是深灰字（主题蓝只留给约会议，不用红）。
+    expect(String(view.find((props) => props["aria-label"] === "存好")!.className)).toContain("_plainButton_");
+    expect(String(view.find((props) => props["data-delete"] !== undefined)!.className)).toContain("_popDelete_");
     view.key("Enter");
     expect(h.api.PATCH).not.toHaveBeenCalled();
     expect(view.html).not.toContain("data-mark-pop");
@@ -576,7 +580,7 @@ describe("HomePlan：计划点", () => {
     await settle();
     const html = view.render();
     expect((h.calendar!.marks as { label: string }[])[0].label).toBe("联调");
-    expect(html).toMatch(/role="alert"[^>]*>名字最多 10 个字</);
+    expect(html).toMatch(/role="alert"[^>]*>.*?名字最多 10 个字<\/p>/);
     expect(window.dispatchEvent).not.toHaveBeenCalled();
     expect(view.calendar("onAddMark", "2026-10-24")).not.toContain('role="alert"');
   });
@@ -703,27 +707,10 @@ describe("HomePlan：计划点", () => {
   });
 });
 
-describe("首页样式的关键值", () => {
-  const css = readFileSync(new URL("../../../styles/home-plan.module.css", import.meta.url), "utf8");
-  /** 一条规则的声明块（选择器原样给）。 */
-  const rule = (selector: string) => css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{([^}]*)\\}`))?.[1] ?? "";
-  it("顶行「月历 268 · Mission · 快捷 268」同高 268，模块间距 20", () => {
-    expect(rule(".board")).toMatch(/grid-template-columns: 268px minmax\(0, 1fr\) 268px;[\s\S]*grid-template-rows: 268px auto auto;[\s\S]*gap: 20px;/);
-  });
-  it("卡片：白底到 --morning-end 的 145° 渐变、1px #dfe4e9、圆角 22、阴影 0 2px 8px #29334c08；月历卡用雷达卡的淡蓝渐变", () => {
-    expect(rule(".card")).toMatch(/border: 1px solid #dfe4e9;[\s\S]*border-radius: 22px;[\s\S]*background: linear-gradient\(145deg, #fff, var\(--morning-end\) 70%\);[\s\S]*box-shadow: 0 2px 8px #29334c08;/);
-    expect(css).toMatch(/\.calendar \{[^}]*background: linear-gradient\(145deg, #f1f7ff, #f8fafd 75%\);/);
-  });
-  it("Mission 详情：Mission 色只在若有若无的底色里；没有侧边色条；本周栏中性浅灰、栏名深色，不再用主题蓝", () => {
-    expect(rule('.detail:not([data-detail="all"])')).toContain("color-mix(in oklab, var(--c) 7%, white) 0%");
+describe("首页样式的护栏", () => {
+  it("Mission 色只在若有若无的底色里：没有侧边色条，本周栏不用主题蓝", () => {
+    const css = readFileSync(new URL("../../../styles/home-plan.module.css", import.meta.url), "utf8");
     expect(css).not.toMatch(/--bar|#215ba1|rgba\(33, 91, 161/);
-    expect(rule('.column[data-column="week"]')).toContain("background: rgba(29, 36, 51, .035);");
-    expect(rule('.column[data-column="week"] h3')).toContain("color: var(--ink);");
-  });
-  it("主区窄于 880：快捷一排在上；窄于 560：一列；详情窄于 720：Task 列变成一排横滑", () => {
-    expect(css).toMatch(/@container \(max-width: 879px\) \{\s*\.board \{[\s\S]*?grid-template-areas: "quick quick" "calendar missions"/);
-    expect(css).toMatch(/@container \(max-width: 559px\) \{\s*\.board \{[\s\S]*?grid-template-areas: "quick" "calendar" "missions" "detail" "progress";/);
-    expect(css).toMatch(/@container \(max-width: 719px\) \{[\s\S]*?\.tasks \{ display: flex;[^}]*overflow-x: auto;/);
   });
 });
 

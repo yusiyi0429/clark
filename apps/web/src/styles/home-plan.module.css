@@ -49,21 +49,25 @@
 .detail { grid-area: detail; }
 .progress { grid-area: progress; }
 
-/* 计划点没存上的那句错：浮在月历卡底部，下一次操作时收起。 */
+/* 计划点没存上的那句错：浮在月历卡底部，墨色带个提示图标（不用红字），下一次操作时收起。 */
 .markError {
   position: absolute;
   right: 12px;
   bottom: 10px;
   left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   padding: 6px 10px;
   border-radius: 10px;
   background: var(--surface);
   box-shadow: 0 2px 8px #29334c14;
-  color: var(--counter);
+  color: var(--ink);
   font-size: 12px;
   line-height: 1.5;
 }
+.markError > svg { flex: none; color: var(--ink-muted); }
 
 /*
  * Mission 卡：竖排列表，名字写全、换行；右边小字是下一个关口（太长截断，title 有全文）。
@@ -88,10 +92,12 @@
   transition: background-color var(--dur-base) var(--ease-swift);
 }
 .mission:hover { background: color-mix(in oklab, var(--ink) 3%, transparent); }
-.mission[aria-selected="true"] { background: color-mix(in oklab, var(--c) 8%, white); color: var(--ink); font-weight: 600; }
+.mission[aria-pressed="true"] { background: color-mix(in oklab, var(--c) 8%, white); color: var(--ink); font-weight: 600; }
 .mission .dot { margin-top: calc((1.45em - 8px) / 2); }
 .mission[data-mission="all"] .dot { opacity: .5; }
 .missionName { min-width: 0; overflow-wrap: anywhere; }
+/* 列表自己会滚：焦点框（外壳给按钮的 3px 外框）整个收进按钮里，免得被滚动容器裁掉（Task 列窄时横滑，同理）。选择器要压过外壳的 .shell button:not([data-slot]):focus-visible。 */
+.missionList > .mission.mission:focus-visible, .tasks .taskHit.taskHit:focus-visible { outline-offset: -3px; }
 .mission small {
   max-width: 10em;
   overflow: hidden;
@@ -120,8 +126,8 @@
 .sep { color: color-mix(in oklab, var(--ink-faint) 55%, transparent); font-weight: 400; }
 .current { color: var(--ink-muted); font-weight: 400; }
 .start { flex: none; margin: -5.5px 0 -5.5px auto; }
-/* ts-design 的 ghost 按钮，换成白底细边、深灰字。 */
-.start button {
+/* ts-design 的 ghost 按钮，换成白底细边、深灰字：「开启执行事项」和计划点浮层的确认钮同一个样子。 */
+.start button, .plainButton.plainButton {
   --button-bg: #fff;
   --button-bg-hover: color-mix(in oklab, var(--ink) 4%, #fff);
   --button-bg-pressed: var(--button-bg-hover);
@@ -136,7 +142,9 @@
   font-weight: 500;
   white-space: nowrap;
 }
-.start button:hover { background: var(--button-bg-hover); }
+.start button:hover, .plainButton.plainButton:hover { background: var(--button-bg-hover); }
+/* 计划点浮层的「删除」：深灰字的 ghost 按钮。 */
+.popDelete.popDelete { --button-fg: var(--ink-muted); color: var(--ink-muted); }
 
 .split { display: grid; gap: 24px; min-width: 0; }
 .split[data-split] { grid-template-columns: 228px minmax(0, 1fr); }

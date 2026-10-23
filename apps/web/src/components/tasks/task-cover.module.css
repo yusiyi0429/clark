@@ -181,7 +181,7 @@ button.logRow[aria-expanded='true'] .logChevron { transform: rotate(90deg); }
 .logDetail { display: grid; gap: 6px; padding: 0 8px 12px 104px; }
 .process .logDetail p { margin: 0; color: #4d5a6c; font-size: 13.5px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .logLinks { display: flex; flex-wrap: wrap; gap: 4px 14px; min-width: 0; }
-.logLinks a { color: #2f6fd6; font-size: 13px; overflow-wrap: anywhere; text-underline-offset: 3px; }
+.logLinks a { color: var(--ink-muted); font-size: 13px; overflow-wrap: anywhere; text-decoration: underline; text-underline-offset: 3px; }
 .logDetail small { color: #8a95a5; font-size: 12px; line-height: 1.6; }
 .pinned { display: grid; gap: 4px; min-width: 0; padding: 12px 14px; border-radius: 14px; background: #f5f7fa; }
 .pinned small { color: #8a95a5; font-size: 11.5px; line-height: 1.6; }

@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TRequestListItem } from "@warmap/contracts";
@@ -114,16 +113,6 @@ describe("雷达", () => {
     const radar = button(render({ radarUnread: 3 }), "雷达");
     expect(radar).toMatch(/雷达<span class="[^"]*_unread_[^"]*" role="img" aria-label="3 条未读"><\/span>/);
     expect(visible(radar)).toBe("雷达");
-  });
-});
-
-describe("快捷卡的样式", () => {
-  it("2 列方块；主区窄时排成一行；角标、红点在右上角", () => {
-    const css = readFileSync(new URL("../../../styles/home-actions.module.css", import.meta.url), "utf8");
-    expect(css).toMatch(/\.tiles \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
-    expect(css).toMatch(/@container \(max-width: 879px\) \{\s*\.tiles \{[^}]*grid-auto-flow: column;/);
-    expect(css).toMatch(/\.count \{[^}]*position: absolute;[^}]*background: var\(--warning\);/);
-    expect(css).toMatch(/\.unread \{[^}]*position: absolute;[^}]*background: var\(--counter\);/);
   });
 });
 

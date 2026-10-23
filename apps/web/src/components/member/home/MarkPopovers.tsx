@@ -4,7 +4,7 @@
  * 月历上的两个小浮层，挂在那一天的格子下面（triggerRef）；外观、开合、Esc 和点外面关都照会议页的编辑浮层（ts-design Popover）。
  * - 加计划点：日期、（「全部」视图下）一排 Mission 色点选挂到哪个 Mission、名字输入框。
  * - 改计划点：「M/D」和「删除」，下面是改名字的输入框。
- * 名字 ≤10 字，Enter 提交（拼字中的 Enter 不算），空名字不提交。
+ * 名字 ≤10 字，Enter 提交（拼字中的 Enter 不算），空名字不提交。按钮都是深灰：确认和「开启执行事项」同一个样子，删除是深灰字。
  */
 import type { ReactNode, RefObject } from "react";
 import { Check } from "lucide-react";
@@ -44,7 +44,7 @@ function NameField({ value, action, onChange, onSubmit }: { value: string; actio
           event.preventDefault();
           onSubmit();
         }} />
-      <Button size="sm" isIconOnly aria-label={action} isDisabled={!value.trim()} onPress={onSubmit}><Check size={15} aria-hidden /></Button>
+      <Button size="sm" variant="ghost" isIconOnly className={s.plainButton} aria-label={action} isDisabled={!value.trim()} onPress={onSubmit}><Check size={15} aria-hidden /></Button>
     </div>
   );
 }
@@ -89,7 +89,7 @@ export function EditMarkPopover({ mark, label, anchor, onChange, onSubmit, onDel
     <MarkFloat anchor={anchor} kind="edit" label={`计划点 ${shortDate(mark.date)} ${mark.label}`} onClose={onClose}>
       <div className={s.popHead}>
         <span className={s.popDate}>{shortDate(mark.date)}</span>
-        <Button size="sm" variant="danger-soft" data-delete onPress={onDelete}>删除</Button>
+        <Button size="sm" variant="ghost" className={s.popDelete} data-delete onPress={onDelete}>删除</Button>
       </div>
       <NameField value={label} action="存好" onChange={onChange} onSubmit={onSubmit} />
     </MarkFloat>

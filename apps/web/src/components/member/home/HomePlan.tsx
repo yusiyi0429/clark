@@ -9,6 +9,7 @@
  * - 版式按主区宽度（容器查询，见样式）：宽时顶行三张并排；窄一些时快捷变成一排小方块放最上面；再窄就一列。
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { CircleAlert } from "lucide-react";
 import type { THomePlanActivity, THomePlanMark, THomePlanResponse } from "@warmap/contracts";
 import { AddMarkPopover, EditMarkPopover, type MarkDraft } from "./MarkPopovers";
 import { MissionDetail } from "./MissionDetail";
@@ -106,7 +107,7 @@ export function HomePlan({ plan, actions, onNavigate }: { plan: THomePlanRespons
               if (mark && !isPending(id)) openMark({ kind: "edit", id, label: mark.label }, mark.date);
             }}
           />
-          {planMarks.error && <p className={s.markError} role="alert">{planMarks.error}</p>}
+          {planMarks.error && <p className={s.markError} role="alert"><CircleAlert size={14} aria-hidden />{planMarks.error}</p>}
           {adding && (
             <AddMarkPopover draft={adding} missions={focus === null ? missions : null} anchor={dayRef}
               onChange={(draft) => setPopover({ ...draft, kind: "add" })} onSubmit={submitAdd} onClose={close} />
