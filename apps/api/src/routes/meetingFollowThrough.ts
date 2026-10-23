@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import {
-  ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardView,
+  FeishuMinuteInboxResponse, ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardView,
   MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse,
 } from "@warmap/contracts";
 import { askImpactCard, markImpactCardIrrelevant, readImpactCardByRequest } from "../impactCards.js";
@@ -11,12 +11,23 @@ import { personDisplayNames } from "../people.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 const idParams = Type.Object({ id: Type.String() });
+const tokenParams = Type.Object({ token: Type.String({ minLength: 1, maxLength: 200 }) });
 
 /** 会后：会议卡（待确认清单、读、存草稿、整卡确认）、挂点与会议记录状态、已推影响卡（读、追问、和我无关）。 */
 export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteContext, followThrough: MeetingFollowThrough): void {
   // 通知栏一场会一条：我主持或创建的会里待确认、修改待确认、写入失败的会议记录。
   app.get("/api/me/meeting-cards", { preHandler: ctx.requirePerson, schema: { response: { 200: MyMeetingCardsResponse } } },
     async (req) => ({ meetings: await followThrough.cards.pendingFor(req.person!.personId) }));
+
+  // 飞书里直接开的会待整理：只认本人（列表只有本人名下的，别人的妙记一律 404）。
+  app.get("/api/me/feishu-minutes", { preHandler: ctx.requirePerson, schema: { response: { 200: FeishuMinuteInboxResponse } } },
+    async (req) => ({ minutes: await followThrough.minuteInbox.listFor(req.person!.personId) }));
+
+  app.post("/api/me/feishu-minutes/:token/ignore", { preHandler: ctx.requirePerson, schema: { params: tokenParams } }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "feishu_minute.ignore", objectRef: `feishu_minute:${req.params.token}` });
+    const result = await followThrough.minuteInbox.ignore(req.person!.personId, req.params.token);
+    return "error" in result ? ctx.fail(reply, result.error.status, result.error.code, result.error.message) : reply.code(204).send();
+  });
 
   // 会议入本体：会议页单独取挂点、会议记录状态和每条决定的落点（不进会议卡，读会议保持轻）。
   app.get("/api/meetings/:id/world", { preHandler: ctx.requirePerson, schema: { params: idParams, response: { 200: MeetingWorldResponse } } }, async (req, reply) => {

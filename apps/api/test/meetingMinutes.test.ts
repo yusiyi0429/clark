@@ -1,12 +1,9 @@
-import { createHash, randomBytes } from "node:crypto";
-import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import type { TMeetingCardCandidate } from "@warmap/contracts";
-import { createTestApp, preflightCandidate, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
-import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
+import { createTestApp, preflightCandidate, type TestApp } from "./helpers.js";
+import { authorize, CEO, feishuEnv, HOST, OWNER, PEOPLE_SEED, recordingOutcome, TRANSCRIPT } from "./feishuMinutesFixtures.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import { loadPeopleDirectory } from "../src/peopleDirectory.js";
-import { saveAuthorizedToken } from "../src/feishu/tokens.js";
 import { createFeishuMinutesApi, type FeishuMinuteInfo, type FeishuMinutesApi } from "../src/feishu/minutes.js";
 import { createMeetingMinutesService, feishuMeetingFromEvent, meetingMinutesJobs, meetingMinutesReply, minuteFromEvent } from "../src/meetingMinutes.js";
 import { FEISHU_SUBSCRIBED_EVENTS } from "../src/feishu/events.js";
@@ -18,48 +15,15 @@ import { hashSecret } from "../src/session.js";
 import { normalizeTranscriptText, transcriptContentHash } from "../src/transcriptHash.js";
 
 // 会议链路：妙记自动获取（事件 + 5 分钟轮询兜底）、waiting / manual、实际参会名单、手动上传仍是兜底。
-const PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people-candidate.json", import.meta.url));
-const CEO = TEST_CEO.personId; // 测试甲
-const HOST = TEST_MEMBER.personId; // 测试乙
-const OWNER = "person-fixture-003"; // 测试丙
-const feishuEnv = { tokenKey: randomBytes(32), tokenKeyVersion: 1 };
 const START = "2026-06-01T10:00:00.000+08:00";
 
-/** 飞书导出的逐字稿 txt（合成样例）：第一行开会时刻，然后关键词，再是「姓名 hh:mm:ss.mmm」加正文。 */
-const TRANSCRIPT = [
-  "2026-06-01 10:02:10 CST|58min 3s",
-  "",
-  "关键词:",
-  "接口、看板",
-  "",
-  "测试乙 00:00:05.120 ",
-  "接口统一改成 v2，测试丙那边月底前切过去。",
-  "",
-  "测试丙 00:01:10.002 ",
-  "好，我月底前把渠道看板接到 v2。",
-  "我们定在 10:30 再碰一次。",
-  "",
-].join("\n");
-
-const CANDIDATE: TMeetingCardCandidate = {
-  summary: "接口统一切到 v2",
-  sections: [{ heading: "接口", body: "已定：接口统一改成 v2。", turnIds: ["turn-0001"] }],
-  objectChanges: [],
-  actionItems: [],
-};
-
 const preflightAgent: PreflightAgent = { async generate(input: PreflightAgentInput) { return { candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)) }; } };
-
-function recordingOutcome(): PostMeetingAgent & { inputs: PostMeetingAgentInput[] } {
-  const agent = { inputs: [] as PostMeetingAgentInput[], async generate(input: PostMeetingAgentInput) { agent.inputs.push(input); return { candidate: structuredClone(CANDIDATE) }; } };
-  return agent;
-}
 
 function fakeMinutesApi(transcript = TRANSCRIPT): FeishuMinutesApi & {
   calls: string[]; artifactsError: Error | null; exportError: Error | null; listEmpty: boolean; onRead: (() => Promise<void>) | null;
 } {
   const minute: FeishuMinuteInfo = { token: "obcn_minute_1", title: "接口切换会", ownerOpenId: "ou_host", createdAt: new Date("2026-06-01T10:02:10+08:00"),
-    durationSeconds: 3483, url: "https://example.feishu.cn/minutes/obcn_minute_1", meetingId: "vc_1" };
+    durationSeconds: 3483, url: "https://example.feishu.cn/minutes/obcn_minute_1", meetingId: "vc_1", sourceType: "meeting" };
   const api = {
     calls: [] as string[],
     artifactsError: null as Error | null,
@@ -96,11 +60,6 @@ async function scheduledMeeting(t: TestApp, participants: string[] = [HOST]): Pr
   } });
   expect(created.statusCode).toBe(200);
   return created.json().cards[0].objectRef.id as string;
-}
-
-async function authorize(t: TestApp, personId: string, openId: string, name: string, at: Date) {
-  await t.pool.query("INSERT INTO feishu_identities (person_id, open_id, name) VALUES ($1, $2, $3)", [personId, openId, name]);
-  await saveAuthorizedToken(t.pool.query.bind(t.pool), feishuEnv, personId, { accessToken: `u-${personId}`, expiresIn: 7200, scope: "offline_access" }, at);
 }
 
 describe("飞书妙记逐字稿解析", () => {
@@ -771,9 +730,9 @@ describe("妙记搜索按真飞书的请求与返回", () => {
     expect(searches[0].url).toContain("page_size=30");
     expect(searches[0].body).toEqual({ filter: { owner_ids: ["ou_host"], create_time: { start_time: start.toISOString(), end_time: end.toISOString() } } });
     expect(searches[1].url).toContain("page_token=p2");
-    expect(minutes.map(({ token, ownerOpenId, meetingId, durationSeconds }) => ({ token, ownerOpenId, meetingId, durationSeconds }))).toEqual([
-      { token: "obcn_a", ownerOpenId: "ou_host", meetingId: "vc_obcn_a", durationSeconds: 3181 },
-      { token: "obcn_b", ownerOpenId: "ou_host", meetingId: "vc_obcn_b", durationSeconds: 3181 },
+    expect(minutes.map(({ token, ownerOpenId, meetingId, sourceType, durationSeconds }) => ({ token, ownerOpenId, meetingId, sourceType, durationSeconds }))).toEqual([
+      { token: "obcn_a", ownerOpenId: "ou_host", meetingId: "vc_obcn_a", sourceType: "meeting", durationSeconds: 3181 },
+      { token: "obcn_b", ownerOpenId: "ou_host", meetingId: "vc_obcn_b", sourceType: "meeting", durationSeconds: 3181 },
     ]);
     expect(minutes[0].createdAt?.toISOString()).toBe(new Date(1792380446082).toISOString());
   });
