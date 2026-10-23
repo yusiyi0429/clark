@@ -45,9 +45,6 @@ vi.mock("@/components/HeroButton", () => ({ HeroButton: (props: { children?: Rea
 } }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/components/TianshuMark", () => ({ TianshuMark: () => null }));
-vi.mock("./useDictation", () => ({ useDictation: () => ({ active: false, polishing: false, live: true, phase: "idle", error: null, marks: [], clearError: vi.fn(), start: vi.fn(), cancel: vi.fn(), stop: vi.fn(), finish: vi.fn(), settle: vi.fn(), change: () => false, composition: vi.fn(), keyDown: () => false }),
-  withDictation: (input: string, text: string) => input + text }));
-vi.mock("./DictationControls", () => ({ DictationControls: () => null }));
 vi.mock("./references", () => ({ ReferenceTray: () => null }));
 vi.mock("./ConversationAttachments", () => ({ AttachButton: () => null, AttachmentStatus: () => null }));
 
@@ -136,7 +133,7 @@ describe("长回答：对话层里读完整回答 → 收起（第 24 项，D6 �
     // 3. 收起：输入条回到胶囊，草稿与本地存储都还在，待发附件没被清，没有发出任何东西。
     props.historyOpen = false; props.keyboard = false;
     html = settle(dock);
-    expect(html).toContain('data-composer="voice"');
+    expect(html).toContain('data-composer="entry"');
     expect(html).not.toContain("先说结论");
     expect(h.field!.value).toBe("我还想追问回款节奏");
     expect(h.storage.get(DRAFT_KEY)).toBe("我还想追问回款节奏");

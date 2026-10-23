@@ -9,18 +9,14 @@ import { HeroButton } from "@/components/HeroButton";
 import { ChannelSwitch, ComposerAction, ComposerPill, pillStyles, usePillRows } from "./ComposerPill";
 import { columnComposerClass, pressChannel, type ConversationChannel } from "./ConversationColumn";
 import { AttachButton } from "./ConversationAttachments";
-import { DictationControls } from "./DictationControls";
-import { DictationMirror } from "./DictationMirror";
-import { useDictation } from "./useDictation";
 import type { ConversationData } from "./useConversation";
 import { QuoteChips } from "./QuoteChips";
 import { useAnswerOptionFill } from "./answerOptions";
 import { quotedMessage, storedDraft, type QuotePrefill, type TextQuote } from "./quotes";
 import d from "@/styles/conversation-dock.module.css";
-import ds from "@/styles/dictation.module.css";
 
 /**
- * 二级页右列底下的输入条（clark CEO dock 的 `data-form=pill` 形态）：两行，底行左边是频道开关，右边一颗三态钮。
+ * 二级页右列底下的输入条（clark CEO dock 的 `data-form=pill` 形态）：两行，底行左边是频道开关，右边是发送 / 停止。
  * 草稿、引用预填、发送失败放回与首页输入条（ConversationDock）同一套规则、同一个草稿键。
  * 没有群组的页面只有「天枢」一个频道：宽屏不画开关；窄屏画这一颗，它是打开对话浮层的入口。
  */
@@ -76,7 +72,6 @@ export function ColumnComposer({
   const inputVersion = useRef(0);
   const sending = useRef(false);
   const handledNonce = useRef<number | null>(null);
-  const dictation = useDictation({ field: inputElement, value: input, onValue: (value) => updateInput(value) });
 
   // 草稿按对话范围保存（C-03：切换对象后不串草稿），关闭和改变宽度不丢。
   useEffect(() => {
@@ -89,7 +84,6 @@ export function ColumnComposer({
   const updateInput = (value: string) => {
     inputVersion.current++;
     setInput(value);
-    dictation.clearError();
     try {
       if (value) localStorage.setItem(draftKey, value);
       else localStorage.removeItem(draftKey);
@@ -101,7 +95,7 @@ export function ColumnComposer({
   useEffect(() => {
     if (!prefill) return;
     onPrefillUsed?.(prefill.nonce);
-    // 同一个预填只处理一次（开发模式下 effect 会重跑；代发与听写都不能来两次）。
+    // 同一个预填只处理一次（开发模式下 effect 会重跑；代发不能来两次）。
     if (handledNonce.current === prefill.nonce) return;
     handledNonce.current = prefill.nonce;
     // 代一号位发出的一句（「按意见重写」）：直接发，输入框里的草稿和已挂的引用块不动；回答进行中就不发，回报没接下。
@@ -120,8 +114,6 @@ export function ColumnComposer({
       const element = inputElement.current;
       element?.focus({ preventScroll: true });
       if (element) element.setSelectionRange(element.value.length, element.value.length);
-      // 「对这一段提意见」：引用挂上后直接进入听写（首次会弹麦克风授权）；回答进行中也可以先说，说完再发。
-      if (prefill.listen && !dictation.active) void dictation.start();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只响应新的引用
   }, [prefill?.nonce]);
@@ -136,18 +128,6 @@ export function ColumnComposer({
     });
   });
 
-  /** ■：停下，文字留在输入框（光标在这次说的末尾），整理在后台进行。 */
-  async function confirmDictation() {
-    await dictation.stop();
-  }
-
-  /** ↑：等整理（最多 1.2 秒，超时发原文），整段直接发出；发不出去（回答中）时留在输入框里。 */
-  async function sendDictation() {
-    const next = await dictation.finish();
-    if (next === null) return;
-    await submit(next);
-  }
-
   /**
    * 按下发送的这一刻文字与引用一起清空（D5）。C-04：服务端没接下时都放回去 ——
    * 不覆盖期间新写的草稿；引用交给宿主合并，不覆盖期间新加的引用。
@@ -155,14 +135,8 @@ export function ColumnComposer({
   async function submit(raw = input) {
     if (!raw.trim() || busy || sending.current) return;
     sending.current = true;
-    // ■ 之后整理还没完就按了发送：等整理（最多 1.2 秒），发整理后的版本。
-    const value = dictation.polishing ? await dictation.settle() : raw;
-    const text = value.trim();
-    if (!text) {
-      sending.current = false;
-      return;
-    }
-    const kept = value;
+    const text = raw.trim();
+    const kept = raw;
     const sentQuotes = textQuotes;
     updateInput("");
     const clearedVersion = inputVersion.current;
@@ -177,10 +151,9 @@ export function ColumnComposer({
   }
 
   const showSwitch = channels.length > 1 || narrow;
-  const attachments = textQuotes.length || data.attachments.length || dictation.error ? (
+  const attachments = textQuotes.length || data.attachments.length ? (
     <>
       {textQuotes.length ? <QuoteChips quotes={textQuotes} onRemove={onRemoveQuotes} /> : null}
-      {dictation.error ? <p role="alert" className={ds.error}>{dictation.error}</p> : null}
       {data.attachments.map((attachment) => (
         <span key={attachment.id} className={pillStyles.reference}>
           <Paperclip size={12} aria-hidden="true" />
@@ -221,14 +194,11 @@ export function ColumnComposer({
       <ComposerPill
         ref={pill}
         tone="agent"
-        dictating={dictation.active}
         references={attachments}
         onHeight={onHeightChange}
         onSubmit={() => {
           if (composing.current) return;
-          // 听写中回车 = ↑（等整理后发出）。
-          if (dictation.phase === "listening") void sendDictation();
-          else if (!dictation.active) void submit();
+          void submit();
         }}
         leading={
           showSwitch ? (
@@ -236,25 +206,18 @@ export function ColumnComposer({
           ) : undefined
         }
         field={
-          <>
-          <DictationMirror field={inputElement} value={input} marks={dictation.marks} polishing={dictation.polishing} fresh={dictation.fresh} />
           <HeroTextArea
             ref={inputElement}
             rows={rows}
             value={input}
-            onChange={(event) => {
-              if (!dictation.change(event.target.value)) updateInput(event.target.value);
-            }}
+            onChange={(event) => updateInput(event.target.value)}
             onCompositionStart={() => {
               composing.current = true;
-              dictation.composition(true);
             }}
             onCompositionEnd={() => {
               composing.current = false;
-              dictation.composition(false);
             }}
             onKeyDown={(event) => {
-              if (dictation.keyDown(event)) return;
               if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || composing.current) {
                 // 组词中的 Escape 只取消组词，不向外冒泡（C-06）。
                 if (event.key === "Escape") event.stopPropagation();
@@ -271,20 +234,15 @@ export function ColumnComposer({
               event.preventDefault();
               event.currentTarget.form?.requestSubmit();
             }}
-            placeholder={dictation.phase === "finishing" ? "正在收尾…" : dictation.active ? (dictation.live ? "正在听…" : "正在录音，结束后转写…") : data.viewingMaterialEditable ? "让 Agent 改这份材料…" : "与天枢讨论…"}
+            placeholder={data.viewingMaterialEditable ? "让 Agent 改这份材料…" : "与天枢讨论…"}
             aria-label={`${label}对话输入`}
           />
-          </>
         }
         action={
-          dictation.active ? (
-            <DictationControls dictation={dictation} onToInput={confirmDictation} onSend={sendDictation} canSend={!busy} />
-          ) : (
-            <>
-              {allowAttachments ? <AttachButton data={data} className={pillStyles.tool} /> : null}
-              <ComposerAction state={busy ? "stop" : input.trim() ? "send" : "mic"} onStop={data.stop} onMic={() => void dictation.start()} />
-            </>
-          )
+          <>
+            {allowAttachments ? <AttachButton data={data} className={pillStyles.tool} /> : null}
+            <ComposerAction state={busy ? "stop" : "send"} isDisabled={!input.trim()} onStop={data.stop} />
+          </>
         }
       />
     </div>

@@ -103,12 +103,13 @@ describe("对话端点与附件", () => {
 });
 
 describe("全局输入条（clark workspace 614–640）", () => {
-  it("默认是语音面：主按钮「点击说话」（语音输入），渲染时不请求麦克风", () => {
+  it("收起时只有一颗主按钮「输入文字」：没有天枢自己的语音入口（语音交给微信输入法）", () => {
     const html = dock();
-    expect(html).toContain("点击说话");
-    expect(html).toContain('aria-label="语音输入"');
-    expect(html).not.toContain("语音未接入");
-    expect(html).toContain('aria-label="切换键盘输入"');
+    expect(html).toContain("输入文字");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("点击说话");
+    expect(html).not.toContain("语音输入");
+    expect(html).not.toContain("切换键盘输入");
     // D2：没有历史键。
     expect(html).not.toContain("对话记录");
   });
@@ -116,19 +117,19 @@ describe("全局输入条（clark workspace 614–640）", () => {
   it("键盘面：首页占位「输入问题或指令…」，二级页「继续讨论…」，批注后改为围绕批注", () => {
     expect(dock({ keyboard: true })).toContain('placeholder="输入问题或指令…"');
     expect(dock({ keyboard: true })).toContain('aria-label="全局对话输入"');
-    // 展开后左边那颗是麦克风：原地开始听写，不缩回胶囊。
-    expect(dock({ keyboard: true })).toContain('aria-label="语音输入"');
-    expect(dock({ keyboard: true })).not.toContain("切换到语音输入");
+    // 展开后也没有麦克风。
+    expect(dock({ keyboard: true })).not.toContain("语音输入");
     const detail = dock({ keyboard: true, detail: true, global: false, label: "交付力量先支持灯塔" });
     expect(detail).toContain('placeholder="继续讨论…"');
     expect(detail).toContain('aria-label="交付力量先支持灯塔对话输入"');
     expect(dock({ keyboard: true, references: [card("c1", "议题")] })).toContain('placeholder="围绕批注的内容输入问题或判断…"');
   });
 
-  it("回答进行中主按钮变成「停止回答」", () => {
+  it("回答进行中：收起时主按钮仍是「输入文字」，停止在输入框右边（发送键的位置）", () => {
     const html = dock({ data: data({ streaming: true, thinking: true, status: "streaming" }) });
-    expect(html).toContain("停止回答");
-    expect(html).toContain('aria-label="停止本次回答"');
+    expect(html).toContain("输入文字");
+    expect(html).not.toContain("停止回答");
+    expect(dock({ keyboard: true, data: data({ streaming: true, thinking: true, status: "streaming" }) })).toContain('aria-label="停止本次回答"');
   });
 
   it("输入条上方没有气泡（D6）：回答、刚问的话、失败说明都只在对话层里", () => {

@@ -36,12 +36,6 @@ describe("听写控件：红点 + 计时 + 弱化声波，三样同时可见", (
     expect(rules).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*\.dot\s*\{\s*animation:\s*none/);
     expect(rules).toMatch(/\.marked\s*\{[^}]*text-decoration-line:\s*underline/);
   });
-
-  it("首页输入条听写时输入框不再藏起来；多行时控件贴底", () => {
-    const rules = css("conversation-dock.module.css");
-    expect(rules).not.toMatch(/data-dictating=true\] textarea\s*\{\s*display:\s*none/);
-    expect(rules).toMatch(/\.dock\.composerExpanded \.dictation\s*\{[^}]*position:absolute;[^}]*bottom:5px/);
-  });
 });
 
 describe("下划线镜像层", () => {

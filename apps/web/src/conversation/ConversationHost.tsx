@@ -73,7 +73,7 @@ export type ConversationUiState = {
 /**
  * 对话的外壳层（clark `workspace.tsx` 的对话编排）：
  * 首页 = 全局对话（天枢）+ 对话层；二级页 = 右列（ConversationColumn）+ 右列底下的两行输入条。
- * 全局输入条的打字面和对话层一起开合（D6）：从语音胶囊进入打字（键盘键、「点击说话」、新引用）就升起对话层；
+ * 全局输入条的打字面和对话层一起开合（D6）：从收起的输入条进入打字（「输入文字」、唤醒键、新引用）就升起对话层；
  * 收起对话层（⌄、点空白、Esc）输入条回到胶囊，草稿留着。没有外置气泡，消息与出错说明都在对话层里。
  * 引用只为全局对话准备；在二级页已引用时，输入条上方出现「在全局讨论 · N」。
  */
@@ -138,8 +138,6 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, subject, ui 
     ui.setHistoryOpen(true);
   });
 
-  /** 听写出错（没授权、没听清）：输入条交上来，在对话层里说（D6）。 */
-  const [dictationError, setDictationError] = useState<string | null>(null);
   // 新引用 / 起草（引用提问、划词引用、起草文档）在没有右列的页面上：打字面和对话层一起出来。
   const usesDock = !rail || ui.historyOpen;
   useEffect(() => {
@@ -186,7 +184,7 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, subject, ui 
             data-leaving={sheet.leaving || undefined} tabIndex={sheet.leaving ? -1 : undefined} />
           <ConversationHistorySheet data={data} label={target.label} global={global} onClose={closeHistory} composerRef={dockRef} leaving={sheet.leaving}
             wide={canWide && sheetWide} onWide={canWide ? setSheetWide : undefined}
-            notice={dictationError} onQuote={(text) => ui.quoteInConversation(text, { scope: target.scope, intent: MESSAGE_REPLY })} />
+            onQuote={(text) => ui.quoteInConversation(text, { scope: target.scope, intent: MESSAGE_REPLY })} />
         </>
       ) : null}
       <ConversationDock
@@ -197,7 +195,6 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, subject, ui 
         keyboard={ui.historyOpen}
         onKeyboardChange={keyboardChange}
         historyOpen={ui.historyOpen}
-        onDictationError={setDictationError}
         references={items}
         onRemoveReference={removeReference}
         onClearReferences={clearReferences}

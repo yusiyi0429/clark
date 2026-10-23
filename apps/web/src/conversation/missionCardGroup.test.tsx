@@ -15,10 +15,10 @@ describe("任务卡群组的阶段和公开记录", () => {
     expect(groupInputState(phase)).toEqual({ writable, placeholder });
     const html = renderToStaticMarkup(<MissionGroupComposer cardId="card" phase={phase} channels={[]} channel="group" onChannel={() => {}} narrow={false} mobileOpen={false} onMobileOpen={() => {}} onHeightChange={() => {}} reference={null} onRemoveReference={() => {}} busy={false} onSend={async () => true} />);
     expect(html).toContain(`placeholder="${placeholder}"`);
-    // 空输入时右端是麦克风：能写时能按（开始听写），不能写时停用。
-    const mic = html.match(/<button[^>]*data-state="mic"[^>]*>/)?.[0] ?? "";
-    expect(mic).not.toBe("");
-    expect(mic.includes("disabled")).toBe(!writable);
+    // 空输入时右端是停用的发送钮（没有麦克风）。
+    const send = html.match(/<button[^>]*data-state="send"[^>]*>/)?.[0] ?? "";
+    expect(send).toContain("disabled");
+    expect(html).not.toContain("语音输入");
     expect(/<textarea[^>]*disabled/.test(html)).toBe(!writable);
     expect(html).toContain('data-tone="group"');
   });

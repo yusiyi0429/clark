@@ -41,8 +41,8 @@ describe("成员工作台外壳", () => {
     const html = renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽" />);
     expect(html).toContain('data-testid="global-controls"');
     expect(html).toContain('data-conversation-context="global"');
-    // D2 / D6：没有历史键；收起时是语音胶囊，打字面与对话层一起开合。
-    expect(html).toContain('data-composer="voice"');
+    // D2 / D6：没有历史键；收起时是「输入文字」主按钮，打字面与对话层一起开合。
+    expect(html).toContain('data-composer="entry"');
     expect(html).not.toContain("的对话记录");
   });
 

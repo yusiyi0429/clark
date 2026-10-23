@@ -61,12 +61,12 @@ describe("右列底下的两行输入条", () => {
     expect(narrow).toContain("天枢");
   });
 
-  it("提示文字是「与天枢讨论…」，空着时右端是能按的麦克风（语音输入）", () => {
+  it("提示文字是「与天枢讨论…」，空着时右端是停用的发送钮（没有麦克风）", () => {
     const html = composer();
     expect(html).toContain('placeholder="与天枢讨论…"');
-    expect(html).toContain('aria-label="语音输入"');
-    expect(html).toContain('data-state="mic"');
-    expect(html).not.toContain("语音对话尚未接入");
+    const send = html.match(/<button[^>]*data-state="send"[^>]*>/)?.[0] ?? "";
+    expect(send).toContain("disabled");
+    expect(html).not.toContain("语音输入");
   });
 
   it("回答进行中右端变成停止", () => {
