@@ -585,7 +585,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
             data-covered={(detailOpen && !noticeTransition && !closing && !entering && !peek) || undefined}
             style={noticeTransition && !openingEmpty ? { viewTransitionName: "home-board" } : undefined}
           >
-            {/* 成员首页的约会议、复盘在首页左上的操作区里（HomeActions）。 */}
+            {/* 成员首页的约会议、复盘在首页的快捷卡里（HomeActions）。 */}
             {homeHref === "/" ? (
               <div className={s.m2Entry}>
                 {viewerId ? <button type="button" onClick={bookMeeting}>约会议</button> : null}

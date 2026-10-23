@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { TRequestListItem } from "@warmap/contracts";
 
 /**
- * 成员首页左上的操作区。没有 jsdom：Button 换成原生按钮，按下的处理器按按钮上的字记下来，直接调。
+ * 成员首页的快捷卡。没有 jsdom：Button 换成原生按钮，按下的处理器按按钮上的字记下来，直接调。
  */
 const h = vi.hoisted(() => ({ presses: new Map<string, (event: { target: unknown }) => void>() }));
 vi.mock("ts-design/primitives", async () => {
@@ -21,7 +21,7 @@ vi.mock("ts-design/primitives", async () => {
   return { Button };
 });
 
-import { HomeActions, reviewWindow } from "./HomeActions";
+import { HomeActions, reviewMonth } from "./HomeActions";
 import { waitingReplyCount } from "@/components/requests/RequestNotices";
 
 const sentItem = (id: string, extra: Partial<TRequestListItem> = {}): TRequestListItem => ({
@@ -81,9 +81,15 @@ describe("约会议与战场进展", () => {
     expect(navigate).toHaveBeenCalledWith("/me/progress", target);
   });
 
-  it("按钮的顺序：约会议、等回复、战场进展、（雷达）、复盘", () => {
-    expect(visible(render({ waitingReplies: 1 }))).toBe("约会议 等回复 1 战场进展 10 月复盘 10/29 开");
-    expect(visible(render({ waitingReplies: 1, radarUnread: 0 }))).toBe("约会议 等回复 1 战场进展 雷达 10 月复盘 10/29 开");
+  it("方块的顺序：约会议、等回复、战场进展、（雷达）；平时不出复盘", () => {
+    expect(visible(render({ waitingReplies: 1 }))).toBe("约会议 等回复 1 战场进展");
+    expect(visible(render({ waitingReplies: 1, radarUnread: 0 }))).toBe("约会议 等回复 1 战场进展 雷达");
+  });
+
+  it("每格都是同一种方块；复盘窗口期多一格（样式自动排成 2 列 × 3 行）", () => {
+    const html = render({ radarUnread: 0 });
+    for (const label of ["约会议", "等回复", "战场进展", "雷达"]) expect(button(html, label)).toMatch(/class="[^"]*_tile_/);
+    expect(render({ radarUnread: 0, today: "2026-10-29" }).match(/_tile_/g)).toHaveLength(5);
   });
 });
 
@@ -111,45 +117,43 @@ describe("雷达", () => {
   });
 });
 
-describe("操作区的样式", () => {
-  it("上、左各留 4px：胶囊不贴着主区的圆角（主区圆角会裁掉溢出）", () => {
+describe("快捷卡的样式", () => {
+  it("2 列方块；主区窄时排成一行；角标、红点在右上角", () => {
     const css = readFileSync(new URL("../../../styles/home-actions.module.css", import.meta.url), "utf8");
-    expect(css).toMatch(/\.actions \{[^}]*padding: 4px 0 0 4px;/);
-    expect(css).toMatch(/\.unread \{[^}]*background: var\(--counter\);/);
+    expect(css).toMatch(/\.tiles \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+    expect(css).toMatch(/@container \(max-width: 879px\) \{\s*\.tiles \{[^}]*grid-auto-flow: column;/);
+    expect(css).toMatch(/\.count \{[^}]*position: absolute;[^}]*background: var\(--warning\);/);
+    expect(css).toMatch(/\.unread \{[^}]*position: absolute;[^}]*background: var\(--counter\);/);
   });
 });
 
-describe("M 月复盘", () => {
-  it("10/22 是置灰的按钮，写「10/29 开」；10/29 是去 M2 的链接，样子同旁边的胶囊", () => {
-    const closedHtml = render({ today: "2026-10-22" });
-    const closed = button(closedHtml, "复盘");
-    expect(closed).toContain('disabled=""');
-    expect(visible(closed)).toBe("10 月复盘 10/29 开");
-    expect(closedHtml).not.toContain("<a ");
+describe("复盘", () => {
+  it("10/22 不在复盘窗口：不出复盘；10/29 多一格去 M2 的链接，样子同旁边的方块", () => {
+    expect(visible(render({ today: "2026-10-22" }))).not.toContain("复盘");
     const openHtml = render({ today: "2026-10-29" });
     expect(button(openHtml, "复盘")).toBe("");
     const link = openHtml.match(/<a [^>]*>.*?<\/a>/)?.[0] ?? "";
     expect(link).toContain('href="/m2/"');
-    expect(link).toMatch(/class="button button--sm button--tertiary [^"]*pill/);
+    expect(link).toMatch(/class="button [^"]*button--tertiary [^"]*tile[^"]*plain/);
     expect(visible(link)).toBe("10 月复盘");
   });
 
-  it("窗口：本月倒数第 3 天到月底复盘本月，下月 1–7 日复盘上个月，其余时间写下次开的日子", () => {
-    expect(reviewWindow("2026-10-22")).toEqual({ month: 10, opensOn: "10/29" });
-    expect(reviewWindow("2026-10-28")).toEqual({ month: 10, opensOn: "10/29" });
-    expect(reviewWindow("2026-10-29")).toEqual({ month: 10, opensOn: null });
-    expect(reviewWindow("2026-10-31")).toEqual({ month: 10, opensOn: null });
-    expect(reviewWindow("2026-11-01")).toEqual({ month: 10, opensOn: null });
-    expect(reviewWindow("2026-11-07")).toEqual({ month: 10, opensOn: null });
-    expect(reviewWindow("2026-11-08")).toEqual({ month: 11, opensOn: "11/28" });
-    expect(reviewWindow("2027-01-03")).toEqual({ month: 12, opensOn: null });
-    expect(reviewWindow("2027-02-10")).toEqual({ month: 2, opensOn: "2/26" });
-    expect(reviewWindow("2028-02-26")).toEqual({ month: 2, opensOn: "2/27" });
-    expect(reviewWindow("2028-02-27")).toEqual({ month: 2, opensOn: null });
+  it("窗口：本月倒数第 3 天到月底复盘本月，下月 1–7 日复盘上个月，其余时间不开", () => {
+    expect(reviewMonth("2026-10-22")).toBeNull();
+    expect(reviewMonth("2026-10-28")).toBeNull();
+    expect(reviewMonth("2026-10-29")).toBe(10);
+    expect(reviewMonth("2026-10-31")).toBe(10);
+    expect(reviewMonth("2026-11-01")).toBe(10);
+    expect(reviewMonth("2026-11-07")).toBe(10);
+    expect(reviewMonth("2026-11-08")).toBeNull();
+    expect(reviewMonth("2027-01-03")).toBe(12);
+    expect(reviewMonth("2027-02-10")).toBeNull();
+    expect(reviewMonth("2028-02-26")).toBeNull();
+    expect(reviewMonth("2028-02-27")).toBe(2);
   });
 
   it("M2 不可用、或计划还没读到今天，不显示复盘", () => {
-    expect(visible(render({ m2Available: false }))).not.toContain("复盘");
+    expect(visible(render({ m2Available: false, today: "2026-10-29" }))).not.toContain("复盘");
     expect(visible(render({ today: null }))).not.toContain("复盘");
   });
 });

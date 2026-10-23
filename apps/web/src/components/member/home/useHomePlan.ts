@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { THomePlanResponse } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
-/** MissionPlanCard 存好计划点之后发出。 */
+/** 首页计划点存好之后发出（usePlanMarks）。 */
 export const HOME_PLAN_CHANGED = "home-plan-changed";
 
 const REFRESH_MS = 20_000;

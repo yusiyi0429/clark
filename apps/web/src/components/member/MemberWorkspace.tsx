@@ -17,7 +17,7 @@ import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { logout } from "@/lib/logout";
 import { HomeActions } from "./home/HomeActions";
-import { MissionPlanCard } from "./home/MissionPlanCard";
+import { HomePlan } from "./home/HomePlan";
 import { useHomePlan } from "./home/useHomePlan";
 import { MemberRadarNotices, noteworthySignals } from "./MemberRadarNotices";
 import { MemberMeetingSchedule } from "./MemberMeetingSchedule";
@@ -88,7 +88,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
   );
 }
 
-/** 首页：左上操作区，下面是本月 Mission 卡片；桌面上个人菜单在通知栏底部，这里的一份只在手机上显示。 */
+/** 首页：顶行月历 · Mission · 快捷，下面 Mission 详情和最近进展；桌面上个人菜单在通知栏底部，这里的一份只在手机上显示。 */
 function MemberHomeBody({ displayName, home, account, waitingReplies }: { displayName: string; home: ReturnType<typeof useMemberHome>; account: Account; waitingReplies: number }) {
   const { navigate, bookMeeting, m2Available = false } = useWorkspace();
   const plan = useHomePlan();
@@ -96,9 +96,9 @@ function MemberHomeBody({ displayName, home, account, waitingReplies }: { displa
   const error = home.homeError ?? plan.error;
   return <div className={m.board}>
     <header className={m.heading}><h1>{displayName}</h1><span>我的工作台</span></header>
-    <HomeActions waitingReplies={waitingReplies} radarUnread={home.radar ? home.radar.unreadCount : null} today={plan.plan?.today ?? null} m2Available={m2Available} onBookMeeting={bookMeeting} onNavigate={navigate} />
     {error ? <div className={m.error} role="alert"><span>{error}</span><HeroButton variant="ghost" size="sm" onPress={() => { void home.refresh(); void plan.refresh(); }}>重试</HeroButton></div> : null}
-    {plan.plan ? <MissionPlanCard plan={plan.plan} onNavigate={navigate} /> : null}
+    <HomePlan plan={plan.plan} onNavigate={navigate}
+      actions={<HomeActions waitingReplies={waitingReplies} radarUnread={home.radar ? home.radar.unreadCount : null} today={plan.plan?.today ?? null} m2Available={m2Available} onBookMeeting={bookMeeting} onNavigate={navigate} />} />
     <div className={m.phoneAccount}><AccountMenu account={account} onNavigate={navigate} /></div>
   </div>;
 }

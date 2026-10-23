@@ -1,38 +1,46 @@
 /*
- * 成员首页左上的操作区（components/member/home/HomeActions.tsx），版式照样稿 home-layout-v4 的一排胶囊。
- * 按钮是 ts-design Button（圆角、高度、按下、置灰都由它管；开着的复盘是同样式的链接）：约会议用 primary；
- * 其余是白底发丝边，和下面的 Mission 卡片同一套 token。「等回复」的条数用主题的 --warning 小圆角标；雷达有未读时一个 --counter 红点。
- * 主区（外壳 .mainArea）是透明的，但带 24px 圆角并裁掉溢出：操作区贴着它的左上角时，圆角会切掉「约会议」的左上一块。
- * 所以上、左各留 4px：胶囊整个落在圆角里面，键盘焦点框（外扩 4px）也不被主区上沿裁掉。
+ * 成员首页的快捷卡内容（components/member/home/HomeActions.tsx），照样稿 home-layout-v9；卡片外壳在 home-plan.module.css 的 .quick。
+ * 方块按钮，字居中：平时 2×2；复盘窗口期多一格，2 列 × 3 行，仍在同一个正方形里。主区窄时（home-plan 的 .plan 容器窄于 880）排成一行小方块。
+ * 按钮是 ts-design Button（按下、聚焦由它管；开着的复盘是同样式的链接）：约会议用 primary（主题蓝实心）；
+ * 其余半透明白底、细边、深灰字。「等回复」的条数是右上角 --warning 小圆角标；雷达有未读时右上角一个 --counter 红点。
  */
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 4px 0 0 4px;
-}
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 8px; height: 100%; }
 
-/*
- * 约会议以外的胶囊：覆盖 tertiary 的底色和字色（HeroUI 的变体只设这几个变量）。
- * 置灰时也留着发丝边：globals.css 的禁用样式用 !important 去掉了阴影，这里只把这一圈边补回来（透明度、去饱和照旧）。
- */
-.pill.pill {
-  --button-bg: var(--ts-surface, var(--surface));
-  --button-bg-hover: color-mix(in oklab, var(--ink) 4%, var(--ts-surface, var(--surface)));
+.tile.tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 10px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.plain.plain {
+  --button-bg: rgb(255 255 255 / 80%);
+  --button-bg-hover: color-mix(in oklab, var(--ink) 4%, #fff);
   --button-bg-pressed: var(--button-bg-hover);
   --button-fg: var(--ink-muted);
-  box-shadow: inset 0 0 0 1px var(--hairline);
-  text-decoration: none;
+  box-shadow: inset 0 0 0 1px #e6eaf0;
+  font-weight: 500;
 }
-.pill.pill:disabled { box-shadow: inset 0 0 0 1px var(--hairline) !important; }
 
 .count {
+  position: absolute;
+  top: 8px;
+  right: 8px;
   display: inline-grid;
   place-items: center;
-  min-width: 18px;
-  height: 18px;
+  min-width: 17px;
+  height: 17px;
   padding: 0 5px;
   border-radius: 9px;
   background: var(--warning);
@@ -43,25 +51,17 @@
   font-variant-numeric: tabular-nums;
 }
 
-.unread {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--counter);
-}
+.unread { position: absolute; top: 10px; right: 10px; width: 7px; height: 7px; border-radius: 50%; background: var(--counter); }
 
-.opens {
-  color: var(--ink-faint);
-  font-size: var(--type-meta, 12px);
-  font-variant-numeric: tabular-nums;
+/* 主区窄：一行小方块。 */
+@container (max-width: 879px) {
+  .tiles { grid-template-columns: none; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; grid-auto-rows: auto; height: auto; }
+  .tile.tile { height: 56px; border-radius: 14px; }
+  .count { top: 5px; right: 5px; }
+  .unread { top: 7px; right: 7px; }
 }
-
-/* 点触下限：手持与触屏热区 44（--touch-hit 只在那时定义），鼠标的电脑上仍是 ts-design sm 的 32。 */
-@media (max-width: 959px), (pointer: coarse) {
-  .actions > * { min-height: var(--touch-hit, 32px); }
-}
-/* 手持（≤959）字号下限，同首页其他卡片：角标、开放日 13px。 */
+/* 手持（≤959）字号下限：按钮 14px，角标 13px。 */
 @media (max-width: 959px) {
+  .tile.tile { font-size: 14px; }
   .count { min-width: 20px; height: 20px; border-radius: 10px; font-size: 13px; }
-  .opens { font-size: 13px; }
 }
