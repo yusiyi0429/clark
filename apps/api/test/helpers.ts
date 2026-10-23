@@ -1,6 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { Pool } from "pg";
+import { Client, Pool } from "pg";
 import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
 import type { TPreflightCandidate, TWebSearchInput, TWebSearchResponse, TWebSearchResult } from "@warmap/contracts";
 import { migrate } from "../src/migrate.js";
@@ -40,6 +41,44 @@ import { createWeeklyReviewService, type WeeklyReviewService } from "../src/week
 import type { WeeklyReviewAgent } from "../src/weeklyReviewAgent.js";
 
 const ADMIN_URL = process.env.TEST_PG_URL ?? "postgres://postgres:postgres@localhost:54329/postgres";
+const MIGRATIONS_DIR = new URL("../migrations/", import.meta.url);
+const TEMPLATE_LOCK_KEY = 727212; // 建测试模板库的锁，与 migrate 的锁分开
+let migratedTemplate: Promise<string> | undefined;
+
+/**
+ * 跑完全部迁移的模板库，按迁移文件内容哈希命名；测试库从它复制，不必每次重跑全部迁移。
+ * 多个测试进程同时起步时持锁只建一次；先在临时名下迁移、建好再改名，别的进程不会复制到半成品。
+ */
+function migratedTemplateDatabase(): Promise<string> {
+  migratedTemplate ??= (async () => {
+    const hash = createHash("sha256");
+    for (const file of (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith(".sql")).sort()) {
+      hash.update(file).update(await readFile(new URL(file, MIGRATIONS_DIR)));
+    }
+    const name = `warmap_template_${hash.digest("hex").slice(0, 16)}`;
+    const admin = new Client({ connectionString: ADMIN_URL });
+    await admin.connect();
+    try {
+      await admin.query("SELECT pg_advisory_lock($1)", [TEMPLATE_LOCK_KEY]);
+      if ((await admin.query("SELECT 1 FROM pg_database WHERE datname = $1", [name])).rowCount === 0) {
+        const building = `${name}_${randomUUID().replace(/-/g, "").slice(0, 8)}`;
+        await admin.query(`CREATE DATABASE ${building}`);
+        const db = new Client({ connectionString: ADMIN_URL.replace(/\/postgres$/, `/${building}`) });
+        await db.connect();
+        try {
+          await migrate(db);
+        } finally {
+          await db.end();
+        }
+        await admin.query(`ALTER DATABASE ${building} RENAME TO ${name}`);
+      }
+    } finally {
+      await admin.end(); // 断开即释放锁
+    }
+    return name;
+  })();
+  return migratedTemplate;
+}
 
 export type TestDb = { db: import("pg").PoolClient; pool: Pool; admin: Pool; database: string };
 
@@ -91,11 +130,11 @@ function tolerateDroppedConnections(pool: Pool): Pool {
   return pool;
 }
 
-/** 建一个一次性空库跑迁移/集成测试，结束后删除。 */
-export async function createTestDb(fn: (t: TestDb) => Promise<void>): Promise<void> {
+/** 建一个一次性库跑迁移/集成测试，结束后删除。默认是空库；migrated 时从已迁移的模板复制。 */
+export async function createTestDb(fn: (t: TestDb) => Promise<void>, options: { migrated?: boolean } = {}): Promise<void> {
   const database = `warmap_test_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const admin = new Pool({ connectionString: ADMIN_URL, max: 2 });
-  await admin.query(`CREATE DATABASE ${database}`);
+  await admin.query(options.migrated ? `CREATE DATABASE ${database} TEMPLATE ${await migratedTemplateDatabase()}` : `CREATE DATABASE ${database}`);
   const db = tolerateDroppedConnections(new Pool({
     connectionString: ADMIN_URL.replace(/\/postgres$/, `/${database}`),
     max: 5,
@@ -328,13 +367,12 @@ export async function createTestApp(
 ): Promise<TestApp> {
   const database = `warmap_test_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const admin = new Pool({ connectionString: ADMIN_URL, max: 2 });
-  await admin.query(`CREATE DATABASE ${database}`);
+  await admin.query(`CREATE DATABASE ${database} TEMPLATE ${await migratedTemplateDatabase()}`);
   const pool = tolerateDroppedConnections(new Pool({
     connectionString: ADMIN_URL.replace(/\/postgres$/, `/${database}`),
     max: 5,
   }));
   const client = await pool.connect();
-  await migrate(client);
   await seedTestAccess(client);
   client.release();
   const env = { ...testEnv, ...seedOverrides };
