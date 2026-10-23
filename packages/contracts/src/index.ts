@@ -43,3 +43,4 @@ export * from "./meetingCard.js";
 export * from "./impact.js";
 export * from "./docChanges.js";
 export * from "./collections.js";
+export * from "./feishuMinuteInbox.js";

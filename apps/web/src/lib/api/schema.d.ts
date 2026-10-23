@@ -1213,6 +1213,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/feishu-minutes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我在飞书里直接开的会待整理：只列我是所有者、近 7 天、还没对上天枢会议的视频会议妙记 */
+        get: operations["listMyFeishuMinutes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/feishu-minutes/{token}/organize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 妙记所有者用这份妙记新建一场会（别人 404 MINUTE_NOT_FOUND）；已整理过的再整理返回同一个 meetingId；400 INVALID_INPUT / ANCHOR_NOT_FOUND / INVALID_CEO / INVALID_PARTICIPANT，409 MINUTE_NOT_PENDING / MINUTE_TAKEN */
+        post: operations["organizeFeishuMinute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/feishu-minutes/{token}/attach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 妙记所有者把妙记记到建议的那场天枢里约好的会（别人 404 MINUTE_NOT_FOUND）；已记到同一场会的再记返回同一个 meetingId；409 MINUTE_NOT_PENDING / SUGGESTION_CHANGED / MINUTE_TAKEN */
+        post: operations["attachFeishuMinute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/feishu-minutes/{token}/ignore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 妙记所有者忽略这份妙记，不再提示（别人 404 MINUTE_NOT_FOUND）；已忽略的再忽略 204；409 MINUTE_NOT_PENDING */
+        post: operations["ignoreFeishuMinute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings/{id}/minutes": {
         parameters: {
             query?: never;
@@ -10192,6 +10260,36 @@ export interface components {
                 status: "pending" | "edit_pending" | "failed";
             }[];
         };
+        FeishuMinuteInboxResponse: {
+            minutes: {
+                minuteToken: string;
+                title: string;
+                startsAt: string;
+                endsAt: string;
+                attendees: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                otherAttendees: number;
+                suggestion: {
+                    meetingId: string;
+                    title: string;
+                } | null;
+            }[];
+        };
+        OrganizeFeishuMinuteRequest: {
+            title: string;
+            anchors: {
+                kind: "lto" | "po" | "mission" | "unit";
+                id: string;
+            }[];
+        };
+        AttachFeishuMinuteRequest: {
+            meetingId: string;
+        };
+        FeishuMinuteMeetingResponse: {
+            meetingId: string;
+        };
         MeetingWorldResponse: {
             world: {
                 excluded: boolean;
@@ -14548,6 +14646,197 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMyFeishuMinutes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 待整理的妙记 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeishuMinuteInboxResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    organizeFeishuMinute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizeFeishuMinuteRequest"];
+            };
+        };
+        responses: {
+            /** @description 妙记所在的会 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeishuMinuteMeetingResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    attachFeishuMinute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachFeishuMinuteRequest"];
+            };
+        };
+        responses: {
+            /** @description 妙记所在的会 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeishuMinuteMeetingResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    ignoreFeishuMinute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已忽略 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
