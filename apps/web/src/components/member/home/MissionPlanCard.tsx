@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * 成员首页的 Mission 卡片（照样稿 home-layout-v4，外观跟首页其他卡片一致）：Mission 行、本月时间轴、Task 行、Activity 三栏。
+ * 成员首页的 Mission 卡片（照样稿 home-tabs-v5，外观跟首页其他卡片一致）：本月时间轴、Mission 切换、Task 行、Activity 三栏，
+ * 切换紧挨着它管的 Task 行和三栏。
  * - 只展示 plan，取数在 useHomePlan；计划点的加、拖、删在 usePlanMarks（先画上再发请求）。
  * - 按 Mission 归组一律看 activity.missionId（任务卡没确认时 item.mission 为空）。
  * - 当前范围（全部或聚焦的 Mission）一个 Task 都没有时不出 Task 行，三栏列这个范围里的所有 Activity（10 月本体里还没有 Task）。
@@ -71,9 +72,7 @@ export function MissionPlanCard({ plan, onNavigate }: { plan: THomePlanResponse;
   };
 
   return (
-    <section ref={cardRef} className={s.card} aria-label="本月 Mission" data-focus={focus ?? undefined}>
-      <MissionRow plan={plan} focus={focus} onChoose={choose} onNavigate={onNavigate} />
-
+    <section ref={cardRef} className={s.card} aria-label="本月 Mission">
       <div className={s.timeline}>
         <DayTimeline
           days={plan.days}
@@ -106,6 +105,8 @@ export function MissionPlanCard({ plan, onNavigate }: { plan: THomePlanResponse;
         )}
         {planMarks.error && <p className={s.error} role="alert">{planMarks.error}</p>}
       </div>
+
+      <MissionRow plan={plan} focus={focus} onChoose={choose} onNavigate={onNavigate} />
 
       {tasks.length > 0 && (
         <TaskRow tasks={tasks} selected={selected} others={others} dots={focus === null} colorOf={colorOf} infoOpen={infoOpen}

@@ -32,13 +32,25 @@ const brief = (patch: Partial<MemberRadarBrief> = {}): MemberRadarBrief => ({ la
 
 beforeEach(() => { ui.presses.clear(); home.radar = null; });
 
-describe("成员首页不放雷达小卡", () => {
-  it("雷达开着也只在左栏出值得注意的信号，首页主区没有雷达卡", () => {
+describe("成员首页操作区的「雷达」", () => {
+  /** 操作区里「雷达」那颗按钮的整段 HTML。 */
+  const radarPill = (html: string) => html.match(/<button[^>]*data-origin="\/me\/radar"[^>]*>.*?<\/button>/)?.[0] ?? "";
+
+  it("雷达开着、有未读：操作区出「雷达」带红点，进我的雷达页；没有雷达小卡，左栏照样出值得注意的信号", () => {
     home.radar = brief({ highlights: [signal(1)] });
     const html = renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽" />);
     expect(html).not.toContain("雷达信号");
-    expect(html).not.toContain('data-origin="/me/radar"');
+    expect(radarPill(html)).toContain('aria-label="2 条未读"');
     expect(html).toContain("雷达 · 值得注意");
+  });
+
+  it("雷达开着、都读过：「雷达」没有红点；雷达关着（radar 为空）：不出「雷达」", () => {
+    home.radar = brief({ unreadCount: 0, highlights: [] });
+    const read = radarPill(renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽" />));
+    expect(read).toContain("雷达");
+    expect(read).not.toContain("条未读");
+    home.radar = null;
+    expect(renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽" />)).not.toContain('data-origin="/me/radar"');
   });
 });
 

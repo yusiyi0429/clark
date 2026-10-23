@@ -1,7 +1,9 @@
 /*
  * 成员首页左上的操作区（components/member/home/HomeActions.tsx），版式照样稿 home-layout-v4 的一排胶囊。
  * 按钮是 ts-design Button（圆角、高度、按下、置灰都由它管；开着的复盘是同样式的链接）：约会议用 primary；
- * 其余是白底发丝边，和下面的 Mission 卡片同一套 token。「等回复」的条数用主题的 --warning 小圆角标。
+ * 其余是白底发丝边，和下面的 Mission 卡片同一套 token。「等回复」的条数用主题的 --warning 小圆角标；雷达有未读时一个 --counter 红点。
+ * 主区（外壳 .mainArea）是透明的，但带 24px 圆角并裁掉溢出：操作区贴着它的左上角时，圆角会切掉「约会议」的左上一块。
+ * 所以上、左各留 4px：胶囊整个落在圆角里面，键盘焦点框（外扩 4px）也不被主区上沿裁掉。
  */
 .actions {
   display: flex;
@@ -9,6 +11,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+  padding: 4px 0 0 4px;
 }
 
 /*
@@ -38,6 +41,13 @@
   font-weight: 600;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+}
+
+.unread {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--counter);
 }
 
 .opens {

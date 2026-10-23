@@ -3,8 +3,8 @@
 /**
  * 成员首页的本月时间轴：一天一格，只管画和把操作交出去，不取数。
  *
- * - 格子：还没到的工作日深蓝、休息日浅蓝，过去的统一灰；今天加一圈描边，下面写「今天」。
- *   格子下面只标 1 号、逢 5、今天和月末；再下面一道括线圈出本周（截到本月以内），写「本周还剩 N 个工作日」；showWeek=false 时不画本周。
+ * - 格子是定宽的小方块，靠左排（不随卡片拉宽）：还没到的工作日蓝、休息日浅蓝，过去的统一浅灰；今天加一圈细描边，下面写「今天」。
+ *   格子下面只标 1 号、今天和月末。本周（截到本月以内）的格子后面垫一块浅蓝底，上方左端写「本周 · 还剩 N 个工作日」；showWeek=false 时不画本周。
  * - 格子上方按日期放签定关口（实心菱形）和计划点（空心圆），颜色是所属 Mission 的颜色；同一天的并排放。
  *   名字只在 title 和读屏文字里。聚焦某个 Mission 时，其他 Mission 的点淡掉。
  * - 计划点：按住拖到别的格子（按整格吸附，松手时改日期；拖出格子那一带或按 Esc 就放回原处）；右键或手指长按删除。点格子加计划点。
@@ -27,7 +27,7 @@ export type DayTimelineProps = {
   today: string;
   weekStart: string;
   weekEnd: string;
-  /** false 时不画本周（括线、细线上的本周底带和字），比如回退显示上个月时。默认画。 */
+  /** false 时不画本周（浅蓝底和字、细线上的本周底带和字），比如回退显示上个月时。默认画。 */
   showWeek?: boolean;
   gates: THomePlanGate[];
   marks: THomePlanMark[];
@@ -73,7 +73,7 @@ export function DayTimeline({ days, today, weekStart, weekEnd, showWeek = true, 
     ? {
         first: weekIndexes[0],
         last: weekIndexes.at(-1)!,
-        // 本周被月初或月末截断时，括线下的字贴着没截断的那头，免得伸出时间轴。
+        // 本周被月初或月末截断时记下是哪头：月末那头上方的字靠右对齐底块，免得伸出时间轴；细线上「本周」跟着那头的日期写。
         edge: weekStart < days[0].date ? "start" : weekEnd > days[count - 1].date ? "end" : undefined,
       }
     : null;
@@ -175,6 +175,15 @@ export function DayTimeline({ days, today, weekStart, weekEnd, showWeek = true, 
   return (
     <div className={s.timeline} role="group" aria-label="本月时间轴" style={{ "--days": count } as CSSProperties}>
       <div className={s.days} data-view="days">
+        {week && (
+          <div className={s.weekRow}>
+            <span className={s.weekText} data-week data-edge={week.edge} style={{ gridColumn: `${week.first + 1} / ${week.last + 2}` }}>
+              本周 · 还剩 {workdaysLeftThisWeek(days, today, weekEnd)} 个工作日
+            </span>
+          </div>
+        )}
+        {/* 底块在格子前面，画在格子下层。 */}
+        {week && <span className={s.weekBand} data-week style={{ "--first": week.first, "--span": week.last - week.first + 1 } as CSSProperties} />}
         <ol className={s.grid}>
           {days.map((day, index) => {
             const state = day.date === today ? "today" : day.date < today ? "past" : "future";
@@ -182,7 +191,7 @@ export function DayTimeline({ days, today, weekStart, weekEnd, showWeek = true, 
             const onDay = markers.filter((marker) => marker.date === day.date);
             const ghost = dragged && drop?.date === day.date ? dragged : undefined;
             const number = dayOfMonth(day.date);
-            const labelled = number === 1 || number % 5 === 0 || state === "today" || index === count - 1;
+            const labelled = number === 1 || state === "today" || index === count - 1;
             return (
               <li
                 key={day.date}
@@ -208,14 +217,6 @@ export function DayTimeline({ days, today, weekStart, weekEnd, showWeek = true, 
             );
           })}
         </ol>
-        {week && (
-          <div className={s.braceRow}>
-            <div className={s.brace} data-week data-edge={week.edge} style={{ gridColumn: `${week.first + 1} / ${week.last + 2}` }}>
-              <span className={s.bracket} />
-              <span className={s.braceText}>本周还剩 {workdaysLeftThisWeek(days, today, weekEnd)} 个工作日</span>
-            </div>
-          </div>
-        )}
       </div>
 
       <div className={s.line} data-view="line">

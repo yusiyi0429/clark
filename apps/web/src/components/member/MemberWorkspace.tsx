@@ -96,7 +96,7 @@ function MemberHomeBody({ displayName, home, account, waitingReplies }: { displa
   const error = home.homeError ?? plan.error;
   return <div className={m.board}>
     <header className={m.heading}><h1>{displayName}</h1><span>我的工作台</span></header>
-    <HomeActions waitingReplies={waitingReplies} today={plan.plan?.today ?? null} m2Available={m2Available} onBookMeeting={bookMeeting} onNavigate={navigate} />
+    <HomeActions waitingReplies={waitingReplies} radarUnread={home.radar ? home.radar.unreadCount : null} today={plan.plan?.today ?? null} m2Available={m2Available} onBookMeeting={bookMeeting} onNavigate={navigate} />
     {error ? <div className={m.error} role="alert"><span>{error}</span><HeroButton variant="ghost" size="sm" onPress={() => { void home.refresh(); void plan.refresh(); }}>重试</HeroButton></div> : null}
     {plan.plan ? <MissionPlanCard plan={plan.plan} onNavigate={navigate} /> : null}
     <div className={m.phoneAccount}><AccountMenu account={account} onNavigate={navigate} /></div>

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TRequestListItem } from "@warmap/contracts";
@@ -29,7 +30,7 @@ const sentItem = (id: string, extra: Partial<TRequestListItem> = {}): TRequestLi
 });
 
 const render = (props: Partial<Parameters<typeof HomeActions>[0]> = {}) => renderToStaticMarkup(
-  <HomeActions waitingReplies={0} today="2026-10-22" m2Available onBookMeeting={vi.fn()} onNavigate={vi.fn()} {...props} />,
+  <HomeActions waitingReplies={0} radarUnread={null} today="2026-10-22" m2Available onBookMeeting={vi.fn()} onNavigate={vi.fn()} {...props} />,
 );
 /** 页面上看得到的字（去掉标签和 React 的文本分隔注释）。 */
 const visible = (html: string) => html.replace(/<!--.*?-->/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -80,8 +81,41 @@ describe("约会议与战场进展", () => {
     expect(navigate).toHaveBeenCalledWith("/me/progress", target);
   });
 
-  it("四个按钮的顺序：约会议、等回复、战场进展、复盘", () => {
+  it("按钮的顺序：约会议、等回复、战场进展、（雷达）、复盘", () => {
     expect(visible(render({ waitingReplies: 1 }))).toBe("约会议 等回复 1 战场进展 10 月复盘 10/29 开");
+    expect(visible(render({ waitingReplies: 1, radarUnread: 0 }))).toBe("约会议 等回复 1 战场进展 雷达 10 月复盘 10/29 开");
+  });
+});
+
+describe("雷达", () => {
+  it("本人雷达没开（radarUnread 为 null）：不出雷达", () => {
+    expect(visible(render({ radarUnread: null }))).not.toContain("雷达");
+    expect(h.presses.has("雷达")).toBe(false);
+  });
+
+  it("开着、没有未读：只写「雷达」，没有红点；点进我的雷达页", () => {
+    const navigate = vi.fn();
+    const html = render({ radarUnread: 0, onNavigate: navigate });
+    const radar = button(html, "雷达");
+    expect(radar).toContain('data-origin="/me/radar"');
+    expect(radar).not.toContain('role="img"');
+    const target = {};
+    h.presses.get("雷达")!({ target });
+    expect(navigate).toHaveBeenCalledWith("/me/radar", target);
+  });
+
+  it("有未读信号：「雷达」后面一个红点（读屏读条数），不写数字", () => {
+    const radar = button(render({ radarUnread: 3 }), "雷达");
+    expect(radar).toMatch(/雷达<span class="[^"]*_unread_[^"]*" role="img" aria-label="3 条未读"><\/span>/);
+    expect(visible(radar)).toBe("雷达");
+  });
+});
+
+describe("操作区的样式", () => {
+  it("上、左各留 4px：胶囊不贴着主区的圆角（主区圆角会裁掉溢出）", () => {
+    const css = readFileSync(new URL("../../../styles/home-actions.module.css", import.meta.url), "utf8");
+    expect(css).toMatch(/\.actions \{[^}]*padding: 4px 0 0 4px;/);
+    expect(css).toMatch(/\.unread \{[^}]*background: var\(--counter\);/);
   });
 });
 

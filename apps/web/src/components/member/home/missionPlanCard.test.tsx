@@ -195,10 +195,51 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe("MissionPlanCard：Mission 行", () => {
+/** Mission 切换里一项的 props。 */
+const tab = (view: ReturnType<typeof mount>, id: string) => view.find((props) => props["data-mission"] === id)!;
+
+describe("MissionPlanCard：Mission 切换", () => {
+  it("卡片里从上到下：时间轴、Mission 切换、Task 行、三栏（切换紧挨着它管的东西）", () => {
+    const html = mount().html;
+    const at = (needle: string) => {
+      const index = html.indexOf(needle);
+      expect(index, needle).toBeGreaterThan(-1);
+      return index;
+    };
+    const order = [at("_timeline_"), at('role="tablist"'), at("data-task-row"), at('data-column="done"')];
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it("页签的读屏语义：tablist 里每项是 tab，选中的 aria-selected", () => {
+    const view = mount();
+    expect(view.html).toMatch(/role="tablist" aria-label="Mission"/);
+    for (const id of ["all", "m1", "m2"]) expect(tab(view, id).role).toBe("tab");
+    expect(tab(view, "all")["aria-selected"]).toBe(true);
+    expect(tab(view, "m1")["aria-selected"]).toBe(false);
+    view.mission("m1");
+    expect(tab(view, "all")["aria-selected"]).toBe(false);
+    expect(tab(view, "m1")["aria-selected"]).toBe(true);
+  });
+
+  it("只靠字号分选中：选「全部」时它大、其余 Mission 中号；选 m1 时 m1 大、其余（含「全部」）小", () => {
+    const view = mount();
+    expect([tab(view, "all"), tab(view, "m1"), tab(view, "m2")].map((props) => props["data-size"])).toEqual(["large", "medium", "medium"]);
+    view.mission("m1");
+    expect([tab(view, "all"), tab(view, "m1"), tab(view, "m2")].map((props) => props["data-size"])).toEqual(["small", "large", "small"]);
+    view.mission("all");
+    expect(tab(view, "all")["data-size"]).toBe("large");
+  });
+
+  it("「全部」后面是 Mission 个数；每个 Mission 带色点，悬停看全名", () => {
+    const view = mount();
+    expect(view.html).toMatch(/data-mission="all"[^>]*><span class="[^"]*_name_[^"]*">全部<\/span><span class="[^"]*_total_[^"]*">2<\/span><\/button>/);
+    expect(view.html).toMatch(/data-mission="m2"[^>]*><i class="[^"]*_dot_[^"]*" style="--c:#2f8a7a"/);
+    expect(tab(view, "m1").title).toBe("CEO / DRI Agent 从能用到在用");
+  });
+
   it("默认「全部」：三栏的卡片数等于 activities 按 column 分组的数目；栏名照写", () => {
     const view = mount();
-    expect(view.find((props) => props["data-mission"] === "all")!["aria-pressed"]).toBe(true);
+    expect(tab(view, "all")["aria-selected"]).toBe(true);
     expect(cardsIn(view.html, "done")).toHaveLength(2);
     expect(cardsIn(view.html, "week")).toHaveLength(4);
     expect(cardsIn(view.html, "later")).toHaveLength(1);
@@ -243,21 +284,13 @@ describe("MissionPlanCard：Mission 行", () => {
     expect(cardsIn(view.html, "week")).toContain("a8");
   });
 
-  it("每个 Mission 上面的小字：今天起最近的一个签定关口「M/D 名字」；没有就什么都不写", () => {
+  it("Mission 上面不再写最近关口的小字（关口在时间轴上）", () => {
     const html = mount().html;
-    expect(text(html)).toContain("10/28 上线");
-    expect(text(html)).toContain("10/22 首次会面");
-    expect(text(html)).not.toMatch(/需求冻结|10\/30 复盘/);
-    const pastOnly = mount(plan({ gates: [{ missionId: "m1", date: "2026-10-12", label: "需求冻结" }] })).html;
-    expect(text(pastOnly)).not.toContain("需求冻结");
+    expect(text(html)).not.toMatch(/10\/28 上线|10\/22 首次会面|上线|需求冻结|复盘/);
+    expect(html).not.toContain("_hint_");
   });
 
-  it("标题上面那行小字没有内容时也空着占位，各项标题对得齐", () => {
-    const html = mount(plan({ gates: [] })).html;
-    for (const id of ["all", "m1", "m2"]) expect(html).toMatch(new RegExp(`data-mission="${id}"[^>]*><span class="[^"]*_hint_[^"]*"></span>`));
-  });
-
-  it("回退显示上个月：「全部」上面写「9 月」，时间轴不画本周括线", () => {
+  it("回退显示上个月：切换行尾写「9 月」，时间轴不画本周", () => {
     const html = mount(plan({ period: "2026-09", fallbackFrom: "2026-09", days: [{ date: "2026-09-30", workday: true }] })).html;
     expect(text(html)).toContain("9 月");
     expect(h.timeline!.showWeek).toBe(false);
@@ -626,6 +659,23 @@ describe("MissionPlanCard：计划点", () => {
 
 describe("Mission 卡片样式", () => {
   const css = readFileSync(new URL("../../../styles/mission-plan-card.module.css", import.meta.url), "utf8");
+  const handheld = css.match(/@media \(max-width: 959px\) \{([\s\S]*?)\r?\n\}/)?.[1] ?? "";
+  it("Mission 切换：选中 22（正文 +8）半粗主墨、写全；中号 15；小号 14 更淡；没有底线；字号有过渡、减少动效时关掉", () => {
+    expect(css).toMatch(/\.mission \{[^}]*max-width: 15em;[^}]*font-size: calc\(var\(--type-body, 14px\) \+ 1px\);[^}]*transition: font-size/);
+    expect(css).toContain('.mission[data-size="large"] { max-width: none; color: var(--ink); font-size: calc(var(--type-body, 14px) + 8px); font-weight: 600;');
+    expect(css).toMatch(/\.mission\[data-size="small"\] \{[^}]*font-size: var\(--type-body, 14px\);/);
+    expect(css).toMatch(/\.name \{[^}]*overflow: hidden; text-overflow: ellipsis;/);
+    expect(css).not.toMatch(/\.mission[^{]*::after/);
+    expect(css).toMatch(/\.missions \{[^}]*gap: 26px;[^}]*overflow-x: auto;/);
+    expect(css).toMatch(/\.missions\[data-more\] \{ mask-image: linear-gradient/);
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^}]*\.mission, \.mission \.dot,[^}]*transition: none;/);
+  });
+  it("手持（≤959）按比例缩小：选中 19、中号 14、小号 13；点触热区 44", () => {
+    expect(handheld).toContain(".mission { font-size: 14px; }");
+    expect(handheld).toContain('.mission[data-size="large"] { font-size: 19px; }');
+    expect(handheld).toContain('.mission[data-size="small"] { font-size: 13px; }');
+    expect(css).toMatch(/@media \(max-width: 959px\), \(pointer: coarse\) \{\s*\.mission \{ min-height: var\(--touch-hit, 32px\);/);
+  });
   it("本周那栏最宽、打浅蓝底", () => {
     expect(css).toMatch(/grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1\.35fr\) minmax\(0, 1fr\);/);
     expect(css).toMatch(/\.column\[data-column="week"\] \{[^}]*background: rgba\(33, 91, 161, \.07\);/);

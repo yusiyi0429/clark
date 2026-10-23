@@ -100,10 +100,10 @@ describe("DayTimeline：一天一格", () => {
     expect(dayTag(html, "2026-10-23")).toContain('data-workday="true"');
   });
 
-  it("格子下面只标 1 号、逢 5、今天（写今天）和月末", () => {
+  it("格子下面只标 1 号、今天（写今天）和月末", () => {
     const grid = render().match(/<ol[^>]*>.*<\/ol>/)?.[0] ?? "";
     const texts = [...grid.matchAll(/>([^<]+)</g)].map((match) => match[1]);
-    expect(texts).toEqual(["1", "5", "10", "15", "20", "今天", "25", "30", "31"]);
+    expect(texts).toEqual(["1", "今天", "31"]);
   });
 
   it("读屏：根节点叫本月时间轴，每格读日期、今天、工作日或休息日", () => {
@@ -113,22 +113,28 @@ describe("DayTimeline：一天一格", () => {
     expect(dayTag(html, "2026-10-24")).toContain('aria-label="10月24日 休息日"');
   });
 
-  it("本周括线：圈住本周在本月里的格子，写本周还剩 N 个工作日", () => {
-    const html = render();
-    const brace = html.match(/<div[^>]*data-week[^>]*>.*?<\/div>/)?.[0] ?? "";
-    expect(brace).toContain("grid-column:19 / 26");
-    expect(brace).toContain("本周还剩 2 个工作日");
+  it("本周（W1 浅底托）：格子后面一块底垫住本周在本月里的格子，上方左端写「本周 · 还剩 N 个工作日」；不再有括线", () => {
+    const days = view(render(), "days");
+    const label = days.match(/<span[^>]*data-week[^>]*>([^<]*)<\/span>/);
+    expect(label?.[0]).toContain("grid-column:19 / 26");
+    expect(label?.[0]).not.toContain("data-edge");
+    expect(label?.[1]).toBe("本周 · 还剩 2 个工作日");
+    expect(days).toMatch(/<span class="[^"]*_weekBand_[^"]*" data-week="true" style="--first:18;--span:7"><\/span>/);
+    // 底块在格子前面，画在格子下层。
+    expect(days.indexOf("_weekBand_")).toBeLessThan(days.indexOf("<ol"));
+    expect(days).not.toMatch(/brace|bracket/i);
   });
 
-  it("本周跨到下个月：括线截到月末，只数本月里的工作日", () => {
-    const html = render({ today: "2026-10-30", weekStart: "2026-10-26", weekEnd: "2026-11-01" });
-    const brace = html.match(/<div[^>]*data-week[^>]*>.*?<\/div>/)?.[0] ?? "";
-    expect(brace).toContain("grid-column:26 / 32");
-    expect(brace).toContain('data-edge="end"');
-    expect(brace).toContain("本周还剩 1 个工作日");
+  it("本周跨到下个月：底块截到月末，字靠右，只数本月里的工作日", () => {
+    const days = view(render({ today: "2026-10-30", weekStart: "2026-10-26", weekEnd: "2026-11-01" }), "days");
+    const label = days.match(/<span[^>]*data-week[^>]*>([^<]*)<\/span>/);
+    expect(label?.[0]).toContain("grid-column:26 / 32");
+    expect(label?.[0]).toContain('data-edge="end"');
+    expect(label?.[1]).toBe("本周 · 还剩 1 个工作日");
+    expect(days).toContain('style="--first:25;--span:6"');
   });
 
-  it("showWeek=false：本周落在这个月里也不画括线，细线上没有本周底带和「本周」", () => {
+  it("showWeek=false：本周落在这个月里也不画底块和字，细线上没有本周底带和「本周」", () => {
     const html = render({ showWeek: false });
     expect(html).not.toContain("data-week");
     expect(html).not.toContain("本周");
@@ -136,7 +142,7 @@ describe("DayTimeline：一天一格", () => {
     expect(render()).toContain("data-week");
   });
 
-  it("本周不在这个月（回退显示上个月）：不画括线，也没有今天那格", () => {
+  it("本周不在这个月（回退显示上个月）：不画本周，也没有今天那格", () => {
     const html = render({ today: "2026-11-23", weekStart: "2026-11-23", weekEnd: "2026-11-29" });
     expect(html).not.toContain("data-week");
     expect(html).not.toContain('data-state="today"');
@@ -363,10 +369,25 @@ describe("DayTimeline：窄容器退成一根细线", () => {
     expect(css).toMatch(/@container day-timeline \(max-width: 559px\) \{[^@]*\.days[^{]*\{ display: none; \}[^@]*\.line \{ display: block; \}/);
   });
 
-  it("颜色照样稿：未到工作日深蓝、未到休息日浅蓝、过去统一灰", () => {
+  it("存在感压低：定宽小方块靠左排；同一套色相调淡（未到工作日蓝、未到休息日浅蓝、过去统一灰），今天细描边；不用阴影和渐变", () => {
     const css = readFileSync(new URL("../../../styles/day-timeline.module.css", import.meta.url), "utf8");
-    expect(css).toContain('.day[data-workday="true"] { background: #3d6fb6; }');
-    expect(css).toContain('.day[data-workday="false"] { background: #dbe4f0; }');
-    expect(css).toContain('.day[data-state="past"] { background: #c9d1dc; }');
+    expect(css).toContain("--cell: 12px;");
+    expect(css).toContain("grid-template-columns: repeat(var(--days), var(--cell));");
+    expect(css).toMatch(/\.grid \{[^}]*width: fit-content;/);
+    expect(css).toContain('.day[data-workday="true"] { background: color-mix(in oklab, #3d6fb6 58%, var(--ts-surface, var(--surface))); }');
+    expect(css).toContain('.day[data-workday="false"] { background: color-mix(in oklab, #dbe4f0 60%, var(--ts-surface, var(--surface))); }');
+    expect(css).toContain('.day[data-state="past"] { background: color-mix(in oklab, #c9d1dc 60%, var(--ts-surface, var(--surface))); }');
+    expect(css).toContain('.day[data-state="today"] { outline: 1.5px solid var(--ink); outline-offset: 1.5px; }');
+    expect(css).toMatch(/\.gate, \.mark \{[^}]*width: 8px; height: 8px;/);
+    expect(css).not.toMatch(/box-shadow|gradient\(/);
+  });
+
+  it("本周底块和字压得很轻：浅蓝底 .08、11px 不加粗；细线上的本周底带同一种底", () => {
+    const css = readFileSync(new URL("../../../styles/day-timeline.module.css", import.meta.url), "utf8");
+    expect(css).toMatch(/\.weekBand \{[^}]*background: rgba\(61, 111, 182, \.08\);/);
+    expect(css).toMatch(/\.weekText \{[^}]*font-size: 11px;/);
+    expect(css).not.toMatch(/\.weekText \{[^}]*font-weight/);
+    expect(css).toMatch(/\.band \{[^}]*background: rgba\(61, 111, 182, \.08\);/);
+    expect(css).not.toMatch(/dashed/);
   });
 });

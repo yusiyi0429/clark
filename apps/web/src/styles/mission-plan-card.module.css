@@ -1,11 +1,11 @@
 /*
- * 成员首页的 Mission 卡片（components/member/home/MissionPlanCard.tsx 及同目录的各块），版式照样稿 home-layout-v4。
+ * 成员首页的 Mission 卡片（components/member/home/MissionPlanCard.tsx 及同目录的各块），版式照样稿 home-layout-v4，Mission 切换照 home-tabs-v5。
  * 外观跟首页其他卡片走同一套 token，不另起一套：
  *   卡片     = 原首页卡片（已删的 member-home-widgets.module.css .widget）：发丝边、--onboarding-card-radius、--onboarding-highlight、内边距 22
  *   字号     = 外壳的 --type-title / --type-body / --type-meta；墨色 --ink / --ink-muted / --ink-faint；分隔线 --rule、--hairline
  *   浮层     = meeting-workspace.module.css 的 .editFloat / .editDialog（ts-design Popover）
  *   小卡     = --r-inset 圆角、发丝边；红字 --counter；链接 --onboarding-pressed
- * 规格自带的颜色：Mission 色（行内 --c / --bar）、本周浅蓝底 rgba(33, 91, 161, .07) 和同色的「本周」字（与时间轴括线 #215ba1 一致）。
+ * 规格自带的颜色：Mission 色（行内 --c / --bar）、本周浅蓝底 rgba(33, 91, 161, .07) 和同色的「本周」字 #215ba1。
  * 卡片窄于 560px 时三栏上下排，本周在最上面。
  */
 .card {
@@ -24,70 +24,72 @@
 
 .dot { flex: none; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
 
-/* Mission 行：底线画在行的内阴影上，选中项的短线（::after）盖住它；放不下时横向滑动。 */
+/*
+ * Mission 切换（时间轴下面一行，样稿 home-tabs-v5）：只靠字号分选中，不画底线；各项按基线对齐，间距 26 免得读成一句话。
+ *   data-size large  = 选中的：正文 +8（22），半粗，主墨，名字写全
+ *   data-size medium = 选「全部」时的其余 Mission：正文 +1（15），灰
+ *   data-size small  = 选某个 Mission 时的其余（含「全部」）：正文（14），更淡，色点也淡
+ * 没选中的长名字截到 15em；一行放不下时横向滑动，右边还有没露出来的（data-more）用遮罩渐隐。
+ * 滑动区四周留 4px（再用负外边距抵掉），键盘焦点框不被裁掉。
+ */
+.switcher { display: flex; align-items: baseline; gap: 16px; min-width: 0; margin: 0 0 16px; }
 .missions {
+  flex: 1;
   display: flex;
-  align-items: flex-end;
-  gap: 22px;
-  margin-bottom: 16px;
+  align-items: baseline;
+  gap: 26px;
+  min-width: 0;
+  margin: -4px;
+  padding: 4px;
   overflow-x: auto;
-  box-shadow: inset 0 -1px var(--rule);
   scrollbar-width: none;
 }
 .missions::-webkit-scrollbar { display: none; }
+.missions[data-more] { mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent); }
 
 .mission {
-  position: relative;
   flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  padding: 0 0 10px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  max-width: 15em;
+  padding: 0;
   border: 0;
   background: none;
+  color: var(--ink-faint);
+  font-size: calc(var(--type-body, 14px) + 1px);
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
   text-align: left;
   cursor: pointer;
+  transition: font-size var(--dur-base) var(--ease-swift), color var(--dur-base) var(--ease-swift);
 }
-.mission[aria-pressed="true"]::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 2px;
-  border-radius: var(--r-bar);
-  background: var(--ink);
-}
-/* 小字行没有内容也占住一行，各项标题对得齐。 */
-.hint { min-height: 18px; color: var(--ink-faint); font-size: var(--type-meta, 12px); line-height: 18px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-/* Mission 标题照样稿 17px：跟正文字号走（大屏随外壳一起放大），不跟外壳在 1000px 以下收小的标题字号。 */
-.name {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: calc(var(--type-body, 14px) + 3px);
-  font-weight: 600;
-  line-height: 1.45;
-  letter-spacing: -.02em;
-  white-space: nowrap;
-  transition: color var(--dur-base) var(--ease-swift);
-}
-.mission[data-mission="all"] .name { font-size: var(--type-body, 14px); letter-spacing: 0; }
-.card[data-focus] .mission[aria-pressed="false"] .name { color: var(--ink-faint); font-weight: 400; }
-.card[data-focus] .mission[aria-pressed="false"]:hover .name { color: var(--ink-muted); }
+.mission:hover { color: var(--ink-muted); }
+.mission[data-size="large"] { max-width: none; color: var(--ink); font-size: calc(var(--type-body, 14px) + 8px); font-weight: 600; letter-spacing: -.02em; }
+.mission[data-size="small"] { color: color-mix(in oklab, var(--ink-faint) 60%, transparent); font-size: var(--type-body, 14px); }
+.mission[data-size="small"]:hover { color: var(--ink-faint); }
+/* 色点底边落在字的基线上，再按字号往上提到字身中间（手持时按钮有 44 的热区，不能按整个按钮居中）。 */
+.mission .dot { width: 7px; height: 7px; transform: translateY(calc(3.5px - .38em)); transition: opacity var(--dur-base) var(--ease-swift); }
+.mission[data-size="small"] .dot { opacity: .45; }
+.name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* 「全部」后面的 Mission 个数。 */
+.total { color: var(--ink-faint); font-size: var(--type-meta, 12px); font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.mission[data-size="large"] .total { font-size: 13px; }
+.mission[data-size="small"] .total { color: inherit; }
+/* 回退显示上个月时行尾的「M 月」。 */
+.month { flex: none; color: var(--ink-faint); font-size: var(--type-meta, 12px); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-/* ts-design 的 ghost 按钮，只改位置、字色和字号。 */
+/* ts-design 的 ghost 按钮，只改字色和字号。 */
 .cardLink {
   flex: none;
-  align-self: flex-end;
-  margin: 0 0 4px auto;
   color: var(--onboarding-pressed);
   font-size: var(--type-meta, 12px);
   white-space: nowrap;
 }
 
 /* 时间轴：DayTimeline 用 inline-size 容器查询，这里给它一个有宽度的块。 */
-.timeline { position: relative; margin-bottom: 16px; }
+.timeline { position: relative; margin-bottom: 10px; }
 .error { margin: 2px 0 0; color: var(--counter); font-size: var(--type-meta, 12px); }
 
 /* 浮层：和会议页的编辑浮层同一个样子。 */
@@ -248,11 +250,17 @@
 .empty { padding: 2px 4px; color: var(--ink-faint); font-size: var(--type-meta, 12px); }
 
 @media (max-width: 759px) { .card { padding: 20px; } }
-/* 手持（≤959）字号下限，同首页其他卡片：标签 13px，说明性的辅助字 14px；Mission 标题收到 15px。 */
+/* 手持（≤959）字号下限，同首页其他卡片：标签 13px，说明性的辅助字 14px；Mission 切换按比例收小（选中 19、其余 14，选了某个 Mission 时其余 13）。 */
 @media (max-width: 959px) {
-  .hint, .column h3, .popDate, .empty { font-size: 13px; }
+  .column h3, .popDate, .empty, .total, .month { font-size: 13px; }
   .activity small { font-size: 14px; }
-  .name { font-size: 15px; }
+  .mission { font-size: 14px; }
+  .mission[data-size="large"] { font-size: 19px; }
+  .mission[data-size="small"] { font-size: 13px; }
+}
+/* 点触下限：手持与触屏热区 44（--touch-hit 只在那时定义）；上内边距按字号算，字落在热区中间，各项仍按基线对齐。 */
+@media (max-width: 959px), (pointer: coarse) {
+  .mission { min-height: var(--touch-hit, 32px); padding-top: calc((var(--touch-hit, 32px) - 1.3em) / 2); }
 }
 
 @container plan-card (max-width: 559px) {
@@ -262,9 +270,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .name, .pick, .task, .activity { transition: none; }
+  .mission, .mission .dot, .pick, .task, .activity { transition: none; }
 }
 @media (prefers-contrast: more) {
   .card, .activity, .task { border-color: var(--ink-muted); }
-  .hint, .column h3, .activity small, .count { color: var(--ink); }
+  .mission, .total, .month, .column h3, .activity small, .count { color: var(--ink); }
 }
