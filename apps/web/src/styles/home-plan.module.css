@@ -49,7 +49,7 @@
 .detail { grid-area: detail; }
 .progress { grid-area: progress; }
 
-/* 计划点没存上的那句错：浮在月历卡底部，墨色带个提示图标（不用红字），下一次操作时收起。 */
+/* 节点没存上的那句错：浮在月历卡底部，墨色带个提示图标（不用红字），下一次操作时收起。 */
 .markError {
   position: absolute;
   right: 12px;
@@ -126,7 +126,7 @@
 .sep { color: color-mix(in oklab, var(--ink-faint) 55%, transparent); font-weight: 400; }
 .current { color: var(--ink-muted); font-weight: 400; }
 .start { flex: none; margin: -5.5px 0 -5.5px auto; }
-/* ts-design 的 ghost 按钮，换成白底细边、深灰字：「开启执行事项」和计划点浮层的确认钮同一个样子。 */
+/* ts-design 的 ghost 按钮，换成白底细边、深灰字：「开启执行事项」和「这一天」浮层的确认钮同一个样子。 */
 .start button, .plainButton.plainButton {
   --button-bg: #fff;
   --button-bg-hover: color-mix(in oklab, var(--ink) 4%, #fff);
@@ -143,7 +143,7 @@
   white-space: nowrap;
 }
 .start button:hover, .plainButton.plainButton:hover { background: var(--button-bg-hover); }
-/* 计划点浮层的「删除」：深灰字的 ghost 按钮。 */
+/* 「这一天」浮层里的「删除」：深灰字的 ghost 按钮。 */
 .popDelete.popDelete { --button-fg: var(--ink-muted); color: var(--ink-muted); }
 
 .split { display: grid; gap: 24px; min-width: 0; }
@@ -250,18 +250,69 @@
 .popDate { min-width: 0; overflow: hidden; color: var(--ink-faint); font-size: 12px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .popHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
-.picks { display: flex; flex-wrap: wrap; gap: 10px; }
-.pick {
-  width: 18px;
-  height: 18px;
-  padding: 0;
+/*
+ * 「这一天」浮层（样稿 calendar-day-v1）：标题墨色半粗，右边小字；分组名小灰字；每行「符号 名字 …所属 Mission」，Mission 名截断。
+ * 关口 = 实心小菱形、节点 = 空心小圆（同月历上的画法，颜色是 Mission 色）；截止的执行事项没有符号，右边一个「›」。
+ * 「＋ 加节点」在最下面，上面一条细线隔开。字和按钮都不染色。
+ */
+.dayDialog { width: 310px; max-width: calc(100vw - 32px); gap: 6px; }
+.dayTitle { min-width: 0; color: var(--ink); font-size: 13.5px; font-weight: 600; }
+.dayGroup { display: grid; }
+.dayGroup h3 { margin: 4px 0 2px; color: var(--ink-faint); font-size: 12px; font-weight: 400; }
+.dayLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 -8px;
+  padding: 5px 8px;
   border: 0;
-  border-radius: 50%;
-  background: var(--c);
-  cursor: pointer;
-  transition: box-shadow var(--dur-base) var(--ease-swift);
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
 }
-.pick[aria-checked="true"] { box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--c); }
+button.dayLine { cursor: pointer; }
+button.dayLine:hover { background: color-mix(in oklab, var(--ink) 4%, transparent); }
+.dayLine > span { min-width: 0; flex: 0 1 auto; overflow-wrap: anywhere; }
+.dayLine > small { flex: 1 1 0; min-width: 3em; overflow: hidden; color: var(--ink-faint); font-size: 12px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.gateIcon, .markIcon { flex: none; box-sizing: border-box; width: 6px; height: 6px; }
+.gateIcon { border-radius: 1px; background: var(--c); transform: rotate(45deg); }
+.markIcon { border: 1.3px solid var(--c); border-radius: 50%; }
+.dayEdit { display: grid; gap: 6px; padding: 4px 0; }
+.dayEdit > .popDelete { justify-self: start; }
+.dayAdd {
+  margin-top: 6px;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid #eef1f5;
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dayAdd:hover { color: var(--ink); }
+
+/* 加节点时选 Mission：按名字列出，前面是 Mission 色点；选中的浅灰底、字加粗。 */
+.picks { display: grid; gap: 2px; }
+.pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-base) var(--ease-swift);
+}
+.pick:hover { background: color-mix(in oklab, var(--ink) 3%, transparent); }
+.pick[aria-checked="true"] { background: #f3f5f8; color: var(--ink); font-weight: 600; }
 
 .nameRow { display: flex; align-items: center; gap: 8px; }
 /* 边、底色、圆角、聚焦用全站 --field-* 那套（globals.css），尺寸同会议页编辑浮层里的输入框。 */

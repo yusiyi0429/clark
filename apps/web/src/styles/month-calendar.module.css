@@ -2,8 +2,8 @@
  * 成员首页的月历卡内容（components/member/home/MonthCalendar.tsx），照样稿 home-layout-v9；卡片外壳在 home-plan.module.css 的 .calendar。
  *   日期   7 列周一起；工作日正文灰，休息日更浅，过去的日子淡灰；今天一圈 1.5px 墨色细框（伪元素画，本周底托不被切开）
  *   本周   那一行垫浅蓝底托 rgba(61, 111, 182, .08)（同第五版时间轴的本周底），两头圆角
- *   日期下 签定关口 = 小菱形，计划点 = 小空心圆，颜色由行内 --c 给（所属 Mission 的颜色）；淡掉的透明度 .35
- * 点格子加计划点（.hit 铺满格子）；点计划点改名或删（点击区比圆点大一圈）；关口不接点击，点到它等于点格子。
+ *   日期下 签定关口 = 小菱形，我的节点 = 小空心圆，颜色由行内 --c 给（所属 Mission 的颜色）；淡掉的透明度 .35
+ * 点格子看这一天（.hit 铺满格子）；点节点改名或删（点击区比圆点大一圈）；关口不接点击，点到它等于点格子。
  */
 .head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 8px; }
 .head h2 { margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; line-height: 1.4; }
@@ -56,7 +56,7 @@
 .gate, .mark { flex: none; box-sizing: border-box; width: 6px; height: 6px; }
 .gate { border-radius: 1px; background: var(--c); transform: rotate(45deg); pointer-events: none; }
 .mark { position: relative; padding: 0; border: 1.5px solid var(--c); border-radius: 50%; background: #fff; cursor: pointer; pointer-events: auto; }
-/* 点击区比圆点左右各大 5px、往下到格子底边，往上不盖住日期数字（点数字是加计划点）。 */
+/* 点击区比圆点左右各大 5px、往下到格子底边，往上不盖住日期数字（点数字是看这一天）。 */
 .mark::after { content: ""; position: absolute; inset: -1px -5px -3px; }
 .mark:hover { box-shadow: 0 0 0 2px color-mix(in oklab, var(--c) 25%, transparent); }
 .mark:disabled { cursor: default; }

@@ -53,7 +53,7 @@ const base = {
 type CalendarProps = Parameters<typeof MonthCalendar>[0];
 const render = (overrides: Partial<CalendarProps> = {}) => {
   h.elements = [];
-  return renderToStaticMarkup(<MonthCalendar onAddMark={vi.fn()} onEditMark={vi.fn()} {...base} {...overrides} />);
+  return renderToStaticMarkup(<MonthCalendar onPickDay={vi.fn()} onEditMark={vi.fn()} {...base} {...overrides} />);
 };
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 /** 一天那一格的开标签。 */
@@ -129,16 +129,16 @@ describe("MonthCalendar：月历", () => {
     expect(text(html)).not.toContain("还剩");
   });
 
-  it("关口是小菱形（只读、不是按钮），计划点是空心圆按钮；颜色是 Mission 色，名字在 title 和读屏文字里", () => {
+  it("关口是小菱形（只读、不是按钮），节点是空心圆按钮；颜色是 Mission 色，名字在 title 和读屏文字里", () => {
     const html = render();
-    expect(dayBlock(html, "2026-10-28")).toMatch(/<span[^>]*data-kind="gate"[^>]*role="img"[^>]*aria-label="签定关口 10\/28 上线"[^>]*style="--c:#2f63b0"/);
-    expect(dayBlock(html, "2026-10-28")).toMatch(/<button[^>]*data-kind="mark"[^>]*data-mark="k2"[^>]*aria-label="计划点 10\/28 复盘"[^>]*style="--c:#2f8a7a"/);
+    expect(dayBlock(html, "2026-10-28")).toMatch(/<span[^>]*data-kind="gate"[^>]*role="img"[^>]*aria-label="关口 10\/28 上线"[^>]*style="--c:#2f63b0"/);
+    expect(dayBlock(html, "2026-10-28")).toMatch(/<button[^>]*data-kind="mark"[^>]*data-mark="k2"[^>]*aria-label="节点 10\/28 复盘"[^>]*style="--c:#2f8a7a"/);
     const gate = find((props) => props["data-kind"] === "gate")!;
     expect(gate.onClick).toBeUndefined();
     expect(Object.keys(gate).filter((key) => key.startsWith("onPointer"))).toEqual([]);
   });
 
-  it("聚焦某个 Mission 时，其他 Mission 的关口和计划点淡掉", () => {
+  it("聚焦某个 Mission 时，其他 Mission 的关口和节点淡掉", () => {
     const html = render({ focus: "m1" });
     expect(dayBlock(html, "2026-10-12")).toMatch(/data-kind="gate"[^>]*data-dim="true"/);
     expect(dayBlock(html, "2026-10-28")).toMatch(/data-kind="gate"(?![^>]*data-dim)/);
@@ -146,16 +146,16 @@ describe("MonthCalendar：月历", () => {
     expect(render({ focus: null })).not.toContain("data-dim");
   });
 
-  it("点日期加计划点：每格一个铺满格子的按钮，按下交出那一天", () => {
-    const onAddMark = vi.fn();
-    render({ onAddMark });
-    const hit = find((props) => props["aria-label"] === "加计划点 10月26日")!;
+  it("点日期看这一天：每格一个铺满格子的按钮，按下交出那一天", () => {
+    const onPickDay = vi.fn();
+    render({ onPickDay });
+    const hit = find((props) => props["aria-label"] === "看 10月26日")!;
     (hit.onClick as () => void)();
-    expect(onAddMark).toHaveBeenCalledWith("2026-10-26");
-    expect(render({ onAddMark: undefined })).not.toContain("加计划点");
+    expect(onPickDay).toHaveBeenCalledWith("2026-10-26");
+    expect(render({ onPickDay: undefined })).not.toContain("看 10月");
   });
 
-  it("点计划点交出它的 id（改名或删）；没有拖动；没传回调时点不了", () => {
+  it("点节点交出它的 id（改名或删）；没有拖动；没传回调时点不了", () => {
     const onEditMark = vi.fn();
     render({ onEditMark });
     const mark = find((props) => props["data-mark"] === "k1")!;
