@@ -312,6 +312,7 @@ export function ConversationColumn({
         aria-label={ariaLabel}
         role={overlayOpen ? "dialog" : undefined}
         aria-modal={overlayOpen || undefined}
+        data-conversation-overlay={overlayOpen || undefined}
         data-tone="light"
       >
         {narrow ? (

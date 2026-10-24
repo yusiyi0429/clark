@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { TextArea as HeroTextArea } from "@heroui/react";
-import { ArrowUpRight, Paperclip, X } from "lucide-react";
+import { ArrowUpRight, Mic, Paperclip, X } from "lucide-react";
 import clsx from "clsx";
 import type { Card } from "@/lib/api/client";
 import { HeroButton } from "@/components/HeroButton";
@@ -20,7 +20,8 @@ import d from "@/styles/conversation-dock.module.css";
 import ds from "@/styles/dictation.module.css";
 
 /**
- * 二级页右列底下的输入条（clark CEO dock 的 `data-form=pill` 形态）：两行，底行左边是频道开关，右边一颗三态钮。
+ * 二级页右列底下的输入条（clark CEO dock 的 `data-form=pill` 形态）：两行，底行左边是频道开关，右边是附件、小麦克风（天枢自己的听写，
+ * 语音主要交给微信输入法）、发送 / 停止。
  * 草稿、引用预填、发送失败放回与首页输入条（ConversationDock）同一套规则、同一个草稿键。
  * 没有群组的页面只有「天枢」一个频道：宽屏不画开关；窄屏画这一颗，它是打开对话浮层的入口。
  */
@@ -101,7 +102,7 @@ export function ColumnComposer({
   useEffect(() => {
     if (!prefill) return;
     onPrefillUsed?.(prefill.nonce);
-    // 同一个预填只处理一次（开发模式下 effect 会重跑；代发与听写都不能来两次）。
+    // 同一个预填只处理一次（开发模式下 effect 会重跑；代发不能来两次）。
     if (handledNonce.current === prefill.nonce) return;
     handledNonce.current = prefill.nonce;
     // 代一号位发出的一句（「按意见重写」）：直接发，输入框里的草稿和已挂的引用块不动；回答进行中就不发，回报没接下。
@@ -120,8 +121,6 @@ export function ColumnComposer({
       const element = inputElement.current;
       element?.focus({ preventScroll: true });
       if (element) element.setSelectionRange(element.value.length, element.value.length);
-      // 「对这一段提意见」：引用挂上后直接进入听写（首次会弹麦克风授权）；回答进行中也可以先说，说完再发。
-      if (prefill.listen && !dictation.active) void dictation.start();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只响应新的引用
   }, [prefill?.nonce]);
@@ -282,7 +281,10 @@ export function ColumnComposer({
           ) : (
             <>
               {allowAttachments ? <AttachButton data={data} className={pillStyles.tool} /> : null}
-              <ComposerAction state={busy ? "stop" : input.trim() ? "send" : "mic"} onStop={data.stop} onMic={() => void dictation.start()} />
+              <button type="button" className={pillStyles.tool} onClick={() => void dictation.start()} aria-label="语音输入" title="语音输入">
+                <Mic size={18} strokeWidth={1.8} aria-hidden />
+              </button>
+              <ComposerAction state={busy ? "stop" : "send"} isDisabled={!input.trim()} onStop={data.stop} />
             </>
           )
         }

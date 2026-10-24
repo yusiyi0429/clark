@@ -4,7 +4,7 @@
  * 二级页的输入条（clark `conversation/composer-pill.tsx`），一直是两行：
  * - 上面一行是文字；写多了往上长，最多 7 行，再多在框里滚。有附件时附件条在最上面。
  * - 下面一行是操作区：左边频道开关（当前那颗实心频道色、白字，整张卡的底色和占位文字跟着换 ——「这句话发给谁」
- *   一眼看得到）；右边一颗钮三态：空时麦克风（点了开始听写，见 useDictation），有字时发送，回答中是停止。
+ *   一眼看得到）；右边是调用方给的工具键（附件、小麦克风）和一颗两态钮：发送（空着时灰着），回答中是停止。
  * - 点卡片上的空白处就是点文字框。
  *
  * 这里只管样子和排布；文字框、发送、停止由调用方给（ColumnComposer）。颜色读 conversation-column.module.css
@@ -13,7 +13,7 @@
 
 import { forwardRef, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Button, ToggleButton, ToggleButtonGroup } from "ts-design/primitives";
-import { ArrowUp, Mic, Square, Users } from "lucide-react";
+import { ArrowUp, Square, Users } from "lucide-react";
 import { TianshuMark } from "@/components/TianshuMark";
 import { formatUnread, unreadPhrase } from "./seen";
 import type { ConversationChannel } from "./ConversationColumn";
@@ -194,15 +194,12 @@ export function ChannelSwitch({ channels, channel, onPress }: { channels: Conver
   );
 }
 
-export type ActionState = "mic" | "send" | "stop";
+export type ActionState = "send" | "stop";
 
-/** 右端那颗钮里的三个图标一直都在，按状态交叉淡入 —— 钮是同一个元素，底色也跟着过渡。 */
+/** 右端那颗钮里的两个图标一直都在，按状态交叉淡入 —— 钮是同一个元素，底色也跟着过渡。 */
 function ActionIcons() {
   return (
     <>
-      <span className={p.icon} data-icon="mic" aria-hidden>
-        <Mic size={18} strokeWidth={1.8} />
-      </span>
       <span className={p.icon} data-icon="send" aria-hidden>
         <ArrowUp size={18} strokeWidth={2.2} />
       </span>
@@ -213,25 +210,19 @@ function ActionIcons() {
   );
 }
 
-/**
- * 右端那颗钮：空时是麦克风，按下开始听写（onMic）；没给 onMic 时灰着、按不下去，悬停写「语音对话尚未接入」
- * （禁用的钮收不到悬停，提示挂在外面那一层）。有字时是发送，回答中是停止。
- */
-export function ComposerAction({ state, onStop, onMic, isDisabled = false, sendLabel = "发送", unavailable = "语音对话尚未接入" }: { state: ActionState; onStop?: () => void; onMic?: () => void; isDisabled?: boolean; sendLabel?: string; unavailable?: string }) {
-  const label = state === "stop" ? "停止本次回答" : state === "send" ? sendLabel : onMic ? "语音输入" : unavailable;
+/** 右端那颗钮：发送（isDisabled 时灰着、按不下去，比如还没写字），回答中是停止。 */
+export function ComposerAction({ state, onStop, isDisabled = false, sendLabel = "发送" }: { state: ActionState; onStop?: () => void; isDisabled?: boolean; sendLabel?: string }) {
   return (
-    <span className={p.actionSlot} title={state === "mic" && !onMic ? unavailable : undefined}>
-      <Button
-        isIconOnly
-        className={p.actionButton}
-        data-state={state}
-        type={state === "send" ? "submit" : "button"}
-        isDisabled={(state === "mic" && (!onMic || isDisabled)) || (state === "send" && isDisabled) || (state === "stop" && !onStop)}
-        onPress={state === "stop" ? onStop : state === "mic" ? onMic : undefined}
-        aria-label={label}
-      >
-        <ActionIcons />
-      </Button>
-    </span>
+    <Button
+      isIconOnly
+      className={p.actionButton}
+      data-state={state}
+      type={state === "send" ? "submit" : "button"}
+      isDisabled={state === "send" ? isDisabled : !onStop}
+      onPress={state === "stop" ? onStop : undefined}
+      aria-label={state === "stop" ? "停止本次回答" : sendLabel}
+    >
+      <ActionIcons />
+    </Button>
   );
 }

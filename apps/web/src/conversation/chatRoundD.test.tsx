@@ -64,28 +64,27 @@ describe("D1 对话层没有页头横条", () => {
   });
 });
 
-describe("D2 输入条：没有历史键，附件在麦克风右边", () => {
-  it("键盘面：[麦克风] [附件] 输入框；没有历史键", () => {
+describe("D2 输入条：没有历史键；打字面左边是 [附件] [小麦克风]", () => {
+  it("键盘面：[附件] [小麦克风] 输入框；没有历史键", () => {
     const html = dock({ keyboard: true });
-    const mic = html.indexOf('aria-label="语音输入"');
     const attach = html.indexOf("上传附件（PDF/DOCX/Markdown）");
-    expect(mic).toBeGreaterThan(-1);
-    expect(attach).toBeGreaterThan(mic);
-    expect(html.indexOf("<textarea")).toBeGreaterThan(attach);
+    const mic = html.indexOf('aria-label="语音输入"');
+    expect(attach).toBeGreaterThan(-1);
+    expect(mic).toBeGreaterThan(attach);
+    expect(html.indexOf("<textarea")).toBeGreaterThan(mic);
     expect(html).not.toContain("对话记录");
   });
-  it("语音胶囊面：没有历史键、没有附件键", () => {
+  it("收起时：只有主按钮，没有历史键、附件键、麦克风", () => {
     const html = dock();
     expect(html).not.toContain("对话记录");
     expect(html).not.toContain("上传附件");
-    expect(css("conversation-dock.module.css")).toMatch(/\.layer \.dock:not\(\.typing\)\{width:calc\(10px \+ 44px \+ 136px \+ 5px \+ 2px\)/);
+    expect(html).not.toContain("语音输入");
+    expect(css("conversation-dock.module.css")).toMatch(/\.layer \.dock:not\(\.typing\)\{width:calc\(10px \+ 136px \+ 2px\)/);
   });
-  it("键盘面的麦克风键（含听写中的 ✕）去掉圆形底色与阴影；胶囊面的键盘键不动", () => {
-    const rules = css("conversation-dock.module.css");
-    const typed = rules.match(/\.layer\[data-conversation-context\] \.dock\.typing \.modeButton:not\(:hover\)\s*\{([^}]*)\}/)?.[1] ?? "";
-    expect(typed).toMatch(/background:\s*transparent/);
-    expect(typed).toMatch(/box-shadow:\s*none/);
-    expect(rules).toMatch(/\.dock \.modeButton\s*\{\s*background:\s*#ffffff95/);
+  it("主按钮不用主题蓝（主题蓝只留给约会议）", () => {
+    const rule = css("conversation-dock.module.css").match(/\.dock \.entryButton\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(rule).toMatch(/background:/);
+    expect(rule).not.toMatch(/#3a83f7|#007aff/i);
   });
 });
 

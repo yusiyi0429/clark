@@ -19,7 +19,6 @@ export function storedDraft(key: string): string {
 
 /**
  * draft：「起草文档」这类入口预填进输入条的一句话；输入条里已有草稿时不覆盖。
- * listen：引用挂上后直接进入语音听写（「对这一段提意见」）。
  * send：代一号位直接发出一条消息（「按意见重写」）：带自己的引用，不动输入条里的草稿和已挂的引用块；onResult 回报服务端是否接下。
  */
 export type QuotePrefill = {
@@ -27,7 +26,6 @@ export type QuotePrefill = {
   nonce: number;
   source?: QuoteSource;
   draft?: string;
-  listen?: boolean;
   send?: { message: string; quotes: TextQuote[]; onResult?: (accepted: boolean) => void };
 };
 
