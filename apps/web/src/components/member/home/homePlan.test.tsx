@@ -179,7 +179,13 @@ function mount(initial: THomePlanResponse | null = plan()) {
     click: (predicate: (props: Props) => boolean, what: string) => call(get(predicate, what), "onClick"),
     type: (value: string) => call(get((props) => props["data-mark-name"] !== undefined, "名字输入框"), "onChange", { target: { value } }),
     key: (key: string, isComposing = false) => call(get((props) => props["data-mark-name"] !== undefined, "名字输入框"), "onKeyDown", { key, nativeEvent: { isComposing }, preventDefault: vi.fn() }),
-    calendar: (handler: "onAddMark" | "onEditMark", ...args: string[]) => { (h.calendar![handler] as (...values: string[]) => void)(...args); return render(); },
+    calendar: (handler: "onPickDay" | "onEditMark", ...args: string[]) => { (h.calendar![handler] as (...values: string[]) => void)(...args); return render(); },
+    /** 点一天，再点「＋ 加节点」。 */
+    addOn: (date: string) => {
+      (h.calendar!.onPickDay as (value: string) => void)(date);
+      render();
+      return call(get((props) => props["data-day-add"] !== undefined, "＋ 加节点"), "onClick");
+    },
   };
 }
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -495,32 +501,60 @@ describe("HomePlan：事项卡上的最近一次动静", () => {
   });
 });
 
-describe("HomePlan：计划点", () => {
+describe("HomePlan：月历上的「这一天」与节点", () => {
   const radios = () => h.elements.filter((element) => element.props.role === "radio");
 
-  it("「全部」视图下点某一天：浮层里有 Mission 色点可选，提交挂到选中的 Mission", async () => {
+  it("点一天先看这一天：关口、我的节点、这天截止分组列出，空的组不出；截止的事项点进去是详情", () => {
+    const view = mount();
+    view.calendar("onPickDay", "2026-10-23");
+    const day = text(view.html);
+    expect(view.html).toContain('data-mark-pop="day"');
+    expect(day).toContain("10 月 23 日 周五");
+    expect(day).toContain("还有 1 个工作日");
+    expect(day).toMatch(/我的节点 联调 CEO \/ DRI Agent 从能用到在用/);
+    expect(day).toMatch(/这天截止 报销/);
+    expect(day).not.toContain("关口");
+    expect(day).toContain("＋ 加节点");
+    view.click((props) => props["data-day-item"] === "a7", "报销");
+    expect(view.onNavigate).toHaveBeenCalledWith("/me/tasks/a7", { id: "origin" });
+    expect(view.html).not.toContain("data-mark-pop");
+
+    view.calendar("onPickDay", "2026-10-22");
+    expect(text(view.html)).toMatch(/10 月 22 日 周四 今天 关口 首次会面 灯塔首次会面/);
+    // 做完的事项不算这天截止；什么都没有时只有日期和「＋ 加节点」。
+    view.calendar("onPickDay", "2026-10-21");
+    expect(text(view.html)).not.toMatch(/截止|关口|我的节点|还有/);
+    expect(text(view.html)).toContain("＋ 加节点");
+  });
+
+  it("「全部」视图下加节点：Mission 按名字列出，默认第一个；提交挂到选中的 Mission，回到「看这一天」", async () => {
     h.api.POST.mockResolvedValue(ok({ id: "k9", missionId: "m2", date: "2026-10-24", label: "演示" }));
     const view = mount();
-    view.calendar("onAddMark", "2026-10-24");
-    expect(view.html).toContain('role="radiogroup"');
+    view.addOn("2026-10-24");
+    expect(view.html).toContain('data-mark-pop="add"');
+    expect(text(view.html)).toContain("10 月 24 日 周六 · 加节点");
     expect(radios()).toHaveLength(2);
+    expect(radios().map((radio) => radio.props["aria-checked"])).toEqual([true, false]);
+    expect(text(view.html)).toContain("灯塔首次会面");
     view.click((props) => props["data-pick"] === "m2", "m2 色点");
     view.type("演示");
     view.key("Enter");
     expect(h.api.POST).toHaveBeenCalledWith("/api/me/plan-marks", { body: { missionId: "m2", date: "2026-10-24", label: "演示" } });
+    expect(view.html).toContain('data-mark-pop="day"');
+    expect(text(view.html)).toMatch(/我的节点 演示 灯塔首次会面/);
   });
 
-  it("聚焦 m1 时点某一天：没有 Mission 选择，挂到 m1；先画上再等接口，存好后通知重取", async () => {
-    h.api.POST.mockResolvedValue(ok({ id: "k9", missionId: "m1", date: "2026-10-24", label: "评审" }));
+  it("聚焦 m2 时加节点：默认选 m2；先画上再等接口，存好后通知重取", async () => {
+    h.api.POST.mockResolvedValue(ok({ id: "k9", missionId: "m2", date: "2026-10-24", label: "评审" }));
     const view = mount();
-    view.mission("m1");
-    view.calendar("onAddMark", "2026-10-24");
+    view.mission("m2");
+    view.addOn("2026-10-24");
     expect(view.html).toContain('data-mark-pop="add"');
-    expect(view.html).not.toContain('role="radiogroup"');
+    expect(radios().map((radio) => radio.props["aria-checked"])).toEqual([false, true]);
     view.type("评审");
     view.key("Enter");
-    expect(h.api.POST).toHaveBeenCalledWith("/api/me/plan-marks", { body: { missionId: "m1", date: "2026-10-24", label: "评审" } });
-    expect(view.html).not.toContain("data-mark-pop");
+    expect(h.api.POST).toHaveBeenCalledWith("/api/me/plan-marks", { body: { missionId: "m2", date: "2026-10-24", label: "评审" } });
+    expect(view.html).toContain('data-mark-pop="day"');
     expect((h.calendar!.marks as { label: string; date: string }[]).map((mark) => `${mark.date} ${mark.label}`)).toContain("2026-10-24 评审");
     await settle();
     expect(window.dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: HOME_PLAN_CHANGED }));
@@ -528,7 +562,7 @@ describe("HomePlan：计划点", () => {
 
   it("中文输入法还在拼字时按 Enter 不提交；空名字不提交；名字最多 10 个字；Esc 关掉不提交", () => {
     const view = mount();
-    view.calendar("onAddMark", "2026-10-24");
+    view.addOn("2026-10-24");
     expect(view.find((props) => props["data-mark-name"] !== undefined)!.maxLength).toBe(10);
     view.key("Enter");
     view.type("评审");
@@ -539,12 +573,14 @@ describe("HomePlan：计划点", () => {
     expect(h.api.POST).not.toHaveBeenCalled();
   });
 
-  it("没有 Mission 时点日期不加点（月历不给加点回调）", () => {
-    mount(plan({ missions: [] }));
-    expect(h.calendar!.onAddMark).toBeUndefined();
+  it("没有 Mission 时点日期只看、不出「＋ 加节点」", () => {
+    const view = mount(plan({ missions: [] }));
+    view.calendar("onPickDay", "2026-10-24");
+    expect(view.html).toContain('data-mark-pop="day"');
+    expect(view.html).not.toContain("data-day-add");
   });
 
-  it("点计划点：浮层里是它的名字，可以改名；改了才发 PATCH，先改上再等接口", async () => {
+  it("点月历上的节点：开那一天并原地改名；没改不发请求、回到「看」；在「看」里点节点也能改名；改了才发 PATCH，先改上再等接口", async () => {
     h.api.PATCH.mockResolvedValue(ok({ id: "k1", missionId: "m1", date: "2026-10-23", label: "联调二" }));
     const view = mount();
     view.calendar("onEditMark", "k1");
@@ -555,8 +591,9 @@ describe("HomePlan：计划点", () => {
     expect(String(view.find((props) => props["data-delete"] !== undefined)!.className)).toContain("_popDelete_");
     view.key("Enter");
     expect(h.api.PATCH).not.toHaveBeenCalled();
-    expect(view.html).not.toContain("data-mark-pop");
-    view.calendar("onEditMark", "k1");
+    expect(view.html).toContain('data-mark-pop="day"');
+    view.click((props) => props["data-day-mark"] === "k1", "联调");
+    expect(view.html).toContain('data-mark-pop="edit"');
     view.type("联调二");
     view.key("Enter");
     expect(h.api.PATCH).toHaveBeenCalledWith("/api/me/plan-marks/{id}", { params: { path: { id: "k1" } }, body: { label: "联调二" } });
@@ -576,7 +613,7 @@ describe("HomePlan：计划点", () => {
     expect((h.calendar!.marks as { label: string }[])[0].label).toBe("联调");
     expect(html).toMatch(/role="alert"[^>]*>.*?名字最多 10 个字<\/p>/);
     expect(window.dispatchEvent).not.toHaveBeenCalled();
-    expect(view.calendar("onAddMark", "2026-10-24")).not.toContain('role="alert"');
+    expect(view.calendar("onPickDay", "2026-10-24")).not.toContain('role="alert"');
   });
 
   it("浮层里点「删除」才删；点之前月历上还在", async () => {
@@ -588,6 +625,7 @@ describe("HomePlan：计划点", () => {
     view.click((props) => props["data-delete"] !== undefined, "删除");
     expect(h.api.DELETE).toHaveBeenCalledWith("/api/me/plan-marks/{id}", { params: { path: { id: "k1" } } });
     expect(h.calendar!.marks).toEqual([]);
+    expect(view.html).toContain('data-mark-pop="day"');
     await settle();
     expect(window.dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: HOME_PLAN_CHANGED }));
   });
@@ -607,7 +645,7 @@ describe("HomePlan：计划点", () => {
     h.api.POST.mockResolvedValue(ok({ id: "k9", missionId: "m1", date: "2026-10-24", label: "评审" }));
     const view = mount();
     view.mission("m1");
-    view.calendar("onAddMark", "2026-10-24");
+    view.addOn("2026-10-24");
     view.type("评审");
     view.key("Enter");
     await settle();
@@ -653,7 +691,7 @@ describe("HomePlan：计划点", () => {
     view.type("联调二");
     view.key("Enter");
     view.mission("m1");
-    view.calendar("onAddMark", "2026-10-24");
+    view.addOn("2026-10-24");
     view.type("评审");
     view.key("Enter");
     expect(markLabels()).toEqual({ k1: "联调二", [markIds()[1]]: "评审" });
@@ -674,13 +712,13 @@ describe("HomePlan：计划点", () => {
     h.api.POST.mockReturnValue(posting.promise);
     const view = mount();
     view.mission("m1");
-    view.calendar("onAddMark", "2026-10-24");
+    view.addOn("2026-10-24");
     view.type("评审");
     view.key("Enter");
     const temp = markIds()[1];
     expect(temp).toMatch(/^pending-/);
     view.calendar("onEditMark", temp);
-    expect(view.html).not.toContain("data-mark-pop");
+    expect(view.html).not.toContain('data-mark-pop="edit"');
     posting.resolve(ok({ id: "k9", missionId: "m1", date: "2026-10-24", label: "评审" }));
     await settle();
     view.render();
@@ -689,15 +727,15 @@ describe("HomePlan：计划点", () => {
     expect(view.html).toContain('data-mark-pop="edit"');
   });
 
-  it("改点浮层对着的点重取后不在了：浮层关掉、状态清掉，点再回来也不重开", () => {
+  it("正在改名的节点重取后不在了：回到「看这一天」，节点再回来也不重新进入改名", () => {
     const view = mount();
     view.calendar("onEditMark", "k1");
     expect(view.openPopovers()).toBe(1);
     view.setPlan(plan({ marks: [] }));
-    expect(view.html).not.toContain("data-mark-pop");
-    expect(view.openPopovers()).toBe(0);
+    expect(view.html).toContain('data-mark-pop="day"');
+    expect(view.openPopovers()).toBe(1);
     view.setPlan(plan());
-    expect(view.html).not.toContain("data-mark-pop");
+    expect(view.html).not.toContain('data-mark-pop="edit"');
   });
 });
 

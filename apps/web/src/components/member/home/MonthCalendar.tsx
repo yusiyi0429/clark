@@ -5,8 +5,8 @@
  *
  * - 标题「M 月」，右边小字「还剩 N 个工作日」（本月从今天数到月末）；current=false（回退显示上个月）时不写，也不画本周。
  * - 7 列，周一起；工作日按 days 上的节假日日历（调休上班日照常），休息日字更浅；过去的日子淡灰；今天一圈细框；本周那一行垫浅底。
- * - 日期下面：签定关口是小菱形，计划点是小空心圆，颜色是所属 Mission 的颜色；聚焦某个 Mission 时其他 Mission 的淡掉。
- * - 点日期加计划点；点计划点改名或删；签定关口只读、不接点击。哪个回调没传，对应的操作就关掉。
+ * - 日期下面：签定关口是小菱形，我的节点是小空心圆，颜色是所属 Mission 的颜色；聚焦某个 Mission 时其他 Mission 的淡掉。
+ * - 点日期看这一天（加节点在那里面）；点节点改名或删；关口只读、不接点击。哪个回调没传，对应的操作就关掉。
  */
 import type { CSSProperties } from "react";
 import type { THomePlanDay, THomePlanGate, THomePlanMark } from "@warmap/contracts";
@@ -28,7 +28,7 @@ type MonthCalendarProps = {
   colorOf: (missionId: string) => string;
   /** 聚焦的 Mission；null 是「全部」。 */
   focus: string | null;
-  onAddMark?: (date: string) => void;
+  onPickDay?: (date: string) => void;
   onEditMark?: (id: string) => void;
 };
 
@@ -43,7 +43,7 @@ export function workdaysLeftThisMonth(days: THomePlanDay[], today: string): numb
 /** 周一 = 0 … 周日 = 6。 */
 const weekdayOf = (date: string) => (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7;
 
-export function MonthCalendar({ period, days, today, weekStart, weekEnd, current = true, gates, marks, colorOf, focus, onAddMark, onEditMark }: MonthCalendarProps) {
+export function MonthCalendar({ period, days, today, weekStart, weekEnd, current = true, gates, marks, colorOf, focus, onPickDay, onEditMark }: MonthCalendarProps) {
   const dimmed = (missionId: string) => (focus !== null && missionId !== focus) || undefined;
   const week = current ? days.filter((day) => day.date >= weekStart && day.date <= weekEnd).map((day) => day.date) : [];
   return (
@@ -67,17 +67,17 @@ export function MonthCalendar({ period, days, today, weekStart, weekEnd, current
               data-week-only={inWeek && week.length === 1 ? true : undefined}
               style={index === 0 ? ({ gridColumnStart: weekdayOf(day.date) + 1 } as CSSProperties) : undefined}
               aria-label={`${name}${state === "today" ? " 今天" : ""} ${day.workday ? "工作日" : "休息日"}`}>
-              {onAddMark && <button type="button" className={c.hit} aria-label={`加计划点 ${name}`} onClick={() => onAddMark(day.date)} />}
+              {onPickDay && <button type="button" className={c.hit} aria-label={`看 ${name}`} onClick={() => onPickDay(day.date)} />}
               <span className={c.num} aria-hidden="true">{number}</span>
               {onDayGates.length + onDayMarks.length > 0 && (
                 <span className={c.marks}>
                   {onDayGates.map((gate, at) => (
                     <span key={`gate-${at}`} className={c.gate} data-kind="gate" data-dim={dimmed(gate.missionId)} role="img"
-                      aria-label={`签定关口 ${shortDate(gate.date)} ${gate.label}`} title={`${shortDate(gate.date)} ${gate.label}`} style={tone(colorOf(gate.missionId))} />
+                      aria-label={`关口 ${shortDate(gate.date)} ${gate.label}`} title={`${shortDate(gate.date)} ${gate.label}`} style={tone(colorOf(gate.missionId))} />
                   ))}
                   {onDayMarks.map((mark) => (
                     <button key={mark.id} type="button" className={c.mark} data-kind="mark" data-mark={mark.id} data-dim={dimmed(mark.missionId)}
-                      aria-label={`计划点 ${shortDate(mark.date)} ${mark.label}`} title={`${shortDate(mark.date)} ${mark.label}`} style={tone(colorOf(mark.missionId))}
+                      aria-label={`节点 ${shortDate(mark.date)} ${mark.label}`} title={`${shortDate(mark.date)} ${mark.label}`} style={tone(colorOf(mark.missionId))}
                       disabled={!onEditMark} onClick={() => onEditMark?.(mark.id)} />
                   ))}
                 </span>
