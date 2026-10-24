@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { TextArea as HeroTextArea } from "@heroui/react";
-import { ArrowUp, ArrowUpRight, Keyboard, Mic, Square, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, MessageCircle, Mic, Square, X } from "lucide-react";
 import clsx from "clsx";
 import type { Card } from "@/lib/api/client";
 import { HeroButton } from "@/components/HeroButton";
@@ -22,8 +22,8 @@ import d from "@/styles/conversation-dock.module.css";
 const ATTACH_EXIT_MS = 340;
 
 /**
- * 全局输入条（clark `workspace.tsx` 614–640）：收起时一颗主按钮「输入文字」，展开后是附件、小麦克风、输入框、发送。
- * 没有历史键、没有输入条上方的气泡（D2 / D6）：点「输入文字」（或按唤醒键，见 wakeKey.ts）就是展开输入框、打开对话层，
+ * 全局输入条（clark `workspace.tsx` 614–640）：收起时只有一颗白色胶囊「对话天枢」（没有外面那层灰底），展开后是附件、小麦克风、输入框、发送。
+ * 没有历史键、没有输入条上方的气泡（D2 / D6）：点「对话天枢」（或按唤醒键，见 wakeKey.ts）就是展开输入框、打开对话层，
  * 所有消息、出错说明都在对话层里；宿主把 keyboard 与对话层开合绑在一起。
  * 语音主要交给微信输入法；小麦克风是天枢自己的听写（useDictation），和附件键一样不起眼：文字边说边进输入框（带下划线，
  * 可改字），右边 [● 0:12 声波] ■ ↑；■ 停下、文字留在输入框，↑ 等整理后直接发出；听写中小麦克风变 ✕，✕ / Esc 恢复听写前的原文。
@@ -283,11 +283,11 @@ export const ConversationDock = memo(function ConversationDock({
             {dictation.active ? <X size={18} strokeWidth={1.9} /> : <Mic size={18} strokeWidth={1.7} />}
           </HeroButton>
         ) : null}
-        <div className={d.content} style={{ height: keyboard && composerExpanded ? composerHeight : 36 }}>
+        <div className={d.content} style={{ height: keyboard ? (composerExpanded ? composerHeight : 36) : 48 }}>
           <div className={d.entryLayer} aria-hidden={keyboard} inert={keyboard}>
             <button type="button" ref={entryButton} className={d.entryButton} onClick={() => onKeyboardChange(true)} aria-expanded={false}>
-              <Keyboard size={19} strokeWidth={1.8} aria-hidden />
-              <span>输入文字</span>
+              <MessageCircle size={18} strokeWidth={1.8} aria-hidden />
+              <span>对话天枢</span>
             </button>
           </div>
           <div className={d.textLayer} aria-hidden={!keyboard} inert={!keyboard}>

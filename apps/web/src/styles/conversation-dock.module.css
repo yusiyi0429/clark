@@ -30,6 +30,8 @@
   transition: height 260ms cubic-bezier(.22,1,.36,1), width 340ms cubic-bezier(.22,1,.36,1), background-color 260ms ease, color 220ms ease, box-shadow 260ms ease, border-color 260ms ease;
 }
 
+/* 收起时外面这层不画（无底、无边、无影、无内边距），只剩里面那颗白色胶囊「对话天枢」；打字时这层再画出来、长成输入条。 */
+.dock[data-mode="entry"] { padding:0; border-color:transparent; background:transparent; box-shadow:none; }
 .typing { position:relative; }
 /* 右边缘固定：打字 / 听写时只向左展开到 --composer-width，不横移（用户 2026-09-28）。 */
 .layer .dock.typing { width:var(--composer-width); }
@@ -57,14 +59,15 @@
 /* Both modes occupy the exact same plane; neither adds a row or mounts late. */
 .content { position:relative; height:36px; min-width:0; flex:1; transition:height 220ms cubic-bezier(.22,1,.36,1); }
 .entryLayer,.textLayer { position:absolute; inset:0; transition:opacity 180ms ease, transform 360ms cubic-bezier(.22,1,.36,1), filter 240ms ease; }
-.entryLayer { opacity:1; transform:scale(1); filter:blur(0); }
+/* 静止时不带 filter：带了它，里面胶囊的 backdrop-filter 只模糊得到这一层自己（看不到页面），毛玻璃就失效。 */
+.entryLayer { opacity:1; transform:scale(1); filter:none; }
 .textLayer { opacity:0; transform:translateX(10px) scale(.98); filter:blur(3px); pointer-events:none; }
 .typing .entryLayer { opacity:0; transform:scale(.96); filter:blur(3px); pointer-events:none; }
 .typing .textLayer { opacity:1; transform:translateX(0) scale(1); filter:blur(0); pointer-events:auto; }
-/* 主按钮「输入文字」：白底细边、深灰字（和首页「开启执行事项」等按钮同一个样子；主题蓝只留给约会议）。 */
-.dock .entryButton { height:100%; min-height:44px; display:flex; align-items:center; justify-content:center; gap:8px; padding:0 22px 0 18px; border:0; border-radius:22px; background:#fff; box-shadow:inset 0 0 0 1px #dfe3e9; color:var(--ink,#17171b); font:inherit; font-size:15px; font-weight:500; letter-spacing:.1px; white-space:nowrap; cursor:pointer; user-select:none; -webkit-user-select:none; transition:background 160ms ease, transform 120ms ease; }
+/* 主按钮「对话天枢」：一颗毛玻璃胶囊——半透明白底加背景模糊（底下的卡片滚过时隐约透出颜色），顶边一道高光、极细的边、一层很淡的浮起阴影；深灰字（主题蓝只留给约会议）。 */
+.dock .entryButton { height:100%; min-height:44px; display:flex; align-items:center; justify-content:center; gap:8px; padding:0 24px 0 20px; border:0; border-radius:24px; background:rgba(255,255,255,.62); -webkit-backdrop-filter:blur(18px) saturate(1.6); backdrop-filter:blur(18px) saturate(1.6); box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 0 0 1px #1d243314, 0 8px 22px #1d24331a, 0 1px 2px #1d243312; color:var(--ink,#17171b); font:inherit; font-size:15px; font-weight:500; letter-spacing:.2px; white-space:nowrap; cursor:pointer; user-select:none; -webkit-user-select:none; transition:background 160ms ease, box-shadow 200ms ease, transform 120ms ease; }
 .dock .entryButton svg { flex:none; }
-.dock .entryButton:hover { background:color-mix(in oklab, var(--ink,#17171b) 4%, #fff); }
+.dock .entryButton:hover { background:rgba(255,255,255,.8); box-shadow:inset 0 1px 0 #fff, 0 0 0 1px #1d24331a, 0 10px 26px #1d243322, 0 1px 2px #1d243314; }
 .dock .entryButton:active { transform:scale(.96); }
 .wave { display:flex; align-items:center; justify-content:center; gap:2.5px; width:20px; height:22px; color:#fff; }
 .wave i { width:2px; height:6px; border-radius:3px; background:currentColor; transition:color 250ms ease; }

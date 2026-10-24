@@ -103,9 +103,9 @@ describe("对话端点与附件", () => {
 });
 
 describe("全局输入条（clark workspace 614–640）", () => {
-  it("收起时只有一颗主按钮「输入文字」：没有「点击说话」、切换键和麦克风", () => {
+  it("收起时只有一颗主按钮「对话天枢」：没有「点击说话」、切换键和麦克风", () => {
     const html = dock();
-    expect(html).toContain("输入文字");
+    expect(html).toContain("对话天枢");
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain("点击说话");
     expect(html).not.toContain("语音输入");
@@ -125,9 +125,9 @@ describe("全局输入条（clark workspace 614–640）", () => {
     expect(dock({ keyboard: true, references: [card("c1", "议题")] })).toContain('placeholder="围绕批注的内容输入问题或判断…"');
   });
 
-  it("回答进行中：收起时主按钮仍是「输入文字」，停止在输入框右边（发送键的位置）", () => {
+  it("回答进行中：收起时主按钮仍是「对话天枢」，停止在输入框右边（发送键的位置）", () => {
     const html = dock({ data: data({ streaming: true, thinking: true, status: "streaming" }) });
-    expect(html).toContain("输入文字");
+    expect(html).toContain("对话天枢");
     expect(html).not.toContain("停止回答");
     expect(dock({ keyboard: true, data: data({ streaming: true, thinking: true, status: "streaming" }) })).toContain('aria-label="停止本次回答"');
   });
