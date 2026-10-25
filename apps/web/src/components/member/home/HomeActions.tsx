@@ -6,7 +6,7 @@
  * 等回复在右侧浮出请求列表（先开「发出的」，面板由首页挂），右上角是条数；战场进展进原来那张战场进展页（/me/progress）。
  * 雷达只在本人雷达开着时出（首页数据里 radar 不为空），有未读信号时右上角红点，进我的雷达页（/me/radar）。
  * 复盘按公司时区的今天（计划里的 today）算：本月倒数第 3 天到月底复盘本月，下月 1–7 日复盘上个月，这段时间出一格去 M2 的链接，其余时间不出。
- * 前四格右下角各一枚简笔花纹（纯装饰，读屏不读），意思同按钮；悬停、键盘聚焦时动一下，见样式。
+ * 前四格右下角各一件釉色小物件（纯装饰，读屏不读），意思同按钮；悬停、键盘聚焦时动一下，见样式。
  */
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
@@ -18,43 +18,71 @@ import s from "@/styles/home-actions.module.css";
 const PROGRESS = "/me/progress";
 const RADAR = "/me/radar";
 
-/** 花纹画在 48×48 里，线宽、颜色、大小都由样式给。 */
+/** 角落小物件画在 80×80 里，自带渐变和高光；大小、位置、悬停时的动作由样式给。渐变 id 带 ha- 前缀，免得和页面上别的 svg 撞。 */
 function Motif({ children }: { children: ReactNode }) {
-  return <svg className={s.motif} viewBox="0 0 48 48" aria-hidden="true" focusable="false">{children}</svg>;
+  return <svg className={s.motif} viewBox="0 0 80 80" aria-hidden="true" focusable="false">{children}</svg>;
 }
 
-/** 约会议：一页日历带个小钟；等回复：带省略号的气泡；战场进展：山头一面旗，一条小路往上；雷达：三道弧和一根扫描线。 */
+/**
+ * 釉色小物件（样稿 quick-art-v1 方向 A）：柔和渐变、顶部一道高光、很淡的投影，像捏出来的瓷片。
+ * 约会议：一页日历带个小钟（蓝底上用半透明白）；等回复：前后两个气泡，前面那个带省略号；
+ * 战场进展：两层山坡、一条小路、山头一面旗；雷达：三道同心圆、一束扫过的光和一个光点。
+ */
 const MOTIFS = {
   meeting: (
     <Motif>
+      <defs>
+        <linearGradient id="ha-meet-page" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fff" stopOpacity=".55" /><stop offset="1" stopColor="#fff" stopOpacity=".18" /></linearGradient>
+        <linearGradient id="ha-meet-clock" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#fff" stopOpacity=".9" /><stop offset="1" stopColor="#dbe7ff" stopOpacity=".55" /></linearGradient>
+      </defs>
       <g className={s.page}>
-        <path d="M24 36H8a3 3 0 0 1-3-3V14a3 3 0 0 1 3-3h20a3 3 0 0 1 3 3v12" />
-        <path d="M5 18h26M11 8v6M25 8v6" />
+        <rect x="12" y="20" width="46" height="44" rx="10" fill="url(#ha-meet-page)" />
+        <rect x="12" y="20" width="46" height="13" rx="10" fill="#fff" fillOpacity=".35" />
+        <rect x="22" y="14" width="5" height="12" rx="2.5" fill="#fff" fillOpacity=".7" />
+        <rect x="43" y="14" width="5" height="12" rx="2.5" fill="#fff" fillOpacity=".7" />
       </g>
-      <circle cx="34" cy="35" r="7.5" />
-      <path className={s.hands} d="M34 31v4l2.5 2" />
+      <circle cx="58" cy="58" r="16" fill="url(#ha-meet-clock)" />
+      <path className={s.hands} d="M58 50v8l5 3" fill="none" stroke="#3f74ee" strokeOpacity=".55" strokeWidth="2.4" strokeLinecap="round" />
     </Motif>
   ),
   waiting: (
     <Motif>
-      <path d="M12 12h22a6 6 0 0 1 6 6v10a6 6 0 0 1-6 6H22l-7 6v-6h-3a6 6 0 0 1-6-6V18a6 6 0 0 1 6-6z" />
-      <circle className={s.dot} cx="16" cy="23" r="1.2" />
-      <circle className={s.dot} cx="23" cy="23" r="1.2" />
-      <circle className={s.dot} cx="30" cy="23" r="1.2" />
+      <defs>
+        <linearGradient id="ha-wait-back" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#e7ebff" /><stop offset="1" stopColor="#c9d3f5" /></linearGradient>
+        <linearGradient id="ha-wait-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fff" /><stop offset="1" stopColor="#eef1f6" /></linearGradient>
+        <filter id="ha-wait-shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#29334c" floodOpacity=".12" /></filter>
+      </defs>
+      <path d="M30 18h30a10 10 0 0 1 10 10v14a10 10 0 0 1-10 10h-4l2 9-11-9H30a10 10 0 0 1-10-10V28a10 10 0 0 1 10-10z" fill="url(#ha-wait-back)" opacity=".8" />
+      <path d="M18 32h30a10 10 0 0 1 10 10v14a10 10 0 0 1-10 10H32l-11 9 2-9h-5A10 10 0 0 1 8 56V42a10 10 0 0 1 10-10z" fill="url(#ha-wait-front)" filter="url(#ha-wait-shadow)" />
+      <circle className={s.dot} cx="23" cy="49" r="2.6" fill="#9aa6bb" />
+      <circle className={s.dot} cx="33" cy="49" r="2.6" fill="#b3bccc" />
+      <circle className={s.dot} cx="43" cy="49" r="2.6" fill="#ccd3de" />
     </Motif>
   ),
   progress: (
     <Motif>
-      <path d="M2 43Q22 24 47 38" />
-      <path className={s.trail} d="M12 44C20 43 22 40 18 38S20 34 25 33.5" />
-      <path d="M26 32V11" />
-      <path className={s.flag} d="M26 12c3-1.5 6 1.5 10 0v7c-4 1.5-7-1.5-10 0" />
+      <defs>
+        <linearGradient id="ha-hill-near" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#dfe7e1" /><stop offset="1" stopColor="#c5d3cb" /></linearGradient>
+        <linearGradient id="ha-hill-far" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#eef2f6" /><stop offset="1" stopColor="#d9e0ea" /></linearGradient>
+      </defs>
+      <path d="M0 80C10 58 22 48 38 46c10-1 20 4 42 22v12z" fill="url(#ha-hill-far)" />
+      <path d="M14 80c8-16 18-26 32-30 12-3 22 2 34 12v18z" fill="url(#ha-hill-near)" />
+      <path className={s.trail} d="M26 74c6-6 12-10 20-12" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+      <path d="M47 50V28" stroke="#8a96a8" strokeWidth="2" strokeLinecap="round" />
+      <path className={s.flag} d="M48 28l13 4-13 5z" fill="#d98c6b" fillOpacity=".85" />
     </Motif>
   ),
   radar: (
     <Motif>
-      <path d="M32 41a9 9 0 0 1 9-9M23 41a18 18 0 0 1 18-18M14 41a27 27 0 0 1 27-27" />
-      <path className={s.sweep} d="M41 41 22 22" />
+      <defs>
+        <radialGradient id="ha-radar-glow" cx="1" cy="1" r="1"><stop offset="0" stopColor="#e6edf7" /><stop offset="1" stopColor="#f6f8fb" stopOpacity="0" /></radialGradient>
+        <linearGradient id="ha-radar-beam" x1="1" y1="1" x2="0" y2="0"><stop offset="0" stopColor="#7fa4d8" stopOpacity=".55" /><stop offset="1" stopColor="#7fa4d8" stopOpacity="0" /></linearGradient>
+      </defs>
+      <circle cx="76" cy="76" r="68" fill="url(#ha-radar-glow)" />
+      <g fill="none" stroke="#b9c4d4" strokeWidth="1"><circle cx="76" cy="76" r="22" /><circle cx="76" cy="76" r="44" /><circle cx="76" cy="76" r="66" /></g>
+      <path className={s.sweep} d="M76 76L22 34A68 68 0 0 1 52 12z" fill="url(#ha-radar-beam)" />
+      <circle cx="40" cy="38" r="7" fill="#5f84bd" fillOpacity=".15" />
+      <circle cx="40" cy="38" r="3.2" fill="#5f84bd" />
     </Motif>
   ),
 };
