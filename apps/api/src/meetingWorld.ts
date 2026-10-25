@@ -38,6 +38,7 @@ const BRIEF_READS = 4;
  * 预约、改挂点时能挑的对象，按 本月 PO、LTO、本月 Mission、责任单元 排：PO、LTO 读本体（列对象串行，读不到就不给），Mission、单元读天枢。
  * world-02 里没有 Task 对象，不给 Task。每项带已确认的内容（brief）：PO、LTO 取已成立对象目标块的结果组件（同时最多 4 个请求，读不到为 null），
  * Mission 取定义的结果（轮次确认了才给），单元是名称。`briefs` 为 null 时（建会、改挂点的校验）PO、LTO 不取内容，只看列出来的对象。
+ * Mission 另带负责人和服务的 PO（载入时记下的 goal_ref，这个 PO 在选项里才给）。
  */
 export async function anchorOptions(q: Query, world: AnchorWorld | null, period: string, briefs: AnchorBriefCache | null): Promise<TWorldAnchorOption[]> {
   let goals: TWorldAnchorOption[] = [];
@@ -47,7 +48,7 @@ export async function anchorOptions(q: Query, world: AnchorWorld | null, period:
       const ltos = await world.listObjects({ type: "LongTermGoal" });
       goals = [...pos.map((head) => ({ kind: "po" as const, head })), ...ltos.map((head) => ({ kind: "lto" as const, head }))]
         .filter(({ head }) => usableWorldHead(head) && head.title.trim())
-        .map(({ kind, head }) => ({ kind, id: head.object_id, title: worldDisplayText(head.title.trim()), brief: null, lifecycle: lifecycleOf(head) }));
+        .map(({ kind, head }) => ({ kind, id: head.object_id, title: worldDisplayText(head.title.trim()), brief: null, lifecycle: lifecycleOf(head), ownerId: null, parentId: null }));
       if (briefs) {
         const heads = new Map([...pos, ...ltos].map((head) => [head.object_id, head]));
         const pending = goals.filter((option) => established(option.lifecycle));
@@ -64,16 +65,18 @@ export async function anchorOptions(q: Query, world: AnchorWorld | null, period:
     }
   }
   const missions = (await q(
-    `SELECT m.id, m.title, m.outcome, r.status AS round_status FROM missions m
+    `SELECT m.id, m.title, m.outcome, m.owner_id, m.world_status, m.world_goal_id, r.status AS round_status FROM missions m
        LEFT JOIN personal_mission_cards c ON c.id = m.personal_mission_card_id LEFT JOIN mission_rounds r ON r.id = c.round_id
-      WHERE m.period = $1 AND NOT m.placeholder ORDER BY m.code`, [period])).rows as { id: string; title: string; outcome: string; round_status: string | null }[];
+      WHERE m.period = $1 AND NOT m.placeholder ORDER BY m.code`, [period])).rows as { id: string; title: string; outcome: string; owner_id: string; world_status: string | null; world_goal_id: string | null; round_status: string | null }[];
+  const pos = new Set(goals.filter((option) => option.kind === "po").map((option) => option.id));
   const units = (await q("SELECT id, name FROM capability_config ORDER BY sort_order, code")).rows as { id: string; name: string }[];
   return [
     ...goals,
     ...missions.map((row) => ({ kind: "mission" as const, id: row.id, title: row.title,
       brief: row.round_status === "confirmed" ? brief(row.outcome) : null,
-      lifecycle: row.round_status === null ? null : row.round_status === "confirmed" ? "confirmed" : "draft" })),
-    ...units.map((row) => ({ kind: "unit" as const, id: row.id, title: row.name, brief: brief(row.name), lifecycle: null })),
+      lifecycle: row.round_status === null ? row.world_status : row.round_status === "confirmed" ? "confirmed" : "draft",
+      ownerId: row.owner_id, parentId: row.world_goal_id && pos.has(row.world_goal_id) ? row.world_goal_id : null })),
+    ...units.map((row) => ({ kind: "unit" as const, id: row.id, title: row.name, brief: brief(row.name), lifecycle: null, ownerId: null, parentId: null })),
   ];
 }
 

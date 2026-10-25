@@ -8,13 +8,14 @@ import { worldDisplayText } from "./worldReader.js";
  * 本体是主源：同一个本体对象（scope + 对象 id）在表里只对应一行，重跑按本体最新版本覆盖；只读本体，不写本体。
  * 负责人按实例配置 people（personId → principal）反查，能力域按 capabilities（本体域 id → 能力域编号）对，都按 id 不按名字；
  * 对不上、没负责人的不载入，写进报告。本体里已经没有的行不删，也写进报告，由人决定。
+ * 顺带记下 Mission 服务的周期目标（goal_ref → world_goal_id），约会议挑挂点时按它列 PO 下的 Mission。
  */
 export type WorldMissionReader = Pick<WorldClient, "listObjects" | "getObject" | "config">;
 
 type Component = { id?: string; type?: string; text?: unknown };
 type Block = { id: string; components?: Component[]; value?: { components?: Component[] } | null };
 type MissionObject = WorldObject & {
-  business: WorldObject["business"] & { blocks?: Block[] };
+  business: WorldObject["business"] & { blocks?: Block[]; relations?: { field?: string; value?: unknown }[] };
   identity?: { responsible?: { principals?: { principal_id?: string }[] } };
 };
 type Lifecycle = { status?: string; display_name?: string };
@@ -29,6 +30,11 @@ const componentsOf = (object: MissionObject, blockId: string): Component[] => {
 };
 const textsOf = (components: Component[], type: string): string[] =>
   components.flatMap((item) => item.type === type && typeof item.text === "string" && item.text.trim() ? [worldDisplayText(item.text.trim())] : []);
+/** goal_ref 指向的对象 id（服务的周期目标）；没有为 null。 */
+const goalOf = (object: MissionObject): string | null => {
+  const value = object.business.relations?.find((relation) => relation.field === "goal_ref")?.value as { object_id?: unknown } | null | undefined;
+  return typeof value?.object_id === "string" && value.object_id ? value.object_id : null;
+};
 const lifecycleOf = (value: unknown): Lifecycle => (value && typeof value === "object" ? value : {}) as Lifecycle;
 
 /** 本体对象带天枢外部引用 mission:<code> 就用它的编号，没有就用对象 id 前 8 位。 */
@@ -94,7 +100,7 @@ export async function loadWorldMissions(q: Query, world: WorldMissionReader, opt
 
     const content = [title, ownerId, capabilityId, fields.outcome, fields.why, JSON.stringify(fields.successEvidence), JSON.stringify(fields.milestones),
       fields.dependencies, fields.boundaries, fields.keyPath, fields.timeBoundary, fields.tradeoffs, head.version];
-    const source = [scopeId, head.object_id, head.domain_id, status, label, readAt, JSON.stringify(gaps)];
+    const source = [scopeId, head.object_id, head.domain_id, status, label, readAt, JSON.stringify(gaps), goalOf(object)];
     let action: LoadedMission["action"] = "insert";
     if (existing) {
       action = "same";
@@ -107,15 +113,15 @@ export async function loadWorldMissions(q: Query, world: WorldMissionReader, opt
             IS DISTINCT FROM ($15, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13, $14)`, [existing.id, ...content, options.period]);
         if (changed.rowCount) action = "update";
         await q(`UPDATE missions SET world_scope_id=$2, world_object_id=$3, world_domain_id=$4, world_status=$5, world_status_label=$6,
-            world_read_at=$7, world_gaps=$8::jsonb, source_ref=$9, source_document_id=$3 WHERE id=$1`,
+            world_read_at=$7, world_gaps=$8::jsonb, world_goal_id=$9, source_ref=$10, source_document_id=$3 WHERE id=$1`,
           [existing.id, ...source, `world:${scopeId}:${head.object_id}`]);
       }
     } else if (!options.dryRun) {
       await q(`INSERT INTO missions (id, version, code, period, title, owner_id, capability_id, outcome, why, success_evidence, milestones,
           dependencies, boundaries, key_path, time_boundary, tradeoffs, source_revision, source_title, source_ref, source_document_id,
-          world_scope_id, world_object_id, world_domain_id, world_status, world_status_label, world_read_at, world_gaps)
+          world_scope_id, world_object_id, world_domain_id, world_status, world_status_label, world_read_at, world_gaps, world_goal_id)
         VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12, $13, $14, $15, $16, $4, $17, $19,
-          $18, $19, $20, $21, $22, $23, $24::jsonb)`,
+          $18, $19, $20, $21, $22, $23, $24::jsonb, $25)`,
         [slugId(`${code} ${title}`) || code, code, options.period, ...content, `world:${scopeId}:${head.object_id}`, ...source]);
     }
     report.loaded.push({ code: existing?.code ?? code, title, ownerId, status: label, version: head.version, gaps, action });
