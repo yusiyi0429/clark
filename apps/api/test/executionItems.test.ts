@@ -38,7 +38,7 @@ describe("执行事项",()=>{
     } finally { await f.t.close(); }
   });
 
-  it("能挂的 Mission 和首页同一口径：没有任务卡的本人 Mission 能挂，占位、别人的、过去月份的不能挂",async()=>{
+  it("能挂的 Mission：没有任务卡的本人 Mission（从本体载入）能挂；任务卡还在准备的、占位、别人的、过去月份的不能挂",async()=>{
     const f=await executionFixture("open");
     try {
       const insert=(id:string,owner:string,period:string,placeholder:boolean)=>f.t.sql(`INSERT INTO missions(id,version,code,period,title,owner_id,
@@ -53,11 +53,11 @@ describe("执行事项",()=>{
       expect(created.json()).toMatchObject({mission:{missionId:"imported",title:"本体 imported",cardId:null,battlefieldName:"增长战场"},planTaskId:"t1"});
       for (const missionId of ["held","others","september"])
         expect((await call(f,f.member,"POST","/api/me/tasks",newTask(missionId))).json().code).toBe("MISSION_NOT_AVAILABLE");
-      // 任务卡还在讨论的 Mission 也能挂，和首页一样。
+      // 任务卡还在讨论的 Mission 挂不上：卡没确认前，事项和私聊读不到它（和卡被退回重新准备时同一条）。
       const onOpenCard=await call(f,f.member,"PATCH",`/api/me/tasks/${created.json().id}`,{version:1,missionId:"execution-one"});
-      expect(onOpenCard.json()).toMatchObject({mission:{missionId:"execution-one",cardId:f.card},planTaskId:null});
+      expect(onOpenCard.json().code).toBe("MISSION_NOT_AVAILABLE");
       const options=(await call(f,f.member,"GET",`/api/me/tasks/${created.json().id}`)).json().missionOptions;
-      expect(options.map((m:{missionId:string})=>m.missionId)).toEqual(["execution-one","execution-two","imported"]);
+      expect(options.map((m:{missionId:string})=>m.missionId)).toEqual(["imported"]);
     } finally { await f.t.close(); }
   });
 

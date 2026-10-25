@@ -30,7 +30,7 @@ type StoredAcceptance = Omit<TTaskAcceptance, "by"> & { by: string };
 const TASK_SELECT = `SELECT t.id::text,t.version,t.title,t.status,t.created_by,t.start_date::text AS start_date,
  t.due_date::text AS due_date,t.done_definition,t.judgment,t.judgment_at,t.return_reason,t.origin_meeting_id::text,
  t.source_quote,mt.title AS meeting_title,mt.lead_dri_id,t.owner_id,t.mission_id,t.plan_task_id,t.step_order,
- m.title AS mission_title,c.id::text AS card_id,m.period,COALESCE(b.name,mb.name,cap.name,'') AS battlefield_name,
+ CASE WHEN c.id IS NULL OR r.status='confirmed' THEN m.title ELSE NULL END AS mission_title,c.id::text AS card_id,m.period,COALESCE(b.name,mb.name,cap.name,'') AS battlefield_name,
  (SELECT count(*)::int FROM tasks s WHERE s.mission_id=t.mission_id) AS steps,
  prev.id::text AS previous_id,prev.title AS previous_title,prev.status AS previous_status,
  ARRAY(SELECT tm.person_id FROM task_members tm WHERE tm.task_id=t.id AND tm.role='collaborator' AND tm.left_at IS NULL ORDER BY tm.added_at,tm.person_id) AS collaborators,
@@ -133,14 +133,15 @@ const validDates = (start: string | null, due: string | null) =>
   (!start || validDate(start)) && (!due || validDate(due)) && (!start || !due || start <= due);
 
 /**
- * 本人能挂执行事项的 Mission：和首页计划同一口径——本人的、不是占位、月份未过，不要求任务卡已确认
- * （10 月的 Mission 从本体导入，没有任务卡）。战场名取任务卡轮次的战场，没有卡时取 Mission 的第一个战场，再没有取能力域名。
+ * 本人能挂执行事项的 Mission：本人的、不是占位、月份未过；有任务卡的要等卡所在轮次确认，
+ * 没有任务卡的（从本体载入的）不用等。事项上显示所属 Mission 也是同一条（TASK_SELECT 的 mission_title）：
+ * 卡被退回、重新准备时，事项和私聊读不到这个 Mission。战场名取任务卡轮次的战场，没有卡时取 Mission 的第一个战场，再没有取能力域名。
  */
 const AVAILABLE_MISSIONS = `SELECT m.id,m.code,m.title,m.period,COALESCE(rb.name,mb.name,cap.name,'') AS battlefield FROM missions m
   LEFT JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id LEFT JOIN mission_rounds r ON r.id=c.round_id
   LEFT JOIN battlefield_config rb ON rb.id=r.battlefield_id LEFT JOIN battlefield_config mb ON mb.id=m.battlefield_ids->>0
   LEFT JOIN capability_config cap ON cap.id=m.capability_id
-  WHERE m.owner_id=$1 AND NOT m.placeholder AND m.period >= $2`;
+  WHERE m.owner_id=$1 AND NOT m.placeholder AND m.period >= $2 AND (c.id IS NULL OR r.status='confirmed')`;
 type AvailableMission = { id: string; code: string; title: string; period: string; battlefield: string };
 export async function missionAvailable(q: Query, ownerId: string, missionId: string, now: Date): Promise<boolean> {
   return !!(await q(`${AVAILABLE_MISSIONS} AND m.id=$3`, [ownerId, companyPeriod(now), missionId])).rowCount;
