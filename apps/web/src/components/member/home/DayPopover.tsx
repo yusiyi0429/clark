@@ -3,6 +3,7 @@
 /**
  * 月历上点一天弹出的「这一天」浮层（样稿 calendar-day-v1），挂在那一天的格子下面（anchor）；外观、开合、Esc 和点外面关同会议页的编辑浮层（ts-design Popover）。
  * - 看：「10 月 26 日 周一」，右边小字「今天」或「还有 N 个工作日」；下面按 关口 / 我的节点 / 这天截止 三组列出，空的组不出；最下面「＋ 加节点」。
+ *   关口和节点分两行：上面节点名，下面灰色小字 Mission 名，都折行全显示。
  *   我的节点点一下原地改名或删；这天截止的执行事项点进去是详情。
  * - 加节点：Mission 按名字列出（带色点，只有一个 Mission 时不列），默认选聚焦的那个；再填节点名称。
  * 名字 ≤10 字，Enter 提交（拼字中的 Enter 不算），空名字不提交。按钮都是深灰：确认和「开启执行事项」同一个样子，删除是深灰字。
@@ -107,7 +108,7 @@ export function DayPopover({ date, mode, today, days, gates, marks, deadlines, m
                 <Group name="关口">
                   {gates.map((gate, at) => (
                     <div key={`gate-${at}`} className={s.dayLine} data-day-gate style={tone(colorOf(gate.missionId))}>
-                      <i className={s.gateIcon} aria-hidden="true" /><span>{gate.label}</span><small>{titleOf(gate.missionId)}</small>
+                      <i className={s.gateIcon} aria-hidden="true" /><span className={s.dayText}><span>{gate.label}</span><small>{titleOf(gate.missionId)}</small></span>
                     </div>
                   ))}
                 </Group>
@@ -122,7 +123,7 @@ export function DayPopover({ date, mode, today, days, gates, marks, deadlines, m
                   ) : (
                     <button key={mark.id} type="button" className={s.dayLine} data-day-mark={mark.id} style={tone(colorOf(mark.missionId))}
                       onClick={() => onMode({ kind: "edit", id: mark.id, label: mark.label })}>
-                      <i className={s.markIcon} aria-hidden="true" /><span>{mark.label}</span><small>{titleOf(mark.missionId)}</small>
+                      <i className={s.markIcon} aria-hidden="true" /><span className={s.dayText}><span>{mark.label}</span><small>{titleOf(mark.missionId)}</small></span>
                     </button>
                   ))}
                 </Group>
