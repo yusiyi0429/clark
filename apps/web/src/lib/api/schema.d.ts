@@ -10962,6 +10962,8 @@ export interface components {
                 title: string;
                 brief: string | null;
                 lifecycle: string | null;
+                ownerId: string | null;
+                parentId: string | null;
             }[];
         };
         ImpactCardView: {

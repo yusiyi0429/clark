@@ -1777,7 +1777,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       canFetch={canFetchMinutes} onFetched={() => void reloadCard()} onUpload={canUpload ? () => uploadRef.current?.click() : undefined}
       uploading={uploading} uploadError={uploadError} />
   ) : null;
-  const worldLine = <MeetingWorldSection meetingId={meetingId} progress={progress ? <MeetingProgress model={progress} actions={progressActions} /> : null} />;
+  const worldLine = <MeetingWorldSection meetingId={meetingId} viewerId={workspace.viewerId ?? ""} progress={progress ? <MeetingProgress model={progress} actions={progressActions} /> : null} />;
   // 会开完、还没有确认的逐字稿时，主栏整块能拖会议记录进来（FileDropZone）。
   const recordDrop = canUpload && ended && !source.transcript;
   // 选会议记录文件：会议记录区的「上传会议记录」和进度线上的共用，上传块不出现时也在。

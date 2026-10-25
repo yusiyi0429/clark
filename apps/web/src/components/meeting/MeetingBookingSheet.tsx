@@ -3,7 +3,9 @@
 /**
  * 约会议（FR-4.1）：顶栏或首页「约会议」打开的右侧浮出面板（SidePanel，形状同通知栏），页头和二级页同一个（DetailFrame）。
  * 外壳一直挂着它、每次打开换一个 key：表单从空白开始，关时面板能原路滑出。
- * 名称、日期 + 起止、主持人（成员只能是本人，CEO 从 DRI 里选）、参会人（可空）、挂到（WorldAnchorPicker，至少一个）。
+ * 名称、日期 + 起止、主持人（成员只能是本人，CEO 从 DRI 里选）、参会人（可空）、挂到（一个）。
+ * 挂到：选项到了就默认挂上自己本月的第一个 Mission（没有就空着、直接展开去挑），收起时一行写着挂点和「我的 Mission / PO …」，右边「换」；
+ * 换的时候是 WorldAnchorPicker，挑了 Mission、LTO 就收起，挑了 PO 不收（下面展开它的 Mission 可以再往下挑）。
  * 「约好」建会（只存天枢，不写本体），成功后跳到会议页。
  * 整理模式（organize）：飞书里直接开的会待整理，用这份妙记建会；时间、参会人取自妙记只读，没有主持人一栏，挂点按妙记那个月取。
  */
@@ -18,7 +20,7 @@ import { Select } from "@/components/ui/Select";
 import { SidePanel } from "@/components/ui/SidePanel";
 import { timeOptions } from "@/components/ui/pickerFormat";
 import { bookMeeting, listPeople, listPersonDirectory, listWorldAnchorOptions, organizeFeishuMinute, type DirectoryPerson } from "./meetingDecisionApi";
-import { WorldAnchorPicker } from "./WorldAnchorPicker";
+import { anchorRole, WorldAnchorPicker } from "./WorldAnchorPicker";
 import d from "./meeting-decisions.module.css";
 
 const BOOK_ERROR: Record<string, string> = { ANCHOR_NOT_FOUND: "挂点已失效", FORBIDDEN: "没有权限", INVALID_LEAD_DRI: "主持人不可选", INVALID_PARTICIPANT: "参会人不可选" };
@@ -45,7 +47,9 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
   /** 整理会议：待整理的那份妙记；整理好后跳到 `${meetingBase}/${meetingId}`。 */
   | { organize: { minute: TFeishuMinuteInboxItem; meetingBase: string; onOrganized(meetingId: string): void }; viewer?: undefined }
 )) {
-  const { navigate } = useWorkspace();
+  const { navigate, viewerId: workspaceViewer } = useWorkspace();
+  /** 登录的人（整理飞书会时没有 viewer，用工作台的）：挂点默认挂他的 Mission。 */
+  const me = viewer?.personId ?? workspaceViewer ?? "";
   const role = viewer?.role;
   const [title, setTitle] = useState(organize?.minute.title ?? "");
   const [slot, setSlot] = useState(nextSlot);
@@ -59,6 +63,7 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [optionsError, setOptionsError] = useState(false);
+  const [picking, setPicking] = useState(false);
   const period = organize ? companyMonth(new Date(organize.minute.startsAt)) : slot.date.slice(0, 7);
 
   // 整理会议不取人员名册（参会人取自妙记）。
@@ -78,12 +83,18 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
       if (!live) return;
       setOptions(next);
       setOptionsError(false);
-      setAnchors((current) => current.filter((anchor) => next.some((option) => option.kind === anchor.kind && option.id === anchor.id)));
+      setAnchors((current) => {
+        const kept = current.filter((anchor) => next.some((option) => option.kind === anchor.kind && option.id === anchor.id));
+        if (kept.length) return kept;
+        const mine = next.find((option) => option.kind === "mission" && option.ownerId === me);
+        return mine ? [{ kind: mine.kind, id: mine.id, title: mine.title }] : [];
+      });
     }, () => { if (live) setOptionsError(true); });
     return () => { live = false; };
-  }, [open, period]);
+  }, [open, period, me]);
 
   const nameOf = (personId: string) => people.find((person) => person.personId === personId)?.displayName ?? "";
+  const anchorOption = (anchor: TWorldAnchor) => options?.find((option) => option.kind === anchor.kind && option.id === anchor.id);
   const valid = organize
     ? Boolean(title.trim() && options && anchors.length)
     : Boolean(title.trim() && slot.date && slot.start && slot.end && slot.end > slot.start && leadDriId && options && anchors.length);
@@ -185,7 +196,19 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
           </div>
           <div className={d.bookField}>
             <span>挂到</span>
-            {options ? <WorldAnchorPicker options={options} value={anchors} onChange={setAnchors} /> : null}
+            {options && anchors.length && !picking ? (
+              <div className={d.bookAnchor} data-anchor-row>
+                <span>
+                  {anchors[0].title}
+                  <small>{anchorOption(anchors[0]) ? anchorRole(anchorOption(anchors[0])!, me, nameOf) : ""}</small>
+                </span>
+                <button type="button" onClick={() => setPicking(true)}>换</button>
+              </div>
+            ) : null}
+            {options && (picking || !anchors.length) ? (
+              <WorldAnchorPicker options={options} value={anchors} viewerId={me} nameOf={nameOf}
+                onChange={(next) => { setAnchors(next); if (next[0]?.kind !== "po") setPicking(false); }} />
+            ) : null}
             {optionsError ? <p className={d.worldError} role="alert">没有读到对象</p> : null}
           </div>
           {error ? <p className={d.worldError} role="alert">{error}</p> : null}

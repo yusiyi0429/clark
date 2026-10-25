@@ -62753,7 +62753,9 @@
                 "id",
                 "title",
                 "brief",
-                "lifecycle"
+                "lifecycle",
+                "ownerId",
+                "parentId"
               ],
               "properties": {
                 "kind": {
@@ -62796,6 +62798,26 @@
                   ]
                 },
                 "lifecycle": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "ownerId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "parentId": {
                   "anyOf": [
                     {
                       "type": "string"

@@ -1,64 +1,108 @@
 "use client";
 
 /**
- * 挑挂点（约会议、会议页页头「改」共用）：上面是已选的标签（可去掉），一个搜索框，下面按 PO / LTO / Mission / 单元 分组列候选。
- * 每项一行名称 + 类型（草稿再加「草稿」），下一行灰字是对象已确认的内容（brief）。点一项选上，再点取消。
+ * 挑挂点（约会议、会议页页头「改」共用，样稿 anchor-picker-v1）：挑一个，点别的就是换。
+ * - 上面一个搜索框，搜 Mission、LTO、PO（有字时下面直接列搜到的，每项写类型或负责人）。
+ * - 没搜时：「我的 Mission」直接列；其余收成「别人的 Mission / LTO / PO」三行，点进去是二级（‹ 返回）。
+ * - PO 二级：点一个 PO 就挂在它上面，下面展开服务这个 PO 的 Mission（parentId），再点其中一个就改挂到那个 Mission。
+ * 选中的那行前面一个勾、浅底；草稿在名字后面写灰字「草稿」。没有分组框线、没有类型色块。责任单元不在这里列。
  */
 import { useMemo, useState } from "react";
+import { Check } from "lucide-react";
 import type { TWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
-import { WorldAnchors } from "./WorldAnchors";
 import d from "./meeting-decisions.module.css";
 
-const GROUPS = [["po", "PO"], ["lto", "LTO"], ["mission", "Mission"], ["unit", "单元"]] as const;
-const KIND = Object.fromEntries(GROUPS) as Record<TWorldAnchorOption["kind"], string>;
+type View = "root" | "others" | "lto" | "po";
+const LEVEL: Record<Exclude<View, "root">, string> = { others: "别人的 Mission", lto: "LTO", po: "PO" };
 const same = (a: Pick<TWorldAnchor, "kind" | "id">, b: Pick<TWorldAnchor, "kind" | "id">) => a.kind === b.kind && a.id === b.id;
-/** lifecycle 是草稿（本体对象的 draft、Mission 轮次没确认）。 */
-const isDraftLifecycle = (lifecycle: string | null) => lifecycle === "draft";
 
-export function WorldAnchorPicker({ options, value, onChange, min = 0 }: {
+/** 已选挂点下面那行灰字：我的 Mission / 某某的 Mission / LTO / PO（约会议收起时那一行也用）。 */
+export function anchorRole(option: Pick<TWorldAnchorOption, "kind" | "ownerId">, viewerId: string, nameOf?: (personId: string) => string): string {
+  if (option.kind === "mission") {
+    if (option.ownerId === viewerId) return "我的 Mission";
+    const name = option.ownerId ? nameOf?.(option.ownerId) : "";
+    return name ? `${name}的 Mission` : "Mission";
+  }
+  return option.kind === "po" ? "PO" : option.kind === "lto" ? "LTO" : "";
+}
+
+export function WorldAnchorPicker({ options, value, onChange, viewerId = "", nameOf }: {
   options: TWorldAnchorOption[]; value: TWorldAnchor[]; onChange(next: TWorldAnchor[]): void;
-  /** 至少留几个：已选到这个数时标签上不给去掉。 */
-  min?: number;
+  /** 登录的人：负责人是他的 Mission 列在最前。 */
+  viewerId?: string;
+  /** personId → 名字：别人的 Mission 下面写负责人。 */
+  nameOf?: (personId: string) => string;
 }) {
   const [query, setQuery] = useState("");
-  const shown = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return needle ? options.filter((option) => `${option.title} ${option.brief ?? ""}`.toLowerCase().includes(needle)) : options;
-  }, [options, query]);
-  const toggle = (option: TWorldAnchor) => {
-    if (value.some((item) => same(item, option))) {
-      if (value.length > min) onChange(value.filter((item) => !same(item, option)));
-    } else onChange([...value, { kind: option.kind, id: option.id, title: option.title }]);
-  };
+  const [view, setView] = useState<View>("root");
+  const pickable = useMemo(() => options.filter((option) => option.kind !== "unit"), [options]);
+  const missions = pickable.filter((option) => option.kind === "mission");
+  const mine = missions.filter((option) => option.ownerId === viewerId);
+  const others = missions.filter((option) => option.ownerId !== viewerId);
+  const ltos = pickable.filter((option) => option.kind === "lto");
+  const pos = pickable.filter((option) => option.kind === "po");
+  const childrenOf = (po: TWorldAnchorOption) => missions.filter((option) => option.parentId === po.id);
+  const isOn = (option: TWorldAnchorOption) => value.some((item) => same(item, option));
+  const pick = (option: TWorldAnchorOption) => onChange([{ kind: option.kind, id: option.id, title: option.title }]);
+  const ownerOf = (option: TWorldAnchorOption) => (option.ownerId ? nameOf?.(option.ownerId) : "") || "";
+
+  const row = (option: TWorldAnchorOption, sub?: string) => (
+    <li key={`${option.kind}:${option.id}`}>
+      <button type="button" className={d.pickOption} aria-pressed={isOn(option)} onClick={() => pick(option)}>
+        <span className={d.pickCheck} aria-hidden="true">{isOn(option) ? <Check size={14} strokeWidth={2.2} /> : null}</span>
+        <span className={d.pickText}>
+          {option.title}
+          {option.lifecycle === "draft" ? <span className={d.pickDraft}>草稿</span> : null}
+          {sub ? <small>{sub}</small> : null}
+        </span>
+      </button>
+    </li>
+  );
+  const level = (target: Exclude<View, "root">, count: number) => count ? (
+    <li key={target}>
+      <button type="button" className={d.pickOption} data-level={target} onClick={() => setView(target)}>
+        <span className={d.pickCheck} aria-hidden="true" />
+        <span className={d.pickText}>{LEVEL[target]}</span>
+        <span className={d.pickCount}>{count} ›</span>
+      </button>
+    </li>
+  ) : null;
+
+  const needle = query.trim().toLowerCase();
+  let body;
+  if (needle) {
+    const found = pickable.filter((option) => `${option.title} ${option.brief ?? ""}`.toLowerCase().includes(needle));
+    body = found.length
+      ? <ul>{found.map((option) => row(option, anchorRole(option, viewerId, nameOf)))}</ul>
+      : <p className={d.pickEmpty}>没有搜到</p>;
+  } else if (view === "root") {
+    body = <>
+      {mine.length ? <><h4>我的 Mission</h4><ul>{mine.map((option) => row(option))}</ul></> : null}
+      {mine.length ? <h4>其他</h4> : null}
+      <ul>{level("others", others.length)}{level("lto", ltos.length)}{level("po", pos.length)}</ul>
+    </>;
+  } else {
+    const list = view === "others" ? others : view === "lto" ? ltos : pos;
+    body = <>
+      <button type="button" className={d.pickBack} onClick={() => setView("root")}>‹ {LEVEL[view]}</button>
+      <ul>
+        {list.map((option) => {
+          if (view === "others") return row(option, ownerOf(option));
+          if (view === "lto") return row(option);
+          // PO：选中它、或选中了它下面的 Mission 时，下面展开服务这个 PO 的 Mission。
+          const children = childrenOf(option);
+          const open = children.length > 0 && (isOn(option) || children.some(isOn));
+          return [row(option, children.length ? `${children.length} 个 Mission` : undefined),
+            open ? <li key={`${option.id}:children`}><ul className={d.pickChildren}>{children.map((child) => row(child, ownerOf(child)))}</ul></li> : null];
+        })}
+      </ul>
+    </>;
+  }
 
   return (
     <div className={d.picker}>
-      {value.length ? <WorldAnchors anchors={value} onRemove={value.length > min ? toggle : undefined} /> : null}
-      <input type="search" aria-label="搜对象" placeholder="搜对象" value={query} onChange={(event) => setQuery(event.target.value)} />
-      <div className={d.pickList}>
-        {GROUPS.map(([kind, label]) => {
-          const items = shown.filter((option) => option.kind === kind);
-          return items.length ? (
-            <section key={kind} className={d.pickGroup} aria-label={label}>
-              <h4>{label}</h4>
-              <ul>
-                {items.map((option) => (
-                  <li key={`${option.kind}:${option.id}`}>
-                    <button type="button" className={d.pickOption} aria-pressed={value.some((item) => same(item, option))} onClick={() => toggle(option)}>
-                      <span className={d.pickHead}>
-                        <span className={d.pickTitle}>{option.title}</span>
-                        <span className={d.pickKind}>{KIND[option.kind]}</span>
-                        {isDraftLifecycle(option.lifecycle) ? <span className={d.pickDraft}>草稿</span> : null}
-                      </span>
-                      {option.brief && option.brief !== option.title ? <span className={d.pickBrief}>{option.brief}</span> : null}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null;
-        })}
-      </div>
+      <input type="search" aria-label="搜对象" placeholder="搜 Mission、LTO、PO" value={query} onChange={(event) => setQuery(event.target.value)} />
+      <div className={d.pickList}>{body}</div>
     </div>
   );
 }

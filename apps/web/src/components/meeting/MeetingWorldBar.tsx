@@ -13,14 +13,16 @@ import { WorldAnchors } from "./WorldAnchors";
 import d from "./meeting-decisions.module.css";
 
 /** 页头那一块：取「这场会在本体里」；看不到挂点时只放进度线。 */
-export function MeetingWorldSection({ meetingId, progress }: { meetingId: string; progress?: ReactNode }) {
+export function MeetingWorldSection({ meetingId, viewerId, progress }: { meetingId: string; viewerId?: string; progress?: ReactNode }) {
   const [detail, setDetail] = useMeetingWorld(meetingId);
-  if (detail) return <MeetingWorldBar meetingId={meetingId} world={detail.world} onChange={setDetail} progress={progress} />;
+  if (detail) return <MeetingWorldBar meetingId={meetingId} viewerId={viewerId} world={detail.world} onChange={setDetail} progress={progress} />;
   return progress ? <div className={d.worldBar}>{progress}</div> : null;
 }
 
-export function MeetingWorldBar({ meetingId, world: initial, onChange, progress }: {
+export function MeetingWorldBar({ meetingId, viewerId, world: initial, onChange, progress }: {
   meetingId: string; world: TMeetingWorldView;
+  /** 登录的人：挑挂点时自己的 Mission 列在最前。 */
+  viewerId?: string;
   onChange: (next: TMeetingWorldResponse) => void;
   progress?: ReactNode;
 }) {
@@ -57,7 +59,7 @@ export function MeetingWorldBar({ meetingId, world: initial, onChange, progress 
       </div>
       {picking ? (
         <div className={d.pickerPanel}>
-          {options ? <WorldAnchorPicker options={options} value={chosen} onChange={setChosen} /> : null}
+          {options ? <WorldAnchorPicker options={options} value={chosen} onChange={setChosen} viewerId={viewerId} /> : null}
           <div className={d.actions}>
             {world.edited ? <button type="button" className={d.link} disabled={busy} onClick={() => void settle(() => setMeetingWorldAnchors(meetingId, null))}>恢复自动</button> : null}
             <span className={d.spacer} />

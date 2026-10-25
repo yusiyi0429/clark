@@ -52,7 +52,7 @@ const render = (view: TMeetingWorldView, progress?: unknown, onChange = vi.fn())
   return nodes(expand(MeetingWorldBar({ meetingId: "m1", world: view, onChange, progress: progress as never })));
 };
 const option = (anchor: { kind: TWorldAnchorOption["kind"]; id: string; title: string }, brief: string | null = null, lifecycle: string | null = null): TWorldAnchorOption =>
-  ({ ...anchor, brief, lifecycle });
+  ({ ...anchor, brief, lifecycle, ownerId: null, parentId: null });
 
 beforeEach(() => { hooks.values = []; api.put.mockReset(); api.get.mockReset(); api.post.mockReset(); });
 
@@ -106,32 +106,29 @@ describe("会议页页头：这场会挂到哪", () => {
     expect(nodes(items[1]).filter((node) => node.type === "span").map(text)).toEqual(["Mission", "接口全量切到 v2"]);
   });
 
-  it("改挂点：按类型分组可搜，选了保存；改过的可以恢复自动", async () => {
+  it("改挂点：挑一个（点别的就是换），能搜；改过的可以恢复自动", async () => {
     const unit = { kind: "unit" as const, id: "agents", title: "智能体" };
     const po = { kind: "po" as const, id: "<po>", title: "十月目标" };
     api.get.mockResolvedValue({ data: { options: [option(po, "十月跑通预约", "committed"), option(MISSION, null, "draft"), option(unit, "智能体")] }, response: { ok: true, status: 200 } });
     const view = world({ edited: true });
     (render(view).find((node) => node.type === "button" && text(node) === "改")!.props!.onClick as () => void)();
     await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/meetings/{id}/world-anchor-options", { params: { path: { id: "m1" } } }));
-    await vi.waitFor(() => expect(render(view).some((node) => node.props?.["aria-pressed"] !== undefined)).toBe(true));
+    await vi.waitFor(() => expect(render(view).some((node) => node.props?.["aria-label"] === "搜对象")).toBe(true));
+    // 没有自己的 Mission：只有「别人的 Mission」「PO」两行，单元不列。
     const picker = render(view);
-    expect(picker.filter((node) => node.type === "h4").map(text)).toEqual(["PO", "Mission", "单元"]);
-    expect(picker.filter((node) => node.props?.["aria-pressed"] !== undefined).map((node) => node.props!["aria-pressed"])).toEqual([false, true, false]);
-    const missionRow = picker.find((node) => node.props?.["aria-pressed"] === true)!;
-    expect(nodes(missionRow).some((node) => text(node) === "草稿")).toBe(true);
-    const poRow = picker.find((node) => node.props?.["aria-pressed"] === false)!;
-    expect(nodes(poRow).some((node) => text(node) === "十月跑通预约")).toBe(true);
+    expect(picker.filter((node) => node.props?.["data-level"] !== undefined).map((node) => node.props!["data-level"])).toEqual(["others", "po"]);
+    expect(picker.some((node) => text(node) === "智能体")).toBe(false);
 
-    (picker.find((node) => node.props?.["aria-label"] === "搜对象")!.props!.onChange as (event: unknown) => void)({ target: { value: "智能" } });
+    (picker.find((node) => node.props?.["aria-label"] === "搜对象")!.props!.onChange as (event: unknown) => void)({ target: { value: "十月" } });
     const searched = render(view);
     expect(searched.filter((node) => node.props?.["aria-pressed"] !== undefined)).toHaveLength(1);
     (searched.find((node) => node.props?.["aria-pressed"] === false)!.props!.onClick as () => void)();
     expect(render(view).some((node) => node.type === "button" && text(node) === "恢复自动")).toBe(true);
 
-    api.put.mockResolvedValue({ data: { world: world({ anchors: [MISSION, unit], edited: true }), decisions: [] }, response: { ok: true, status: 200 } });
+    api.put.mockResolvedValue({ data: { world: world({ anchors: [{ ...po }], edited: true }), decisions: [] }, response: { ok: true, status: 200 } });
     (render(view).find((node) => node.type === "button" && text(node) === "保存")!.props!.onClick as () => void)();
     await vi.waitFor(() => expect(api.put).toHaveBeenCalledWith("/api/meetings/{id}/world-anchors",
-      { params: { path: { id: "m1" } }, body: { anchors: [{ kind: "mission", id: "m-v2" }, { kind: "unit", id: "agents" }] } }));
+      { params: { path: { id: "m1" } }, body: { anchors: [{ kind: "po", id: "<po>" }] } }));
   });
 });
 

@@ -10,12 +10,13 @@ const OCT_25=new Date("2026-10-25T04:40:00.000Z");
 type Comp={type:string;text:string};
 /** 本体里的一条 Mission：列表头 + 取对象（负责人在 identity，块在 business.blocks）。 */
 function mission(id:string,title:string,options:{domain:string;owner:string|null;version?:number;ref?:string;status?:[string,string];
-  definition?:Comp[];plan?:Comp[];tasks?:Comp[]}) {
+  definition?:Comp[];plan?:Comp[];tasks?:Comp[];goal?:string}) {
   const head={object_id:id,object_type:"Mission",title,version:options.version??1,revision_id:`rev-${id}`,object_version:options.version??1,domain_id:options.domain,
     external_refs:options.ref?[{system:"tianshu",id:`mission:${options.ref}`}]:[],lifecycle:{status:options.status?.[0]??"draft",display_name:options.status?.[1]??"草稿"},
     contract_version:"tkos.world/0.3"};
   const block=(blockId:string,items:Comp[]|undefined)=>({id:blockId,value:items?.length?{components:items.map((item,index)=>({id:`${blockId}-${index}`,...item}))}:null});
   const object={business:{...head,attributes:{responsible:options.owner??undefined},
+    relations:options.goal?[{field:"goal_ref",relation:"serves",value:{object_id:options.goal}}]:[],
     blocks:[block("definition",options.definition),block("mission_plan",options.plan),block("execution_plan",options.tasks)]},
     identity:{responsible:{principals:options.owner?[{principal_id:options.owner}]:[]}},records:{lifecycle:head.lifecycle},protocol:{contract_version:head.contract_version}};
   return {head,object};
@@ -28,7 +29,7 @@ function world(missions:ReturnType<typeof mission>[]):WorldMissionReader {
     getObject:async(id:string)=>byId.get(id),
   } as unknown as WorldMissionReader;
 }
-const full=mission("obj-m1","CEO / DRI Agent 从能用到在用",{domain:AGENTS,owner:MEMBER_P,version:5,ref:"sun-202610-1",
+const full=mission("obj-m1","CEO / DRI Agent 从能用到在用",{domain:AGENTS,owner:MEMBER_P,version:5,ref:"sun-202610-1",goal:"po-agents",
   definition:[{type:"outcome",text:"会议写进本体，对话问得到"},{type:"acceptance_criterion",text:"多人真实会写入并读回"},{type:"acceptance_criterion",text:"新 Chat 打分一次"},
     {type:"time_boundary",text:"2026-10-31"},{type:"scope_boundary",text:"不含回答质量"},{type:"contribution",text:"让 Agent 真正被用起来"}],
   plan:[{type:"core_path",text:"先做会议回流"},{type:"milestone",text:"10/28 天枢 V1 上线"},{type:"key_trade_off",text:"先内部版"}],
@@ -65,6 +66,9 @@ describe("从本体只读载入 Mission",()=>{
         {objectId:"obj-y",title:"负责人不在天枢",reason:"负责人对不上"},
         {objectId:"obj-z",title:"灯塔域的",reason:"能力域对不上"},
       ]);
+      // 服务的周期目标（goal_ref）记下来，约会议挑挂点时按它列 PO 下的 Mission；没有的为 null。
+      expect(await f.t.sql("SELECT code,world_goal_id FROM missions WHERE world_object_id IS NOT NULL ORDER BY code"))
+        .toEqual([{code:"sun-202610-1",world_goal_id:"po-agents"},{code:"w-obj-eo",world_goal_id:null}]);
       const [m1,eo]=await rows(f);
       expect(m1).toMatchObject({owner_id:TEST_MEMBER.personId,capability_id:"agents",version:1,outcome:"会议写进本体，对话问得到",
         success_evidence:["多人真实会写入并读回","新 Chat 打分一次"],milestones:["10/28 天枢 V1 上线"],time_boundary:"2026-10-31",boundaries:"不含回答质量",
