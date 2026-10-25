@@ -281,6 +281,11 @@ button.dayLine { cursor: pointer; }
 button.dayLine:hover { background: color-mix(in oklab, var(--ink) 4%, transparent); }
 .dayLine > span { min-width: 0; flex: 0 1 auto; overflow-wrap: anywhere; }
 .dayLine > small { flex: 1 1 0; min-width: 3em; overflow: hidden; color: var(--ink-faint); font-size: 12px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.dayText { display: grid; flex: 1 1 auto; min-width: 0; gap: 1px; }
+.dayText > span { overflow-wrap: anywhere; }
+.dayText > small { color: var(--ink-faint); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.dayLine:has(> .dayText) { align-items: flex-start; }
+.dayLine:has(> .dayText) > i { margin-top: .6em; }
 .gateIcon, .markIcon { flex: none; box-sizing: border-box; width: 6px; height: 6px; }
 .gateIcon { border-radius: 1px; background: var(--c); transform: rotate(45deg); }
 .markIcon { border: 1.3px solid var(--c); border-radius: 50%; }
