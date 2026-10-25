@@ -9182,6 +9182,13 @@ export interface components {
             title: string;
             cardId: string | null;
             color: string;
+            world: {
+                status: string;
+                label: string;
+                version: number;
+                readAt: string;
+                gaps: string[];
+            } | null;
         };
         HomePlanActivity: {
             item: {
@@ -9266,6 +9273,13 @@ export interface components {
                 title: string;
                 cardId: string | null;
                 color: string;
+                world: {
+                    status: string;
+                    label: string;
+                    version: number;
+                    readAt: string;
+                    gaps: string[];
+                } | null;
             }[];
             gates: {
                 missionId: string;

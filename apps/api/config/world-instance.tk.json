@@ -14,7 +14,26 @@
     "company": "0ee4d398-0283-4e08-9f9f-c0244802c806",
     "strategy": "0057ae2d-1439-4326-9587-258ee8988577"
   },
-  "people": {},
+  "people": {
+    "liu-minghua": "f7788d18-a7a0-454f-a835-504d3c56280d",
+    "yu-siyi": "41b0a17f-a6eb-4fb2-9fb2-97e471a673ae",
+    "liu-renhao": "35d64f99-c846-4ae3-a2ca-ae6444be88f0",
+    "bai-tiantian": "1d4c4263-a064-428e-900d-d4bf0409aaa9",
+    "sun-mingze": "305ea98d-c0e7-4e3a-8746-1748f7fdcec0",
+    "chen-xinan": "bc24818f-357f-4a07-87d4-4c4feed69c7b",
+    "wang-chuangfeng": "1ef50e26-c557-4e59-a8cf-ad5d0c6995e9",
+    "qin-mengyi": "8e23a8a4-695b-4e0b-a4a3-b0275bf32c2e",
+    "tang-jujie": "d78999f9-921b-4071-a24f-9d68a8ff8bac"
+  },
   "reads": true,
-  "writes": false
+  "writes": false,
+  "capabilities": {
+    "1e733720-eb62-4962-b372-356c3eaca513": "02",
+    "57998c53-4121-4889-93be-73be3f5ff45e": "03",
+    "d6a897c5-fe98-4fd3-905b-d7968c198d3a": "04",
+    "88674067-189b-4457-ba20-7de2df9f3768": "05",
+    "1447391a-bb2e-47ca-acdb-ebbcfbf6764a": "07",
+    "4763b7e9-a2ec-450e-aea8-2caa28d514e4": "08",
+    "cd58e46f-3000-4d1b-bdf1-4683cf16c147": "09"
+  }
 }

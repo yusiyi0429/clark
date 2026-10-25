@@ -51053,7 +51053,8 @@
           "code",
           "title",
           "cardId",
-          "color"
+          "color",
+          "world"
         ],
         "properties": {
           "missionId": {
@@ -51079,6 +51080,48 @@
           },
           "color": {
             "type": "string"
+          },
+          "world": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "status",
+                  "label",
+                  "version",
+                  "readAt",
+                  "gaps"
+                ],
+                "properties": {
+                  "status": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "label": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "readAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "gaps": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -51647,7 +51690,8 @@
                 "code",
                 "title",
                 "cardId",
-                "color"
+                "color",
+                "world"
               ],
               "properties": {
                 "missionId": {
@@ -51673,6 +51717,48 @@
                 },
                 "color": {
                   "type": "string"
+                },
+                "world": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "status",
+                        "label",
+                        "version",
+                        "readAt",
+                        "gaps"
+                      ],
+                      "properties": {
+                        "status": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "label": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "readAt": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "gaps": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }

@@ -27,8 +27,9 @@ const sample = {
   period: "2026-10", fallbackFrom: null, today: "2026-10-22", weekStart: "2026-10-19", weekEnd: "2026-10-25",
   days,
   missions: [
-    { missionId: "sun-202610-1", code: "M1", title: "CEO / DRI Agent 从能用到在用", cardId: "card-1", color: "#2f63b0" },
-    { missionId: "sun-202610-2", code: "M2", title: "灯塔首次会面", cardId: null, color: "#2f8a7a" },
+    { missionId: "sun-202610-1", code: "M1", title: "CEO / DRI Agent 从能用到在用", cardId: "card-1", color: "#2f63b0",
+      world: { status: "draft", label: "草稿", version: 5, readAt: "2026-10-25T04:40:00.000Z", gaps: ["Task 全景"] } },
+    { missionId: "sun-202610-2", code: "M2", title: "灯塔首次会面", cardId: null, color: "#2f8a7a", world: null },
   ],
   gates: [
     { missionId: "sun-202610-2", date: "2026-10-11", label: "首次会面" },

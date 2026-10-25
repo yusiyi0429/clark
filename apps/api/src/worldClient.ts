@@ -15,6 +15,8 @@ export type WorldInstance = {
   tenant_id?: string;
   domains: { company: string; eo: string } & Record<string, string>;
   people: Record<string, string>;
+  /** 本体业务域 id → 天枢能力域编号（capability_config.code）；从本体载入 Mission 时用，对不上的域不载入。 */
+  capabilities?: Record<string, string>;
   label?: string;
   principals?: Record<string, string>;
   anchors?: { company?: string; strategy?: string };

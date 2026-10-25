@@ -54,6 +54,17 @@ describe("首页 Task 行的本体来源", () => {
     expect(calls.get.sort()).toEqual(["<task-a>", "<task-b>", "<task-c>"]);
   });
 
+  it("从本体载入的 Mission：按记下的对象 id 和域、用它所在 scope 的读身份找 Task，不查外部引用；没有这个 scope 的读身份就没有 Task", async () => {
+    const main = stubWorld({});
+    const tk = stubWorld({ "<task-a>": taskObject("<task-a>", "会议内容写进本体", ref("<mission-tk>"), [{ type: "outcome", text: "写进本体" }]) });
+    const loaded = { id: "w-mission", code: "w-mission", world: { scopeId: "scope-tk", objectId: "<mission-tk>", domainId: "<domain:agents>" } };
+    const source = createWorldPlanTaskSource(main.world, { scopes: new Map([["scope-tk", tk.world]]) });
+    expect(await source([loaded])).toEqual([{ taskId: "<task-a>", missionId: "w-mission", name: "会议内容写进本体", doneDefinition: "写进本体", criteria: [] }]);
+    expect(tk.calls.list).toEqual([{ type: "Task", domain_id: "<domain:agents>" }]);
+    expect(main.calls.list).toEqual([]);
+    expect(await createWorldPlanTaskSource(main.world)([{ ...loaded, id: "other" }])).toEqual([]);
+  });
+
   it("Mission 在本体里找不到：这个 Mission 没有 Task，不报错、不列对象", async () => {
     const { world, calls } = stubWorld({ "<task-a>": taskObject("<task-a>", "回流方案定稿", ref("<mission-1>"), []) });
     expect(await createWorldPlanTaskSource(world)([{ id: "execution-two", code: "execution-two" }])).toEqual([]);

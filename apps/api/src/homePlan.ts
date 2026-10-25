@@ -12,14 +12,22 @@ const MISSION_COLORS = ["#2f63b0", "#2f8a7a", "#8a5cc2", "#c26a2f"];
 /** 签定关口开头的日期（YYYY-MM-DD 或 M/D）连同后面的空白和分隔符（：: 、 -）。 */
 const LEADING_DATE = /^(?:\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2})[\s：:、-]*/;
 
-type MissionRow = { id: string; code: string; title: string; card_id: string | null; milestones: string[] };
+type MissionRow = { id: string; code: string; title: string; card_id: string | null; milestones: string[];
+  source_revision: number; world_scope_id: string | null; world_object_id: string | null; world_domain_id: string | null;
+  world_status: string | null; world_status_label: string | null; world_read_at: Date | null; world_gaps: string[] };
 
-/** 本人这个月的 Mission（不含占位的），不要求任务卡已确认；本月一个都没有时回退到之前最近一个有 Mission 的月份。 */
+/**
+ * 本人这个月的 Mission（不含占位的），不要求任务卡已确认；本月一个都没有时回退到之前最近一个有 Mission 的月份。
+ * 这个月已经从本体载入过（表里有本月的本体行）就不回退：本体里没有本人的就显示空，不拿上个月顶（斯一 10/24）。
+ */
 async function ownMissions(q: Query, ownerId: string, current: string): Promise<{ period: string; fallbackFrom: string | null; rows: MissionRow[] }> {
-  const select = `SELECT id,code,title,personal_mission_card_id::text AS card_id,milestones
+  const select = `SELECT id,code,title,personal_mission_card_id::text AS card_id,milestones,source_revision,
+      world_scope_id,world_object_id,world_domain_id,world_status,world_status_label,world_read_at,world_gaps
     FROM missions WHERE owner_id=$1 AND period=$2 AND NOT placeholder ORDER BY code`;
   const rows = (await q(select, [ownerId, current])).rows as MissionRow[];
   if (rows.length) return { period: current, fallbackFrom: null, rows };
+  if ((await q("SELECT 1 FROM missions WHERE period=$1 AND world_object_id IS NOT NULL LIMIT 1", [current])).rows.length)
+    return { period: current, fallbackFrom: null, rows: [] };
   const previous = (await q("SELECT max(period) AS period FROM missions WHERE owner_id=$1 AND period<$2 AND NOT placeholder", [ownerId, current])).rows[0].period as string | null;
   if (!previous) return { period: current, fallbackFrom: null, rows: [] };
   return { period: previous, fallbackFrom: previous, rows: (await q(select, [ownerId, previous])).rows as MissionRow[] };
@@ -69,14 +77,18 @@ export async function readHomePlan(q: Query, person: { personId: string }, now: 
   const monthEnd = monthDays(current).at(-1)!.date;
   const windowStart = weekStart < `${current}-01` ? weekStart : `${current}-01`;
   const windowEnd = weekEnd > monthEnd ? weekEnd : monthEnd;
-  const missions = rows.map((m, index) => ({ missionId: m.id, code: m.code, title: m.title, cardId: m.card_id, color: MISSION_COLORS[index % MISSION_COLORS.length] }));
+  const missions = rows.map((m, index) => ({ missionId: m.id, code: m.code, title: m.title, cardId: m.card_id, color: MISSION_COLORS[index % MISSION_COLORS.length],
+    world: m.world_object_id && m.world_status && m.world_read_at
+      ? { status: m.world_status, label: m.world_status_label ?? m.world_status, version: m.source_revision, readAt: m.world_read_at.toISOString(), gaps: m.world_gaps }
+      : null }));
   // 关口只留落在显示月份里的。
   const gates = rows.flatMap((m) => m.milestones.flatMap((text) => {
     const date = milestoneDate(text, period);
     return date?.startsWith(`${period}-`) ? [{ missionId: m.id, date, label: text.replace(LEADING_DATE, "").trim() }] : [];
   }));
   const [tasks, items, marks] = await Promise.all([
-    readPlanTasks(deps.planTasks, rows.map(({ id, code }) => ({ id, code }))),
+    readPlanTasks(deps.planTasks, rows.map((m) => ({ id: m.id, code: m.code,
+      world: m.world_scope_id && m.world_object_id && m.world_domain_id ? { scopeId: m.world_scope_id, objectId: m.world_object_id, domainId: m.world_domain_id } : null }))),
     listPlanItems(q, person.personId, rows.map((m) => m.id), windowStart, windowEnd, deps.names, { period }),
     listPlanMarks(q, person.personId, rows.map((m) => m.id)),
   ]);

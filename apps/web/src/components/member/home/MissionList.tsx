@@ -3,9 +3,10 @@
 /**
  * 首页顶行中间的 Mission 卡：竖排列表。第一行「全部」（右边小字：执行事项件数），下面每个 Mission：色点 + 完整名字（换行、不截断）+ 右边小字下一个关口。
  * 选中项底色是 Mission 色 8% 混白，字深色加粗；字永远不染 Mission 色。回退显示上个月时标题旁写「M 月」。
+ * 从本体载入、还没成立的（草稿、已承诺）名字后面一个小灰标，写本体给的中文名。
  */
 import type { THomePlanResponse } from "@warmap/contracts";
-import { shortDate, tone } from "./planFormat";
+import { shortDate, tone, worldPending } from "./planFormat";
 import s from "@/styles/home-plan.module.css";
 
 /** 「全部」的色点和选中底色：中性灰。 */
@@ -36,11 +37,12 @@ export function MissionList({ plan, focus, onChoose }: {
         </button>
         {plan.missions.map((mission) => {
           const gate = nextGate(plan, mission.missionId);
+          const pending = worldPending(mission.world);
           return (
             <button key={mission.missionId} type="button" className={s.mission} data-mission={mission.missionId}
               aria-pressed={focus === mission.missionId} style={tone(mission.color)} onClick={() => onChoose(mission.missionId)}>
               <i className={s.dot} aria-hidden />
-              <span className={s.missionName}>{mission.title}</span>
+              <span className={s.missionName}>{mission.title}{pending ? <span className={s.worldTag} data-world-status={mission.world?.status}>{pending}</span> : null}</span>
               {gate ? <small title={gate}>{gate}</small> : null}
             </button>
           );
