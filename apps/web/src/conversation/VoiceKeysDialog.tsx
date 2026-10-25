@@ -98,9 +98,9 @@ export function VoiceKeysDialog({ onClose }: { onClose: () => void }) {
             <WakeDemo />
             <div className={v.title}>
               <img src="/brand/wetype.png" alt="微信输入法" width={28} height={28} />
-              <h2>用微信输入法对天枢说话</h2>
+              <h2>连接微信输入法的语音快捷键</h2>
             </div>
-            <p className={v.lead}>按一下你的语音快捷键</p>
+            <p className={v.lead}>连上后，一按快捷键就展开输入框，直接说话</p>
             <div className={v.rows}>
               {ROWS.map(([mode, name]) => (
                 <button key={mode} type="button" className={v.row} data-voice-key={mode} data-live={live === mode} onClick={() => setLive(mode)}>
