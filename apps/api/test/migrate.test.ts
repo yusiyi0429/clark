@@ -181,6 +181,7 @@ describe("migration", () => {
         "204_feishu_minute_inbox.sql",
         "205_task_progress_notifications.sql",
         "206_task_blocker.sql",
+        "207_missions_world_source.sql",
       ]);
 
       // 幂等：重复执行不再变更

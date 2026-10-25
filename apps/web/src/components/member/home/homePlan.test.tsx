@@ -113,8 +113,9 @@ const plan = (overrides: Partial<THomePlanResponse> = {}): THomePlanResponse => 
   weekEnd: "2026-10-25",
   days: Array.from({ length: 31 }, (_, index) => ({ date: `2026-10-${String(index + 1).padStart(2, "0")}`, workday: true })),
   missions: [
-    { missionId: "m1", code: "M1", title: "CEO / DRI Agent 从能用到在用", cardId: "card-1", color: "#2f63b0" },
-    { missionId: "m2", code: "M2", title: "灯塔首次会面", cardId: null, color: "#2f8a7a" },
+    { missionId: "m1", code: "M1", title: "CEO / DRI Agent 从能用到在用", cardId: "card-1", color: "#2f63b0",
+      world: { status: "draft", label: "草稿", version: 5, readAt: "2026-10-25T04:40:00.000Z", gaps: ["Task 全景", "时间边界"] } },
+    { missionId: "m2", code: "M2", title: "灯塔首次会面", cardId: null, color: "#2f8a7a", world: null },
   ],
   gates: [
     { missionId: "m1", date: "2026-10-12", label: "需求冻结" },
@@ -264,7 +265,7 @@ describe("HomePlan：Mission 卡", () => {
     expect(view.html).toMatch(/role="group" aria-label="Mission"/);
     expect(view.html).not.toMatch(/role="tab(list)?"/);
     expect(missionText(view.html, "all")).toBe("全部 7 件");
-    expect(missionText(view.html, "m1")).toBe("CEO / DRI Agent 从能用到在用 10/28 上线");
+    expect(missionText(view.html, "m1")).toBe("CEO / DRI Agent 从能用到在用 草稿 10/28 上线");
     expect(missionText(view.html, "m2")).toBe("灯塔首次会面 10/22 首次会面");
     for (const id of ["all", "m1", "m2"]) expect(tab(view, id).type).toBe("button");
   });
@@ -284,9 +285,23 @@ describe("HomePlan：Mission 卡", () => {
     expect(tab(view, "m1")["aria-pressed"]).toBe(true);
   });
 
+  it("从本体载入、还没成立的 Mission：名字后面标本体给的中文名；详情页头下一行写状态、本体版本、读取时间和缺项；不是本体载入的、已确认的都不标", () => {
+    const view = mount();
+    expect(view.html).toMatch(/data-world-status="draft"[^>]*>草稿<\/span>/);
+    expect(view.html).not.toContain("data-world-meta");
+    view.mission("m1");
+    expect(text(view.html.match(/<p[^>]*data-world-meta[^>]*>.*?<\/p>/)?.[0] ?? "").trim()).toBe("草稿 · 本体 v5 · 10/25 读 · 缺 Task 全景、时间边界");
+    view.mission("m2");
+    expect(view.html).not.toContain("data-world-meta");
+    const confirmed = mount(plan({ missions: plan().missions.map((m) => m.world ? { ...m, world: { ...m.world, status: "confirmed", label: "已确认", gaps: [] } } : m) }));
+    expect(confirmed.html).not.toContain("data-world-status");
+    confirmed.mission("m1");
+    expect(text(confirmed.html.match(/<p[^>]*data-world-meta[^>]*>.*?<\/p>/)?.[0] ?? "").trim()).toBe("本体 v5 · 10/25 读");
+  });
+
   it("没有关口的 Mission 不写右边小字；关口都过去了也不写", () => {
     const html = mount(plan({ gates: [{ missionId: "m1", date: "2026-10-12", label: "需求冻结" }] })).html;
-    expect(missionText(html, "m1")).toBe("CEO / DRI Agent 从能用到在用");
+    expect(missionText(html, "m1")).toBe("CEO / DRI Agent 从能用到在用 草稿");
     expect(missionText(html, "m2")).toBe("灯塔首次会面");
   });
 });

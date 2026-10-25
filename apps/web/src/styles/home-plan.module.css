@@ -96,6 +96,8 @@
 .mission .dot { margin-top: calc((1.45em - 8px) / 2); }
 .mission[data-mission="all"] .dot { opacity: .5; }
 .missionName { min-width: 0; overflow-wrap: anywhere; }
+/* 本体里还没成立的 Mission：名字后面一个小灰标（墨色系，不染 Mission 色）。 */
+.worldTag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 6px; background: color-mix(in oklab, var(--ink) 6%, transparent); color: var(--ink-muted); font-size: 11.5px; font-weight: 500; line-height: 18px; white-space: nowrap; vertical-align: 1px; }
 /* 列表自己会滚：焦点框（外壳给按钮的 3px 外框）整个收进按钮里，免得被滚动容器裁掉（Task 列窄时横滑，同理）。选择器要压过外壳的 .shell button:not([data-slot]):focus-visible。 */
 .missionList > .mission.mission:focus-visible, .tasks .taskHit.taskHit:focus-visible { outline-offset: -3px; }
 .mission small {
@@ -126,6 +128,8 @@
 .sep { color: color-mix(in oklab, var(--ink-faint) 55%, transparent); font-weight: 400; }
 .current { color: var(--ink-muted); font-weight: 400; }
 .start { flex: none; margin: -5.5px 0 -5.5px auto; }
+/* 详情页头下面一行：本体状态 · 版本 · 读取时间 · 缺项。 */
+.worldMeta { flex: 1 0 100%; margin: -6px 0 0; color: var(--ink-faint); font-size: 12px; line-height: 1.5; }
 /* ts-design 的 ghost 按钮，换成白底细边、深灰字：「开启执行事项」和「这一天」浮层的确认钮同一个样子。 */
 .start button, .plainButton.plainButton {
   --button-bg: #fff;

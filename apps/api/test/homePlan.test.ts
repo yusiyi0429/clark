@@ -177,12 +177,12 @@ describe("首页计划",()=>{
       expect(plan.gates).toEqual([["2026-10-28","上线"],["2026-10-29","试用"],["2026-10-30","收尾"],["2026-10-31","复盘"],["2026-10-27","联调"]]
         .map(([date,label])=>({missionId:"execution-one",date,label})));
       expect(plan.missions).toEqual([
-        {missionId:"execution-one",code:"execution-one",title:"上线",cardId:f.card,color:"#2f63b0"},
-        {missionId:"execution-two",code:"execution-two",title:"验证",cardId:f.card,color:"#2f8a7a"},
+        {missionId:"execution-one",code:"execution-one",title:"上线",cardId:f.card,color:"#2f63b0",world:null},
+        {missionId:"execution-two",code:"execution-two",title:"验证",cardId:f.card,color:"#2f8a7a",world:null},
       ]);
       expect(plan.marks).toEqual([mark]);
       expect(plan.tasks).toEqual([task]);
-      expect(calls).toEqual([[{id:"execution-one",code:"execution-one"},{id:"execution-two",code:"execution-two"}]]);
+      expect(calls).toEqual([[{id:"execution-one",code:"execution-one",world:null},{id:"execution-two",code:"execution-two",world:null}]]);
     } finally { await f.t.close(); }
   });
 
