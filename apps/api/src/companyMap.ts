@@ -28,7 +28,7 @@ export type ReadFocus = {
   period: string;
 };
 type ScopeArgs = { people?: "all" | "me" | string[]; battlefieldId?: string; from?: string; to?: string };
-type Resolved = { people: string[] | null; battlefieldId: string | null; from: string; to: string; unknownPeople: string[]; unknownBattlefield?: string; label: string };
+type Resolved = { people: string[] | null; battlefieldId: string | null; capabilityId: string | null; from: string; to: string; unknownPeople: string[]; unknownBattlefield?: string; label: string };
 export type CompanyMapDeps = {
   q: Query;
   viewer: ProgressViewer;
@@ -115,7 +115,7 @@ export const THREE_LAYER_RULES = `# 三层取用
 - \`read_progress\`：执行事项的状态与进展（含本机采集整理出的进展）；
 - \`read_reviews\`：月度复盘（个人、战场与能力域，附评论）与周复盘；
 - \`read_object_tree\`：从公司、战场、Mission、Task 或某个人出发，向上（所属）、向下（下属）、向旁边（同级）走。
-people 填「all」（全员）、「me」或人名列表；from、to 是月份（YYYY-MM），不填按 anchor.range。要几个人、几个战场、几个月就一次读完（全员就填 all，不限战场就不填 battlefieldId），不按人、按战场或按月分多次读。
+people 填「all」（全员）、「me」或人名列表；from、to 是月份（YYYY-MM），不填按 anchor.range。要几个人、几个战场、几个月就一次读完（全员就填 all，不限战场就不填 battlefieldId），不按人、按战场或按月分多次读。battlefieldId 也可以写能力域（如「智能体」）；结果里有 unknownBattlefield 表示这个名字既不是战场也不是能力域、这次没按它筛，要说明。问「我的」时不用填 battlefieldId。
 结果里 filtered 大于 0 表示有这么多条因权限没有读到（等于 0 时不用提权限）（进展与复盘：CEO 能看全部，其他人只能看同一战场的）：回答里必须写明有几条没读到、原因是权限，不能猜被过滤的内容；跨战场的可以请本人用「请同事帮忙」直接问对方，或找 CEO。unknownPeople 是没对上人员目录的名字，要说明。引用读到的内容时照抄结果里的 cite 作出处。
 \`scopeOverride\`（有时才出现）是本人在界面上改过的读取范围：这一轮一律按它读，回答开头不复述范围。`;
 
@@ -126,6 +126,10 @@ export function createCompanyMap(deps: CompanyMapDeps) {
   let battlefields: Promise<{ id: string; code: string; name: string; owner_id: string; six_month_outcome: string; participant_ids: string[] | null }[]> | undefined;
   const loadBattlefields = () => (battlefields ??= q("SELECT id, code, name, owner_id, six_month_outcome, participant_ids FROM battlefield_config ORDER BY sort_order, code, id")
     .then((result) => result.rows as Awaited<NonNullable<typeof battlefields>>));
+  /** 能力域（智能体、增长……）：从本体载入的 Mission 只挂能力域、不挂战场，模型常把能力域名当战场名传进来。 */
+  let capabilities: Promise<{ id: string; code: string; name: string }[]> | undefined;
+  const loadCapabilities = () => (capabilities ??= q("SELECT id, code, name FROM capability_config ORDER BY sort_order, code, id")
+    .then((result) => result.rows as Awaited<NonNullable<typeof capabilities>>));
   const nameOf = (id: string) => names.get(id) ?? id;
   let lastLabel: string | undefined;
   /** 这一轮跨对象读过的总范围：模型按战场、按人分几次读时，范围标签显示合起来的那一个（人取并集，战场不同就不限，月份取首尾）。 */
@@ -160,18 +164,23 @@ export function createCompanyMap(deps: CompanyMapDeps) {
     if (monthsBetween(from, to) > MAX_MONTHS) from = shiftMonth(to, -(MAX_MONTHS - 1));
     const { ids, unknown } = resolvePeople(merged.people);
     const fields = await loadBattlefields();
-    const field = merged.battlefieldId ? fields.find((item) => item.id === merged.battlefieldId || item.name === merged.battlefieldId || item.code === merged.battlefieldId) : undefined;
-    const label = scopeLabel({ people: ids, battlefieldName: field?.name ?? null, from, to, viewerId: viewer.personId }, names);
+    const matches = (item: { id: string; name: string; code: string }) => item.id === merged.battlefieldId || item.name === merged.battlefieldId || item.code === merged.battlefieldId;
+    const field = merged.battlefieldId ? fields.find(matches) : undefined;
+    // 不是战场再找能力域；两边都对不上就不筛（照常读，结果里写 unknownBattlefield），不按一个不存在的战场筛成空。
+    const caps = await loadCapabilities();
+    const cap = merged.battlefieldId && !field ? caps.find(matches) : undefined;
+    const unit = field ?? cap;
+    const label = scopeLabel({ people: ids, battlefieldName: unit?.name ?? null, from, to, viewerId: viewer.personId }, names);
     // 跨对象（不只是本人、或不只一个月、或限定了战场）才发范围标签；一个人也没对上时什么都没读，不发。
-    const crossObject = (ids === null || ids.some((id) => id !== viewer.personId) || from !== to || Boolean(field)) && (ids === null || ids.length > 0);
+    const crossObject = (ids === null || ids.some((id) => id !== viewer.personId) || from !== to || Boolean(unit)) && (ids === null || ids.length > 0);
     if (crossObject && deps.onScope) {
-      union = !union ? { people: ids, battlefieldId: field?.id ?? null, from, to } : {
+      union = !union ? { people: ids, battlefieldId: unit?.id ?? null, from, to } : {
         people: union.people === null || ids === null ? null : [...new Set([...union.people, ...ids])],
-        battlefieldId: union.battlefieldId === (field?.id ?? null) ? union.battlefieldId : null,
+        battlefieldId: union.battlefieldId === (unit?.id ?? null) ? union.battlefieldId : null,
         from: union.from < from ? union.from : from, to: union.to > to ? union.to : to,
       };
       const total = union;
-      const totalField = total.battlefieldId ? fields.find((item) => item.id === total.battlefieldId) : undefined;
+      const totalField = total.battlefieldId ? [...fields, ...caps].find((item) => item.id === total.battlefieldId) : undefined;
       const totalLabel = scopeLabel({ people: total.people, battlefieldName: totalField?.name ?? null, from: total.from, to: total.to, viewerId: viewer.personId }, names);
       if (totalLabel !== lastLabel) {
         lastLabel = totalLabel;
@@ -180,7 +189,8 @@ export function createCompanyMap(deps: CompanyMapDeps) {
         deps.onScope({ label: totalLabel, params, choices: { people: deps.people.slice(0, 80).map((person) => ({ id: person.personId, name: person.displayName })) } });
       }
     }
-    return { people: ids, battlefieldId: field?.id ?? (merged.battlefieldId ? "__unknown__" : null), from, to, unknownPeople: unknown, ...(merged.battlefieldId && !field ? { unknownBattlefield: merged.battlefieldId } : {}), label };
+    return { people: ids, battlefieldId: field?.id ?? null, capabilityId: cap?.id ?? null, from, to, unknownPeople: unknown,
+      ...(merged.battlefieldId && !unit ? { unknownBattlefield: merged.battlefieldId } : {}), label };
   };
   const scopeOf = (scope: Resolved) => ({ scope: scope.label, ...(scope.unknownPeople.length ? { unknownPeople: scope.unknownPeople } : {}),
     ...(scope.unknownBattlefield ? { unknownBattlefield: scope.unknownBattlefield } : {}) });
@@ -192,7 +202,8 @@ export function createCompanyMap(deps: CompanyMapDeps) {
           m.success_evidence, m.key_path, m.risk, m.dependencies, m.placeholder, m.personal_mission_card_id, mr.status AS round_status
         FROM missions m LEFT JOIN personal_mission_cards pc ON pc.id = m.personal_mission_card_id LEFT JOIN mission_rounds mr ON mr.id = pc.round_id
         WHERE m.period BETWEEN $1 AND $2 AND ($3::text[] IS NULL OR m.owner_id = ANY($3)) AND ($4::text IS NULL OR m.battlefield_ids @> jsonb_build_array($4::text))
-        ORDER BY m.period DESC, m.owner_id, m.code, m.id LIMIT 400`, [scope.from, scope.to, scope.people, scope.battlefieldId])).rows as Record<string, any>[];
+          AND ($5::text IS NULL OR m.capability_id = $5)
+        ORDER BY m.period DESC, m.owner_id, m.code, m.id LIMIT 400`, [scope.from, scope.to, scope.people, scope.battlefieldId, scope.capabilityId])).rows as Record<string, any>[];
       const fields = new Map((await loadBattlefields()).map((field) => [field.id, field.name]));
       let filtered = 0;
       const visible: Record<string, any>[] = [];
@@ -214,17 +225,19 @@ export function createCompanyMap(deps: CompanyMapDeps) {
       const scope = await resolve(args);
       const range = window(scope.from, scope.to);
       const taskId = args.taskId && /^[0-9a-f-]{36}$/i.test(args.taskId) ? args.taskId : null;
-      const params = [range.start, range.end, scope.people, scope.battlefieldId, taskId, scope.from, scope.to];
+      const params = [range.start, range.end, scope.people, scope.battlefieldId, taskId, scope.from, scope.to, scope.capabilityId];
       // 依次查（q 可能是同一个连接）。
       const tasks = await q(`SELECT t.id, t.title, t.status, t.owner_id, t.due_date::text AS due_date, t.updated_at, t.mission_id, m.title AS mission_title, m.period, m.battlefield_ids
             FROM tasks t LEFT JOIN missions m ON m.id = t.mission_id
            WHERE (m.period BETWEEN $6 AND $7 OR (t.mission_id IS NULL AND t.updated_at >= $1::timestamptz AND t.created_at < $2::timestamptz))
              AND ($3::text[] IS NULL OR t.owner_id = ANY($3)) AND ($4::text IS NULL OR m.battlefield_ids @> jsonb_build_array($4::text))
+             AND ($8::text IS NULL OR m.capability_id = $8)
              AND ($5::uuid IS NULL OR t.id = $5) ORDER BY t.owner_id, m.period, t.step_order NULLS LAST, t.created_at LIMIT 400`, params);
       const updates = await q(`SELECT p.id, p.task_id, p.author_id, p.source, p.body, p.links, p.created_at, t.title AS task_title, t.owner_id AS task_owner, m.battlefield_ids
             FROM task_progress p JOIN tasks t ON t.id = p.task_id LEFT JOIN missions m ON m.id = t.mission_id
            WHERE p.created_at >= $1::timestamptz AND p.created_at < $2::timestamptz AND ($3::text[] IS NULL OR p.author_id = ANY($3) OR t.owner_id = ANY($3))
              AND ($4::text IS NULL OR m.battlefield_ids @> jsonb_build_array($4::text)) AND ($5::uuid IS NULL OR t.id = $5)
+             AND ($8::text IS NULL OR m.capability_id = $8)
              AND $6::text IS NOT NULL AND $7::text IS NOT NULL
            ORDER BY p.created_at DESC, p.id LIMIT 600`, params);
       let filtered = 0;
@@ -277,7 +290,8 @@ export function createCompanyMap(deps: CompanyMapDeps) {
             LEFT JOIN battlefield_config b ON i.subject_type = 'battlefield' AND b.id = i.subject_id
             LEFT JOIN capability_config cap ON i.subject_type = 'capability' AND cap.id = i.subject_id
            WHERE r.period BETWEEN $1 AND $2 AND ($3::text[] IS NULL OR i.owner_id = ANY($3)) AND ($4::text IS NULL OR (i.subject_type = 'battlefield' AND i.subject_id = $4))
-             AND i.self_review IS NOT NULL ORDER BY r.period DESC, i.subject_type, i.subject_id LIMIT 100`, [scope.from, scope.to, scope.people, scope.battlefieldId])).rows as Record<string, any>[];
+             AND ($5::text IS NULL OR (i.subject_type = 'capability' AND i.subject_id = $5))
+             AND i.self_review IS NOT NULL ORDER BY r.period DESC, i.subject_type, i.subject_id LIMIT 100`, [scope.from, scope.to, scope.people, scope.battlefieldId, scope.capabilityId])).rows as Record<string, any>[];
         for (const row of units) {
           if (row.owner_id !== viewer.personId && viewer.role !== "ceo" && !["submitted", "confirmed"].includes(row.status)) continue;
           const readable = row.subject_type === "battlefield"
@@ -349,7 +363,15 @@ export function createCompanyMap(deps: CompanyMapDeps) {
       }
       if (type === "battlefield") {
         const field = fields.find((item) => item.id === id || item.name === id || item.code === id);
-        if (!field) return { error: "NOT_FOUND", message: "没有这个战场" };
+        if (!field) {
+          const caps = await loadCapabilities();
+          const cap = caps.find((item) => item.id === id || item.name === id || item.code === id);
+          if (!cap) return { error: "NOT_FOUND", message: "没有这个战场或能力域" };
+          const capNode = (item: (typeof caps)[number]) => ({ ref: `battlefield:${item.id}`, title: item.name, kind: "能力域" });
+          if (args.direction === "up") return done(capNode(cap), [{ ref: "company", title: "公司" }]);
+          if (args.direction === "side") return done(capNode(cap), caps.filter((item) => item.id !== cap.id).map(capNode));
+          return done(capNode(cap), await missionsWhere("m.period = $1 AND m.capability_id = $2", [period, cap.id]));
+        }
         if (args.direction === "up") return done(battlefieldNode(field), [{ ref: "company", title: "公司" }]);
         if (args.direction === "side") return done(battlefieldNode(field), fields.filter((item) => item.id !== field.id).map(battlefieldNode));
         return done(battlefieldNode(field), await missionsWhere("m.period = $1 AND m.battlefield_ids @> jsonb_build_array($2::text)", [period, field.id]));
