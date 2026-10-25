@@ -1,0 +1,142 @@
+/*
+ * 语音快捷键面板（conversation/VoiceKeysDialog，样稿 voice-keys-v4）：白色圆角小卡、居中；微信输入法的绿只用在标识和「等着录」那一行。
+ * 按钮深灰（完成）/ 浅灰（稍后再弄），一样大。
+ */
+.backdrop { background: rgb(16 21 31 / 30%); }
+
+.panel {
+  --wx: #1fbf86;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(380px, calc(100vw - 32px));
+  max-width: none;
+  padding: 22px 22px 20px;
+  border-radius: 24px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.title { display: flex; align-items: center; gap: 9px; margin-top: 18px; }
+.title img { flex: none; }
+.title h2 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: .2px; }
+.lead { margin: 6px 0 18px; color: var(--ink-faint); font-size: 14px; }
+
+.rows { display: grid; gap: 10px; width: 100%; }
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 52px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 14px;
+  background: #f5f7fa;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+.row:hover { background: #eef1f5; }
+.row:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
+.row[data-live="true"] { background: #fff; box-shadow: 0 0 0 2px var(--wx); }
+.row em { color: #16a874; font-size: 14px; font-style: normal; }
+.keys { display: flex; align-items: center; gap: 6px; }
+.keys kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: inset 0 -2px 0 #e1e5ec, 0 0 0 1px rgb(29 36 51 / 7%);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+}
+.empty { color: var(--ink-faint); }
+
+.foot { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; margin-top: 22px; }
+.later.later, .done.done { width: 100%; height: 46px; min-height: 46px; border-radius: 14px; font-size: 15px; font-weight: 600; }
+.later.later { background: #eef1f5; color: var(--ink); }
+.done.done { background: #2a3140; color: #fff; }
+
+/* 顶上的小动画：左边 Ulanzi 小键盘，语音键按下去；右边一小块页面，右下角「对话天枢」展开成输入框，字一个个落进来。3.6 秒一轮。 */
+.demo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 116px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #f4f7fb, #eef2f7);
+}
+.pad {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(3, 18px);
+  gap: 5px;
+  padding: 7px;
+  border-radius: 11px;
+  background: #2a3140;
+  box-shadow: 0 6px 14px rgb(29 36 51 / 22%);
+}
+.pad i { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 4px; background: #3b4456; box-shadow: inset 0 -1.5px 0 rgb(0 0 0 / 28%); }
+.voiceKey { color: #fff; animation: press 3.6s ease infinite; }
+.screen { position: relative; flex: 1; height: 86px; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px rgb(29 36 51 / 6%), 0 4px 12px rgb(29 36 51 / 6%); overflow: hidden; }
+.bar {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  box-sizing: border-box;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #e3e7ee, 0 3px 8px rgb(29 36 51 / 8%);
+  color: #5f6572;
+  overflow: hidden;
+  white-space: nowrap;
+  animation: open 3.6s cubic-bezier(.22, 1, .36, 1) infinite;
+}
+.bar svg { flex: none; }
+/* 12 个字，一步一个字（宽度按 em 走，光标跟在最后一个字后面）。 */
+.typed { flex: none; width: 12em; overflow: hidden; color: var(--ink); font-size: 10.5px; animation: type 3.6s steps(12, end) infinite; }
+.caret { flex: none; width: 1px; height: 11px; background: var(--ink); animation: caret 3.6s step-end infinite; }
+
+@keyframes press {
+  0%, 14% { transform: none; background: #3b4456; box-shadow: inset 0 -1.5px 0 rgb(0 0 0 / 28%); }
+  18%, 24% { transform: translateY(1.5px); background: var(--wx); box-shadow: 0 0 0 3px rgb(31 191 134 / 30%); }
+  30%, 100% { transform: none; background: #3b4456; box-shadow: inset 0 -1.5px 0 rgb(0 0 0 / 28%); }
+}
+@keyframes open {
+  0%, 24% { width: 28px; }
+  38%, 92% { width: calc(100% - 16px); opacity: 1; }
+  98% { width: calc(100% - 16px); opacity: 0; }
+  100% { width: 28px; opacity: 0; }
+}
+@keyframes type {
+  0%, 42% { width: 0; }
+  78%, 100% { width: 12em; }
+}
+@keyframes caret {
+  0%, 36% { opacity: 0; }
+  38%, 46%, 54%, 62%, 70%, 78%, 86% { opacity: 1; }
+  82%, 90% { opacity: 0; }
+  92%, 100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voiceKey, .bar, .typed, .caret { animation: none; }
+  .bar { width: calc(100% - 16px); }
+}

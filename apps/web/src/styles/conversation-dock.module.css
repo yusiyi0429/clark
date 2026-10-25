@@ -153,6 +153,7 @@
 /* In the multiline composer, controls form one stable bottom toolbar. */
 .dock.composerExpanded .attachButton { position:absolute; left:6px; bottom:6px; z-index:3; }
 .dock.composerExpanded .micButton { position:absolute; left:54px; bottom:5px; z-index:3; }
+.dock.composerExpanded .keysButton { position:absolute; left:103px; bottom:5px; z-index:3; }
 .dock.composerExpanded .sendButton { position:absolute; right:6px; bottom:2px; z-index:3; width:34px; height:34px; }
 .dock.composerExpanded .inputForm::after {
   content:'';
@@ -269,7 +270,9 @@
 @media(min-width:600px) and (max-width:959px){.layer,.layer[data-issue-context=true]{right:16px;width:calc(100vw - var(--main-start,16px) - 24px)}}
 
 /* 键盘面左边是 [附件] [小麦克风]（D2）：都是无底色灰色图标键，悬停浅底（.dock .iconButton:hover 一套），跟着打字面淡入。 */
-.dock .attachButton,.dock .micButton{cursor:pointer;animation:attachIn 220ms ease both}
+.dock .attachButton,.dock .micButton,.dock .keysButton{cursor:pointer;animation:attachIn 220ms ease both}
+/* 触屏没有微信电脑版的语音键：不出小键盘图标。 */
+@media(pointer:coarse){.dock .keysButton{display:none}}
 .dock .attachButton:disabled{opacity:.45;cursor:default}
 @keyframes attachIn{from{opacity:0}to{opacity:1}}
 /* 收起时附件键、小麦克风与输入条一起收窄淡出（ConversationDock ATTACH_EXIT_MS），收窄途中吃掉各自那道 5px 间距，宽度连续。 */

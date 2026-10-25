@@ -122,6 +122,9 @@
 .item.item:focus-visible { outline: 2px solid #3a83f7; outline-offset: -2px; }
 .item.item > svg { flex: none; color: #4f5f76; }
 .item.item[data-quiet] { color: #4f5a6b; }
+/* 「设置 ›」：箭头靠右；二级开着时这一行保持按下的浅底。 */
+.item.item > svg.more { margin-left: auto; color: #8a95a6; }
+.item.item[data-settings][aria-expanded='true'] { background: rgb(255 255 255 / 58%); }
 .rule { margin: 4px 8px; border: 0; border-top: 1px solid rgb(31 53 86 / 10%); }
 
 /* 不支持或不想要透明效果时：退回实色，字照样读得清。 */
