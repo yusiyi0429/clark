@@ -4059,6 +4059,231 @@
         }
       }
     },
+    "/api/me/feishu-minutes": {
+      "get": {
+        "operationId": "listMyFeishuMinutes",
+        "summary": "我在飞书里直接开的会待整理：只列我是所有者、近 7 天、还没对上天枢会议的视频会议妙记",
+        "responses": {
+          "200": {
+            "description": "待整理的妙记",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeishuMinuteInboxResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/feishu-minutes/{token}/organize": {
+      "post": {
+        "operationId": "organizeFeishuMinute",
+        "summary": "妙记所有者用这份妙记新建一场会（别人 404 MINUTE_NOT_FOUND）；已整理过的再整理返回同一个 meetingId；400 INVALID_INPUT / ANCHOR_NOT_FOUND / INVALID_CEO / INVALID_PARTICIPANT，409 MINUTE_NOT_PENDING / MINUTE_TAKEN",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizeFeishuMinuteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "妙记所在的会",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeishuMinuteMeetingResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/feishu-minutes/{token}/attach": {
+      "post": {
+        "operationId": "attachFeishuMinute",
+        "summary": "妙记所有者把妙记记到建议的那场天枢里约好的会（别人 404 MINUTE_NOT_FOUND）；已记到同一场会的再记返回同一个 meetingId；409 MINUTE_NOT_PENDING / SUGGESTION_CHANGED / MINUTE_TAKEN",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachFeishuMinuteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "妙记所在的会",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeishuMinuteMeetingResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/feishu-minutes/{token}/ignore": {
+      "post": {
+        "operationId": "ignoreFeishuMinute",
+        "summary": "妙记所有者忽略这份妙记，不再提示（别人 404 MINUTE_NOT_FOUND）；已忽略的再忽略 204；409 MINUTE_NOT_PENDING",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "已忽略"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/meetings/{id}/minutes": {
       "post": {
         "operationId": "readMeetingMinutesLink",
@@ -6328,6 +6553,44 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HomePlanResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/battlefield-progress": {
+      "get": {
+        "operationId": "getMyBattlefieldProgress",
+        "summary": "成员的战场进展：按我所在的战场分组（本月没有战场时按我本月 Mission 的业务域）；需要搭把手的事和每人一张卡",
+        "responses": {
+          "200": {
+            "description": "战场进展",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BattlefieldProgressResponse"
                 }
               }
             }
@@ -14269,6 +14532,7 @@
               "origin",
               "awaitingAcceptance",
               "planTaskId",
+              "blocker",
               "createdAt",
               "updatedAt"
             ],
@@ -14384,8 +14648,15 @@
                         "type": "string"
                       },
                       "cardId": {
-                        "minLength": 1,
-                        "type": "string"
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "period": {
                         "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -14604,6 +14875,58 @@
                   {
                     "minLength": 1,
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "blocker": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "reason",
+                      "waitingOn",
+                      "since"
+                    ],
+                    "properties": {
+                      "reason": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      "waitingOn": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "name"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "since": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
                   },
                   {
                     "type": "null"
@@ -39140,6 +39463,7 @@
           "origin",
           "awaitingAcceptance",
           "planTaskId",
+          "blocker",
           "createdAt",
           "updatedAt"
         ],
@@ -39255,8 +39579,15 @@
                     "type": "string"
                   },
                   "cardId": {
-                    "minLength": 1,
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "period": {
                     "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -39475,6 +39806,58 @@
               {
                 "minLength": 1,
                 "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "blocker": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "reason",
+                  "waitingOn",
+                  "since"
+                ],
+                "properties": {
+                  "reason": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "waitingOn": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "personId",
+                          "name"
+                        ],
+                        "properties": {
+                          "personId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "name": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "since": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
               },
               {
                 "type": "null"
@@ -39777,6 +40160,7 @@
                       "origin",
                       "awaitingAcceptance",
                       "planTaskId",
+                      "blocker",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -39892,8 +40276,15 @@
                                 "type": "string"
                               },
                               "cardId": {
-                                "minLength": 1,
-                                "type": "string"
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               },
                               "period": {
                                 "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -40112,6 +40503,58 @@
                           {
                             "minLength": 1,
                             "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "blocker": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "reason",
+                              "waitingOn",
+                              "since"
+                            ],
+                            "properties": {
+                              "reason": {
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "type": "string"
+                              },
+                              "waitingOn": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "personId",
+                                      "name"
+                                    ],
+                                    "properties": {
+                                      "personId": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "since": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
                           },
                           {
                             "type": "null"
@@ -43204,8 +43647,15 @@
                                 "type": "string"
                               },
                               "cardId": {
-                                "minLength": 1,
-                                "type": "string"
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               },
                               "period": {
                                 "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -47505,8 +47955,15 @@
             "type": "string"
           },
           "cardId": {
-            "minLength": 1,
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "period": {
             "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -47613,6 +48070,7 @@
               "origin",
               "awaitingAcceptance",
               "planTaskId",
+              "blocker",
               "createdAt",
               "updatedAt"
             ],
@@ -47728,8 +48186,15 @@
                         "type": "string"
                       },
                       "cardId": {
-                        "minLength": 1,
-                        "type": "string"
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "period": {
                         "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -47948,6 +48413,58 @@
                   {
                     "minLength": 1,
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "blocker": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "reason",
+                      "waitingOn",
+                      "since"
+                    ],
+                    "properties": {
+                      "reason": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      "waitingOn": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "name"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "since": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
                   },
                   {
                     "type": "null"
@@ -48587,6 +49104,7 @@
                 "origin",
                 "awaitingAcceptance",
                 "planTaskId",
+                "blocker",
                 "createdAt",
                 "updatedAt"
               ],
@@ -48702,8 +49220,15 @@
                           "type": "string"
                         },
                         "cardId": {
-                          "minLength": 1,
-                          "type": "string"
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "period": {
                           "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -48928,6 +49453,58 @@
                     }
                   ]
                 },
+                "blocker": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "reason",
+                        "waitingOn",
+                        "since"
+                      ],
+                      "properties": {
+                        "reason": {
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "waitingOn": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "personId",
+                                "name"
+                              ],
+                              "properties": {
+                                "personId": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "since": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "createdAt": {
                   "minLength": 1,
                   "type": "string"
@@ -49085,6 +49662,7 @@
                       "origin",
                       "awaitingAcceptance",
                       "planTaskId",
+                      "blocker",
                       "createdAt",
                       "updatedAt"
                     ],
@@ -49200,8 +49778,15 @@
                                 "type": "string"
                               },
                               "cardId": {
-                                "minLength": 1,
-                                "type": "string"
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               },
                               "period": {
                                 "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -49426,6 +50011,58 @@
                           }
                         ]
                       },
+                      "blocker": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "reason",
+                              "waitingOn",
+                              "since"
+                            ],
+                            "properties": {
+                              "reason": {
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "type": "string"
+                              },
+                              "waitingOn": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "personId",
+                                      "name"
+                                    ],
+                                    "properties": {
+                                      "personId": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "since": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "createdAt": {
                         "minLength": 1,
                         "type": "string"
@@ -49559,6 +50196,7 @@
                 "origin",
                 "awaitingAcceptance",
                 "planTaskId",
+                "blocker",
                 "createdAt",
                 "updatedAt"
               ],
@@ -49674,8 +50312,15 @@
                           "type": "string"
                         },
                         "cardId": {
-                          "minLength": 1,
-                          "type": "string"
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         },
                         "period": {
                           "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -49894,6 +50539,58 @@
                     {
                       "minLength": 1,
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "blocker": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "reason",
+                        "waitingOn",
+                        "since"
+                      ],
+                      "properties": {
+                        "reason": {
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "waitingOn": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "personId",
+                                "name"
+                              ],
+                              "properties": {
+                                "personId": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "since": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
                     },
                     {
                       "type": "null"
@@ -50581,7 +51278,8 @@
           "code",
           "title",
           "cardId",
-          "color"
+          "color",
+          "world"
         ],
         "properties": {
           "missionId": {
@@ -50607,6 +51305,48 @@
           },
           "color": {
             "type": "string"
+          },
+          "world": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "status",
+                  "label",
+                  "version",
+                  "readAt",
+                  "gaps"
+                ],
+                "properties": {
+                  "status": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "label": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "readAt": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "gaps": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -50617,7 +51357,9 @@
           "item",
           "missionId",
           "column",
-          "overdue"
+          "overdue",
+          "lastActivityAt",
+          "idleDays"
         ],
         "properties": {
           "item": {
@@ -50641,6 +51383,7 @@
               "origin",
               "awaitingAcceptance",
               "planTaskId",
+              "blocker",
               "createdAt",
               "updatedAt"
             ],
@@ -50756,8 +51499,15 @@
                         "type": "string"
                       },
                       "cardId": {
-                        "minLength": 1,
-                        "type": "string"
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "period": {
                         "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -50982,6 +51732,58 @@
                   }
                 ]
               },
+              "blocker": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "reason",
+                      "waitingOn",
+                      "since"
+                    ],
+                    "properties": {
+                      "reason": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      "waitingOn": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "name"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "since": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "createdAt": {
                 "minLength": 1,
                 "type": "string"
@@ -51021,6 +51823,21 @@
           },
           "overdue": {
             "type": "boolean"
+          },
+          "lastActivityAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "idleDays": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -51098,7 +51915,8 @@
                 "code",
                 "title",
                 "cardId",
-                "color"
+                "color",
+                "world"
               ],
               "properties": {
                 "missionId": {
@@ -51124,6 +51942,48 @@
                 },
                 "color": {
                   "type": "string"
+                },
+                "world": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "status",
+                        "label",
+                        "version",
+                        "readAt",
+                        "gaps"
+                      ],
+                      "properties": {
+                        "status": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "label": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "readAt": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "gaps": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -51237,7 +52097,9 @@
                 "item",
                 "missionId",
                 "column",
-                "overdue"
+                "overdue",
+                "lastActivityAt",
+                "idleDays"
               ],
               "properties": {
                 "item": {
@@ -51261,6 +52123,7 @@
                     "origin",
                     "awaitingAcceptance",
                     "planTaskId",
+                    "blocker",
                     "createdAt",
                     "updatedAt"
                   ],
@@ -51376,8 +52239,15 @@
                               "type": "string"
                             },
                             "cardId": {
-                              "minLength": 1,
-                              "type": "string"
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             },
                             "period": {
                               "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
@@ -51602,6 +52472,58 @@
                         }
                       ]
                     },
+                    "blocker": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "reason",
+                            "waitingOn",
+                            "since"
+                          ],
+                          "properties": {
+                            "reason": {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            "waitingOn": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "personId",
+                                    "name"
+                                  ],
+                                  "properties": {
+                                    "personId": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "since": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "createdAt": {
                       "minLength": 1,
                       "type": "string"
@@ -51641,6 +52563,419 @@
                 },
                 "overdue": {
                   "type": "boolean"
+                },
+                "lastActivityAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "idleDays": {
+                  "anyOf": [
+                    {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "BattlefieldProgressResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "today",
+          "groups"
+        ],
+        "properties": {
+          "today": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "kind",
+                "goal",
+                "counts",
+                "help",
+                "people"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "battlefield",
+                      "type": "string"
+                    },
+                    {
+                      "const": "capability",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "goal": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "counts": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "missions",
+                    "onTrack",
+                    "slow",
+                    "blocked"
+                  ],
+                  "properties": {
+                    "missions": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "onTrack": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "slow": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "blocked": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  }
+                },
+                "help": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "person",
+                      "mission",
+                      "task",
+                      "reason",
+                      "waitingOn",
+                      "waitingOnMe",
+                      "days",
+                      "dueDate",
+                      "neededDays",
+                      "leftDays",
+                      "canOpen"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "anyOf": [
+                          {
+                            "const": "blocked",
+                            "type": "string"
+                          },
+                          {
+                            "const": "deadline",
+                            "type": "string"
+                          },
+                          {
+                            "const": "overdue",
+                            "type": "string"
+                          },
+                          {
+                            "const": "no_progress",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "person": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "personId",
+                          "name"
+                        ],
+                        "properties": {
+                          "personId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "name": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "mission": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "missionId",
+                          "title"
+                        ],
+                        "properties": {
+                          "missionId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "title": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "task": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "taskId",
+                              "title"
+                            ],
+                            "properties": {
+                              "taskId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "title": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reason": {
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "waitingOn": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "name"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "waitingOnMe": {
+                        "type": "boolean"
+                      },
+                      "days": {
+                        "anyOf": [
+                          {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "dueDate": {
+                        "anyOf": [
+                          {
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "neededDays": {
+                        "anyOf": [
+                          {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "leftDays": {
+                        "anyOf": [
+                          {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "canOpen": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                },
+                "people": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "person",
+                      "me",
+                      "movedThisWeek",
+                      "latest",
+                      "missions"
+                    ],
+                    "properties": {
+                      "person": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "personId",
+                          "name"
+                        ],
+                        "properties": {
+                          "personId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "name": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "me": {
+                        "type": "boolean"
+                      },
+                      "movedThisWeek": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "latest": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "text",
+                              "at"
+                            ],
+                            "properties": {
+                              "text": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "at": {
+                                "description": "ISO 8601",
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "missions": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "missionId",
+                            "title",
+                            "done",
+                            "total",
+                            "flag"
+                          ],
+                          "properties": {
+                            "missionId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "title": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "done": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "total": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "flag": {
+                              "anyOf": [
+                                {
+                                  "const": "blocked",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "deadline",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "slow",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -54573,6 +55908,29 @@
                 "type": "null"
               }
             ]
+          },
+          "blockedReason": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "waitingOn": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -55120,6 +56478,10 @@
                     },
                     {
                       "const": "meeting_card_pending",
+                      "type": "string"
+                    },
+                    {
+                      "const": "task_progress_added",
                       "type": "string"
                     }
                   ]
@@ -59311,6 +60673,180 @@
           }
         }
       },
+      "FeishuMinuteInboxResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "minutes"
+        ],
+        "properties": {
+          "minutes": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "minuteToken",
+                "title",
+                "startsAt",
+                "endsAt",
+                "attendees",
+                "otherAttendees",
+                "suggestion"
+              ],
+              "properties": {
+                "minuteToken": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "startsAt": {
+                  "type": "string"
+                },
+                "endsAt": {
+                  "type": "string"
+                },
+                "attendees": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "displayName"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "otherAttendees": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "suggestion": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "meetingId",
+                        "title"
+                      ],
+                      "properties": {
+                        "meetingId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "OrganizeFeishuMinuteRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "anchors"
+        ],
+        "properties": {
+          "title": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "anchors": {
+            "minItems": 1,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "kind",
+                "id"
+              ],
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "lto",
+                      "type": "string"
+                    },
+                    {
+                      "const": "po",
+                      "type": "string"
+                    },
+                    {
+                      "const": "mission",
+                      "type": "string"
+                    },
+                    {
+                      "const": "unit",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "id": {
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "AttachFeishuMinuteRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "meetingId"
+        ],
+        "properties": {
+          "meetingId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "FeishuMinuteMeetingResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "meetingId"
+        ],
+        "properties": {
+          "meetingId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
       "MeetingWorldResponse": {
         "additionalProperties": false,
         "type": "object",
@@ -61217,7 +62753,9 @@
                 "id",
                 "title",
                 "brief",
-                "lifecycle"
+                "lifecycle",
+                "ownerId",
+                "parentId"
               ],
               "properties": {
                 "kind": {
@@ -61260,6 +62798,26 @@
                   ]
                 },
                 "lifecycle": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "ownerId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "parentId": {
                   "anyOf": [
                     {
                       "type": "string"

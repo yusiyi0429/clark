@@ -649,6 +649,9 @@ export async function runPreflight(
     await fail(PREFLIGHT_AGENT_FAILED, (err as Error).message || "Preflight Agent 失败");
   }
 }
+/** 待整理的妙记整理成的会（已开完，不跑预审）：启动恢复和补跑都不碰。 */
+const NOT_MINUTE_MEETING = "origin_ref->>'type' IS DISTINCT FROM 'feishu_minute'";
+
 /** 启动恢复：进程崩溃留下的 pending/running 预审标为可见失败，等待显式重试。 */
 export async function recoverInterruptedPreflight(
   q: Query,
@@ -663,7 +666,7 @@ export async function recoverInterruptedPreflight(
             ),
             version = version + 1,
             updated_at = now()
-      WHERE status = 'scheduled'
+      WHERE status = 'scheduled' AND ${NOT_MINUTE_MEETING}
         AND preflight->>'status' IN ('pending', 'running')
         AND (preflight->>'pendingSince')::timestamptz < $1::timestamptz`,
     [new Date(now().getTime() - staleAfterMs), PREFLIGHT_INTERRUPTED],
@@ -678,7 +681,7 @@ export async function recoverInterruptedPreflight(
 export async function resumePreflights(pool: Pool, peopleDirectory: PeopleDirectory, preflightAgent: PreflightAgent): Promise<number> {
   const rows = (await pool.query<{ id: string }>(
     `SELECT id FROM meetings
-      WHERE status = 'scheduled'
+      WHERE status = 'scheduled' AND ${NOT_MINUTE_MEETING}
         AND (preflight->>'status' = 'pending' OR (preflight->>'status' = 'failed' AND preflight->'error'->>'code' = $1))
       ORDER BY scheduled_at, id`, [PREFLIGHT_INTERRUPTED])).rows;
   for (const row of rows) await runPreflight(pool, peopleDirectory, preflightAgent, row.id).catch(() => undefined);

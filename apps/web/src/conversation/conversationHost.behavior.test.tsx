@@ -308,7 +308,7 @@ describe("打字面与对话层一起开合（D6）", () => {
     return context;
   }
 
-  it("从语音胶囊进入打字（键盘键 / 点击说话）就升起对话层", () => {
+  it("从收起的输入条进入打字（「对话天枢」）就升起对话层", () => {
     const { ui, render } = home();
     render();
     expect(harness.dock!.keyboard).toBe(false);

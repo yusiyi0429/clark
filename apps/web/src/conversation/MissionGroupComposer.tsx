@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { TextArea } from "@heroui/react";
-import { X } from "lucide-react";
+import { Mic, X } from "lucide-react";
 import clsx from "clsx";
 import { HeroButton } from "@/components/HeroButton";
-import { ComposerPill, ComposerAction, ChannelSwitch, usePillRows } from "./ComposerPill";
+import { ComposerPill, ComposerAction, ChannelSwitch, pillStyles, usePillRows } from "./ComposerPill";
 import { columnComposerClass, pressChannel, type ConversationChannel } from "./ConversationColumn";
 import { DictationControls } from "./DictationControls";
 import { DictationMirror } from "./DictationMirror";
@@ -80,6 +80,9 @@ export function MissionGroupComposer({ cardId, viewerId, phase, channels, channe
         }} /></>}
       action={dictation.active
         ? <DictationControls dictation={dictation} onToInput={confirmDictation} onSend={sendDictation} canSend={!busy} />
-        : <ComposerAction state={input.trim() ? "send" : "mic"} isDisabled={!writable || busy} onMic={() => void dictation.start()} sendLabel={busy ? "正在发送" : "发送公开意见"} />} />
+        : <>
+          <button type="button" className={pillStyles.tool} disabled={!writable || busy} onClick={() => void dictation.start()} aria-label="语音输入" title="语音输入"><Mic size={18} strokeWidth={1.8} aria-hidden /></button>
+          <ComposerAction state="send" isDisabled={!writable || busy || !input.trim()} sendLabel={busy ? "正在发送" : "发送公开意见"} />
+        </>} />
   </div>;
 }

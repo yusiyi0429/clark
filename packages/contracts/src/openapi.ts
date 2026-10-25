@@ -7,6 +7,7 @@ import {
 } from "./requests.js";
 import { MeetingCardConfirmRequest, MeetingCardDraftRequest, MeetingCardView } from "./meetingCard.js";
 import { MeetingDecisionView, MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse } from "./meetingDecisions.js";
+import { AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, OrganizeFeishuMinuteRequest } from "./feishuMinuteInbox.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
@@ -152,6 +153,7 @@ import {
   HomePlanMission,
   HomePlanActivity,
   HomePlanResponse,
+  BattlefieldProgressResponse,
   CreatePlanMarkRequest,
   PatchPlanMarkRequest,
   WeeklySyncReminder,
@@ -882,6 +884,35 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "待处理的会议记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MyMeetingCardsResponse" } } } }, "401": errorResponse },
         },
       },
+      "/api/me/feishu-minutes": {
+        get: {
+          operationId: "listMyFeishuMinutes", summary: "我在飞书里直接开的会待整理：只列我是所有者、近 7 天、还没对上天枢会议的视频会议妙记",
+          responses: { "200": { description: "待整理的妙记", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuMinuteInboxResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/me/feishu-minutes/{token}/organize": {
+        post: {
+          operationId: "organizeFeishuMinute", summary: "妙记所有者用这份妙记新建一场会（别人 404 MINUTE_NOT_FOUND）；已整理过的再整理返回同一个 meetingId；400 INVALID_INPUT / ANCHOR_NOT_FOUND / INVALID_CEO / INVALID_PARTICIPANT，409 MINUTE_NOT_PENDING / MINUTE_TAKEN",
+          parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/OrganizeFeishuMinuteRequest" }),
+          responses: { "200": { description: "妙记所在的会", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuMinuteMeetingResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/me/feishu-minutes/{token}/attach": {
+        post: {
+          operationId: "attachFeishuMinute", summary: "妙记所有者把妙记记到建议的那场天枢里约好的会（别人 404 MINUTE_NOT_FOUND）；已记到同一场会的再记返回同一个 meetingId；409 MINUTE_NOT_PENDING / SUGGESTION_CHANGED / MINUTE_TAKEN",
+          parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/AttachFeishuMinuteRequest" }),
+          responses: { "200": { description: "妙记所在的会", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuMinuteMeetingResponse" } } } }, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/me/feishu-minutes/{token}/ignore": {
+        post: {
+          operationId: "ignoreFeishuMinute", summary: "妙记所有者忽略这份妙记，不再提示（别人 404 MINUTE_NOT_FOUND）；已忽略的再忽略 204；409 MINUTE_NOT_PENDING",
+          parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+          responses: { "204": { description: "已忽略" }, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
       "/api/meetings/{id}/minutes": {
         post: {
           operationId: "readMeetingMinutesLink", summary: "主持人或创建人贴飞书妙记链接，按这个妙记读逐字稿（别人一律 404）",
@@ -1303,6 +1334,17 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           summary: "成员首页的 Mission 计划：本月 Mission、签定关口、计划点、Task 与分好三栏的执行事项；本月没有 Mission 时回退到最近一个有的月份",
           responses: {
             "200": { description: "首页计划", content: { "application/json": { schema: { $ref: "#/components/schemas/HomePlanResponse" } } } },
+            "401": errorResponse,
+            "403": errorResponse,
+          },
+        },
+      },
+      "/api/me/battlefield-progress": {
+        get: {
+          operationId: "getMyBattlefieldProgress",
+          summary: "成员的战场进展：按我所在的战场分组（本月没有战场时按我本月 Mission 的业务域）；需要搭把手的事和每人一张卡",
+          responses: {
+            "200": { description: "战场进展", content: { "application/json": { schema: { $ref: "#/components/schemas/BattlefieldProgressResponse" } } } },
             "401": errorResponse,
             "403": errorResponse,
           },
@@ -3003,6 +3045,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         HomePlanMission: HomePlanMission as JsonSchema,
         HomePlanActivity: HomePlanActivity as JsonSchema,
         HomePlanResponse: HomePlanResponse as JsonSchema,
+        BattlefieldProgressResponse: BattlefieldProgressResponse as JsonSchema,
         CreatePlanMarkRequest: CreatePlanMarkRequest as JsonSchema,
         PatchPlanMarkRequest: PatchPlanMarkRequest as JsonSchema,
         WeeklySyncReminder: WeeklySyncReminder as JsonSchema,
@@ -3068,6 +3111,10 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ExecuteRequestActionRequest: ExecuteRequestActionRequest as JsonSchema,
         MeetingDecisionView: MeetingDecisionView as JsonSchema,
         MyMeetingCardsResponse: MyMeetingCardsResponse as JsonSchema,
+        FeishuMinuteInboxResponse: FeishuMinuteInboxResponse as JsonSchema,
+        OrganizeFeishuMinuteRequest: OrganizeFeishuMinuteRequest as JsonSchema,
+        AttachFeishuMinuteRequest: AttachFeishuMinuteRequest as JsonSchema,
+        FeishuMinuteMeetingResponse: FeishuMinuteMeetingResponse as JsonSchema,
         MeetingWorldResponse: MeetingWorldResponse as JsonSchema,
         MeetingCardView: MeetingCardView as JsonSchema,
         MeetingCardDraftRequest: MeetingCardDraftRequest as JsonSchema,

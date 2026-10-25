@@ -135,7 +135,8 @@ export const MeetingWorldAnchorsRequest = Type.Object(
 );
 /**
  * 预约、改挂点时的一个候选：名称、类型，加对象已确认的内容（brief，截 80 字）——LTO、PO 是目标块的结果，Mission 是定义的结果，
- * 单元是名称；草稿或读不到时为 null。lifecycle 照本体（LTO、PO）或 Mission 轮次（draft / confirmed），单元为 null。
+ * 单元是名称；草稿或读不到时为 null。lifecycle 照本体（LTO、PO）或 Mission 轮次（draft / confirmed；没有任务卡时照本体状态），单元为 null。
+ * Mission 带负责人（ownerId，约会议默认挂自己的）和服务的 PO（parentId：选项里有这个 PO 时才给），其余为 null。
  */
 export const WorldAnchorOption = Type.Object(
   {
@@ -144,6 +145,8 @@ export const WorldAnchorOption = Type.Object(
     title: Type.String({ minLength: 1 }),
     brief: Type.Union([Type.String({ maxLength: 80 }), Type.Null()]),
     lifecycle: Type.Union([Type.String(), Type.Null()]),
+    ownerId: Type.Union([Type.String(), Type.Null()]),
+    parentId: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
 );

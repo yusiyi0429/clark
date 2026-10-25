@@ -23,6 +23,33 @@ const byTitle=(activities:Activity[])=>Object.fromEntries(activities.map((a)=>[a
 const titles=(activities:Activity[])=>activities.map((a)=>a.item.title);
 
 describe("首页计划",()=>{
+  it("最近一次动静：取最新进展，没有进展用创建时间；进行中且过了 3 个工作日才算停滞，按自然日报天数",async()=>{
+    const f=await executionFixture();
+    try {
+      f.setNow(OCT_22);
+      const quiet=await create(f,f.member,"execution-one",{title:"上周五写过进展"});
+      const fresh=await create(f,f.member,"execution-one",{title:"前天写过进展"});
+      const idle=await create(f,f.member,"execution-one",{title:"没进展但很久前建的"});
+      const waiting=await create(f,f.member,"execution-one",{title:"没开始"});
+      const submitted=await create(f,f.member,"execution-one",{title:"等验收"});
+      await f.t.sql("UPDATE tasks SET status='in_progress' WHERE id=ANY($1::uuid[])",[[quiet.id,fresh.id,idle.id,submitted.id]]);
+      await f.t.sql(`UPDATE tasks SET created_at='2026-10-09T02:00:00Z',submission='{"at":"2026-10-12T02:00:00Z","by":"x","standards":[]}'::jsonb WHERE id=$1`,[submitted.id]);
+      await f.t.sql("UPDATE tasks SET created_at=$2 WHERE id=ANY($1::uuid[])",[[idle.id,waiting.id],"2026-10-09T02:00:00Z"]);
+      const progress=(id:string,at:string)=>f.t.sql(`INSERT INTO task_progress(id,task_id,author_id,source,body,created_at) VALUES($1,$2,$3,'web','进展',$4)`,[randomUUID(),id,TEST_MEMBER.personId,at]);
+      // 10/16（周五）之后：10/19、10/20、10/21、10/22 四个工作日 → 停滞 6 天。
+      await progress(quiet.id,"2026-10-16T03:00:00Z");
+      // 10/20 之后：10/21、10/22 两个工作日 → 不算停滞。
+      await progress(fresh.id,"2026-10-20T03:00:00Z");
+      const plan=await read(f,f.member);
+      const of=(id:string)=>plan.activities.find((a:{item:{id:string}})=>a.item.id===id);
+      expect(of(quiet.id)).toMatchObject({lastActivityAt:"2026-10-16T03:00:00.000Z",idleDays:6});
+      expect(of(fresh.id)).toMatchObject({lastActivityAt:"2026-10-20T03:00:00.000Z",idleDays:null});
+      expect(of(idle.id)).toMatchObject({lastActivityAt:"2026-10-09T02:00:00.000Z",idleDays:13});
+      expect(of(waiting.id)).toMatchObject({lastActivityAt:"2026-10-09T02:00:00.000Z",idleDays:null});
+      expect(of(submitted.id)).toMatchObject({item:{awaitingAcceptance:true},idleDays:null});
+    } finally { await f.t.close(); }
+  });
+
   it("每种日期组合落到唯一一栏",async()=>{
     const f=await executionFixture();
     try {
@@ -150,16 +177,16 @@ describe("首页计划",()=>{
       expect(plan.gates).toEqual([["2026-10-28","上线"],["2026-10-29","试用"],["2026-10-30","收尾"],["2026-10-31","复盘"],["2026-10-27","联调"]]
         .map(([date,label])=>({missionId:"execution-one",date,label})));
       expect(plan.missions).toEqual([
-        {missionId:"execution-one",code:"execution-one",title:"上线",cardId:f.card,color:"#2f63b0"},
-        {missionId:"execution-two",code:"execution-two",title:"验证",cardId:f.card,color:"#2f8a7a"},
+        {missionId:"execution-one",code:"execution-one",title:"上线",cardId:f.card,color:"#2f63b0",world:null},
+        {missionId:"execution-two",code:"execution-two",title:"验证",cardId:f.card,color:"#2f8a7a",world:null},
       ]);
       expect(plan.marks).toEqual([mark]);
       expect(plan.tasks).toEqual([task]);
-      expect(calls).toEqual([[{id:"execution-one",code:"execution-one"},{id:"execution-two",code:"execution-two"}]]);
+      expect(calls).toEqual([[{id:"execution-one",code:"execution-one",world:null},{id:"execution-two",code:"execution-two",world:null}]]);
     } finally { await f.t.close(); }
   });
 
-  it("任务卡没确认时 Mission 和关口照常出，事项带上 missionId",async()=>{
+  it("任务卡没确认时 Mission 和关口照常出；事项上的 Mission 为空（卡在准备，不给读），仍按 missionId 归到这个 Mission",async()=>{
     const f=await executionFixture("open");
     try {
       f.setNow(OCT_22);

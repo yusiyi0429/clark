@@ -1213,6 +1213,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/feishu-minutes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我在飞书里直接开的会待整理：只列我是所有者、近 7 天、还没对上天枢会议的视频会议妙记 */
+        get: operations["listMyFeishuMinutes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/feishu-minutes/{token}/organize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 妙记所有者用这份妙记新建一场会（别人 404 MINUTE_NOT_FOUND）；已整理过的再整理返回同一个 meetingId；400 INVALID_INPUT / ANCHOR_NOT_FOUND / INVALID_CEO / INVALID_PARTICIPANT，409 MINUTE_NOT_PENDING / MINUTE_TAKEN */
+        post: operations["organizeFeishuMinute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/feishu-minutes/{token}/attach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 妙记所有者把妙记记到建议的那场天枢里约好的会（别人 404 MINUTE_NOT_FOUND）；已记到同一场会的再记返回同一个 meetingId；409 MINUTE_NOT_PENDING / SUGGESTION_CHANGED / MINUTE_TAKEN */
+        post: operations["attachFeishuMinute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/feishu-minutes/{token}/ignore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 妙记所有者忽略这份妙记，不再提示（别人 404 MINUTE_NOT_FOUND）；已忽略的再忽略 204；409 MINUTE_NOT_PENDING */
+        post: operations["ignoreFeishuMinute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings/{id}/minutes": {
         parameters: {
             query?: never;
@@ -1838,6 +1906,23 @@ export interface paths {
         };
         /** 成员首页的 Mission 计划：本月 Mission、签定关口、计划点、Task 与分好三栏的执行事项；本月没有 Mission 时回退到最近一个有的月份 */
         get: operations["getMyHomePlan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/battlefield-progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 成员的战场进展：按我所在的战场分组（本月没有战场时按我本月 Mission 的业务域）；需要搭把手的事和每人一张卡 */
+        get: operations["getMyBattlefieldProgress"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3579,7 +3664,7 @@ export interface components {
                 mission: {
                     missionId: string;
                     title: string;
-                    cardId: string;
+                    cardId: string | null;
                     period: string;
                     battlefieldName: string;
                     step: number;
@@ -3616,6 +3701,14 @@ export interface components {
                 } | null;
                 awaitingAcceptance: boolean;
                 planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
                 createdAt: string;
                 updatedAt: string;
             };
@@ -7384,7 +7477,7 @@ export interface components {
             mission: {
                 missionId: string;
                 title: string;
-                cardId: string;
+                cardId: string | null;
                 period: string;
                 battlefieldName: string;
                 step: number;
@@ -7421,6 +7514,14 @@ export interface components {
             } | null;
             awaitingAcceptance: boolean;
             planTaskId: string | null;
+            blocker: {
+                reason: string;
+                waitingOn: {
+                    personId: string;
+                    name: string;
+                } | null;
+                since: string;
+            } | null;
             createdAt: string;
             updatedAt: string;
         };
@@ -7479,7 +7580,7 @@ export interface components {
                     mission: {
                         missionId: string;
                         title: string;
-                        cardId: string;
+                        cardId: string | null;
                         period: string;
                         battlefieldName: string;
                         step: number;
@@ -7516,6 +7617,14 @@ export interface components {
                     } | null;
                     awaitingAcceptance: boolean;
                     planTaskId: string | null;
+                    blocker: {
+                        reason: string;
+                        waitingOn: {
+                            personId: string;
+                            name: string;
+                        } | null;
+                        since: string;
+                    } | null;
                     createdAt: string;
                     updatedAt: string;
                 }[];
@@ -8009,7 +8118,7 @@ export interface components {
                     mission: {
                         missionId: string;
                         title: string;
-                        cardId: string;
+                        cardId: string | null;
                         period: string;
                         battlefieldName: string;
                         step: number;
@@ -8656,7 +8765,7 @@ export interface components {
         TaskMissionRef: {
             missionId: string;
             title: string;
-            cardId: string;
+            cardId: string | null;
             period: string;
             battlefieldName: string;
             step: number;
@@ -8685,7 +8794,7 @@ export interface components {
                 mission: {
                     missionId: string;
                     title: string;
-                    cardId: string;
+                    cardId: string | null;
                     period: string;
                     battlefieldName: string;
                     step: number;
@@ -8722,6 +8831,14 @@ export interface components {
                 } | null;
                 awaitingAcceptance: boolean;
                 planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
                 createdAt: string;
                 updatedAt: string;
             };
@@ -8820,7 +8937,7 @@ export interface components {
                 mission: {
                     missionId: string;
                     title: string;
-                    cardId: string;
+                    cardId: string | null;
                     period: string;
                     battlefieldName: string;
                     step: number;
@@ -8857,6 +8974,14 @@ export interface components {
                 } | null;
                 awaitingAcceptance: boolean;
                 planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
                 createdAt: string;
                 updatedAt: string;
             }[];
@@ -8889,7 +9014,7 @@ export interface components {
                     mission: {
                         missionId: string;
                         title: string;
-                        cardId: string;
+                        cardId: string | null;
                         period: string;
                         battlefieldName: string;
                         step: number;
@@ -8926,6 +9051,14 @@ export interface components {
                     } | null;
                     awaitingAcceptance: boolean;
                     planTaskId: string | null;
+                    blocker: {
+                        reason: string;
+                        waitingOn: {
+                            personId: string;
+                            name: string;
+                        } | null;
+                        since: string;
+                    } | null;
                     createdAt: string;
                     updatedAt: string;
                 }[];
@@ -8958,7 +9091,7 @@ export interface components {
                 mission: {
                     missionId: string;
                     title: string;
-                    cardId: string;
+                    cardId: string | null;
                     period: string;
                     battlefieldName: string;
                     step: number;
@@ -8995,6 +9128,14 @@ export interface components {
                 } | null;
                 awaitingAcceptance: boolean;
                 planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
                 createdAt: string;
                 updatedAt: string;
             }[];
@@ -9109,6 +9250,13 @@ export interface components {
             title: string;
             cardId: string | null;
             color: string;
+            world: {
+                status: string;
+                label: string;
+                version: number;
+                readAt: string;
+                gaps: string[];
+            } | null;
         };
         HomePlanActivity: {
             item: {
@@ -9123,7 +9271,7 @@ export interface components {
                 mission: {
                     missionId: string;
                     title: string;
-                    cardId: string;
+                    cardId: string | null;
                     period: string;
                     battlefieldName: string;
                     step: number;
@@ -9160,12 +9308,22 @@ export interface components {
                 } | null;
                 awaitingAcceptance: boolean;
                 planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
                 createdAt: string;
                 updatedAt: string;
             };
             missionId: string | null;
             column: "done" | "week" | "later";
             overdue: boolean;
+            lastActivityAt: string;
+            idleDays: number | null;
         };
         HomePlanResponse: {
             period: string;
@@ -9183,6 +9341,13 @@ export interface components {
                 title: string;
                 cardId: string | null;
                 color: string;
+                world: {
+                    status: string;
+                    label: string;
+                    version: number;
+                    readAt: string;
+                    gaps: string[];
+                } | null;
             }[];
             gates: {
                 missionId: string;
@@ -9216,7 +9381,7 @@ export interface components {
                     mission: {
                         missionId: string;
                         title: string;
-                        cardId: string;
+                        cardId: string | null;
                         period: string;
                         battlefieldName: string;
                         step: number;
@@ -9253,12 +9418,83 @@ export interface components {
                     } | null;
                     awaitingAcceptance: boolean;
                     planTaskId: string | null;
+                    blocker: {
+                        reason: string;
+                        waitingOn: {
+                            personId: string;
+                            name: string;
+                        } | null;
+                        since: string;
+                    } | null;
                     createdAt: string;
                     updatedAt: string;
                 };
                 missionId: string | null;
                 column: "done" | "week" | "later";
                 overdue: boolean;
+                lastActivityAt: string;
+                idleDays: number | null;
+            }[];
+        };
+        BattlefieldProgressResponse: {
+            today: string;
+            groups: {
+                id: string;
+                name: string;
+                kind: "battlefield" | "capability";
+                goal: string | null;
+                counts: {
+                    missions: number;
+                    onTrack: number;
+                    slow: number;
+                    blocked: number;
+                };
+                help: {
+                    kind: "blocked" | "deadline" | "overdue" | "no_progress";
+                    person: {
+                        personId: string;
+                        name: string;
+                    };
+                    mission: {
+                        missionId: string;
+                        title: string;
+                    };
+                    task: {
+                        taskId: string;
+                        title: string;
+                    } | null;
+                    reason: string | null;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    waitingOnMe: boolean;
+                    days: number | null;
+                    dueDate: string | null;
+                    neededDays: number | null;
+                    leftDays: number | null;
+                    canOpen: boolean;
+                }[];
+                people: {
+                    person: {
+                        personId: string;
+                        name: string;
+                    };
+                    me: boolean;
+                    movedThisWeek: number;
+                    latest: {
+                        text: string;
+                        /** @description ISO 8601 */
+                        at: string;
+                    } | null;
+                    missions: {
+                        missionId: string;
+                        title: string;
+                        done: number;
+                        total: number;
+                        flag: "blocked" | "deadline" | "slow" | null;
+                    }[];
+                }[];
             }[];
         };
         CreatePlanMarkRequest: {
@@ -9712,6 +9948,8 @@ export interface components {
             judgment?: string | null;
             missionId?: string | null;
             planTaskId?: string | null;
+            blockedReason?: string | null;
+            waitingOn?: string | null;
         };
         ReturnMyTaskRequest: {
             version: number;
@@ -9781,7 +10019,7 @@ export interface components {
         NotificationList: {
             notifications: {
                 id: string;
-                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned" | "request_received" | "request_answered" | "request_done" | "request_asked" | "collection_reminder" | "meeting_card_pending";
+                kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned" | "request_received" | "request_answered" | "request_done" | "request_asked" | "collection_reminder" | "meeting_card_pending" | "task_progress_added";
                 text: string;
                 objectType: "task" | "meeting" | "issue" | "request";
                 objectId: string;
@@ -10443,6 +10681,36 @@ export interface components {
                 status: "pending" | "edit_pending" | "failed";
             }[];
         };
+        FeishuMinuteInboxResponse: {
+            minutes: {
+                minuteToken: string;
+                title: string;
+                startsAt: string;
+                endsAt: string;
+                attendees: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                otherAttendees: number;
+                suggestion: {
+                    meetingId: string;
+                    title: string;
+                } | null;
+            }[];
+        };
+        OrganizeFeishuMinuteRequest: {
+            title: string;
+            anchors: {
+                kind: "lto" | "po" | "mission" | "unit";
+                id: string;
+            }[];
+        };
+        AttachFeishuMinuteRequest: {
+            meetingId: string;
+        };
+        FeishuMinuteMeetingResponse: {
+            meetingId: string;
+        };
         MeetingWorldResponse: {
             world: {
                 excluded: boolean;
@@ -10694,6 +10962,8 @@ export interface components {
                 title: string;
                 brief: string | null;
                 lifecycle: string | null;
+                ownerId: string | null;
+                parentId: string | null;
             }[];
         };
         ImpactCardView: {
@@ -14808,6 +15078,197 @@ export interface operations {
             };
         };
     };
+    listMyFeishuMinutes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 待整理的妙记 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeishuMinuteInboxResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    organizeFeishuMinute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizeFeishuMinuteRequest"];
+            };
+        };
+        responses: {
+            /** @description 妙记所在的会 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeishuMinuteMeetingResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    attachFeishuMinute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachFeishuMinuteRequest"];
+            };
+        };
+        responses: {
+            /** @description 妙记所在的会 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeishuMinuteMeetingResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    ignoreFeishuMinute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已忽略 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     readMeetingMinutesLink: {
         parameters: {
             query?: never;
@@ -16664,6 +17125,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HomePlanResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyBattlefieldProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 战场进展 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BattlefieldProgressResponse"];
                 };
             };
             /** @description ApiError 统一错误 */

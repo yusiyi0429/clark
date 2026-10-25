@@ -1,5 +1,6 @@
 .muted{margin:0;color:var(--ts-text-muted,#6b7482);font-size:12px;line-height:1.7}
 .twoFields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;min-width:0}
+.dateField{display:flex;flex-direction:column;gap:8px;min-width:0}
 .taskPane{box-sizing:border-box;min-width:0;padding:22px 32px 130px}
 .pane{display:grid;grid-template-columns:minmax(0,1fr);gap:24px;width:min(100%,720px);min-width:0;margin:0 auto}
 .paneBlock{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-width:0;padding:0 0 28px;border-bottom:1px solid var(--ts-border,#dce3ec)}
@@ -13,9 +14,6 @@
 .longLink{display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;height:auto;min-height:32px;padding-block:4px;white-space:normal;text-align:left;font-weight:600;overflow-wrap:anywhere}
 .longLink svg{flex:none}
 .paneNote,.paneBlock .paneNote{margin:0;color:var(--ts-text-muted,#6b7482);font-size:12px;line-height:1.7;overflow-wrap:anywhere}
-.progressList{display:grid;gap:0;min-width:0}.progressEntry{display:grid;gap:6px;min-width:0;padding:12px 0;border-bottom:1px solid var(--ts-border,#dce3ec)}
-.progressMeta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;color:var(--ts-text-muted,#6b7482);font-size:12px}.progressSource{padding:2px 8px;border-radius:20px;background:#edf4ff;color:#2369d4;font-weight:600}
-.progressLinks{display:flex;flex-wrap:wrap;gap:6px 12px;min-width:0}.progressLinks a{color:#3a83f7;font-size:12px;overflow-wrap:anywhere}
 .returnForm{display:grid;gap:12px;min-width:0}
 .returnForm button{justify-self:start}
 .error{margin:0;color:#a44d3e;font-size:13px;line-height:1.7}

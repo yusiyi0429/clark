@@ -1,16 +1,17 @@
 "use client";
 
 /**
- * 个人菜单：通知栏左下角点自己的名字（收起成窄条时是头像）弹出。本人能改的设置都收在这里 ——
- * 声纹（已配置时）、雷达、我的记忆（成员 /me/memory、CEO /memory）、定时任务（成员 /me/schedules、CEO /schedules）、连接飞书（接了飞书时）、Co-Agent 形象、修改口令、重看首次引导；双身份者还能切换工作台。
- * CEO 多一项组织配置，管理员多一项管理员视图；最后是退出登录。
- * 声纹、雷达和口令各开一个小弹窗，不离开当前页面。
+ * 个人菜单：通知栏左下角点自己的名字（收起成窄条时是头像）弹出。一级只放每天会点的和身份相关的（样稿 voice-keys-v3）——
+ * 雷达、我的记忆（成员 /me/memory、CEO /memory）、定时任务（成员 /me/schedules、CEO /schedules）、「设置 ›」、CEO 的组织配置、双身份者切换工作台，最后是退出登录。
+ * 配一次就不太动的收进「设置 ›」，在菜单右边弹出二级：语音输入、声纹（已配置时）、连接飞书（接了飞书时）、连接到外部工具、Co-Agent 形象、修改口令、
+ * 重看首次引导、管理员视图（管理员）。
+ * 声纹、雷达、口令、语音输入各开一个小弹窗，不离开当前页面。
  */
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Modal, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, CalendarClock, KeyRound, Link2, LogOut, PlugZap, Radar, RotateCcw, Settings2, Smile, X } from "lucide-react";
+import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, CalendarClock, ChevronRight, KeyRound, Link2, LogOut, Mic, PlugZap, Radar, RotateCcw, Settings, Settings2, Smile, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { feishuConnectHref, readFeishuConnection } from "@/lib/feishuLogin";
 import { logout } from "@/lib/logout";
@@ -19,6 +20,7 @@ import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import m from "@/styles/account-menu.module.css";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { CoAgentSkinPicker } from "@/components/coagent/SkinPicker";
+import { VoiceKeysDialog } from "@/conversation/VoiceKeysDialog";
 
 export interface Account {
   displayName: string;
@@ -41,10 +43,11 @@ export function accountSubtitle(account: Account, demo: boolean): string {
   return [account.loginId, account.role === "ceo" ? "CEO" : "成员"].filter(Boolean).join(" · ");
 }
 
-type Dialog = "voiceprint" | "radar" | "connection" | "coagent" | "passcode" | null;
+type Dialog = "voiceprint" | "radar" | "connection" | "coagent" | "passcode" | "voice" | null;
 
 export function AccountMenu({ account, compact = false, onNavigate }: { account: Account; compact?: boolean; onNavigate?: (href: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [leaving, setLeaving] = useState(false);
   const [leaveArmed, setLeaveArmed] = useState(false);
@@ -56,6 +59,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   const [error, setError] = useState<string | null>(null);
   const radarTitle = account.role === "ceo" ? "雷达设置" : "我的雷达";
   const trigger = useRef<HTMLButtonElement>(null);
+  const settingsTrigger = useRef<HTMLButtonElement>(null);
   // 通知上的「授权开始」要打开「连接到外部工具」；页面上可能同时挂着手机版和桌面版两份菜单，只让看得见的那份接。
   useEffect(() => {
     const openConnection = (event: Event) => {
@@ -69,6 +73,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   }, []);
   const openMenu = (next: boolean) => {
     setOpen(next);
+    setSettingsOpen(false);
     setLeaveArmed(false);
     if (!next) return;
     setError(null);
@@ -106,6 +111,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   };
   const pick = (next: Dialog) => {
     setOpen(false);
+    setSettingsOpen(false);
     setDialog(next);
   };
 
@@ -130,10 +136,6 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                   {accountSubtitle(account, false) ? <small>{accountSubtitle(account, false)}</small> : null}
                 </span>
               </div>
-              {voiceConfigured ? <Button variant="ghost" className={m.item} onPress={() => pick("voiceprint")}>
-                <AudioLines size={16} aria-hidden="true" />
-                我的声纹
-              </Button> : null}
               <Button variant="ghost" className={m.item} onPress={() => pick("radar")}>
                 <Radar size={16} aria-hidden="true" />
                 {radarTitle}
@@ -150,18 +152,49 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                   定时任务
                 </Button>
               ) : null}
-              {feishu?.enabled ? <FeishuConnectItem connected={feishu.connected} /> : null}
-              <Button variant="ghost" className={m.item} onPress={() => pick("connection")}>
-                <PlugZap size={16} aria-hidden="true" />连接到外部工具
+              <Button ref={settingsTrigger} variant="ghost" className={m.item} data-settings aria-expanded={settingsOpen} onPress={() => setSettingsOpen((value) => !value)}>
+                <Settings size={16} aria-hidden="true" />
+                设置
+                <ChevronRight size={15} className={m.more} aria-hidden="true" />
               </Button>
-              <Button variant="ghost" className={m.item} onPress={() => pick("coagent")}>
-                <Smile size={16} aria-hidden="true" />
-                Co-Agent 形象
-              </Button>
-              <Button variant="ghost" className={m.item} onPress={() => pick("passcode")}>
-                <KeyRound size={16} aria-hidden="true" />
-                修改口令
-              </Button>
+              <Popover isOpen={settingsOpen} onOpenChange={setSettingsOpen}>
+                <Popover.Content triggerRef={settingsTrigger} placement="end top" offset={16} crossOffset={-8} className={m.popover}>
+                  <TianshuPortalTheme>
+                    <Popover.Dialog className={m.menu} aria-label="设置">
+                      <Button variant="ghost" className={m.item} onPress={() => pick("voice")}>
+                        <Mic size={16} aria-hidden="true" />
+                        语音输入
+                      </Button>
+                      {voiceConfigured ? <Button variant="ghost" className={m.item} onPress={() => pick("voiceprint")}>
+                        <AudioLines size={16} aria-hidden="true" />
+                        我的声纹
+                      </Button> : null}
+                      {feishu?.enabled ? <FeishuConnectItem connected={feishu.connected} /> : null}
+                      <Button variant="ghost" className={m.item} onPress={() => pick("connection")}>
+                        <PlugZap size={16} aria-hidden="true" />连接到外部工具
+                      </Button>
+                      <Button variant="ghost" className={m.item} onPress={() => pick("coagent")}>
+                        <Smile size={16} aria-hidden="true" />
+                        Co-Agent 形象
+                      </Button>
+                      <Button variant="ghost" className={m.item} onPress={() => pick("passcode")}>
+                        <KeyRound size={16} aria-hidden="true" />
+                        修改口令
+                      </Button>
+                      <Button variant="ghost" className={m.item} isDisabled={busy} onPress={() => void replayOnboarding()}>
+                        <RotateCcw size={16} aria-hidden="true" />
+                        重看首次引导
+                      </Button>
+                      {admin && onNavigate ? (
+                        <Button variant="ghost" className={m.item} onPress={() => { setOpen(false); onNavigate(account.role === "ceo" ? "/admin" : "/me/admin"); }}>
+                          <Activity size={16} aria-hidden="true" />
+                          管理员
+                        </Button>
+                      ) : null}
+                    </Popover.Dialog>
+                  </TianshuPortalTheme>
+                </Popover.Content>
+              </Popover>
               {account.role === "ceo" && onNavigate ? (
                 <Button
                   variant="ghost"
@@ -175,20 +208,10 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                   组织配置
                 </Button>
               ) : null}
-              {admin && onNavigate ? (
-                <Button variant="ghost" className={m.item} onPress={() => { setOpen(false); onNavigate(account.role === "ceo" ? "/admin" : "/me/admin"); }}>
-                  <Activity size={16} aria-hidden="true" />
-                  管理员
-                </Button>
-              ) : null}
               {canSwitchView ? <Button variant="ghost" className={m.item} isDisabled={busy} onPress={() => void switchView()}>
                 <ArrowLeftRight size={16} aria-hidden="true" />
                 {account.role === "ceo" ? "切换到负责人工作台" : "切换到 CEO 工作台"}
               </Button> : null}
-              <Button variant="ghost" className={m.item} isDisabled={busy} onPress={() => void replayOnboarding()}>
-                <RotateCcw size={16} aria-hidden="true" />
-                重看首次引导
-              </Button>
               {error ? <p className={m.error} role="alert">{error}</p> : null}
               <hr className={m.rule} />
               <Button
@@ -239,6 +262,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
         </MenuDialog>
       ) : null}
       {dialog === "coagent" ? <MenuDialog title="Co-Agent 形象" wide onClose={() => setDialog(null)}><CoAgentSkinPicker /></MenuDialog> : null}
+      {dialog === "voice" ? <VoiceKeysDialog onClose={() => setDialog(null)} /> : null}
       {dialog === "connection" ? <MenuDialog title="连接到外部工具" wide onClose={() => setDialog(null)}><ConnectionDialog role={account.role} /></MenuDialog> : null}
     </>
   );

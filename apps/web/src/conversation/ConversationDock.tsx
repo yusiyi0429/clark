@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { TextArea as HeroTextArea } from "@heroui/react";
-import { ArrowUp, ArrowUpRight, Keyboard, Mic, Square, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Keyboard, MessageCircle, Mic, Square, X } from "lucide-react";
 import clsx from "clsx";
 import type { Card } from "@/lib/api/client";
 import { HeroButton } from "@/components/HeroButton";
@@ -14,6 +14,7 @@ import { useDictation } from "./useDictation";
 import type { ConversationData } from "./useConversation";
 import { QuoteChips } from "./QuoteChips";
 import { useAnswerOptionFill } from "./answerOptions";
+import { VoiceKeysDialog, voiceIntroDue } from "./VoiceKeysDialog";
 import { quotedMessage, storedDraft, type QuotePrefill, type TextQuote } from "./quotes";
 import { useExitPresence } from "@/lib/motion";
 import d from "@/styles/conversation-dock.module.css";
@@ -22,13 +23,14 @@ import d from "@/styles/conversation-dock.module.css";
 const ATTACH_EXIT_MS = 340;
 
 /**
- * 全局输入条（clark `workspace.tsx` 614–640）：键盘/语音切换、附件、两个常驻输入面、发送。
- * 没有历史键、没有输入条上方的气泡（D2 / D6）：进入打字（点键盘键或「点击说话」）就是打开对话层，
+ * 全局输入条（clark `workspace.tsx` 614–640）：收起时只有一颗白色胶囊「对话天枢」（没有外面那层灰底），展开后是附件、小麦克风、输入框、发送。
+ * 没有历史键、没有输入条上方的气泡（D2 / D6）：点「对话天枢」（或按唤醒键，见 wakeKey.ts）就是展开输入框、打开对话层，
  * 所有消息、出错说明都在对话层里；宿主把 keyboard 与对话层开合绑在一起。
- * 宽屏上输入条右边缘固定、只向左伸缩（不再横移到正中）。语音面的主按钮「点击说话」：原地展开并直接开始听写
- * （useDictation）：文字边说边进输入框（带下划线，可改字），右边 [● 0:12 声波] ■ ↑；■ 停下、文字留在输入框，
- * ↑ 等整理后直接发出；✕ / Esc 恢复听写前的原文并缩回原样。听写出错交给对话层显示（onDictationError）。
- * 麦克风只在点这一下时请求。回答进行中主按钮变「停止回答」。
+ * 语音主要交给微信输入法；小麦克风是天枢自己的听写（useDictation），和附件键一样不起眼：文字边说边进输入框（带下划线，
+ * 可改字），右边 [● 0:12 声波] ■ ↑；■ 停下、文字留在输入框，↑ 等整理后直接发出；听写中小麦克风变 ✕，✕ / Esc 恢复听写前的原文。
+ * 听写出错交给对话层显示（onDictationError）。麦克风只在点这一下时请求。
+ * 小麦克风右边的小键盘图标打开语音快捷键面板（VoiceKeysDialog）；第一次点「对话天枢」时也弹一次（触屏不弹、不出这颗键）。
+ * 宽屏上输入条右边缘固定、只向左伸缩（不再横移到正中）。回答进行中发送键变「停止本次回答」。
  * 待发送的卡片引用、文字引用、附件都在输入框里文字行上方那一行（D4）。
  * memo（sameDockProps）：流式中对话数据每帧在变，输入条只看自己用到的那几项，没变就不重画。
  */
@@ -61,8 +63,9 @@ export const ConversationDock = memo(function ConversationDock({
   const [input, setInput] = useState("");
   const [composerHeight, setComposerHeight] = useState(36);
   const [composerExpanded, setComposerExpanded] = useState(false);
+  const [voiceKeys, setVoiceKeys] = useState(false);
   const inputElement = useRef<HTMLTextAreaElement>(null);
-  const modeButton = useRef<HTMLButtonElement>(null);
+  const entryButton = useRef<HTMLButtonElement>(null);
   const composing = useRef(false);
   const inputVersion = useRef(0);
   const sending = useRef(false);
@@ -75,15 +78,9 @@ export const ConversationDock = memo(function ConversationDock({
   /** 输入框里文字行上方那一行（卡片引用、附件、文字引用，D4）。 */
   const hasTray = hasReferences || textQuotes.length > 0;
   const busy = data.streaming;
-  /** 收起打字面：附件键先留着、随输入条一起收窄淡出，输入条宽度连续地缩回语音面（不在一帧里跳）。 */
+  /** 收起打字面：附件键、小麦克风先留着、随输入条一起收窄淡出，输入条宽度连续地缩回主按钮（不在一帧里跳）。 */
   const attach = useExitPresence(keyboard, ATTACH_EXIT_MS);
-  /** 这次听写是不是从收起的语音面开始的：是的话，没留下文字就缩回语音面。 */
-  const fromVoice = useRef(false);
-  const collapseIfEmpty = (restored: string = input) => {
-    if (fromVoice.current && !restored) onKeyboardChange(false);
-    fromVoice.current = false;
-  };
-  const dictation = useDictation({ field: inputElement, value: input, onValue: (value) => updateInput(value), onCancel: collapseIfEmpty });
+  const dictation = useDictation({ field: inputElement, value: input, onValue: (value) => updateInput(value) });
 
   // 草稿按对话范围保存（C-03：切换对象或频道后不串草稿），关闭和改变宽度不丢。
   useEffect(() => {
@@ -134,13 +131,13 @@ export const ConversationDock = memo(function ConversationDock({
     });
   });
 
-  // 进入键盘面聚焦输入；离开时焦点回到切换键。
+  // 进入键盘面聚焦输入；离开时焦点回到主按钮。
   useEffect(() => {
     if (keyboard === wasKeyboard.current) return;
     wasKeyboard.current = keyboard;
     const frame = requestAnimationFrame(() => {
       if (keyboard) inputElement.current?.focus({ preventScroll: true });
-      else modeButton.current?.focus({ preventScroll: true });
+      else entryButton.current?.focus({ preventScroll: true });
     });
     return () => cancelAnimationFrame(frame);
   }, [keyboard]);
@@ -172,25 +169,17 @@ export const ConversationDock = memo(function ConversationDock({
     setComposerHeight((previous) => (previous === next ? previous : next));
   }, [input, keyboard, composerExpanded, hasReferences, dictation.active]);
 
-  function startDictation() {
-    fromVoice.current = !keyboard;
-    onKeyboardChange(true);
-    void dictation.start();
-  }
-
   /**
    * ■：停下，文字留在输入框（光标在这次说的末尾），整理在后台进行、好了原地替换。
    * 没听清：留在打字面，说明在对话层里（D6）；不缩回，免得说明跟着对话层一起收走。
    */
   async function confirmDictation() {
     await dictation.stop();
-    fromVoice.current = false;
   }
 
   /** ↑：等整理（最多 1.2 秒，超时发原文），整段直接发出（对话层开着，回答就在里面）。发不出去时文字留在输入框里。 */
   async function sendDictation() {
     const next = await dictation.finish();
-    fromVoice.current = false;
     if (next === null) return;
     await submit(next);
   }
@@ -246,7 +235,7 @@ export const ConversationDock = memo(function ConversationDock({
       data-has-tray={hasTray}
       data-history-open={historyOpen}
       data-history-status={data.historyStatus}
-      data-composer={keyboard ? "keyboard" : "voice"}
+      data-composer={keyboard ? "keyboard" : "entry"}
       data-scoped-context={!global || pendingGlobalReferences > 0}
     >
       {pendingGlobalReferences > 0 && onDiscussGlobal ? (
@@ -269,7 +258,7 @@ export const ConversationDock = memo(function ConversationDock({
         ref={dockRef}
         className={clsx(d.dock, keyboard && d.typing, keyboard && composerExpanded && d.composerExpanded, busy && d.thinking)}
         data-testid="conversation-dock"
-        data-mode={keyboard ? "keyboard" : "voice"}
+        data-mode={keyboard ? "keyboard" : "entry"}
         data-composer-expanded={composerExpanded}
         style={dockHeight ? { height: dockHeight } : undefined}
       >
@@ -281,46 +270,43 @@ export const ConversationDock = memo(function ConversationDock({
           onRemoveAttachment={data.removeAttachment}
           quotes={textQuotes.length ? <QuoteChips quotes={textQuotes} onRemove={onRemoveQuotes} /> : null}
         />
-        <HeroButton
-          variant="ghost"
-          size="sm"
-          isIconOnly
-          className={clsx(d.iconButton, d.modeButton)}
-          onPress={() => {
-            // 收起时这颗是键盘：展开成打字。展开后它是麦克风：原地开始听写（不缩回胶囊）；听写中它是 ✕ 取消。
-            if (!keyboard) return onKeyboardChange(true);
-            if (dictation.active) dictation.cancel();
-            else startDictation();
-          }}
-          ref={modeButton}
-          aria-label={keyboard ? (dictation.active ? "取消听写" : "语音输入") : "切换键盘输入"}
-          aria-expanded={keyboard ? undefined : false}
-          data-dictating={dictation.active}
-          title={keyboard ? (dictation.active ? "取消听写" : "语音输入") : "切换键盘输入"}
-        >
-          <span className={clsx(d.modeIcon, d.keyboardIcon)} aria-hidden>
-            <Keyboard size={20} strokeWidth={1.7} />
-          </span>
-          <span className={clsx(d.modeIcon, d.microphoneIcon)} aria-hidden>
-            <Mic size={20} strokeWidth={1.7} />
-          </span>
-          <span className={clsx(d.modeIcon, d.cancelIcon)} aria-hidden>
-            <X size={20} strokeWidth={1.9} />
-          </span>
-        </HeroButton>
-        {/* 附件键在麦克风右边（D2）：麦克风 / 键盘那颗在两种面上都贴左边，展开时不跳位，附件跟着淡入。 */}
+        {/* 打字面左边是 [附件] [小麦克风]（D2），跟着打字面淡入；小麦克风是天枢自己的听写，听写中变 ✕ 取消。 */}
         {attach.mounted ? <AttachButton data={data} className={clsx(d.iconButton, d.attachButton, attach.leaving && d.attachLeaving)} /> : null}
-        <div className={d.content} style={{ height: keyboard && composerExpanded ? composerHeight : 36 }}>
-          <div className={d.voiceLayer} aria-hidden={keyboard} inert={keyboard}>
-            <button
-              type="button"
-              className={d.holdButton}
-              data-busy={busy}
-              onClick={() => (busy ? data.stop() : startDictation())}
-              aria-label={busy ? "停止本次回答" : "语音输入"}
-            >
-              {busy ? <Square size={16} strokeWidth={2.2} aria-hidden /> : <Mic size={20} strokeWidth={1.8} aria-hidden />}
-              <span>{busy ? "停止回答" : "点击说话"}</span>
+        {attach.mounted ? (
+          <HeroButton
+            variant="ghost"
+            size="sm"
+            isIconOnly
+            className={clsx(d.iconButton, d.micButton, attach.leaving && d.attachLeaving)}
+            onPress={() => (dictation.active ? dictation.cancel() : void dictation.start())}
+            aria-label={dictation.active ? "取消听写" : "语音输入"}
+            title={dictation.active ? "取消听写" : "语音输入"}
+            data-dictating={dictation.active}
+          >
+            {dictation.active ? <X size={18} strokeWidth={1.9} /> : <Mic size={18} strokeWidth={1.7} />}
+          </HeroButton>
+        ) : null}
+        {attach.mounted ? (
+          <HeroButton
+            variant="ghost"
+            size="sm"
+            isIconOnly
+            className={clsx(d.iconButton, d.keysButton, attach.leaving && d.attachLeaving)}
+            onPress={() => setVoiceKeys(true)}
+            aria-label="语音快捷键"
+            title="语音快捷键"
+          >
+            <Keyboard size={18} strokeWidth={1.7} />
+          </HeroButton>
+        ) : null}
+        <div className={d.content} style={{ height: keyboard ? (composerExpanded ? composerHeight : 36) : 48 }}>
+          <div className={d.entryLayer} aria-hidden={keyboard} inert={keyboard}>
+            <button type="button" ref={entryButton} className={d.entryButton} onClick={() => {
+              onKeyboardChange(true);
+              if (voiceIntroDue()) setVoiceKeys(true);
+            }} aria-expanded={false}>
+              <MessageCircle size={18} strokeWidth={1.8} aria-hidden />
+              <span>对话天枢</span>
             </button>
           </div>
           <div className={d.textLayer} aria-hidden={!keyboard} inert={!keyboard}>
@@ -400,6 +386,7 @@ export const ConversationDock = memo(function ConversationDock({
           </div>
         </div>
       </div>
+      {voiceKeys ? <VoiceKeysDialog onClose={() => setVoiceKeys(false)} /> : null}
     </div>
   );
 }, sameDockProps);

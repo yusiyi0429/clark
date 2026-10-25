@@ -39,6 +39,9 @@
 .missionLink.missionLink { margin-inline-start: -8px; padding-inline: 8px; }
 .missionText.missionText { margin: 0; color: var(--ts-text, #1f2a3d); font-size: 14px; font-weight: 600; line-height: 1.7; overflow-wrap: anywhere; }
 .returned.returned { margin: 4px 0 0; color: var(--ts-judgment, #92400e); font-size: 13px; line-height: 1.7; }
+/* 卡住：正文墨色，前面一个琥珀小点（同首页「N 天没动」），不染字。 */
+.blocker { display: flex; align-items: baseline; gap: 6px; margin: 4px 0 0; color: var(--ink); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.blocker::before { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--warning); content: ""; transform: translateY(-1px); }
 .titleRow { display: flex; align-items: flex-start; gap: 20px; margin-top: 14px; }
 .title { flex: 1; min-width: 0; margin: 0; color: var(--ts-text, #1f2a3d); font-size: 24px; font-weight: 600; line-height: 1.4; letter-spacing: 0; overflow-wrap: anywhere; }
 .metaRow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 12px; }
@@ -151,17 +154,38 @@ button.evidence:hover { text-decoration: underline; text-underline-offset: 3px; 
 .rowName { flex: none; max-width: 50%; overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .rowMeta { flex: 1; min-width: 0; overflow: hidden; color: #6b7482; font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
 
-/* 执行过程：默认折叠成一行（和首页「已完成」折叠行同一种）；展开是会议原话、推进人的判断和进展。 */
+/* 没有进展时的一行「写一条进展」（和首页「已完成」折叠行同一种）。 */
 .toggle {
   display: inline-flex; align-items: center; gap: 4px; justify-self: start; max-width: 100%; min-height: 30px; margin-top: -8px;
   padding: 4px 8px 4px 4px; border: 0; border-radius: 9px; background: none; color: #8a95a5; font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
 }
 .toggle:hover { background: #eef2f7a8; color: #5f6b7c; }
 .toggle:focus-visible { outline: 2px solid #3a83f7; outline-offset: 2px; }
-.toggle > svg { flex: none; transition: transform .18s ease; }
-.toggle[aria-expanded='true'] > svg { transform: rotate(90deg); }
+.toggle > svg { flex: none; }
 .toggleText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.process.process { gap: 12px; padding-top: 4px; }
+/* 执行过程：一行一条、最新的在前；左边一列等宽的时间，行间一道很淡的线；整列不铺满，读起来是一列纪录。 */
+.process.process { gap: 12px; }
+.write.write { gap: 4px; height: 28px; min-height: 28px; margin-left: auto; padding: 0 8px; border-radius: 8px; color: #6b7482; font-size: 12.5px; font-weight: 500; }
+.write.write:hover { background: rgb(31 53 86 / 6%); color: #1f2a3d; }
+.log, .process > .blockHead { max-width: 620px; }
+.log { display: grid; margin: 0; padding: 0; list-style: none; }
+.logItem + .logItem { border-top: 1px solid #eef2f7; }
+.logRow {
+  display: grid; grid-template-columns: 84px minmax(0, 1fr) 14px; align-items: baseline; column-gap: 12px; box-sizing: border-box; width: 100%;
+  margin: 0; padding: 9px 8px; border: 0; border-radius: 8px; background: none; color: var(--ts-text, #1f2a3d); font: inherit; text-align: left;
+}
+button.logRow { cursor: pointer; }
+button.logRow:hover { background: #eef2f7a8; }
+button.logRow:focus-visible { outline: 2px solid #3a83f7; outline-offset: -2px; }
+.logTime { color: #8a95a5; font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.logText { min-width: 0; font-size: 14.5px; line-height: 1.7; overflow-wrap: anywhere; }
+.logChevron { align-self: center; color: #b4bcc8; transition: transform .18s ease; }
+button.logRow[aria-expanded='true'] .logChevron { transform: rotate(90deg); }
+.logDetail { display: grid; gap: 6px; padding: 0 8px 12px 104px; }
+.process .logDetail p { margin: 0; color: #4d5a6c; font-size: 13.5px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.logLinks { display: flex; flex-wrap: wrap; gap: 4px 14px; min-width: 0; }
+.logLinks a { color: var(--ink-muted); font-size: 13px; overflow-wrap: anywhere; text-decoration: underline; text-underline-offset: 3px; }
+.logDetail small { color: #8a95a5; font-size: 12px; line-height: 1.6; }
 .pinned { display: grid; gap: 4px; min-width: 0; padding: 12px 14px; border-radius: 14px; background: #f5f7fa; }
 .pinned small { color: #8a95a5; font-size: 11.5px; line-height: 1.6; }
 .pinned p { margin: 0; color: var(--ts-text, #1f2a3d); font-size: 14.5px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -202,10 +226,12 @@ button.evidence:hover { text-decoration: underline; text-underline-offset: 3px; 
   .entries .entryText strong { font-size: 13.5px; }
   .cardMeta, .heroMeta, .rowMeta, .recordMeta { font-size: 13px; }
   .toggle { min-height: 36px; font-size: 14px; }
+  .logText { font-size: 15px; }
+  .logTime { font-size: 13px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pulse, .wash, .caretLine > em { animation: none; }
-  .card, .toggle > svg { transition: none; }
+  .card, .logChevron { transition: none; }
   .card:hover { transform: none; }
 }
 :global([data-reduce-motion='true']) .pulse, :global([data-reduce-motion='true']) .wash, :global([data-reduce-motion='true']) .caretLine > em { animation: none; }

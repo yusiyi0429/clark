@@ -49,12 +49,12 @@ export const AppendTaskProgressRequest = Type.Object({
   links: Type.Optional(Type.Array(TaskProgressLink, { maxItems: 5 })),
 }, { additionalProperties: false });
 
-/** 所属个人任务：本人已确定任务卡上的一项；同一项个人任务下的执行事项按先后排成第 1..steps 步。 */
+/** 所属 Mission；同一个 Mission 下的执行事项按先后排成第 1..steps 步。从本体导入、没有任务卡的 Mission cardId 为 null。 */
 export const TaskMissionRef = Type.Object(
   {
     missionId: Type.String({ minLength: 1 }),
     title: Type.String({ minLength: 1 }),
-    cardId: Type.String({ minLength: 1 }),
+    cardId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     period: Period,
     battlefieldName: Type.String(),
     step: Type.Integer({ minimum: 1 }),
@@ -70,6 +70,16 @@ export const TaskOrigin = Type.Object(
     meetingId: Type.String({ minLength: 1 }),
     meetingTitle: Type.String({ minLength: 1 }),
     quote: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+/** 卡住：推进人写的「卡在哪」、在等的人（可空）、从哪一刻算起（ISO 8601）。 */
+export const TaskBlocker = Type.Object(
+  {
+    reason: Type.String({ minLength: 1, maxLength: 200 }),
+    waitingOn: Type.Union([TaskPerson, Type.Null()]),
+    since: Type.String({ minLength: 1 }),
   },
   { additionalProperties: false },
 );
@@ -101,6 +111,8 @@ export const TaskView = Type.Object(
     awaitingAcceptance: Type.Boolean(),
     /** 挂在本月计划里的哪个 Task（本体里的 Task 对象 id）；没挂为 null。 */
     planTaskId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    /** 没卡住为 null；事项完成时清掉。 */
+    blocker: Type.Union([TaskBlocker, Type.Null()]),
     /** ISO 8601 */
     createdAt: Type.String({ minLength: 1 }),
     updatedAt: Type.String({ minLength: 1 }),
@@ -223,6 +235,10 @@ export const PatchMyTaskRequest = Type.Object(
     missionId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
     /** 挂到哪个 Task；null 取消挂靠。 */
     planTaskId: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()])),
+    /** 卡在哪；null 清掉（连同在等谁）。 */
+    blockedReason: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()])),
+    /** 在等谁（人员 id）；要有卡在哪才算数，null 清掉。 */
+    waitingOn: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -253,7 +269,7 @@ export const TaskDetailResponse = Type.Object(
     myNote: Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()]),
     myNoteAt: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     role: Type.Union([Type.Literal("owner"), Type.Literal("collaborator")]),
-    /** 可挂的个人任务：本人已确定、月份未过的任务卡上的条目。 */
+    /** 可挂的 Mission：本人的、不是占位、月份未过（和首页同一口径，不要求任务卡已确认）。 */
     missionOptions: Type.Array(Type.Object(
       { missionId: Type.String({ minLength: 1 }), title: Type.String({ minLength: 1 }), battlefieldName: Type.String(), period: Period },
       { additionalProperties: false },
@@ -374,6 +390,8 @@ export const NotificationKind = Type.Union([
   Type.Literal("collection_reminder"),
   /** 会议卡草稿生成好了：主持人和创建人各一条，一场会只发一次；objectType=meeting。 */
   Type.Literal("meeting_card_pending"),
+  /** 别人在你推进或协作的执行事项上写了进展；同一件事没看过的只留一条，文案取最新一条；objectType=task。 */
+  Type.Literal("task_progress_added"),
 ]);
 
 /** 通知只指向对象；text 在读取时按对象当前状态组合。 */

@@ -132,11 +132,12 @@ describe("文字引用不混进二级页输入", () => {
 });
 
 describe("月度计划逐段评审：就地入口只是召唤这一个输入条", () => {
-  it("「对这一段提意见」：引用挂上后直接进入听写，不发送、不动草稿", () => {
+  it("新引用挂上：光标进输入框，不进听写、不发送、不动草稿（语音交给微信输入法）", () => {
     h.storage.set("tianshu-conversation-draft-v1:sun:mission-card:card-01", "我自己的问题");
-    const { send, render } = setup({ text: quote.text, nonce: 2, listen: true });
+    const { send, render } = setup({ text: quote.text, nonce: 2 });
     render(); h.frames.forEach((frame) => frame());
-    expect(h.dictationStart).toHaveBeenCalledOnce();
+    expect(h.inputElement.focus).toHaveBeenCalledOnce();
+    expect(h.dictationStart).not.toHaveBeenCalled();
     expect(h.field!.value).toBe("我自己的问题");
     expect(send).not.toHaveBeenCalled();
   });

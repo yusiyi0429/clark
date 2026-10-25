@@ -15,7 +15,7 @@ const step = {
   mission: { missionId: "sun-202610-1", title: "CEO Agent 核心体验", cardId: "card-1", period: "2026-10", battlefieldName: "灯塔项目", step: 2, steps: 4 },
   waitingOn: { taskId: "7b0c3c1e-0000-4000-8000-000000000000", title: "对齐验收口径" },
   owner: person, collaborators: [{ personId: "bai-tiantian", name: "白田田" }], latestProgress: null,
-  returnReason: null, origin: null, awaitingAcceptance: false, planTaskId: null, createdAt: now, updatedAt: now,
+  returnReason: null, origin: null, awaitingAcceptance: false, planTaskId: null, blocker: null, createdAt: now, updatedAt: now,
 };
 /** uuid 格式由 Fastify 校验；这里只查字段与范围。 */
 const withoutFormat = (schema: typeof CreateMyTaskRequest) => ({ ...schema, properties: { ...schema.properties, clientId: { ...schema.properties.clientId, format: undefined } } });

@@ -185,9 +185,7 @@
   .segment.segment { gap: 4px; padding: 0 10px; }
 }
 
-/* ── 右端那颗钮：麦克风 / 发送 / 停止 ────────────────────────────────── */
-
-.actionSlot { display: inline-flex; }
+/* ── 右端那颗钮：发送 / 停止 ────────────────────────────────── */
 
 .actionButton.actionButton {
   position: relative;
@@ -210,8 +208,9 @@
 .actionButton.actionButton[data-state='stop'] { background: var(--tone-send); color: #ffffff; }
 .actionButton.actionButton:disabled,
 .actionButton.actionButton[data-disabled='true'] { cursor: default; opacity: 1; }
-.actionButton.actionButton[data-state='mic']:disabled,
-.actionButton.actionButton[data-state='mic'][data-disabled='true'] { color: color-mix(in srgb, var(--tone-muted) 55%, transparent); pointer-events: none; }
+/* 还没写字（或发不了）的发送钮：退回浅底灰字。 */
+.actionButton.actionButton[data-state='send']:disabled,
+.actionButton.actionButton[data-state='send'][data-disabled='true'] { background: var(--tone-mic); color: color-mix(in srgb, var(--tone-muted) 55%, transparent); pointer-events: none; }
 .actionButton.actionButton:not(:disabled):active { transform: scale(0.94); }
 .actionButton.actionButton:focus-visible { outline: 2px solid var(--tone-send); outline-offset: 2px; }
 
@@ -225,7 +224,6 @@
   transition: opacity 150ms ease, transform 150ms ease;
 }
 
-.actionButton[data-state='mic'] .icon[data-icon='mic'],
 .actionButton[data-state='send'] .icon[data-icon='send'],
 .actionButton[data-state='stop'] .icon[data-icon='stop'] { opacity: 1; transform: none; }
 
@@ -287,8 +285,8 @@
 @media(max-width:959px){.badge.badge{min-width:19px;height:19px;padding:0 5px;font-size:13px;top:-7px;right:-7px}}
 
 /*
- * 点触下限（docs/superpowers/specs/2026-10-12-mobile-foldable.md §3.3）：手持与触屏时右下角的麦克风 / 发送 / 停止、附件到 44，
- * 频道钮（窄屏上按它打开对话层）高 40、透明热区上下补到 44。麦克风仍在右下，单手拇指够得着。鼠标的电脑不变。
+ * 点触下限（docs/superpowers/specs/2026-10-12-mobile-foldable.md §3.3）：手持与触屏时右下角的发送 / 停止、附件到 44，
+ * 频道钮（窄屏上按它打开对话层）高 40、透明热区上下补到 44。发送仍在右下，单手拇指够得着。鼠标的电脑不变。
  */
 @media (max-width: 959px), (pointer: coarse) {
   .actionButton.actionButton { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }

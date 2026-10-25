@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import type {
   TCard,
   TMeetingBookingRequest,
   TMeetingDraft,
   TMeetingParticipant,
+  TPickedWorldAnchor,
   TSupplementRequest,
   TWorldAnchor,
 } from "@warmap/contracts";
@@ -38,11 +39,13 @@ import {
   type StoredWorldAnchor,
 } from "./meetingStore.js";
 
-type ResolvedParticipants = { participants: TMeetingParticipant[]; ceo: TMeetingParticipant; lead: TMeetingParticipant };
+export type ResolvedParticipants = { participants: TMeetingParticipant[]; ceo: TMeetingParticipant; lead: TMeetingParticipant };
 
-function resolveParticipants(
+/** requireDriLead = false：不查主持人的 dri 角色（待整理的妙记所有者可能是 CEO 或只有 participant 角色）。 */
+export function resolveParticipants(
   peopleDirectory: PeopleDirectory,
   input: { leadDriId: string; ceoParticipantId: string; participants: string[] },
+  { requireDriLead = true }: { requireDriLead?: boolean } = {},
 ): ResolvedParticipants | { error: MeetingActionError } {
   const byId = new Map(peopleDirectory.searchPeople(undefined).map((person) => [person.personId, person]));
   const ids = unique([input.ceoParticipantId, input.leadDriId, ...input.participants]);
@@ -55,7 +58,7 @@ function resolveParticipants(
     return { error: { status: 400, code: "INVALID_CEO", message: "ceoParticipantId 必须具有 ceo 角色", fieldErrors: { ceoParticipantId: "role ceo required" } } };
   }
   const lead = byId.get(input.leadDriId)!;
-  if (!lead.roles.includes("dri")) {
+  if (requireDriLead && !lead.roles.includes("dri")) {
     return { error: { status: 400, code: "INVALID_LEAD_DRI", message: "leadDriId 必须具有 dri 角色", fieldErrors: { leadDriId: "role dri required" } } };
   }
   const participants = ids.map((id) => {
@@ -262,18 +265,24 @@ export async function bookMeeting(
   if (!ceo) return { error: { status: 400, code: "INVALID_CEO", message: "company-people.v1 中没有 ceo 角色", fieldErrors: { leadDriId: "ceo missing" } } };
   const resolved = resolveParticipants(deps.peopleDirectory, { leadDriId, ceoParticipantId: ceo.personId, participants: input.participants ?? [] });
   if ("error" in resolved) return resolved;
-  const options = await deps.anchorOptions(shanghaiDate(scheduledAt).slice(0, 7));
+  const anchors = resolveAnchors(input.anchors, await deps.anchorOptions(shanghaiDate(scheduledAt).slice(0, 7)));
+  if ("error" in anchors) return anchors;
+  return insertScheduledMeeting(deps.pool, deps.peopleDirectory, deps.preflightAgent, deps.secret, {
+    title: input.title, scheduledAt, endsAt, resolved, issueIds: [], originRef: { type: "booking" },
+    worldAnchors: anchors, createdBy: viewer.personId,
+  }, deps.introAgent);
+}
+
+/** 挑的挂点（去重）要在那个月的选项里；有一个不在就 ANCHOR_NOT_FOUND。 */
+export function resolveAnchors(picked: TPickedWorldAnchor[], options: TWorldAnchor[]): StoredWorldAnchor[] | { error: MeetingActionError } {
   const anchors: StoredWorldAnchor[] = [];
-  for (const anchor of input.anchors) {
+  for (const anchor of picked) {
     if (anchors.some((other) => other.kind === anchor.kind && other.id === anchor.id)) continue;
     const option = options.find((candidate) => candidate.kind === anchor.kind && candidate.id === anchor.id);
     if (!option) return { error: { status: 400, code: "ANCHOR_NOT_FOUND", message: "挂点只能是 LTO、本月 PO、本月 Mission 或责任单元", fieldErrors: { anchors: "unknown anchor" } } };
     anchors.push(storedAnchor(option));
   }
-  return insertScheduledMeeting(deps.pool, deps.peopleDirectory, deps.preflightAgent, deps.secret, {
-    title: input.title, scheduledAt, endsAt, resolved, issueIds: [], originRef: { type: "booking" },
-    worldAnchors: anchors, createdBy: viewer.personId,
-  }, deps.introAgent);
+  return anchors;
 }
 
 /** 建一场 scheduled 会（配置页、预约共用）：落库、同步成员、邀请介绍、可选会前材料，再跑首次预审。 */
@@ -708,4 +717,47 @@ export async function importDriMeeting(
     resolved.participants.map((person) => person.personId).filter((id) => id !== resolved.lead.personId), [resolved.lead.personId]);
   await startPreflight(pool, peopleDirectory, preflightAgent, meetingId);
   return { status: 201, card: projectMeetingCard((await getMeetingRow(pool.query.bind(pool), meetingId))!, secret) };
+}
+
+/**
+ * 待整理的妙记整理成一场已开完的会（feishuMinuteInbox.ts，在调用方的事务里）：起止取妙记，所有者是主持人也是建会的人，
+ * 妙记已经记在会上、从现在起等妙记。不跑预审、不发会议群介绍、不在飞书约会。
+ * 妙记已在别的会上、或同一 external_id 已有会时返回 null。
+ */
+export async function insertMinuteMeeting(client: PoolClient, input: {
+  title: string; startsAt: Date; endsAt: Date; resolved: ResolvedParticipants; worldAnchors: StoredWorldAnchor[];
+  minuteToken: string; feishuMeetingId: string; now: Date;
+}): Promise<string | null> {
+  const { resolved } = input;
+  const inserted = await client.query<{ id: string }>(
+    `INSERT INTO meetings
+       (id, version, title, status, scheduled_at, ends_at, started_at, ended_at, lead_dri_id, ceo_participant_id, created_by,
+        participants, issue_ids, preflight, draft, origin_ref, action_fingerprints, world_anchors,
+        external_id, minute_token, feishu_meeting_id, minutes_status, minutes_waiting_since)
+     VALUES ($1, 1, $2, 'scheduled', $3, $4, $3, $4, $5, $6, $5, $7::jsonb, '[]'::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, '[]'::jsonb, $11::jsonb,
+       $12, $13, $14, 'waiting', $15)
+     ON CONFLICT DO NOTHING
+     RETURNING id`,
+    [
+      randomUUID(),
+      input.title,
+      input.startsAt,
+      input.endsAt,
+      resolved.lead.personId,
+      resolved.ceo.personId,
+      JSON.stringify(resolved.participants),
+      JSON.stringify(emptyPreflight(input.now)),
+      JSON.stringify(emptyDraft()),
+      JSON.stringify({ type: "feishu_minute", minuteToken: input.minuteToken }),
+      JSON.stringify(input.worldAnchors),
+      `feishu-minute:${input.minuteToken}`,
+      input.minuteToken,
+      input.feishuMeetingId,
+      input.now,
+    ],
+  );
+  const id = inserted.rows[0]?.id;
+  if (!id) return null;
+  await syncMeetingMembers(client, id, resolved.participants.map((person) => person.personId));
+  return id;
 }

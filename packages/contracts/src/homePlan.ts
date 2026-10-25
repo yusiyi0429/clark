@@ -35,6 +35,21 @@ export const HomePlanTask = Type.Object(
 );
 
 /** color 按 Mission 在列表里的顺序取固定色板，同一个 Mission 每次都是同一个颜色。 */
+/**
+ * 从本体载入的 Mission 的本体状态：status 是本体生命周期（如 draft），label 是本体给的中文名（如「草稿」）；
+ * version 是载入时的本体版本，readAt 是读取时间，gaps 是本体里还空着的部分（成果、成功标准、时间边界、Mission 计划、Task 全景）。
+ */
+export const HomePlanMissionWorld = Type.Object(
+  {
+    status: Type.String({ minLength: 1 }),
+    label: Type.String({ minLength: 1 }),
+    version: Type.Integer({ minimum: 1 }),
+    readAt: Type.String({ minLength: 1 }),
+    gaps: Type.Array(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
 export const HomePlanMission = Type.Object(
   {
     missionId: Type.String({ minLength: 1 }),
@@ -42,6 +57,8 @@ export const HomePlanMission = Type.Object(
     title: Type.String(),
     cardId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     color: Type.String(),
+    /** 不是从本体载入的为 null。 */
+    world: Type.Union([HomePlanMissionWorld, Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -50,6 +67,8 @@ export const HomePlanMission = Type.Object(
  * Activity 就是执行事项；column 由服务端分好：已完成、本周、之后。overdue：没完成，且截止早于本周一或挂在之前月份的 Mission 下。
  * missionId 是事项挂的 Mission，独立事项为 null；任务卡没确认时 item.mission 为空，按 Mission 归组看这里。
  * 之前月份 Mission 下没做完的也在 activities 里（放本周），它的 missionId 不在 missions 里。
+ * lastActivityAt：最近一次动静（最新一条进展的时间，没有进展用创建时间）。
+ * idleDays：进行中、没在等验收、且最近一次动静之后已过 3 个工作日时，是那天到今天的自然日数；其余为 null。
  */
 export const HomePlanActivity = Type.Object(
   {
@@ -57,6 +76,8 @@ export const HomePlanActivity = Type.Object(
     missionId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     column: Type.Union([Type.Literal("done"), Type.Literal("week"), Type.Literal("later")]),
     overdue: Type.Boolean(),
+    lastActivityAt: Type.String({ minLength: 1 }),
+    idleDays: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -100,6 +121,7 @@ export type THomePlanGate = Static<typeof HomePlanGate>;
 export type THomePlanMark = Static<typeof HomePlanMark>;
 export type THomePlanTask = Static<typeof HomePlanTask>;
 export type THomePlanMission = Static<typeof HomePlanMission>;
+export type THomePlanMissionWorld = Static<typeof HomePlanMissionWorld>;
 export type THomePlanActivity = Static<typeof HomePlanActivity>;
 export type THomePlanResponse = Static<typeof HomePlanResponse>;
 export type TCreatePlanMarkRequest = Static<typeof CreatePlanMarkRequest>;

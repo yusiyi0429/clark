@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { TMeetingCardV1Payload } from "@warmap/contracts";
 import { getScopeObject } from "../src/conversations.js";
 import { getMeeting } from "../src/mcpCeoReads.js";
+import { payloadHash } from "../src/meetingCardHash.js";
 import { listConfirmedMeetings, readConfirmedMeeting } from "../src/meetingCardRead.js";
 import type { Query } from "../src/meetingStore.js";
+import type { PostMeetingAgent } from "../src/outcome.js";
 import type { TestApp } from "./helpers.js";
-import { CEO, confirm, edit, HOST, OWNER, ready, setup } from "./meetingCardFixture.js";
+import { CEO, confirm, edit, HOST, OCCURRED, OWNER, ready, setup } from "./meetingCardFixture.js";
 import { projection, stubWorld } from "./worldFixture.js";
 
 // 给独立 Chat 的只读接口（拍板 12）和现有读会议的地方：只读当前确认版，草稿不算事实；旧会议照旧格式。
@@ -33,10 +36,12 @@ async function confirmThenEditDraft(t: TestApp, host: string, meetingId: string)
 const internal = (t: TestApp, url: string, headers: Record<string, string>) => t.app.inject({ method: "GET", url, headers });
 /** 本轮视角（10/22 起必填）：CEO 用公司视角，其他人用成员视角。 */
 const asOwner = (personId: string) => ({ authorization: `Bearer ${TOKEN}`, "x-owner-id": personId, "x-viewer-role": personId === CEO ? "ceo" : "member" });
-/** 再复制 n 场已确认的会（目录上限用）。 */
-async function cloneConfirmed(t: TestApp, meetingId: string, n: number) {
+/** 再复制 n 场已确认的会（目录上限、检索排序用），返回新会的 id。 */
+async function cloneConfirmed(t: TestApp, meetingId: string, n: number): Promise<string[]> {
+  const ids: string[] = [];
   for (let i = 0; i < n; i++) {
     const id = crypto.randomUUID();
+    ids.push(id);
     await t.sql("CREATE TEMP TABLE m_copy AS SELECT * FROM meetings WHERE id = $1", [meetingId]);
     await t.sql("UPDATE m_copy SET id = $1", [id]);
     await t.sql("INSERT INTO meetings SELECT * FROM m_copy");
@@ -48,7 +53,30 @@ async function cloneConfirmed(t: TestApp, meetingId: string, n: number) {
       await t.sql("DROP TABLE c_copy");
     }
   }
+  return ids;
 }
+/** 改一场会的确认版正文，并重算确认时记下的摘要值（当作正常确认过的）。 */
+async function rewriteConfirmed(t: TestApp, meetingId: string, change: (payload: TMeetingCardV1Payload) => void) {
+  const [row] = await t.sql("SELECT payload FROM meeting_card_confirmations WHERE meeting_id = $1", [meetingId]);
+  const payload = row.payload as TMeetingCardV1Payload;
+  change(payload);
+  await t.sql("UPDATE meeting_card_confirmations SET payload = $2::jsonb, confirmation = jsonb_set(confirmation, '{payloadHash}', to_jsonb($3::text)) WHERE meeting_id = $1",
+    [meetingId, JSON.stringify(payload), payloadHash(payload)]);
+}
+/** 决定只写在段落正文里的会（10/23 诊断：「预发环境回收提前到 10/27」不在会议名、摘要和段落标题里）。 */
+const teardownAgent: PostMeetingAgent = {
+  async generate() {
+    return { candidate: {
+      summary: "接口统一切到 v2，渠道预算下周再定。",
+      sections: [
+        { heading: "预发环境", body: "已定：预发环境回收提前，由 10/28 前调整为 10/27 前停服务、删卷和站点。", turnIds: ["turn-002"] },
+        { heading: "渠道预算", body: "未定：渠道预算下周看数据再定。", turnIds: ["turn-001"] },
+      ],
+      objectChanges: [{ targetRef: "obj-po-1#target/acc-1", after: { text: "十月底前 4 家客户上线" }, basisSections: [1] }],
+      actionItems: [{ text: "渠道看板接到 v2", ownerPersonId: OWNER, dueDate: "2026-06-30", basisSections: [2] }],
+    } };
+  },
+};
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -159,6 +187,61 @@ describe("给独立 Chat 的确认会议只读接口", () => {
       expect(tampered.statusCode).toBe(500);
       expect(tampered.json().code).toBe("PAYLOAD_HASH_MISMATCH");
       expect(tampered.body).not.toContain("接口切换");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("检索确认版正文：按词切分，命中正文段落、对象修改和行动项，带段落引用和片段；命中词多的会在前；可读范围和摘要值核对同详情", async () => {
+    ontology();
+    const { t, host, meetingId } = await setup(teardownAgent, { internalChatToken: TOKEN });
+    try {
+      const draftVersion = await ready(t, host, meetingId);
+      expect((await confirm(t, host, meetingId, { draftVersion, writeToWorld: false })).statusCode).toBe(200);
+      const search = async (personId: string, query: string) => {
+        const res = await internal(t, `/internal/confirmed-meetings?${new URLSearchParams({ query })}`, asOwner(personId));
+        expect(res.statusCode).toBe(200);
+        return res.json().meetings as { meetingId: string; matches: { ref: string; snippet: string }[] }[];
+      };
+
+      // 「预发 回收」两个词都只在正文里：按词切分后能找到，片段就是那段正文。
+      expect(await search(CEO, "预发 回收")).toEqual([{ meetingId, title: "接口切换会", occurredAt: OCCURRED, participants: expect.any(Array), currentConfirmedVersion: 1,
+        matches: [{ ref: "sec-1", kind: "section", heading: "预发环境", snippet: "已定：预发环境回收提前，由 10/28 前调整为 10/27 前停服务、删卷和站点。" }] }]);
+      // 段落按命中词数排：sec-1 两个，摘要、sec-2、行动项各一个，最多 3 段。
+      expect((await search(CEO, "预发 回收 渠道"))[0].matches.map((match) => match.ref)).toEqual(["sec-1", "summary", "sec-2"]);
+      // 对象修改后的文字、行动项也能搜到。
+      expect((await search(CEO, "客户上线"))[0].matches).toEqual([{ ref: "chg-1", kind: "objectChange", heading: "十月交付 · 验收标准", snippet: "十月底前 4 家客户上线" }]);
+      expect((await search(CEO, "看板"))[0].matches).toEqual([{ ref: "act-1", kind: "actionItem", heading: "行动项 · 截止 2026-06-30", snippet: "渠道看板接到 v2" }]);
+      expect(await search(CEO, "不存在的词")).toEqual([]);
+      // 汉字按二元组切：连写的「预发回收」、整句问法都能命中那段。
+      for (const query of ["预发回收", "我需要在几号前完成预发环境回收"]) {
+        expect((await search(CEO, query))[0].matches[0]).toMatchObject({ ref: "sec-1", snippet: expect.stringContaining("10/27 前") });
+      }
+      // 只有空白和标点：和不带 query 一样；query 超过 200 字 → 400。
+      const plain = await internal(t, "/internal/confirmed-meetings", asOwner(CEO));
+      expect((await internal(t, `/internal/confirmed-meetings?${new URLSearchParams({ query: " ，。！ ?" })}`, asOwner(CEO))).json()).toEqual(plain.json());
+      expect(plain.json().meetings[0]).not.toHaveProperty("matches");
+      const tooLong = await internal(t, `/internal/confirmed-meetings?${new URLSearchParams({ query: "预".repeat(201) })}`, asOwner(CEO));
+      expect([tooLong.statusCode, tooLong.json().code]).toEqual([400, "INVALID_INPUT"]);
+
+      // 另一场更晚的会只命中「预发」：排在两个词都命中的这场后面；长段落只给命中词附近。
+      const [other] = await cloneConfirmed(t, meetingId, 1);
+      await rewriteConfirmed(t, other, (payload) => {
+        payload.occurredAt = "2026-06-08T10:00:00+08:00";
+        payload.sections[0].body = `${"背景".repeat(150)}预发环境下周再看。`;
+      });
+      const ranked = await search(CEO, "预发 回收");
+      expect(ranked.map((meeting) => meeting.meetingId)).toEqual([meetingId, other]);
+      expect(ranked[1].matches[0].snippet).toMatch(/^…(背景){30}预发环境下周再看。$/);
+
+      // 可读范围同详情：测试丙在参会人里能搜到；实际参会只有主持人和 CEO 时搜不到。
+      expect((await search(OWNER, "预发 回收")).map((meeting) => meeting.meetingId)).toContain(meetingId);
+      await t.sql("UPDATE meetings SET attendees_actual = $2::jsonb WHERE id = ANY($1::uuid[])", [[meetingId, other], JSON.stringify([HOST, CEO])]);
+      expect(await search(OWNER, "预发 回收")).toEqual([]);
+
+      // 正文被改过、和确认时的摘要值对不上：不进检索结果。
+      await t.sql(`UPDATE meeting_card_confirmations SET payload = jsonb_set(payload, '{summary}', to_jsonb((payload->>'summary') || '。')) WHERE meeting_id = $1`, [meetingId]);
+      expect((await search(CEO, "预发 回收")).map((meeting) => meeting.meetingId)).toEqual([other]);
     } finally {
       await t.close();
     }

@@ -30,7 +30,7 @@ export function CeoWorkspace({ initialCards, viewerId, account, children }: { in
   useEffect(() => setCards(initialCards), [initialCards]);
   const onCard = useCallback((updated: Card) => setCards((current) => replaceActionCard(current, updated)), []);
   return (
-    <WorkspaceFrame homeHref="/" viewerId={viewerId} account={account} homeCards={cards} agentTitle="我的 Agent"
+    <WorkspaceFrame homeHref="/" viewerId={viewerId} account={account} homeCards={cards} agentTitle="我的对话"
       home={<CeoHome cards={cards} onCard={onCard} account={account} />}
       notifications={(api, pathname) => <NotificationRail cards={cards} viewerId={viewerId} onNavigate={api.navigate} onHome={() => api.navigate("/")} homeActive={!api.detailOpen} currentHref={api.detailOpen ? pathname : undefined} account={account} />}
     >{children}</WorkspaceFrame>

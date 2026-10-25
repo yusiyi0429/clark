@@ -173,6 +173,34 @@ describe("三层取用的权限与范围标签", () => {
     });
   }, 60_000);
 
+  it("战场名其实是能力域（从本体载入的 Mission 只挂能力域）：按能力域读；两边都对不上时不筛、照常读并说明", async () => {
+    await createTestDb(async ({ db }) => {
+      await migrate(db);
+      const q: Q = (sql, params) => db.query(sql, params);
+      await seed(q);
+      await q("INSERT INTO capability_config (id, version, code, name, six_month_outcome) VALUES ('agents', 1, '07', '智能体', '')");
+      await q(`INSERT INTO missions (id, version, code, period, title, owner_id, capability_id, battlefield_ids, outcome, source_ref, source_document_id, source_revision, source_title)
+        VALUES ('m-yi-agents', 1, 'm-yi-agents', '2026-10', '乙的智能体 Mission', $1, 'agents', '[]'::jsonb, '目标结果', 'fixture://m', 'fixture-agents', 1, 'fixture')`, [YI]);
+      await q(`INSERT INTO tasks (id, title, status, owner_id, created_by, mission_id, step_order) VALUES ($1, '乙的智能体事项', 'in_progress', $2, 'self', 'm-yi-agents', 1)`, [randomUUID(), YI]);
+      const titles = (read: { missions: unknown }) => (read.missions as { title: string }[]).map((mission) => mission.title).sort();
+
+      const member = mapFor(q, YI, "member");
+      const byDomain = await member.map.readMissionCards({ people: "me", battlefieldId: "智能体" });
+      expect(titles(byDomain)).toEqual(["乙的智能体 Mission"]);
+      expect(byDomain.unknownBattlefield).toBeUndefined();
+      expect(member.scopes.at(-1)?.label).toBe("智能体 · 我 · 10 月");
+      const progress = await member.map.readProgress({ people: "me", battlefieldId: "智能体" });
+      expect(JSON.stringify(progress)).toContain("乙的智能体事项");
+
+      const unknown = await member.map.readMissionCards({ people: "me", battlefieldId: "不存在" });
+      expect(titles(unknown)).toEqual(["m-yi-10 标题", "乙的智能体 Mission"].sort());
+      expect(unknown.unknownBattlefield).toBe("不存在");
+
+      const tree = await member.map.readObjectTree({ from: "battlefield:智能体", direction: "down" });
+      expect((tree as { items: { title: string }[] }).items.map((item) => item.title)).toEqual(["乙的智能体 Mission"]);
+    });
+  }, 60_000);
+
   it("范围标签的写法", () => {
     const names = new Map(PEOPLE.map((person) => [person.personId, person.displayName]));
     expect(scopeLabel({ people: null, from: "2026-07", to: "2026-10", viewerId: YI }, names)).toBe("全员 · 7–10 月");

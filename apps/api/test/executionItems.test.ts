@@ -3,6 +3,7 @@ import { describe,expect,it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { TaskView } from "@warmap/contracts";
 import { call,executionFixture,newTask } from "./executionFixture.js";
+import { TEST_CEO,TEST_MEMBER } from "./helpers.js";
 import { getScopeObject } from "../src/conversations.js";
 import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 
@@ -34,6 +35,65 @@ describe("执行事项",()=>{
           people:loadPeopleDirectory(f.t.env).searchPeople(undefined),now:new Date("2026-10-10T02:00:00Z")});
       expect(context.snapshot?.payload).toMatchObject({task:{id:first.json().id},mission:{title:"验证",battlefield_name:"增长战场"},monthOutcome:"本月目标"});
       expect((await call(f,f.ceo,"PATCH",`/api/me/tasks/${second.id}`,{version:1,status:"in_progress"})).statusCode).toBe(403);
+    } finally { await f.t.close(); }
+  });
+
+  it("能挂的 Mission：没有任务卡的本人 Mission（从本体载入）能挂；任务卡还在准备的、占位、别人的、过去月份的不能挂",async()=>{
+    const f=await executionFixture("open");
+    try {
+      const insert=(id:string,owner:string,period:string,placeholder:boolean)=>f.t.sql(`INSERT INTO missions(id,version,code,period,title,owner_id,
+        capability_id,battlefield_ids,outcome,source_ref,source_document_id,source_revision,source_title,placeholder)
+        VALUES($1,1,$1,$2,$3,$4,'method','["growth"]','目标','world:mission','world',1,'world',$5)`,[id,period,`本体 ${id}`,owner,placeholder]);
+      await insert("imported",TEST_MEMBER.personId,"2026-10",false);
+      await insert("held",TEST_MEMBER.personId,"2026-10",true);
+      await insert("others",TEST_CEO.personId,"2026-10",false);
+      await insert("september",TEST_MEMBER.personId,"2026-09",false);
+      const created=await call(f,f.member,"POST","/api/me/tasks",newTask("imported",{planTaskId:"t1"}));
+      expect(created.statusCode).toBe(200);
+      expect(created.json()).toMatchObject({mission:{missionId:"imported",title:"本体 imported",cardId:null,battlefieldName:"增长战场"},planTaskId:"t1"});
+      for (const missionId of ["held","others","september"])
+        expect((await call(f,f.member,"POST","/api/me/tasks",newTask(missionId))).json().code).toBe("MISSION_NOT_AVAILABLE");
+      // 任务卡还在讨论的 Mission 挂不上：卡没确认前，事项和私聊读不到它（和卡被退回重新准备时同一条）。
+      const onOpenCard=await call(f,f.member,"PATCH",`/api/me/tasks/${created.json().id}`,{version:1,missionId:"execution-one"});
+      expect(onOpenCard.json().code).toBe("MISSION_NOT_AVAILABLE");
+      const options=(await call(f,f.member,"GET",`/api/me/tasks/${created.json().id}`)).json().missionOptions;
+      expect(options.map((m:{missionId:string})=>m.missionId)).toEqual(["imported"]);
+    } finally { await f.t.close(); }
+  });
+
+  it("协作进展通知：别人写进展，推进人和其他协作者各一条（不含作者）；同一件事没看过的只留一条、顶到最前、文案取最新一条",async()=>{
+    const f=await executionFixture();
+    try {
+      const task=(await call(f,f.member,"POST","/api/me/tasks",newTask(null,{title:"路线图"}))).json();
+      await call(f,f.member,"POST",`/api/me/tasks/${task.id}/collaborators`,{personIds:["person-fixture-003"]});
+      const progress=(cookie:string,body:string)=>call(f,cookie,"POST",`/api/me/tasks/${task.id}/progress`,{clientEventId:randomUUID(),body});
+      const mine=async(cookie:string)=>((await call(f,cookie,"GET","/api/me/notifications")).json().notifications as {id:string;kind:string;text:string;objectId:string;readAt:string|null}[])
+        .filter((n)=>n.kind==="task_progress_added");
+      // 推进人写的：自己不收，协作者收。
+      expect((await progress(f.member,"自己写的")).statusCode).toBe(200);
+      expect(await mine(f.member)).toEqual([]);
+      expect((await mine(f.third)).map((n)=>n.text)).toEqual([expect.stringMatching(/写了进展：自己写的$/)]);
+      // 协作者写：推进人收到，作者本人不收。
+      expect((await progress(f.third,"补了竞品\n第二行不进文案")).statusCode).toBe(200);
+      const first=await mine(f.member);
+      expect(first).toHaveLength(1);
+      expect(first[0]).toMatchObject({objectId:task.id,readAt:null});
+      expect(first[0].text).toMatch(/在「路线图」写了进展：补了竞品$/);
+      // 协作者自己写的不顶掉他那条：文案仍是推进人写的那条。
+      expect((await mine(f.third)).map((n)=>n.text)).toEqual([expect.stringMatching(/写了进展：自己写的$/)]);
+      // 再写一条：还是一条，文案换成最新的；推进人再写一条，协作者收到。
+      expect((await progress(f.third,"竞品表定稿")).statusCode).toBe(200);
+      const second=await mine(f.member);
+      expect(second).toHaveLength(1);
+      expect(second[0].text).toMatch(/写了进展：竞品表定稿$/);
+      expect((await progress(f.member,"和明华过了一遍")).statusCode).toBe(200);
+      expect((await mine(f.third))[0].text).toMatch(/写了进展：和明华过了一遍$/);
+      // 看过之后再有新进展，另起一条。
+      expect((await call(f,f.member,"POST","/api/me/seen",{notificationIds:[second[0].id]})).statusCode).toBeLessThan(300);
+      expect((await progress(f.third,"补了一张图")).statusCode).toBe(200);
+      const third=await mine(f.member);
+      expect(third.filter((n)=>n.readAt===null)).toHaveLength(1);
+      expect(third).toHaveLength(2);
     } finally { await f.t.close(); }
   });
 

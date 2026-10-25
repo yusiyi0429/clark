@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { TMeetingBookingRequest, TMeetingMinutesFetchResponse, TMeetingWorldResponse, TPickedWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
+import type { TMeetingBookingRequest, TMeetingMinutesFetchResponse, TOrganizeFeishuMinuteRequest, TMeetingWorldResponse, TPickedWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
 import { browserApi, type Card } from "@/lib/api/client";
 
 /** 会议入本体：挂点与会议记录状态（GET /api/meetings/:id/world，不进会议卡）。 */
@@ -63,6 +63,27 @@ export async function bookMeeting(body: TMeetingBookingRequest): Promise<{ card:
   const { data, error, response } = await browserApi.POST("/api/meetings", { body });
   if (response.status === 401) { window.location.assign("/access"); return { code: "UNAUTHENTICATED" }; }
   return response.ok && data ? { card: data.card } : { code: (error as { code?: string } | undefined)?.code ?? "FAILED" };
+}
+
+/** 整理飞书里直接开的会：成功给新会议 id，失败给错误码。 */
+export async function organizeFeishuMinute(minuteToken: string, body: TOrganizeFeishuMinuteRequest): Promise<{ meetingId: string } | { code: string }> {
+  const { data, error, response } = await browserApi.POST("/api/me/feishu-minutes/{token}/organize", { params: { path: { token: minuteToken } }, body });
+  if (response.status === 401) { window.location.assign("/access"); return { code: "UNAUTHENTICATED" }; }
+  return response.ok && data ? { meetingId: data.meetingId } : { code: (error as { code?: string } | undefined)?.code ?? "FAILED" };
+}
+
+/** 把妙记记到天枢里约好的那场会：成功给会议 id，失败给错误码。 */
+export async function attachFeishuMinute(minuteToken: string, meetingId: string): Promise<{ meetingId: string } | { code: string }> {
+  const { data, error, response } = await browserApi.POST("/api/me/feishu-minutes/{token}/attach", { params: { path: { token: minuteToken } }, body: { meetingId } });
+  if (response.status === 401) { window.location.assign("/access"); return { code: "UNAUTHENTICATED" }; }
+  return response.ok && data ? { meetingId: data.meetingId } : { code: (error as { code?: string } | undefined)?.code ?? "FAILED" };
+}
+
+/** 忽略这份妙记，不再提示。 */
+export async function ignoreFeishuMinute(minuteToken: string): Promise<{ ok: true } | { code: string }> {
+  const { error, response } = await browserApi.POST("/api/me/feishu-minutes/{token}/ignore", { params: { path: { token: minuteToken } } });
+  if (response.status === 401) { window.location.assign("/access"); return { code: "UNAUTHENTICATED" }; }
+  return response.ok ? { ok: true } : { code: (error as { code?: string } | undefined)?.code ?? "FAILED" };
 }
 
 type MinutesResult = TMeetingMinutesFetchResponse | { code: string };

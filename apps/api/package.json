@@ -13,6 +13,7 @@
     "world:link-missions": "tsx scripts/world-link-missions.ts",
     "mission-cards:import": "tsx scripts/import-mission-card-drafts.ts",
     "missions:import": "tsx scripts/import-missions.ts",
+    "missions:load-world": "tsx scripts/load-world-missions.ts",
     "reviews:import": "tsx scripts/import-reviews.ts",
     "weekly-reviews:import": "tsx scripts/import-feishu-weekly-reviews.ts",
     "signals:backfill-covers": "tsx scripts/backfill-signal-covers.ts"

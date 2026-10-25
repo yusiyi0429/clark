@@ -110,6 +110,25 @@ describe("成员通知栏里的执行事项", () => {
     expect(groups.results[0].buttons.map((button) => button.label)).toEqual(["知道了"]);
   });
 
+  it("协作进展单独一组：写着谁在哪件事上写了进展；点开进事项并算看过，「知道了」也算看过；看过的不再列", async () => {
+    const opened: string[] = [];
+    const seen: string[][] = [];
+    const groups = memberNoticeGroups(
+      [
+        { id: "p1", kind: "task_progress_added", text: "刘人豪 在「Y」写了进展：补了竞品", objectType: "task", objectId: "t5", createdAt: "2026-10-23T08:39:00.000Z", readAt: null },
+        { id: "p2", kind: "task_progress_added", text: "旧的", objectType: "task", objectId: "t6", createdAt: "2026-10-22T08:00:00.000Z", readAt: "2026-10-22T09:00:00.000Z" },
+      ],
+      { markSeen: async (ids) => { seen.push(ids); return { ok: true }; }, returnTask: async () => ({ ok: true }), openTask: (id) => opened.push(id) },
+    );
+    expect(groups.assigned).toEqual([]);
+    expect(groups.results).toEqual([]);
+    expect(groups.progress.map((notice) => [notice.id, notice.title, notice.detail])).toEqual([["p1", "刘人豪 在「Y」写了进展：补了竞品", "协作进展 · 10/23 16:39"]]);
+    groups.progress[0].onOpen?.(null);
+    expect(opened).toEqual(["t5"]);
+    expect(seen).toEqual([["p1"]]);
+    expect(groups.progress[0].buttons.map((button) => button.label)).toEqual(["知道了"]);
+  });
+
   it("「等你验收」在回复与结果里：点开直接弹出验收；没有「知道了」，验收完或「还要继续做」才算处理", () => {
     const opened: string[] = [];
     const groups = memberNoticeGroups(

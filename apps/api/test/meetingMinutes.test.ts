@@ -1,12 +1,9 @@
-import { createHash, randomBytes } from "node:crypto";
-import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import type { TMeetingCardCandidate } from "@warmap/contracts";
-import { createTestApp, preflightCandidate, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
-import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
+import { createTestApp, preflightCandidate, type TestApp } from "./helpers.js";
+import { authorize, CEO, feishuEnv, HOST, OWNER, PEOPLE_SEED, recordingOutcome, TRANSCRIPT } from "./feishuMinutesFixtures.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
 import { loadPeopleDirectory } from "../src/peopleDirectory.js";
-import { saveAuthorizedToken } from "../src/feishu/tokens.js";
 import { createFeishuMinutesApi, type FeishuMinuteInfo, type FeishuMinutesApi } from "../src/feishu/minutes.js";
 import { createMeetingMinutesService, feishuMeetingFromEvent, meetingMinutesJobs, meetingMinutesReply, minuteFromEvent } from "../src/meetingMinutes.js";
 import { FEISHU_SUBSCRIBED_EVENTS } from "../src/feishu/events.js";
@@ -18,48 +15,15 @@ import { hashSecret } from "../src/session.js";
 import { normalizeTranscriptText, transcriptContentHash } from "../src/transcriptHash.js";
 
 // 会议链路：妙记自动获取（事件 + 5 分钟轮询兜底）、waiting / manual、实际参会名单、手动上传仍是兜底。
-const PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people-candidate.json", import.meta.url));
-const CEO = TEST_CEO.personId; // 测试甲
-const HOST = TEST_MEMBER.personId; // 测试乙
-const OWNER = "person-fixture-003"; // 测试丙
-const feishuEnv = { tokenKey: randomBytes(32), tokenKeyVersion: 1 };
 const START = "2026-06-01T10:00:00.000+08:00";
 
-/** 飞书导出的逐字稿 txt（合成样例）：第一行开会时刻，然后关键词，再是「姓名 hh:mm:ss.mmm」加正文。 */
-const TRANSCRIPT = [
-  "2026-06-01 10:02:10 CST|58min 3s",
-  "",
-  "关键词:",
-  "接口、看板",
-  "",
-  "测试乙 00:00:05.120 ",
-  "接口统一改成 v2，测试丙那边月底前切过去。",
-  "",
-  "测试丙 00:01:10.002 ",
-  "好，我月底前把渠道看板接到 v2。",
-  "我们定在 10:30 再碰一次。",
-  "",
-].join("\n");
-
-const CANDIDATE: TMeetingCardCandidate = {
-  summary: "接口统一切到 v2",
-  sections: [{ heading: "接口", body: "已定：接口统一改成 v2。", turnIds: ["turn-0001"] }],
-  objectChanges: [],
-  actionItems: [],
-};
-
 const preflightAgent: PreflightAgent = { async generate(input: PreflightAgentInput) { return { candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)) }; } };
-
-function recordingOutcome(): PostMeetingAgent & { inputs: PostMeetingAgentInput[] } {
-  const agent = { inputs: [] as PostMeetingAgentInput[], async generate(input: PostMeetingAgentInput) { agent.inputs.push(input); return { candidate: structuredClone(CANDIDATE) }; } };
-  return agent;
-}
 
 function fakeMinutesApi(transcript = TRANSCRIPT): FeishuMinutesApi & {
   calls: string[]; artifactsError: Error | null; exportError: Error | null; listEmpty: boolean; onRead: (() => Promise<void>) | null;
 } {
   const minute: FeishuMinuteInfo = { token: "obcn_minute_1", title: "接口切换会", ownerOpenId: "ou_host", createdAt: new Date("2026-06-01T10:02:10+08:00"),
-    durationSeconds: 3483, url: "https://example.feishu.cn/minutes/obcn_minute_1", meetingId: "vc_1" };
+    durationSeconds: 3483, url: "https://example.feishu.cn/minutes/obcn_minute_1", meetingId: "vc_1", sourceType: "meeting" };
   const api = {
     calls: [] as string[],
     artifactsError: null as Error | null,
@@ -96,11 +60,6 @@ async function scheduledMeeting(t: TestApp, participants: string[] = [HOST]): Pr
   } });
   expect(created.statusCode).toBe(200);
   return created.json().cards[0].objectRef.id as string;
-}
-
-async function authorize(t: TestApp, personId: string, openId: string, name: string, at: Date) {
-  await t.pool.query("INSERT INTO feishu_identities (person_id, open_id, name) VALUES ($1, $2, $3)", [personId, openId, name]);
-  await saveAuthorizedToken(t.pool.query.bind(t.pool), feishuEnv, personId, { accessToken: `u-${personId}`, expiresIn: 7200, scope: "offline_access" }, at);
 }
 
 describe("飞书妙记逐字稿解析", () => {
@@ -745,6 +704,66 @@ describe("用户自己上传了，自动同步就停下", () => {
   });
 });
 
+describe("自动挂按飞书会议号收紧，待整理跟着变", () => {
+  it("自动挂收紧", async () => {
+    const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
+    try {
+      await authorize(t, HOST, "ou_host", "测试乙", new Date());
+      const api = fakeMinutesApi();
+      const minutesOf = async (id: string) => (await t.pool.query("SELECT minutes_status, minute_token FROM meetings WHERE id = $1", [id])).rows[0];
+      const setSource = (id: string, feishuMeetingId: string) => t.pool.query("UPDATE meetings SET feishu_meeting_id = $2 WHERE id = $1", [id, feishuMeetingId]);
+      // 轮询：会议已有飞书会议号、妙记来自别的飞书会（vc_1）就不挂；对上了照常挂。
+      const meetingId = await scheduledMeeting(t);
+      await setSource(meetingId, "vc_other");
+      await tickAfterMeeting(t, api);
+      expect(await minutesOf(meetingId)).toEqual({ minutes_status: "waiting", minute_token: null });
+      await setSource(meetingId, "vc_1");
+      await tickAfterMeeting(t, api);
+      expect(await minutesOf(meetingId)).toEqual({ minutes_status: "ready", minute_token: "obcn_minute_1" });
+
+      // 「妙记生成」事件按时间对的那支：妙记来自 vc_2、会议是 vc_other，不读全文；会议号对上了才读。
+      const second = await scheduledMeeting(t);
+      await setSource(second, "vc_other");
+      api.listEmpty = true;
+      await tickAfterMeeting(t, api);
+      expect((await minutesOf(second)).minutes_status).toBe("waiting");
+      const getMinute = api.getMinute;
+      api.getMinute = async (token, minuteToken) => ({ ...await getMinute(token, minuteToken), meetingId: "vc_2" });
+      const minutes = createMeetingMinutesService({ pool: t.pool, peopleDirectory: loadPeopleDirectory(t.env), outcomeAgent: recordingOutcome(), secret: t.env.sessionSecret,
+        feishu: { env: feishuEnv, api }, now: () => new Date("2026-06-01T11:15:00+08:00") });
+      api.calls.length = 0;
+      await minutes.onMinuteGenerated({ event_id: "ev1", minute_token: "obcn_minute_2" });
+      expect(api.calls.filter((call) => call.startsWith("artifacts:") || call.startsWith("export:"))).toEqual([]);
+      expect(await minutesOf(second)).toEqual({ minutes_status: "waiting", minute_token: null });
+      await setSource(second, "vc_2");
+      await minutes.onMinuteGenerated({ event_id: "ev2", minute_token: "obcn_minute_2" });
+      expect(await minutesOf(second)).toEqual({ minutes_status: "ready", minute_token: "obcn_minute_2" });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("自动挂上后待整理消失，放手后回来", async () => {
+    for (const userUploads of [false, true]) {
+      const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED }, undefined, { preflightAgent, outcomeAgent: recordingOutcome() });
+      try {
+        await authorize(t, HOST, "ou_host", "测试乙", new Date());
+        await t.pool.query(`INSERT INTO feishu_minute_inbox (minute_token, owner_id, title, starts_at, ends_at, feishu_meeting_id)
+          VALUES ('obcn_minute_1', $1, '接口切换会', '2026-06-01T10:02:10+08:00', '2026-06-01T11:00:13+08:00', 'vc_1')`, [HOST]);
+        const meetingId = await scheduledMeeting(t);
+        const api = fakeMinutesApi();
+        // 另起一场：自动拉取读全文时用户上传了候选，自动拉取放手。
+        if (userUploads) api.onRead = async () => { await uploadMarkdown(t, meetingId); };
+        await tickAfterMeeting(t, api);
+        const row = (await t.pool.query("SELECT status, meeting_id FROM feishu_minute_inbox WHERE minute_token = 'obcn_minute_1'")).rows[0];
+        expect(row).toEqual(userUploads ? { status: "pending", meeting_id: null } : { status: "attached", meeting_id: meetingId });
+      } finally {
+        await t.close();
+      }
+    }
+  });
+});
+
 // 10/21 对真飞书：search 条件在 filter 里、每页最多 30，结果只有 token 和展示文字；开始时刻、所有者、来源会议逐条查详情补上。
 describe("妙记搜索按真飞书的请求与返回", () => {
   it("按本人和时间段搜，再逐条查详情；来源会议取 generated_source", async () => {
@@ -771,11 +790,34 @@ describe("妙记搜索按真飞书的请求与返回", () => {
     expect(searches[0].url).toContain("page_size=30");
     expect(searches[0].body).toEqual({ filter: { owner_ids: ["ou_host"], create_time: { start_time: start.toISOString(), end_time: end.toISOString() } } });
     expect(searches[1].url).toContain("page_token=p2");
-    expect(minutes.map(({ token, ownerOpenId, meetingId, durationSeconds }) => ({ token, ownerOpenId, meetingId, durationSeconds }))).toEqual([
-      { token: "obcn_a", ownerOpenId: "ou_host", meetingId: "vc_obcn_a", durationSeconds: 3181 },
-      { token: "obcn_b", ownerOpenId: "ou_host", meetingId: "vc_obcn_b", durationSeconds: 3181 },
+    expect(minutes.map(({ token, ownerOpenId, meetingId, sourceType, durationSeconds }) => ({ token, ownerOpenId, meetingId, sourceType, durationSeconds }))).toEqual([
+      { token: "obcn_a", ownerOpenId: "ou_host", meetingId: "vc_obcn_a", sourceType: "meeting", durationSeconds: 3181 },
+      { token: "obcn_b", ownerOpenId: "ou_host", meetingId: "vc_obcn_b", sourceType: "meeting", durationSeconds: 3181 },
     ]);
     expect(minutes[0].createdAt?.toISOString()).toBe(new Date(1792380446082).toISOString());
+  });
+
+  /** 搜到 obcn_a、obcn_b 两份；details 给每份详情的返回（Feishu 错误码不为 0 时是错误体）。 */
+  const searchApi = (details: Record<string, { code: number; duration?: string }>) => createFeishuMinutesApi({ fetch: (async (url: string) => {
+    const json = (code: number, data: unknown) => new Response(JSON.stringify({ code, msg: code ? "failed" : "success", data }), { headers: { "content-type": "application/json" } });
+    if (url.includes("/minutes/search")) return json(0, { has_more: false, items: Object.keys(details).map((token) => ({ token })) });
+    const token = Object.keys(details).find((item) => url.includes(item))!;
+    const { code, duration = "3181000" } = details[token];
+    return json(code, code ? {} : { minute: { token, title: token, owner_id: "ou_host", create_time: "1792380446082", duration,
+      generated_source: { source_entity_id: `vc_${token}`, source_type: "meeting" } } });
+  }) as typeof fetch });
+  const range = { start: new Date("2026-10-19T02:00:00.000Z"), end: new Date("2026-10-19T06:00:00.000Z") };
+
+  it("一份详情读不到不连累别的；全都读不到才报错", async () => {
+    const partial = await searchApi({ obcn_a: { code: 2091002 }, obcn_b: { code: 0 } }).listMinutes("u-token", { openId: "ou_host" }, range);
+    expect(partial.map((item) => item.token)).toEqual(["obcn_b"]);
+    await expect(searchApi({ obcn_a: { code: 2091002 }, obcn_b: { code: 2091005 } }).listMinutes("u-token", { openId: "ou_host" }, range))
+      .rejects.toMatchObject({ code: 2091002 });
+  });
+
+  it("时长是毫秒", async () => {
+    const [short] = await searchApi({ obcn_a: { code: 0, duration: "45000" } }).listMinutes("u-token", { openId: "ou_host" }, range);
+    expect(short.durationSeconds).toBe(45);
   });
 });
 

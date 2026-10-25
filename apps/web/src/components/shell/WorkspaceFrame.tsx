@@ -14,6 +14,7 @@ import { CitationPanel } from "@/conversation/CitationPanel";
 import { ReferenceProvider } from "@/conversation/references";
 import { appendQuote, restoreQuotes, type QuotePrefill, type QuoteSource, type TextQuote } from "@/conversation/quotes";
 import { NARROW_COLUMN_QUERY, saveColumnMode } from "@/conversation/useColumnMode";
+import { COMPOSER_FIELD, useWakeKey } from "@/conversation/wakeKey";
 import { prefersReducedMotion, runRouteTransition, supportsViewTransition, type TransitionDirection } from "@/lib/viewTransition";
 import { WhatsNewCard } from "@/components/whatsNew/WhatsNewCard";
 import { MeetingBookingSheet } from "@/components/meeting/MeetingBookingSheet";
@@ -70,9 +71,12 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   /** 已发起、新路由还没提交的目标：二级页先打开，右侧盖加载蒙版。路由提交（包括被重定向到别处）就清掉。 */
   const [pending, setPending] = useState<string | null>(null);
   const [m2Available, setM2Available] = useState(false);
-  /** 建会抽屉：CEO 从顶栏「约会议」打开，成员从首页操作区打开（经 WorkspaceContext 的 bookMeeting）。 */
+  /** 建会面板：CEO 从顶栏「约会议」打开，成员从首页操作区打开（经 WorkspaceContext 的 bookMeeting）。每次打开换一个 key，表单从空白开始。 */
   const [booking, setBooking] = useState(false);
-  const bookMeeting = useCallback(() => setBooking(true), []);
+  const [bookingRun, setBookingRun] = useState(0);
+  const [bookingWith, setBookingWith] = useState<string[]>([]);
+  const bookMeeting = useCallback(() => { setBookingWith([]); setBookingRun((run) => run + 1); setBooking(true); }, []);
+  const bookMeetingWith = useCallback((participants: string[]) => { setBookingWith(participants); setBookingRun((run) => run + 1); setBooking(true); }, []);
   useEffect(() => {
     const controller = new AbortController();
     setM2Available(false);
@@ -89,8 +93,6 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   const railAllowed = routeOpen && pathname !== `${homeHref === "/" ? "" : homeHref}/radar` && !(homeHref === "/me" && (pathname.startsWith("/me/battlefields/") || pathname.startsWith("/me/radar/")));
 
   const [detail, setDetail] = useState<DetailInfo | null>(null);
-  // 战场页共用全局对话，右列页头标题下写「围绕：<战场名>战场」。
-  const battlefieldSubject = detail?.scope === "global" && detail.label && /\/battlefields\/[^/]+/.test(pathname) ? (detail.label.endsWith("战场") ? detail.label : `${detail.label}战场`) : null;
   const registerDetail = useCallback((info: DetailInfo | null) => setDetail(info), []);
 
   const [noticeTransition, setNoticeTransition] = useState<TransitionDirection | null>(null);
@@ -133,7 +135,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   }, [historyOpen]);
   useEffect(() => setQuoteDraft(null), [quoteKey]);
   // 引用只进入当前对象的私聊，正文保持在小引用块里，输入条留给用户自己的话。
-  const quote = useCallback((text: string, source?: QuoteSource, options?: { listen?: boolean }) => {
+  const quote = useCallback((text: string, source?: QuoteSource) => {
     if (!text.trim()) return;
     setHistoryOpen(false);
     setGlobalView(false);
@@ -144,7 +146,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
     const resolvedSource = { label: detail?.label, ...source, scope: detail?.scope ?? "global" };
     setQuoteDraft((current) => ({ key: quoteKey,
       items: appendQuote(current?.key === quoteKey ? current.items : [], { id: `quote-${nonce}`, text, source: resolvedSource }),
-      prefill: { text, nonce, source: resolvedSource, ...(options?.listen ? { listen: true } : {}) } }));
+      prefill: { text, nonce, source: resolvedSource } }));
   }, [detail?.label, detail?.scope, quoteKey]);
   // 代一号位发出一句（月度计划「按意见重写」）：只带这一句自己的引用，输入条里的草稿和已挂的引用块原样留着。
   const ask = useCallback((message: string, item: Omit<TextQuote, "id">, onResult?: (accepted: boolean) => void) => {
@@ -178,6 +180,24 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
     setQuoteDraft((current) => ({ key: quoteKey, items: current?.key === quoteKey ? current.items : [],
       prefill: { text: "", draft, nonce, source: { label: detail?.label, scope: detail?.scope ?? "global" } } }));
   }, [detail?.label, detail?.scope, quoteKey]);
+  // 唤醒输入框（wakeKey.ts）：二级页展开右列（窄屏打开对话浮层），其余页面展开输入条并升起对话层，光标放进输入框末尾。
+  // 状态同步提交完再聚焦：微信语音紧跟着这一下开始，字要落进已经聚焦的输入框。
+  useWakeKey(() => {
+    const field = () => document.querySelector<HTMLTextAreaElement>(COMPOSER_FIELD);
+    if (document.activeElement && document.activeElement === field()) return;
+    flushSync(() => {
+      if (railAllowed && !historyOpen) {
+        if (window.matchMedia(NARROW_COLUMN_QUERY).matches) setRailMobileOpen(true);
+        else saveColumnMode("expanded");
+      } else {
+        setKeyboard(true);
+        setHistoryOpen(true);
+      }
+    });
+    const element = field();
+    element?.focus({ preventScroll: true });
+    element?.setSelectionRange(element.value.length, element.value.length);
+  });
   const consumePrefill = useCallback((nonce?: number) => setQuoteDraft((current) =>
     current && (nonce === undefined || current.prefill?.nonce === nonce) ? { ...current, prefill: null } : current), []);
   const removeQuotes = useCallback((ids: string[]) => setQuoteDraft((current) => current
@@ -534,8 +554,8 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   );
 
   const api: WorkspaceApi = useMemo(
-    () => ({ navigate, close, detailOpen, closing, registerDetail, showToast, homeCards, quote, ask, compose, viewerId, bookMeeting: viewerId ? bookMeeting : undefined, m2Available }),
-    [homeCards, ask, bookMeeting, close, closing, compose, detailOpen, m2Available, navigate, quote, registerDetail, showToast, viewerId],
+    () => ({ navigate, close, detailOpen, closing, registerDetail, showToast, homeCards, quote, ask, compose, viewerId, bookMeeting: viewerId ? bookMeeting : undefined, bookMeetingWith: viewerId ? bookMeetingWith : undefined, m2Available }),
+    [homeCards, ask, bookMeeting, bookMeetingWith, close, closing, compose, detailOpen, m2Available, navigate, quote, registerDetail, showToast, viewerId],
   );
 
   const conversationUi: ConversationUiState = {
@@ -587,7 +607,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
             data-covered={(detailOpen && !noticeTransition && !closing && !entering && !peek) || undefined}
             style={noticeTransition && !openingEmpty ? { viewTransitionName: "home-board" } : undefined}
           >
-            {/* 成员首页的约会议、复盘在首页左上的操作区里（HomeActions）。 */}
+            {/* 成员首页的约会议、复盘在首页的快捷卡里（HomeActions）。 */}
             {homeHref === "/" ? (
               <div className={s.m2Entry}>
                 {viewerId ? <button type="button" onClick={bookMeeting}>约会议</button> : null}
@@ -629,7 +649,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
         <div className={s.notificationArea} data-testid="notification-only" style={noticeTransition ? { viewTransitionName: "notice-rail" } : undefined}>
           {notifications(api, pathname)}
         </div>
-        <ConversationHost page={detail} detailOpen={detailOpen} rail={railAllowed} agentTitle={agentTitle} pageSubject={battlefieldSubject} ui={conversationUi} />
+        <ConversationHost page={detail} detailOpen={detailOpen} rail={railAllowed} agentTitle={agentTitle} ui={conversationUi} />
         <CitationPanel active={deskOpen || sheetWide} />
         {toast ? (
           <div className={s.noticeToast} role="status">
@@ -645,7 +665,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
           </div>
         ) : null}
         <WhatsNewCard />
-        {booking && viewerId ? <MeetingBookingSheet open onClose={() => setBooking(false)} viewer={{ personId: viewerId, role: account.role, displayName: account.displayName }} /> : null}
+        {viewerId ? <MeetingBookingSheet key={bookingRun} open={booking} onClose={() => setBooking(false)} initialParticipants={bookingWith} viewer={{ personId: viewerId, role: account.role, displayName: account.displayName }} /> : null}
       </div>
       </ReferenceProvider>
     </WorkspaceContext.Provider>

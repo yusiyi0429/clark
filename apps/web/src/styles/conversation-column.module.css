@@ -521,11 +521,6 @@
 .header[data-kind='group'] .headerTitle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .header[data-kind='group'] .headerTitle > svg { flex: none; }
 
-/* 天枢页头：标题下面一行 13px 弱色小字写当前对话对象；两行合起来不超过页头高度，长了省略。 */
-.headerStack { display: flex; flex-direction: column; align-items: center; min-width: 0; max-width: 100%; }
-.headerStack .headerTitle { height: 28px; }
-.header .headerSub { margin: -2px 0 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #8a919c; font-size: 13px; font-weight: 400; line-height: 18px; }
-
 /* Agent：标志用品牌的两色渐变，字用字标那一款字（登录页那一枚同一套）。 */
 .headerMark { flex: none; width: 20px; height: 20px; }
 .wordmark { font-family: var(--font-wordmark), "Microsoft YaHei UI", sans-serif; font-size: 17px; font-weight: 400; letter-spacing: 0.06em; }

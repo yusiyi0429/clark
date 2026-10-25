@@ -36,7 +36,7 @@ import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { createWorldReader, mergeWorldGoalsIntoContext, ontologyToolResult, type OntologyQuery } from "./worldReader.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
-import type { DriExporter } from "./meetingStore.js";
+import type { DriExporter, Query } from "./meetingStore.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
 import type { MonthlyReviewService } from "./monthlyReviewService.js";
 import type { WeeklyReviewService } from "./weeklyReviewService.js";
@@ -118,6 +118,21 @@ import { personDisplayNames } from "./people.js";
 import { listPendingIssueSummaries } from "./issues.js";
 
 type ValidationItem = { instancePath?: string; dataPath?: string; message?: string };
+
+/**
+ * 首页 Task 的本体来源：主实例开了读就用它（外部引用对上的 Mission 也在它里面找）；配了 TK 只读实例也能用。
+ * 从本体载入的 Mission 按 scope 找读身份（主实例优先，TK 只读实例补它没有的 scope）；两个都没有就没有 Task。
+ */
+function worldPlanTaskSource(q: Query, env: AppEnv, mainReads: boolean): PlanTaskSource {
+  const clients = [
+    ...(mainReads ? [new WorldClient(q, env)] : []),
+    ...(env.worldTk && worldConfigured(env.worldTk) ? [new WorldClient(q, env.worldTk)] : []),
+  ];
+  if (!clients.length) return emptyPlanTaskSource;
+  const scopes = new Map<string, WorldClient>();
+  for (const client of clients) if (!scopes.has(client.config.scope_id)) scopes.set(client.config.scope_id, client);
+  return createWorldPlanTaskSource(clients[0], { scopes });
+}
 
 /**
  * 一轮对话的绝对上限：只防死循环，不用来截断正常的长回答（10/13 起取消 180 秒硬上限）。
@@ -625,8 +640,8 @@ export async function buildApp({
     threadIntroAgent: threadIntroAgent ?? createThreadIntroAgent(pool, env),
     missionCardDraftAgent: missionCardDraftAgent ?? createMissionCardDraftAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.heavyModel }),
     taskAcceptanceAgent: taskAcceptanceAgent ?? createTaskAcceptanceAgent(pool, env),
-    // 首页 Task 行：本体配了、实例也开了读（和其他读本体的地方同一个开关）才从本体读（只读），否则没有 Task。
-    planTasks: planTasks ?? (world.enabled ? createWorldPlanTaskSource(new WorldClient(q, env)) : emptyPlanTaskSource),
+    // 首页 Task 行：本体配了、实例也开了读（和其他读本体的地方同一个开关），或配了 TK 只读实例，才从本体读（只读），否则没有 Task。
+    planTasks: planTasks ?? worldPlanTaskSource(q, env, world.enabled),
     materialStorageDir,
     conversationAttachmentStorageDir,
     conversationTurnTimeoutMs,

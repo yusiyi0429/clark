@@ -13,7 +13,8 @@ import { createMeetingCardService, registerMeetingCardDeps, type MeetingCardServ
 import { createMeetingCardConfirmService, meetingCardConfirmJobs, type MeetingCardConfirmService } from "./meetingCardConfirm.js";
 import { createMeetingFeishuEventService, meetingFeishuEventJobs, type MeetingFeishuEventService } from "./meetingFeishuEvent.js";
 import { createMeetingObjectSync } from "./meetingObjectSync.js";
-import { createMeetingMinutesService, meetingMinutesJobs, type MeetingMinutesService } from "./meetingMinutes.js";
+import { createMeetingMinutesService, FEISHU_MINUTES_EVENT, meetingMinutesJobs, type MeetingMinutesService } from "./meetingMinutes.js";
+import { createFeishuMinuteInboxService, feishuMinuteInboxJobs, type FeishuMinuteInboxService } from "./feishuMinuteInbox.js";
 import { setOutcomeContextProvider, type PostMeetingAgent } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
 import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
@@ -24,7 +25,8 @@ import { WORLD_READ_TIMEOUT_MS, type WorldReader } from "./worldReader.js";
  * 会后链路的装配（G 会议链路 + 会议卡）：
  * - 解读纪要时对照的公司地图（按池注册给会后整理）；
  * - 会后只有会议卡一个入口：草稿好了提醒主持人和创建人（meetingCard.ts），整卡确认后写会议事件；不再逐条分层、提醒代判或推影响卡；
- * - 后台任务（server.ts 的 jobs worker 注册）：妙记轮询与「妙记生成」事件、整卡确认后写会议事件（meeting.world_sync）、在飞书约会（meeting.feishu_event）。
+ * - 后台任务（server.ts 的 jobs worker 注册）：妙记轮询与「妙记生成」事件、整卡确认后写会议事件（meeting.world_sync）、在飞书约会（meeting.feishu_event）、
+ *   飞书里直接开的会待整理的扫描（「妙记生成」事件先照原样对天枢的会，再排一次扫描）。
  */
 export type MeetingFollowThroughEnv = WorldEnv & {
   publicOrigin: string;
@@ -46,6 +48,8 @@ export type MeetingFollowThrough = {
   /** 整卡确认、重试、写会议事件。 */
   cardConfirm: MeetingCardConfirmService;
   minutes: MeetingMinutesService;
+  /** 飞书里直接开的会待整理（只给妙记所有者本人）。 */
+  minuteInbox: FeishuMinuteInboxService;
   /** 建会后在飞书约上、改时间、取消。 */
   feishuEvents: MeetingFeishuEventService;
   /** 已推影响卡（旧会议、文档变更）上的追问。 */
@@ -86,14 +90,21 @@ export function createMeetingFollowThrough({ pool, env, peopleDirectory, world, 
   const objectSync = worldClient ? createMeetingObjectSync({ q, world: worldClient, refreshDraft: cards.refreshDraft }) : undefined;
   const cardConfirm = createMeetingCardConfirmService({ pool, world: anchorWorld, meetingWorld, objectSync, names: cardDeps.names, view: cards.view, now });
   const decisions = createMeetingDecisionService({ pool, peopleDirectory, anchorWorld, onAnchorsChanged: cards.anchorsChanged });
-  const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now, feishuWebOrigin: env.feishuWebOrigin,
-    ...(env.feishu ? { feishu: { env: env.feishu, api: minutesApi ?? createFeishuMinutesApi() } } : {}) });
+  const feishuMinutes = env.feishu ? { feishu: { env: env.feishu, api: minutesApi ?? createFeishuMinutesApi() } } : {};
+  const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now, feishuWebOrigin: env.feishuWebOrigin, ...feishuMinutes });
+  const minuteInbox = createFeishuMinuteInboxService({ pool, peopleDirectory, minutes, anchorChoicesFor: decisions.anchorChoicesFor, now, ...feishuMinutes });
   const feishuEvents = createMeetingFeishuEventService({ pool, now, ...(env.feishu ? { feishu: { env: env.feishu, api: calendarApi ?? createFeishuCalendarApi() } } : {}) });
   return {
-    decisions, cards, cardConfirm, minutes, feishuEvents, impact: impactAgent, context,
+    decisions, cards, cardConfirm, minutes, minuteInbox, feishuEvents, impact: impactAgent, context,
     jobs() {
       const minuteJobs = meetingMinutesJobs(minutes);
-      return { handlers: { ...minuteJobs.handlers, ...meetingCardConfirmJobs(cardConfirm), ...meetingFeishuEventJobs(feishuEvents) }, recurring: minuteJobs.recurring, feishuEvents: minuteJobs.events };
+      const inboxJobs = feishuMinuteInboxJobs(minuteInbox);
+      const onMinuteGenerated = minuteJobs.events[FEISHU_MINUTES_EVENT];
+      return {
+        handlers: { ...minuteJobs.handlers, ...inboxJobs.handlers, ...meetingCardConfirmJobs(cardConfirm), ...meetingFeishuEventJobs(feishuEvents) },
+        recurring: [...minuteJobs.recurring, ...inboxJobs.recurring],
+        feishuEvents: { ...minuteJobs.events, [FEISHU_MINUTES_EVENT]: async (payload) => { await onMinuteGenerated(payload); await minuteInbox.afterMinuteEvent(payload); } },
+      };
     },
   };
 }

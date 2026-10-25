@@ -31,8 +31,8 @@ export type WorkspaceApi = {
   showToast: (text: string) => void;
   /** 首页已载入的 Card 集合（战场/能力名称、会议安排等只读展示用，不另发请求）。 */
   homeCards: Card[];
-  /** 引用正文追问：进入当前对象私聊，以独立引用块保留选文和来源，不改用户输入。listen：挂上引用后直接进入语音听写。 */
-  quote: (text: string, source?: QuoteSource, options?: { listen?: boolean }) => void;
+  /** 引用正文追问：进入当前对象私聊，以独立引用块保留选文和来源，不改用户输入。 */
+  quote: (text: string, source?: QuoteSource) => void;
   /**
    * 代一号位在当前对象私聊里发出一句话（带自己的引用），不动输入条里的草稿和已挂的引用块（月度计划「按意见重写」）。
    * onResult：服务端是否接下这一句（回答进行中等情况下没接下）。
@@ -44,6 +44,8 @@ export type WorkspaceApi = {
   viewerId: string | null;
   /** 打开外壳里的建会抽屉（成员首页操作区的「约会议」）；没有登录人时没有。 */
   bookMeeting?: () => void;
+  /** 同一个建会抽屉，参会人先填好（战场进展里「约会议」找某个人）。 */
+  bookMeetingWith?: (participants: string[]) => void;
   /** M2（目标拆解与复盘）对当前登录人可用。 */
   m2Available?: boolean;
 };
