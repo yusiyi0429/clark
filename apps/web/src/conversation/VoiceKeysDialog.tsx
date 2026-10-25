@@ -2,16 +2,16 @@
 
 /**
  * 语音快捷键面板（样稿 voice-keys-v4）：第一次点「对话天枢」时弹一次；以后从输入条上的小键盘图标、个人菜单「设置 › 语音输入」打开。
- * 顶上一段循环小动画：按 Ulanzi 小键盘上的语音键 → 右下角「对话天枢」展开成输入框 → 说的话落进来。
+ * 顶上一段循环小动画：按 Ulanzi VibeKey（竖条、顶上收音孔、只露出第一颗语音键）→ 右下角「对话天枢」展开成输入框 → 说的话落进来。
  * 两行照抄微信输入法设置页的名字：按住说话 / 启动语音输入。点一行就等着录（绿圈「按下快捷键…」），按一下自己的微信语音键就录好，
- * 显示天枢实际收到的键（微信吞掉的不显示）。打开时等着录的是第一行还没有键的那一行。录好马上存（voiceKeys.ts）。
+ * 显示天枢实际收到的键；「按住说话」只收到 Win 时前面补一颗淡色 Ctrl（微信 Ctrl+Win 里的 Ctrl 被它吞了）。打开时等着录的是第一行还没有键的那一行。录好马上存（voiceKeys.ts）。
  * 「稍后再弄」「完成」一样大，都关掉面板、记下弹过了。Esc、Tab 留给面板自己；单按回车 / 空格是按按钮，不录。
  */
 import { useEffect, useState } from "react";
 import { Mic, MessageCircle } from "lucide-react";
 import { Button, Modal } from "ts-design/primitives";
 import { useStableCallback } from "./stableCallback";
-import { gestureCode, keyLabels, readVoiceKeys, saveVoiceKeys, voiceBindings, type VoiceBindings, type VoiceKeys, type VoiceMode } from "./voiceKeys";
+import { DEFAULT_HOLD, gestureCode, keyLabels, readVoiceKeys, saveVoiceKeys, voiceBindings, type VoiceBindings, type VoiceKeys, type VoiceMode } from "./voiceKeys";
 import v from "@/styles/voice-keys.module.css";
 
 const ROWS: [VoiceMode, string][] = [["hold", "按住说话"], ["tap", "启动语音输入"]];
@@ -58,13 +58,14 @@ function useKeyCapture(live: VoiceMode | null, onCaptured: (codes: string[]) => 
 function WakeDemo() {
   return (
     <div className={v.demo} aria-hidden="true">
-      <div className={v.pad}>
-        <i /><i /><i className={v.voiceKey}><Mic size={13} strokeWidth={2.2} /></i><i /><i /><i />
+      <div className={v.device}>
+        <span className={v.grille}><i /><i /><i /><i /><i /><i /></span>
+        <span className={v.key}><span className={v.button}><Mic size={12} strokeWidth={2} /></span></span>
       </div>
       <div className={v.screen}>
         <div className={v.bar}>
           <MessageCircle size={11} strokeWidth={2} />
-          <span className={v.typed}>帮我约人豪明天下午对一下</span>
+          <span className={v.typed}>整理一下今天的会议要点</span>
           <span className={v.caret} />
         </div>
       </div>
@@ -86,8 +87,9 @@ export function VoiceKeysDialog({ onClose }: { onClose: () => void }) {
     saveVoiceKeys({ intro: true });
     onClose();
   };
-  // 没录过的「按住说话」写微信默认的 Ctrl+Win（实际收到的是 Win）。
-  const shown = (mode: VoiceMode) => keys[mode] ? keyLabels(keys[mode]!, windows) : mode === "hold" && windows ? ["Ctrl", "Win"] : [];
+  // 「按住说话」认的只是 Win（没录过时的微信默认，或录到的就是 Win）：前面补一颗淡色 Ctrl。
+  const winOnly = (mode: VoiceMode) => mode === "hold" && windows && (keys.hold ?? DEFAULT_HOLD).join() === DEFAULT_HOLD.join();
+  const shown = (mode: VoiceMode) => voiceBindings(keys, windows)[mode] ? keyLabels(voiceBindings(keys, windows)[mode]!, windows) : [];
   return (
     <Modal isOpen onOpenChange={(open) => { if (!open) close(); }}>
       <Modal.Backdrop className={v.backdrop} isDismissable>
@@ -104,7 +106,7 @@ export function VoiceKeysDialog({ onClose }: { onClose: () => void }) {
                 <button key={mode} type="button" className={v.row} data-voice-key={mode} data-live={live === mode} onClick={() => setLive(mode)}>
                   <span>{name}</span>
                   {live === mode ? <em>按下快捷键…</em> : (
-                    <span className={v.keys}>{shown(mode).length ? shown(mode).map((label) => <kbd key={label}>{label}</kbd>) : <span className={v.empty}>—</span>}</span>
+                    <span className={v.keys}>{winOnly(mode) && <kbd data-swallowed>Ctrl</kbd>}{shown(mode).length ? shown(mode).map((label) => <kbd key={label}>{label}</kbd>) : <span className={v.empty}>—</span>}</span>
                   )}
                 </button>
               ))}

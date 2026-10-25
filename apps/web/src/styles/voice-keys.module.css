@@ -60,6 +60,8 @@
   line-height: 1;
 }
 .empty { color: var(--ink-faint); }
+/* 微信吞掉、天枢收不到的那颗（Ctrl+Win 里的 Ctrl）：淡色。 */
+.keys kbd[data-swallowed] { opacity: .4; }
 
 .foot { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; margin-top: 22px; }
 .later.later, .done.done { width: 100%; height: 46px; min-height: 46px; border-radius: 14px; font-size: 15px; font-weight: 600; }
@@ -77,19 +79,31 @@
   padding: 14px 16px;
   border-radius: 16px;
   background: linear-gradient(160deg, #f4f7fb, #eef2f7);
+  overflow: hidden;
 }
-.pad {
-  display: grid;
+/* Ulanzi VibeKey：银色竖条，顶上一排收音孔，下面只露出第一颗语音键（其余在卡片下沿外，被裁掉）。 */
+.device {
+  position: relative;
+  display: flex;
   flex: none;
-  grid-template-columns: repeat(3, 18px);
-  gap: 5px;
-  padding: 7px;
-  border-radius: 11px;
-  background: #2a3140;
-  box-shadow: 0 6px 14px rgb(29 36 51 / 22%);
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-start;
+  box-sizing: border-box;
+  width: 40px;
+  height: 128px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-radius: 9px;
+  background: linear-gradient(90deg, #d5d8dc, #eceef0 45%, #dfe2e5);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%), 0 0 0 1px rgb(29 36 51 / 8%), 0 6px 14px rgb(29 36 51 / 14%);
 }
-.pad i { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 4px; background: #3b4456; box-shadow: inset 0 -1.5px 0 rgb(0 0 0 / 28%); }
-.voiceKey { color: #fff; animation: press 3.6s ease infinite; }
+.grille { display: flex; gap: 3px; }
+.grille i { width: 3px; height: 10px; border-radius: 2px; background: radial-gradient(circle, #6f757d 30%, #9aa0a7 31%) 0 0 / 2px 2px; }
+.key { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; animation: glow 3.6s ease infinite; }
+.button { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(160deg, #f6f7f8, #e3e5e8);
+  box-shadow: 0 1.5px 2px rgb(29 36 51 / 22%), inset 0 1px 0 #fff; color: #6b7178; animation: press 3.6s ease infinite; }
 .screen { position: relative; flex: 1; height: 86px; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px rgb(29 36 51 / 6%), 0 4px 12px rgb(29 36 51 / 6%); overflow: hidden; }
 .bar {
   position: absolute;
@@ -110,14 +124,18 @@
   animation: open 3.6s cubic-bezier(.22, 1, .36, 1) infinite;
 }
 .bar svg { flex: none; }
-/* 12 个字，一步一个字（宽度按 em 走，光标跟在最后一个字后面）。 */
-.typed { flex: none; width: 12em; overflow: hidden; color: var(--ink); font-size: 10.5px; animation: type 3.6s steps(12, end) infinite; }
+/* 10 个字，一步一个字（宽度按 em 走，光标跟在最后一个字后面）。 */
+.typed { flex: none; width: 10em; overflow: hidden; color: var(--ink); font-size: 10.5px; animation: type 3.6s steps(10, end) infinite; }
 .caret { flex: none; width: 1px; height: 11px; background: var(--ink); animation: caret 3.6s step-end infinite; }
 
 @keyframes press {
-  0%, 14% { transform: none; background: #3b4456; box-shadow: inset 0 -1.5px 0 rgb(0 0 0 / 28%); }
-  18%, 24% { transform: translateY(1.5px); background: var(--wx); box-shadow: 0 0 0 3px rgb(31 191 134 / 30%); }
-  30%, 100% { transform: none; background: #3b4456; box-shadow: inset 0 -1.5px 0 rgb(0 0 0 / 28%); }
+  0%, 14%, 30%, 100% { transform: none; box-shadow: 0 1.5px 2px rgb(29 36 51 / 22%), inset 0 1px 0 #fff; }
+  18%, 24% { transform: translateY(1px) scale(.96); box-shadow: 0 .5px 1px rgb(29 36 51 / 22%), inset 0 1px 0 #fff; }
+}
+/* 按下时键位一圈暖光（照 VibeKey 的灯带）。 */
+@keyframes glow {
+  0%, 14%, 40%, 100% { box-shadow: none; }
+  18%, 30% { box-shadow: 0 0 0 1.5px #f3cf7d, 0 0 8px rgb(243 207 125 / 70%); }
 }
 @keyframes open {
   0%, 24% { width: 28px; }
@@ -127,7 +145,7 @@
 }
 @keyframes type {
   0%, 42% { width: 0; }
-  78%, 100% { width: 12em; }
+  78%, 100% { width: 10em; }
 }
 @keyframes caret {
   0%, 36% { opacity: 0; }
@@ -137,6 +155,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .voiceKey, .bar, .typed, .caret { animation: none; }
+  .key, .button, .bar, .typed, .caret { animation: none; }
   .bar { width: calc(100% - 16px); }
 }
