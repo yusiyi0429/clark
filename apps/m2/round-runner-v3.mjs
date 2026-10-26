@@ -345,19 +345,25 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
  const alignPass=async(stageName,round)=>{
   if(L.stages[stageName]?.done)return;
   const st=L.stages[stageName]??={decisions:{}};
-  // The second pass takes only people who went over after the first, or whose load grew since; a settled overload is not asked twice.
-  const before=L.stages.align?.after||{};
-  const over=capacityFacts(units(),{from:input.scheduleFrom,period:input.period,capacity:input.capacity}).filter(p=>p.over>0.5&&!st.decisions[p.name]&&(round===1||!(p.name in before)||p.plannedDays>before[p.name]+0.5));
+  // The second pass takes everyone still over after the final revisions (10/22: a gate on load growth let 唐巨杰 through at 22.9 of 21).
+  const over=capacityFacts(units(),{from:input.scheduleFrom,period:input.period,capacity:input.capacity}).filter(p=>p.over>0.5&&!st.decisions[p.name]);
   const record={layer:stageName,round,issues:over.length,repairable:over.length,revised:[]};input.iterations.push(record);
   const workOf=name=>keys.flatMap(k=>L.units[k].missions.flatMap((m,i)=>(m.tasks||[]).map((t,j)=>t.owner===name?{id:`${k}:m${i+1}-t${j+1}`,unit:k,mission:m.title,missionTier:m.tier,title:t.title,tier:t.tier,time:t.time,effort:t.effort,dependsOn:t.dependsOn,result:t.result}:null).filter(Boolean)));
   await save({stage:'全局对齐：人日与优先级',done:0,total:over.length});
   let n=0;
   await runRoundPool(over,async p=>{
    const work=workOf(p.name);
+   let last=null;
    st.decisions[p.name]=await twice(`align:${p.name}`,p.name,{stage:'align-generate',task:`对齐「${p.name}」本月全部工作：按技能“产品生成整轮候选·每一步怎么做·4b. 全局对齐”执行。返回 {analysis, changes:[{id,tier,defer:false|true,effort,reason}], decisionsForCEO:[], gaps:[]}；id 取 work 里的编号，只列要改的 Task。`,key:p.name,person:p,work,demandFacts:demandFacts(units()),capacity:input.capacity},answer=>{
     if(!Array.isArray(answer.changes))throw reject('全局对齐缺少 changes',answer,'card-contract');
-    const ids=new Set(work.map(w=>w.id));return {changes:answer.changes.filter(c=>c&&ids.has(c.id)),decisionsForCEO:list(answer.decisionsForCEO),gaps:list(answer.gaps)};
-   });
+    const ids=new Set(work.map(w=>w.id)),changes=answer.changes.filter(c=>c&&ids.has(c.id));
+    // Measured, not decided here: still over with P2 work kept means the skill's order (P2 first) was skipped (10/22 走查：唐巨杰 22.9 of 21 with 9 days of P2).
+    const days=e=>Number(String(e||'').match(/(\d+(?:\.\d+)?)\s*人日/)?.[1]||0),byId=new Map(changes.map(c=>[c.id,c]));
+    const kept=work.filter(w=>!byId.get(w.id)?.defer),load=kept.reduce((n,w)=>n+days(byId.get(w.id)?.effort||w.effort),0),p2=kept.filter(w=>normalTier(byId.get(w.id)?.tier||w.tier,w.tier)==='P2');
+    last={changes,decisionsForCEO:[...list(answer.decisionsForCEO),`${p.name} 调整后仍有 ${+load.toFixed(1)} 人日（容量 ${p.capacityDays}），还留着 ${p2.length} 个 P2 Task，自动对齐两次没有让出，请 RU DRI 决定先推哪几项。`],gaps:list(answer.gaps)};
+    if(load>p.capacityDays+0.5&&p2.length)throw reject(`调整后仍有 ${+load.toFixed(1)} 人日，超出容量 ${p.capacityDays}，但还留着 ${p2.length} 个 P2 Task：先推迟 P2，再把 P0、P1 装不下的部分交 CEO`,answer,'card-contract');
+    return {changes,decisionsForCEO:list(answer.decisionsForCEO),gaps:list(answer.gaps)};
+   }).catch(error=>{if(!last||!/两次结果均不合格/.test(error.message))throw error;input.generationGaps.push({unitKey:p.name,layer:'align',gap:error.message.slice(0,140)});return last;});
    n++;record.revised.push(p.name);await save({stage:'全局对齐：人日与优先级',done:n,total:over.length});
   },concurrency);
   // Apply: tier and effort changes in place; deferred Tasks leave this month's plan and are listed on the unit plan.
@@ -371,7 +377,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
    for(const m of u.missions){const keep=(m.tasks||[]).filter(t=>!t.deferred);for(const t of (m.tasks||[]).filter(t=>t.deferred))moved.push(`**推迟：**${m.title}·${t.title}（${t.owner}）：${t.deferred}`);if(keep.length)m.tasks=keep;else{m.tasks=m.tasks.map(({deferred,...t})=>t);m.tier='P2';}}
    if(moved.length)u.po.plan={...u.po.plan,tradeoffs:[...(u.po.plan?.tradeoffs||[]),...moved]};
   }
-  for(const [name,d] of Object.entries(st.decisions)){const was=input.alignDecisions?.[name];(input.alignDecisions??={})[name]={decisionsForCEO:[...(was?.decisionsForCEO||[]),...d.decisionsForCEO],changed:(was?.changed||0)+d.changes.length};}
+  for(const [name,d] of Object.entries(st.decisions)){const was=input.alignDecisions?.[name];(input.alignDecisions??={})[name]={decisionsForCEO:[...new Set([...(was?.decisionsForCEO||[]),...d.decisionsForCEO])],changed:(was?.changed||0)+d.changes.length};}
   st.after=Object.fromEntries(capacityFacts(units(),{from:input.scheduleFrom,period:input.period,capacity:input.capacity}).map(p=>[p.name,p.plannedDays]));
   st.done=true;await save({stage:'全局对齐完成',done:over.length,total:over.length,partialUnits:display()});
  };

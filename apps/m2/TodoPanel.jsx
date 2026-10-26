@@ -23,8 +23,10 @@ export default function TodoPanel({items,resolve,display,onGo,labelOf,expanded=f
  </section>;
 }
 // 待我处理 in the title row (陈溪南 2026-10-21): one button with the count; the same list opens under it in both stages.
-export function TodoMenu({items,resolve,display,onGo,labelOf}){
+export function TodoMenu({items,resolve,display,onGo,labelOf,openKey}){
  const [open,setOpen]=useState(false),ref=React.useRef(null);
+ // A notification link (?todo=1) opens the list.
+ React.useEffect(()=>{if(openKey)setOpen(true);},[openKey]);
  React.useEffect(()=>{if(!open)return;const close=e=>{if(!ref.current?.contains(e.target))setOpen(false);},key=e=>{if(e.key==='Escape')setOpen(false);};document.addEventListener('pointerdown',close,true);document.addEventListener('keydown',key);return()=>{document.removeEventListener('pointerdown',close,true);document.removeEventListener('keydown',key);};},[open]);
  if(!items.length)return null;
  // The count is the list: every item below is counted once (评测 2026-10-22: badge 8 vs twenty in the list).

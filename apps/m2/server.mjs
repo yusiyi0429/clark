@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {normalize,allNodes} from './domain.mjs';
 import {createModelGateway,recordModelRun,patientTransport} from './model.mjs';
-import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,ownerAnnotation,isChildCard,reconcileReply} from './nexus-policy.mjs';
+import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,ownerAnnotation,isChildCard,reconcileReply,roomLine} from './nexus-policy.mjs';
 import {createCollaborationState,currentVersion,canRead,cardStatus,confirmationSummary} from './governance.mjs';
 import {disagrees} from './stance.mjs';
 import {openCollaborationStore,archivesPath} from './collaboration-store.mjs';
@@ -42,6 +42,7 @@ import {draftMission} from './mission-draft.mjs';
 import {withReviewSources} from './review-sources.mjs';
 import {broadcast} from './broadcasts.mjs';
 import {memberProfiles as handoffProfiles} from './member-profiles.mjs';
+import {notificationsFor,createReadMarks} from './notifications.mjs';
 import {nexusRetry} from './nexus-retry.mjs';
 import {materializeTopics} from './topic-lifecycle.mjs';
 import {privateAgentContext} from './private-agent-context.mjs';
@@ -104,6 +105,8 @@ const reviewJobs=createReviewJobs({store,gateway,skillRoot:reviewSkillRoot,state
  companyDirection:async period=>{try{const m=await loadOntologyManifest();return m.selections.filter(x=>x.unit==='company'&&(x.kind==='intent'||x.kind==='history'&&x.historyPeriod===period)).map(x=>x.text).join('\n\n');}catch{return '';}},
  installReviewRound,archivesPath});
 await reviewJobs.recover();
+// 通知卡片 for Tianshu's notification centre (2026-10-26): read-only, read marks in their own file (notifications.mjs).
+const readMarks=createReadMarks(process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)));
 // 复盘 → 拆解. Until the full run is wanted (DECODING_PLAN_HANDOFF=generate), only the input package is prepared and
 // the groups are told; the current plan round stays as it is (陈溪南 2026-10-21: click through the flow first).
 async function prepareHandoff(){
@@ -170,6 +173,11 @@ export const server=createServer(async(req,res)=>{
   if(route.pathname==='/api/review-import'&&req.method==='POST'){if(!req.m2Session.internal)return json(res,403,{error:'只能在服务器内部导入复盘'});const b=await body(req);return json(res,200,await importReviewRound(store,b,{seedDir:seedRoot(),statePath:process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)),busy:roundFlight||auditFlight}));}
   if(route.pathname==='/api/session'&&req.method==='GET')return json(res,200,{authenticated:true,...req.m2Session});
   if(route.pathname==='/api/ontology/status'&&req.method==='GET')return json(res,200,await ontologyConnectionStatus());
+  // Never in M2's own path: an error here answers this call only and the page works as before.
+  if(route.pathname==='/api/notifications'&&req.method==='GET'){const member=route.searchParams.get('member');try{const items=notificationsFor(store.snapshot(),member,{reads:await readMarks.of(member),jobs:{review:reviewJobs.view()}});const body=JSON.stringify({items,at:new Date().toISOString()}),etag='"'+createHash('sha256').update(JSON.stringify(items)).digest('hex').slice(0,20)+'"';if(req.headers['if-none-match']===etag){res.writeHead(304,{ETag:etag,'Cache-Control':'private, no-cache'});return res.end();}res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, no-cache',ETag:etag,'X-Content-Type-Options':'nosniff'});return res.end(body);}catch(e){return json(res,200,{items:[],error:'通知暂时取不到'});}}
+  if(route.pathname==='/api/notifications/read'&&req.method==='POST'){const b=await body(req);if(!handoffProfiles[b.memberId])return json(res,400,{error:'请选择名单中的试用成员'});const ids=Array.isArray(b.ids)?b.ids.slice(0,20):[b.id];await readMarks.mark(b.memberId,ids.filter(Boolean));return json(res,200,{ok:true});}
+  if(route.pathname==='/api/reviews'&&req.method==='GET')return json(res,200,{job:reviewJobs.view()});
+  if(route.pathname==='/api/reviews'&&req.method==='POST'){const b=await body(req);try{return json(res,200,{job:await reviewJobs.start(actorFor(b.memberId),{regenerate:b.regenerate===true,resume:b.resume===true})});}catch(e){return json(res,e.status||500,{error:e.message,...(e.code?{code:e.code,total:e.total,confirmed:e.confirmed}:{})});}}
   if(route.pathname==='/api/reviews'&&req.method==='GET')return json(res,200,{job:reviewJobs.view()});
   if(route.pathname==='/api/reviews'&&req.method==='POST'){const b=await body(req);try{return json(res,200,{job:await reviewJobs.start(actorFor(b.memberId),{regenerate:b.regenerate===true,resume:b.resume===true})});}catch(e){return json(res,e.status||500,{error:e.message,...(e.code?{code:e.code,total:e.total,confirmed:e.confirmed}:{})});}}
   if(route.pathname==='/api/collaboration'&&req.method==='GET'){const state=store.snapshot(),member=route.searchParams.get('member');return revalidated(req,res,cachedRead(state,'collaboration:'+member,()=>sharedProjection(state,memberActor(member,state))));}
@@ -375,8 +383,15 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
     await store.transact(state=>{if(state.round?.id!==roundAtStart)throw Object.assign(Error('轮次已切换，建议未保存'),{status:409});return applyOwnerAnnotations(queueProposals(state,scope.id,[...output.proposals,...missionProposals]),scope.id);});
     runCascades();
     // A card speaks for itself: no extra line beside it. The owner's accept or reject is synced to the group afterwards (陈溪南 2026-10-21).
-    const notice=!output.proposals.length&&!missionProposals.length&&output.reply;
-    if(notice)await store.transact(state=>{if(state.round?.id!==roundAtStart)return state;state.messages.push({id:randomUUID(),author:'Nexus',channel:'group',scope:scope.id,text:notice,createdAt:new Date().toISOString()});state.sequence++;return state;});
+    // …and a question asked in the same batch is still answered: when the pass wrote no answer, one short call answers it.
+    if(explicitQuestions.length&&!String(output.reply||'').trim()){
+     try{const asked=await chatGateway.complete([{role:'system',content:nexusSystemPrompt+reviewBlock},{role:'user',content:JSON.stringify({task:'下面 questions 里的提问还没有回答。只回答这些提问：按 cards 和 evidence 里的证据说明，没有依据就直说没找到，不要出修订卡。出处用大白话说（谁、哪天、哪张卡的哪一项），不写 E 开头的证据编号。返回 {"reply":"回答"}。',scope:scope.id,questions:explicitQuestions.map(q=>({id:q.id,author:handoffProfiles[q.author]?.name||q.author,text:q.text,card:q.context?.selection?.id,block:q.context?.block||q.block})),cards,evidence:ctx.evidence||evidence})}],nexusOptions);
+      const said=JSON.parse(asked.answer);if(typeof said?.reply==='string')output.reply=readableAnswer(said.reply,cards);}catch{}
+    }
+    const notice=roomLine({reply:output.reply,cards:output.proposals.length+missionProposals.length,questions:explicitQuestions});
+    // An answer to one question sits under that question; the question's own card stays the context.
+    const answered=explicitQuestions.length===1?explicitQuestions[0]:null;
+    if(notice)await store.transact(state=>{if(state.round?.id!==roundAtStart)return state;state.messages.push({id:randomUUID(),author:'Nexus',channel:'group',scope:scope.id,text:notice,...(answered?{replyTo:answered.id,replyToAuthor:answered.author,threadId:answered.threadId||answered.id,...(answered.context?{context:answered.context}:{})}:{}),createdAt:new Date().toISOString()});state.sequence++;return state;});
     await nexusActivity(scope.id,{running:false,topics:output.topics,error:null,lastAct,...(notice&&!output.participation.called?{lastIntervention:{key:output.participation.key,sourceIds:output.participation.sourceIds,at:new Date().toISOString()},interventionHistory:[...interventionHistory,{signature:output.participation.signature,at:new Date().toISOString()}]}:{})},analyzedRound);
     const deferIds=output.participation.deferred?output.participation.deferIds:[];
     await store.transact(s=>{if(s.round?.id!==roundAtStart)return s;const n=s.nexus[scope.id];n.pendingSourceIds=(n.pendingSourceIds||[]).filter(id=>!pendingSourceIds.includes(id)||deferIds.includes(id));if(deferIds.length)n.deferUntil=output.participation.deferUntil;else delete n.deferUntil;if(!n.pendingSourceIds.length)delete n.pendingSince;return s;});

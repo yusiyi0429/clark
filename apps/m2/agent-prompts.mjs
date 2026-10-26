@@ -1,6 +1,8 @@
 export function readableAnswer(answer,cards=[]){
  let text=String(answer||'');
  for(const card of [...cards].filter(c=>c.id&&c.title).sort((a,b)=>b.id.length-a.id.length))text=text.replace(new RegExp(`(?<![\\w-])${card.id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}(?![\\w-])`,'g'),()=>`《${card.title}》`);
+ // Evidence numbers from the review input ([E19][E25]) mean nothing to people reading the room (评测 2026-10-23).
+ text=text.replace(/\s*[\[［【]E\d+(?:\s*[、,，]\s*E\d+)*[\]］】]/g,'').replace(/[（(]\s*E\d+(?:\s*[、,，]\s*E\d+)*\s*[）)]/g,'');
  return text;
 }
 export function privateAgentPrompt(name,rules){return `你是${name}的私人 Agent，帮助他理解当前页面、讨论意见、准备修订与回应，不是公司 Co-agent Nexus。

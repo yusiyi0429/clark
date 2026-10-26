@@ -53,6 +53,9 @@ export const isChildCard=(id,parent)=>String(id).startsWith(parent+'-');
 // How a card is called in the room: PO, M02, M02 的 T01.
 export function cardName(id,cards=[]){if(String(id).startsWith('rv:')){const m=String(id).match(/-m(\d+)$/);return m?`M${String(m[1]).padStart(2,'0')} 复盘`:id==='rv:company'?'公司复盘':'PO 复盘';}const m=String(id).match(/-m(\d+)(?:-t(\d+))?$/),pad=n=>String(n).padStart(2,'0');if(!m)return cards.find(c=>c.id===id)?.level==='po'||!/-/.test(id)?'PO':String(id);return m[2]?`M${pad(m[1])} 的 T${pad(m[2])}`:`M${pad(m[1])}`;}
 // The reply never claims a card that did not reach the room, and says plainly why one did not.
+// What goes to the room beside the cards (评测 2026-10-23): a card speaks for itself, but a question asked in the same
+// batch still gets its answer — 「这一条时间写错了」 and 「为什么判未达成？」 together used to leave the question unanswered.
+export function roomLine({reply,cards=0,questions=[]}){const text=String(reply||'').trim();if(!text)return '';return !cards||questions.length?text:'';}
 export function reconcileReply(reply,kept=[],rejected=[],cards=[]){
  // Only a claim that a card is out needs correcting; 「你同意的话我再出卡」is a question and stays as it is (2026-10-19 Token Ops).
  const text=String(reply||''),mentions=/(已|已经|这就|现已)(出|给出|发出|生成)[^。！？?]{0,10}卡|卡[^。！？?]{0,6}(已出|已给出|已发出|已生成)|见(修订)?卡片|拟修改如下|请[^。！？?]{0,10}(接受|确认)[^。！？?]{0,6}(修订|这张卡|卡片)/.test(text);

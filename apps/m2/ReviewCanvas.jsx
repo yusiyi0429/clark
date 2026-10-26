@@ -17,7 +17,7 @@ function Row({node,field,label,comments,onDetail,children}){
  return <tr><th scope="row">{label}</th><td><section className="plan-doc-field" data-block-id={`${node.id}:${field}`}><div className="plan-doc-field-heading review-row-heading">{onDetail&&<CommentBubble node={node} field={field} label={label} comments={comments} onDetail={onDetail}/>}</div>{children}</section></td></tr>;
 }
 // One item of a list field can be commented on by itself; the bubble shows on hover, or always once it has comments.
-function ItemBubble({node,field,index,label,comments,onDetail}){return <span className="review-item-bubble"><CommentBubble node={node} field={`${field}#${index}`} label={`${label} · 第 ${index+1} 条`} comments={comments} onDetail={onDetail}/></span>;}
+function ItemBubble({node,field,index,label,comments,onDetail}){return <span className="review-item-bubble" data-block-id={`${node.id}:${field}#${index}`}><CommentBubble node={node} field={`${field}#${index}`} label={`${label} · 第 ${index+1} 条`} comments={comments} onDetail={onDetail}/></span>;}
 function Ask({node,index,ask,answer,canAnswer,onAnswer}){
  const [text,setText]=useState(null),[busy,setBusy]=useState(false);
  if(answer)return <div className="review-ask is-answered"><span className="review-ask-q">追问：{ask}</span><span className="review-ask-a">{answer.author}：{String(answer.text).replace(/^回答「[^」]*」：/,'')}</span></div>;
