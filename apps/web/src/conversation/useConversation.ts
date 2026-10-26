@@ -37,6 +37,8 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   answers?: TAskAnswerRecord;
   /** carried：转议题时从首页带过来的一段；trace：首页留痕行「已转到议题 X」，meta.href 直达。 */
   kind?: "carried" | "trace";
+  /** 这一句是在飞书私聊天枢机器人时说的（问与答都标）。 */
+  via?: "feishu";
   meta?: { issueId?: string; title?: string; href?: string } };
 export type Attachment = { id: string; fileName: string; mimeType: string };
 export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | "aborted";
@@ -102,6 +104,22 @@ export const CONVERSATION_SEND = "conversation-send";
 /** 一句话发出 / 这一轮结束（成功、失败、停止都算）：detail.scope 是这条对话。 */
 export const CONVERSATION_TURN_SENT = "conversation-turn-sent";
 export const CONVERSATION_TURN_SETTLED = "conversation-turn-settled";
+
+/** 飞书私聊机器人说的话记在首页对话里：开着时多久看一眼有没有新的；飞书里刚问、还没答完时看得勤一些。 */
+export const FEISHU_POLL_MS = 10_000;
+export const FEISHU_WAITING_POLL_MS = 3_000;
+
+/** 读回的历史和眼前的比，有没有变（条数、最后一条的序号、长度、来源）。 */
+export function historySignature(list: Message[]): string {
+  const last = list.at(-1);
+  return `${list.length}:${last?.sequence ?? 0}:${last?.content.length ?? 0}:${last?.via ?? ""}`;
+}
+
+/** 飞书里问了、还没答完：最后一条是飞书来的提问。 */
+export function feishuWaiting(list: Message[]): boolean {
+  const last = list.at(-1);
+  return last?.role === "user" && last.via === "feishu";
+}
 
 export function messagesEndpoint(scope: string): string {
   return `/api/conversations/${encodeURIComponent(scope)}/messages`;
@@ -410,6 +428,22 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
       document.removeEventListener("visibilitychange", again);
     };
   }, [historyStatus, historyError, loadHistory]);
+
+  // 飞书私聊天枢机器人 = 在首页对话里说（scope = global）：开着时隔几秒看一眼，飞书里有新的问答就安静地重读。
+  const shownSignature = historySignature(messages);
+  const waitingOnFeishu = feishuWaiting(messages);
+  useEffect(() => {
+    if (scope !== "global" || status === "streaming" || historyStatus !== "ready" || typeof window === "undefined") return;
+    const timer = setInterval(async () => {
+      if (document.visibilityState !== "visible" || historyRun.current) return;
+      try {
+        const response = await fetch(historyUrl, { headers: { accept: "application/json" } });
+        const body = response.ok ? (await response.json()) as { messages?: unknown } : null;
+        if (Array.isArray(body?.messages) && historySignature(body.messages as Message[]) !== shownSignature) void loadHistory("quiet");
+      } catch { /* 下一次再看 */ }
+    }, waitingOnFeishu ? FEISHU_WAITING_POLL_MS : FEISHU_POLL_MS);
+    return () => clearInterval(timer);
+  }, [scope, status, historyStatus, historyUrl, loadHistory, shownSignature, waitingOnFeishu]);
 
   /** 只重读历史：输入草稿、待发附件、已显示的消息和正在流式的回答都不动。 */
   const retryHistory = useCallback(() => {

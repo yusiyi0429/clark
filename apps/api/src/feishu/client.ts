@@ -30,6 +30,8 @@ export type FeishuClient = {
   getUserInfo(userAccessToken: string): Promise<FeishuUserInfo>;
   /** 以机器人身份发消息（tenant_access_token）。content 是消息体对象，发送时序列化。 */
   sendMessage(receiveIdType: FeishuReceiveIdType, receiveId: string, msgType: "text" | "interactive", content: object): Promise<{ messageId: string }>;
+  /** 以机器人身份改自己发过的卡片（im:message:update）：飞书私聊里「正在查」原地换成回答。 */
+  updateCard(messageId: string, content: object): Promise<void>;
   /** 以本人身份读云文档元数据（drive:drive.metadata:readonly）；读不到的（没权限、已删）不出现在结果里。一次最多 200 份。 */
   getDocMetas(userAccessToken: string, docs: { token: string; type: FeishuDocType }[]): Promise<FeishuDocMeta[]>;
 };
@@ -131,6 +133,15 @@ export function createFeishuClient({ appId, appSecret, fetch: fetchImpl = fetch 
       });
       const sent = data(await readJson(response), "发送飞书消息");
       return { messageId: String(sent.message_id ?? "") };
+    },
+    async updateCard(messageId, content) {
+      const response = await fetchImpl(`${OPEN_API}/im/v1/messages/${encodeURIComponent(messageId)}`, {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${await tenantToken()}`, "content-type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ content: JSON.stringify(content) }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      data(await readJson(response), "更新飞书消息");
     },
     async getDocMetas(userAccessToken, docs) {
       if (!docs.length) return [];

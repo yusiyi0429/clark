@@ -17496,6 +17496,10 @@
                     }
                   ]
                 },
+                "via": {
+                  "const": "feishu",
+                  "type": "string"
+                },
                 "meta": {
                   "additionalProperties": false,
                   "type": "object",

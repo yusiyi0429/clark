@@ -46,6 +46,7 @@ import { logEvent } from "./observability.js";
 import { clientTagFor, enterRequestClient, tracingEnabled } from "./tracing.js";
 import type { FeishuEnv } from "./feishu/config.js";
 import { createFeishuClient, type FeishuClient } from "./feishu/client.js";
+import { createFeishuChat, type FeishuChat } from "./feishuChat.js";
 import { registerFeishuAuthRoutes } from "./routes/feishu.js";
 import { createMeetingFollowThrough, type MeetingFollowThrough } from "./meetingFollowThrough.js";
 import type { ImpactAgent } from "./impactAgent.js";
@@ -235,6 +236,7 @@ declare module "fastify" {
     battlefieldSummaries: BattlefieldSummaries;
     /** 会后分派的归位（task.place）；server.ts 注册给 jobs worker。 */
     taskPlacementJobs: Record<string, JobHandler>;
+    feishuChat: FeishuChat | undefined;
   }
 }
 
@@ -746,6 +748,10 @@ export async function buildApp({
   });
   app.decorate("docChanges", env.docChangeEnabled ? docChanges : { ...docChanges, jobs: () => ({ ...docChanges.jobs(), feishuEvents: {} }) });
   registerDocChangeRoutes(app, ctx, docChanges);
+  // 私聊天枢机器人：以本人身份走首页对话（feishuChat.ts）；事件由 server.ts 按 app.feishuChat.events 注册。
+  const feishuChat = feishuApi ? createFeishuChat({ app, pool, client: feishuApi, env, peopleDirectory }) : undefined;
+  app.decorate("feishuChat", feishuChat);
+  if (feishuChat) app.addHook("onClose", async () => { await feishuChat.idle(); });
 
   return app;
 }

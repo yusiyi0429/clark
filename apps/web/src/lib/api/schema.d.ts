@@ -4161,6 +4161,8 @@ export interface components {
                     }[];
                 };
                 kind?: "carried" | "trace";
+                /** @constant */
+                via?: "feishu";
                 meta?: {
                     issueId?: string;
                     title?: string;
