@@ -145,6 +145,7 @@ import {
   WorkBasisResponse, UpdateWorkBasisRequest, ScheduleMigrationResponse, UpdateScheduleMigrationRequest,
   WeeklyReviewBoardResponse, WeeklyReviewResponse, ExecuteWeeklyReviewActionRequest, ExecuteWeeklyReviewActionResponse, WeeklyReviewUpdateInput,
   ProgressOverviewResponse,
+  BattlefieldSummariesResponse,
   OAuthConsentRequest,
   OAuthConsentResponse,
   OAuthConsentDecisionResponse,
@@ -1858,6 +1859,12 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "全局进展", content: { "application/json": { schema: { $ref: "#/components/schemas/ProgressOverviewResponse" } } } }, "401": errorResponse },
         },
       },
+      "/api/progress/battlefield-summaries": {
+        get: {
+          operationId: "getBattlefieldSummaries", summary: "战场进展汇总：每个战场每天一份 Agent 汇总（对照本期目标、各 Mission 推进、卡点）；今天这份还没有时当场开始整理；CEO 看全部战场，其他人看自己所在的战场",
+          responses: { "200": { description: "战场进展汇总", content: { "application/json": { schema: { $ref: "#/components/schemas/BattlefieldSummariesResponse" } } } }, "401": errorResponse },
+        },
+      },
       "/api/me/tokens/{id}": {
         delete: {
           operationId: "revokePersonalToken", summary: "撤销本人令牌",
@@ -3073,6 +3080,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ExecuteWeeklyReviewActionResponse: ExecuteWeeklyReviewActionResponse as JsonSchema,
         WeeklyReviewUpdateInput: WeeklyReviewUpdateInput as JsonSchema,
         ProgressOverviewResponse: ProgressOverviewResponse as JsonSchema,
+        BattlefieldSummariesResponse: BattlefieldSummariesResponse as JsonSchema,
         TaskPerson: TaskPerson as JsonSchema,
         TaskMissionRef: TaskMissionRef as JsonSchema,
         CreateMyTaskRequest: CreateMyTaskRequest as JsonSchema,

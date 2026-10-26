@@ -2,6 +2,7 @@
 
 /**
  * 成员的「战场进展」（/me/progress，样稿 progress-rethink-v1 方案 1「卡点优先」）：先看谁需要搭把手，再看大家在推进什么。
+ * - 最上面：我所在战场的 Agent 汇总（BattlefieldSummaries，与全局进展共用）。
  * - 页头：我所在的组（战场；本月没有战场时是业务域）多于一个时一排切换；下面这组本月的目标（有才写）和一行盘点数字。
  * - 需要搭把手：卡住、按截止做不完、过了截止、没有核实进展，一张卡一件事；按钮「约会议」（参会人先填好这个人）、
  *   「发请求」（新请求里先写好找谁、关于哪件事）、「看看」（我是推进人或协作者时才有）。是我自己的事只给「看看」。
@@ -14,6 +15,7 @@ import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { SegmentedSwitch } from "@/components/SegmentedSwitch";
 import { browserApi, type Card } from "@/lib/api/client";
+import { BattlefieldSummaries } from "./BattlefieldSummaries";
 import { relativeDayTime } from "@/lib/companyTime";
 import p from "./progress.module.css";
 import s from "./battlefield-progress.module.css";
@@ -51,6 +53,7 @@ export function BattlefieldProgressScreen() {
       <DetailFrame title="战场进展" subtitle={group && data && data.groups.length === 1 ? group.name : ""} onBack={() => workspace.close()}>
         <div className={`${p.content} ${s.content}`}>
           <div className={s.stack}>
+            <BattlefieldSummaries />
             {failed && !data ? <p className={p.error} role="alert">没有读到战场进展</p> : null}
             {!data ? (failed ? null : <p className={p.loading} role="status">正在读取</p>)
               : !group ? <p className={p.empty}>这个月还没有你的 Mission</p>

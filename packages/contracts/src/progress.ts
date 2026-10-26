@@ -193,6 +193,33 @@ export const BattlefieldProgressGroup = Type.Object(
 );
 export const BattlefieldProgressResponse = Type.Object({ today: Day, groups: Type.Array(BattlefieldProgressGroup) }, { additionalProperties: false });
 
+/**
+ * 战场进展汇总（GET /api/progress/battlefield-summaries）：每个战场每天一份 Agent 汇总，CEO 看全部战场，其他人看自己所在的战场。
+ * - summary：最近一份；今天这份还没出来时是之前那份（看 day），一份都没有为 null。goal 是汇总对照的本期目标，没载入为 null。
+ *   progressUntil 是输入里最新一条进展的时间，没有进展记录为 null。
+ * - generation：今天这份正在整理（phase：reading 读进展、writing 整理）或没整理出来；今天这份已有或还没开始为 null。
+ */
+export const BattlefieldSummary = Type.Object(
+  {
+    battlefieldId: Type.String({ minLength: 1 }),
+    name: Type.String({ minLength: 1 }),
+    summary: Type.Union([Type.Object({
+      day: Day,
+      goal: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+      paragraphs: Type.Array(Type.String({ minLength: 1 })),
+      progressUntil: NullableDateTime,
+      summarizedAt: DateTime,
+    }, { additionalProperties: false }), Type.Null()]),
+    generation: Type.Union([
+      Type.Object({ state: Type.Literal("running"), phase: Type.Union([Type.Literal("reading"), Type.Literal("writing")]), startedAt: DateTime }, { additionalProperties: false }),
+      Type.Object({ state: Type.Literal("failed"), at: DateTime }, { additionalProperties: false }),
+      Type.Null(),
+    ]),
+  },
+  { additionalProperties: false },
+);
+export const BattlefieldSummariesResponse = Type.Object({ today: Day, battlefields: Type.Array(BattlefieldSummary) }, { additionalProperties: false });
+
 export type TProgressPerson = Static<typeof ProgressPerson>;
 export type TProgressArtifact = Static<typeof ProgressArtifact>;
 export type TProgressMissionRef = Static<typeof ProgressMissionRef>;
@@ -207,3 +234,5 @@ export type TBattlefieldHelpItem = Static<typeof BattlefieldHelpItem>;
 export type TBattlefieldPersonCard = Static<typeof BattlefieldPersonCard>;
 export type TBattlefieldProgressGroup = Static<typeof BattlefieldProgressGroup>;
 export type TBattlefieldProgressResponse = Static<typeof BattlefieldProgressResponse>;
+export type TBattlefieldSummary = Static<typeof BattlefieldSummary>;
+export type TBattlefieldSummariesResponse = Static<typeof BattlefieldSummariesResponse>;

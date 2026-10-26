@@ -65,6 +65,7 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | | `RESEARCH_*`、`OUTCOME_*` | 预研、会后提取：`HEAVY_MODEL`、不开思考 |
 | | `RADAR_*`、`PERSONAL_RADAR_*` | 公司雷达：`LIGHT_MODEL`；个人雷达跟公司雷达 |
 | | `MEMORY_IMPORT_MODEL`、`MEMORY_IMPORT_THINKING` | 记忆导入分类与去重：`LIGHT_MODEL` |
+| | `PROGRESS_SUMMARY_MODEL`、`PROGRESS_SUMMARY_THINKING` | 战场进展汇总（每天 07:30 与页面打开时）：`HEAVY_MODEL`、思考 medium |
 | 雷达 | `BOCHA_API_KEY` | 博查是唯一 Web Search；缺失时雷达卡如实显示未配置 |
 | | `WECHAT_MCP_URL`、`WECHAT_MCP_TOKEN` | 公众号 sidecar 的内网 MCP；Compose 地址缺省 `http://wechat:5000/mcp` |
 | 录音与声纹 | `TOS_ACCESS_KEY`、`TOS_SECRET_KEY`、`TOS_ENDPOINT`、`TOS_REGION`、`TOS_BUCKET` | 五项配全才能上传录音 |

@@ -1,0 +1,17 @@
+/* 按战场：卡片外壳、标题、底部时间沿用 progress.module.css（.item / .itemTitle / .coverage），这里只加本期目标一行、正文段落和整理状态。 */
+.card { gap: 8px; }
+
+.goal { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 1.6; }
+.goal b { flex: none; color: var(--ink-faint); font-weight: 500; }
+.goal span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.goal[data-missing] span { color: var(--ink-faint); }
+
+.body { display: grid; gap: 8px; margin-top: 2px; }
+.body p { margin: 0; color: var(--ink); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+
+.status { display: inline-flex; align-items: center; gap: 6px; justify-self: start; margin: 0; color: var(--ink-muted); font-size: 13px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.status::before { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--brand-deep); content: ""; animation: summaryPulse 1.6s ease-in-out infinite; }
+.status[data-failed]::before { background: var(--counter); animation: none; }
+@keyframes summaryPulse { 50% { opacity: .35; } }
+
+@media (prefers-reduced-motion: reduce) { .status::before { animation: none; } }

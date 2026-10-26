@@ -9476,6 +9476,34 @@
         }
       }
     },
+    "/api/progress/battlefield-summaries": {
+      "get": {
+        "operationId": "getBattlefieldSummaries",
+        "summary": "战场进展汇总：每个战场每天一份 Agent 汇总（对照本期目标、各 Mission 推进、卡点）；今天这份还没有时当场开始整理；CEO 看全部战场，其他人看自己所在的战场",
+        "responses": {
+          "200": {
+            "description": "战场进展汇总",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BattlefieldSummariesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/tokens/{id}": {
       "delete": {
         "operationId": "revokePersonalToken",
@@ -48648,6 +48676,156 @@
                       ]
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      },
+      "BattlefieldSummariesResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "today",
+          "battlefields"
+        ],
+        "properties": {
+          "today": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "battlefields": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "battlefieldId",
+                "name",
+                "summary",
+                "generation"
+              ],
+              "properties": {
+                "battlefieldId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "summary": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "day",
+                        "goal",
+                        "paragraphs",
+                        "progressUntil",
+                        "summarizedAt"
+                      ],
+                      "properties": {
+                        "day": {
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                          "type": "string"
+                        },
+                        "goal": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "paragraphs": {
+                          "type": "array",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "progressUntil": {
+                          "anyOf": [
+                            {
+                              "description": "ISO 8601",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "summarizedAt": {
+                          "description": "ISO 8601",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "generation": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "state",
+                        "phase",
+                        "startedAt"
+                      ],
+                      "properties": {
+                        "state": {
+                          "const": "running",
+                          "type": "string"
+                        },
+                        "phase": {
+                          "anyOf": [
+                            {
+                              "const": "reading",
+                              "type": "string"
+                            },
+                            {
+                              "const": "writing",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "startedAt": {
+                          "description": "ISO 8601",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "state",
+                        "at"
+                      ],
+                      "properties": {
+                        "state": {
+                          "const": "failed",
+                          "type": "string"
+                        },
+                        "at": {
+                          "description": "ISO 8601",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
