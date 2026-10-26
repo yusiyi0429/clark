@@ -203,7 +203,7 @@ describe("约会议", () => {
     // 没挂：挑选器直接展开，「约好」不能点。
     expect(tree.some((node) => node.props?.["data-anchor-row"] !== undefined)).toBe(false);
     expect(button(tree, "约好").props!.disabled).toBe(true);
-    click(renderDraft().find((node) => node.props?.["data-level"] === "po"));
+    // CEO 的挑选器里公司目标直接列着：点 PO 就挂上。
     click(renderDraft().find((node) => node.props?.["aria-pressed"] === false && text(node).includes(PO.title)));
     api.post.mockResolvedValue({ data: { card: { objectRef: { id: "m-new" }, navigation: [{ href: "/meetings/m-new", label: "Meeting" }] } }, response: { ok: true, status: 200 } });
     (button(renderDraft(), "约好").props!.onClick as () => void)();
