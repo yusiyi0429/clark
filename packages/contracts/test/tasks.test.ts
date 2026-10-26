@@ -106,7 +106,7 @@ describe("执行事项契约（工单 05）", () => {
     expect(doc.components.schemas.MonthPlanResponse).toBeDefined();
     expect(doc.paths["/api/me/tasks/{id}/accept"]?.post).toBeDefined();
     expect(doc.paths["/api/me/tasks/{id}/acceptance-draft"]?.post?.responses?.["503"]).toBeDefined();
-    expect(doc.paths["/api/me/tasks/{id}/submission"]?.delete).toBeDefined();
+    expect(doc.paths["/api/me/tasks/{id}/acceptance-return"]?.post).toBeDefined();
     expect(doc.paths["/api/me/tasks/{id}/reopen"]?.post).toBeDefined();
     expect(doc.paths["/api/materials/{objectType}/{objectId}/links"]?.post).toBeDefined();
   });

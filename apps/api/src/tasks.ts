@@ -286,7 +286,8 @@ const settleSubmissionNotices = (client: PoolClient, taskId: string) => client.q
 const tellGroup = (client: PoolClient, taskId: string, ownerId: string, text: string) =>
   postCoAgentMessage(queryOf(client), { objectType: "task", objectId: taskId }, text, [ownerId]);
 
-/** 推进人验收：存完成标准的文字快照和逐条判断、交付结果、一句结论；清掉待验收的提交。
+/** 推进人验收：逐条对完成标准，每一条都确认达到才算完成（没写完成标准的先写再验收；有一条没达到走退回）。
+ *  存完成标准的文字快照和逐条判断、交付结果、一句结论；清掉待验收的提交。
  *  viaAgent：本人在对话里说了验收通过，由他自己的外部工具代为确认；群里记下工具和本人原话。 */
 export function acceptMyTask(pool: Pool, ownerId: string, taskId: string, input: TAcceptMyTaskRequest, names: Map<string,string>, now: Date,
   viaAgent?: { client: TTaskProgressSource; userConfirmation: string }): Promise<TaskResult> {
@@ -297,12 +298,14 @@ export function acceptMyTask(pool: Pool, ownerId: string, taskId: string, input:
     const deliverables = [...new Set(input.deliverableMaterialIds)];
     const failed = await checkAcceptanceInput(client,taskId,standards,input.standards,deliverables);
     if (failed) return failed;
+    if (!standards.length) return error(400,"ACCEPTANCE_NO_STANDARDS","这件事还没写完成标准，先写完成标准再验收");
     const checks = new Map(input.standards.map((check) => [check.index, check]));
+    if (standards.some((_, index) => !checks.get(index)?.met)) return error(400,"ACCEPTANCE_NOT_ALL_MET","还有完成标准没确认达到；没达到的请退回");
     const verdict = input.verdict?.trim() || null;
     const acceptance: StoredAcceptance = { by: ownerId, at: now.toISOString(), verdict, deliverableMaterialIds: deliverables,
       standards: standards.map((text, index) => {
-        const check = checks.get(index);
-        return { text, met: check?.met ?? false, evidence: check?.evidence?.trim() || null, materialId: check?.materialId ?? null };
+        const check = checks.get(index)!;
+        return { text, met: true, evidence: check.evidence?.trim() || null, materialId: check.materialId ?? null };
       }) };
     await client.query("UPDATE tasks SET status='done',acceptance=$2,submission=NULL,blocked_reason=NULL,waiting_on=NULL,blocked_at=NULL,version=version+1,updated_at=now() WHERE id=$1",
       [taskId,JSON.stringify(acceptance)]);
@@ -313,12 +316,21 @@ export function acceptMyTask(pool: Pool, ownerId: string, taskId: string, input:
       : `${who}验收了这件事${verdict ? `：${verdict}` : "。"}`);
   });
 }
-/** 「还要继续做」：清掉外部工具提交的验收，状态不变。 */
-export function clearMyTaskSubmission(pool: Pool, ownerId: string, taskId: string, version: number, names: Map<string,string>): Promise<TaskResult> {
-  return ownerMutation(pool,ownerId,taskId,version,names,async(client,row)=>{
-    if (!row.submission || row.status === "done") return error(409,"TASK_NO_SUBMISSION","这件事现在没有待验收的提交");
+/** 验收退回：逐条对完成标准时有没达到的，每条没达到的都写原因；清掉外部工具的提交（有的话），状态不变，群里记下哪几条没达到、为什么。 */
+export function returnMyTaskAcceptance(pool: Pool, ownerId: string, taskId: string, input: { version: number; standards: CheckInput[] }, names: Map<string,string>): Promise<TaskResult> {
+  return ownerMutation(pool,ownerId,taskId,input.version,names,async(client,row)=>{
+    if (row.status === "done") return error(409,"TASK_ALREADY_DONE","这件事已经验收过了");
+    if (row.status === "returned") return error(409,"TASK_RETURNED","已退回的事项不能验收");
+    const standards = taskStandards(row.done_definition);
+    const failed = await checkAcceptanceInput(client,taskId,standards,input.standards,[]);
+    if (failed) return failed;
+    const missed = input.standards.filter((check) => !check.met);
+    if (!missed.length) return error(400,"ACCEPTANCE_NOTHING_MISSED","每条都达到了，直接验收完成");
+    if (missed.some((check) => !check.evidence?.trim())) return error(400,"ACCEPTANCE_REASON_REQUIRED","没达到的每一条都写一句原因");
     await client.query("UPDATE tasks SET submission=NULL,version=version+1,updated_at=now() WHERE id=$1",[taskId]);
     await settleSubmissionNotices(client,taskId);
+    const lines = missed.sort((a, b) => a.index - b.index).map((check) => `「${standards[check.index]}」：${check.evidence!.trim()}`);
+    await tellGroup(client,taskId,ownerId,`${names.get(ownerId) ?? ownerId}验收没通过，退回接着做。没达到：${lines.join("；")}`);
   });
 }
 /** 重新打开：状态回进行中，清掉验收记录（不留历史，群里那句就是记录）。 */
@@ -329,22 +341,13 @@ export function reopenMyTask(pool: Pool, ownerId: string, taskId: string, versio
     await tellGroup(client,taskId,ownerId,`${names.get(ownerId) ?? ownerId}重新打开了这件事。`);
   });
 }
-/** 信心充足：有完成标准，每一条都判断为达到，而且每条都有一句依据或指向一份材料。 */
-function confidentEnough(standards: string[], checks: CheckInput[]): boolean {
-  const byIndex = new Map(checks.map((check) => [check.index, check]));
-  return standards.length > 0 && standards.every((_, index) => {
-    const check = byIndex.get(index);
-    return Boolean(check?.met && (check.evidence?.trim() || check.materialId));
-  });
-}
 /**
- * 外部工具替推进人提交验收（可带草稿）：平时完成由推进人确认。未启动的同时变进行中（这是推进人自己的工具）；
+ * 外部工具替推进人提交验收（可带草稿）：完成只能由推进人逐条对完成标准确认。未启动的同时变进行中（这是推进人自己的工具）；
  * 推进人收到「等你验收」，同一件事只留最新一条未读。
- * autoDone（TASK_AUTO_DONE 开着）：工具说信心充足（confident）且每条完成标准都达到、有依据时，直接判定完成，推进人收到一条，不对可以重新打开。
  */
 export function submitMyTaskForAcceptance(pool: Pool, ownerId: string, taskId: string,
-  input: { version: number; verdict?: string | null; standards?: CheckInput[]; deliverables?: string[]; confident?: boolean },
-  via: TTaskProgressSource, names: Map<string,string>, now: Date, autoDone = false): Promise<TaskResult> {
+  input: { version: number; verdict?: string | null; standards?: CheckInput[]; deliverables?: string[] },
+  via: TTaskProgressSource, names: Map<string,string>, now: Date): Promise<TaskResult> {
   return ownerMutation(pool,ownerId,taskId,input.version,names,async(client,row)=>{
     if (row.status === "done") return error(409,"TASK_ALREADY_DONE","这件事已经验收完成");
     if (row.status === "returned") return error(409,"TASK_RETURNED","已退回的事项不能提交验收");
@@ -354,20 +357,6 @@ export function submitMyTaskForAcceptance(pool: Pool, ownerId: string, taskId: s
     const failed = await checkAcceptanceInput(client,taskId,standards,checks,deliverables);
     if (failed) return failed;
     const verdict = input.verdict?.trim() || null;
-    if (autoDone && input.confident && confidentEnough(standards,checks)) {
-      const byIndex = new Map(checks.map((check) => [check.index, check]));
-      const acceptance: StoredAcceptance = { by: ownerId, at: now.toISOString(), verdict, deliverableMaterialIds: deliverables, auto: via,
-        standards: standards.map((text, index) => {
-          const check = byIndex.get(index)!;
-          return { text, met: true, evidence: check.evidence?.trim() || null, materialId: check.materialId ?? null };
-        }) };
-      await client.query("UPDATE tasks SET status='done',acceptance=$2,submission=NULL,blocked_reason=NULL,waiting_on=NULL,blocked_at=NULL,version=version+1,updated_at=now() WHERE id=$1",
-        [taskId,JSON.stringify(acceptance)]);
-      await client.query("DELETE FROM notifications WHERE kind IN ('task_submitted','task_auto_done') AND object_type='task' AND object_id=$1 AND read_at IS NULL",[taskId]);
-      await insertNotification(client,{personId:ownerId,kind:"task_auto_done",objectType:"task",objectId:taskId,actorId:ownerId});
-      await tellGroup(client,taskId,ownerId,`${names.get(ownerId) ?? ownerId}的${TOOL_NAME[via]}判定这件事完成了${verdict ? `：${verdict}` : "。"}`);
-      return;
-    }
     const submission: StoredSubmission = { by: ownerId, via, at: now.toISOString(), verdict,
       standards: checks.map((check) => ({ index: check.index, met: check.met, evidence: check.evidence?.trim() || null, materialId: check.materialId ?? null })),
       deliverableMaterialIds: deliverables };

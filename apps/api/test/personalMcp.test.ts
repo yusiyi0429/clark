@@ -133,16 +133,19 @@ describe("个人令牌与执行事项 MCP", () => {
       const refused = await invoke(7, "delete_item", { itemId: assigned, version: 1 });
       expect(refused.isError).toBe(true); expect(refused.body.code).toBe("TASK_NOT_DELETABLE");
       expect((await invoke(8, "return_item", { itemId: assigned, version: 1, reason: "不归我" })).body).toMatchObject({ status: "returned" });
-      // 提交验收后列表里标出等验收；本人说了「通过」才代为确认，群里记下工具和原话。
-      const done = (await call(f, f.member, "POST", "/api/me/tasks", newTask(null, { title: "要验收的事" }))).json();
-      const submitted = await invoke(9, "submit_for_acceptance", { itemId: done.id, version: done.version, verdict: "做完了" });
+      // 提交验收后列表里标出等验收；本人逐条确认了才代为确认（有一条没达到不行），群里记下工具和原话；不能自己判定完成。
+      const done = (await call(f, f.member, "POST", "/api/me/tasks", newTask(null, { title: "要验收的事", doneDefinition: "两家都确认" }))).json();
+      expect((await invoke(13, "submit_for_acceptance", { itemId: done.id, version: done.version, confident: true })).isError).toBe(true);
+      const submitted = await invoke(9, "submit_for_acceptance", { itemId: done.id, version: done.version, verdict: "做完了", standards: [{ index: 0, met: true, evidence: "两家都回了" }] });
       expect((await invoke(10, "list_my_items", {})).body.items.find((item: { id: string }) => item.id === done.id)).toMatchObject({ awaitingAcceptance: true, source: "self" });
       expect((await invoke(11, "accept_item", { itemId: done.id, version: submitted.body.version, userConfirmation: " " })).isError).toBe(true);
-      const accepted = await invoke(12, "accept_item", { itemId: done.id, version: submitted.body.version, userConfirmation: "通过" });
+      const unmet = await invoke(14, "accept_item", { itemId: done.id, version: submitted.body.version, userConfirmation: "先这样", standards: [{ index: 0, met: false }] });
+      expect(unmet.isError).toBe(true); expect(unmet.body.code).toBe("ACCEPTANCE_NOT_ALL_MET");
+      const accepted = await invoke(12, "accept_item", { itemId: done.id, version: submitted.body.version, userConfirmation: "两家都确认了，通过" });
       expect(accepted.body).toMatchObject({ status: "done" });
       const detail = (await call(f, f.member, "GET", `/api/me/tasks/${done.id}`)).json();
       expect(detail.acceptance).toMatchObject({ verdict: "做完了", by: { personId: TEST_MEMBER.personId } });
-      expect(JSON.stringify((await call(f, f.member, "GET", `/api/threads/task/${done.id}`)).json())).toContain("Claude Code 里确认验收（“通过”）");
+      expect(JSON.stringify((await call(f, f.member, "GET", `/api/threads/task/${done.id}`)).json())).toContain("Claude Code 里确认验收（“两家都确认了，通过”）");
     } finally { await f.t.close(); }
   });
 

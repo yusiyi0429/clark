@@ -129,7 +129,7 @@ describe("成员通知栏里的执行事项", () => {
     expect(groups.progress[0].buttons.map((button) => button.label)).toEqual(["知道了"]);
   });
 
-  it("「等你验收」在回复与结果里：点开直接弹出验收；没有「知道了」，验收完或「还要继续做」才算处理", () => {
+  it("「等你验收」在回复与结果里：点开直接弹出验收；没有「知道了」，验收完或退回才算处理", () => {
     const opened: string[] = [];
     const groups = memberNoticeGroups(
       [{ id: "n4", kind: "task_submitted", text: "「Y」等你验收", objectType: "task", objectId: "t4", createdAt: "2026-10-08T08:00:00.000Z", readAt: null }],

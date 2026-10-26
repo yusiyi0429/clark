@@ -10111,7 +10111,7 @@
     "/api/me/tasks/{id}/accept": {
       "post": {
         "operationId": "acceptMyTask",
-        "summary": "推进人验收：对照完成标准逐条记下是否达到和依据、选交付结果、写一句结论；状态变完成，清掉待验收的提交",
+        "summary": "推进人验收：逐条对完成标准，每条都确认达到才完成（有没达到的走退回，没写完成标准的先写）；选交付结果、写一句结论；状态变完成，清掉待验收的提交",
         "parameters": [
           {
             "name": "id",
@@ -10274,10 +10274,10 @@
         }
       }
     },
-    "/api/me/tasks/{id}/submission": {
-      "delete": {
-        "operationId": "clearMyTaskSubmission",
-        "summary": "推进人看过外部工具提交的验收后「还要继续做」：清掉这次提交，状态不变",
+    "/api/me/tasks/{id}/acceptance-return": {
+      "post": {
+        "operationId": "returnMyTaskAcceptance",
+        "summary": "推进人逐条对完成标准时有没达到的：写明哪几条没达到、为什么，退回接着做；清掉外部工具的提交，状态不变",
         "parameters": [
           {
             "name": "id",
@@ -10286,17 +10286,18 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "version",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnTaskAcceptanceRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "更新后的执行事项",
@@ -10304,6 +10305,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -49662,30 +49673,6 @@
                       "format": "uuid",
                       "type": "string"
                     }
-                  },
-                  "auto": {
-                    "anyOf": [
-                      {
-                        "const": "web",
-                        "type": "string"
-                      },
-                      {
-                        "const": "codex",
-                        "type": "string"
-                      },
-                      {
-                        "const": "claude",
-                        "type": "string"
-                      },
-                      {
-                        "const": "github",
-                        "type": "string"
-                      },
-                      {
-                        "const": "other",
-                        "type": "string"
-                      }
-                    ]
                   }
                 }
               },
@@ -56974,30 +56961,6 @@
               "format": "uuid",
               "type": "string"
             }
-          },
-          "auto": {
-            "anyOf": [
-              {
-                "const": "web",
-                "type": "string"
-              },
-              {
-                "const": "codex",
-                "type": "string"
-              },
-              {
-                "const": "claude",
-                "type": "string"
-              },
-              {
-                "const": "github",
-                "type": "string"
-              },
-              {
-                "const": "other",
-                "type": "string"
-              }
-            ]
           }
         }
       },
@@ -57094,6 +57057,68 @@
           "version": {
             "minimum": 1,
             "type": "integer"
+          }
+        }
+      },
+      "ReturnTaskAcceptanceRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "standards"
+        ],
+        "properties": {
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "standards": {
+            "minItems": 1,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "index",
+                "met",
+                "evidence",
+                "materialId"
+              ],
+              "properties": {
+                "index": {
+                  "minimum": 0,
+                  "maximum": 49,
+                  "type": "integer"
+                },
+                "met": {
+                  "type": "boolean"
+                },
+                "evidence": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "materialId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -57226,10 +57251,6 @@
                     },
                     {
                       "const": "task_submitted",
-                      "type": "string"
-                    },
-                    {
-                      "const": "task_auto_done",
                       "type": "string"
                     },
                     {

@@ -277,105 +277,110 @@ it("重新打开先确认（验收记录会清掉），再带版本调 reopen", 
 
 const submission = { by: { personId: "sun", name: "孙铭泽" }, via: "codex", at: "2026-10-09T08:00:00Z", verdict: "两家都确认了",
   standards: [{ index: 0, met: true, evidence: "进展里写了两家的回复", materialId: null }, { index: 1, met: true, evidence: null, materialId: DOC }], deliverableMaterialIds: [DOC, "99999999-9999-4999-8999-999999999999"] };
-const standardBoxes = (tree: unknown) => findAll(tree, (node) => node.props?.className === a.checkbox);
 const deliverableBoxes = (tree: unknown) => findAll(tree, (node) => node.props?.className === a.deliverable);
 const button = (tree: unknown, label: string) => find(tree, (node) => Array.isArray(node.props?.children) ? (node.props!.children as unknown[]).includes(label) : node.props?.children === label);
+/** 第 index 条（从 0 起）下面的「达到」「没达到」。 */
+const decide = (tree: unknown, index: number, label: "达到" | "没达到") =>
+  (find(find(tree, (node) => node.props?.["aria-label"] === `第 ${index + 1} 条`), (node) => node.props?.children === label)!.props!.onClick as () => void)();
+const reason = (tree: unknown, index: number) => find(tree, (node) => node.props?.["aria-label"] === `第 ${index + 1} 条没达到的原因`);
+const text = (tree: unknown): string => {
+  if (tree === null || tree === undefined || typeof tree === "boolean") return "";
+  if (typeof tree === "string" || typeof tree === "number") return String(tree);
+  if (Array.isArray(tree)) return tree.map(text).join("");
+  return text((tree as Node).props?.children);
+};
+const dialogProps = (detail: unknown, materials: unknown[] = [material(DOC, "结论.md")]) =>
+  ({ detail: detail as never, materials: materials as never[], onClose: vi.fn(), onDone: vi.fn(async () => undefined), onStale: vi.fn(), onOpenMaterial: vi.fn(), onEditStandards: vi.fn() });
 
-it("外部工具带了草稿：一打开就预填（不再请 Agent 起草）；人改过之后点「验收完成」，提交勾选、依据、结论和现有的交付结果", async () => {
-  const props = { detail: detailOf({ submission, task: { ...task, awaitingAcceptance: true } }), materials: [material(DOC, "结论.md"), material(LINK, "依据.md")], onClose: vi.fn(), onDone: vi.fn(async () => undefined), onStale: vi.fn(), onOpenMaterial: vi.fn() };
-  let tree = render(() => AcceptDialog(props));
+it("外部工具提交了：每条下面写工具的判断和依据，不请 Agent 起草；本人逐条确认前「验收完成」点不了；全部达到才提交，带上工具的依据、结论和现有的交付结果", async () => {
+  const props = dialogProps(detailOf({ submission, task: { ...task, awaitingAcceptance: true } }));
+  const store: unknown[] = [];
+  let tree = render(() => AcceptDialog(props), store);
   hooks.effects.forEach((effect) => effect());
   expect(actions.post).not.toHaveBeenCalled();
-  expect(standardBoxes(tree).map((node) => node.props!.isSelected)).toEqual([true, true]);
-  expect(deliverableBoxes(tree).map((node) => node.props!.isSelected)).toEqual([true, false]);
+  expect(text(tree)).toContain("Codex达到 · 进展里写了两家的回复");
+  expect(text(tree)).toContain("0 / 2 已确认");
+  expect(button(tree, "验收完成")!.props!.isDisabled).toBe(true);
+  decide(tree, 0, "达到");
+  tree = render(() => AcceptDialog(props), store);
+  expect(button(tree, "验收完成")!.props!.isDisabled).toBe(true);
+  decide(tree, 1, "达到");
+  tree = render(() => AcceptDialog(props), store);
+  expect(text(tree)).toContain("2 / 2 已确认");
+  expect(deliverableBoxes(tree).map((node) => node.props!.isSelected)).toEqual([true]);
   expect(find(tree, (node) => node.props?.value === "两家都确认了")).toBeDefined();
-  expect(button(tree, "还要继续做")).toBeDefined();
-  // 第二条其实没达到，再把「依据.md」也算进交付结果。
-  (standardBoxes(tree)[1].props!.onChange as (selected: boolean) => void)(false);
-  (deliverableBoxes(tree)[1].props!.onChange as (selected: boolean) => void)(true);
-  tree = render(() => AcceptDialog(props));
   actions.post.mockResolvedValue({ data: { ...task, status: "done", version: 3 } });
   (button(tree, "验收完成")!.props!.onPress as () => void)();
   await vi.waitFor(() => expect(props.onDone).toHaveBeenCalledWith({ ...task, status: "done", version: 3 }, true));
   expect(actions.post).toHaveBeenCalledWith("/api/me/tasks/{id}/accept", { params: { path: { id: "task-1" } }, body: {
-    version: 2, verdict: "两家都确认了", deliverableMaterialIds: [DOC, LINK],
-    standards: [{ index: 0, met: true, evidence: "进展里写了两家的回复", materialId: null }, { index: 1, met: false, evidence: null, materialId: DOC }],
+    version: 2, verdict: "两家都确认了", deliverableMaterialIds: [DOC],
+    standards: [{ index: 0, met: true, evidence: "进展里写了两家的回复", materialId: null }, { index: 1, met: true, evidence: null, materialId: DOC }],
   } });
 });
 
-it("没有提交时请我的 Agent 起草；没起草出来也能手填验收，没勾全照样提交、如实记录；没有「还要继续做」", async () => {
-  const props = { detail: detailOf(), materials: [material(DOC, "结论.md")], onClose: vi.fn(), onDone: vi.fn(async () => undefined), onStale: vi.fn(), onOpenMaterial: vi.fn() };
+it("有一条没达到：要写原因才能点，按钮变成「退回」、不出结论；退回带上每条的判断和原因，接着做", async () => {
+  const props = dialogProps(detailOf({ submission, task: { ...task, awaitingAcceptance: true } }));
+  const store: unknown[] = [];
+  let tree = render(() => AcceptDialog(props), store);
+  decide(tree, 0, "达到");
+  decide(tree, 1, "没达到");
+  tree = render(() => AcceptDialog(props), store);
+  expect(button(tree, "验收完成")).toBeUndefined();
+  expect(button(tree, "退回")!.props!.isDisabled).toBe(true);
+  expect(find(tree, (node) => node.props?.value === "两家都确认了")).toBeUndefined();
+  (reason(tree, 1)!.props!.onChange as (value: string) => void)("第二家还没回复");
+  tree = render(() => AcceptDialog(props), store);
+  expect(button(tree, "退回")!.props!.isDisabled).toBe(false);
+  actions.post.mockResolvedValue({ data: { ...task, version: 3 } });
+  (button(tree, "退回")!.props!.onPress as () => void)();
+  await vi.waitFor(() => expect(props.onDone).toHaveBeenCalledWith({ ...task, version: 3 }, false));
+  expect(actions.post).toHaveBeenCalledWith("/api/me/tasks/{id}/acceptance-return", { params: { path: { id: "task-1" } }, body: {
+    version: 2, standards: [{ index: 0, met: true, evidence: "进展里写了两家的回复", materialId: null }, { index: 1, met: false, evidence: "第二家还没回复", materialId: null }],
+  } });
+});
+
+it("没有提交时请我的 Agent 起草：判断列在每条下面，但不替人确认；没写完成标准的不起草，只有「写完成标准」", async () => {
+  const props = dialogProps(detailOf());
   const store: unknown[] = [];
   let tree = render(() => AcceptDialog(props), store);
   expect(find(tree, (node) => node.props?.role === "status")).toBeDefined();
-  expect(button(tree, "还要继续做")).toBeUndefined();
-  actions.post.mockResolvedValueOnce({ response: { status: 503 }, error: { code: "ACCEPTANCE_DRAFT_UNAVAILABLE" } });
+  actions.post.mockResolvedValueOnce({ data: { verdict: "两家都回了", standards: [{ index: 0, met: true, evidence: "群里有回复", materialId: null }], deliverableMaterialIds: [] } });
   hooks.effects.forEach((effect) => effect());
   expect(actions.post).toHaveBeenCalledWith("/api/me/tasks/{id}/acceptance-draft", expect.objectContaining({ params: { path: { id: "task-1" } } }));
   await vi.waitFor(() => { tree = render(() => AcceptDialog(props), store); expect(find(tree, (node) => node.props?.role === "status")).toBeUndefined(); });
-  expect(standardBoxes(tree).map((node) => node.props!.isSelected)).toEqual([false, false]);
-  (standardBoxes(tree)[0].props!.onChange as (selected: boolean) => void)(true);
-  tree = render(() => AcceptDialog(props), store);
-  actions.post.mockResolvedValue({ data: { ...task, status: "done", version: 3 } });
-  (button(tree, "验收完成")!.props!.onPress as () => void)();
-  await vi.waitFor(() => expect(props.onDone).toHaveBeenCalled());
-  expect(actions.post).toHaveBeenLastCalledWith("/api/me/tasks/{id}/accept", { params: { path: { id: "task-1" } }, body: { version: 2, verdict: null, deliverableMaterialIds: [], standards: [{ index: 0, met: true, evidence: null, materialId: null }] } });
-});
+  expect(text(tree)).toContain("我的 Agent达到 · 群里有回复");
+  expect(text(tree)).toContain("0 / 2 已确认");
+  expect(button(tree, "验收完成")!.props!.isDisabled).toBe(true);
 
-it("首页简化版（quick）：照样列完成标准和交付结果，勾不勾都能「验收完成」；不请 Agent 起草、没有结论输入和「还要继续做」，外部工具的结论照带；「完整验收」去二级页", async () => {
-  const onFull = vi.fn();
-  const props = { detail: detailOf({ submission, task: { ...task, awaitingAcceptance: true } }), materials: [material(DOC, "结论.md")], onClose: vi.fn(),
-    onDone: vi.fn(async () => undefined), onStale: vi.fn(), quick: { onFull } };
-  let tree = render(() => AcceptDialog(props));
+  vi.mocked(actions.post).mockClear();
+  const bare = dialogProps(detailOf({ standards: [] }), []);
+  tree = render(() => AcceptDialog(bare), []);
   hooks.effects.forEach((effect) => effect());
   expect(actions.post).not.toHaveBeenCalled();
-  expect(standardBoxes(tree)).toHaveLength(2);
-  expect(deliverableBoxes(tree)).toHaveLength(1);
-  expect(find(tree, (node) => node.type === "textarea" || node.props?.value === "两家都确认了")).toBeUndefined();
-  expect(button(tree, "还要继续做")).toBeUndefined();
-  (button(tree, "完整验收")!.props!.onPress as () => void)();
-  expect(onFull).toHaveBeenCalled();
-  tree = render(() => AcceptDialog(props));
-  actions.post.mockResolvedValue({ data: { ...task, status: "done", version: 3 } });
-  (button(tree, "验收完成")!.props!.onPress as () => void)();
-  await vi.waitFor(() => expect(props.onDone).toHaveBeenCalled());
-  expect(actions.post).toHaveBeenCalledWith("/api/me/tasks/{id}/accept", expect.objectContaining({ body: expect.objectContaining({ verdict: "两家都确认了" }) }));
-
-  // 没有提交、什么都不勾也能验收；不起草。
-  vi.mocked(actions.post).mockClear();
-  const plain = { ...props, detail: detailOf() };
-  tree = render(() => AcceptDialog(plain), []);
-  hooks.effects.forEach((effect) => effect());
-  expect(find(tree, (node) => node.props?.role === "status")).toBeUndefined();
-  actions.post.mockResolvedValue({ data: { ...task, status: "done", version: 3 } });
-  (button(tree, "验收完成")!.props!.onPress as () => void)();
-  await vi.waitFor(() => expect(actions.post).toHaveBeenCalledTimes(1));
-  expect(actions.post).toHaveBeenCalledWith("/api/me/tasks/{id}/accept", { params: { path: { id: "task-1" } }, body: { version: 2, verdict: null, deliverableMaterialIds: [], standards: [] } });
+  expect(button(tree, "验收完成")).toBeUndefined();
+  (button(tree, "写完成标准")!.props!.onPress as () => void)();
+  expect(bare.onClose).toHaveBeenCalled();
+  expect(bare.onEditStandards).toHaveBeenCalled();
 });
 
-it("人先动了手，Agent 的草稿晚到也不覆盖", async () => {
-  const props = { detail: detailOf(), materials: [], onClose: vi.fn(), onDone: vi.fn(async () => undefined), onStale: vi.fn(), onOpenMaterial: vi.fn() };
+it("人先动了结论，Agent 的草稿晚到也不覆盖；关弹窗什么都不提交", async () => {
+  const props = dialogProps(detailOf(), []);
   const store: unknown[] = [];
   let tree = render(() => AcceptDialog(props), store);
   let resolve: (value: unknown) => void = () => undefined;
   actions.post.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
   hooks.effects.forEach((effect) => effect());
-  (standardBoxes(tree)[1].props!.onChange as (selected: boolean) => void)(true);
+  decide(tree, 0, "达到");
+  tree = render(() => AcceptDialog(props), store);
+  (find(tree, (node) => node.props?.className === a.verdict)!.props!.onChange as (value: string) => void)("我自己的结论");
   resolve({ data: { verdict: "Agent 的结论", standards: [{ index: 0, met: true, evidence: null, materialId: null }], deliverableMaterialIds: [] } });
   await vi.waitFor(() => { tree = render(() => AcceptDialog(props), store); expect(find(tree, (node) => node.props?.role === "status")).toBeUndefined(); });
-  expect(standardBoxes(tree).map((node) => node.props!.isSelected)).toEqual([false, true]);
+  expect(find(tree, (node) => node.props?.value === "我自己的结论")).toBeDefined();
   expect(find(tree, (node) => node.props?.value === "Agent 的结论")).toBeUndefined();
-});
-
-it("「还要继续做」清掉这次提交（DELETE 带版本）；关弹窗不清任何东西", async () => {
-  const props = { detail: detailOf({ submission, task: { ...task, awaitingAcceptance: true } }), materials: [material(DOC, "结论.md")], onClose: vi.fn(), onDone: vi.fn(async () => undefined), onStale: vi.fn(), onOpenMaterial: vi.fn() };
-  const tree = render(() => AcceptDialog(props));
+  vi.mocked(actions.post).mockClear();
   ((tree as Node).props!.onClose as () => void)();
-  expect(props.onClose).toHaveBeenCalled(); expect(actions.delete).not.toHaveBeenCalled();
-  actions.delete.mockResolvedValue({ data: { ...task, version: 3 } });
-  (button(tree, "还要继续做")!.props!.onPress as () => void)();
-  await vi.waitFor(() => expect(props.onDone).toHaveBeenCalledWith({ ...task, version: 3 }, false));
-  expect(actions.delete).toHaveBeenCalledWith("/api/me/tasks/{id}/submission", { params: { path: { id: "task-1" }, query: { version: 2 } } });
+  expect(props.onClose).toHaveBeenCalled();
+  expect(actions.post).not.toHaveBeenCalled();
 });
 
 it("执行过程：会议原话置顶、不显示推进人的判断；点有链接的那一行展开全文、来源和证据链接，再点收起", () => {

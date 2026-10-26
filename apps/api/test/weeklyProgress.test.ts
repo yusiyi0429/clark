@@ -31,12 +31,12 @@ describe("本体每周进展拉取", () => {
       conversationRuntime: { async run(input) { return { assistantMessage: "", runtimeEntries: input.runtimeEntries }; } },
     });
     try {
-      const missionTask = (await call(f, f.member, "POST", "/api/me/tasks", newTask())).json();
+      const missionTask = (await call(f, f.member, "POST", "/api/me/tasks", newTask("execution-one", { doneDefinition: "第一步做完" }))).json();
       const plainTask = (await call(f, f.member, "POST", "/api/me/tasks", newTask(null, { title: "独立事项" }))).json();
       const invited = await call(f, f.member, "POST", `/api/me/tasks/${missionTask.id}/collaborators`, { personIds: ["person-fixture-003"] });
       const dated = await call(f, f.member, "PATCH", `/api/me/tasks/${missionTask.id}`, { version: invited.json().version, dueDate: "2026-10-20" });
       expect((await call(f, f.member, "POST", `/api/me/tasks/${missionTask.id}/accept`,
-        { version: dated.json().version, verdict: null, standards: [], deliverableMaterialIds: [] })).statusCode).toBe(200);
+        { version: dated.json().version, verdict: null, standards: [{ index: 0, met: true, evidence: null, materialId: null }], deliverableMaterialIds: [] })).statusCode).toBe(200);
       const insert = async (taskId: string, authorId: string, at: string, body: string) => {
         const id = randomUUID();
         await f.t.sql(`INSERT INTO task_progress(id,task_id,author_id,source,body,links,created_at)

@@ -84,8 +84,8 @@ function Identity({ detail, onInvite }: { detail: Detail; onInvite: () => void }
     </div>
     {acceptance ? <div className={c.record}>
       <div className={c.recordHead}>
-        <span className={c.recordBadge}><CircleCheck size={17} strokeWidth={2} aria-hidden />{acceptance.auto ? "已完成" : "已验收"}</span>
-        <span className={c.recordMeta}>{acceptance.auto ? `${SOURCE[acceptance.auto]} 判定` : acceptance.by.name} · {monthDayClock(acceptance.at)}{early === null ? "" : early > 0 ? ` · 比计划早 ${early} 天` : early < 0 ? ` · 比计划晚 ${-early} 天` : " · 按期完成"}</span>
+        <span className={c.recordBadge}><CircleCheck size={17} strokeWidth={2} aria-hidden />已验收</span>
+        <span className={c.recordMeta}>{acceptance.by.name} · {monthDayClock(acceptance.at)}{early === null ? "" : early > 0 ? ` · 比计划早 ${early} 天` : early < 0 ? ` · 比计划晚 ${-early} 天` : " · 按期完成"}</span>
       </div>
       {acceptance.verdict ? <p className={c.verdict}>{acceptance.verdict}</p> : null}
     </div> : null}

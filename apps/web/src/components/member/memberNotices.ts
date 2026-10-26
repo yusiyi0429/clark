@@ -2,7 +2,7 @@
  * 成员通知栏的两组（clark DRI 通知栏「推动」那一组的处理方式）：
  * - 新的执行事项：会后分给我的事 —— 「接下」（看过，事已经在我的执行事项里），或「退回」（写原因，告诉主持人）。
  * - 回复与结果：我主持的会里有人退回、CEO 不同意战略议题 —— 「知道了」；外部工具替我提交了验收（design-12）——
- *   点开直接弹出验收。打开不等于处理：验收完或点「还要继续做」，服务端才把它标为已读。
+ *   点开直接弹出验收。打开不等于处理：验收完或退回，服务端才把它标为已读。
  * - 协作进展：别人在我推进或协作的事项上写了进展（同一件事只一条，文案是最新一条）—— 点开进事项并算看过，或「知道了」。
  * 只列没看过的；看过的从通知栏退掉（通知只指向对象，文案按对象此刻的状态写，C-05）。
  */
@@ -61,7 +61,7 @@ export function memberNoticeGroups(
       },
     }));
   const results = unread
-    .filter((item) => item.kind === "task_returned" || item.kind === "strategic_rejected" || item.kind === "task_submitted" || item.kind === "task_auto_done")
+    .filter((item) => item.kind === "task_returned" || item.kind === "strategic_rejected" || item.kind === "task_submitted")
     .map<ActionNotice>((item) => item.kind === "task_submitted" ? ({
       id: item.id,
       title: item.text,
@@ -69,13 +69,6 @@ export function memberNoticeGroups(
       tone: "neutral",
       onOpen: (from) => handlers.openAcceptance?.(item.objectId, from),
       buttons: [],
-    }) : item.kind === "task_auto_done" ? ({
-      id: item.id,
-      title: item.text,
-      detail: `外部工具判定 · ${monthDayTime(item.createdAt)}`,
-      tone: "neutral",
-      onOpen: (from) => handlers.openTask?.(item.objectId, from),
-      buttons: [{ label: "知道了", emphasis: true, run: () => seen(item.id) }],
     }) : ({
       id: item.id,
       title: item.text,

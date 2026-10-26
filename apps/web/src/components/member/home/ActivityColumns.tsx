@@ -6,7 +6,7 @@
  * 卡片只写标题和一行小字：有截止写截止日，本周、之后没截止有开始写「M/D 起」，已完成只写截止日；逾期的日期加粗（不染色）。
  * 「全部」视图下小字前面加它属于哪个 Mission（missionOf），不属于任何 Mission 的写「不属于 Mission」。
  * 进行中的卡右上角写最近一次动静（今天写 HH:MM，更早写 M/D）；停滞的（idleDays）改写「N 天没动」，小点换琥珀色、标题降一档。
- * 没完成的卡右下角一个「验收」，当场弹出简化的验收弹窗（AcceptDialog quick）：对照完成标准、看一眼交付结果，勾不勾都行，点「验收完成」；
+ * 没完成的卡右下角一个「验收」，当场弹出和二级页同一个验收弹窗：逐条对完成标准，全部达到才「验收完成」，有没达到的就「退回」；
  * 外部工具提交了验收的，「验收」深一档。读不到事项时直接去二级页验收。
  */
 import { useState } from "react";
@@ -127,7 +127,7 @@ export function ActivityColumns({ activities, today, weekStart, weekEnd, mission
           onClose={() => setAccepting(null)}
           onDone={async () => setAccepting(null)}
           onStale={() => void accept(accepting.detail.task.id, accepting.origin)}
-          quick={{ onFull: () => { const { detail, origin } = accepting; setAccepting(null); onNavigate(`${taskHref(detail.task.id)}?accept=1`, origin); } }} />
+          onEditStandards={() => onNavigate(taskHref(accepting.detail.task.id), accepting.origin)} />
       ) : null}
     </div>
   );

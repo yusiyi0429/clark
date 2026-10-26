@@ -498,7 +498,7 @@ describe("HomePlan：三栏的卡片", () => {
     expect(cardsIn(mount().html, "week")).toEqual(["a4", "a7", "a3", "a5"]);
   });
 
-  it("没完成的卡右下角「验收」：读事项详情和材料，当场弹出简化的验收弹窗；「完整验收」去二级页；读不到就直接去二级页；已完成的卡没有", async () => {
+  it("没完成的卡右下角「验收」：读事项详情和材料，当场弹出和二级页同一个验收弹窗；没写完成标准时「写完成标准」去二级页；读不到就直接去二级页验收；已完成的卡没有", async () => {
     const detail = { task: { id: "a3", version: 1, title: "真实会议跑通" }, standards: ["跑通"], submission: null };
     const materials = [{ id: "m-1", fileName: "纪要.md" }];
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ materials }) })));
@@ -511,9 +511,11 @@ describe("HomePlan：三栏的卡片", () => {
     expect(h.api.GET).toHaveBeenCalledWith("/api/me/tasks/{id}", { params: { path: { id: "a3" } } });
     expect(fetch).toHaveBeenCalledWith("/api/materials/task/a3", expect.anything());
     expect(view.html).toContain("data-accept-dialog");
-    expect(h.accept).toMatchObject({ detail, materials, quick: expect.anything() });
-    (h.accept!.quick as { onFull: () => void }).onFull();
-    expect(view.onNavigate).toHaveBeenCalledWith("/me/tasks/a3?accept=1", expect.anything());
+    expect(h.accept).toMatchObject({ detail, materials });
+    expect(h.accept).not.toHaveProperty("quick");
+    (h.accept!.onEditStandards as () => void)();
+    expect(view.onNavigate).toHaveBeenCalledWith("/me/tasks/a3", expect.anything());
+    (h.accept!.onClose as () => void)();
     expect(view.render()).not.toContain("data-accept-dialog");
 
     h.api.GET.mockResolvedValue({ data: undefined, response: { ok: false, status: 404 } });

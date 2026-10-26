@@ -149,10 +149,10 @@ export function TaskScreen({ initialDetail }: { initialDetail: Detail }) {
             {error ? <p className={s.error}>{error}</p> : <p className={s.notice}>{notice}</p>}
           </div></div> : null}
           {acceptOpen ? <AcceptDialog detail={detail} materials={area.materials} onClose={() => setAcceptOpen(false)} onStale={() => void refresh()}
-            onOpenMaterial={(id) => area.open(id)}
+            onOpenMaterial={(id) => area.open(id)} onEditStandards={() => { setEditing(true); setError(""); }}
             onDone={async (next, accepted) => {
               if (!await refresh()) setDetail((current) => ({ ...current, task: next }));
-              setAcceptOpen(false); setNotice(accepted ? "已验收，这件事完成了" : "已清掉这次提交，接着做");
+              setAcceptOpen(false); setNotice(accepted ? "已验收，这件事完成了" : "已退回，接着做");
             }} /> : null}
         </>}
       </ObjectMaterialArea>
