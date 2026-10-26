@@ -4,7 +4,9 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {normalize,allNodes} from './domain.mjs';
 import {createModelGateway,recordModelRun,patientTransport} from './model.mjs';
 import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,ownerAnnotation,isChildCard,reconcileReply,roomLine} from './nexus-policy.mjs';
-import {createCollaborationState,currentVersion,canRead,cardStatus,confirmationSummary} from './governance.mjs';
+import {createCollaborationState,currentVersion,canRead,cardStatus,confirmationSummary,insightView} from './governance.mjs';
+import {runRoundPool} from './round-pool.mjs';
+import {redactMessages} from './redact.mjs';
 import {disagrees} from './stance.mjs';
 import {openCollaborationStore,archivesPath} from './collaboration-store.mjs';
 import {memberActor,sharedProjection} from './shared-projection.mjs';
@@ -32,7 +34,7 @@ import {listenSystemPrompt,listenInput,parseListen,applyListen} from './nexus-li
 import {actContext} from './nexus-context.mjs';
 import {cascadeSystem,cascadeInput,validateCascade,cascadeMessage,childrenOf} from './nexus-cascade.mjs';
 import {bareJson} from './model.mjs';
-import {loadReviewRules,reviewPromptBlock,reviewCardsFor} from './nexus-review.mjs';
+import {loadReviewRules,reviewPromptBlock,reviewCardsFor,insightSynthesisRequest} from './nexus-review.mjs';
 import {handoffPackage,monthOf,handoffGenerated,reviewSummary} from './review-handoff.mjs';
 import {carryReviewLayer,installReviewRound} from './review-round.mjs';
 import {importReviewRound} from './deployment-review-import.mjs';
@@ -105,6 +107,20 @@ const reviewJobs=createReviewJobs({store,gateway,skillRoot:reviewSkillRoot,state
  companyDirection:async period=>{try{const m=await loadOntologyManifest();return m.selections.filter(x=>x.unit==='company'&&(x.kind==='intent'||x.kind==='history'&&x.historyPeriod===period)).map(x=>x.text).join('\n\n');}catch{return '';}},
  installReviewRound,archivesPath});
 await reviewJobs.recover();
+// Nexus's synthesis under each review once insights are revealed; a failure is kept on the card, not hidden (2026-10-26).
+let synthesizing=false;
+async function synthesizeInsights(){
+ if(synthesizing)return;synthesizing=true;
+ try{
+  const rules=(await loadReviewRules(reviewSkillRoot)).rules,name=id=>handoffProfiles[id]?.name||id;
+  const todo=Object.values(store.snapshot().cards).filter(c=>c.kind==='review'&&(store.snapshot().insights?.[c.id]||[]).length&&!store.snapshot().insightNexus?.[c.id]?.text).map(c=>c.id);
+  await runRoundPool(todo,async id=>{
+   let entry;try{const snap=store.snapshot(),r=await chatGateway.complete(redactMessages(insightSynthesisRequest(snap,snap.cards[id],rules,name)).messages,{json:true,thinking:true,reasoningEffort:'medium'});const v=JSON.parse(r.answer);if(typeof v?.text!=='string'||!v.text.trim())throw Error('综合为空');entry={text:readableAnswer(v.text,[]),createdAt:new Date().toISOString()};}
+   catch(e){entry={error:e.code==='MODEL_REFUSAL'?'模型拒绝了这次综合，可能因为洞察里有具体到个人的敏感细节':'综合没有完成，可在管理里重试',at:new Date().toISOString()};}
+   await store.transact(s=>{(s.insightNexus??={})[id]=entry;s.sequence++;return s;});
+  },4);
+ }finally{synthesizing=false;}
+}
 // 通知卡片 for Tianshu's notification centre (2026-10-26): read-only, read marks in their own file (notifications.mjs).
 const readMarks=createReadMarks(process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)));
 // 复盘 → 拆解. Until the full run is wanted (DECODING_PLAN_HANDOFF=generate), only the input package is prepared and
@@ -176,6 +192,15 @@ export const server=createServer(async(req,res)=>{
   // Never in M2's own path: an error here answers this call only and the page works as before.
   if(route.pathname==='/api/notifications'&&req.method==='GET'){const member=route.searchParams.get('member');try{const items=notificationsFor(store.snapshot(),member,{reads:await readMarks.of(member),jobs:{review:reviewJobs.view()}});const body=JSON.stringify({items,at:new Date().toISOString()}),etag='"'+createHash('sha256').update(JSON.stringify(items)).digest('hex').slice(0,20)+'"';if(req.headers['if-none-match']===etag){res.writeHead(304,{ETag:etag,'Cache-Control':'private, no-cache'});return res.end();}res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, no-cache',ETag:etag,'X-Content-Type-Options':'nosniff'});return res.end(body);}catch(e){return json(res,200,{items:[],error:'通知暂时取不到'});}}
   if(route.pathname==='/api/notifications/read'&&req.method==='POST'){const b=await body(req);if(!handoffProfiles[b.memberId])return json(res,400,{error:'请选择名单中的试用成员'});const ids=Array.isArray(b.ids)?b.ids.slice(0,20):[b.id];await readMarks.mark(b.memberId,ids.filter(Boolean));return json(res,200,{ok:true});}
+  // 公开洞察 (陈溪南 2026-10-26): 管理 opens every review's insights at once; Nexus then writes its synthesis under each.
+  if(route.pathname==='/api/reviews/reveal-insights'&&req.method==='POST'){const b=await body(req),actor=actorFor(b.memberId);if(!(actor?.ceo===true||roundOperators.includes(actor?.id)))return json(res,403,{error:'只有管理员能公开洞察'});
+   const now=new Date().toISOString();let missing=[];
+   await store.transact(s=>{if(!s.reviewRound)throw Object.assign(Error('还没有复盘'),{status:409});s.insightsRevealed??={at:now,by:actor.id};
+    const cards=Object.values(s.cards).filter(c=>c.kind==='review');missing=cards.map(c=>({cardId:c.id,title:currentVersion(c).content.title,missing:insightView(s,c,actor).missing})).filter(x=>x.missing.length);
+    for(const u of new Set(cards.filter(c=>c.level!=='company').map(c=>c.unit)))broadcast(s,u,'本月复盘的分析洞察已公开，大家可以看到彼此写的内容，Nexus 正在综合。',{kind:'insights-revealed',now});
+    s.sequence++;return s;});
+   synthesizeInsights().catch(()=>{});
+   return json(res,200,{revealedAt:store.snapshot().insightsRevealed.at,missing});}
   if(route.pathname==='/api/reviews'&&req.method==='GET')return json(res,200,{job:reviewJobs.view()});
   if(route.pathname==='/api/reviews'&&req.method==='POST'){const b=await body(req);try{return json(res,200,{job:await reviewJobs.start(actorFor(b.memberId),{regenerate:b.regenerate===true,resume:b.resume===true})});}catch(e){return json(res,e.status||500,{error:e.message,...(e.code?{code:e.code,total:e.total,confirmed:e.confirmed}:{})});}}
   if(route.pathname==='/api/reviews'&&req.method==='GET')return json(res,200,{job:reviewJobs.view()});

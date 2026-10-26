@@ -1136,3 +1136,25 @@ body.is-col-resizing{cursor:col-resize;user-select:none}
 .review-item-bubble{position:absolute;right:0;top:0;opacity:0;transition:opacity .15s}
 .review-list>li.review-item:hover .review-item-bubble,.review-item-bubble:focus-within,.review-item-bubble:has(.has-comments){opacity:1}
 .admin-skipped{color:#6b7b8a}
+
+/* 复盘改版 2026-10-26: facts lines and the insight card */
+.review-fact-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}
+.review-fact-owner{color:#5b6b7a;font-size:13px}
+.review-fact-status{font-size:13px;color:#6b7b8a}
+.review-fact.tone-no .review-fact-status{color:#b42318}.review-fact.tone-part .review-fact-status{color:#a15c07}.review-fact.tone-ok .review-fact-status{color:#1a7f37}
+.review-fact-evidence{margin:2px 0 0}
+.review-fact-gap{margin:2px 0 0;color:#475467}.review-fact-gap>span{color:#6b7b8a;font-size:13px;margin-right:6px}
+.review-facts-edit li{margin-bottom:12px}.review-facts-edit .review-fact-head select{margin-left:auto}
+.insight-card{margin-top:16px}
+.insight-card .insight-tag{background:#eef1f6;color:#344054}
+.insight-guide{color:#5b6b7a;font-size:13px;margin:8px 0 12px}
+.insight-submitters{margin:0 0 12px}.insight-submitters small{display:block;color:#6b7b8a;font-size:12px;margin-top:2px}
+.insight-nexus{background:#f5f7fb;border-radius:10px;padding:12px 14px;margin:0 0 12px}.insight-nexus h3{margin:0 0 6px;font-size:14px}
+.insight-mine-heading{font-size:14px;margin:4px 0 6px}
+.insight-list{list-style:none;padding:0;margin:0 0 12px}
+.insight-line{padding:10px 0;border-top:1px solid #eef0f3}.insight-line:first-child{border-top:0}
+.insight-author{display:block;font-size:13px;margin-bottom:2px}
+.insight-text{margin:0;white-space:pre-wrap}
+.insight-actions{display:flex;gap:4px;margin-top:4px}.insight-actions .plain{font-size:12px;min-height:0;padding:2px 6px;color:#5b6b7a}.insight-actions .insight-delete{color:#b42318}
+.insight-compose textarea{width:100%}.insight-compose .proposal-actions{align-items:center;gap:10px;margin-top:6px}
+.admin-reveal{margin:10px 0}

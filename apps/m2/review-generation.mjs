@@ -12,6 +12,7 @@ import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {redactText,sensitiveRulesVersion} from './redact.mjs';
 import {bareJson} from './model.mjs';
+import {factProblem} from './governance.mjs';
 
 export const reviewUnits=[['bf01','灯塔项目'],['bf02','Token Ops'],['bf03','维信诺'],['rearch','Re-architecture'],['method','Method'],['agents','Agents'],['eo','E&O'],['tokenhub','TokenHub'],['talent','Talent & Organization'],['finance','Finance, Compliance & Operations']];
 // An RU object's title ("维信诺（002客户）", "E&O") to the program's unit key.
@@ -93,6 +94,7 @@ function blockLines(blocks){
  }
  return lines.join('\n');
 }
+const successCriteria=o=>(o?.business?.blocks||[]).flatMap(b=>(b.components||b.value?.components||[]).filter(c=>c.type==='acceptance_criterion'&&String(c.text||'').trim()).map(c=>String(c.text).trim()));
 // Stand-in accounts are not owners: 代录 entries and test accounts such as “于斯一（测试治理）” (added to two October PeriodGoals on 10/23).
 const ownerOf=o=>(o?.identity?.responsible?.principals||[]).map(p=>p.display_name).filter(n=>n&&!/（(代录|测试[^）]*)）/.test(n)).join('、')||'';
 const relationTo=(o,field)=>(o?.business?.relations||[]).find(r=>r.field===field&&r.value)?.value?.object_id||null;
@@ -185,7 +187,11 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
   const ev=ownProgress?[...own,...goalLevel]:[...own,...goalLevel,...(byUnit[m.goal.unit]||[])];
   const n=(perGoal[m.goal.id]=(perGoal[m.goal.id]||0)+1),owner=ownerOf(m.object),ruOwner=ownerOf(m.goal.object);
   stage1.push({...base,id:`${m.goal.unit}-m${n}`,level:'mission',unit:m.goal.unit,parent:m.goal.unit,title:m.object?.business?.title||'',owner:owner||ruOwner,
-   ...(owner?{}:{missing:['本体里这个 Mission 没写负责人，暂按 RU DRI 填']}),commitment:blockLines(m.object?.business?.blocks),commitmentSource:`本体 ${month} 月 Mission（${statusOf(m.object)}），服务于「${m.goal.object?.business?.title||''}」`,evidence:numbered(ev),recordFacts:recordFacts(ev),objectId:m.id});
+   ...(owner?{}:{missing:['本体里这个 Mission 没写负责人，暂按 RU DRI 填']}),commitment:blockLines(m.object?.business?.blocks),commitmentSource:`本体 ${month} 月 Mission（${statusOf(m.object)}），服务于「${m.goal.object?.business?.title||''}」`,evidence:numbered(ev),recordFacts:recordFacts(ev),
+   // 个人复盘一行一个 Task (2026-10-26): the Mission's Tasks in the ontology, so each gets its fact line.
+   tasks:heads.tasks.filter(t=>missionOfTask.get(t.object_id)===m.id).map(t=>({ref:t.object_id,title:objects[t.object_id]?.business?.title||t.title||'',owner:ownerOf(objects[t.object_id]),status:statusOf(objects[t.object_id])})),
+   // No Task in the ontology: the Mission's own success criteria are the lines to report on, one each.
+   ...(heads.tasks.some(t=>missionOfTask.get(t.object_id)===m.id)?{}:{expectedFacts:successCriteria(m.object).map((text,i)=>({ref:`ref-${i+1}`,item:text}))}),objectId:m.id});
  }
  for(const [unit,g] of Object.entries(goals)){
   const ev=[...(bySubject[g.id]||[]),...(byUnit[unit]||[])];
@@ -220,15 +226,24 @@ export async function loadReviewSkill(root){
  return {rules,version,hash:sha(rules),files,groups:[...stages.matchAll(/^- 第(.)组（([^）]+)）：(.+)$/gm)].map(m=>({name:m[2],types:m[3].split('、').map(s=>s.trim())})),mustFix:(stages.match(/必须修改的问题类型：(.+)/)?.[1]||'').replace(/。$/,'').split('、').filter(Boolean)};
 }
 const causeText=x=>typeof x==='string'?x:[x?.text,x?.ask].filter(Boolean).join(' ');
-const textOf=r=>[r.verdictReason,r.keyGap,...(r.causes||[]).map(causeText),...['targets','results','questions','changes','practices','decisions','commonCauses'].flatMap(k=>r[k]||[]),...(r.nextInputs||[]).map(n=>n?.text),r.ltoProgress,r.ltoReview?.reason].filter(Boolean);
+const textOf=r=>[r.verdictReason,r.keyGap,...(r.facts||[]).flatMap(f=>[f.evidence,f.gap]),...(r.causes||[]).map(causeText),...['targets','results','questions','changes','practices','decisions','commonCauses'].flatMap(k=>r[k]||[]),...(r.nextInputs||[]).map(n=>n?.text),r.ltoProgress,r.ltoReview?.reason].filter(Boolean);
 const visible=s=>String(s).replace(/\*\*|\[E\d+\]|\s/g,'');
 export function lengthFindings(r){
  const f=[];for(const s of textOf(r)){for(const sent of String(s).split(/[。；！？]/)){const n=visible(sent.replace(/^\*\*[^*]+\*\*/,'')).length;if(n>30)f.push({type:'长句',chars:n,text:sent.slice(0,60)});}
   for(const w of ['尚不能','仍需进一步','有待观察','闭环','赋能','打通','具备条件'])if(String(s).includes(w))f.push({type:'回避或空话',word:w,text:String(s).slice(0,60)});}
+ // 三段式 field limits (复盘技能 2.1.0): 判定理由 60, item 30, evidence 100, gap 60.
+ const over=(field,text,limit)=>{const n=visible(String(text||'')).length;if(n>limit)f.push({type:'超字数',field,chars:n,limit,text:String(text).slice(0,40)});};
+ if(Array.isArray(r.facts)){over('verdictReason',r.verdictReason,60);for(const x of r.facts){over('item',x.item,30);over('evidence',x.evidence,100);over('gap',x.gap,60);}}
  return f;
 }
+// 漏行 measured, not judged: which Tasks / Missions / units the input has and the fact lines do not.
+export function rowFacts(c,r){
+ const want=c.level==='mission'?(c.tasks?.length?c.tasks.map(t=>({ref:t.ref,item:t.title})):(c.expectedFacts||[])):(c.children||[]).map(id=>({ref:id,item:id}));
+ const lines=new Set((r?.facts||[]).flatMap(f=>[f.ref,f.item]));
+ return {expected:want.length,lines:(r?.facts||[]).length,missing:want.filter(w=>!lines.has(w.ref)&&!lines.has(w.item)).map(w=>w.item)};
+}
 function evidenceFacts(c,r){const ids=new Set((c.evidence||[]).map(e=>e.id));const used=[...new Set(JSON.stringify(r).match(/E\d+/g)||[])];return {missingIds:used.filter(id=>ids.size&&!ids.has(id)),usedCount:used.length};}
-const unitData=c=>({id:c.id,level:c.level,unit:c.unit,title:c.title,owner:c.owner,period:c.period,cutoff:c.cutoff,commitment:c.commitment,commitmentSource:c.commitmentSource,evidence:c.evidence,missing:c.missing,note:c.note,recordFacts:c.recordFacts});
+const unitData=c=>({id:c.id,level:c.level,unit:c.unit,title:c.title,owner:c.owner,period:c.period,cutoff:c.cutoff,commitment:c.commitment,commitmentSource:c.commitmentSource,evidence:c.evidence,missing:c.missing,note:c.note,recordFacts:c.recordFacts,...(c.tasks?.length?{tasks:c.tasks}:{}),...(c.expectedFacts?{expectedFacts:c.expectedFacts}:{})});
 const fieldsHint='返回 JSON：{"analysis":"不展示的分析，600 字内","review":{按 round-stages.md「字段」写全本层字段}}';
 
 // Runs the skill's stages on a built input. `run` holds what is done so far (raw answers by call), so a failed run
@@ -271,7 +286,7 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
  if(skill.groups.length){
   await onProgress({stage:'检查与修改',done,total});
   const all=[...s1,...s2].filter(c=>run.reviews[c.id]);
-  const facts=Object.fromEntries(all.map(c=>[c.id,{lengthFindings:lengthFindings(run.reviews[c.id]),evidenceFacts:evidenceFacts(c,run.reviews[c.id])}]));
+  const facts=Object.fromEntries(all.map(c=>[c.id,{lengthFindings:lengthFindings(run.reviews[c.id]),evidenceFacts:evidenceFacts(c,run.reviews[c.id]),...(Array.isArray(run.reviews[c.id]?.facts)?{rowFacts:rowFacts(c,run.reviews[c.id])}:{})}]));
   const verdictFacts=s2.filter(c=>run.reviews[c.id]).map(c=>({ref:c.id,verdict:run.reviews[c.id].verdict,children:c.children.map(id=>({ref:id,verdict:run.reviews[id]?.verdict||'生成失败'}))}));
   const reviews=all.map(c=>run.reviews[c.id]),brief=Object.fromEntries(all.map(c=>[c.id,{commitment:c.commitment,evidence:(c.evidence||[]).map(e=>({id:e.id,asOf:e.asOf,text:e.text.slice(0,400)}))}]));
   if(!run.checked){
@@ -298,9 +313,18 @@ export function reviewProblems(run,input,{roster=[]}={}){
  for(const c of expected)if(!run.reviews[c.id]&&c.id!=='company'&&!refused(c.id))out.push({unit:c.id,problem:'没有生成出来'});
  for(const [id,r] of Object.entries(run.reviews)){
   if(!tiers.includes(r.verdict))out.push({unit:id,problem:`判定写成“${r.verdict??'空'}”，只能是达成、部分达成、未达成`});
-  const miss=['verdictReason','targets','causes','nextInputs'].filter(f=>!filled(r[f]));if(miss.length)out.push({unit:id,problem:`缺 ${miss.join('、')}`});
-  const bad=(r.nextInputs||[]).filter(n=>n&&typeof n==='object'&&n.type&&!nextTypes.has(n.type)).map(n=>n.type);if(bad.length)out.push({unit:id,problem:`下月输入类型“${bad.join('、')}”不对`});
-  if(r.level==='company'&&!ltoChoices.has(r.ltoReview?.choice))out.push({unit:id,problem:'长期目标审视要写建议维持、建议修改或建议重开'});
+  if(Array.isArray(r.facts)){
+   // 三段式 (2026-10-26): a verdict with one line of reason, then fact lines; insights are written by people, not generated.
+   if(!filled(r.verdictReason))out.push({unit:id,problem:'缺判定理由'});
+   if(!r.facts.length)out.push({unit:id,problem:'缺事实证据'});else if(factProblem(r.facts))out.push({unit:id,problem:'事实证据格式不对：每行要有这一项、状态（达成/部分达成/未达成/未开始）和证据'});
+   const c=expected.find(x=>x.id===id),lines=new Set(r.facts.flatMap(f=>[f.ref,f.item]));
+   const lost=(c?.tasks||[]).filter(t=>!lines.has(t.ref)&&!lines.has(t.title)).map(t=>t.title);if(lost.length)out.push({unit:id,problem:`这些 Task 没有事实行：${lost.join('、').slice(0,120)}`});
+   if(r.insights!=null||r.causes!=null||r.nextInputs!=null)out.push({unit:id,problem:'生成结果里不该有洞察、原因或下月输入，这些由大家提交'});
+  }else{
+   const miss=['verdictReason','targets','causes','nextInputs'].filter(f=>!filled(r[f]));if(miss.length)out.push({unit:id,problem:`缺 ${miss.join('、')}`});
+   const bad=(r.nextInputs||[]).filter(n=>n&&typeof n==='object'&&n.type&&!nextTypes.has(n.type)).map(n=>n.type);if(bad.length)out.push({unit:id,problem:`下月输入类型“${bad.join('、')}”不对`});
+   if(r.level==='company'&&!ltoChoices.has(r.ltoReview?.choice))out.push({unit:id,problem:'长期目标审视要写建议维持、建议修改或建议重开'});
+  }
   if(roster.length){const unknown=String(r.owner||'').split(/[、,，]/).map(x=>x.trim()).filter(x=>x&&!roster.includes(x));if(unknown.length)out.push({unit:id,problem:`负责人“${unknown.join('、')}”不在公司名单里`});}
  }
  return out;

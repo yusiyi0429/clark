@@ -2,6 +2,7 @@
 // the plan — every confirmed review becomes context for next month's decomposition. The plan page stays as it is;
 // the reviews only travel as input. Until the full run is wanted, the server prepares this package without generating.
 import {currentVersion} from './governance.mjs';
+import {memberProfiles} from './member-profiles.mjs';
 import {broadcast} from './broadcasts.mjs';
 import {nextPeriod,monthOf} from './review-display.mjs';
 export {nextPeriod,monthOf};
@@ -9,11 +10,14 @@ export const isReviewCard=c=>c?.kind==='review';
 export function unconfirmedReviews(state){
  return Object.values(state.cards).filter(c=>isReviewCard(c)&&c.level!=='company'&&c.confirmedVersion!==currentVersion(c).number);
 }
-// What the decomposition reads: each confirmed review's judgment, causes and next-month inputs, by unit.
+// What the decomposition reads: each confirmed review in full, by unit.
 export function handoffPackage(state){
  const reviews=Object.values(state.cards).filter(isReviewCard).map(c=>{const v=currentVersion(c).content;
+  // The whole review goes to the decomposition as reference (陈溪南 2026-10-26): verdict, fact lines, every revealed insight and Nexus's synthesis.
+  const name=id=>memberProfiles[id]?.name||id,revealed=!!state.insightsRevealed,nexus=state.insightNexus?.[c.id]?.text;
   return {id:c.id,ref:v.ref,unit:v.unit,level:c.level,title:v.title,owner:v.owner,version:currentVersion(c).number,verdict:v.verdict,verdictReason:v.verdictReason,
-   causes:(v.causes||[]).map(x=>typeof x==='string'?x:x.text),nextInputs:v.nextInputs||[],...(v.ltoReview?{ltoReview:v.ltoReview}:{})};});
+   ...(Array.isArray(v.facts)?{facts:v.facts}:{targets:v.targets||[],causes:(v.causes||[]).map(x=>typeof x==='string'?x:x.text),nextInputs:v.nextInputs||[],...(v.ltoReview?{ltoReview:v.ltoReview}:{})}),
+   ...(revealed?{insights:(state.insights?.[c.id]||[]).map(x=>({author:name(x.author),text:x.text})),...(nexus?{nexusInsight:nexus}:{})}:{})};});
  const company=reviews.find(r=>r.level==='company')||null,units=[...new Set(reviews.filter(r=>r.level!=='company').map(r=>r.unit))];
  return {fromPeriod:state.reviewRound?.period||null,forPeriod:nextPeriod(state.reviewRound?.period),reviewRound:state.reviewRound?.label||null,
   company,units:units.map(u=>({unit:u,po:reviews.find(r=>r.unit===u&&r.level==='po')||null,missions:reviews.filter(r=>r.unit===u&&r.level==='mission')}))};

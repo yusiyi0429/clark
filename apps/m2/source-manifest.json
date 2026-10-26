@@ -16,7 +16,7 @@
     },
     {
       "path": "AdminPanel.jsx",
-      "sha256": "3a489f88653b330645931a6dab2712971db04048b9bad3502cd829e823342c91"
+      "sha256": "4d6a319c1e393d5d0dfe6566254d7d2ea3c9e1732c8472792eaca96d3a01df3c"
     },
     {
       "path": "agent-prompts.mjs",
@@ -24,7 +24,7 @@
     },
     {
       "path": "app.jsx",
-      "sha256": "1f98e09d5fde89a9bf6046710ed95ca6395b486ea9f9317d6865e1a38d035b7b"
+      "sha256": "7acffa1bcf52b3da017b368987a3ecd025e46d93a0174fe8a20c583dd4021285"
     },
     {
       "path": "AuditStatus.jsx",
@@ -84,7 +84,7 @@
     },
     {
       "path": "document-template.mjs",
-      "sha256": "5a31da783dadaad84efcaf2dce88d8495f8adb34541b6322d29e5d421dd11d54"
+      "sha256": "8aa501da43d7fe9572b32c7724a4dae2884c601bb72cd9f4cf3868898218a6dc"
     },
     {
       "path": "DocumentCanvas.jsx",
@@ -124,7 +124,7 @@
     },
     {
       "path": "governance.mjs",
-      "sha256": "64a6cd12c6d1e0c42b0d39246d2a63f95845ac09e414f1ecef0a0f7dbbb9e1e9"
+      "sha256": "1ff81bfec5bdca9c0213a882c4677cae59aca345cb620461b109f8fa2c10e2dc"
     },
     {
       "path": "Handshake.jsx",
@@ -200,7 +200,7 @@
     },
     {
       "path": "nexus-review.mjs",
-      "sha256": "9c5dfd4933fddc6f82f47bf4ce0b2fcca756d3343a24a9201ace663300eade70"
+      "sha256": "1a5171c209c965d5c9e4b69475972ee4ff68f74dd7db44e53dff85e9e719ea5c"
     },
     {
       "path": "NexusIsland.jsx",
@@ -248,7 +248,7 @@
     },
     {
       "path": "ProposalCard.jsx",
-      "sha256": "eb025989fccbdd64721e4491ab8b73afc6419bbaf9e4fe3611b30d40092d55ae"
+      "sha256": "336369eab365eb58596832dff96cdb1d16c7514f482ecf23c73b2661ae63e307"
     },
     {
       "path": "reader-format.mjs",
@@ -268,23 +268,23 @@
     },
     {
       "path": "review-display.mjs",
-      "sha256": "35a773d9c9bb691103d8e44e0ba96cdf4ad70e483dd234cb69dfaa6ea2d6f57c"
+      "sha256": "33964eb82ac31f0900bcccf5c1448def7e3ddfdfe0122357edf2b22c20385925"
     },
     {
       "path": "review-generation.mjs",
-      "sha256": "11c9cdb3b4e8fe7ab3692c25c3d71ca2826303a3ed20e1bc10da10c609480620"
+      "sha256": "74f2a0df7219382ff5997a68618b53056950b651455c2ae85d9ec65e0121a352"
     },
     {
       "path": "review-handoff.mjs",
-      "sha256": "33dd7b9b9c6425875a998cdc8686f602213259db86a2b77eee0545fb024aa7da"
+      "sha256": "e479c198b681cb9cf76bcd5757d3c72bb4fa7d0e89a705109a90a3e45e9ebbf1"
     },
     {
       "path": "review-round.mjs",
-      "sha256": "39906c8674a8c8ada18e65e16f720d52610dd326c87cdd03b85155e2336be522"
+      "sha256": "d8afe4b4a28860618780a231e8de19dc88024cf798d81ce3d25a76f370cd7d9f"
     },
     {
       "path": "review-sources.mjs",
-      "sha256": "84d3e9baf58f966c0d56ccf76eac26a00f12de06aa468cdfc367c2ba6c6308aa"
+      "sha256": "4ea398b6d70460dbba4e5599f58b994576432efc6ac64d729b6c305632e1a60a"
     },
     {
       "path": "review-workflow.mjs",
@@ -292,7 +292,7 @@
     },
     {
       "path": "ReviewCanvas.jsx",
-      "sha256": "cab3a1b9a6d2ba3db3ffd0b27ecb384bf8cb4c8a3c6fc73113bd1cfd951aad34"
+      "sha256": "cdb9006a81546c7eabe3e950c68bccc484eab661cd9981cf56ecc0d939342cf2"
     },
     {
       "path": "ReviewEditor.jsx",
@@ -368,11 +368,11 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "56593b94b2c1c1d465074162ac7f2f94b1e9ba19388276dfacd0d3360d559033"
+      "sha256": "10e446fa1ac90fd07a7a78d5d4fc3e8aca6618f53a17d5159b1ff718ebf7bf8d"
     },
     {
       "path": "shared-projection.mjs",
-      "sha256": "50d75bdfa536f58e615b5f98c195a41aba61549de0c6a3bf619f967ebf5bda7b"
+      "sha256": "d4a34aae1526b10479e021ed86ccaf3a1cf7730bb2a802cf7562aef4c384430c"
     },
     {
       "path": "skill-snapshot.mjs",
@@ -392,7 +392,7 @@
     },
     {
       "path": "style.css",
-      "sha256": "d507aaff9b4f86c4abaf5672639a95d5f85d05ab6a78b51431b35d7dfa611ea7"
+      "sha256": "9705321a7c2daf61cb5b930082ffc28dee7a3bb591d8f1393ddb9eee2a06bbeb"
     },
     {
       "path": "todo.mjs",
@@ -400,7 +400,7 @@
     },
     {
       "path": "TodoPanel.jsx",
-      "sha256": "1ebe888ad312a1e33a2c280314c6d39a0e96ba18bca75fd59244663cafe0d1a5"
+      "sha256": "d0b9652ef226b051e686a26b07a2cc7c1d99f1a99c345bae3475dd98568cc457"
     },
     {
       "path": "topic-lifecycle.mjs",
@@ -420,7 +420,7 @@
     },
     {
       "path": "notifications.mjs",
-      "sha256": "3a504c17ec340b9626a191c9e714bd35752c161ec23fb4f1c064a50f55129f0e"
+      "sha256": "ec0c7d15f7e284ce4c09832b4e911332db0120387ddd6917a0fad70b70ebf17b"
     }
   ],
   "excluded": [
@@ -436,9 +436,9 @@
     "source": "~/.codex/skills/tkos-decoding"
   },
   "reviewSkill": {
-    "version": "2.0.4",
-    "fingerprint": "7756dce16b5d",
-    "source": "apps/decoding-mvp/.runtime/eval/review/skills/tkos-review-2.0.4"
+    "version": "2.1.0",
+    "fingerprint": "6e72115d0ddc",
+    "source": "apps/decoding-mvp/.runtime/eval/review/skills/tkos-review-2.1.0"
   },
-  "mergeBase": "/Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261026"
+  "mergeBase": "/Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261026b"
 }

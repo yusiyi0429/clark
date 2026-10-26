@@ -19,7 +19,33 @@ export function unitOf(card){return card.unit||card.id;}
 // Who answers for a review is whoever the review names, so Mission reviews are matched by owner name.
 export const isReview=card=>card?.kind==='review';
 const reviewOwners=card=>String(currentVersion(card).content.owner||'').split(/[、,，\s]+/).filter(Boolean);
-const reviewEditable=new Set(['verdict','verdictReason','targets','causes','nextInputs','ltoReview']);
+const reviewEditable=new Set(['verdict','verdictReason','facts','targets','causes','nextInputs','ltoReview']);
+// 复盘三段式 (陈溪南 2026-10-26): a fact line is one Task / Mission / unit — what it is, its status, the evidence and the plain gap.
+const FACT_STATUS=['达成','部分达成','未达成','未开始'];
+export const factProblem=list=>!Array.isArray(list)||list.length>40||list.some(x=>!x||typeof x.item!=='string'||!x.item.trim()||!FACT_STATUS.includes(x.status)||typeof (x.evidence??'')!=='string'||typeof (x.gap??'')!=='string'||String(x.evidence||'').length>2000||String(x.gap||'').length>1000);
+// 分析洞察 (陈溪南 2026-10-26): written by each participant under a review, never handshaken. Until 管理 reveals them,
+// only the author sees the text; others see who wrote how many. Kept apart from comments and chat so Nexus and the
+// private Agent cannot read them early.
+export function insightParticipants(state,card){
+ const names=new Set(),ceo=Object.values(memberProfiles).find(p=>p.ceo)?.name,owner=c=>String(currentVersion(c).content.owner||'').split(/[、,，\s]+/).filter(Boolean);
+ if(ceo)names.add(ceo);
+ const reviews=Object.values(state.cards).filter(isReview);
+ // The company review is the CEO's (only the CEO sees it); Nexus adds its synthesis after the reveal.
+ if(card.level!=='company'){const unit=unitOf(card),po=reviews.find(c=>c.level==='po'&&unitOf(c)===unit);if(po)owner(po).forEach(n=>names.add(n));
+  if(card.level==='po'){for(const c of reviews)if(c.level==='mission'&&unitOf(c)===unit)owner(c).forEach(n=>names.add(n));}else owner(card).forEach(n=>names.add(n));}
+ return [...names].filter(n=>Object.values(memberProfiles).some(p=>p.name===n));
+}
+// What one member sees of a review's insights: before the reveal, who wrote how many and their own; after, everything.
+export function insightView(state,card,actor){
+ if(!isReview(card))return undefined;
+ const list=state.insights?.[card.id]||[],revealed=!!state.insightsRevealed,name=id=>memberProfiles[id]?.name||id;
+ const counts=new Map();for(const x of list)counts.set(x.author,(counts.get(x.author)||0)+1);
+ const participants=insightParticipants(state,card);
+ const base={revealed,participants,submitters:[...counts].map(([id,count])=>({name:name(id),count})),missing:participants.filter(n=>![...counts.keys()].some(id=>name(id)===n))};
+ if(!revealed)return {...base,mine:list.filter(x=>x.author===actor.id).map(({id,text,createdAt,updatedAt})=>({id,text,createdAt,updatedAt}))};
+ const nexus=state.insightNexus?.[card.id];
+ return {...base,items:list.map(x=>({id:x.id,author:name(x.author),mine:x.author===actor.id,text:x.text,createdAt:x.createdAt,updatedAt:x.updatedAt})),nexus:nexus?.text?{text:nexus.text,createdAt:nexus.createdAt}:nexus?.error?{error:nexus.error}:null};
+}
 // Group notices keep everyone on the same page after a revision or a handshake; they are support, not discussion.
 const nameOf=id=>memberProfiles[id]?.name||id;
 const titleOf=card=>'「'+(currentVersion(card).content.title||card.title||card.id)+'」';
@@ -128,6 +154,7 @@ export function applyAction(previous,actor,action){
   if('tier'in patch&&(!['mission','task'].includes(card.level)||!['P0','P1','P2'].includes(patch.tier)))fail(400,'档位只能是 P0、P1、P2，且只用于 Mission 和 Task');
   for(const [key,value]of Object.entries(patch)){
    // Review lists hold objects: causes {text, ask}, nextInputs {id, type, text}; ltoReview {choice, reason}.
+   if(isReview(card)&&key==='facts'){if(factProblem(value))fail(400,'事实证据格式错误：每行要有这一项、状态（达成/部分达成/未达成/未开始）和证据');continue;}
    if(isReview(card)&&(key==='causes'?!Array.isArray(value)||value.length>5||value.some(x=>!x||typeof x.text!=='string'||typeof (x.ask??'')!=='string'):key==='nextInputs'?!Array.isArray(value)||value.length>5||value.some(x=>!x||typeof x.text!=='string'||!['欠账','继续验证','停止','约束','待决策'].includes(x.type)):key==='ltoReview'?!value||!['维持','修改','重开','建议维持','建议修改','建议重开'].includes(value.choice):key==='verdict'?!['达成','部分达成','未达成'].includes(value):false))fail(400,'修订内容格式错误');
    if(isReview(card)&&['causes','nextInputs','ltoReview','verdict'].includes(key))continue;
    if(Array.isArray(value)?value.length>50||value.some(x=>typeof x!=='string'||x.length>8000):['checks','milestones'].includes(key)||typeof value!=='string'||value.length>16000)fail(400,'修订内容格式错误');
@@ -213,6 +240,20 @@ export function applyAction(previous,actor,action){
    if(unit!=='company'){const same=c=>unitOf(c)===unit&&(isReview(c)?isReview(card):!isReview(card)&&confirmationSlots(c).length>0);const set=Object.values(state.cards).filter(same);
     const key=isReview(card)?`review:${state.reviewRound?.loadedAt||''}`:`plan:${state.round?.id||''}`;state.unitsDone??={};
     if(set.length&&set.every(done)&&!state.unitsDone[unit+'|'+key]){state.unitsDone[unit+'|'+key]=now;broadcast(state,unit,isReview(card)?`本领域 ${reviewMonth(state)}复盘已全部确认。`:`本领域的计划已全部确认，按此执行。`,{kind:isReview(card)?'review-unit-done':'plan-unit-done',now});}}const names=[...new Set(v.signatures.map(x=>nameOf(x.actorId)))];groupNotice(state,card,`${names.join('、')} 已就${titleOf(card)} v${v.number} 达成共识，按此版本推进。`);}
+ }else if(['insight','editInsight','deleteInsight'].includes(action.type)){
+  if(actor.kind==='coagent')fail(403,'Nexus 的综合在公开后由服务端写入');
+  if(!isReview(card))fail(400,'洞察只写在复盘卡上');
+  if(!insightParticipants(state,card).includes(actor.name)&&actor.ceo!==true)fail(403,'只有这份复盘的参与者能写洞察');
+  state.insights??={};const list=state.insights[card.id]??=[];
+  if(action.type==='insight'){
+   const text=typeof action.text==='string'?action.text.trim():'';if(!text||text.length>4000)fail(400,'请写下你的洞察（4000 字以内）');
+   if(list.filter(x=>x.author===actor.id).length>=20)fail(400,'每份复盘每人最多 20 条洞察');
+   state.sequence++;list.push({id:`insight-${state.sequence}`,author:actor.id,text,createdAt:now});
+  }else{
+   const i=list.findIndex(x=>x.id===action.insightId);if(i<0)fail(404,'这条洞察不存在');if(list[i].author!==actor.id)fail(403,'只能改自己的洞察');
+   if(action.type==='deleteInsight')list.splice(i,1);
+   else{const text=typeof action.text==='string'?action.text.trim():'';if(!text||text.length>4000)fail(400,'请写下你的洞察（4000 字以内）');list[i]={...list[i],text,updatedAt:now};}
+  }
  }else if(action.type==='deleteComment'){
   const i=state.comments.findIndex(c=>c.id===action.commentId&&c.cardId===card.id);
   if(i<0)fail(404,'批注不存在或已删除');

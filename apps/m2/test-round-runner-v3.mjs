@@ -170,3 +170,39 @@ test('a unit the model refuses twice is marked failed and the round goes on; one
   assert.ok(seen.some(t=>t.includes('10/12 入职')),'入职这类结果保留');
  }finally{await rm(temp,{recursive:true,force:true});delete process.env.DECODING_RUNS_DIR;}
 });
+
+test('after the final check, upstream rows whose Mission is gone are settled and people who went over are aligned again',async()=>{
+ const temp=await mkdtemp(tmpdir()+'/v3-up-');process.env.DECODING_RUNS_DIR=temp;
+ try{
+  const log=[],base=fakeGateway(log);let repairAsked=null;
+  const gateway={...base,async complete(messages,opts){
+   const p=JSON.parse(messages[1].content);
+   if(p.stage==='final-revise'&&p.key==='bf02'){log.push('final-revise:bf02');return {answer:JSON.stringify({changes:[{op:'replace',id:'m1',card:{...p.current.missions[0],title:'bf02 合并后的结果线',upstreamIds:[]}}],gaps:[]}),usage:{}};}
+   if(p.stage==='upstream-repair'){log.push('upstream-repair:'+p.key);repairAsked=p;return {answer:JSON.stringify({rows:p.rows.map(r=>({id:r.id,disposition:'承接',missionTitle:p.missions[0].title}))}),usage:{}};}
+   return base.complete(messages,opts);
+  }};
+  const result=await generateRoundV3({gateway,rules,fetchSources:async()=>({period:'2026-10',planningDate:'2026-10-09',sources:keys.map(key=>({key,content:`${key} 资料\n【本月意图】${key} 10 月目标（草稿）· 成果\n原文`}))})});
+  assert.deepEqual(log.filter(x=>x.startsWith('upstream-repair')),['upstream-repair:bf02'],'只有 Mission 改没了的单元要核对');
+  assert.equal(repairAsked.rows[0].missionTitle,'bf02 第一条结果线成立');
+  const row=result.audit.upstreamCoverage.bf02.find(x=>x.disposition==='承接');
+  assert.equal(row.missionTitle,'bf02 合并后的结果线');
+  assert.ok(result.raw.find(u=>u.key==='bf02').missions[0].upstreamIds.includes(row.id),'Mission 也记着它承接的编号');
+  assert.deepEqual(result.audit.alignDecisions['刘人豪'].decisionsForCEO,['缺 3 人日'],'再对齐时交 CEO 的决定不重复');
+ }finally{await rm(temp,{recursive:true,force:true});delete process.env.DECODING_RUNS_DIR;}
+});
+
+test('global alignment that leaves someone over while keeping P2 work is sent back; if it stays so, the round goes on and says so',async()=>{
+ const temp=await mkdtemp(tmpdir()+'/v3-align-');process.env.DECODING_RUNS_DIR=temp;
+ try{
+  const log=[],base=fakeGateway(log);let asked=0;
+  const gateway={...base,async complete(messages,opts){
+   const p=JSON.parse(messages[1].content);
+   if(p.stage==='task-generate'&&p.key==='eo'){const r=await base.complete(messages,opts);const a=JSON.parse(r.answer);a.tasks=[...a.tasks,{...a.tasks[0],title:'eo 次要的事',tier:'P2',effort:'人约 9 人日'}];return {...r,answer:JSON.stringify(a)};}
+   if(p.stage==='align-generate'&&p.key==='刘人豪'){asked++;return {answer:JSON.stringify({analysis:'',changes:[],decisionsForCEO:['缺人日']}),usage:{}};}
+   return base.complete(messages,opts);
+  }};
+  const result=await generateRoundV3({gateway,rules,fetchSources:async()=>({period:'2026-10',planningDate:'2026-10-09',sources:keys.map(key=>({key,content:`${key} 资料\n【本月意图】${key} 10 月目标（草稿）· 成果\n原文`}))})});
+  assert.ok(asked>=2,'第一次没让出 P2 就退回重做');
+  assert.ok(result.audit.alignDecisions['刘人豪'].decisionsForCEO.some(d=>/还留着 \d+ 个 P2 Task/.test(d)),'两次都没让出时，写进交给 CEO 和 RU DRI 的决定');
+ }finally{await rm(temp,{recursive:true,force:true});delete process.env.DECODING_RUNS_DIR;}
+});

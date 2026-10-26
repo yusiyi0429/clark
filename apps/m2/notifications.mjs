@@ -21,12 +21,12 @@ const iso=v=>v?new Date(v).toISOString():null;
 const latest=list=>list.reduce((a,b)=>Math.max(a,b),0);
 // Links are relative to the M2 page (Tianshu prefixes /m2/); the page reads these parameters to open the right place.
 const link=params=>'?'+new URLSearchParams(params).toString();
-const TODO_WORDS={sign:'份待确认',proposal:'张修订卡待决定',ask:'个追问待回答',objection:'处反对待回应',upstream:'处上级调整待核对',downstream:'处下级调整待核对'};
+const TODO_WORDS={insight:'份复盘待写洞察',sign:'份待确认',proposal:'张修订卡待决定',ask:'个追问待回答',objection:'处反对待回应',upstream:'处上级调整待核对',downstream:'处下级调整待核对'};
 
 function todoCard(stage,items,label){
  if(!items.length)return null;
  const counts={};for(const i of items){const k=i.kind;counts[k]=(counts[k]||0)+(k==='ask'?i.count||1:1);}
- const order=['sign','proposal','ask','objection','upstream','downstream'];
+ const order=['sign','insight','proposal','ask','objection','upstream','downstream'];
  const text=order.filter(k=>counts[k]).map(k=>`${counts[k]} ${TODO_WORDS[k]}`).join('、');
  const first=items[0];
  return {id:`todo:${stage}`,type:'todo',stage,title:`${label}：你有待办`,text,count:items.length,breakdown:counts,

@@ -9,8 +9,10 @@ import {Pencil,CheckCircle2,X} from 'lucide-react';
 import {memberProfiles} from './member-profiles.mjs';
 import {enterSubmit} from './enter-submit.mjs';
 // Each change reads as 原来 / 改成 (or 新增 / 删去); unchanged items fold into one line (陈溪南 2026-10-19).
+// 事实证据 rows {item, status, evidence, gap} read as one line each, named by the item (复盘改版 2026-10-26).
+const factLine=x=>`**${x.item}：**${x.status||''}。${x.evidence||''}${x.gap?` 没做到的原因：${x.gap}`:''}`;
 // Review fields hold objects: 原因 {text, ask}, 下月输入 {type, text}, 长期目标审视 {choice, reason}; compare them as lines.
-const asLines=v=>Array.isArray(v)?v.map(x=>typeof x==='string'?x:x?.type?`［${x.type}］${x.text}`:x?.text!=null?x.text+(x.ask?`（追问：${x.ask}）`:''):JSON.stringify(x)):v&&typeof v==='object'?`${v.choice||''}：${v.reason||''}`:v;
+const asLines=v=>Array.isArray(v)?v.map(x=>typeof x==='string'?x:x?.item!=null&&x?.evidence!==undefined?factLine(x):x?.type?`［${x.type}］${x.text}`:x?.text!=null?x.text+(x.ask?`（追问：${x.ask}）`:''):JSON.stringify(x)):v&&typeof v==='object'?`${v.choice||''}：${v.reason||''}`:v;
 // One change per line, only the change (陈溪南 2026-10-22): which field (and which item), then the old words struck → the
 // new words. A rewrite shows the new text whole with 看原来; an added or removed item says so in its label.
 const itemTitle=t=>String(t||'').match(/^\*\*(.+?)[：:]\*\*/)?.[1]||'';

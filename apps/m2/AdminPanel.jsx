@@ -5,6 +5,20 @@ import {X} from 'lucide-react';
 // 管理 (陈溪南 2026-10-22): one place, on her account (and the CEO's), to start or restart the month-end round.
 // 复盘 starts here; once every review is confirmed and the CEO confirms the company review, the plan generates by itself.
 // Starting again opens a new round: the earlier talk is kept in the archive, the chat panes start empty.
+// 公开洞察 (复盘改版约定 2026-10-26): until she reveals them, nobody sees anyone else's insights. The reply names who has not handed in.
+function RevealInsights({memberId}){
+ const [state,setState]=useState(null),[busy,setBusy]=useState(false),[sure,setSure]=useState(false);
+ async function reveal(){setBusy(true);try{const r=await fetch('/api/reviews/reveal-insights',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({memberId})});const v=await r.json().catch(()=>({}));if(!r.ok)throw Error(r.status===404?'程序这边还没接上公开洞察':v.error||'没能公开');setState({ok:true,missing:v.missing||v.notSubmitted||[]});}catch(e){setState({error:e.message});}finally{setBusy(false);setSure(false);}}
+ // The reply lists, per review, who has not handed in: {cardId, title, missing:[name]}.
+ const names=(state?.missing||[]).map(m=>typeof m==='string'?m:Array.isArray(m.missing)?`${m.title||m.cardId}：${m.missing.join('、')}`:[m.name,m.title].filter(Boolean).join(' · '));
+ return <div className="admin-reveal">
+  {sure?<div className="admin-confirm"><p>公开后，所有人都能看到每份复盘下的全部洞察，Nexus 会为每份复盘写一条综合。</p><div className="proposal-actions"><Button className="primary" isDisabled={busy} onPress={reveal}>{busy?'正在公开…':'确认公开'}</Button><Button className="plain" onPress={()=>setSure(false)}>取消</Button></div></div>
+   :<Button className="plain" isDisabled={busy} onPress={()=>setSure(true)}>公开洞察</Button>}
+  {state?.error&&<p className="admin-line is-failed" role="alert">{state.error}</p>}
+  {state?.ok&&<p className="admin-line">{names.length?'已公开。还没交洞察的：':'已公开，大家都交了洞察。'}</p>}
+  {state?.ok&&names.length>0&&<ul className="admin-checks">{names.map((t,i)=><li key={i}>{t}</li>)}</ul>}
+ </div>;
+}
 export default function AdminPanel({memberId,review,onClose,plan}){
  const [job,setJob]=useState(null),[missing,setMissing]=useState(false),[confirm,setConfirm]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  useEffect(()=>{let live=true,timer;const poll=async()=>{try{const r=await fetch('/api/reviews');if(r.status===404){if(live)setMissing(true);return;}const v=await r.json();if(!live)return;setJob(v.job||null);if(v.job?.status==='running')timer=setTimeout(poll,3000);}catch{}};poll();return()=>{live=false;clearTimeout(timer);};},[busy]);
@@ -24,6 +38,7 @@ export default function AdminPanel({memberId,review,onClose,plan}){
    {job?.inputCutoff&&<p className="admin-note">本体数据读到 {String(job.inputCutoff).slice(5,16).replace('T',' ')}</p>}
    {missing?<p className="admin-note">生成服务还没接上，接上后这里就能直接生成。</p>:confirm?<div className="admin-confirm"><p className={has&&review.confirmed>0?'admin-warn':undefined}>{has?`${review.confirmed>0?`已有 ${review.confirmed} 份复盘被确认，`:''}重新生成会开始新的一轮复盘：现有复盘和所有讨论都归档保存，聊天框从新一轮开始，大家要重新确认。`:'生成本月复盘，生成好后各单元群会收到通知。'}</p><div className="proposal-actions"><Button className="primary" isDisabled={busy} onPress={()=>start()}>{busy?'正在开始…':has?'确认重新生成':'开始生成'}</Button><Button className="plain" onPress={()=>setConfirm(false)}>取消</Button></div></div>:<Button className="primary" isDisabled={running||busy} onPress={()=>setConfirm(true)}>{running?'生成中…':has?'重新生成复盘':'生成复盘'}</Button>}
    {error&&<p className="admin-line is-failed" role="alert">{error}</p>}
+   {has&&<RevealInsights memberId={memberId}/>}
    <p className="admin-note">复盘全部确认、CEO 确认公司复盘后，会自动生成下月拆解。</p>
   </section>
   <section className="admin-block"><h3>拆解</h3>{plan}</section>

@@ -3,7 +3,7 @@ import {ChevronRight,ChevronDown} from 'lucide-react';
 import {shortLabel} from './plan-track.mjs';
 // "待我处理" on the home page: the few things only this member can move forward, most urgent first.
 // Cards nobody has confirmed yet are the baseline of the month, so they fold into one line instead of crowding the list.
-const verb={objection:'有人反对，待你回应',downstream:'下级有调整，请核对',ask:'待你回答',proposal:'修订建议待你确认',upstream:'上级已调整，请核对',sign:'对方已确认，等你确认',mention:'在群里 @ 了你',comment:'有新批注'};
+const verb={insight:'待提交洞察',objection:'有人反对，待你回应',downstream:'下级有调整，请核对',ask:'待你回答',proposal:'修订建议待你确认',upstream:'上级已调整，请核对',sign:'对方已确认，等你确认',mention:'在群里 @ 了你',comment:'有新批注'};
 // The review stage uses the same panel; labelOf names its cards (复盘卡 are not plan nodes).
 export default function TodoPanel({items,resolve,display,onGo,labelOf,expanded=false}){
  const [allState,setAll]=useState(false),[baselineState,setBaselineOpen]=useState(false),all=expanded||allState,baselineOpen=expanded||baselineState;

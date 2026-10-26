@@ -34,6 +34,8 @@ export function reviewTodos(nodes,p,comments={},proposals=[]){
  for(const n of nodes)if(n.downstreamChange&&(ownerNames(n).includes(p.name)||n.level==='company'&&p.ceo||n.level==='po'&&(p.unitDri||[]).includes(n.unit)))out.push({kind:'downstream',cardId:n.id,childId:n.downstreamChange.cardId});
  for(const n of nodes){const against=ownerNames(n).includes(p.name)?openObjections(comments[n.id],p.name):[];if(against.length)out.push({kind:'objection',cardId:n.id,id:against.at(-1).id,author:against.at(-1).author,text:against.at(-1).text,count:against.length});}
  for(const r of proposals)if(isReviewId(r.cardId)&&r.status==='pending'&&!r.stale&&r.canAccept)out.push({kind:'proposal',cardId:r.cardId,id:r.id});
+ // 待提交洞察 (2026-10-26): a participant who has not written one yet, until the insights are revealed.
+ for(const n of nodes)if(Array.isArray(n.facts)&&n.insights&&!n.insights.revealed&&(n.insights.missing||[]).includes(p.name))out.push({kind:'insight',cardId:n.id});
  for(const n of nodes){
   // One line per review for its open 追问, and none once the review is confirmed (陈溪南 2026-10-22).
   const asks=ownerNames(n).includes(p.name)&&n.status!=='已确认'?(n.causes||[]).map((c,i)=>c?.ask&&!answerOf(comments[n.id],i)?i:null).filter(i=>i!=null):[];
