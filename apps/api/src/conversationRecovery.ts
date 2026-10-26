@@ -377,7 +377,8 @@ export class ConversationTurnError extends Error {
   get runtimeEntries() { return this.details.runtimeEntries; }
 }
 
-export type TurnFailureKind = FailureKind | "search_budget" | "internal" | "turn_timeout" | "turn_stalled";
+/** restart：服务停机（部署换版本），正在写的这一轮先存档收尾，界面连上新实例后自动接着写。 */
+export type TurnFailureKind = FailureKind | "search_budget" | "internal" | "turn_timeout" | "turn_stalled" | "restart";
 
 /** 存进对话记录的那一行说明（括号整行），续写时不算已写出的正文。 */
 const SETTLED_NOTE = /\n*（(这次回答在这里中断了|这次回答没有完成|已停止|回答持续了|回答在 \d+ 秒时限内没有写完)[\s\S]*）\s*$/;
@@ -387,6 +388,7 @@ export function shortFailureReason(kind: TurnFailureKind): string {
   switch (kind) {
     case "turn_timeout": return "持续时间超过上限";
     case "turn_stalled": return "长时间没有进展";
+    case "restart": return "天枢服务更新";
     case "search_budget": return "外部检索次数用完";
     case "internal": return "天枢处理时出错";
     default: return REASON_COPY[kind];
@@ -431,6 +433,7 @@ export function turnFailureCopy(kind: TurnFailureKind, input: { partial: boolean
     case "search_budget": return { code: "SEARCH_BUDGET_EXHAUSTED", message: `这一轮的外部检索次数已经用完。${input.partial ? "已写出的部分保留在上方。" : "问题已保留，"}可以把问题缩小一些再问。` };
     case "turn_timeout": return { code: "TURN_TIMEOUT", message: `这次回答已经持续 ${input.capMinutes ?? 10} 分钟，为防止陷入循环先停在这里。${keep}`, resume };
     case "turn_stalled": return { code: "TURN_STALLED", message: `这一轮超过 ${input.stallSeconds ?? 120} 秒没有任何进展（没有新的思考、正文或查证结果）。${keep}`, resume };
+    case "restart": return { code: "SERVER_RESTARTING", message: `天枢服务在更新。${keep}`, resume };
     case "aborted": return { code: "ABORTED", message: `已停止。${input.partial ? "已写出的部分保留在上方，点「继续」可以接着写。" : ""}`, ...(input.partial ? { resume: "continue" as const } : {}) };
     case "internal":
     case "unknown":

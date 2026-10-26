@@ -147,9 +147,9 @@ describe("长回答：对话层里读完整回答 → 收起（第 24 项，D6 �
 
 describe("历史没读到时的重试入口", () => {
   it("重试键调用 retryHistory，不碰发送", () => {
-    const data = conversation({ messages: [], historyStatus: "error", historyError: "没有连上天枢服务，对话记录没读出来，可以点重试。" });
+    const data = conversation({ messages: [], historyStatus: "error", historyError: null });
     const html = settle(() => <ConversationHistoryState data={data} empty={<p>暂无消息</p>} />);
-    expect(html).toContain("对话记录没有载入，这不代表没有记录。");
+    expect(html).toContain("对话记录暂未载入");
     expect(html).not.toContain("暂无消息");
     h.buttons.get("重试载入对话记录")!.onPress!();
     expect(data.retryHistory).toHaveBeenCalledOnce();

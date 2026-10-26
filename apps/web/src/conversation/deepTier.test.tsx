@@ -44,7 +44,7 @@ describe("深度档的开场说明与进度", () => {
   it("整轮超过绝对上限：用服务端给的中文说明（已写出的部分保留、点「继续」），英文原文不上屏", () => {
     const copy = "这次回答已经持续 10 分钟，为防止陷入循环先停在这里。已写出的部分保留在上方，点「继续」从断点接着写。";
     expect(failureCopy("TURN_TIMEOUT", copy)).toBe(copy);
-    expect(failureCopy("TURN_TIMEOUT", "Conversation turn exceeded 600 seconds")).toBe("这次回答没有完成（原因已记录）。");
+    expect(failureCopy("TURN_TIMEOUT", "Conversation turn exceeded 600 seconds")).toBe("这次回答没有完成。");
   });
 });
 

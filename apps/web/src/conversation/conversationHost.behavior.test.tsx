@@ -210,9 +210,9 @@ describe("右列私聊的历史状态与记录归属", () => {
     let html = render();
     expect(html).toContain("正在载入对话记录…");
     expect(html).not.toContain("暂无消息");
-    harness.conversation = { historyStatus: "error", historyError: "没有连上天枢服务，对话记录没读出来，可以点重试。" };
+    harness.conversation = { historyStatus: "error", historyError: null };
     html = render();
-    expect(html).toContain("对话记录没有载入，这不代表没有记录。 没有连上天枢服务，对话记录没读出来，可以点重试。");
+    expect(html).toContain("对话记录暂未载入");
     expect(html).toContain("重试");
     expect(html).not.toContain("暂无消息");
     harness.conversation = { historyStatus: "ready" };

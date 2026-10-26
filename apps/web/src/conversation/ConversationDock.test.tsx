@@ -83,10 +83,10 @@ describe("对话端点与附件", () => {
 
 
   it("失败文案按出错的环节说清楚，没有笼统的「暂不可用」，也不显示英文原文（C-04）", () => {
-    expect(failureCopy("UNREACHABLE", "Failed to fetch")).toBe("没有连上天枢服务（可能正在重启，或本机网络刚切换）。消息没有发出去，原文已放回输入框，稍后重发即可。");
-    expect(failureCopy("STREAM_BROKEN", "network error")).toBe("和天枢服务的连接在回答途中断开了（可能是服务重启或本机网络切换）。");
-    expect(failureCopy("HTTP_502", "")).toContain("天枢服务这次没有接下这条消息");
-    expect(failureCopy("RUNTIME_FAILED", "terminated")).toBe("这次回答没有完成（原因已记录）。");
+    expect(failureCopy("UNREACHABLE", "Failed to fetch")).toBe("没发出去，原文已放回输入框。");
+    expect(failureCopy("STREAM_BROKEN", "network error")).toBe("连接中断了。");
+    expect(failureCopy("HTTP_502", "")).toBe("没发出去，原文已放回输入框。");
+    expect(failureCopy("RUNTIME_FAILED", "terminated")).toBe("这次回答没有完成。");
     expect(failureCopy("NETWORK_INTERRUPTED", "和模型服务的网络连接中断了。已写出的部分保留在上方，点「继续」从断点接着写。"))
       .toBe("和模型服务的网络连接中断了。已写出的部分保留在上方，点「继续」从断点接着写。");
     for (const code of [undefined, "RUNTIME_FAILED", "TURN_TIMEOUT", "HTTP_500", "STREAM_ENDED", "STREAM_SILENT", "X"]) {
@@ -142,7 +142,7 @@ describe("全局输入条（clark workspace 614–640）", () => {
   });
 
   it("输入条标出历史读取状态，供页面与验收脚本识别", () => {
-    expect(dock({ data: data({ historyStatus: "error", historyError: "没有连上天枢服务，对话记录没读出来，可以点重试。" }) })).toContain('data-history-status="error"');
+    expect(dock({ data: data({ historyStatus: "error", historyError: null }) })).toContain('data-history-status="error"');
     expect(dock()).toContain('data-history-status="ready"');
   });
 
@@ -203,9 +203,12 @@ describe("对话记录", () => {
     expect(loading).toContain('data-history="loading"');
     expect(loading).toContain('data-empty="false"');
     expect(loading).not.toContain("你最想弄清的地方开始");
-    const failed = sheet({ historyStatus: "error", historyError: "没有连上天枢服务，对话记录没读出来，可以点重试。" });
-    expect(failed).toContain("对话记录没有载入，这不代表没有记录。 没有连上天枢服务，对话记录没读出来，可以点重试。");
-    expect(failed).toContain('role="alert"');
+    const failed = sheet({ historyStatus: "error", historyError: null });
+    expect(failed).toContain("对话记录暂未载入");
+    expect(failed).not.toMatch(/服务出错|已记录/);
+    // 连接类自己重试过仍没读到：一行灰字（status），不是醒目的告警；登录、权限类才用 alert。
+    expect(failed).toContain('role="status"');
+    expect(sheet({ historyStatus: "error", historyError: "登录状态已失效，请重新进入后再试。" })).toContain('role="alert"');
     expect(failed).toContain("重试");
     expect(failed).toContain('data-empty="false"');
     expect(failed).not.toContain("你最想弄清的地方开始");
@@ -218,10 +221,10 @@ describe("对话记录", () => {
 
   it("历史层：已显示的消息在刷新失败、重新载入时都留着，提示接在下面", () => {
     const messages = [{ sequence: 1, role: "user" as const, content: "灯塔的付费意愿怎么判断？" }];
-    const failed = renderToStaticMarkup(<ConversationHistorySheet data={data({ messages, historyStatus: "error", historyError: "没有连上天枢服务，对话记录没读出来，可以点重试。" })} label="天枢" global onClose={noop} />);
+    const failed = renderToStaticMarkup(<ConversationHistorySheet data={data({ messages, historyStatus: "error", historyError: null })} label="天枢" global onClose={noop} />);
     expect(failed).toContain("灯塔的付费意愿怎么判断？");
-    expect(failed).toContain("对话记录没有刷新成功，已显示的内容仍保留。");
-    expect(failed.indexOf("灯塔的付费意愿怎么判断？")).toBeLessThan(failed.indexOf("对话记录没有刷新成功"));
+    expect(failed).toContain("对话记录暂未刷新");
+    expect(failed.indexOf("灯塔的付费意愿怎么判断？")).toBeLessThan(failed.indexOf("对话记录暂未刷新"));
     const reloading = renderToStaticMarkup(<ConversationHistorySheet data={data({ messages, historyStatus: "loading" })} label="天枢" global onClose={noop} />);
     expect(reloading).toContain("灯塔的付费意愿怎么判断？");
     expect(reloading).toContain("正在刷新对话记录…");

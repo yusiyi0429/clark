@@ -7,6 +7,7 @@ import type { TAskAnswerInput, TAskAnswerRecord, TConversationCard, TReadScope, 
 import type { components } from "@/lib/api/schema";
 import { afterResize, resizing } from "./resizeGate";
 import { useStableCallback } from "./stableCallback";
+import { backoff, HISTORY_RETRY_MS, offline, pause, RECONNECT_MS } from "./reconnect";
 
 /**
  * 对话的数据与调用：一个人在一个页面有一条当前对话（默认一直接着往下聊，用户感觉不到「会话」）。
@@ -42,8 +43,11 @@ export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | 
 /** 历史读取：`ready` 且 0 条 = 真的没有记录；`error` = 没读到（不代表没有记录）。与一轮回答的 `status` 无关。 */
 export type HistoryStatus = "loading" | "ready" | "error";
 /** clark 的三段思考：尚无事件 = 思考；开始用工具 = 快速查证；首个文字 = 整理回答。 */
-/** understanding：刚发出、档位还没定；thinking：模型在思考；researching：在查证；answering：正文在写。 */
-export type ThinkingStage = "understanding" | "thinking" | "researching" | "answering";
+/**
+ * understanding：刚发出、档位还没定；thinking：模型在思考；researching：在查证；answering：正文在写。
+ * connecting / offline：这句还没送到（或回答断了正在接上），自己在重连 / 在等网络恢复。
+ */
+export type ThinkingStage = "understanding" | "thinking" | "researching" | "answering" | "connecting" | "offline";
 /**
  * 进度行（第 2 段，系统生成，不由模型写）：最近一步在查什么 / 读到了什么、已查完几项、思考要点（推理摘要里有中文要点时）、
  * 非深度档的中途升级提示。
@@ -139,28 +143,32 @@ export function failureCopy(code: string | undefined, fallback?: string): string
   if (readableCopy(fallback)) return fallback;
   switch (code) {
     case "UNREACHABLE":
-      return "没有连上天枢服务（可能正在重启，或本机网络刚切换）。消息没有发出去，原文已放回输入框，稍后重发即可。";
+      return "没发出去，原文已放回输入框。";
     case "HTTP_400":
       return "这条消息没有通过校验，没有发出去。原文已放回输入框，可以改短一些或去掉附件后重发。";
     case "HTTP_413":
       return "消息或附件太大，没有发出去。原文已放回输入框，可以拆成几次发。";
     case "STREAM_SILENT":
-      return "和天枢服务的连接超过一分钟没有任何数据，已断开。";
+      return "连接超过一分钟没有数据，已断开。";
     case "STREAM_BROKEN":
     case "STREAM_ENDED":
-      return "和天枢服务的连接在回答途中断开了（可能是服务重启或本机网络切换）。";
+      return "连接中断了。";
     default:
-      if (code?.startsWith("HTTP_5")) return "天枢服务这次没有接下这条消息（服务出错，已记录）。原文已放回输入框，可以直接重发。";
-      return "这次回答没有完成（原因已记录）。";
+      if (code?.startsWith("HTTP_5")) return "没发出去，原文已放回输入框。";
+      return "这次回答没有完成。";
   }
 }
 
-/** 历史没读到的原因（中文，不显示英文原文）；界面再补一句「没载入不代表没有记录」或「已显示的内容仍保留」。 */
-export function historyFailureCopy(status?: number): string {
+/** 没送到天枢服务的几种（没连上、代理连不上正在重启的服务）：这句留着，自己再发。 */
+const UNDELIVERED = new Set(["UNREACHABLE", "HTTP_502", "HTTP_503"]);
+/** 回答途中连接断了（服务端没来得及说什么），或服务停机前先存了档（SERVER_RESTARTING）：连上后自己接着写一次。 */
+const CONNECTION_LOST = new Set(["STREAM_BROKEN", "STREAM_ENDED", "STREAM_SILENT", "SERVER_RESTARTING"]);
+
+/** 历史没读到、要本人处理的原因；连接类（没连上、服务出错）自己重试过仍不行时没有原因，界面只说「暂未载入」。 */
+export function historyFailureCopy(status?: number): string | null {
   if (status === 401) return "登录状态已失效，请重新进入后再试。";
   if (status === 403 || status === 404) return "暂无法读取该对话：对象可能已移除，或无查看权限。";
-  if (status && status >= 500) return "天枢服务读取对话记录时出错（已记录），可以点重试。";
-  return "没有连上天枢服务，对话记录没读出来，可以点重试。";
+  return null;
 }
 
 /** 失败后这一轮能不能接着来：continue 从断点续写，retry 用已查到的材料重答。 */
@@ -226,6 +234,8 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [historyStatus, setHistoryStatus] = useState<HistoryStatus>("loading");
   const [historyError, setHistoryError] = useState<string | null>(null);
+  /** 载入对话记录时连不上、正在自己重试：从什么时候开始等、是不是在等网络恢复。 */
+  const [historyWaiting, setHistoryWaiting] = useState<{ since: number; offline: boolean } | null>(null);
   /** 这一轮没完成时能不能接着来（「继续」/「重新回答」）：哪一轮、怎么接；发下一句、换 scope 时清空。 */
   const [recoveryState, setRecoveryState] = useState<{ mode: TurnRecoveryMode; runId: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -301,8 +311,10 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   /**
    * 读历史，返回读到的消息（没读到为 null）。`show`（首次、重试）显示载入中；`quiet`（发送后的重读）不闪载入态。
    * 读不到只记下失败，不清掉已显示的消息、不碰流式中的回答、输入草稿和待发附件。
+   * 连接类失败（没连上、5xx）先自己按退避再试，`HISTORY_RETRY_MS` 内仍不行才记失败；登录、权限类直接记。
+   * `probe`（一轮刚结束、断线后试探连上没有）：只读一次，读不到什么都不记，由调用方决定接下来怎么办。
    */
-  const loadHistory = useCallback(async (mode: "show" | "quiet" = "show"): Promise<Message[] | null> => {
+  const loadHistory = useCallback(async (mode: "show" | "quiet" | "probe" = "show"): Promise<Message[] | null> => {
     historyRun.current?.abort();
     const controller = new AbortController();
     historyRun.current = controller;
@@ -310,27 +322,42 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
     if (mode === "show") {
       setHistoryStatus("loading");
       setHistoryError(null);
+      setHistoryWaiting(null);
     }
-    let failedStatus: number | undefined;
+    const began = Date.now();
     try {
-      const response = await fetch(historyUrl, { headers: { accept: "application/json" }, signal: controller.signal });
-      if (!response.ok) {
-        failedStatus = response.status;
-        throw new Error(`历史读取失败：${response.status}`);
+      for (let attempt = 0; ; attempt++) {
+        let failedStatus: number | undefined;
+        try {
+          const response = await fetch(historyUrl, { headers: { accept: "application/json" }, signal: controller.signal });
+          if (!response.ok) {
+            failedStatus = response.status;
+            throw new Error(`历史读取失败：${response.status}`);
+          }
+          const body = (await response.json()) as { messages?: unknown };
+          if (!Array.isArray(body.messages)) throw new Error("历史格式不对");
+          if (!current()) return null;
+          const loaded = withPendingTurn(body.messages as Message[], pendingTurn.current);
+          setMessages(loaded);
+          setHistoryStatus("ready");
+          setHistoryError(null);
+          setHistoryWaiting(null);
+          return loaded;
+        } catch {
+          if (!current() || mode === "probe") return null;
+          const connection = failedStatus === undefined || failedStatus >= 500;
+          if (connection && Date.now() - began < HISTORY_RETRY_MS) {
+            if (mode === "show") setHistoryWaiting({ since: began, offline: offline() });
+            await pause(backoff(attempt), controller.signal);
+            if (!current()) return null;
+            continue;
+          }
+          setHistoryWaiting(null);
+          setHistoryStatus("error");
+          setHistoryError(historyFailureCopy(failedStatus));
+          return null;
+        }
       }
-      const body = (await response.json()) as { messages?: unknown };
-      if (!Array.isArray(body.messages)) throw new Error("历史格式不对");
-      if (!current()) return null;
-      const loaded = withPendingTurn(body.messages as Message[], pendingTurn.current);
-      setMessages(loaded);
-      setHistoryStatus("ready");
-      setHistoryError(null);
-      return loaded;
-    } catch {
-      if (!current()) return null;
-      setHistoryStatus("error");
-      setHistoryError(historyFailureCopy(failedStatus));
-      return null;
     } finally {
       if (historyRun.current === controller) historyRun.current = null;
     }
@@ -370,6 +397,19 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
     window.addEventListener(CONVERSATION_RELOAD, onReload);
     return () => window.removeEventListener(CONVERSATION_RELOAD, onReload);
   }, [loadHistory, scope]);
+
+  // 自己重试过仍没读到：网络恢复、页面回到前台时再读一次，不等本人点「重试」。
+  useEffect(() => {
+    // 登录、权限类（有 historyError）要本人处理，不自动重读。
+    if (historyStatus !== "error" || historyError !== null || typeof window === "undefined" || typeof window.addEventListener !== "function") return;
+    const again = () => { if (document.visibilityState === "visible") void loadHistory("show"); };
+    window.addEventListener("online", again);
+    document.addEventListener("visibilitychange", again);
+    return () => {
+      window.removeEventListener("online", again);
+      document.removeEventListener("visibilitychange", again);
+    };
+  }, [historyStatus, historyError, loadHistory]);
 
   /** 只重读历史：输入草稿、待发附件、已显示的消息和正在流式的回答都不动。 */
   const retryHistory = useCallback(() => {
@@ -418,15 +458,46 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   }
 
   /**
+   * 回答断线后等连上：进度行显示「正在连接 / 等待网络 · N 秒」，「停止」可以取消；读得回对话记录就算连上了。
+   * 返回 true 连上了、false 到时限仍没连上（或已换 scope）、"stopped" 本人点了停止。
+   */
+  async function reconnected(live: () => boolean): Promise<boolean | "stopped"> {
+    const waiting = new AbortController();
+    abortRef.current = waiting;
+    const since = Date.now();
+    setStatus("streaming");
+    setStartedAt(since);
+    setStage(offline() ? "offline" : "connecting");
+    setRoute(null);
+    setProgress({ label: null, checked: 0 });
+    setSteps([]);
+    setReadScope(null);
+    try {
+      for (let attempt = 0; Date.now() - since < RECONNECT_MS; attempt++) {
+        await pause(backoff(attempt), waiting.signal);
+        if (waiting.signal.aborted) return "stopped";
+        if (!live()) return false;
+        if (await loadHistory("probe")) return true;
+        if (live()) setStage(offline() ? "offline" : "connecting");
+      }
+      return false;
+    } finally {
+      if (abortRef.current === waiting) abortRef.current = null;
+    }
+  }
+
+  /**
    * 发送一轮。返回 false 表示在服务端接收之前就失败了（C-04：调用方保留输入与引用）。
    * 请求与 SSE 处理与原实现相同；只在展示上派生思考阶段与失败文案。
    * 这一轮不管怎么结束（出错、断线、超时、停止），已经写出的正文和思考都留在界面上：服务端存了就用读回的，
    * 没来得及存就在本地补一条；能接着来的给出「继续」/「重新回答」（resume）。
    * options.resumeRunId：接着那一轮没完成的回答（「继续」按钮），这一句不带页面前缀。
    * options.answers：回答 Agent 的提问（AskPanel）；record 只用来先画出问答记录，原文由服务端按提问卡重写。
+   * 连接类失败自己恢复（RECONNECT_MS 内）：没送到就留着这句、显示「正在连接」并重发；回答途中断了就等连上后自动「继续」一次
+   * （options.auto：这一句就是自动接上的那次，再断就交给本人）。
    */
   async function send(message: string, references: SentCardRef[], options: { resumeRunId?: string; scopeOverride?: TReadScopeParams;
-    answers?: { input: TAskAnswerInput; record: TAskAnswerRecord } } = {}): Promise<boolean> {
+    answers?: { input: TAskAnswerInput; record: TAskAnswerRecord }; auto?: boolean } = {}): Promise<boolean> {
     const input = message.trim();
     if (!input || status === "streaming") return false;
     const text = messageContext && !options.resumeRunId && !options.answers ? `${messageContext}
@@ -454,6 +525,8 @@ ${input}` : input;
     const attachmentRefs = attachments.map((attachment) => ({ id: attachment.id }));
     // 乐观渲染：引用的卡片、附的材料随这句一起立刻画出来，不等回答结束读回历史。
     const turn = { ...pendingUserMessage(0, text, references, attachments), ...(options.answers ? { answers: options.answers.record } : {}) };
+    /** 发出前已有的最后一条：没连上之后读回历史，若这句已经排在它后面，就是其实送到了，不再重发。 */
+    const lastSequence = messages.reduce((max, item) => Math.max(max, item.sequence), 0);
     pendingTurn.current = turn;
     setMessages((current) => [...current, { ...turn, sequence: current.length + 1 }]);
     // 页面上跟着这条对话走的部分（月度计划逐段意见）：发出与这一轮结束时各通知一次，各自重读。
@@ -476,26 +549,47 @@ ${input}` : input;
     /** 回答途中连接一直没有数据（服务端每 15 秒有心跳）：当断了处理，不让界面一直停在「正在思考」。 */
     let silenceTimer: ReturnType<typeof setTimeout> | undefined;
     try {
-      let response: Response;
-      try {
-        response = await fetch(historyUrl, {
-          method: "POST",
-          headers: { accept: "text/event-stream", "content-type": "application/json" },
-          body: JSON.stringify({ message: text, references: references.map(({ cardId, version }) => ({ cardId, version })), attachments: attachmentRefs,
-            ...(viewingMaterial ? { viewingMaterialId: viewingMaterial.id } : {}),
-            ...(anchorSelection ? { anchorSelection } : {}),
-            ...(options.resumeRunId ? { resumeRunId: options.resumeRunId } : {}),
-            ...(options.answers ? { answers: options.answers.input } : {}),
-            ...(options.scopeOverride ? { scopeOverride: options.scopeOverride } : {}) }),
-          signal: controller.signal,
-        });
-      } catch (cause) {
-        if (controller.signal.aborted) throw cause;
-        throw new TurnError("UNREACHABLE", (cause as Error)?.message ?? "fetch failed");
+      let response!: Response;
+      let attempt = 0;
+      for (; ; attempt++) {
+        let undelivered: TurnError | null = null;
+        try {
+          response = await fetch(historyUrl, {
+            method: "POST",
+            headers: { accept: "text/event-stream", "content-type": "application/json" },
+            body: JSON.stringify({ message: text, references: references.map(({ cardId, version }) => ({ cardId, version })), attachments: attachmentRefs,
+              ...(viewingMaterial ? { viewingMaterialId: viewingMaterial.id } : {}),
+              ...(anchorSelection ? { anchorSelection } : {}),
+              ...(options.resumeRunId ? { resumeRunId: options.resumeRunId } : {}),
+              ...(options.answers ? { answers: options.answers.input } : {}),
+              ...(options.scopeOverride ? { scopeOverride: options.scopeOverride } : {}) }),
+            signal: controller.signal,
+          });
+          if (UNDELIVERED.has(`HTTP_${response.status}`)) undelivered = new TurnError(`HTTP_${response.status}`, "");
+        } catch (cause) {
+          if (controller.signal.aborted) throw cause;
+          undelivered = new TurnError("UNREACHABLE", (cause as Error)?.message ?? "fetch failed");
+        }
+        if (!undelivered) break;
+        if (Date.now() - began >= RECONNECT_MS) throw undelivered;
+        if (live()) setStage(offline() ? "offline" : "connecting");
+        await pause(backoff(attempt), controller.signal);
+        if (controller.signal.aborted) throw undelivered;
+        if (undelivered.code === "UNREACHABLE") {
+          // 请求可能已经送到、只是回应没回来：读回历史里有这句就不再重发，按回答中途断了接着处理。
+          const seen = (await loadHistory("probe"))?.find((item) => item.role === "user" && item.content === text && item.sequence > lastSequence);
+          if (seen) {
+            accepted = true;
+            runId = seen.runId;
+            throw new TurnError("STREAM_BROKEN", "delivered, response lost");
+          }
+        }
       }
+      if (attempt > 0 && live()) setStage("understanding");
       if (response.status === 401) {
+        // 按没接下返回：调用方把原文放回输入框（存成草稿），重新登录回来还在。
         window.location.assign("/access");
-        return true;
+        return false;
       }
       if (!response.ok || !response.body) {
         const body = (await response.json().catch(() => ({}))) as { code?: string; message?: string; error?: { code?: string; message?: string } };
@@ -613,8 +707,10 @@ ${input}` : input;
       if (!live()) return true;
       // 本地那句先放下，读回来的就是服务端保存的全部；读不回来时保留已显示的对话，并把这次回答接在后面。
       pendingTurn.current = null;
-      const reloaded = await loadHistory("quiet");
+      const reloaded = await loadHistory("probe");
       if (!live()) return true;
+      // 读不回来时先用本地这份，后台接着读，读到了再换成服务端保存的。
+      if (!reloaded) void loadHistory("quiet");
       if (!reloaded && reply) setMessages((current) => [...current, { sequence: (current.at(-1)?.sequence ?? 0) + 1, role: "assistant", content: withNotice(notice, reply),
         ...(recoveryNote ? { recoveryNote } : {}) }]);
       setPartial("");
@@ -627,10 +723,10 @@ ${input}` : input;
       flushPartial(live);
       if (!live()) return accepted;
       pendingTurn.current = null;
-      const reloaded = await loadHistory("quiet");
+      const reloaded = await loadHistory("probe");
       if (!live()) return accepted;
       const code = (cause as TurnError).code;
-      const stopped = controller.signal.aborted || code === "ABORTED";
+      let stopped = controller.signal.aborted || code === "ABORTED";
       const written = reply.trim().length > 0;
       // 服务端没接下这句、历史也没读回来：撤掉本地那句，原文由输入框放回（C-04）。
       if (!reloaded && !accepted) setMessages((current) => withoutPendingTurn(current, text));
@@ -646,6 +742,19 @@ ${input}` : input;
         if (thinking && thoughtSeconds === null) setThought({ text: thinking, seconds: Math.max(1, Math.round((Date.now() - began) / 1000)) });
       }
       setPartial("");
+      // 服务端说了能不能接着来就照它；连接中途断了（服务端没来得及说）按有没有写出正文决定。
+      const mode = serverError ? serverError.resume : accepted ? (written ? "continue" : "retry") : undefined;
+      // 回答途中连接断了：等连上后自动接着来一次（服务端按这一轮已写出的部分接上），本人不用点；自动接的那次再断才交给本人。
+      if (!stopped && !options.auto && mode && runId && CONNECTION_LOST.has(code ?? "")) {
+        const back = await reconnected(live);
+        if (!live()) return true;
+        if (back === true) {
+          await send(RESUME_TEXT[mode], [], { resumeRunId: runId, auto: true });
+          return true;
+        }
+        stopped = back === "stopped";
+      }
+      if (!reloaded) void loadHistory("quiet");
       if (stopped) {
         setStatus("aborted");
         setError(written ? "已停止。已写出的部分保留在上方，点「继续」可以接着写。" : "已停止本次回答。");
@@ -653,8 +762,6 @@ ${input}` : input;
       } else {
         setStatus("failed");
         const copy = failureCopy(code, (cause as Error).message);
-        // 服务端说了能不能接着来就照它；连接中途断了（服务端没来得及说）按有没有写出正文决定。
-        const mode = serverError ? serverError.resume : accepted ? (written ? "continue" : "retry") : undefined;
         // 说明里还没写下一步时补上：能接着来就指向按钮，不能就只说已保留了什么。
         const next = !accepted || /点「(继续|重新回答)」|保留在上方|放回输入框|问题已保留/.test(copy) ? ""
           : mode === "continue" ? "已写出的部分保留在上方，点「继续」从断点接着写。"
@@ -712,6 +819,7 @@ ${input}` : input;
     lastReply,
     historyStatus,
     historyError,
+    historyWaiting,
     retryHistory,
     attachments,
     uploading,
