@@ -234,6 +234,7 @@ export const ConversationDock = memo(function ConversationDock({
       data-has-references={hasReferences}
       data-has-tray={hasTray}
       data-history-open={historyOpen}
+      data-wide={wide || undefined}
       data-history-status={data.historyStatus}
       data-composer={keyboard ? "keyboard" : "entry"}
       data-scoped-context={!global || pendingGlobalReferences > 0}
