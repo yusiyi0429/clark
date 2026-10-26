@@ -134,7 +134,7 @@ export const TaskStandardCheck = Type.Object(
   { additionalProperties: false },
 );
 
-/** 外部工具（Codex、Claude Code 等）替推进人提交的验收，可带草稿；推进人验收或点「还要继续做」后清掉。 */
+/** 外部工具（Codex、Claude Code 等）替推进人提交的验收，可带草稿；推进人验收或退回后清掉。 */
 export const TaskSubmission = Type.Object(
   {
     by: TaskPerson,
@@ -170,8 +170,8 @@ export const TaskAcceptance = Type.Object(
 );
 
 /**
- * 推进人验收：只有推进人；version 不一致 409 带 latestTask。standards 只带判断，完成标准的文字由服务端按当前
- * doneDefinition 拆出来存快照；没列到的条目记为没达到。交付结果必须是这件事现有的材料。
+ * 推进人验收：只有推进人；version 不一致 409 带 latestTask。逐条对完成标准：每一条都要 met=true 才能完成（有没达到的走退回，没写完成标准的先写）。
+ * 完成标准的文字由服务端按当前 doneDefinition 拆出来存快照。交付结果必须是这件事现有的材料。
  */
 export const AcceptMyTaskRequest = Type.Object(
   {
@@ -179,6 +179,15 @@ export const AcceptMyTaskRequest = Type.Object(
     verdict: Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()]),
     standards: Type.Array(TaskStandardCheck, { maxItems: 50 }),
     deliverableMaterialIds: Type.Array(Type.String({ format: "uuid" }), { maxItems: 30 }),
+  },
+  { additionalProperties: false },
+);
+
+/** 验收退回：逐条对完成标准时有没达到的；standards 至少一条 met=false，没达到的每条都要写原因（evidence）。清掉外部工具的提交，状态不变。 */
+export const ReturnTaskAcceptanceRequest = Type.Object(
+  {
+    version: Type.Integer({ minimum: 1 }),
+    standards: Type.Array(TaskStandardCheck, { minItems: 1, maxItems: 50 }),
   },
   { additionalProperties: false },
 );
@@ -445,6 +454,7 @@ export type TTaskSubmission = Static<typeof TaskSubmission>;
 export type TTaskAcceptance = Static<typeof TaskAcceptance>;
 export type TAcceptMyTaskRequest = Static<typeof AcceptMyTaskRequest>;
 export type TReopenMyTaskRequest = Static<typeof ReopenMyTaskRequest>;
+export type TReturnTaskAcceptanceRequest = Static<typeof ReturnTaskAcceptanceRequest>;
 export type TTaskAcceptanceDraft = Static<typeof TaskAcceptanceDraft>;
 export type TMeHomeResponse = Static<typeof MeHomeResponse>;
 export type TWeeklySyncReminder = Static<typeof WeeklySyncReminder>;

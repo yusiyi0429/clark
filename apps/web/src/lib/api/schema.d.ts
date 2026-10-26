@@ -2735,7 +2735,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 推进人验收：对照完成标准逐条记下是否达到和依据、选交付结果、写一句结论；状态变完成，清掉待验收的提交 */
+        /** 推进人验收：逐条对完成标准，每条都确认达到才完成（有没达到的走退回，没写完成标准的先写）；选交付结果、写一句结论；状态变完成，清掉待验收的提交 */
         post: operations["acceptMyTask"];
         delete?: never;
         options?: never;
@@ -2760,7 +2760,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/me/tasks/{id}/submission": {
+    "/api/me/tasks/{id}/acceptance-return": {
         parameters: {
             query?: never;
             header?: never;
@@ -2769,9 +2769,9 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post?: never;
-        /** 推进人看过外部工具提交的验收后「还要继续做」：清掉这次提交，状态不变 */
-        delete: operations["clearMyTaskSubmission"];
+        /** 推进人逐条对完成标准时有没达到的：写明哪几条没达到、为什么，退回接着做；清掉外部工具的提交，状态不变 */
+        post: operations["returnMyTaskAcceptance"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -10142,6 +10142,15 @@ export interface components {
         };
         ReopenMyTaskRequest: {
             version: number;
+        };
+        ReturnTaskAcceptanceRequest: {
+            version: number;
+            standards: {
+                index: number;
+                met: boolean;
+                evidence: string | null;
+                materialId: string | null;
+            }[];
         };
         TaskAcceptanceDraft: {
             verdict: string | null;
@@ -20287,18 +20296,20 @@ export interface operations {
             };
         };
     };
-    clearMyTaskSubmission: {
+    returnMyTaskAcceptance: {
         parameters: {
-            query: {
-                version: number;
-            };
+            query?: never;
             header?: never;
             path: {
                 id: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReturnTaskAcceptanceRequest"];
+            };
+        };
         responses: {
             /** @description 更新后的执行事项 */
             200: {
@@ -20307,6 +20318,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
             /** @description ApiError 统一错误 */

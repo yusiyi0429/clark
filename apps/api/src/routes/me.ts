@@ -1,8 +1,8 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, BattlefieldProgressResponse, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
+import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, ReturnTaskAcceptanceRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, BattlefieldProgressResponse, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
-import { acceptMyTask, addTaskCollaborators, clearMyTaskSubmission, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, reopenMyTask, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
+import { acceptMyTask, addTaskCollaborators, returnMyTaskAcceptance, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, reopenMyTask, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
 import { draftTaskAcceptance } from "../taskAcceptanceDraft.js";
 import { readMonthPlan, saveMonthPlan } from "../monthPlan.js";
 import { readHomePlan } from "../homePlan.js";
@@ -103,7 +103,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     async (req, reply) => respondTask(reply, await returnMyTask(pool, req.person!.personId, req.params.id, req.body, names())),
   );
 
-  // 完成只能经推进人验收（design-12）；外部工具的提交走 MCP。
+  // 完成只能经推进人逐条对完成标准验收（design-12）；外部工具只能提交验收（走 MCP）。
   app.post(
     "/api/me/tasks/:id/accept",
     { preHandler: requireMember, schema: { params: idParams, body: AcceptMyTaskRequest } },
@@ -115,9 +115,8 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     if (draft === "closed") return fail(reply, 409, "TASK_NOT_ACCEPTABLE", "这件事已经完成或已退回");
     return draft ?? fail(reply, 503, "ACCEPTANCE_DRAFT_UNAVAILABLE", "我的 Agent 这次没起草出来，可以直接手填");
   });
-  app.delete("/api/me/tasks/:id/submission", { preHandler: requireMember, schema: { params: idParams,
-    querystring: Type.Object({ version: Type.Integer({ minimum: 1 }) }, { additionalProperties: false }) } }, async (req, reply) =>
-    respondTask(reply, await clearMyTaskSubmission(pool, req.person!.personId, req.params.id, req.query.version, names())));
+  app.post("/api/me/tasks/:id/acceptance-return", { preHandler: requireMember, schema: { params: idParams, body: ReturnTaskAcceptanceRequest } }, async (req, reply) =>
+    respondTask(reply, await returnMyTaskAcceptance(pool, req.person!.personId, req.params.id, req.body, names())));
   app.post(
     "/api/me/tasks/:id/reopen",
     { preHandler: requireMember, schema: { params: idParams, body: ReopenMyTaskRequest } },

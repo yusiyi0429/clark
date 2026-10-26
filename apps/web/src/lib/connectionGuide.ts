@@ -6,7 +6,7 @@ export type TokenClient = AgentClient | "collector";
 
 export const clientName = (client: TokenClient) => client === "codex" ? "Codex" : client === "claude" ? "Claude Code" : client === "collector" ? "本机采集器" : "AI 工具";
 
-const syncInstruction = (span: "本周" | "今天") => `用天枢 MCP 同步我${span}的工作进展：先调用 tianshu 的 list_my_items（status=all）看我负责的执行事项；我已知的协作事项用 get_item 核对。再根据我${span === "本周" ? "这周" : "今天"}实际做过的事（当前目录及其下各仓库的提交、文档，以及我们的对话），为每件有进展的事项调用一次 append_progress，写清做了什么、证据链接和下一步；做出来的文档、设计稿、PR 这类有链接的东西，用 add_link 放进对应事项。实际推进了、但天枢里还没有对应事项的工作，先用 create_item 建一条（对得上 Mission 就挂上）再写进展；一次问答或顺手的小改动不建。我推进的事项已经做完的，用 submit_for_acceptance 提交验收，对照完成标准逐条写明是否达到和依据，完成由我在天枢确认。没有进展的事项不要写，不要编造。最后列出你写了哪几条、新建了哪几条。`;
+const syncInstruction = (span: "本周" | "今天") => `用天枢 MCP 同步我${span}的工作进展：先调用 tianshu 的 list_my_items（status=all）看我负责的执行事项；我已知的协作事项用 get_item 核对。再根据我${span === "本周" ? "这周" : "今天"}实际做过的事（当前目录及其下各仓库的提交、文档，以及我们的对话），为每件有进展的事项调用一次 append_progress，写清做了什么、证据链接和下一步；做出来的文档、设计稿、PR 这类有链接的东西，用 add_link 放进对应事项。实际推进了、但天枢里还没有对应事项的工作，够一件执行事项（Mission 卡上一个带 ◆ 关口的 Activity，一般 1–2 周）才用 create_item 建一条（对得上 Mission 就挂上）再写进展；过程步骤、修小问题、配置、一次会、一次问答、跑完一个子任务都只写进展，不新建。我推进的事项已经做完的，用 submit_for_acceptance 提交验收，对照完成标准逐条写明是否达到和依据，完成由我在天枢逐条确认。没有进展的事项不要写，不要编造。最后列出你写了哪几条、新建了哪几条。`;
 export const SYNC_INSTRUCTION = syncInstruction("本周");
 /** 每日补漏：会话里漏写的进展、漏建的事项，每天定时补一次。 */
 export const DAILY_SYNC_INSTRUCTION = syncInstruction("今天");
@@ -123,7 +123,7 @@ export function connectionGuide({ role, client, endpoint, token, expires, weekly
       "- 用户问「这周各战场进展怎样？」时，调用 `company_progress`；可以按周、战场或人筛选。",
       `- 这些工具只读。要拍板、签发、确认，把结果里的 \`href\` 拼成完整链接给用户（天枢网址是 \`${endpoint.replace(/\/mcp\/me$/, "")}\`，例如 \`${endpoint.replace(/\/mcp\/me$/, "")}/issues/<id>\`），让用户回天枢网页处理。`,
     ] : [
-      "- 不用等用户开口，主动把用户正在推进的工作同步进天枢：开始一件新工作时用 `list_my_items` 找到对应事项，没有就用 `create_item` 建一条（一次问答或顺手的小改动不建）；做出阶段成果（提交、PR、文档）或告一段落时用 `append_progress` 写一条进展（做了什么、证据链接、下一步或阻塞）；做出来的文档、设计稿、PR 用 `add_link` 放进这件事；做完用 `submit_for_acceptance` 提交验收（对照完成标准逐条写明是否达到和依据），由用户在天枢确认完成。只写真实做过的事。",
+      "- 不用等用户开口，主动把用户正在推进的工作同步进天枢：开始一件新工作时用 `list_my_items` 找到对应事项，没有、而且够一件执行事项（Mission 卡上一个带 ◆ 关口的 Activity，一般 1–2 周，一个 Task 下 2–5 件）才用 `create_item` 建一条（过程步骤、修小问题、配置、一次会、一次问答、跑完一个子任务都只写进展）；做出阶段成果（提交、PR、文档）或告一段落时用 `append_progress` 写一条进展（做了什么、证据链接、下一步或阻塞）；做出来的文档、设计稿、PR 用 `add_link` 放进这件事；做完用 `submit_for_acceptance` 提交验收（对照完成标准逐条写明是否达到和依据），由用户在天枢逐条确认完成。只写真实做过的事。",
       `- 用户说「同步本周进展」时，照这段做：${SYNC_INSTRUCTION}`,
       "- 月末天枢会请每人对照自己的 Mission Card 做个人复盘，Co-Agent 会先起草一版。用户说「改写我的月度复盘」时：调用 `get_my_review` 看状态、Mission、现有草稿和写作要求，结合用户手边的周复盘、文档和提交记录补充改写四部分，用 `save_review_draft` 保存；不能替用户提交，写完请用户回天枢确认提交。`list_pending` 里出现待提交的个人复盘时，主动提醒用户。",
       "- 可以问用户要不要把上面两条写进常用项目的 AGENTS.md 或 CLAUDE.md（不要写令牌）。",

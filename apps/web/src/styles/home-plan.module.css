@@ -195,40 +195,85 @@
 }
 .info[aria-expanded="true"] { border-color: var(--ink); background: var(--ink); color: var(--surface); }
 
-/* 三栏：本周栏是中性浅灰底、栏名深色半粗，底色一直铺到详情卡底部。卡片白底细边；已完成透明底、虚线边、字更浅。 */
-.columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; min-width: 0; }
+/* 两栏：本周栏是中性浅灰底、栏名深色半粗，底色一直铺到详情卡底部。卡片白底细边。
+   已完成不占栏：两栏下面一行很淡的「已完成 · N」，点开是透明底、虚线边、字更浅的卡。 */
+.activityBoard { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.columns { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; min-width: 0; }
 .column { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
 .column h3 { margin: 0 0 1px; color: var(--ink-faint); font-size: 12px; font-weight: 500; line-height: 18px; font-variant-numeric: tabular-nums; }
 .column[data-column="week"] { margin: -12px 0; padding: 12px; border-radius: 16px; background: rgba(29, 36, 51, .035); }
 .column[data-column="week"] h3 { color: var(--ink); font-weight: 600; }
+/* 整张卡都能点进事项（.open 的 ::after 铺满），右下角的「验收」压在上面。 */
 .activity {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  column-gap: 8px;
   width: 100%;
   min-width: 0;
   padding: 10px 12px;
   border: 1px solid #edf0f4;
   border-radius: 12px;
   background: #fff;
-  text-align: left;
-  cursor: pointer;
   transition: border-color var(--dur-base) var(--ease-swift);
 }
 .activity:hover { border-color: var(--hairline-strong); }
+.activity:has(.open:focus-visible) { outline: 2px solid var(--ink-muted); outline-offset: 2px; }
+.open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.open::after { position: absolute; inset: 0; border-radius: inherit; content: ""; }
 .title { max-width: 100%; color: var(--ink); font-size: 13px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
 /* 进行中的卡：标题右边是最近一次动静，前面一个深灰小点；停滞的换琥珀小点（同等回复角标），标题降一档。 */
 .cardTop { display: flex; align-items: flex-start; gap: 10px; width: 100%; }
 .cardTop .title { flex: 1; }
 .signal { display: inline-flex; flex: none; align-items: center; gap: 5px; margin-top: 2px; color: var(--ink-faint); font-size: 11px; line-height: 16px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .signal::before { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-muted); content: ""; }
-.activity[data-idle] .signal { color: var(--ink-muted); }
-.activity[data-idle] .signal::before { background: var(--warning); }
-.activity[data-idle] .title { color: var(--ink-muted); }
+.open[data-idle] .signal { color: var(--ink-muted); }
+.open[data-idle] .signal::before { background: var(--warning); }
+.open[data-idle] .title { color: var(--ink-muted); }
 .activity small { color: var(--ink-faint); font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
 /* 逾期的日期：加粗、用正文墨色，不染红。 */
 .activity [data-overdue] { color: var(--ink); font-weight: 600; }
+/* 「验收」：细边小胶囊，平时很淡；外部工具提交了验收的深一档。 */
+.accept {
+  --accept-h: 22px;
+  position: relative;
+  z-index: 1;
+  height: var(--accept-h);
+  padding: 0 9px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: calc(var(--accept-h) - 2px);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--dur-base) var(--ease-swift), border-color var(--dur-base) var(--ease-swift), background var(--dur-base) var(--ease-swift);
+}
+.accept::before { position: absolute; inset: -8px -6px; content: ""; }
+.accept:hover, .accept[data-awaiting] { border-color: var(--ink-faint); color: var(--ink); }
+.accept:disabled { opacity: .55; cursor: default; }
+.accept:focus-visible { outline: 2px solid var(--ink-muted); outline-offset: 2px; }
+.doneArea { display: flex; flex-direction: column; align-items: flex-start; gap: 9px; min-width: 0; }
+.doneToggle { padding: 2px 0; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: 12px; line-height: 18px; font-variant-numeric: tabular-nums; cursor: pointer; }
+.doneToggle:hover, .doneToggle[aria-expanded="true"] { color: var(--ink-muted); }
+.doneArea .column { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); width: 100%; }
 .column[data-column="done"] .activity { border-style: dashed; background: transparent; }
 .column[data-column="done"] .title { color: var(--ink-muted); font-weight: 500; }
 .empty { padding: 2px 0; color: var(--ink-faint); font-size: 12px; }
@@ -371,7 +416,6 @@ button.dayLine:hover { background: color-mix(in oklab, var(--ink) 4%, transparen
   .detailTitle { flex: 1 1 auto; }
   .columns { grid-template-columns: minmax(0, 1fr); gap: 20px; }
   .column[data-column="week"] { order: -1; margin: 0 -12px; }
-  .column[data-column="done"] { order: 1; }
 }
 
 @media (max-width: 759px) {
@@ -380,17 +424,19 @@ button.dayLine:hover { background: color-mix(in oklab, var(--ink) 4%, transparen
 }
 /* 手持（≤959）字号下限，同首页其他卡片：标签 13px，说明性的辅助字 14px。 */
 @media (max-width: 959px) {
-  .head small, .month, .mission small, .taskMeta, .column h3, .popDate, .empty { font-size: 13px; }
+  .head small, .month, .mission small, .taskMeta, .column h3, .popDate, .empty, .doneToggle, .accept { font-size: 13px; }
+  .accept { --accept-h: 28px; padding: 0 12px; }
   .mission, .taskName, .title { font-size: 14px; }
   .activity small { font-size: 14px; }
 }
 /* 点触下限：手持与触屏热区 44（--touch-hit 只在那时定义）。 */
 @media (max-width: 959px), (pointer: coarse) {
+  .accept::before { inset: calc((var(--accept-h) - var(--touch-hit, 32px)) / 2) -8px; }
   .mission { min-height: var(--touch-hit, 32px); padding-top: calc((var(--touch-hit, 32px) - 1.45em) / 2); padding-bottom: calc((var(--touch-hit, 32px) - 1.45em) / 2); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mission, .task, .activity, .pick { transition: none; }
+  .mission, .task, .activity, .pick, .accept { transition: none; }
 }
 @media (prefers-contrast: more) {
   .card, .activity, .task[data-selected] { border-color: var(--ink-muted); }

@@ -169,6 +169,7 @@ import {
   TaskAcceptance,
   AcceptMyTaskRequest,
   ReopenMyTaskRequest,
+  ReturnTaskAcceptanceRequest,
   TaskAcceptanceDraft,
   TaskPerson,
   TaskMissionRef,
@@ -1973,7 +1974,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/me/tasks/{id}/accept": {
         post: {
           operationId: "acceptMyTask",
-          summary: "推进人验收：对照完成标准逐条记下是否达到和依据、选交付结果、写一句结论；状态变完成，清掉待验收的提交",
+          summary: "推进人验收：逐条对完成标准，每条都确认达到才完成（有没达到的走退回，没写完成标准的先写）；选交付结果、写一句结论；状态变完成，清掉待验收的提交",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/AcceptMyTaskRequest" }),
           responses: {
@@ -2001,13 +2002,15 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
-      "/api/me/tasks/{id}/submission": {
-        delete: {
-          operationId: "clearMyTaskSubmission",
-          summary: "推进人看过外部工具提交的验收后「还要继续做」：清掉这次提交，状态不变",
-          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }, { name: "version", in: "query", required: true, schema: { type: "integer", minimum: 1 } }],
+      "/api/me/tasks/{id}/acceptance-return": {
+        post: {
+          operationId: "returnMyTaskAcceptance",
+          summary: "推进人逐条对完成标准时有没达到的：写明哪几条没达到、为什么，退回接着做；清掉外部工具的提交，状态不变",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/ReturnTaskAcceptanceRequest" }),
           responses: {
             "200": { description: "更新后的执行事项", content: { "application/json": { schema: { $ref: "#/components/schemas/TaskView" } } } },
+            "400": errorResponse,
             "401": errorResponse,
             "403": errorResponse,
             "404": errorResponse,
@@ -3113,6 +3116,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         TaskAcceptance: TaskAcceptance as JsonSchema,
         AcceptMyTaskRequest: AcceptMyTaskRequest as JsonSchema,
         ReopenMyTaskRequest: ReopenMyTaskRequest as JsonSchema,
+        ReturnTaskAcceptanceRequest: ReturnTaskAcceptanceRequest as JsonSchema,
         TaskAcceptanceDraft: TaskAcceptanceDraft as JsonSchema,
         NotificationList: NotificationList as JsonSchema,
         MarkNotificationsSeenRequest: MarkNotificationsSeenRequest as JsonSchema,

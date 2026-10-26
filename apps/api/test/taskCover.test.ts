@@ -95,7 +95,7 @@ describe("执行事项封面", () => {
     } finally { await f.t.close(); }
   });
 
-  it("完成只能经推进人验收：快照、交付结果、群里一句；协作者不能验收；重新打开", async () => {
+  it("完成只能经推进人逐条验收：每条都达到才完成、没写标准先写；快照、交付结果、群里一句；协作者不能验收；重新打开", async () => {
     const f = await executionFixture();
     try {
       const task = (await call(f, f.member, "POST", "/api/me/tasks", newTask(null, { doneDefinition: "- 路线图定稿\n- 明华确认" }))).json();
@@ -116,13 +116,16 @@ describe("执行事项封面", () => {
       expect(stale.statusCode).toBe(409);
       expect(stale.json().latestTask.version).toBe(3);
 
-      const accepted = await accept({ standards: [{ index: 0, met: true, evidence: " 见路线图 v4 ", materialId: doc.id }], deliverableMaterialIds: [doc.id, doc.id] });
+      // 逐条对：有一条没确认达到就不能完成。
+      expect((await accept({ standards: [{ index: 0, met: true, evidence: null, materialId: null }] })).json().code).toBe("ACCEPTANCE_NOT_ALL_MET");
+      expect((await accept({ standards: [{ index: 0, met: true, evidence: null, materialId: null }, { index: 1, met: false, evidence: "没确认", materialId: null }] })).json().code).toBe("ACCEPTANCE_NOT_ALL_MET");
+      const accepted = await accept({ standards: [{ index: 0, met: true, evidence: " 见路线图 v4 ", materialId: doc.id }, { index: 1, met: true, evidence: null, materialId: null }], deliverableMaterialIds: [doc.id, doc.id] });
       expect(accepted.statusCode).toBe(200);
       expect(accepted.json()).toMatchObject({ status: "done", version: 4, awaitingAcceptance: false });
       current = await detail(f, f.third, task.id);
       expect(Value.Check(TaskDetailResponse, current)).toBe(true);
       expect(current.acceptance).toMatchObject({ by: { personId: "person-fixture-002" }, verdict: "路线图定稿，九个迭代", deliverableMaterialIds: [doc.id],
-        standards: [{ text: "路线图定稿", met: true, evidence: "见路线图 v4", materialId: doc.id }, { text: "明华确认", met: false, evidence: null, materialId: null }] });
+        standards: [{ text: "路线图定稿", met: true, evidence: "见路线图 v4", materialId: doc.id }, { text: "明华确认", met: true, evidence: null, materialId: null }] });
       expect(await groupSays(f, task.id)).toContain("测试乙验收了这件事：路线图定稿，九个迭代");
       expect((await call(f, f.member, "PATCH", `/api/me/tasks/${task.id}`, { version: 4, status: "in_progress" })).json().code).toBe("TASK_ALREADY_DONE");
       expect((await accept({ version: 4 })).json().code).toBe("TASK_ALREADY_DONE");
@@ -136,14 +139,17 @@ describe("执行事项封面", () => {
       expect((await detail(f, f.member, task.id)).acceptance).toBeNull();
       expect(await groupSays(f, task.id)).toContain("测试乙重新打开了这件事。");
       expect((await call(f, f.member, "POST", `/api/me/tasks/${task.id}/reopen`, { version: 6 })).json().code).toBe("TASK_NOT_DONE");
-      // 未启动也能直接验收：完成不一定要留下文件。
+      // 没写完成标准的先写再验收；未启动也能直接验收：完成不一定要留下文件。
       const quiet = (await call(f, f.member, "POST", "/api/me/tasks", newTask(null))).json();
-      expect((await call(f, f.member, "POST", `/api/me/tasks/${quiet.id}/accept`, { version: 1, verdict: null, standards: [], deliverableMaterialIds: [] })).json())
-        .toMatchObject({ status: "done" });
+      expect((await call(f, f.member, "POST", `/api/me/tasks/${quiet.id}/accept`, { version: 1, verdict: null, standards: [], deliverableMaterialIds: [] })).json().code)
+        .toBe("ACCEPTANCE_NO_STANDARDS");
+      const written = (await call(f, f.member, "PATCH", `/api/me/tasks/${quiet.id}`, { version: 1, doneDefinition: "口头确认过" })).json();
+      expect((await call(f, f.member, "POST", `/api/me/tasks/${quiet.id}/accept`, { version: written.version, verdict: null,
+        standards: [{ index: 0, met: true, evidence: null, materialId: null }], deliverableMaterialIds: [] })).json()).toMatchObject({ status: "done" });
     } finally { await f.t.close(); }
   });
 
-  it("外部工具：update_status(done) 只提交验收；草稿、通知只留一条、协作者不能提交但能放链接；还要继续做、验收后通知已读", async () => {
+  it("外部工具：update_status(done) 只提交验收；草稿、通知只留一条、协作者不能提交但能放链接；逐条退回写原因、验收后通知已读", async () => {
     const f = await executionFixture();
     try {
       const task = (await call(f, f.member, "POST", "/api/me/tasks", newTask(null, { doneDefinition: "- 路线图定稿\n- 明华确认" }))).json();
@@ -176,13 +182,18 @@ describe("执行事项封面", () => {
       expect(notices).toHaveLength(1);
       expect((await owner("submit_for_acceptance", { itemId: task.id, version: 4, standards: [{ index: 9, met: true }] })).value.code).toBe("ACCEPTANCE_STANDARD_INVALID");
 
-      const cleared = await call(f, f.member, "DELETE", `/api/me/tasks/${task.id}/submission?version=4`);
+      const giveBack = (standards: unknown[], version = 4, cookie = f.member) => call(f, cookie, "POST", `/api/me/tasks/${task.id}/acceptance-return`, { version, standards });
+      expect((await giveBack([{ index: 0, met: true, evidence: null, materialId: null }])).json().code).toBe("ACCEPTANCE_NOTHING_MISSED");
+      expect((await giveBack([{ index: 1, met: false, evidence: null, materialId: null }])).json().code).toBe("ACCEPTANCE_REASON_REQUIRED");
+      expect((await giveBack([{ index: 1, met: false, evidence: "明华还没确认", materialId: null }], 4, f.third)).json().code).toBe("TASK_NOT_FOUND");
+      const cleared = await giveBack([{ index: 0, met: true, evidence: "PR #42 合入", materialId: null }, { index: 1, met: false, evidence: " 明华还没确认 ", materialId: null }]);
       expect(cleared.json()).toMatchObject({ status: "in_progress", awaitingAcceptance: false, version: 5 });
       expect((await call(f, f.member, "GET", "/api/me/notifications")).json().notifications.find((entry: { kind: string }) => entry.kind === "task_submitted").readAt).not.toBeNull();
-      expect((await call(f, f.member, "DELETE", `/api/me/tasks/${task.id}/submission?version=5`)).json().code).toBe("TASK_NO_SUBMISSION");
+      expect(await groupSays(f, task.id)).toContain("测试乙验收没通过，退回接着做。没达到：「明华确认」：明华还没确认");
 
       await owner("update_status", { itemId: task.id, status: "done", version: 5 });
-      const accepted = await call(f, f.member, "POST", `/api/me/tasks/${task.id}/accept`, { version: 6, verdict: null, standards: [], deliverableMaterialIds: [] });
+      const accepted = await call(f, f.member, "POST", `/api/me/tasks/${task.id}/accept`, { version: 6, verdict: null,
+        standards: [{ index: 0, met: true, evidence: null, materialId: null }, { index: 1, met: true, evidence: null, materialId: null }], deliverableMaterialIds: [] });
       expect(accepted.json()).toMatchObject({ status: "done", awaitingAcceptance: false });
       expect((await call(f, f.member, "GET", "/api/me/notifications")).json().notifications
         .filter((entry: { kind: string }) => entry.kind === "task_submitted").every((entry: { readAt: string | null }) => entry.readAt !== null)).toBe(true);
@@ -236,7 +247,8 @@ describe("执行事项封面", () => {
         expect.objectContaining({ format: "link", url: "https://example.com/proto", excerpt: "" })]);
       expect((await call(f, f.third, "POST", `/api/me/tasks/${task.id}/acceptance-draft`)).statusCode).toBe(404);
       const version = (await detail(f, f.member, task.id)).task.version;
-      await call(f, f.member, "POST", `/api/me/tasks/${task.id}/accept`, { version, verdict: null, standards: [], deliverableMaterialIds: [] });
+      await call(f, f.member, "POST", `/api/me/tasks/${task.id}/accept`, { version, verdict: null,
+        standards: [{ index: 0, met: true, evidence: null, materialId: null }, { index: 1, met: true, evidence: null, materialId: null }], deliverableMaterialIds: [] });
       expect((await call(f, f.member, "POST", `/api/me/tasks/${task.id}/acceptance-draft`)).json().code).toBe("TASK_NOT_ACCEPTABLE");
     } finally { await f.t.close(); }
     const g = await executionFixture();

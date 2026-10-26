@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   calendar: null as Record<string, unknown> | null,
   popovers: [] as { open: boolean; change: (open: boolean) => void }[],
   api: { GET: vi.fn(), POST: vi.fn(), PATCH: vi.fn(), DELETE: vi.fn() },
+  accept: null as Record<string, unknown> | null,
 }));
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
@@ -88,6 +89,7 @@ vi.mock("ts-design/primitives", async () => {
 });
 vi.mock("./MonthCalendar", () => ({ MonthCalendar: (props: Record<string, unknown>) => { h.calendar = props; return null; } }));
 vi.mock("@/components/tours/StartTaskButton", () => ({ StartTaskButton: () => null }));
+vi.mock("@/components/tasks/AcceptDialog", () => ({ AcceptDialog: (props: Record<string, unknown>) => { h.accept = props; return <div data-accept-dialog="true" />; } }));
 vi.mock("@/lib/api/client", () => ({ browserApi: h.api }));
 
 import { HomePlan } from "./HomePlan";
@@ -177,6 +179,8 @@ function mount(initial: THomePlanResponse | null = plan()) {
     task: (id: string) => call(get((props) => props["data-task"] === id, `Task ${id}`), "onClick"),
     info: () => call(get((props) => props["data-info"] !== undefined, "ⓘ"), "onClick"),
     activity: (id: string) => get((props) => props["data-activity"] === id, `卡片 ${id}`),
+    /** 点开两栏下面的「已完成 · N」。 */
+    openDone: () => call(get((props) => props["data-done-toggle"] !== undefined, "已完成"), "onClick"),
     click: (predicate: (props: Props) => boolean, what: string) => call(get(predicate, what), "onClick"),
     type: (value: string) => call(get((props) => props["data-mark-name"] !== undefined, "名字输入框"), "onChange", { target: { value } }),
     key: (key: string, isComposing = false) => call(get((props) => props["data-mark-name"] !== undefined, "名字输入框"), "onKeyDown", { key, nativeEvent: { isComposing }, preventDefault: vi.fn() }),
@@ -311,11 +315,14 @@ describe("HomePlan：选「全部」时的详情", () => {
     const view = mount();
     expect(heading(view.html)).toBe("全部 Mission");
     expect(view.html).not.toContain("data-task-list");
-    expect(cardsIn(view.html, "done")).toHaveLength(2);
     expect(cardsIn(view.html, "week")).toHaveLength(4);
     expect(cardsIn(view.html, "later")).toHaveLength(1);
-    expect(text(view.html)).toContain("已完成 · 2");
     expect(text(view.html)).toContain("本周 10/19–10/25");
+    // 已完成不占栏：两栏下面一行「已完成 · 2」，点开才列出。
+    expect(cardsIn(view.html, "done")).toEqual([]);
+    expect(text(view.html)).toContain("已完成 · 2");
+    view.openDone();
+    expect(cardsIn(view.html, "done")).toHaveLength(2);
   });
 
   it("卡片小字写它属于哪个 Mission；不属于任何 Mission 的写「不属于 Mission」", () => {
@@ -343,6 +350,7 @@ describe("HomePlan：选某个 Mission 时的详情", () => {
     view.mission("m1");
     expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用 / 会议写进本体");
     expect(view.find((props) => props["data-task"] === "t1")!["aria-pressed"]).toBe(true);
+    view.openDone();
     expect(cardsIn(view.html, "done")).toEqual(["a1"]);
     expect(cardsIn(view.html, "week")).toEqual(["a3"]);
     expect(cardsIn(view.html, "later")).toEqual([]);
@@ -387,6 +395,7 @@ describe("HomePlan：选某个 Mission 时的详情", () => {
     expect(text(taskCard(view.html, "loose")).trim()).toBe("未归入 Task 2 件");
     view.task("loose");
     expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用 / 未归入 Task");
+    view.openDone();
     expect(allCards(view.html)).toEqual(["a2", "a6"]);
   });
 
@@ -406,6 +415,7 @@ describe("HomePlan：选某个 Mission 时的详情", () => {
     view.task("t2");
     view.setPlan(plan({ tasks: plan().tasks.filter((task) => task.taskId !== "t2") }));
     expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用 / 会议写进本体");
+    view.openDone();
     expect(allCards(view.html)).toEqual(["a1", "a3"]);
   });
 
@@ -414,6 +424,7 @@ describe("HomePlan：选某个 Mission 时的详情", () => {
     view.mission("m1");
     expect(view.html).not.toContain("data-task-list");
     expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用");
+    view.openDone();
     expect(allCards(view.html)).toEqual(["a1", "a2", "a3", "a4", "a6"]);
   });
 
@@ -472,6 +483,7 @@ describe("HomePlan：三栏的卡片", () => {
     const view = mount();
     view.mission("m1");
     view.task("loose");
+    view.openDone();
     const card = (id: string) => view.html.match(new RegExp(`<button[^>]*data-activity="${id}"[^>]*>.*?</button>`))?.[0] ?? "";
     expect(text(card("a6")).trim()).toBe("新 Chat 题库打分 10/27 起");
     expect(text(card("a2")).trim()).toBe("对话架构与分工 10/20");
@@ -484,6 +496,34 @@ describe("HomePlan：三栏的卡片", () => {
 
   it("每栏按日期排，没日期的在后", () => {
     expect(cardsIn(mount().html, "week")).toEqual(["a4", "a7", "a3", "a5"]);
+  });
+
+  it("没完成的卡右下角「验收」：读事项详情和材料，当场弹出和二级页同一个验收弹窗；没写完成标准时「写完成标准」去二级页；读不到就直接去二级页验收；已完成的卡没有", async () => {
+    const detail = { task: { id: "a3", version: 1, title: "真实会议跑通" }, standards: ["跑通"], submission: null };
+    const materials = [{ id: "m-1", fileName: "纪要.md" }];
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ materials }) })));
+    h.accept = null;
+    h.api.GET.mockResolvedValue(ok(detail));
+    const view = mount();
+    view.click((props) => props["data-accept"] === "a3", "验收");
+    await settle();
+    view.render();
+    expect(h.api.GET).toHaveBeenCalledWith("/api/me/tasks/{id}", { params: { path: { id: "a3" } } });
+    expect(fetch).toHaveBeenCalledWith("/api/materials/task/a3", expect.anything());
+    expect(view.html).toContain("data-accept-dialog");
+    expect(h.accept).toMatchObject({ detail, materials });
+    expect(h.accept).not.toHaveProperty("quick");
+    (h.accept!.onEditStandards as () => void)();
+    expect(view.onNavigate).toHaveBeenCalledWith("/me/tasks/a3", expect.anything());
+    (h.accept!.onClose as () => void)();
+    expect(view.render()).not.toContain("data-accept-dialog");
+
+    h.api.GET.mockResolvedValue({ data: undefined, response: { ok: false, status: 404 } });
+    view.click((props) => props["data-accept"] === "a4", "验收");
+    await settle();
+    expect(view.onNavigate).toHaveBeenLastCalledWith("/me/tasks/a4?accept=1", expect.anything());
+    view.openDone();
+    expect(view.find((props) => props["data-accept"] === "a1")).toBeUndefined();
   });
 
   it("点卡片进事项详情", () => {
@@ -499,6 +539,7 @@ describe("HomePlan：事项卡上的最近一次动静", () => {
     const view = mount();
     view.mission("m1");
     view.task("t1");
+    view.openDone();
     const signal = (id: string) => {
       const match = view.html.match(new RegExp(`data-activity="${id}"[^>]*>(.*?)</button>`));
       expect(match, id).toBeTruthy();
