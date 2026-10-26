@@ -13310,6 +13310,82 @@
       }
     },
     "/api/meetings/{id}/transcript": {
+      "get": {
+        "operationId": "getMeetingTranscriptPage",
+        "summary": "逐字稿按发言段分页读；只给 CEO 和实际参会的人，其他人和不存在的会一样 404 NOT_FOUND",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "从这一段起（上一页的 nextTurn）"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "一页发言段",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingTranscriptPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "operationId": "importMeetingTranscript",
         "summary": "CEO Web 上传 warmap-transcript.v1（multipart 单文件）",
@@ -39343,6 +39419,100 @@
                 }
               }
             }
+          }
+        }
+      },
+      "MeetingTranscriptTurnView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "speakerName",
+          "startedAt",
+          "text"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "speakerName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "MeetingTranscriptPage": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "turns",
+          "nextTurn",
+          "total"
+        ],
+        "properties": {
+          "turns": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "speakerName",
+                "startedAt",
+                "text"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "speakerName": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "startedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "text": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "nextTurn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total": {
+            "minimum": 0,
+            "type": "integer"
           }
         }
       },

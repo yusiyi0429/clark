@@ -107,6 +107,8 @@ import {
   UnreadThreadsResponse,
   MemberMeetingItem,
   MemberMeetingsResponse,
+  MeetingTranscriptTurnView,
+  MeetingTranscriptPage,
   SignalStateRequest,
   UpdateMeetingDraftRequest,
   EditMeetingDetailsRequest,
@@ -2606,6 +2608,21 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         },
       },
       "/api/meetings/{id}/transcript": {
+        get: {
+          operationId: "getMeetingTranscriptPage",
+          summary: "逐字稿按发言段分页读；只给 CEO 和实际参会的人，其他人和不存在的会一样 404 NOT_FOUND",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "from", in: "query", required: false, schema: { type: "string" }, description: "从这一段起（上一页的 nextTurn）" },
+            { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 500, default: 200 } },
+          ],
+          responses: {
+            "200": { description: "一页发言段", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingTranscriptPage" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
         post: {
           operationId: "importMeetingTranscript",
           summary: "CEO Web 上传 warmap-transcript.v1（multipart 单文件）",
@@ -2995,6 +3012,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         UnreadThreadsResponse: UnreadThreadsResponse as JsonSchema,
         MemberMeetingItem: MemberMeetingItem as JsonSchema,
         MemberMeetingsResponse: MemberMeetingsResponse as JsonSchema,
+        MeetingTranscriptTurnView: MeetingTranscriptTurnView as JsonSchema,
+        MeetingTranscriptPage: MeetingTranscriptPage as JsonSchema,
         ThreadMessage: ThreadMessage as JsonSchema,
         ThreadMessageList: ThreadMessageList as JsonSchema,
         PostThreadMessageRequest: PostThreadMessageRequest as JsonSchema,

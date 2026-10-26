@@ -7,7 +7,7 @@ import { knowledgeName, materialTitle } from "@/lib/displayText";
  * 预审条目、历史决定、执行变化里的来源都是这一套 ref；这里只做解析和定位，不发请求：
  * - `material:<id>@v<n>[#p<k>]` 群材料当时那一版（可带段落）；`material:<id>` 旧会前材料；
  * - `discussion:<messageId>` 群讨论发言；`decision:<id>` 已确认的历史决定；`fact:` 执行事实；`feedback:` 阶段反馈；
- * - `signal:<id>` 外部信号；`outcome:<meetingId>#<itemId>` 会后条目；`meeting:` / `transcript:` / `issue:` / `research:` / `memory:`（企业知识章节）；
+ * - `signal:<id>` 外部信号；`outcome:<meetingId>#<itemId>` 会后条目；`transcript:<meetingId>[#<turnId>]` 逐字稿（可带发言段）；`meeting:` / `issue:` / `research:` / `memory:`（企业知识章节）；
  * - `chat:<会话>#<序号>` 本人以前说过的原话；`pmem:<id>` 本人的一条个人记忆（只有本人可见）。
  * 名字里不出现内部编号；认不出的来源写「其他来源」，不把原始 ref 摆给 CEO。
  */
@@ -22,7 +22,7 @@ export type ParsedSource =
   | { kind: "signal"; ref: string; id: string }
   | { kind: "outcome"; ref: string; meetingId: string; itemId: string | null }
   | { kind: "meeting"; ref: string; id: string }
-  | { kind: "transcript"; ref: string; meetingId: string }
+  | { kind: "transcript"; ref: string; meetingId: string; turnId: string | null }
   | { kind: "issue"; ref: string; id: string }
   | { kind: "research"; ref: string; issueId: string }
   | { kind: "memory"; ref: string; file: string; section: number | null }
@@ -53,7 +53,11 @@ export function parseSourceRef(ref: string): ParsedSource {
         : { kind: "outcome", ref, meetingId: rest.slice(0, hash), itemId: rest.slice(hash + 1) || null };
     }
     case "meeting": return { kind: "meeting", ref, id: rest };
-    case "transcript": return { kind: "transcript", ref, meetingId: rest };
+    case "transcript": {
+      const hash = rest.indexOf("#");
+      return hash === -1 ? { kind: "transcript", ref, meetingId: rest, turnId: null }
+        : { kind: "transcript", ref, meetingId: rest.slice(0, hash), turnId: rest.slice(hash + 1) || null };
+    }
     case "issue": return { kind: "issue", ref, id: rest };
     case "research": return { kind: "research", ref, issueId: rest };
     case "memory": {
@@ -101,6 +105,10 @@ export const issueAnchorId = (issueId: string) => `issue-${slug(issueId)}`;
 export const historyAnchorId = (issueId: string, ref: string) => `history-${slug(issueId)}-${slug(ref)}`;
 export const outcomeAnchorId = (itemId: string) => `outcome-${slug(itemId)}`;
 export const sectionAnchorId = (issueId: string, section: string) => `issue-${slug(issueId)}-${section}`;
+/** 逐字稿里一段发言（components/meeting/TranscriptReader 的行 id）。 */
+export function transcriptTurnAnchorId(turnId: string): string {
+  return `turn-${turnId}`;
+}
 function slug(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, "-");
 }
@@ -225,7 +233,7 @@ export function sourceLabel(ref: string, context: SourceContext, issueId?: strin
  * - anchor：同一页里的议题块 / 历史条目 / 会后条目，滚过去并闪一下，可以一键回到刚才的位置；
  * - material / legacy-material / discussion / detail：在侧边的「依据」抽屉里打开，关上回到原处；
  * - route：另一个页面（外部信号、别的会议、别的议题）；
- * - record：切到本场的会议记录；none：当前会议本身，不是可打开的东西。
+ * - record：切到本场的会议记录（带 turnId 时定位到那一段发言）；none：当前会议本身，不是可打开的东西。
  */
 export type SourceTarget =
   | { type: "anchor"; anchorId: string; fallback?: SourceTarget }
@@ -234,7 +242,7 @@ export type SourceTarget =
   | { type: "discussion"; ref: string; messageId: number; change: TDecisionHistoryChange | null }
   | { type: "detail"; ref: string; hit: HistoryHit | null; parsed: ParsedSource }
   | { type: "route"; href: string }
-  | { type: "record" }
+  | { type: "record"; turnId?: string }
   | { type: "none" };
 
 export function sourceTarget(ref: string, context: SourceContext, issueId?: string | null): SourceTarget {
@@ -263,8 +271,11 @@ export function sourceTarget(ref: string, context: SourceContext, issueId?: stri
       return { type: "route", href: `/meetings/${encodeURIComponent(parsed.meetingId)}` };
     case "meeting":
       return parsed.id === context.meetingId ? { type: "none" } : { type: "route", href: `/meetings/${encodeURIComponent(parsed.id)}` };
-    case "transcript":
-      return parsed.meetingId === context.meetingId ? { type: "record" } : { type: "route", href: `/meetings/${encodeURIComponent(parsed.meetingId)}?meetingAction=transcript` };
+    case "transcript": {
+      const { meetingId, turnId } = parsed;
+      if (meetingId === context.meetingId) return turnId ? { type: "anchor", anchorId: transcriptTurnAnchorId(turnId), fallback: { type: "record", turnId } } : { type: "record" };
+      return { type: "route", href: `/meetings/${encodeURIComponent(meetingId)}?meetingAction=transcript${turnId ? `&turn=${encodeURIComponent(turnId)}` : ""}` };
+    }
     case "issue":
       return context.issueIds.includes(parsed.id) ? { type: "anchor", anchorId: issueAnchorId(parsed.id), fallback: { type: "route", href: `/issues/${encodeURIComponent(parsed.id)}` } }
         : { type: "route", href: `/issues/${encodeURIComponent(parsed.id)}` };

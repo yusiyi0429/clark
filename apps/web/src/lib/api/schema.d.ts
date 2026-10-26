@@ -3406,7 +3406,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** 逐字稿按发言段分页读；只给 CEO 和实际参会的人，其他人和不存在的会一样 404 NOT_FOUND */
+        get: operations["getMeetingTranscriptPage"];
         put?: never;
         /** CEO Web 上传 warmap-transcript.v1（multipart 单文件） */
         post: operations["importMeetingTranscript"];
@@ -7476,6 +7477,22 @@ export interface components {
                 href: string;
                 followUp?: boolean;
             }[];
+        };
+        MeetingTranscriptTurnView: {
+            id: string;
+            speakerName: string;
+            startedAt: string | null;
+            text: string;
+        };
+        MeetingTranscriptPage: {
+            turns: {
+                id: string;
+                speakerName: string;
+                startedAt: string | null;
+                text: string;
+            }[];
+            nextTurn: string | null;
+            total: number;
         };
         ThreadMessage: {
             id: number;
@@ -22856,6 +22873,59 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMeetingTranscriptPage: {
+        parameters: {
+            query?: {
+                /** @description 从这一段起（上一页的 nextTurn） */
+                from?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 一页发言段 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingTranscriptPage"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
