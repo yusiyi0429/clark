@@ -36,6 +36,7 @@ export function ActionNoticeCard({
   subtitle,
   mark,
   notices,
+  counted = true,
   onSettled,
 }: {
   /** 通知栏里这一组的标识（data-notice，FLIP 动画按它对位置）。 */
@@ -44,6 +45,8 @@ export function ActionNoticeCard({
   subtitle?: string;
   mark: ContextMarkKind;
   notices: ActionNotice[];
+  /** 标题后的条数角标；入口卡（不是待办）不出。 */
+  counted?: boolean;
   /** 这一条办完、回执也淡出了：调用方从列表里拿掉（或重新拉取）。 */
   onSettled: (noticeId: string) => void;
 }) {
@@ -69,9 +72,11 @@ export function ActionNoticeCard({
         <span className={n.identity}>
           <strong>
             {title}
-            <b className={n.count} aria-label={`${open} 项待处理`}>
-              {open}
-            </b>
+            {counted ? (
+              <b className={n.count} aria-label={`${open} 项待处理`}>
+                {open}
+              </b>
+            ) : null}
           </strong>
           {subtitle ? <small>{subtitle}</small> : null}
         </span>

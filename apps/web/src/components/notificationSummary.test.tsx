@@ -73,6 +73,11 @@ describe("通知栏分组（clark 三组）", () => {
     expect(html).toContain('aria-label="天枢，返回首页"');
     expect(html).toContain('aria-label="8 项通知"');
   });
+
+  it("M2 可用时 CEO 通知栏有去 M2 的入口卡，不可用时没有", () => {
+    expect(renderToStaticMarkup(<NotificationRail cards={[]} onNavigate={() => undefined} m2Available />)).toContain('data-notice="m2-entry"');
+    expect(renderToStaticMarkup(<NotificationRail cards={[]} onNavigate={() => undefined} />)).not.toContain('data-notice="m2-entry"');
+  });
 });
 
 describe("本月 Mission Card 的 CEO 通知入口", () => {

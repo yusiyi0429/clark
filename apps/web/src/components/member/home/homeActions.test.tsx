@@ -20,7 +20,7 @@ vi.mock("ts-design/primitives", async () => {
   return { Button };
 });
 
-import { HomeActions, reviewMonth } from "./HomeActions";
+import { HomeActions } from "./HomeActions";
 import { waitingReplyCount } from "@/components/requests/RequestNotices";
 
 const sentItem = (id: string, extra: Partial<TRequestListItem> = {}): TRequestListItem => ({
@@ -29,7 +29,7 @@ const sentItem = (id: string, extra: Partial<TRequestListItem> = {}): TRequestLi
 });
 
 const render = (props: Partial<Parameters<typeof HomeActions>[0]> = {}) => renderToStaticMarkup(
-  <HomeActions waitingReplies={0} radarUnread={null} today="2026-10-22" m2Available onBookMeeting={vi.fn()} onOpenRequests={vi.fn()} onNavigate={vi.fn()} {...props} />,
+  <HomeActions waitingReplies={0} radarUnread={null} onBookMeeting={vi.fn()} onOpenRequests={vi.fn()} onNavigate={vi.fn()} {...props} />,
 );
 /** 页面上看得到的字（去掉标签和 React 的文本分隔注释）。 */
 const visible = (html: string) => html.replace(/<!--.*?-->/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -80,15 +80,16 @@ describe("约会议与战场进展", () => {
     expect(navigate).toHaveBeenCalledWith("/me/progress", target);
   });
 
-  it("方块的顺序：约会议、等回复、战场进展、（雷达）；平时不出复盘", () => {
+  it("方块的顺序：约会议、等回复、战场进展、（雷达）；没有复盘格（M2 入口在通知栏）", () => {
     expect(visible(render({ waitingReplies: 1 }))).toBe("约会议 等回复 1 战场进展");
     expect(visible(render({ waitingReplies: 1, radarUnread: 0 }))).toBe("约会议 等回复 1 战场进展 雷达");
   });
 
-  it("每格都是同一种方块；复盘窗口期多一格（样式自动排成 2 列 × 3 行）", () => {
+  it("每格都是同一种方块，没有去 M2 的链接", () => {
     const html = render({ radarUnread: 0 });
     for (const label of ["约会议", "等回复", "战场进展", "雷达"]) expect(button(html, label)).toMatch(/class="[^"]*_tile_/);
-    expect(render({ radarUnread: 0, today: "2026-10-29" }).match(/_tile_/g)).toHaveLength(5);
+    expect(html.match(/_tile_/g)).toHaveLength(4);
+    expect(html).not.toContain("/m2/");
   });
 });
 
@@ -113,36 +114,5 @@ describe("雷达", () => {
     const radar = button(render({ radarUnread: 3 }), "雷达");
     expect(radar).toMatch(/雷达<span class="[^"]*_unread_[^"]*" role="img" aria-label="3 条未读"><\/span>/);
     expect(visible(radar)).toBe("雷达");
-  });
-});
-
-describe("复盘", () => {
-  it("10/22 不在复盘窗口：不出复盘；10/29 多一格去 M2 的链接，样子同旁边的方块", () => {
-    expect(visible(render({ today: "2026-10-22" }))).not.toContain("复盘");
-    const openHtml = render({ today: "2026-10-29" });
-    expect(button(openHtml, "复盘")).toBe("");
-    const link = openHtml.match(/<a [^>]*>.*?<\/a>/)?.[0] ?? "";
-    expect(link).toContain('href="/m2/"');
-    expect(link).toMatch(/class="button [^"]*button--tertiary [^"]*tile[^"]*plain/);
-    expect(visible(link)).toBe("10 月复盘");
-  });
-
-  it("窗口：本月倒数第 3 天到月底复盘本月，下月 1–7 日复盘上个月，其余时间不开", () => {
-    expect(reviewMonth("2026-10-22")).toBeNull();
-    expect(reviewMonth("2026-10-28")).toBeNull();
-    expect(reviewMonth("2026-10-29")).toBe(10);
-    expect(reviewMonth("2026-10-31")).toBe(10);
-    expect(reviewMonth("2026-11-01")).toBe(10);
-    expect(reviewMonth("2026-11-07")).toBe(10);
-    expect(reviewMonth("2026-11-08")).toBeNull();
-    expect(reviewMonth("2027-01-03")).toBe(12);
-    expect(reviewMonth("2027-02-10")).toBeNull();
-    expect(reviewMonth("2028-02-26")).toBeNull();
-    expect(reviewMonth("2028-02-27")).toBe(2);
-  });
-
-  it("M2 不可用、或计划还没读到今天，不显示复盘", () => {
-    expect(visible(render({ m2Available: false, today: "2026-10-29" }))).not.toContain("复盘");
-    expect(visible(render({ today: null }))).not.toContain("复盘");
   });
 });

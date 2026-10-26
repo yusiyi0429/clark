@@ -9,6 +9,7 @@ import { HeroButton } from "@/components/HeroButton";
 import { RailClock } from "@/components/NotificationRail";
 import { MissionCardNoticeGroup } from "@/components/missionCards/MissionCardNoticeGroup";
 import { MonthlyReviewNotices } from "@/components/monthlyReview/MonthlyReviewNotices";
+import { M2EntryNotice } from "@/components/monthlyReview/M2EntryNotice";
 import { PersonalReviewBoard } from "@/components/monthlyReview/PersonalReviewBoard";
 import { useWeeklyReviewBoard, WeeklyReviewBoard } from "@/components/weeklyReview/WeeklyReviewBoard";
 import { RequestNotices, type RequestCounts } from "@/components/requests/RequestNotices";
@@ -66,6 +67,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
             <WeeklyReviewBoard onNavigate={api.navigate} state={weeklyReviews} />
             <PersonalReviewBoard onNavigate={api.navigate} />
             <RequestNotices base="/me/requests" currentHref={currentHref} onNavigate={api.navigate} header={false} onCounts={setRequests} />
+            <M2EntryNotice available={api.m2Available ?? false} />
             <MonthlyReviewNotices onNavigate={api.navigate} />
             {home.rounds.map((round) => <MissionCardNoticeGroup key={round.roundId} round={round} entry="member" currentHref={currentHref} onNavigate={api.navigate} onRefresh={home.refresh} />)}
             <ActionNoticeCard id="assigned" title="分给你的事与邀请" subtitle="会后分派与协作邀请" mark="meeting" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).assigned} onSettled={home.settle} />
@@ -92,7 +94,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
 
 /** 首页：顶行月历 · Mission · 快捷，下面 Mission 详情和最近进展；桌面上个人菜单在通知栏底部，这里的一份只在手机上显示。 */
 function MemberHomeBody({ displayName, home, account, waitingReplies }: { displayName: string; home: ReturnType<typeof useMemberHome>; account: Account; waitingReplies: number }) {
-  const { navigate, bookMeeting, m2Available = false } = useWorkspace();
+  const { navigate, bookMeeting } = useWorkspace();
   const plan = useHomePlan();
   /** 等回复面板开着时记着按下的那颗键：面板里点进详情时从它展开，详情关了回到它。 */
   const [requestsFrom, setRequestsFrom] = useState<Element | null>(null);
@@ -102,7 +104,7 @@ function MemberHomeBody({ displayName, home, account, waitingReplies }: { displa
     <header className={m.heading}><h1>{displayName}</h1><span>我的工作台</span></header>
     {error ? <div className={m.error} role="alert"><span>{error}</span><HeroButton variant="ghost" size="sm" onPress={() => { void home.refresh(); void plan.refresh(); }}>重试</HeroButton></div> : null}
     <HomePlan plan={plan.plan} onNavigate={navigate}
-      actions={<HomeActions waitingReplies={waitingReplies} radarUnread={home.radar ? home.radar.unreadCount : null} today={plan.plan?.today ?? null} m2Available={m2Available} onBookMeeting={bookMeeting} onOpenRequests={setRequestsFrom} onNavigate={navigate} />} />
+      actions={<HomeActions waitingReplies={waitingReplies} radarUnread={home.radar ? home.radar.unreadCount : null} onBookMeeting={bookMeeting} onOpenRequests={setRequestsFrom} onNavigate={navigate} />} />
     <RequestListPanel open={requestsFrom !== null} onClose={() => setRequestsFrom(null)} base="/me/requests" onNavigate={(href) => navigate(href, requestsFrom)} />
     <div className={m.phoneAccount}><AccountMenu account={account} onNavigate={navigate} /></div>
   </div>;
