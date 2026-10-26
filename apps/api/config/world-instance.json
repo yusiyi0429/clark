@@ -2,7 +2,13 @@
   "scope_id": "a92430fd-e1fc-4a42-8a04-bc2faa0a34cc",
   "domains": {
     "company": "fc9e6f1e-0bec-4076-8d0d-2686c8ea26fa",
-    "eo": "88674067-189b-4457-ba20-7de2df9f3768"
+    "eo": "88674067-189b-4457-ba20-7de2df9f3768",
+    "rearch": "1e733720-eb62-4962-b372-356c3eaca513",
+    "method": "57998c53-4121-4889-93be-73be3f5ff45e",
+    "agents": "d6a897c5-fe98-4fd3-905b-d7968c198d3a",
+    "tokenhub": "1447391a-bb2e-47ca-acdb-ebbcfbf6764a",
+    "talent": "4763b7e9-a2ec-450e-aea8-2caa28d514e4",
+    "finance": "cd58e46f-3000-4d1b-bdf1-4683cf16c147"
   },
   "people": {
     "liu-minghua": "f7788d18-a7a0-454f-a835-504d3c56280d",
@@ -23,5 +29,14 @@
     "1447391a-bb2e-47ca-acdb-ebbcfbf6764a": "07",
     "4763b7e9-a2ec-450e-aea8-2caa28d514e4": "08",
     "cd58e46f-3000-4d1b-bdf1-4683cf16c147": "09"
+  },
+  "unit_dris": {
+    "rearch": "liu-minghua",
+    "method": "bai-tiantian",
+    "agents": "liu-minghua",
+    "eo": "liu-renhao",
+    "tokenhub": "wang-chuangfeng",
+    "talent": "qin-mengyi",
+    "finance": "tang-jujie"
   }
 }

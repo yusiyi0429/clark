@@ -1,7 +1,8 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { AdminActionRequest, AdminOverviewResponse } from "@warmap/contracts";
+import { AdminActionRequest, AdminOverviewResponse, UsageQuery, UsageResponse } from "@warmap/contracts";
 import { executeAdminAction, readAdminOverview } from "../admin.js";
 import { personDisplayNames } from "../people.js";
+import { isWeekStart, readUsage, usageMarkdown } from "../usage.js";
 import { isAllowedOrigin, type AppInstance, type RouteContext } from "./shared.js";
 
 /** 管理员：TIANSHU_ADMIN_PERSON_IDS 里的人。 */
@@ -27,5 +28,20 @@ export function registerAdminRoutes(app: AppInstance, ctx: RouteContext): void {
     const error = await executeAdminAction(pool, peopleDirectory, req.person!.personId, req.body);
     if (error) return fail(reply, error.status, error.code, error.message);
     return overview(req);
+  });
+
+  // 使用周报：week 是周一（北京时间），不传为本周（现算）；没有生成过的那一周 404。
+  type UsageRequest = FastifyRequest<{ Querystring: { week?: string } }>;
+  const usage = async (req: UsageRequest, reply: FastifyReply) => {
+    if (req.query.week && !isWeekStart(req.query.week)) return void fail(reply, 400, "INVALID_WEEK", "week 要是某一周的周一");
+    const found = await readUsage(q, peopleDirectory, req.query.week, ctx.now());
+    if (!found) fail(reply, 404, "USAGE_REPORT_NOT_FOUND", "这一周没有周报");
+    return found ?? undefined;
+  };
+  app.get("/api/admin/usage", { preValidation: requireAdmin, schema: { querystring: UsageQuery, response: { 200: UsageResponse } } },
+    async (req: UsageRequest, reply) => (await usage(req, reply)) ?? reply);
+  app.get("/api/admin/usage/markdown", { preValidation: requireAdmin, schema: { querystring: UsageQuery } }, async (req: UsageRequest, reply) => {
+    const found = await usage(req, reply);
+    return found ? reply.type("text/markdown; charset=utf-8").send(usageMarkdown(found.report)) : reply;
   });
 }

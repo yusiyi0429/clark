@@ -2381,6 +2381,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 使用周报：谁在用、频率、关键路径漏斗和中断点、本周问题台账、和上周对比；week 不传为本周（现算）。非管理员 404 */
+        get: operations["getAdminUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/usage/markdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 使用周报导出 Markdown（贴到飞书）；week 不传为本周（现算）。非管理员 404 */
+        get: operations["getAdminUsageMarkdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/usage/onboarding-step": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 上手流程打开了哪一步（使用周报的上手漏斗）；一人一步一天只记一次 */
+        post: operations["recordOnboardingStep"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/collector/status": {
         parameters: {
             query?: never;
@@ -3355,7 +3406,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** 逐字稿按发言段分页读；只给 CEO 和实际参会的人，其他人和不存在的会一样 404 NOT_FOUND */
+        get: operations["getMeetingTranscriptPage"];
         put?: never;
         /** CEO Web 上传 warmap-transcript.v1（multipart 单文件） */
         post: operations["importMeetingTranscript"];
@@ -7426,6 +7478,22 @@ export interface components {
                 followUp?: boolean;
             }[];
         };
+        MeetingTranscriptTurnView: {
+            id: string;
+            speakerName: string;
+            startedAt: string | null;
+            text: string;
+        };
+        MeetingTranscriptPage: {
+            turns: {
+                id: string;
+                speakerName: string;
+                startedAt: string | null;
+                text: string;
+            }[];
+            nextTurn: string | null;
+            total: number;
+        };
         ThreadMessage: {
             id: number;
             kind: "member" | "co-agent";
@@ -8412,6 +8480,75 @@ export interface components {
                 type: "job";
                 id: string;
             };
+        };
+        UsageResponse: {
+            weeks: {
+                /** Format: date */
+                weekStart: string;
+                live: boolean;
+            }[];
+            report: {
+                /** Format: date */
+                weekStart: string;
+                /** Format: date */
+                weekEnd: string;
+                /** Format: date-time */
+                generatedAt: string;
+                live: boolean;
+                summary: {
+                    roster: number;
+                    activePeople: number;
+                    avgActiveDays: number;
+                    asks: number;
+                };
+                previous: {
+                    roster: number;
+                    activePeople: number;
+                    avgActiveDays: number;
+                    asks: number;
+                };
+                people: {
+                    personId: string;
+                    displayName: string;
+                    days: string[];
+                    asks: number;
+                    breaks: number;
+                    previousActiveDays: number;
+                }[];
+                paths: {
+                    key: "conversation" | "meeting" | "memory" | "onboarding";
+                    title: string;
+                    unit: string;
+                    shape: "funnel" | "counts";
+                    steps: {
+                        key: string;
+                        label: string;
+                        units: number;
+                        people: number;
+                    }[];
+                    stuckStep: string | null;
+                    breaks: {
+                        step: string;
+                        label: string;
+                        count: number;
+                    }[];
+                    previousUnits: number[];
+                }[];
+                ledger: {
+                    key: string;
+                    source: "quality" | "feedback" | "job" | "world";
+                    label: string;
+                    count: number;
+                    people: number;
+                    open: number;
+                    previousCount: number;
+                    /** Format: date-time */
+                    lastAt: string;
+                }[];
+            };
+        };
+        OnboardingStepUsageRequest: {
+            step: "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "work" | "radar" | "voiceprint" | "connect" | "collector" | "scan" | "review" | "delegation" | "start";
         };
         CollectorStatusResponse: {
             consent: boolean;
@@ -18937,6 +19074,128 @@ export interface operations {
             };
         };
     };
+    getAdminUsage: {
+        parameters: {
+            query?: {
+                /** @description 周一（北京时间），如 2026-10-19 */
+                week?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 可选的各周与所选那一周的周报 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getAdminUsageMarkdown: {
+        parameters: {
+            query?: {
+                /** @description 周一（北京时间），如 2026-10-19 */
+                week?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Markdown 周报 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown": string;
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    recordOnboardingStep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardingStepUsageRequest"];
+            };
+        };
+        responses: {
+            /** @description 已记下 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getCollectorStatus: {
         parameters: {
             query?: never;
@@ -22613,6 +22872,59 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMeetingTranscriptPage: {
+        parameters: {
+            query?: {
+                /** @description 从这一段起（上一页的 nextTurn） */
+                from?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 一页发言段 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingTranscriptPage"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

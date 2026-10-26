@@ -41,6 +41,7 @@ import { personDisplayNames } from "./people.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
 import { resolveWorldEnv, resolveWorldTkEnv } from "./worldClient.js";
 import { createJobWorker, exampleJobHandlers } from "./jobs.js";
+import { usageReportJobs } from "./usage.js";
 import { resolveFeishuEnv } from "./feishu/config.js";
 import { parseAdminPersonIds } from "./admin.js";
 import { createFeishuClient } from "./feishu/client.js";
@@ -69,6 +70,8 @@ const env: AppEnv = {
   companyPeopleSeed: requiredEnv("COMPANY_PEOPLE_SEED"),
   companyName: process.env.COMPANY_NAME,
   onboardingDelegationStep: process.env.ONBOARDING_DELEGATION_STEP === "1",
+  // 签发月度计划后代记本体周期目标的门：设为 1 才启用（还要实例配置允许写）；不影响会议、周复盘等其他本体写入。
+  worldPeriodGoalGates: process.env.TKOS_WORLD_PERIOD_GOAL_GATES === "1",
   missionCardDraftsDir: process.env.MISSION_CARD_DRAFTS_DIR,
   missionCardKnownMissionsFile: process.env.MISSION_CARD_KNOWN_MISSIONS_FILE,
   piBaseUrl: requiredEnv("PI_BASE_URL"),
@@ -106,6 +109,9 @@ const env: AppEnv = {
   // 会议事件的妙记链接：FEISHU_WEB_ORIGIN（如 https://tokenking.feishu.cn）；不配时不带链接。
   feishuWebOrigin: process.env.FEISHU_WEB_ORIGIN?.trim() || undefined,
   collectionBitable: process.env.FEISHU_BITABLE_MODE === "live" ? "live" : "mock",
+  // 信息收集、文档变更推送（D-56）：值为 1 才开，缺省关。
+  collectionsEnabled: process.env.COLLECTIONS_ENABLED === "1",
+  docChangeEnabled: process.env.DOC_CHANGE_ENABLED === "1",
 };
 
 const port = Number(process.env.PORT ?? "4000");
@@ -270,14 +276,16 @@ const app = await buildApp({
 const followThroughJobs = app.meetingFollowThrough.jobs();
 // 文档变更：群里 @机器人 贴文档链接即发布（im.message.receive_v1），找候选走后台任务。
 const docChangeJobs = app.docChanges.jobs();
+// 使用周报：每周一 08:00 之后生成上一周。
+const usageJobs = usageReportJobs(pool.query.bind(pool), peopleDirectory, now);
 const jobWorker = createJobWorker({
   pool,
   handlers: {
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers,
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers,
     ...(env.feishu ? feishuEventJobs(pool, { ...followThroughJobs.feishuEvents, ...docChangeJobs.feishuEvents }) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },
-  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring],
+  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring],
 });
 let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {

@@ -49,8 +49,10 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
 
   if (!feishu || !client) return;
 
-  const sessionCookie = (outcome: Extract<FeishuLoginOutcome, { kind: "ok" }>) =>
-    sessionSetCookie(env.sessionSecret, env.sessionMaxAgeSeconds, { pid: outcome.personId, v: outcome.sessionVersion, view: outcome.role });
+  const sessionCookie = (outcome: Extract<FeishuLoginOutcome, { kind: "ok" }>) => {
+    void ctx.usage.record(outcome.personId, "login");
+    return sessionSetCookie(env.sessionSecret, env.sessionMaxAgeSeconds, { pid: outcome.personId, v: outcome.sessionVersion, view: outcome.role });
+  };
 
   /**
    * 连接飞书的回调：发起时的会话还有效（口令没重置）才继续；飞书账号关联给发起的人、存授权，不换会话。

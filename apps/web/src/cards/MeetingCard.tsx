@@ -44,6 +44,7 @@ import { Select } from "@/components/ui/Select";
 import { groupPreflight } from "./preflightOutline";
 import { attributeEntries, groupOutcomeByIssue, ISSUE_STATUS_LABEL, preflightInFlight, preflightStatusText, speakerLabel, type PreflightEntry } from "./meetingIssueModel";
 import { buildHistoryIndex, outcomeAnchorId, type SourceContext, type SourceMaterial } from "./meetingSources";
+import { TranscriptReader } from "@/components/meeting/TranscriptReader";
 import s from "@/styles/meeting-workspace.module.css";
 import p from "@/styles/meeting-progress.module.css";
 
@@ -669,7 +670,12 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     { objectType: "meeting", objectId: meetingId },
     ...objectsKey.split(",").filter(Boolean).map((id) => ({ objectType: payload.issueIds.includes(id) ? "issue" as const : "meeting" as const, objectId: id })),
   ], [meetingId, objectsKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const showRecord = useCallback(() => setView(pickSegment("record")), []);
+  // 逐字稿里要定位的那一段：出处 `transcript:<本场>#<段>` 或 `meetingAction=transcript&turn=` 带进来。
+  const [focusTurn, setFocusTurn] = useState<string | null>(null);
+  const showRecord = useCallback((turnId?: string) => {
+    setView(pickSegment("record"));
+    if (turnId) setFocusTurn(turnId);
+  }, []);
   const leaveReading = useCallback(() => saveReadingPosition(readingKey, mainRef.current), [readingKey]);
   const { api: sourceApi, overlay: sourceOverlay } = useSourceNavigator({
     context: sourceContext, rootRef: workspaceRef, onNavigate, onShowRecord: showRecord, objects: sourceObjects, meetingId, beforeLeave: leaveReading,
@@ -777,13 +783,15 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
 
   const requestedMeetingAction = useRef<string | null>(null);
   useEffect(() => {
-    const request = new URLSearchParams(window.location.search).get("meetingAction");
-    const key = request ? `${card.objectRef.id}:${request}` : null;
+    const params = new URLSearchParams(window.location.search);
+    const request = params.get("meetingAction");
+    const turn = request === "transcript" ? params.get("turn") : null;
+    const key = request ? `${card.objectRef.id}:${request}:${turn ?? ""}` : null;
     if (!key || requestedMeetingAction.current === key) return;
     requestedMeetingAction.current = key;
     if (request === "reschedule" && actionOf("meeting.reschedule")) void openEditDetails(true);
     if (request === "transcript" || (request === "reschedule" && payload.transcriptCandidate))
-      setView(pickSegment("record"));
+      showRecord(turn ?? undefined);
   });
 
   /** 只提交真正改动的字段：未改的时间不重写。时间按公司时区提交。 */
@@ -1590,6 +1598,17 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   ) : null;
   const legacyRecord = recordCard.status === "legacy";
 
+  // 逐字稿只给 CEO 和实际参会的人：成员 Card 只在参会时带 transcript。
+  const transcriptSection = source.transcript ? (
+    <section className={s.reviewSection} data-outline="transcript">
+      <header>
+        <h3>逐字稿</h3>
+        <span className={s.count}>{source.transcript.turns.length} 段</span>
+      </header>
+      <TranscriptReader meetingId={card.objectRef.id} focusTurnId={focusTurn} />
+    </section>
+  ) : null;
+
   const recordView =
     memberReadOnly && !(isHost && payload.status === "scheduled") ? (
       <section className={s.review}>
@@ -1623,6 +1642,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           ) : <p className={s.empty}>暂无已确认的会后结论。</p>}
         </section>
         </> : null)}
+        {transcriptSection}
       </section>
     ) : payload.status === "cancelled" ? (
       <p className={s.empty}>该会议已取消，无会议记录。</p>
@@ -1729,14 +1749,12 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         ) : (
           <p className={s.empty}>逐字稿已保存，会后抽取尚未开始。</p>
         ))}
-        <section className={s.reviewSection} data-outline="transcript">
-          <header>
-            <h3>逐字稿</h3>
-          </header>
-          <p className={s.entryBody}>
-            {payload.transcript ? `${payload.transcript.turns.length} 条发言已保存` : "尚未导入逐字稿"}
-          </p>
-        </section>
+        {transcriptSection ?? (
+          <section className={s.reviewSection} data-outline="transcript">
+            <header><h3>逐字稿</h3></header>
+            <p className={s.entryBody}>尚未导入逐字稿</p>
+          </section>
+        )}
         {actionOf("meeting.replace_transcript") && !replaceOpen ? (
           <button type="button" className={s.replaceLink} onClick={() => setReplaceOpen(true)}>替换逐字稿</button>
         ) : null}

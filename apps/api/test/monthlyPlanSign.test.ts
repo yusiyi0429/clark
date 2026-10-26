@@ -340,31 +340,54 @@ describe("BattlefieldConfig registration", () => {
   });
 });
 
+/** 本体桩：同周期一个已承诺（承诺在签发之前）的 E&O 周期目标；返回记下的写入请求。 */
+function stubPeriodGoalWorld(): { localFile: string; commits: any[] } {
+  const world = loadWorldInstance();
+  // 测试名单里的 CEO 是 person-fixture-001，用本地人员对应文件给他一个本体主体。
+  const localFile = join(mkdtempSync(join(tmpdir(), "world-people-")), "people.json");
+  writeFileSync(localFile, JSON.stringify({ people: { "person-fixture-001": "principal-ceo" } }));
+  const goal = {
+    object_id: "goal-eo", object_type: "PeriodGoal", title: "E&O 本月", revision_id: "rev-1", object_version: 3, version: 2,
+    domain_id: world.domains.eo, external_refs: [], lifecycle: { status: "committed", display_name: "已承诺", event_id: "commit-1" },
+  };
+  const commits: any[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const path = new URL(url).pathname;
+    if (path === "/v1/world/objects") return Response.json({ items: [goal], next_cursor: null });
+    // 承诺在签发之前。
+    if (path.endsWith("/events")) return Response.json({ object_id: goal.object_id, events: [{ event_id: "commit-1", kind: "commit", recorded_at: "2026-01-01T00:00:00Z" }] });
+    if (path.startsWith("/v1/world/objects/")) return Response.json({ business: { ...goal, attributes: { external_refs: [] } }, records: { lifecycle: goal.lifecycle }, protocol: { contract_version: "tkos.world/0.3" } });
+    if (path.endsWith("/prepare")) return Response.json({ expected_versions: [] });
+    if (path === "/v1/actions") {
+      commits.push(JSON.parse(String(init?.body)));
+      return Response.json({ receipt_id: "r-1", status: "committed", result: { event_id: "ev-1" } });
+    }
+    return Response.json({ ok: true });
+  }));
+  return { localFile, commits };
+}
+
 describe("MonthlyPlan signing projections", () => {
-  it("world 允许写时：CEO 签发后后台按 0.3 代名单里的 CEO 确认本体同周期、已承诺的周期目标", async () => {
-    const world = loadWorldInstance();
-    // 测试名单里的 CEO 是 person-fixture-001，用本地人员对应文件给他一个本体主体。
-    const localFile = join(mkdtempSync(join(tmpdir(), "world-people-")), "people.json");
-    writeFileSync(localFile, JSON.stringify({ people: { "person-fixture-001": "principal-ceo" } }));
-    const goal = {
-      object_id: "goal-eo", object_type: "PeriodGoal", title: "E&O 本月", revision_id: "rev-1", object_version: 3, version: 2,
-      domain_id: world.domains.eo, external_refs: [], lifecycle: { status: "committed", display_name: "已承诺", event_id: "commit-1" },
-    };
-    const commits: any[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
-      const path = new URL(url).pathname;
-      if (path === "/v1/world/objects") return Response.json({ items: [goal], next_cursor: null });
-      // 承诺在签发之前。
-      if (path.endsWith("/events")) return Response.json({ object_id: goal.object_id, events: [{ event_id: "commit-1", kind: "commit", recorded_at: "2026-01-01T00:00:00Z" }] });
-      if (path.startsWith("/v1/world/objects/")) return Response.json({ business: { ...goal, attributes: { external_refs: [] } }, records: { lifecycle: goal.lifecycle }, protocol: { contract_version: "tkos.world/0.3" } });
-      if (path.endsWith("/prepare")) return Response.json({ expected_versions: [] });
-      if (path === "/v1/actions") {
-        commits.push(JSON.parse(String(init?.body)));
-        return Response.json({ receipt_id: "r-1", status: "committed", result: { event_id: "ev-1" } });
-      }
-      return Response.json({ ok: true });
-    }));
+  it("代记周期目标的门开关缺省关着：签发后不代 CEO 确认，其他本体写入仍开着", async () => {
+    const { localFile, commits } = stubPeriodGoalWorld();
     const t = await createTestApp({ worldApiUrl: "https://world.test", worldAgentToken: "stub-world-token", worldInstanceLocalFile: localFile }, undefined,
+      { monthlyDraftAgent: fakeAgent(), monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+    try {
+      const planId = await readyPlan(t);
+      const cookie = await t.loginCookie();
+      await checkAll(t, cookie, planId);
+      expect((await sign(t, cookie, planId)).statusCode).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      expect(commits).toHaveLength(0);
+      expect((await t.app.inject({ method: "GET", url: "/healthz" })).json().world).toMatchObject({ writes: true });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("开关开着且 world 允许写时：CEO 签发后后台按 0.3 代名单里的 CEO 确认本体同周期、已承诺的周期目标", async () => {
+    const { localFile, commits } = stubPeriodGoalWorld();
+    const t = await createTestApp({ worldApiUrl: "https://world.test", worldAgentToken: "stub-world-token", worldInstanceLocalFile: localFile, worldPeriodGoalGates: true }, undefined,
       { monthlyDraftAgent: fakeAgent(), monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
     try {
       const planId = await readyPlan(t);

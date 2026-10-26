@@ -16,6 +16,7 @@ import { browserApi, type Card } from "@/lib/api/client";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { companyToday } from "@/components/ui/pickerFormat";
 import { monthDayTime } from "@/lib/companyTime";
+import { emptySourceContext, sourceTarget } from "@/cards/meetingSources";
 import { REQUESTS_CHANGED, RequestApiError, chooseImpactBasis, requestError, runRequestAction } from "./requestApi";
 import { RequestSteps, runningSteps } from "./RequestSteps";
 import s from "./requests.module.css";
@@ -244,12 +245,7 @@ function ImpactContext({ card, base }: { card: TImpactCardView; base: string }) 
             <div><dt>会议</dt><dd>{trigger.meetingTitle}</dd></div>
           </dl>
         )}
-        {card.sources.map((source) => (
-          <figure key={`${source.turnId}:${source.quote}`} className={i.quote}>
-            <blockquote>{source.quote}</blockquote>
-            <figcaption>{[source.speakerName, source.at ? monthDayTime(source.at) : null].filter(Boolean).join(" · ")}</figcaption>
-          </figure>
-        ))}
+        {card.sources.map((source) => <ImpactQuote key={`${source.turnId}:${source.quote}`} source={source} base={base} onNavigate={workspace.navigate} />)}
         {card.askWho.length ? (
           <div className={i.askWho}>
             <span className={s.fieldName}>可以问</span>
@@ -264,6 +260,24 @@ function ImpactContext({ card, base }: { card: TImpactCardView; base: string }) 
         ) : null}
       </div>
     </details>
+  );
+}
+
+/** 原话：带发言段的点下去打开那场会的逐字稿，定位到这一段（成员走 /me/meetings）。 */
+export function ImpactQuote({ source, base, onNavigate }: {
+  source: TImpactCardView["sources"][number]; base: string; onNavigate: (href: string, origin?: Element | null) => void;
+}) {
+  const target = source.turnId ? sourceTarget(`transcript:${source.meetingId}#${source.turnId}`, emptySourceContext()) : null;
+  const href = target?.type === "route" ? `${base.startsWith("/me/") ? "/me" : ""}${target.href}` : null;
+  return (
+    <figure className={i.quote}>
+      {href ? (
+        <a className={i.quoteLink} href={href} onClick={(event) => { event.preventDefault(); onNavigate(href, event.currentTarget); }}>
+          <blockquote>{source.quote}</blockquote>
+        </a>
+      ) : <blockquote>{source.quote}</blockquote>}
+      <figcaption>{[source.speakerName, source.at ? monthDayTime(source.at) : null].filter(Boolean).join(" · ")}</figcaption>
+    </figure>
   );
 }
 

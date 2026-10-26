@@ -30,10 +30,10 @@ const QUALITY_WINDOW_DAYS = 7;
 const LIST_LIMIT = 100;
 
 type Mark = { action: string; actor_id: string; created_at: Date };
-type MarkIndex = { latest: Map<string, Mark>; reminded: Map<string, Date> };
+export type MarkIndex = { latest: Map<string, Mark>; reminded: Map<string, Date> };
 const key = (type: TAdminSubjectType, id: string) => `${type}\u0000${id}`;
 
-async function readMarks(q: Query): Promise<MarkIndex> {
+export async function readMarks(q: Query): Promise<MarkIndex> {
   const marks = await q(`SELECT DISTINCT ON (subject_type, subject_id) subject_type, subject_id, action, actor_id, created_at
     FROM admin_incidents WHERE action IN ('acknowledge', 'resolve') ORDER BY subject_type, subject_id, created_at DESC`);
   const reminders = await q(`SELECT subject_type, subject_id, max(created_at) AS at FROM admin_incidents WHERE action = 'remind' GROUP BY subject_type, subject_id`);
@@ -49,7 +49,7 @@ const acknowledged = (marks: MarkIndex, names: Map<string, string>, type: TAdmin
   return mark?.action === "acknowledge" ? { actorName: names.get(mark.actor_id) ?? mark.actor_id, at: mark.created_at.toISOString() } : null;
 };
 /** 失败列表：解决时间不早于这次失败的，不再列出（之后又失败会重新出现）。 */
-const resolvedSince = (marks: MarkIndex, type: TAdminSubjectType, id: string, failedAt: Date) => {
+export const resolvedSince = (marks: MarkIndex, type: TAdminSubjectType, id: string, failedAt: Date) => {
   const mark = marks.latest.get(key(type, id));
   return mark?.action === "resolve" && mark.created_at.getTime() >= failedAt.getTime();
 };
@@ -62,7 +62,7 @@ type FeishuRow = { person_id: string; status: "active" | "reauth_required"; auth
 type WeeklyRow = { person_id: string; week_start: string; submitted_at: Date; world_sync_status: "pending" | "done" | "failed"; failed_targets: number; last_done_at: Date | null };
 
 /** 名单：能用天枢的真人（CEO、DRI、参与人），不含会议纪要一类的记录账号。 */
-function adminPeople(peopleDirectory: PeopleDirectory) {
+export function adminPeople(peopleDirectory: PeopleDirectory) {
   return peopleDirectory.searchPeople(undefined)
     .filter((person) => isRealPerson(person) && person.roles.some((role) => role === "ceo" || role === "dri" || role === "participant"));
 }

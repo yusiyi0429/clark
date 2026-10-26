@@ -105,6 +105,7 @@ import type { JobHandler, RecurringJob } from "./jobs.js";
 import { registerCollectorRoutes } from "./routes/collector.js";
 import { registerWeeklyReviewRoutes } from "./routes/weeklyReviews.js";
 import { registerAdminRoutes } from "./routes/admin.js";
+import { createUsageTracker } from "./usage.js";
 import { registerProgressRoutes } from "./routes/progress.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
@@ -164,6 +165,8 @@ export type AppEnv = {
   companyName?: string;
   /** 上手流程显示「授权天枢替你记进本体」这一步（ONBOARDING_DELEGATION_STEP=1）；本体的网页授权页确认之前默认关闭。 */
   onboardingDelegationStep?: boolean;
+  /** 签发月度计划后代记本体周期目标的门（TKOS_WORLD_PERIOD_GOAL_GATES=1）；本人委托登记好之前默认关闭，只管这一项，其他本体写入不受影响。 */
+  worldPeriodGoalGates?: boolean;
   /** 旧配置兼容；正式自动起草不读取文件，人工导入须由 CLI 显式指定路径。 */
   missionCardDraftsDir?: string;
   /** 已知的本月任务（飞书任务卡、本体 Mission 导出），作为起草依据；未配置或文件缺失时照常起草。 */
@@ -211,6 +214,10 @@ export type AppEnv = {
   feishuWebOrigin?: string;
   /** ③ 信息收集的飞书多维表格：live 以发起人身份调开放接口（要先在飞书后台开通 base 权限，见 feishu/bitable.ts）；缺省 mock，不调飞书（FEISHU_BITABLE_MODE）。 */
   collectionBitable?: "live" | "mock";
+  /** ③ 信息收集（COLLECTIONS_ENABLED=1 才开，D-56）：关着时不接收集路由、不跑每分钟的收集任务、对话里没有「发起信息收集」，定时任务里不列收集项。 */
+  collectionsEnabled?: boolean;
+  /** ⑧ 文档变更推送（DOC_CHANGE_ENABLED=1 才开，D-56）：关着时群里贴文档链接不触发；已有的变更照常能看、能处理。 */
+  docChangeEnabled?: boolean;
 } & PeopleDirectoryEnv & WorldEnv & CompanyContextEnv;
 
 declare module "fastify" {
@@ -511,7 +518,7 @@ export async function buildApp({
     names: () => personDisplayNames(peopleDirectory),
     now,
   };
-  app.decorate("collectionJobs", collectionJobs(collectionDeps));
+  app.decorate("collectionJobs", env.collectionsEnabled ? collectionJobs(collectionDeps) : { handlers: {}, recurring: [] });
   // 周复盘提交后按关联的 Mission、Task 写进展到本体：同样只在实例配置允许写时启用；不写时提交照常，等配好后补发。
   let weeklyReviewWorld: WeeklyReviewWorldSync | undefined;
   if (worldConfigured(env) && world.status().writes) {
@@ -519,9 +526,9 @@ export async function buildApp({
     weeklyReviewWorld = sync;
     app.addHook("onClose", async () => { await sync.close(); });
   }
-  // 签发月度计划后代 CEO 确认本体同周期的周期目标：同样只在实例配置允许写时启用。
+  // 签发月度计划后代记本体同周期周期目标的门（代 RU DRI 承诺、代 CEO 确认）：实例配置允许写、且单独的开关打开时才启用。
   let worldPeriodGoals: WorldPeriodGoalService | undefined;
-  if (worldConfigured(env) && world.status().writes) {
+  if (worldConfigured(env) && world.status().writes && env.worldPeriodGoalGates) {
     const service = createWorldPeriodGoalService(pool, new WorldClient(q, env),
       () => peopleDirectory.searchPeople(undefined).find((person) => person.roles.includes("ceo"))?.personId);
     worldPeriodGoals = service;
@@ -529,7 +536,12 @@ export async function buildApp({
   }
   // 每个请求的结构化日志上下文：handler 里补充 action/run 字段，onResponse 统一落一条。
   const requestContext = new WeakMap<FastifyRequest, RequestContext>();
+  // 使用周报的「哪天用过」：登录后发问或改动（非 GET 的请求；上手步骤上报本身不算），一人一天记一次。页面打开、轮询不算。
+  const usage = createUsageTracker(q, now);
   app.addHook("onResponse", async (req, reply) => {
+    if (req.person && reply.statusCode < 400 && req.method !== "GET" && req.method !== "HEAD" && req.routeOptions.url !== "/api/me/usage/onboarding-step") {
+      usage.active(req.person.personId);
+    }
     const ctx = requestContext.get(req) ?? {};
     logEvent({
       event: "http.request",
@@ -631,7 +643,7 @@ export async function buildApp({
     weeklyReviewService,
     weeklyReviewWorld,
     worldPeriodGoals,
-    collections: { agent: collectionAgent ?? createCollectionAgent(pool, env), deps: collectionDeps },
+    collections: env.collectionsEnabled ? { agent: collectionAgent ?? createCollectionAgent(pool, env), deps: collectionDeps } : undefined,
     recordings,
     voiceprints: voiceprintDeps,
     dictation: dictationDeps,
@@ -650,6 +662,7 @@ export async function buildApp({
     conversationCompaction,
     maxTranscriptBytes: MAX_TRANSCRIPT_BYTES,
     now,
+    usage,
     requestContext,
     fail,
     requireCEO,
@@ -704,7 +717,7 @@ export async function buildApp({
     ...(feishuApi && env.feishu ? { feishu: { client: feishuApi, env: env.feishu } } : {}),
     pathFor: (personId, requestId) => `${isCeo(personId) ? "" : "/me"}/requests/${requestId}`,
   });
-  app.decorate("docChanges", docChanges);
+  app.decorate("docChanges", env.docChangeEnabled ? docChanges : { ...docChanges, jobs: () => ({ ...docChanges.jobs(), feishuEvents: {} }) });
   registerDocChangeRoutes(app, ctx, docChanges);
 
   return app;

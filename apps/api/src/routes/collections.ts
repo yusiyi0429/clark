@@ -17,6 +17,14 @@ const OBJECT_TYPES = new Set(["collection", "collection-round"]);
 /** ③ 信息收集：CEO 和成员都能发起、接收；看得到的范围在 collections.ts 里按发起人与这一轮的接收人判断。 */
 export function registerCollectionRoutes(app: AppInstance, ctx: RouteContext): void {
   const secret = ctx.env.sessionSecret;
+  app.get("/api/me/schedules", { preHandler: ctx.requirePerson, schema: { response: { 200: ScheduleListResponse } } }, async (req) => {
+    const person = ctx.peopleDirectory.searchPeople(undefined).find((item) => item.personId === req.person!.personId);
+    const items = await listSchedules(ctx.q, { personId: req.person!.personId, isCeo: req.person!.role === "ceo", weeklyReviews: person ? canUseMemberView(person) : false },
+      secret, ctx.now());
+    return { items: ctx.collections ? items : items.filter((item) => item.category !== "collect") };
+  });
+  // 收集关着时（D-56）下面的接口都不注册，一律 404。
+  if (!ctx.collections) return;
   const { agent, deps } = ctx.collections;
   const people = (): TRequestPerson[] => ctx.peopleDirectory.searchPeople(undefined).filter(isRealPerson)
     .map((person) => ({ personId: person.personId, displayName: person.displayName }));
@@ -56,11 +64,5 @@ export function registerCollectionRoutes(app: AppInstance, ctx: RouteContext): v
       ? await readCollectionRound(ctx.q, result.requestId, viewDeps(viewerId))
       : await readCollection(ctx.q, result.collectionId, viewDeps(viewerId));
     return view ? { collection: view } : notFound(reply);
-  });
-
-  app.get("/api/me/schedules", { preHandler: ctx.requirePerson, schema: { response: { 200: ScheduleListResponse } } }, async (req) => {
-    const person = ctx.peopleDirectory.searchPeople(undefined).find((item) => item.personId === req.person!.personId);
-    return { items: await listSchedules(ctx.q, { personId: req.person!.personId, isCeo: req.person!.role === "ceo", weeklyReviews: person ? canUseMemberView(person) : false },
-      secret, ctx.now()) };
   });
 }

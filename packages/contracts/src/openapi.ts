@@ -9,6 +9,7 @@ import { MeetingCardConfirmRequest, MeetingCardDraftRequest, MeetingCardView } f
 import { MeetingDecisionView, MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse } from "./meetingDecisions.js";
 import { AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, OrganizeFeishuMinuteRequest } from "./feishuMinuteInbox.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
+import { UsageResponse, OnboardingStepUsageRequest } from "./usage.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
   CollectionField, CollectionEntryView, CollectionRoundView, CollectionView, CollectionResponse, DraftCollectionRequest, DraftCollectionResponse,
@@ -106,6 +107,8 @@ import {
   UnreadThreadsResponse,
   MemberMeetingItem,
   MemberMeetingsResponse,
+  MeetingTranscriptTurnView,
+  MeetingTranscriptPage,
   SignalStateRequest,
   UpdateMeetingDraftRequest,
   EditMeetingDetailsRequest,
@@ -1759,6 +1762,27 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "操作后的管理员视图", content: { "application/json": { schema: { $ref: "#/components/schemas/AdminOverviewResponse" } } } }, "400": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
+      "/api/admin/usage": {
+        get: {
+          operationId: "getAdminUsage", summary: "使用周报：谁在用、频率、关键路径漏斗和中断点、本周问题台账、和上周对比；week 不传为本周（现算）。非管理员 404",
+          parameters: [{ name: "week", in: "query", required: false, schema: { type: "string", format: "date" }, description: "周一（北京时间），如 2026-10-19" }],
+          responses: { "200": { description: "可选的各周与所选那一周的周报", content: { "application/json": { schema: { $ref: "#/components/schemas/UsageResponse" } } } }, "400": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/admin/usage/markdown": {
+        get: {
+          operationId: "getAdminUsageMarkdown", summary: "使用周报导出 Markdown（贴到飞书）；week 不传为本周（现算）。非管理员 404",
+          parameters: [{ name: "week", in: "query", required: false, schema: { type: "string", format: "date" }, description: "周一（北京时间），如 2026-10-19" }],
+          responses: { "200": { description: "Markdown 周报", content: { "text/markdown": { schema: { type: "string" } } } }, "400": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/me/usage/onboarding-step": {
+        post: {
+          operationId: "recordOnboardingStep", summary: "上手流程打开了哪一步（使用周报的上手漏斗）；一人一步一天只记一次",
+          requestBody: jsonBody({ $ref: "#/components/schemas/OnboardingStepUsageRequest" }),
+          responses: { "204": { description: "已记下" }, "400": errorResponse, "401": errorResponse },
+        },
+      },
       "/api/me/collector/status": {
         get: {
           operationId: "getCollectorStatus", summary: "本人的采集器：连上的设备、最近一次完整盘点、盘点到的条数（上手流程轮询）",
@@ -2584,6 +2608,21 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         },
       },
       "/api/meetings/{id}/transcript": {
+        get: {
+          operationId: "getMeetingTranscriptPage",
+          summary: "逐字稿按发言段分页读；只给 CEO 和实际参会的人，其他人和不存在的会一样 404 NOT_FOUND",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "from", in: "query", required: false, schema: { type: "string" }, description: "从这一段起（上一页的 nextTurn）" },
+            { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 500, default: 200 } },
+          ],
+          responses: {
+            "200": { description: "一页发言段", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingTranscriptPage" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
         post: {
           operationId: "importMeetingTranscript",
           summary: "CEO Web 上传 warmap-transcript.v1（multipart 单文件）",
@@ -2973,6 +3012,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         UnreadThreadsResponse: UnreadThreadsResponse as JsonSchema,
         MemberMeetingItem: MemberMeetingItem as JsonSchema,
         MemberMeetingsResponse: MemberMeetingsResponse as JsonSchema,
+        MeetingTranscriptTurnView: MeetingTranscriptTurnView as JsonSchema,
+        MeetingTranscriptPage: MeetingTranscriptPage as JsonSchema,
         ThreadMessage: ThreadMessage as JsonSchema,
         ThreadMessageList: ThreadMessageList as JsonSchema,
         PostThreadMessageRequest: PostThreadMessageRequest as JsonSchema,
@@ -3016,6 +3057,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         UpdateCollectorConsentRequest: UpdateCollectorConsentRequest as JsonSchema,
         AdminOverviewResponse: AdminOverviewResponse as JsonSchema,
         AdminActionRequest: AdminActionRequest as JsonSchema,
+        UsageResponse: UsageResponse as JsonSchema,
+        OnboardingStepUsageRequest: OnboardingStepUsageRequest as JsonSchema,
         CollectorStatusResponse: CollectorStatusResponse as JsonSchema,
         WorkBasisResponse: WorkBasisResponse as JsonSchema,
         UpdateWorkBasisRequest: UpdateWorkBasisRequest as JsonSchema,

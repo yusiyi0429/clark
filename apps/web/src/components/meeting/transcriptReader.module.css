@@ -1,0 +1,15 @@
+/* 逐字稿阅读器：一行一段，说话人 · 时间 · 正文；窄屏说话人和时间一行，正文另起一行。 */
+.reader{display:flex;flex-direction:column;gap:6px}
+.turns{display:flex;flex-direction:column;margin:0;padding:0;list-style:none}
+.turn{display:grid;grid-template-columns:72px 40px minmax(0,1fr);column-gap:12px;align-items:baseline;margin:0 -10px;padding:7px 10px;border-radius:10px;font-size:13px;line-height:22px}
+.turn+.turn{border-top:1px solid #f0f2f5}
+.turn[data-flash=true]{animation:turnFlash 1.8s ease-out}
+.speaker{overflow:hidden;color:#1d1d1f;font-weight:600;white-space:nowrap;text-overflow:ellipsis}
+.time{color:#6e6e73;font-size:12px;font-variant-numeric:tabular-nums}
+.text{margin:0;color:#4f5866;overflow-wrap:anywhere;white-space:pre-wrap}
+.status{display:flex;align-items:center;gap:8px;margin:4px 0 0;color:#6e6e73;font-size:12px}
+.retry{padding:0;border:0;background:none;color:#3a83f7;font:inherit;cursor:pointer}
+.end{height:1px}
+@keyframes turnFlash{0%,35%{background:#3a83f714;box-shadow:0 0 0 3px #3a83f766}100%{background:transparent;box-shadow:0 0 0 0 transparent}}
+@media(max-width:959px){.turn{grid-template-columns:auto minmax(0,1fr);row-gap:2px}.text{grid-column:1/-1}}
+@media(prefers-reduced-motion:reduce){.turn[data-flash=true]{animation:none;box-shadow:0 0 0 3px #3a83f766}}

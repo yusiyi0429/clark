@@ -920,7 +920,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
           }, { additionalProperties: false }),
           execute: async (_id, args) => textResult(await entries.requestHelp(args as { prompt: string; requestId?: string; answers?: string[] })),
         }),
-        defineTool({
+        ...(entries.collections ? [defineTool({
           name: "start_collection",
           label: "发起信息收集",
           description: "本人要定期向一群人收信息、大家共填一张表时调用（例如「每周五下班前收一下大家这周在灯塔项目上的开销」「方法部门每周收一次大家的进展」）。只支持财务每周开销和方法部门每周进展两类，其他的按返回如实说。系统判断场景、起草收什么、发给谁、截止和是否每周固定，放进草稿卡；本人在卡上确认、点「发送」才发出。prompt 照抄本人原话；本人要改上一版时带上那一版的 collectionId 和新的原话。按返回的 note 回答。",
@@ -929,7 +929,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
             collectionId: Type.Optional(Type.String({ maxLength: 64 })),
           }, { additionalProperties: false }),
           execute: async (_id, args) => textResult(await entries.startCollection(args as { prompt: string; collectionId?: string })),
-        }),
+        })] : []),
       ] : [];
       // 场景锚点（PR #12）：展开本轮页面项或下一页目录；每次都按本人当前权限和版本重读（sceneAnchor.ts）。
       // 展开的正文只在本轮临时给模型（anchorResults，provider 边界换进去）；Pi 历史里只留一句说明，卡片引用放在 details。
