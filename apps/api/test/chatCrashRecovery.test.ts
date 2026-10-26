@@ -111,6 +111,21 @@ describe("对话主答出错时不丢字、自动恢复", () => {
     } finally { await t.runtime.close?.(); }
   });
 
+  it("各档都是同一个模型（预发、正式站的配置）：网关流里只回一个空错误事件时，换到配置的备用模型答完，档位记录不变", async () => {
+    const SOL = "gpt-5.6-sol";
+    const t = await harness((seen) => (seen.model === SOL ? { error: "Error Code undefined: undefined" } : { text: ["待决策议题 3 个。"] }),
+      { modelId: SOL, tierModels: { quick: SOL, grounded: SOL, deep: SOL }, fallbackModelId: "gpt-5.6-terra" });
+    try {
+      const { result, events } = await t.turn(QUICK_Q);
+      expect(t.seen.map((call) => call.model)).toEqual([SOL, SOL, "gpt-5.6-terra"]);
+      expect(result?.assistantMessage).toBe("待决策议题 3 个。");
+      expect(events.filter((event) => event.type === "recovery").map((event) => [(event as { reason: string }).reason, (event as { action: string }).action]))
+        .toEqual([["upstream", "retry"], ["upstream", "fallback"]]);
+      expect(result?.recoverySummary).toMatchObject({ originalModel: SOL, fallbackModel: "gpt-5.6-terra" });
+      expect(JSON.stringify(result?.runtimeEntries)).toContain(`"tier":"quick","modelId":"${SOL}"`);
+    } finally { await t.runtime.close?.(); }
+  });
+
   it("恢复用尽仍失败：抛出带分类的错误，已写出的正文作为一条回答进模型历史，下一轮照常接上", async () => {
     let fail = true;
     const t = await harness(() => (fail ? { text: ["写了半句"], error: "fetch failed" } : { text: ["接着说。"] }));

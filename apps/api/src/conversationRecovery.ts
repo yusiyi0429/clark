@@ -46,6 +46,7 @@ const RATE_PATTERN = /\b429\b|rate.?limit|too many requests|overloaded|\b529\b|r
 const NETWORK_PATTERN = /terminated|fetch failed|network|socket|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|ENOTFOUND|EAI_AGAIN|other side closed|connection (error|lost|closed|reset|refused)|reset before headers|stream ended|ended without|premature|aborted by the server|UND_ERR/i;
 const UPSTREAM_PATTERN = /\b5\d\d\b|unknown_service_err|service.?unavailable|server.?error|internal.?error|bad gateway|gateway|upstream|provider returned error|timed? ?out|timeout/i;
 const REJECTED_PATTERN = /\b4\d\d\b|invalid|not found|unsupported|bad request|validation|signature|must|expected/i;
+const STREAM_ERROR_PATTERN = /^Error Code |"type"\s*:\s*"(error|response\.failed)"/;
 
 /** 把 pi / SDK 的英文报错归成几类，决定怎么恢复、给一号位怎么说。原文只进日志。 */
 export function classifyFailure(message: string | undefined, flags: { stalled?: boolean; aborted?: boolean; length?: boolean } = {}): FailureKind {
@@ -60,6 +61,8 @@ export function classifyFailure(message: string | undefined, flags: { stalled?: 
   if (NETWORK_PATTERN.test(text)) return "network";
   if (UPSTREAM_PATTERN.test(text)) return "upstream";
   if (REJECTED_PATTERN.test(text)) return "rejected";
+  // 网关在流里发了错误事件、又没说是什么（pi 报成「Error Code undefined: undefined」）：按上游异常处理，换备用模型。
+  if (STREAM_ERROR_PATTERN.test(text)) return "upstream";
   return "unknown";
 }
 
@@ -89,7 +92,38 @@ export function recoveryNotice(kind: FailureKind, action: RecoveryAction, attemp
   return `${what}，正在重试（第 ${attempt} 次）`;
 }
 
-export type CallFailure = { kind: FailureKind; model: string; mode: HistoryMode; attempt: number; error: string; visible: boolean; at: number };
+/** upstreamEvent：网关在流里发的错误事件原文（pi 只取其中的 code、message，其余丢掉），有才记。 */
+export type CallFailure = { kind: FailureKind; model: string; mode: HistoryMode; attempt: number; error: string; visible: boolean; at: number; upstreamEvent?: string };
+
+/** 流内错误事件原文最多留这么多字（只进日志）。 */
+const UPSTREAM_EVENT_CHARS = 800;
+
+/**
+ * 每次模型调用包一层 fetch：流式回包照常原样交给 pi，同时留下最后一个 error / response.failed 事件的原文。
+ * 10/26 网关约 70 秒里对 sol 关思考的请求只回 {"type":"error"}，pi 报成「Error Code undefined: undefined」，原因看不到。
+ */
+export function captureStreamErrors(base: typeof fetch = fetch): { fetch: typeof fetch; event: () => string | undefined } {
+  let event: string | undefined;
+  const wrapped: typeof fetch = async (input, init) => {
+    const response = await base(input, init);
+    if (!response.body || !(response.headers.get("content-type") ?? "").includes("event-stream")) return response;
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const body = response.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        controller.enqueue(chunk);
+        buffer += decoder.decode(chunk, { stream: true });
+        for (let match = /\r?\n\r?\n/.exec(buffer); match; match = /\r?\n\r?\n/.exec(buffer)) {
+          const block = buffer.slice(0, match.index);
+          buffer = buffer.slice(match.index + match[0].length);
+          if (/"type"\s*:\s*"(error|response\.failed)"/.test(block)) event = block.replace(/^data:\s?/gm, "").slice(0, UPSTREAM_EVENT_CHARS);
+        }
+      },
+    }));
+    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+  };
+  return { fetch: wrapped, event: () => event };
+}
 
 /** 一轮对话的恢复状态（run() 里建，经 turnRecovery 带进 streamSimple）。 */
 export type TurnRecovery = {
@@ -204,7 +238,8 @@ export function recoveringStream(inner: ModeStreamFn, deps: { sleep?: (ms: numbe
         arm();
         const claude = model.api === "anthropic-messages";
         const reasoning = options?.reasoning ?? (claude && model.id !== requestedModel.id ? turn?.claudeFallbackReasoning ?? "low" : undefined);
-        const callOptions: SimpleStreamOptions = { ...options, signal: controller.signal, ...(reasoning ? { reasoning } : {}),
+        const capture = captureStreamErrors(options?.fetch);
+        const callOptions: SimpleStreamOptions = { ...options, signal: controller.signal, fetch: capture.fetch, ...(reasoning ? { reasoning } : {}),
           ...(continueReason ? { toolChoice: "none" as const } : {}) };
         const callContext = continueReason ? continuationContext(context, visible, model, continueReason === "length") : context;
         let final: AssistantMessage | undefined;
@@ -251,8 +286,10 @@ export function recoveringStream(inner: ModeStreamFn, deps: { sleep?: (ms: numbe
           return;
         }
         const aborted = Boolean(outer?.aborted);
-        const kind = classifyFailure(final.errorMessage, { stalled: stalled && !aborted, aborted: aborted || (final.stopReason === "aborted" && !stalled), length });
-        const failure: CallFailure = { kind, model: model.id, mode, attempt, error: String(final.errorMessage ?? final.stopReason).slice(0, 400), visible: visible.length > 0, at: Date.now() };
+        const upstreamEvent = capture.event();
+        const kind = classifyFailure([final.errorMessage, upstreamEvent].filter(Boolean).join(" "), { stalled: stalled && !aborted, aborted: aborted || (final.stopReason === "aborted" && !stalled), length });
+        const failure: CallFailure = { kind, model: model.id, mode, attempt, error: String(final.errorMessage ?? final.stopReason).slice(0, 400), visible: visible.length > 0, at: Date.now(),
+          ...(upstreamEvent ? { upstreamEvent } : {}) };
         turn?.failures.push(failure);
         turn?.log?.({ event: "conversation.recovery", ...failure });
         const candidates = main && turn ? turn.candidates.filter((candidate) => !tried.has(candidate.id)) : [];
