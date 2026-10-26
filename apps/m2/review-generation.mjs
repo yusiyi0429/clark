@@ -94,6 +94,7 @@ function blockLines(blocks){
  }
  return lines.join('\n');
 }
+const planItems=o=>(o?.business?.blocks||[]).filter(b=>b.id==='execution_plan'||b.kind==='plan').flatMap(b=>(b.components||b.value?.components||[]).filter(c=>c.type==='plan_item'&&String(c.text||'').trim()).map(c=>({title:String(c.text).trim(),responsible:c.attributes?.responsible||null,expected:c.attributes?.expected_output||'',quality:c.attributes?.quality_standard||'',finish:c.attributes?.finish_date||'',ref:c.ref?String(c.ref).replace(/@\d+#/,'#'):null})));
 const successCriteria=o=>(o?.business?.blocks||[]).flatMap(b=>(b.components||b.value?.components||[]).filter(c=>c.type==='acceptance_criterion'&&String(c.text||'').trim()).map(c=>String(c.text).trim()));
 // Stand-in accounts are not owners: 代录 entries and test accounts such as “于斯一（测试治理）” (added to two October PeriodGoals on 10/23).
 const ownerOf=o=>(o?.identity?.responsible?.principals||[]).map(p=>p.display_name).filter(n=>n&&!/（(代录|测试[^）]*)）/.test(n)).join('、')||'';
@@ -118,6 +119,9 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  const {period,cutoff,heads,objects}=sources,month=Number(period.slice(5)),prev=month===1?12:month-1;
  const monthEvents=sources.monthEvents||[];
  const inMonth=at=>{const d=String(at||'');return d.slice(0,7)===period&&(!cutoff||d<=cutoff);};
+ // Plan items name people by principal id; every principal the read carries gives its name (读取盘点 2026-10-26 第 1 条).
+ const principalName=new Map();(function scan(v){if(!v||typeof v!=='object')return;if(Array.isArray(v)){v.forEach(scan);return;}if(typeof v.principal_id==='string'&&v.display_name)principalName.set(v.principal_id,v.display_name);for(const x of Object.values(v))scan(x);})([objects,monthEvents]);
+ const realName=n=>n&&!/（(代录|测试[^）]*)）/.test(n)?n:'';
  const unitOfDomain=new Map(heads.rus.map(r=>[r.domain_id,unitKeyOfTitle(r.title)]).filter(([,k])=>k));
  const unitOfRu=new Map(heads.rus.map(r=>[r.object_id,unitKeyOfTitle(r.title)]).filter(([,k])=>k));
  const ruObject=new Map(heads.rus.map(r=>[unitKeyOfTitle(r.title),objects[r.object_id]]));
@@ -127,7 +131,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  for(const g of heads.goals){const unit=unitOfDomain.get(g.domain_id);if(unit&&!goals[unit])goals[unit]={id:g.object_id,unit,object:objects[g.object_id]};}
  const goalOfId=new Map(Object.values(goals).map(g=>[g.id,g]));
  const missions=[];
- for(const m of heads.missions){const o=objects[m.object_id],goal=goalOfId.get(relationTo(o,'goal_ref'))||goals[unitOfDomain.get(m.domain_id)];if(!goal)continue;missions.push({id:m.object_id,goal,object:o});}
+ for(const m of [...heads.missions].sort((a,b)=>String(a.object_id).localeCompare(String(b.object_id)))){const o=objects[m.object_id],goal=goalOfId.get(relationTo(o,'goal_ref'))||goals[unitOfDomain.get(m.domain_id)];if(!goal)continue;missions.push({id:m.object_id,goal,object:o});}
  const missionIds=new Set(missions.map(m=>m.id));
  const missionOfTask=new Map(heads.tasks.map(t=>[t.object_id,relationTo(objects[t.object_id],'mission_ref')||relationTo(objects[t.object_id],'parent_ref')]));
  const titleOf=id=>objects[id]?.business?.title||objects[id]?.title||heads.rus.find(r=>r.object_id===id)?.title||'';
@@ -140,20 +144,25 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
   if(goalOfId.has(objectId))return put(bySubject,objectId,item);
   if(companyIds.has(objectId)||objectId===companyGoal?.object_id)return forCompany.push(item);
   const unit=unitOfRu.get(objectId)||unitOfDomain.get(domainId)||unitKeyOfTitle(String(fallbackTitle).split(' · ')[0]);
-  if(unit)put(byUnit,unit,item);
+  // Records on objects the review does not list (LTO, Strategy) go to the unit if known, else to the company — never silently dropped.
+  if(unit)put(byUnit,unit,item);else forCompany.push({...item,source:item.source+'（挂在长期目标或战略上）'});
  };
  // Background migrated before the month (“M2 基础资料…截至 10/08”) and last month's reviews are the starting point, not this month's results.
  const startingPoint=text=>/基础资料/.test(text);
- const lastMonthReview=(e,text)=>e.category==='review'&&!new RegExp(`${month}\\s*月复盘`).test(text.slice(0,80));
+ // Only a review that says it is last month's is last month's; a decision filed as review this month is this month's record.
+ const lastMonthReview=(e,text)=>e.category==='review'&&new RegExp(`${prev}\\s*月复盘`).test(text.slice(0,80));
  // A daily record is often written twice: the event, then a progress snapshot citing it. The snapshot stands for both.
  const cited=new Set(heads.snapshots.flatMap(h=>(objects[h.object_id]?.source_event_refs||[]).map(r=>r.event_id||String(r.ref||'').replace(/^event:/,''))));
+ const usedSnapshots=new Set(),usedEvents=new Set();
  const seen=new Set(),once=(key,item)=>{const k=key+'|'+item.asOf+'|'+item.text.slice(0,300);if(seen.has(k))return null;seen.add(k);return item;};
  for(const h of heads.snapshots){
-  const s=objects[h.object_id];if(!s||!inMonth(s.as_of)&&!startingPoint(String(s.title||'')))continue;
+  // A progress entry's own time is the fact time; a snapshot written in November about October still counts.
+  const s=objects[h.object_id],entryTimes=JSON.stringify(s?.blocks||s?.snapshot?.blocks||[]).match(/"at":\s*"([^"]+)"/g)?.map(x=>x.split('"')[3])||[];
+  if(!s||!inMonth(s.as_of)&&!entryTimes.some(inMonth)&&!startingPoint(String(s.title||'')))continue;
   let text=blockLines(s.blocks||s.snapshot?.blocks);if(!text)continue;if(text.length>4000)text=text.slice(0,4000)+'……（截断）';
   const baseline=startingPoint(String(s.title||''));
   const item=once(s.subject_ref?.object_id,{kind:baseline?'月初起点':'本月进展',source:(baseline?'【月初起点，不算本月结果】':'')+s.title,asOf:String(s.as_of||'').slice(0,10),text,by:s.generator?.display_name||''});
-  if(item)place(s.subject_ref?.object_id,h.domain_id,item,s.title);
+  if(item){place(s.subject_ref?.object_id,h.domain_id,item,s.title);usedSnapshots.add(h.object_id);}
  }
  for(const e of monthEvents){
   if((e.corrected_by||[]).length||(e.withdrawn_by||[]).length||cited.has(e.event_id))continue;
@@ -171,7 +180,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
   }
   if(text.length>2000)text=text.slice(0,2000)+'……（截断）';
   const item={kind,source:label+(e.category==='meeting'||e.category==='delivery'?'':` · ${e.kind}`),asOf:eventAt(e).slice(0,10),text,by:e.principal?.display_name||''};
-  for(const id of subjects){const it=once(id,item);if(it)place(id,null,it);}
+  for(const id of subjects){const it=once(id,item);if(it){place(id,null,it);usedEvents.add(e.event_id);}}
  }
  // Issues raised on a PO or Mission and not yet handled.
  for(const id of [...goalOfId.keys(),...missionIds])for(const i of objects[id]?.records?.open_issues||[])place(id,null,{kind:'本月进展',source:'未处置的问题',asOf:String(i.raised_at||i.at||'').slice(0,10),text:[i.title||i.summary||i.text,i.status&&`状态：${i.status}`].filter(Boolean).join('；')||String(i.issue_ref||'问题'),by:''});
@@ -180,18 +189,39 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  const base={period,cutoff,note:NOTE};
  const stage1=[],stage2=[],missing=[];
  const perGoal={};
+ const bare=t=>String(t||'').replace(/^\s*[A-Z]?\d*[-–]?[A-Z0-9]*\s*[｜|]\s*/,'').split(/[：:]/)[0].trim();
+ function taskLines(m){
+  const items=planItems(m.object),objs=heads.tasks.filter(t=>missionOfTask.get(t.object_id)===m.id).map(t=>({id:t.object_id,o:objects[t.object_id]}));
+  const used=new Set(),lines=items.map((p,i)=>{const hit=objs.find(t=>!used.has(t.id)&&bare(t.o?.business?.title)&&(bare(p.title)===bare(t.o?.business?.title)||p.title.includes(bare(t.o?.business?.title))));if(hit)used.add(hit.id);
+   const owner=realName(ownerOf(hit?.o))||realName(principalName.get(p.responsible))||'未指派';
+   return {ref:hit?.id||p.ref||`plan-${i+1}`,title:p.title,owner,status:hit?statusOf(hit.o):'计划条目',...(p.expected?{expected:p.expected}:{}),...(p.quality?{quality:p.quality}:{}),...(p.finish?{finish:p.finish}:{}),...(hit?{definition:blockLines(hit.o?.business?.blocks).slice(0,1200)}:{})};});
+  for(const t of objs)if(!used.has(t.id))lines.push({ref:t.id,title:t.o?.business?.title||'',owner:realName(ownerOf(t.o))||'未指派',status:statusOf(t.o),definition:blockLines(t.o?.business?.blocks).slice(0,1200)});
+  return lines;
+ }
+ // Unit- and PO-level records that name a Mission (its title, its code such as 09-1, or one of its Task titles) belong to
+ // that Mission; the rest reach every Mission of the unit as 单元层面进展, not evidence for any one Task (读取盘点第 2 条).
+ const codeOf=t=>String(t||'').match(/^\s*(\d{2}-\d+)/)?.[1];
+ const namesOf=m=>[m.object?.business?.title,codeOf(m.object?.business?.title),...planItems(m.object).map(p=>p.title),...heads.tasks.filter(t=>missionOfTask.get(t.object_id)===m.id).map(t=>objects[t.object_id]?.business?.title)].filter(x=>x&&String(x).length>=4);
+ const shared={};
+ for(const [unit,items] of Object.entries(byUnit)){const ms=missions.filter(m=>m.goal.unit===unit);
+  for(const it of items){const hit=ms.filter(m=>namesOf(m).some(n=>it.text.includes(n)||it.source.includes(n)));
+   if(hit.length)for(const m of hit)put(bySubject,m.id,{...it,source:it.source+'（记在单元上，正文提到这个 Mission）'});else put(shared,unit,it);}}
+ for(const m of missions)for(const it of bySubject[m.goal.id]||[])if(namesOf(m).some(n=>it.text.includes(n)))put(bySubject,m.id,{...it,source:it.source+'（记在 PO 上，正文提到这个 Mission）'});
  for(const m of missions){
-  const own=bySubject[m.id]||[],goalLevel=bySubject[m.goal.id]||[];
-  // Unit-level progress is added when the Mission has no progress of its own (its creation, assignment and revisions do not count).
-  const ownProgress=own.some(e=>!e.source.startsWith('过程记录'));
-  const ev=ownProgress?[...own,...goalLevel]:[...own,...goalLevel,...(byUnit[m.goal.unit]||[])];
+  const own=bySubject[m.id]||[],goalLevel=(bySubject[m.goal.id]||[]).filter(it=>!own.includes(it));
+  const unitLevel=(shared[m.goal.unit]||[]).slice(-40).map(it=>({...it,kind:it.kind==='本月进展'?'单元层面进展':it.kind,source:'【单元层面进展，没指明 Mission，不能单独作为某个 Task 达成的证据】'+it.source}));
+  const ev=[...own,...goalLevel,...unitLevel];
   const n=(perGoal[m.goal.id]=(perGoal[m.goal.id]||0)+1),owner=ownerOf(m.object),ruOwner=ownerOf(m.goal.object);
-  stage1.push({...base,id:`${m.goal.unit}-m${n}`,level:'mission',unit:m.goal.unit,parent:m.goal.unit,title:m.object?.business?.title||'',owner:owner||ruOwner,
-   ...(owner?{}:{missing:['本体里这个 Mission 没写负责人，暂按 RU DRI 填']}),commitment:blockLines(m.object?.business?.blocks),commitmentSource:`本体 ${month} 月 Mission（${statusOf(m.object)}），服务于「${m.goal.object?.business?.title||''}」`,evidence:numbered(ev),recordFacts:recordFacts(ev),
+  // No owner in the ontology: shown under 未指派 (not under the unit DRI, 读取盘点第 7 条); the unit DRI still signs for it.
+  const planOwners=[...new Set(planItems(m.object).map(p=>realName(principalName.get(p.responsible))).filter(Boolean))];
+  stage1.push({...base,id:`${m.goal.unit}-m${n}`,level:'mission',unit:m.goal.unit,parent:m.goal.unit,title:m.object?.business?.title||'',owner:owner||ruOwner,ownerAssigned:Boolean(owner),
+   ...(owner?{}:{missing:[`本体里这个 Mission 没写负责人，页面归在“未指派”，由 RU DRI 代为确认${planOwners.length?`；计划条目里的负责人是 ${planOwners.join('、')}`:''}`]}),commitment:blockLines(m.object?.business?.blocks),commitmentSource:`本体 ${month} 月 Mission（${statusOf(m.object)}），服务于「${m.goal.object?.business?.title||''}」`,evidence:numbered(ev),recordFacts:recordFacts(ev),
    // 个人复盘一行一个 Task (2026-10-26): the Mission's Tasks in the ontology, so each gets its fact line.
-   tasks:heads.tasks.filter(t=>missionOfTask.get(t.object_id)===m.id).map(t=>({ref:t.object_id,title:objects[t.object_id]?.business?.title||t.title||'',owner:ownerOf(objects[t.object_id]),status:statusOf(objects[t.object_id])})),
-   // No Task in the ontology: the Mission's own success criteria are the lines to report on, one each.
-   ...(heads.tasks.some(t=>missionOfTask.get(t.object_id)===m.id)?{}:{expectedFacts:successCriteria(m.object).map((text,i)=>({ref:`ref-${i+1}`,item:text}))}),objectId:m.id});
+   // Task lines from two sources (读取盘点第 1 条): the Mission's plan items lead; a Task object whose title matches adds its
+   // definition and id; a Task object matching no item is its own line. Owner: Task → plan item → 未指派, never the Mission's.
+   tasks:taskLines(m),
+   // Neither plan items nor Tasks: the Mission's own success criteria are the lines to report on, one each.
+   ...(taskLines(m).length?{}:{expectedFacts:successCriteria(m.object).map((text,i)=>({ref:`ref-${i+1}`,item:text}))}),objectId:m.id});
  }
  for(const [unit,g] of Object.entries(goals)){
   const ev=[...(bySubject[g.id]||[]),...(byUnit[unit]||[])];
@@ -214,7 +244,9 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
   for(const e of c.evidence){const x=redactText(e.text);e.text=x.text;add(x.hits);}
   if(Object.keys(found).length){c.redactions=found;redactions[c.id]=found;}
  }
- return {period,cutoff,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing]};
+ // What this review was built from, kept with every run (于斯一 asked; the 10/23 run could not be traced, 读取盘点第 8 条).
+ const readReceipt={readAt:sources.readAt,cutoff,objects:Object.entries(objects).filter(([,o])=>o).map(([id,o])=>`${id}@${o.business?.version??o.version??o.revision_id??'?'}`),snapshots:[...usedSnapshots],events:[...usedEvents]};
+ return {period,cutoff,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
 }
 
 // ---------- running the review skill ----------
@@ -333,7 +365,10 @@ export function reviewProblems(run,input,{roster=[]}={}){
 // What installReviewRound reads: the run's reviews plus what was skipped or failed, so the page names them.
 export function reviewFile(run,input,{skill,model,label,startedAt=null}){
  const generatedAt=new Date().toISOString();
- return {name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,reviews:run.reviews,failed:run.failed,dropped:run.dropped,skipped:input.skipped,readAt:input.readAt,redactions:input.redactions};
+ return {name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,
+  // Facts the review cards need from the input: which object each review is about, and whether the Mission has an owner.
+  reviews:Object.fromEntries(Object.entries(run.reviews).map(([id,r])=>{const c=input.stages.flat().find(x=>x.id===id);return [id,{...r,...(c?.objectId?{objectId:c.objectId}:{}),...(c?.ownerAssigned===false?{ownerAssigned:false}:{})}];})),
+  failed:run.failed,dropped:run.dropped,skipped:input.skipped,readAt:input.readAt,redactions:input.redactions,readReceipt:input.readReceipt||null};
 }
 
 // ---------- the background job ----------

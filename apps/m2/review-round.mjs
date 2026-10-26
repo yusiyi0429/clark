@@ -14,7 +14,7 @@ export function reviewCards(file,{now=new Date().toISOString()}={}){
   const content={version:1,ref:r.ref||r.unit,unit:r.level==='company'?'company':r.unit,level,title:r.title,owner:r.owner,verdict:r.verdict,verdictReason:r.verdictReason,
    // 三段式 (2026-10-26): facts replace targets/causes/nextInputs; older runs keep their fields and show as before.
    ...(Array.isArray(r.facts)?{facts:r.facts.map(f=>({ref:f.ref||'',item:String(f.item||''),owner:f.owner||'',status:f.status,evidence:String(f.evidence||''),gap:String(f.gap||'')}))}:{targets:r.targets||[],causes:(r.causes||[]).map(causeOf),nextInputs:r.nextInputs||[],...(r.ltoReview?{ltoReview:r.ltoReview}:{})}),
-   evidenceRefs:r.evidenceRefs||[],recordFacts:r.recordFacts||null};
+   evidenceRefs:r.evidenceRefs||[],recordFacts:r.recordFacts||null,...(r.objectId?{objectId:r.objectId}:{}),...(r.ownerAssigned===false?{ownerAssigned:false}:{})};
   cards[id]={...content,id,kind:'review',parentId:parent,versions:[{number:1,content:structuredClone(content),author:'Review',signatures:[],createdAt:now}],confirmedVersion:null};
  }
  return cards;

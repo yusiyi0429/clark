@@ -110,8 +110,9 @@ export function InsightCard({node,data,profile,onInsight}){
   {revealed&&<section className="insight-nexus"><h3>Nexus 综合</h3>{d.nexus?.text?<p className="insight-text"><Rich text={d.nexus.text}/></p>:d.nexus?.error?<p className="review-none">Nexus 这次没综合成，会再试一次。</p>:<p className="review-none">Nexus 正在读全部洞察，综合好后会出现在这里。</p>}</section>}
   {revealed?items.length>0&&<ol className="insight-list">{items.map(i=><InsightLine key={i.id} item={i} mine={isMine(i)} onEdit={edit} onDelete={remove}/>)}</ol>
    :mine.length>0&&<><h3 className="insight-mine-heading">我写的</h3><ol className="insight-list">{mine.map(i=><InsightLine key={i.id} item={i} mine onEdit={edit} onDelete={remove}/>)}</ol></>}
-  <div className="insight-compose"><textarea className="inline-field-input" rows={3} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>enterSubmit(e,submit,!busy)} placeholder={mine.length?'再写一条洞察':'写一条洞察：发现的问题，加上建议'} aria-label="写洞察" title="回车提交，Shift＋回车换行"/>
-   <div className="proposal-actions"><Button className="proposal-confirm" isDisabled={busy||!text.trim()} onPress={submit}>{busy?'提交中…':'提交'}</Button>{error&&<span className="admin-line is-failed" role="alert">{error}</span>}</div></div>
+  {/* Only participants write (the server decides who: participants); others read. */}
+  {(!Array.isArray(d.participants)||d.participants.includes(profile.name))&&<div className="insight-compose"><textarea className="inline-field-input" rows={3} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>enterSubmit(e,submit,!busy)} placeholder={mine.length?'再写一条洞察':'写一条洞察：发现的问题，加上建议'} aria-label="写洞察" title="回车提交，Shift＋回车换行"/>
+   <div className="proposal-actions"><Button className="proposal-confirm" isDisabled={busy||!text.trim()} onPress={submit}>{busy?'提交中…':'提交'}</Button>{error&&<span className="admin-line is-failed" role="alert">{error}</span>}</div></div>}
  </article>;
 }
 export function ReviewSummary({node,onOpen,unitLabel,comments=[],tone='domain',stateOf}){
