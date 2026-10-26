@@ -12,8 +12,8 @@ import { SESSION_COOKIE, createSessionToken } from "./session.js";
  * 飞书私聊天枢机器人 = 在本人首页的对话里说一句（「我的对话」，scope = global）：
  * 收到私聊（im.message.receive_v1，chat_type = p2p，要 im:message.p2p_msg:readonly）后，按飞书身份找到本人，
  * 以本人身份走同一个对话接口（同一条主对话、同一套权限和上下文），问与答都存进对话记录并标「飞书」，网页打开着会自己读到。
- * 回答前先回一张「正在查」的卡，每几秒换成当前在查什么、用了多久；写完原地换成回答（改不了卡时另发一条）。
- * 飞书里点不了天枢的卡和图表：回答里有这些时附「在天枢查看」。
+ * 回答前先回一张「正在想」的小卡，每几秒换成当前在查什么、用了多久；写完小卡缩成「用时 N 秒」，回答另发一条普通消息（富文本，飞书默认字号）。
+ * 飞书里点不了天枢的卡和图表：回答里有这些时末尾附「在天枢查看」链接。
  */
 export const FEISHU_CHAT_EVENT = "im.message.receive_v1";
 const SCOPE = "global";
@@ -26,16 +26,19 @@ const RICH_FENCE = /\n*```(?:options|metric-compare|timeline|roadmap)[ \t]*\n[\s
 
 type Card = object;
 
-/** 回答转成飞书卡片里的 Markdown（1.0 卡片只认加粗、斜体、删除线、链接）：标题变加粗，列表用圆点，站内链接换成免登深链接，超长截断。 */
+/**
+ * 回答转成飞书富文本 md 段落（认加粗、斜体、链接、列表、引用，不认标题）：标题变加粗，站内链接换成免登深链接，超长截断。
+ * 出处标记（网页里画成小标签）去掉，只留书名号的资料名；个人记忆标记也去掉。
+ */
 export function toFeishuMarkdown(text: string, publicOrigin: string): { content: string; richDropped: boolean; truncated: boolean } {
   let body = withoutIssueSuggestBlocks(text);
   const richDropped = RICH_FENCE.test(body);
   body = body.replace(RICH_FENCE, "")
-    .replace(/\[([^\]]*)\]\(cite:[^)]*\)/g, (_match, label: string) => (label === "记忆" ? "" : label))
+    .replace(/([ \t]*)\[([^\]]*)\]\(cite:[^)]*\)/g, (_match, space: string, label: string) => (label.startsWith("《") ? `${space}${label}` : ""))
     .replace(/\]\((\/[^)\s]*)\)/g, (_match, path: string) => `](${feishuDeepLink(publicOrigin, path)})`)
     .split("\n")
     .filter((line) => !/^\s*```/.test(line))
-    .map((line) => line.replace(/^#{1,6}\s+(.*)$/, "**$1**").replace(/^(\s*)[-*+]\s+/, "$1• "))
+    .map((line) => line.replace(/^#{1,6}\s+(.*)$/, "**$1**").replace(/[ 	]+$/, ""))
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -44,17 +47,15 @@ export function toFeishuMarkdown(text: string, publicOrigin: string): { content:
   return { content: body, richDropped, truncated };
 }
 
-function card(markdown: string, link?: { label: string; url: string }): Card {
-  return {
-    config: { wide_screen_mode: true, update_multi: true },
-    elements: [
-      { tag: "markdown", content: markdown },
-      ...(link ? [{ tag: "action", actions: [{ tag: "button", text: { tag: "plain_text", content: link.label }, type: "default", url: link.url }] }] : []),
-    ],
-  };
+/** 进度小卡：一行灰字，能原地改。 */
+function card(markdown: string): Card {
+  return { config: { wide_screen_mode: true, update_multi: true }, elements: [{ tag: "markdown", content: markdown }] };
 }
 
 const grey = (text: string) => `<font color='grey'>${text}</font>`;
+
+/** 普通富文本消息（飞书默认字号）：一段 md。 */
+const post = (markdown: string) => ({ zh_cn: { content: [[{ tag: "md", text: markdown }]] } });
 
 /** 私聊消息的文字：文本消息取 text，富文本把各段文字拼起来；其他类型（图片、文件、语音）返回 null。 */
 export function messageText(messageType: string | undefined, content: string | undefined): string | null {
@@ -104,17 +105,25 @@ export function createFeishuChat(deps: {
   const q = pool.query.bind(pool);
   const running = new Set<Promise<void>>();
 
-  /** 回一张卡；有 messageId 时先试着原地改，改不了（没开 im:message:update、超时）就另发一条。 */
-  async function show(openId: string, existing: string | null, content: Card): Promise<string | null> {
-    if (existing) {
-      try { await client.updateCard(existing, content); return existing; } catch (error) {
-        logEvent({ event: "feishu_chat.update_failed", error: (error as Error).message });
-      }
-    }
-    try { return (await client.sendMessage("open_id", openId, "interactive", content)).messageId || null; } catch (error) {
+  async function send(openId: string, msgType: "interactive" | "post", content: object): Promise<string | null> {
+    try { return (await client.sendMessage("open_id", openId, msgType, content)).messageId || null; } catch (error) {
       logEvent({ event: "feishu_chat.send_failed", error: (error as Error).message });
       return null;
     }
+  }
+
+  /** 改进度小卡；改不了（没开 im:message:update、超时）就不改，不另发。 */
+  async function update(messageId: string | null, content: Card): Promise<void> {
+    if (!messageId) return;
+    await client.updateCard(messageId, content).catch((error: Error) => logEvent({ event: "feishu_chat.update_failed", error: error.message }));
+  }
+
+  /** 收尾：进度小卡缩成一行小字，回答（或没答成的说明）另发一条普通消息。 */
+  async function finish(openId: string, progress: string | null, startedAt: number, markdown: string, link?: { label: string; url: string }): Promise<void> {
+    await update(progress, card(grey(`用时 ${Math.max(1, Math.round((Date.now() - startedAt) / 1000))} 秒`)));
+    await send(openId, "post", post(link ? `${markdown}
+
+[${link.label}](${link.url})` : markdown));
   }
 
   async function markVia(runId: string): Promise<void> {
@@ -127,12 +136,12 @@ export function createFeishuChat(deps: {
     const home = person.role === "ceo" ? "/" : "/me";
     const open = { label: "在天枢查看", url: feishuDeepLink(env.publicOrigin, home) };
     if (version === null) {
-      await show(openId, null, card("你的天枢账号还没开通，开通后就能在这里直接问我。"));
+      await send(openId, "post", post("你的天枢账号还没开通，开通后就能在这里直接问我。"));
       return;
     }
     const cookie = `${SESSION_COOKIE}=${createSessionToken(env.sessionSecret, 15 * 60, { pid: person.personId, v: version, view: person.role })}`;
     const startedAt = Date.now();
-    let messageId = await show(openId, null, card(grey("正在想…")));
+    const progress = await send(openId, "interactive", card(grey("正在想…")));
     for (;;) {
       const response = await app.inject({
         method: "POST", url: `/api/conversations/${SCOPE}/messages`, payloadAsStream: true,
@@ -145,12 +154,12 @@ export function createFeishuChat(deps: {
         for await (const chunk of stream) body += chunk.toString();
         const code = (() => { try { return (JSON.parse(body) as { code?: string }).code; } catch { return undefined; } })();
         if (code === "TURN_IN_PROGRESS" && Date.now() - startedAt < BUSY_GIVE_UP_MS) {
-          messageId = await show(openId, messageId, card(grey("上一个问题还在回答，答完马上接着答这个。")));
+          await update(progress, card(grey("上一个问题还在回答，答完马上接着答这个。")));
           await new Promise((resolve) => setTimeout(resolve, BUSY_RETRY_MS));
           continue;
         }
         logEvent({ event: "feishu_chat.turn_rejected", personId: person.personId, httpStatus: response.statusCode, code });
-        await show(openId, messageId, card("这句没能交给天枢，稍后再发一次，或者到天枢里问。", open));
+        await finish(openId, progress, startedAt, "这句没能交给天枢，稍后再发一次，或者到天枢里问。", open);
         return;
       }
       let runId: string | undefined;
@@ -164,17 +173,17 @@ export function createFeishuChat(deps: {
         if (Date.now() - lastShown >= PROGRESS_EVERY_MS) {
           lastShown = Date.now();
           const seconds = Math.round((Date.now() - startedAt) / 1000);
-          messageId = await show(openId, messageId, card(grey(`${step ? `正在${step}` : "正在想"}… ${seconds} 秒`)));
+          await update(progress, card(grey(`${step ? `正在${step}` : "正在想"}… ${seconds} 秒`)));
         }
       }
-      if (!runId) { await show(openId, messageId, card("这次回答没有完成，稍后再发一次。", open)); return; }
+      if (!runId) { await finish(openId, progress, startedAt, "这次回答没有完成，稍后再发一次。", open); return; }
       await markVia(runId);
       const saved = (await q(
         `SELECT m.content, r.input_snapshot -> 'cards' AS cards FROM conversation_messages m LEFT JOIN agent_runs r ON r.id = m.run_id
           WHERE m.run_id = $1 AND m.role = 'assistant' ORDER BY m.sequence DESC LIMIT 1`, [runId])).rows[0] as { content: string; cards: unknown } | undefined;
       const answer = toFeishuMarkdown(saved?.content ?? failure ?? "这次回答没有完成。", env.publicOrigin);
       const needsWeb = answer.richDropped || answer.truncated || (Array.isArray(saved?.cards) && saved.cards.length > 0) || failure !== null;
-      await show(openId, messageId, card(answer.content || "（没有文字回答）", needsWeb ? open : undefined));
+      await finish(openId, progress, startedAt, answer.content || "（没有文字回答）", needsWeb ? open : undefined);
       return;
     }
   }
@@ -192,13 +201,14 @@ export function createFeishuChat(deps: {
     const personId = (await q("SELECT person_id FROM feishu_identities WHERE open_id = $1", [openId])).rows[0]?.person_id as string | undefined;
     const person = personId ? deps.peopleDirectory.searchPeople(undefined).find((entry) => entry.personId === personId) : undefined;
     if (!person) {
-      await show(openId, null, card("你的飞书还没和天枢账号关联。在飞书里打开天枢登录一次就关联好了，之后就能在这里直接问我。",
-        { label: "打开天枢", url: feishuDeepLink(env.publicOrigin, "/") }));
+      await send(openId, "post", post(`你的飞书还没和天枢账号关联。在飞书里打开天枢登录一次就关联好了，之后就能在这里直接问我。
+
+[打开天枢](${feishuDeepLink(env.publicOrigin, "/")})`));
       return;
     }
     const text = messageText(message.message_type, message.content);
     if (!text) {
-      await show(openId, null, card("现在只看得懂文字消息，把问题打成字发给我就行。"));
+      await send(openId, "post", post("现在只看得懂文字消息，把问题打成字发给我就行。"));
       return;
     }
     const work = turn({ personId: person.personId, role: roleOf(person) }, openId, text.slice(0, 8_000))

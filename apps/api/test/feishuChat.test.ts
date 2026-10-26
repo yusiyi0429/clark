@@ -4,19 +4,19 @@ import type { FeishuClient } from "../src/feishu/client.js";
 import { messageText, toFeishuMarkdown } from "../src/feishuChat.js";
 import { createTestApp, TEST_CEO, type TestApp } from "./helpers.js";
 
-type Sent = { kind: "send" | "update"; to: string; markdown: string; button?: string };
+type Sent = { kind: "card" | "post" | "update"; to: string; markdown: string };
 
 function fakeFeishu(failUpdate = false) {
   const sent: Sent[] = [];
   let next = 0;
   const markdownOf = (content: object) => {
-    const elements = (content as { elements: { tag: string; content?: string; actions?: { text: { content: string } }[] }[] }).elements;
-    return { markdown: elements.find((element) => element.tag === "markdown")?.content ?? "",
-      button: elements.find((element) => element.tag === "action")?.actions?.[0]?.text.content };
+    const post = (content as { zh_cn?: { content: { text: string }[][] } }).zh_cn;
+    if (post) return { markdown: post.content[0][0].text };
+    return { markdown: (content as { elements: { tag: string; content?: string }[] }).elements.find((element) => element.tag === "markdown")?.content ?? "" };
   };
   const client = {
-    async sendMessage(_type: string, id: string, _msgType: string, content: object) {
-      sent.push({ kind: "send", to: id, ...markdownOf(content) });
+    async sendMessage(_type: string, id: string, msgType: string, content: object) {
+      sent.push({ kind: msgType === "post" ? "post" : "card", to: id, ...markdownOf(content) });
       return { messageId: `om_${++next}` };
     },
     async updateCard(messageId: string, content: object) {
@@ -51,19 +51,21 @@ async function start(runtime: ConversationRuntime, failUpdate = false) {
 }
 
 describe("飞书私聊机器人 = 首页对话", () => {
-  it("以本人身份问首页对话：先回「正在想」，写完原地换成回答；问与答都存进首页对话并标飞书", async () => {
-    const feishu = await start(answering("## 本周进展\n- 战场 A 推进中 [记忆](cite:pmem:x)\n详见[会议](/meetings/m1)"));
+  it("以本人身份问首页对话：先回「正在想」小卡，写完小卡缩成用时、回答另发普通消息；问与答都存进首页对话并标飞书", async () => {
+    const feishu = await start(answering("## 本周进展\n- 战场 A 推进中 [记忆](cite:pmem:x)，见[《经营原则》](cite:doc:1)。 [进展](cite:progress:2)\n详见[会议](/meetings/m1)"));
     await t!.app.feishuChat!.onMessage(dm("ou_ceo", "这周怎么样"));
     await t!.app.feishuChat!.idle();
 
-    expect(feishu.sent[0]).toMatchObject({ kind: "send", to: "ou_ceo" });
+    expect(feishu.sent[0]).toMatchObject({ kind: "card", to: "ou_ceo" });
     expect(feishu.sent[0].markdown).toContain("正在想");
-    const last = feishu.sent.at(-1)!;
-    expect(last).toMatchObject({ kind: "update", to: "om_1" });
-    expect(last.markdown).toContain("**本周进展**");
-    expect(last.markdown).toContain("• 战场 A 推进中");
-    expect(last.markdown).not.toContain("cite:");
-    expect(last.markdown).toContain(`${t!.publicOrigin}/api/auth/feishu/start?next=${encodeURIComponent("/meetings/m1")}`);
+    const [shrunk, answer] = feishu.sent.slice(-2);
+    expect(shrunk).toMatchObject({ kind: "update", to: "om_1" });
+    expect(shrunk.markdown).toMatch(/用时 \d+ 秒/);
+    expect(answer).toMatchObject({ kind: "post", to: "ou_ceo" });
+    expect(answer.markdown).toContain("**本周进展**");
+    expect(answer.markdown).toContain("- 战场 A 推进中，见《经营原则》。\n");
+    expect(answer.markdown).not.toContain("cite:");
+    expect(answer.markdown).toContain(`${t!.publicOrigin}/api/auth/feishu/start?next=${encodeURIComponent("/meetings/m1")}`);
 
     const cookie = await t!.loginCookie();
     const history = (await t!.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie } })).json().messages as
@@ -72,11 +74,11 @@ describe("飞书私聊机器人 = 首页对话", () => {
     expect(history[0].content).toBe("这周怎么样");
   });
 
-  it("改不了卡（没开更新权限）就另发一条回答", async () => {
+  it("改不了卡（没开更新权限）时小卡停在「正在想」，回答照样另发", async () => {
     const feishu = await start(answering("好的"), true);
     await t!.app.feishuChat!.onMessage(dm("ou_ceo", "在吗"));
     await t!.app.feishuChat!.idle();
-    expect(feishu.sent.map((item) => item.kind)).toEqual(["send", "send"]);
+    expect(feishu.sent.map((item) => item.kind)).toEqual(["card", "post"]);
     expect(feishu.sent[1].markdown).toBe("好的");
   });
 

@@ -29,7 +29,7 @@ export type FeishuClient = {
   refreshUserToken(refreshToken: string): Promise<FeishuUserToken>;
   getUserInfo(userAccessToken: string): Promise<FeishuUserInfo>;
   /** 以机器人身份发消息（tenant_access_token）。content 是消息体对象，发送时序列化。 */
-  sendMessage(receiveIdType: FeishuReceiveIdType, receiveId: string, msgType: "text" | "interactive", content: object): Promise<{ messageId: string }>;
+  sendMessage(receiveIdType: FeishuReceiveIdType, receiveId: string, msgType: "text" | "interactive" | "post", content: object): Promise<{ messageId: string }>;
   /** 以机器人身份改自己发过的卡片（im:message:update）：飞书私聊里「正在查」原地换成回答。 */
   updateCard(messageId: string, content: object): Promise<void>;
   /** 以本人身份读云文档元数据（drive:drive.metadata:readonly）；读不到的（没权限、已删）不出现在结果里。一次最多 200 份。 */
