@@ -211,6 +211,11 @@
       "sha256": "1c58465bc0173d096528b578c7c89946ba20ac7ecd0365ecf2a21ed0dbabf1fc"
     },
     {
+      "path": "ontology-input.mjs",
+      "sha256": "6415c1c3ad5a3efc3a87a6b2b4f0305129878d1abdc00afbfbbe5494fa0e494d",
+      "from": "../../tools/decoding-ontology-input.mjs"
+    },
+    {
       "path": "ontology-sources.mjs",
       "sha256": "421d224abc3bc397f920149e27a9b68eb3b90e4bea7dd2ca1afdf81908f6ab59"
     },
@@ -428,7 +433,7 @@
     "runtime state, histories and private inputs (deployment-only)",
     "tests that need this machine's seed, eval skills, browser, Codex or real model (run them in the demo workspace)",
     "lan-host.mjs and published-round.mjs (local-only; the server binds via M2_BIND_HOST and reads rounds from the private seed)",
-    "round-runner-v3.mjs and ontology-sources.mjs stay on the 2026-10-22 Tianshu version (capacity fix waits for 10/27; Tianshu reads the ontology with the product token only)"
+    "ontology-sources.mjs keeps the Tianshu reading path (product token only, private manifest); its checks follow the demo as of 2026-10-26"
   ],
   "skill": {
     "version": "3.1.7",
