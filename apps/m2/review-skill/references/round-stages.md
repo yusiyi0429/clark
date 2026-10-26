@@ -26,11 +26,11 @@
 **每次生成先写 analysis**（不展示）：逐项列出要写的事实行（Task、Mission 或单元），每项对上证据编号或写“无证据”；认出核心承诺；核对负责人自评的三种偏差；再定判定。analysis 不超过 600 字。然后写展示字段，第一遍就写成人话。
 
 **1. Mission 复盘**（个人复盘。每个 Mission 一次调用。输入：这个 Mission 的承诺全文、它的 Task、与它有关的证据、负责人自评、所属 RU 的 PO）：
-1. 事实证据一个 Task 一行：输入 unit.tasks 里每个 Task 都要有一行，ref 照抄。没有 Task 的，按输入的 expectedFacts 一项一行。
+1. 事实证据一个 Task 一行：输入 unit.tasks 里每一行都要有一行事实，ref 照抄；unit.tasks 里有计划条目也有 Task 对象，都算。某行带 expected（预期产出）、quality（质量标准）、finish（截止日期）或 definition（Task 定义）时，按它们定这一行的 status：预期产出有没有交出、是否达到质量标准、是否在截止日前完成。没有 Task 的，按输入的 expectedFacts 一项一行。
 2. 按 method.md 第 1 节，以 Mission 的成果和成功标准定判定，写判定理由。
 
 **2. RU 复盘**（责任单元复盘，只复盘 PO。每个 RU 一次调用。输入：本 RU 的 PO 和长期目标、本 RU 各 Mission 复盘、RU 层面的证据、别的 RU 写到本 RU 的需求和交付）：
-1. 事实证据一个 Mission 一行，status 照搬该 Mission 复盘的判定，evidence 写一句它的结果，不重抄 Mission 复盘的细节。没有 Mission 的，按 PO 成功标准一条一行。
+1. 事实证据一个 Mission 一行，status 照搬该 Mission 复盘的判定，evidence 写一句它的结果，不重抄 Mission 复盘的细节。没有 Mission 的单元，输入里会给 expectedFacts（PO 每条成功标准一项），一项一行，ref 和 item 照抄。
 2. 按 method.md 第 4 节，以 PO 为起点定判定，写判定理由。
 
 **3. 检查与修改**：三组同时检查全部 Mission 和 RU 复盘，然后按单元修改。
@@ -57,7 +57,7 @@
  "facts":[{"ref":"编号","item":"这一项是什么","owner":"负责人","status":"达成|部分达成|未达成|未开始","evidence":"现状和证据，带日期和证据编号","gap":"没达成时事实上的原因，达成时写空字符串"}]}
 ```
 
-facts 的 ref：个人复盘用输入 unit.tasks 里每个 Task 的 ref，每个 Task 都要有一行；没有 Task 的 Mission，输入里会给 expectedFacts（每条成功标准一项），一项一行，ref 和 item 照抄。单元复盘用 missionReviews 里每个 Mission 的 ref；公司复盘用 ruReviews 里每个单元的 key。
+facts 的 ref：个人复盘用输入 unit.tasks 里每个 Task 的 ref，每个 Task 都要有一行；没有 Task 的 Mission，输入里会给 expectedFacts（每条成功标准一项），一项一行，ref 和 item 照抄。单元复盘用 missionReviews 里每个 Mission 的 ref，没有 Mission 的用 expectedFacts 的 ref；公司复盘用 ruReviews 里每个单元的 key。
 
 生成时不写洞察，结果里不带 insights、causes、nextInputs、targets、ltoReview。
 
