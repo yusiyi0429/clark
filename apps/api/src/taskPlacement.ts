@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import { runCandidateAgent, type CandidateAgentOptions, type CandidateThinkingLevel } from "./candidateAgentRuntime.js";
 import type { JobHandler } from "./jobs.js";
 import { logEvent } from "./observability.js";
+import { ADDRESS_STYLE } from "./promptStyle.js";
 import { listAvailableMissions, placeTask, TASK_PLACE_JOB, UNPLACED } from "./tasks.js";
 
 /**
@@ -29,7 +30,9 @@ export const TASK_PLACEMENT_PROMPT = `你是天枢的执行事项归位 Agent。
 - 只有事项明显是在推进某个 Mission 的结果时才挑它：missionId 填那个 Mission 的 id（必须是 missions 里的 id），reason 写一句为什么（例如「事项是在交付这个 Mission 的会议回流链路」）。
 - 拿不准、两个都像、或者都不像，missionId 填 null，reason 用一句话写清楚为什么挂不上，让本人一看就知道该怎么处理（例如「你名下没有和外部数据源调研对得上的 Mission」「和 A、B 两个 Mission 都相关，需要你选」）。
 - 宁可不挑也不要挑错：挂错了本人很难发现。
-- reason 不超过 40 字，用简体中文，不写客套话。`;
+- reason 不超过 40 字，用简体中文，不写客套话。
+
+${ADDRESS_STYLE}`;
 
 export type TaskPlacementAgent = { place(input: unknown, taskId: string): Promise<Placement> };
 
