@@ -262,6 +262,8 @@ export type PiConversationRuntimeOptions = {
    * modelApi、modelBaseUrl 只作用于 modelId 本身，其他模型按 id 推断协议与地址。
    */
   tierModels?: Partial<Record<ConversationTier, string>>;
+  /** 主答的最后一个备用模型（Responses 协议，按 id 推断地址）：各档模型都上游异常时换到它。不配或与各档相同时不起作用。 */
+  fallbackModelId?: string;
   /** Claude 的英文思考摘要按段译成中文后上屏（快模型）；不提供时英文段落不上屏，只显示「正在思考」。 */
   translateThinking?: ThinkingTranslator;
   /** 按档位覆盖思考强度（CONVERSATION_THINKING）；没写的档位沿用 TIER_SETTINGS。 */
@@ -605,7 +607,8 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
     grounded: options.tierModels?.grounded ?? options.modelId,
     deep: options.tierModels?.deep ?? options.modelId,
   };
-  const mainModelIds = [...new Set([options.modelId, ...Object.values(tierModelIds)])];
+  // 备用模型排在最后：各档都配成同一个模型时，上游异常也有得换（自动恢复第二次起换模型，conversationRecovery.ts）。
+  const mainModelIds = [...new Set([options.modelId, ...Object.values(tierModelIds), ...(options.fallbackModelId ? [options.fallbackModelId] : [])])];
   const mainModelDefinitions = mainModelIds.map((id) => conversationModelDefinition({ modelId: id, api: id === options.modelId ? options.modelApi : undefined,
     baseUrl: normalizedBaseUrl(options.baseUrl), overrideBaseUrl: id === options.modelId ? options.modelBaseUrl : undefined }));
   const definitionOf = (id: string) => mainModelDefinitions.find((item) => item.id === id) ?? mainModelDefinitions[0];

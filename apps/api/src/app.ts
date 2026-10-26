@@ -418,6 +418,8 @@ export async function buildApp({
     // 按档位选主答模型：CONVERSATION_MODEL 不配时快答 HEAVY_MODEL、检索问答 Sonnet、深度 Opus；配一个 id 时三档都用它（conversationModel.ts）。
     modelId: tierModels.quick,
     tierModels,
+    // 各档都是同一个主答模型时（预发、正式站都是 HEAVY_MODEL）上游一出错就无处可换：LIGHT_MODEL 作最后的备用（10/26 网关约 70 秒只拒 sol 关思考的请求）。
+    fallbackModelId: env.lightModel,
     ...(env.conversationApi ? { modelApi: conversationModelApi(tierModels.quick, env.conversationApi) } : {}),
     ...(env.conversationBaseUrl ? { modelBaseUrl: env.conversationBaseUrl } : {}),
     ...(env.conversationThinking ? { tierThinking: parseTierThinking(env.conversationThinking) } : {}),
