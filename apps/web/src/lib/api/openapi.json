@@ -4859,7 +4859,7 @@
     "/api/meetings": {
       "post": {
         "operationId": "bookMeeting",
-        "summary": "预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人",
+        "summary": "预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人；带 draftId 时同一张会议卡只建一场",
         "requestBody": {
           "required": true,
           "content": {
@@ -4911,6 +4911,65 @@
             }
           },
           "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meeting-drafts/{draftId}": {
+      "get": {
+        "operationId": "getMeetingDraftStatus",
+        "summary": "对话里的一张会议卡约好没有：本人用这张卡建的会，没约为 null",
+        "parameters": [
+          {
+            "name": "draftId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "这张会议卡建的会",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDraftStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -17007,6 +17066,177 @@
                           "collectionId": {
                             "minLength": 1,
                             "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "draftId",
+                          "title",
+                          "scheduledAt",
+                          "endsAt",
+                          "host",
+                          "participants",
+                          "unresolved",
+                          "anchor"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "meeting_draft",
+                            "type": "string"
+                          },
+                          "draftId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "title": {
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "type": "string"
+                          },
+                          "scheduledAt": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "endsAt": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "host": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "personId",
+                                  "displayName"
+                                ],
+                                "properties": {
+                                  "personId": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "displayName": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "participants": {
+                            "maxItems": 50,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "personId",
+                                "displayName"
+                              ],
+                              "properties": {
+                                "personId": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "displayName": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "unresolved": {
+                            "maxItems": 20,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "name",
+                                "reason"
+                              ],
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "maxLength": 40,
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "anyOf": [
+                                    {
+                                      "const": "not_found",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "ambiguous",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "host": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          },
+                          "anchor": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "kind",
+                                  "id",
+                                  "title"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "lto",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "po",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "mission",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "task",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "unit",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "company",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "title": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         }
                       }
@@ -36690,6 +36920,48 @@
                 }
               }
             }
+          },
+          "draftId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      },
+      "MeetingDraftStatusResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "meeting"
+        ],
+        "properties": {
+          "meeting": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "id",
+                  "title",
+                  "href"
+                ],
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "href": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },

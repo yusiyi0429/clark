@@ -114,8 +114,8 @@ describe("全局输入条（clark workspace 614–640）", () => {
     expect(html).not.toContain("对话记录");
   });
 
-  it("键盘面：首页占位「输入问题或指令…」，二级页「继续讨论…」，批注后改为围绕批注", () => {
-    expect(dock({ keyboard: true })).toContain('placeholder="输入问题或指令…"');
+  it("键盘面：首页占位「问点什么，或者说要约的会…」，二级页「继续讨论…」，批注后改为围绕批注", () => {
+    expect(dock({ keyboard: true })).toContain('placeholder="问点什么，或者说要约的会…"');
     expect(dock({ keyboard: true })).toContain('aria-label="全局对话输入"');
     // 展开后附件旁边是小麦克风（天枢自己的听写，存在感放低）。
     expect(dock({ keyboard: true })).toContain('aria-label="语音输入"');

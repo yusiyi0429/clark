@@ -67,6 +67,7 @@ import {
   CreateConfigMeetingRequest,
   CreateMeetingRequest,
   MeetingBookingRequest,
+  MeetingDraftStatusResponse,
   DriIssueImportRequest,
   DriMeetingImportRequest,
   HealthResponse,
@@ -988,12 +989,19 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       "/api/meetings": {
         post: {
-          operationId: "bookMeeting", summary: "预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人",
+          operationId: "bookMeeting", summary: "预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人；带 draftId 时同一张会议卡只建一场",
           requestBody: jsonBody({ $ref: "#/components/schemas/MeetingBookingRequest" }),
           responses: {
             "200": { description: "新建的会议卡", content: { "application/json": { schema: { type: "object", required: ["card"], additionalProperties: false, properties: { card: { $ref: "#/components/schemas/Card" } } } } } },
-            "400": errorResponse, "401": errorResponse, "403": errorResponse,
+            "400": errorResponse, "401": errorResponse, "403": errorResponse, "409": errorResponse,
           },
+        },
+      },
+      "/api/meeting-drafts/{draftId}": {
+        get: {
+          operationId: "getMeetingDraftStatus", summary: "对话里的一张会议卡约好没有：本人用这张卡建的会，没约为 null",
+          parameters: [{ name: "draftId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { "200": { description: "这张会议卡建的会", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingDraftStatusResponse" } } } }, "400": errorResponse, "401": errorResponse },
         },
       },
       "/api/world-anchor-options": {
@@ -2992,6 +3000,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         DriMeetingImportRequest: DriMeetingImportRequest as JsonSchema,
         CreateMeetingRequest: CreateMeetingRequest as JsonSchema,
         MeetingBookingRequest: MeetingBookingRequest as JsonSchema,
+        MeetingDraftStatusResponse: MeetingDraftStatusResponse as JsonSchema,
         JoinMeetingRequest: JoinMeetingRequest as JsonSchema,
         UpdateMeetingDraftRequest: UpdateMeetingDraftRequest as JsonSchema,
         EditMeetingDetailsRequest: EditMeetingDetailsRequest as JsonSchema,

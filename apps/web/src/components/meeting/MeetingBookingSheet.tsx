@@ -8,6 +8,7 @@
  * 换的时候是 WorldAnchorPicker，挑了 Mission、LTO 就收起，挑了 PO 不收（下面展开它的 Mission 可以再往下挑）。
  * 「约好」建会（只存天枢，不写本体），成功后跳到会议页。
  * 整理模式（organize）：飞书里直接开的会待整理，用这份妙记建会；时间、参会人取自妙记只读，没有主持人一栏，挂点按妙记那个月取。
+ * 对话里会议卡的「改」（draft）：名称、时间、主持人、参会人、挂到先按草稿填好（草稿没挂就空着，不默认挂），约好时带 draftId。
  */
 import { useEffect, useState } from "react";
 import type { TFeishuMinuteInboxItem, TPickedWorldAnchor, TWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
@@ -23,7 +24,7 @@ import { bookMeeting, listPeople, listPersonDirectory, listWorldAnchorOptions, o
 import { anchorRole, WorldAnchorPicker } from "./WorldAnchorPicker";
 import d from "./meeting-decisions.module.css";
 
-const BOOK_ERROR: Record<string, string> = { ANCHOR_NOT_FOUND: "挂点已失效", FORBIDDEN: "没有权限", INVALID_LEAD_DRI: "主持人不可选", INVALID_PARTICIPANT: "参会人不可选" };
+export const BOOK_ERROR: Record<string, string> = { ANCHOR_NOT_FOUND: "挂点已失效", FORBIDDEN: "没有权限", INVALID_LEAD_DRI: "主持人不可选", INVALID_PARTICIPANT: "参会人不可选", MEETING_DRAFT_BUSY: "正在约" };
 const ORGANIZE_ERROR: Record<string, string> = { MINUTE_TAKEN: "已经记到别的会上了", MINUTE_NOT_PENDING: "已经处理过了", ANCHOR_NOT_FOUND: "挂点已失效" };
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -34,13 +35,22 @@ function nextSlot(now = new Date()): { date: string; start: string; end: string 
   const hour = Number(at.toLocaleTimeString("en-GB", { timeZone: COMPANY_TIMEZONE, hour: "2-digit", hour12: false }).slice(0, 2));
   return { date, start: `${pad(hour)}:00`, end: hour >= 23 ? "23:45" : `${pad(hour + 1)}:00` };
 }
+const clockAt = (iso: string) => new Date(iso).toLocaleTimeString("en-GB", { timeZone: COMPANY_TIMEZONE, hour: "2-digit", minute: "2-digit", hour12: false });
+/** 草稿的起止换成表单的日期、开始、结束（公司时区）。 */
+const slotOf = ({ scheduledAt, endsAt }: BookingDraft) =>
+  ({ date: new Date(scheduledAt).toLocaleDateString("sv-SE", { timeZone: COMPANY_TIMEZONE }), start: clockAt(scheduledAt), end: clockAt(endsAt) });
+
+/** 对话里会议卡的草稿（「改」打开时先填好）。 */
+export type BookingDraft = { draftId: string; title: string; scheduledAt: string; endsAt: string; leadDriId: string | null; participants: string[]; anchors: TWorldAnchor[] };
 
 type Viewer = { personId: string; role: "ceo" | "member"; displayName: string };
 
-export function MeetingBookingSheet({ open, onClose, viewer, organize, initialParticipants = [] }: {
+export function MeetingBookingSheet({ open, onClose, viewer, organize, initialParticipants = [], draft }: {
   open: boolean; onClose(): void;
   /** 打开时先填好的参会人（战场进展「约会议」）。 */
   initialParticipants?: string[];
+  /** 对话里会议卡的草稿（卡上的「改」）。 */
+  draft?: BookingDraft;
 } & (
   /** 约会议：登录的人；成员的主持人一栏就是 displayName。 */
   | { viewer: Viewer; organize?: undefined }
@@ -51,11 +61,13 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
   /** 登录的人（整理飞书会时没有 viewer，用工作台的）：挂点默认挂他的 Mission。 */
   const me = viewer?.personId ?? workspaceViewer ?? "";
   const role = viewer?.role;
-  const [title, setTitle] = useState(organize?.minute.title ?? "");
-  const [slot, setSlot] = useState(nextSlot);
-  const [leadDriId, setLeadDriId] = useState(viewer?.role === "member" ? viewer.personId : "");
-  const [participants, setParticipants] = useState<string[]>(() => initialParticipants.filter((id) => id !== viewer?.personId));
-  const [anchors, setAnchors] = useState<TWorldAnchor[]>([]);
+  const [title, setTitle] = useState(organize?.minute.title ?? draft?.title ?? "");
+  const [slot, setSlot] = useState(() => (draft ? slotOf(draft) : nextSlot()));
+  const [leadDriId, setLeadDriId] = useState(viewer?.role === "member" ? viewer.personId : draft?.leadDriId ?? "");
+  const [participants, setParticipants] = useState<string[]>(() => (draft?.participants ?? initialParticipants).filter((id) => id !== viewer?.personId));
+  const [anchors, setAnchors] = useState<TWorldAnchor[]>(draft?.anchors ?? []);
+  /** 草稿没挂（CEO 的会议卡默认不挂）：不替他默认挂自己的 Mission。 */
+  const autoAnchor = !draft || draft.anchors.length > 0;
   const [options, setOptions] = useState<TWorldAnchorOption[] | null>(null);
   /** 人员名册（选参会人）；CEO 另取带角色的目录选主持人。 */
   const [people, setPeople] = useState<{ personId: string; displayName: string }[]>([]);
@@ -86,12 +98,12 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
       setAnchors((current) => {
         const kept = current.filter((anchor) => next.some((option) => option.kind === anchor.kind && option.id === anchor.id));
         if (kept.length) return kept;
-        const mine = next.find((option) => option.kind === "mission" && option.ownerId === me);
+        const mine = autoAnchor ? next.find((option) => option.kind === "mission" && option.ownerId === me) : undefined;
         return mine ? [{ kind: mine.kind, id: mine.id, title: mine.title }] : [];
       });
     }, () => { if (live) setOptionsError(true); });
     return () => { live = false; };
-  }, [open, period, me]);
+  }, [open, period, me, autoAnchor]);
 
   const nameOf = (personId: string) => people.find((person) => person.personId === personId)?.displayName ?? "";
   const anchorOption = (anchor: TWorldAnchor) => options?.find((option) => option.kind === anchor.kind && option.id === anchor.id);
@@ -126,6 +138,7 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
         ...(viewer.role === "ceo" ? { leadDriId } : {}),
         ...(participants.length ? { participants } : {}),
         anchors: anchors.map(({ kind, id }) => ({ kind: kind as TPickedWorldAnchor["kind"], id })),
+        ...(draft ? { draftId: draft.draftId } : {}),
       });
       if ("code" in result) { setError(BOOK_ERROR[result.code] ?? "没有约成"); return; }
       window.dispatchEvent(new Event("meeting-changed"));

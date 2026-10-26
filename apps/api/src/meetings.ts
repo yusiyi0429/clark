@@ -233,9 +233,16 @@ export async function createConfigMeeting(
     input.materials?.length ? { items: input.materials, storageDir: input.materialStorageDir } : undefined);
 }
 
+/** 本人用对话里某张会议卡（draftId）建的会；没建过为 null。 */
+export async function meetingFromDraft(q: Query, personId: string, draftId: string): Promise<MeetingRow | null> {
+  const result = await q(`SELECT ${meetingColumns()} FROM meetings WHERE origin_ref->>'draftId' = $1 AND created_by = $2 LIMIT 1`, [draftId, personId]);
+  return (result.rows[0] as MeetingRow | undefined) ?? null;
+}
+
 /**
  * 预约建会：带起止、挂点，只存天枢。成员只能给自己建（leadDriId 缺省或等于本人，否则 403）；
  * CEO 必须从 DRI 里指定主持人（同配置页）。挂点要在开会那个月的选项里。
+ * 带 draftId（对话里的会议卡）时同一张卡只建一场：已建过就返回那场（replayed，不再约飞书）；同一张卡正在约时 409，不排队等。
  */
 export async function bookMeeting(
   deps: {
@@ -247,6 +254,30 @@ export async function bookMeeting(
     /** 某月能挑的挂点（本月 PO、LTO、本月 Mission、责任单元）。 */
     anchorOptions: (period: string) => Promise<TWorldAnchor[]>;
   },
+  viewer: { personId: string; role: "ceo" | "member" },
+  input: TMeetingBookingRequest,
+): Promise<{ card: TCard; replayed?: true } | { error: MeetingActionError }> {
+  const { draftId } = input;
+  if (!draftId) return bookOnce(deps, viewer, input);
+  const lock = await deps.pool.connect();
+  const key = `meeting:draft:${draftId}`;
+  let broken = false;
+  try {
+    const { got } = (await lock.query("SELECT pg_try_advisory_lock(hashtext($1)) AS got", [key])).rows[0] as { got: boolean };
+    if (!got) return { error: { status: 409, code: "MEETING_DRAFT_BUSY", message: "这张会议卡正在约" } };
+    try {
+      const booked = await meetingFromDraft(deps.pool.query.bind(deps.pool), viewer.personId, draftId);
+      return booked ? { card: projectMeetingCard(booked, deps.secret), replayed: true } : await bookOnce(deps, viewer, input);
+    } finally {
+      await lock.query("SELECT pg_advisory_unlock(hashtext($1))", [key]).catch(() => { broken = true; });
+    }
+  } finally {
+    lock.release(broken);
+  }
+}
+
+async function bookOnce(
+  deps: Parameters<typeof bookMeeting>[0],
   viewer: { personId: string; role: "ceo" | "member" },
   input: TMeetingBookingRequest,
 ): Promise<{ card: TCard } | { error: MeetingActionError }> {
@@ -268,7 +299,7 @@ export async function bookMeeting(
   const anchors = resolveAnchors(input.anchors, await deps.anchorOptions(shanghaiDate(scheduledAt).slice(0, 7)));
   if ("error" in anchors) return anchors;
   return insertScheduledMeeting(deps.pool, deps.peopleDirectory, deps.preflightAgent, deps.secret, {
-    title: input.title, scheduledAt, endsAt, resolved, issueIds: [], originRef: { type: "booking" },
+    title: input.title, scheduledAt, endsAt, resolved, issueIds: [], originRef: { type: "booking", ...(input.draftId ? { draftId: input.draftId } : {}) },
     worldAnchors: anchors, createdBy: viewer.personId,
   }, deps.introAgent);
 }

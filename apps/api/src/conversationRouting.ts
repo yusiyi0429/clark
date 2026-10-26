@@ -537,6 +537,7 @@ export function toolProgressLabel(name: string, args: unknown): string | undefin
     case "read_anchor": return "展开当前页面";
     case "read_issue_conversation": return "读取议题里的对话";
     case "propose_issue": return "起草议题初稿";
+    case "draft_meeting": return "起草会议";
     case "update_business_object": case "create_business_object": case "run_business_action": case "apply_business_proposal":
     case "edit_material": case "create_material": case "edit_mission_card": case "edit_current_object":
       return "保存修改";
