@@ -20,6 +20,8 @@ export type WorldInstance = {
   label?: string;
   principals?: Record<string, string>;
   anchors?: { company?: string; strategy?: string };
+  /** 签发月度计划时代哪位 RU DRI 承诺周期目标：domains 的键 → 天枢 personId（再经 people 取本体主体）；没写的域不代。 */
+  unit_dris?: Record<string, string>;
   reads?: boolean;
   writes?: boolean;
 };
@@ -281,7 +283,9 @@ export class WorldClient {
         }
         await this.q("UPDATE world_sync_ledger SET request_body = $2::jsonb, request_digest = $3, prepared = true WHERE id = $1", [id, JSON.stringify(body), requestDigest(body)]);
         const receipt = await this.request<WorldReceipt>("/v1/actions", body);
-        await this.q("UPDATE world_sync_ledger SET status = 'committed', receipt_id = $2 WHERE id = $1", [id, receipt.receipt_id]);
+        // 代记的回执带本体实际用的委托（天枢指定不了），照存备查。
+        const delegation = (receipt.result.on_behalf_of as { delegation_event_id?: string } | undefined)?.delegation_event_id ?? null;
+        await this.q("UPDATE world_sync_ledger SET status = 'committed', receipt_id = $2, delegation_event_id = $3 WHERE id = $1", [id, receipt.receipt_id, delegation]);
         return receipt;
       } catch (error) {
         const code = worldErrorCode(error);

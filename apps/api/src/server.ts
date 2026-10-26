@@ -69,6 +69,8 @@ const env: AppEnv = {
   companyPeopleSeed: requiredEnv("COMPANY_PEOPLE_SEED"),
   companyName: process.env.COMPANY_NAME,
   onboardingDelegationStep: process.env.ONBOARDING_DELEGATION_STEP === "1",
+  // 签发月度计划后代记本体周期目标的门：设为 1 才启用（还要实例配置允许写）；不影响会议、周复盘等其他本体写入。
+  worldPeriodGoalGates: process.env.TKOS_WORLD_PERIOD_GOAL_GATES === "1",
   missionCardDraftsDir: process.env.MISSION_CARD_DRAFTS_DIR,
   missionCardKnownMissionsFile: process.env.MISSION_CARD_KNOWN_MISSIONS_FILE,
   piBaseUrl: requiredEnv("PI_BASE_URL"),

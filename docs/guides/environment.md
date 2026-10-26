@@ -54,6 +54,7 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | | `TKOS_WORLD_INSTANCE` | `mvp`；可选 `demo`、`formal`、`tk`，对应 `apps/api/config/world-instance*.json` |
 | | `TKOS_WORLD_INSTANCE_LOCAL_FILE` | 只合并人员对应（people），其余以仓库实例配置为准 |
 | | `TKOS_WORLD_TK_INSTANCE`、`TKOS_WORLD_TK_API_URL`、`TKOS_WORLD_TK_TOKEN_FILE` | 第二个只读实例，只接受 `tk`；不填就关闭。地址缺省沿用主实例，凭证只从文件读 |
+| | `TKOS_WORLD_PERIOD_GOAL_GATES` | 设为 `1` 才在签发月度计划后代记本体周期目标的门（签发时那一版草稿代 RU DRI 承诺，再代 CEO 确认；RU DRI 按实例配置的 `unit_dris` 逐域写明）；还要实例配置允许写。只管这一项，会议、周复盘等写入不受影响 |
 | 公司事实与记忆 | `COMPANY_WORLD_ACCESS_FILE` | 按人授权的本体域，JSON `{"<personId>":["<domain_id>"]}`。公司事实只认本体：不填或读不到时如实说没读到，不用本地资料兜底 |
 | | `COMPANY_SYSTEM_PERSON_ID` | 后台服务（雷达、会前预审、预研、月度起草与复盘、任务卡起草）读本体用谁的授权；这个 personId 要在授权文件里有域。不填时这些服务如实说没读到本体 |
 | | `MEMORY_STORAGE_DIR` | 本体公司事实的只读投影写在 `<目录>/company`，可重建；不填用 `/tmp/warmap-company`。个人记忆存数据库，不在这里 |
