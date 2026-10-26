@@ -557,8 +557,8 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   );
 
   const api: WorkspaceApi = useMemo(
-    () => ({ navigate, close, detailOpen, closing, registerDetail, showToast, homeCards, quote, ask, compose, viewerId, bookMeeting: viewerId ? bookMeeting : undefined, bookMeetingWith: viewerId ? bookMeetingWith : undefined, bookMeetingFrom: viewerId ? bookMeetingFrom : undefined, m2Available }),
-    [homeCards, ask, bookMeeting, bookMeetingWith, bookMeetingFrom, close, closing, compose, detailOpen, m2Available, navigate, quote, registerDetail, showToast, viewerId],
+    () => ({ navigate, close, detailOpen, closing, registerDetail, showToast, homeCards, quote, ask, compose, viewerId, bookMeeting: viewerId ? bookMeeting : undefined, bookMeetingWith: viewerId ? bookMeetingWith : undefined, bookMeetingFrom: viewerId ? bookMeetingFrom : undefined, m2Available, ceo: homeHref === "/" }),
+    [homeCards, ask, bookMeeting, bookMeetingWith, bookMeetingFrom, close, closing, compose, detailOpen, homeHref, m2Available, navigate, quote, registerDetail, showToast, viewerId],
   );
 
   const conversationUi: ConversationUiState = {

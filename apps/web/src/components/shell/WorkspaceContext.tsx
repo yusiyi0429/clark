@@ -51,6 +51,8 @@ export type WorkspaceApi = {
   bookMeetingFrom?: (draft: BookingDraft) => void;
   /** M2（目标拆解与复盘）对当前登录人可用。 */
   m2Available?: boolean;
+  /** 这是 CEO 工作台（首页是 /）：约会议挑挂点时公司目标在前、Mission 按战场分组。 */
+  ceo?: boolean;
 };
 
 export const WorkspaceContext = createContext<WorkspaceApi | null>(null);

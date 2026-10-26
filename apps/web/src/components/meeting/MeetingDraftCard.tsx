@@ -33,7 +33,7 @@ function span(startIso: string, endIso: string): string {
 }
 
 export function MeetingDraftCard({ card }: { card: Draft }) {
-  const { navigate, viewerId, bookMeetingFrom } = useWorkspace();
+  const { navigate, viewerId, bookMeetingFrom, ceo } = useWorkspace();
   /** undefined：还在读这张卡约好没有。 */
   const [booked, setBooked] = useState<Booked | null | undefined>(undefined);
   const [anchor, setAnchor] = useState<TWorldAnchor | null>(card.anchor);
@@ -122,7 +122,7 @@ export function MeetingDraftCard({ card }: { card: Draft }) {
           ) : null}
           {!anchor && !picking ? (live ? <button type="button" className={d.link} onClick={() => setPicking(true)}>选</button> : "—") : null}
           {picking && options ? (
-            <WorldAnchorPicker options={options} value={anchor ? [anchor] : []} viewerId={viewerId ?? ""} nameOf={nameOf}
+            <WorldAnchorPicker options={options} value={anchor ? [anchor] : []} viewerId={viewerId ?? ""} nameOf={nameOf} company={ceo}
               onChange={(next) => { setAnchor(next[0] ?? null); if (next[0]?.kind !== "po") setPicking(false); }} />
           ) : null}
         </dd>
