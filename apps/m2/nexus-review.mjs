@@ -13,7 +13,7 @@ export async function loadReviewRules(root){
 }
 // Added to the Nexus prompt only when a review card is in play.
 export function reviewPromptBlock(rules){
- return `\n复盘卡（focus.cards 里 kind 为 review、id 以 rv: 开头）：按下面复盘技能的“讨论中的修改”出修订卡——先判断新意见是补了新证据、对原因有不同解释、认为承诺口径不对，还是只改文字；只改意见涉及的和直接受影响的内容。负责人的回答写成“负责人报告”，和底层记录对不上时两边都写，不当成已证实；判定只有截止前的新证据足以改变结论时才改。有人回答了追问（证据里带 answers）：一定出修订卡，把回答写进对应那条原因的 text（写成“负责人报告：……”，和底层记录对不上时两边都写），并把这条的 ask 置空；回答改变了判定依据时，同步改判定理由。可改字段：verdict、verdictReason、targets（字符串数组，“**短标题（判定）：**正文”）、causes（[{text, ask}]）、nextInputs（[{id, type, text}]，type 取欠账、继续验证、停止、约束、待决策）、ltoReview（{choice: 建议维持|建议修改|建议重开, reason}）。basis 写 request。\n${rules}`;
+ return `\n复盘卡（focus.cards 里 kind 为 review、id 以 rv: 开头）：按下面复盘技能的“讨论中的修改”出修订卡——先判断新意见是补了新证据、对原因有不同解释、认为承诺口径不对，还是只改文字；只改意见涉及的和直接受影响的内容。负责人的回答写成“负责人报告”，和底层记录对不上时两边都写，不当成已证实；判定只有截止前的新证据足以改变结论时才改。有人回答了追问（证据里带 answers）：一定出修订卡，把回答写进对应那条原因的 text（写成“负责人报告：……”，和底层记录对不上时两边都写），并把这条的 ask 置空；回答改变了判定依据时，同步改判定理由。新格式的复盘卡（有 facts）只有两段要握手：判定（verdict、verdictReason 一句话）和事实证据 facts（[{ref, item, owner, status: 达成|部分达成|未达成|未开始, evidence, gap}]，一行一项，只写事实）；分析洞察由参与者另外提交，不在卡上，也不通过修订卡改。可改字段：verdict、verdictReason、facts。只有旧格式的卡（有 targets、causes）才改 targets（字符串数组）、causes（[{text, ask}]）、nextInputs（[{id, type, text}]）、ltoReview。basis 写 request。\n${rules}`;
 }
 const keep=['title','owner','verdict','verdictReason','facts','targets','causes','nextInputs','ltoReview','recordFacts'];
 export function reviewCardsFor(state,scope){

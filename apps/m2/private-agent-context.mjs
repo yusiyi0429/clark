@@ -1,8 +1,10 @@
-import {canRead,currentVersion,cardStatus,mayRevise,confirmationSlots} from './governance.mjs';
+import {canRead,currentVersion,cardStatus,mayRevise,confirmationSlots,insightView} from './governance.mjs';
 import {memberProfiles} from './member-profiles.mjs';
 const name=id=>memberProfiles[id]?.name||id;
 const fail=message=>{throw Object.assign(Error(message),{status:403});};
-const fields=['id','level','name','unit','owner','title','result','time','why','boundary','path','dependencies','checks','logic','handoffs','parentLtoReference','tradeoff','expectedProgress','milestones'];
+const fields=['id','level','name','unit','owner','title','result','time','why','boundary','path','dependencies','checks','logic','handoffs','parentLtoReference','tradeoff','expectedProgress','milestones',
+ // Review cards (评测 2026-10-26: the Agent on a review page could not see the review itself).
+ 'kind','ref','verdict','verdictReason','facts','targets','causes','nextInputs','ltoReview'];
 export function privateAgentContext(state,actor,requested={},sourceFallback=[]){
  const readable=Object.values(state.cards).filter(c=>canRead(actor,c)),byId=new Map(readable.map(c=>[c.id,c]));
  const selected=requested.selection?.id?byId.get(requested.selection.id):null;
@@ -14,7 +16,8 @@ export function privateAgentContext(state,actor,requested={},sourceFallback=[]){
  const view={scope,selection,canvasView:requested.canvasView==='gantt'?'gantt':'document',expanded:(Array.isArray(requested.expanded)?requested.expanded:[]).filter(id=>byId.has(id)).slice(0,100)};
  const pageCards=selected?[selected,...readable.filter(c=>c.parentId===selected.id)]:scope?readable.filter(c=>(c.unit||c.id)===scope):view.canvasView==='document'&&!actor.ceo?readable.filter(c=>!c.parentId&&actor.unitDri?.includes(c.id)||c.level==='mission'&&actor.missionDri?.includes(c.id)&&!actor.unitDri?.includes(c.unit)):readable.filter(c=>!c.parentId);
  const ids=new Set(pageCards.map(c=>c.id));
- const project=c=>{const v=currentVersion(c);return {...Object.fromEntries(fields.filter(k=>v.content[k]!==undefined).map(k=>[k,v.content[k]])),version:v.number,status:cardStatus(c),mayRevise:mayRevise(actor,c),upstreamChange:c.upstreamChange};};
+ // Insights as this member may see them: their own before the reveal, everyone's after.
+ const project=c=>{const v=currentVersion(c),ins=c.kind==='review'?insightView(state,c,actor):undefined;return {...Object.fromEntries(fields.filter(k=>v.content[k]!==undefined).map(k=>[k,v.content[k]])),...(c.kind==='review'?{kind:'review'}:{}),version:v.number,status:cardStatus(c),mayRevise:mayRevise(actor,c),upstreamChange:c.upstreamChange,...(ins?{insights:ins.revealed?{revealed:true,items:ins.items.map(({author,text})=>({author,text})),nexus:ins.nexus?.text||null}:{revealed:false,mine:ins.mine.map(x=>x.text),submitters:ins.submitters}}:{})};};
  const ancestors=[];for(let c=selected;c?.parentId&&byId.has(c.parentId);){c=byId.get(c.parentId);ancestors.unshift(project(c));}
  const relevantPrivate=e=>{const v=e.context||{};return selection?v.selection?.id===selection.id||!v.selection?.id&&v.scope===scope:scope?v.scope===scope:!v.scope&&!v.selection?.id;};
  const relevantPublic=e=>e.scope===scope&&(!e.context?.selection?.id||!e.context?.block||e.context.block==='card'||ids.has(e.context.selection.id));

@@ -124,7 +124,7 @@
     },
     {
       "path": "governance.mjs",
-      "sha256": "1ff81bfec5bdca9c0213a882c4677cae59aca345cb620461b109f8fa2c10e2dc"
+      "sha256": "e7ff3d312c86c23e8a5a00643c17b5b6e449166f9b16fc9f42e2757b36b4cf03"
     },
     {
       "path": "Handshake.jsx",
@@ -200,7 +200,7 @@
     },
     {
       "path": "nexus-review.mjs",
-      "sha256": "1a5171c209c965d5c9e4b69475972ee4ff68f74dd7db44e53dff85e9e719ea5c"
+      "sha256": "dcb2f78c178f0bb7e4202a4eb42f88dc7e6e7bcb0865fd378a91cc65e4fd83f2"
     },
     {
       "path": "NexusIsland.jsx",
@@ -236,7 +236,7 @@
     },
     {
       "path": "private-agent-context.mjs",
-      "sha256": "23fc2f1af4b92c287bdc618f2520cd4ffecb31bba227fc8efb56618c21bdee9b"
+      "sha256": "68d95e75cf168d830061c2e5b5039c5956b5acdd7c15ece38fd00c7626c618f8"
     },
     {
       "path": "proposal-confirmation.mjs",
@@ -272,7 +272,7 @@
     },
     {
       "path": "review-generation.mjs",
-      "sha256": "74f2a0df7219382ff5997a68618b53056950b651455c2ae85d9ec65e0121a352"
+      "sha256": "88951c681b9d1da54a320492979293f638c0c3ce3b282996162582e47ab28aee"
     },
     {
       "path": "review-handoff.mjs",
@@ -368,7 +368,7 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "10e446fa1ac90fd07a7a78d5d4fc3e8aca6618f53a17d5159b1ff718ebf7bf8d"
+      "sha256": "5db97b88c190814aab1d309158ddf2188901bb873f6958662c43b07fcfc1e154"
     },
     {
       "path": "shared-projection.mjs",
@@ -440,5 +440,5 @@
     "fingerprint": "117faa063216",
     "source": "apps/decoding-mvp/.runtime/eval/review/skills/tkos-review-2.1.1"
   },
-  "mergeBase": "/Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261026b"
+  "mergeBase": "/Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261026c"
 }

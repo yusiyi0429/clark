@@ -31,8 +31,17 @@ export function insightParticipants(state,card){
  if(ceo)names.add(ceo);
  const reviews=Object.values(state.cards).filter(isReview);
  // The company review is the CEO's (only the CEO sees it); Nexus adds its synthesis after the reveal.
- if(card.level!=='company'){const unit=unitOf(card),po=reviews.find(c=>c.level==='po'&&unitOf(c)===unit);if(po)owner(po).forEach(n=>names.add(n));
-  if(card.level==='po'){for(const c of reviews)if(c.level==='mission'&&unitOf(c)===unit)owner(c).forEach(n=>names.add(n));}else owner(card).forEach(n=>names.add(n));}
+ // Inside a unit everything is open (陈溪南 2026-10-26): the unit DRI, every Mission DRI of the unit and the CEO may write under any of its reviews.
+ if(card.level!=='company'){const unit=unitOf(card);for(const c of reviews)if(unitOf(c)===unit&&c.level!=='company')owner(c).forEach(n=>names.add(n));}
+ return [...names].filter(n=>Object.values(memberProfiles).some(p=>p.name===n));
+}
+// Who still owes at least one insight under a review: the people the review is about — a Mission review's owner and
+// unit DRI, a unit review's DRI and its Mission DRIs, the company review's CEO. Others may write but are not chased.
+export function insightOwed(state,card){
+ const ceo=Object.values(memberProfiles).find(p=>p.ceo)?.name,owner=c=>String(currentVersion(c).content.owner||'').split(/[、,，\s]+/).filter(Boolean);
+ if(card.level==='company')return ceo?[ceo]:[];
+ const unit=unitOf(card),reviews=Object.values(state.cards).filter(c=>isReview(c)&&unitOf(c)===unit),po=reviews.find(c=>c.level==='po'),names=new Set(po?owner(po):[]);
+ if(card.level==='po'){for(const c of reviews)if(c.level==='mission')owner(c).forEach(n=>names.add(n));}else owner(card).forEach(n=>names.add(n));
  return [...names].filter(n=>Object.values(memberProfiles).some(p=>p.name===n));
 }
 // What one member sees of a review's insights: before the reveal, who wrote how many and their own; after, everything.
@@ -40,8 +49,8 @@ export function insightView(state,card,actor){
  if(!isReview(card))return undefined;
  const list=state.insights?.[card.id]||[],revealed=!!state.insightsRevealed,name=id=>memberProfiles[id]?.name||id;
  const counts=new Map();for(const x of list)counts.set(x.author,(counts.get(x.author)||0)+1);
- const participants=insightParticipants(state,card);
- const base={revealed,participants,submitters:[...counts].map(([id,count])=>({name:name(id),count})),missing:participants.filter(n=>![...counts.keys()].some(id=>name(id)===n))};
+ const participants=insightParticipants(state,card),owed=insightOwed(state,card);
+ const base={revealed,participants,owed,submitters:[...counts].map(([id,count])=>({name:name(id),count})),missing:owed.filter(n=>![...counts.keys()].some(id=>name(id)===n))};
  if(!revealed)return {...base,mine:list.filter(x=>x.author===actor.id).map(({id,text,createdAt,updatedAt})=>({id,text,createdAt,updatedAt}))};
  const nexus=state.insightNexus?.[card.id];
  return {...base,items:list.map(x=>({id:x.id,author:name(x.author),mine:x.author===actor.id,text:x.text,createdAt:x.createdAt,updatedAt:x.updatedAt})),nexus:nexus?.text?{text:nexus.text,createdAt:nexus.createdAt}:nexus?.error?{error:nexus.error}:null};

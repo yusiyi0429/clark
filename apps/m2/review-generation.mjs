@@ -197,6 +197,8 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
   const ev=[...(bySubject[g.id]||[]),...(byUnit[unit]||[])];
   const children=stage1.filter(c=>c.level==='mission'&&c.unit===unit).map(c=>c.id);
   const c={...base,id:unit,level:'ru',unit,parent:'company',title:g.object?.business?.title||'',owner:ownerOf(g.object)||ownerOf(ruObject.get(unit)),commitment:blockLines(g.object?.business?.blocks),commitmentSource:`本体 ${month} 月 RU PO（${statusOf(g.object)}）`,evidence:numbered(ev),recordFacts:recordFacts(ev),objectId:g.id,...(children.length?{children}:{})};
+  // A unit with no Mission reports on its PO's success criteria, one line each (评测 2026-10-26).
+  if(!children.length){const crit=successCriteria(g.object);if(crit.length)c.expectedFacts=crit.map((text,i)=>({ref:`ref-${i+1}`,item:text}));}
   (children.length?stage2:stage1).push(c);
  }
  for(const [unit,name] of reviewUnits)if(!goals[unit])missing.push(`${name}：本体里没有 ${month} 月 RU PO，不复盘`);
@@ -238,7 +240,7 @@ export function lengthFindings(r){
 }
 // 漏行 measured, not judged: which Tasks / Missions / units the input has and the fact lines do not.
 export function rowFacts(c,r){
- const want=c.level==='mission'?(c.tasks?.length?c.tasks.map(t=>({ref:t.ref,item:t.title})):(c.expectedFacts||[])):(c.children||[]).map(id=>({ref:id,item:id}));
+ const want=c.level==='mission'?(c.tasks?.length?c.tasks.map(t=>({ref:t.ref,item:t.title})):(c.expectedFacts||[])):c.children?.length?c.children.map(id=>({ref:id,item:id})):(c.expectedFacts||[]);
  const lines=new Set((r?.facts||[]).flatMap(f=>[f.ref,f.item]));
  return {expected:want.length,lines:(r?.facts||[]).length,missing:want.filter(w=>!lines.has(w.ref)&&!lines.has(w.item)).map(w=>w.item)};
 }
@@ -317,8 +319,7 @@ export function reviewProblems(run,input,{roster=[]}={}){
    // 三段式 (2026-10-26): a verdict with one line of reason, then fact lines; insights are written by people, not generated.
    if(!filled(r.verdictReason))out.push({unit:id,problem:'缺判定理由'});
    if(!r.facts.length)out.push({unit:id,problem:'缺事实证据'});else if(factProblem(r.facts))out.push({unit:id,problem:'事实证据格式不对：每行要有这一项、状态（达成/部分达成/未达成/未开始）和证据'});
-   const c=expected.find(x=>x.id===id),lines=new Set(r.facts.flatMap(f=>[f.ref,f.item]));
-   const lost=(c?.tasks||[]).filter(t=>!lines.has(t.ref)&&!lines.has(t.title)).map(t=>t.title);if(lost.length)out.push({unit:id,problem:`这些 Task 没有事实行：${lost.join('、').slice(0,120)}`});
+   const c=expected.find(x=>x.id===id),lost=c?rowFacts(c,r).missing:[];if(lost.length)out.push({unit:id,problem:`这些项没有事实行：${lost.join('、').slice(0,120)}`});
    if(r.insights!=null||r.causes!=null||r.nextInputs!=null)out.push({unit:id,problem:'生成结果里不该有洞察、原因或下月输入，这些由大家提交'});
   }else{
    const miss=['verdictReason','targets','causes','nextInputs'].filter(f=>!filled(r[f]));if(miss.length)out.push({unit:id,problem:`缺 ${miss.join('、')}`});
