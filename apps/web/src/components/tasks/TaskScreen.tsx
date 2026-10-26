@@ -66,16 +66,21 @@ export function TaskScreen({ initialDetail }: { initialDetail: Detail }) {
   };
   // 通知里的「等你验收」带 ?accept=1 打开：直接弹出验收，地址里的参数随即去掉（刷新不再弹）。
   // 这一页已经开着时再点那条通知，路由不会重新挂载这一页，所以跟着地址里的参数走，不只在打开时看一次。
-  const acceptLink = useSearchParams()?.get("accept") === "1";
+  // 首页验收窗里「写完成标准」带 ?edit=1 打开：直接展开编辑表单，参数同样随即去掉。
+  const params = useSearchParams();
+  const acceptLink = params?.get("accept") === "1";
+  const editLink = params?.get("edit") === "1";
   useEffect(() => {
-    if (!acceptLink) return;
+    if (!acceptLink && !editLink) return;
     const url = new URL(window.location.href);
     url.searchParams.delete("accept");
+    url.searchParams.delete("edit");
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-    if (acceptable) setAcceptOpen(true);
+    if (acceptLink && acceptable) setAcceptOpen(true);
+    if (editLink && owner) setEditing(true);
     // 只响应参数出现的那一下。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [acceptLink]);
+  }, [acceptLink, editLink]);
   const failed = (failure: { message?: string; latestTask?: Task } | undefined, fallback: string) => {
     if (failure?.latestTask) { setDetail((current) => ({ ...current, task: failure.latestTask! })); void refresh(); }
     setError(failure?.latestTask ? "这件事刚被改过，请核对最新内容再保存。" : failure?.message ?? fallback);

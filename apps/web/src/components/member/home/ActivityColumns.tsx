@@ -127,7 +127,7 @@ export function ActivityColumns({ activities, today, weekStart, weekEnd, mission
           onClose={() => setAccepting(null)}
           onDone={async () => setAccepting(null)}
           onStale={() => void accept(accepting.detail.task.id, accepting.origin)}
-          onEditStandards={() => onNavigate(taskHref(accepting.detail.task.id), accepting.origin)} />
+          onEditStandards={() => onNavigate(`${taskHref(accepting.detail.task.id)}?edit=1`, accepting.origin)} />
       ) : null}
     </div>
   );
