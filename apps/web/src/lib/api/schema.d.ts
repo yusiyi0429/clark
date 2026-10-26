@@ -8520,7 +8520,6 @@ export interface components {
                     title: string;
                     unit: string;
                     shape: "funnel" | "counts";
-                    available: boolean;
                     steps: {
                         key: string;
                         label: string;

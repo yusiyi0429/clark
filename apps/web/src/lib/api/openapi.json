@@ -46127,7 +46127,6 @@
                     "title",
                     "unit",
                     "shape",
-                    "available",
                     "steps",
                     "stuckStep",
                     "breaks",
@@ -46171,9 +46170,6 @@
                           "type": "string"
                         }
                       ]
-                    },
-                    "available": {
-                      "type": "boolean"
                     },
                     "steps": {
                       "type": "array",

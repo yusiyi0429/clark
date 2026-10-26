@@ -109,13 +109,12 @@ function Stat({ label, value, total, delta }: { label: string; value: string; to
 function PathCard({ path }: { path: TUsagePath }) {
   const first = path.steps[0]?.units ?? 0;
   return (
-    <article className={u.path} data-key={path.key} data-shape={path.shape} data-off={path.available ? undefined : ""}>
+    <article className={u.path} data-key={path.key} data-shape={path.shape}>
       <header className={u.pathHead}>
         <h3>{path.title}</h3>
         <span className={u.unit}>{path.unit}</span>
-        {!path.available ? <span className={u.off}>未接入</span> : null}
       </header>
-      {!path.available ? null : path.shape === "counts" ? (
+      {path.shape === "counts" ? (
         <dl className={u.counts}>
           {path.steps.map((step, index) => (
             <div key={step.key}>

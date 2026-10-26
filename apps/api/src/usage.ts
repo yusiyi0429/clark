@@ -8,7 +8,7 @@ import type { PeopleDirectory } from "./peopleDirectory.js";
 
 /**
  * 使用周报（迁移 210）：周一到周日（北京时间）一周一份。能从现有表推导的都现算——
- * 对话（agent_runs kind=conversation）、会议卡（meeting_cards / meeting_card_confirmations / meeting_card_syncs，会议卡合入前这条路径记「未接入」）、
+ * 对话（agent_runs kind=conversation）、会议卡（meeting_cards / meeting_card_confirmations / meeting_card_syncs）、
  * 个人记忆（回答里的记忆标记、被替代、被忘掉）、上手完成（person_onboarding）、问题台账（与管理员视图同源：质量信号、失败的运行、后台任务、本体写入，
  * 以及影响卡「和我无关」）；推导不了的（哪天用过、登录、界面上原地改 / 彻底删记忆、上手走到哪一步）记在 usage_events。
  * 只读计数、时间和 personId；判断「说不对」只在库里比对开头几个字，正文不出库。
@@ -102,17 +102,15 @@ async function conversationPath(q: Query, range: Range): Promise<{ path: Omit<TU
   ].filter((item) => item.count > 0);
   const breaksOf = new Map<string, number>();
   for (const turn of [...failed, ...answered.filter((item) => item.rejected)]) breaksOf.set(turn.person_id, (breaksOf.get(turn.person_id) ?? 0) + 1);
-  return { path: { key: "conversation", title: "全局对话", unit: "次", shape: "funnel", available: true, steps, stuckStep: funnel(steps), breaks }, breaksOf };
+  return { path: { key: "conversation", title: "全局对话", unit: "次", shape: "funnel", steps, stuckStep: funnel(steps), breaks }, breaksOf };
 }
 
 type MeetingRow = { host: string; minutes_status: string; carded: boolean; confirmed: boolean; syncs: string[] | null };
 
-/** 会议写入：会议结束 → 会议卡生成 → 主持人确认 → 写入本体（会议卡 B 方案的三张表；还没合入时记「未接入」）。 */
+/** 会议写入：会议结束 → 会议卡生成 → 主持人确认 → 写入本体（会议卡 B 方案的三张表，迁移 200）。 */
 async function meetingPath(q: Query, range: Range): Promise<Omit<TUsagePath, "previousUnits">> {
   const labels: [string, string][] = [["ended", "会议结束"], ["carded", "会议卡生成"], ["confirmed", "主持人确认"], ["written", "写入本体"]];
   const base = { key: "meeting" as const, title: "会议写入", unit: "场", shape: "funnel" as const };
-  const ready = (await q("SELECT to_regclass('public.meeting_card_syncs') IS NOT NULL AS ready")).rows[0]?.ready === true;
-  if (!ready) return { ...base, available: false, steps: labels.map(([key, label]) => ({ key, label, units: 0, people: 0 })), stuckStep: null, breaks: [] };
   const rows = (await q(
     `SELECT m.lead_dri_id AS host, m.minutes_status,
        COALESCE(c.draft_status = 'draft_ready' OR c.current_revision IS NOT NULL, false) AS carded,
@@ -137,7 +135,7 @@ async function meetingPath(q: Query, range: Range): Promise<Omit<TUsagePath, "pr
     { step: "written", label: "写入中", count: count(unwritten, (row) => !row.syncs?.includes("failed") && (row.syncs?.includes("pending") ?? false)) },
     { step: "written", label: "选了不写入", count: count(unwritten, (row) => !row.syncs?.some((status) => status === "failed" || status === "pending") && (row.syncs?.includes("skipped") ?? false)) },
   ].filter((item) => item.count > 0);
-  return { ...base, available: true, steps, stuckStep: funnel(steps), breaks };
+  return { ...base, steps, stuckStep: funnel(steps), breaks };
 }
 
 /** 个人记忆：被用到（回答里出现记忆标记）、被改（替代 + 界面上原地改）、被删（忘掉 + 彻底删除）。三项各自计数。 */
@@ -152,7 +150,7 @@ async function memoryPath(q: Query, range: Range): Promise<Omit<TUsagePath, "pre
   ]);
   const step = (key: string, label: string, rows: { person_id: string }[]): TUsageStep => ({ key, label, units: rows.length, people: distinct(rows, (row) => row.person_id) });
   const steps = [step("used", "被用到", used.rows), step("edited", "被改", edited.rows), step("deleted", "被删", deleted.rows)];
-  return { key: "memory", title: "个人记忆", unit: "次", shape: "counts", available: true, steps, stuckStep: null, breaks: [] };
+  return { key: "memory", title: "个人记忆", unit: "次", shape: "counts", steps, stuckStep: null, breaks: [] };
 }
 
 /** 上手流程的步骤，顺序与 WelcomeFlow 一致（按角色和配置会跳过其中几步）。 */
@@ -193,7 +191,7 @@ async function onboardingPath(q: Query, range: Range): Promise<Omit<TUsagePath, 
     return { key, label: labels[index], units: people, people };
   });
   const breaks = keys.map((key, index) => ({ step: key, label: "跳过", count: skipped.filter((value) => value === index).length })).filter((item) => item.count > 0);
-  return { key: "onboarding", title: "上手", unit: "人", shape: "funnel", available: true, steps, stuckStep: funnel(steps), breaks };
+  return { key: "onboarding", title: "上手", unit: "人", shape: "funnel", steps, stuckStep: funnel(steps), breaks };
 }
 
 type LedgerRow = { key: string; source: TUsageLedgerItem["source"]; label: string; person: string | null; at: Date; open: boolean };
@@ -356,7 +354,6 @@ export function usageMarkdown(report: TUsageWeekReport): string {
   ];
   for (const path of report.paths) {
     lines.push("", `### ${path.title}（${path.unit}）`, "");
-    if (!path.available) { lines.push("未接入"); continue; }
     if (path.shape === "counts") {
       lines.push("| 项 | 次数 | 人 | 上周 |", "| --- | --- | --- | --- |",
         ...path.steps.map((step, index) => `| ${step.label} | ${step.units} | ${step.people} | ${path.previousUnits[index] ?? 0} |`));

@@ -129,8 +129,8 @@ describe("使用周报", () => {
       { step: "answered", label: "点了重答", count: 1 }, { step: "accepted", label: "说「不对」", count: 1 },
     ]);
     expect(conversation.previousUnits).toEqual([1, 1, 1]);
-    // 会议卡还没合入：未接入。
-    expect(pathOf(view, "meeting")).toMatchObject({ available: false, stuckStep: null });
+    // 这一周没有会议：会议写入那条漏斗是空的。
+    expect(pathOf(view, "meeting")).toMatchObject({ steps: [{ units: 0 }, { units: 0 }, { units: 0 }, { units: 0 }] });
     expect(pathOf(view, "memory").steps.map((step) => [step.key, step.units, step.people])).toEqual([["used", 1, 1], ["edited", 2, 2], ["deleted", 1, 1]]);
     // 上手：乙、丙登录；丙停在雷达，乙走完。
     const onboarding = pathOf(view, "onboarding");
@@ -150,11 +150,8 @@ describe("使用周报", () => {
     expect(markdown.body).not.toContain("机密正文");
   }, 30_000);
 
-  it("会议卡合入后按会议结束 → 会议卡 → 主持人确认 → 写入本体算", async () => {
+  it("会议写入按会议结束 → 会议卡 → 主持人确认 → 写入本体算", async () => {
     const { t, admin } = await setup();
-    await t.sql(`CREATE TABLE IF NOT EXISTS meeting_cards (meeting_id UUID PRIMARY KEY, draft_status TEXT NOT NULL DEFAULT 'created', current_revision INTEGER)`);
-    await t.sql(`CREATE TABLE IF NOT EXISTS meeting_card_confirmations (meeting_id UUID NOT NULL, revision INTEGER NOT NULL)`);
-    await t.sql(`CREATE TABLE IF NOT EXISTS meeting_card_syncs (meeting_id UUID NOT NULL, revision INTEGER NOT NULL, event_status TEXT NOT NULL)`);
     const meeting = async (host: string, ended: string, minutes: string) => {
       const id = randomUUID();
       await t.sql(`INSERT INTO meetings (id, version, title, status, scheduled_at, ends_at, ended_at, lead_dri_id, ceo_participant_id, participants, issue_ids, preflight, draft, origin_ref, minutes_status)
@@ -166,12 +163,12 @@ describe("使用周报", () => {
     const pending = await meeting(THIRD, "2026-10-19T01:20:00Z", "ready");
     await meeting(THIRD, "2026-10-19T01:30:00Z", "waiting");
     await t.sql("INSERT INTO meeting_cards (meeting_id, draft_status, current_revision) VALUES ($1, 'draft_ready', 1), ($2, 'draft_ready', 1), ($3, 'draft_ready', NULL)", [written, failed, pending]);
-    await t.sql("INSERT INTO meeting_card_confirmations (meeting_id, revision) VALUES ($1, 1), ($2, 1)", [written, failed]);
+    await t.sql(`INSERT INTO meeting_card_confirmations (meeting_id, revision, draft_version, kind, payload, confirmation, write_to_world)
+      VALUES ($1, 1, 1, 'first', '{}', '{}', true), ($2, 1, 1, 'first', '{}', '{}', true)`, [written, failed]);
     await t.sql("INSERT INTO meeting_card_syncs (meeting_id, revision, event_status) VALUES ($1, 1, 'succeeded'), ($2, 1, 'failed')", [written, failed]);
 
     const view = (await get(admin, "/api/admin/usage")).json() as TUsageResponse;
     const path = pathOf(view, "meeting");
-    expect(path.available).toBe(true);
     expect(path.steps.map((step) => [step.key, step.units, step.people])).toEqual([["ended", 4, 2], ["carded", 3, 2], ["confirmed", 2, 1], ["written", 1, 1]]);
     expect(path.breaks).toEqual([
       { step: "carded", label: "妙记未生成", count: 1 }, { step: "confirmed", label: "待确认", count: 1 }, { step: "written", label: "写入失败", count: 1 },

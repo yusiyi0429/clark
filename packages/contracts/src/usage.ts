@@ -52,8 +52,6 @@ export const UsagePath = Type.Object({
   unit: Type.String(),
   /** funnel：前一步到了才有后一步；counts：几项各自计数（个人记忆）。 */
   shape: Type.Union([Type.Literal("funnel"), Type.Literal("counts")]),
-  /** 这条路径依赖的数据还没接入（如会议卡还没合入）。 */
-  available: Type.Boolean(),
   steps: Type.Array(UsageStep),
   /** 流失最多的那一步（到了这一步、没到下一步的最多）；没有流失为空。 */
   stuckStep: Type.Union([Type.String(), Type.Null()]),
