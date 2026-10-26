@@ -62,6 +62,7 @@
 .card .itemText>span{font-size:var(--type-body);line-height:1.5;font-weight:560;color:var(--notice-ink);letter-spacing:-.005em}
 .card .itemText small{font-size:var(--type-meta);line-height:1.45;color:var(--notice-muted)}
 .item[data-tone=done] .itemText>span{font-weight:450;color:var(--notice-muted)}
+.card[data-plain] .itemText>span{font-weight:400}
 .item>svg{flex:none;margin-top:5px;color:#a2a6ad}
 
 .announcement{display:flex;align-items:flex-start;gap:8px;font-size:var(--type-note);line-height:1.6;color:rgb(255 255 255/58%);text-shadow:0 1px 8px rgb(1 5 15/42%)}

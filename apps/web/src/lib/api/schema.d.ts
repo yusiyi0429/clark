@@ -10262,6 +10262,8 @@ export interface components {
                 id: string;
                 kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned" | "request_received" | "request_answered" | "request_done" | "request_asked" | "collection_reminder" | "meeting_card_pending" | "task_progress_added";
                 text: string;
+                subject?: string;
+                source?: string;
                 objectType: "task" | "meeting" | "issue" | "request";
                 objectId: string;
                 createdAt: string;

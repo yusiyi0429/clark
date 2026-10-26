@@ -409,6 +409,10 @@ export const NotificationView = Type.Object(
     id: Type.String({ minLength: 1 }),
     kind: NotificationKind,
     text: Type.String({ minLength: 1 }),
+    /** 事情本身（会后分派：执行事项全文）；通知栏正文只写它，来源写在小字里。 */
+    subject: Type.Optional(Type.String({ minLength: 1 })),
+    /** 来自哪儿（会后分派：会议名）。 */
+    source: Type.Optional(Type.String({ minLength: 1 })),
     /** issue：被拉进议题群（工单 08），点开进 /me/issues/{objectId}。 */
     objectType: Type.Union([Type.Literal("task"), Type.Literal("meeting"), Type.Literal("issue"), Type.Literal("request")]),
     objectId: Type.String({ minLength: 1 }),
