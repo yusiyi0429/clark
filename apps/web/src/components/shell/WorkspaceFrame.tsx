@@ -607,11 +607,10 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
             data-covered={(detailOpen && !noticeTransition && !closing && !entering && !peek) || undefined}
             style={noticeTransition && !openingEmpty ? { viewTransitionName: "home-board" } : undefined}
           >
-            {/* 成员首页的约会议、复盘在首页的快捷卡里（HomeActions）。 */}
+            {/* 成员首页的约会议在首页的快捷卡里（HomeActions）；去 M2 的入口在通知栏（M2EntryNotice）。 */}
             {homeHref === "/" ? (
               <div className={s.m2Entry}>
                 {viewerId ? <button type="button" onClick={bookMeeting}>约会议</button> : null}
-                {m2Available ? <a href="/m2/">目标拆解与协作 <span aria-hidden="true">→</span></a> : null}
               </div>
             ) : null}
             {home}

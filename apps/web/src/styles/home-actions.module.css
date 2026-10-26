@@ -1,7 +1,7 @@
 /*
  * 成员首页的快捷卡内容（components/member/home/HomeActions.tsx），照样稿 home-layout-v9；卡片外壳在 home-plan.module.css 的 .quick。
- * 方块按钮，字居中：平时 2×2；复盘窗口期多一格，2 列 × 3 行，仍在同一个正方形里。主区窄时（home-plan 的 .plan 容器窄于 880）排成一排小方块，放不下就换行。
- * 按钮是 ts-design Button（按下、聚焦由它管；开着的复盘是同样式的链接）：约会议用 primary（主题蓝实心）；
+ * 方块按钮，字居中：2×2。主区窄时（home-plan 的 .plan 容器窄于 880）排成一排小方块，放不下就换行。
+ * 按钮是 ts-design Button（按下、聚焦由它管）：约会议用 primary（主题蓝实心）；
  * 其余半透明白底、细边、深灰字。「等回复」的条数是右上角 --warning 小圆角标；雷达有未读时右上角一个 --counter 红点。
  * 前四格右下角各一件釉色小物件（.motif），位置、大小一样，略出到格外（格子裁掉）；悬停、键盘聚焦时浓一点、动一下。
  */
@@ -57,7 +57,7 @@
 .unread { position: absolute; top: 10px; right: 10px; width: 7px; height: 7px; border-radius: 50%; background: var(--counter); }
 
 /*
- * 角落小物件：高取格子的 52%（2×2 约 60px，复盘窗口期 3 行约 40px），略出到格外（格子裁掉），压在字下面（格子 isolate 自成层叠上下文，-1 仍在底色之上）。
+ * 角落小物件：高取格子的 52%（2×2 约 60px），略出到格外（格子裁掉），压在字下面（格子 isolate 自成层叠上下文，-1 仍在底色之上）。
  * 颜色、渐变、高光都画在 svg 里（HomeActions 的 MOTIFS）；这里只管大小、浓淡和悬停时动一下。
  */
 .motif.motif {
@@ -94,7 +94,7 @@
   .tile:is([data-hovered='true'], [data-focus-visible='true']) .sweep { transform: rotate(12deg); }
 }
 
-/* 主区窄：一排小方块，放不下（复盘窗口期多一格）就自动换到第二行，字不截断。小物件固定 32px；手持一列时格子太小，不画。 */
+/* 主区窄：一排小方块，放不下就自动换到第二行，字不截断。小物件固定 32px；手持一列时格子太小，不画。 */
 @container (max-width: 879px) {
   .tiles { grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); grid-auto-rows: 56px; height: auto; }
   .tile.tile { height: 56px; padding: 0 6px; border-radius: 14px; }

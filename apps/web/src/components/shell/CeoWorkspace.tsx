@@ -32,7 +32,7 @@ export function CeoWorkspace({ initialCards, viewerId, account, children }: { in
   return (
     <WorkspaceFrame homeHref="/" viewerId={viewerId} account={account} homeCards={cards} agentTitle="我的对话"
       home={<CeoHome cards={cards} onCard={onCard} account={account} />}
-      notifications={(api, pathname) => <NotificationRail cards={cards} viewerId={viewerId} onNavigate={api.navigate} onHome={() => api.navigate("/")} homeActive={!api.detailOpen} currentHref={api.detailOpen ? pathname : undefined} account={account} />}
+      notifications={(api, pathname) => <NotificationRail cards={cards} viewerId={viewerId} onNavigate={api.navigate} onHome={() => api.navigate("/")} homeActive={!api.detailOpen} currentHref={api.detailOpen ? pathname : undefined} account={account} m2Available={api.m2Available} />}
     >{children}</WorkspaceFrame>
   );
 }

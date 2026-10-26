@@ -17,6 +17,7 @@ import { COMPANY_TIMEZONE, monthDayTime } from "@/lib/companyTime";
 import { MissionCardNoticeGroup } from "./missionCards/MissionCardNoticeGroup";
 import { roundStatusText } from "./missionCards/roundStatusText";
 import { MonthlyReviewNotices } from "./monthlyReview/MonthlyReviewNotices";
+import { M2EntryNotice } from "./monthlyReview/M2EntryNotice";
 import { PersonalReviewBoard } from "./monthlyReview/PersonalReviewBoard";
 import { useWeeklyReviewBoard, WeeklyReviewBoard } from "./weeklyReview/WeeklyReviewBoard";
 import { RequestNotices } from "./requests/RequestNotices";
@@ -230,6 +231,7 @@ export function NotificationRail({
   currentHref,
   account,
   viewerId,
+  m2Available = false,
 }: {
   cards: Card[];
   onNavigate: (href: string, origin?: Element | null) => void;
@@ -240,6 +242,8 @@ export function NotificationRail({
   homeActive?: boolean;
   /** 当前打开的对象（高亮所在分组与那一行）。 */
   currentHref?: string;
+  /** M2 对当前登录人可用：出去 M2 的入口卡。 */
+  m2Available?: boolean;
 }) {
   const router = useRouter();
   const groups = railGroups(cards, new Date(), viewerId);
@@ -292,6 +296,7 @@ export function NotificationRail({
         <WeeklyReviewBoard onNavigate={onNavigate} state={weeklyReviews} />
         <PersonalReviewBoard onNavigate={onNavigate} />
         <RequestNotices base="/requests" currentHref={currentHref} onNavigate={onNavigate} />
+        <M2EntryNotice available={m2Available} />
         <MonthlyReviewNotices onNavigate={onNavigate} ceo />
         {groups.map((group) => {
           const current = group.items.some((item) => item.href === currentHref || (item.missionRound && payloadOf<TMissionRoundSummary>(item.missionRound).cards.some((row) => `/mission-cards/${row.cardId}` === currentHref?.split("?")[0])));
