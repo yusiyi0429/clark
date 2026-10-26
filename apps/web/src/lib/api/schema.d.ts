@@ -2845,6 +2845,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/tasks/{id}/standalone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 待归位的事项本人确认不属于任何 Mission（写一句为什么），之后按本人的独立事项算 */
+        post: operations["standaloneMyTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/notifications": {
         parameters: {
             query?: never;
@@ -3795,6 +3812,9 @@ export interface components {
                     } | null;
                     since: string;
                 } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
                 createdAt: string;
                 updatedAt: string;
             };
@@ -7658,6 +7678,9 @@ export interface components {
                 } | null;
                 since: string;
             } | null;
+            unplaced?: {
+                reason: string | null;
+            };
             createdAt: string;
             updatedAt: string;
         };
@@ -7761,6 +7784,9 @@ export interface components {
                         } | null;
                         since: string;
                     } | null;
+                    unplaced?: {
+                        reason: string | null;
+                    };
                     createdAt: string;
                     updatedAt: string;
                 }[];
@@ -9071,6 +9097,9 @@ export interface components {
                     } | null;
                     since: string;
                 } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
                 createdAt: string;
                 updatedAt: string;
             };
@@ -9214,6 +9243,9 @@ export interface components {
                     } | null;
                     since: string;
                 } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
                 createdAt: string;
                 updatedAt: string;
             }[];
@@ -9291,6 +9323,9 @@ export interface components {
                         } | null;
                         since: string;
                     } | null;
+                    unplaced?: {
+                        reason: string | null;
+                    };
                     createdAt: string;
                     updatedAt: string;
                 }[];
@@ -9368,6 +9403,9 @@ export interface components {
                     } | null;
                     since: string;
                 } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
                 createdAt: string;
                 updatedAt: string;
             }[];
@@ -9548,6 +9586,9 @@ export interface components {
                     } | null;
                     since: string;
                 } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
                 createdAt: string;
                 updatedAt: string;
             };
@@ -9658,6 +9699,9 @@ export interface components {
                         } | null;
                         since: string;
                     } | null;
+                    unplaced?: {
+                        reason: string | null;
+                    };
                     createdAt: string;
                     updatedAt: string;
                 };
@@ -9666,6 +9710,69 @@ export interface components {
                 overdue: boolean;
                 lastActivityAt: string;
                 idleDays: number | null;
+            }[];
+            unplaced: {
+                id: string;
+                version: number;
+                title: string;
+                status: "not_started" | "in_progress" | "done" | "returned";
+                source: "meeting" | "self" | "plan" | "agent";
+                startDate: string | null;
+                dueDate: string | null;
+                doneDefinition: string | null;
+                mission: {
+                    missionId: string;
+                    title: string;
+                    cardId: string | null;
+                    period: string;
+                    battlefieldName: string;
+                    step: number;
+                    steps: number;
+                } | null;
+                waitingOn: {
+                    taskId: string;
+                    title: string;
+                } | null;
+                owner: {
+                    personId: string;
+                    name: string;
+                };
+                collaborators: {
+                    personId: string;
+                    name: string;
+                }[];
+                latestProgress: {
+                    body: string;
+                    source: "web" | "codex" | "claude" | "github" | "other";
+                    author: {
+                        personId: string;
+                        name: string;
+                    };
+                    createdAt: string;
+                } | null;
+                returnReason: string | null;
+                origin: {
+                    /** @constant */
+                    type: "meeting";
+                    meetingId: string;
+                    meetingTitle: string;
+                    quote: string | null;
+                } | null;
+                awaitingAcceptance: boolean;
+                planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
+                createdAt: string;
+                updatedAt: string;
             }[];
         };
         BattlefieldProgressResponse: {
@@ -10184,6 +10291,10 @@ export interface components {
             waitingOn?: string | null;
         };
         ReturnMyTaskRequest: {
+            version: number;
+            reason: string;
+        };
+        StandaloneMyTaskRequest: {
             version: number;
             reason: string;
         };
@@ -20658,6 +20769,68 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    standaloneMyTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandaloneMyTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description 确认后的执行事项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

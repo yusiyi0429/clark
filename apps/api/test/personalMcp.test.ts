@@ -91,9 +91,20 @@ describe("个人令牌与执行事项 MCP", () => {
       expect(foreign.isError).toBe(true); expect(foreign.content[0].text).toContain("MISSION_NOT_AVAILABLE");
       const onTask = JSON.parse((await invoke(5, "create_item", { clientId: randomUUID(), title: "挂到 Task", missionId: "execution-one", planTaskId: "t1" })).content[0].text);
       expect((await call(f, f.member, "GET", `/api/me/tasks/${onTask.id}`)).json().task.planTaskId).toBe("t1");
-      const lone = await invoke(6, "create_item", { clientId: randomUUID(), title: "独立事项挂 Task", planTaskId: "t1" });
+      const lone = await invoke(6, "create_item", { clientId: randomUUID(), title: "独立事项挂 Task", planTaskId: "t1", noMissionReason: "对不上" });
       expect(lone.isError).toBe(true);
       expect(JSON.parse(lone.content[0].text)).toMatchObject({ code: "INVALID_INPUT", message: "独立事项不能挂 Task" });
+      // 只有本人自己建的可以不挂 Mission：Agent 不带 missionId 又不写原因的不收；写了原因的进本人的待归位，Mission 不能被 Agent 取消。
+      const bare = await invoke(8, "create_item", { clientId: randomUUID(), title: "外部数据源调研" });
+      expect(bare.isError).toBe(true);
+      expect(JSON.parse(bare.content[0].text)).toMatchObject({ code: "MISSION_REQUIRED" });
+      const unmatched = JSON.parse((await invoke(9, "create_item", { clientId: randomUUID(), title: "外部数据源调研", noMissionReason: "你名下没有和数据源调研对得上的 Mission" })).content[0].text);
+      const home = (await call(f, f.member, "GET", "/api/me/home-plan")).json();
+      expect(home.unplaced).toEqual([expect.objectContaining({ id: unmatched.id, unplaced: { reason: "你名下没有和数据源调研对得上的 Mission" } })]);
+      expect(home.activities.some((entry: { item: { id: string } }) => entry.item.id === unmatched.id)).toBe(false);
+      const unhook = await invoke(10, "update_item", { itemId: onTask.id, version: 1, missionId: null });
+      expect(unhook.isError).toBe(true);
+      expect(JSON.parse(unhook.content[0].text)).toMatchObject({ code: "MISSION_REQUIRED" });
       const tooLong = await invoke(7, "create_item", { clientId: randomUUID(), title: "Task id 太长", missionId: "execution-one", planTaskId: "t".repeat(201) });
       expect(tooLong.isError).toBe(true);
       expect(JSON.parse(tooLong.content[0].text)).toMatchObject({ code: "INVALID_INPUT" });
@@ -111,7 +122,7 @@ describe("个人令牌与执行事项 MCP", () => {
           headers: { authorization: `Bearer ${token}`, accept: "application/json, text/event-stream" }, payload: rpc(id, "tools/call", { name, arguments: args }) })).json().result;
         return { isError: out.isError as boolean, body: JSON.parse(out.content[0].text) };
       };
-      const created = (await invoke(1, "create_item", { clientId: randomUUID(), title: "已合入主线的配置", startDate: "2026-10-10" })).body;
+      const created = (await invoke(1, "create_item", { clientId: randomUUID(), title: "已合入主线的配置", missionId: "execution-one", startDate: "2026-10-10" })).body;
       const renamed = await invoke(2, "update_item", { itemId: created.id, version: created.version, title: "外部工具自动记录进天枢", doneDefinition: "Agent 能建事项\n能写进展", dueDate: null });
       expect(renamed.isError).toBe(false);
       expect(renamed.body).toMatchObject({ title: "外部工具自动记录进天枢", doneDefinition: "Agent 能建事项\n能写进展", dueDate: null });

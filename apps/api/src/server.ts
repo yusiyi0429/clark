@@ -284,7 +284,7 @@ const summaryJobs = app.battlefieldSummaries.jobs();
 const jobWorker = createJobWorker({
   pool,
   handlers: {
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers,
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...app.taskPlacementJobs,
     ...(env.feishu ? feishuEventJobs(pool, { ...followThroughJobs.feishuEvents, ...docChangeJobs.feishuEvents }) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },

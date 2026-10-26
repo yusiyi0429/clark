@@ -100,6 +100,8 @@ export const HomePlanResponse = Type.Object(
     marks: Type.Array(HomePlanMark),
     tasks: Type.Array(HomePlanTask),
     activities: Type.Array(HomePlanActivity),
+    /** 待归位的事项（TaskView.unplaced 不为空的）：不进 activities，首页单独一组、通知栏单独一张卡。 */
+    unplaced: Type.Array(TaskView),
   },
   { additionalProperties: false },
 );

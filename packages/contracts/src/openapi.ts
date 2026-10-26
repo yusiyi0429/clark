@@ -166,6 +166,7 @@ import {
   MemberBattlefieldResponse,
   PatchMyTaskRequest,
   ReturnMyTaskRequest,
+  StandaloneMyTaskRequest,
   TaskStandardCheck,
   TaskSubmission,
   TaskAcceptance,
@@ -2065,6 +2066,21 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/me/tasks/{id}/standalone": {
+        post: {
+          operationId: "standaloneMyTask",
+          summary: "待归位的事项本人确认不属于任何 Mission（写一句为什么），之后按本人的独立事项算",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/StandaloneMyTaskRequest" }),
+          responses: {
+            "200": { description: "确认后的执行事项", content: { "application/json": { schema: { $ref: "#/components/schemas/TaskView" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
       "/api/me/notifications": {
         get: {
           operationId: "listMyNotifications",
@@ -3128,6 +3144,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         PersonalRadarRun: PersonalRadarRun as JsonSchema,
         PatchMyTaskRequest: PatchMyTaskRequest as JsonSchema,
         ReturnMyTaskRequest: ReturnMyTaskRequest as JsonSchema,
+        StandaloneMyTaskRequest: StandaloneMyTaskRequest as JsonSchema,
         TaskStandardCheck: TaskStandardCheck as JsonSchema,
         TaskSubmission: TaskSubmission as JsonSchema,
         TaskAcceptance: TaskAcceptance as JsonSchema,

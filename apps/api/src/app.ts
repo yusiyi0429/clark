@@ -109,6 +109,7 @@ import { createUsageTracker } from "./usage.js";
 import { registerProgressRoutes } from "./routes/progress.js";
 import { createBattlefieldSummaries, type BattlefieldSummaries, type BattlefieldSummaryAgent } from "./battlefieldSummary.js";
 import { createBattlefieldSummaryAgent } from "./battlefieldSummaryAgent.js";
+import { createTaskPlacementAgent, taskPlacementJobs, type TaskPlacementAgent } from "./taskPlacement.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 import { realDictationDeps, type DictationDeps } from "./dictation.js";
@@ -232,6 +233,8 @@ declare module "fastify" {
     collectionJobs: { handlers: Record<string, JobHandler>; recurring: RecurringJob[] };
     /** 战场进展汇总；server.ts 用它的 jobs() 注册每天 07:30 的生成。 */
     battlefieldSummaries: BattlefieldSummaries;
+    /** 会后分派的归位（task.place）；server.ts 注册给 jobs worker。 */
+    taskPlacementJobs: Record<string, JobHandler>;
   }
 }
 
@@ -272,6 +275,7 @@ export async function buildApp({
   meetingFollowThroughAgents,
   docChangeAgent,
   battlefieldSummaryAgent,
+  taskPlacementAgent,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
   conversationStallTimeoutMs = CONVERSATION_STALL_TIMEOUT_MS,
   conversationHeartbeatMs = CONVERSATION_HEARTBEAT_MS,
@@ -338,6 +342,8 @@ export async function buildApp({
   docChangeAgent?: DocChangeAgent;
   /** 战场进展汇总的 Agent（测试注入假实现）；缺省 PROGRESS_SUMMARY_MODEL，不配时 HEAVY_MODEL、思考 medium。 */
   battlefieldSummaryAgent?: BattlefieldSummaryAgent;
+  /** 会后事项归位的 Agent（测试注入假实现）；缺省 TASK_PLACEMENT_MODEL，不配时 LIGHT_MODEL、不开思考。 */
+  taskPlacementAgent?: TaskPlacementAgent;
   conversationTurnTimeoutMs?: number;
   conversationStallTimeoutMs?: number;
   conversationHeartbeatMs?: number;
@@ -723,6 +729,9 @@ export async function buildApp({
       ...agentModel(env.agentModels, "progressSummary", { modelId: env.heavyModel, thinkingLevel: "medium" }) }),
   });
   app.decorate("battlefieldSummaries", battlefieldSummaries);
+  app.decorate("taskPlacementJobs", taskPlacementJobs({ pool, now,
+    agent: taskPlacementAgent ?? createTaskPlacementAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
+      ...agentModel(env.agentModels, "taskPlacement", { modelId: env.lightModel, thinkingLevel: "off" }) }) }));
   app.addHook("onClose", async () => { await battlefieldSummaries.idle(); });
   registerProgressRoutes(app, ctx, battlefieldSummaries);
   registerMeetingFollowThroughRoutes(app, ctx, followThrough);
