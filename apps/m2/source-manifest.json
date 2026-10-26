@@ -212,7 +212,7 @@
     },
     {
       "path": "ontology-sources.mjs",
-      "sha256": "7745c0764d9b96f87d10a207f3a58aa61586294571dab9c0c5e97d359b29913a"
+      "sha256": "421d224abc3bc397f920149e27a9b68eb3b90e4bea7dd2ca1afdf81908f6ab59"
     },
     {
       "path": "owner-name.mjs",
@@ -320,7 +320,7 @@
     },
     {
       "path": "round-metadata.mjs",
-      "sha256": "0e0554e12e72dee7b8627b77a5cd18b9476e1b544ef5a62fbb46bc4b7a1844d2"
+      "sha256": "3396515ab0d101b4550c387d43d4cbc73c16781f4a19fb04cdf7b9fe63a4f456"
     },
     {
       "path": "round-pool.mjs",

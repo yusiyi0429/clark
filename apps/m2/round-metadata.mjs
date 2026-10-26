@@ -15,5 +15,5 @@ export async function roundMetadata(round,fallbackInput){
   try{generationModel=JSON.parse(await readFile(new URL(`../../output/${published[round.number]}/generation-audit.json`,import.meta.url),'utf8')).model||null;}catch{}
  }
  const coverage=sourceCoverage(input);
- return {...(coverage?{sourceCoverage:coverage}:{}),sourceMode:input.mode||null,sourceTitles:[...new Set((input.sources||[]).map(s=>s.title).filter(Boolean))],generationModel:generationModel?{model:generationModel.model||generationModel.id||null,reasoningEffort:generationModel.reasoningEffort||null}:null,...(generationTiming?{generationTiming}:{}),...(input.versionNotices?.length?{versionNotices:input.versionNotices}:{}),...(round?.audit?{roundAudit:round.audit}:{}),...(readerViews?{readerViews}:{})};
+ return {...(coverage?{sourceCoverage:coverage}:{}),sourceMode:input.mode||null,sourceTitles:[...new Set((input.sources||[]).map(s=>s.title).filter(Boolean))],generationModel:generationModel?{model:generationModel.model||generationModel.id||null,reasoningEffort:generationModel.reasoningEffort||null}:null,...(generationTiming?{generationTiming}:{}),...(input.versionNotices?.length?{versionNotices:input.versionNotices}:{}),...(input.identityNotices?.length?{identityNotices:input.identityNotices}:{}),...(round?.audit?{roundAudit:round.audit}:{}),...(readerViews?{readerViews}:{})};
 }
