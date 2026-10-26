@@ -107,6 +107,8 @@ import { registerWeeklyReviewRoutes } from "./routes/weeklyReviews.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { createUsageTracker } from "./usage.js";
 import { registerProgressRoutes } from "./routes/progress.js";
+import { createBattlefieldSummaries, type BattlefieldSummaries, type BattlefieldSummaryAgent } from "./battlefieldSummary.js";
+import { createBattlefieldSummaryAgent } from "./battlefieldSummaryAgent.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
 import { realDictationDeps, type DictationDeps } from "./dictation.js";
@@ -228,6 +230,8 @@ declare module "fastify" {
     docChanges: DocChangeService;
     /** ③ 信息收集的后台任务（每分钟 collection.tick）；server.ts 注册给 jobs worker。 */
     collectionJobs: { handlers: Record<string, JobHandler>; recurring: RecurringJob[] };
+    /** 战场进展汇总；server.ts 用它的 jobs() 注册每天 07:30 的生成。 */
+    battlefieldSummaries: BattlefieldSummaries;
   }
 }
 
@@ -267,6 +271,7 @@ export async function buildApp({
   feishuClient,
   meetingFollowThroughAgents,
   docChangeAgent,
+  battlefieldSummaryAgent,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
   conversationStallTimeoutMs = CONVERSATION_STALL_TIMEOUT_MS,
   conversationHeartbeatMs = CONVERSATION_HEARTBEAT_MS,
@@ -331,6 +336,8 @@ export async function buildApp({
   meetingFollowThroughAgents?: { impact?: ImpactAgent; minutesApi?: FeishuMinutesApi; calendarApi?: FeishuCalendarApi };
   /** 文档变更找候选的 Agent（测试注入假实现）；缺省用快模型。 */
   docChangeAgent?: DocChangeAgent;
+  /** 战场进展汇总的 Agent（测试注入假实现）；缺省 PROGRESS_SUMMARY_MODEL，不配时 HEAVY_MODEL、思考 medium。 */
+  battlefieldSummaryAgent?: BattlefieldSummaryAgent;
   conversationTurnTimeoutMs?: number;
   conversationStallTimeoutMs?: number;
   conversationHeartbeatMs?: number;
@@ -708,7 +715,16 @@ export async function buildApp({
   registerCollectorRoutes(app, ctx);
   registerWeeklyReviewRoutes(app, ctx);
   registerAdminRoutes(app, ctx);
-  registerProgressRoutes(app, ctx);
+  // 战场进展汇总：页面打开时当天还没有就当场整理；每天 07:30 的生成由 server.ts 按 app.battlefieldSummaries.jobs() 注册。
+  const battlefieldSummaries = createBattlefieldSummaries({
+    pool, now, people: () => peopleDirectory.searchPeople(undefined),
+    world: () => (world.enabled ? world.snapshot() : Promise.resolve(null)),
+    agent: battlefieldSummaryAgent ?? createBattlefieldSummaryAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
+      ...agentModel(env.agentModels, "progressSummary", { modelId: env.heavyModel, thinkingLevel: "medium" }) }),
+  });
+  app.decorate("battlefieldSummaries", battlefieldSummaries);
+  app.addHook("onClose", async () => { await battlefieldSummaries.idle(); });
+  registerProgressRoutes(app, ctx, battlefieldSummaries);
   registerMeetingFollowThroughRoutes(app, ctx, followThrough);
   registerInternalMeetingRoutes(app, ctx);
   // 文档变更：找候选用快模型；按作者身份读飞书文档元数据（不读正文）；后台任务与群消息事件由 server.ts 按 app.docChanges.jobs() 注册。

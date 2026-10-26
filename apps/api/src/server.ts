@@ -279,14 +279,16 @@ const followThroughJobs = app.meetingFollowThrough.jobs();
 const docChangeJobs = app.docChanges.jobs();
 // 使用周报：每周一 08:00 之后生成上一周。
 const usageJobs = usageReportJobs(pool.query.bind(pool), peopleDirectory, now);
+// 战场进展汇总：每天 07:30 之后补齐当天各战场的。
+const summaryJobs = app.battlefieldSummaries.jobs();
 const jobWorker = createJobWorker({
   pool,
   handlers: {
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers,
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers,
     ...(env.feishu ? feishuEventJobs(pool, { ...followThroughJobs.feishuEvents, ...docChangeJobs.feishuEvents }) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },
-  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring],
+  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring],
 });
 let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {

@@ -10,6 +10,7 @@
  * | 公司雷达研判 | RADAR_MODEL | RADAR_THINKING | LIGHT_MODEL · 不开思考 |
  * | 个人雷达判定 | PERSONAL_RADAR_MODEL | PERSONAL_RADAR_THINKING | 公司雷达的配置，再不配就是 LIGHT_MODEL · 不开思考 |
  * | 记忆导入分类与去重 | MEMORY_IMPORT_MODEL | MEMORY_IMPORT_THINKING | LIGHT_MODEL · 不开思考 |
+ * | 战场进展汇总 | PROGRESS_SUMMARY_MODEL | PROGRESS_SUMMARY_THINKING | HEAVY_MODEL · medium |
  *
  * 协议与地址按模型 id 推断（conversationModel.ts）：claude-* 走 Anthropic 协议（根地址 + /anthropic），gpt-6.1-* 走根地址 + /openai，
  * 其余走 PI_BASE_URL。思考强度 off / minimal / low / medium / high / xhigh；Claude 的 off 按 effort low 发（Sonnet / Opus 5.5 不能关思考）。
@@ -17,7 +18,7 @@
  */
 import type { CandidateThinkingLevel } from "./candidateAgentRuntime.js";
 
-export type AgentModelKey = "research" | "outcome" | "radar" | "personalRadar" | "memoryImport";
+export type AgentModelKey = "research" | "outcome" | "radar" | "personalRadar" | "memoryImport" | "progressSummary";
 
 export const AGENT_MODEL_ENV: Readonly<Record<AgentModelKey, { model: string; thinking: string }>> = {
   research: { model: "RESEARCH_MODEL", thinking: "RESEARCH_THINKING" },
@@ -25,6 +26,7 @@ export const AGENT_MODEL_ENV: Readonly<Record<AgentModelKey, { model: string; th
   radar: { model: "RADAR_MODEL", thinking: "RADAR_THINKING" },
   personalRadar: { model: "PERSONAL_RADAR_MODEL", thinking: "PERSONAL_RADAR_THINKING" },
   memoryImport: { model: "MEMORY_IMPORT_MODEL", thinking: "MEMORY_IMPORT_THINKING" },
+  progressSummary: { model: "PROGRESS_SUMMARY_MODEL", thinking: "PROGRESS_SUMMARY_THINKING" },
 };
 
 const THINKING_LEVELS: readonly CandidateThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];

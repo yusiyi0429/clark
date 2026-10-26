@@ -2604,6 +2604,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/progress/battlefield-summaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 战场进展汇总：每个战场每天一份 Agent 汇总（对照本期目标、各 Mission 推进、卡点）；今天这份还没有时当场开始整理；CEO 看全部战场，其他人看自己所在的战场 */
+        get: operations["getBattlefieldSummaries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/tokens/{id}": {
         parameters: {
             query?: never;
@@ -8894,6 +8911,33 @@ export interface components {
                     coverageUntil: string | null;
                 }[];
             };
+        };
+        BattlefieldSummariesResponse: {
+            today: string;
+            battlefields: {
+                battlefieldId: string;
+                name: string;
+                summary: {
+                    day: string;
+                    goal: string | null;
+                    paragraphs: string[];
+                    progressUntil: string | null;
+                    /** @description ISO 8601 */
+                    summarizedAt: string;
+                } | null;
+                generation: {
+                    /** @constant */
+                    state: "running";
+                    phase: "reading" | "writing";
+                    /** @description ISO 8601 */
+                    startedAt: string;
+                } | {
+                    /** @constant */
+                    state: "failed";
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+            }[];
         };
         TaskPerson: {
             personId: string;
@@ -19621,6 +19665,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProgressOverviewResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getBattlefieldSummaries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 战场进展汇总 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BattlefieldSummariesResponse"];
                 };
             };
             /** @description ApiError 统一错误 */

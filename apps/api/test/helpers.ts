@@ -364,6 +364,8 @@ export async function createTestApp(
     meetingFollowThroughAgents?: Parameters<typeof buildApp>[0]["meetingFollowThroughAgents"];
     /** 文档变更找候选的假 Agent；不注入时用真实装配（只在后台任务里调用）。 */
     docChangeAgent?: Parameters<typeof buildApp>[0]["docChangeAgent"];
+    /** 战场进展汇总的假 Agent；不注入时用真实装配（打开汇总接口才会调用）。 */
+    battlefieldSummaryAgent?: Parameters<typeof buildApp>[0]["battlefieldSummaryAgent"];
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {
