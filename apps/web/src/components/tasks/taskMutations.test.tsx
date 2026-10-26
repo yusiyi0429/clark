@@ -14,7 +14,8 @@ vi.mock("react", async (importOriginal) => {
   };
 });
 vi.mock("@/components/shell/WorkspaceContext", () => ({ useWorkspace: () => ({ close: vi.fn(), navigate: actions.navigate, compose: vi.fn() }), useRegisterDetail: vi.fn() }));
-vi.mock("next/navigation", () => ({ useSearchParams: () => null }));
+const nav = vi.hoisted(() => ({ params: null as URLSearchParams | null }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => nav.params }));
 vi.mock("@/components/shell/DetailFrame", () => ({ DetailFrame: () => null }));
 vi.mock("@/components/ConfirmDialog", () => ({ useConfirm: () => ({ ask: actions.ask, dialog: null }) }));
 vi.mock("@/lib/api/client", () => ({ browserApi: { POST: actions.post, PATCH: actions.patch, PUT: actions.put, GET: actions.get, DELETE: actions.delete } }));
@@ -236,6 +237,24 @@ it("⋯ → 编辑：表单只把改过的字段交给保存；页面 PATCH 带�
   (editor.props!.onSave as (body: unknown) => void)({ dueDate: "2026-10-20" });
   await vi.waitFor(() => expect(actions.patch).toHaveBeenCalledWith("/api/me/tasks/{id}", { params: { path: { id: "task-1" } }, body: { version: 2, dueDate: "2026-10-20" } }));
   expect(actions.put).not.toHaveBeenCalled();
+});
+
+it("地址带 ?edit=1（首页验收窗里点「写完成标准」）：直接展开编辑表单，参数随即去掉；不是推进人不展开", () => {
+  const replaceState = vi.fn();
+  vi.stubGlobal("window", { location: { href: "http://localhost/me/tasks/task-1?edit=1" }, history: { state: null, replaceState } });
+  nav.params = new URLSearchParams("edit=1");
+  try {
+    const store: unknown[] = [];
+    render(() => TaskScreen({ initialDetail: detailOf() }), store);
+    hooks.effects.forEach((effect) => effect());
+    const tree = render(() => TaskScreen({ initialDetail: detailOf() }), store);
+    expect((coverOf(tree).props!.editor as Node).type).toBe(TaskEditForm);
+    expect(replaceState).toHaveBeenCalledWith(null, "", "/me/tasks/task-1");
+    const viewer: unknown[] = [];
+    render(() => TaskScreen({ initialDetail: detailOf({ role: "collaborator" }) }), viewer);
+    hooks.effects.forEach((effect) => effect());
+    expect(coverOf(render(() => TaskScreen({ initialDetail: detailOf({ role: "collaborator" }) }), viewer)).props!.editor).toBeNull();
+  } finally { nav.params = null; vi.unstubAllGlobals(); }
 });
 
 it("编辑表单只交人改过的字段：别处同时改了截止日期，保存完成标准时不把旧的截止日期盖回去", () => {
