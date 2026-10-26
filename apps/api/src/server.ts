@@ -41,6 +41,7 @@ import { personDisplayNames } from "./people.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
 import { resolveWorldEnv, resolveWorldTkEnv } from "./worldClient.js";
 import { createJobWorker, exampleJobHandlers } from "./jobs.js";
+import { usageReportJobs } from "./usage.js";
 import { resolveFeishuEnv } from "./feishu/config.js";
 import { parseAdminPersonIds } from "./admin.js";
 import { createFeishuClient } from "./feishu/client.js";
@@ -275,14 +276,16 @@ const app = await buildApp({
 const followThroughJobs = app.meetingFollowThrough.jobs();
 // 文档变更：群里 @机器人 贴文档链接即发布（im.message.receive_v1），找候选走后台任务。
 const docChangeJobs = app.docChanges.jobs();
+// 使用周报：每周一 08:00 之后生成上一周。
+const usageJobs = usageReportJobs(pool.query.bind(pool), peopleDirectory, now);
 const jobWorker = createJobWorker({
   pool,
   handlers: {
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers,
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers,
     ...(env.feishu ? feishuEventJobs(pool, { ...followThroughJobs.feishuEvents, ...docChangeJobs.feishuEvents }) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },
-  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring],
+  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring],
 });
 let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {

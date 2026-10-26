@@ -12,6 +12,10 @@
 .screen :global(.ts-detail) { background: var(--surface); overflow-y: auto; overscroll-behavior: contain; }
 .content { box-sizing: border-box; width: 100%; min-width: 0; padding: 20px calc(32px + var(--conversation-lane, 0px)) 128px 32px; color: var(--ink-muted); transition: padding-right var(--dur-slow) var(--ease-brand); }
 .stack { display: grid; gap: 28px; min-width: 0; max-width: 1120px; margin-inline: auto; }
+.stack[hidden] { display: none; }
+/* 运行 / 使用 两个视图的切换，和下面的内容左对齐。 */
+.views { display: flex; width: fit-content; margin: 0 0 20px max(0px, calc((100% - 1120px) / 2)); }
+@media (max-width: 959px), (pointer: coarse) { .views > * { min-height: 44px; } }
 .error { margin: 0; color: var(--onboarding-error); font-size: 14px; line-height: 1.7; }
 .refresh.refresh { width: 36px; height: 36px; min-width: 36px; border-radius: 50%; color: inherit; }
 

@@ -6,7 +6,7 @@
  * 每 30 秒轮询一次；回到页面时立刻再取。只显示运行数据，不显示对话正文。
  */
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Button } from "ts-design/primitives";
+import { Button, ToggleButton, ToggleButtonGroup } from "ts-design/primitives";
 import { Bell, Check, ChevronDown, Database, KeyRound, Laptop, RefreshCw, RotateCcw, type LucideIcon } from "lucide-react";
 import type {
   TAdminActionRequest, TAdminCounterKey, TAdminIssue, TAdminMark, TAdminOverviewResponse, TAdminPersonRow, TAdminQualitySignal, TAdminStatus, TAdminSubject,
@@ -16,6 +16,7 @@ import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { browserApi, type Card } from "@/lib/api/client";
 import { monthDayTime, publishedDate } from "@/lib/companyTime";
+import { UsagePanel } from "./UsagePanel";
 import { COUNTER_ISSUE, COUNTER_LABELS, COUNTER_SOURCE, SOURCES, age, isProblem, issueName, reminderDraft, runKindLabel, signalLabel, type Source } from "./adminText";
 import s from "./admin.module.css";
 
@@ -33,6 +34,7 @@ export function AdminScreen({ initial }: { initial: TAdminOverviewResponse }) {
   const [filter, setFilter] = useState<TAdminCounterKey | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [remind, setRemind] = useState<{ row: TAdminPersonRow; source: Source } | null>(null);
+  const [tab, setTab] = useState<"runtime" | "usage">("runtime");
   useRegisterDetail(useMemo(() => ({ scope: "global", label: "管理员", mark: null, cards: NO_CARDS }), []));
 
   const load = useCallback(async () => {
@@ -72,7 +74,13 @@ export function AdminScreen({ initial }: { initial: TAdminOverviewResponse }) {
       <DetailFrame title="管理员" subtitle={clock} onBack={() => workspace.close()}
         actions={<Button variant="ghost" isIconOnly className={s.refresh} aria-label="刷新" onPress={() => void load()}><RefreshCw size={17} aria-hidden="true" /></Button>}>
         <div className={s.content}>
-          <div className={s.stack}>
+          <ToggleButtonGroup className={s.views} aria-label="视图" selectionMode="single" disallowEmptySelection selectedKeys={[tab]}
+            onSelectionChange={(keys) => { const next = [...keys][0]; if (next === "runtime" || next === "usage") setTab(next); }}>
+            <ToggleButton id="runtime" size="sm">运行</ToggleButton>
+            <ToggleButton id="usage" size="sm">使用</ToggleButton>
+          </ToggleButtonGroup>
+          {tab === "usage" ? <UsagePanel /> : null}
+          <div className={s.stack} hidden={tab !== "runtime"}>
             {failed ? <p className={s.error} role="alert">没有取到最新数据</p> : null}
             <section className={s.counters} aria-label="计数">
               {view.counters.map((counter) => {
