@@ -177,6 +177,9 @@ services:
       FEISHU_BITABLE_MODE: ${FEISHU_BITABLE_MODE:-}
       # 飞书网页域名：会议事件写本体时拼妙记链接；留空不带链接。
       FEISHU_WEB_ORIGIN: ${FEISHU_WEB_ORIGIN:-}
+      # 信息收集、文档变更推送：1 才开，缺省关。
+      COLLECTIONS_ENABLED: ${COLLECTIONS_ENABLED:-0}
+      DOC_CHANGE_ENABLED: ${DOC_CHANGE_ENABLED:-0}
       # 管理员视图：逗号分隔的 personId；留空时没有人能看。
       TIANSHU_ADMIN_PERSON_IDS: ${TIANSHU_ADMIN_PERSON_IDS:-}
       MEETING_MATERIAL_STORAGE_DIR: /var/lib/warmap/meeting_materials

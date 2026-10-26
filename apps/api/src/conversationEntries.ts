@@ -27,6 +27,8 @@ export type ConversationEntries = {
   requestHelp(args: { prompt: string; requestId?: string; answers?: string[] }): Promise<Record<string, unknown>>;
   generateReview(args: { kind: "monthly" | "weekly"; period?: string }): Promise<Record<string, unknown>>;
   startCollection(args: { prompt: string; collectionId?: string }): Promise<Record<string, unknown>>;
+  /** 信息收集开着（配了 collections）才给模型「发起信息收集」这个工具（D-56）。 */
+  collections: boolean;
 };
 export type EntryDeps = {
   pool: Pool;
@@ -135,6 +137,7 @@ export function createConversationEntries(deps: EntryDeps): ConversationEntries 
   }
 
   return {
+    collections: Boolean(deps.collections),
     async askAboutTodo(args) {
       const question = args.question?.trim() || deps.message;
       step("todo-locate", "定位待办", "active");

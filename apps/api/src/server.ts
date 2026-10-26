@@ -108,6 +108,9 @@ const env: AppEnv = {
   // 会议事件的妙记链接：FEISHU_WEB_ORIGIN（如 https://tokenking.feishu.cn）；不配时不带链接。
   feishuWebOrigin: process.env.FEISHU_WEB_ORIGIN?.trim() || undefined,
   collectionBitable: process.env.FEISHU_BITABLE_MODE === "live" ? "live" : "mock",
+  // 信息收集、文档变更推送（D-56）：值为 1 才开，缺省关。
+  collectionsEnabled: process.env.COLLECTIONS_ENABLED === "1",
+  docChangeEnabled: process.env.DOC_CHANGE_ENABLED === "1",
 };
 
 const port = Number(process.env.PORT ?? "4000");
