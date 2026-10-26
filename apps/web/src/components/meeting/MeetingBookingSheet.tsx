@@ -206,7 +206,7 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
               </div>
             ) : null}
             {options && (picking || !anchors.length) ? (
-              <WorldAnchorPicker options={options} value={anchors} viewerId={me} nameOf={nameOf}
+              <WorldAnchorPicker options={options} value={anchors} viewerId={me} nameOf={nameOf} company={role === "ceo"}
                 onChange={(next) => { setAnchors(next); if (next[0]?.kind !== "po") setPicking(false); }} />
             ) : null}
             {optionsError ? <p className={d.worldError} role="alert">没有读到对象</p> : null}

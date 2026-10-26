@@ -127,6 +127,30 @@ describe("约会议", () => {
     expect(text(row)).toContain("周舟的 Mission");
   });
 
+  it("CEO：不自动挂；先列公司目标（LTO、PO），再按战场一行一个，点进去是这个战场的 Mission", async () => {
+    const LTO: TWorldAnchorOption = { kind: "lto", id: "<lto>", title: "三年做成行业标杆", brief: null, lifecycle: "established", ownerId: null, parentId: null };
+    const options = [PO, LTO, { ...MISSION, group: "灯塔战场" }, { ...THEIRS, group: "增长战场" }];
+    api.get.mockImplementation(async (path: string) => path === "/api/people"
+      ? { data: { people: PEOPLE }, response: { ok: true, status: 200 } }
+      : path === "/api/people/directory"
+        ? { data: { people: PEOPLE.map(({ personId, displayName }) => ({ personId, displayName })) }, response: { ok: true, status: 200 } }
+        : { data: { options }, response: { ok: true, status: 200 } });
+    await fill(CEO);
+    let tree = render(CEO);
+    expect(tree.some((node) => node.props?.["data-anchor-row"] !== undefined)).toBe(false);
+    expect(tree.filter((node) => node.type === "h4").map(text)).toEqual(["公司目标", "战场"]);
+    const goals = tree.filter((node) => node.props?.["aria-pressed"] !== undefined).map(text);
+    expect(goals[0]).toContain(LTO.title);
+    expect(goals[1]).toContain(PO.title);
+    expect(tree.filter((node) => node.props?.["data-level"] !== undefined).map((node) => node.props!["data-level"])).toEqual(["group:灯塔战场", "group:增长战场"]);
+    click(tree.find((node) => node.props?.["data-level"] === "group:增长战场"));
+    tree = render(CEO);
+    expect(text(tree.find((node) => node.type === "button" && text(node).startsWith("‹"))!)).toBe("‹ 增长战场");
+    const row = tree.find((node) => node.props?.["aria-pressed"] === false && text(node).includes("周舟的 Mission"))!;
+    expect(text(row)).toContain("周舟");
+    expect(tree.some((node) => text(node).includes("草稿 Mission"))).toBe(false);
+  });
+
   it("开始、横线、结束在同一行", () => {
     const row = render(MEMBER).find((node) => Array.isArray(node.props?.children) && (node.props!.children as Node[]).some((child) => child?.props?.["aria-label"] === "开始"))!;
     expect(row.type).toBe("div");

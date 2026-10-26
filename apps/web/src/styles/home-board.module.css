@@ -107,6 +107,14 @@
 .phoneAccount{display:none}
 @media(max-width:959px){.board{display:none}.phoneAccount{display:block;margin-top:4px}}
 
+/* 公司战略议题空着时收起：雷达独占一行，收成一条（雷达图在左、标题和状态在中间、箭头常显）。 */
+.top[data-collapsed]{grid-template-columns:minmax(0,1fr)}
+.top[data-collapsed] .radar{min-height:0;flex-direction:row;align-items:center;gap:14px;padding:12px 48px 12px 16px}
+.top[data-collapsed] .scanStage{order:-1;flex:none;width:52px;height:52px;min-height:0;max-height:none}
+.top[data-collapsed] .scanStage > div{height:52px}
+.top[data-collapsed] .radarStatus{position:static}
+.top[data-collapsed] .radar > svg:last-child{top:50%;transform:translateY(-50%);opacity:1}
+
 /* 标题不可打开时（天枢没有战略 / 能力详情页）：同一排版，不放箭头。 */
 .headingStatic{cursor:default}
 

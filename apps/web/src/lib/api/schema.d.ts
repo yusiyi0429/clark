@@ -11110,6 +11110,7 @@ export interface components {
                 lifecycle: string | null;
                 ownerId: string | null;
                 parentId: string | null;
+                group?: string;
             }[];
         };
         ImpactCardView: {

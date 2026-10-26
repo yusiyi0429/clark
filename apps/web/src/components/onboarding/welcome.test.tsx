@@ -115,19 +115,30 @@ describe("收尾按钮文案与实际落点一致", () => {
   const ceoNext = { ...ceo, next: { text: "9 月的目标等你核对和签发", action: "核对 9 月目标", href: "/plans/2026-09" } };
   const memberNext = { ...member, next: { text: "先处理你的执行事项", action: "查看我的执行事项", href: "/me/tasks/task-1" } };
   const memberMission = { ...member, next: { text: "10 月 Mission Card 讨论开放到 10/3 18:00", action: "查看我的 10 月卡", href: "/me/mission-cards/my-card" } };
-  const ceoMission = { ...ceo, next: { text: "10 月任务卡草稿已就绪，可以下发审核", action: "查看 10 月任务卡", href: "/mission-cards/first-card" } };
   it.each([
-    { name: "CEO 默认首页", data: ceoNext, nextPath: "/", label: "核对 9 月目标", destination: "/plans/2026-09" },
+    { name: "CEO 默认首页", nextPath: "/", label: "进入工作台", destination: "/plans/2026-09" },
+    { name: "CEO 无 next", nextPath: undefined, label: "进入工作台", destination: "/plans/2026-09" },
+    { name: "CEO 真原链接", nextPath: "/radar?tab=all#new", label: "继续刚才的页面", destination: "/radar?tab=all#new" },
+    { name: "CEO 无效外链", nextPath: "https://example.com/", label: "进入工作台", destination: "/plans/2026-09" },
+    { name: "CEO 无效引导循环", nextPath: "/welcome", label: "进入工作台", destination: "/plans/2026-09" },
+  ])("$name：CEO 看完三页直接进工作台，不再说本月目标待签发", async ({ nextPath, label, destination }) => {
+    const replace = vi.fn();
+    vi.stubGlobal("window", { location: { replace } });
+    const complete = vi.spyOn(browserApi, "POST").mockResolvedValue({ data: { onboarded: true }, response: new Response(null, { status: 200 }) });
+    (button(renderFlow(ceoNext, nextPath), "开始").props.onClick as () => void)();
+    (button(renderFlow(ceoNext, nextPath), "下一步").props.onClick as () => void)();
+    const tree = renderFlow(ceoNext, nextPath);
+    expect(text(tree)).not.toContain(ceoNext.next.text);
+    expect(text(tree)).not.toContain("先进入工作台");
+    (button(tree, label).props.onClick as () => void)();
+    expect(complete).toHaveBeenCalledExactlyOnceWith("/api/me/onboarding/complete");
+    await vi.waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith(destination));
+  });
+  it.each([
     { name: "成员默认首页", data: memberNext, nextPath: "/me", label: "查看我的执行事项", destination: "/me/tasks/task-1" },
-    { name: "无 next", data: ceoNext, nextPath: undefined, label: "核对 9 月目标", destination: "/plans/2026-09" },
-    { name: "CEO 真原链接", data: ceoNext, nextPath: "/radar?tab=all#new", label: "继续刚才的页面", destination: "/radar?tab=all#new" },
     { name: "成员真原链接", data: memberNext, nextPath: "/me/tasks/task-2", label: "继续刚才的页面", destination: "/me/tasks/task-2" },
-    { name: "无效外链", data: ceoNext, nextPath: "https://example.com/", label: "核对 9 月目标", destination: "/plans/2026-09" },
     { name: "无效跨角色链接", data: memberNext, nextPath: "/plans/2026-09", label: "查看我的执行事项", destination: "/me/tasks/task-1" },
-    { name: "无效引导循环", data: ceoNext, nextPath: "/welcome", label: "核对 9 月目标", destination: "/plans/2026-09" },
     { name: "成员本轮任务卡", data: memberMission, nextPath: "/me", label: "查看我的 10 月卡", destination: "/me/mission-cards/my-card" },
-    { name: "CEO 本轮任务卡", data: ceoMission, nextPath: "/", label: "查看 10 月任务卡", destination: "/mission-cards/first-card" },
-    { name: "CEO 整理入口", data: { ...ceoMission, next: { text: "10 月目标已签发，可以整理任务卡草稿", action: "整理 10 月任务卡", href: "/?missionRoundDraft=01%3A2026-10" } }, nextPath: "/", label: "整理 10 月任务卡", destination: "/?missionRoundDraft=01%3A2026-10&_entry=unlock" },
   ])("$name：点击写完完成记录，再去按钮承诺的页面", async ({ data, nextPath, label, destination }) => {
     const replace = vi.fn();
     vi.stubGlobal("window", { location: { replace } });
@@ -142,12 +153,12 @@ describe("收尾按钮文案与实际落点一致", () => {
 });
 
 describe("真实数据的首次引导", () => {
-  it("成员先导览、再看 Mission 和本月工作；CEO 步骤保持原样", () => {
+  it("成员先导览、再看 Mission 和本月工作；CEO 只看工作台三页", () => {
     const tail = ["connect", "collector", "scan", "review", "start"];
     expect(onboardingSteps(member)).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", ...tail]);
     expect(onboardingSteps({ ...member, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", "voiceprint", ...tail]);
-    expect(onboardingSteps(ceo)).toEqual(["hello", "tour-notifications", "tour-board", "radar", ...tail]);
-    expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "radar", "voiceprint", ...tail]);
+    expect(onboardingSteps(ceo)).toEqual(["hello", "tour-notifications", "tour-board"]);
+    expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true }, delegationStep: true })).toEqual(["hello", "tour-notifications", "tour-board"]);
     // 委托授权这一步由配置打开，放在结束页之前。
     expect(onboardingSteps({ ...member, delegationStep: true }).slice(-3)).toEqual(["review", "delegation", "start"]);
     // 扫完三项都没有可确认的：跳过确认清单。
@@ -220,7 +231,7 @@ describe("真实数据的首次引导", () => {
     (button(tree, "下一步").props.onClick as () => void)();
     tree = renderFlow(ceo);
     expect(text(tree)).toContain("右边是公司全局");
-    expect(text(tree)).toContain("底部是你的 Agent：问公司的事，它查了再答。");
+    expect(text(tree)).toContain("底部是你的 Agent：问公司的事，它查了再答；要约会议，也直接跟它说。");
     // 手机首页是一条滚动：通知下面就是公司全局；详情铺满屏幕，返回在左上角。
     expect(text(tree)).toContain("往下是公司全局");
     expect(text(tree)).toContain("详情铺满屏幕，左上角返回");
@@ -319,17 +330,9 @@ describe("雷达步骤", () => {
     expect(footerButtons).not.toContain("下一步");
     expect(footerButtons).toContain("上一步");
   });
-  it("CEO：写明按签发的本月目标自动关注，编辑的是公司雷达", () => {
-    const tree = reachRadar(ceo);
-    expect(text(tree)).toContain("公司雷达，还要看什么？");
-    expect(text(tree)).toContain("我会按你签发的本月目标自动关注；你还可以补充方向和来源。");
-    expect(radarEditor(tree)).toMatchObject({ mode: "company", submitLabel: "保存并继续" });
-  });
-  it("结束页设置摘要加雷达一行：成员按开没开，CEO 按补充的方向数；本步保存后立刻换成新的", () => {
-    expect(radarSummaryLine("member", { enabled: true, directions: 2 })).toBe("雷达 · 已开启");
-    expect(radarSummaryLine("member", { enabled: false, directions: 0 })).toBe("雷达 · 未开启");
-    expect(radarSummaryLine("ceo", { enabled: true, directions: 0 })).toBe("雷达 · 按本月目标自动关注");
-    expect(radarSummaryLine("ceo", { enabled: true, directions: 3 })).toBe("雷达 · 已补充 3 个方向");
+  it("结束页设置摘要加雷达一行：按开没开；本步保存后立刻换成新的", () => {
+    expect(radarSummaryLine({ enabled: true })).toBe("雷达 · 已开启");
+    expect(radarSummaryLine({ enabled: false })).toBe("雷达 · 未开启");
     const skipped = text(reachFinish(member));
     expect(skipped).toContain("雷达 · 未开启");
     expect(skipped).toContain("外部工具 · 稍后在个人菜单里连");
@@ -338,12 +341,6 @@ describe("雷达步骤", () => {
     expect(saved).toContain("雷达 · 已开启");
     expect(saved).toContain("都可以在个人菜单里改");
     expect(saved).not.toContain("声纹 ·");
-    hooks.reset();
-    expect(text(reachFinish(ceo))).toContain("雷达 · 按本月目标自动关注");
-    hooks.reset();
-    expect(text(reachFinish({ ...ceo, radar: { configured: true, enabled: true, directions: 2 } }))).toContain("雷达 · 已补充 2 个方向");
-    hooks.reset();
-    expect(text(reachFinish(ceo, undefined, { enabled: true, directions: 4, sources: 1 }))).toContain("雷达 · 已补充 4 个方向");
   });
   it("连接外部工具在雷达之后、结束之前：同一张表单预填名字，主按钮放进底栏（不再是「下一步」），可以「稍后」跳过", () => {
     radarEditor(reachRadar(member)).onLater!();
@@ -354,7 +351,7 @@ describe("雷达步骤", () => {
     expect(elements(tree).find((element) => element.type === "button" && text(element.props.children as ReactNode) === "下一步")).toBeUndefined();
     expect(button(tree, "稍后")).toBeDefined();
   });
-  it("同意上传会话的开关从「连上 AI 工具」挪到「安装本机采集器」：成员有，CEO 没有；没连上之前「下一步」不能点、可以「稍后」", () => {
+  it("同意上传会话的开关从「连上 AI 工具」挪到「安装本机采集器」；没连上之前「下一步」不能点、可以「稍后」", () => {
     radarEditor(reachRadar(member)).onLater!();
     const connect = renderFlow(member);
     expect(elements(connect).some((element) => element.type === CollectorConsentSwitch)).toBe(false);
@@ -365,10 +362,6 @@ describe("雷达步骤", () => {
     expect(panel?.props).toMatchObject({ token: null, status: null });
     expect(button(tree, "下一步").props.disabled).toBe(true);
     expect(button(tree, "稍后")).toBeDefined();
-    hooks.reset();
-    radarEditor(reachRadar(ceo)).onLater!();
-    (button(renderFlow(ceo), "稍后").props.onClick as () => void)();
-    expect(text(renderFlow(ceo))).toContain("安装本机采集器");
   });
   it("确认清单不用逐项确认，「完成」直接可点；委托授权一步只在配置打开时出现", () => {
     radarEditor(reachRadar(member)).onLater!();

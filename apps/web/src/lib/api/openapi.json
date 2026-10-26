@@ -63627,6 +63627,10 @@
                       "type": "null"
                     }
                   ]
+                },
+                "group": {
+                  "minLength": 1,
+                  "type": "string"
                 }
               }
             }

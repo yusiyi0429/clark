@@ -27,20 +27,21 @@ export type OnboardingData = components["schemas"]["OnboardingResponse"];
 type Step = "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "work" | "radar" | "voiceprint" | "connect" | "collector" | "scan" | "review" | "delegation" | "start";
 
 /**
- * 两种角色都先看工作台；成员接着看每月 Mission 的形成与执行。
- * 连上 AI 工具之后：安装本机采集器 → 后台扫描 → 确认清单（10a 第 2–4 步；扫完三项都没有可确认的就跳过）；委托授权（第 7 步）由配置打开。
+ * CEO 只看工作台三页（你好 → 通知栏 → 公司全局和对话），最后一页直接进工作台；雷达、外部工具、采集器都在个人菜单里。
+ * 成员看完工作台，接着看每月 Mission 的形成与执行；连上 AI 工具之后：安装本机采集器 → 后台扫描 → 确认清单
+ * （10a 第 2–4 步；扫完三项都没有可确认的就跳过）；委托授权（第 7 步）由配置打开。
  */
 export function onboardingSteps(data: OnboardingData, skipReview = false): Step[] {
-  return ["hello", "tour-notifications", "tour-board", ...(data.role === "member" ? ["mission-flow" as const, "work" as const] : []), "radar", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "connect",
+  if (data.role === "ceo") return ["hello", "tour-notifications", "tour-board"];
+  return ["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "connect",
     "collector", "scan", ...(skipReview ? [] : ["review" as const]), ...(data.delegationStep ? ["delegation" as const] : []), "start"];
 }
 
 /** 扫描等第一次盘点最多这么久；超时就停在那一步，用已有的数据整理清单，不让人卡在这一页。 */
 export const SCAN_TIMEOUT_MS = 120_000;
 
-/** 结束页设置摘要里的雷达一行：成员写开没开；CEO 的公司雷达不能关，写补充了几个方向。 */
-export function radarSummaryLine(role: OnboardingData["role"], radar: { enabled: boolean; directions: number }): string {
-  if (role === "ceo") return radar.directions ? `雷达 · 已补充 ${radar.directions} 个方向` : "雷达 · 按本月目标自动关注";
+/** 结束页设置摘要里的雷达一行（只有成员走到结束页）：写开没开。 */
+export function radarSummaryLine(radar: { enabled: boolean }): string {
   return radar.enabled ? "雷达 · 已开启" : "雷达 · 未开启";
 }
 
@@ -124,6 +125,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
   const memoryFiles = collectorConnected && collector!.consent ? collector!.inventory.memoryFiles : null;
   const steps = onboardingSteps(data, !reviewed && reviewLists !== null && reviewEmpty(reviewLists, memoryFiles));
   const step = steps[index];
+  const last = index === steps.length - 1;
   const scanFinished = Boolean(collector) && (!collectorConnected || !collector?.consent || Boolean(collector?.scannedAt) || scanTimedOut);
   const scanReady = scanFinished && reviewLists !== null;
   const voice = useVoiceprintEnrollment({ initialStatus: data.voiceprint });
@@ -209,7 +211,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
   }
 
   async function forward() {
-    if (step === "start" || error) return finish();
+    if (last || error) return finish();
     if (step === "review" && reviewLists) {
       setReviewSaving(true);
       setReviewError(null);
@@ -242,8 +244,9 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
       : step === "connect" && !connectDownloaded ? connectPrimary?.querySelector<HTMLButtonElement>("button") : primary.current)?.click();
   }
 
-  const heading = step === "collector" ? "安装本机采集器" : step === "scan" ? scanReady ? "扫描完成" : "正在扫描" : step === "review" ? "确认清单" : step === "delegation" ? "授权天枢替你记进本体" : step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "work" ? "你这个月的工作" : step === "radar" ? data.role === "ceo" ? "公司雷达，还要看什么？" : "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : step === "connect" ? "连上你自己的 AI 工具" : "可以开始了";
+  const heading = step === "collector" ? "安装本机采集器" : step === "scan" ? scanReady ? "扫描完成" : "正在扫描" : step === "review" ? "确认清单" : step === "delegation" ? "授权天枢替你记进本体" : step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "work" ? "你这个月的工作" : step === "radar" ? "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : step === "connect" ? "连上你自己的 AI 工具" : "可以开始了";
   // 手机首页是一条滚动：最上面是通知，往下 CEO 是公司全局、成员是自己的工作。
+  const noticeCopy = data.role === "ceo" ? "会后要你确认的会议卡、月末的复盘与拆解，到时候会出现在这里。" : "任务卡的讨论、分给你的事和别人的回复，按轻重排在这里。";
   const phoneHeading = step === "tour-notifications" ? "最上面是通知" : step === "tour-board" ? data.role === "ceo" ? "往下是公司全局" : "往下是你的工作" : null;
   const busy = finishing || voice.phase === "saving" || reviewSaving;
   const voiceReady = voice.status?.enrolled && !rerecord && voice.phase === "idle";
@@ -252,13 +255,13 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
   const disabledHint = step === "voiceprint" && primaryDisabled && !busy
     ? voice.recording ? "录好后再继续，也可以选「稍后」" : voice.tooShort ? "请重新录满 15 秒，或者选「稍后」" : voice.consent ? "录好一段 15–30 秒的朗读，或者选「稍后」" : "先勾选同意并录好，或者选「稍后」"
     : null;
-  const primaryLabel = finishing ? "正在进入…" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : step === "review" ? reviewSaving ? "正在保存…" : "完成" : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : "下一步";
+  const primaryLabel = finishing ? "正在进入…" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : last ? returnPath ? "继续刚才的页面" : "进入工作台" : step === "review" ? reviewSaving ? "正在保存…" : "完成" : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : "下一步";
 
   return <main className={s.page} onKeyDown={onKeyDown} style={{ "--direction": direction } as CSSProperties}>
     <MorningCanvas progress={index} />
     <header className={s.header}>
       <div className={s.brand} aria-label="天枢"><TianshuMark /><span>天枢</span></div>
-      {step !== "start" ? <button type="button" className={f.textButton} onClick={() => void finish()} disabled={busy}>先进入工作台</button> : null}
+      {!last ? <button type="button" className={f.textButton} onClick={() => void finish()} disabled={busy}>先进入工作台</button> : null}
     </header>
     <div className={s.flow} data-step={step} data-role={data.role}>
       <CoAgentCapsule acknowledge={acknowledge} state={voice.recording ? "listening" : "idle"} level={voice.level} />
@@ -266,14 +269,12 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
         <div className={s.content} key={step.startsWith("tour-") ? "tour" : step} ref={content} data-step={step}>
           <div className={s.intro}>
             <h1 ref={title} tabIndex={-1}>{phoneHeading ? <><span className={s.desktopTourCopy}>{heading}</span><span className={s.mobileTourCopy}>{phoneHeading}</span></> : heading}</h1>
-            {step === "hello" ? <><p className={s.subtitle}>欢迎使用天枢。</p><p className={s.description}>{data.role === "ceo" ? "先花一分钟看看工作台。" : <>先花一分钟看看工作台，再看看每个月的 Mission 怎么定下来。<br /></>}{data.voiceprint.configured ? "雷达、声纹和外部工具" : "雷达和外部工具"}，可以现在设，也可以以后再说。</p></> : null}
-            {step === "tour-notifications" ? <><p className={`${s.description} ${s.desktopTourCopy}`}>{data.role === "ceo" ? "要你拍板的事、会议安排和需要研究的问题" : "任务卡的讨论、分给你的事和别人的回复"}，按轻重排在这里。点开一条，右边展开详情；看完关掉，回到原处。</p><p className={`${s.description} ${s.mobileTourCopy}`}>{data.role === "ceo" ? "要你拍板的事、会议安排和需要研究的问题" : "任务卡的讨论、分给你的事和别人的回复"}，按轻重排在这里。</p></> : null}
-            {step === "tour-board" ? <><p className={`${s.description} ${s.desktopTourCopy}`}>{data.role === "ceo" ? <>战略议题、雷达和各个战场都在这里。<br />底部是你的 Agent：问公司的事，它查了再答。</> : <>最上面是这个月的日历、你的 Mission 和约会议、等回复这些常用操作。<br />选一个 Mission，下面是它的 Task 和执行事项，分已完成、本周、之后三栏；再往下是最近进展。<br />底部是你的 Agent：问这个月的事，它查了再答。</>}</p><p className={`${s.description} ${s.mobileTourCopy}`}>{data.role === "ceo" ? "各个战场和雷达都在通知下面，一个一行。点开任何一条，详情铺满屏幕，左上角返回；底部是你的 Agent。" : "约会议、等回复在最上面；往下是这个月的日历、Mission，再往下是 Mission 里的执行事项，本周的排在最前。"}</p></> : null}
+            {step === "hello" ? <><p className={s.subtitle}>欢迎使用天枢。</p><p className={s.description}>{data.role === "ceo" ? "先花一分钟看看工作台。" : <>先花一分钟看看工作台，再看看每个月的 Mission 怎么定下来。<br />{data.voiceprint.configured ? "雷达、声纹和外部工具" : "雷达和外部工具"}，可以现在设，也可以以后再说。</>}</p></> : null}
+            {step === "tour-notifications" ? <><p className={`${s.description} ${s.desktopTourCopy}`}>{noticeCopy}点开一条，右边展开详情；看完关掉，回到原处。</p><p className={`${s.description} ${s.mobileTourCopy}`}>{noticeCopy}</p></> : null}
+            {step === "tour-board" ? <><p className={`${s.description} ${s.desktopTourCopy}`}>{data.role === "ceo" ? <>各个战场和雷达都在这里。<br />底部是你的 Agent：问公司的事，它查了再答；要约会议，也直接跟它说。</> : <>最上面是这个月的日历、你的 Mission 和约会议、等回复这些常用操作。<br />选一个 Mission，下面是它的 Task 和执行事项，分已完成、本周、之后三栏；再往下是最近进展。<br />底部是你的 Agent：问这个月的事，它查了再答。</>}</p><p className={`${s.description} ${s.mobileTourCopy}`}>{data.role === "ceo" ? "各个战场和雷达都在通知下面，一个一行。点开任何一条，详情铺满屏幕，左上角返回；底部是你的 Agent，问公司的事、约会议都跟它说。" : "约会议、等回复在最上面；往下是这个月的日历、Mission，再往下是 Mission 里的执行事项，本周的排在最前。"}</p></> : null}
             {step === "mission-flow" ? <p className={s.description}>月初一起定方向，之后由你拆成每天的事。</p> : null}
-            {/* 「这里改的是公司雷达。」由编辑器顶部那一行说，同一屏不重复。 */}
-            {step === "radar" && data.role === "ceo" ? <p className={s.description}>我会按你签发的本月目标自动关注；你还可以补充方向和来源。</p> : null}
             {step === "voiceprint" ? <p className={s.description}>录一段 15–30 秒的朗读，帮我在会后建议哪些发言可能来自你——最后仍由人核对。</p> : null}
-            {step === "connect" ? <p className={s.description}>{data.role === "ceo" ? "Codex、Claude Code 这类工具连上天枢后，可以直接问它今天有什么要你拍板、这周各战场怎么样。它只能看，拍板仍在天枢里做。" : "Codex、Claude Code 这类工具连上天枢后，能读你的执行事项、帮你写进展。需要每周自动同步时，可以再设置定时任务。"}</p> : null}
+            {step === "connect" ? <p className={s.description}>Codex、Claude Code 这类工具连上天枢后，能读你的执行事项、帮你写进展。需要每周自动同步时，可以再设置定时任务。</p> : null}
             {step === "start" && !returnPath ? <p className={s.description}>{data.next.text}</p> : null}
           </div>
           <div className={s.details}>
@@ -281,7 +282,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
             {step === "mission-flow" && data.role === "member" ? <MissionFlow /> : null}
             {step === "work" && data.role === "member" ? <WorkSnapshot data={data} onRefresh={refresh} /> : null}
             {step === "radar" ? <RadarSettingsEditor
-              mode={data.role === "ceo" ? "company" : "person"}
+              mode="person"
               submitLabel="保存并继续"
               onSaved={(summary) => { setRadarSaved({ enabled: summary.enabled, directions: summary.directions }); move(1); }}
               onLater={() => move(1)}
@@ -318,7 +319,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
               onPick={(key, checked) => setReviewPicks((current) => ({ ...current, [key]: checked }))} saving={reviewSaving} error={reviewError} /> : null}
             {step === "delegation" ? <DelegationPanel /> : null}
             {step === "start" ? <p className={s.summary}>
-              <span className={s.summaryItem}>{radarSummaryLine(data.role, radarSaved ?? data.radar)}</span>
+              <span className={s.summaryItem}>{radarSummaryLine(radarSaved ?? data.radar)}</span>
               {data.voiceprint.configured ? <span className={s.summaryItem}>声纹 · {voice.status?.enrolled ? "已录好" : "稍后在个人菜单里录"}</span> : null}
               <span className={s.summaryItem}>外部工具 · {connectDownloaded ? "连接步骤已准备" : "稍后在个人菜单里连"}</span>
               <span className={s.summaryItem}>本机采集器 · {collectorConnected ? "已连接" : "未连接"}</span>

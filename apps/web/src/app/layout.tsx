@@ -17,13 +17,16 @@ export const metadata: Metadata = {
   title: "TKOS",
   description: "把公司的判断变成持久对象。",
   robots: { index: false, follow: false },
+  // 苹果手机「添加到主屏幕」后全屏打开；状态栏透明叠在深色画布上（刘海由页面留白，见 viewportFit）。
+  appleWebApp: { capable: true, title: "天枢", statusBarStyle: "black-translucent" },
 };
 
 /**
  * 弹出软键盘时让整页（外壳是 100dvh）一起缩到键盘上方：底部的输入条、对话记录层跟着上来，不被键盘盖住。
  * Android / 鸿蒙的 Chromium 内核浏览器默认只缩视觉视口，固定在底部的输入条会被推到键盘后面；iOS Safari 忽略这一项。
+ * viewportFit cover：页面铺到刘海和底部横条下面，各处用 safe-area-inset 自己留白；themeColor 是手机浏览器顶栏的颜色。
  */
-export const viewport: Viewport = { width: "device-width", initialScale: 1, interactiveWidget: "resizes-content" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, interactiveWidget: "resizes-content", viewportFit: "cover", themeColor: "#1b2543" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

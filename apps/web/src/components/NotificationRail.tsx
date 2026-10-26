@@ -19,7 +19,7 @@ import { roundStatusText } from "./missionCards/roundStatusText";
 import { MonthlyReviewNotices } from "./monthlyReview/MonthlyReviewNotices";
 import { M2EntryNotice } from "./monthlyReview/M2EntryNotice";
 import { PersonalReviewBoard } from "./monthlyReview/PersonalReviewBoard";
-import { useWeeklyReviewBoard, WeeklyReviewBoard } from "./weeklyReview/WeeklyReviewBoard";
+import { inWeeklyReviewWindow, useWeeklyReviewBoard, WeeklyReviewBoard } from "./weeklyReview/WeeklyReviewBoard";
 import { RequestNotices } from "./requests/RequestNotices";
 import { MeetingCardNotices } from "./meeting/MeetingCardNotices";
 import { MeetingRecordDrop } from "./meeting/MeetingRecordDrop";
@@ -218,6 +218,14 @@ export function RailClock({ lead, onHome, homeActive }: { lead: ReactNode; onHom
         </span>
         <time dateTime={now?.toISOString()}>{parts?.time}</time>
       </HeroButton>
+      {/* 手持首页像锁屏：只显示日期和大号时间，不是按钮（首页就是这一页）。 */}
+      <div className={n.lockClock}>
+        <span className={n.railDate}>
+          <span>{parts?.day}</span>
+          <span className={n.railWeekday}>{parts?.weekday}</span>
+        </span>
+        <time dateTime={now?.toISOString()}>{parts?.time}</time>
+      </div>
     </header>
   );
 }
@@ -242,11 +250,12 @@ export function NotificationRail({
   homeActive?: boolean;
   /** 当前打开的对象（高亮所在分组与那一行）。 */
   currentHref?: string;
-  /** M2 对当前登录人可用：出去 M2 的入口卡。 */
+  /** M2 对当前登录人可用：出去 M2 的入口卡；复盘和拆解由 M2 承接，天枢自己的月末复盘、月度计划、任务卡轮次和倒计时不出。 */
   m2Available?: boolean;
 }) {
   const router = useRouter();
-  const groups = railGroups(cards, new Date(), viewerId);
+  const now = new Date();
+  const groups = railGroups(cards, now, viewerId).filter((group) => !(m2Available && group.kind === "decisions"));
   const rail = useRef<HTMLElement>(null);
   const positions = useRef(new Map<string, number>());
   const weeklyReviews = useWeeklyReviewBoard();
@@ -291,13 +300,13 @@ export function NotificationRail({
         }
       />
       <div className={n.noticeList}>
-        <CycleCountdown />
+        {m2Available ? null : <CycleCountdown />}
         <MeetingCardNotices meetingBase="/meetings" onNavigate={onNavigate} />
-        <WeeklyReviewBoard onNavigate={onNavigate} state={weeklyReviews} />
-        <PersonalReviewBoard onNavigate={onNavigate} />
-        <RequestNotices base="/requests" currentHref={currentHref} onNavigate={onNavigate} />
-        <M2EntryNotice available={m2Available} />
-        <MonthlyReviewNotices onNavigate={onNavigate} ceo />
+        {inWeeklyReviewWindow(now) ? <WeeklyReviewBoard onNavigate={onNavigate} state={weeklyReviews} /> : null}
+        {m2Available ? null : <PersonalReviewBoard onNavigate={onNavigate} />}
+        <RequestNotices base="/requests" header={false} currentHref={currentHref} onNavigate={onNavigate} />
+        <M2EntryNotice available={m2Available} now={now} />
+        {m2Available ? null : <MonthlyReviewNotices onNavigate={onNavigate} ceo />}
         {groups.map((group) => {
           const current = group.items.some((item) => item.href === currentHref || (item.missionRound && payloadOf<TMissionRoundSummary>(item.missionRound).cards.some((row) => `/mission-cards/${row.cardId}` === currentHref?.split("?")[0])));
           return (

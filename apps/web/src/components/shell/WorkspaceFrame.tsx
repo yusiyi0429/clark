@@ -71,7 +71,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   /** 已发起、新路由还没提交的目标：二级页先打开，右侧盖加载蒙版。路由提交（包括被重定向到别处）就清掉。 */
   const [pending, setPending] = useState<string | null>(null);
   const [m2Available, setM2Available] = useState(false);
-  /** 建会面板：CEO 从顶栏「约会议」打开，成员从首页操作区打开（经 WorkspaceContext 的 bookMeeting）。每次打开换一个 key，表单从空白开始。 */
+  /** 建会面板：CEO 从首页战场工具条「约会议」打开，成员从首页操作区打开（经 WorkspaceContext 的 bookMeeting）。每次打开换一个 key，表单从空白开始。 */
   const [booking, setBooking] = useState(false);
   const [bookingRun, setBookingRun] = useState(0);
   const [bookingWith, setBookingWith] = useState<string[]>([]);
@@ -607,12 +607,6 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
             data-covered={(detailOpen && !noticeTransition && !closing && !entering && !peek) || undefined}
             style={noticeTransition && !openingEmpty ? { viewTransitionName: "home-board" } : undefined}
           >
-            {/* 成员首页的约会议在首页的快捷卡里（HomeActions）；去 M2 的入口在通知栏（M2EntryNotice）。 */}
-            {homeHref === "/" ? (
-              <div className={s.m2Entry}>
-                {viewerId ? <button type="button" onClick={bookMeeting}>约会议</button> : null}
-              </div>
-            ) : null}
             {home}
           </div>
           {detailOpen ? (
