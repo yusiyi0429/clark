@@ -1443,8 +1443,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人 */
+        /** 预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人；带 draftId 时同一张会议卡只建一场 */
         post: operations["bookMeeting"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meeting-drafts/{draftId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 对话里的一张会议卡约好没有：本人用这张卡建的会，没约为 null */
+        get: operations["getMeetingDraftStatus"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4055,6 +4072,31 @@ export interface components {
                     /** @constant */
                     kind: "collection_draft";
                     collectionId: string;
+                } | {
+                    /** @constant */
+                    kind: "meeting_draft";
+                    draftId: string;
+                    title: string;
+                    scheduledAt: string;
+                    endsAt: string;
+                    host: {
+                        personId: string;
+                        displayName: string;
+                    } | null;
+                    participants: {
+                        personId: string;
+                        displayName: string;
+                    }[];
+                    unresolved: {
+                        name: string;
+                        reason: "not_found" | "ambiguous";
+                        host?: boolean;
+                    }[];
+                    anchor: {
+                        kind: "lto" | "po" | "mission" | "task" | "unit" | "company";
+                        id: string;
+                        title: string;
+                    } | null;
                 })[];
                 readScope?: {
                     label: string;
@@ -7034,6 +7076,15 @@ export interface components {
                 kind: "lto" | "po" | "mission" | "unit";
                 id: string;
             }[];
+            /** Format: uuid */
+            draftId?: string;
+        };
+        MeetingDraftStatusResponse: {
+            meeting: {
+                id: string;
+                title: string;
+                href: string;
+            } | null;
         };
         JoinMeetingRequest: {
             meetingId: string;
@@ -15925,6 +15976,55 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMeetingDraftStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 这张会议卡建的会 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingDraftStatusResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

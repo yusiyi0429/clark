@@ -164,6 +164,32 @@ describe("约会议", () => {
     await vi.waitFor(() => expect(workspace.navigate).toHaveBeenCalledWith("/me/meetings/m-new"));
   });
 
+  it("对话里会议卡的「改」：草稿整份填好，CEO 草稿没挂就空着不默认挂，约好带 draftId", async () => {
+    const draft = { draftId: "8f9c2c55-6d3c-4a51-9a7e-3d9a3c1e0001", title: "新 Chat 切换", scheduledAt: "2026-10-27T15:00:00+08:00",
+      endsAt: "2026-10-27T15:30:00+08:00", leadDriId: "p-third", participants: ["p-member"], anchors: [] };
+    const renderDraft = () => { hooks.index = 0; hooks.effectIndex = 0; return nodes(expand(MeetingBookingSheet({ open: true, onClose: vi.fn(), viewer: CEO, draft }))); };
+    await vi.waitFor(() => expect(anchorsReady(renderDraft())).toBe(true));
+    const tree = renderDraft();
+    expect(field(tree, "名称").props!.value).toBe("新 Chat 切换");
+    expect(tree.find((node) => node.type === DatePicker)!.props!.value).toBe("2026-10-27");
+    expect(tree.find((node) => node.type === Select && node.props?.["aria-label"] === "开始")!.props!.value).toBe("15:00");
+    expect(tree.find((node) => node.type === Select && node.props?.["aria-label"] === "结束")!.props!.value).toBe("15:30");
+    expect(tree.find((node) => node.type === Select && node.props?.["aria-label"] === "主持人")!.props!.value).toBe("p-third");
+    expect(tree.filter((node) => String(node.props?.["aria-label"] ?? "").startsWith("去掉")).map((node) => node.props!["aria-label"])).toEqual(["去掉 林晓"]);
+    // 没挂：挑选器直接展开，「约好」不能点。
+    expect(tree.some((node) => node.props?.["data-anchor-row"] !== undefined)).toBe(false);
+    expect(button(tree, "约好").props!.disabled).toBe(true);
+    click(renderDraft().find((node) => node.props?.["data-level"] === "po"));
+    click(renderDraft().find((node) => node.props?.["aria-pressed"] === false && text(node).includes(PO.title)));
+    api.post.mockResolvedValue({ data: { card: { objectRef: { id: "m-new" }, navigation: [{ href: "/meetings/m-new", label: "Meeting" }] } }, response: { ok: true, status: 200 } });
+    (button(renderDraft(), "约好").props!.onClick as () => void)();
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalled());
+    const [, { body }] = api.post.mock.calls[0] as [string, { body: Record<string, unknown> }];
+    expect(body).toMatchObject({ title: "新 Chat 切换", leadDriId: "p-third", participants: ["p-member"], anchors: [{ kind: "po", id: PO.id }], draftId: draft.draftId });
+    expect(new Date(body.scheduledAt as string).toISOString()).toBe("2026-10-27T07:00:00.000Z");
+    expect(new Date(body.endsAt as string).toISOString()).toBe("2026-10-27T07:30:00.000Z");
+  });
+
   it("换了月份：旧选项先收起，读不到时标出来，再读到就清掉", async () => {
     await fill(MEMBER);
     let fail = true;

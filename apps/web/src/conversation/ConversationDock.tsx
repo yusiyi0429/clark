@@ -222,7 +222,7 @@ export const ConversationDock = memo(function ConversationDock({
   }, [onHeightChange, keyboard, composerExpanded, composerHeight]);
 
   const placeholder =
-    dictation.phase === "finishing" ? "正在收尾…" : dictation.active ? (dictation.live ? "正在听…" : "正在录音，结束后转写…") : activeReferences.length ? "围绕批注的内容输入问题或判断…" : detail ? "继续讨论…" : "输入问题或指令…";
+    dictation.phase === "finishing" ? "正在收尾…" : dictation.active ? (dictation.live ? "正在听…" : "正在录音，结束后转写…") : activeReferences.length ? "围绕批注的内容输入问题或判断…" : detail ? "继续讨论…" : "问点什么，或者说要约的会…";
   const dockHeight = keyboard ? (composerExpanded ? composerHeight + (hasTray ? 48 : 12) : hasTray ? 84 : 48) : undefined;
 
   return (
