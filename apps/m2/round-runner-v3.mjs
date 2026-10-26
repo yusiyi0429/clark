@@ -142,6 +142,9 @@ export function scheduleShapeFacts(units,{from,period}){
  return out;
 }
 // Domain Missions whose only answered demands come from one battlefield (陈溪南 2026-10-19: Method M01 and Agents M03 served only 灯塔).
+// Mission and Task owners who are the CEO: the skill says the CEO confirms and decides, never owns work (评测 2026-10-26).
+export function ceoOwnerFacts(units){const ceo=Object.values(memberProfiles).find(p=>p.ceo)?.name;if(!ceo)return [];
+ return units.flatMap(u=>(u.missions||[]).flatMap((m,i)=>[...(m.owner===ceo?[{unit:u.po.key,card:`m${i+1}`,title:m.title}]:[]),...(m.tasks||[]).flatMap((t,j)=>t.owner===ceo?[{unit:u.po.key,card:`m${i+1}-t${j+1}`,title:t.title}]:[])]));}
 export function placementFacts(units){
  const demands=new Map(units.flatMap(u=>(u.po.demands||[]).map(d=>[d.id,u.po.key])));
  return units.filter(u=>!battlefieldKeys.includes(u.po.key)).flatMap(u=>(u.missions||[]).flatMap((m,i)=>{
@@ -252,7 +255,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
 
  // Check and revise: groups in parallel, then each unit fixes its own must-fix findings by card id.
  const units=()=>keys.map(k=>L.units[k]);
- const facts=()=>({knownSupply:supply,splitFacts:splitFacts(units()),tierFacts:tierFacts(units()),loadFacts:loadFacts(units()),personDays:personDays(units()),capacityFacts:capacityFacts(units(),{from:input.scheduleFrom,period:input.period,capacity:input.capacity}),scheduleFacts:scheduleFacts(units()),scheduleShapeFacts:scheduleShapeFacts(units(),{from:input.scheduleFrom,period:input.period}),placementFacts:placementFacts(units()),demandFacts:demandFacts(units()),upstreamFacts:upstreamFactsV3(units())});
+ const facts=()=>({knownSupply:supply,splitFacts:splitFacts(units()),tierFacts:tierFacts(units()),loadFacts:loadFacts(units()),personDays:personDays(units()),capacityFacts:capacityFacts(units(),{from:input.scheduleFrom,period:input.period,capacity:input.capacity}),scheduleFacts:scheduleFacts(units()),scheduleShapeFacts:scheduleShapeFacts(units(),{from:input.scheduleFrom,period:input.period}),placementFacts:placementFacts(units()),ceoOwnerFacts:ceoOwnerFacts(units()),demandFacts:demandFacts(units()),upstreamFacts:upstreamFactsV3(units())});
  const candidates=()=>units().map(u=>({key:u.po.key,...withIds(u),upstream:u.upstream}));
  const keepFor=(before=[],now)=>{const id=i=>[i.unitKey,i.cardTitle,i.type,i.problem].join('|'),seen=new Set(now.map(id));return [...before.filter(i=>!seen.has(id(i))),...now];};
  const checkRound=async(layer,extraFor=()=>null)=>{
@@ -374,11 +377,21 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
   }
   for(const k of keys){
    const u=L.units[k],moved=[];
-   for(const m of u.missions){const keep=(m.tasks||[]).filter(t=>!t.deferred);for(const t of (m.tasks||[]).filter(t=>t.deferred))moved.push(`**推迟：**${m.title}·${t.title}（${t.owner}）：${t.deferred}`);if(keep.length)m.tasks=keep;else{m.tasks=m.tasks.map(({deferred,...t})=>t);m.tier='P2';}}
+   // Every Task of a Mission deferred: the whole Mission moves to next month (评测 2026-10-26: putting them back left 于斯一 at 24 of 21).
+   // Only when the unit would be left with no Mission at all are they kept, and the overload goes to the CEO below.
+   const stays=u.missions.filter(m=>(m.tasks||[]).some(t=>!t.deferred));
+   for(const m of u.missions){const keep=(m.tasks||[]).filter(t=>!t.deferred);
+    if(keep.length){for(const t of m.tasks.filter(t=>t.deferred))moved.push(`**推迟：**${m.title}·${t.title}（${t.owner}）：${t.deferred}`);m.tasks=keep;}
+    else if(stays.length)moved.push(`**推迟：**整个 Mission「${m.title}」（${m.owner}）推到下月：${[...new Set(m.tasks.map(t=>t.deferred))].join('；')}`);
+    else{moved.push(`**推迟：**${m.title}（${m.owner}）整组推迟，但这是本单元唯一的 Mission，保留为 P2，放不下的人日交 CEO 决定：${[...new Set(m.tasks.map(t=>t.deferred))].join('；')}`);m.tasks=m.tasks.map(({deferred,...t})=>t);m.tier='P2';}}
+   if(stays.length)u.missions=stays;
    if(moved.length)u.po.plan={...u.po.plan,tradeoffs:[...(u.po.plan?.tradeoffs||[]),...moved]};
   }
   for(const [name,d] of Object.entries(st.decisions)){const was=input.alignDecisions?.[name];(input.alignDecisions??={})[name]={decisionsForCEO:[...new Set([...(was?.decisionsForCEO||[]),...d.decisionsForCEO])],changed:(was?.changed||0)+d.changes.length};}
-  st.after=Object.fromEntries(capacityFacts(units(),{from:input.scheduleFrom,period:input.period,capacity:input.capacity}).map(p=>[p.name,p.plannedDays]));
+  // Measured after applying, not as the model reported: anyone still over goes to the CEO by name.
+  const after=capacityFacts(units(),{from:input.scheduleFrom,period:input.period,capacity:input.capacity});
+  for(const p of after.filter(p=>p.over>0.5)){const note=`${p.name} 对齐后仍有 ${p.plannedDays} 人日（容量 ${p.capacityDays}），请 RU DRI 和 CEO 决定先推哪几项。`;const d=(input.alignDecisions??={})[p.name]??={decisionsForCEO:[],changed:0};if(!d.decisionsForCEO.includes(note))d.decisionsForCEO.push(note);if(!input.generationGaps.some(g=>g.layer==='align'&&g.gap===note))input.generationGaps.push({unitKey:p.name,layer:'align',gap:note});}
+  st.after=Object.fromEntries(after.map(p=>[p.name,p.plannedDays]));
   st.done=true;await save({stage:'全局对齐完成',done:over.length,total:over.length,partialUnits:display()});
  };
  await alignPass('align',1);

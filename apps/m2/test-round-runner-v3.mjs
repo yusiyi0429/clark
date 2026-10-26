@@ -45,7 +45,8 @@ test('3.x 流程：战场先写并提需求，能力域收到需求后回应，�
   assert.ok(log.includes('align-generate:刘人豪'),'刘人豪超载，进入全局对齐');
   assert.equal(eo.missions[0].tier,'P2','唯一的 Task 被推迟后，Mission 降为 P2 并保留 Task');
   assert.ok(eo.tradeoff.some(t=>t.startsWith('**推迟：**')),'推迟的工作写进单元计划的取舍');
-  assert.deepEqual(result.audit.alignDecisions['刘人豪'].decisionsForCEO,['缺 3 人日']);
+  assert.equal(result.audit.alignDecisions['刘人豪'].decisionsForCEO[0],'缺 3 人日');
+  assert.ok(result.audit.alignDecisions['刘人豪'].decisionsForCEO.some(x=>/对齐后仍有/.test(x)),'对齐后按实际结果重算，仍超的交 CEO');
   assert.deepEqual(eo.milestones,['10/16 首次使用']);
   assert.equal(eo.time,'2026-10-01—2026-10-31');
   assert.equal(result.counts.mission,10);assert.equal(result.counts.task,10);
@@ -187,7 +188,7 @@ test('after the final check, upstream rows whose Mission is gone are settled and
   const row=result.audit.upstreamCoverage.bf02.find(x=>x.disposition==='承接');
   assert.equal(row.missionTitle,'bf02 合并后的结果线');
   assert.ok(result.raw.find(u=>u.key==='bf02').missions[0].upstreamIds.includes(row.id),'Mission 也记着它承接的编号');
-  assert.deepEqual(result.audit.alignDecisions['刘人豪'].decisionsForCEO,['缺 3 人日'],'再对齐时交 CEO 的决定不重复');
+  assert.equal(result.audit.alignDecisions['刘人豪'].decisionsForCEO.filter(x=>x==='缺 3 人日').length,1,'再对齐时交 CEO 的决定不重复');
  }finally{await rm(temp,{recursive:true,force:true});delete process.env.DECODING_RUNS_DIR;}
 });
 
@@ -204,5 +205,22 @@ test('global alignment that leaves someone over while keeping P2 work is sent ba
   const result=await generateRoundV3({gateway,rules,fetchSources:async()=>({period:'2026-10',planningDate:'2026-10-09',sources:keys.map(key=>({key,content:`${key} 资料\n【本月意图】${key} 10 月目标（草稿）· 成果\n原文`}))})});
   assert.ok(asked>=2,'第一次没让出 P2 就退回重做');
   assert.ok(result.audit.alignDecisions['刘人豪'].decisionsForCEO.some(d=>/还留着 \d+ 个 P2 Task/.test(d)),'两次都没让出时，写进交给 CEO 和 RU DRI 的决定');
+ }finally{await rm(temp,{recursive:true,force:true});delete process.env.DECODING_RUNS_DIR;}
+});
+
+test('global alignment that defers every Task of one Mission moves that Mission to next month when the unit has others',async()=>{
+ const temp=await mkdtemp(tmpdir()+'/v3-defer-');process.env.DECODING_RUNS_DIR=temp;
+ try{
+  const log=[],base=fakeGateway(log);let aligned=0;
+  const gateway={...base,async complete(messages,opts){
+   const p=JSON.parse(messages[1].content);
+   if(p.stage==='domain-generate'&&p.key==='eo'){const r=await base.complete(messages,opts);const a=JSON.parse(r.answer);a.missions=[...a.missions,{...a.missions[0],title:'eo 第二条结果线成立',tier:'P1',gate:'10/20 第二个场景首次使用',result:'另一个人能做成另一件事。',route:'试点→推广'}];return {...r,answer:JSON.stringify(a)};}
+   if(p.stage==='align-generate'&&p.key==='刘人豪'){const second=p.work.filter(w=>w.mission==='eo 第二条结果线成立');if(!aligned++)assert.ok(second.length,'第一次对齐时第二条结果线的 Task 也在里面');return {answer:JSON.stringify({analysis:'',changes:second.map(w=>({id:w.id,defer:true,reason:'下月再做'})),decisionsForCEO:[],gaps:[]}),usage:{}};}
+   return base.complete(messages,opts);
+  }};
+  const result=await generateRoundV3({gateway,rules,fetchSources:async()=>({period:'2026-10',planningDate:'2026-10-09',sources:keys.map(key=>({key,content:`${key} 资料\n【本月意图】${key} 10 月目标（草稿）· 成果\n原文`}))})});
+  const eo=result.raw.find(u=>u.key==='eo');
+  assert.deepEqual(eo.missions.map(m=>m.title),['eo 第一条结果线成立'],'Task 全推迟的 Mission 整个推到下月，不再放回');
+  assert.ok((eo.tradeoff||[]).some(t=>t.includes('整个 Mission「eo 第二条结果线成立」')),'单元计划写明整个 Mission 推迟');
  }finally{await rm(temp,{recursive:true,force:true});delete process.env.DECODING_RUNS_DIR;}
 });
