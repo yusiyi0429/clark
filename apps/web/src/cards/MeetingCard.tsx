@@ -1788,14 +1788,14 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   };
   // 能上传会议记录的人（CEO、主持人）：进度线上待交记录后面的「上传会议记录」打开这里的选文件。
   const canUpload = payload.status === "scheduled" && (!memberReadOnly || isHost);
-  // 等开会、进行中时「进入飞书会议」在页头最右那一格；进度线只在待交记录这一步后面给上传会议记录这几样补救。
+  // 等开会、进行中时「进入飞书会议」在页头最右那一格；待交记录时进度线下面单独一块给贴妙记链接、上传会议记录这几样补救。
   const joinUrl = live === "waiting" || live === "live" ? payload.feishuEvent?.joinUrl ?? null : null;
   const progressActions = progress?.upload ? (
     <MinutesRecovery meetingId={meetingId} status={source.minutesStatus ?? "none"} failure={source.minutesFailure ?? null}
       canFetch={canFetchMinutes} onFetched={() => void reloadCard()} onUpload={canUpload ? () => uploadRef.current?.click() : undefined}
       uploading={uploading} uploadError={uploadError} />
   ) : null;
-  const worldLine = <MeetingWorldSection meetingId={meetingId} viewerId={workspace.viewerId ?? ""} progress={progress ? <MeetingProgress model={progress} actions={progressActions} /> : null} />;
+  const worldLine = <MeetingWorldSection meetingId={meetingId} viewerId={workspace.viewerId ?? ""} progress={progress ? <MeetingProgress model={progress} below={progressActions} /> : null} />;
   // 会开完、还没有确认的逐字稿时，主栏整块能拖会议记录进来（FileDropZone）。
   const recordDrop = canUpload && ended && !source.transcript;
   // 选会议记录文件：会议记录区的「上传会议记录」和进度线上的共用，上传块不出现时也在。

@@ -139,11 +139,12 @@ describe("进度线：自动取妙记失败后的入口", () => {
   };
   const buttons = (tree: Node[]) => tree.filter((node) => node.type === "button").map(text);
 
-  it("读取失败：上传会议记录、再读一次、贴妙记链接；再读成功后重取会议卡", async () => {
+  it("读取失败：先是贴妙记链接读取，其次再读一次，最后上传会议记录；再读成功后重取会议卡", async () => {
     const onUpload = vi.fn();
     const onFetched = vi.fn();
     const tree = recovery({ onUpload, onFetched });
-    expect(buttons(tree)).toEqual(["上传会议记录", "再读一次", "贴妙记链接"]);
+    expect(tree.some((node) => node.props?.["aria-label"] === "妙记链接")).toBe(true);
+    expect(buttons(tree)).toEqual(["读取", "再读一次", "上传会议记录"]);
     (tree.find((node) => node.type === "button" && text(node) === "上传会议记录")!.props!.onClick as () => void)();
     expect(onUpload).toHaveBeenCalled();
     api.post.mockResolvedValue({ data: { minutesStatus: "waiting", minutesFailure: null }, response: { ok: true, status: 200 } });
@@ -154,6 +155,7 @@ describe("进度线：自动取妙记失败后的入口", () => {
 
   it("参会人什么都没有；只能上传的人只有上传", () => {
     expect(buttons(recovery({ canFetch: false }))).toEqual([]);
+    expect(recovery({ canFetch: false }).some((node) => node.props?.["aria-label"] === "妙记链接")).toBe(false);
     hooks.values = [];
     expect(buttons(recovery({ canFetch: false, onUpload: vi.fn() }))).toEqual(["上传会议记录"]);
   });
@@ -166,15 +168,13 @@ describe("进度线：自动取妙记失败后的入口", () => {
     expect(recovery({ onFetched }).some((node) => node.props?.role === "alert")).toBe(false);
   });
 
-  it("贴妙记链接：点开才有输入框，读取后重取会议卡", async () => {
+  it("贴妙记链接：输入框直接在，没填时读取不能点，读取后重取会议卡", async () => {
     const onFetched = vi.fn();
-    const tree = recovery({ status: "manual", failure: null, onFetched });
-    expect(tree.some((node) => node.props?.["aria-label"] === "妙记链接")).toBe(false);
-    (tree.find((node) => node.type === "button" && text(node) === "贴妙记链接")!.props!.onClick as () => void)();
     const opened = recovery({ status: "manual", failure: null, onFetched });
+    expect(opened.find((node) => node.type === "button" && text(node) === "读取")!.props!.disabled).toBe(true);
     (opened.find((node) => node.props?.["aria-label"] === "妙记链接")!.props!.onChange as (event: unknown) => void)({ target: { value: "https://x.feishu.cn/minutes/obcn1" } });
     api.post.mockResolvedValue({ data: { minutesStatus: "ready", minutesFailure: null }, response: { ok: true, status: 200 } });
-    (recovery({ status: "manual", failure: null, onFetched }).find((node) => node.type === "button" && text(node) === "读取")!.props!.onClick as () => void)();
+    (recovery({ status: "manual", failure: null, onFetched }).find((node) => node.type === "form")!.props!.onSubmit as (event: unknown) => void)({ preventDefault() {} });
     await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/minutes",
       { params: { path: { id: "m1" } }, body: { url: "https://x.feishu.cn/minutes/obcn1" } }));
     await vi.waitFor(() => expect(onFetched).toHaveBeenCalled());
