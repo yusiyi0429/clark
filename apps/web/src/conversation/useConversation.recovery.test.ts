@@ -75,26 +75,82 @@ describe("一轮没完成时，已经写出的内容留在界面上", () => {
     expect(JSON.parse((fetchMock.mock.calls[2][1] as { body: string }).body)).toMatchObject({ message: "继续", resumeRunId: RUN });
   });
 
-  it("连接在回答途中断开（服务端没来得及存）：在本地补上这条半截回答和一句说明，给「继续」", async () => {
+  it("连接在回答途中断开：进度行写「正在连接」，连上后自动「继续」（带那一轮的 runId），本人不用点", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "第一段" })], new TypeError("network error")))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }]))
+      .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "接着写完。" }), sse({ type: "done", status: "completed" })]))
+      .mockResolvedValueOnce(history([]));
+    vi.stubGlobal("fetch", fetchMock);
+    let settled = false;
+    const sending = snapshot().send("问题", []).finally(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(snapshot()).toMatchObject({ status: "streaming", stage: "connecting", error: null, recovery: null });
+    for (let step = 0; step < 10 && !settled; step += 1) await vi.advanceTimersByTimeAsync(1_000);
+    expect(await sending).toBe(true);
+    expect(JSON.parse((fetchMock.mock.calls[3][1] as { body: string }).body)).toMatchObject({ message: "继续", resumeRunId: RUN });
+    expect(snapshot()).toMatchObject({ status: "complete", error: null });
+  });
+
+  it("服务停机前先存了档（SERVER_RESTARTING）：连上新实例后自动接着写", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "写到一半" }),
+        sse({ type: "error", code: "SERVER_RESTARTING", message: "天枢服务在更新。已写出的部分保留在上方，点「继续」从断点接着写。", resume: "continue", partial: true })]))
+      .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }, { sequence: 2, role: "assistant", content: "写到一半\n\n（这次回答在这里中断了，以上是已经写出的部分。）", runId: RUN }]))
+      .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }, { sequence: 2, role: "assistant", content: "写到一半", runId: RUN }]))
+      .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "写完。" }), sse({ type: "done", status: "completed" })]))
+      .mockResolvedValueOnce(history([]));
+    vi.stubGlobal("fetch", fetchMock);
+    const sending = snapshot().send("问题", []);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(await sending).toBe(true);
+    expect(JSON.parse((fetchMock.mock.calls[3][1] as { body: string }).body)).toMatchObject({ message: "继续", resumeRunId: RUN });
+    expect(snapshot().status).toBe("complete");
+  });
+
+  it("一分钟内都没连上：在本地补上这条半截回答和一句说明，这时才给「继续」", async () => {
+    vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn()
       .mockResolvedValueOnce(streamResponse([sse({ type: "route", tier: "grounded", expectSeconds: 30, notice: "需要先查证企业知识和公开来源再作答。" }),
         sse({ type: "message", delta: "硅基流动 9 月完成融资" })], new TypeError("network error")))
-      .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "硅基流动最近融资？", runId: RUN }])));
-    expect(await snapshot().send("硅基流动最近融资？", [])).toBe(true);
+      .mockRejectedValue(new TypeError("Failed to fetch")));
+    const sending = snapshot().send("硅基流动最近融资？", []);
+    await vi.advanceTimersByTimeAsync(70_000);
+    expect(await sending).toBe(true);
     const view = snapshot();
     expect(view.messages.at(-1)).toMatchObject({ role: "assistant", runId: RUN,
       content: "需要先查证企业知识和公开来源再作答。\n\n硅基流动 9 月完成融资\n\n（连接在这里中断了，以上是已经写出的部分。）" });
-    expect(view.error).toBe("和天枢服务的连接在回答途中断开了（可能是服务重启或本机网络切换）。已写出的部分保留在上方，点「继续」从断点接着写。");
-    expect(view.error).not.toMatch(/暂不可用|network/);
+    expect(view.error).toBe("连接中断了。已写出的部分保留在上方，点「继续」从断点接着写。");
+    expect(view.error).not.toMatch(/暂不可用|network|服务出错|已记录/);
     expect(view.recovery).toMatchObject({ mode: "continue" });
     expect(view.partial).toBe("");
   });
 
+  it("等连上时点「停止」：不再自动接，按停止处理，已写出的部分可以「继续」", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "写了一段" })], new TypeError("network error")))
+      .mockRejectedValue(new TypeError("Failed to fetch")));
+    const sending = snapshot().send("问题", []);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(snapshot().stage).toBe("connecting");
+    snapshot().stop();
+    expect(await sending).toBe(true);
+    expect(snapshot()).toMatchObject({ status: "aborted", recovery: { mode: "continue" } });
+  });
+
   it("只思考了、还没出正文就断了：思考收成「已思考 N 秒」挂在本地补的一条说明上，给「重新回答」", async () => {
+    vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn()
       .mockResolvedValueOnce(streamResponse([sse({ type: "thinking", delta: "比较几家的现金消耗。" })], "end"))
-      .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }])));
-    await snapshot().send("问题", []);
+      .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }]))
+      .mockRejectedValue(new TypeError("Failed to fetch")));
+    const sending = snapshot().send("问题", []);
+    await vi.advanceTimersByTimeAsync(70_000);
+    await sending;
     const view = snapshot();
     expect(view.messages.at(-1)).toMatchObject({ role: "assistant", content: "（这次回答没有完成。）" });
     expect(view.thought).toMatchObject({ text: "比较几家的现金消耗。", seconds: expect.any(Number) });
@@ -106,16 +162,17 @@ describe("一轮没完成时，已经写出的内容留在界面上", () => {
     vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn()
       .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "写了一句" })], "hang"))
-      .mockResolvedValueOnce(history([])));
+      .mockResolvedValueOnce(history([]))
+      .mockRejectedValue(new TypeError("Failed to fetch")));
     let settled = false;
     const sending = snapshot().send("问题", []).finally(() => { settled = true; });
-    // 第二次读一直不回来：按 5 秒一步往前拨，最多拨到两分钟。
-    for (let step = 0; step < 24 && !settled; step += 1) await vi.advanceTimersByTimeAsync(5_000);
+    // 第二次读一直不回来，之后也连不上：按 5 秒一步往前拨，最多拨到三分钟（一分钟静默 + 一分钟自己重连）。
+    for (let step = 0; step < 36 && !settled; step += 1) await vi.advanceTimersByTimeAsync(5_000);
     expect(settled).toBe(true);
     expect(await sending).toBe(true);
     const view = snapshot();
     expect(view.status).toBe("failed");
-    expect(view.error).toContain("超过一分钟没有任何数据");
+    expect(view.error).toContain("超过一分钟没有数据");
     expect(view.messages.at(-1)).toMatchObject({ role: "assistant", content: expect.stringContaining("写了一句") });
   });
 
@@ -137,14 +194,58 @@ describe("一轮没完成时，已经写出的内容留在界面上", () => {
     void release;
   });
 
-  it("服务端没接下（5xx、代理没回 JSON）：说明服务端没接下、原文放回输入框，不给「继续」", async () => {
-    vi.stubGlobal("fetch", vi.fn()
+  it("服务端没接下（500、代理没回 JSON）：不自动重发，一句「没发出去」、原文放回输入框，不给「继续」", async () => {
+    const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: false, status: 500, body: null, json: async () => { throw new Error("not json"); } })
-      .mockResolvedValueOnce(history([])));
+      .mockResolvedValueOnce(history([]));
+    vi.stubGlobal("fetch", fetchMock);
     expect(await snapshot().send("问题", [])).toBe(false);
     const view = snapshot();
-    expect(view.error).toBe("天枢服务这次没有接下这条消息（服务出错，已记录）。原文已放回输入框，可以直接重发。");
+    expect(view.error).toBe("没发出去，原文已放回输入框。");
     expect(view.recovery).toBeNull();
+    expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST")).toHaveLength(1);
+  });
+
+  it("代理连不上正在重启的服务（502）：这句留在对话里、进度行写「正在连接」，自己重发成功，只有一条提问", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 502, body: null, json: async () => ({}) })
+      .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "回答" }), sse({ type: "done", status: "completed" })]))
+      .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }, { sequence: 2, role: "assistant", content: "回答", runId: RUN }]));
+    vi.stubGlobal("fetch", fetchMock);
+    let settled = false;
+    const sending = snapshot().send("问题", []).finally(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(snapshot()).toMatchObject({ status: "streaming", stage: "connecting" });
+    expect(snapshot().messages.filter((message) => message.role === "user")).toHaveLength(1);
+    for (let step = 0; step < 5 && !settled; step += 1) await vi.advanceTimersByTimeAsync(1_000);
+    expect(await sending).toBe(true);
+    expect(snapshot()).toMatchObject({ status: "complete", error: null });
+    expect(snapshot().messages.map((message) => message.content)).toEqual(["问题", "回答"]);
+  });
+
+  it("没连上但其实已经送到（读回的历史里有这句）：不重发，按回答中途断了自动接上", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }]))
+      .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }]))
+      .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }]))
+      .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "回答" }), sse({ type: "done", status: "completed" })]))
+      .mockResolvedValueOnce(history([]));
+    vi.stubGlobal("fetch", fetchMock);
+    const sending = snapshot().send("问题", []);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(await sending).toBe(true);
+    const posts = fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST");
+    expect(posts.map(([, init]) => JSON.parse((init as { body: string }).body).message)).toEqual(["问题", "重新回答"]);
+    expect(JSON.parse((posts[1][1] as { body: string }).body)).toMatchObject({ resumeRunId: RUN });
+  });
+
+  it("登录过期：去登录页，按没接下返回，原文放回输入框（存成草稿，回来还在）", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: false, status: 401, body: null, json: async () => ({}) }));
+    expect(await snapshot().send("问题", [])).toBe(false);
+    expect(window.location.assign).toHaveBeenCalledWith("/access");
   });
 
   it("停止：已写出的部分留着，可以「继续」", async () => {

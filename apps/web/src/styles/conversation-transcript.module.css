@@ -74,7 +74,11 @@
 .historyError{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:4px 0 28px;padding:10px 14px;border-radius:12px;background:#ffffff0d;color:#e9c3b9;font-size:13px;line-height:1.7;overflow-wrap:anywhere}
 .historyError p{flex:1 1 220px;min-width:0;margin:0}
 .historyError button{flex:none;display:inline-flex;align-items:center;gap:4px;min-height:32px;padding:0 12px;border-radius:999px;color:inherit;font-weight:600}
-:global([data-tone=light]) .historyLoading{color:#8b9099}
+/* 连接类自己重试过仍没读到：和载入中同一行灰字，后面一个小「重试」，不用醒目的底色。 */
+.historyPaused{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:4px 0 24px;color:#a5a5af;font-size:13px;line-height:1.6}
+.historyPaused p{margin:0}
+.historyPaused button{flex:none;display:inline-flex;align-items:center;gap:4px;min-height:28px;padding:0 10px;border-radius:999px;color:inherit}
+:global([data-tone=light]) .historyLoading,:global([data-tone=light]) .historyPaused{color:#8b9099}
 :global([data-tone=light]) .historyError{background:#fff5f2;color:#a44d3e}
 :global([data-tone=light]) .historyError button:hover{background:#a44d3e12}
 @media(prefers-reduced-motion:reduce){.historyLoading::before{animation:none}}

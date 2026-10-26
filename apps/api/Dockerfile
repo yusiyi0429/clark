@@ -16,4 +16,6 @@ ENV NODE_ENV=production
 # 非 root：node 用户只读访问代码与只读挂载的 seed；镜像内不写业务文件
 USER node
 EXPOSE 4000
-CMD ["pnpm", "--filter", "@warmap/api", "start"]
+# 直接由 node 当 1 号进程（与 pnpm start 同一条 tsx 启动）：docker stop 的 SIGTERM 送到 server.ts 的停机收尾，不经 pnpm 转发。
+WORKDIR /repo/apps/api
+CMD ["node", "--import", "tsx", "src/server.ts"]

@@ -17,6 +17,7 @@ import { recoverInterruptedResearch } from "./issues.js";
 import { loadPeopleDirectory } from "./peopleDirectory.js";
 import { createCompanyContext } from "./companyContext.js";
 import { assignLegacyConversations } from "./conversations.js";
+import { settleActiveTurns } from "./routes/conversations.js";
 import { createResearchService } from "./research.js";
 import { createResearchAgentRunner, researchTimeoutMs } from "./researchAgent.js";
 import { agentModel, agentModelEnvFrom } from "./agentModels.js";
@@ -313,3 +314,14 @@ await app.listen({ port, host: "0.0.0.0" });
 // 飞书长连接：收到事件只落库并排 jobs，3 秒内 ack。
 feishuEvents = env.feishu ? startFeishuEventStream(pool, env.feishu) : undefined;
 console.log(`warmap api listening on :${port} (${join(".", "migrations")} applied, build ${env.buildSha})`);
+// 停机（部署换版本、重启）：正在写的对话先以「服务更新」收尾存档，界面连上新实例后自动接着写；再关服务和后台任务后退出。
+let stopping = false;
+const shutdown = async () => {
+  if (stopping) return;
+  stopping = true;
+  await settleActiveTurns();
+  await app.close().catch(() => undefined);
+  process.exit(0);
+};
+process.once("SIGTERM", () => void shutdown());
+process.once("SIGINT", () => void shutdown());

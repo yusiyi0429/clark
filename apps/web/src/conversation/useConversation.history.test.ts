@@ -37,7 +37,7 @@ vi.mock("react", () => ({
 }));
 import { useConversation, type Message } from "./useConversation";
 
-type Pending = { url: string; init?: RequestInit; resolve: (value: unknown) => void; reject: (cause: unknown) => void };
+type Pending = { url: string; init?: RequestInit; resolve: (value: unknown) => void; reject: (cause: unknown) => void; done: boolean };
 let requests: Pending[] = [];
 /** 服务端已经回了、网络层没理会取消：只能靠 hook 自己丢掉迟到的结果。 */
 let ignoreAbort = false;
@@ -47,11 +47,13 @@ beforeEach(() => {
   requests = []; ignoreAbort = false;
   vi.stubGlobal("window", { dispatchEvent: vi.fn(), location: { assign: vi.fn() } });
   vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => new Promise((resolve, reject) => {
-    requests.push({ url, init, resolve, reject });
-    init?.signal?.addEventListener("abort", () => { if (!ignoreAbort) reject(Object.assign(new Error("aborted"), { name: "AbortError" })); });
+    const request: Pending = { url, init, done: false,
+      resolve: (value) => { request.done = true; resolve(value); }, reject: (cause) => { request.done = true; reject(cause); } };
+    requests.push(request);
+    init?.signal?.addEventListener("abort", () => { if (!ignoreAbort) request.reject(Object.assign(new Error("aborted"), { name: "AbortError" })); });
   })));
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 let scope = "global";
 /** 渲染一遍并执行排队的 effect；返回这一遍看到的状态。 */
@@ -73,7 +75,14 @@ function unmount() {
   h.effects.forEach((slot) => { if (typeof slot?.cleanup === "function") slot.cleanup(); });
   h.effects = [];
 }
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+const flush = () => (vi.isFakeTimers() ? vi.advanceTimersByTimeAsync(0) : new Promise((resolve) => setTimeout(resolve, 0)));
+/** 连接类失败 hook 会自己按退避再试：把每次重试都答成同样的失败，拨过重试时限（30 秒）。 */
+async function keepFailing(answer: (request: Pending) => void) {
+  for (let second = 0; second < 40; second++) {
+    for (const request of requests.filter((item) => !item.init?.method && !item.done)) answer(request);
+    await vi.advanceTimersByTimeAsync(1_000);
+  }
+}
 const historyRequest = (index = -1) => requests.filter((request) => !request.init?.method).at(index)!;
 const ok = (messages: Message[]) => ({ ok: true, status: 200, json: async () => ({ scope, messages }) });
 const failed = (status: number) => ({ ok: false, status, json: async () => ({ code: "INTERNAL", message: "boom" }) });
@@ -107,10 +116,9 @@ describe("对话历史：载入中、真的没有、没读到是三种状态", (
   });
 
   it.each([
-    [500, "天枢服务读取对话记录时出错（已记录），可以点重试。"],
     [404, "暂无法读取该对话：对象可能已移除，或无查看权限。"],
     [401, "登录状态已失效，请重新进入后再试。"],
-  ])("接口返回 %s：是可重试的失败，不是空历史", async (status, copy) => {
+  ])("接口返回 %s：要本人处理的失败，直接说原因，不是空历史", async (status, copy) => {
     scope = "global";
     render();
     historyRequest().resolve(failed(status));
@@ -120,17 +128,36 @@ describe("对话历史：载入中、真的没有、没读到是三种状态", (
     expect(view.historyError).not.toMatch(/boom|INTERNAL|\d{3}/);
   });
 
-  it("网络断开同样记为失败", async () => {
+  it("接口返回 500：先自己按退避重试、仍是载入中；30 秒内都不行才记失败，没有原因文案", async () => {
+    vi.useFakeTimers();
+    scope = "global";
+    render();
+    historyRequest().resolve(failed(500));
+    await flush();
+    expect(render()).toMatchObject({ historyStatus: "loading", historyError: null, historyWaiting: { since: expect.any(Number), offline: false } });
+    await keepFailing((request) => request.resolve(failed(500)));
+    expect(render()).toMatchObject({ historyStatus: "error", historyError: null, historyWaiting: null, messages: [] });
+    // 1、2、4、8、15 秒退避：30 秒里最多读 6 次，不是一直刷。
+    expect(requests.filter((request) => !request.init?.method).length).toBeLessThanOrEqual(6);
+  });
+
+  it("网络断开：自己重试，网络回来后读到就正常显示，不出现失败", async () => {
+    vi.useFakeTimers();
     scope = "global";
     render();
     historyRequest().reject(new TypeError("Failed to fetch"));
     await flush();
-    expect(render()).toMatchObject({ historyStatus: "error", historyError: "没有连上天枢服务，对话记录没读出来，可以点重试。" });
+    expect(render().historyStatus).toBe("loading");
+    await vi.advanceTimersByTimeAsync(1_000);
+    historyRequest().resolve(ok([user(1, "上次的问题")]));
+    await flush();
+    expect(render()).toMatchObject({ historyStatus: "ready", historyError: null, historyWaiting: null, messages: [user(1, "上次的问题")] });
   });
 });
 
 describe("重试只重读历史", () => {
   it("失败后重试成功；重试期间已显示的消息和待发附件都在", async () => {
+    vi.useFakeTimers();
     scope = "issue:issue-01";
     render();
     historyRequest().resolve(ok([user(1, "上次的问题"), assistant(2, "上次的回答")]));
@@ -142,8 +169,7 @@ describe("重试只重读历史", () => {
     await uploading;
     // 再一次读取失败：已显示的消息不清空。
     render().retryHistory();
-    historyRequest().resolve(failed(503));
-    await flush();
+    await keepFailing((request) => request.resolve(failed(503)));
     expect(render()).toMatchObject({ historyStatus: "error", messages: [user(1, "上次的问题"), assistant(2, "上次的回答")] });
     expect(render().attachments).toEqual([{ id: "att-1", fileName: "brief.pdf", mimeType: "application/pdf" }]);
     // 重试：载入中也不清空，读到后换成服务端的全部。
@@ -261,7 +287,8 @@ describe("换对象与卸载：迟到的结果不串进来", () => {
 });
 
 describe("发送后的重读失败", () => {
-  it("保留已显示的对话并接上这次回答，给出可重试的提示而不是清空", async () => {
+  it("保留已显示的对话并接上这次回答；后台接着重读，仍不行才给可重试的提示，不清空", async () => {
+    vi.useFakeTimers();
     scope = "global";
     render();
     historyRequest().resolve(ok([user(1, "早先的问题"), assistant(2, "早先的回答")]));
@@ -274,14 +301,17 @@ describe("发送后的重读失败", () => {
     await flush();
     historyRequest().resolve(failed(502));
     expect(await sending).toBe(true);
+    expect(render()).toMatchObject({ status: "complete", partial: "", historyStatus: "ready" });
+    await keepFailing((request) => request.resolve(failed(502)));
     const view = render();
-    expect(view).toMatchObject({ status: "complete", partial: "", historyStatus: "error", historyError: "天枢服务读取对话记录时出错（已记录），可以点重试。" });
+    expect(view).toMatchObject({ status: "complete", historyStatus: "error", historyError: null });
     expect(view.messages.map((message) => [message.role, message.content])).toEqual([
       ["user", "早先的问题"], ["assistant", "早先的回答"], ["user", "新的问题"], ["assistant", "新的回答"],
     ]);
   });
 
   it("服务端没接下这句、重读也失败：撤掉本地那句，返回未接收让输入框放回原文", async () => {
+    vi.useFakeTimers();
     scope = "global";
     render();
     historyRequest().resolve(ok([user(1, "早先的问题")]));
@@ -292,6 +322,7 @@ describe("发送后的重读失败", () => {
     await flush();
     historyRequest().resolve(failed(500));
     expect(await sending).toBe(false);
+    await keepFailing((request) => request.resolve(failed(500)));
     const view = render();
     expect(view).toMatchObject({ status: "failed", error: "上一轮回答还没结束，请等它写完或点「停止」后再发。", historyStatus: "error", recovery: null });
     expect(view.messages).toEqual([user(1, "早先的问题")]);

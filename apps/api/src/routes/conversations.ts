@@ -57,6 +57,19 @@ const OBJECT_SCENES: Record<string, string> = {
   "monthly-plan": "月度计划详情", "monthly-review-item": "复盘项详情", "personal-review": "个人复盘", signal: "信号详情",
 };
 
+/** 正在写的一号位对话轮次（每轮的 abort）：停机时由 settleActiveTurns 收尾。 */
+const activeTurns = new Set<AbortController>();
+
+/**
+ * 停机前（部署换版本）：正在写的每一轮都以「服务更新」收尾，已写出的部分存下并标成可继续，
+ * 界面连上新实例后自动接着写；最多等 waitMs 让它们存完档。
+ */
+export async function settleActiveTurns(waitMs = 5_000): Promise<void> {
+  for (const turn of activeTurns) turn.abort(Object.assign(new Error("Server restarting"), { code: "SERVER_RESTARTING" }));
+  const deadline = Date.now() + waitMs;
+  while (activeTurns.size && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
 export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, deliveryAgent: RequestAgent): void {
   const { pool, q, env, fail, requirePerson, requireCEO, requestContext, runtime, peopleDirectory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, conversationStallTimeoutMs, conversationHeartbeatMs, conversationCompaction, research } = ctx;
 
@@ -164,6 +177,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       requestContext.set(req, { runId, scope: req.params.scope });
       const runStartedAt = Date.now();
       const abort = new AbortController();
+      activeTurns.add(abort);
       let streamFinished = false;
       let eventSequence = 0;
       let runStatus = "aborted";
@@ -560,7 +574,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           }));
           if (abort.signal.aborted) {
             const reason = abort.signal.reason as { code?: string; message?: string } | undefined;
-            await settleFailure(reason?.code === "TURN_TIMEOUT" ? "turn_timeout" : reason?.code === "TURN_STALLED" ? "turn_stalled" : "aborted",
+            await settleFailure(reason?.code === "TURN_TIMEOUT" ? "turn_timeout" : reason?.code === "TURN_STALLED" ? "turn_stalled"
+              : reason?.code === "SERVER_RESTARTING" ? "restart" : "aborted",
               reason?.message ?? "Conversation aborted");
           } else {
             // 这一轮走过恢复（用了备用模型、重试、续写、精简历史）：回答末尾一行很淡的说明，随消息存下。
@@ -610,6 +625,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           const raw = reason?.message ?? (err as Error)?.message ?? "Conversation runtime failed";
           const kind: TurnFailureKind = reason?.code === "TURN_TIMEOUT" ? "turn_timeout"
             : reason?.code === "TURN_STALLED" ? "turn_stalled"
+            : reason?.code === "SERVER_RESTARTING" ? "restart"
             : abort.signal.aborted ? "aborted"
             : err instanceof ConversationTurnError ? err.kind
             : (err as { code?: string })?.code === "SEARCH_BUDGET_EXHAUSTED" ? "search_budget"
@@ -667,6 +683,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         if (hijacked && !reply.raw.writableEnded) reply.raw.end();
         if (scopeLockHeld) await client.query("SELECT pg_advisory_unlock(hashtext($1))", [lockKey]).catch(() => undefined);
         client.release();
+        activeTurns.delete(abort);
       }
     };
 

@@ -288,9 +288,10 @@ export function ConversationTurns({ messages, partial = "", footer, after, trail
   );
 }
 
-export const STAGE_COPY: Record<ThinkingStage, string> = { understanding: "正在理解问题", thinking: "正在思考", researching: "正在快速查证", answering: "正在整理回答" };
+export const STAGE_COPY: Record<ThinkingStage, string> = { understanding: "正在理解问题", thinking: "正在思考", researching: "正在快速查证", answering: "正在整理回答",
+  connecting: "正在连接", offline: "等待网络" };
 /** 深度档（重要的战略问题），以及中途升级后的非深度档：进度行用同一口径。 */
-export const DEEP_STAGE_COPY: Record<ThinkingStage, string> = { understanding: "正在理解问题", thinking: "正在深入思考", researching: "正在深入查证", answering: "正在整理回答" };
+export const DEEP_STAGE_COPY: Record<ThinkingStage, string> = { ...STAGE_COPY, thinking: "正在深入思考", researching: "正在深入查证" };
 
 /**
  * 进度行的细节（系统生成）：查证时是最近一步在查什么 / 读到了什么；思考时是推理摘要里的中文要点，没有就沿用最近读到的内容；
