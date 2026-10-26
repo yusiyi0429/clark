@@ -40,6 +40,8 @@
 .editCancel{background:#fff;outline:1px solid #d9dde5;color:#4f5866}
 .editSave{background:#007aff;font-weight:500;color:#fff}
 .editSave:disabled{opacity:.5;cursor:default}
+.editDelete{margin-right:auto;border:0;background:none;padding:8px 2px;font:inherit;font-size:12.5px;color:var(--danger,#be123c);cursor:pointer}
+.editDelete:disabled{opacity:.5;cursor:default}
 .hiddenInput{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /*
@@ -418,12 +420,12 @@
   /* 标题右侧「编辑会议」铅笔：视觉 28，热区 44（规范 §3.5）。 */
   .workspace .titleEdit { width: var(--touch-hit, 44px); height: var(--touch-hit, 44px); }
   /* 资料已更新提示里的「用最新资料重新预审」、选议题、确认 / 取消决定、撤回：文字钮统一 44 高。 */
-  .staleNotice button, .chooseButton, .confirmDecision, .cancelDecision, .revokeButton, .editCancel, .editSave, .candidateReopen {
+  .staleNotice button, .chooseButton, .confirmDecision, .cancelDecision, .revokeButton, .editCancel, .editSave, .editDelete, .candidateReopen {
     min-height: var(--touch-hit, 44px);
   }
   /* 报错条里的「重试会后抽取」：原来 26 高。 */
   .error button { min-height: var(--touch-hit, 44px); padding: 0 14px; font-size: 14px; }
-  .staleNotice button, .chooseButton, .cancelDecision, .revokeButton, .editCancel, .editSave, .candidateReopen { font-size: 14px; }
+  .staleNotice button, .chooseButton, .cancelDecision, .revokeButton, .editCancel, .editSave, .editDelete, .candidateReopen { font-size: 14px; }
   .confirmDecision { min-width: 72px; font-size: 14px; }
   .issueLink { display: inline-flex; align-items: center; min-height: var(--touch-hit, 44px); font-size: 14px; }
   /* 妙记候选弹层：关闭钮 30 → 44；底部三颗钮高 44，三颗放不下就折行。 */

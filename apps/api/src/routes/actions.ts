@@ -32,7 +32,7 @@ import { startSignedMissionDrafts } from "../missionRounds.js";
 import { executeReplaceTranscript, executeRetryOutcome } from "../outcome.js";
 import { executeConfirmTranscriptCandidate, executeDiscardTranscriptCandidate } from "../transcriptCandidate.js";
 import { getMeetingRow, type MeetingActionOutcome } from "../meetingStore.js";
-import { projectMemberMeetingCardFromCard } from "../memberCards.js";
+import { HOST_MEETING_ACTIONS, projectMemberMeetingCardFromCard } from "../memberCards.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void {
@@ -47,7 +47,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
         return fail(reply, 404, "UNKNOWN_ACTION", "无效 actionId");
       }
       if (req.person!.role !== "ceo") {
-        if (!["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate", "meeting.retry_feishu_booking"].includes(scope.actionType) || scope.objectType !== "meeting")
+        if (!HOST_MEETING_ACTIONS.includes(scope.actionType) || scope.objectType !== "meeting")
           return fail(reply, 403, "FORBIDDEN", "只有 CEO 可以访问");
         const meeting = await getMeetingRow(q, scope.objectId);
         if (!meeting || meeting.lead_dri_id !== req.person!.personId)
@@ -112,7 +112,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
       if (scope.actionType === "meeting.cancel") {
         const result = await executeCancelMeeting(pool, env.sessionSecret, scope, fingerprint);
         if (changed(result)) await feishuEvents.schedule(scope.objectId, "cancel");
-        return respond(reply, result);
+        return respondMeeting(result);
       }
       if (scope.actionType === "meeting.retry_feishu_booking") {
         return respondMeeting(await feishuEvents.retry(env.sessionSecret, scope, fingerprint, hostId));
@@ -121,11 +121,7 @@ export function registerActionRoutes(app: AppInstance, ctx: RouteContext): void 
         const result = await executeEndMeeting(pool, env.sessionSecret, scope, fingerprint, hostId);
         // 开完马上排一次妙记轮询：几秒内进入「等妙记」，不等下一个 5 分钟。
         if ("card" in result) await enqueueJob(q, { kind: MEETING_MINUTES_POLL_KIND, dedupeKey: `${MEETING_MINUTES_POLL_KIND}:end:${scope.objectId}` });
-        if (req.person!.role === "ceo" || "error" in result) return respond(reply, result);
-        const viewerId = req.person!.personId;
-        return respond(reply, "card" in result
-          ? { ...result, card: projectMemberMeetingCardFromCard(result.card, viewerId) }
-          : { ...result, latestCard: projectMemberMeetingCardFromCard(result.latestCard, viewerId) });
+        return respondMeeting(result);
       }
       if (scope.actionType === "meeting.retry_preflight") {
         return respond(reply, await executeRetryPreflight(pool, peopleDirectory, preflight, env.sessionSecret, scope, fingerprint));

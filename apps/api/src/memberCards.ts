@@ -22,6 +22,9 @@ export function projectMemberMeetingCard(row: MeetingRow, secret: string, viewer
   return projectMemberMeetingCardFromCard(projectMeetingCard(row, secret), viewerId);
 }
 
+/** 主持人（成员）在自己主持的会上能做的操作：结束、重新安排、取消（没开成时界面上叫「删除此会议」）、会议记录映射、重试飞书预约。 */
+export const HOST_MEETING_ACTIONS = ["meeting.end", "meeting.reschedule", "meeting.cancel", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate", "meeting.retry_feishu_booking"];
+
 export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string): TCard {
   const payload = card.payload as TMeetingCardPayload;
   const isHost = payload.leadDriId === viewerId;
@@ -56,6 +59,6 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
       decisions: payload.decisions ?? [],
     } : {}),
   },
-    actions: isHost ? card.actions.filter((action) => ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate", "meeting.retry_feishu_booking"].includes(action.actionType)) : [],
+    actions: isHost ? card.actions.filter((action) => HOST_MEETING_ACTIONS.includes(action.actionType)) : [],
     navigation: [{ href: `/me/meetings/${card.objectRef.id}`, label: "会议" }] };
 }
