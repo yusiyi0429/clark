@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createAssistantMessageEventStream, type AssistantMessage, type Context, type Model } from "@earendil-works/pi-ai";
 import {
-  CONTINUE_AFTER_BREAK, ConversationTurnError, classifyFailure, createTurnRecovery, recoveringStream, recoveryNote, recoveryNotice, resumeInstruction,
+  CONTINUE_AFTER_BREAK, ConversationTurnError, captureStreamErrors, classifyFailure, createTurnRecovery, recoveringStream, recoveryNote, recoveryNotice, resumeInstruction,
   summarizeRecovery, turnFailureCopy, turnRecovery, type RecoveryEvent,
 } from "../src/conversationRecovery.js";
 import type { HistoryMode } from "../src/conversationStream.js";
@@ -198,6 +198,52 @@ describe("出错的分类与给一号位的说明", () => {
     expect(classifyFailure("400 messages.1.content.0: Invalid signature in thinking block")).toBe("rejected");
     expect(classifyFailure("Response incomplete: content_filter")).toBe("content_filter");
     expect(classifyFailure("whatever", { stalled: true })).toBe("stalled");
+    // 网关流里只回一个空的错误事件（10/26）：按上游异常；错误事件里说清了原因的照原因归类。
+    expect(classifyFailure("Error Code undefined: undefined")).toBe("upstream");
+    expect(classifyFailure('Error Code undefined: undefined {"type":"error","sequence_number":3}')).toBe("upstream");
+    expect(classifyFailure("Error Code context_length_exceeded: Your input exceeds the context window")).toBe("context");
+    expect(classifyFailure("Error Code undefined: undefined")).not.toBe("unknown");
+  });
+
+  it("网关流里的错误事件原文留下来：回包一个字节不改地交给 pi，事件跨数据块也认得出", async () => {
+    const encoder = new TextEncoder();
+    const chunks = ['data: {"type":"response.created"}\n\n', 'data: {"type":"err', 'or","error":{"type":"server_error","message":"upstream busy"}}\n\n'];
+    const base = async () => new Response(new ReadableStream({ start(controller) { for (const chunk of chunks) controller.enqueue(encoder.encode(chunk)); controller.close(); } }),
+      { status: 200, headers: { "content-type": "text/event-stream" } });
+    const capture = captureStreamErrors(base as typeof fetch);
+    const response = await capture.fetch("https://gateway.invalid/responses");
+    expect(await response.text()).toBe(chunks.join(""));
+    expect(capture.event()).toBe('{"type":"error","error":{"type":"server_error","message":"upstream busy"}}');
+    // 不是流式回包（例如 4xx 的 JSON）原样返回，不留事件。
+    const plain = captureStreamErrors(async () => new Response("{}", { status: 400, headers: { "content-type": "application/json" } }));
+    expect((await plain.fetch("https://gateway.invalid/responses")).status).toBe(400);
+    expect(plain.event()).toBeUndefined();
+  });
+
+  it("恢复日志带上网关的错误事件原文，并按上游异常换备用模型", async () => {
+    const encoder = new TextEncoder();
+    const logged: Record<string, unknown>[] = [];
+    const sse = async () => new Response(new ReadableStream({ start(controller) { controller.enqueue(encoder.encode('data: {"type":"error"}\n\n')); controller.close(); } }),
+      { status: 200, headers: { "content-type": "text/event-stream" } });
+    let calls = 0;
+    const stream = recoveringStream((target, _ctx, options) => {
+      calls += 1;
+      const out = createAssistantMessageEventStream();
+      void (async () => {
+        // 像 pi 一样经 options.fetch 发请求、读完回包，再报出它那句只有 code、message 的错误。
+        if (calls <= 2) await (await options!.fetch!("https://gateway.invalid/responses")).text();
+        const failed = calls <= 2;
+        out.push(failed
+          ? { type: "error", reason: "error", error: message(target, "", "error", "Error Code undefined: undefined") }
+          : { type: "done", reason: "stop", message: message(target, "备用模型的回答。", "stop") });
+        out.end();
+      })();
+      return out;
+    }, { sleep: async () => undefined });
+    const { state } = turn([GPT, model("gpt-5.6-terra")], { log: (entry) => logged.push(entry) });
+    const { result } = await turnRecovery.run(state, () => drain(stream(GPT, context, { fetch: sse as typeof fetch })));
+    expect(result.model).toBe("gpt-5.6-terra");
+    expect(logged[0]).toMatchObject({ event: "conversation.recovery", kind: "upstream", error: "Error Code undefined: undefined", upstreamEvent: '{"type":"error"}' });
   });
 
   it("说明具体、可操作，不出现英文原文，也没有笼统的「暂不可用」", () => {
