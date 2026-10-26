@@ -24,8 +24,10 @@ const checksOf = (draft: Draft | null, count: number) => new Map((draft?.standar
  * 验收（design-12 §4）：对照完成标准逐条打勾、选交付结果、写一句结论，推进人点「验收完成」这件事才算完成。
  * 外部工具提交时带了草稿就直接预填；没有就请我的 Agent 起草（只读，30 秒内没回就留空，手填照样能验收）。
  * 草稿只是预填，不替人点「验收完成」。右上角关闭和 Esc 只关弹窗；「还要继续做」才清掉这次提交。
+ * quick（首页卡片上的「验收」）：同一个弹窗的简化版——完成标准和交付结果照样列出来对照，勾不勾都行；
+ * 不请 Agent 起草、不写结论（外部工具提交时写的结论照带），没有「还要继续做」，多一个「完整验收」去二级页。
  */
-export function AcceptDialog({ detail, materials, onClose, onDone, onStale, onOpenMaterial }: {
+export function AcceptDialog({ detail, materials, onClose, onDone, onStale, onOpenMaterial, quick }: {
   detail: Detail;
   materials: TMaterialView[];
   onClose: () => void;
@@ -33,7 +35,9 @@ export function AcceptDialog({ detail, materials, onClose, onDone, onStale, onOp
   onDone: (task: Task, accepted: boolean) => Promise<void>;
   /** 这件事刚被别处改过：重读一遍再让人核对。 */
   onStale: () => void;
-  onOpenMaterial: (id: string) => void;
+  /** 首页上点开时没有材料阅读区：依据里的材料只写名字。 */
+  onOpenMaterial?: (id: string) => void;
+  quick?: { onFull: () => void };
 }) {
   const task = detail.task;
   const standards = detail.standards;
@@ -44,13 +48,13 @@ export function AcceptDialog({ detail, materials, onClose, onDone, onStale, onOp
   // 交付结果按 id 记：从通知直接打开时材料可能还没读到，显示和提交时再对照现有材料。
   const [deliverables, setDeliverables] = useState<Set<string>>(() => new Set(submitted?.deliverableMaterialIds ?? []));
   const [verdict, setVerdict] = useState(submitted?.verdict ?? "");
-  const [drafting, setDrafting] = useState<"loading" | "agent" | "none">(submitted ? "agent" : "loading");
+  const [drafting, setDrafting] = useState<"loading" | "agent" | "none">(submitted ? "agent" : quick ? "none" : "loading");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   /** 人已经动过了：草稿晚到也不覆盖人的选择。 */
   const touched = useRef(false);
   useEffect(() => {
-    if (submitted) return;
+    if (submitted || quick) return;
     const controller = new AbortController();
     void browserApi.POST("/api/me/tasks/{id}/acceptance-draft", { params: { path: { id: task.id } }, signal: controller.signal })
       .then(({ data }) => {
@@ -118,7 +122,8 @@ export function AcceptDialog({ detail, materials, onClose, onDone, onStale, onOp
                 <Label className={a.checkLabel}>{text}</Label>
               </Checkbox.Content>
             </Checkbox>
-            {material || check?.evidence ? <p className={a.evidence}>依据：{material ? <button type="button" onClick={() => { onClose(); onOpenMaterial(material.id); }}>{material.fileName}</button> : null}
+            {material || check?.evidence ? <p className={a.evidence}>依据：{material ? onOpenMaterial
+              ? <button type="button" onClick={() => { onClose(); onOpenMaterial(material.id); }}>{material.fileName}</button> : material.fileName : null}
               {material && check?.evidence ? "，" : ""}{check?.evidence}</p> : null}
           </div>;
         })}</div> : <p className={a.muted}>没写完成标准</p>}
@@ -135,14 +140,15 @@ export function AcceptDialog({ detail, materials, onClose, onDone, onStale, onOp
         </Checkbox>)}</div>
       </section> : null}
 
-      <TextField className={a.verdict} value={verdict} onChange={(value) => { touched.current = true; setVerdict(value); }} maxLength={200}>
+      {quick ? (verdict ? <p className={a.submittedVerdict}>{verdict}</p> : null) : <TextField className={a.verdict} value={verdict} onChange={(value) => { touched.current = true; setVerdict(value); }} maxLength={200}>
         <div className={a.head}><Label className={a.verdictLabel}>一句结论</Label><span className={a.note}>{agentWrote && verdict ? "Agent 起草" : "可不填"}</span></div>
         <TextArea rows={2} placeholder="这件事交付了什么" />
-      </TextField>
+      </TextField>}
 
       {error ? <p className={a.error} role="alert">{error}</p> : null}
       <div className={a.actions}>
-        {submission ? <Button variant="secondary" isDisabled={busy} onPress={() => void keepGoing()}>还要继续做</Button> : null}
+        {quick ? <Button variant="ghost" className={a.full} isDisabled={busy} onPress={quick.onFull}>完整验收</Button> : null}
+        {submission && !quick ? <Button variant="secondary" isDisabled={busy} onPress={() => void keepGoing()}>还要继续做</Button> : null}
         <Button variant="primary" isDisabled={busy} onPress={() => void accept()}><Check size={15} strokeWidth={2.4} aria-hidden />{busy ? "保存中…" : "验收完成"}</Button>
       </div>
     </div>

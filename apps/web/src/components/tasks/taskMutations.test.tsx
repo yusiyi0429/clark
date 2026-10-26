@@ -322,6 +322,37 @@ it("没有提交时请我的 Agent 起草；没起草出来也能手填验收，
   expect(actions.post).toHaveBeenLastCalledWith("/api/me/tasks/{id}/accept", { params: { path: { id: "task-1" } }, body: { version: 2, verdict: null, deliverableMaterialIds: [], standards: [{ index: 0, met: true, evidence: null, materialId: null }] } });
 });
 
+it("首页简化版（quick）：照样列完成标准和交付结果，勾不勾都能「验收完成」；不请 Agent 起草、没有结论输入和「还要继续做」，外部工具的结论照带；「完整验收」去二级页", async () => {
+  const onFull = vi.fn();
+  const props = { detail: detailOf({ submission, task: { ...task, awaitingAcceptance: true } }), materials: [material(DOC, "结论.md")], onClose: vi.fn(),
+    onDone: vi.fn(async () => undefined), onStale: vi.fn(), quick: { onFull } };
+  let tree = render(() => AcceptDialog(props));
+  hooks.effects.forEach((effect) => effect());
+  expect(actions.post).not.toHaveBeenCalled();
+  expect(standardBoxes(tree)).toHaveLength(2);
+  expect(deliverableBoxes(tree)).toHaveLength(1);
+  expect(find(tree, (node) => node.type === "textarea" || node.props?.value === "两家都确认了")).toBeUndefined();
+  expect(button(tree, "还要继续做")).toBeUndefined();
+  (button(tree, "完整验收")!.props!.onPress as () => void)();
+  expect(onFull).toHaveBeenCalled();
+  tree = render(() => AcceptDialog(props));
+  actions.post.mockResolvedValue({ data: { ...task, status: "done", version: 3 } });
+  (button(tree, "验收完成")!.props!.onPress as () => void)();
+  await vi.waitFor(() => expect(props.onDone).toHaveBeenCalled());
+  expect(actions.post).toHaveBeenCalledWith("/api/me/tasks/{id}/accept", expect.objectContaining({ body: expect.objectContaining({ verdict: "两家都确认了" }) }));
+
+  // 没有提交、什么都不勾也能验收；不起草。
+  vi.mocked(actions.post).mockClear();
+  const plain = { ...props, detail: detailOf() };
+  tree = render(() => AcceptDialog(plain), []);
+  hooks.effects.forEach((effect) => effect());
+  expect(find(tree, (node) => node.props?.role === "status")).toBeUndefined();
+  actions.post.mockResolvedValue({ data: { ...task, status: "done", version: 3 } });
+  (button(tree, "验收完成")!.props!.onPress as () => void)();
+  await vi.waitFor(() => expect(actions.post).toHaveBeenCalledTimes(1));
+  expect(actions.post).toHaveBeenCalledWith("/api/me/tasks/{id}/accept", { params: { path: { id: "task-1" } }, body: { version: 2, verdict: null, deliverableMaterialIds: [], standards: [] } });
+});
+
 it("人先动了手，Agent 的草稿晚到也不覆盖", async () => {
   const props = { detail: detailOf(), materials: [], onClose: vi.fn(), onDone: vi.fn(async () => undefined), onStale: vi.fn(), onOpenMaterial: vi.fn() };
   const store: unknown[] = [];

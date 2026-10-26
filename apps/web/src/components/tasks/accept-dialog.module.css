@@ -41,6 +41,9 @@
 .verdict { display: grid; gap: 10px; min-width: 0; margin-top: 18px; }
 .verdictLabel.verdictLabel { flex: 1; color: #1f2a3d; font-size: 14px; font-weight: 600; }
 .verdict textarea { font-size: 14px; line-height: 1.75; }
+/* 首页简化版：外部工具提交时写的结论只读一行；「完整验收」靠左。 */
+.submittedVerdict { margin: 18px 0 0; color: #4d5a6c; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.actions > .full.full { margin-inline-end: auto; }
 .error { margin: 12px 0 0; color: #a44d3e; font-size: 13px; line-height: 1.6; }
 .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .actions > button { gap: 6px; }

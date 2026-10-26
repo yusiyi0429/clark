@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   calendar: null as Record<string, unknown> | null,
   popovers: [] as { open: boolean; change: (open: boolean) => void }[],
   api: { GET: vi.fn(), POST: vi.fn(), PATCH: vi.fn(), DELETE: vi.fn() },
+  accept: null as Record<string, unknown> | null,
 }));
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
@@ -88,6 +89,7 @@ vi.mock("ts-design/primitives", async () => {
 });
 vi.mock("./MonthCalendar", () => ({ MonthCalendar: (props: Record<string, unknown>) => { h.calendar = props; return null; } }));
 vi.mock("@/components/tours/StartTaskButton", () => ({ StartTaskButton: () => null }));
+vi.mock("@/components/tasks/AcceptDialog", () => ({ AcceptDialog: (props: Record<string, unknown>) => { h.accept = props; return <div data-accept-dialog="true" />; } }));
 vi.mock("@/lib/api/client", () => ({ browserApi: h.api }));
 
 import { HomePlan } from "./HomePlan";
@@ -496,22 +498,30 @@ describe("HomePlan：三栏的卡片", () => {
     expect(cardsIn(mount().html, "week")).toEqual(["a4", "a7", "a3", "a5"]);
   });
 
-  it("没完成的卡右下角「完成」：点一下变「确认」，再点才发完成请求，之后通知重读；已完成的卡没有", async () => {
-    vi.stubGlobal("window", { dispatchEvent: vi.fn(), setTimeout: vi.fn(() => 1), clearTimeout: vi.fn() });
-    vi.stubGlobal("document", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
-    h.api.POST.mockResolvedValue(ok({ id: "a3", status: "done" }));
+  it("没完成的卡右下角「验收」：读事项详情和材料，当场弹出简化的验收弹窗；「完整验收」去二级页；读不到就直接去二级页；已完成的卡没有", async () => {
+    const detail = { task: { id: "a3", version: 1, title: "真实会议跑通" }, standards: ["跑通"], submission: null };
+    const materials = [{ id: "m-1", fileName: "纪要.md" }];
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ materials }) })));
+    h.accept = null;
+    h.api.GET.mockResolvedValue(ok(detail));
     const view = mount();
-    const done = () => view.find((props) => props["aria-label"] === "完成「真实会议跑通」" || props["aria-label"] === "确认完成「真实会议跑通」")!;
-    expect(done().children).toBe("完成");
-    view.click((props) => props === done(), "完成");
-    expect(done().children).toBe("确认");
-    expect(h.api.POST).not.toHaveBeenCalled();
-    view.click((props) => props === done(), "确认");
+    view.click((props) => props["data-accept"] === "a3", "验收");
     await settle();
-    expect(h.api.POST).toHaveBeenCalledWith("/api/me/tasks/{id}/complete", { params: { path: { id: "a3" } }, body: { version: 1 } });
-    expect((window.dispatchEvent as ReturnType<typeof vi.fn>).mock.calls.map(([e]) => (e as Event).type)).toContain("member-tasks-changed");
+    view.render();
+    expect(h.api.GET).toHaveBeenCalledWith("/api/me/tasks/{id}", { params: { path: { id: "a3" } } });
+    expect(fetch).toHaveBeenCalledWith("/api/materials/task/a3", expect.anything());
+    expect(view.html).toContain("data-accept-dialog");
+    expect(h.accept).toMatchObject({ detail, materials, quick: expect.anything() });
+    (h.accept!.quick as { onFull: () => void }).onFull();
+    expect(view.onNavigate).toHaveBeenCalledWith("/me/tasks/a3?accept=1", expect.anything());
+    expect(view.render()).not.toContain("data-accept-dialog");
+
+    h.api.GET.mockResolvedValue({ data: undefined, response: { ok: false, status: 404 } });
+    view.click((props) => props["data-accept"] === "a4", "验收");
+    await settle();
+    expect(view.onNavigate).toHaveBeenLastCalledWith("/me/tasks/a4?accept=1", expect.anything());
     view.openDone();
-    expect(view.find((props) => props["aria-label"] === "完成「回流方案定稿」")).toBeUndefined();
+    expect(view.find((props) => props["data-accept"] === "a1")).toBeUndefined();
   });
 
   it("点卡片进事项详情", () => {

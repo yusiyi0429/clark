@@ -171,12 +171,6 @@ export const TaskAcceptance = Type.Object(
   { additionalProperties: false },
 );
 
-/** 首页卡片上「完成 → 确认」：有外部工具的待验收提交就照它记，没有就按每条完成标准都达到记。 */
-export const CompleteMyTaskRequest = Type.Object(
-  { version: Type.Integer({ minimum: 1 }) },
-  { additionalProperties: false },
-);
-
 /**
  * 推进人验收：只有推进人；version 不一致 409 带 latestTask。standards 只带判断，完成标准的文字由服务端按当前
  * doneDefinition 拆出来存快照；没列到的条目记为没达到。交付结果必须是这件事现有的材料。
@@ -455,7 +449,6 @@ export type TTaskSubmission = Static<typeof TaskSubmission>;
 export type TTaskAcceptance = Static<typeof TaskAcceptance>;
 export type TAcceptMyTaskRequest = Static<typeof AcceptMyTaskRequest>;
 export type TReopenMyTaskRequest = Static<typeof ReopenMyTaskRequest>;
-export type TCompleteMyTaskRequest = Static<typeof CompleteMyTaskRequest>;
 export type TTaskAcceptanceDraft = Static<typeof TaskAcceptanceDraft>;
 export type TMeHomeResponse = Static<typeof MeHomeResponse>;
 export type TWeeklySyncReminder = Static<typeof WeeklySyncReminder>;

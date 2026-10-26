@@ -329,15 +329,6 @@ export function reopenMyTask(pool: Pool, ownerId: string, taskId: string, versio
     await tellGroup(client,taskId,ownerId,`${names.get(ownerId) ?? ownerId}重新打开了这件事。`);
   });
 }
-/** 首页卡片上「完成 → 确认」：有外部工具的待验收提交就照它记，没有就按每条完成标准都达到记（本人点了完成）。 */
-export async function completeMyTask(pool: Pool, ownerId: string, taskId: string, version: number, names: Map<string,string>, now: Date): Promise<TaskResult> {
-  const row = await getTaskRow((sql,params)=>pool.query(sql,params),taskId);
-  if (!row || row.owner_id !== ownerId) return { notFound:true };
-  const submission = row.status === "done" ? null : row.submission;
-  return acceptMyTask(pool,ownerId,taskId,{ version, verdict: submission?.verdict ?? null,
-    standards: submission?.standards ?? taskStandards(row.done_definition).map((_, index) => ({ index, met: true, evidence: null, materialId: null })),
-    deliverableMaterialIds: submission?.deliverableMaterialIds ?? [] },names,now);
-}
 /** 信心充足：有完成标准，每一条都判断为达到，而且每条都有一句依据或指向一份材料。 */
 function confidentEnough(standards: string[], checks: CheckInput[]): boolean {
   const byIndex = new Map(checks.map((check) => [check.index, check]));

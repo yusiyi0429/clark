@@ -6,72 +6,43 @@
  * 卡片只写标题和一行小字：有截止写截止日，本周、之后没截止有开始写「M/D 起」，已完成只写截止日；逾期的日期加粗（不染色）。
  * 「全部」视图下小字前面加它属于哪个 Mission（missionOf），不属于任何 Mission 的写「不属于 Mission」。
  * 进行中的卡右上角写最近一次动静（今天写 HH:MM，更早写 M/D）；停滞的（idleDays）改写「N 天没动」，小点换琥珀色、标题降一档。
- * 没完成的卡右下角一个「完成」，点一下变「确认」，再点才完成（几秒内不点或点别处就退回「完成」）；外部工具提交了验收的，「完成」深一档。
+ * 没完成的卡右下角一个「验收」，当场弹出简化的验收弹窗（AcceptDialog quick）：对照完成标准、看一眼交付结果，勾不勾都行，点「验收完成」；
+ * 外部工具提交了验收的，「验收」深一档。读不到事项时直接去二级页验收。
  */
-import { useEffect, useRef, useState } from "react";
-import type { THomePlanActivity } from "@warmap/contracts";
+import { useState } from "react";
+import type { THomePlanActivity, TMaterialView } from "@warmap/contracts";
+import type { components } from "@/lib/api/schema";
 import { browserApi } from "@/lib/api/client";
+import { AcceptDialog } from "@/components/tasks/AcceptDialog";
 import { activityTime, shortDate, type Navigate } from "./planFormat";
 import s from "@/styles/home-plan.module.css";
 
 type Column = THomePlanActivity["column"];
+type Detail = components["schemas"]["TaskDetailResponse"];
+type Accepting = { detail: Detail; materials: TMaterialView[]; origin: Element | null };
 const COLUMNS: Column[] = ["week", "later"];
-/** 点了「完成」之后这么久不点「确认」就退回。 */
-const ARM_MS = 4_000;
 
 /** 排序用的日期：「之后」看哪天开始，其余看截止。 */
 const sortDate = ({ item, column }: THomePlanActivity) => (column === "later" ? item.startDate ?? item.dueDate : item.dueDate ?? item.startDate);
 const byDate = (a: THomePlanActivity, b: THomePlanActivity) => (sortDate(a) ?? "9999").localeCompare(sortDate(b) ?? "9999");
+const taskHref = (id: string) => `/me/tasks/${encodeURIComponent(id)}`;
 
-type DoneState = "idle" | "armed" | "busy" | "failed";
-
-/** 「完成 → 确认」：两下才完成。完成后发 member-tasks-changed，首页计划重读，卡片挪进已完成。 */
-function DoneButton({ activity }: { activity: THomePlanActivity }) {
-  const { item } = activity;
-  const [state, setState] = useState<DoneState>("idle");
-  const ref = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => {
-    if (state !== "armed" && state !== "failed") return;
-    const timer = window.setTimeout(() => setState("idle"), ARM_MS);
-    const away = (event: PointerEvent) => { if (!ref.current?.contains(event.target as Node)) setState("idle"); };
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setState("idle"); };
-    document.addEventListener("pointerdown", away);
-    document.addEventListener("keydown", escape);
-    return () => {
-      window.clearTimeout(timer);
-      document.removeEventListener("pointerdown", away);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [state]);
-
-  const complete = async () => {
-    setState("busy");
-    try {
-      const { data } = await browserApi.POST("/api/me/tasks/{id}/complete", { params: { path: { id: item.id } }, body: { version: item.version } });
-      window.dispatchEvent(new Event("member-tasks-changed"));
-      // 成功时卡片随重读挪走；没成（多半是刚被改过）就停在「重试」，计划已经换成最新的。
-      if (!data) setState("failed");
-    } catch {
-      setState("failed");
-    }
-  };
-
-  const label = state === "idle" ? "完成" : state === "failed" ? "重试" : "确认";
-  return (
-    <button ref={ref} type="button" className={s.done} data-done={state} data-awaiting={item.awaitingAcceptance || undefined} disabled={state === "busy"}
-      aria-label={state === "idle" ? `完成「${item.title}」` : `确认完成「${item.title}」`}
-      onClick={() => { if (state === "idle") setState("armed"); else if (state !== "busy") void complete(); }}>
-      {label}
-    </button>
-  );
+/** 验收弹窗要的：事项详情（完成标准、外部工具的提交）和这件事的材料。 */
+async function readAcceptance(id: string): Promise<{ detail: Detail; materials: TMaterialView[] } | null> {
+  const [{ data }, materials] = await Promise.all([
+    browserApi.GET("/api/me/tasks/{id}", { params: { path: { id } } }),
+    fetch(`/api/materials/task/${encodeURIComponent(id)}`, { headers: { accept: "application/json" } })
+      .then(async (response) => response.ok ? ((await response.json()) as { materials: TMaterialView[] }).materials : []),
+  ]);
+  return data ? { detail: data, materials } : null;
 }
 
-function ActivityCard({ activity, mission, today, onNavigate }: { activity: THomePlanActivity; mission: string | null; today: string; onNavigate: Navigate }) {
+function ActivityCard({ activity, mission, today, busy, onNavigate, onAccept }: { activity: THomePlanActivity; mission: string | null; today: string;
+  busy: boolean; onNavigate: Navigate; onAccept: (origin: Element) => void }) {
   const { item, column } = activity;
-  const href = `/me/tasks/${encodeURIComponent(item.id)}`;
+  const href = taskHref(item.id);
   const date = item.dueDate ? shortDate(item.dueDate) : column !== "done" && item.startDate ? `${shortDate(item.startDate)} 起` : null;
-  const completable = item.status === "not_started" || item.status === "in_progress";
+  const acceptable = item.status === "not_started" || item.status === "in_progress";
   return (
     <div className={s.activity}>
       <button type="button" className={s.open} data-activity={item.id} data-idle={activity.idleDays ? true : undefined} data-origin={href} onClick={(event) => onNavigate(href, event.currentTarget)}>
@@ -89,7 +60,12 @@ function ActivityCard({ activity, mission, today, onNavigate }: { activity: THom
           </small>
         )}
       </button>
-      {completable ? <DoneButton activity={activity} /> : null}
+      {acceptable ? (
+        <button type="button" className={s.accept} data-accept={item.id} data-awaiting={item.awaitingAcceptance || undefined} disabled={busy}
+          aria-label={`验收「${item.title}」`} onClick={(event) => onAccept(event.currentTarget)}>
+          验收
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -104,7 +80,25 @@ export function ActivityColumns({ activities, today, weekStart, weekEnd, mission
   onNavigate: Navigate;
 }) {
   const [doneOpen, setDoneOpen] = useState(false);
-  const card = (activity: THomePlanActivity) => <ActivityCard key={activity.item.id} activity={activity} mission={missionOf?.(activity) ?? null} today={today} onNavigate={onNavigate} />;
+  const [accepting, setAccepting] = useState<Accepting | null>(null);
+  /** 正在读验收弹窗要的东西的那件事。 */
+  const [loading, setLoading] = useState<string | null>(null);
+
+  const accept = async (id: string, origin: Element | null) => {
+    setLoading(id);
+    try {
+      const read = await readAcceptance(id);
+      if (read) setAccepting({ ...read, origin });
+      else onNavigate(`${taskHref(id)}?accept=1`, origin);
+    } catch {
+      onNavigate(`${taskHref(id)}?accept=1`, origin);
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const card = (activity: THomePlanActivity) => <ActivityCard key={activity.item.id} activity={activity} mission={missionOf?.(activity) ?? null} today={today}
+    busy={loading === activity.item.id} onNavigate={onNavigate} onAccept={(origin) => void accept(activity.item.id, origin)} />;
   const done = activities.filter((activity) => activity.column === "done").sort(byDate);
   return (
     <div className={s.activityBoard}>
@@ -127,6 +121,13 @@ export function ActivityColumns({ activities, today, weekStart, weekEnd, mission
           </button>
           {doneOpen ? <section className={s.column} data-column="done" aria-label="已完成">{done.map(card)}</section> : null}
         </div>
+      ) : null}
+      {accepting ? (
+        <AcceptDialog key={accepting.detail.task.id} detail={accepting.detail} materials={accepting.materials}
+          onClose={() => setAccepting(null)}
+          onDone={async () => setAccepting(null)}
+          onStale={() => void accept(accepting.detail.task.id, accepting.origin)}
+          quick={{ onFull: () => { const { detail, origin } = accepting; setAccepting(null); onNavigate(`${taskHref(detail.task.id)}?accept=1`, origin); } }} />
       ) : null}
     </div>
   );

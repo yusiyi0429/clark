@@ -2743,23 +2743,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/me/tasks/{id}/complete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 推进人在首页卡片上点「完成 → 确认」：有外部工具的待验收提交就照它记，没有就按每条完成标准都达到记；状态变完成 */
-        post: operations["completeMyTask"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/me/tasks/{id}/acceptance-draft": {
         parameters: {
             query?: never;
@@ -10158,9 +10141,6 @@ export interface components {
                 materialId: string | null;
             }[];
             deliverableMaterialIds: string[];
-        };
-        CompleteMyTaskRequest: {
-            version: number;
         };
         ReopenMyTaskRequest: {
             version: number;
@@ -20183,77 +20163,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AcceptMyTaskRequest"];
-            };
-        };
-        responses: {
-            /** @description 已完成的执行事项 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TaskView"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    completeMyTask: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CompleteMyTaskRequest"];
             };
         };
         responses: {

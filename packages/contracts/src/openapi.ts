@@ -168,7 +168,6 @@ import {
   TaskSubmission,
   TaskAcceptance,
   AcceptMyTaskRequest,
-  CompleteMyTaskRequest,
   ReopenMyTaskRequest,
   TaskAcceptanceDraft,
   TaskPerson,
@@ -1987,22 +1986,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
-      "/api/me/tasks/{id}/complete": {
-        post: {
-          operationId: "completeMyTask",
-          summary: "推进人在首页卡片上点「完成 → 确认」：有外部工具的待验收提交就照它记，没有就按每条完成标准都达到记；状态变完成",
-          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-          requestBody: jsonBody({ $ref: "#/components/schemas/CompleteMyTaskRequest" }),
-          responses: {
-            "200": { description: "已完成的执行事项", content: { "application/json": { schema: { $ref: "#/components/schemas/TaskView" } } } },
-            "400": errorResponse,
-            "401": errorResponse,
-            "403": errorResponse,
-            "404": errorResponse,
-            "409": errorResponse,
-          },
-        },
-      },
       "/api/me/tasks/{id}/acceptance-draft": {
         post: {
           operationId: "draftMyTaskAcceptance",
@@ -3129,7 +3112,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         TaskSubmission: TaskSubmission as JsonSchema,
         TaskAcceptance: TaskAcceptance as JsonSchema,
         AcceptMyTaskRequest: AcceptMyTaskRequest as JsonSchema,
-        CompleteMyTaskRequest: CompleteMyTaskRequest as JsonSchema,
         ReopenMyTaskRequest: ReopenMyTaskRequest as JsonSchema,
         TaskAcceptanceDraft: TaskAcceptanceDraft as JsonSchema,
         NotificationList: NotificationList as JsonSchema,

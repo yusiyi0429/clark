@@ -1,8 +1,8 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, CompleteMyTaskRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, BattlefieldProgressResponse, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
+import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, BattlefieldProgressResponse, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
-import { acceptMyTask, addTaskCollaborators, clearMyTaskSubmission, completeMyTask, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, reopenMyTask, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
+import { acceptMyTask, addTaskCollaborators, clearMyTaskSubmission, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, reopenMyTask, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
 import { draftTaskAcceptance } from "../taskAcceptanceDraft.js";
 import { readMonthPlan, saveMonthPlan } from "../monthPlan.js";
 import { readHomePlan } from "../homePlan.js";
@@ -108,12 +108,6 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     "/api/me/tasks/:id/accept",
     { preHandler: requireMember, schema: { params: idParams, body: AcceptMyTaskRequest } },
     async (req, reply) => respondTask(reply, await acceptMyTask(pool, req.person!.personId, req.params.id, req.body, names(), ctx.now())),
-  );
-  // 首页卡片上「完成 → 确认」。
-  app.post(
-    "/api/me/tasks/:id/complete",
-    { preHandler: requireMember, schema: { params: idParams, body: CompleteMyTaskRequest } },
-    async (req, reply) => respondTask(reply, await completeMyTask(pool, req.person!.personId, req.params.id, req.body.version, names(), ctx.now())),
   );
   app.post("/api/me/tasks/:id/acceptance-draft", { preHandler: requireMember, schema: { params: idParams, response: { 200: TaskAcceptanceDraft } } }, async (req, reply) => {
     const draft = await draftTaskAcceptance(pool, ctx.taskAcceptanceAgent, req.params.id, req.person!.personId, names());

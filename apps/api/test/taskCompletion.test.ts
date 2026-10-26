@@ -17,31 +17,14 @@ const withStandards = async (f: Fixture, title: string) =>
 const fullChecks = [{ index: 0, met: true, evidence: "PR #45 已合入" }, { index: 1, met: true, evidence: "预发 46b8dab8 全程测过" }];
 
 describe("执行事项怎么完成", () => {
-  it("首页「完成 → 确认」：没有提交就按每条标准都达到记；有外部工具的提交就照它记；版本不对 409", async () => {
+  it("不在灰度名单里：工具说有十足把握、每条都达到也照常等本人确认", async () => {
     const f = await executionFixture();
     try {
-      const plain = await withStandards(f, "没人提交过");
-      expect((await call(f, f.member, "POST", `/api/me/tasks/${plain.id}/complete`, { version: plain.version + 1 })).statusCode).toBe(409);
-      const done = await call(f, f.member, "POST", `/api/me/tasks/${plain.id}/complete`, { version: plain.version });
-      expect(done.statusCode).toBe(200);
-      expect(done.json()).toMatchObject({ status: "done" });
-      const detail = (await call(f, f.member, "GET", `/api/me/tasks/${plain.id}`)).json();
-      expect(detail.acceptance).toMatchObject({ by: { personId: TEST_MEMBER.personId }, verdict: null,
-        standards: [{ text: "主线合入", met: true, evidence: null }, { text: "预发跑通", met: true, evidence: null }] });
-      expect(detail.acceptance.auto).toBeUndefined();
-      expect((await call(f, f.member, "POST", `/api/me/tasks/${plain.id}/complete`, { version: detail.task.version })).json().code).toBe("TASK_ALREADY_DONE");
-      // 别人的事项点不了。
-      expect((await call(f, f.third, "POST", `/api/me/tasks/${plain.id}/complete`, { version: detail.task.version })).statusCode).toBe(404);
-
       const invoke = await agent(f);
-      const submitted = await withStandards(f, "Claude 提交过");
-      const sent = await invoke("submit_for_acceptance", { itemId: submitted.id, version: submitted.version, verdict: "差一条", confident: true,
-        standards: [{ index: 0, met: true, evidence: "PR #45 已合入" }, { index: 1, met: false }] });
-      // 不在灰度名单里：照常等本人确认。
+      const item = await withStandards(f, "Claude 提交过");
+      const sent = await invoke("submit_for_acceptance", { itemId: item.id, version: item.version, verdict: "两条都达到", confident: true, standards: fullChecks });
       expect(sent.body).toMatchObject({ submittedForAcceptance: true, status: "in_progress" });
-      expect((await call(f, f.member, "POST", `/api/me/tasks/${submitted.id}/complete`, { version: sent.body.version })).statusCode).toBe(200);
-      expect((await call(f, f.member, "GET", `/api/me/tasks/${submitted.id}`)).json().acceptance).toMatchObject({ verdict: "差一条",
-        standards: [{ met: true, evidence: "PR #45 已合入" }, { met: false, evidence: null }] });
+      expect((await call(f, f.member, "GET", `/api/me/tasks/${item.id}`)).json()).toMatchObject({ acceptance: null, submission: { verdict: "两条都达到" } });
     } finally { await f.t.close(); }
   });
 
