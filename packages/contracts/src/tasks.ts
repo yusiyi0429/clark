@@ -165,7 +165,15 @@ export const TaskAcceptance = Type.Object(
       { additionalProperties: false },
     ), { maxItems: 50 }),
     deliverableMaterialIds: Type.Array(Type.String({ format: "uuid" }), { maxItems: 30 }),
+    /** 灰度：推进人的外部工具信心充足（每条完成标准都达到且有依据）时直接判定完成，记下是哪个工具；人验收的没有这一项。 */
+    auto: Type.Optional(TaskProgressSource),
   },
+  { additionalProperties: false },
+);
+
+/** 首页卡片上「完成 → 确认」：有外部工具的待验收提交就照它记，没有就按每条完成标准都达到记。 */
+export const CompleteMyTaskRequest = Type.Object(
+  { version: Type.Integer({ minimum: 1 }) },
   { additionalProperties: false },
 );
 
@@ -379,6 +387,8 @@ export const NotificationKind = Type.Union([
   Type.Literal("thread_member_added"),
   /** 外部工具替推进人提交了验收，推进人收到「等你验收」。 */
   Type.Literal("task_submitted"),
+  /** 灰度：外部工具信心充足、直接判定完成，推进人收到一条（不对可以在事项里重新打开）。 */
+  Type.Literal("task_auto_done"),
   /** 一号位把议题指派给本人主责（issue.assign）；objectType=issue。 */
   Type.Literal("issue_assigned"),
   /** 送达通道（⑨ 传话）：收到请求、我的问题有人回答、接收人标记完成、接收人提问（给发起人）；objectType=request。 */
@@ -445,6 +455,7 @@ export type TTaskSubmission = Static<typeof TaskSubmission>;
 export type TTaskAcceptance = Static<typeof TaskAcceptance>;
 export type TAcceptMyTaskRequest = Static<typeof AcceptMyTaskRequest>;
 export type TReopenMyTaskRequest = Static<typeof ReopenMyTaskRequest>;
+export type TCompleteMyTaskRequest = Static<typeof CompleteMyTaskRequest>;
 export type TTaskAcceptanceDraft = Static<typeof TaskAcceptanceDraft>;
 export type TMeHomeResponse = Static<typeof MeHomeResponse>;
 export type TWeeklySyncReminder = Static<typeof WeeklySyncReminder>;

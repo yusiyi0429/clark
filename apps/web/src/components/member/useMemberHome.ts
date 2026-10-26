@@ -16,7 +16,7 @@ type MemberTask = components["schemas"]["TaskView"];
 
 export interface MemberNotification {
   id: string;
-  kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "meeting_card_pending" | "task_progress_added";
+  kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "task_auto_done" | "meeting_card_pending" | "task_progress_added";
   text: string;
   objectType: "task" | "meeting" | "issue";
   objectId: string;

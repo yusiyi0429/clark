@@ -7,9 +7,10 @@ import { createTestApp, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js
 const PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people-candidate.json", import.meta.url));
 const THIRD = { personId: "person-fixture-003", loginId: "ceshib", passcode: "3579" } as const;
 
-export async function executionFixture(status:"confirmed"|"open"="confirmed",period="2026-10",runtime:Parameters<typeof createTestApp>[2]={}) {
+export async function executionFixture(status:"confirmed"|"open"="confirmed",period="2026-10",runtime:Parameters<typeof createTestApp>[2]={},
+  env:Parameters<typeof createTestApp>[0]={}) {
   let now=new Date("2026-10-10T02:00:00.000Z");
-  const t=await createTestApp({companyPeopleSeed:PEOPLE_SEED},undefined,{monthlyNow:()=>now,...runtime});
+  const t=await createTestApp({companyPeopleSeed:PEOPLE_SEED,...env},undefined,{monthlyNow:()=>now,...runtime});
   const plan=randomUUID(),round=randomUUID(),card=randomUUID();
   await t.sql("UPDATE battlefield_config SET owner_id=$1,six_month_outcome='半年目标' WHERE id='growth'",[TEST_CEO.personId]);
   await t.sql(`INSERT INTO monthly_plans(id,version,period,status,company_outcome,battlefields,todos,negotiation,generation,confirmed_at)

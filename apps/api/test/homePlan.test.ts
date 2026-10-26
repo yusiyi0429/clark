@@ -114,10 +114,11 @@ describe("首页计划",()=>{
         VALUES('september-one',1,'september-one','2026-09','九月',$1,'method','["growth"]','目标','[]','fixture://s','fixture',1,'fixture')`,[TEST_MEMBER.personId]);
       await create(f,f.member,null,{title:"九月底到期没做完",dueDate:"2026-09-28"});
       const doneLate=await create(f,f.member,null,{title:"九月底到期做完了",dueDate:"2026-09-28"});
-      await f.t.sql("UPDATE tasks SET status='done' WHERE id=$1",[doneLate.id]);
+      // 九月里做完的（完成时间在九月）不列。
+      await f.t.sql("UPDATE tasks SET status='done',updated_at='2026-09-28T02:00:00Z' WHERE id=$1",[doneLate.id]);
       for (const [title,status] of [["九月 Mission 没做完","not_started"],["九月 Mission 进行中","in_progress"],["九月 Mission 做完了","done"]])
-        await f.t.sql(`INSERT INTO tasks(id,title,owner_id,created_by,status,mission_id,step_order,client_id)
-          VALUES($1,$2,$3,'self',$4,'september-one',1,$5)`,[randomUUID(),title,TEST_MEMBER.personId,status,randomUUID()]);
+        await f.t.sql(`INSERT INTO tasks(id,title,owner_id,created_by,status,mission_id,step_order,client_id,updated_at)
+          VALUES($1,$2,$3,'self',$4,'september-one',1,$5,'2026-09-28T02:00:00Z')`,[randomUUID(),title,TEST_MEMBER.personId,status,randomUUID()]);
       const plan=await read(f,f.member);
       expect(plan.missions.map((m:{missionId:string})=>m.missionId)).toEqual(["execution-one","execution-two"]);
       expect(byTitle(plan.activities)).toEqual({
@@ -127,6 +128,26 @@ describe("首页计划",()=>{
       });
       const month=(await call(f,f.member,"GET","/api/me/plan?period=2026-10")).json();
       expect(month.groups.flatMap((group:{items:{title:string}[]})=>group.items.map((item)=>item.title))).toEqual([]);
+    } finally { await f.t.close(); }
+  });
+
+  it("已完成只列本月完成的（按验收时间，没有验收记录看更新时间，公司时区），不管日期和挂在哪",async()=>{
+    const f=await executionFixture();
+    try {
+      f.setNow(OCT_22);
+      const loose=await create(f,f.member,null,{title:"没日期本月完成"});
+      const accepted=await create(f,f.member,"execution-one",{title:"九月截止十月验收",dueDate:"2026-09-20"});
+      const lastMonth=await create(f,f.member,"execution-one",{title:"本月 Mission 九月就完成了"});
+      const boundary=await create(f,f.member,null,{title:"九月三十号晚上完成",dueDate:"2026-10-01"});
+      await f.t.sql("UPDATE tasks SET status='done' WHERE id=ANY($1::uuid[])",[[loose.id,accepted.id,lastMonth.id,boundary.id]]);
+      await f.t.sql(`UPDATE tasks SET updated_at='2026-09-01T02:00:00Z',acceptance=jsonb_build_object('at','2026-10-05T02:00:00Z','by',$2::text,'verdict',null,'standards','[]'::jsonb,'deliverableMaterialIds','[]'::jsonb) WHERE id=$1`,[accepted.id,TEST_MEMBER.personId]);
+      await f.t.sql("UPDATE tasks SET updated_at='2026-09-30T02:00:00Z' WHERE id=$1",[lastMonth.id]);
+      // 上海时间 9/30 23:30 = UTC 15:30，算九月。
+      await f.t.sql("UPDATE tasks SET updated_at='2026-09-30T15:30:00Z' WHERE id=$1",[boundary.id]);
+      expect(byTitle((await read(f,f.member)).activities)).toEqual({
+        "没日期本月完成":{missionId:null,column:"done",overdue:false},
+        "九月截止十月验收":{missionId:"execution-one",column:"done",overdue:false},
+      });
     } finally { await f.t.close(); }
   });
 

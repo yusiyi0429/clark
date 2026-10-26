@@ -77,6 +77,8 @@ function composeText(row: NotificationRow, names: Map<string, string>): string {
       return `${row.actor_id ? (names.get(row.actor_id) ?? row.actor_id) : "同事"} 拉你进${row.object_type === "issue" ? "议题" : "会议"}「${row.object_type === "issue" ? row.issue_title ?? "" : row.meeting_title ?? ""}」`;
     case "task_submitted":
       return `「${row.task_title ?? ""}」等你验收`;
+    case "task_auto_done":
+      return `「${row.task_title ?? ""}」已判定完成`;
     case "issue_assigned": {
       // item_id 是这次指派的时间：改派过也能找回当时那句说明。
       const note = row.issue_assignments?.find((entry) => entry.assignedAt === row.item_id)?.note;

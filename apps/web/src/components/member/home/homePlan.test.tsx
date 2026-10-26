@@ -177,6 +177,8 @@ function mount(initial: THomePlanResponse | null = plan()) {
     task: (id: string) => call(get((props) => props["data-task"] === id, `Task ${id}`), "onClick"),
     info: () => call(get((props) => props["data-info"] !== undefined, "ⓘ"), "onClick"),
     activity: (id: string) => get((props) => props["data-activity"] === id, `卡片 ${id}`),
+    /** 点开两栏下面的「已完成 · N」。 */
+    openDone: () => call(get((props) => props["data-done-toggle"] !== undefined, "已完成"), "onClick"),
     click: (predicate: (props: Props) => boolean, what: string) => call(get(predicate, what), "onClick"),
     type: (value: string) => call(get((props) => props["data-mark-name"] !== undefined, "名字输入框"), "onChange", { target: { value } }),
     key: (key: string, isComposing = false) => call(get((props) => props["data-mark-name"] !== undefined, "名字输入框"), "onKeyDown", { key, nativeEvent: { isComposing }, preventDefault: vi.fn() }),
@@ -311,11 +313,14 @@ describe("HomePlan：选「全部」时的详情", () => {
     const view = mount();
     expect(heading(view.html)).toBe("全部 Mission");
     expect(view.html).not.toContain("data-task-list");
-    expect(cardsIn(view.html, "done")).toHaveLength(2);
     expect(cardsIn(view.html, "week")).toHaveLength(4);
     expect(cardsIn(view.html, "later")).toHaveLength(1);
-    expect(text(view.html)).toContain("已完成 · 2");
     expect(text(view.html)).toContain("本周 10/19–10/25");
+    // 已完成不占栏：两栏下面一行「已完成 · 2」，点开才列出。
+    expect(cardsIn(view.html, "done")).toEqual([]);
+    expect(text(view.html)).toContain("已完成 · 2");
+    view.openDone();
+    expect(cardsIn(view.html, "done")).toHaveLength(2);
   });
 
   it("卡片小字写它属于哪个 Mission；不属于任何 Mission 的写「不属于 Mission」", () => {
@@ -343,6 +348,7 @@ describe("HomePlan：选某个 Mission 时的详情", () => {
     view.mission("m1");
     expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用 / 会议写进本体");
     expect(view.find((props) => props["data-task"] === "t1")!["aria-pressed"]).toBe(true);
+    view.openDone();
     expect(cardsIn(view.html, "done")).toEqual(["a1"]);
     expect(cardsIn(view.html, "week")).toEqual(["a3"]);
     expect(cardsIn(view.html, "later")).toEqual([]);
@@ -387,6 +393,7 @@ describe("HomePlan：选某个 Mission 时的详情", () => {
     expect(text(taskCard(view.html, "loose")).trim()).toBe("未归入 Task 2 件");
     view.task("loose");
     expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用 / 未归入 Task");
+    view.openDone();
     expect(allCards(view.html)).toEqual(["a2", "a6"]);
   });
 
@@ -406,6 +413,7 @@ describe("HomePlan：选某个 Mission 时的详情", () => {
     view.task("t2");
     view.setPlan(plan({ tasks: plan().tasks.filter((task) => task.taskId !== "t2") }));
     expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用 / 会议写进本体");
+    view.openDone();
     expect(allCards(view.html)).toEqual(["a1", "a3"]);
   });
 
@@ -414,6 +422,7 @@ describe("HomePlan：选某个 Mission 时的详情", () => {
     view.mission("m1");
     expect(view.html).not.toContain("data-task-list");
     expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用");
+    view.openDone();
     expect(allCards(view.html)).toEqual(["a1", "a2", "a3", "a4", "a6"]);
   });
 
@@ -472,6 +481,7 @@ describe("HomePlan：三栏的卡片", () => {
     const view = mount();
     view.mission("m1");
     view.task("loose");
+    view.openDone();
     const card = (id: string) => view.html.match(new RegExp(`<button[^>]*data-activity="${id}"[^>]*>.*?</button>`))?.[0] ?? "";
     expect(text(card("a6")).trim()).toBe("新 Chat 题库打分 10/27 起");
     expect(text(card("a2")).trim()).toBe("对话架构与分工 10/20");
@@ -484,6 +494,24 @@ describe("HomePlan：三栏的卡片", () => {
 
   it("每栏按日期排，没日期的在后", () => {
     expect(cardsIn(mount().html, "week")).toEqual(["a4", "a7", "a3", "a5"]);
+  });
+
+  it("没完成的卡右下角「完成」：点一下变「确认」，再点才发完成请求，之后通知重读；已完成的卡没有", async () => {
+    vi.stubGlobal("window", { dispatchEvent: vi.fn(), setTimeout: vi.fn(() => 1), clearTimeout: vi.fn() });
+    vi.stubGlobal("document", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    h.api.POST.mockResolvedValue(ok({ id: "a3", status: "done" }));
+    const view = mount();
+    const done = () => view.find((props) => props["aria-label"] === "完成「真实会议跑通」" || props["aria-label"] === "确认完成「真实会议跑通」")!;
+    expect(done().children).toBe("完成");
+    view.click((props) => props === done(), "完成");
+    expect(done().children).toBe("确认");
+    expect(h.api.POST).not.toHaveBeenCalled();
+    view.click((props) => props === done(), "确认");
+    await settle();
+    expect(h.api.POST).toHaveBeenCalledWith("/api/me/tasks/{id}/complete", { params: { path: { id: "a3" } }, body: { version: 1 } });
+    expect((window.dispatchEvent as ReturnType<typeof vi.fn>).mock.calls.map(([e]) => (e as Event).type)).toContain("member-tasks-changed");
+    view.openDone();
+    expect(view.find((props) => props["aria-label"] === "完成「回流方案定稿」")).toBeUndefined();
   });
 
   it("点卡片进事项详情", () => {
@@ -499,6 +527,7 @@ describe("HomePlan：事项卡上的最近一次动静", () => {
     const view = mount();
     view.mission("m1");
     view.task("t1");
+    view.openDone();
     const signal = (id: string) => {
       const match = view.html.match(new RegExp(`data-activity="${id}"[^>]*>(.*?)</button>`));
       expect(match, id).toBeTruthy();

@@ -218,6 +218,8 @@ export type AppEnv = {
   collectionsEnabled?: boolean;
   /** ⑧ 文档变更推送（DOC_CHANGE_ENABLED=1 才开，D-56）：关着时群里贴文档链接不触发；已有的变更照常能看、能处理。 */
   docChangeEnabled?: boolean;
+  /** 灰度（TASK_AUTO_DONE_PERSON_IDS，逗号分隔的 personId）：外部工具信心充足时直接判定执行事项完成；不配时所有人照常由本人确认。 */
+  taskAutoDonePersonIds?: string[];
 } & PeopleDirectoryEnv & WorldEnv & CompanyContextEnv;
 
 declare module "fastify" {

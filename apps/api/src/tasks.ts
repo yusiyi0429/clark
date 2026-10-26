@@ -329,13 +329,31 @@ export function reopenMyTask(pool: Pool, ownerId: string, taskId: string, versio
     await tellGroup(client,taskId,ownerId,`${names.get(ownerId) ?? ownerId}重新打开了这件事。`);
   });
 }
+/** 首页卡片上「完成 → 确认」：有外部工具的待验收提交就照它记，没有就按每条完成标准都达到记（本人点了完成）。 */
+export async function completeMyTask(pool: Pool, ownerId: string, taskId: string, version: number, names: Map<string,string>, now: Date): Promise<TaskResult> {
+  const row = await getTaskRow((sql,params)=>pool.query(sql,params),taskId);
+  if (!row || row.owner_id !== ownerId) return { notFound:true };
+  const submission = row.status === "done" ? null : row.submission;
+  return acceptMyTask(pool,ownerId,taskId,{ version, verdict: submission?.verdict ?? null,
+    standards: submission?.standards ?? taskStandards(row.done_definition).map((_, index) => ({ index, met: true, evidence: null, materialId: null })),
+    deliverableMaterialIds: submission?.deliverableMaterialIds ?? [] },names,now);
+}
+/** 信心充足：有完成标准，每一条都判断为达到，而且每条都有一句依据或指向一份材料。 */
+function confidentEnough(standards: string[], checks: CheckInput[]): boolean {
+  const byIndex = new Map(checks.map((check) => [check.index, check]));
+  return standards.length > 0 && standards.every((_, index) => {
+    const check = byIndex.get(index);
+    return Boolean(check?.met && (check.evidence?.trim() || check.materialId));
+  });
+}
 /**
- * 外部工具替推进人提交验收（可带草稿）：完成仍只能由推进人在天枢里验收。未启动的同时变进行中（这是推进人自己的工具）；
+ * 外部工具替推进人提交验收（可带草稿）：平时完成由推进人确认。未启动的同时变进行中（这是推进人自己的工具）；
  * 推进人收到「等你验收」，同一件事只留最新一条未读。
+ * autoDone（灰度名单里的人）：工具说信心充足（confident）且每条完成标准都达到、有依据时，直接判定完成，推进人收到一条，不对可以重新打开。
  */
 export function submitMyTaskForAcceptance(pool: Pool, ownerId: string, taskId: string,
-  input: { version: number; verdict?: string | null; standards?: CheckInput[]; deliverables?: string[] },
-  via: TTaskProgressSource, names: Map<string,string>, now: Date): Promise<TaskResult> {
+  input: { version: number; verdict?: string | null; standards?: CheckInput[]; deliverables?: string[]; confident?: boolean },
+  via: TTaskProgressSource, names: Map<string,string>, now: Date, autoDone = false): Promise<TaskResult> {
   return ownerMutation(pool,ownerId,taskId,input.version,names,async(client,row)=>{
     if (row.status === "done") return error(409,"TASK_ALREADY_DONE","这件事已经验收完成");
     if (row.status === "returned") return error(409,"TASK_RETURNED","已退回的事项不能提交验收");
@@ -344,7 +362,22 @@ export function submitMyTaskForAcceptance(pool: Pool, ownerId: string, taskId: s
     const deliverables = [...new Set(input.deliverables ?? [])];
     const failed = await checkAcceptanceInput(client,taskId,standards,checks,deliverables);
     if (failed) return failed;
-    const submission: StoredSubmission = { by: ownerId, via, at: now.toISOString(), verdict: input.verdict?.trim() || null,
+    const verdict = input.verdict?.trim() || null;
+    if (autoDone && input.confident && confidentEnough(standards,checks)) {
+      const byIndex = new Map(checks.map((check) => [check.index, check]));
+      const acceptance: StoredAcceptance = { by: ownerId, at: now.toISOString(), verdict, deliverableMaterialIds: deliverables, auto: via,
+        standards: standards.map((text, index) => {
+          const check = byIndex.get(index)!;
+          return { text, met: true, evidence: check.evidence?.trim() || null, materialId: check.materialId ?? null };
+        }) };
+      await client.query("UPDATE tasks SET status='done',acceptance=$2,submission=NULL,blocked_reason=NULL,waiting_on=NULL,blocked_at=NULL,version=version+1,updated_at=now() WHERE id=$1",
+        [taskId,JSON.stringify(acceptance)]);
+      await client.query("DELETE FROM notifications WHERE kind IN ('task_submitted','task_auto_done') AND object_type='task' AND object_id=$1 AND read_at IS NULL",[taskId]);
+      await insertNotification(client,{personId:ownerId,kind:"task_auto_done",objectType:"task",objectId:taskId,actorId:ownerId});
+      await tellGroup(client,taskId,ownerId,`${names.get(ownerId) ?? ownerId}的${TOOL_NAME[via]}判定这件事完成了${verdict ? `：${verdict}` : "。"}`);
+      return;
+    }
+    const submission: StoredSubmission = { by: ownerId, via, at: now.toISOString(), verdict,
       standards: checks.map((check) => ({ index: check.index, met: check.met, evidence: check.evidence?.trim() || null, materialId: check.materialId ?? null })),
       deliverableMaterialIds: deliverables };
     await client.query(`UPDATE tasks SET submission=$2,status=CASE WHEN status='not_started' THEN 'in_progress' ELSE status END,

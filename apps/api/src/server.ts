@@ -112,6 +112,8 @@ const env: AppEnv = {
   // 信息收集、文档变更推送（D-56）：值为 1 才开，缺省关。
   collectionsEnabled: process.env.COLLECTIONS_ENABLED === "1",
   docChangeEnabled: process.env.DOC_CHANGE_ENABLED === "1",
+  // 执行事项灰度自动完成：TASK_AUTO_DONE_PERSON_IDS（逗号分隔的 personId）；不配时没有人自动完成。
+  taskAutoDonePersonIds: parseAdminPersonIds(process.env.TASK_AUTO_DONE_PERSON_IDS),
 };
 
 const port = Number(process.env.PORT ?? "4000");

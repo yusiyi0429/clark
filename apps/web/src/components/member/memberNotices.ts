@@ -61,7 +61,7 @@ export function memberNoticeGroups(
       },
     }));
   const results = unread
-    .filter((item) => item.kind === "task_returned" || item.kind === "strategic_rejected" || item.kind === "task_submitted")
+    .filter((item) => item.kind === "task_returned" || item.kind === "strategic_rejected" || item.kind === "task_submitted" || item.kind === "task_auto_done")
     .map<ActionNotice>((item) => item.kind === "task_submitted" ? ({
       id: item.id,
       title: item.text,
@@ -69,6 +69,13 @@ export function memberNoticeGroups(
       tone: "neutral",
       onOpen: (from) => handlers.openAcceptance?.(item.objectId, from),
       buttons: [],
+    }) : item.kind === "task_auto_done" ? ({
+      id: item.id,
+      title: item.text,
+      detail: `外部工具判定 · ${monthDayTime(item.createdAt)}`,
+      tone: "neutral",
+      onOpen: (from) => handlers.openTask?.(item.objectId, from),
+      buttons: [{ label: "知道了", emphasis: true, run: () => seen(item.id) }],
     }) : ({
       id: item.id,
       title: item.text,

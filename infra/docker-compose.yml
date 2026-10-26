@@ -182,6 +182,8 @@ services:
       DOC_CHANGE_ENABLED: ${DOC_CHANGE_ENABLED:-0}
       # 管理员视图：逗号分隔的 personId；留空时没有人能看。
       TIANSHU_ADMIN_PERSON_IDS: ${TIANSHU_ADMIN_PERSON_IDS:-}
+      # 执行事项灰度自动完成：逗号分隔的 personId；留空时所有人照常由本人确认。
+      TASK_AUTO_DONE_PERSON_IDS: ${TASK_AUTO_DONE_PERSON_IDS:-}
       MEETING_MATERIAL_STORAGE_DIR: /var/lib/warmap/meeting_materials
       CONVERSATION_ATTACHMENT_STORAGE_DIR: /var/lib/warmap/conversation_attachments
       MEETING_RECORDING_STORAGE_DIR: /var/lib/warmap/meeting_recordings

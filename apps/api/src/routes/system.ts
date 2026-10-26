@@ -59,7 +59,8 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void 
     reply.hijack();
     const { server, transport } = await createMeMcpSession({ pool: ctx.pool, q, pepper: env.sessionSecret, now: ctx.now,
       names: () => personDisplayNames(peopleDirectory), findPerson, initialPerson: findPerson(identity.personId)!, authorization: req.headers.authorization,
-      people: () => peopleDirectory.searchPeople(undefined), publicOrigin: env.publicOrigin, planTasks: ctx.planTasks });
+      people: () => peopleDirectory.searchPeople(undefined), publicOrigin: env.publicOrigin, planTasks: ctx.planTasks,
+      autoDonePersonIds: env.taskAutoDonePersonIds });
     reply.raw.on("close", () => { void server.close(); });
     await transport.handleRequest(req.raw, reply.raw, req.body);
   };

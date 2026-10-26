@@ -50,7 +50,7 @@ function activitySignal(item: PlanItem["item"], today: string): Pick<THomePlanAc
 }
 
 /**
- * 已完成；挂在之前月份 Mission 下没做完的放本周、算逾期；
+ * 已完成（只有本月完成的会读进来）；挂在之前月份 Mission 下没做完的放本周、算逾期；
  * 之后＝开始在本周之后，或还没开始、没写开始日、截止在本周之后或没写；其余都在本周，截止早于本周一的算逾期。
  */
 function placeActivity({ item, missionId }: PlanItem, weekStart: string, weekEnd: string, earlierMission: boolean): Pick<THomePlanActivity, "item" | "missionId" | "column" | "overdue"> {
@@ -89,7 +89,7 @@ export async function readHomePlan(q: Query, person: { personId: string }, now: 
   const [tasks, items, marks] = await Promise.all([
     readPlanTasks(deps.planTasks, rows.map((m) => ({ id: m.id, code: m.code,
       world: m.world_scope_id && m.world_object_id && m.world_domain_id ? { scopeId: m.world_scope_id, objectId: m.world_object_id, domainId: m.world_domain_id } : null }))),
-    listPlanItems(q, person.personId, rows.map((m) => m.id), windowStart, windowEnd, deps.names, { period }),
+    listPlanItems(q, person.personId, rows.map((m) => m.id), windowStart, windowEnd, deps.names, { period, doneFrom: `${current}-01`, doneTo: monthEnd }),
     listPlanMarks(q, person.personId, rows.map((m) => m.id)),
   ]);
   const shown = new Set(rows.map((m) => m.id));
