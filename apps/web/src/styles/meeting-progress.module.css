@@ -101,7 +101,7 @@
 
 .link { display: flex; align-items: center; gap: 8px; width: min(440px, 100%); margin: 0; }
 .link input { flex: 1; min-width: 0; height: 34px; padding: 0 12px; border: 1px solid #d9dde5; border-radius: 9px; background: #fff; color: #1f2a3d; font: inherit; font-size: 13px; }
-.link input:focus { outline: none; border-color: #215ba1; box-shadow: 0 0 0 3px rgb(33 91 161 / 12%); }
+.link input:focus { outline: none; border-color: #215ba1; box-shadow: var(--field-focus-ring); }
 .read.read { flex: none; height: 34px; padding: 0 16px; border: 0; border-radius: 9px; background: #215ba1; color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .read.read:hover { background: #1b4d8a; }
 .read.read:disabled { background: #c9d3e1; cursor: default; }

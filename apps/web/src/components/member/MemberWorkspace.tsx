@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Lock } from "lucide-react";
 import { AccountMenu, type Account } from "@/components/AccountMenu";
 import { ActionNoticeCard } from "@/components/ActionNoticeCard";
+import { unplacedNotices } from "@/components/tasks/Unplaced";
 import { CycleCountdown } from "@/components/CycleCountdown";
 import { HeroButton } from "@/components/HeroButton";
 import { RailClock } from "@/components/NotificationRail";
@@ -37,13 +38,15 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
   /** 左栏请求、影响两组的条数（算进空通知提示）和首页「等回复 N」：跟着那两组的轮询走。 */
   const [requests, setRequests] = useState(NO_REQUESTS);
   const home = useMemberHome();
+  // 首页计划和通知栏的「待归位」用同一份。
+  const plan = useHomePlan();
   const weeklyReviews = useWeeklyReviewBoard();
   const records = useMeetingRecords();
   const radarSignals = noteworthySignals(home.radar);
   const account = { displayName, loginId, role: "member" as const };
   return (
     <WorkspaceFrame homeHref="/me" viewerId={viewerId} account={account} agentTitle="我的对话"
-      home={<MemberHomeBody displayName={displayName} home={home} account={account} waitingReplies={requests.waitingReplies} />}
+      home={<MemberHomeBody displayName={displayName} home={home} plan={plan} account={account} waitingReplies={requests.waitingReplies} />}
       notifications={(api, currentHref) => (
         <aside className={n.rail} aria-label="通知">
           <RailClock
@@ -70,6 +73,8 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
             <M2EntryNotice available={api.m2Available ?? false} />
             <MonthlyReviewNotices onNavigate={api.navigate} />
             {home.rounds.map((round) => <MissionCardNoticeGroup key={round.roundId} round={round} entry="member" currentHref={currentHref} onNavigate={api.navigate} onRefresh={home.refresh} />)}
+            <ActionNoticeCard id="unplaced" plain title="待归位的事项" subtitle="还没挂到 Mission" mark="issue"
+              notices={unplacedNotices(plan.plan?.unplaced ?? [], (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from))} onSettled={() => undefined} />
             <ActionNoticeCard id="assigned" plain title="分给你的事与邀请" subtitle="会后分派与协作邀请" mark="meeting" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).assigned} onSettled={home.settle} />
             <ActionNoticeCard id="results" title="回复与结果" mark="issue" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openAcceptance: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}?accept=1`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).results} onSettled={home.settle} />
             <ActionNoticeCard id="progress" title="协作进展" mark="issue" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openAcceptance: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}?accept=1`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).progress} onSettled={home.settle} />
@@ -81,7 +86,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
               api.navigate(`${item.href}?channel=group`, from);
             }, buttons: [] })))} onSettled={() => undefined} />
             <MemberRadarNotices signals={radarSignals} currentHref={currentHref} onNavigate={api.navigate} onRead={home.readRadarNotice} />
-            {requests.items + records.meetings.length + records.minutes.length + home.rounds.length + home.meetings.length + home.unreadThreads.length + home.unreadMissionGroups.length + quietNoticeCount(home.notifications) + radarSignals.length + (home.weeklySync ? 1 : 0) + (weeklyReviews.board?.rows.length ?? 0) === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
+            {(plan.plan?.unplaced.length ?? 0) + requests.items + records.meetings.length + records.minutes.length + home.rounds.length + home.meetings.length + home.unreadThreads.length + home.unreadMissionGroups.length + quietNoticeCount(home.notifications) + radarSignals.length + (home.weeklySync ? 1 : 0) + (weeklyReviews.board?.rows.length ?? 0) === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
           </div>
           <div className={n.railFoot}>
             <AccountMenu account={account} onNavigate={api.navigate} />
@@ -93,9 +98,8 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
 }
 
 /** 首页：顶行月历 · Mission · 快捷，下面 Mission 详情和最近进展；桌面上个人菜单在通知栏底部，这里的一份只在手机上显示。 */
-function MemberHomeBody({ displayName, home, account, waitingReplies }: { displayName: string; home: ReturnType<typeof useMemberHome>; account: Account; waitingReplies: number }) {
+function MemberHomeBody({ displayName, home, plan, account, waitingReplies }: { displayName: string; home: ReturnType<typeof useMemberHome>; plan: ReturnType<typeof useHomePlan>; account: Account; waitingReplies: number }) {
   const { navigate, bookMeeting } = useWorkspace();
-  const plan = useHomePlan();
   /** 等回复面板开着时记着按下的那颗键：面板里点进详情时从它展开，详情关了回到它。 */
   const [requestsFrom, setRequestsFrom] = useState<Element | null>(null);
   // 首页两份数据（工作台、计划）谁没连上都提示一次，重试两份都重取。

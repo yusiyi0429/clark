@@ -16,6 +16,7 @@ import { CollaboratorsDialog } from "./CollaboratorsDialog";
 import { TaskCover } from "./TaskCover";
 import { TaskEditForm, type TaskPatch } from "./TaskEditForm";
 import { AcceptDialog } from "./AcceptDialog";
+import { UnplacedActions } from "./Unplaced";
 import s from "./task-detail.module.css";
 import c from "./task-cover.module.css";
 import t from "@/styles/material-tabs.module.css";
@@ -148,6 +149,7 @@ export function TaskScreen({ initialDetail }: { initialDetail: Detail }) {
         deliverables={done && detail.acceptance ? detail.acceptance.deliverableMaterialIds : null} onChanged={() => void refresh()}>
         {(area) => <>
           <TaskCover detail={detail} area={area} onEdit={() => setEditing(true)} onInvite={() => setInviteOpen(true)}
+            unplaced={owner && task.unplaced ? <UnplacedActions task={task} missions={detail.missionOptions} onDone={() => { setNotice("已处理"); void refresh(); }} /> : null}
             onProgress={(entry) => { setDetail((current) => ({ ...current, progress: [entry, ...current.progress.filter((item) => item.id !== entry.id)].slice(0, 50) })); void refresh(); }}
             editor={editing && owner ? <TaskEditForm detail={detail} busy={busy} onSave={(body) => void patch(body)} onCancel={() => { setEditing(false); setError(""); }} /> : null} />
           {error || notice ? <div className={s.taskPane} role={error ? "alert" : "status"}><div className={s.pane}>
