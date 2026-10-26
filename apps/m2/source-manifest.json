@@ -292,7 +292,7 @@
     },
     {
       "path": "ReviewCanvas.jsx",
-      "sha256": "65995d3cadecadcc95a8f02177454b433d38fe8419c8c88ef7347b3bdd6498f0"
+      "sha256": "0a20d98169f47e75586d16ce2f4d8210985b04a02896e20ca66adf857bbcad11"
     },
     {
       "path": "ReviewEditor.jsx",
@@ -368,7 +368,7 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "5db97b88c190814aab1d309158ddf2188901bb873f6958662c43b07fcfc1e154"
+      "sha256": "d5057d67dc6218c31bf9ca4e8d77fdf57ba86efb792db586b65c3b62f62aa537"
     },
     {
       "path": "shared-projection.mjs",
@@ -392,7 +392,7 @@
     },
     {
       "path": "style.css",
-      "sha256": "9705321a7c2daf61cb5b930082ffc28dee7a3bb591d8f1393ddb9eee2a06bbeb"
+      "sha256": "920f19b42533d255856cb01ceed1ef292bbd5adb815e0f135130aa4e1b670319"
     },
     {
       "path": "todo.mjs",
@@ -440,5 +440,5 @@
     "fingerprint": "d21f673c3e4c",
     "source": "apps/decoding-mvp/.runtime/eval/review/skills/tkos-review-2.1.2"
   },
-  "mergeBase": "/Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261026d"
+  "mergeBase": "/Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261026e"
 }

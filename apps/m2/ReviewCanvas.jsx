@@ -24,6 +24,11 @@ function Facts({node,comments,onDetail,evidence}){return <ol className="review-l
  <div className="review-fact-head"><strong>{f.item}</strong>{f.owner&&<span className="review-fact-owner">{f.owner}</span>}{f.status&&<span className="review-fact-status">{f.status}</span>}</div>
  {f.evidence&&<p className="review-fact-evidence"><Rich text={f.evidence} evidence={evidence}/></p>}
  {f.gap&&<p className="review-fact-gap"><span>没做到的原因</span><Rich text={f.gap} evidence={evidence}/></p>}</li>)}</ol>;}
+// No owner in the ontology (ownerAssigned:false): the card says 未指派; owner stays the unit DRI, who signs it (M2 2026-10-26).
+const unassigned=n=>n.level==='mission'&&n.ownerAssigned===false;
+const personOf=n=>unassigned(n)?'未指派':n.owner;
+// 个人复盘 grouped by owner, 未指派 last.
+function byOwner(list){const groups=new Map();for(const n of list){const k=unassigned(n)?'未指派':n.owner||'未指派';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(n);}return [...groups].sort(([a],[b])=>(a==='未指派')-(b==='未指派'));}
 function ItemBubble({node,field,index,label,comments,onDetail}){return <span className="review-item-bubble" data-block-id={`${node.id}:${field}#${index}`}><CommentBubble node={node} field={`${field}#${index}`} label={`${label} · 第 ${index+1} 条`} comments={comments} onDetail={onDetail}/></span>;}
 function Ask({node,index,ask,answer,canAnswer,onAnswer}){
  const [text,setText]=useState(null),[busy,setBusy]=useState(false);
@@ -71,7 +76,7 @@ function ReviewEdit({node,onSave,onCancel}){
 export function ReviewCard({node,profile,comments=[],onDetail,onAnswer,evidence,unitLabel,tone='domain',onRevise}){
  const mineToAnswer=ownerNames(node).includes(profile.name),[editing,setEditing]=useState(false),canEdit=!!onRevise&&mayEdit(node,profile);
  return <article className={`plan-doc-node review-card doc-${node.level==='mission'?'mission':'po'} tone-${tone}`} data-document-node={node.id}>
-  <div className="card-head"><span className="level-tag">{node.level==='mission'?`${unitShort(unitLabel(node))} · ${reviewLabel(node)}`:node.level==='company'?'公司复盘':`${unitLabel(node)} · ${reviewLabel(node)}`}</span><span className="card-meta"><span className="person">{node.owner}</span><span>v{node.version}</span></span><span className="card-head-end">{canEdit&&<Button className="icon review-edit-toggle" aria-label={editing?'收起编辑':'编辑复盘'} title={editing?'收起编辑':'编辑复盘'} onPress={()=>setEditing(x=>!x)}>{editing?<X size={15}/>:<Pencil size={15}/>}</Button>}{/* Same head as the home card: verdict and status on the right (陈溪南 2026-10-23). */}{node.verdict&&<Verdict value={node.verdict} small/>}<span className="state" data-confirmed={node.status==='已确认'}>{node.status}</span></span></div>
+  <div className="card-head"><span className="level-tag">{node.level==='mission'?`${unitShort(unitLabel(node))} · ${reviewLabel(node)}`:node.level==='company'?'公司复盘':`${unitLabel(node)} · ${reviewLabel(node)}`}</span><span className="card-meta"><span className="person">{personOf(node)}</span><span>v{node.version}</span></span><span className="card-head-end">{canEdit&&<Button className="icon review-edit-toggle" aria-label={editing?'收起编辑':'编辑复盘'} title={editing?'收起编辑':'编辑复盘'} onPress={()=>setEditing(x=>!x)}>{editing?<X size={15}/>:<Pencil size={15}/>}</Button>}{/* Same head as the home card: verdict and status on the right (陈溪南 2026-10-23). */}{node.verdict&&<Verdict value={node.verdict} small/>}<span className="state" data-confirmed={node.status==='已确认'}>{node.status}</span></span></div>
   <h2>{node.title}</h2>
   {editing?<ReviewEdit node={node} onCancel={()=>setEditing(false)} onSave={async patch=>{await onRevise(node,patch);setEditing(false);}}/>:<div className="template-content card-simple"><table className="review-table"><tbody>
    <Row node={node} field="verdict" label="判定" comments={comments} onDetail={onDetail}><p className="review-verdict-line">{node.verdictChange&&<span className="verdict-changed">由「{node.verdictChange.from}」改为「{node.verdictChange.to}」· {node.verdictChange.by} · v{node.verdictChange.version}</span>}<span className="review-verdict-reason"><Rich text={node.verdictReason} evidence={evidence}/></span></p></Row>
@@ -118,7 +123,7 @@ export function InsightCard({node,data,profile,onInsight}){
 export function ReviewSummary({node,onOpen,unitLabel,comments=[],tone='domain',stateOf}){
  const st=stateOf?stateOf(node):{text:node.status,mine:false};
  return <article role="button" tabIndex={0} aria-label={`打开 ${node.title}`} onClick={()=>onOpen(node)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen(node);}}} className={`plan-doc-node doc-summary review-summary doc-${node.level==='mission'?'mission':'po'} tone-${tone}`} data-document-node={node.id}>
-  <div className="card-head"><span className="level-tag">{node.level==='mission'?`${unitShort(unitLabel(node))} · ${reviewLabel(node)}`:node.level==='company'?'公司复盘':unitLabel(node)}</span><span className="card-meta"><span className="person">{node.owner}</span>{node.level==='po'&&node.children?.length>0&&<span>{node.children.length} Mission</span>}{comments.length>0&&<span className="card-comments"><MessageCircle size={14}/> {comments.length}</span>}</span><span className="card-head-end">{node.verdict&&<Verdict value={node.verdict} small/>}<span className={`state${st.mine?' is-mine':''}`} data-confirmed={node.status==='已确认'}>{st.text}</span></span></div>
+  <div className="card-head"><span className="level-tag">{node.level==='mission'?`${unitShort(unitLabel(node))} · ${reviewLabel(node)}`:node.level==='company'?'公司复盘':unitLabel(node)}</span><span className="card-meta"><span className="person">{personOf(node)}</span>{node.level==='po'&&node.children?.length>0&&<span>{node.children.length} Mission</span>}{comments.length>0&&<span className="card-comments"><MessageCircle size={14}/> {comments.length}</span>}</span><span className="card-head-end">{node.verdict&&<Verdict value={node.verdict} small/>}<span className={`state${st.mine?' is-mine':''}`} data-confirmed={node.status==='已确认'}>{st.text}</span></span></div>
   <h2>{node.title}</h2><p className="doc-description"><Rich text={node.verdictReason}/></p>
  </article>;
 }
@@ -149,7 +154,7 @@ export default function ReviewCanvas({insights={},onInsight,ceoName='CEO',onRevi
    <ReviewCard node={node} tone={toneOf(node)} onRevise={onRevise} profile={profile} comments={comments[node.id]||[]} onDetail={onDetail} onAnswer={onAnswer} evidence={evidence} unitLabel={unitLabel}/>
    {isFactsCard(node)&&<>{handshake}<InsightCard node={node} data={insights[node.id]} profile={profile} onInsight={onInsight}/></>}
    {node.level==='po'&&<section className="document-next review-next"><h3>{node.level==='company'?'各单元 PO 复盘':'Mission 复盘'}{below.length>0&&<small> · {below.length}</small>}</h3>
-    {below.length?below.map(n=><ReviewSummary key={n.id} node={n} stateOf={stateOf} tone={toneOf(n)} onOpen={onOpen} unitLabel={unitLabel} comments={comments[n.id]}/>):<p className="review-none">{node.level==='po'?'这个单元本月计划里没有拆出 Mission，所以只有这一份 PO 复盘。':'还没有单元复盘。'}</p>}
+    {below.length?byOwner(below).map(([owner,list],_,all)=><div key={owner} className="review-owner-group">{all.length>1&&<h4 className="review-owner-heading">{owner==='未指派'?'未指派负责人':owner}<small> · {list.length}</small></h4>}{list.map(n=><ReviewSummary key={n.id} node={n} stateOf={stateOf} tone={toneOf(n)} onOpen={onOpen} unitLabel={unitLabel} comments={comments[n.id]}/>)}</div>):<p className="review-none">{node.level==='po'?'这个单元本月计划里没有拆出 Mission，所以只有这一份 PO 复盘。':'还没有单元复盘。'}</p>}
    </section>}
    {!isFactsCard(node)&&handshake}
   </div></div>
