@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { call, executionFixture, newTask, type Fixture } from "./executionFixture.js";
-import { TEST_MEMBER } from "./helpers.js";
 
 const rpc = (id: number, name: string, args: Record<string, unknown>) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
 const agent = async (f: Fixture) => {
@@ -17,8 +16,8 @@ const withStandards = async (f: Fixture, title: string) =>
 const fullChecks = [{ index: 0, met: true, evidence: "PR #45 已合入" }, { index: 1, met: true, evidence: "预发 46b8dab8 全程测过" }];
 
 describe("执行事项怎么完成", () => {
-  it("不在灰度名单里：工具说有十足把握、每条都达到也照常等本人确认", async () => {
-    const f = await executionFixture();
+  it("TASK_AUTO_DONE=0 关掉时：工具说有十足把握、每条都达到也照常等本人确认", async () => {
+    const f = await executionFixture("confirmed", "2026-10", {}, { taskAutoDone: false });
     try {
       const invoke = await agent(f);
       const item = await withStandards(f, "Claude 提交过");
@@ -28,8 +27,8 @@ describe("执行事项怎么完成", () => {
     } finally { await f.t.close(); }
   });
 
-  it("灰度：名单里的人，工具说有十足把握且每条标准都达到、都有依据，直接完成；缺一条依据或没说有把握就照常等确认", async () => {
-    const f = await executionFixture("confirmed", "2026-10", {}, { taskAutoDonePersonIds: [TEST_MEMBER.personId] });
+  it("默认所有人都开：工具说有十足把握且每条标准都达到、都有依据，直接完成；缺一条依据或没说有把握就照常等确认", async () => {
+    const f = await executionFixture();
     try {
       const invoke = await agent(f);
       const sure = await withStandards(f, "有十足把握");

@@ -103,7 +103,7 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     async (req, reply) => respondTask(reply, await returnMyTask(pool, req.person!.personId, req.params.id, req.body, names())),
   );
 
-  // 完成平时经推进人验收（design-12）；外部工具的提交走 MCP（灰度名单里的人信心充足时直接完成）。
+  // 完成平时经推进人验收（design-12）；外部工具的提交走 MCP（信心充足时直接完成）。
   app.post(
     "/api/me/tasks/:id/accept",
     { preHandler: requireMember, schema: { params: idParams, body: AcceptMyTaskRequest } },

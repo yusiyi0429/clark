@@ -340,7 +340,7 @@ function confidentEnough(standards: string[], checks: CheckInput[]): boolean {
 /**
  * 外部工具替推进人提交验收（可带草稿）：平时完成由推进人确认。未启动的同时变进行中（这是推进人自己的工具）；
  * 推进人收到「等你验收」，同一件事只留最新一条未读。
- * autoDone（灰度名单里的人）：工具说信心充足（confident）且每条完成标准都达到、有依据时，直接判定完成，推进人收到一条，不对可以重新打开。
+ * autoDone（TASK_AUTO_DONE 开着）：工具说信心充足（confident）且每条完成标准都达到、有依据时，直接判定完成，推进人收到一条，不对可以重新打开。
  */
 export function submitMyTaskForAcceptance(pool: Pool, ownerId: string, taskId: string,
   input: { version: number; verdict?: string | null; standards?: CheckInput[]; deliverables?: string[]; confident?: boolean },

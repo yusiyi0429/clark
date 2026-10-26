@@ -67,7 +67,7 @@ const memberDefinitions: Tool[] = [
   { name: "get_item", description: "读取我推进或协作的执行事项详情：完成标准（standards，按行拆好，index 从 0 起）、材料、进展、待验收的提交和验收记录。Read an execution item I own or collaborate on, with its done standards, materials, progress, pending submission and acceptance.", inputSchema: GetInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "append_progress", description: "给我推进或协作的事项记录进展、证据和下一步；结果里的 item 是事项此刻的状态和版本（接着提交验收用这个版本）。Append progress and evidence to an item I own or collaborate on; the result's item carries the item's current status and version.", inputSchema: AppendInput as Tool["inputSchema"] },
   { name: "update_status", description: "把我推进的事项标为未启动或进行中，必须带当前版本。done 不会直接完成，而是提交给本人验收（同 submit_for_acceptance）。Set an item I own to not_started or in_progress; done only submits it for my acceptance.", inputSchema: StatusInput as Tool["inputSchema"] },
-  { name: "submit_for_acceptance", description: "我推进的事项做完了，提交给本人验收，必须带当前版本；平时完成要本人确认：本人在天枢首页卡片上点「验收」，或本人在对话里说了之后用 accept_item 代为确认。可附草稿：对 get_item 返回的 standards 逐条（index）写是否达到和一句依据（依据是材料时带 materialId）、一句结论、建议作为交付结果的材料 id。confident=true 只在你有十足把握时传：每条标准都达到、每条都有能核对的依据（提交、PR、文档、会议结论）；本人在灰度名单里时会直接判定完成（结果 autoDone=true，告诉本人一声，不对他可以重新打开），否则照常等本人确认。Submit an item I own for my acceptance; confident=true may complete it directly for users in the rollout.", inputSchema: SubmitInput as Tool["inputSchema"] },
+  { name: "submit_for_acceptance", description: "我推进的事项做完了，提交给本人验收，必须带当前版本；平时完成要本人确认：本人在天枢首页卡片上点「验收」，或本人在对话里说了之后用 accept_item 代为确认。可附草稿：对 get_item 返回的 standards 逐条（index）写是否达到和一句依据（依据是材料时带 materialId）、一句结论、建议作为交付结果的材料 id。confident=true 只在你有十足把握时传：每条标准都达到、每条都有能核对的依据（提交、PR、文档、会议结论）；会直接判定完成（结果 autoDone=true，告诉本人一声，不对他可以重新打开）；条件不满足就照常等本人确认。Submit an item I own for my acceptance; confident=true may complete it directly.", inputSchema: SubmitInput as Tool["inputSchema"] },
   { name: "add_link", description: "把外部工具做出来的东西（文档、原型、PR 等）以链接放进我推进或协作的事项，出现在事项封面上；只收 http/https，同一个地址不会重复放；结果里的 item 是事项此刻的状态和版本。Attach a link (http/https) to an item I own or collaborate on; the result's item carries the item's current status and version.", inputSchema: LinkInput as Tool["inputSchema"] },
   { name: "update_item", description: "改我推进的事项：标题、完成标准（每行一条，null 清空）、开始/截止日期（null 清空）、挂哪个 Mission 和 Task（null 取消挂靠），必须带当前版本，只传要改的字段。Edit an item I own (title, done standards, dates, mission/task).", inputSchema: UpdateInput as Tool["inputSchema"] },
   { name: "delete_item", description: "删掉我推进的一件事（任何状态都行），用来整理过碎、重复、过时的事项：先把有用的进展用 append_progress 写进要保留的那件，再删，删完告诉用户删了哪几件。会后分派的不能删，用 return_item 退回。Delete an item I own; meeting-assigned items can only be returned.", inputSchema: VersionInput as Tool["inputSchema"] },
@@ -111,8 +111,8 @@ const taskFailure = (outcome: TaskResult | { deleted: true }) => "notFound" in o
 export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: string; now: () => Date;
   names: () => Map<string, string>; findPerson: (personId: string) => MemoryPerson | undefined;
   people: () => MemoryPerson[]; initialPerson: MemoryPerson; publicOrigin?: string; authorization: string | undefined; planTasks: PlanTaskSource;
-  /** 灰度：外部工具信心充足时可以直接判定完成的人（TASK_AUTO_DONE_PERSON_IDS）。 */
-  autoDonePersonIds?: string[] }) {
+  /** 外部工具信心充足时可以直接判定完成（TASK_AUTO_DONE，缺省开）。 */
+  autoDone?: boolean }) {
   const auth = () => authenticateMcpToken(deps.q, deps.authorization, deps.pepper, deps.now(), (id) => !!deps.findPerson(id), deps.publicOrigin ? oauthUrls(deps.publicOrigin).resource : undefined);
   /** 推进人写进展、放链接会让未启动的事项变进行中、版本跟着变：把事项此刻的状态和版本一起回给外部工具，接着提交验收直接用。 */
   const itemState = async (itemId: string) =>
@@ -128,7 +128,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
   const instructions = [
     ...(initialAccess.ceo ? ["公司业务只读：可以查待你处理的事、议题/会议/任务卡详情和全公司进展；拍板、签发、确认请回天枢网页操作。"] : []),
     ...(initialAccess.member ? [
-      "可以查看自己的执行事项，记录真实进展，把做出来的东西用 add_link 放进去；做完用 submit_for_acceptance 提交给本人验收，平时完成由本人确认；有十足把握时带 confident=true（灰度名单里的人会直接完成）。",
+      "可以查看自己的执行事项，记录真实进展，把做出来的东西用 add_link 放进去；做完用 submit_for_acceptance 提交给本人验收，平时完成由本人确认；有十足把握时带 confident=true（会直接完成）。",
       "每段工作收尾时，对照本人推进的、和这段工作相关的事项的完成标准过一遍：都达到了就 submit_for_acceptance，逐条写依据；没达到就写进展，不提交。",
       "不用等用户开口，主动把用户正在推进的工作同步进天枢：开始一件新工作时，先 list_my_items 找对应事项，找到就沿用；没有、而且是里程碑级成果（要几天才能交付的结果；过程步骤、配置、修小问题、一次问答都不算）时才用 create_item 建一条并告诉用户，否则写进最接近的已有事项的进展。做出阶段成果（提交、PR、文档、设计稿）或这段工作告一段落时，用 append_progress 写做了什么、证据和下一步，产出用 add_link 放进去；做完用 submit_for_acceptance 提交验收。只写真实做过的事。",
       "替用户维护天枢里事项的实时性，不要留给用户去点：发现过碎、重复、过时或标题写成进展句的事项，自己用 update_item 改、用 append_progress 把有用的进展并进要保留的那件、再用 delete_item 删掉，做完告诉用户改了什么。会后分派的事不删，本人说不做时用 return_item 退回。",
@@ -296,7 +296,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
           const input = args as typeof SubmitInput.static;
           itemId = input.itemId;
           const submitted = await submitMyTaskForAcceptance(deps.pool, identity.personId, itemId, input, identity.client, names, deps.now(),
-            deps.autoDonePersonIds?.includes(identity.personId) ?? false);
+            deps.autoDone ?? false);
           if ("notFound" in submitted) {
             const readable = await canReadTask(deps.q, itemId, identity.personId);
             code = readable ? "FORBIDDEN" : "TASK_NOT_FOUND";
