@@ -132,7 +132,7 @@
     },
     {
       "path": "Handshake.jsx",
-      "sha256": "56311747817b4c763215395b26506bb105dd37504f9e450ebf153f3a1989f926"
+      "sha256": "7bc9f93a2472fcc6544bbd5c9c831c95d74c6a9f373d57988ab76429666ac74a"
     },
     {
       "path": "index.html",
@@ -212,7 +212,7 @@
     },
     {
       "path": "NexusOrb.jsx",
-      "sha256": "cbb8bdc2dc22af781767adaac1963aa0af0a42023a752eaea5def14032477de3"
+      "sha256": "111afc9a31418d4304a9fca5293381bbebdaf329dfb81401ba2b0922774b6575"
     },
     {
       "path": "ontology-input.mjs",
