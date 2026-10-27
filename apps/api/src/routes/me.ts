@@ -169,15 +169,21 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
 
   app.get("/api/me/meetings", { preHandler: requireMember, schema: { response: { 200: MemberMeetingsResponse } } }, async (req) => {
     const at = ctx.now();
-    const rows = (await q(`SELECT m.id::text,m.title,m.scheduled_at,m.ends_at,m.ended_at,m.lead_dri_id FROM meetings m
+    // 主持的会交了记录、还在生成会议卡的也列着（没生成出来的只留三天），生成好了转到「会议记录」待确认。
+    const rows = (await q(`SELECT m.id::text,m.title,m.scheduled_at,m.ends_at,m.ended_at,m.lead_dri_id,m.status,m.outcome FROM meetings m
       JOIN thread_members tm ON tm.object_type='meeting' AND tm.object_id=m.id::text
-      WHERE tm.person_id=$1 AND tm.left_at IS NULL AND m.status='scheduled'
-        AND ((m.ended_at IS NULL AND m.ends_at > $2) OR m.lead_dri_id=$1)
+      WHERE tm.person_id=$1 AND tm.left_at IS NULL AND (
+        (m.status='scheduled' AND ((m.ended_at IS NULL AND m.ends_at > $2) OR m.lead_dri_id=$1))
+        OR (m.status='held' AND m.lead_dri_id=$1 AND (m.outcome->>'status' IN ('pending','running')
+          OR (m.outcome->>'status'='failed' AND m.scheduled_at > $2::timestamptz - interval '3 days'))))
       ORDER BY m.scheduled_at,m.id`, [req.person!.personId, at])).rows;
     const displayNames = names();
     return { meetings: rows.map((row) => ({ meetingId: row.id, title: row.title,
       startsAt: row.scheduled_at.toISOString(), endsAt: row.ends_at?.toISOString() ?? null,
-      followUp: row.ended_at !== null || row.ends_at.getTime() <= at.getTime(),
+      followUp: row.status === "scheduled" && (row.ended_at !== null || row.ends_at.getTime() <= at.getTime()),
+      ...(row.status === "held" ? { processing: {
+        since: (row.outcome.status === "running" ? row.outcome.startedAt : null) ?? row.outcome.pendingSince ?? null,
+        failed: row.outcome.status === "failed" } } : {}),
       hostName: displayNames.get(row.lead_dri_id) ?? row.lead_dri_id, href: `/me/meetings/${row.id}` })) };
   });
 

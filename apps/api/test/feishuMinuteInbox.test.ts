@@ -332,6 +332,10 @@ describe("飞书妙记待整理：整理成一场天枢会", () => {
         payload: { url: `https://example.feishu.cn/minutes/${TOKEN}` } });
       expect(pasted.statusCode).toBe(409);
       expect(pasted.json().code).toBe("MINUTE_TAKEN");
+      // 说出是哪场会：会名和开会时刻（北京时间）。
+      const title = (await t.sql("SELECT title FROM meetings WHERE id = $1", [meetingId]))[0].title;
+      expect(pasted.json().message).toMatch(/^这份妙记已经用在「.+」（\d{1,2}\/\d{1,2} \d{2}:\d{2}）上了/);
+      expect(pasted.json().message).toContain(`「${title}」`);
     } finally {
       await t.close();
     }

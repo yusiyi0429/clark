@@ -93,11 +93,12 @@ export async function ignoreFeishuMinute(minuteToken: string): Promise<{ ok: tru
   return response.ok ? { ok: true } : { code: (error as { code?: string } | undefined)?.code ?? "FAILED" };
 }
 
-type MinutesResult = TMeetingMinutesFetchResponse | { code: string };
+type MinutesResult = TMeetingMinutesFetchResponse | { code: string; message?: string };
 async function settleMinutes(promise: Promise<{ data?: TMeetingMinutesFetchResponse; error?: unknown; response: Response }>): Promise<MinutesResult> {
   const { data, error, response } = await promise;
   if (response.status === 401) { window.location.assign("/access"); return { code: "UNAUTHENTICATED" }; }
-  return response.ok && data ? data : { code: (error as { code?: string } | undefined)?.code ?? "FAILED" };
+  const failure = error as { code?: string; message?: string } | undefined;
+  return response.ok && data ? data : { code: failure?.code ?? "FAILED", message: failure?.message };
 }
 /** 妙记「再读一次」（主持人、创建人）。 */
 export const refetchMeetingMinutes = (meetingId: string) =>

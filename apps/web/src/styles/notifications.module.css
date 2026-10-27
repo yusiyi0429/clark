@@ -160,4 +160,5 @@
 @media(max-width:959px){.card .meetingNoticeBody{padding:14px 16px;gap:12px}.card .meetingNoticeBody:hover{background:rgb(28 34 48/4%)}}
 /* 待交记录的会：整行能拖文件进来上传；虚线框、「松开上传」见 file-drop-zone。 */
 .meetingDrop{--drop-radius:12px}
+.meetingDrop>form,.meetingDrop>[role=status]{margin:2px 14px 12px 30px}
 .meetingDropError{display:block;padding:0 14px 12px 30px;font-size:12px;color:#ffb4b4}

@@ -51,6 +51,26 @@ describe("meeting notification lifecycle and host follow-through", () => {
     } finally { await t.close(); }
   });
 
+  it("交了记录还在生成会议卡的会留在主持人的会议安排里，生成好或没生成出来超过三天就不列", async () => {
+    const t = await createTestApp({}, undefined, { monthlyNow: () => NOW });
+    try {
+      const member = await t.memberCookie();
+      const outcome = (status: string, extra: Record<string, unknown> = {}) => JSON.stringify({ status, pendingSince: "2026-09-30T07:59:00.000Z", startedAt: null, runId: null,
+        previousRunIds: [], error: null, summary: "", items: [], ...extra });
+      const running = await meeting(t, "running", { status: "held" }), queued = await meeting(t, "queued", { status: "held" });
+      const failed = await meeting(t, "failed", { status: "held" }), oldFailed = await meeting(t, "old failed", { status: "held", end: new Date(NOW.getTime() - 4 * 86_400_000) });
+      const ready = await meeting(t, "ready", { status: "held" }), others = await meeting(t, "others", { status: "held", host: TEST_CEO.personId });
+      await t.sql("UPDATE meetings SET outcome=$2::jsonb WHERE id=$1", [running, outcome("running", { startedAt: "2026-09-30T07:59:30.000Z" })]);
+      for (const [id, status] of [[queued, "pending"], [failed, "failed"], [oldFailed, "failed"], [ready, "ready"], [others, "running"]] as const)
+        await t.sql("UPDATE meetings SET outcome=$2::jsonb WHERE id=$1", [id, outcome(status)]);
+      const listed = (await read(t, member, "/api/me/meetings")).meetings;
+      expect(listed.map((m: any) => m.meetingId).sort()).toEqual([running, queued, failed].sort());
+      expect(listed.find((m: any) => m.meetingId === running)).toMatchObject({ followUp: false, processing: { since: "2026-09-30T07:59:30.000Z", failed: false } });
+      expect(listed.find((m: any) => m.meetingId === queued).processing).toEqual({ since: "2026-09-30T07:59:00.000Z", failed: false });
+      expect(listed.find((m: any) => m.meetingId === failed).processing.failed).toBe(true);
+    } finally { await t.close(); }
+  });
+
   it("lets the current host reschedule a marked-ended meeting, preserves duration, and restores attendee notices", async () => {
     const t=await createTestApp({}, undefined, { outcomeAgent: { async generate() { return { candidate: { summary: "已核对会议记录", items: [] } }; } } });
     try {

@@ -7556,6 +7556,10 @@ export interface components {
             hostName: string;
             href: string;
             followUp?: boolean;
+            processing?: {
+                since: string | null;
+                failed: boolean;
+            };
         };
         MemberMeetingsResponse: {
             meetings: {
@@ -7566,6 +7570,10 @@ export interface components {
                 hostName: string;
                 href: string;
                 followUp?: boolean;
+                processing?: {
+                    since: string | null;
+                    failed: boolean;
+                };
             }[];
         };
         MeetingTranscriptTurnView: {

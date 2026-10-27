@@ -67,6 +67,13 @@ type FeishuIdentity = { person_id: string; open_id: string; name: string | null 
 type IngestResult = { kind: "ready" | "failed" | "taken" } | { kind: "rejected"; status: 404 | 409; code: string; message: string };
 /** 代读结果：text 是飞书原文；contentHash 算它，confirmedContentHash 是确认时那份逐字稿来源记下的（没有为 null）。 */
 type TranscriptRead = { meetingId: string; source: { url: string | null; title: string }; text: string; contentHash: string; confirmedContentHash: string | null };
+const SHANGHAI_MINUTE = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+/** 「10/26 16:03」：北京时间。 */
+function monthDayTime(at: Date): string {
+  const parts = Object.fromEntries(SHANGHAI_MINUTE.formatToParts(at).map((part) => [part.type, part.value]));
+  return `${Number(parts.month)}/${Number(parts.day)} ${parts.hour}:${parts.minute}`;
+}
+
 type MinutesFetchResult = TMeetingMinutesFetchResponse | { error: { status: 400 | 404 | 409; code: string; message: string } };
 
 /** 飞书错误码归到读取失败的原因（待联调：按开放平台妙记错误码，2091002 / 2091004 不存在或已删，2091005 与 99991672 / 99991679 没权限）。 */
@@ -478,9 +485,17 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     return meeting && (meeting.lead_dri_id === viewerId || (meeting.created_by ?? meeting.lead_dri_id) === viewerId) ? meeting : null;
   }
 
-  async function respond(meetingId: string, result: IngestResult): Promise<MinutesFetchResult> {
+  /** 妙记已经对到别的会上：说出是哪场会（会名和开会时刻），对不上就只说已经用过。 */
+  async function takenMessage(meetingId: string, minuteToken: string | undefined): Promise<string> {
+    const other = minuteToken
+      ? (await q("SELECT title, scheduled_at FROM meetings WHERE minute_token = $1 AND id <> $2 LIMIT 1", [minuteToken, meetingId])).rows[0] as { title: string; scheduled_at: Date } | undefined
+      : undefined;
+    return other ? `这份妙记已经用在「${other.title}」（${monthDayTime(other.scheduled_at)}）上了，一份妙记只能对一场会` : "这份妙记已经用在别的会上了，一份妙记只能对一场会";
+  }
+
+  async function respond(meetingId: string, result: IngestResult, minuteToken?: string): Promise<MinutesFetchResult> {
     if (result.kind === "rejected") return { error: { status: result.status, code: result.code, message: result.message } };
-    if (result.kind === "taken") return { error: { status: 409, code: "MINUTE_TAKEN", message: "这份妙记已经对到别的会上了" } };
+    if (result.kind === "taken") return { error: { status: 409, code: "MINUTE_TAKEN", message: await takenMessage(meetingId, minuteToken) } };
     const row = (await getMeetingRow(q, meetingId))!;
     const status = minutesStatusOf(row);
     return { minutesStatus: status, minutesFailure: status === "failed" ? row.minutes_failure ?? null : null };
@@ -514,7 +529,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     if (meeting.status !== "scheduled") return { error: NOT_SCHEDULED };
     const readers = await fetchers(meeting);
     if (!feishu || !readers.length) return respond(meeting.id, await fail(meeting.id, "no_permission", NO_AUTH));
-    return respond(meeting.id, await ingestByToken(feishu.api, meeting, readers, minuteToken, true));
+    return respond(meeting.id, await ingestByToken(feishu.api, meeting, readers, minuteToken, true), minuteToken);
   }
 
   /**

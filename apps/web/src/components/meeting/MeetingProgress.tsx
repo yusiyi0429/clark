@@ -145,8 +145,8 @@ export function MeetingProgress({ model, actions, below }: { model: MeetingProgr
   return below ? <div className={p.withBelow}>{line}<div className={p.below}>{below}</div></div> : line;
 }
 
-/** 再读、贴链接没成功时的短标签（不显示服务端原话）。 */
-const FETCH_ERROR: Record<string, string> = { INVALID_MINUTES_URL: "不是妙记链接", MINUTE_TAKEN: "已对到别的会" };
+/** 再读、贴链接没成功时的短标签（不显示服务端原话）；妙记已用在别的会上时照服务端说的是哪场会。 */
+const FETCH_ERROR: Record<string, string> = { INVALID_MINUTES_URL: "不是妙记链接", MINUTE_TAKEN: "这份妙记已经用在别的会上了" };
 /** 其实已经读完了（页面上的会议卡旧了）：直接重取会议卡。 */
 const ALREADY_READ = new Set(["MINUTES_READY", "TRANSCRIPT_ALREADY_IMPORTED"]);
 
@@ -179,11 +179,11 @@ export function MinutesRecovery({ meetingId, status, failure, canFetch, onFetche
     return () => { alive = false; };
   }, [wantsConnect]);
   const connectHref = wantsConnect && feishu?.enabled && !feishu.connected ? feishuConnectHref(`${window.location.pathname}${window.location.search}`) : null;
-  const run = async (work: () => Promise<TMeetingMinutesFetchResponse | { code: string }>) => {
+  const run = async (work: () => Promise<TMeetingMinutesFetchResponse | { code: string; message?: string }>) => {
     setBusy(true); setError("");
     try {
       const result = await work();
-      if ("code" in result && !ALREADY_READ.has(result.code)) setError(FETCH_ERROR[result.code] ?? "没有读到");
+      if ("code" in result && !ALREADY_READ.has(result.code)) setError((result.code === "MINUTE_TAKEN" && result.message) || (FETCH_ERROR[result.code] ?? "没有读到"));
       else { setUrl(""); onFetched?.(); }
     } catch { setError("没有读到"); }
     finally { setBusy(false); }

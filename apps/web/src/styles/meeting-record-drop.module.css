@@ -1,0 +1,35 @@
+/* 待交记录那一行下面展开的小卡：贴妙记链接（首选）+ 选文件；桌面在深色卡上，手持（≤959）在磨砂浅色卡上。小卡和进度行的边距由所在的通知栏、会议安排各自定。 */
+.panel{display:grid;gap:8px;padding:10px;border-radius:12px;background:rgb(255 255 255/.07);box-shadow:inset 0 0 0 1px rgb(255 255 255/.12)}
+.linkRow{display:flex;gap:6px;min-width:0}
+.linkRow input{flex:1;min-width:0;font:inherit;font-size:12px;padding:7px 9px;border:1px solid rgb(255 255 255/.18);border-radius:8px;background:rgb(0 0 0/.18);color:inherit}
+.linkRow input::placeholder{color:currentColor;opacity:.55}
+.linkRow input:focus{border-color:#96beff}
+.panel .linkRow button{flex:none;display:inline-block;width:auto;font:inherit;font-size:12px;font-weight:600;padding:6px 12px;border:0;border-radius:8px;background:#96beff;color:#13213a;cursor:pointer}
+.panel .linkRow button:disabled{opacity:.45;cursor:default}
+.panel .quiet{justify-self:start;display:inline-block;width:auto;font:inherit;font-size:12px;padding:0;border:0;background:none;color:inherit;opacity:.75;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.panel .quiet:disabled{cursor:default}
+.panel button:focus-visible{outline:2px solid #96beff;outline-offset:2px}
+
+/* 进行中：整行一道流光扫过，点在呼吸；减少动态时只留静止的点。 */
+.processing{position:relative;overflow:hidden;isolation:isolate}
+.processing::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(100deg,transparent 25%,rgb(150 190 255/.16) 50%,transparent 75%);transform:translateX(-100%);animation:recordSheen 2.4s ease-in-out infinite}
+.stage{font-size:12px}
+.phase{display:inline-flex;align-items:center;gap:6px;font-style:normal}
+.phase time{opacity:.75;font-variant-numeric:tabular-nums}
+.pulse{display:inline-block;flex:none;width:6px;height:6px;border-radius:50%;background:#96beff;animation:recordPulse 1.6s ease-in-out infinite}
+.failed{font-style:normal;color:#ffb4b4}
+@keyframes recordSheen{to{transform:translateX(100%)}}
+@keyframes recordPulse{0%,100%{opacity:.45;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
+@media(prefers-reduced-motion:reduce){.processing::after{animation:none;opacity:0}.pulse{animation:none}}
+
+@media(max-width:959px){
+ .panel{background:rgb(28 34 48/.04);box-shadow:inset 0 0 0 1px rgb(28 34 48/.1)}
+ .linkRow input{font-size:16px;border-color:rgb(28 34 48/.15);background:#fff}
+ .linkRow input:focus{border-color:#3a3a40}
+ .panel .linkRow button{font-size:15px;background:#2f63b0;color:#fff}
+ .panel .quiet{font-size:14px}
+ .stage{font-size:14px}
+ .pulse{background:#2f63b0}
+ .processing::after{background:linear-gradient(100deg,transparent 25%,rgb(47 99 176/.1) 50%,transparent 75%)}
+ .failed{color:#be123c}
+}

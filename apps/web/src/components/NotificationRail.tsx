@@ -23,6 +23,8 @@ import { inWeeklyReviewWindow, useWeeklyReviewBoard, WeeklyReviewBoard } from ".
 import { RequestNotices } from "./requests/RequestNotices";
 import { MeetingCardNotices } from "./meeting/MeetingCardNotices";
 import { MeetingRecordDrop } from "./meeting/MeetingRecordDrop";
+import { RecordProcessingMeta, type RecordProcessing } from "./meeting/MeetingRecordProcessing";
+import d from "@/styles/meeting-record-drop.module.css";
 import { CycleCountdown } from "./CycleCountdown";
 import { RADAR_ORIGIN_LABEL, RadarOriginIcon } from "./OriginTag";
 import { preflightInFlight } from "@/cards/meetingIssueModel";
@@ -30,7 +32,7 @@ import n from "@/styles/notifications.module.css";
 
 type RailKind = "decisions" | "meetings" | "research";
 type Tone = "red" | "amber" | "neutral";
-type RailItem = { id: string; title: string; meta: string; tone: Tone; href: string; missionRound?: Card; followUp?: boolean; canReschedule?: boolean; meetingId?: string };
+type RailItem = { id: string; title: string; meta: string; tone: Tone; href: string; missionRound?: Card; followUp?: boolean; canReschedule?: boolean; meetingId?: string; processing?: RecordProcessing };
 type RailGroup = { kind: RailKind; title: string; subtitle: ReactNode; mark: ContextMarkKind; items: RailItem[] };
 
 const RAIL: Record<RailKind, { title: string; mark: ContextMarkKind }> = {
@@ -57,8 +59,15 @@ export function clock(date: Date): { time: string; weekday: string; day: string 
 const sameCompanyDay = (a: Date, b: Date) => clock(a).day === clock(b).day;
 
 /** 左栏多久重读一次首页卡片：有会前预审在跑 5 秒，有待开的会或没定完的任务卡轮次 20 秒，否则不轮询。 */
+/** 交了记录、还在生成会议卡的会（服务端只给主持人列，没生成出来的留三天）。 */
+function cardProcessing(meeting: MeetingPayload): RecordProcessing | null {
+  const outcome = meeting.outcome;
+  if (meeting.status !== "held" || !outcome || outcome.status === "ready") return null;
+  return { since: (outcome.status === "running" ? outcome.startedAt : null) ?? outcome.pendingSince, failed: outcome.status === "failed" };
+}
+
 export function railRefreshInterval(cards: Card[]): number | null {
-  if (cards.some((card) => card.kind === "meeting" && preflightInFlight(payloadOf<MeetingPayload>(card)))) return 5_000;
+  if (cards.some((card) => card.kind === "meeting" && (preflightInFlight(payloadOf<MeetingPayload>(card)) || cardProcessing(payloadOf<MeetingPayload>(card))?.failed === false))) return 5_000;
   const waiting = cards.some((card) => {
     if (card.kind === "meeting") return payloadOf<MeetingPayload>(card).status === "scheduled";
     if (card.kind !== "mission-round") return false;
@@ -118,18 +127,20 @@ export function railGroups(cards: Card[], now: Date = new Date(), viewerId?: str
       if (card.kind !== "meeting") return false;
       const meeting = payloadOf<MeetingPayload>(card);
       const ended = Boolean(meeting.hasEnded || meeting.endedAt) || Date.parse(meeting.endsAt) <= now.getTime();
-      return meeting.status === "scheduled" && (!ended || meeting.leadDriId === viewerId);
+      return (meeting.status === "scheduled" && (!ended || meeting.leadDriId === viewerId)) || (meeting.leadDriId === viewerId && cardProcessing(meeting) !== null);
     })
     .sort((a, b) => payloadOf<MeetingPayload>(a).scheduledAt.localeCompare(payloadOf<MeetingPayload>(b).scheduledAt));
   const meetingItems = meetings.map<RailItem>((card) => {
     const payload = payloadOf<MeetingPayload>(card);
     const at = payload.scheduledAt;
-    const followUp = Boolean(payload.hasEnded || payload.endedAt) || Date.parse(payload.endsAt) <= now.getTime();
+    const processing = cardProcessing(payload) ?? undefined;
+    const followUp = !processing && (Boolean(payload.hasEnded || payload.endedAt) || Date.parse(payload.endsAt) <= now.getTime());
     return {
       id: card.id,
       title: card.title,
-      meta: followUp ? "待交记录" : sameCompanyDay(new Date(at), now) ? clock(new Date(at)).time : monthDayTime(at),
+      meta: processing ? (processing.failed ? "会议卡没生成" : "生成会议卡") : followUp ? "待交记录" : sameCompanyDay(new Date(at), now) ? clock(new Date(at)).time : monthDayTime(at),
       followUp,
+      processing,
       meetingId: card.objectRef.id,
       canReschedule: card.actions.some((action) => action.actionType === "meeting.reschedule"),
       tone: "neutral",
@@ -144,7 +155,7 @@ export function railGroups(cards: Card[], now: Date = new Date(), viewerId?: str
     }),
   );
   const lead = leads.size === 1 ? [...leads][0] : "";
-  const meetingSubtitle = meetingItems.some((item) => item.followUp) ? "含待处理的会后记录" : allToday ? `今天${lead ? ` · ${lead}主持` : ""}` : `${meetings.length} 场待开`;
+  const meetingSubtitle = meetingItems.some((item) => item.followUp || item.processing) ? "含待处理的会后记录" : allToday ? `今天${lead ? ` · ${lead}主持` : ""}` : `${meetings.length} 场待开`;
 
   const urgent = cards.filter((card) => card.kind === "issue" && card.urgency === "red");
   // 议题来源：雷达自动升级的（AI 候选议题）写「雷达」并带雷达小图标。
@@ -351,13 +362,13 @@ export function NotificationRail({
                     <span className={n.mark} aria-hidden="true" />
                     <span className={n.itemText}>
                       <span>{item.title}</span>
-                      <small>{item.meta}</small>
+                      <small>{item.processing ? <RecordProcessingMeta processing={item.processing} /> : item.meta}</small>
                     </span>
                     <ChevronRight size={15} aria-hidden="true" />
                   </HeroButton>
                   {item.followUp ? <div className={n.meetingFollowUp}>
                     {item.canReschedule ? <button type="button" onClick={(event) => onNavigate(`${item.href}?meetingAction=reschedule`, event.currentTarget)}>重新安排</button> : null}
-                    <button type="button" disabled={busy} onClick={pick}>{busy ? "上传中…" : "上传"}</button>
+                    <button type="button" disabled={busy} onClick={pick}>上传</button>
                   </div> : null}
                   </>}</RailItemFrame>
                 ))}
@@ -377,7 +388,7 @@ export function NotificationRail({
 
 /** 通知栏一行：开完待交记录的会整行能拖文件上传（MeetingRecordDrop）；其余照旧。 */
 function RailItemFrame({ item, onNavigate, children }: { item: RailItem; onNavigate: (href: string, from?: Element | null) => void; children: (pick: () => void, busy: boolean) => ReactNode }) {
-  if (!item.followUp || !item.meetingId) return <div>{children(() => undefined, false)}</div>;
+  if (!item.followUp || !item.meetingId) return <div className={item.processing && !item.processing.failed ? d.processing : undefined}>{children(() => undefined, false)}</div>;
   return <MeetingRecordDrop meetingId={item.meetingId} title={item.title} href={item.href} onNavigate={onNavigate} className={n.meetingDrop} errorClassName={n.meetingDropError}>
     {children}
   </MeetingRecordDrop>;

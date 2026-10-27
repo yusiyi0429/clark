@@ -39772,6 +39772,29 @@
           },
           "followUp": {
             "type": "boolean"
+          },
+          "processing": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "since",
+              "failed"
+            ],
+            "properties": {
+              "since": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "failed": {
+                "type": "boolean"
+              }
+            }
           }
         }
       },
@@ -39829,6 +39852,29 @@
                 },
                 "followUp": {
                   "type": "boolean"
+                },
+                "processing": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "since",
+                    "failed"
+                  ],
+                  "properties": {
+                    "since": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "failed": {
+                      "type": "boolean"
+                    }
+                  }
                 }
               }
             }

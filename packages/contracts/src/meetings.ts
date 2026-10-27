@@ -480,6 +480,11 @@ export const StartMeetingRecordingResponse = Type.Object(
 );
 
 /** 成员通知栏「会议安排」：我在群里、还没开完的会，按开始时间排（工单 08）。 */
+/** 记录交上去以后在生成会议卡：since 是从哪一刻算起（排队或开始生成），failed 是没生成出来。 */
+export const MeetingRecordProcessing = Type.Object(
+  { since: Type.Union([Type.String(), Type.Null()]), failed: Type.Boolean() },
+  { additionalProperties: false },
+);
 export const MemberMeetingItem = Type.Object(
   {
     meetingId: Type.String({ minLength: 1 }),
@@ -489,6 +494,8 @@ export const MemberMeetingItem = Type.Object(
     hostName: Type.String({ minLength: 1 }),
     href: Type.String({ minLength: 1 }),
     followUp: Type.Optional(Type.Boolean()),
+    /** 主持的会交了记录、正在生成会议卡（生成好了就转到「会议记录」待确认）。 */
+    processing: Type.Optional(MeetingRecordProcessing),
   },
   { additionalProperties: false },
 );
