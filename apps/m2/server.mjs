@@ -219,6 +219,14 @@ export const server=createServer(async(req,res)=>{
   if(route.pathname==='/api/session'&&req.method==='GET')return json(res,200,{authenticated:true,...req.m2Session});
   if(route.pathname==='/api/ontology/status'&&req.method==='GET')return json(res,200,await ontologyConnectionStatus());
   // Never in M2's own path: an error here answers this call only and the page works as before.
+  // 个人 Agent 的现场 (陈溪南 2026-10-27, for Tianshu's role Agent): read-only, the member's own view, the same rules as the page.
+  // ?scope=<单元|person:id>&card=<卡片 id>&view=document|gantt; without them, what this member has across M2.
+  if(route.pathname==='/api/agent-context'&&req.method==='GET'){const q=route.searchParams,member=q.get('member');try{const actor=actorFor(member),snap=store.snapshot();
+    const bundle=privateAgentContext(snap,actor,{scope:q.get('scope')||undefined,...(q.get('card')?{selection:{id:q.get('card')}}:{}),canvasView:q.get('view')||undefined},snap.round?.input?.sources||[]);
+    const stage=snap.reviewRound&&!snap.planHandoff?.generatedAt?'review':'plan';
+    return json(res,200,{...bundle,stage,review:snap.reviewRound?{period:snap.reviewRound.period,dueAt:snap.reviewRound.dueAt||null,loadedAt:snap.reviewRound.loadedAt}:null,plan:snap.round?{period:snap.round.input?.period||null}:null,
+     notifications:notificationsFor(snap,actor.id,{reads:await readMarks.of(actor.id),jobs:{review:reviewJobs.view()}})});}
+   catch(e){return json(res,e.status||400,{error:String(e.message||e)});}}
   if(route.pathname==='/api/notifications'&&req.method==='GET'){const member=route.searchParams.get('member');try{const items=notificationsFor(store.snapshot(),member,{reads:await readMarks.of(member),jobs:{review:reviewJobs.view()}});const body=JSON.stringify({items,at:new Date().toISOString()}),etag='"'+createHash('sha256').update(JSON.stringify(items)).digest('hex').slice(0,20)+'"';if(req.headers['if-none-match']===etag){res.writeHead(304,{ETag:etag,'Cache-Control':'private, no-cache'});return res.end();}res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, no-cache',ETag:etag,'X-Content-Type-Options':'nosniff'});return res.end(body);}catch(e){return json(res,200,{items:[],error:'通知暂时取不到'});}}
   if(route.pathname==='/api/notifications/read'&&req.method==='POST'){const b=await body(req);if(!handoffProfiles[b.memberId])return json(res,400,{error:'请选择名单中的试用成员'});const ids=Array.isArray(b.ids)?b.ids.slice(0,20):[b.id];await readMarks.mark(b.memberId,ids.filter(Boolean));return json(res,200,{ok:true});}
   // 公开洞察 (陈溪南 2026-10-26): 管理 opens every review's insights at once; Nexus then writes its synthesis under each.
