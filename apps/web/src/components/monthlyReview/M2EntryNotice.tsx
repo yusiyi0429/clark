@@ -17,7 +17,7 @@ export function m2EntryNotices(go: (href: string) => void): ActionNotice[] {
 
 /**
  * M2 的通知（溪南 10/27 初版接口 GET /m2/api/notifications）：环节、我的待办、@我、生成失败四种，合并少发、只读。
- * 已读由 M2 页面在从链接进入时自己标，天枢不另外调。
+ * 点开时、点「知道了」时调 POST /m2/api/notifications/read 标已读（M2 页面从链接进入时也会自己标）。
  */
 export type M2Notification = {
   id: string;
@@ -42,14 +42,24 @@ export function visibleM2Notifications(body: unknown): M2Notification[] {
   });
 }
 
-const DAY = new Intl.DateTimeFormat("zh-CN", { timeZone: COMPANY_TIMEZONE, month: "numeric", day: "numeric", weekday: "short" });
-/** 「截止 10/31 周五」；离截止不到一天（或已过）标红。 */
+const DUE = new Intl.DateTimeFormat("zh-CN", { timeZone: COMPANY_TIMEZONE, month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+/** dueAt 是带 Z 的时刻：「截止 10/31 周六 18:00」（北京时间），不到 24 小时标红；过了截止写「已过截止」。 */
 function due(dueAt: string, now: Date): { text: string; soon: boolean } {
-  const parts = Object.fromEntries(DAY.formatToParts(new Date(dueAt)).map((part) => [part.type, part.value]));
-  return { text: `截止 ${parts.month}/${parts.day} ${parts.weekday}`, soon: Date.parse(dueAt) - now.getTime() < 86_400_000 };
+  const left = Date.parse(dueAt) - now.getTime();
+  if (left <= 0) return { text: "已过截止", soon: true };
+  const parts = Object.fromEntries(DUE.formatToParts(new Date(dueAt)).map((part) => [part.type, part.value]));
+  return { text: `截止 ${parts.month}/${parts.day} ${parts.weekday} ${parts.hour}:${parts.minute}`, soon: left < 86_400_000 };
 }
 
-export function m2NotificationNotices(items: M2Notification[], go: (href: string) => void, now: Date): ActionNotice[] {
+/** 标已读：一次最多 20 个；页面跳走也要发出去（keepalive），失败不提示（下次取通知时还在就再标）。 */
+export function markM2NotificationsRead(ids: string[]): Promise<boolean> {
+  return fetch("/m2/api/notifications/read", { method: "POST", credentials: "same-origin", keepalive: true,
+    headers: { "content-type": "application/json" }, body: JSON.stringify({ ids: ids.slice(0, 20) }) })
+    .then((response) => response.ok, () => false);
+}
+
+/** 环节卡和 @我 可以在通知栏里「知道了」；待办办完、生成失败续跑成功才消失，不给关。 */
+export function m2NotificationNotices(items: M2Notification[], go: (href: string) => void, now: Date, markRead = markM2NotificationsRead): ActionNotice[] {
   return items.map((item) => {
     const deadline = item.dueAt && item.status !== "done" ? due(item.dueAt, now) : null;
     return {
@@ -57,8 +67,10 @@ export function m2NotificationNotices(items: M2Notification[], go: (href: string
       title: item.title,
       detail: [item.text, deadline?.text].filter(Boolean).join(" · "),
       tone: item.type === "failure" || deadline?.soon ? "red" : item.unread || item.type === "todo" ? "amber" : "neutral",
-      onOpen: () => go(`/m2/${item.link.replace(/^\/+/, "")}`),
-      buttons: [],
+      onOpen: () => { void markRead([item.id]); go(`/m2/${item.link.replace(/^\/+/, "")}`); },
+      buttons: item.type === "stage" || item.type === "mention"
+        ? [{ label: "知道了", run: async () => (await markRead([item.id]) ? { ok: true as const, settled: "已读" } : { ok: false as const, error: "没标上，稍后再试" }) }]
+        : [],
     };
   });
 }
@@ -66,7 +78,7 @@ export function m2NotificationNotices(items: M2Notification[], go: (href: string
 const POLL_MS = 60_000;
 
 /** 每分钟取一次（带 ETag，没变化回 304 就沿用）；页面不在前台时不取，回到前台立即取。 */
-function useM2Notifications(enabled: boolean): M2Notification[] {
+function useM2Notifications(enabled: boolean): [M2Notification[], (id: string) => void] {
   const [items, setItems] = useState<M2Notification[]>([]);
   useEffect(() => {
     if (!enabled) return;
@@ -90,7 +102,7 @@ function useM2Notifications(enabled: boolean): M2Notification[] {
     document.addEventListener("visibilitychange", load);
     return () => { alive = false; window.clearInterval(timer); document.removeEventListener("visibilitychange", load); };
   }, [enabled]);
-  return items;
+  return [items, (id: string) => setItems((current) => current.filter((item) => `m2:${item.id}` !== id))];
 }
 
 /**
@@ -98,10 +110,10 @@ function useM2Notifications(enabled: boolean): M2Notification[] {
  * M2 对当前登录人不可用就整张不出；接口没接上或出错时只剩入口那一行。不是待办，不出条数角标。
  */
 export function M2EntryNotice({ available, now = new Date() }: { available: boolean; now?: Date }) {
-  const items = useM2Notifications(available);
+  const [items, dismiss] = useM2Notifications(available);
   if (!available) return null;
   const go = (href: string) => window.location.assign(href);
   const notices = [...m2NotificationNotices(items, go, now), ...(inM2Window(now) ? m2EntryNotices(go) : [])];
   if (!notices.length) return null;
-  return <ActionNoticeCard id="m2-entry" title="目标拆解与协作" mark="monthly" counted={false} notices={notices} onSettled={() => undefined} />;
+  return <ActionNoticeCard id="m2-entry" title="目标拆解与协作" mark="monthly" counted={false} notices={notices} onSettled={dismiss} />;
 }
