@@ -244,6 +244,8 @@ export function applyAction(previous,actor,action){
   if(card.upstreamChange)fail(409,'上级成果有调整，请先核对影响再确认');
   // The company review closes the month: every unit and Mission review must be confirmed first (陈溪南 2026-10-21).
   if(isReview(card)&&card.level==='company'){const open=Object.values(state.cards).filter(c=>isReview(c)&&c.level!=='company'&&c.confirmedVersion!==currentVersion(c).number);if(open.length)fail(409,`还有 ${open.length} 份复盘未确认，全部确认后才能确认公司复盘`);}
+  // 先贴一条洞察 (陈溪南 2026-10-27): whoever owes an insight on a 三段式 review confirms only after writing one, on any entry point.
+  if(isReview(card)&&Array.isArray(v.content.facts)&&insightOwed(state,card).includes(actor.name)&&!(state.insights?.[card.id]||[]).some(x=>x.author===actor.id))fail(400,'确认前至少贴一条洞察');
   const slot=action.slot;
   const authorized=slot==='ceo'?actor.ceo===true:slot==='unitDri'?(actor.unitDri||[]).includes(unitOf(card)):slot==='missionDri'?(isReview(card)?reviewOwners(card).includes(actor.name):(actor.missionDri||[]).includes(card.id)):false;
   if(!slots.includes(slot)||!authorized)fail(403,'没有这一确认职责');
@@ -271,6 +273,11 @@ export function applyAction(previous,actor,action){
    const i=list.findIndex(x=>x.id===action.insightId);if(i<0)fail(404,'这条洞察不存在');if(list[i].author!==actor.id)fail(403,'只能改自己的洞察');
    if(action.type==='deleteInsight')list.splice(i,1);
    else{const text=typeof action.text==='string'?action.text.trim():'';if(!text||text.length>4000)fail(400,'请写下你的洞察（4000 字以内）');list[i]={...list[i],text,updatedAt:now};}
+  }
+  // After the reveal (陈溪南 2026-10-27): late insights are welcome, show in the group like comments, and Nexus redoes this card's and the company's synthesis.
+  if(state.insightsRevealed){
+   if(action.type!=='deleteInsight')groupNotice(state,card,`${actor.name}${action.type==='insight'?'在':'改了在'}${titleOf(card)}下的分析洞察：${String(action.text).trim().slice(0,300)}`);
+   if(state.insightNexus){delete state.insightNexus[card.id];const company=Object.values(state.cards).find(c=>isReview(c)&&c.level==='company');if(company)delete state.insightNexus[company.id];}
   }
  }else if(action.type==='deleteComment'){
   const i=state.comments.findIndex(c=>c.id===action.commentId&&c.cardId===card.id);

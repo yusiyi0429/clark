@@ -83,3 +83,19 @@ test('公司复盘的 Nexus 综合读所有复盘下的洞察，按复盘分组�
  const mission=JSON.parse(insightSynthesisRequest(s,s.cards['rv:bf01-m1'],'',name)[1].content);
  assert.equal(mission.allReviews,undefined);
 });
+
+test('确认前至少贴一条洞察：应交洞察的人没交，从任何入口确认都被拒；交了一条就能确认',()=>{
+ let s=fresh();const sun=memberActor('member-03',s);
+ assert.throws(()=>applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',baseVersion:1,slot:'missionDri'}),/确认前至少贴一条洞察/);
+ s=applyAction(s,sun,{type:'insight',cardId:'rv:bf01-m1',text:'客户窗口只靠一个人联系'});
+ s=applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',baseVersion:1,slot:'missionDri'});
+ assert.ok(currentVersion(s.cards['rv:bf01-m1']).signatures.some(x=>x.slot==='missionDri'));
+});
+
+test('公开后还能补交洞察：补交的进群里，这份复盘和公司复盘的 Nexus 综合作废重写',()=>{
+ let s=fresh();const sun=memberActor('member-03',s);
+ s.insightsRevealed={at:'2026-10-29T02:33:00.000Z',by:'auto'};s.insightNexus={'rv:bf01-m1':{text:'旧综合'},'rv:company':{text:'公司旧综合'},'rv:bf01':{text:'单元综合'}};
+ s=applyAction(s,sun,{type:'insight',cardId:'rv:bf01-m1',text:'演示和真用要分开验收'});
+ assert.match(s.messages.at(-1).text,/孙铭泽在「首用」下的分析洞察：演示和真用要分开验收/);assert.equal(s.messages.at(-1).scope,'bf01');
+ assert.equal(s.insightNexus['rv:bf01-m1'],undefined);assert.equal(s.insightNexus['rv:company'],undefined);assert.equal(s.insightNexus['rv:bf01'].text,'单元综合','别的复盘不动');
+});

@@ -114,6 +114,9 @@ async function revealInsights(actor,{auto=false}={}){
  await store.transact(s=>{if(!s.reviewRound)throw Object.assign(Error('还没有复盘'),{status:409});s.insightsRevealed??={at:now,by:auto?'auto':actor.id};
   const viewer=actor||{ceo:true,name:''},cards=Object.values(s.cards).filter(c=>c.kind==='review');missing=cards.map(c=>({cardId:c.id,title:currentVersion(c).content.title,missing:insightView(s,c,viewer).missing})).filter(x=>x.missing.length);
   for(const u of new Set(cards.filter(c=>c.level!=='company').map(c=>c.unit)))broadcast(s,u,`${auto?'复盘已到截止时间，':''}本月复盘的分析洞察已公开，大家可以看到彼此写的内容，Nexus 正在综合。`,{kind:'insights-revealed',now});
+  // Like comments, the revealed insights go into each card's group (陈溪南 2026-10-27): one line per review.
+  for(const c of cards){const list=s.insights?.[c.id]||[];if(!list.length)continue;s.sequence++;s.messages.push({id:`notice-${s.sequence}`,createdSequence:s.sequence,author:'Nexus',kind:'notice',channel:'group',scope:c.level==='company'?'company':c.unit,cardId:c.id,version:currentVersion(c).number,general:true,createdAt:now,
+   text:`「${currentVersion(c).content.title}」的分析洞察（${list.length} 条）：\n${list.map(x=>`- ${handoffProfiles[x.author]?.name||x.author}：${String(x.text).slice(0,300)}`).join('\n')}`});}
   s.sequence++;return s;});
  synthesizeInsights().catch(()=>{});
  return missing;
@@ -304,6 +307,7 @@ export const server=createServer(async(req,res)=>{
    let next=await store.apply(actor,b.action||{});
    runCascades();
    if(next.planHandoff?.status==='requested'){await prepareHandoff();next=store.snapshot();}
+   if(['insight','editInsight','deleteInsight'].includes(b.action.type)&&next.insightsRevealed)synthesizeInsights().catch(()=>{});
    if(['message','comment'].includes(b.action.type)){const event=next[b.action.type==='comment'?'comments':'messages'].at(-1);if(!event.acceptedProposalId)await scheduleNexus(event.scope,actor.id,event);}
    // A rejection with a reason is a line in the group too; Nexus answers it like any reply.
    if(b.action.type==='rejectProposal'){const event=next.messages.at(-1);if(event?.rejectsProposal===b.action.proposalId)await scheduleNexus(event.scope,actor.id,event);}

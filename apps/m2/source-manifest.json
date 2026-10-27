@@ -124,7 +124,7 @@
     },
     {
       "path": "governance.mjs",
-      "sha256": "ce09c2fd05e6d6f800b7368e26a296e84834ea5d882798493921b7fe4bb58f7a"
+      "sha256": "a253702fed8c2cb7e310dcda68b9df1f82cddd6231cfd13ee2f58665559a0e6e"
     },
     {
       "path": "Handshake.jsx",
@@ -373,7 +373,7 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "3df7af21f40514f1d3799d70642335e9dd544590b39b5d1d51ead76a04e802b7"
+      "sha256": "22719394004ec8d8d8b31f0bb3dce4778c6d9aa05ac828123591f89d7a8dd1ee"
     },
     {
       "path": "shared-projection.mjs",
