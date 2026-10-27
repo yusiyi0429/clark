@@ -1,3 +1,4 @@
+import {nowContext} from './time-context.mjs';
 // What Nexus is given when it does step in: layered, not everything at once (陈溪南 2026-10-19).
 //  1. Always: the unit at a glance — PO and Missions, owners, tiers, who still has to confirm, open topics and how far each has got.
 //  2. Where people pointed: the card a field comment sits on (whole card, plus its parent and siblings by title),
@@ -48,11 +49,12 @@ export function focusThread(evidence,fresh,topics=[]){
   ...(e.context?.block&&e.context.block!=='card'?{on:`${e.context.selection?.id}:${e.context.block}`}:{}),...(e.replyTo?{replyTo:e.replyTo}:{}),...(e.answersNexus?{answersNexus:true}:{}),createdAt:e.createdAt}));
 }
 
-export function actContext({cards,nodes=[],evidence,fresh,topics,decision={},foundation=[],otherUnitCards=[],capacity=null,extraIds=[]}){
+export function actContext({cards,nodes=[],evidence,fresh,topics,decision={},foundation=[],otherUnitCards=[],capacity=null,extraIds=[],now=Date.now()}){
  // Nothing pointed at (a general line): the PO itself is the card in focus.
  let ids=[...new Set([...extraIds.filter(id=>cards.some(c=>c.id===id)),...focusCardIds(cards,fresh,evidence,topics)])];
  if(!ids.length){const po=cards.find(c=>c.level==='po');if(po)ids=[po.id];}
  return {
+  now:nowContext(now),
   goal:'让这个单元的计划尽快定下来：每个话题从“提出”走到“已定”（负责人确认）。你每次开口都要把某个话题往前推一格。',
   unit:unitOverview(cards,nodes),
   // The unit's reviews (月底复盘) at a glance, when there are any.

@@ -1,5 +1,6 @@
 // Narrow MVP contract, adapted from legacy discussion-state and system-prompt.
 import {participationDecision,directQuestion} from './nexus-participation.mjs';
+import {NOW_RULE} from './time-context.mjs';
 import {verifiedWaiting,verifiedIntervention} from './nexus-next-step.mjs';
 import {agrees,disagrees,declinesChange} from './stance.mjs';
 import {memberProfiles} from './member-profiles.mjs';
@@ -33,7 +34,8 @@ JSON 输出：{reply:string,interventionNeeded:boolean,interventionType:"risk"|"
 已握手：cards 里 status 为“已确认”的卡，没有人明确要求时不提修订；被明确要求时可以出卡，reason 里写明“接受后需双方重新确认”。
 撮合分歧：同一事项上至少两位参与者立场明确冲突、讨论没有收敛时，可以主动介入一次，interventionType 用 "mediation"，interventionConfidence 只有在你确信概括准确且方案确实可行时才给 "high"，否则不介入。interventionImpact 用一句话写清双方各自的主张（谁主张什么），interventionQuestion 给一个具体可行的折中方案或请有权决定的人做一个选择；interventionRecipient 是有权决定的人。不重复撮合同一事项，不站队，不替人决定。
 换负责人：大家定了某张卡改由谁负责时，patch 里改 owner（只能写名单里的人，接受要由领域 DRI 来点），不要只写进责任边界。
-新增、撤掉、恢复 Mission：把某条 Mission 挪到下月、本月不做、降成下月做、拿掉，都算撤掉：比如“把五项组织缺口降成下月做”，出一张 withdraw-mission 卡，不要把它的档位改成 P2 或把成果改小。有人明确要求给某个 PO 加一条 Mission、撤掉一条 Mission，或恢复撤掉的 Mission 时，不用 patch 改写别的卡来代替（不要把要撤的卡改成“本月不做”），而是在 JSON 里另给 missionCards:[{op:"add-mission"|"withdraw-mission"|"restore-mission",poId:PO 的 id,missionId:撤掉或恢复时填,brief:新增时一两句写清这条 Mission 要做成什么、谁负责、档位,reason:一句话,sourceIds:[消息id]}]。一张卡只做一件事；同时要改 PO 的成果或验收，就另出一张 PO 修订卡。新增卡的完整内容和 Task 草稿由系统按拆解技能起草，你只写 brief。withdrawnMissions 是本单元撤掉的 Mission，只有被要求恢复时才用。`;
+新增、撤掉、恢复 Mission：把某条 Mission 挪到下月、本月不做、降成下月做、拿掉，都算撤掉：比如“把五项组织缺口降成下月做”，出一张 withdraw-mission 卡，不要把它的档位改成 P2 或把成果改小。有人明确要求给某个 PO 加一条 Mission、撤掉一条 Mission，或恢复撤掉的 Mission 时，不用 patch 改写别的卡来代替（不要把要撤的卡改成“本月不做”），而是在 JSON 里另给 missionCards:[{op:"add-mission"|"withdraw-mission"|"restore-mission",poId:PO 的 id,missionId:撤掉或恢复时填,brief:新增时一两句写清这条 Mission 要做成什么、谁负责、档位,reason:一句话,sourceIds:[消息id]}]。一张卡只做一件事；同时要改 PO 的成果或验收，就另出一张 PO 修订卡。新增卡的完整内容和 Task 草稿由系统按拆解技能起草，你只写 brief。withdrawnMissions 是本单元撤掉的 Mission，只有被要求恢复时才用。
+${NOW_RULE}`;
 // Before 2026-10-19 (no goal sense, no layered input): kept for side-by-side evaluation (NEXUS_MODE=legacy).
 export const nexusSystemPromptLegacy=nexusSystemPrompt.replace(/目标感：[^\n]*\n说话规矩：[^\n]*\n输入结构：[^\n]*\n/,'').replace('只用当前领域的公开消息、文档批注、卡片与提供的材料；facts（本体原文）和 otherUnits（其他单元摘要）只在本次需要时才提供。','只用当前领域的公开消息、文档批注、卡片与提供的飞书基础材料。');
 export const fields=['title','owner','result','time','checks','why','boundary','path','dependencies','logic','handoffs','parentLtoReference','tradeoff','expectedProgress','milestones','tier','risks','effort','stop'];

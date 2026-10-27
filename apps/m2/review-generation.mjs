@@ -262,9 +262,20 @@ export async function loadReviewSkill(root){
 const causeText=x=>typeof x==='string'?x:[x?.text,x?.ask].filter(Boolean).join(' ');
 const textOf=r=>[r.verdictReason,r.keyGap,...(r.facts||[]).flatMap(f=>[f.evidence,f.gap]),...(r.causes||[]).map(causeText),...['targets','results','questions','changes','practices','decisions','commonCauses'].flatMap(k=>r[k]||[]),...(r.nextInputs||[]).map(n=>n?.text),r.ltoProgress,r.ltoReview?.reason].filter(Boolean);
 const visible=s=>String(s).replace(/\*\*|\[E\d+\]|\s/g,'');
+const KNOWN_WORDS=new Set(['agent','agents','co-agent','coagent','nexus','tokenhub','token','ceo','dri','po','ru','mission','task','activity','mvp','ai','api','chat','inception','tkos','m2','e&o','eno','icp','vpn','aidc','gpu','gpt','claude','sonnet','pitch','demo','app','feishu','langsmith','ok']);
+export function jargonOf(text){
+ const t=String(text||'').replace(/\[E\d+\]/g,''),out=new Set();
+ const code=/rev\s*\d+|(?<![\d/.:-])0\d-\d+(?:\.\d+)?(?![\d/])|[父子]\s?(?:PO|Mission|Task)|(?<![A-Za-z])[MT]\d{2}(?!\d)/gi;
+ for(const m of t.matchAll(code))out.add(m[0]);
+ for(const m of t.replace(code,' ').matchAll(/[A-Za-z][A-Za-z&-]*(?:\s+[A-Za-z][A-Za-z&-]*)*/g)){const words=m[0].split(/\s+/);if(words.some(w=>w.length>=3&&!KNOWN_WORDS.has(w.toLowerCase())))out.add(m[0]);}
+ return [...out].slice(0,8);
+}
 export function lengthFindings(r){
  const f=[];for(const s of textOf(r)){for(const sent of String(s).split(/[。；！？]/)){const n=visible(sent.replace(/^\*\*[^*]+\*\*/,'')).length;if(n>30)f.push({type:'长句',chars:n,text:sent.slice(0,60)});}
   for(const w of ['尚不能','仍需进一步','有待观察','闭环','赋能','打通','具备条件'])if(String(s).includes(w))f.push({type:'回避或空话',word:w,text:String(s).slice(0,60)});}
+ // 疑似内部用词 (陈溪南 2026-10-27「不要造一些词了」, 复盘技能 2.1.5): version numbers, codes, internal terms and English words
+ // a reader outside the unit would not know. Measured here and judged by the check; [E3] and ref fields are not text.
+ for(const t of [...textOf(r),...(r.nextInputs||[]).map(n=>n?.ask?.question)].filter(Boolean))for(const w of jargonOf(t))f.push({type:'疑似内部用词',word:w,text:String(t).slice(0,60)});
  // 三段式 field limits (复盘技能 2.1.0): 判定理由 60, item 30, evidence 100, gap 60.
  const over=(field,text,limit)=>{const n=visible(String(text||'')).length;if(n>limit)f.push({type:'超字数',field,chars:n,limit,text:String(text).slice(0,40)});};
  if(Array.isArray(r.facts)){over('verdictReason',r.verdictReason,60);for(const x of r.facts){over('item',x.item,30);over('evidence',x.evidence,100);over('gap',x.gap,60);}
@@ -372,7 +383,8 @@ export function reviewProblems(run,input,{roster=[]}={}){
    if(!r.facts.length)out.push({unit:id,problem:'缺事实证据'});else if(factProblem(r.facts))out.push({unit:id,problem:'事实证据格式不对：每行要有这一项、状态（达成/部分达成/未达成/未开始）和证据'});
    const c=expected.find(x=>x.id===id),lost=c?rowFacts(c,r).missing:[];if(lost.length)out.push({unit:id,problem:`这些项没有事实行：${lost.join('、').slice(0,120)}`});
    if(r.insights!=null||r.causes!=null)out.push({unit:id,problem:'生成结果里不该有洞察或原因，洞察由大家提交'});
-   const next=nextInputProblem(r.nextInputs,{max:r.level==='company'?8:5,roster,allowEmpty:r.verdict==='达成'});if(next)out.push({unit:id,problem:next});
+   // 点名提问的上限只管生成（复盘技能 2.1.5）：人改卡时不拦，上一轮装入的卡也照常能改。
+   const next=nextInputProblem(r.nextInputs,{max:r.level==='company'?8:5,roster,allowEmpty:r.verdict==='达成',maxAsks:r.level==='company'?3:2});if(next)out.push({unit:id,problem:next});
   }else{
    const miss=['verdictReason','targets','causes','nextInputs'].filter(f=>!filled(r[f]));if(miss.length)out.push({unit:id,problem:`缺 ${miss.join('、')}`});
    const bad=(r.nextInputs||[]).filter(n=>n&&typeof n==='object'&&n.type&&!nextTypes.has(n.type)).map(n=>n.type);if(bad.length)out.push({unit:id,problem:`下月输入类型“${bad.join('、')}”不对`});

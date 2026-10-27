@@ -20,7 +20,7 @@
     },
     {
       "path": "agent-prompts.mjs",
-      "sha256": "6f0c103f7d243cd273db3660347dab6591928b822252f599e4f40f225199276f"
+      "sha256": "841adcae3575b29fed0faa1001b17bde69f7bd4024daa1251646780b4167adf5"
     },
     {
       "path": "app.jsx",
@@ -124,7 +124,7 @@
     },
     {
       "path": "governance.mjs",
-      "sha256": "357183f6d1d7f4b2659f0afec656a063b5341a965b9c5afa1a98defc8e9162d9"
+      "sha256": "0501987d0537df72e845a5cdb3efea9ccbb483d32488f879540305a8c0274de5"
     },
     {
       "path": "Handshake.jsx",
@@ -172,11 +172,11 @@
     },
     {
       "path": "nexus-context.mjs",
-      "sha256": "27453e1b18043806b553f28ab010bbc158ea8f46ee9808fbf46ff26dc0f1cbb1"
+      "sha256": "029a08f3ff971463eda2505e9a4c0a6180be86e514f785b26a8e7f4334a8e76d"
     },
     {
       "path": "nexus-listen.mjs",
-      "sha256": "a2fb684b561ceeeab87c646ef3aa4455f02b5731a245dd7b1f6fde0b23c8cecd"
+      "sha256": "dbc29f431d277b8402b89dfca47cf1ede809d405a10e6ef6890bac7628a49714"
     },
     {
       "path": "nexus-memory.mjs",
@@ -192,7 +192,7 @@
     },
     {
       "path": "nexus-policy.mjs",
-      "sha256": "9fdd5f566596620bb7b92d2237903c5bc88b75c131f67c0c40cb3215eb0bfc92"
+      "sha256": "3631cc268ecbb014358236d7f3c7aefd2b9c67e6241ef2e6fa9670e3be8849a6"
     },
     {
       "path": "nexus-retry.mjs",
@@ -241,7 +241,7 @@
     },
     {
       "path": "private-agent-context.mjs",
-      "sha256": "68d95e75cf168d830061c2e5b5039c5956b5acdd7c15ece38fd00c7626c618f8"
+      "sha256": "a95870a8ef25063ff3a546cb7adada773980cfdb922f3b5eb78060644c4dc641"
     },
     {
       "path": "proposal-confirmation.mjs",
@@ -277,7 +277,7 @@
     },
     {
       "path": "review-generation.mjs",
-      "sha256": "ac6dacda692f5ea9e8268cf35ed010a1c2b62166ce99988630ebed6851249a7d"
+      "sha256": "a30d89cc13f068de57dd1737eafa706854138e55be62afffe2a2dfd5a7a63688"
     },
     {
       "path": "review-handoff.mjs",
@@ -400,6 +400,10 @@
       "sha256": "3425e0bbbb6dcee6f3f41049c48816e2a0df9ce3f93f5d10eab61a7bbda5d728"
     },
     {
+      "path": "time-context.mjs",
+      "sha256": "42205018480c19e1c2a8e99a9af8b91a626caa911e0f02118623a1a85cd291d1"
+    },
+    {
       "path": "todo.mjs",
       "sha256": "ec61424b47d89e90e2a16cdbb00020d4334822b5ce610dc201cfe210df1636fe"
     },
@@ -441,9 +445,9 @@
     "source": "~/.codex/skills/tkos-decoding"
   },
   "reviewSkill": {
-    "version": "2.1.4",
-    "fingerprint": "f4a9b5534aaa",
-    "source": "apps/decoding-mvp/.runtime/eval/review/skills/tkos-review-2.1.4"
+    "version": "2.1.5",
+    "fingerprint": "8f9559c4518d",
+    "source": "apps/decoding-mvp/.runtime/eval/review/skills/tkos-review-2.1.5"
   },
   "mergeBase": "/Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261026e"
 }

@@ -25,10 +25,11 @@ const FACT_STATUS=['达成','部分达成','未达成','未开始'];
 // 下期输入 (陈溪南 2026-10-27, back after the 三段式): what next month takes from this review; a row may name who has to answer.
 export const NEXT_TYPES=['继续','调整','停止','待决策'];
 // A review judged 达成 with nothing left open may have none (陈溪南 2026-10-27, via Skill 建设).
-export const nextInputProblem=(list,{max=5,roster=[],allowEmpty=false}={})=>(list==null||Array.isArray(list)&&!list.length)?(allowEmpty?null:'缺下期输入'):!Array.isArray(list)?'下期输入要是列表':list.length>max?`下期输入最多 ${max} 条`:
+export const nextInputProblem=(list,{max=5,roster=[],allowEmpty=false,maxAsks=Infinity}={})=>(list==null||Array.isArray(list)&&!list.length)?(allowEmpty?null:'缺下期输入'):!Array.isArray(list)?'下期输入要是列表':list.length>max?`下期输入最多 ${max} 条`:
  list.some(x=>!x||typeof x.text!=='string'||!x.text.trim()||x.text.length>300)?'每条下期输入要有正文':
  list.some(x=>!NEXT_TYPES.includes(x.type))?`下期输入类型只能是${NEXT_TYPES.join('、')}`:
  list.some(x=>x.ask!=null&&(typeof x.ask!=='object'||!String(x.ask.to||'').trim()||!String(x.ask.question||'').trim()||String(x.ask.question).length>300))?'要问人的下期输入要写问谁、问什么':
+ list.filter(x=>x.ask).length>maxAsks?`点名提问最多 ${maxAsks} 个，现在有 ${list.filter(x=>x.ask).length} 个`:
  roster.length&&list.some(x=>x.ask&&!roster.includes(String(x.ask.to).trim()))?`下期输入里问的“${list.find(x=>x.ask&&!roster.includes(String(x.ask.to).trim())).ask.to}”不在公司名单里`:null;
 export const factProblem=list=>!Array.isArray(list)||list.length>40||list.some(x=>!x||typeof x.item!=='string'||!x.item.trim()||!FACT_STATUS.includes(x.status)||typeof (x.evidence??'')!=='string'||typeof (x.gap??'')!=='string'||String(x.evidence||'').length>2000||String(x.gap||'').length>1000);
 // 分析洞察 (陈溪南 2026-10-26): written by each participant under a review, never handshaken. Until 管理 reveals them,

@@ -6,7 +6,7 @@ import {memberActor,sharedProjection} from './shared-projection.mjs';
 import {reviewTree,reviewTodos} from './review-display.mjs';
 import {handoffPackage} from './review-handoff.mjs';
 import {withReviewSources} from './review-sources.mjs';
-import {reviewProblems,repairReviews} from './review-generation.mjs';
+import {reviewProblems,repairReviews,jargonOf,lengthFindings} from './review-generation.mjs';
 import {insightSynthesisRequest,reviewPatchProblem} from './nexus-review.mjs';
 import {notificationsFor} from './notifications.mjs';
 // 下期输入、截止时间、公司综合读全部洞察 (陈溪南 2026-10-27).
@@ -138,4 +138,19 @@ test('在判定上说出不同的判定（“实际是达成了”）就算改�
  const ask=sourceIds=>validateNexusResult({topics:[],proposals:[{cardId:'rv:agents-m4',baseVersion:1,basis:'request',sourceIds,patch:{verdict:'达成'}}]},{cards:[card],evidence:ev,fresh:ev});
  const r=ask(['c1']);assert.equal(r.proposals.length,1,JSON.stringify(r.rejected));
  ev[0].text='部分达成没问题';assert.equal(ask(['c1']).proposals.length,0);
+});
+
+test('疑似内部用词：版本号、编号、父 PO、不认识的英文词量出来交给检查；产品名、证据编号和日期不算',()=>{
+ assert.deepEqual(jargonOf('按01-1文稿rev14的边界准备 Readiness 候选'),['01-1','rev14','Readiness']);
+ assert.deepEqual(jargonOf('父 PO 不收窄，M04 复盘'),['父 PO','M04']);
+ assert.deepEqual(jargonOf('TokenHub 首版 10/15 发布，Agent 已接入 [E3]，2026-10-26 CEO 确认'),[]);
+ const f=lengthFindings({verdict:'部分达成',verdictReason:'Readiness 没到',facts:[{item:'x',status:'达成',evidence:'y'}],nextInputs:[{type:'待决策',text:'z',ask:{to:'刘明华',question:'01-1 还做吗？'}}]});
+ assert.deepEqual(f.filter(x=>x.type==='疑似内部用词').map(x=>x.word),['Readiness','01-1']);
+});
+
+test('生成时点名提问每份最多 2 个、公司复盘 3 个；人改卡不受这个限制',()=>{
+ const q=n=>Array.from({length:n},(_,i)=>({ref:'',type:'待决策',text:'x'+i,ask:{to:'刘明华',question:'定吗？'}}));
+ assert.match(nextInputProblem(q(3),{maxAsks:2}),/点名提问最多 2 个，现在有 3 个/);
+ assert.equal(nextInputProblem(q(3),{maxAsks:3}),null);
+ assert.equal(nextInputProblem(q(3)),null,'不传上限（人改卡）就不拦');
 });

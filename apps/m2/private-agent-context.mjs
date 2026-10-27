@@ -1,11 +1,12 @@
 import {canRead,currentVersion,cardStatus,mayRevise,confirmationSlots,insightView} from './governance.mjs';
+import {nowContext} from './time-context.mjs';
 import {memberProfiles} from './member-profiles.mjs';
 const name=id=>memberProfiles[id]?.name||id;
 const fail=message=>{throw Object.assign(Error(message),{status:403});};
 const fields=['id','level','name','unit','owner','title','result','time','why','boundary','path','dependencies','checks','logic','handoffs','parentLtoReference','tradeoff','expectedProgress','milestones',
  // Review cards (评测 2026-10-26: the Agent on a review page could not see the review itself).
  'kind','ref','verdict','verdictReason','facts','targets','causes','nextInputs','ltoReview'];
-export function privateAgentContext(state,actor,requested={},sourceFallback=[]){
+export function privateAgentContext(state,actor,requested={},sourceFallback=[],now=Date.now()){
  const readable=Object.values(state.cards).filter(c=>canRead(actor,c)),byId=new Map(readable.map(c=>[c.id,c]));
  const selected=requested.selection?.id?byId.get(requested.selection.id):null;
  if(requested.selection?.id&&!selected)fail('当前页面不在成员可见范围内');
@@ -32,7 +33,7 @@ export function privateAgentContext(state,actor,requested={},sourceFallback=[]){
  // Where confirmations stand across everything this member can see, whatever page is open:
  // "which ones have I confirmed / are waiting on me" must not depend on the current page.
  const progress=confirmationProgress(state,actor,readable);
- return {view,progress,member:{id:actor.id,name:actor.name||name(actor.id),ceo:actor.ceo,unitDri:actor.unitDri,missionDri:actor.missionDri},page:{cards:pageCards.map(project),ancestors,clientVersion:requested.selection?.version,staleClient:!!selection&&requested.selection?.version!==undefined&&selection.version!==requested.selection.version},privateHistory,groupChat,annotations,sources,limits:{privateHistory:20,groupChat:30,annotations:40,backgroundCharacters:24000},round:state.round?.number||6};
+ return {now:nowContext(now),view,progress,member:{id:actor.id,name:actor.name||name(actor.id),ceo:actor.ceo,unitDri:actor.unitDri,missionDri:actor.missionDri},page:{cards:pageCards.map(project),ancestors,clientVersion:requested.selection?.version,staleClient:!!selection&&requested.selection?.version!==undefined&&selection.version!==requested.selection.version},privateHistory,groupChat,annotations,sources,limits:{privateHistory:20,groupChat:30,annotations:40,backgroundCharacters:24000},round:state.round?.number||6};
 }
 
 export function confirmationProgress(state,actor,readable){
