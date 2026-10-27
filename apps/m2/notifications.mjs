@@ -70,7 +70,9 @@ export function notificationsFor(state,memberId,{reads={},jobs={}}={}){
  const mineIds=new Set(state.messages.filter(m=>m.author===memberId).map(m=>m.id));
  for(const [room,list] of Object.entries(records)){
   if(!room.startsWith('group:'))continue;const scope=room.slice(6),seen=time(reads[`mention:${scope}`]);
-  const hits=(list||[]).filter(m=>m.kind!=='revision-proposal'&&m.kind!=='notice'&&!m.broadcast&&m.author!==name&&time(m.createdAt)>seen&&(String(m.text||'').includes('@'+name)||m.author==='Nexus'&&mineIds.has(m.replyTo)));
+  // In my own 个人复盘 room every Nexus reply is to me (评测 2026-10-27: Nexus answered there and no card showed).
+  const ownRoom=scope==='person:'+memberId;
+  const hits=(list||[]).filter(m=>m.kind!=='revision-proposal'&&m.kind!=='notice'&&!m.broadcast&&m.author!==name&&time(m.createdAt)>seen&&(String(m.text||'').includes('@'+name)||m.author==='Nexus'&&(mineIds.has(m.replyTo)||ownRoom)));
   if(!hits.length)continue;
   const last=hits.reduce((a,b)=>time(b.createdAt)>time(a.createdAt)?b:a);
   const unit=scope.startsWith('person:')?'个人复盘':drafts[scope]?.title||(scope==='company'?'公司':scope);

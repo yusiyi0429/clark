@@ -276,3 +276,12 @@ test('个人复盘房间里本人说话就算在跟 Nexus 说：不带 @ 也一�
  const r=validateNexusResult({topics:[],proposals:[{cardId:'rv:bf01-m1',baseVersion:1,basis:'request',sourceIds:[ev[0].id],patch:{facts:[c.facts[0],{...c.facts[1],status:'部分达成',evidence:'10/25 客户试用一次（会议纪要）'}]}}]},{cards,evidence:ev,fresh:ev,ownRoom:true});
  assert.equal(r.proposals.length,1,JSON.stringify(r.rejected));
 });
+
+test('个人复盘房间里 Nexus 回本人，本人的通知里有一张“个人复盘”的提及卡',()=>{
+ let s=fresh();const sun=memberActor('member-03',s);
+ s=applyAction(s,sun,{type:'message',cardId:'rv:person:孙铭泽',text:'第二条能改成部分达成吗'});
+ s.messages.push({id:'nx1',author:'Nexus',channel:'group',scope:'person:member-03',text:'还缺会议纪要的日期，补上后我再出卡。',createdAt:new Date(Date.now()+1000).toISOString()});
+ const card=notificationsFor(s,'member-03').find(i=>i.id==='mention:person:member-03');
+ assert.ok(card,'有提及卡');assert.match(card.title,/^个人复盘：1 条消息与你有关/);assert.match(card.link,/scope=person%3Amember-03/);
+ assert.ok(!notificationsFor(s,'member-01').some(i=>i.id==='mention:person:member-03'),'别人没有');
+});
