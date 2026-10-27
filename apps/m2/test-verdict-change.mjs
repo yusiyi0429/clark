@@ -49,18 +49,15 @@ test('下级改了日期，上级还写着旧日期：上级标“下级有调�
  assert.ok(s.messages.some(m=>m.cardId==='bf01'&&/还写着 11\/06/.test(m.text)&&m.text.includes('@刘明华')));
  s=applyAction(s,ceo,{type:'confirm',cardId:'bf01',slot:'ceo',baseVersion:1});assert.equal(s.cards.bf01.downstreamChange,undefined);
 });
-test('复盘：子 Mission 判定改了，上级 RU 复盘也被提醒',()=>{
+test('个人复盘判定或事实证据改了：不再给单元复盘标“下级有调整”，而是排一项让 Nexus 判断对单元复盘有没有实质影响（2026-10-27）',()=>{
  let s=fresh();const sun=memberActor('member-03',s);
  s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:1,patch:{verdict:'部分达成'},reason:'有一次真实使用'});
- assert.equal(s.cards['rv:bf01'].downstreamChange?.cardId,'rv:bf01-m1');assert.deepEqual(s.cards['rv:bf01'].downstreamChange.fields,['verdict']);
-});
-test('复盘：子 Mission 的事实证据改了（某个 Task 状态变了），上级 RU 复盘也被提醒',()=>{
- let s=fresh();const sun=memberActor('member-03',s);
  const facts=[{ref:'t1',item:'首用',owner:'孙铭泽',status:'部分达成',evidence:'10/20 有一次真实使用（群聊记录）',gap:''}];
- s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:1,patch:{facts},reason:'10/20 有一次真实使用'});
+ s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:2,patch:{facts},reason:'10/20 有一次真实使用'});
  assert.equal(currentVersion(s.cards['rv:bf01-m1']).content.facts[0].status,'部分达成','事实证据直接改成新版本');
- assert.deepEqual(s.cards['rv:bf01'].downstreamChange?.fields,['facts']);
- assert.ok(s.messages.some(m=>m.text.includes('改了事实证据')),'提醒里写明改的是事实证据');
+ assert.equal(s.cards['rv:bf01'].downstreamChange,undefined);
+ assert.deepEqual(s.reviewCascadeQueue.map(j=>[j.childId,j.parentId,j.fromVersion,j.toVersion,j.fields.join()]),[['rv:bf01-m1','rv:bf01',1,2,'verdict'],['rv:bf01-m1','rv:bf01',2,3,'facts']]);
+ assert.ok(!s.messages.some(m=>m.scope==='bf01'&&/改了/.test(m.text)),'单元群里没有提醒');
 });
 test('修订卡不重复、不过期：卡在上级改动后已被改过，下级对齐的卡不再发；理由引用的日期卡上已没有，不发；上级再改或确认后，旧的对齐卡归档',async()=>{
  const {queueProposals,staleDates}=await import('./nexus-memory.mjs');

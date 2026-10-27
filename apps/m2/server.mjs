@@ -4,7 +4,8 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {normalize,allNodes} from './domain.mjs';
 import {createModelGateway,recordModelRun,patientTransport} from './model.mjs';
 import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,ownerAnnotation,isChildCard,reconcileReply,quietReply,roomLine} from './nexus-policy.mjs';
-import {createCollaborationState,currentVersion,canRead,cardStatus,confirmationSummary,insightView} from './governance.mjs';
+import {createCollaborationState,currentVersion,canRead,cardStatus,confirmationSummary,insightView,roomMember,canReadRoom} from './governance.mjs';
+import {reviewCascadeRequest,reviewCascadeProposal} from './review-cascade.mjs';
 import {runRoundPool} from './round-pool.mjs';
 import {redactMessages} from './redact.mjs';
 import {disagrees} from './stance.mjs';
@@ -81,7 +82,17 @@ let nexusClosing=false;
 async function nexusActivity(scope,patch,guard){return store.transact(s=>{if(guard&&s.round?.id!==guard.id)return s;s.nexus??={};if(patch.topics)patch={...patch,topics:mergeTopics(s.nexus[scope]?.topics,patch.topics,[...s.comments,...s.messages])};s.nexus[scope]={...s.nexus[scope],...patch,updatedAt:new Date().toISOString()};s.sequence++;return s;});}
 // 下级对齐: one at a time, in the order upper cards changed. Uses the generation model and the Decoding skill at high effort.
 let cascading=false;
-function runCascades(){if(process.env.DECODING_CASCADE==='off'||cascading||!ready||!store.snapshot().cascadeQueue?.length)return;cascading=true;(async()=>{try{for(;;){const job=store.snapshot().cascadeQueue?.[0];if(!job)break;await store.transact(s=>{s.cascadeQueue=(s.cascadeQueue||[]).filter(j=>j!==s.cascadeQueue[0]);return s;});await cascadeOnce(job).catch(e=>cascadeFailed(job,e));}}finally{cascading=false;}})();}
+function runCascades(){runReviewCascades();if(process.env.DECODING_CASCADE==='off'||cascading||!ready||!store.snapshot().cascadeQueue?.length)return;cascading=true;(async()=>{try{for(;;){const job=store.snapshot().cascadeQueue?.[0];if(!job)break;await store.transact(s=>{s.cascadeQueue=(s.cascadeQueue||[]).filter(j=>j!==s.cascadeQueue[0]);return s;});await cascadeOnce(job).catch(e=>cascadeFailed(job,e));}}finally{cascading=false;}})();}
+// 个人复盘改了 → Nexus 判断对单元复盘有没有实质影响，有才在单元群出卡 (review-cascade.mjs, 陈溪南 2026-10-27).
+let reviewCascading=false;
+function runReviewCascades(){if(process.env.DECODING_CASCADE==='off'||reviewCascading||!ready||!store.snapshot().reviewCascadeQueue?.length)return;reviewCascading=true;(async()=>{try{for(;;){const job=store.snapshot().reviewCascadeQueue?.[0];if(!job)break;
+ await store.transact(s=>{s.reviewCascadeQueue=(s.reviewCascadeQueue||[]).slice(1);s.sequence++;return s;});
+ const log=entry=>store.transact(s=>{s.reviewCascadeLog=[...(s.reviewCascadeLog||[]),{...job,...entry,at:new Date().toISOString()}].slice(-50);return s;});
+ try{const snap=store.snapshot();if(!snap.cards[job.childId]||!snap.cards[job.parentId])continue;const rules=(await loadReviewRules(reviewSkillRoot)).rules;
+  const r=await chatGateway.complete(redactMessages(reviewCascadeRequest(snap,job,rules)).messages,{json:true,thinking:true,reasoningEffort:'medium'});
+  const value=JSON.parse(bareJson(r.answer));let reason='';
+  await store.transact(s=>{const out=reviewCascadeProposal(s,job,value);reason=out.reason||'';return out.proposal?queueProposals(s,out.scope,[out.proposal]):s;});await log({impact:!reason,reason});
+ }catch(e){await log({error:String(e.message).slice(0,160)});}}}finally{reviewCascading=false;}})();}
 async function cascadeOnce(job){
  const start=store.snapshot(),roundAtStart=start.round?.id,parent=start.cards[job.cardId];if(!parent||!childrenOf(start,job.cardId).length)return;
  const skill=await loadSkillSnapshot(skillRoot);
@@ -130,7 +141,8 @@ async function synthesizeInsights(){
   const rules=(await loadReviewRules(reviewSkillRoot)).rules,name=id=>handoffProfiles[id]?.name||id;
   // The company card is synthesized whenever any review has insights: it reads them all (2026-10-27).
   const snap0=store.snapshot(),anyInsight=Object.values(snap0.insights||{}).some(l=>l?.length);
-  const todo=Object.values(snap0.cards).filter(c=>c.kind==='review'&&((snap0.insights?.[c.id]||[]).length||c.level==='company'&&anyInsight)&&!snap0.insightNexus?.[c.id]?.text).map(c=>c.id);
+  const fromMissions=c=>c.level==='po'&&Object.values(snap0.cards).some(m=>m.kind==='review'&&m.level==='mission'&&m.unit===c.unit&&(snap0.insights?.[m.id]||[]).length);
+  const todo=Object.values(snap0.cards).filter(c=>c.kind==='review'&&((snap0.insights?.[c.id]||[]).length||fromMissions(c)||c.level==='company'&&anyInsight)&&!snap0.insightNexus?.[c.id]?.text).map(c=>c.id);
   await runRoundPool(todo,async id=>{
    let entry;try{const snap=store.snapshot(),r=await chatGateway.complete(redactMessages(insightSynthesisRequest(snap,snap.cards[id],rules,name)).messages,{json:true,thinking:true,reasoningEffort:'medium'});const v=JSON.parse(r.answer);if(typeof v?.text!=='string'||!v.text.trim())throw Error('综合为空');entry={text:readableAnswer(v.text,[]),createdAt:new Date().toISOString()};}
    catch(e){entry={error:e.code==='MODEL_REFUSAL'?'模型拒绝了这次综合，可能因为洞察里有具体到个人的敏感细节':'综合没有完成，可在管理里重试',at:new Date().toISOString()};}
@@ -319,10 +331,11 @@ export const server=createServer(async(req,res)=>{
    if(!ready)return json(res,503,{error:'模型服务尚未配置。需在服务器配置 DECODING_API_BASE、DECODING_MODEL、DECODING_API_KEY；密钥不进入浏览器。'});
    if(typeof b.text!=='string'||!b.text.trim()||b.text.length>8000)return json(res,400,{error:'请输入有效问题'});
    // 公司复盘 is not a unit but Nexus still works on it (in the CEO's own Agent pane).
-   const scope=liveUnits().find(u=>u.id===b.context?.scope)||(b.context?.scope==='company'&&store.snapshot().cards['rv:company']?{id:'company',level:'company'}:undefined);
+   // 个人复盘的房间 person:<memberId> (2026-10-27): only that person, their Agent and Nexus.
+   const scope=liveUnits().find(u=>u.id===b.context?.scope)||(b.context?.scope==='company'&&store.snapshot().cards['rv:company']?{id:'company',level:'company'}:undefined)||(roomMember(b.context?.scope)&&handoffProfiles[roomMember(b.context.scope)]?{id:b.context.scope,level:'person'}:undefined);
    const shared=req.url==='/api/nexus';
    const actor=actorFor(b.memberId);refusalTo={shared,scope:scope?.id,memberId:actor.id,called:b.trigger!=='automatic'};
-   if(n&&!canRead(actor,store.snapshot().cards[n.id])||scope&&!canRead(actor,store.snapshot().cards[scope.id]||store.snapshot().cards['rv:'+scope.id]))return json(res,403,{error:'不在当前成员的领域范围内'});
+   if(n&&!canRead(actor,store.snapshot().cards[n.id])||scope&&(scope.level==='person'?!canReadRoom(actor,scope.id):!canRead(actor,store.snapshot().cards[scope.id]||store.snapshot().cards['rv:'+scope.id])))return json(res,403,{error:'不在当前成员的领域范围内'});
    if(shared&&!scope)return json(res,400,{error:'请先进入战场或 Domain，Nexus 只分析该领域的公开讨论。'});
    if(shared){
     if(nexusRunning.has(scope.id))return json(res,409,{error:'正在整理本领域的新消息，请稍后'});

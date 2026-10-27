@@ -52,7 +52,9 @@ export function notificationsFor(state,memberId,{reads={},jobs={}}={}){
   const tree=reviewTree(drafts,(state.round?.units||[]).map(u=>u.id));
   const proposals=Object.values(records).flat().filter(r=>r.kind==='revision-proposal');
   const items=reviewTodos(tree.nodes,p,comments,proposals).map(i=>({...i,at:time(drafts[i.cardId]?.history?.at?.(-1)?.at)||time(review.loadedAt)}));
-  const card=todoCard('review',items,`${month}复盘`);if(card)cards.push({...card,dueAt:reviewDueAt(review)});
+  // The earliest due time among my items: a 个人复盘 is due at 24 hours, the rest at 48 (2026-10-27).
+  const dues=items.map(i=>drafts[i.cardId]?.dueAt).filter(Boolean).sort();
+  const card=todoCard('review',items,`${month}复盘`);if(card)cards.push({...card,dueAt:dues[0]||reviewDueAt(review)});
  }
  // 我的待办 · 拆解: only once the plan after this review is out (before that the plan page is closed).
  const job=state.roundJob,planOpen=!review?.loadedAt||state.planHandoff?.status==='generated'||job?.id===state.round?.id&&String(job?.finishedAt||'')>review.loadedAt;
@@ -71,8 +73,8 @@ export function notificationsFor(state,memberId,{reads={},jobs={}}={}){
   const hits=(list||[]).filter(m=>m.kind!=='revision-proposal'&&m.kind!=='notice'&&!m.broadcast&&m.author!==name&&time(m.createdAt)>seen&&(String(m.text||'').includes('@'+name)||m.author==='Nexus'&&mineIds.has(m.replyTo)));
   if(!hits.length)continue;
   const last=hits.reduce((a,b)=>time(b.createdAt)>time(a.createdAt)?b:a);
-  const unit=drafts[scope]?.title||(scope==='company'?'公司':scope);
-  cards.push({id:`mention:${scope}`,type:'mention',unit:scope,title:`${unit}群：${hits.length} 条消息与你有关`,text:`${last.author}：${String(last.text||'').replace(/\s+/g,' ').slice(0,30)}`,count:hits.length,
+  const unit=scope.startsWith('person:')?'个人复盘':drafts[scope]?.title||(scope==='company'?'公司':scope);
+  cards.push({id:`mention:${scope}`,type:'mention',unit:scope,title:`${unit}${scope.startsWith('person:')?'':'群'}：${hits.length} 条消息与你有关`,text:`${last.author}：${String(last.text||'').replace(/\s+/g,' ').slice(0,30)}`,count:hits.length,
    link:link({scope,message:last.id}),updatedAt:iso(time(last.createdAt))});
  }
  // A failed generation goes to the M2 admin only (陈溪南 2026-10-27), not the CEO or other operators.

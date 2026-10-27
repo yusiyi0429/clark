@@ -19,6 +19,14 @@ export function unitOf(card){return card.unit||card.id;}
 // Who answers for a review is whoever the review names, so Mission reviews are matched by owner name.
 export const isReview=card=>card?.kind==='review';
 const reviewOwners=card=>String(currentVersion(card).content.owner||'').split(/[、,，\s]+/).filter(Boolean);
+// 个人复盘的对话 (陈溪南 2026-10-27): a person's Mission reviews talk in their own room, person:<memberId>, with only them,
+// their Agent and Nexus; nothing said there goes to the unit group. Unassigned reviews stay in the unit group.
+export const personRoomOf=name=>{const id=Object.entries(memberProfiles).find(([,p])=>p.name===name)?.[0];return id?`person:${id}`:null;};
+export const roomMember=scope=>String(scope||'').startsWith('person:')?String(scope).slice(7):null;
+export function roomOf(card){if(isReview(card)&&card.level==='mission'&&currentVersion(card).content.ownerAssigned!==false){const room=personRoomOf(reviewOwners(card)[0]);if(room)return room;}return unitOf(card);}
+export function canReadRoom(actor,scope){const m=roomMember(scope);return m?actor?.id===m:!!actor&&(actor.ceo===true||(actor.visibleUnits||[]).includes(scope));}
+// A review's due time (陈溪南 2026-10-27): 个人复盘 24 hours after the round is in, unit and company reviews 48.
+export const reviewCardDueAt=(round,card)=>!round?.loadedAt||!round.dueAt?null:isReview(card)&&card.level==='mission'?new Date(Date.parse(round.loadedAt)+24*3600e3).toISOString():round.dueAt;
 const reviewEditable=new Set(['verdict','verdictReason','facts','targets','causes','nextInputs','ltoReview']);
 // 复盘三段式 (陈溪南 2026-10-26): a fact line is one Task / Mission / unit — what it is, its status, the evidence and the plain gap.
 const FACT_STATUS=['达成','部分达成','未达成','未开始'];
@@ -62,8 +70,11 @@ export function insightView(state,card,actor){
  const base={revealed,participants,owed,submitters:[...counts].map(([id,count])=>({name:name(id),count})),missing:owed.filter(n=>![...counts.keys()].some(id=>name(id)===n))};
  if(!revealed)return {...base,mine:list.filter(x=>x.author===actor.id).map(({id,text,createdAt,updatedAt})=>({id,text,createdAt,updatedAt}))};
  const nexus=state.insightNexus?.[card.id];
- return {...base,items:list.map(x=>({id:x.id,author:name(x.author),mine:x.author===actor.id,text:x.text,createdAt:x.createdAt,updatedAt:x.updatedAt})),nexus:nexus?.text?{text:nexus.text,createdAt:nexus.createdAt}:nexus?.error?{error:nexus.error}:null};
+ // After the reveal a unit review also shows its Mission reviews' insights, each saying where it came from (2026-10-27).
+ const fromMissions=card.level==='po'?Object.values(state.cards).filter(c=>isReview(c)&&c.level==='mission'&&unitOf(c)===unitOf(card)).flatMap(c=>(state.insights?.[c.id]||[]).map(x=>({...x,source:{cardId:c.id,label:missionLabel(c)}}))):[];
+ return {...base,items:[...list,...fromMissions].map(x=>({id:x.id,author:name(x.author),mine:x.author===actor.id,text:x.text,createdAt:x.createdAt,updatedAt:x.updatedAt,...(x.source?{source:x.source}:{})})),nexus:nexus?.text?{text:nexus.text,createdAt:nexus.createdAt}:nexus?.error?{error:nexus.error}:null};
 }
+export const missionLabel=card=>{const m=String(card.id).match(/-m(\d+)$/);return m?`Mission ${Number(m[1])}`:currentVersion(card).content.title||card.id;};
 // Group notices keep everyone on the same page after a revision or a handshake; they are support, not discussion.
 const nameOf=id=>memberProfiles[id]?.name||id;
 const titleOf=card=>'「'+(currentVersion(card).content.title||card.title||card.id)+'」';
@@ -92,7 +103,7 @@ function applyMissionCard(previous,actor,proposal){
  else fail(400,'不认识的修订卡');
  return state;
 }
-function groupNotice(state,card,text){state.sequence++;state.messages.push({id:`notice-${state.sequence}`,createdSequence:state.sequence,author:'Nexus',kind:'notice',channel:'group',scope:unitOf(card),cardId:card.id,version:currentVersion(card).number,general:true,text,createdAt:new Date().toISOString()});}
+function groupNotice(state,card,text,scope=roomOf(card)){state.sequence++;state.messages.push({id:`notice-${state.sequence}`,createdSequence:state.sequence,author:'Nexus',kind:'notice',channel:'group',scope,cardId:card.id,version:currentVersion(card).number,general:true,text,createdAt:new Date().toISOString()});}
 // Who has confirmed the current version and whom it still waits for, by name (for Nexus progress answers).
 // Who decides a changed verdict on a review: the signers other than those who asked for it.
 export function verdictDeciders(state,card,proposal){
@@ -158,8 +169,12 @@ export function applyAction(previous,actor,action){
   if(reason){saved.rejectReason=reason;const after=applyAction(next,actor,{type:'message',cardId:proposal.cardId,replyTo:proposal.id,text:`不采用这张修订卡：${reason}`});after.messages.at(-1).rejectsProposal=proposal.id;return after;}
   return next;
  }
- const state=structuredClone(previous),card=state.cards[action.cardId];
+ const state=structuredClone(previous);let card=state.cards[action.cardId];
  if(!actor?.id)fail(401,'请选择试用成员');
+ // rv:person:<名字> is the person's own review room: a line there is about their reviews in general, not one card.
+ if(!card&&String(action.cardId||'').startsWith('rv:person:')&&action.type==='message'){const who=String(action.cardId).slice(10);
+  if(who!==actor.name)fail(403,'个人复盘的对话只有本人能发');
+  card=Object.values(state.cards).find(c=>isReview(c)&&c.level==='mission'&&roomOf(c)===personRoomOf(who));if(!card)fail(404,'没有你的个人复盘');action={...action,general:true};}
  if(!card||!canRead(actor,card)&&actor.kind!=='coagent')fail(403,'不在当前领域可见范围内');
  const v=currentVersion(card),now=new Date().toISOString();
  if(action.type==='revise'){
@@ -189,7 +204,7 @@ export function applyAction(previous,actor,action){
   const soleSigner=isReview(card)&&verdictDeciders(state,card,null).every(n=>n===nameOf(actor.id));
   if(isReview(card)&&actor.kind!=='coagent'&&!action.viaProposal&&!soleSigner&&'verdict'in patch&&patch.verdict!==v.content.verdict){
    state.proposals??=[];state.sequence++;
-   const proposal={id:`verdict-${state.sequence}`,cardId:card.id,scope:unitOf(card),baseVersion:v.number,patch:structuredClone(patch),reason:String(action.reason||patch.verdictReason||'').slice(0,2000),sourceIds:[],status:'pending',createdSequence:state.sequence,createdAt:now,
+   const proposal={id:`verdict-${state.sequence}`,cardId:card.id,scope:roomOf(card),baseVersion:v.number,patch:structuredClone(patch),reason:String(action.reason||patch.verdictReason||'').slice(0,2000),sourceIds:[],status:'pending',createdSequence:state.sequence,createdAt:now,
     before:Object.fromEntries(Object.keys(patch).map(k=>[k,v.content[k]??''])),verdictChange:{from:v.content.verdict||'',to:patch.verdict,by:[actor.id],basis:String(action.reason||patch.verdictReason||'').slice(0,2000)}};
    state.proposals.push(proposal);
    groupNotice(state,card,`${nameOf(actor.id)}提出把${titleOf(card)}的判定由「${proposal.verdictChange.from}」改为「${proposal.verdictChange.to}」，请 ${mentionList(verdictDeciders(state,card,proposal))} 看修订卡后决定。`);
@@ -220,7 +235,10 @@ export function applyAction(previous,actor,action){
   // card above wrote out of date (a PO milestone still on the old day, an RU review still saying "all three missed").
   // Its owner is told and the card shows 下级有调整 until they look; dates the upper card still quotes are named.
   const watched=changed.filter(k=>['time','checks','milestones','result','verdict','verdictReason','targets','facts','nextInputs','tier'].includes(k)),parent=card.parentId&&state.cards[card.parentId];
-  if(watched.length&&parent){
+  // A 个人复盘 change no longer flags its unit review (陈溪南 2026-10-27): Nexus reads the change and, only when it matters for the
+  // unit review, files a card there for its signers (server: review-cascade.mjs).
+  if(watched.length&&parent&&isReview(card)&&card.level==='mission'&&isReview(parent)){(state.reviewCascadeQueue??=[]).push({childId:card.id,parentId:parent.id,fromVersion:v.number,toVersion:v.number+1,fields:watched,at:now});}
+  else if(watched.length&&parent){
    // Dates compared as month/day (11/06 = 11-6); the upper card's own spelling is what the notice quotes.
    const dates=x=>new Map((JSON.stringify(x||'').match(/\d{1,2}[\/-]\d{1,2}/g)||[]).map(d=>{const [m,dd]=d.split(/[\/-]/).map(Number);return [`${m}/${dd}`,d];}));
    const was=dates(watched.map(k=>v.content[k])),now2=dates(watched.map(k=>patch[k])),gone=[...was.keys()].filter(d=>!now2.has(d));
@@ -257,6 +275,8 @@ export function applyAction(previous,actor,action){
   const slots=confirmationSlots(card);
   if(!slots.length)fail(400,'Task 与 Activity 不设握手');
   if(card.upstreamChange)fail(409,'上级成果有调整，请先核对影响再确认');
+  // A unit review waits for its 个人复盘 (陈溪南 2026-10-27).
+  if(isReview(card)&&card.level==='po'){const open=Object.values(state.cards).filter(c=>isReview(c)&&c.level==='mission'&&unitOf(c)===unitOf(card)&&c.confirmedVersion!==currentVersion(c).number);if(open.length)fail(409,`本单元还有 ${open.length} 份个人复盘未确认，全部确认后才能确认单元复盘`);}
   // The company review closes the month: every unit and Mission review must be confirmed first (陈溪南 2026-10-21).
   if(isReview(card)&&card.level==='company'){const open=Object.values(state.cards).filter(c=>isReview(c)&&c.level!=='company'&&c.confirmedVersion!==currentVersion(c).number);if(open.length)fail(409,`还有 ${open.length} 份复盘未确认，全部确认后才能确认公司复盘`);}
   // 先贴一条洞察 (陈溪南 2026-10-27): whoever owes an insight on a 三段式 review confirms only after writing one, on any entry point.
@@ -291,8 +311,9 @@ export function applyAction(previous,actor,action){
   }
   // After the reveal (陈溪南 2026-10-27): late insights are welcome, show in the group like comments, and Nexus redoes this card's and the company's synthesis.
   if(state.insightsRevealed){
-   if(action.type!=='deleteInsight')groupNotice(state,card,`${actor.name}${action.type==='insight'?'在':'改了在'}${titleOf(card)}下的分析洞察：${String(action.text).trim().slice(0,300)}`);
-   if(state.insightNexus){delete state.insightNexus[card.id];const company=Object.values(state.cards).find(c=>isReview(c)&&c.level==='company');if(company)delete state.insightNexus[company.id];}
+   // Revealed insights are the unit's to read, so a late one goes to the unit group, a 个人复盘's included.
+   if(action.type!=='deleteInsight')groupNotice(state,card,`${actor.name}${action.type==='insight'?'在':'改了在'}${titleOf(card)}下的分析洞察：${String(action.text).trim().slice(0,300)}`,unitOf(card));
+   if(state.insightNexus){delete state.insightNexus[card.id];if(card.level==='mission'&&card.parentId)delete state.insightNexus[card.parentId];const company=Object.values(state.cards).find(c=>isReview(c)&&c.level==='company');if(company)delete state.insightNexus[company.id];}
   }
  }else if(action.type==='deleteComment'){
   const i=state.comments.findIndex(c=>c.id===action.commentId&&c.cardId===card.id);
@@ -304,7 +325,10 @@ export function applyAction(previous,actor,action){
   if(typeof action.text!=='string'||!action.text.trim()||action.text.length>8000)fail(400,'请输入有效反馈');
   const target=action.type==='comment'&&action.baseVersion!==undefined?card.versions.find(x=>x.number===action.baseVersion):v;
   if(!target)fail(400,'批注关联的版本不存在');
-  const entry={id:`event-${state.sequence+1}`,createdSequence:state.sequence+1,author:actor.id,scope:unitOf(card),cardId:card.id,version:target.number,text:action.text.trim(),block:typeof action.block==='string'?action.block.slice(0,80):'card',createdAt:now,channel:'group'};
+  // Only the owner talks on a 个人复盘; someone a 下期输入 question names may still answer it there.
+  const room=roomOf(card),member=roomMember(room);
+  if(member&&member!==actor.id&&!(action.type==='comment'&&action.answers&&Number.isInteger(action.answers.index)&&currentVersion(card).content.nextInputs?.[action.answers.index]?.ask?.to===actor.name))fail(403,'个人复盘的讨论只在本人的个人复盘里；有意见请在单元复盘里说');
+  const entry={id:`event-${state.sequence+1}`,createdSequence:state.sequence+1,author:actor.id,scope:room,cardId:card.id,version:target.number,text:action.text.trim(),block:typeof action.block==='string'?action.block.slice(0,80):'card',createdAt:now,channel:'group'};
   // A comment can sit on one item of a list field (陈溪南 2026-10-23); it keeps which item and that item's text,
   // so whoever reads it (Nexus first) sees exactly what was pointed at.
   if(action.type==='comment'){const val=target.content[entry.block],pick=Array.isArray(val)&&Number.isInteger(action.item)&&action.item>=0&&action.item<val.length?val[action.item]:undefined;

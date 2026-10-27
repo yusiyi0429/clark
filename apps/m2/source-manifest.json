@@ -128,7 +128,7 @@
     },
     {
       "path": "governance.mjs",
-      "sha256": "95a8d0ec0b2de0529e7ac1308e978898f883eb2467f56341aa7a0f307fce514b"
+      "sha256": "a510712f6e7502dd83331f1217ba9914f6fda8552ca003cd162f622d252af936"
     },
     {
       "path": "Handshake.jsx",
@@ -204,7 +204,7 @@
     },
     {
       "path": "nexus-review.mjs",
-      "sha256": "e15a9aa3323bb516f74ac8a937cfcf46e38a292f545affebde055445f9329b8c"
+      "sha256": "4893986ce04431d22676dbdadb896f7dbba7e424e6bbb5ef6439fca374cee4b5"
     },
     {
       "path": "NexusIsland.jsx",
@@ -245,7 +245,7 @@
     },
     {
       "path": "private-agent-context.mjs",
-      "sha256": "c882c06da43604d0d47945639a496611d01bc412b3dda28c7c0c6da8853740ec"
+      "sha256": "6111db3b26a8bd139f20ebb012c118c5fd0c19e017af4bc571e9f963a2eb398a"
     },
     {
       "path": "proposal-confirmation.mjs",
@@ -274,6 +274,10 @@
     {
       "path": "redact.mjs",
       "sha256": "1e6a5f3590d30c2f4140cfc17f2d2aa9eeff9de00605699a818704621ac60fa5"
+    },
+    {
+      "path": "review-cascade.mjs",
+      "sha256": "fe92657a83a75e036dd7ba37bbf246dc8104c7274ae9a206e6db5bebb1cd7e65"
     },
     {
       "path": "review-display.mjs",
@@ -377,11 +381,11 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "d3d89bed684d711be3cd88bce1caab6e895176f7930b8879556dfac9d783d918"
+      "sha256": "00b0d80c9c2ec6773733574868639791df09f5462f8f02319bbe870638910313"
     },
     {
       "path": "shared-projection.mjs",
-      "sha256": "83fc04c8f70f5d70b92472363fcb503383170bc9d9c59086134ab7420b20eee3"
+      "sha256": "7edece7ab3768c3dd030b3e97a75633f550919ab305ae622d60f5a6f01b29f8c"
     },
     {
       "path": "skill-snapshot.mjs",
@@ -433,7 +437,7 @@
     },
     {
       "path": "notifications.mjs",
-      "sha256": "c6c9478db490e1260dc809061f8e9134805d1d7d4a495f01de040071d39ce42d"
+      "sha256": "aa6000e7caa1fe89d499d5fe308fc7792344d6d1e6b5c4183e17a66e40768b8f"
     }
   ],
   "excluded": [

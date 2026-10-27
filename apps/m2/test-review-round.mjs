@@ -19,6 +19,8 @@ test('复盘卡挂在同一单元：rv:前缀、上下级、原因统一成 {tex
 test('握手：PO 复盘 CEO 和单元 DRI 各签一次（刘明华两个都签）；个人复盘只由负责人确认；公司复盘 CEO 签',()=>{
  let s=installReviewRound(plan(),sample,{label:'10 月复盘'});
  const ceo=memberActor('member-01',s),sun=memberActor('member-03',s);
+ assert.throws(()=>applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'ceo',baseVersion:1}),/还有 1 份个人复盘未确认/,'单元复盘等个人复盘先确认');
+ s=applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',slot:'missionDri',baseVersion:1});
  s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'ceo',baseVersion:1});
  assert.notEqual(s.cards['rv:bf01'].confirmedVersion,1,'签一次不算完成');
  s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'unitDri',baseVersion:1});
@@ -56,13 +58,14 @@ test('同一个 Nexus：复盘卡并进单元的卡片，按复盘字段校验�
  let s=installReviewRound(plan(),sample,{label:'10 月复盘'});
  const sun=memberActor('member-03',s);
  s=applyAction(s,sun,{type:'comment',cardId:'rv:bf01-m1',baseVersion:1,block:'causes',text:'回答：人被借走一周',answers:{index:0}});
- const cards=reviewCardsFor(s,'bf01');assert.deepEqual(cards.map(c=>c.id),['rv:bf01','rv:bf01-m1']);assert.deepEqual(cards[1].aliases,[]);
- assert.equal(reviewPatchProblem(cards[1],{tier:'P0'}),'有字段不能改');assert.match(reviewPatchProblem(cards[1],{verdict:'差不多'}),/判定只能是/);
- const evidence=publicEvidence(sharedProjection(s,sun).records['group:bf01'],'bf01',{retainAll:true});
+ assert.deepEqual(reviewCardsFor(s,'bf01').map(c=>c.id),['rv:bf01'],'单元群只管单元复盘（个人复盘在本人的房间，2026-10-27）');
+ const cards=reviewCardsFor(s,'person:member-03');assert.deepEqual(cards.map(c=>c.id),['rv:bf01-m1']);assert.deepEqual(cards[0].aliases,[]);
+ assert.equal(reviewPatchProblem(cards[0],{tier:'P0'}),'有字段不能改');assert.match(reviewPatchProblem(cards[0],{verdict:'差不多'}),/判定只能是/);
+ const evidence=publicEvidence(sharedProjection(s,sun).records['group:person:member-03'],'person:member-03',{retainAll:true});
  const e=evidence.find(x=>x.answers);assert.ok(e,'回答带着 answers 进 Nexus');
  const out=validateNexusResult({topics:[],proposals:[{cardId:'rv:bf01-m1',baseVersion:1,basis:'request',sourceIds:[e.id],reason:'对原因的解释',patch:{causes:[{text:'**人被借走：**一周（负责人报告）',ask:'x'}]}}]},{cards,evidence,fresh:evidence});
  assert.equal(out.proposals.length,1,JSON.stringify(out.rejected));assert.equal(out.proposals[0].patch.causes[0].ask,'x');
- s=applyOwnerAnnotations(queueProposals(s,'bf01',out.proposals),'bf01');
+ s=applyOwnerAnnotations(queueProposals(s,'person:member-03',out.proposals),'person:member-03');
  assert.equal(s.proposals.at(-1).status,'pending','回答不是改稿指令，仍等负责人确认');
  assert.match(reviewPromptBlock('--- references/revision-loop.md ---\n补了新证据'),/补了新证据/);
 });
@@ -90,8 +93,8 @@ test('复盘 → 拆解：别的复盘都确认完才能确认公司复盘；确
  let s=installReviewRound(plan(),{...sample,period:'2026-10'},{label:'10 月复盘'});
  const ceo=memberActor('member-01',s),sun=memberActor('member-03',s);
  assert.throws(()=>applyAction(s,ceo,{type:'confirm',cardId:'rv:company',slot:'ceo',baseVersion:1}),/还有 2 份复盘未确认/);
- s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'ceo',baseVersion:1});s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'unitDri',baseVersion:1});
  s=applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',slot:'missionDri',baseVersion:1});
+ s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'ceo',baseVersion:1});s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'unitDri',baseVersion:1});
  s=applyAction(s,ceo,{type:'confirm',cardId:'rv:company',slot:'ceo',baseVersion:1});
  assert.equal(s.planHandoff.status,'requested');
  const pkg=handoffPackage(s);assert.equal(pkg.forPeriod,'2026-11');assert.equal(pkg.units[0].po.nextInputs[0].id,'bf01-1');assert.equal(pkg.company.ltoReview.choice,'维持');
@@ -118,9 +121,9 @@ test('领域内的公共通知 @所有人：复盘生成、换新一轮、本领
  let s=installReviewRound(plan(),{...sample,period:'2026-10'},{label:'第 1 轮'});
  const ready=s.messages.filter(m=>m.broadcast==='review-ready');assert.deepEqual(ready.map(m=>m.scope),['bf01']);assert.match(ready[0].text,/^@所有人 10 月复盘已生成/);
  const ceo=memberActor('member-01',s),sun=memberActor('member-03',s);
- s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'ceo',baseVersion:1});s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'unitDri',baseVersion:1});
- assert.ok(!s.messages.some(m=>m.broadcast==='review-unit-done'),'还有 Mission 复盘没确认');
  s=applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',slot:'missionDri',baseVersion:1});
+ assert.ok(!s.messages.some(m=>m.broadcast==='review-unit-done'),'单元复盘还没确认');
+ s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'ceo',baseVersion:1});s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'unitDri',baseVersion:1});
  assert.equal(s.messages.filter(m=>m.broadcast==='review-unit-done').length,1);
  s=installReviewRound(s,{...sample,period:'2026-10'},{label:'第 2 轮'});
  assert.match(s.messages.filter(m=>m.broadcast==='review-regenerated').at(-1).text,/已换成新一轮（第 2 轮）/);
