@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { WorldAnchor } from "./meetingDecisions.js";
 
 export const ConversationScope = Type.String({
   pattern: "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
@@ -205,8 +206,10 @@ export const ConversationRecoveryNote = Type.Object(
   { additionalProperties: false },
 );
 
+const MeetingDraftPerson = Type.Object({ personId: Type.String({ minLength: 1 }), displayName: Type.String() }, { additionalProperties: false });
+
 /**
- * 回答后面挂的卡（对话里的一句话入口：生成复盘、帮我问问、请同事帮忙）。由服务端按工具结果生成，不由模型写；
+ * 回答后面挂的卡（对话里的一句话入口：生成复盘、帮我问问、请同事帮忙、约会议）。由服务端按工具结果生成，不由模型写；
  * 卡上的状态（是否已发出、草稿进度）由界面按 id 读最新的对象，发出仍走各对象自己的 Action。href 是对象页面的地址。
  */
 export const ConversationCard = Type.Union([
@@ -236,6 +239,25 @@ export const ConversationCard = Type.Union([
   Type.Object({ kind: Type.Literal("questions"), askId: Type.String({ minLength: 1 }), questions: Type.Array(AskQuestion, { minItems: 1, maxItems: 4 }) }, { additionalProperties: false }),
   /** 本人发起的信息收集草稿：收什么、发给谁、截止、每周固定与「发送」。 */
   Type.Object({ kind: Type.Literal("collection_draft"), collectionId: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+  /**
+   * 对话里起草的会议（不落库，草稿整份在卡上）：名称、起止、主持人、参会人、挂到，「约好」走建会接口（带 draftId，同一张卡只建一场），
+   * 「改」打开约会议面板。人名在人员目录里没对上或对上不止一个的放进 unresolved（host 为 true 的是主持人），不猜。
+   */
+  Type.Object({
+    kind: Type.Literal("meeting_draft"),
+    draftId: Type.String({ minLength: 1 }),
+    title: Type.String({ minLength: 1, maxLength: 200 }),
+    scheduledAt: Type.String({ minLength: 1 }),
+    endsAt: Type.String({ minLength: 1 }),
+    host: Type.Union([MeetingDraftPerson, Type.Null()]),
+    participants: Type.Array(MeetingDraftPerson, { maxItems: 50 }),
+    unresolved: Type.Array(Type.Object({
+      name: Type.String({ minLength: 1, maxLength: 40 }),
+      reason: Type.Union([Type.Literal("not_found"), Type.Literal("ambiguous")]),
+      host: Type.Optional(Type.Boolean()),
+    }, { additionalProperties: false }), { maxItems: 20 }),
+    anchor: Type.Union([WorldAnchor, Type.Null()]),
+  }, { additionalProperties: false }),
 ]);
 
 export const ConversationMessage = Type.Object(
@@ -262,6 +284,8 @@ export const ConversationMessage = Type.Object(
      * 普通消息没有这个字段。
      */
     kind: Type.Optional(Type.Union([Type.Literal("carried"), Type.Literal("trace")])),
+    /** 这一轮是在飞书私聊机器人时说的（问与答都标）；网页里不标的就是在天枢里说的。 */
+    via: Type.Optional(Type.Literal("feishu")),
     meta: Type.Optional(Type.Object(
       { issueId: Type.Optional(Type.String()), title: Type.Optional(Type.String()), href: Type.Optional(Type.String()) },
       { additionalProperties: false },

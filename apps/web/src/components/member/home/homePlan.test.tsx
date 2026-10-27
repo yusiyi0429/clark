@@ -131,6 +131,7 @@ const plan = (overrides: Partial<THomePlanResponse> = {}): THomePlanResponse => 
     { taskId: "t2", missionId: "m1", name: "对话质量达标", doneDefinition: null, criteria: [] },
     { taskId: "t3", missionId: "m2", name: "Chat 客户版", doneDefinition: null, criteria: [] },
   ],
+  unplaced: [],
   activities: [
     { item: item("a1", "回流方案定稿", { status: "done", dueDate: "2026-10-21", planTaskId: "t1", mission: confirmedRef, collaborators: renhao, latestProgress: progress("方案定稿", "2026-10-22T03:40:00Z") }), missionId: "m1", column: "done", overdue: false, lastActivityAt: "2026-10-22T03:40:00Z", idleDays: null },
     { item: item("a2", "对话架构与分工", { status: "done", dueDate: "2026-10-20", mission: confirmedRef }), missionId: "m1", column: "done", overdue: false, lastActivityAt: "2026-10-01T00:00:00Z", idleDays: null },

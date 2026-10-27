@@ -155,13 +155,13 @@ describe("预约建会", () => {
     try {
       await seed(t);
       // 这个 Mission 在本体里服务那个 PO（载入时记下的 goal_ref）。
-      await t.pool.query("UPDATE missions SET world_goal_id = $2 WHERE id = $1", [MISSION, PO.object_id]);
+      await t.pool.query("UPDATE missions SET world_goal_id = $2, battlefield_ids = '[\"growth\"]'::jsonb WHERE id = $1", [MISSION, PO.object_id]);
       const res = await t.app.inject({ method: "GET", url: "/api/world-anchor-options?period=2026-10", headers: { cookie: await t.memberCookie() } });
       expect(res.statusCode).toBe(200);
       const options = res.json().options as { kind: string; id: string; title: string }[];
       expect(options.filter((option) => option.kind === "po")).toEqual([{ kind: "po", id: PO.object_id, title: PO.title, brief: PO_OUTCOME, lifecycle: "established", ownerId: null, parentId: null }]);
       expect(options.filter((option) => option.kind === "lto")).toEqual([{ kind: "lto", id: LTO.object_id, title: LTO.title, brief: LTO_OUTCOME, lifecycle: "established", ownerId: null, parentId: null }]);
-      expect(options).toContainEqual(expect.objectContaining({ kind: "mission", id: MISSION, title: "预约挂点 Mission", ownerId: TEST_MEMBER.personId, parentId: PO.object_id }));
+      expect(options).toContainEqual(expect.objectContaining({ kind: "mission", id: MISSION, title: "预约挂点 Mission", ownerId: TEST_MEMBER.personId, parentId: PO.object_id, group: "增长战场" }));
       expect(options).toContainEqual(expect.objectContaining({ kind: "unit", id: "unit-booking", title: "预约单元" }));
     } finally {
       await t.close();

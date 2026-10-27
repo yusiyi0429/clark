@@ -1,11 +1,11 @@
 import { Type } from "@sinclair/typebox";
 import {
-  AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardView,
+  AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardView, MeetingDraftStatusResponse,
   MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse, OrganizeFeishuMinuteRequest,
 } from "@warmap/contracts";
 import { askImpactCard, markImpactCardIrrelevant, readImpactCardByRequest } from "../impactCards.js";
 import type { MeetingFollowThrough } from "../meetingFollowThrough.js";
-import { bookMeeting } from "../meetings.js";
+import { bookMeeting, meetingFromDraft } from "../meetings.js";
 import { projectMemberMeetingCardFromCard } from "../memberCards.js";
 import { personDisplayNames } from "../people.js";
 import type { AppInstance, RouteContext } from "./shared.js";
@@ -118,9 +118,19 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
     if ("error" in result) {
       return ctx.fail(reply, result.error.status, result.error.code, result.error.message, result.error.fieldErrors ? { fieldErrors: result.error.fieldErrors } : undefined);
     }
-    // 后台在飞书约上（建会的人本人的授权）；返回的卡不等它。
-    await followThrough.feishuEvents.schedule(result.card.objectRef.id, "create");
+    // 后台在飞书约上（建会的人本人的授权）；返回的卡不等它。同一张会议卡再约（replayed）不再约一次。
+    if (!("replayed" in result)) await followThrough.feishuEvents.schedule(result.card.objectRef.id, "create");
     return { card: viewer.role === "ceo" ? result.card : projectMemberMeetingCardFromCard(result.card, viewer.personId) };
+  });
+
+  // 对话里的会议卡约好没有：只看本人用这张卡建的会（刷新、重放历史后卡按它显示已约）。
+  app.get("/api/meeting-drafts/:draftId", {
+    preHandler: ctx.requirePerson,
+    schema: { params: Type.Object({ draftId: Type.String({ format: "uuid" }) }), response: { 200: MeetingDraftStatusResponse } },
+  }, async (req) => {
+    const viewer = req.person!;
+    const row = await meetingFromDraft(ctx.q, viewer.personId, req.params.draftId);
+    return { meeting: row ? { id: row.id, title: row.title, href: `${viewer.role === "ceo" ? "" : "/me"}/meetings/${row.id}` } : null };
   });
 
   // 预约时的挂点选项（还没有会议）：登录的人都能取。

@@ -5,6 +5,7 @@
  * 页头下一排计数，先列红线（Task 级：比预期慢 / 按截止日做不完，数字对比加一条进度条），
  * 没有 Task 基线的人按人列周复盘与采集摘要，按计划在走的收起。每条带做出来的东西和信息截至时间。
  * 一号位看全部（/progress），二号位看同一战场的人（/me/progress）；可见范围在服务端判。
+ * 最上面是按战场的 Agent 汇总（BattlefieldSummaries，与成员的战场进展共用）。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight, Link2 } from "lucide-react";
@@ -13,6 +14,7 @@ import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { browserApi, type Card } from "@/lib/api/client";
 import { relativeDayTime } from "@/lib/companyTime";
+import { BattlefieldSummaries } from "./BattlefieldSummaries";
 import { artifactLabel, coverageText, dayRangeText, meterParts } from "./progressText";
 import s from "./progress.module.css";
 
@@ -47,6 +49,7 @@ export function ProgressScreen({ scope }: { scope: "ceo" | "member" }) {
       <DetailFrame title={title} subtitle={progress ? todayText(progress.today) : ""} onBack={() => workspace.close()}>
         <div className={s.content}>
           <div className={s.stack}>
+            <BattlefieldSummaries />
             {failed && !progress ? <p className={s.error} role="alert">没有读到进展</p> : null}
             {progress ? <ProgressBody progress={progress} onNavigate={workspace.navigate} /> : failed ? null : <p className={s.loading} role="status">正在读取</p>}
           </div>

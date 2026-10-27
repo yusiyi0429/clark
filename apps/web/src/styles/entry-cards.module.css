@@ -42,6 +42,14 @@
 .summary p { display: -webkit-box; margin: 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
 .foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
+/* 会议卡（MeetingDraftCard）：一行一项，左边项名、右边内容；参会人、挂到、按钮沿用约会议面板（meeting-decisions.module.css）。 */
+.rows { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 8px 16px; margin: 0; }
+.rows dt { color: #7a7f89; font-size: 13px; white-space: nowrap; }
+.rows dd { min-width: 0; margin: 0; color: #25282e; font-size: 14px; overflow-wrap: anywhere; }
+.open { color: #1f5fd6; font-size: 14px; font-weight: 500; text-decoration: none; }
+.open:hover { text-decoration: underline; }
+.open:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; border-radius: 4px; }
+
 @keyframes shimmer { to { background-position: -200% 0; } }
 @media (max-width: 599px) {
   .cards { margin-top: -14px; }

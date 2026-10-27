@@ -261,7 +261,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
       if (item.taskId) { dispatched.push(item); continue; }
       const owner = item.ownerPersonId ?? meeting.lead_dri_id;
       const taskId = await dispatchMeetingTodo(client, { id: meeting.id, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id,
-        ownerName: nameOf(meeting.participants, owner), title: meeting.title }, { ...item, dueDate: item.dueDate ?? undefined, quote: null });
+        ownerName: nameOf(meeting.participants, owner), title: meeting.title, now: now() }, { ...item, dueDate: item.dueDate ?? undefined, quote: null });
       dispatched.push({ ...item, taskId });
     }
     return dispatched;

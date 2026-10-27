@@ -17,7 +17,7 @@ import { NARROW_COLUMN_QUERY, saveColumnMode } from "@/conversation/useColumnMod
 import { COMPOSER_FIELD, useWakeKey } from "@/conversation/wakeKey";
 import { prefersReducedMotion, runRouteTransition, supportsViewTransition, type TransitionDirection } from "@/lib/viewTransition";
 import { WhatsNewCard } from "@/components/whatsNew/WhatsNewCard";
-import { MeetingBookingSheet } from "@/components/meeting/MeetingBookingSheet";
+import { MeetingBookingSheet, type BookingDraft } from "@/components/meeting/MeetingBookingSheet";
 import { ESCAPE_BACK_ATTR, ESCAPE_BACK_EVENT, escapeStep } from "./escapeChain";
 import { popReturn, trimReturns } from "./returnStack";
 import { LoadingMask } from "./LoadingMask";
@@ -71,12 +71,15 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   /** 已发起、新路由还没提交的目标：二级页先打开，右侧盖加载蒙版。路由提交（包括被重定向到别处）就清掉。 */
   const [pending, setPending] = useState<string | null>(null);
   const [m2Available, setM2Available] = useState(false);
-  /** 建会面板：CEO 从顶栏「约会议」打开，成员从首页操作区打开（经 WorkspaceContext 的 bookMeeting）。每次打开换一个 key，表单从空白开始。 */
+  /** 建会面板：CEO 从首页战场工具条「约会议」打开，成员从首页操作区打开（经 WorkspaceContext 的 bookMeeting）。每次打开换一个 key，表单从空白开始。 */
   const [booking, setBooking] = useState(false);
   const [bookingRun, setBookingRun] = useState(0);
-  const [bookingWith, setBookingWith] = useState<string[]>([]);
-  const bookMeeting = useCallback(() => { setBookingWith([]); setBookingRun((run) => run + 1); setBooking(true); }, []);
-  const bookMeetingWith = useCallback((participants: string[]) => { setBookingWith(participants); setBookingRun((run) => run + 1); setBooking(true); }, []);
+  /** 打开时先填好的：参会人（战场进展），或对话里会议卡的整份草稿（「改」）。 */
+  const [bookingFrom, setBookingFrom] = useState<{ participants?: string[]; draft?: BookingDraft }>({});
+  const openBooking = useCallback((from: typeof bookingFrom) => { setBookingFrom(from); setBookingRun((run) => run + 1); setBooking(true); }, []);
+  const bookMeeting = useCallback(() => openBooking({}), [openBooking]);
+  const bookMeetingWith = useCallback((participants: string[]) => openBooking({ participants }), [openBooking]);
+  const bookMeetingFrom = useCallback((draft: BookingDraft) => openBooking({ draft }), [openBooking]);
   useEffect(() => {
     const controller = new AbortController();
     setM2Available(false);
@@ -554,8 +557,8 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
   );
 
   const api: WorkspaceApi = useMemo(
-    () => ({ navigate, close, detailOpen, closing, registerDetail, showToast, homeCards, quote, ask, compose, viewerId, bookMeeting: viewerId ? bookMeeting : undefined, bookMeetingWith: viewerId ? bookMeetingWith : undefined, m2Available }),
-    [homeCards, ask, bookMeeting, bookMeetingWith, close, closing, compose, detailOpen, m2Available, navigate, quote, registerDetail, showToast, viewerId],
+    () => ({ navigate, close, detailOpen, closing, registerDetail, showToast, homeCards, quote, ask, compose, viewerId, bookMeeting: viewerId ? bookMeeting : undefined, bookMeetingWith: viewerId ? bookMeetingWith : undefined, bookMeetingFrom: viewerId ? bookMeetingFrom : undefined, m2Available, ceo: homeHref === "/" }),
+    [homeCards, ask, bookMeeting, bookMeetingWith, bookMeetingFrom, close, closing, compose, detailOpen, homeHref, m2Available, navigate, quote, registerDetail, showToast, viewerId],
   );
 
   const conversationUi: ConversationUiState = {
@@ -607,12 +610,6 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
             data-covered={(detailOpen && !noticeTransition && !closing && !entering && !peek) || undefined}
             style={noticeTransition && !openingEmpty ? { viewTransitionName: "home-board" } : undefined}
           >
-            {/* 成员首页的约会议在首页的快捷卡里（HomeActions）；去 M2 的入口在通知栏（M2EntryNotice）。 */}
-            {homeHref === "/" ? (
-              <div className={s.m2Entry}>
-                {viewerId ? <button type="button" onClick={bookMeeting}>约会议</button> : null}
-              </div>
-            ) : null}
             {home}
           </div>
           {detailOpen ? (
@@ -664,7 +661,7 @@ export function WorkspaceFrame({ homeHref, viewerId, account, homeCards = EMPTY_
           </div>
         ) : null}
         <WhatsNewCard />
-        {viewerId ? <MeetingBookingSheet key={bookingRun} open={booking} onClose={() => setBooking(false)} initialParticipants={bookingWith} viewer={{ personId: viewerId, role: account.role, displayName: account.displayName }} /> : null}
+        {viewerId ? <MeetingBookingSheet key={bookingRun} open={booking} onClose={() => setBooking(false)} initialParticipants={bookingFrom.participants} draft={bookingFrom.draft} viewer={{ personId: viewerId, role: account.role, displayName: account.displayName }} /> : null}
       </div>
       </ReferenceProvider>
     </WorkspaceContext.Provider>

@@ -4859,7 +4859,7 @@
     "/api/meetings": {
       "post": {
         "operationId": "bookMeeting",
-        "summary": "预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人",
+        "summary": "预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人；带 draftId 时同一张会议卡只建一场",
         "requestBody": {
           "required": true,
           "content": {
@@ -4911,6 +4911,65 @@
             }
           },
           "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meeting-drafts/{draftId}": {
+      "get": {
+        "operationId": "getMeetingDraftStatus",
+        "summary": "对话里的一张会议卡约好没有：本人用这张卡建的会，没约为 null",
+        "parameters": [
+          {
+            "name": "draftId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "这张会议卡建的会",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDraftStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -9476,6 +9535,34 @@
         }
       }
     },
+    "/api/progress/battlefield-summaries": {
+      "get": {
+        "operationId": "getBattlefieldSummaries",
+        "summary": "战场进展汇总：每个战场每天一份 Agent 汇总（对照本期目标、各 Mission 推进、卡点）；今天这份还没有时当场开始整理；CEO 看全部战场，其他人看自己所在的战场",
+        "responses": {
+          "200": {
+            "description": "战场进展汇总",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BattlefieldSummariesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/tokens/{id}": {
       "delete": {
         "operationId": "revokePersonalToken",
@@ -10506,6 +10593,84 @@
             }
           },
           "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/tasks/{id}/standalone": {
+      "post": {
+        "operationId": "standaloneMyTask",
+        "summary": "待归位的事项本人确认不属于任何 Mission（写一句为什么），之后按本人的独立事项算",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandaloneMyTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "确认后的执行事项",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -15161,6 +15326,26 @@
                   }
                 ]
               },
+              "unplaced": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
               "createdAt": {
                 "minLength": 1,
                 "type": "string"
@@ -16981,6 +17166,177 @@
                             "type": "string"
                           }
                         }
+                      },
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "draftId",
+                          "title",
+                          "scheduledAt",
+                          "endsAt",
+                          "host",
+                          "participants",
+                          "unresolved",
+                          "anchor"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "meeting_draft",
+                            "type": "string"
+                          },
+                          "draftId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "title": {
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "type": "string"
+                          },
+                          "scheduledAt": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "endsAt": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "host": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "personId",
+                                  "displayName"
+                                ],
+                                "properties": {
+                                  "personId": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "displayName": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "participants": {
+                            "maxItems": 50,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "personId",
+                                "displayName"
+                              ],
+                              "properties": {
+                                "personId": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "displayName": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "unresolved": {
+                            "maxItems": 20,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "name",
+                                "reason"
+                              ],
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "maxLength": 40,
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "anyOf": [
+                                    {
+                                      "const": "not_found",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "ambiguous",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "host": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          },
+                          "anchor": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "kind",
+                                  "id",
+                                  "title"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "lto",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "po",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "mission",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "task",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "unit",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "company",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "title": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
                       }
                     ]
                   }
@@ -17139,6 +17495,10 @@
                       "type": "string"
                     }
                   ]
+                },
+                "via": {
+                  "const": "feishu",
+                  "type": "string"
                 },
                 "meta": {
                   "additionalProperties": false,
@@ -36662,6 +37022,48 @@
                 }
               }
             }
+          },
+          "draftId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      },
+      "MeetingDraftStatusResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "meeting"
+        ],
+        "properties": {
+          "meeting": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "id",
+                  "title",
+                  "href"
+                ],
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "href": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -40186,6 +40588,26 @@
               }
             ]
           },
+          "unplaced": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
           "createdAt": {
             "minLength": 1,
             "type": "string"
@@ -40882,6 +41304,26 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "unplaced": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "reason"
+                        ],
+                        "properties": {
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
                       },
                       "createdAt": {
                         "minLength": 1,
@@ -48654,6 +49096,156 @@
           }
         }
       },
+      "BattlefieldSummariesResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "today",
+          "battlefields"
+        ],
+        "properties": {
+          "today": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "battlefields": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "battlefieldId",
+                "name",
+                "summary",
+                "generation"
+              ],
+              "properties": {
+                "battlefieldId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "summary": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "day",
+                        "goal",
+                        "paragraphs",
+                        "progressUntil",
+                        "summarizedAt"
+                      ],
+                      "properties": {
+                        "day": {
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                          "type": "string"
+                        },
+                        "goal": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "paragraphs": {
+                          "type": "array",
+                          "items": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "progressUntil": {
+                          "anyOf": [
+                            {
+                              "description": "ISO 8601",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "summarizedAt": {
+                          "description": "ISO 8601",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "generation": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "state",
+                        "phase",
+                        "startedAt"
+                      ],
+                      "properties": {
+                        "state": {
+                          "const": "running",
+                          "type": "string"
+                        },
+                        "phase": {
+                          "anyOf": [
+                            {
+                              "const": "reading",
+                              "type": "string"
+                            },
+                            {
+                              "const": "writing",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "startedAt": {
+                          "description": "ISO 8601",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "state",
+                        "at"
+                      ],
+                      "properties": {
+                        "state": {
+                          "const": "failed",
+                          "type": "string"
+                        },
+                        "at": {
+                          "description": "ISO 8601",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
       "TaskPerson": {
         "additionalProperties": false,
         "type": "object",
@@ -49209,6 +49801,26 @@
                     "type": "null"
                   }
                 ]
+              },
+              "unplaced": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
               },
               "createdAt": {
                 "minLength": 1,
@@ -50244,6 +50856,26 @@
                     }
                   ]
                 },
+                "unplaced": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "reason"
+                  ],
+                  "properties": {
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
                 "createdAt": {
                   "minLength": 1,
                   "type": "string"
@@ -50802,6 +51434,26 @@
                           }
                         ]
                       },
+                      "unplaced": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "reason"
+                        ],
+                        "properties": {
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
                       "createdAt": {
                         "minLength": 1,
                         "type": "string"
@@ -51335,6 +51987,26 @@
                       "type": "null"
                     }
                   ]
+                },
+                "unplaced": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "reason"
+                  ],
+                  "properties": {
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
                 },
                 "createdAt": {
                   "minLength": 1,
@@ -52523,6 +53195,26 @@
                   }
                 ]
               },
+              "unplaced": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
               "createdAt": {
                 "minLength": 1,
                 "type": "string"
@@ -52594,7 +53286,8 @@
           "gates",
           "marks",
           "tasks",
-          "activities"
+          "activities",
+          "unplaced"
         ],
         "properties": {
           "period": {
@@ -53263,6 +53956,26 @@
                         }
                       ]
                     },
+                    "unplaced": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "reason"
+                      ],
+                      "properties": {
+                        "reason": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
                     "createdAt": {
                       "minLength": 1,
                       "type": "string"
@@ -53317,6 +54030,461 @@
                       "type": "null"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "unplaced": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "version",
+                "title",
+                "status",
+                "source",
+                "startDate",
+                "dueDate",
+                "doneDefinition",
+                "mission",
+                "waitingOn",
+                "owner",
+                "collaborators",
+                "latestProgress",
+                "returnReason",
+                "origin",
+                "awaitingAcceptance",
+                "planTaskId",
+                "blocker",
+                "createdAt",
+                "updatedAt"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "version": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "not_started",
+                      "type": "string"
+                    },
+                    {
+                      "const": "in_progress",
+                      "type": "string"
+                    },
+                    {
+                      "const": "done",
+                      "type": "string"
+                    },
+                    {
+                      "const": "returned",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "source": {
+                  "anyOf": [
+                    {
+                      "const": "meeting",
+                      "type": "string"
+                    },
+                    {
+                      "const": "self",
+                      "type": "string"
+                    },
+                    {
+                      "const": "plan",
+                      "type": "string"
+                    },
+                    {
+                      "const": "agent",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "startDate": {
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "dueDate": {
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "doneDefinition": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "mission": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "missionId",
+                        "title",
+                        "cardId",
+                        "period",
+                        "battlefieldName",
+                        "step",
+                        "steps"
+                      ],
+                      "properties": {
+                        "missionId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "cardId": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "period": {
+                          "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                          "type": "string"
+                        },
+                        "battlefieldName": {
+                          "type": "string"
+                        },
+                        "step": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "steps": {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "waitingOn": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "taskId",
+                        "title"
+                      ],
+                      "properties": {
+                        "taskId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "owner": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "name"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "name": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                },
+                "collaborators": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "name"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "latestProgress": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "body",
+                        "source",
+                        "author",
+                        "createdAt"
+                      ],
+                      "properties": {
+                        "body": {
+                          "minLength": 1,
+                          "maxLength": 2000,
+                          "type": "string"
+                        },
+                        "source": {
+                          "anyOf": [
+                            {
+                              "const": "web",
+                              "type": "string"
+                            },
+                            {
+                              "const": "codex",
+                              "type": "string"
+                            },
+                            {
+                              "const": "claude",
+                              "type": "string"
+                            },
+                            {
+                              "const": "github",
+                              "type": "string"
+                            },
+                            {
+                              "const": "other",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "author": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "personId",
+                            "name"
+                          ],
+                          "properties": {
+                            "personId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "createdAt": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "returnReason": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "origin": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "type",
+                        "meetingId",
+                        "meetingTitle",
+                        "quote"
+                      ],
+                      "properties": {
+                        "type": {
+                          "const": "meeting",
+                          "type": "string"
+                        },
+                        "meetingId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "meetingTitle": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "quote": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "awaitingAcceptance": {
+                  "type": "boolean"
+                },
+                "planTaskId": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "blocker": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "reason",
+                        "waitingOn",
+                        "since"
+                      ],
+                      "properties": {
+                        "reason": {
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "waitingOn": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "personId",
+                                "name"
+                              ],
+                              "properties": {
+                                "personId": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "since": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "unplaced": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "reason"
+                  ],
+                  "properties": {
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "createdAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "minLength": 1,
+                  "type": "string"
                 }
               }
             }
@@ -56692,6 +57860,25 @@
           }
         }
       },
+      "StandaloneMyTaskRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "reason"
+        ],
+        "properties": {
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "reason": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          }
+        }
+      },
       "TaskStandardCheck": {
         "additionalProperties": false,
         "type": "object",
@@ -57288,6 +58475,14 @@
                   ]
                 },
                 "text": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "subject": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "source": {
                   "minLength": 1,
                   "type": "string"
                 },
@@ -63627,6 +64822,10 @@
                       "type": "null"
                     }
                   ]
+                },
+                "group": {
+                  "minLength": 1,
+                  "type": "string"
                 }
               }
             }

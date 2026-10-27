@@ -67,6 +67,7 @@ import {
   CreateConfigMeetingRequest,
   CreateMeetingRequest,
   MeetingBookingRequest,
+  MeetingDraftStatusResponse,
   DriIssueImportRequest,
   DriMeetingImportRequest,
   HealthResponse,
@@ -145,6 +146,7 @@ import {
   WorkBasisResponse, UpdateWorkBasisRequest, ScheduleMigrationResponse, UpdateScheduleMigrationRequest,
   WeeklyReviewBoardResponse, WeeklyReviewResponse, ExecuteWeeklyReviewActionRequest, ExecuteWeeklyReviewActionResponse, WeeklyReviewUpdateInput,
   ProgressOverviewResponse,
+  BattlefieldSummariesResponse,
   OAuthConsentRequest,
   OAuthConsentResponse,
   OAuthConsentDecisionResponse,
@@ -164,6 +166,7 @@ import {
   MemberBattlefieldResponse,
   PatchMyTaskRequest,
   ReturnMyTaskRequest,
+  StandaloneMyTaskRequest,
   TaskStandardCheck,
   TaskSubmission,
   TaskAcceptance,
@@ -987,12 +990,19 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       "/api/meetings": {
         post: {
-          operationId: "bookMeeting", summary: "预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人",
+          operationId: "bookMeeting", summary: "预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人；带 draftId 时同一张会议卡只建一场",
           requestBody: jsonBody({ $ref: "#/components/schemas/MeetingBookingRequest" }),
           responses: {
             "200": { description: "新建的会议卡", content: { "application/json": { schema: { type: "object", required: ["card"], additionalProperties: false, properties: { card: { $ref: "#/components/schemas/Card" } } } } } },
-            "400": errorResponse, "401": errorResponse, "403": errorResponse,
+            "400": errorResponse, "401": errorResponse, "403": errorResponse, "409": errorResponse,
           },
+        },
+      },
+      "/api/meeting-drafts/{draftId}": {
+        get: {
+          operationId: "getMeetingDraftStatus", summary: "对话里的一张会议卡约好没有：本人用这张卡建的会，没约为 null",
+          parameters: [{ name: "draftId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { "200": { description: "这张会议卡建的会", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingDraftStatusResponse" } } } }, "400": errorResponse, "401": errorResponse },
         },
       },
       "/api/world-anchor-options": {
@@ -1858,6 +1868,12 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "全局进展", content: { "application/json": { schema: { $ref: "#/components/schemas/ProgressOverviewResponse" } } } }, "401": errorResponse },
         },
       },
+      "/api/progress/battlefield-summaries": {
+        get: {
+          operationId: "getBattlefieldSummaries", summary: "战场进展汇总：每个战场每天一份 Agent 汇总（对照本期目标、各 Mission 推进、卡点）；今天这份还没有时当场开始整理；CEO 看全部战场，其他人看自己所在的战场",
+          responses: { "200": { description: "战场进展汇总", content: { "application/json": { schema: { $ref: "#/components/schemas/BattlefieldSummariesResponse" } } } }, "401": errorResponse },
+        },
+      },
       "/api/me/tokens/{id}": {
         delete: {
           operationId: "revokePersonalToken", summary: "撤销本人令牌",
@@ -2045,6 +2061,21 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "400": errorResponse,
             "401": errorResponse,
             "403": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/api/me/tasks/{id}/standalone": {
+        post: {
+          operationId: "standaloneMyTask",
+          summary: "待归位的事项本人确认不属于任何 Mission（写一句为什么），之后按本人的独立事项算",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/StandaloneMyTaskRequest" }),
+          responses: {
+            "200": { description: "确认后的执行事项", content: { "application/json": { schema: { $ref: "#/components/schemas/TaskView" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
             "404": errorResponse,
             "409": errorResponse,
           },
@@ -2985,6 +3016,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         DriMeetingImportRequest: DriMeetingImportRequest as JsonSchema,
         CreateMeetingRequest: CreateMeetingRequest as JsonSchema,
         MeetingBookingRequest: MeetingBookingRequest as JsonSchema,
+        MeetingDraftStatusResponse: MeetingDraftStatusResponse as JsonSchema,
         JoinMeetingRequest: JoinMeetingRequest as JsonSchema,
         UpdateMeetingDraftRequest: UpdateMeetingDraftRequest as JsonSchema,
         EditMeetingDetailsRequest: EditMeetingDetailsRequest as JsonSchema,
@@ -3073,6 +3105,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ExecuteWeeklyReviewActionResponse: ExecuteWeeklyReviewActionResponse as JsonSchema,
         WeeklyReviewUpdateInput: WeeklyReviewUpdateInput as JsonSchema,
         ProgressOverviewResponse: ProgressOverviewResponse as JsonSchema,
+        BattlefieldSummariesResponse: BattlefieldSummariesResponse as JsonSchema,
         TaskPerson: TaskPerson as JsonSchema,
         TaskMissionRef: TaskMissionRef as JsonSchema,
         CreateMyTaskRequest: CreateMyTaskRequest as JsonSchema,
@@ -3111,6 +3144,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         PersonalRadarRun: PersonalRadarRun as JsonSchema,
         PatchMyTaskRequest: PatchMyTaskRequest as JsonSchema,
         ReturnMyTaskRequest: ReturnMyTaskRequest as JsonSchema,
+        StandaloneMyTaskRequest: StandaloneMyTaskRequest as JsonSchema,
         TaskStandardCheck: TaskStandardCheck as JsonSchema,
         TaskSubmission: TaskSubmission as JsonSchema,
         TaskAcceptance: TaskAcceptance as JsonSchema,

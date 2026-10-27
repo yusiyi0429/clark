@@ -37,6 +37,7 @@ export function ActionNoticeCard({
   mark,
   notices,
   counted = true,
+  plain = false,
   onSettled,
 }: {
   /** 通知栏里这一组的标识（data-notice，FLIP 动画按它对位置）。 */
@@ -47,6 +48,8 @@ export function ActionNoticeCard({
   notices: ActionNotice[];
   /** 标题后的条数角标；入口卡（不是待办）不出。 */
   counted?: boolean;
+  /** 正文不加粗：一条写的就是事情本身（会后分派），用正文字重。 */
+  plain?: boolean;
   /** 这一条办完、回执也淡出了：调用方从列表里拿掉（或重新拉取）。 */
   onSettled: (noticeId: string) => void;
 }) {
@@ -66,7 +69,7 @@ export function ActionNoticeCard({
   const open = notices.filter((notice) => !(notice.id in receipts)).length;
 
   return (
-    <HeroCard<"section"> render={(props) => <section {...props} />} className={n.card} data-notice={id} aria-label={title}>
+    <HeroCard<"section"> render={(props) => <section {...props} />} className={n.card} data-notice={id} data-plain={plain || undefined} aria-label={title}>
       <HeroCard.Header<"header"> render={(props) => <header {...props} />} className={n.glassHeader}>
         <ContextMark kind={mark} className={n.glyph} />
         <span className={n.identity}>

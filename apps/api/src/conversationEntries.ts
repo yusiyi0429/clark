@@ -11,6 +11,7 @@ import type { WeeklyReviewService } from "./weeklyReviewService.js";
 import type { CollectionAgent } from "./collectionAgent.js";
 import { deadlineLabel, draftCollection, type CollectionDeps } from "./collections.js";
 import { getWeeklyReviewRow, weeklyReviewHref, weeklyReviewText } from "./weeklyReviews.js";
+import { draftMeeting, draftTimeLabel, type DraftMeetingArgs } from "./meetingDraft.js";
 
 /**
  * 对话里的三个一句话入口（交给主 Agent 的工具，见 piConversationRuntime.ts）：
@@ -18,6 +19,7 @@ import { getWeeklyReviewRow, weeklyReviewHref, weeklyReviewText } from "./weekly
  * - 帮我问问：定位待办（todoLocator.ts，确定性规则）→ 查有没有人问过 → 整理问题 → 等你确认，复用送达服务；
  * - 请同事帮忙：送达服务的起草流程（起草请求 → 查歧义 → 等你确认）。
  * - 发起信息收集（③）：判断场景 → 起草收集表 → 等你确认，草稿卡上点「发送」才发出。
+ * - 约会议：一句话换成会议卡（meetingDraft.ts，只读不写库），卡上点「约好」才建会、发飞书邀请。
  * 处理中的每一步经 onStep 发给界面；结果卡经 onCard 挂在这一轮回答后面。发出、提交都由本人在卡上点，这里一律不发。
  * 交给模型的结果只有它说话要用的事实（不带 actionId），说法要求写在 note 里。
  */
@@ -27,6 +29,7 @@ export type ConversationEntries = {
   requestHelp(args: { prompt: string; requestId?: string; answers?: string[] }): Promise<Record<string, unknown>>;
   generateReview(args: { kind: "monthly" | "weekly"; period?: string }): Promise<Record<string, unknown>>;
   startCollection(args: { prompt: string; collectionId?: string }): Promise<Record<string, unknown>>;
+  draftMeeting(args: DraftMeetingArgs): Promise<Record<string, unknown>>;
   /** 信息收集开着（配了 collections）才给模型「发起信息收集」这个工具（D-56）。 */
   collections: boolean;
 };
@@ -235,6 +238,23 @@ export function createConversationEntries(deps: EntryDeps): ConversationEntries 
         drafted: true, collectionId: view.id, title: view.title, fields: view.fields.map((field) => field.label),
         suggestedRecipients: view.candidates.map((person) => person.displayName), deadline: deadlineLabel(new Date(view.deadlineAt)), weekly: view.weekly,
         note: "收集表草稿已放在回答下面的卡里：收件人、截止、每周固定都能在卡上改，本人点「发送」才发出。回答一句话说收什么、发给谁、什么时候截止；收件人没定下来时请本人在卡上选。本人在对话里要改时，带上 collectionId 和新的原话再调用一次。不要说已经发出。",
+      };
+    },
+
+    async draftMeeting(args) {
+      const result = await draftMeeting({ q, viewer: deps.viewer, people: deps.directory, now: deps.now() }, args);
+      if ("reason" in result) {
+        return { drafted: false, reason: result.reason,
+          note: "没有出会议卡。日期或时间认不出、而你能确定是哪天几点时，把 date 写成 YYYY-MM-DD、time 写成 HH:mm 再调用一次；否则如实告诉本人原因，请本人说清楚。" };
+      }
+      const { card } = result;
+      deps.onCard(card);
+      return {
+        drafted: true, title: card.title, time: draftTimeLabel(new Date(card.scheduledAt), new Date(card.endsAt)),
+        host: card.host?.displayName ?? null, participants: card.participants.map((person) => person.displayName),
+        ...(card.unresolved.length ? { unresolved: card.unresolved.map((item) => `${item.name}（${item.reason === "ambiguous" ? "对上不止一个人" : "人员目录里没有"}${item.host ? "，主持人" : ""}）`) } : {}),
+        anchor: card.anchor?.title ?? null, ...(result.hostNote ? { hostNote: result.hostNote } : {}),
+        note: "会议卡已放在回答下面，本人点「约好」才建会、发飞书邀请，点「改」可以改。回答只用一句话复述名称、时间和参会人；有 unresolved 时说清哪几个名字没对上、请本人点「改」补上，不替本人猜是谁；anchor 为 null 时说请在卡上选挂到哪；有 hostNote 时照实说。不要说已经约好或已经发出邀请。",
       };
     },
 

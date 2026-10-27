@@ -607,6 +607,19 @@ export const MeetingBookingRequest = Type.Object(
     leadDriId: Type.Optional(PersonId),
     participants: Type.Optional(Type.Array(PersonId, { maxItems: 50 })),
     anchors: Type.Array(PickedWorldAnchor, { minItems: 1, maxItems: 10 }),
+    /** 从对话里的会议卡约（卡上的 draftId）：同一张卡只建一场会，再约返回已建的那场。 */
+    draftId: Type.Optional(Type.String({ format: "uuid" })),
+  },
+  { additionalProperties: false },
+);
+
+/** 对话里的一张会议卡约好没有（GET /api/meeting-drafts/:draftId）：本人用这张卡建的会，没约为 null。 */
+export const MeetingDraftStatusResponse = Type.Object(
+  {
+    meeting: Type.Union([
+      Type.Object({ id: Type.String({ minLength: 1 }), title: Type.String(), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
+      Type.Null(),
+    ]),
   },
   { additionalProperties: false },
 );
@@ -746,6 +759,7 @@ export type TMeetingTranscriptPage = Static<typeof MeetingTranscriptPage>;
 export type TMeetingTranscriptQuery = Static<typeof MeetingTranscriptQuery>;
 export type TCreateMeetingRequest = Static<typeof CreateMeetingRequest>;
 export type TMeetingBookingRequest = Static<typeof MeetingBookingRequest>;
+export type TMeetingDraftStatusResponse = Static<typeof MeetingDraftStatusResponse>;
 export type TPersonDirectoryResponse = Static<typeof PersonDirectoryResponse>;
 export type TJoinMeetingRequest = Static<typeof JoinMeetingRequest>;
 export type TUpdateMeetingDraftRequest = Static<typeof UpdateMeetingDraftRequest>;

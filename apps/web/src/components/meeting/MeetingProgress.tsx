@@ -9,7 +9,7 @@
  * - 「等开会」那一格：没开成时写没开成。已取消的会不画。
  *
  * 这一步：点会呼吸（进行中用页头同一个红），粗字，后面是走着的用时，能估的跟「· 约 N 分钟」；到点前的等开会、没开成、生成失败不呼吸。
- * `MinutesRecovery` 是待交记录后面那几样：上传会议记录、贴妙记链接、再读一次、连接飞书（后三样只给主持人和建会的人）。
+ * `MinutesRecovery` 是待交记录时进度线下面那一块：先贴妙记链接读取，其次再读一次、连接飞书，最后上传会议记录（前三样只给主持人和建会的人）。
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
@@ -123,9 +123,9 @@ function ProgressClock({ since, expectedMs }: { since: string; expectedMs: numbe
   return <time className={p.clock} role="timer" dateTime={since} suppressHydrationWarning>{progressClock(since, now, expectedMs)}</time>;
 }
 
-/** 进度线本身；`actions` 跟在这一步后面（进入飞书会议、重新安排会议、上传会议记录）。 */
-export function MeetingProgress({ model, actions }: { model: MeetingProgressModel; actions?: ReactNode }) {
-  return (
+/** 进度线本身；`actions` 跟在这一步后面，`below` 是进度线下面单独一块（待交记录时的补救）。 */
+export function MeetingProgress({ model, actions, below }: { model: MeetingProgressModel; actions?: ReactNode; below?: ReactNode }) {
+  const line = (
     <ol className={p.progress} aria-label="进度">
       {model.steps.map((step, index) => {
         const current = step.state === "current";
@@ -142,6 +142,7 @@ export function MeetingProgress({ model, actions }: { model: MeetingProgressMode
       })}
     </ol>
   );
+  return below ? <div className={p.withBelow}>{line}<div className={p.below}>{below}</div></div> : line;
 }
 
 /** 再读、贴链接没成功时的短标签（不显示服务端原话）。 */
@@ -150,8 +151,9 @@ const FETCH_ERROR: Record<string, string> = { INVALID_MINUTES_URL: "不是妙记
 const ALREADY_READ = new Set(["MINUTES_READY", "TRANSCRIPT_ALREADY_IMPORTED"]);
 
 /**
- * 待交记录后面的几样，都是安静的文字链接：上传会议记录（能上传的人）；主持人和建会的人还有贴妙记链接（点开才有输入框）、
- * 读取失败时的再读一次；自己没连好飞书、因此没拿到（没授权退回手动、读的时候没权限）时是连接飞书，连上后这场会接着自动拿妙记。
+ * 待交记录时进度线下面那一块。主持人和建会的人：第一行是妙记链接输入框和「读取」（首选）；第二行是安静的文字链接——
+ * 读取失败时的再读一次、自己没连好飞书（没授权退回手动、读的时候没权限）时的连接飞书，最后是上传会议记录。
+ * 只能上传的人只有上传会议记录。
  */
 export function MinutesRecovery({ meetingId, status, failure, canFetch, onFetched, onUpload, uploading = false, uploadError = null }: {
   meetingId: string; status: TMeetingMinutesStatus; failure: TMeetingMinutesFailure | null;
@@ -165,7 +167,6 @@ export function MinutesRecovery({ meetingId, status, failure, canFetch, onFetche
   uploadError?: string | null;
 }) {
   const [url, setUrl] = useState("");
-  const [pasting, setPasting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const retry = canFetch && status === "failed" && failure !== "not_ready";
@@ -183,23 +184,26 @@ export function MinutesRecovery({ meetingId, status, failure, canFetch, onFetche
     try {
       const result = await work();
       if ("code" in result && !ALREADY_READ.has(result.code)) setError(FETCH_ERROR[result.code] ?? "没有读到");
-      else { setUrl(""); setPasting(false); onFetched?.(); }
+      else { setUrl(""); onFetched?.(); }
     } catch { setError("没有读到"); }
     finally { setBusy(false); }
   };
+  const read = () => { if (url.trim() && !busy) void run(() => readMeetingMinutesLink(meetingId, url.trim())); };
+  const others = [
+    retry && !connectHref ? <button key="retry" type="button" className={p.quiet} disabled={busy} onClick={() => void run(() => refetchMeetingMinutes(meetingId))}>再读一次</button> : null,
+    connectHref ? <a key="connect" className={p.quiet} href={connectHref}>连接飞书</a> : null,
+    onUpload ? <button key="upload" type="button" className={p.quiet} disabled={uploading} onClick={onUpload}>{uploading ? "上传中…" : "上传会议记录"}</button> : null,
+  ].filter(Boolean);
   return (
-    <>
-      {onUpload ? <button type="button" className={p.quiet} disabled={uploading} onClick={onUpload}>{uploading ? "上传中…" : "上传会议记录"}</button> : null}
-      {connectHref ? <a className={p.quiet} href={connectHref}>连接飞书</a> : null}
-      {retry && !connectHref ? <button type="button" className={p.quiet} disabled={busy} onClick={() => void run(() => refetchMeetingMinutes(meetingId))}>再读一次</button> : null}
-      {canFetch && !pasting ? <button type="button" className={p.quiet} onClick={() => setPasting(true)}>贴妙记链接</button> : null}
-      {canFetch && pasting ? (
-        <span className={p.link}>
+    <div className={p.recovery}>
+      {canFetch ? (
+        <form className={p.link} onSubmit={(event) => { event.preventDefault(); read(); }}>
           <input type="url" aria-label="妙记链接" placeholder="贴妙记链接" value={url} disabled={busy} onChange={(event) => setUrl(event.target.value)} />
-          <button type="button" className={p.quiet} disabled={busy || !url.trim()} onClick={() => void run(() => readMeetingMinutesLink(meetingId, url.trim()))}>读取</button>
-        </span>
+          <button type="submit" className={p.read} disabled={busy || !url.trim()}>{busy ? "读取中…" : "读取"}</button>
+        </form>
       ) : null}
+      {others.length ? <div className={p.others}>{others}</div> : null}
       {error || uploadError ? <span className={p.error} role="alert">{error || uploadError}</span> : null}
-    </>
+    </div>
   );
 }

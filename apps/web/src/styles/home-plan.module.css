@@ -442,3 +442,12 @@ button.dayLine:hover { background: color-mix(in oklab, var(--ink) 4%, transparen
   .card, .activity, .task[data-selected] { border-color: var(--ink-muted); }
   .head small, .month, .mission, .mission small, .taskMeta, .column h3, .activity small, .sep { color: var(--ink); }
 }
+
+/* 待归位（UnplacedDetail）：一件一行，标题能点开，下面小字「从哪来 · 为什么没挂上」，再下面挑 Mission 挂上或「不属于任何 Mission」。 */
+.unplacedList { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.unplacedItem { display: grid; gap: 6px; min-width: 0; padding: 14px 0; border-top: 1px solid var(--hairline); }
+.unplacedItem:first-child { padding-top: 0; border-top: 0; }
+.unplacedTitle { padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: 14px; line-height: 1.55; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.unplacedTitle:hover { text-decoration: underline; text-decoration-color: var(--hairline-strong); text-underline-offset: 4px; }
+.unplacedLine { color: var(--ink-muted); font-size: 12px; line-height: 1.5; }
+.unplacedItem > [data-unplaced] { margin-top: 4px; }

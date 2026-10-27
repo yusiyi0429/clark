@@ -602,7 +602,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const materialRef = useRef<HTMLInputElement>(null);
   const candidateDialog = useRef<HTMLDialogElement>(null);
 
-  const actions = memberReadOnly ? card.actions.filter((action) => isHost && ["meeting.end", "meeting.reschedule", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate", "meeting.retry_feishu_booking"].includes(action.actionType)) : card.actions;
+  const actions = memberReadOnly ? card.actions.filter((action) => isHost && ["meeting.end", "meeting.reschedule", "meeting.cancel", "meeting.confirm_transcript_candidate", "meeting.discard_transcript_candidate", "meeting.retry_feishu_booking"].includes(action.actionType)) : card.actions;
   const actionOf = (type: string) => actions.find((action) => action.actionType === type);
 
   const issues = collection.filter((item) => item.kind === "issue");
@@ -1193,6 +1193,14 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
     setView(pickSegment("record"));
   };
 
+  /** 没开成的会：重新安排的浮层里可以直接删掉（走取消会议，飞书日程一起删），删完回到首页。 */
+  const cancelAction = actionOf("meeting.cancel");
+  const deleteMissed = rescheduling && live === "missed" && cancelAction ? async () => {
+    if (!(await ask("删除这场没开成的会？飞书里的日程会一起删掉。", "删除"))) return;
+    setEditOpen(false);
+    if (await run(cancelAction, {})) workspace.close();
+  } : null;
+
   /** 编辑会议 / 重新安排会议共用的表单（标题、起止、主持人）。 */
   const editFields = (
     <>
@@ -1221,6 +1229,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       {editForm.scheduledAt && editForm.endsAt && editForm.endsAt <= editForm.scheduledAt ? <p className={s.editHint}>结束时间要晚于开始时间</p> : null}
       {driError ? <p className={s.editHint}>{driError}</p> : null}
       <div className={s.editActions}>
+        {deleteMissed ? <button type="button" className={s.editDelete} disabled={pending} onClick={() => void deleteMissed()}>删除此会议</button> : null}
         <button type="button" className={s.editCancel} onClick={() => setEditOpen(false)}>
           取消
         </button>
@@ -1788,14 +1797,14 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   };
   // 能上传会议记录的人（CEO、主持人）：进度线上待交记录后面的「上传会议记录」打开这里的选文件。
   const canUpload = payload.status === "scheduled" && (!memberReadOnly || isHost);
-  // 等开会、进行中时「进入飞书会议」在页头最右那一格；进度线只在待交记录这一步后面给上传会议记录这几样补救。
+  // 等开会、进行中时「进入飞书会议」在页头最右那一格；待交记录时进度线下面单独一块给贴妙记链接、上传会议记录这几样补救。
   const joinUrl = live === "waiting" || live === "live" ? payload.feishuEvent?.joinUrl ?? null : null;
   const progressActions = progress?.upload ? (
     <MinutesRecovery meetingId={meetingId} status={source.minutesStatus ?? "none"} failure={source.minutesFailure ?? null}
       canFetch={canFetchMinutes} onFetched={() => void reloadCard()} onUpload={canUpload ? () => uploadRef.current?.click() : undefined}
       uploading={uploading} uploadError={uploadError} />
   ) : null;
-  const worldLine = <MeetingWorldSection meetingId={meetingId} viewerId={workspace.viewerId ?? ""} progress={progress ? <MeetingProgress model={progress} actions={progressActions} /> : null} />;
+  const worldLine = <MeetingWorldSection meetingId={meetingId} viewerId={workspace.viewerId ?? ""} progress={progress ? <MeetingProgress model={progress} below={progressActions} /> : null} />;
   // 会开完、还没有确认的逐字稿时，主栏整块能拖会议记录进来（FileDropZone）。
   const recordDrop = canUpload && ended && !source.transcript;
   // 选会议记录文件：会议记录区的「上传会议记录」和进度线上的共用，上传块不出现时也在。

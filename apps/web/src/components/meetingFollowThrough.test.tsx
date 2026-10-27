@@ -97,13 +97,16 @@ describe("成员通知栏里的执行事项", () => {
   it("通知栏分两组：新的执行事项能接下或退回，回复与结果只要知道了；看过的不再列", () => {
     const groups = memberNoticeGroups(
       [
-        { id: "n1", kind: "meeting_action_assigned", text: "会议「X」给你分配了执行事项「Y」", objectType: "task", objectId: "t1", createdAt: "2026-09-26T08:00:00.000Z", readAt: null },
+        { id: "n1", kind: "meeting_action_assigned", text: "会议「X」给你分配了执行事项「Y」", subject: "Y", source: "X", objectType: "task", objectId: "t1", createdAt: "2026-09-26T08:00:00.000Z", readAt: null },
         { id: "n2", kind: "task_returned", text: "孙铭泽 退回了执行事项「Y」：不归我", objectType: "task", objectId: "t2", createdAt: "2026-09-26T08:00:00.000Z", readAt: null },
         { id: "n3", kind: "meeting_action_assigned", text: "旧的", objectType: "task", objectId: "t3", createdAt: "2026-09-25T08:00:00.000Z", readAt: "2026-09-25T09:00:00.000Z" },
       ],
       { markSeen: async () => ({ ok: true }), returnTask: async () => ({ ok: true }) },
     );
     expect(groups.assigned.map((notice) => notice.id)).toEqual(["n1"]);
+    // 正文只写事情本身，会议名写在小字里：「X」分配给你 · 时间。
+    expect(groups.assigned[0].title).toBe("Y");
+    expect(groups.assigned[0].detail).toMatch(/^「X」分配给你 · /);
     expect(groups.assigned[0].buttons.map((button) => button.label)).toEqual(["接下"]);
     expect(groups.assigned[0].reason?.label).toBe("退回");
     expect(groups.results.map((notice) => notice.id)).toEqual(["n2"]);

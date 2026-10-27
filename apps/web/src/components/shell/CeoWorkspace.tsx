@@ -16,9 +16,9 @@ import { WorkspaceFrame } from "./WorkspaceFrame";
  * 两者用 CSS 按宽度切换（服务端渲染没有屏宽，不在 JS 里判断，免得手机上先闪一下大看板）。个人菜单在桌面随通知栏，这里的一份只在手持显示。
  */
 function CeoHome({ cards, onCard, account }: { cards: Card[]; onCard: (card: Card) => void; account: Account }) {
-  const { navigate } = useWorkspace();
+  const { navigate, bookMeeting } = useWorkspace();
   return <>
-    <HomeBoard cards={cards} onCard={onCard} onNavigate={navigate} />
+    <HomeBoard cards={cards} onCard={onCard} onNavigate={navigate} onBookMeeting={bookMeeting} />
     <CeoGlance cards={cards} onNavigate={navigate} />
     <div className={b.phoneAccount}><AccountMenu account={account} onNavigate={navigate} /></div>
   </>;

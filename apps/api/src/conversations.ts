@@ -392,7 +392,7 @@ export const CONVERSATION_IDLE_RESTART_MS = 12 * 60 * 60 * 1000;
 
 type MessageRow = { sequence: number; role: string; content: string; references_snapshot: unknown; attachments: TConversationAttachment[];
   run_id: string; created_at: Date; recovery_note: { text?: unknown; detail?: unknown } | null; memory_used: unknown; cards?: unknown;
-  read_scope?: unknown; kind?: string; meta?: { issueId?: unknown; title?: unknown; href?: unknown; answers?: unknown } | null };
+  read_scope?: unknown; kind?: string; meta?: { issueId?: unknown; title?: unknown; href?: unknown; answers?: unknown; via?: unknown } | null };
 
 function historyMessage(row: MessageRow): TConversationHistory["messages"][number] {
   const note = row.recovery_note;
@@ -412,6 +412,7 @@ function historyMessage(row: MessageRow): TConversationHistory["messages"][numbe
     // 回答 Agent 提问的那条：问答记录存在 meta.answers（routes/conversations.ts 按提问卡核对后写入）。
     ...(row.role === "user" && row.meta?.answers && typeof row.meta.answers === "object" ? { answers: row.meta.answers as TAskAnswerRecord } : {}),
     ...(row.kind === "carried" || row.kind === "trace" ? { kind: row.kind } : {}),
+    ...(row.meta?.via === "feishu" ? { via: "feishu" as const } : {}),
     ...(row.kind === "trace" && row.meta ? { meta: Object.fromEntries((["issueId", "title", "href"] as const)
       .flatMap((key) => (typeof row.meta?.[key] === "string" ? [[key, row.meta[key]]] : []))) } : {}),
   };

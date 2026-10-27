@@ -1,8 +1,8 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, ReturnTaskAcceptanceRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, BattlefieldProgressResponse, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
+import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, ReturnTaskAcceptanceRequest, StandaloneMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, BattlefieldProgressResponse, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
-import { acceptMyTask, addTaskCollaborators, returnMyTaskAcceptance, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, reopenMyTask, returnMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
+import { acceptMyTask, addTaskCollaborators, returnMyTaskAcceptance, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, reopenMyTask, returnMyTask, standaloneMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
 import { draftTaskAcceptance } from "../taskAcceptanceDraft.js";
 import { readMonthPlan, saveMonthPlan } from "../monthPlan.js";
 import { readHomePlan } from "../homePlan.js";
@@ -101,6 +101,13 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     "/api/me/tasks/:id/return",
     { preHandler: requireMember, schema: { params: idParams, body: ReturnMyTaskRequest } },
     async (req, reply) => respondTask(reply, await returnMyTask(pool, req.person!.personId, req.params.id, req.body, names())),
+  );
+
+  // 待归位的事项本人确认「不属于任何 Mission」（挂到 Mission 走 PATCH missionId）。
+  app.post(
+    "/api/me/tasks/:id/standalone",
+    { preHandler: requireMember, schema: { params: idParams, body: StandaloneMyTaskRequest } },
+    async (req, reply) => respondTask(reply, await standaloneMyTask(pool, req.person!.personId, req.params.id, req.body, names())),
   );
 
   // 完成只能经推进人逐条对完成标准验收（design-12）；外部工具只能提交验收（走 MCP）。

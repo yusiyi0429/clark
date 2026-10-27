@@ -3,7 +3,7 @@
 /**
  * 个人菜单：通知栏左下角点自己的名字（收起成窄条时是头像）弹出。一级只放每天会点的和身份相关的（样稿 voice-keys-v3）——
  * 雷达、我的记忆（成员 /me/memory、CEO /memory）、定时任务（成员 /me/schedules、CEO /schedules）、「设置 ›」、CEO 的组织配置、双身份者切换工作台，最后是退出登录。
- * 配一次就不太动的收进「设置 ›」，在菜单右边弹出二级：语音输入、声纹（已配置时）、连接飞书（接了飞书时）、连接到外部工具、Co-Agent 形象、修改口令、
+ * 配一次就不太动的收进「设置 ›」，在菜单右边弹出二级：语音输入、声纹（已配置时）、连接飞书（接了飞书时）、连接到外部工具、本机采集器、Co-Agent 形象、修改口令、
  * 重看首次引导、管理员视图（管理员）。
  * 声纹、雷达、口令、语音输入各开一个小弹窗，不离开当前页面。
  */
@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Modal, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, CalendarClock, ChevronRight, KeyRound, Link2, LogOut, Mic, PlugZap, Radar, RotateCcw, Settings, Settings2, Smile, X } from "lucide-react";
+import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, CalendarClock, ChevronRight, KeyRound, Link2, LogOut, Laptop, Mic, PlugZap, Radar, RotateCcw, Settings, Settings2, Smile, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { feishuConnectHref, readFeishuConnection } from "@/lib/feishuLogin";
 import { logout } from "@/lib/logout";
@@ -21,6 +21,7 @@ import m from "@/styles/account-menu.module.css";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { CoAgentSkinPicker } from "@/components/coagent/SkinPicker";
 import { VoiceKeysDialog } from "@/conversation/VoiceKeysDialog";
+import { CollectorInstallPanel, useCollectorStatus } from "@/components/onboarding/CollectorSetup";
 
 export interface Account {
   displayName: string;
@@ -43,7 +44,7 @@ export function accountSubtitle(account: Account, demo: boolean): string {
   return [account.loginId, account.role === "ceo" ? "CEO" : "成员"].filter(Boolean).join(" · ");
 }
 
-type Dialog = "voiceprint" | "radar" | "connection" | "coagent" | "passcode" | "voice" | null;
+type Dialog = "voiceprint" | "radar" | "connection" | "collector" | "coagent" | "passcode" | "voice" | null;
 
 export function AccountMenu({ account, compact = false, onNavigate }: { account: Account; compact?: boolean; onNavigate?: (href: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -173,6 +174,9 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                       <Button variant="ghost" className={m.item} onPress={() => pick("connection")}>
                         <PlugZap size={16} aria-hidden="true" />连接到外部工具
                       </Button>
+                      <Button variant="ghost" className={m.item} onPress={() => pick("collector")}>
+                        <Laptop size={16} aria-hidden="true" />本机采集器
+                      </Button>
                       <Button variant="ghost" className={m.item} onPress={() => pick("coagent")}>
                         <Smile size={16} aria-hidden="true" />
                         Co-Agent 形象
@@ -264,8 +268,15 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
       {dialog === "coagent" ? <MenuDialog title="Co-Agent 形象" wide onClose={() => setDialog(null)}><CoAgentSkinPicker /></MenuDialog> : null}
       {dialog === "voice" ? <VoiceKeysDialog onClose={() => setDialog(null)} /> : null}
       {dialog === "connection" ? <MenuDialog title="连接到外部工具" wide onClose={() => setDialog(null)}><ConnectionDialog role={account.role} /></MenuDialog> : null}
+      {dialog === "collector" ? <MenuDialog title="本机采集器" wide onClose={() => setDialog(null)}><CollectorDialog /></MenuDialog> : null}
     </>
   );
+}
+
+/** 个人菜单里的本机采集器：和首次引导同一块安装面板，开着时读状态，令牌只在这次打开里留着。 */
+function CollectorDialog() {
+  const [token, setToken] = useState<string | null>(null);
+  return <CollectorInstallPanel token={token} onToken={setToken} status={useCollectorStatus(true)} />;
 }
 
 /** 个人菜单里的飞书：没连好时「连接飞书」，整页去飞书授权、授权完回到这一页；连好了只显示状态。 */

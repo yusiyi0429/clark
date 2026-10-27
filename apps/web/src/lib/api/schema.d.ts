@@ -1443,8 +1443,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人 */
+        /** 预约建会：带起止、挂点、是否不写进本体；成员只能给自己建，CEO 从 DRI 里指定主持人；带 draftId 时同一张会议卡只建一场 */
         post: operations["bookMeeting"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meeting-drafts/{draftId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 对话里的一张会议卡约好没有：本人用这张卡建的会，没约为 null */
+        get: operations["getMeetingDraftStatus"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2604,6 +2621,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/progress/battlefield-summaries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 战场进展汇总：每个战场每天一份 Agent 汇总（对照本期目标、各 Mission 推进、卡点）；今天这份还没有时当场开始整理；CEO 看全部战场，其他人看自己所在的战场 */
+        get: operations["getBattlefieldSummaries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/tokens/{id}": {
         parameters: {
             query?: never;
@@ -2805,6 +2839,23 @@ export interface paths {
         put?: never;
         /** 负责人写原因退回执行事项，并通知会议主持人（主持人退回自己的不通知） */
         post: operations["returnMyTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{id}/standalone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 待归位的事项本人确认不属于任何 Mission（写一句为什么），之后按本人的独立事项算 */
+        post: operations["standaloneMyTask"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3761,6 +3812,9 @@ export interface components {
                     } | null;
                     since: string;
                 } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
                 createdAt: string;
                 updatedAt: string;
             };
@@ -4055,6 +4109,31 @@ export interface components {
                     /** @constant */
                     kind: "collection_draft";
                     collectionId: string;
+                } | {
+                    /** @constant */
+                    kind: "meeting_draft";
+                    draftId: string;
+                    title: string;
+                    scheduledAt: string;
+                    endsAt: string;
+                    host: {
+                        personId: string;
+                        displayName: string;
+                    } | null;
+                    participants: {
+                        personId: string;
+                        displayName: string;
+                    }[];
+                    unresolved: {
+                        name: string;
+                        reason: "not_found" | "ambiguous";
+                        host?: boolean;
+                    }[];
+                    anchor: {
+                        kind: "lto" | "po" | "mission" | "task" | "unit" | "company";
+                        id: string;
+                        title: string;
+                    } | null;
                 })[];
                 readScope?: {
                     label: string;
@@ -4082,6 +4161,8 @@ export interface components {
                     }[];
                 };
                 kind?: "carried" | "trace";
+                /** @constant */
+                via?: "feishu";
                 meta?: {
                     issueId?: string;
                     title?: string;
@@ -7034,6 +7115,15 @@ export interface components {
                 kind: "lto" | "po" | "mission" | "unit";
                 id: string;
             }[];
+            /** Format: uuid */
+            draftId?: string;
+        };
+        MeetingDraftStatusResponse: {
+            meeting: {
+                id: string;
+                title: string;
+                href: string;
+            } | null;
         };
         JoinMeetingRequest: {
             meetingId: string;
@@ -7590,6 +7680,9 @@ export interface components {
                 } | null;
                 since: string;
             } | null;
+            unplaced?: {
+                reason: string | null;
+            };
             createdAt: string;
             updatedAt: string;
         };
@@ -7693,6 +7786,9 @@ export interface components {
                         } | null;
                         since: string;
                     } | null;
+                    unplaced?: {
+                        reason: string | null;
+                    };
                     createdAt: string;
                     updatedAt: string;
                 }[];
@@ -8895,6 +8991,33 @@ export interface components {
                 }[];
             };
         };
+        BattlefieldSummariesResponse: {
+            today: string;
+            battlefields: {
+                battlefieldId: string;
+                name: string;
+                summary: {
+                    day: string;
+                    goal: string | null;
+                    paragraphs: string[];
+                    progressUntil: string | null;
+                    /** @description ISO 8601 */
+                    summarizedAt: string;
+                } | null;
+                generation: {
+                    /** @constant */
+                    state: "running";
+                    phase: "reading" | "writing";
+                    /** @description ISO 8601 */
+                    startedAt: string;
+                } | {
+                    /** @constant */
+                    state: "failed";
+                    /** @description ISO 8601 */
+                    at: string;
+                } | null;
+            }[];
+        };
         TaskPerson: {
             personId: string;
             name: string;
@@ -8976,6 +9099,9 @@ export interface components {
                     } | null;
                     since: string;
                 } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
                 createdAt: string;
                 updatedAt: string;
             };
@@ -9119,6 +9245,9 @@ export interface components {
                     } | null;
                     since: string;
                 } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
                 createdAt: string;
                 updatedAt: string;
             }[];
@@ -9196,6 +9325,9 @@ export interface components {
                         } | null;
                         since: string;
                     } | null;
+                    unplaced?: {
+                        reason: string | null;
+                    };
                     createdAt: string;
                     updatedAt: string;
                 }[];
@@ -9273,6 +9405,9 @@ export interface components {
                     } | null;
                     since: string;
                 } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
                 createdAt: string;
                 updatedAt: string;
             }[];
@@ -9453,6 +9588,9 @@ export interface components {
                     } | null;
                     since: string;
                 } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
                 createdAt: string;
                 updatedAt: string;
             };
@@ -9563,6 +9701,9 @@ export interface components {
                         } | null;
                         since: string;
                     } | null;
+                    unplaced?: {
+                        reason: string | null;
+                    };
                     createdAt: string;
                     updatedAt: string;
                 };
@@ -9571,6 +9712,69 @@ export interface components {
                 overdue: boolean;
                 lastActivityAt: string;
                 idleDays: number | null;
+            }[];
+            unplaced: {
+                id: string;
+                version: number;
+                title: string;
+                status: "not_started" | "in_progress" | "done" | "returned";
+                source: "meeting" | "self" | "plan" | "agent";
+                startDate: string | null;
+                dueDate: string | null;
+                doneDefinition: string | null;
+                mission: {
+                    missionId: string;
+                    title: string;
+                    cardId: string | null;
+                    period: string;
+                    battlefieldName: string;
+                    step: number;
+                    steps: number;
+                } | null;
+                waitingOn: {
+                    taskId: string;
+                    title: string;
+                } | null;
+                owner: {
+                    personId: string;
+                    name: string;
+                };
+                collaborators: {
+                    personId: string;
+                    name: string;
+                }[];
+                latestProgress: {
+                    body: string;
+                    source: "web" | "codex" | "claude" | "github" | "other";
+                    author: {
+                        personId: string;
+                        name: string;
+                    };
+                    createdAt: string;
+                } | null;
+                returnReason: string | null;
+                origin: {
+                    /** @constant */
+                    type: "meeting";
+                    meetingId: string;
+                    meetingTitle: string;
+                    quote: string | null;
+                } | null;
+                awaitingAcceptance: boolean;
+                planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
+                createdAt: string;
+                updatedAt: string;
             }[];
         };
         BattlefieldProgressResponse: {
@@ -10092,6 +10296,10 @@ export interface components {
             version: number;
             reason: string;
         };
+        StandaloneMyTaskRequest: {
+            version: number;
+            reason: string;
+        };
         TaskStandardCheck: {
             index: number;
             met: boolean;
@@ -10167,6 +10375,8 @@ export interface components {
                 id: string;
                 kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "issue_assigned" | "request_received" | "request_answered" | "request_done" | "request_asked" | "collection_reminder" | "meeting_card_pending" | "task_progress_added";
                 text: string;
+                subject?: string;
+                source?: string;
                 objectType: "task" | "meeting" | "issue" | "request";
                 objectId: string;
                 createdAt: string;
@@ -11110,6 +11320,7 @@ export interface components {
                 lifecycle: string | null;
                 ownerId: string | null;
                 parentId: string | null;
+                group?: string;
             }[];
         };
         ImpactCardView: {
@@ -15932,6 +16143,55 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMeetingDraftStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 这张会议卡建的会 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingDraftStatusResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
         };
     };
     listWorldAnchorOptions: {
@@ -19634,6 +19894,35 @@ export interface operations {
             };
         };
     };
+    getBattlefieldSummaries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 战场进展汇总 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BattlefieldSummariesResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     revokePersonalToken: {
         parameters: {
             query?: never;
@@ -20482,6 +20771,68 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    standaloneMyTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandaloneMyTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description 确认后的执行事项 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
