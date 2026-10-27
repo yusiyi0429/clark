@@ -1,8 +1,8 @@
-// 通知卡片 (陈溪南 2026-10-26): what Tianshu's notification centre shows for one member, merged so a person sees one
+// 通知卡片 (陈溪南 2026-10-26/27): what Tianshu's notification centre shows for one member, merged so a person sees one
 // or two cards, not a stream. Four kinds only:
+//   stage:review / stage:plan — the stage has started, then the same card says it is done;
 //   todo:review / todo:plan — 我的待办 for that stage (sign, revision cards, review questions, objections, checks); the review card carries dueAt;
 //   mention:<unit>          — @我 in one unit group (Nexus answering my question counts too);
-//   comments                — new comments on the cards I am responsible for, all cards in one;
 //   failure:round / failure:review — a generation that failed, for the M2 admin only (M2_FAILURE_NOTIFY, default 陈溪南).
 // Read-only over the collaboration state. Read marks live in their own small file, so this never touches plans or
 // reviews, and M2 works the same whether or not anyone calls it.
@@ -11,10 +11,9 @@ import {dirname,join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {sharedProjection,memberActor} from './shared-projection.mjs';
 import {memberProfiles} from './member-profiles.mjs';
-import {currentVersion} from './governance.mjs';
+import {currentVersion,confirmationSlots} from './governance.mjs';
 import {todoItems} from './todo.mjs';
-import {reviewTree,reviewTodos,ownerNames} from './review-display.mjs';
-import {ownerName} from './owner-name.mjs';
+import {reviewTree,reviewTodos} from './review-display.mjs';
 import {reviewDueAt} from './review-round.mjs';
 
 const time=v=>Date.parse(v||'')||0;
@@ -41,6 +40,12 @@ export function notificationsFor(state,memberId,{reads={},jobs={}}={}){
  const p={...profile,name,ceo:actor.ceo===true,unitDri:actor.unitDri||[],missions:actor.missionDri||[],units:actor.visibleUnits};
  const drafts=view.drafts||{},comments=view.comments||{},records=view.records||{};
  const cards=[];
+ // 环节卡: one per stage, the start notice turning into the done notice (陈溪南 2026-10-27; comments no longer get a card).
+ const hm=v=>{const d=new Date(Date.parse(v)+8*3600e3);return `${d.getUTCMonth()+1}/${String(d.getUTCDate()).padStart(2,'0')} ${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}`;};
+ const signedAt=list=>latest(list.flatMap(c=>c.versions.flatMap(v=>v.signatures.map(x=>time(x.createdAt)))));
+ const reviewCards=Object.values(state.cards).filter(c=>c.kind==='review'),seesReview=Object.keys(drafts).some(id=>id.startsWith('rv:'));
+ if(state.reviewRound&&seesReview){const month=(m=>m?`${Number(m[1])} 月`:'')(String(state.reviewRound.period||'').match(/-(\d{2})$/)),company=reviewCards.find(c=>c.level==='company'),done=company&&company.confirmedVersion===currentVersion(company).number,due=reviewDueAt(state.reviewRound);
+  cards.push({id:'stage:review',type:'stage',stage:'review',status:done?'done':'open',title:done?`${month}复盘已完成`:`${month}复盘已出`,text:done?'CEO 已确认公司复盘，下月拆解开始生成':`请看自己的复盘，${due?hm(due)+' 前确认':'按时确认'}`,count:1,link:link({stage:'review'}),updatedAt:iso(done?signedAt([company]):time(state.reviewRound.loadedAt)),...(due&&!done?{dueAt:due}:{})});}
  // 我的待办 · 复盘
  const review=state.reviewRound,month=(p=>{const m=String(p||'').match(/-(\d{2})$/);return m?`${Number(m[1])} 月`:'';})(review?.period);
  if(review){
@@ -56,6 +61,9 @@ export function notificationsFor(state,memberId,{reads={},jobs={}}={}){
   const items=todoItems({units,drafts,records,comments,profile:p,name}).filter(i=>['proposal','upstream','downstream','sign','objection'].includes(i.kind)&&!String(i.cardId||'').startsWith('rv:'));
   const card=todoCard('plan',items,'拆解');if(card)cards.push(card);
  }
+ if(state.round&&planOpen&&Object.keys(drafts).some(id=>!id.startsWith('rv:'))){const planCards=Object.values(state.cards).filter(c=>c.kind!=='review'&&confirmationSlots(c).length),done=planCards.length&&planCards.every(c=>c.confirmedVersion===currentVersion(c).number);
+  const to=(m=>m?`${Number(m[1])} 月`:'')(String(state.round.input?.period||'').match(/-(\d{2})$/));
+  cards.push({id:'stage:plan',type:'stage',stage:'plan',status:done?'done':'open',title:done?`${to}计划已全部确认`:`${to}拆解草稿已出`,text:done?'按此执行':'请看自己负责的部分',count:1,link:link({stage:'plan'}),updatedAt:iso(done?signedAt(planCards):time(job?.finishedAt)||time(state.planHandoff?.generatedAt))});}
  // @我, one card per unit group: lines naming me, and Nexus answering a line of mine.
  const mineIds=new Set(state.messages.filter(m=>m.author===memberId).map(m=>m.id));
  for(const [room,list] of Object.entries(records)){
@@ -66,15 +74,6 @@ export function notificationsFor(state,memberId,{reads={},jobs={}}={}){
   const unit=drafts[scope]?.title||(scope==='company'?'公司':scope);
   cards.push({id:`mention:${scope}`,type:'mention',unit:scope,title:`${unit}群：${hits.length} 条消息与你有关`,text:`${last.author}：${String(last.text||'').replace(/\s+/g,' ').slice(0,30)}`,count:hits.length,
    link:link({scope,message:last.id}),updatedAt:iso(time(last.createdAt))});
- }
- // New comments on the cards I am responsible for, all cards in one.
- const mine=([id,d])=>id.startsWith('rv:')?ownerNames(d).includes(name)||d.level==='company'&&p.ceo||d.level==='po'&&p.unitDri.includes(d.unit||id.slice(3)):ownerName(d.owner)===name||d.level==='po'&&p.unitDri.includes(id)||p.missions.includes(id);
- const seenComments=time(reads.comments);
- const fresh=Object.entries(drafts).filter(mine).map(([id])=>[id,(comments[id]||[]).filter(c=>c.author!==name&&c.author!=='Nexus'&&time(c.createdAt)>seenComments)]).filter(([,l])=>l.length);
- if(fresh.length){
-  const all=fresh.flatMap(([,l])=>l),last=all.reduce((a,b)=>time(b.createdAt)>time(a.createdAt)?b:a),at=fresh.find(([,l])=>l.includes(last))[0];
-  cards.push({id:'comments',type:'comments',title:`你负责的 ${fresh.length} 张卡有 ${all.length} 条新批注`,text:`${last.author}：${String(last.text||'').replace(/\s+/g,' ').slice(0,30)}`,count:all.length,
-   link:link({card:at,comment:last.id}),updatedAt:iso(time(last.createdAt))});
  }
  // A failed generation goes to the M2 admin only (陈溪南 2026-10-27), not the CEO or other operators.
  if(FAILURE_TO.includes(name)){

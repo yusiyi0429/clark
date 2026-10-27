@@ -110,3 +110,12 @@ test('程序检查没过的那份单独重写一次再查，不整轮作废；�
  assert.deepEqual(asked,['bf01-m1'],'只重写有问题的那一份');assert.equal(work.reviews['bf01-m1'].nextInputs.length,2);
  assert.deepEqual(reviewProblems(work,input,{roster}),[]);
 });
+
+test('环节卡：复盘装入后是“已出”并带截止时间；CEO 确认公司复盘后同一张变成“已完成”',()=>{
+ const s=fresh();let card=notificationsFor(s,'member-03').find(i=>i.id==='stage:review');
+ assert.deepEqual([card.status,card.title,card.dueAt],['open','10 月复盘已出','2026-10-29T02:33:00.000Z']);assert.match(card.text,/10\/29 10:33 前确认/);
+ const company=s.cards['rv:company'],v=currentVersion(company);v.signatures.push({slot:'ceo',actorId:'member-01',version:v.number,createdAt:'2026-10-29T01:00:00.000Z'});company.confirmedVersion=v.number;
+ card=notificationsFor(s,'member-03').find(i=>i.id==='stage:review');
+ assert.deepEqual([card.status,card.title,card.dueAt,card.updatedAt],['done','10 月复盘已完成',undefined,'2026-10-29T01:00:00.000Z']);
+ assert.ok(!notificationsFor(s,'member-03').some(i=>i.id==='comments'),'新批注不再单独成卡');
+});
