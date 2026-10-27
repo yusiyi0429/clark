@@ -83,8 +83,7 @@ export function createMeetingFollowThrough({ pool, env, peopleDirectory, world, 
   // 挂点选项里的 LTO、本月 PO：同一条件下只列对象，用读的超时（预约表单在等）。
   const anchorWorld = worldClient ? new WorldClient(q, env, undefined, { timeoutMs: WORLD_READ_TIMEOUT_MS }) : undefined;
   // 会议卡草稿：生成（会后整理按池取）和读写共用同一套依赖；挂点对象、修改目标读本体（同一条件下用读的超时）。
-  // 配了飞书：草稿好了的提醒同时推飞书。
-  const cardDeps = { world: anchorWorld, publicOrigin: env.publicOrigin, names: () => personDisplayNames(peopleDirectory), feishuNotify: Boolean(env.feishu) };
+  const cardDeps = { world: anchorWorld, publicOrigin: env.publicOrigin, names: () => personDisplayNames(peopleDirectory) };
   registerMeetingCardDeps(pool, cardDeps);
   const cards = createMeetingCardService(pool, cardDeps);
   const objectSync = worldClient ? createMeetingObjectSync({ q, world: worldClient, refreshDraft: cards.refreshDraft }) : undefined;

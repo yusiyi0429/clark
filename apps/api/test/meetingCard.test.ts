@@ -416,7 +416,7 @@ describe("会后待确认入口", () => {
     }
   });
 
-  it("草稿好了提醒一次：主持人和创建人各一条，再存草稿、重新生成都不多发", async () => {
+  it("草稿好了在通知栏提醒一次：主持人和创建人各一条，再存草稿、重新生成都不多发，不推飞书", async () => {
     ontology();
     const { agent } = cardAgent();
     const { t, host, meetingId } = await setup(agent, { createdBy: CEO, feishu: true });
@@ -429,14 +429,10 @@ describe("会后待确认入口", () => {
       await runOutcome(t.pool, agent, meetingId);
       expect((await viewOf(t, host, meetingId)).draftVersion).toBe(3);
       expect(await pendingNotices(t, meetingId)).toHaveLength(2);
-      // 通知文案「会名 · 会议记录待确认」；飞书各推一次，点了去会议页。
+      // 通知文案「会名 · 会议记录待确认」，只在天枢通知栏里出；配了飞书也不推（10/27 定）。
       const notices = (await t.app.inject({ method: "GET", url: "/api/me/notifications", headers: { cookie: host } })).json().notifications as { kind: string; text: string }[];
       expect(notices.filter((notice) => notice.kind === "meeting_card_pending").map((notice) => notice.text)).toEqual(["接口切换会 · 会议记录待确认"]);
-      const feishu = (await t.sql("SELECT payload FROM jobs WHERE kind = 'feishu.notify' ORDER BY payload->>'personId'")).map((row) => row.payload);
-      expect(feishu).toEqual([
-        { personId: CEO, title: "接口切换会 · 会议记录待确认", body: "6月1日 10:00", links: [{ label: "去确认", path: `/meetings/${meetingId}` }] },
-        { personId: HOST, title: "接口切换会 · 会议记录待确认", body: "6月1日 10:00", links: [{ label: "去确认", path: `/me/meetings/${meetingId}` }] },
-      ]);
+      expect(await t.sql("SELECT payload FROM jobs WHERE kind = 'feishu.notify'")).toEqual([]);
     } finally {
       await t.close();
     }
