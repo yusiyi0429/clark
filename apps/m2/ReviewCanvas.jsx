@@ -140,7 +140,7 @@ function PersonSummary({name,cards,me,months,unitLabel,onOpen}){
  return <article role="button" tabIndex={0} aria-label={`打开 ${name}的个人复盘`} onClick={onOpen} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen();}}} className="plan-doc-node doc-summary review-summary person-summary doc-mission tone-mission">
   <div className="card-head"><span className="level-tag">个人复盘</span><span className="card-meta"><span className="person">{name}</span><span>{cards.length} 个 Mission</span></span><span className="card-head-end"><span className={`state${mineToSign?' is-mine':''}`} data-confirmed={done===cards.length}>{state}</span></span></div>
   <h2>{name==='未指派'?`未指派负责人的 Mission 复盘`:name===me?'我的'+months.from+'个人复盘':`${name}的${months.from}个人复盘`}</h2>
-  <ul className="person-summary-list">{cards.map(n=><li key={n.id}><span className="person-summary-tag">{unitShort(unitLabel(n))} · {reviewLabel(n)}</span>{n.title}{n.verdict&&<Verdict value={n.verdict} small/>}</li>)}</ul>
+  <ul className="person-summary-list">{cards.map(n=><li key={n.id}><span className="person-summary-tag">{unitShort(unitLabel(n))} · {reviewLabel(n)}</span>{n.title}</li>)}</ul>
  </article>;
 }
 export function ReviewSummary({node,onOpen,unitLabel,comments=[],tone='domain',stateOf}){
