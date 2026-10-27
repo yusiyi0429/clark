@@ -3,7 +3,7 @@
 //   todo:review / todo:plan — 我的待办 for that stage (sign, revision cards, review questions, objections, checks); the review card carries dueAt;
 //   mention:<unit>          — @我 in one unit group (Nexus answering my question counts too);
 //   comments                — new comments on the cards I am responsible for, all cards in one;
-//   failure:round / failure:review — a generation that failed, for the CEO and round operators only.
+//   failure:round / failure:review — a generation that failed, for the M2 admin only (M2_FAILURE_NOTIFY, default 陈溪南).
 // Read-only over the collaboration state. Read marks live in their own small file, so this never touches plans or
 // reviews, and M2 works the same whether or not anyone calls it.
 import {readFile,writeFile,rename,mkdir} from 'node:fs/promises';
@@ -22,6 +22,7 @@ const iso=v=>v?new Date(v).toISOString():null;
 const latest=list=>list.reduce((a,b)=>Math.max(a,b),0);
 // Links are relative to the M2 page (Tianshu prefixes /m2/); the page reads these parameters to open the right place.
 const link=params=>'?'+new URLSearchParams(params).toString();
+const FAILURE_TO=(process.env.M2_FAILURE_NOTIFY||'陈溪南').split(/[、,，]/).map(x=>x.trim()).filter(Boolean);
 const TODO_WORDS={insight:'份复盘待写洞察',sign:'份待确认',proposal:'张修订卡待决定',ask:'个追问待回答',objection:'处反对待回应',upstream:'处上级调整待核对',downstream:'处下级调整待核对'};
 
 function todoCard(stage,items,label){
@@ -75,8 +76,8 @@ export function notificationsFor(state,memberId,{reads={},jobs={}}={}){
   cards.push({id:'comments',type:'comments',title:`你负责的 ${fresh.length} 张卡有 ${all.length} 条新批注`,text:`${last.author}：${String(last.text||'').replace(/\s+/g,' ').slice(0,30)}`,count:all.length,
    link:link({card:at,comment:last.id}),updatedAt:iso(time(last.createdAt))});
  }
- // A failed generation, for whoever can run rounds (CEO and round operators).
- if(view.operator){
+ // A failed generation goes to the M2 admin only (陈溪南 2026-10-27), not the CEO or other operators.
+ if(FAILURE_TO.includes(name)){
   if(job?.status==='failed')cards.push({id:'failure:round',type:'failure',stage:'plan',title:'拆解生成失败',text:String(job.error||'可在管理里续跑').slice(0,80),count:1,link:link({admin:'1'}),updatedAt:iso(time(job.finishedAt||job.createdAt))});
   const r=jobs.review;if(r?.status==='failed')cards.push({id:'failure:review',type:'failure',stage:'review',title:'复盘生成失败',text:String(r.error||'可在管理里续跑').slice(0,80),count:1,link:link({admin:'1'}),updatedAt:iso(time(r.finishedAt||r.startedAt))});
  }

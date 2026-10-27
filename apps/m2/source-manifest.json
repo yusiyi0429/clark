@@ -425,7 +425,7 @@
     },
     {
       "path": "notifications.mjs",
-      "sha256": "b9002e19997fcbb01b171ca32bb52b1cf11fef5546ab0292e31a5b62b8fc01bd"
+      "sha256": "b2e1cad620430831f8842c1dff53ab402abd0abc2d60170d00adc23f7a27e58d"
     }
   ],
   "excluded": [
@@ -442,7 +442,7 @@
   },
   "reviewSkill": {
     "version": "2.1.4",
-    "fingerprint": "5108c8794093",
+    "fingerprint": "f4a9b5534aaa",
     "source": "apps/decoding-mvp/.runtime/eval/review/skills/tkos-review-2.1.4"
   },
   "mergeBase": "/Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261026e"
