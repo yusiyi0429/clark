@@ -436,6 +436,9 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
       // Said in the room, not swallowed: a refusal asks for the personal details to be left out (模型调用稳定性加固 2026-10-22).
       output.reply=e.code==='MODEL_REFUSAL'?'这次没能起草新增的 Mission：模型拒绝了这次请求，可能因为讨论里有具体到个人的敏感细节（薪酬、背调、考评等）。去掉这些细节后再 @Nexus。':'这次没能起草新增的 Mission，起草没有完成，请稍后再 @Nexus 试一次。';}
     }
+    // In a person's own room there is no @ to retry with, and a card may already be waiting (评测 2026-10-27).
+    if(scope.level==='person'&&/这次未生成有效回答/.test(output.reply||'')){const waiting=(store.snapshot().proposals||[]).some(p=>p.status==='pending'&&p.scope===scope.id);
+     output.reply=waiting?'已有修订卡在等你确认，新补的证据我记下了；需要的话我按新证据改那张卡。':'这次我没理出结论。你可以再说一下要改哪一项、依据是什么（哪天、谁记的、在哪能查到）。';}
     const rawReply=output.reply;output.reply=quietReply(output.reply,output.proposals,output.rejected||[],cards);
     // Nobody asked and no card came out: the miss stays in lastAct for diagnosis, not in the room (2026-10-19 drill).
     if(!output.participation.called&&!output.proposals.length&&output.reply!==rawReply)output.reply='';
