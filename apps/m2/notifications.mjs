@@ -45,7 +45,7 @@ export function notificationsFor(state,memberId,{reads={},jobs={}}={}){
  const signedAt=list=>latest(list.flatMap(c=>c.versions.flatMap(v=>v.signatures.map(x=>time(x.createdAt)))));
  const reviewCards=Object.values(state.cards).filter(c=>c.kind==='review'),seesReview=Object.keys(drafts).some(id=>id.startsWith('rv:'));
  if(state.reviewRound&&seesReview){const month=(m=>m?`${Number(m[1])} 月`:'')(String(state.reviewRound.period||'').match(/-(\d{2})$/)),company=reviewCards.find(c=>c.level==='company'),done=company&&company.confirmedVersion===currentVersion(company).number,due=reviewDueAt(state.reviewRound);
-  cards.push({id:'stage:review',type:'stage',stage:'review',status:done?'done':'open',title:done?`${month}复盘已完成`:`${month}复盘已出`,text:done?'CEO 已确认公司复盘，下月拆解开始生成':`请看自己的复盘，${due?hm(due)+' 前确认':'按时确认'}`,count:1,link:link({stage:'review'}),updatedAt:iso(done?signedAt([company]):time(state.reviewRound.loadedAt)),...(due&&!done?{dueAt:due}:{})});}
+  cards.push({id:'stage:review',type:'stage',stage:'review',status:done?'done':'open',title:done?`${month}复盘已完成`:`${month}复盘已出`,text:done?'CEO 已确认公司复盘，下月拆解开始生成':due&&Date.now()>Date.parse(due)?`已过截止时间（${hm(due)}），还没确认的请尽快确认`:`请看自己的复盘，${due?hm(due)+' 前确认':'按时确认'}`,count:1,link:link({stage:'review'}),updatedAt:iso(done?signedAt([company]):time(state.reviewRound.loadedAt)),...(due&&!done?{dueAt:due}:{})});}
  // 我的待办 · 复盘
  const review=state.reviewRound,month=(p=>{const m=String(p||'').match(/-(\d{2})$/);return m?`${Number(m[1])} 月`:'';})(review?.period);
  if(review){
