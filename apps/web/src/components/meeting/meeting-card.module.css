@@ -113,6 +113,8 @@ button.source:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; b
 .itemText { font-size: 14px; line-height: 24px; }
 .itemMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; color: #6b7280; font-size: 13px; line-height: 20px; }
 .ownerPicker { width: 140px; max-width: 100%; }
+.props dd.speakers { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.speaker { display: inline-flex; align-items: center; gap: 8px; }
 .flag[data-tone='done'] { background: #e9f7ef; color: #1c7a43; }
 
 /* 底部：同步状态逐行 + 这一刻能做的事。 */

@@ -6,7 +6,7 @@ import { Card, MeetingCardPayload, StoredTranscript, type TTranscriptSource } fr
 import { createTestApp, preflightCandidate, type TestApp } from "./helpers.js";
 import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
-import { buildTranscriptCandidate } from "../src/transcriptCandidate.js";
+import { buildTranscriptCandidate, suggestByAttendees } from "../src/transcriptCandidate.js";
 
 const PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people-candidate.json", import.meta.url));
 
@@ -159,6 +159,30 @@ describe("buildTranscriptCandidate", () => {
     ]);
     expect(candidate.warnings).toHaveLength(2);
     expect(candidate.turns).toEqual(turns);
+  });
+});
+
+describe("suggestByAttendees：按飞书参会名单排除法", () => {
+  const source: TTranscriptSource = { format: "miaoji_markdown", fileName: "m.md", sizeBytes: 10, sha256: "a".repeat(64), parserVersion: "miaoji-markdown.v1", timeAnchor: null };
+  const people = [
+    { personId: "p1", displayName: "甲", roles: ["ceo"], sourceRef: "s", updatedAt: "t" },
+    { personId: "p2", displayName: "乙", roles: ["participant"], sourceRef: "s", updatedAt: "t" },
+  ];
+  const turns = [{ speakerName: "甲", offsetSeconds: 1, text: "a" }, { speakerName: "Speaker 1", offsetSeconds: 2, text: "b" }];
+  const base = buildTranscriptCandidate(turns, people, source);
+
+  it("名单里只剩一个人、只有一位通用说话人没对上：对到这个人", () => {
+    const candidate = suggestByAttendees(base, { personIds: ["p1", "p2"], unknown: 0 }, people);
+    expect(candidate.speakers[1]).toMatchObject({ speakerName: "Speaker 1", suggestedPersonId: "p2", suggestedDisplayName: "乙" });
+    expect(candidate.warnings).toEqual(["说话人「Speaker 1」按飞书参会名单对到「乙」"]);
+  });
+
+  it("名单里有天枢外的人、剩下不止一个人、或没对上的不是通用名：不猜", () => {
+    expect(suggestByAttendees(base, { personIds: ["p1", "p2"], unknown: 1 }, people)).toBe(base);
+    expect(suggestByAttendees(base, { personIds: ["p1"], unknown: 0 }, people)).toBe(base);
+    expect(suggestByAttendees(base, null, people)).toBe(base);
+    const named = buildTranscriptCandidate([turns[0], { speakerName: "Nexus", offsetSeconds: 2, text: "b" }], people, source);
+    expect(suggestByAttendees(named, { personIds: ["p1", "p2"], unknown: 0 }, people)).toBe(named);
   });
 });
 

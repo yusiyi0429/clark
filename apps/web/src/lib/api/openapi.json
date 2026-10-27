@@ -4546,6 +4546,84 @@
         }
       }
     },
+    "/api/meetings/{id}/card/speakers": {
+      "post": {
+        "operationId": "assignMeetingCardSpeaker",
+        "summary": "主持人或创建人指定一位没对上人的说话人：对到某人（卡里的原名换成这个人、加进参会人），或选「不是天枢里的人」保留原名；draftVersion 过期 409 DRAFT_CHANGED（带 view）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeetingCardSpeakerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "指定后的会议卡",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingCardView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/meetings/{id}/card/confirm": {
       "post": {
         "operationId": "confirmMeetingCard",
@@ -15368,7 +15446,8 @@
               "sync",
               "targetOptions",
               "canEdit",
-              "draftChange"
+              "draftChange",
+              "unmappedSpeakers"
             ],
             "properties": {
               "draft": {
@@ -16414,6 +16493,25 @@
                     "type": "string"
                   }
                 ]
+              },
+              "unmappedSpeakers": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                }
               }
             }
           }
@@ -38751,6 +38849,10 @@
                   "minLength": 1,
                   "maxLength": 200,
                   "type": "string"
+                },
+                "kept": {
+                  "const": true,
+                  "type": "boolean"
                 }
               }
             }
@@ -63173,7 +63275,8 @@
           "sync",
           "targetOptions",
           "canEdit",
-          "draftChange"
+          "draftChange",
+          "unmappedSpeakers"
         ],
         "properties": {
           "draft": {
@@ -64219,6 +64322,25 @@
                 "type": "string"
               }
             ]
+          },
+          "unmappedSpeakers": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "name"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -64644,6 +64766,38 @@
           "reason": {
             "maxLength": 200,
             "type": "string"
+          }
+        }
+      },
+      "MeetingCardSpeakerRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "draftVersion",
+          "speakerId",
+          "personId"
+        ],
+        "properties": {
+          "draftVersion": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "speakerId": {
+            "pattern": "^speaker:\\d+$",
+            "maxLength": 50,
+            "type": "string"
+          },
+          "personId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { TMeetingActionItem, TMeetingCardDraft, TMeetingCardSection, TMeetingCardTargetOption, TMeetingCardView } from "@warmap/contracts";
-import { confirmMeetingCard, getMeetingCard, retryMeetingCardSync, saveMeetingCardDraft, type CardResult } from "./meetingCardApi";
+import { assignMeetingCardSpeaker, confirmMeetingCard, getMeetingCard, retryMeetingCardSync, saveMeetingCardDraft, type CardResult } from "./meetingCardApi";
 import {
   cardDiffers, draftFromConfirmed, draftReady, itemsDiffer, itemsWithoutSection, newItemId, newSectionId, restoreBlank, restoreBlankItems,
   syncPending,
@@ -17,7 +17,7 @@ const POLL_LIMIT_MS = 10 * 60_000;
 /** 自动保存的状态（卡顶右侧的小字）：保存中、已保存、保存失败、网络不通。 */
 export type SaveState = "idle" | "saving" | "saved" | "failed" | "offline";
 /** 确认、重试、重读出错时的标签（不显示服务端原话）。 */
-export type ActionError = "确认失败" | "重试失败" | "本体暂不可用" | "网络不通";
+export type ActionError = "确认失败" | "重试失败" | "指定失败" | "本体暂不可用" | "网络不通";
 export type ConfirmInput = { writeToWorld: boolean; kind?: "correction" | "followup"; reason?: string };
 type SectionField = "heading" | "body";
 type ItemField = "text" | "ownerPersonId" | "dueDate";
@@ -309,6 +309,29 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
     announce();
   };
 
+  /** 指定说话人：先存掉没存的，再带最新的 draftVersion 指定；成功后草稿换成返回的（卡里的原名已换成这个人）。 */
+  const assignSpeaker = async (speakerId: string, personId: string | null): Promise<boolean> => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (!(await flush())) return false;
+      const result = await assignMeetingCardSpeaker(meetingId, versionRef.current, speakerId, personId);
+      if (!aliveRef.current) return false;
+      if (result.ok) {
+        adopt(result.view, true);
+        return true;
+      }
+      if (result.code === "DRAFT_CHANGED") {
+        conflictRef.current = true;
+        stopTimer();
+        setConflict(true);
+      } else setError(actionError(result, "指定失败"));
+      return false;
+    } finally {
+      if (aliveRef.current) setBusy(false);
+    }
+  };
+
   /** 重试会议事件写入；服务端说没有要重试的（别处已经重试过）就重读一次。 */
   const retry = async () => {
     setBusy(true);
@@ -369,6 +392,6 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
     view, draft, items, leftItems, pending, editing, timeInFooter, timeRejected, focus, conflict, unsaved, saveState, busy, error,
     edit: update, leave, setOccurredAt, setSection, moveSection, deleteSection, addSection, setPendingField, leavePending, setAfter, setTarget, deleteChange,
     addItem, setItem, deleteItem, leaveItem,
-    startEditing: () => { setSaveState("idle"); setFocus("title"); setEditing(true); }, reload, confirm, discard, retry,
+    startEditing: () => { setSaveState("idle"); setFocus("title"); setEditing(true); }, reload, confirm, discard, retry, assignSpeaker,
   };
 }

@@ -1349,6 +1349,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meetings/{id}/card/speakers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 主持人或创建人指定一位没对上人的说话人：对到某人（卡里的原名换成这个人、加进参会人），或选「不是天枢里的人」保留原名；draftVersion 过期 409 DRAFT_CHANGED（带 view） */
+        post: operations["assignMeetingCardSpeaker"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings/{id}/card/confirm": {
         parameters: {
             query?: never;
@@ -3958,6 +3975,10 @@ export interface components {
                 }[];
                 canEdit: boolean;
                 draftChange: "none" | "items" | "content";
+                unmappedSpeakers: {
+                    id: string;
+                    name: string;
+                }[];
             };
         };
         LoginRequest: {
@@ -7411,6 +7432,8 @@ export interface components {
             unmappedSpeakers?: {
                 id: string;
                 name: string;
+                /** @constant */
+                kept?: true;
             }[];
         };
         PostMeetingCandidate: {
@@ -11244,6 +11267,10 @@ export interface components {
             }[];
             canEdit: boolean;
             draftChange: "none" | "items" | "content";
+            unmappedSpeakers: {
+                id: string;
+                name: string;
+            }[];
         };
         MeetingCardDraftRequest: {
             draftVersion: number;
@@ -11305,6 +11332,11 @@ export interface components {
             writeToWorld: boolean;
             kind?: "correction" | "followup";
             reason?: string;
+        };
+        MeetingCardSpeakerRequest: {
+            draftVersion: number;
+            speakerId: string;
+            personId: string | null;
         };
         MeetingMinutesLinkRequest: {
             url: string;
@@ -15801,6 +15833,68 @@ export interface operations {
         };
         responses: {
             /** @description 保存后的会议卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingCardView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    assignMeetingCardSpeaker: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingCardSpeakerRequest"];
+            };
+        };
+        responses: {
+            /** @description 指定后的会议卡 */
             200: {
                 headers: {
                     [name: string]: unknown;

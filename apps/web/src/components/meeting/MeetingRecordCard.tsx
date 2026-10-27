@@ -10,6 +10,8 @@ import { useEffect, useState } from "react";
 import type { TMeetingCardView, TWorldAnchor } from "@warmap/contracts";
 import { Plus } from "lucide-react";
 import { DateTimePicker } from "@/components/ui/DatePicker";
+import { Select } from "@/components/ui/Select";
+import { browserApi } from "@/lib/api/client";
 import { monthDayClock } from "@/lib/companyTime";
 import { getMeetingWorld } from "./meetingDecisionApi";
 import {
@@ -35,17 +37,30 @@ type MeetingRecordCardProps = {
   speakerName?: (speakerId: string) => string | null;
   /** 会议页的参会人（天枢 personId）：行动项的负责人从这里选。 */
   people?: MeetingPerson[];
+  /** 指定了说话人：会议页重读参会人和逐字稿。 */
+  onSpeakers?: () => void;
 };
 
 const noSpeaker = () => null;
 const noPeople: MeetingPerson[] = [];
 const SAVE_LABEL = { idle: null, saving: "保存中", saved: "已保存", failed: "保存失败", offline: "网络不通" } as const;
 const names = (content: CardContent) => content.participants.map((person) => person.name).join("、");
+const NOT_IN_TIANSHU = "none";
 
-export function MeetingRecordCard({ meetingId, initial, onView, turns = [], speakerName = noSpeaker, people = noPeople }: MeetingRecordCardProps) {
+export function MeetingRecordCard({ meetingId, initial, onView, turns = [], speakerName = noSpeaker, people = noPeople, onSpeakers }: MeetingRecordCardProps) {
   const card = useMeetingCard(meetingId, initial, onView);
   const [anchors, setAnchors] = useState<TWorldAnchor[]>([]);
   useEffect(() => { void getMeetingWorld(meetingId).then((detail) => setAnchors(detail?.world.anchors ?? []), () => undefined); }, [meetingId]);
+  // 没对上人的说话人由主持人或创建人从人员目录里点一下指定。
+  const speakers = card.view.canEdit && card.draft ? card.view.unmappedSpeakers : [];
+  const [directory, setDirectory] = useState<MeetingPerson[]>([]);
+  useEffect(() => {
+    if (!speakers.length || directory.length) return;
+    void browserApi.GET("/api/people").then(({ data }) => setDirectory(data?.people ?? []), () => undefined);
+  }, [speakers.length, directory.length]);
+  const speakerOptions = [...directory.map((person) => ({ value: person.personId, label: person.displayName })), { value: NOT_IN_TIANSHU, label: "不是天枢里的人" }];
+  const assign = (speakerId: string, value: string) =>
+    void card.assignSpeaker(speakerId, value === NOT_IN_TIANSHU ? null : value).then((done) => { if (done && value !== NOT_IN_TIANSHU) onSpeakers?.(); });
 
   const { view, draft, pending } = card;
   const confirmed = view.confirmed;
@@ -109,6 +124,17 @@ export function MeetingRecordCard({ meetingId, initial, onView, turns = [], spea
           <div data-changed={wasNames !== null ? "" : undefined}><dt>参会人</dt><dd>
             {wasNames ? <del className={c.was}>{wasNames}</del> : null}
             {names(content)}
+          </dd></div>
+        ) : null}
+        {speakers.length ? (
+          <div><dt>说话人</dt><dd className={c.speakers}>
+            {speakers.map((speaker) => (
+              <span key={speaker.id} className={c.speaker}>
+                <span>{speaker.name}</span>
+                <Select aria-label={`${speaker.name}是谁`} placeholder="是谁" size="compact" className={c.ownerPicker} value="" disabled={locked}
+                  options={speakerOptions} onChange={(value) => { if (value) assign(speaker.id, value); }} />
+              </span>
+            ))}
           </dd></div>
         ) : null}
         {anchors.length ? <div><dt>挂到</dt><dd><WorldAnchors anchors={anchors} /></dd></div> : null}

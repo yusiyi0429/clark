@@ -2,7 +2,7 @@ import type { TMeetingActionItem, TMeetingCardConfirmRequest, TMeetingCardDraft,
 import { browserApi } from "@/lib/api/client";
 
 /**
- * 会议卡（FR-4、FR-5）的四个接口：读卡、整份存草稿、整卡确认、重试会议事件写入。
+ * 会议卡（FR-4、FR-5）的接口：读卡、整份存草稿、指定说话人、整卡确认、重试会议事件写入。
  * 结果统一成 ok / 失败两种；失败只带状态码和错误码（界面按错误码显示标签，不显示服务端原话）。
  * status 0 是网络不通。
  */
@@ -33,3 +33,7 @@ export const confirmMeetingCard = (meetingId: string, body: TMeetingCardConfirmR
 
 export const retryMeetingCardSync = (meetingId: string) =>
   settle(browserApi.POST("/api/meetings/{id}/card/retry", { params: { path: { id: meetingId } } }));
+
+/** 把没对上人的说话人指定给某人；personId 为 null 是「不是天枢里的人」。 */
+export const assignMeetingCardSpeaker = (meetingId: string, draftVersion: number, speakerId: string, personId: string | null) =>
+  settle(browserApi.POST("/api/meetings/{id}/card/speakers", { params: { path: { id: meetingId } }, body: { draftVersion, speakerId, personId } }));

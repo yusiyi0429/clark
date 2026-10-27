@@ -238,3 +238,59 @@ describe("行动项推成执行事项", () => {
     }
   });
 });
+
+describe("会议卡上指定说话人", () => {
+  const speakers = (t: Awaited<ReturnType<typeof setup>>["t"], cookie: string, meetingId: string, payload: unknown) =>
+    t.app.inject({ method: "POST", url: `/api/meetings/${meetingId}/card/speakers`, headers: { cookie, origin: t.publicOrigin }, payload });
+  /** 把逐字稿第 3 句改成没对上人的「Speaker 1」（像飞书认不出的声音），卡里写上原名；OWNER 先不在参会人里。 */
+  async function unmapped(t: Awaited<ReturnType<typeof setup>>["t"], meetingId: string) {
+    await t.pool.query(`UPDATE meetings SET transcript = jsonb_set(jsonb_set(transcript, '{turns,2,speakerId}', '"speaker:1"'), '{unmappedSpeakers}',
+      '[{"id":"speaker:1","name":"Speaker 1"},{"id":"speaker:2","name":"Nexus"}]'),
+      participants = (SELECT jsonb_agg(p) FROM jsonb_array_elements(participants) p WHERE p->>'personId' <> $2) WHERE id = $1`, [meetingId, OWNER]);
+    await t.pool.query(`UPDATE meeting_cards SET draft = jsonb_set(draft, '{summary}', '"Speaker 1 接 v2，Speaker 10 另说。"'),
+      action_items = jsonb_set(action_items, '{0,text}', '"Speaker 1 渠道看板接到 v2"') WHERE meeting_id = $1`, [meetingId]);
+  }
+
+  it("指定到人：发言改记到他、补进参会人、卡里原名换成他的名字（Speaker 10 不动）；另一位还要指定", async () => {
+    ontology();
+    const { t, host, meetingId } = await setup();
+    try {
+      await unmapped(t, meetingId);
+      const before = await getCard(t, host, meetingId);
+      expect(before.unmappedSpeakers).toEqual([{ id: "speaker:1", name: "Speaker 1" }, { id: "speaker:2", name: "Nexus" }]);
+      const res = await speakers(t, host, meetingId, { draftVersion: before.draftVersion, speakerId: "speaker:1", personId: OWNER });
+      expect(res.statusCode).toBe(200);
+      const view: TMeetingCardView = res.json();
+      expect(view.draftVersion).toBe(before.draftVersion + 1);
+      expect(view.unmappedSpeakers).toEqual([{ id: "speaker:2", name: "Nexus" }]);
+      expect(view.draft!.summary).toBe("测试丙 接 v2，Speaker 10 另说。");
+      expect(view.actionItems[0].text).toBe("测试丙 渠道看板接到 v2");
+      expect(view.draft!.participants.map((person) => person.name)).toContain("测试丙");
+      const [meeting] = await t.sql("SELECT transcript, participants FROM meetings WHERE id = $1", [meetingId]);
+      expect(meeting.transcript.turns[2].speakerId).toBe(OWNER);
+      expect(meeting.transcript.unmappedSpeakers).toEqual([{ id: "speaker:2", name: "Nexus" }]);
+      expect((meeting.participants as { personId: string }[]).map((person) => person.personId)).toContain(OWNER);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("「不是天枢里的人」只记下不再提示、卡不动；草稿版本过期 409；别人 404", async () => {
+    ontology();
+    const { t, host, owner, meetingId } = await setup();
+    try {
+      await unmapped(t, meetingId);
+      const before = await getCard(t, host, meetingId);
+      expect((await speakers(t, host, meetingId, { draftVersion: before.draftVersion - 1, speakerId: "speaker:2", personId: null })).statusCode).toBe(409);
+      expect((await speakers(t, owner, meetingId, { draftVersion: before.draftVersion, speakerId: "speaker:2", personId: null })).statusCode).toBe(404);
+      const res = await speakers(t, host, meetingId, { draftVersion: before.draftVersion, speakerId: "speaker:2", personId: null });
+      expect(res.statusCode).toBe(200);
+      const view: TMeetingCardView = res.json();
+      expect(view.draftVersion).toBe(before.draftVersion);
+      expect(view.unmappedSpeakers).toEqual([{ id: "speaker:1", name: "Speaker 1" }]);
+      expect((await speakers(t, host, meetingId, { draftVersion: view.draftVersion, speakerId: "speaker:2", personId: OWNER })).statusCode).toBe(404);
+    } finally {
+      await t.close();
+    }
+  });
+});

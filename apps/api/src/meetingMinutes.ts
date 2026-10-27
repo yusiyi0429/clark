@@ -10,7 +10,7 @@ import { MINUTES_GIVE_UP_MS, MINUTES_RECENT_MS, minutesStatusOf } from "./meetin
 import { getMeetingRow, meetingColumns, type MeetingRow, type Query } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
 import type { PostMeetingAgent } from "./outcome.js";
-import { buildTranscriptCandidate, executeConfirmTranscriptCandidate, saveTranscriptCandidate } from "./transcriptCandidate.js";
+import { buildTranscriptCandidate, executeConfirmTranscriptCandidate, saveTranscriptCandidate, suggestByAttendees } from "./transcriptCandidate.js";
 import { capturedAtOf, transcriptContentHash } from "./transcriptHash.js";
 import { FEISHU_TRANSCRIPT_PARSER_VERSION, parseFeishuTranscriptText } from "./transcriptMarkdown.js";
 
@@ -227,12 +227,13 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   }
 
   /** 实际参会名单：飞书会议的参会人 open_id 换成天枢的人；一个都对不上时不改（退回手填名单）。 */
-  async function actualAttendees(token: string, feishuMeetingId: string): Promise<string[] | null> {
+  /** 飞书会议的实际参会人：认得的（连过飞书的）换成 person_id，认不得的只记个数（排除法要求名单里每个人都认得）。 */
+  async function actualAttendees(token: string, feishuMeetingId: string): Promise<{ personIds: string[]; unknown: number } | null> {
     if (!feishu) return null;
     const openIds = await feishu.api.meetingParticipants(token, feishuMeetingId).catch(() => [] as string[]);
     if (!openIds.length) return null;
-    const mapped = (await q("SELECT person_id FROM feishu_identities WHERE open_id = ANY($1::text[]) ORDER BY person_id", [openIds])).rows.map((row) => row.person_id as string);
-    return mapped.length ? mapped : null;
+    const rows = (await q("SELECT open_id, person_id FROM feishu_identities WHERE open_id = ANY($1::text[]) ORDER BY person_id", [openIds])).rows as { open_id: string; person_id: string }[];
+    return { personIds: rows.map((row) => row.person_id), unknown: openIds.filter((openId) => !rows.some((row) => row.open_id === openId)).length };
   }
 
   /** 说话人对人：人员目录的显示名之外，再认飞书账号的名字。 */
@@ -293,7 +294,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     if (!parsed.ok) return fail(meeting.id, "fetch_failed", `妙记逐字稿解析失败：${parsed.error.message}`);
     const meetingRef = feishuMeetingId ?? minute.meetingId;
     const attendees = meetingRef ? await actualAttendees(token, meetingRef) : null;
-    if (attendees) await q("UPDATE meetings SET attendees_actual = $2::jsonb WHERE id = $1", [meeting.id, JSON.stringify(attendees)]);
+    if (attendees?.personIds.length) await q("UPDATE meetings SET attendees_actual = $2::jsonb WHERE id = $1", [meeting.id, JSON.stringify(attendees.personIds)]);
 
     const bytes = Buffer.from(text, "utf8");
     const title = minute.title || meeting.title;
@@ -309,7 +310,8 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
       contentHash: transcriptContentHash(text),
       capturedAt,
     };
-    const candidate = buildTranscriptCandidate(parsed.transcript.turns, await peopleWithFeishuNames(), source);
+    const people = await peopleWithFeishuNames();
+    const candidate = suggestByAttendees(buildTranscriptCandidate(parsed.transcript.turns, people, source), attendees, people);
     const saved = await saveTranscriptCandidate(pool, meeting.id, candidate, undefined, { keepExisting: !manual });
     if (!("row" in saved)) {
       await q("UPDATE meetings SET minute_token = $3 WHERE id = $1 AND minute_token = $2", [meeting.id, minute.token, meeting.minute_token]);

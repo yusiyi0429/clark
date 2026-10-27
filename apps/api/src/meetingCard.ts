@@ -3,6 +3,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   MeetingCardCandidate,
   MeetingCardDraftRequest,
+  MeetingCardSpeakerRequest,
   type TMeetingActionItem,
   type TMeetingCardCandidate,
   type TMeetingCardDraft,
@@ -11,6 +12,8 @@ import {
   type TMeetingObjectChange,
   type TMeetingSource,
   type TMyMeetingCard,
+  type TPersonResult,
+  type TStoredTranscript,
 } from "@warmap/contracts";
 import { confirmedView, currentConfirmation, draftChangeOf, meetingRecordState } from "./meetingCardConfirm.js";
 import { attendeesOf } from "./meetingDecisionView.js";
@@ -20,6 +23,7 @@ import { meetingAnchorGroups } from "./meetingWorld.js";
 import { insertNotification } from "./notifications.js";
 import { logEvent } from "./observability.js";
 import { capturedAtOf, meetingTranscriptUrl, transcriptContentHash } from "./transcriptHash.js";
+import { projectPerson } from "./transcriptCandidate.js";
 import type { WorldClient } from "./worldClient.js";
 import { anchorHead, recordedStart, type AnchorHeadClient } from "./worldMeetingEvent.js";
 
@@ -40,6 +44,8 @@ export type MeetingCardDeps = {
   publicOrigin?: string;
   /** 参会人的显示名（会议成员里没有的人从人员目录取）。 */
   names?: () => Map<string, string>;
+  /** 人员目录：在会议卡上把说话人指定给某人时，按它补进参会人。 */
+  people?: () => TPersonResult[];
 };
 export type Viewer = { personId: string; isCeo: boolean };
 type CardError = { status: number; code: string; message: string; fieldErrors?: Record<string, string>; view?: TMeetingCardView };
@@ -323,7 +329,75 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     return {
       draft: row?.draft ?? null, draftVersion: row?.draft_version ?? 0, draftStatus: row?.draft_status ?? "created", actionItems: row?.action_items ?? [],
       ...confirmedView(current), targetOptions, canEdit, draftChange: draftChangeOf(row?.draft ?? null, row?.action_items ?? [], current),
+      unmappedSpeakers: canEdit ? await openSpeakers(meetingId) : [],
     };
+  }
+
+  /** 逐字稿里还没对上人、主持人也没选「不是天枢里的人」的说话人。 */
+  async function openSpeakers(meetingId: string): Promise<{ id: string; name: string }[]> {
+    const transcript = (await q("SELECT transcript FROM meetings WHERE id = $1", [meetingId])).rows[0]?.transcript as TStoredTranscript | null | undefined;
+    return (transcript?.unmappedSpeakers ?? []).filter((speaker) => !speaker.kept).map((speaker) => ({ id: speaker.id, name: speaker.name }));
+  }
+
+  /**
+   * 在会议卡上指定说话人（排除法对不完的由主持人点一下）：对到某人时，逐字稿里这位说话人的发言改记到这个人、他补进参会人，
+   * 卡里写着原名的地方换成他的名字，草稿版本加一（行动项负责人这时就能选到他）；选「不是天枢里的人」只记下不再提示，卡不动。
+   */
+  async function assignSpeaker(meetingId: string, viewer: Viewer, body: unknown): Promise<{ view: TMeetingCardView } | { error: CardError }> {
+    const found = await access(meetingId, viewer);
+    if (!found?.canEdit) return NOT_FOUND;
+    if (!Value.Check(MeetingCardSpeakerRequest, body)) return { error: { status: 400, code: "INVALID_INPUT", message: "要指定的说话人或人员不合格式" } };
+    const person = body.personId ? deps.people?.().find((candidate) => candidate.personId === body.personId) : undefined;
+    if (body.personId && !person) return { error: { status: 400, code: "UNKNOWN_PERSON", message: "人员目录里没有这个人" } };
+    const client = await pool.connect();
+    let outcome: "done" | "changed" | "missing" = "done";
+    try {
+      await client.query("BEGIN");
+      const meeting = (await client.query("SELECT transcript, participants FROM meetings WHERE id = $1 FOR UPDATE", [meetingId])).rows[0] as
+        Pick<MeetingRow, "participants"> & { transcript: TStoredTranscript | null } | undefined;
+      const card = (await client.query("SELECT draft, action_items, draft_version FROM meeting_cards WHERE meeting_id = $1 FOR UPDATE", [meetingId])).rows[0] as
+        Pick<CardRow, "draft" | "action_items" | "draft_version"> | undefined;
+      const speakers = meeting?.transcript?.unmappedSpeakers ?? [];
+      const speaker = speakers.find((candidate) => candidate.id === body.speakerId && !candidate.kept);
+      if (!card?.draft || card.draft_version !== body.draftVersion) outcome = "changed";
+      else if (!meeting?.transcript || !speaker) outcome = "missing";
+      else if (!person) {
+        const transcript = { ...meeting.transcript, unmappedSpeakers: speakers.map((candidate) => candidate.id === speaker.id ? { ...candidate, kept: true as const } : candidate) };
+        await client.query("UPDATE meetings SET transcript = $2::jsonb, version = version + 1, updated_at = now() WHERE id = $1", [meetingId, JSON.stringify(transcript)]);
+      } else {
+        const rest = speakers.filter((candidate) => candidate.id !== speaker.id);
+        const transcript = {
+          ...meeting.transcript,
+          turns: meeting.transcript.turns.map((turn) => turn.speakerId === speaker.id ? { ...turn, speakerId: person.personId } : turn),
+          unmappedSpeakers: rest.length ? rest : undefined,
+        };
+        const participants = meeting.participants.some((existing) => existing.personId === person.personId) ? meeting.participants : [...meeting.participants, projectPerson(person)];
+        await client.query("UPDATE meetings SET transcript = $2::jsonb, participants = $3::jsonb, version = version + 1, updated_at = now() WHERE id = $1",
+          [meetingId, JSON.stringify(transcript), JSON.stringify(participants)]);
+        // 「Speaker 1」不能顺带换掉「Speaker 10」。
+        const pattern = new RegExp(`${speaker.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![0-9])`, "g");
+        const named = (text: string) => text.replace(pattern, person.displayName);
+        const draft: TMeetingCardDraft = {
+          ...card.draft,
+          summary: named(card.draft.summary),
+          sections: card.draft.sections.map((section) => ({ ...section, heading: named(section.heading), body: named(section.body) })),
+          participants: card.draft.participants.some((existing) => existing.name === person.displayName) ? card.draft.participants
+            : [...card.draft.participants, { name: person.displayName, personRef: deps.world?.config.people[person.personId] ?? null }],
+        };
+        const actionItems = card.action_items.map((item) => ({ ...item, text: named(item.text) }));
+        await client.query("UPDATE meeting_cards SET draft = $2::jsonb, action_items = $3::jsonb, draft_version = draft_version + 1, updated_at = now() WHERE meeting_id = $1",
+          [meetingId, JSON.stringify(draft), JSON.stringify(actionItems)]);
+      }
+      await client.query(outcome === "done" ? "COMMIT" : "ROLLBACK");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+    if (outcome === "changed") return { error: { status: 409, code: "DRAFT_CHANGED", message: "会议卡已被修改，请查看最新内容", view: await buildView(meetingId, true) } };
+    if (outcome === "missing") return { error: { status: 404, code: "SPEAKER_NOT_FOUND", message: "这位说话人已经指定过了" } };
+    return { view: await buildView(meetingId, true) };
   }
 
   async function view(meetingId: string, viewer: Viewer): Promise<{ view: TMeetingCardView } | typeof NOT_FOUND> {
@@ -478,7 +552,7 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     return meetings;
   }
 
-  return { view, saveDraft, anchorsChanged, pendingFor, refreshDraft: async (meetingId: string) => { await refreshDraft(meetingId); } };
+  return { view, saveDraft, assignSpeaker, anchorsChanged, pendingFor, refreshDraft: async (meetingId: string) => { await refreshDraft(meetingId); } };
 }
 
 export type MeetingCardService = ReturnType<typeof createMeetingCardService>;

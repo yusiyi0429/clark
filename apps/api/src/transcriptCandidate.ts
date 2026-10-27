@@ -37,7 +37,7 @@ export type TranscriptCandidateResult =
   | { status: 200; card: TCard }
   | { status: 400 | 404 | 409; code: string; message: string; fieldErrors?: Record<string, string> };
 
-function projectPerson(person: TPersonResult): TMeetingParticipant {
+export function projectPerson(person: TPersonResult): TMeetingParticipant {
   return { personId: person.personId, displayName: person.displayName, roles: [...person.roles], sourceRef: person.sourceRef, updatedAt: person.updatedAt };
 }
 
@@ -82,6 +82,28 @@ export function buildTranscriptCandidate(
     };
   });
   return { source, createdAt: new Date().toISOString(), speakers, turns, warnings };
+}
+
+const GENERIC_SPEAKER = /^(speaker|说话人)\s*\d+$/i;
+/**
+ * 飞书参会名单排除法（10/27）：按名字对完以后，只剩一个没对上的说话人、名单里也只剩一个没对上的人，而且名单里每个人都认得，就是他。
+ * 只认飞书的泛称（Speaker 1、说话人 1）；别的名字（例如账号名「Nexus」）不猜。对不上就原样返回，留给主持人在会议卡上指定。
+ */
+export function suggestByAttendees(candidate: TStoredTranscriptCandidate, attendees: { personIds: string[]; unknown: number } | null, people: TPersonResult[]): TStoredTranscriptCandidate {
+  if (!attendees || attendees.unknown > 0) return candidate;
+  const open = candidate.speakers.filter((speaker) => !speaker.suggestedPersonId);
+  const named = new Set(candidate.speakers.flatMap((speaker) => speaker.suggestedPersonId ? [speaker.suggestedPersonId] : []));
+  const left = [...new Set(attendees.personIds)].filter((personId) => !named.has(personId));
+  const person = left.length === 1 ? people.find((candidatePerson) => candidatePerson.personId === left[0]) : undefined;
+  if (open.length !== 1 || !person || !GENERIC_SPEAKER.test(open[0].speakerName.trim())) return candidate;
+  const speakerName = open[0].speakerName;
+  return {
+    ...candidate,
+    speakers: candidate.speakers.map((speaker) => speaker.speakerName === speakerName
+      ? { ...speaker, suggestedPersonId: person.personId, suggestedDisplayName: person.displayName } : speaker),
+    warnings: [...candidate.warnings.filter((warning) => !warning.startsWith(`说话人「${speakerName}」`)),
+      `说话人「${speakerName}」按飞书参会名单对到「${person.displayName}」`],
+  };
 }
 
 /**

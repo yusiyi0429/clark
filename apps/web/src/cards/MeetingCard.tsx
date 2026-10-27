@@ -1602,7 +1602,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           // 整卡确认了：重取会议卡（会议记为已处理完），进度线最后一步换成已确认。
           if (view.confirmed && source.status === "held") void reloadCard();
         }}
-        turns={source.transcript?.turns ?? []} speakerName={(speakerId) => speakerLabel(speakerId, people)} people={payload.participants} />
+        turns={source.transcript?.turns ?? []} speakerName={(speakerId) => speakerLabel(speakerId, people)} people={payload.participants}
+        onSpeakers={() => void reloadCard()} />
     </>
   ) : null;
   const legacyRecord = recordCard.status === "legacy";

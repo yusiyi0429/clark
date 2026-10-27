@@ -68,7 +68,7 @@ const confirmedOf = (source: TMeetingCardDraft, revision = 1): NonNullable<TMeet
 const SYNCED: TMeetingCardSync = { revision: 1, writeToWorld: true, event: { status: "succeeded", eventId: "ev-1", error: null },
   objects: [{ changeId: "chg-1", title: "接口全量切到 v2 · result", status: "updated", actualVersion: 5, error: null }] };
 const view = (overrides: Partial<TMeetingCardView> = {}): TMeetingCardView => ({
-  draft: draft(), draftVersion: 3, draftStatus: "draft_ready", actionItems: [], confirmed: null, sync: null, targetOptions: [], canEdit: true, draftChange: "none", ...overrides,
+  draft: draft(), draftVersion: 3, draftStatus: "draft_ready", actionItems: [], confirmed: null, sync: null, targetOptions: [], canEdit: true, draftChange: "none", unmappedSpeakers: [], ...overrides,
 });
 const ok = (data: TMeetingCardView) => ({ data, response: { ok: true, status: 200 } });
 
@@ -324,6 +324,36 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
     expect(hasText(tree, "接口全量切到 v2 · result · 已更新")).toBe(true);
     click(button(tree, "重试"));
     await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/card/retry", { params: { path: { id: "m1" } } }));
+  });
+
+  it("没对上人的说话人：点一下指定，带草稿版本发出，指定到人后会议页重读", async () => {
+    const initial = view({ unmappedSpeakers: [{ id: "speaker:1", name: "Speaker 1" }] });
+    api.post.mockResolvedValue(ok(view({ draftVersion: 4 })));
+    const onSpeakers = vi.fn();
+    const draw = () => { hooks.index = 0; hooks.refIndex = 0; return nodes(expand(MeetingRecordCard({ meetingId: "m1", initial, people: PEOPLE, onSpeakers }))); };
+    const picker = () => draw().find((node) => node.props?.["aria-label"] === "Speaker 1是谁" && "options" in node.props);
+    expect(hasText(draw(), "Speaker 1")).toBe(true);
+    (picker()!.props!.onChange as (value: string) => void)("p2");
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/card/speakers",
+      { params: { path: { id: "m1" } }, body: { draftVersion: 3, speakerId: "speaker:1", personId: "p2" } }));
+    await vi.waitFor(() => expect(onSpeakers).toHaveBeenCalledTimes(1));
+    expect(picker()).toBeUndefined();
+  });
+
+  it("说话人选「不是天枢里的人」：personId 为 null，会议页不用重读；只读的人看不到", async () => {
+    const initial = view({ unmappedSpeakers: [{ id: "speaker:2", name: "Nexus" }] });
+    api.post.mockResolvedValue(ok(view({ draftVersion: 3 })));
+    const onSpeakers = vi.fn();
+    hooks.index = 0; hooks.refIndex = 0;
+    const tree = nodes(expand(MeetingRecordCard({ meetingId: "m1", initial, people: PEOPLE, onSpeakers })));
+    const picker = tree.find((node) => node.props?.["aria-label"] === "Nexus是谁" && "options" in node.props)!;
+    const options = picker.props!.options as { value: string; label: string }[];
+    (picker.props!.onChange as (value: string) => void)(options.find((option) => option.label === "不是天枢里的人")!.value);
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/card/speakers",
+      { params: { path: { id: "m1" } }, body: { draftVersion: 3, speakerId: "speaker:2", personId: null } }));
+    expect(onSpeakers).not.toHaveBeenCalled();
+    hooks.values = []; hooks.refs = [];
+    expect(render(view({ canEdit: false, unmappedSpeakers: [{ id: "speaker:2", name: "Nexus" }] })).some((node) => node.props?.["aria-label"] === "Nexus是谁")).toBe(false);
   });
 
   it("行动项可以改负责人", async () => {

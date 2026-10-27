@@ -73,6 +73,17 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
     return ctx.fail(reply, status, code, message, { ...(fieldErrors ? { fieldErrors } : {}), ...(view ? { view } : {}) });
   });
 
+  // 在会议卡上指定没对上人的说话人：只有主持人或创建人（别人 404）；草稿版本过期 409 带最新视图。
+  app.post("/api/meetings/:id/card/speakers", {
+    preHandler: ctx.requirePerson, schema: { params: idParams, response: { 200: MeetingCardView } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "meeting_card.assign_speaker", objectRef: `meeting:${req.params.id}` });
+    const result = await followThrough.cards.assignSpeaker(req.params.id, { personId: req.person!.personId, isCeo: req.person!.role === "ceo" }, req.body);
+    if ("view" in result) return result.view;
+    const { status, code, message, view } = result.error;
+    return ctx.fail(reply, status, code, message, view ? { view } : undefined);
+  });
+
   // 整卡确认：只有主持人或创建人（别人 404）；草稿版本过期 409 带最新视图；确认后排写本体（选了不写入只留天枢）。
   app.post("/api/meetings/:id/card/confirm", {
     preHandler: ctx.requirePerson, schema: { params: idParams, body: MeetingCardConfirmRequest, response: { 200: MeetingCardView } },

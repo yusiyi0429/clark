@@ -165,6 +165,18 @@ export const MeetingCardView = Type.Object(
     targetOptions: Type.Array(MeetingCardTargetOption),
     canEdit: Type.Boolean(),
     draftChange: MeetingDraftChange,
+    /** 逐字稿里还没对上人的说话人（只给主持人和创建人；选过「不是天枢里的人」的不列）：在会议卡上指定是谁。 */
+    unmappedSpeakers: Type.Array(Type.Object({ id: Type.String(), name: Type.String() }, { additionalProperties: false })),
+  },
+  { additionalProperties: false },
+);
+
+/** 在会议卡上指定说话人：personId 是对到的人；null 是「不是天枢里的人」，保留原名。 */
+export const MeetingCardSpeakerRequest = Type.Object(
+  {
+    draftVersion: Type.Integer({ minimum: 0 }),
+    speakerId: Type.String({ pattern: "^speaker:\\d+$", maxLength: 50 }),
+    personId: Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -257,5 +269,6 @@ export type TMeetingCardSync = Static<typeof MeetingCardSync>;
 export type TMeetingCardView = Static<typeof MeetingCardView>;
 export type TMeetingDraftChange = Static<typeof MeetingDraftChange>;
 export type TMeetingCardDraftRequest = Static<typeof MeetingCardDraftRequest>;
+export type TMeetingCardSpeakerRequest = Static<typeof MeetingCardSpeakerRequest>;
 export type TMeetingCardConfirmRequest = Static<typeof MeetingCardConfirmRequest>;
 export type TMeetingCardCandidate = Static<typeof MeetingCardCandidate>;

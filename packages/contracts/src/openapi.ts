@@ -5,7 +5,7 @@ import {
   DraftRequestRequest, DraftRequestResponse, RequestListItem, RequestListResponse, PrepareRequestQuestionRequest,
   PrepareRequestQuestionResponse, DraftRequestAnswerResponse, RequestSendInput, RequestAskInput, RequestAnswerInput, ExecuteRequestActionRequest,
 } from "./requests.js";
-import { MeetingCardConfirmRequest, MeetingCardDraftRequest, MeetingCardView } from "./meetingCard.js";
+import { MeetingCardConfirmRequest, MeetingCardDraftRequest, MeetingCardSpeakerRequest, MeetingCardView } from "./meetingCard.js";
 import { MeetingDecisionView, MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse } from "./meetingDecisions.js";
 import { AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, OrganizeFeishuMinuteRequest } from "./feishuMinuteInbox.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
@@ -948,6 +948,15 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/MeetingCardDraftRequest" }),
           responses: { "200": { description: "保存后的会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/card/speakers": {
+        post: {
+          operationId: "assignMeetingCardSpeaker",
+          summary: "主持人或创建人指定一位没对上人的说话人：对到某人（卡里的原名换成这个人、加进参会人），或选「不是天枢里的人」保留原名；draftVersion 过期 409 DRAFT_CHANGED（带 view）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingCardSpeakerRequest" }),
+          responses: { "200": { description: "指定后的会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/meetings/{id}/card/confirm": {
@@ -3200,6 +3209,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeetingCardView: MeetingCardView as JsonSchema,
         MeetingCardDraftRequest: MeetingCardDraftRequest as JsonSchema,
         MeetingCardConfirmRequest: MeetingCardConfirmRequest as JsonSchema,
+        MeetingCardSpeakerRequest: MeetingCardSpeakerRequest as JsonSchema,
         MeetingMinutesLinkRequest: MeetingMinutesLinkRequest as JsonSchema,
         MeetingMinutesFetchResponse: MeetingMinutesFetchResponse as JsonSchema,
         MeetingWorldAnchorsRequest: MeetingWorldAnchorsRequest as JsonSchema,
