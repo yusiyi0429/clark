@@ -36,7 +36,7 @@ export function documentFieldLabel(level,key){
  if(key==='stop')return '停止条件';
  if(key==='risks')return '风险';
  if(key==='tier')return '档位';
- const review={verdict:'结果判定',verdictReason:'判定理由',facts:'事实证据',targets:'目标对照',causes:'原因',nextInputs:'下月输入',ltoReview:'长期目标审视'};if(review[key])return review[key];
+ const review={verdict:'结果判定',verdictReason:'判定理由',facts:'事实证据',targets:'目标对照',causes:'原因',nextInputs:'下期输入',ltoReview:'长期目标审视'};if(review[key])return review[key];
  const t=templateFields[level]||templateFields.activity;
  return [...t.core,...t.detail,...(t.plan||[]),...(t.extra||[])].find(([field])=>field===key)?.[1]||key;
 }

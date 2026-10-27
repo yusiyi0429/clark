@@ -19,6 +19,8 @@ export default function Handshake({node,profile,onAction,signerNames={},openIssu
  const confirm=slot=>{if(pending)return;setPending(slot);Promise.resolve(onAction({type:'confirm',slot})).finally(()=>setPending(null));};
  useEffect(()=>{const key=node.id+':'+node.version;const justCompleted=previous.current?.key===key&&!previous.current.complete&&complete;previous.current={key,complete};setCelebrate(justCompleted);if(justCompleted){const timer=setTimeout(()=>setCelebrate(false),1600);return()=>clearTimeout(timer);}},[node.id,node.version,complete]);
  if(!slots.length&&!node.upstreamChange)return null;
+ // 下级有调整 may also be checked by whoever signs this card (CEO on a unit or company review, the unit DRI on a unit review; M2 2026-10-27).
+ const signsHere=slots.some(slot=>allowed(slot));
  const mayCheck=node.level==='po'?profile.unitDri.includes(node.unit||node.id):profile.missions.includes(node.level==='mission'?node.id:node.id.split('-t')[0]);
  // One person can hold two slots (the CEO is also a domain DRI); name them once.
  const names=[...new Set(slots.map(slot=>signerNames[slot]||labels[slot]))];
@@ -30,7 +32,7 @@ export default function Handshake({node,profile,onAction,signerNames={},openIssu
   {!compact&&complete&&<p className="handshake-summary">{names.join('、')} {names.length>1?'已共同确认':'已确认'} v{node.version}，按此版本推进。</p>}
   {!compact&&!complete&&!node.upstreamChange&&<p className="handshake-summary">{summary||'双方都确认后，这一版即成为本月共同承诺。'}</p>}
   {/* 下级有调整 does not block confirming; the same 已核对 clears it (M2 2026-10-22). */}
-  {!node.upstreamChange&&node.downstreamChange&&<p>下级卡已更新{node.downstreamChange.staleDates?.length?`，本卡还写着 ${node.downstreamChange.staleDates.join('、')}`:''}，请核对是否要跟着改。<>{mayCheck?<Button className="plain" onPress={()=>onAction({type:'acknowledgeImpact'})}>已核对下级调整</Button>:<span>待成果负责人核对</span>}</></p>}
+  {!node.upstreamChange&&node.downstreamChange&&<p>下级卡已更新{node.downstreamChange.staleDates?.length?`，本卡还写着 ${node.downstreamChange.staleDates.join('、')}`:''}，请核对是否要跟着改。<>{mayCheck||signsHere?<Button className="plain" onPress={()=>onAction({type:'acknowledgeImpact'})}>已核对下级调整</Button>:<span>待成果负责人核对</span>}</></p>}
   {node.upstreamChange&&<p>上级成果已更新至 v{node.upstreamChange.version}，请核对影响。<>{mayCheck?<Button className="plain" onPress={()=>onAction({type:'acknowledgeImpact'})}>已核对上级调整</Button>:<span>待成果负责人核对</span>}</></p>}
   {/* Before confirming, show what is still open on this card so nobody confirms past their own unresolved notes. */}
   {!complete&&!node.upstreamChange&&openIssues.length>0&&slots.some(slot=>allowed(slot)&&!node.signatures?.some(s=>s.slot===slot))&&<div className="handshake-warning"><strong>还有 {openIssues.length} 项意见未处理</strong><ul>{openIssues.slice(0,4).map((t,i)=><li key={i}>{t}</li>)}</ul></div>}

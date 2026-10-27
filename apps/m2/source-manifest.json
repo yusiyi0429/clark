@@ -28,7 +28,7 @@
     },
     {
       "path": "app.jsx",
-      "sha256": "5d37bc857f8f39a4e52529968b1728e7975eb020e027dd88fc265d4ff6728967"
+      "sha256": "916650d3e9d333e605efc9eff852b7297ee2cfaf85d3dad1a65479bd122125d2"
     },
     {
       "path": "AuditStatus.jsx",
@@ -88,7 +88,7 @@
     },
     {
       "path": "document-template.mjs",
-      "sha256": "304f0594b8c9c7a116a54a5f9461fdb23c5393654f66178dfe9607d6ccbba9fe"
+      "sha256": "e0d1adb70b0ee1fc1fc963db864aead7eab14f324f30f256806d5f50cc0c28b7"
     },
     {
       "path": "DocumentCanvas.jsx",
@@ -132,7 +132,7 @@
     },
     {
       "path": "Handshake.jsx",
-      "sha256": "4027b928db256778cc2926d3fff937e5410bc58e9af5f35e0f1ece9d962ee47e"
+      "sha256": "56311747817b4c763215395b26506bb105dd37504f9e450ebf153f3a1989f926"
     },
     {
       "path": "index.html",
