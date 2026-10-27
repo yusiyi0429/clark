@@ -338,6 +338,22 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
 
 // ---------- checks before install ----------
 // The same rules the eval hard checks apply (eval/hard-checks.mjs reviewChecks), kept here so the product does not depend on eval/.
+// 程序检查没过的那几份各重写一次再查 (2026-10-27: one review with six 下期输入 threw away all 23 after 9 minutes).
+// Only reviews that exist are asked; what is still wrong after one try blocks the round as before.
+export async function repairReviews({gateway,skill,input,run,problems,save=async()=>{}}){
+ const system=`你是 TKOS 的月度复盘助手。按下面的技能工作。仅返回有效 JSON 对象，不加代码围栏。\n${skill.rules}`;
+ const items=input.stages.flat(),byUnit=Object.groupBy(problems.filter(p=>run.reviews[p.unit]),p=>p.unit);
+ run.repaired??=[];
+ await Promise.all(Object.entries(byUnit).map(async([id,list])=>{
+  const c=items.find(x=>x.id===id),key='repair-'+id+'-'+run.repaired.filter(x=>x===id).length;if(!c)return;
+  try{const answer=run.raw[key]||(await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify({task:'按技能「产品生成整轮复盘候选·检查」中的「修改」规则修改这份复盘：只改下面程序检查出的问题，其余照原样保留。'+fieldsHint,unit:unitData(c),review:run.reviews[id],issues:list.map(p=>({type:'程序检查',problem:p.problem}))})}],{thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000})).answer;
+   run.raw[key]=answer;const res=JSON.parse(bareJson(answer));
+   if(res?.review)run.reviews[id]={...res.review,unit:c.unit,level:c.level,ref:c.id,title:c.title,owner:c.owner,...(c.parent?{parent:c.parent==='company'?'company':c.parent}:{})};
+  }catch{}
+  run.repaired.push(id);await save(run);
+ }));
+ return run;
+}
 const tiers=['达成','部分达成','未达成'],nextTypes=new Set(['欠账','继续验证','停止','约束','待决策']),ltoChoices=new Set(['建议维持','建议修改','建议重开']);
 export function reviewProblems(run,input,{roster=[]}={}){
  const out=[],filled=v=>v!=null&&(Array.isArray(v)?v.length>0:String(v).trim()!=='');
@@ -393,7 +409,9 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
    }
    await setJob({inputCutoff:work.input.readAt,skipped:work.input.skipped,skill:{version:skill.version,hash:skill.hash.slice(0,12)}});
    await runReviewSkill({gateway,skill,input:work.input,run:work.run,save:async r=>{work.run=r;await save();},onProgress:p=>setJob(p)});
-   const checks=reviewProblems(work.run,work.input,{roster});
+   let checks=reviewProblems(work.run,work.input,{roster});
+   if(checks.length&&checks.some(p=>work.run.reviews[p.unit])){await setJob({stage:`检查有 ${checks.length} 处问题，重写这几份`});
+    await repairReviews({gateway,skill,input:work.input,run:work.run,problems:checks,save:async r=>{work.run=r;await save();}});checks=reviewProblems(work.run,work.input,{roster});}
    if(checks.length){await setJob({status:'failed',stage:'检查没过，没有装入',error:`有 ${checks.length} 处问题，现有复盘没动`,checks,finishedAt:new Date().toISOString()});return;}
    const label=`${Number(period.slice(5))} 月复盘 ${skill.version||''}（${cutoff.slice(5,10).replace('-','/')}）`.replace('  ',' ');
    const file=reviewFile(work.run,work.input,{skill,model,label,startedAt:store.snapshot().reviewJob?.createdAt||null});

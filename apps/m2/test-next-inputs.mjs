@@ -6,7 +6,7 @@ import {memberActor,sharedProjection} from './shared-projection.mjs';
 import {reviewTree,reviewTodos} from './review-display.mjs';
 import {handoffPackage} from './review-handoff.mjs';
 import {withReviewSources} from './review-sources.mjs';
-import {reviewProblems} from './review-generation.mjs';
+import {reviewProblems,repairReviews} from './review-generation.mjs';
 import {insightSynthesisRequest,reviewPatchProblem} from './nexus-review.mjs';
 import {notificationsFor} from './notifications.mjs';
 // 下期输入、截止时间、公司综合读全部洞察 (陈溪南 2026-10-27).
@@ -98,4 +98,15 @@ test('公开后还能补交洞察：补交的进群里，这份复盘和公司�
  s=applyAction(s,sun,{type:'insight',cardId:'rv:bf01-m1',text:'演示和真用要分开验收'});
  assert.match(s.messages.at(-1).text,/孙铭泽在「首用」下的分析洞察：演示和真用要分开验收/);assert.equal(s.messages.at(-1).scope,'bf01');
  assert.equal(s.insightNexus['rv:bf01-m1'],undefined);assert.equal(s.insightNexus['rv:company'],undefined);assert.equal(s.insightNexus['rv:bf01'].text,'单元综合','别的复盘不动');
+});
+
+test('程序检查没过的那份单独重写一次再查，不整轮作废；重写还不对的照样挡住',async()=>{
+ const input={stages:[run.reviews.map(r=>({id:r.ref,level:r.level==='ru'?'ru':r.level,unit:r.unit,title:r.title,owner:r.owner,parent:r.parent,tasks:r.level==='mission'?[{ref:'t1',title:'部署'},{ref:'t2',title:'客户试用'}]:[],children:r.level==='ru'?['bf01-m1']:r.level==='company'?['bf01']:[]}))]};
+ const reviews=Object.fromEntries(run.reviews.map(r=>[r.ref,structuredClone(r)]));reviews['bf01-m1'].nextInputs=Array(6).fill({ref:'t2',type:'继续',text:'接着做'});
+ const work={raw:{},reviews,failed:[]},roster=['刘明华','孙铭泽'],asked=[];
+ const problems=reviewProblems(work,input,{roster});assert.deepEqual(problems.map(p=>p.unit+':'+p.problem),['bf01-m1:下期输入最多 5 条']);
+ const gateway={async complete(messages){const u=JSON.parse(messages[1].content);asked.push(u.unit.id);return {answer:JSON.stringify({analysis:'',review:{...u.review,nextInputs:u.review.nextInputs.slice(0,2)}})};}};
+ await repairReviews({gateway,skill:{rules:''},input,run:work,problems});
+ assert.deepEqual(asked,['bf01-m1'],'只重写有问题的那一份');assert.equal(work.reviews['bf01-m1'].nextInputs.length,2);
+ assert.deepEqual(reviewProblems(work,input,{roster}),[]);
 });
