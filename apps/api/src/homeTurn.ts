@@ -7,6 +7,7 @@ import { SESSION_COOKIE, createSessionToken } from "./session.js";
  * 从天枢以外的地方（飞书私聊、微信 ClawBot）以本人身份在首页对话里说一句（scope = global）：
  * 走同一个对话接口（同一条主对话、同一套权限和上下文），问与答存进对话记录并标上来源（via），网页打开着会自己读到。
  * 上一轮还在写（网页或别处问的）时隔几秒再试，最多等 10 分钟。
+ * 首页对话切到独立 Chat（CHAT_SERVICE_URL）时这一轮存在 Chat 里、天枢库里没有：回答取流里收到的文字，来源也标不上。
  */
 const SCOPE = "global";
 const BUSY_RETRY_MS = 5_000;
@@ -69,8 +70,10 @@ export async function homeTurn(
     }
     let runId: string | null = null;
     let failure: string | null = null;
+    let streamed = "";
     for await (const event of sseEvents(stream)) {
       if (!runId && typeof event.runId === "string") { runId = event.runId; await markVia(runId); }
+      if (event.type === "message" && typeof event.delta === "string") streamed += event.delta;
       if (event.type === "error") failure = typeof event.message === "string" ? event.message : "这次回答没有完成。";
       await options.onEvent?.(event);
     }
@@ -79,6 +82,6 @@ export async function homeTurn(
     const saved = (await q(
       `SELECT m.content, r.input_snapshot -> 'cards' AS cards FROM conversation_messages m LEFT JOIN agent_runs r ON r.id = m.run_id
         WHERE m.run_id = $1 AND m.role = 'assistant' ORDER BY m.sequence DESC LIMIT 1`, [runId])).rows[0] as { content: string; cards: unknown } | undefined;
-    return { kind: "done", runId, content: saved?.content ?? null, cards: saved?.cards ?? null, failure };
+    return { kind: "done", runId, content: saved?.content ?? (streamed || null), cards: saved?.cards ?? null, failure };
   }
 }
