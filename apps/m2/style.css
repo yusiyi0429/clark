@@ -1361,3 +1361,11 @@ body.is-col-resizing{cursor:col-resize;user-select:none}
 .group-members-panel b{font-size:13px;font-weight:600;color:#102c46}
 .group-members-panel small{font-size:12px;color:#6b7b8a}
 .group-members-panel li.is-limited b{color:#6b7b8a;font-weight:500}
+/* group members: same pill as the tabs beside it, no click ring (2026-10-27) */
+:root .chat-top .group-members-stack{height:40px;padding:0 10px 0 8px;gap:0;border-radius:999px;background:#eef2f6;outline:none;box-shadow:none}
+:root .chat-top .group-members-stack:hover{background:#e6ebf1}
+:root .chat-top .group-members-stack:focus{outline:none}
+:root .chat-top .group-members-stack:focus-visible{outline:2px solid #376aff66;outline-offset:2px}
+:root .chat-top .group-member-slot{box-shadow:0 0 0 1.5px #eef2f6}
+:root .chat-top .group-member-face{width:20px!important;height:20px!important}
+:root .chat-top .group-members-more{margin-left:6px;font-size:12px;font-weight:500;color:#5b6b7a}
