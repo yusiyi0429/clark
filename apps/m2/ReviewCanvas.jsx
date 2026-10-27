@@ -5,7 +5,7 @@ import Handshake from './Handshake.jsx';
 import TodoPanel from './TodoPanel.jsx';
 import {enterSubmit} from './enter-submit.mjs';
 import {CommentBubble,CommentScope} from './DocumentContent.jsx';
-import {verdictTone,targetParts,richParts,reviewLabel,reviewSlots,maySign,mineFirst,reviewTodos,answerOf,ownerNames,confirmState,unitShort} from './review-display.mjs';
+import {verdictTone,targetParts,richParts,reviewLabel,reviewSlots,maySign,mineFirst,reviewTodos,answerOf,ownerNames,confirmState,unitShort,personId,personCards} from './review-display.mjs';
 // 复盘 pages (陈溪南 2026-10-20/21): the plan's layout, five rows per review, same groups, comments and handshake.
 const Verdict=({value,small})=><span className={`review-verdict tone-${verdictTone(value)}${small?' is-small':''}`}>{value||'待判定'}</span>;
 function Rich({text,evidence}){return richParts(text).map((p,i)=>p.bold?<strong key={i}>{p.bold}</strong>:p.evidence?<sup key={i} className="review-evidence" title={evidence?.[p.evidence]?`${p.evidence} · ${evidence[p.evidence].date||''} · ${evidence[p.evidence].title||''}`:`${p.evidence}：证据来源见本轮输入`}>{p.evidence}</sup>:<React.Fragment key={i}>{p.text}</React.Fragment>);}
@@ -134,6 +134,15 @@ export function InsightCard({node,data,profile,onInsight}){
    :<button type="button" className="insight-add" onClick={()=>setOpen(true)}>＋ 添加洞察</button>)}
  </div>;
 }
+function PersonSummary({name,cards,me,months,unitLabel,onOpen}){
+ const mineToSign=name===me?cards.filter(n=>n.status!=='已确认').length:0,done=cards.filter(n=>n.status==='已确认').length;
+ const state=mineToSign?`待你确认 ${mineToSign} 份`:done===cards.length?'已确认':`已确认 ${done}/${cards.length}`;
+ return <article role="button" tabIndex={0} aria-label={`打开 ${name}的个人复盘`} onClick={onOpen} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen();}}} className="plan-doc-node doc-summary review-summary person-summary doc-mission tone-mission">
+  <div className="card-head"><span className="level-tag">个人复盘</span><span className="card-meta"><span className="person">{name}</span><span>{cards.length} 个 Mission</span></span><span className="card-head-end"><span className={`state${mineToSign?' is-mine':''}`} data-confirmed={done===cards.length}>{state}</span></span></div>
+  <h2>{name==='未指派'?`未指派负责人的 Mission 复盘`:name===me?'我的'+months.from+'个人复盘':`${name}的${months.from}个人复盘`}</h2>
+  <ul className="person-summary-list">{cards.map(n=><li key={n.id}><span className="person-summary-tag">{unitShort(unitLabel(n))} · {reviewLabel(n)}</span>{n.title}{n.verdict&&<Verdict value={n.verdict} small/>}</li>)}</ul>
+ </article>;
+}
 export function ReviewSummary({node,onOpen,unitLabel,comments=[],tone='domain',stateOf}){
  const st=stateOf?stateOf(node):{text:node.status,mine:false};
  return <article role="button" tabIndex={0} aria-label={`打开 ${node.title}`} onClick={()=>onOpen(node)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen(node);}}} className={`plan-doc-node doc-summary review-summary doc-${node.level==='mission'?'mission':'po'} tone-${tone}`} data-document-node={node.id}>
@@ -150,26 +159,32 @@ export default function ReviewCanvas({insights={},onInsight,ceoName='CEO',onRevi
   // Only the reviews someone is part of (陈溪南 2026-10-23): seeing a unit because of next month's plan is not a reason
   // to list its October review here. The CEO's list already holds every unit.
   const others=[];
+  // 个人复盘 (陈溪南 2026-10-27): one entry per person for the Missions on my list; mine first.
+  const people=[...new Set(mine.filter(n=>n.level==='mission').flatMap(n=>n.ownerAssigned===false?['未指派']:ownerNames(n).slice(0,1)))].sort((a,b)=>(b===profile.name)-(a===profile.name));
   // Reviews the run could not write (or wrote without background) are named here, never left silently missing.
   // Members see only what the data left out (陈溪南 2026-10-23); program-side issues (拒答、降级) are for 管理, not this page.
   const missing=review?.skipped||[],problems=(review?.problems||[]).filter(p=>p.kind==='missing'),refName=ref=>{const [unit,m]=String(ref).split('-m'),po=tree.nodes.find(n=>n.level==='po'&&(n.unit===unit||n.ref===unit));return `${po?unitLabel(po):unit}${m?` M${m.padStart(2,'0')}`:''}`;};
   return <div className="plan-doc-canvas document-catalog review-catalog" aria-label="复盘目录">
    {(missing.length>0||problems.length>0)&&<div className="review-problems" role="status"><p>本体里缺少材料，以下没有复盘：</p>{missing.map((t,i)=><p key={'s'+i}>{t}</p>)}{problems.map(p=><p key={p.ref}><strong>{refName(p.ref)}</strong>{p.reason}</p>)}</div>}
-   <section className="catalog-group">{mine.map(n=><ReviewSummary key={n.id} node={n} stateOf={stateOf} tone={toneOf(n)} onOpen={onOpen} unitLabel={unitLabel} comments={comments[n.id]}/>)}</section>
+   <section className="catalog-group">{mine.filter(n=>n.level!=='mission').map(n=><ReviewSummary key={n.id} node={n} stateOf={stateOf} tone={toneOf(n)} onOpen={onOpen} unitLabel={unitLabel} comments={comments[n.id]}/>)}
+    {people.map(name=><PersonSummary key={name} name={name} cards={personCards(mine,name)} me={profile.name} months={months} unitLabel={unitLabel} onOpen={()=>onOpen({id:personId(name),level:'person',person:name,title:`${name}的个人复盘`})}/>)}</section>
    {others.length>0&&<section className="catalog-group">{others.map(n=><ReviewSummary key={n.id} node={n} stateOf={stateOf} tone={toneOf(n)} onOpen={onOpen} unitLabel={unitLabel} comments={comments[n.id]}/>)}</section>}
   </div>;
  }
- const node=tree.byId.get(active.id)||active;
- // The company review closes the month: it waits for every other review, and confirming it starts next month's plan.
- const open=node.level==='company'?tree.nodes.filter(n=>n.level!=='company'&&n.status!=='已确认'):[];
- // 确认 needs one insight first (陈溪南 2026-10-27): the button still reads 确认; pressing it says so and opens a blank note.
- const owesInsight=isFactsCard(node)&&(insights[node.id]?.missing||[]).includes(profile.name);
- const goWrite=()=>{const box=document.querySelector(`[data-insight-card="${CSS.escape(node.id)}"]`);box?.scrollIntoView({block:'center',behavior:'smooth'});box?.querySelector('.insight-add')?.click();};
- const handshake=<Handshake compact gate={owesInsight?{text:'确认前至少贴一条洞察',onPress:goWrite}:null} node={node} locked={open.length?{text:`还有 ${open.length} 份复盘未确认`,title:open.map(n=>n.level==='mission'?`${unitLabel(n)} ${reviewLabel(n)}`:unitLabel(n)).join('、')}:null} profile={{...profile,missions:ownerNames(node).includes(profile.name)?[...(profile.missions||[]),node.id]:profile.missions||[]}} slots={reviewSlots(node)} summary={isFactsCard(node)?(node.level==='company'?`确认判定和事实证据后，${months.from}复盘全部定稿，Nexus 开始生成 ${months.to}拆解。分析洞察不用确认。`:'确认的是上面的判定和事实证据；下面的分析洞察不用确认。确认不等于结果达成。'):node.level==='company'?`CEO 确认后，${months.from}复盘全部定稿，Nexus 开始生成 ${months.to}拆解。`:'确认复盘，也就确认了下方的下月输入，它们会作为下月拆解的输入。确认不等于结果达成。'} signerNames={signerNames(node)} onAction={value=>onAction({...value,cardId:node.id,baseVersion:node.version})}/>;
- return <CommentScope me={me} onDeleteComment={onDeleteComment} annotation={annotation}>
-  <div className="plan-doc-canvas document-page" aria-label="复盘文档"><div className="document-primary review-primary">
-   <ReviewCard node={node} tone={toneOf(node)} onRevise={onRevise} profile={profile} comments={comments[node.id]||[]} onDetail={onDetail} onAnswer={onAnswer} evidence={evidence} unitLabel={unitLabel} dueAt={isFactsCard(node)?dueOf(review):null} footer={handshake} insight={isFactsCard(node)?<InsightCard node={node} data={insights[node.id]} profile={profile} onInsight={onInsight}/>:null} insightState={isFactsCard(node)?(insights[node.id]?.revealed?'已公开':'未公开'):''}/>
-   {/* No Mission list under a PO review (陈溪南 2026-10-26): each Mission review is on the home list of whoever is part of it. */}
-  </div></div>
+ const fullCard=node=>{
+  // The company review closes the month: it waits for every other review, and confirming it starts next month's plan.
+  const open=node.level==='company'?tree.nodes.filter(n=>n.level!=='company'&&n.status!=='已确认'):[];
+  // 确认 needs one insight first (陈溪南 2026-10-27): the button still reads 确认; pressing it says so and opens a blank note.
+  const owesInsight=isFactsCard(node)&&(insights[node.id]?.missing||[]).includes(profile.name);
+  const goWrite=()=>{const box=document.querySelector(`[data-insight-card="${CSS.escape(node.id)}"]`);box?.scrollIntoView({block:'center',behavior:'smooth'});box?.querySelector('.insight-add')?.click();};
+  const handshake=<Handshake compact gate={owesInsight?{text:'确认前至少贴一条洞察',onPress:goWrite}:null} node={node} locked={open.length?{text:`还有 ${open.length} 份复盘未确认`,title:open.map(n=>n.level==='mission'?`${unitLabel(n)} ${reviewLabel(n)}`:unitLabel(n)).join('、')}:null} profile={{...profile,missions:ownerNames(node).includes(profile.name)?[...(profile.missions||[]),node.id]:profile.missions||[]}} slots={reviewSlots(node)} summary={isFactsCard(node)?(node.level==='company'?`确认判定和事实证据后，${months.from}复盘全部定稿，Nexus 开始生成 ${months.to}拆解。分析洞察不用确认。`:'确认的是上面的判定和事实证据；下面的分析洞察不用确认。确认不等于结果达成。'):node.level==='company'?`CEO 确认后，${months.from}复盘全部定稿，Nexus 开始生成 ${months.to}拆解。`:'确认复盘，也就确认了下方的下月输入，它们会作为下月拆解的输入。确认不等于结果达成。'} signerNames={signerNames(node)} onAction={value=>onAction({...value,cardId:node.id,baseVersion:node.version})}/>;
+  return <ReviewCard key={node.id} node={node} tone={toneOf(node)} onRevise={onRevise} profile={profile} comments={comments[node.id]||[]} onDetail={onDetail} onAnswer={onAnswer} evidence={evidence} unitLabel={unitLabel} dueAt={isFactsCard(node)?dueOf(review):null} footer={handshake} insight={isFactsCard(node)?<InsightCard node={node} data={insights[node.id]} profile={profile} onInsight={onInsight}/>:null} insightState={isFactsCard(node)?(insights[node.id]?.revealed?'已公开':'未公开'):''}/>
+ };
+ const page=(label,children)=><CommentScope me={me} onDeleteComment={onDeleteComment} annotation={annotation}>
+  <div className="plan-doc-canvas document-page" aria-label={label}><div className="document-primary review-primary">{children}</div></div>
  </CommentScope>;
+ // 个人复盘 page: every Mission this person owns that I can see, one full card each, each confirmed by its owner.
+ if(active.level==='person'){const cards=personCards(tree.nodes,active.person);return page('个人复盘',<>{cards.length?cards.map(fullCard):<p className="review-none">这里没有你能看到的 Mission 复盘。</p>}</>);}
+ const node=tree.byId.get(active.id)||active;
+ return page('复盘文档',fullCard(node));
 }

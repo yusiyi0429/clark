@@ -15,7 +15,12 @@ export function reviewTree(drafts,unitOrder=[]){
  return {nodes:nodes.sort((a,b)=>order(a)-order(b)||pos(a.unit)-pos(b.unit)||String(a.ref).localeCompare(String(b.ref),'en',{numeric:true})),byId};
 }
 // Slots and who holds them, the same as the plan; a review Mission is held by whoever the review names.
-export const reviewSlots=n=>n.level==='company'?['ceo']:n.level==='po'?['ceo','unitDri']:['unitDri','missionDri'];
+// A Mission review (个人复盘) is confirmed by its owner alone; the unit DRI reads, comments and revises (陈溪南 2026-10-27).
+export const reviewSlots=n=>n.level==='company'?['ceo']:n.level==='po'?['ceo','unitDri']:['missionDri'];
+// 个人复盘: one document per person, holding the Missions they own (陈溪南 2026-10-27).
+export const personId=name=>'rv:person:'+name;
+// Missions with no owner in the ontology (ownerAssigned:false) gather under 未指派, not under the unit DRI who signs them.
+export const personCards=(nodes,name)=>nodes.filter(n=>n.level==='mission'&&(name==='未指派'?n.ownerAssigned===false:n.ownerAssigned!==false&&ownerNames(n).includes(name)));
 export function maySign(n,slot,p){return slot==='ceo'?p.ceo===true:slot==='unitDri'?(p.unitDri||[]).includes(n.unit):ownerNames(n).includes(p.name);}
 // Directly mine: CEO → company and every unit PO; unit DRI → own unit PO and its Missions; Mission owner → own Mission and its unit PO.
 export function mineFirst(nodes,p){
