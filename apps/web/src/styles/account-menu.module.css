@@ -160,6 +160,14 @@
 .error { margin: 0; color: #a44d3e; font-size: 12.5px; }
 .done { margin: 0; color: #2f7a44; font-size: 13.5px; line-height: 1.7; }
 
+/* 连接微信：二维码居中，下面一行状态；过期时二维码变淡。 */
+.wechatQr { display: grid; justify-items: center; gap: 12px; padding: 4px 0 2px; }
+.qrFrame { padding: 14px; border-radius: 16px; background: #fff; box-shadow: 0 0 0 1px rgb(15 23 42 / 8%); line-height: 0; transition: opacity var(--dur-snap) var(--ease-swift); }
+.qrFrame[data-expired] { opacity: .25; }
+.wechatStatus { margin: 0; color: #4f5a6b; font-size: 13.5px; line-height: 1.7; }
+.quietButton.quietButton { min-height: 36px; padding: 0 14px; border-radius: 10px; color: #6b7482; font-size: 13.5px; }
+@media (prefers-reduced-motion: reduce) { .qrFrame { transition: none; } }
+
 /* 雷达设置：内容栏与引导同宽（560px），内容长时在弹窗里滚动；编辑器自己的厚玻璃卡在这里并进弹窗，不叠第二层。 */
 .dialog.wide { box-sizing: border-box; width: min(560px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 48px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 20px 24px 24px; border-radius: var(--onboarding-card-radius); }
 .wide > section { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }

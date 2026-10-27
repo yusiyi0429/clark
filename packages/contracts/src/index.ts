@@ -35,6 +35,7 @@ export * from "./personalMemory.js";
 export * from "./memoryImport.js";
 export * from "./collector.js";
 export * from "./feishu.js";
+export * from "./wechat.js";
 export * from "./weeklyReviews.js";
 export * from "./admin.js";
 export * from "./usage.js";

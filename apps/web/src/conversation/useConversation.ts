@@ -37,8 +37,8 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   answers?: TAskAnswerRecord;
   /** carried：转议题时从首页带过来的一段；trace：首页留痕行「已转到议题 X」，meta.href 直达。 */
   kind?: "carried" | "trace";
-  /** 这一句是在飞书私聊天枢机器人时说的（问与答都标）。 */
-  via?: "feishu";
+  /** 这一句是在飞书私聊天枢机器人或微信 ClawBot 里说的（问与答都标）。 */
+  via?: "feishu" | "wechat";
   meta?: { issueId?: string; title?: string; href?: string } };
 export type Attachment = { id: string; fileName: string; mimeType: string };
 export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | "aborted";
@@ -105,7 +105,7 @@ export const CONVERSATION_SEND = "conversation-send";
 export const CONVERSATION_TURN_SENT = "conversation-turn-sent";
 export const CONVERSATION_TURN_SETTLED = "conversation-turn-settled";
 
-/** 飞书私聊机器人说的话记在首页对话里：开着时多久看一眼有没有新的；飞书里刚问、还没答完时看得勤一些。 */
+/** 飞书私聊机器人、微信 ClawBot 说的话记在首页对话里：开着时多久看一眼有没有新的；那边刚问、还没答完时看得勤一些。 */
 export const FEISHU_POLL_MS = 10_000;
 export const FEISHU_WAITING_POLL_MS = 3_000;
 
@@ -115,10 +115,13 @@ export function historySignature(list: Message[]): string {
   return `${list.length}:${last?.sequence ?? 0}:${last?.content.length ?? 0}:${last?.via ?? ""}`;
 }
 
-/** 飞书里问了、还没答完：最后一条是飞书来的提问。 */
+/** 来源标签上的字。 */
+export const VIA_LABEL = { feishu: "飞书", wechat: "微信" } as const;
+
+/** 飞书或微信里问了、还没答完：最后一条是从那边来的提问。 */
 export function feishuWaiting(list: Message[]): boolean {
   const last = list.at(-1);
-  return last?.role === "user" && last.via === "feishu";
+  return last?.role === "user" && last.via !== undefined;
 }
 
 export function messagesEndpoint(scope: string): string {

@@ -318,6 +318,8 @@ collectorDistillScheduler.start();
 await app.listen({ port, host: "0.0.0.0" });
 // 飞书长连接：收到事件只落库并排 jobs，3 秒内 ack。
 feishuEvents = env.feishu ? startFeishuEventStream(pool, env.feishu) : undefined;
+// 微信 ClawBot：已绑定的人开始收消息，定时推送通知；停机时 app.close() 收尾。
+void app.wechat?.start().catch((error: Error) => console.error("wechat start failed", error));
 console.log(`warmap api listening on :${port} (${join(".", "migrations")} applied, build ${env.buildSha})`);
 // 停机（部署换版本、重启）：正在写的对话先以「服务更新」收尾存档，界面连上新实例后自动接着写；再关服务和后台任务后退出。
 let stopping = false;

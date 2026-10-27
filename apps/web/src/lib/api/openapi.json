@@ -313,6 +313,91 @@
         }
       }
     },
+    "/api/me/wechat": {
+      "get": {
+        "operationId": "getMyWechatConnection",
+        "summary": "本人的微信 ClawBot 连接状态（等扫码时带二维码内容）；没接微信时 404",
+        "responses": {
+          "200": {
+            "description": "微信连接状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WechatConnection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "disconnectMyWechat",
+        "summary": "断开本人的微信 ClawBot",
+        "responses": {
+          "204": {
+            "description": "已断开"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/wechat/connect": {
+      "post": {
+        "operationId": "connectMyWechat",
+        "summary": "开始连接微信：要一张绑定二维码，后台等本人扫码确认；正在等扫码时沿用同一张",
+        "responses": {
+          "200": {
+            "description": "微信连接状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WechatConnection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/feishu/start": {
       "get": {
         "operationId": "startFeishuAuth",
@@ -16616,6 +16701,52 @@
           }
         }
       },
+      "WechatConnection": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "anyOf": [
+              {
+                "const": "none",
+                "type": "string"
+              },
+              {
+                "const": "waiting",
+                "type": "string"
+              },
+              {
+                "const": "scanned",
+                "type": "string"
+              },
+              {
+                "const": "expired",
+                "type": "string"
+              },
+              {
+                "const": "connected",
+                "type": "string"
+              },
+              {
+                "const": "stale",
+                "type": "string"
+              }
+            ]
+          },
+          "qrcodeUrl": {
+            "type": "string"
+          },
+          "welcomed": {
+            "type": "boolean"
+          },
+          "paused": {
+            "type": "boolean"
+          }
+        }
+      },
       "ChangePasscodeRequest": {
         "additionalProperties": false,
         "type": "object",
@@ -17581,8 +17712,16 @@
                   ]
                 },
                 "via": {
-                  "const": "feishu",
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "const": "feishu",
+                      "type": "string"
+                    },
+                    {
+                      "const": "wechat",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "meta": {
                   "additionalProperties": false,

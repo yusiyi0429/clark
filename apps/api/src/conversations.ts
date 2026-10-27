@@ -412,7 +412,7 @@ function historyMessage(row: MessageRow): TConversationHistory["messages"][numbe
     // 回答 Agent 提问的那条：问答记录存在 meta.answers（routes/conversations.ts 按提问卡核对后写入）。
     ...(row.role === "user" && row.meta?.answers && typeof row.meta.answers === "object" ? { answers: row.meta.answers as TAskAnswerRecord } : {}),
     ...(row.kind === "carried" || row.kind === "trace" ? { kind: row.kind } : {}),
-    ...(row.meta?.via === "feishu" ? { via: "feishu" as const } : {}),
+    ...(row.meta?.via === "feishu" || row.meta?.via === "wechat" ? { via: row.meta.via as "feishu" | "wechat" } : {}),
     ...(row.kind === "trace" && row.meta ? { meta: Object.fromEntries((["issueId", "title", "href"] as const)
       .flatMap((key) => (typeof row.meta?.[key] === "string" ? [[key, row.meta[key]]] : []))) } : {}),
   };

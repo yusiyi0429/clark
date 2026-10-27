@@ -47,6 +47,9 @@ import { clientTagFor, enterRequestClient, tracingEnabled } from "./tracing.js";
 import type { FeishuEnv } from "./feishu/config.js";
 import { createFeishuClient, type FeishuClient } from "./feishu/client.js";
 import { createFeishuChat, type FeishuChat } from "./feishuChat.js";
+import { createIlink, type Ilink } from "./wechat/ilink.js";
+import { createWechatService, type WechatService } from "./wechat/service.js";
+import { registerWechatRoutes } from "./routes/wechat.js";
 import { registerFeishuAuthRoutes } from "./routes/feishu.js";
 import { createMeetingFollowThrough, type MeetingFollowThrough } from "./meetingFollowThrough.js";
 import type { ImpactAgent } from "./impactAgent.js";
@@ -237,6 +240,8 @@ declare module "fastify" {
     /** 会后分派的归位（task.place）；server.ts 注册给 jobs worker。 */
     taskPlacementJobs: Record<string, JobHandler>;
     feishuChat: FeishuChat | undefined;
+    /** 微信 ClawBot；server.ts 启动后调 start() 开始收消息和推送。没接飞书（借用它的令牌密钥）时为空。 */
+    wechat: WechatService | undefined;
   }
 }
 
@@ -274,6 +279,8 @@ export async function buildApp({
   webSearch,
   outlets,
   feishuClient,
+  wechatIlink,
+  wechatAvatar,
   meetingFollowThroughAgents,
   docChangeAgent,
   battlefieldSummaryAgent,
@@ -338,6 +345,10 @@ export async function buildApp({
   outlets?: RadarOutletAdapter;
   /** 飞书开放接口；缺省按 env.feishu 装配真实客户端（测试注入假实现）。 */
   feishuClient?: FeishuClient;
+  /** 微信 ClawBot 的 iLink 接口；缺省用真实接口（测试注入假实现）。 */
+  wechatIlink?: Ilink;
+  /** 连上微信后发的天枢头像图；缺省读网页的应用图标（测试注入）。 */
+  wechatAvatar?: () => Promise<Buffer>;
   /** 影响卡追问、妙记与日历接口（测试注入假实现）；缺省用 heavy 模型与真实飞书接口。 */
   meetingFollowThroughAgents?: { impact?: ImpactAgent; minutesApi?: FeishuMinutesApi; calendarApi?: FeishuCalendarApi };
   /** 文档变更找候选的 Agent（测试注入假实现）；缺省用快模型。 */
@@ -752,6 +763,16 @@ export async function buildApp({
   const feishuChat = feishuApi ? createFeishuChat({ app, pool, client: feishuApi, env, peopleDirectory }) : undefined;
   app.decorate("feishuChat", feishuChat);
   if (feishuChat) app.addHook("onClose", async () => { await feishuChat.idle(); });
+  // 微信 ClawBot（wechat/）：本人扫码后在微信里问天枢、收通知。bot token 用飞书的令牌密钥加密，所以接了飞书才开。
+  const wechat = env.feishu ? createWechatService({
+    app, pool, ilink: wechatIlink ?? createIlink(), avatar: wechatAvatar, peopleDirectory,
+    env: { sessionSecret: env.sessionSecret, publicOrigin: env.publicOrigin, tokenKey: env.feishu.tokenKey, tokenKeyVersion: env.feishu.tokenKeyVersion },
+  }) : undefined;
+  app.decorate("wechat", wechat);
+  if (wechat) {
+    registerWechatRoutes(app, ctx, wechat);
+    app.addHook("onClose", async () => { await wechat.close(); });
+  }
 
   return app;
 }
