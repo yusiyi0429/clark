@@ -92,6 +92,7 @@ import { registerSystemRoutes } from "./routes/system.js";
 import { registerThreadRoutes } from "./routes/threads.js";
 import { registerRecordingRoutes } from "./routes/recordings.js";
 import { registerMeRoutes } from "./routes/me.js";
+import { registerTaskQualityRoutes } from "./routes/taskQuality.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.js";
 import { registerSeenMarkRoutes } from "./routes/seenMarks.js";
 import { registerMissionCardRoutes } from "./routes/missionCards.js";
@@ -182,6 +183,11 @@ export type AppEnv = {
   ontologyServiceToken?: string;
   /** 独立 Chat 读确认会议的服务凭据（INTERNAL_CHAT_TOKEN）；不配时 /internal/confirmed-meetings 不注册。 */
   internalChatToken?: string;
+  /**
+   * 独立 Chat 服务的地址（CHAT_SERVICE_URL，如预发的 http://chat:3101）：设了，首页对话（scope=global）的历史、发送、附件改走 Chat，
+   * 用 INTERNAL_CHAT_TOKEN 转发本人身份；不设走天枢自己的对话。对象页的对话不受影响。
+   */
+  chatServiceUrl?: string;
   buildSha: string;
   piBaseUrl: string;
   piApiKey: string;
@@ -722,6 +728,7 @@ export async function buildApp({
   registerThreadRoutes(app, ctx);
   registerRecordingRoutes(app, ctx);
   registerMeRoutes(app, ctx);
+  registerTaskQualityRoutes(app, ctx);
   registerOnboardingRoutes(app, ctx, feishuApi && env.feishu ? { client: feishuApi, env: env.feishu } : undefined);
   registerSeenMarkRoutes(app, ctx);
   registerMissionCardRoutes(app, ctx, missionCardAnnotationAgent, missionCardReviewAgent);

@@ -45,8 +45,8 @@ async function open(role: "ceo" | "member" = "ceo") {
   const tree = render(role);
   const popover = elements(tree).find((element) => typeof element.props.onOpenChange === "function")!;
   (popover.props.onOpenChange as (next: boolean) => void)(true);
-  // 打开时读三样：会话、声纹、飞书连接。
-  await vi.waitFor(() => expect(api.GET).toHaveBeenCalledTimes(3));
+  // 打开时读会话、声纹、飞书连接；数据质量开关一个页面只读一次。
+  await vi.waitFor(() => expect(api.GET.mock.calls.length).toBeGreaterThanOrEqual(3));
   await Promise.resolve();
   return render(role);
 }

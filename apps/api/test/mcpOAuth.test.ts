@@ -143,6 +143,11 @@ describe("MCP OAuth", () => {
       expect(tools.map((tool: { name: string }) => tool.name)).not.toContain("append_progress");
       const denied = await mcp(f, connection.tokens.access_token, rpc("append_progress", { itemId: randomUUID(), body: "不应写入" }));
       expect(denied.statusCode).toBe(403); expect(denied.headers["www-authenticate"]).toContain("insufficient_scope");
+      const repairDenied = await mcp(f, connection.tokens.access_token, rpc("report_task_repair_receipt", {
+        viewerRole: "member", proposalId: randomUUID(), receipt: { stage: "change" },
+      }));
+      expect(repairDenied.statusCode).toBe(403);
+      expect(repairDenied.headers["www-authenticate"]).toContain("insufficient_scope");
       expect((await token(f, { ...refreshInput(f, connection), scope: "tianshu:read tianshu:write" })).json().error).toBe("invalid_scope");
     } finally { await f.t.close(); }
   });

@@ -22,6 +22,7 @@ import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { CoAgentSkinPicker } from "@/components/coagent/SkinPicker";
 import { VoiceKeysDialog } from "@/conversation/VoiceKeysDialog";
 import { CollectorInstallPanel, useCollectorStatus } from "@/components/onboarding/CollectorSetup";
+import { readTaskQualityEnabled } from "@/components/task-quality/taskQualityStatus";
 import { PersonalProfileForm } from "@/components/PersonalProfileForm";
 import { WechatConnectPanel, readWechatConnection, type WechatConnection } from "@/components/WechatConnect";
 
@@ -59,6 +60,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   const [voiceConfigured, setVoiceConfigured] = useState(false);
   const [feishu, setFeishu] = useState<{ enabled: boolean; connected: boolean } | null>(null);
   const [wechat, setWechat] = useState<WechatConnection | null>(null);
+  const [taskQuality, setTaskQuality] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const radarTitle = account.role === "ceo" ? "雷达设置" : "我的雷达";
@@ -88,6 +90,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
     }).catch(() => setError("个人设置暂时无法读取，请重试。"));
     void readFeishuConnection().then(setFeishu);
     void readWechatConnection().then(setWechat);
+    void readTaskQualityEnabled().then(setTaskQuality);
   };
   const switchView = async () => {
     const view = account.role === "ceo" ? "member" : "ceo";
@@ -157,6 +160,9 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                   定时任务
                 </Button>
               ) : null}
+              {onNavigate && taskQuality ? <Button variant="ghost" className={m.item} onPress={() => { setOpen(false); onNavigate(account.role === "ceo" ? "/task-quality" : "/me/task-quality"); }}>
+                <Activity size={16} aria-hidden="true" />任务数据质量
+              </Button> : null}
               <Button ref={settingsTrigger} variant="ghost" className={m.item} data-settings aria-expanded={settingsOpen} onPress={() => setSettingsOpen((value) => !value)}>
                 <Settings size={16} aria-hidden="true" />
                 设置

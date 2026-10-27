@@ -87,7 +87,7 @@ describe("给独立 Chat 的确认会议只读接口", () => {
     try {
       await confirmThenEditDraft(t, host, meetingId);
       const read = await readConfirmedMeeting(queryOf(t), ceo, meetingId);
-      expect(read).toMatchObject({ status: "confirmed", confirmation: { revision: 1, confirmedBy: HOST }, syncReceipt: { revision: 1, writeToWorld: false } });
+      expect(read).toMatchObject({ status: "confirmed", kind: "first", confirmation: { revision: 1, confirmedBy: HOST }, syncReceipt: { revision: 1, writeToWorld: false } });
       if (read?.status !== "confirmed") throw new Error("unreachable");
       expect(read.payload.sections.map((section) => section.heading)).toEqual(["接口切换", "渠道预算"]);
 
