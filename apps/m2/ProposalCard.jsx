@@ -65,7 +65,7 @@ const shownFields=patch=>Object.entries(patch).filter(([key])=>!(key==='mileston
 const shortTime=iso=>{const t=new Date(iso);return Number.isNaN(t.getTime())?'':t.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});};
 // The card's title says what changes in one sentence; the old "接受后需双方重新确认" tail is the handshake's job.
 // Older cards wrote who asked; the title only states what changed (陈溪南 2026-10-22).
-const headline=t=>String(t||'').replace(/\s*(\[E\d+\])+/g,'').replace(/[；;，,。]?\s*接受后需[^。]*。?$/,'').replace(/^(负责人批注|负责人报告)[：:]\s*/,'').replace(/^[^，。；：:]{0,12}?(要求|提出|建议|指出|明确要求)[，,]?\s*(在|把|将)?/,'').split('。')[0].replace(/[；;，,]\s*(只改|其他|其余|原其他|原三条|原样)[^。]*$/,'').replace(/[；;，,]\s*[^；;，,。]*(保持不变|不变)。?$/,'').replace(/[。；;，,]$/,'').trim();
+const headline=t=>String(t||'').replace(/\s*(\[E\d+\])+/g,'').replace(/\s*[（(]\s*接受后需[^）)]*[）)]/g,'').replace(/[；;，,。]?\s*接受后需[^。]*。?$/,'').replace(/^(负责人批注|负责人报告)[：:]\s*/,'').replace(/^[^，。；：:]{0,12}?(要求|提出|建议|指出|明确要求)[，,]?\s*(在|把|将)?/,'').split('。')[0].replace(/[；;，,]\s*(只改|其他|其余|原其他|原三条|原样)[^。]*$/,'').replace(/[；;，,]\s*[^；;，,。]*(保持不变|不变)。?$/,'').replace(/[。；;，,]$/,'').trim();
 // A task card (陈溪南 2026-10-22): a header that says what this is and where it stands (its colour is the state),
 // a one-sentence title of the change, the changes themselves, and the two answers at the bottom.
 // A review revision at a glance (陈溪南 2026-10-27: no taller than twice its width): the verdict and the status / type

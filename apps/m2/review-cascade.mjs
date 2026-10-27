@@ -4,6 +4,7 @@
 // Replaces the 下级有调整 flag for 个人复盘.
 import {currentVersion,unitOf} from './governance.mjs';
 import {reviewPatchProblem,normalizeReviewPatch} from './nexus-review.mjs';
+import {readableAnswer} from './agent-prompts.mjs';
 
 const view=content=>({title:content.title,owner:content.owner,verdict:content.verdict,verdictReason:content.verdictReason,facts:content.facts||[],nextInputs:content.nextInputs||[]});
 
@@ -22,5 +23,5 @@ export function reviewCascadeProposal(state,job,value){
  const v=currentVersion(parent),patch=value.patch&&typeof value.patch==='object'?Object.fromEntries(Object.entries(value.patch).filter(([k])=>['verdict','verdictReason','facts','nextInputs'].includes(k))):{};
  const bad=reviewPatchProblem({...v.content,id:parent.id,level:parent.level},patch);if(bad)return {proposal:null,reason:bad};
  const child=state.cards[job.childId],title=currentVersion(child).content.title||child.id;
- return {proposal:{cardId:parent.id,baseVersion:v.number,patch:normalizeReviewPatch(patch),reason:`「${title}」的个人复盘改了：${String(value.reason||'').slice(0,300)}`,sourceIds:[],basis:'cascade',fromMission:{id:child.id,version:job.toVersion}},scope:unitOf(parent)};
+ return {proposal:{cardId:parent.id,baseVersion:v.number,patch:normalizeReviewPatch(patch),reason:readableAnswer(`「${title}」的个人复盘改了：${String(value.reason||'').slice(0,300)}`,[{id:child.id,title},{id:parent.id,title:currentVersion(parent).content.title}]),sourceIds:[],basis:'cascade',fromMission:{id:child.id,version:job.toVersion}},scope:unitOf(parent)};
 }

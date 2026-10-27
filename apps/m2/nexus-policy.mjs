@@ -1,5 +1,6 @@
 // Narrow MVP contract, adapted from legacy discussion-state and system-prompt.
 import {participationDecision,directQuestion} from './nexus-participation.mjs';
+import {readableAnswer} from './agent-prompts.mjs';
 import {NOW_RULE} from './time-context.mjs';
 import {verifiedWaiting,verifiedIntervention} from './nexus-next-step.mjs';
 import {agrees,disagrees,declinesChange} from './stance.mjs';
@@ -31,7 +32,7 @@ JSON 输出：{reply:string,interventionNeeded:boolean,interventionType:"risk"|"
 卡片指代：cards 里的 aliases 是大家平时的叫法（如 M02、Mission 02、T01），与标题、id 同样可用于定位。
 列表字段：cards 中是数组的字段（验收、里程碑、约束与依赖、责任边界、核心路径等），patch 也必须给数组，并原样保留没有要求改动的条目，只改、增、删被要求的那几条；不能把整列换成一句话。
 一致性：出修订卡前核对同一张卡的其他字段（成果、验收、责任边界、里程碑等）是否会与本次修改矛盾；有矛盾时把需要同步的字段一并放进同一个 patch，并在 reason 里一句话说明。
-已握手：cards 里 status 为“已确认”的卡，没有人明确要求时不提修订；被明确要求时可以出卡，reason 里写明“接受后需双方重新确认”。
+已握手：cards 里 status 为“已确认”的卡，没有人明确要求时不提修订；被明确要求时可以出卡（接受后要不要重新确认由系统处理，reason 里不写）。
 撮合分歧：同一事项上至少两位参与者立场明确冲突、讨论没有收敛时，可以主动介入一次，interventionType 用 "mediation"，interventionConfidence 只有在你确信概括准确且方案确实可行时才给 "high"，否则不介入。interventionImpact 用一句话写清双方各自的主张（谁主张什么），interventionQuestion 给一个具体可行的折中方案或请有权决定的人做一个选择；interventionRecipient 是有权决定的人。不重复撮合同一事项，不站队，不替人决定。
 换负责人：大家定了某张卡改由谁负责时，patch 里改 owner（只能写名单里的人，接受要由领域 DRI 来点），不要只写进责任边界。
 新增、撤掉、恢复 Mission：把某条 Mission 挪到下月、本月不做、降成下月做、拿掉，都算撤掉：比如“把五项组织缺口降成下月做”，出一张 withdraw-mission 卡，不要把它的档位改成 P2 或把成果改小。有人明确要求给某个 PO 加一条 Mission、撤掉一条 Mission，或恢复撤掉的 Mission 时，不用 patch 改写别的卡来代替（不要把要撤的卡改成“本月不做”），而是在 JSON 里另给 missionCards:[{op:"add-mission"|"withdraw-mission"|"restore-mission",poId:PO 的 id,missionId:撤掉或恢复时填,brief:新增时一两句写清这条 Mission 要做成什么、谁负责、档位,reason:一句话,sourceIds:[消息id]}]。一张卡只做一件事；同时要改 PO 的成果或验收，就另出一张 PO 修订卡。新增卡的完整内容和 Task 草稿由系统按拆解技能起草，你只写 brief。withdrawnMissions 是本单元撤掉的 Mission，只有被要求恢复时才用。
@@ -168,7 +169,7 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
   const ownerAgreed=!!point&&[...ids.map(id=>sources.get(id)),...fresh].some(x=>x&&isOwner(x.author)&&agrees(x.text)&&!disagrees(x.text)&&String(x.createdAt||'')>=String(point.createdAt||''));
   const agreed=topics.some(t=>t.status==='agreement'&&ids.every(id=>t.sourceIds.includes(id)))||follows||ownerAgreed;
   if(!requested&&!agreed){drop(p,'没找到明确的修改要求');continue;}
-  const reason=String(p.reason||'依据公开反馈修订候选').slice(0,500);
+  const reason=readableAnswer(String(p.reason||'依据公开反馈修订候选'),cards).slice(0,500);
   proposals.push({cardId:p.cardId,baseVersion:p.baseVersion,reason:/iid_JSON|JSON_SEQUENCE|unsolicitedId|<[|]|[|]>/.test(reason)?'依据本领域公开修订请求更新候选，来源保留在修订记录中。':reason,sourceIds:ids,patch:review?normalizeReviewPatch(p.patch):p.patch});
  }
  // 新增/撤掉/恢复 Mission cards: one request each, on a PO shown here, grounded in a line that asked for it.
@@ -192,5 +193,5 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
  if(!participation.called&&(!step||interventionHistory.some(h=>h.signature===step.signature)))participation.speak=false;
  if((proposals.length||missionCards.length)&&!participation.called)participation.speak=false;
  const reply=String(value.reply||'').trim()||(participation.called&&!proposals.length&&!missionCards.length?'这次未生成有效回答，请再次 @Nexus 重试。你的问题已保存，不影响已有材料。':'');
- return {reply:participation.speak?(participation.called?wholeSentences(reply,220):step.reply):'',topics,proposals,missionCards,participation,rejected};
+ return {reply:readableAnswer(participation.speak?(participation.called?wholeSentences(reply,220):step.reply):'',cards),topics,proposals,missionCards,participation,rejected};
 }

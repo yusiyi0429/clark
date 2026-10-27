@@ -285,3 +285,11 @@ test('个人复盘房间里 Nexus 回本人，本人的通知里有一张“个�
  assert.ok(card,'有提及卡');assert.match(card.title,/^个人复盘：1 条消息与你有关/);assert.match(card.link,/scope=person%3Amember-03/);
  assert.ok(!notificationsFor(s,'member-01').some(i=>i.id==='mention:person:member-03'),'别人没有');
 });
+
+test('给人看的话里不露内部写法：ref-3 写成第 3 项，复盘卡编号写成标题，nextInputs 这类字段写中文',async()=>{
+ const {readableAnswer}=await import('./agent-prompts.mjs');
+ const cards=[{id:'rv:eo-m3',title:'Ontology & Data Grounding'}];
+ assert.equal(readableAnswer('核实后，ref-3 可改成部分达成',cards),'核实后，第 3 项 可改成部分达成');
+ assert.equal(readableAnswer('单元复盘 eo-m3 行里的 status 要改，nextInputs 里加一条',cards),'单元复盘 《Ontology & Data Grounding》 行里的 状态 要改，下期输入 里加一条');
+ assert.equal(readableAnswer('bf01-m10 不认识就不动',cards),'bf01-m10 不认识就不动');
+});

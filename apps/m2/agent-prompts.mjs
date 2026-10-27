@@ -2,6 +2,11 @@ import {NOW_RULE} from './time-context.mjs';
 export function readableAnswer(answer,cards=[]){
  let text=String(answer||'');
  for(const card of [...cards].filter(c=>c.id&&c.title).sort((a,b)=>b.id.length-a.id.length))text=text.replace(new RegExp(`(?<![\\w-])${card.id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}(?![\\w-])`,'g'),()=>`《${card.title}》`);
+ // Review cards are named rv:<unit>-mN; people read 「Mission N」, and a fact line's ref-3 is 「第 3 项」 (2026-10-27 walk-through).
+ for(const card of cards.filter(c=>String(c.id||'').startsWith('rv:')&&c.title))text=text.replace(new RegExp(`(?<![\\w:-])${card.id.slice(3).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}(?![\\w-])`,'g'),()=>`《${card.title}》`);
+ text=text.replace(/(?<![\w-])ref-(\d+)(?![\w-])/g,'第 $1 项');
+ const words={nextInputs:'下期输入',verdictReason:'判定理由',facts:'事实证据',verdict:'判定',evidence:'证据',status:'状态',gap:'缺口'};
+ text=text.replace(/(?<![A-Za-z])(nextInputs|verdictReason|facts|verdict|evidence|status|gap)(?![A-Za-z])/g,w=>words[w]);
  // Evidence numbers from the review input ([E19][E25]) mean nothing to people reading the room (评测 2026-10-23).
  text=text.replace(/\s*[\[［【]E\d+(?:\s*[、,，]\s*E\d+)*[\]］】]/g,'').replace(/[（(]\s*E\d+(?:\s*[、,，]\s*E\d+)*\s*[）)]/g,'');
  return text;

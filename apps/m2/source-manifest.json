@@ -24,11 +24,11 @@
     },
     {
       "path": "agent-prompts.mjs",
-      "sha256": "841adcae3575b29fed0faa1001b17bde69f7bd4024daa1251646780b4167adf5"
+      "sha256": "693d2853ce0bfcf372041a15c3e3082b740b8e7ec8896c064f0847de95c92b91"
     },
     {
       "path": "app.jsx",
-      "sha256": "28c47fa30932fd9def20511e8d46c9f62cd7d089c57a7410c2cf86d017703e48"
+      "sha256": "93350859fe0c227b420c99b5a1eec400fb33e36e0ddaa4948b9136646cb20b0f"
     },
     {
       "path": "AuditStatus.jsx",
@@ -52,7 +52,7 @@
     },
     {
       "path": "ChatComposer.jsx",
-      "sha256": "302b2e73dbede790194d55e8d38d32791bbadc95b3b4a1f6f16316c881d026b5"
+      "sha256": "2b9875b21d97ca0dee19c56772fe299600e916f52bd97d8dbb87b7481da2120f"
     },
     {
       "path": "ChatMessage.jsx",
@@ -196,7 +196,7 @@
     },
     {
       "path": "nexus-policy.mjs",
-      "sha256": "b2270360ec38ba082d832f5b4adb951f0119a28b2bd4df10f48db1588399d8a8"
+      "sha256": "3944c861001185315070238ccbfbf556e70a5025c7aa17d01fe9313602c026ce"
     },
     {
       "path": "nexus-retry.mjs",
@@ -257,7 +257,7 @@
     },
     {
       "path": "ProposalCard.jsx",
-      "sha256": "9f52eeac281015b92219a81f30cbd645454042fbfa17af9cbcec12c98e57a386"
+      "sha256": "4ae67158f2b9267f49e456c9a0ca1e347ab4ad4a9444c57494890067a8b01695"
     },
     {
       "path": "reader-format.mjs",
@@ -277,7 +277,7 @@
     },
     {
       "path": "review-cascade.mjs",
-      "sha256": "06ffcc09a066540c157fcec734ad5195fef9e9ff1ba1afb401395a60530e32b0"
+      "sha256": "250b2a7c5a2730725596e36664c0ee09cffc21aad6004fe074286ffbe547489d"
     },
     {
       "path": "review-display.mjs",
@@ -405,7 +405,7 @@
     },
     {
       "path": "style.css",
-      "sha256": "c3be64b832782a2e29049f984900c9199eaf5cdcd72550f461c3d9cb3ff6a7a4"
+      "sha256": "90a4d3d98d095461f8f5b24e254eabf38a797ba245a4bb1c8d5aafb5cb3babd5"
     },
     {
       "path": "time-context.mjs",

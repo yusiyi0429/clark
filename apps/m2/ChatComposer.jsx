@@ -6,7 +6,7 @@ import {mentionAt,insertMention} from './mention-input.mjs';
 import MemberAvatar from './MemberAvatar.jsx';
 import {NexusOrb} from './NexusIsland.jsx';
 
-export default function ChatComposer({text,onChange,onSend,onVoice,recording,busy,channel,reply,onCancelReply,members=[]}){
+export default function ChatComposer({text,onChange,onSend,onVoice,recording,busy,channel,reply,onCancelReply,members=[],roomName='规划群'}){
  const picker=useRef(),[attachment,setAttachment]=useState(null),[notice,setNotice]=useState('');
  const input=useRef(),lastQuery=useRef('null'),listId=useId(),[mention,setMention]=useState(null),[active,setActive]=useState(0);
  const choices=channel==='group'&&mention?['Nexus',...members].filter((name,index,all)=>all.indexOf(name)===index&&name.toLowerCase().includes(mention.query.toLowerCase())):[];
@@ -41,7 +41,7 @@ export default function ChatComposer({text,onChange,onSend,onVoice,recording,bus
   {channel==='group'&&reply&&<div className="compose-reply"><div><small>回复 {reply.author}</small><p>{reply.text.slice(0,120)}</p></div><Button className="icon" aria-label="取消引用回复" onPress={onCancelReply}><X size={14}/></Button></div>}
   {attachment&&<div className="compose-attachment"><span>{attachment.name}</span><Button className="icon" aria-label="移除附件" onPress={()=>setAttachment(null)}><X size={14}/></Button></div>}
   {!!choices.length&&<div className="mention-picker" id={listId} role="listbox" aria-label="选择要提及的成员">{choices.map((name,i)=><button type="button" role="option" aria-label={name} id={`${listId}-${i}`} aria-selected={i===selected} key={name} onMouseDown={e=>e.preventDefault()} onClick={()=>chooseMention(name)}>{name==='Nexus'?<NexusOrb/>:<MemberAvatar name={name}/>} {name}</button>)}</div>}
-  <textarea ref={input} aria-label="消息" aria-autocomplete={channel==='group'?'list':undefined} aria-controls={choices.length?listId:undefined} aria-expanded={choices.length>0} aria-activedescendant={choices.length?`${listId}-${selected}`:undefined} title="回车发送，Shift＋回车换行" onKeyDown={keyDown} onSelect={track} onBlur={()=>setMention(null)} value={text} onChange={event=>{onChange(event.target.value);track(event);}} placeholder={recording?'正在聆听…':channel==='agent'?'和 Agent 讨论…':'发送到规划群…'}/>
+  <textarea ref={input} aria-label="消息" aria-autocomplete={channel==='group'?'list':undefined} aria-controls={choices.length?listId:undefined} aria-expanded={choices.length>0} aria-activedescendant={choices.length?`${listId}-${selected}`:undefined} title="回车发送，Shift＋回车换行" onKeyDown={keyDown} onSelect={track} onBlur={()=>setMention(null)} value={text} onChange={event=>{onChange(event.target.value);track(event);}} placeholder={recording?'正在聆听…':channel==='agent'?'和 Agent 讨论…':`发送到${roomName}…`}/>
   <div className="compose-tools">
    <input ref={picker} type="file" accept=".txt,.md,.csv,.json" hidden onChange={selectFile}/>
    <Button className="icon attachment-button" aria-label="添加附件" onPress={()=>picker.current?.click()}><Plus size={22}/></Button>
