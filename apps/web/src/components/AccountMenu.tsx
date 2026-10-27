@@ -22,6 +22,7 @@ import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { CoAgentSkinPicker } from "@/components/coagent/SkinPicker";
 import { VoiceKeysDialog } from "@/conversation/VoiceKeysDialog";
 import { CollectorInstallPanel, useCollectorStatus } from "@/components/onboarding/CollectorSetup";
+import { PersonalProfileForm } from "@/components/PersonalProfileForm";
 
 export interface Account {
   displayName: string;
@@ -44,7 +45,7 @@ export function accountSubtitle(account: Account, demo: boolean): string {
   return [account.loginId, account.role === "ceo" ? "CEO" : "成员"].filter(Boolean).join(" · ");
 }
 
-type Dialog = "voiceprint" | "radar" | "connection" | "collector" | "coagent" | "passcode" | "voice" | null;
+type Dialog = "voiceprint" | "radar" | "connection" | "collector" | "coagent" | "passcode" | "voice" | "profile" | null;
 
 export function AccountMenu({ account, compact = false, onNavigate }: { account: Account; compact?: boolean; onNavigate?: (href: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -162,6 +163,10 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                 <Popover.Content triggerRef={settingsTrigger} placement="end top" offset={16} crossOffset={-8} className={m.popover}>
                   <TianshuPortalTheme>
                     <Popover.Dialog className={m.menu} aria-label="设置">
+                      <Button variant="ghost" className={m.item} onPress={() => pick("profile")}>
+                        <Settings2 size={16} aria-hidden="true" />
+                        个人资料
+                      </Button>
                       <Button variant="ghost" className={m.item} onPress={() => pick("voice")}>
                         <Mic size={16} aria-hidden="true" />
                         语音输入
@@ -240,6 +245,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
           <VoiceprintCard />
         </MenuDialog>
       ) : null}
+      {dialog === "profile" ? <MenuDialog title="个人资料" onClose={() => setDialog(null)}><PersonalProfileForm /></MenuDialog> : null}
       {dialog === "radar" ? (
         <MenuDialog title={radarTitle} wide onClose={() => setDialog(null)}>
           <RadarSettingsEditor mode={account.role === "ceo" ? "company" : "person"} />

@@ -10,6 +10,7 @@ import { MeetingDecisionView, MeetingMinutesFetchResponse, MeetingMinutesLinkReq
 import { AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, OrganizeFeishuMinuteRequest } from "./feishuMinuteInbox.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import { UsageResponse, OnboardingStepUsageRequest } from "./usage.js";
+import { PersonalProfileView, UpdatePersonalProfileRequest } from "./personalProfile.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
   CollectionField, CollectionEntryView, CollectionRoundView, CollectionView, CollectionResponse, DraftCollectionRequest, DraftCollectionResponse,
@@ -1724,6 +1725,17 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "返回工具的回调地址", content: { "application/json": { schema: { $ref: "#/components/schemas/OAuthConsentDecisionResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "409": errorResponse },
         },
       },
+      "/api/me/profile": {
+        get: {
+          operationId: "getPersonalProfile", summary: "读取本人的可选个人资料",
+          responses: { "200": { description: "本人资料", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalProfileView" } } } }, "401": errorResponse },
+        },
+        patch: {
+          operationId: "updatePersonalProfile", summary: "本人填写或清空可选性别字段",
+          requestBody: jsonBody({ $ref: "#/components/schemas/UpdatePersonalProfileRequest" }),
+          responses: { "200": { description: "保存后的本人资料", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalProfileView" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse },
+        },
+      },
       "/api/me/tokens": {
         get: {
           operationId: "listPersonalTokens", summary: "列出本人未撤销的个人 MCP 令牌",
@@ -3082,6 +3094,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         DecideMaterialAnnotationRequest: DecideMaterialAnnotationRequest as JsonSchema,
         WeeklyProgressResponse: WeeklyProgressResponse as JsonSchema,
         ListPersonalTokensResponse: ListPersonalTokensResponse as JsonSchema,
+        PersonalProfileView: PersonalProfileView as JsonSchema,
+        UpdatePersonalProfileRequest: UpdatePersonalProfileRequest as JsonSchema,
         CreatePersonalTokenRequest: CreatePersonalTokenRequest as JsonSchema,
         CreatePersonalTokenResponse: CreatePersonalTokenResponse as JsonSchema,
         CollectorHeartbeatRequest: CollectorHeartbeatRequest as JsonSchema,

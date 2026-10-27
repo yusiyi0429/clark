@@ -50,6 +50,14 @@ const item = (tree: ReactNode, label: string) => elements(tree).find((element) =
 afterEach(() => hooks.reset());
 
 describe("个人菜单里的雷达", () => {
+  it("CEO 和成员都能从个人菜单打开本人资料", () => {
+    for (const role of ["member", "ceo"] as const) {
+      hooks.reset();
+      expect(item(render(role), "个人资料")).toBeDefined();
+      (item(render(role), "个人资料")!.props.onPress as () => void)();
+      expect(elements(render(role)).find((element) => element.type === MenuDialog)?.props.title).toBe("个人资料");
+    }
+  });
   it("CEO 和成员都显示连接入口", () => {
     expect(item(render("member"), "连接到外部工具")).toBeDefined();
     expect(item(render("ceo"), "连接到外部工具")).toBeDefined();

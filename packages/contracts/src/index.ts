@@ -21,6 +21,7 @@ export * from "./threads.js";
 export * from "./materials.js";
 export * from "./tasks.js";
 export * from "./personalTokens.js";
+export * from "./personalProfile.js";
 export * from "./voiceprint.js";
 export * from "./onboarding.js";
 export * from "./onboardingLists.js";
