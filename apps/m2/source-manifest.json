@@ -128,7 +128,7 @@
     },
     {
       "path": "governance.mjs",
-      "sha256": "0501987d0537df72e845a5cdb3efea9ccbb483d32488f879540305a8c0274de5"
+      "sha256": "bf004b48adc0f63a41b74b3fd4bd4ed6f72d1c06c86f9d778d596dad762327b1"
     },
     {
       "path": "Handshake.jsx",
@@ -277,11 +277,11 @@
     },
     {
       "path": "review-display.mjs",
-      "sha256": "150bbd9c0d9796bb3aabbdb7947f2cbcf396ce84e57865f17a6f3b23eebb3ab7"
+      "sha256": "27ac346a2bbb136a442cb36eeda64283b3254e7a264fac7281c8a849d833c674"
     },
     {
       "path": "review-generation.mjs",
-      "sha256": "a30d89cc13f068de57dd1737eafa706854138e55be62afffe2a2dfd5a7a63688"
+      "sha256": "35af3e7d72fdef9c824f60ebf8d3dc50d5d4c454470dc100df292c9804d2a0eb"
     },
     {
       "path": "review-handoff.mjs",

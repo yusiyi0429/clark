@@ -34,7 +34,8 @@ export function mineFirst(nodes,p){
 // Items in the same shape as the plan's 待我处理, so both stages share one panel.
 export function reviewTodos(nodes,p,comments={},proposals=[]){
  const out=[];
- for(const n of nodes)if(n.downstreamChange&&(ownerNames(n).includes(p.name)||n.level==='company'&&p.ceo||n.level==='po'&&(p.unitDri||[]).includes(n.unit)))out.push({kind:'downstream',cardId:n.id,childId:n.downstreamChange.cardId});
+ // A unit review's 下级有调整 is the CEO's to look at as well: the CEO signs it and is the one the notice names.
+ for(const n of nodes)if(n.downstreamChange&&(ownerNames(n).includes(p.name)||n.level==='company'&&p.ceo||n.level==='po'&&((p.unitDri||[]).includes(n.unit)||p.ceo)))out.push({kind:'downstream',cardId:n.id,childId:n.downstreamChange.cardId});
  for(const n of nodes){const against=ownerNames(n).includes(p.name)?openObjections(comments[n.id],p.name):[];if(against.length)out.push({kind:'objection',cardId:n.id,id:against.at(-1).id,author:against.at(-1).author,text:against.at(-1).text,count:against.length});}
  for(const r of proposals)if(isReviewId(r.cardId)&&r.status==='pending'&&!r.stale&&r.canAccept)out.push({kind:'proposal',cardId:r.cardId,id:r.id});
  // 待提交洞察 (2026-10-26): a participant who has not written one yet, until the insights are revealed.

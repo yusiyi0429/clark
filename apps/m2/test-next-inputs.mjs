@@ -6,7 +6,7 @@ import {memberActor,sharedProjection} from './shared-projection.mjs';
 import {reviewTree,reviewTodos} from './review-display.mjs';
 import {handoffPackage} from './review-handoff.mjs';
 import {withReviewSources} from './review-sources.mjs';
-import {reviewProblems,repairReviews,jargonOf,lengthFindings} from './review-generation.mjs';
+import {reviewProblems,repairReviews,jargonOf,lengthFindings,skillAtLeast} from './review-generation.mjs';
 import {insightSynthesisRequest,reviewPatchProblem} from './nexus-review.mjs';
 import {notificationsFor} from './notifications.mjs';
 // 下期输入、截止时间、公司综合读全部洞察 (陈溪南 2026-10-27).
@@ -153,4 +153,28 @@ test('生成时点名提问每份最多 2 个、公司复盘 3 个；人改卡�
  assert.match(nextInputProblem(q(3),{maxAsks:2}),/点名提问最多 2 个，现在有 3 个/);
  assert.equal(nextInputProblem(q(3),{maxAsks:3}),null);
  assert.equal(nextInputProblem(q(3)),null,'不传上限（人改卡）就不拦');
+});
+
+test('2.1.6 起：下期输入要对上一行事实、一行最多一条、不对应行的最多一条；已达成的行带了只量不拦；2.1.5 不开',()=>{
+ const input={stages:[run.reviews.map(r=>({id:r.ref,level:r.level==='ru'?'ru':r.level,unit:r.unit,tasks:r.level==='mission'?[{ref:'t1',title:'部署'},{ref:'t2',title:'客户试用'}]:[],children:r.level==='ru'?['bf01-m1']:r.level==='company'?['bf01']:[]}))]};
+ const reviews=Object.fromEntries(run.reviews.map(r=>[r.ref,structuredClone(r)]));
+ reviews['bf01-m1'].nextInputs=[{ref:'t2',type:'继续',text:'a'},{ref:'t2',type:'调整',text:'b'},{ref:'t9',type:'继续',text:'c'},{ref:'',type:'待决策',text:'d'},{ref:'',type:'继续',text:'e'}];
+ const roster=['刘明华','孙铭泽'],found=o=>reviewProblems({reviews,failed:[]},input,{roster,...o}).filter(p=>p.unit==='bf01-m1').map(p=>p.problem);
+ assert.deepEqual(found({}),[],'2.1.5 不查');
+ const strict=found({rowMatch:true});
+ assert.ok(strict.some(p=>/对应的事实行不存在：t9/.test(p)));assert.ok(strict.some(p=>/同一行事实写了多条下期输入.*t2/.test(p)));assert.ok(strict.some(p=>/最多 1 条，现在有 2 条/.test(p)));
+ const f=lengthFindings({...reviews['bf01-m1'],nextInputs:[{ref:'t1',type:'停止',text:'不再保留演示环境'}]});
+ assert.deepEqual(f.filter(x=>x.type==='已达成行带下期输入').map(x=>x.ref),['t1']);
+ assert.ok(skillAtLeast('2.1.6','2.1.6')&&skillAtLeast('2.2.0','2.1.6')&&!skillAtLeast('2.1.5','2.1.6')&&!skillAtLeast(null,'2.1.6'));
+ assert.deepEqual(jargonOf('Method 和 Talent 的资料'),[],'单元名不算');
+});
+
+test('下级有调整：上级复盘的签字人（CEO）也能核对，且在他的待办里；不是签字人的仍然不行，报错写下级调整',()=>{
+ let s=fresh();const sun=memberActor('member-03',s),ceo=memberActor('member-01',s),tang=memberActor('member-09',s);
+ const c=currentVersion(s.cards['rv:bf01-m1']).content;
+ s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:1,patch:{facts:[{...c.facts[0],evidence:'10/19 部署'},c.facts[1]]}});
+ assert.ok(s.cards['rv:bf01'].downstreamChange);
+ const v=sharedProjection(s,ceo);assert.ok(reviewTodos(reviewTree(v.drafts).nodes,{name:'刘明华',ceo:true,unitDri:ceo.unitDri||[]},v.comments,[]).some(i=>i.kind==='downstream'&&i.cardId==='rv:bf01'));
+ assert.throws(()=>applyAction(s,tang,{type:'acknowledgeImpact',cardId:'rv:bf01',baseVersion:1}),/下级调整|不在当前领域/);
+ s=applyAction(s,ceo,{type:'acknowledgeImpact',cardId:'rv:bf01',baseVersion:1});assert.equal(s.cards['rv:bf01'].downstreamChange,undefined);
 });

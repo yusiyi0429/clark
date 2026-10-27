@@ -235,7 +235,9 @@ export function applyAction(previous,actor,action){
    if(children.length&&!isReview(card)){state.cascadeQueue??=[];state.cascadeQueue=state.cascadeQueue.filter(j=>j.cardId!==card.id);state.cascadeQueue.push({cardId:card.id,from:v.number,to:v.number+1,noticeId:`notice-${state.sequence}`,at:now});}
   }
  }else if(action.type==='acknowledgeImpact'){
-  if(!mayRevise(actor,card))fail(403,'请由成果负责人核对上级调整');
+  // 下级有调整 can be looked at by whoever signs this card too (2026-10-27 drill: the notice @-ed 刘明华, who then got 403).
+  const signer=!!card.downstreamChange&&confirmationSlots(card).some(slot=>slotHolder(state,card,slot)===actor.name);
+  if(!mayRevise(actor,card)&&!signer)fail(403,card.downstreamChange&&!card.upstreamChange?'请由这张卡的负责人或签字人核对下级调整':'请由成果负责人核对上级调整');
   if(action.baseVersion!==v.number)fail(409,'内容已更新，请重新核对');
   delete card.upstreamChange;delete card.downstreamChange;
  }else if(action.type==='confirm'){
