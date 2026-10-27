@@ -21,7 +21,8 @@ function Row({node,field,label,comments,onDetail,children}){
 // The reason often repeats the verdict at its start (未达成。…); the line already says it once.
 const reasonAfter=(v,t)=>{const x=String(t||'');return v&&x.startsWith(v)?x.slice(v.length).replace(/^[\s，,。.：:；;]+/,''):x;};
 // A clause read as a sentence: ends in 。 unless it already ends in punctuation (evidence marks aside).
-const sentence=t=>{const x=String(t||'').trim(),core=x.replace(/(\s*\[E\d+\])+\s*$/,'');return /[。！？.!?」）)]$/.test(core)?x:core+'。'+x.slice(core.length).trim();};
+const sentence=t=>{const x=String(t||'').trim(),core=x.replace(/(\s*\[E\d+\])+\s*$/,'');// A closing bracket ends a sentence only when a stop sits just inside it: 「…（见 Mission 复盘）」 still needs its 。.
+ return /[。！？.!?]$/.test(core)||/[。！？.!?][」）)]$/.test(core)?x:core+'。'+x.slice(core.length).trim();};
 const dueOf=review=>{const t=Date.parse(review?.dueAt||'');return Number.isFinite(t)?t:null;};
 function Due({at}){const over=Date.now()>at,d=new Date(at).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});return <span className={`review-due${over?' is-over':''}`} title="复盘生成后 48 小时">{over?'已超时':`${d} 前确认`}</span>;}
 const signedAll=n=>{const slots=reviewSlots(n);return slots.length>0&&!n.upstreamChange&&slots.every(slot=>(n.signatures||[]).some(x=>x.slot===slot));};

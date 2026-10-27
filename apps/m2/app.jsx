@@ -45,7 +45,7 @@ import {monthOf,nextPeriod} from './review-display.mjs';
 import './style.css';
 const types={po:'PO',mission:'Mission',task:'Task',activity:'Activity'};
 // The group guide follows the stage: month-end starts with the review, the plan comes after the CEO confirms it.
-const nexusGuide=(stage,{from,to})=>stage==='review'?`我是 Nexus，负责整理大家的讨论、提出修订建议。现在先做 ${from}复盘，这样走：\n\n1. 先看自己负责的复盘，有疑问就在字段上批注；卡上有追问的，直接点“回答”。\n2. 在规划群里讨论，需要我总结或出修订时 @Nexus。\n3. 内容定了，在卡片底部点确认。复盘都确认后，CEO 确认公司复盘，就开始生成${to}拆解。`:`我是 Nexus，负责整理大家的讨论、提出修订建议。${to}拆解这样走：\n\n1. 先看自己负责的卡，有疑问就在字段上批注（鼠标移到字段上会出现批注按钮）。\n2. 在规划群里讨论，需要我总结或出修订时 @Nexus。\n3. 内容定了，在卡片底部点确认；上下级都确认，就达成共识。`;
+const nexusGuide=(stage,{from,to})=>stage==='review'?`我是 Nexus，负责整理大家的讨论、提出修订建议。现在先做 ${from}复盘，这样走：\n\n1. 先看自己负责的复盘，有疑问就在字段上批注；下期输入里问到你的，直接点“回答”。\n2. 在“分析洞察”里写下你看到的共性问题和建议，确认前每人至少一条。\n3. 在规划群里讨论，需要我总结或出修订时 @Nexus。\n4. 内容定了，在卡片底部点确认，卡片右上角写着截止时间。复盘都确认后，CEO 确认公司复盘，就开始生成${to}拆解。`:`我是 Nexus，负责整理大家的讨论、提出修订建议。${to}拆解这样走：\n\n1. 先看自己负责的卡，有疑问就在字段上批注（鼠标移到字段上会出现批注按钮）。\n2. 在规划群里讨论，需要我总结或出修订时 @Nexus。\n3. 内容定了，在卡片底部点确认；上下级都确认，就达成共识。`;
 function App(){
  const [listening,setListening]=useState(true),[topics,setTopics]=useState({}),[nexusTick,setNexusTick]=useState(0),[updated,setUpdated]=useState([]);
  const recordsRef=useRef({}),draftsRef=useRef({}),processed=useRef({}),nexusFlight=useRef(null),listenRef=useRef(true);

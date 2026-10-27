@@ -24,7 +24,7 @@
     },
     {
       "path": "app.jsx",
-      "sha256": "0ab60796ee0f145047074a6215a5f6c063e6f36b3f20290e286b2e5d441cf07d"
+      "sha256": "5cb3a16395c04c581480d6d52c14f533dfe61bab424583c01bae9c8f4c5522f0"
     },
     {
       "path": "AuditStatus.jsx",
@@ -297,7 +297,7 @@
     },
     {
       "path": "ReviewCanvas.jsx",
-      "sha256": "453a9817b0ea89091e2d51c7c495e9a73987843a5720b9c8a1a5034482c6a279"
+      "sha256": "b79fabf8189abcceddec040188e54a12d3d77b98bc4fae57b88df5db5756414e"
     },
     {
       "path": "ReviewEditor.jsx",
