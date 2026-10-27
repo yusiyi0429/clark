@@ -28,7 +28,7 @@
     },
     {
       "path": "app.jsx",
-      "sha256": "1edb6756b677ffefcec00092baddf5f839d4a938334f3449d2d8298cc2f3e3b4"
+      "sha256": "28c47fa30932fd9def20511e8d46c9f62cd7d089c57a7410c2cf86d017703e48"
     },
     {
       "path": "AuditStatus.jsx",
@@ -176,7 +176,7 @@
     },
     {
       "path": "nexus-context.mjs",
-      "sha256": "029a08f3ff971463eda2505e9a4c0a6180be86e514f785b26a8e7f4334a8e76d"
+      "sha256": "031df5b68bde1f0ff522ce8547f2b20e681571b7fa97b55991fa08290c7209f4"
     },
     {
       "path": "nexus-listen.mjs",
@@ -196,7 +196,7 @@
     },
     {
       "path": "nexus-policy.mjs",
-      "sha256": "0368cac3e634b97d330c87d1476e4001b148c7545f03d0c499a01d09cfb434d7"
+      "sha256": "8886c0ae022fc6c9c6b93224da8ad36329d0daaa093350faa1a76341ad70f057"
     },
     {
       "path": "nexus-retry.mjs",
@@ -305,7 +305,7 @@
     },
     {
       "path": "ReviewCanvas.jsx",
-      "sha256": "59e284a0bf19b4627a4c85bcbe74719ae69823398bd71097f061322afeb66d52"
+      "sha256": "9a933358b97babf63337ef73050030c350285d82fef764d48beef76e5d44fdda"
     },
     {
       "path": "ReviewEditor.jsx",
@@ -381,7 +381,7 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "add3d755ccef9d8d9af43e5edf39fa825964435c8abaa31ee491c929353bf707"
+      "sha256": "8923229d57ce004757d91156bf7df8d3850309858223150baac89204010326ab"
     },
     {
       "path": "shared-projection.mjs",

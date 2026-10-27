@@ -250,3 +250,15 @@ test('复盘卡标题去掉本体标题开头的“M03｜”这类编号，名�
  assert.equal(displayTitle('CEO Agent 双 P0 真实应用'),'CEO Agent 双 P0 真实应用');
  assert.equal(displayTitle('M03｜'),'M03｜');
 });
+
+test('个人复盘房间里的 Nexus：没点名哪张卡时看本人的复盘卡；本人有依据地主张改，就算改的要求',async()=>{
+ const {actContext}=await import('./nexus-context.mjs');const {validateNexusResult,publicEvidence}=await import('./nexus-policy.mjs');const {reviewCardsFor}=await import('./nexus-review.mjs');
+ let s=fresh();const sun=memberActor('member-03',s);
+ s=applyAction(s,sun,{type:'message',cardId:'rv:person:孙铭泽',text:'Mission 1 第二条客户试用我觉得是部分达成：10/25 客户用过一次，有会议纪要'});
+ const cards=reviewCardsFor(s,'person:member-03');
+ const ev=publicEvidence(sharedProjection(s,sun).records['group:person:member-03'],'person:member-03',{retainAll:true});
+ assert.ok(actContext({cards,evidence:ev,fresh:ev,topics:[]}).focusCardIds.includes('rv:bf01-m1'),'没点名也看得到本人的卡');
+ const c=currentVersion(s.cards['rv:bf01-m1']).content;
+ const r=validateNexusResult({topics:[],proposals:[{cardId:'rv:bf01-m1',baseVersion:1,basis:'request',sourceIds:[ev[0].id],patch:{facts:[c.facts[0],{...c.facts[1],status:'部分达成',evidence:'10/25 客户试用一次（会议纪要）'}]}}]},{cards,evidence:ev,fresh:ev});
+ assert.equal(r.proposals.length,1,JSON.stringify(r.rejected));
+});

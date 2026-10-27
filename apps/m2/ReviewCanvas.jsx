@@ -186,7 +186,8 @@ export default function ReviewCanvas({insights={},onInsight,ceoName='CEO',onRevi
   <div className="plan-doc-canvas document-page" aria-label={label}><div className="document-primary review-primary">{children}</div></div>
  </CommentScope>;
  // 个人复盘 page: every Mission this person owns that I can see, one full card each, each confirmed by its owner.
- if(active.level==='person'){const cards=personCards(tree.nodes,active.person);return page('个人复盘',<>{cards.length?cards.map(fullCard):<p className="review-none">这里没有你能看到的 Mission 复盘。</p>}</>);}
+ // 未指派: only the unassigned Missions this viewer signs for (their own units), as on the home card.
+ if(active.level==='person'){const cards=personCards(tree.nodes,active.person).filter(n=>active.person!=='未指派'||ownerNames(n).includes(profile.name));return page('个人复盘',<>{cards.length?cards.map(fullCard):<p className="review-none">这里没有你能看到的 Mission 复盘。</p>}</>);}
  const node=tree.byId.get(active.id)||active;
  // 参考：本单元的 Mission 复盘 (陈溪南 2026-10-27): read-only, one line each, each opens just that card.
  const refs=node.level==='po'?tree.nodes.filter(n=>n.level==='mission'&&n.unit===node.unit):[];

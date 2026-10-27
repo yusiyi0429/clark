@@ -375,7 +375,9 @@ export const server=createServer(async(req,res)=>{
       topicsNow=applyListen(previousTopics,listened,fresh);
       // A question on a card is answered even when listening thought it a stray line (2026-10-23: 「这是啥」 went unanswered).
       const ownerAsks=fresh.some(e=>revisionRequest(e.text)||ownerAnnotation(e,cards.find(c=>c.id===e.context?.selection?.id))||directQuestion(e));
-      if(listened.act==='none'&&!ownerAsks){
+      // In a person's own review room every line of theirs is for Nexus to weigh (2026-10-27: an evidenced 改判 got act:none).
+      const ownRoom=scope.level==='person'&&fresh.some(e=>!['Nexus','Agent','system'].includes(e.author));
+      if(listened.act==='none'&&!ownerAsks&&!ownRoom){
        await store.transact(s=>{if(s.round?.id!==roundAtStart)return s;const n=s.nexus[scope.id];n.topics=topicsNow;n.running=false;n.error=null;n.lastListen={act:'none',reason:listened.reason,at:new Date().toISOString()};n.pendingSourceIds=(n.pendingSourceIds||[]).filter(id=>!pendingSourceIds.includes(id));if(!n.pendingSourceIds.length)delete n.pendingSince;s.sequence++;return s;});
        return json(res,200,{collaboration:sharedProjection(store.snapshot(),actor),topics:topicsNow,answer:'',proposals:[],listened});
       }
