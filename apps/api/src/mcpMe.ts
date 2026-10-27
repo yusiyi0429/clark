@@ -29,7 +29,8 @@ const Link = Type.Object({ url: Type.String({ pattern: "^https?://", maxLength: 
 const DateOnly = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
 const CreateInput = Type.Object({ clientId: Uuid, title: Type.String({ minLength: 1, maxLength: 120 }),
   doneDefinition: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })), missionId: Type.Optional(Type.String({ minLength: 1 })),
-  planTaskId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })), startDate: Type.Optional(DateOnly), dueDate: Type.Optional(DateOnly) }, { additionalProperties: false });
+  planTaskId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })), startDate: Type.Optional(DateOnly), dueDate: Type.Optional(DateOnly),
+  noMissionReason: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })) }, { additionalProperties: false });
 const AppendInput = Type.Object({ itemId: Uuid, body: Type.String({ minLength: 1, maxLength: 2000 }),
   links: Type.Optional(Type.Array(Link, { maxItems: 5 })), clientEventId: Type.Optional(Uuid) }, { additionalProperties: false });
 const StatusInput = Type.Object({ itemId: Uuid, status: Type.Union([Type.Literal("not_started"), Type.Literal("in_progress"), Type.Literal("done")]), version: Type.Integer({ minimum: 1 }) }, { additionalProperties: false });
@@ -62,13 +63,13 @@ const CompanyInput = Type.Object({ week: Type.Optional(Type.String()), battlefie
   personId: Type.Optional(Type.String({ minLength: 1 })) }, { additionalProperties: false });
 const memberDefinitions: Tool[] = [
   { name: "list_my_items", description: "列出我推进的执行事项，默认仅未完成；awaitingAcceptance=true 的在等本人验收，source=meeting 的是会后分派；missions 是此刻可以挂执行事项的本月 Mission，tasks 是挂在它下面的 Task。List execution items I own (open by default) and the missions new items can belong to.", inputSchema: ListInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
-  { name: "create_item", description: "按我正在做的事新建一条执行事项，直接生效、标为 Agent 建。一件执行事项 = Mission 卡上一个 Activity（带 ◆ 关口的那一步），一般要做 1–2 周，一个 Task 下 2–5 件；过程步骤、修小问题、配置、一次会、一次问答、跑完一个子任务都只写进最接近的已有事项的进展，不新建，拿不准就写进展。完成标准写成可检查的几条，验收时逐条对。先用 list_my_items 确认没有同一件事，有就写进展，不要重复建。title 写要交付的结果（30 字内），不写「已完成…」「已合入…」这类进展句；doneDefinition 每行一条可检查的完成标准（验收时本人逐条对）；对得上 list_my_items 里的 Mission 就带 missionId，对得上它 tasks 里的 Task 就把 taskId 填进 planTaskId；startDate 填今天，知道截止就填 dueDate。clientId 是这次新建的随机 UUID，重试时沿用。Create an execution item for work I'm doing; check list_my_items first and never duplicate.", inputSchema: CreateInput as Tool["inputSchema"] },
+  { name: "create_item", description: "按我正在做的事新建一条执行事项，直接生效、标为 Agent 建。一件执行事项 = Mission 卡上一个 Activity（带 ◆ 关口的那一步），一般要做 1–2 周，一个 Task 下 2–5 件；过程步骤、修小问题、配置、一次会、一次问答、跑完一个子任务都只写进最接近的已有事项的进展，不新建，拿不准就写进展。完成标准写成可检查的几条，验收时逐条对。先用 list_my_items 确认没有同一件事，有就写进展，不要重复建。title 写要交付的结果（30 字内），不写「已完成…」「已合入…」这类进展句；doneDefinition 每行一条可检查的完成标准（验收时本人逐条对）；必须挂到 Mission：从 list_my_items 的 missions 里挑这件事在推进的那个，带 missionId，对得上它 tasks 里的 Task 就把 taskId 填进 planTaskId；实在对不上任何 Mission 时才不带 missionId，并在 noMissionReason 用一句话写为什么挂不上（例如「你名下没有和外部数据源调研对得上的 Mission」），这件事会进本人的「待归位」由本人处理，不要为了省事不挂；startDate 填今天，知道截止就填 dueDate。clientId 是这次新建的随机 UUID，重试时沿用。Create an execution item for work I'm doing; it must carry a missionId unless noMissionReason explains why none fits; check list_my_items first and never duplicate.", inputSchema: CreateInput as Tool["inputSchema"] },
   { name: "get_item", description: "读取我推进或协作的执行事项详情：完成标准（standards，按行拆好，index 从 0 起）、材料、进展、待验收的提交和验收记录。Read an execution item I own or collaborate on, with its done standards, materials, progress, pending submission and acceptance.", inputSchema: GetInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "append_progress", description: "给我推进或协作的事项记录进展、证据和下一步；结果里的 item 是事项此刻的状态和版本（接着提交验收用这个版本）。Append progress and evidence to an item I own or collaborate on; the result's item carries the item's current status and version.", inputSchema: AppendInput as Tool["inputSchema"] },
   { name: "update_status", description: "把我推进的事项标为未启动或进行中，必须带当前版本。done 不会直接完成，而是提交给本人验收（同 submit_for_acceptance）。Set an item I own to not_started or in_progress; done only submits it for my acceptance.", inputSchema: StatusInput as Tool["inputSchema"] },
   { name: "submit_for_acceptance", description: "我推进的事项做完了，提交给本人验收，必须带当前版本；完成只能由本人在天枢逐条对完成标准确认，提交不等于完成。对 get_item 返回的 standards 逐条（index）写是否达到和一句能核对的依据（提交、PR、文档、会议结论；依据是材料时带 materialId），再写一句结论、建议作为交付结果的材料 id。Submit an item I own for my acceptance; only I can complete it.", inputSchema: SubmitInput as Tool["inputSchema"] },
   { name: "add_link", description: "把外部工具做出来的东西（文档、原型、PR 等）以链接放进我推进或协作的事项，出现在事项封面上；只收 http/https，同一个地址不会重复放；结果里的 item 是事项此刻的状态和版本。Attach a link (http/https) to an item I own or collaborate on; the result's item carries the item's current status and version.", inputSchema: LinkInput as Tool["inputSchema"] },
-  { name: "update_item", description: "改我推进的事项：标题、完成标准（每行一条，null 清空）、开始/截止日期（null 清空）、挂哪个 Mission 和 Task（null 取消挂靠），必须带当前版本，只传要改的字段。Edit an item I own (title, done standards, dates, mission/task).", inputSchema: UpdateInput as Tool["inputSchema"] },
+  { name: "update_item", description: "改我推进的事项：标题、完成标准（每行一条，null 清空）、开始/截止日期（null 清空）、挂哪个 Mission 和 Task（Mission 只能换不能取消，Task 传 null 取消），必须带当前版本，只传要改的字段。Edit an item I own (title, done standards, dates, mission/task).", inputSchema: UpdateInput as Tool["inputSchema"] },
   { name: "delete_item", description: "删掉我推进的一件事（任何状态都行），用来整理过碎、重复、过时的事项：先把有用的进展用 append_progress 写进要保留的那件，再删，删完告诉用户删了哪几件。会后分派的不能删，用 return_item 退回。Delete an item I own; meeting-assigned items can only be returned.", inputSchema: VersionInput as Tool["inputSchema"] },
   { name: "return_item", description: "退回会后分派给我的事（会通知分派的人），reason 写一句原因；只有本人说了不做或不该归他时才退。Return a meeting-assigned item with a reason.", inputSchema: ReturnInput as Tool["inputSchema"] },
   { name: "accept_item", description: "本人在对话里逐条对过完成标准、明确确认每一条都达到之后（一句「通过」不够），代本人确认完成；standards 逐条传 met=true，userConfirmation 填本人原话，群里会记下。有一条没达到、本人没逐条确认或你自己判断达标都不能调用——提醒本人到天枢逐条验收。没传 standards/deliverables/verdict 时沿用待验收提交里的。Mark an item done only after I confirmed every done standard in the conversation.", inputSchema: AcceptInput as Tool["inputSchema"] },
@@ -232,8 +233,14 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
         }
         case "create_item": {
           if (!Value.Check(CreateInput, args)) break;
-          const input = args as typeof CreateInput.static;
-          const created = await createMyTask(deps.pool, identity.personId, names, { ...input, missionId: input.missionId ?? null }, deps.now(), "agent");
+          const { noMissionReason, ...input } = args as typeof CreateInput.static;
+          // 只有本人自己建的事项可以不挂 Mission：Agent 不带 missionId 时必须写清为什么，事项进本人的待归位。
+          if (!input.missionId && !noMissionReason?.trim()) {
+            code = "MISSION_REQUIRED";
+            return result({ code, message: "执行事项必须挂到 Mission：从 list_my_items 的 missions 里挑 missionId；实在对不上时写 noMissionReason（一句话，为什么挂不上），事项会进本人的待归位。" }, true);
+          }
+          const created = await createMyTask(deps.pool, identity.personId, names,
+            { ...input, missionId: input.missionId ?? null, unplacedReason: input.missionId ? undefined : noMissionReason?.trim() }, deps.now(), "agent");
           if ("error" in created) { code = created.error.code; return result(created.error, true); }
           if (!("task" in created)) { code = "INTERNAL"; return result({ code, message: "执行失败，请稍后重试" }, true); }
           const task = created.task;
@@ -306,6 +313,10 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
           if (!Value.Check(UpdateInput, args)) break;
           const { itemId: id, ...input } = args as typeof UpdateInput.static;
           itemId = id;
+          if (input.missionId === null) {
+            code = "MISSION_REQUIRED";
+            return result({ code, message: "Mission 只能换不能取消：要换就传另一个 missionId；不属于任何 Mission 的事由本人在天枢里确认。" }, true);
+          }
           const updated = await updateMyTaskStatus(deps.pool, identity.personId, id, input, names, deps.now());
           const failed = taskFailure(updated);
           if (failed || !("task" in updated)) { code = failed?.code ?? "INTERNAL"; return result(failed, true); }

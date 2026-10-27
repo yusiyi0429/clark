@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import type { TAcceptMyTaskRequest, TAddTaskCollaboratorsRequest, TCreateMyTaskRequest, TMeetingOutcomeItem, TPatchMyTaskRequest, TReturnMyTaskRequest,
+import type { TAcceptMyTaskRequest, TAddTaskCollaboratorsRequest, TCreateMyTaskRequest, TMeetingOutcomeItem, TPatchMyTaskRequest, TReturnMyTaskRequest, TStandaloneMyTaskRequest,
   TTaskAcceptance, TTaskDetailResponse, TTaskProgressSource, TTaskStandardCheck, TTaskSubmission, TTaskView } from "@warmap/contracts";
+import { enqueueJob } from "./jobs.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { insertNotification } from "./notifications.js";
@@ -22,6 +23,7 @@ type TaskRow = {
   latest_progress_author_id: string | null; latest_progress_created_at: Date | null;
   submission: StoredSubmission | null; acceptance: StoredAcceptance | null;
   blocked_reason: string | null; waiting_on: string | null; blocked_at: Date | null;
+  unplaced_reason: string | null; standalone_at: Date | null;
 };
 /** tasks.submission / tasks.acceptance 里存的是人的 id，读的时候换成名字。 */
 type StoredSubmission = Omit<TTaskSubmission, "by"> & { by: string };
@@ -36,7 +38,7 @@ const TASK_SELECT = `SELECT t.id::text,t.version,t.title,t.status,t.created_by,t
  ARRAY(SELECT tm.person_id FROM task_members tm WHERE tm.task_id=t.id AND tm.role='collaborator' AND tm.left_at IS NULL ORDER BY tm.added_at,tm.person_id) AS collaborators,
  t.created_at,t.updated_at,lp.body AS latest_progress_body,lp.source AS latest_progress_source,
  lp.author_id AS latest_progress_author_id,lp.created_at AS latest_progress_created_at,t.submission,t.acceptance,
- t.blocked_reason,t.waiting_on,t.blocked_at
+ t.blocked_reason,t.waiting_on,t.blocked_at,t.unplaced_reason,t.standalone_at
  FROM tasks t
  LEFT JOIN meetings mt ON mt.id=t.origin_meeting_id
  LEFT JOIN missions m ON m.id=t.mission_id
@@ -47,6 +49,16 @@ const TASK_SELECT = `SELECT t.id::text,t.version,t.title,t.status,t.created_by,t
  LEFT JOIN capability_config cap ON cap.id=m.capability_id
  LEFT JOIN tasks prev ON prev.mission_id=t.mission_id AND prev.step_order=t.step_order-1
  LEFT JOIN LATERAL (SELECT body,source,author_id,created_at FROM task_progress WHERE task_id=t.id ORDER BY created_at DESC,id DESC LIMIT 1) lp ON true`;
+
+/**
+ * 待归位（10/26）：只有本人自己建的（self、plan）可以不挂 Mission；会后分派（meeting）、外部 Agent 建的（agent）没挂上、
+ * 本人也没确认「不属于任何 Mission」、还没做完也没退回的，就是待归位。别名 t 指 tasks。
+ */
+export const UNPLACED = "t.mission_id IS NULL AND t.created_by IN ('meeting','agent') AND t.standalone_at IS NULL AND t.status NOT IN ('done','returned')";
+const unplacedRow = (row: TaskRow) => row.mission_id === null && (row.created_by === "meeting" || row.created_by === "agent")
+  && row.standalone_at === null && row.status !== "done" && row.status !== "returned";
+/** 会后分派没挂上时排一次归位（taskPlacement.ts）：快模型按事项原文在负责人能挂的 Mission 里挑。 */
+export const TASK_PLACE_JOB = "task.place";
 
 const queryOf = (client: PoolClient): Query => (sql, params) => client.query(sql, params);
 const person = (id: string, names: Map<string, string>) => ({ personId: id, name: names.get(id) ?? id });
@@ -68,6 +80,7 @@ function projectTask(row: TaskRow, names: Map<string, string>): TTaskView {
     planTaskId: row.plan_task_id,
     blocker: row.blocked_reason && row.blocked_at && row.status !== "done"
       ? { reason: row.blocked_reason, waitingOn: row.waiting_on ? person(row.waiting_on, names) : null, since: row.blocked_at.toISOString() } : null,
+    ...(unplacedRow(row) ? { unplaced: { reason: row.unplaced_reason } } : {}),
     createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
   };
 }
@@ -108,6 +121,11 @@ export async function getTaskViews(q: Query, ids: string[], names: Map<string, s
 }
 export async function listMyTasks(q: Query, ownerId: string, names: Map<string, string>): Promise<TTaskView[]> {
   const rows = (await q(`${TASK_SELECT} WHERE t.owner_id=$1 ORDER BY t.created_at DESC,t.id`, [ownerId])).rows as TaskRow[];
+  return rows.map((row) => projectTask(row, names));
+}
+/** 本人待归位的事项（UNPLACED），新的在前。 */
+export async function listUnplacedTasks(q: Query, ownerId: string, names: Map<string, string>): Promise<TTaskView[]> {
+  const rows = (await q(`${TASK_SELECT} WHERE t.owner_id=$1 AND ${UNPLACED} ORDER BY t.created_at DESC,t.id`, [ownerId])).rows as TaskRow[];
   return rows.map((row) => projectTask(row, names));
 }
 export async function listMissionItems(q: Query, missionId: string, names: Map<string, string>): Promise<TTaskView[]> {
@@ -170,6 +188,8 @@ async function readThrough(client: PoolClient, taskId: string, personId: string,
 }
 async function createInTransaction(client: PoolClient, ownerId: string, names: Map<string, string>, input: {
   clientId: string; title: string; missionId: string | null; startDate?: string; dueDate?: string; doneDefinition?: string; planTaskId?: string; source: "self" | "plan" | "agent";
+  /** 外部 Agent 实在对不上 Mission 时写的原因（待归位上显示）。 */
+  unplacedReason?: string;
 }): Promise<TaskResult> {
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[`task-client:${ownerId}:${input.clientId}`]);
   const existing = await client.query<{ id: string; title: string; mission_id: string | null; start_date: string | null; due_date: string | null; done_definition: string | null; plan_task_id: string | null; created_by: string }>(
@@ -185,21 +205,22 @@ async function createInTransaction(client: PoolClient, ownerId: string, names: M
   if (!validDates(input.startDate ?? null,input.dueDate ?? null)) return error(400,"TASK_DATES_INVALID","计划开始不能晚于截止");
   const step = await appendStep(client,input.missionId);
   const id = randomUUID();
-  await client.query(`INSERT INTO tasks(id,title,owner_id,created_by,status,mission_id,step_order,client_id,start_date,due_date,done_definition,plan_task_id)
-    VALUES($1,$2,$3,$4,'not_started',$5,$6,$7,$8,$9,$10,$11)`,
-  [id,input.title,ownerId,input.source,input.missionId,step,input.clientId,input.startDate ?? null,input.dueDate ?? null,input.doneDefinition ?? null,input.planTaskId ?? null]);
+  await client.query(`INSERT INTO tasks(id,title,owner_id,created_by,status,mission_id,step_order,client_id,start_date,due_date,done_definition,plan_task_id,unplaced_reason)
+    VALUES($1,$2,$3,$4,'not_started',$5,$6,$7,$8,$9,$10,$11,$12)`,
+  [id,input.title,ownerId,input.source,input.missionId,step,input.clientId,input.startDate ?? null,input.dueDate ?? null,input.doneDefinition ?? null,input.planTaskId ?? null,
+    input.missionId ? null : input.unplacedReason ?? null]);
   await client.query("INSERT INTO task_members(task_id,person_id,role,added_by) VALUES($1,$2,'owner',$2)",[id,ownerId]);
   await client.query("INSERT INTO thread_members(object_type,object_id,person_id,added_by) VALUES('task',$1,$2,$2)",[id,ownerId]);
   const row = (await getTaskRow(queryOf(client),id))!;
   const ownerName = names.get(ownerId) ?? ownerId;
   // 开场写进群里就不再回改，所以不写会随拆分变化的「第 n 步，共 m 步」。
-  const belonging = row.mission_title ? `所属个人任务「${row.mission_title}」` : "独立事项";
+  const belonging = row.mission_title ? `所属个人任务「${row.mission_title}」` : input.source === "agent" ? "还没挂到 Mission" : "独立事项";
   const messageId = await threadMessage(client,id,`这个群讨论${ownerName}推进的执行事项「${input.title}」（${belonging}），截止 ${input.dueDate ?? "待定"}。`);
   await readThrough(client,id,ownerId,messageId);
   return { task: (await getTaskView(queryOf(client),id,names))! };
 }
 /** source=agent：外部工具通过 MCP 替本人建的，直接生效，和本人建的一样能改能删。 */
-export async function createMyTask(pool: Pool, ownerId: string, names: Map<string,string>, input: TCreateMyTaskRequest, now: Date, source: "self" | "agent" = "self"): Promise<TaskResult> {
+export async function createMyTask(pool: Pool, ownerId: string, names: Map<string,string>, input: TCreateMyTaskRequest & { unplacedReason?: string }, now: Date, source: "self" | "agent" = "self"): Promise<TaskResult> {
   if (input.planTaskId && !input.missionId) return independentWithTask;
   const client = await pool.connect();
   try {
@@ -252,6 +273,7 @@ export function updateMyTaskStatus(pool: Pool, ownerId: string, taskId: string, 
     await client.query(`UPDATE tasks SET status=COALESCE($2,status),title=COALESCE($3,title),start_date=$4,due_date=$5,
       done_definition=$6,judgment=$7,judgment_at=CASE WHEN $7::text IS NULL THEN NULL WHEN $7::text IS DISTINCT FROM judgment THEN now() ELSE judgment_at END,mission_id=$8,step_order=$9,return_reason=CASE WHEN $2 IS NOT NULL THEN NULL ELSE return_reason END,
       plan_task_id=$10,blocked_reason=$11,waiting_on=$12,blocked_at=CASE WHEN $11::text IS NULL THEN NULL ELSE COALESCE(blocked_at,now()) END,
+      unplaced_reason=CASE WHEN $8::text IS NULL THEN unplaced_reason END,
       version=version+1,updated_at=now() WHERE id=$1`,
     [taskId,input.status ?? null,input.title ?? null,start,due,input.doneDefinition === undefined ? row.done_definition : input.doneDefinition,
       input.judgment === undefined ? row.judgment : input.judgment,missionId,step,planTaskId,blockedReason,waitingOn]);
@@ -266,6 +288,37 @@ export function returnMyTask(pool: Pool, ownerId: string, taskId: string, input:
     await settleSubmissionNotices(client,taskId);
     if (row.lead_dri_id && row.lead_dri_id !== ownerId)
       await insertNotification(client,{personId:row.lead_dri_id,kind:"task_returned",objectType:"task",objectId:taskId,actorId:ownerId});
+  });
+}
+/**
+ * 归位结果（taskPlacement.ts）：还在待归位的事项挂上 missionId（接在这个 Mission 已有的步骤后面，群里记一句）；
+ * missionId 为 null 时只记下挂不上的原因。本人已经手动处理过的不动。
+ */
+export async function placeTask(pool: Pool, taskId: string, missionId: string | null, reason: string | null): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const row = (await client.query<{ owner_id: string }>(`SELECT t.owner_id FROM tasks t WHERE t.id=$1 AND ${UNPLACED} FOR UPDATE`, [taskId])).rows[0];
+    if (!row) { await client.query("ROLLBACK"); return; }
+    if (missionId) {
+      const step = await appendStep(client, missionId);
+      await client.query("UPDATE tasks SET mission_id=$2,step_order=$3,unplaced_reason=NULL,version=version+1,updated_at=now() WHERE id=$1", [taskId, missionId, step]);
+      const title = (await client.query<{ title: string }>("SELECT title FROM missions WHERE id=$1", [missionId])).rows[0]?.title ?? missionId;
+      await tellGroup(client, taskId, row.owner_id, `按会上的内容挂到了 Mission「${title}」；不对的话在这件事里改。`);
+    } else {
+      await client.query("UPDATE tasks SET unplaced_reason=$2,version=version+1,updated_at=now() WHERE id=$1", [taskId, reason]);
+    }
+    await client.query("COMMIT");
+  } catch (e) { await client.query("ROLLBACK").catch(() => undefined); throw e; } finally { client.release(); }
+}
+/** 待归位的事项本人确认「不属于任何 Mission」：记下为什么，之后按本人自己的独立事项算；群里记一句。 */
+export function standaloneMyTask(pool: Pool, ownerId: string, taskId: string, input: TStandaloneMyTaskRequest, names: Map<string,string>): Promise<TaskResult> {
+  return ownerMutation(pool,ownerId,taskId,input.version,names,async(client,row)=>{
+    if (!unplacedRow(row)) return error(409,"TASK_NOT_UNPLACED","这件事不在待归位里");
+    const reason = input.reason.trim();
+    if (!reason) return error(400,"INVALID_INPUT","写一句为什么不属于任何 Mission");
+    await client.query("UPDATE tasks SET standalone_at=now(),standalone_reason=$2,version=version+1,updated_at=now() WHERE id=$1",[taskId,reason]);
+    await tellGroup(client,taskId,ownerId,`${names.get(ownerId) ?? ownerId}确认这件事不属于任何 Mission：${reason}`);
   });
 }
 type CheckInput = Pick<TTaskStandardCheck, "index" | "met"> & { evidence?: string | null; materialId?: string | null };
@@ -444,20 +497,31 @@ export async function addTaskCollaborators(pool: Pool, ownerId: string, taskId: 
 }
 
 /** 会后推送保持原有幂等和通知规则，同时建立可访问的事项群组。会议卡的行动项没有逐字引用，quote 为 null。 */
-export async function dispatchMeetingTodo(client: PoolClient, meeting: { id:string; leadDriId:string; ceoId:string; ownerName?:string; title?:string }, item:Pick<TMeetingOutcomeItem,"id"|"text"|"ownerPersonId"|"dueDate"> & { quote: string | null }): Promise<string | null> {
+export async function dispatchMeetingTodo(client: PoolClient, meeting: { id:string; leadDriId:string; ceoId:string; ownerName?:string; title?:string; now?:Date }, item:Pick<TMeetingOutcomeItem,"id"|"text"|"ownerPersonId"|"dueDate"> & { quote: string | null }): Promise<string | null> {
   const ownerId = item.ownerPersonId ?? meeting.leadDriId;
   if (ownerId === meeting.ceoId) return null;
-  const inserted = await client.query<{id:string}>(`INSERT INTO tasks(id,title,due_date,status,owner_id,created_by,origin_meeting_id,origin_item_id,source_quote)
-    VALUES($1,$2,$3,'not_started',$4,'meeting',$5,$6,$7)
+  const existing = await client.query<{id:string}>("SELECT id::text FROM tasks WHERE origin_meeting_id=$1 AND origin_item_id=$2",[meeting.id,item.id]);
+  if (existing.rowCount) return existing.rows[0].id;
+  // 会挂在负责人自己能挂的 Mission 上就直接挂；对不上的排一次归位（快模型挑），还挑不出就是待归位。
+  const anchored = (await client.query<{ id: string }>(`SELECT a->>'id' AS id FROM meetings mt, jsonb_array_elements(COALESCE(mt.world_anchors,'[]'::jsonb)) a
+    WHERE mt.id=$1 AND a->>'kind'='mission'`,[meeting.id])).rows;
+  let missionId: string | null = null;
+  for (const anchor of anchored) if (await missionAvailable(queryOf(client),ownerId,anchor.id,meeting.now ?? new Date())) { missionId = anchor.id; break; }
+  const step = await appendStep(client,missionId);
+  const inserted = await client.query<{id:string}>(`INSERT INTO tasks(id,title,due_date,status,owner_id,created_by,origin_meeting_id,origin_item_id,source_quote,mission_id,step_order)
+    VALUES($1,$2,$3,'not_started',$4,'meeting',$5,$6,$7,$8,$9)
     ON CONFLICT(origin_meeting_id,origin_item_id) WHERE origin_meeting_id IS NOT NULL DO NOTHING RETURNING id::text`,
-  [randomUUID(),title(item.text),item.dueDate ?? null,ownerId,meeting.id,item.id,item.quote]);
+  [randomUUID(),title(item.text),item.dueDate ?? null,ownerId,meeting.id,item.id,item.quote,missionId,step]);
   if (!inserted.rowCount) return (await client.query<{id:string}>("SELECT id::text FROM tasks WHERE origin_meeting_id=$1 AND origin_item_id=$2",[meeting.id,item.id])).rows[0].id;
   const taskId = inserted.rows[0].id;
   await client.query("INSERT INTO task_members(task_id,person_id,role,added_by) VALUES($1,$2,'owner','meeting')",[taskId,ownerId]);
   await client.query("INSERT INTO thread_members(object_type,object_id,person_id,added_by) VALUES('task',$1,$2,'meeting')",[taskId,ownerId]);
-  const id = await threadMessage(client,taskId,`这个群讨论${meeting.ownerName ?? ownerId}推进的执行事项「${title(item.text)}」（独立事项${meeting.title ? `，来自会议「${meeting.title}」` : ""}），截止 ${item.dueDate ?? "待定"}。`);
+  const mission = missionId ? (await client.query<{ title: string }>("SELECT title FROM missions WHERE id=$1",[missionId])).rows[0]?.title : null;
+  const belonging = mission ? `所属个人任务「${mission}」` : "还没挂到 Mission";
+  const id = await threadMessage(client,taskId,`这个群讨论${meeting.ownerName ?? ownerId}推进的执行事项「${title(item.text)}」（${belonging}${meeting.title ? `，来自会议「${meeting.title}」` : ""}），截止 ${item.dueDate ?? "待定"}。`);
   await readThrough(client,taskId,ownerId,id);
   await insertNotification(client,{personId:ownerId,kind:"meeting_action_assigned",objectType:"task",objectId:taskId});
+  if (!missionId) await enqueueJob(queryOf(client),{ kind: TASK_PLACE_JOB, dedupeKey: `${TASK_PLACE_JOB}:${taskId}`, payload: { taskId } });
   return taskId;
 }
 export async function deleteDispatchedTask(client:PoolClient, taskId:string): Promise<{ok:true}|{ok:false;code:string;message:string}> {

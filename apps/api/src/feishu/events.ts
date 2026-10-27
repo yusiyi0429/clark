@@ -15,6 +15,18 @@ export const FEISHU_SUBSCRIBED_EVENTS = ["im.message.receive_v1", "minutes.minut
   "vc.meeting.all_meeting_started_v1", "vc.meeting.all_meeting_ended_v1"] as const;
 export type FeishuEventHandlers = Record<string, (payload: Record<string, unknown>) => Promise<void>>;
 
+/** 同一种事件有几处要处理（群消息发布文档、私聊对话）：按顺序都交一遍。 */
+export function mergeFeishuEventHandlers(...maps: FeishuEventHandlers[]): FeishuEventHandlers {
+  const merged: FeishuEventHandlers = {};
+  for (const map of maps) {
+    for (const [eventType, handler] of Object.entries(map)) {
+      const previous = merged[eventType];
+      merged[eventType] = previous ? async (payload) => { await previous(payload); await handler(payload); } : handler;
+    }
+  }
+  return merged;
+}
+
 /** 至少投递一次：消息类按 message_id，其余按 event_id（1.0 版事件是 uuid）去重。 */
 export function feishuEventDedupeKey(data: Record<string, unknown>): string | null {
   const messageId = (data.message as { message_id?: unknown } | undefined)?.message_id;

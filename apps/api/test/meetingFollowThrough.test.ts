@@ -332,6 +332,9 @@ describe("成员通知", () => {
         "会议「渠道投入决策会」给你分配了执行事项「跟进风险清单」",
       ]);
       expect(notifications.every((n) => n.kind === "meeting_action_assigned" && n.objectType === "task" && n.readAt === null)).toBe(true);
+      // 通知栏正文只写事情本身，会议名进小字。
+      expect((notifications as unknown as { subject?: string; source?: string }[]).map((n) => `${n.source}|${n.subject}`).sort())
+        .toEqual(["渠道投入决策会|周五前提交资源排期", "渠道投入决策会|跟进风险清单"]);
 
       const ownerNotification = (await t.sql("SELECT id::text FROM notifications WHERE person_id = $1", [OWNER]))[0].id as string;
       const seen = await me(t, lead, "POST", "/api/me/seen", { notificationIds: [notifications[0].id, ownerNotification] });

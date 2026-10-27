@@ -65,6 +65,7 @@ import { THREE_LAYER_RULES } from "./companyMap.js";
 import { composeTurnContext, withTurnContext, type ProviderTurn } from "./turnContext.js";
 import { ISSUE_SUGGEST_RULES } from "./issueDrafts.js";
 import { ASK_USER_RULES, PERSONAL_REVIEW_CHECK_RULES, makeAskTool } from "./askUser.js";
+import { DraftMeetingParams, type DraftMeetingArgs } from "./meetingDraft.js";
 
 /** 场景锚点（PR #12 Anchor 层）在系统提示里的说明：CEO 与 DRI 共用。 */
 const ANCHOR_CONTEXT = `\`anchor\` 是本人当前所在的页面（scene）与聚焦的卡（focus，句柄 A1…），items 是页面上可见项的摘要目录；要看某一项的完整内容或下一页目录时用 \`read_anchor\`（handle 或 cursor），展开结果或 focus 带 changed 时说明这一项在上次读取后有更新。focus.stale 表示本人页面上看到的是旧版本，回答时提醒刷新。anchor 和 currentObject 只在本轮给出，历史里没有，不从历史推断页面现状；它们只说明场景和指代，本地页面、草稿与历史不等于本体（World）里的正式公司事实。\`now\` 是本轮发问时的北京时间（at，含星期）、本周（周一到周日）和本月；本人说的「今天」「这周」「本月」「月底」等都按它换算，不反问本人现在是几号或几月。`;
@@ -76,7 +77,7 @@ const MATERIAL_EDITING_RULES = `材料是上述只读边界的例外。一份材
 const OPEN_TODOS_CONTEXT = `\`myOpenTodos\`（有时才出现）是别人发给本人、本人还没完成的待办（标题、发起人、发出时间、类型），新的在前，只用来理解本人说的「那个表」「巨杰拜托我的事」指什么。本人要你替他问某件待办的发起人时，不管这里对得上几件，都直接调用 ask_about_todo：定位由系统做，对上不止一件时界面会出点选卡让本人选。不要自己用文字反问是哪一件，也不要替本人挑一件。`;
 
 /** 对话里的三个一句话入口：只读边界的例外（CEO 与 DRI 共用），细则写在各自的工具说明里。 */
-const ENTRY_RULES = `三件事是例外，它们只产出草稿或预览，发出、提交仍由本人在卡上点：本人要生成或重新生成自己的复盘时用 generate_review；本人要你替他问某件待办的发起人时用 ask_about_todo；本人要请同事做事、补材料时用 request_help。不能声称已经发出或提交。`;
+const ENTRY_RULES = `这几件事是例外，它们只产出草稿或预览，发出、提交仍由本人在卡上点：本人要生成或重新生成自己的复盘时用 generate_review；本人要你替他问某件待办的发起人时用 ask_about_todo；本人要请同事做事、补材料时用 request_help；本人要约会议时用 draft_meeting（只出会议卡，本人点「约好」才建会）。不能声称已经发出、提交或约好。`;
 
 export const SYSTEM_PROMPT = `# 角色
 
@@ -922,6 +923,13 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
             answers: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 1000 }), { maxItems: 3 })),
           }, { additionalProperties: false }),
           execute: async (_id, args) => textResult(await entries.requestHelp(args as { prompt: string; requestId?: string; answers?: string[] })),
+        }),
+        defineTool({
+          name: "draft_meeting",
+          label: "起草会议",
+          description: "本人要约会、开会、拉人聊某件事时调用（例如「明天下午三点跟人豪、斯一约半小时，聊新 Chat 切换」）。只起草不建会：系统按北京时间换算日期时间、按名字在人员目录里找人，放进回答下面的会议卡，本人点「约好」才建会、发飞书邀请。title 是会议名称（从本人的话里概括，如「新 Chat 切换」）；date、time 照抄本人说的日期和开始时间（如 明天、下周三、10月28日、下午三点、15:00）；说了时长填 durationMinutes（半小时 30、一个小时 60），说了结束时间填 endTime，都没说不填（默认 30 分钟）；host 只在本人指定别人主持时填那人的名字；participants 照抄本人说的人名（不含本人）。本人改了时间、人或名称时带完整的新内容再调用一次。按返回的 note 回答。",
+          parameters: DraftMeetingParams,
+          execute: async (_id, args) => textResult(await entries.draftMeeting(args as DraftMeetingArgs)),
         }),
         ...(entries.collections ? [defineTool({
           name: "start_collection",

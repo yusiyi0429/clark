@@ -18,6 +18,9 @@ export interface MemberNotification {
   id: string;
   kind: "meeting_action_assigned" | "task_returned" | "strategic_rejected" | "task_collaborator_added" | "thread_member_added" | "task_submitted" | "meeting_card_pending" | "task_progress_added";
   text: string;
+  /** 会后分派：事情本身和会议名（通知栏正文只写事情，会议名进小字）。 */
+  subject?: string;
+  source?: string;
   objectType: "task" | "meeting" | "issue";
   objectId: string;
   createdAt: string;

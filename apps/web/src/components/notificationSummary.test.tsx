@@ -74,9 +74,24 @@ describe("通知栏分组（clark 三组）", () => {
     expect(html).toContain('aria-label="8 项通知"');
   });
 
-  it("M2 可用时 CEO 通知栏有去 M2 的入口卡，不可用时没有", () => {
-    expect(renderToStaticMarkup(<NotificationRail cards={[]} onNavigate={() => undefined} m2Available />)).toContain('data-notice="m2-entry"');
-    expect(renderToStaticMarkup(<NotificationRail cards={[]} onNavigate={() => undefined} />)).not.toContain('data-notice="m2-entry"');
+  it("M2 可用时 CEO 通知栏在月末到月初有去 M2 的入口卡，天枢自己的月度计划不出；不可用时没有入口卡", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-29T02:00:00Z"));
+      const plan = card("monthly-plan", "plan", "2026-11 月度计划", { status: "negotiating", period: "2026-11" });
+      const withM2 = renderToStaticMarkup(<NotificationRail cards={[plan]} onNavigate={() => undefined} m2Available />);
+      expect(withM2).toContain('data-notice="m2-entry"');
+      expect(withM2).not.toContain('data-notice="decisions"');
+      expect(renderToStaticMarkup(<NotificationRail cards={[plan]} onNavigate={() => undefined} />)).toContain('data-notice="decisions"');
+      expect(renderToStaticMarkup(<NotificationRail cards={[]} onNavigate={() => undefined} />)).not.toContain('data-notice="m2-entry"');
+      vi.setSystemTime(new Date("2026-10-26T02:00:00Z"));
+      expect(renderToStaticMarkup(<NotificationRail cards={[]} onNavigate={() => undefined} m2Available />)).not.toContain('data-notice="m2-entry"');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("CEO 通知栏没有请求时不出「请求」卡", () => {
+    expect(renderToStaticMarkup(<NotificationRail cards={[]} onNavigate={() => undefined} />)).not.toContain('data-notice="requests"');
   });
 });
 

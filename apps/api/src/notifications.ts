@@ -134,6 +134,8 @@ export async function listMyNotifications(q: Query, peopleDirectory: PeopleDirec
     id: row.id,
     kind: row.kind,
     text: composeText(row, names),
+    ...(row.kind === "meeting_action_assigned" && row.task_title ? { subject: row.task_title } : {}),
+    ...(row.kind === "meeting_action_assigned" && row.meeting_title ? { source: row.meeting_title } : {}),
     objectType: row.object_type,
     objectId: row.object_id,
     createdAt: row.created_at.toISOString(),

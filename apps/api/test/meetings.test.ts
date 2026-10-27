@@ -1097,7 +1097,7 @@ describe("Meeting 计划结束时间与「这场会开完了」", () => {
       const { cookie, meetingId, card } = await readyMeeting(t, "member-host-end");
       const member = await t.memberCookie();
       const memberCard = (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${meetingId}`, headers: { cookie: member } })).json();
-      expect(memberCard.actions.map((action: { actionType: string }) => action.actionType)).toEqual(["meeting.reschedule", "meeting.end"]);
+      expect(memberCard.actions.map((action: { actionType: string }) => action.actionType)).toEqual(["meeting.cancel", "meeting.reschedule", "meeting.end"]);
       expect(memberCard.payload).not.toHaveProperty("draft");
       expect((await execute(t, member, actionOf(card as ActionCard, "meeting.edit_details").actionId, { title: "越权修改" })).statusCode).toBe(403);
       expect((await execute(t, cookie, actionOf(card as ActionCard, "meeting.edit_details").actionId, { title: "CEO 改名" })).statusCode).toBe(200);
@@ -1109,13 +1109,31 @@ describe("Meeting 计划结束时间与「这场会开完了」", () => {
       expect(ended.statusCode).toBe(200);
       expect(ended.json().cards[0].payload.endedAt).toEqual(expect.any(String));
       expect(ended.json().cards[0].payload).not.toHaveProperty("draft");
-      expect(ended.json().cards[0].actions.map((action: { actionType: string }) => action.actionType)).toEqual(["meeting.reschedule"]);
+      expect(ended.json().cards[0].actions.map((action: { actionType: string }) => action.actionType)).toEqual(["meeting.cancel", "meeting.reschedule"]);
 
       const other = await readyMeeting(t, "member-not-host-end");
       await t.sql("UPDATE meetings SET lead_dri_id=$2 WHERE id=$1", [other.meetingId, "another-host"]);
       const visible = (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${other.meetingId}`, headers: { cookie: member } })).json();
       expect(visible.actions).toEqual([]);
       expect((await execute(t, member, actionOf(other.card as ActionCard, "meeting.end").actionId)).statusCode).toBe(404);
+    } finally { await t.close(); }
+  }, 20_000);
+
+  it("主持人能删除（取消）自己主持的会，返回成员投影；不是主持人的会删不了", async () => {
+    const t = await createTestApp({}, undefined, { preflightAgent: fakeAgent() });
+    try {
+      const { meetingId } = await readyMeeting(t, "member-host-cancel");
+      const member = await t.memberCookie();
+      const memberCard = (await t.app.inject({ method: "GET", url: `/api/me/cards/meetings/${meetingId}`, headers: { cookie: member } })).json();
+      const cancelled = await execute(t, member, actionOf(memberCard, "meeting.cancel").actionId);
+      expect(cancelled.statusCode).toBe(200);
+      expect(cancelled.json().cards[0].payload).not.toHaveProperty("draft");
+      expect((await t.sql("SELECT status FROM meetings WHERE id = $1", [meetingId]))[0].status).toBe("cancelled");
+
+      const other = await readyMeeting(t, "member-not-host-cancel");
+      await t.sql("UPDATE meetings SET lead_dri_id=$2 WHERE id=$1", [other.meetingId, "another-host"]);
+      expect((await execute(t, member, actionOf(other.card as ActionCard, "meeting.cancel").actionId)).statusCode).toBe(404);
+      expect((await t.sql("SELECT status FROM meetings WHERE id = $1", [other.meetingId]))[0].status).toBe("scheduled");
     } finally { await t.close(); }
   }, 20_000);
 

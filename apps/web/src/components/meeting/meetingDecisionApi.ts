@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { TMeetingBookingRequest, TMeetingMinutesFetchResponse, TOrganizeFeishuMinuteRequest, TMeetingWorldResponse, TPickedWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
+import type { TMeetingBookingRequest, TMeetingDraftStatusResponse, TMeetingMinutesFetchResponse, TOrganizeFeishuMinuteRequest, TMeetingWorldResponse, TPickedWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
 import { browserApi, type Card } from "@/lib/api/client";
 
 /** 会议入本体：挂点与会议记录状态（GET /api/meetings/:id/world，不进会议卡）。 */
@@ -63,6 +63,13 @@ export async function bookMeeting(body: TMeetingBookingRequest): Promise<{ card:
   const { data, error, response } = await browserApi.POST("/api/meetings", { body });
   if (response.status === 401) { window.location.assign("/access"); return { code: "UNAUTHENTICATED" }; }
   return response.ok && data ? { card: data.card } : { code: (error as { code?: string } | undefined)?.code ?? "FAILED" };
+}
+
+/** 对话里的一张会议卡约好没有：约好了给那场会，没约为 null。 */
+export async function meetingDraftStatus(draftId: string): Promise<TMeetingDraftStatusResponse["meeting"]> {
+  const { data, response } = await browserApi.GET("/api/meeting-drafts/{draftId}", { params: { path: { draftId } } });
+  if (!response.ok || !data) throw new Error("没有读到");
+  return data.meeting;
 }
 
 /** 整理飞书里直接开的会：成功给新会议 id，失败给错误码。 */

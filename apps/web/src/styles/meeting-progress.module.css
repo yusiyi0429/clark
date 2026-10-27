@@ -67,8 +67,13 @@
 
 :global([data-reduce-motion='true']) .step[data-tone] .dot { animation: none; }
 
-/* 待交记录这一步后面的补救入口：都是安静的文字链接（进入飞书会议、重新安排会议在页头最右那一格）。 */
 .actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-left: 6px; font-weight: 400; }
+
+/* 待交记录时进度线下面那一块：和进度线隔开，左边对齐进度点后的字。第一行贴链接读取（首选），第二行安静的文字链接。 */
+.withBelow { display: grid; gap: 14px; min-width: 0; }
+.below { min-width: 0; padding-left: 13px; }
+.recovery { display: grid; gap: 12px; justify-items: start; min-width: 0; }
+.others { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; }
 
 /* 双类名：和 ts-design 的按钮样式同场时压过它。 */
 .quiet.quiet {
@@ -94,14 +99,18 @@
 .quiet.quiet:hover { color: #1f2937; text-decoration-color: currentColor; }
 .quiet.quiet:disabled { opacity: 0.45; cursor: default; }
 
-.link { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-.link input { width: min(240px, 60vw); height: 28px; padding: 0 10px; border: 1px solid #d9dde5; border-radius: 8px; background: #fff; font: inherit; font-size: 13px; }
+.link { display: flex; align-items: center; gap: 8px; width: min(440px, 100%); margin: 0; }
+.link input { flex: 1; min-width: 0; height: 34px; padding: 0 12px; border: 1px solid #d9dde5; border-radius: 9px; background: #fff; color: #1f2a3d; font: inherit; font-size: 13px; }
+.link input:focus { outline: none; border-color: #215ba1; box-shadow: var(--field-focus-ring); }
+.read.read { flex: none; height: 34px; padding: 0 16px; border: 0; border-radius: 9px; background: #215ba1; color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.read.read:hover { background: #1b4d8a; }
+.read.read:disabled { background: #c9d3e1; cursor: default; }
+.read.read:focus-visible { outline: 2px solid #215ba1; outline-offset: 2px; }
 
 .error { color: #be123c; font-size: 12px; }
 
 /* 点触下限（手机端规范 §2 / §3.5）：手持与触屏时入口高 44，贴链接的输入框占满一行。鼠标的电脑不变。 */
 @media (max-width: 959px), (pointer: coarse) {
-  .quiet.quiet, .link input { min-height: var(--touch-hit, 28px); }
-  .link { flex: 1 1 100%; }
-  .link input { flex: 1; width: auto; }
+  .quiet.quiet, .link input, .read.read { min-height: var(--touch-hit, 28px); }
+  .link { width: 100%; }
 }

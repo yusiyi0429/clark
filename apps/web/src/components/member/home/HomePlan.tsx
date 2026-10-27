@@ -14,9 +14,10 @@ import { CircleAlert } from "lucide-react";
 import type { THomePlanActivity, THomePlanMark, THomePlanResponse } from "@warmap/contracts";
 import { DayPopover, type DayMode } from "./DayPopover";
 import { MissionDetail } from "./MissionDetail";
-import { MissionList } from "./MissionList";
+import { MissionList, UNPLACED } from "./MissionList";
 import { MonthCalendar } from "./MonthCalendar";
 import { LOOSE, TaskList, hasInfo } from "./TaskList";
+import { UnplacedDetail } from "./UnplacedDetail";
 import { isPending, usePlanMarks } from "./usePlanMarks";
 import type { Navigate } from "./planFormat";
 import s from "@/styles/home-plan.module.css";
@@ -38,6 +39,8 @@ export function HomePlan({ plan, actions, onNavigate }: { plan: THomePlanRespons
   // 跨月重取后原来聚焦的 Mission 可能不在了，就回到「全部」。
   const mission = missions.find((item) => item.missionId === picked) ?? null;
   const focus = mission?.missionId ?? null;
+  // 选了「待归位」、而且还有待归位的：下面换成待归位的处理卡（都处理完就回到「全部」）。
+  const unplaced = picked === UNPLACED && (plan?.unplaced.length ?? 0) > 0;
   const tasks = mission && plan ? plan.tasks.filter((task) => task.missionId === focus) : [];
   const scope = !plan ? [] : focus ? plan.activities.filter((activity) => activity.missionId === focus) : plan.activities;
   const taskIds = new Set(tasks.map((task) => task.taskId));
@@ -132,9 +135,9 @@ export function HomePlan({ plan, actions, onNavigate }: { plan: THomePlanRespons
           )}
         </section>
         <section className={`${s.card} ${s.missions}`} aria-label="本月 Mission">
-          <MissionList plan={plan} focus={focus} onChoose={choose} />
+          <MissionList plan={plan} focus={unplaced ? UNPLACED : focus} onChoose={choose} />
         </section>
-        <MissionDetail
+        {unplaced ? <UnplacedDetail plan={plan} onNavigate={onNavigate} /> : <MissionDetail
           mission={mission}
           taskName={tasks.length ? selectedTask?.name ?? "未归入 Task" : null}
           tasks={tasks.length ? (
@@ -151,7 +154,7 @@ export function HomePlan({ plan, actions, onNavigate }: { plan: THomePlanRespons
           weekEnd={plan.weekEnd}
           missionOf={focus === null ? missionOf : undefined}
           onNavigate={onNavigate}
-        />
+        />}
       </>}
     </div></div>
   );

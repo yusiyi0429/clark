@@ -32,11 +32,13 @@ const origin = (material: TMaterialView) => material.origin === "agent" ? `Agent
  * 执行事项的封面（design-12）：身份区、完成标准、正在推进的材料、执行过程。完成后换成完成记录：验收记录和结论、交付结果、
  * 逐条打勾的完成标准。材料清单和放材料的动作来自材料区（ObjectMaterialArea），点卡片和在页头下拉里选是同一个动作。
  */
-export function TaskCover({ detail, area, editor, onEdit, onInvite, onProgress }: {
+export function TaskCover({ detail, area, editor, unplaced, onEdit, onInvite, onProgress }: {
   detail: Detail;
   area: MaterialAreaApi;
   /** ⋯ → 编辑展开的表单，放在身份区下面。 */
   editor: ReactNode;
+  /** 待归位时挑 Mission 的那一块（只给推进人），放在身份区战场那一行下面。 */
+  unplaced?: ReactNode;
   onEdit: () => void;
   onInvite: () => void;
   /** 写了一条进展：页面换上这条，并重读这件事（推进人写进展会让未启动的变进行中）。 */
@@ -45,7 +47,7 @@ export function TaskCover({ detail, area, editor, onEdit, onInvite, onProgress }
   const done = detail.task.status === "done";
   const acceptance = done ? detail.acceptance : null;
   return <div className={s.taskPane}><div className={s.pane}>
-    <Identity detail={detail} onInvite={onInvite} />
+    <Identity detail={detail} onInvite={onInvite} unplaced={unplaced} />
     {editor}
     {acceptance ? <>
       <Deliverables ids={acceptance.deliverableMaterialIds} area={area} />
@@ -58,7 +60,7 @@ export function TaskCover({ detail, area, editor, onEdit, onInvite, onProgress }
   </div></div>;
 }
 
-function Identity({ detail, onInvite }: { detail: Detail; onInvite: () => void }) {
+function Identity({ detail, onInvite, unplaced }: { detail: Detail; onInvite: () => void; unplaced?: ReactNode }) {
   const workspace = useWorkspace();
   const task = detail.task;
   const owner = detail.role === "owner";
@@ -73,6 +75,7 @@ function Identity({ detail, onInvite }: { detail: Detail; onInvite: () => void }
       : <p className={c.missionText}>{task.mission.title}</p>
       : <div className={s.paneRow}><StatusBadge tone="info"><span className={s.sourceBadge}>{taskSourceLabel(task)}</span></StatusBadge></div>}
     <p className={s.paneNote}>{task.mission?.battlefieldName || "未关联战场"} · {owner ? "你在推进" : `${task.owner.name}在推进`}</p>
+    {unplaced}
     {task.blocker ? <p className={c.blocker} data-blocker>卡在：{task.blocker.reason}{task.blocker.waitingOn ? ` · 在等 ${task.blocker.waitingOn.name}` : ""}</p> : null}
     {task.status === "returned" ? <p className={c.returned}>已退回{task.returnReason ? `：${task.returnReason}` : ""}</p> : null}
     <div className={c.titleRow}>

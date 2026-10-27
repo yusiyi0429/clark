@@ -2,7 +2,7 @@ import type { Pool } from "pg";
 import type { TMonthPlanResponse, TSaveMonthPlanRequest, TTaskView } from "@warmap/contracts";
 import { companyPeriod } from "./monthlyPlans.js";
 import type { Query } from "./meetingStore.js";
-import { createInTransaction, getTaskViews, queryOf, validDate } from "./tasks.js";
+import { createInTransaction, getTaskViews, queryOf, UNPLACED, validDate } from "./tasks.js";
 
 type Mission = { id:string; title:string; card_id:string; battlefield_name:string; milestones:string[] };
 type PlanError = { status:number; code:string; message:string; latestTask?:TTaskView };
@@ -41,7 +41,7 @@ export async function listPlanItems(q:Query,ownerId:string,missionIds:string[],f
       ((${dated} AND (start_date IS NOT NULL OR due_date IS NOT NULL)) OR
        (start_date IS NULL AND due_date IS NULL AND status<>'done')))${earlier})`;
   const result=await q(`SELECT id::text,mission_id
-    FROM tasks WHERE owner_id=$1 AND ${home ? `CASE WHEN status='done' THEN ${completed} ELSE ${where} END` : where}
+    FROM tasks t WHERE owner_id=$1 AND NOT (${UNPLACED}) AND ${home ? `CASE WHEN status='done' THEN ${completed} ELSE ${where} END` : where}
     ORDER BY step_order NULLS LAST,created_at,id`,[ownerId,missionIds,firstDay,lastDay,...(home ? [home.period,home.doneFrom,home.doneTo] : [])]);
   const views=new Map((await getTaskViews(q,result.rows.map((row)=>row.id as string),names)).map((item)=>[item.id,item]));
   return result.rows.flatMap((row)=>{

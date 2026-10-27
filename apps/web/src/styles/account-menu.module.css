@@ -152,6 +152,8 @@
 .field { display: grid; gap: 6px; font-size: 12.5px; color: #3c4350; }
 /* 码输入框：大字加宽字距，边与聚焦走 globals.css 的统一输入框样式 */
 .field input { width: 160px; height: 40px; padding: 0 14px; font-size: 18px; letter-spacing: .4em; }
+.profileField input { box-sizing: border-box; width: 100%; font-size: 14px; letter-spacing: normal; }
+.profileHint { margin: 0; color: var(--ink-muted); font-size: 12.5px; line-height: 1.7; }
 .formActions { display: flex; justify-content: flex-end; }
 .primary.primary { min-height: 36px; padding: 0 16px; border-radius: 10px; background: #2f6fd6; color: #fff; font-size: 13.5px; font-weight: 600; }
 .primary.primary:disabled { opacity: .5; }

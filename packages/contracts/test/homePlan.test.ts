@@ -42,6 +42,7 @@ const sample = {
     { item: activity("7b0c3c1e-0000-4000-8000-000000000002", "真实会议跑通"), missionId: "sun-202610-1", column: "week", overdue: false, lastActivityAt: now, idleDays: null },
     { item: activity("7b0c3c1e-0000-4000-8000-000000000003", "新 Chat 题库打分", { status: "not_started", startDate: "2026-10-27", dueDate: null, mission: null }), missionId: null, column: "later", overdue: false, lastActivityAt: now, idleDays: null },
   ],
+  unplaced: [],
 };
 
 describe("首页 Mission 计划视图契约", () => {

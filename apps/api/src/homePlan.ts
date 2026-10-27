@@ -3,6 +3,7 @@ import type { Query } from "./meetingStore.js";
 import { listPlanItems, milestoneDate, type PlanItem } from "./monthPlan.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { listPlanMarks } from "./planMarks.js";
+import { listUnplacedTasks } from "./tasks.js";
 import { readPlanTasks, type PlanTaskSource } from "./planTasks.js";
 import { isWorkday, monthDays, weekOf } from "./workCalendar.js";
 import { shanghaiDate } from "./workdays.js";
@@ -86,14 +87,15 @@ export async function readHomePlan(q: Query, person: { personId: string }, now: 
     const date = milestoneDate(text, period);
     return date?.startsWith(`${period}-`) ? [{ missionId: m.id, date, label: text.replace(LEADING_DATE, "").trim() }] : [];
   }));
-  const [tasks, items, marks] = await Promise.all([
+  const [tasks, items, marks, unplaced] = await Promise.all([
     readPlanTasks(deps.planTasks, rows.map((m) => ({ id: m.id, code: m.code,
       world: m.world_scope_id && m.world_object_id && m.world_domain_id ? { scopeId: m.world_scope_id, objectId: m.world_object_id, domainId: m.world_domain_id } : null }))),
     listPlanItems(q, person.personId, rows.map((m) => m.id), windowStart, windowEnd, deps.names, { period, doneFrom: `${current}-01`, doneTo: monthEnd }),
     listPlanMarks(q, person.personId, rows.map((m) => m.id)),
+    listUnplacedTasks(q, person.personId, deps.names),
   ]);
   const shown = new Set(rows.map((m) => m.id));
   return { period, fallbackFrom, today, weekStart, weekEnd, days, missions, gates, marks, tasks,
     activities: items.map((entry) => ({ ...placeActivity(entry, weekStart, weekEnd, entry.missionId !== null && !shown.has(entry.missionId)),
-      ...activitySignal(entry.item, today) })) };
+      ...activitySignal(entry.item, today) })), unplaced };
 }

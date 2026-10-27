@@ -24,6 +24,7 @@ const STEP_LABELS: [RegExp, string][] = [
   [/^read_anchor$/, "读当前页面"],
   [/^read_issue_conversation$/, "读议题对话"],
   [/^propose_issue$/, "起草议题"],
+  [/^draft_meeting$/, "起草会议"],
   [/^list_pending_issues$/, "读待决策议题"],
   [/^(read_ontology|query_company)$/, "查本体"],
   [/^list_business_objects$/, "查业务对象"],

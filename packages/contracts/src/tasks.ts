@@ -113,6 +113,11 @@ export const TaskView = Type.Object(
     planTaskId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     /** 没卡住为 null；事项完成时清掉。 */
     blocker: Type.Union([TaskBlocker, Type.Null()]),
+    /**
+     * 待归位：会后分派或外部 Agent 建的、没挂到 Mission、本人也没确认「不属于任何 Mission」（做完、退回的不算）。
+     * 只有本人自己建的事项可以不挂 Mission。reason 是没挂上的原因（Agent 写的），没有为 null。
+     */
+    unplaced: Type.Optional(Type.Object({ reason: Type.Union([Type.String({ minLength: 1 }), Type.Null()]) }, { additionalProperties: false })),
     /** ISO 8601 */
     createdAt: Type.String({ minLength: 1 }),
     updatedAt: Type.String({ minLength: 1 }),
@@ -266,6 +271,12 @@ export const CreateMyTaskRequest = Type.Object(
   { additionalProperties: false },
 );
 
+/** 待归位的事项本人确认「不属于任何 Mission」：写一句为什么，之后按本人自己的独立事项算。 */
+export const StandaloneMyTaskRequest = Type.Object(
+  { version: Type.Integer({ minimum: 1 }), reason: Type.String({ minLength: 1, maxLength: 200 }) },
+  { additionalProperties: false },
+);
+
 /** 详情：推进人和在职协作者可读；选项只给推进人。 */
 export const TaskDetailResponse = Type.Object(
   {
@@ -409,6 +420,10 @@ export const NotificationView = Type.Object(
     id: Type.String({ minLength: 1 }),
     kind: NotificationKind,
     text: Type.String({ minLength: 1 }),
+    /** 事情本身（会后分派：执行事项全文）；通知栏正文只写它，来源写在小字里。 */
+    subject: Type.Optional(Type.String({ minLength: 1 })),
+    /** 来自哪儿（会后分派：会议名）。 */
+    source: Type.Optional(Type.String({ minLength: 1 })),
     /** issue：被拉进议题群（工单 08），点开进 /me/issues/{objectId}。 */
     objectType: Type.Union([Type.Literal("task"), Type.Literal("meeting"), Type.Literal("issue"), Type.Literal("request")]),
     objectId: Type.String({ minLength: 1 }),
@@ -441,6 +456,7 @@ export type TTaskSource = Static<typeof TaskSource>;
 export type TTaskPerson = Static<typeof TaskPerson>;
 export type TTaskMissionRef = Static<typeof TaskMissionRef>;
 export type TCreateMyTaskRequest = Static<typeof CreateMyTaskRequest>;
+export type TStandaloneMyTaskRequest = Static<typeof StandaloneMyTaskRequest>;
 export type TTaskDetailResponse = Static<typeof TaskDetailResponse>;
 export type TPutMyTaskNoteRequest = Static<typeof PutMyTaskNoteRequest>;
 export type TAddTaskCollaboratorsRequest = Static<typeof AddTaskCollaboratorsRequest>;

@@ -10,6 +10,7 @@ import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import type { TWeeklyReviewBoard } from "@warmap/contracts";
 import { ContextMark } from "@/components/ContextMark";
 import { browserApi } from "@/lib/api/client";
+import { COMPANY_TIMEZONE } from "@/lib/companyTime";
 import n from "@/styles/notifications.module.css";
 import a from "@/styles/notice-actions.module.css";
 import b from "@/components/monthlyReview/personal-review-board.module.css";
@@ -17,6 +18,11 @@ import w from "./weekly-review-board.module.css";
 import { weekLabel, weeklyStatusText } from "./weeklyReviewApi";
 
 type Navigate = (href: string, origin?: Element | null) => void;
+
+/** CEO 通知栏里周复盘出现的时段：公司时区的周五到下周一（周五起草，周一前收齐）。 */
+export function inWeeklyReviewWindow(now: Date): boolean {
+  return ["Fri", "Sat", "Sun", "Mon"].includes(new Intl.DateTimeFormat("en-US", { timeZone: COMPANY_TIMEZONE, weekday: "short" }).format(now));
+}
 
 export function useWeeklyReviewBoard() {
   const [board, setBoard] = useState<TWeeklyReviewBoard | null>(null);

@@ -46,8 +46,9 @@ import { usageReportJobs } from "./usage.js";
 import { resolveFeishuEnv } from "./feishu/config.js";
 import { parseAdminPersonIds } from "./admin.js";
 import { createFeishuClient } from "./feishu/client.js";
+import { ceoFeishuNoticeJobs } from "./ceoFeishuNotices.js";
 import { feishuTokenJobs } from "./feishu/refresh.js";
-import { feishuEventJobs, startFeishuEventStream } from "./feishu/events.js";
+import { feishuEventJobs, mergeFeishuEventHandlers, startFeishuEventStream } from "./feishu/events.js";
 import { feishuNotifyJobs } from "./feishu/notify.js";
 
 function requiredEnv(name: string): string {
@@ -275,18 +276,22 @@ const app = await buildApp({
 // 公共后台任务（jobs.ts）：每 5 秒领一批；现有各功能的 setInterval 暂不迁移。
 // 会后链路：妙记轮询与「妙记生成」事件、分层同步、提醒与代判、影响卡推送与写本体；飞书通知配了飞书才发。
 const followThroughJobs = app.meetingFollowThrough.jobs();
-// 文档变更：群里 @机器人 贴文档链接即发布（im.message.receive_v1），找候选走后台任务。
+// 文档变更：群里 @机器人 贴文档链接即发布（im.message.receive_v1），找候选走后台任务。私聊机器人 = 在首页对话里问（feishuChat.ts）。
 const docChangeJobs = app.docChanges.jobs();
 // 使用周报：每周一 08:00 之后生成上一周。
 const usageJobs = usageReportJobs(pool.query.bind(pool), peopleDirectory, now);
+// 战场进展汇总：每天 07:30 之后补齐当天各战场的。
+const summaryJobs = app.battlefieldSummaries.jobs();
+// 一号位要动手的事主动私信到飞书（复盘与拆解开放、周复盘待确认、红色议题）：配了飞书才发。
+const ceoNoticeJobs = feishuClient ? ceoFeishuNoticeJobs({ pool, people: () => peopleDirectory.searchPeople(undefined), now }) : { handlers: {}, recurring: [] };
 const jobWorker = createJobWorker({
   pool,
   handlers: {
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers,
-    ...(env.feishu ? feishuEventJobs(pool, { ...followThroughJobs.feishuEvents, ...docChangeJobs.feishuEvents }) : {}),
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...app.taskPlacementJobs,
+    ...(env.feishu ? feishuEventJobs(pool, mergeFeishuEventHandlers(followThroughJobs.feishuEvents, docChangeJobs.feishuEvents, app.feishuChat?.events ?? {})) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },
-  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring],
+  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring],
 });
 let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {

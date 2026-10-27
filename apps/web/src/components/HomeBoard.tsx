@@ -19,6 +19,8 @@ type Props = {
   cards: Card[];
   onCard: (card: Card) => void;
   onNavigate: (href: string, origin?: Element | null) => void;
+  /** 约会议：CEO 主要靠和 Agent 对话约，这里只在战场工具条上留一个不抢眼的入口；没有登录人时没有。 */
+  onBookMeeting?: () => void;
 };
 
 /** 首页看板（clark `home-board.tsx`）：公司战略议题 + 雷达 → 战场翻转卡 → 公司能力（战场网格里的最后一张卡）。 */
@@ -77,7 +79,7 @@ export function progressEntryLabel(counts: { redLines: number } | null): string 
   return counts?.redLines ? `全局进展，${counts.redLines} 条红线` : "全局进展";
 }
 
-function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
+function HomeBoardContent({ cards, onCard, onNavigate, onBookMeeting }: Props) {
   const display = useBattlefieldDisplay();
   const radar = cards.find((card) => card.kind === "radar");
   const battlefields = cards.filter((card) => card.kind === "battlefield");
@@ -92,14 +94,15 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
 
   return (
     <div className={b.board} data-testid="decision-home">
-      <div className={b.top}>
-        <section className={`${b.panel} ${b.strategy}`}>
+      {/* 公司战略议题空着时整块收起，雷达收成一条。 */}
+      <div className={b.top} data-collapsed={strategy.length ? undefined : true}>
+        {strategy.length ? <section className={`${b.panel} ${b.strategy}`}>
           <div className={`${b.heading} ${b.headingStatic}`}>
             <h2>公司战略议题</h2>
           </div>
           <ReferenceButton corner cards={strategy} title="公司战略议题" />
-          {strategy.length ? <div className={b.strategicIssues}>{strategy.map(row)}</div> : <p className={b.empty}>暂无待决策议题</p>}
-        </section>
+          <div className={b.strategicIssues}>{strategy.map(row)}</div>
+        </section> : null}
         <div className={b.radarWrapper}>
           {radar ? (
             <HeroButton
@@ -134,6 +137,11 @@ function HomeBoardContent({ cards, onCard, onNavigate }: Props) {
       <div className={b.battlefieldToolbar} data-testid="battlefield-toolbar">
         <span>战场</span>
         <div className={b.toolbarActions}>
+          {onBookMeeting ? (
+            <HeroButton variant="ghost" size="sm" data-ts-layout="true" type="button" className={b.progressEntry} onPress={onBookMeeting}>
+              约会议
+            </HeroButton>
+          ) : null}
           <HeroButton
             variant="ghost"
             size="sm"

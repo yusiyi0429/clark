@@ -36,8 +36,9 @@ describe("首页公司能力卡", () => {
     expect(html).not.toContain("区域仓配服务");
     expect(html).not.toContain("Missions · ");
     expect(html).not.toContain("区域仓配服务的六个月目标");
-    // 两个空态：公司战略议题与公司能力。
-    expect(html.match(/暂无待决策议题/g)).toHaveLength(2);
+    // 公司战略议题空着时整块收起，只剩公司能力的空态。
+    expect(html).not.toContain("公司战略议题");
+    expect(html.match(/暂无待决策议题/g)).toHaveLength(1);
   });
 
   it("只列有议题的能力域并按排序；议题落在所属能力域下，未登记能力的议题归入末尾「其他」", () => {
@@ -55,8 +56,8 @@ describe("首页公司能力卡", () => {
     expect(html.indexOf("是否开放写权限")).toBeLessThan(html.indexOf("是否自建渠道"));
     expect(html).toContain("新能力域待登记");
     expect(html).not.toContain("Missions · ");
-    // 能力卡有议题时不落空态。
-    expect(html.match(/暂无待决策议题/g)).toHaveLength(1);
+    // 能力卡有议题时不落空态；公司战略议题空着时收起。
+    expect(html).not.toContain("暂无待决策议题");
   });
 
   it("首页战场工具条不再放 Mission 入口（1 号位不从这里看 Mission；Mission 在战场卡与公司能力详情里）", () => {

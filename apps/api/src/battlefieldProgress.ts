@@ -12,8 +12,8 @@ import { addDays, BATTLEFIELD_MEMBERS, weekStartOf } from "./weeklyReviews.js";
  * 红线（慢了 / 按截止做不完）沿用 progress.ts 的判法；卡住来自推进人写的「卡在哪」。
  */
 
-type Group = { id: string; name: string; kind: TBattlefieldProgressGroup["kind"]; goal: string | null; members: string[] };
-type MissionRow = { id: string; title: string; owner_id: string; period: string; milestones: string[] };
+export type Group = { id: string; name: string; kind: TBattlefieldProgressGroup["kind"]; goal: string | null; members: string[] };
+export type MissionRow = { id: string; title: string; owner_id: string; period: string; milestones: string[]; outcome: string; world_goal_id: string | null };
 type TaskRow = {
   id: string; title: string; status: string; owner_id: string; mission_id: string; start_date: string | null; due_date: string | null;
   blocked_reason: string | null; waiting_on: string | null; blocked_at: Date | null; last_verified_at: Date | null; mine: boolean;
@@ -42,13 +42,13 @@ async function viewerGroups(q: Query, viewerId: string, period: string): Promise
   return domains.map((row) => ({ id: row.id, name: row.name, kind: "capability", goal: null, members: row.members }));
 }
 
-/** 组里这个月的 Mission：战场组看挂了这个战场的（或任务卡在这个战场轮次里的），业务域组看同一能力域的。 */
-async function groupMissions(q: Query, group: Group, period: string): Promise<MissionRow[]> {
+/** 组里这个月的 Mission：战场组看挂了这个战场的（或任务卡在这个战场轮次里的），业务域组看同一能力域的。战场进展汇总也按这个取。 */
+export async function groupMissions(q: Query, group: Group, period: string): Promise<MissionRow[]> {
   const where = group.kind === "battlefield"
     ? `(m.battlefield_ids ? $3 OR EXISTS (SELECT 1 FROM personal_mission_cards c JOIN mission_rounds r ON r.id = c.round_id
          WHERE c.id = m.personal_mission_card_id AND r.battlefield_id = $3))`
     : "m.capability_id = $3";
-  return (await q(`SELECT m.id, m.title, m.owner_id, m.period, m.milestones FROM missions m
+  return (await q(`SELECT m.id, m.title, m.owner_id, m.period, m.milestones, m.outcome, m.world_goal_id FROM missions m
     WHERE m.period = $1 AND NOT m.placeholder AND m.owner_id = ANY($2) AND ${where} ORDER BY m.code, m.id`, [period, group.members, group.id])).rows as MissionRow[];
 }
 

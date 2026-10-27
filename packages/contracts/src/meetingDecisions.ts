@@ -147,6 +147,8 @@ export const WorldAnchorOption = Type.Object(
     lifecycle: Type.Union([Type.String(), Type.Null()]),
     ownerId: Type.Union([Type.String(), Type.Null()]),
     parentId: Type.Union([Type.String(), Type.Null()]),
+    /** Mission 所在战场的名字，没有战场时是能力域名（CEO 挑挂点时按它分组）；都对不上时没有。 */
+    group: Type.Optional(Type.String({ minLength: 1 })),
   },
   { additionalProperties: false },
 );

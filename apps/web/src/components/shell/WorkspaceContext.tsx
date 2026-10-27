@@ -4,6 +4,7 @@ import { createContext, useContext, useLayoutEffect } from "react";
 import type { Card } from "@/lib/api/client";
 import type { ContextMarkKind } from "@/components/ContextMark";
 import type { DetailGroup } from "@/conversation/missionCardGroup";
+import type { BookingDraft } from "@/components/meeting/MeetingBookingSheet";
 import type { QuoteSource, TextQuote } from "@/conversation/quotes";
 
 /** 当前详情对象向外壳登记的信息：对话范围、窄条上的工作区标记。 */
@@ -46,8 +47,12 @@ export type WorkspaceApi = {
   bookMeeting?: () => void;
   /** 同一个建会抽屉，参会人先填好（战场进展里「约会议」找某个人）。 */
   bookMeetingWith?: (participants: string[]) => void;
+  /** 同一个建会抽屉，填好对话里会议卡的草稿（卡上的「改」）；约好时带 draftId，同一张卡只建一场。 */
+  bookMeetingFrom?: (draft: BookingDraft) => void;
   /** M2（目标拆解与复盘）对当前登录人可用。 */
   m2Available?: boolean;
+  /** 这是 CEO 工作台（首页是 /）：约会议挑挂点时公司目标在前、Mission 按战场分组。 */
+  ceo?: boolean;
 };
 
 export const WorkspaceContext = createContext<WorkspaceApi | null>(null);

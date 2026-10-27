@@ -9,7 +9,7 @@ import type { TReadScope } from "@warmap/contracts";
 import { ScopeChip } from "./ScopeChip";
 import { HeroButton } from "@/components/HeroButton";
 import { StepList, StepToggle, type Step } from "@/components/steps/StepList";
-import type { Message, ThinkingStage, TurnProgress, TurnThought } from "./useConversation";
+import { feishuWaiting, type Message, type ThinkingStage, type TurnProgress, type TurnThought } from "./useConversation";
 import { QuoteChips } from "./QuoteChips";
 import { pageContextBattlefield, readQuotedMessage } from "./quotes";
 import { createArrivalLog, rehypeArrival, type ArrivalLog } from "./arrival";
@@ -124,7 +124,7 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
     && a.role === b.role && a.content === b.content
     && a.recoveryNote?.text === b.recoveryNote?.text && a.recoveryNote?.detail === b.recoveryNote?.detail
     && (a.memoryUsed ?? []).join("|") === (b.memoryUsed ?? []).join("|")
-    && a.readScope?.label === b.readScope?.label && a.kind === b.kind && a.meta?.href === b.meta?.href && a.answers?.askId === b.answers?.askId
+    && a.readScope?.label === b.readScope?.label && a.kind === b.kind && a.via === b.via && a.meta?.href === b.meta?.href && a.answers?.askId === b.answers?.askId
     && sameList(a.attachments, b.attachments, (item) => item.id)
     && sameList(a.referencesSnapshot, b.referencesSnapshot, (item) => `${item.cardId}@${item.version}`);
 }
@@ -216,6 +216,7 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
         </details>
       ) : null}
       {battlefield ? <div className={s.pageTag}>战场 · {battlefield}</div> : null}
+      {user && message.via === "feishu" ? <div className={s.pageTag} data-testid="conversation-via-feishu">飞书</div> : null}
       {quoted.quotes.length ? <QuoteChips quotes={quoted.quotes} sent /> : null}
       {/* 回答 Agent 提问的那一句：画成紧凑的问答记录，不显示原文。 */}
       {user && message.answers ? <AnswerRecord record={message.answers} /> : (
@@ -276,6 +277,13 @@ export function ConversationTurns({ messages, partial = "", footer, after, trail
           {after?.(index) ?? null}
         </Fragment>
       ))}
+      {/* 飞书里刚问、还在答：这里先占一行，答完读回历史时换成回答。 */}
+      {!partial && !status && feishuWaiting(messages) ? (
+        <div className={s.thinking} data-testid="conversation-feishu-waiting">
+          <span className={s.pulse} aria-hidden />
+          <span role="status">正在回答飞书里的提问</span>
+        </div>
+      ) : null}
       {partial || trailing || status ? (
         <Fragment key={`turn-${messages.length}`}>
           {partial ? <ConversationTurn message={{ sequence: -1, role: "assistant", content: partial }} streaming thought={thought ?? undefined} steps={steps?.length ? steps : undefined} /> : null}
