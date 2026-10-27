@@ -1343,3 +1343,21 @@ body.is-col-resizing{cursor:col-resize;user-select:none}
 :root .ai-revision-overlay.presenting{background:rgba(31,79,209,.09)}
 :root .ai-revision-overlay.done{background:transparent}
 :root .ai-revision-overlay.failed{background:#fff1e8dd}
+
+/* 群成员：标题旁一排小头像 (2026-10-27) */
+.group-members{position:relative;margin-left:8px;flex:none}
+.group-members-stack{display:flex;align-items:center;height:32px;padding:0 6px 0 4px;border:0;border-radius:999px;background:transparent;cursor:pointer}
+.group-members-stack:hover{background:#eef2f7}
+.group-member-slot{display:inline-flex;margin-left:-6px;border-radius:50%;box-shadow:0 0 0 2px #fff}.group-member-slot:first-child{margin-left:0}
+.group-member-face{width:22px!important;height:22px!important;font-size:10px}
+.group-member-face .nexus-orb,.group-members .nexus-avatar .nexus-orb{width:22px;height:22px}
+.group-members-more{margin-left:4px;font-size:12px;color:#5b6b7a}
+.group-members-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:260px;padding:12px;border-radius:12px;background:#fff;border:1px solid #e3e9ef;box-shadow:0 8px 24px #0f243a1f}
+.group-members-title{display:block;font-size:13px;margin-bottom:8px}
+.group-members-panel ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.group-members-panel li{display:flex;align-items:center;gap:8px}
+.group-members-panel li .group-member-face{width:26px!important;height:26px!important}
+.group-members-panel li>span{display:flex;flex-direction:column;min-width:0}
+.group-members-panel b{font-size:13px;font-weight:600;color:#102c46}
+.group-members-panel small{font-size:12px;color:#6b7b8a}
+.group-members-panel li.is-limited b{color:#6b7b8a;font-weight:500}
