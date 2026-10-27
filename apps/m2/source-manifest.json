@@ -28,7 +28,7 @@
     },
     {
       "path": "app.jsx",
-      "sha256": "ad298721fb96aa580bd970211455308dd1fc7e271a00f56012b4f1a53f34179c"
+      "sha256": "cd372df72701f53ba59075969efbcf91af2c5f8e900aa9b1463f3fc4a485f37f"
     },
     {
       "path": "AuditStatus.jsx",
@@ -132,7 +132,7 @@
     },
     {
       "path": "Handshake.jsx",
-      "sha256": "7bc9f93a2472fcc6544bbd5c9c831c95d74c6a9f373d57988ab76429666ac74a"
+      "sha256": "b4c04754a00af788bc229a3010d03a4a032bb7a51bf7a496a3574f6a23f40928"
     },
     {
       "path": "index.html",
@@ -281,7 +281,7 @@
     },
     {
       "path": "review-display.mjs",
-      "sha256": "a43c4e12ec45fbae6daf0f2d6aabbafcf88dae85198bad2aecbd9f6dbd9fbff1"
+      "sha256": "e3e917780787168ebcf4cfc7d07c8d59bb135e9649674b79ec575116fdac4378"
     },
     {
       "path": "review-generation.mjs",
@@ -305,7 +305,7 @@
     },
     {
       "path": "ReviewCanvas.jsx",
-      "sha256": "884aaa916db8a385daac02361a0df9051b01fa24d27e50b009534c4ed0ef04a8"
+      "sha256": "59e284a0bf19b4627a4c85bcbe74719ae69823398bd71097f061322afeb66d52"
     },
     {
       "path": "ReviewEditor.jsx",
@@ -385,7 +385,7 @@
     },
     {
       "path": "shared-projection.mjs",
-      "sha256": "7edece7ab3768c3dd030b3e97a75633f550919ab305ae622d60f5a6f01b29f8c"
+      "sha256": "d666dee69a9c7e4b636a4a2b2c3c56edf56a834d4ea1ba7a7b1e0aa905e4a249"
     },
     {
       "path": "skill-snapshot.mjs",
@@ -405,7 +405,7 @@
     },
     {
       "path": "style.css",
-      "sha256": "3d39d218bdc255db7c47785cdf66591885c2881005e17df6268c51273740524a"
+      "sha256": "c3be64b832782a2e29049f984900c9199eaf5cdcd72550f461c3d9cb3ff6a7a4"
     },
     {
       "path": "time-context.mjs",

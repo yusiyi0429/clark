@@ -29,9 +29,7 @@ export function mineFirst(nodes,p){
   if(p.ceo&&(n.level==='company'||n.level==='po'))mine.add(n.id);
   if((p.unitDri||[]).includes(n.unit)&&n.level==='po')mine.add(n.id);
   if(n.level==='mission'&&ownerNames(n).includes(p.name)){mine.add(n.id);mine.add('rv:'+n.unit);}
-  // No Mission list under the PO review any more (2026-10-26): the unit DRI signs them, so they are on that DRI's list.
-  // Not the CEO's (陈溪南 2026-10-27): the CEO neither signs nor owes insights on Mission reviews.
-  if(n.level==='mission'&&(p.unitDri||[]).includes(n.unit))mine.add(n.id);
+  // Others' Mission reviews are reached from their unit review's reference list, not the home (陈溪南 2026-10-27).
  }
  return nodes.filter(n=>mine.has(n.id));
 }

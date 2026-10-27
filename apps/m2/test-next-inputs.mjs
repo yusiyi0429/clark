@@ -234,3 +234,11 @@ test('私人 Agent 在个人复盘里读本人房间的话，读不到别人房�
  assert.equal(out.scope,'bf01');assert.equal(out.proposal.cardId,'rv:bf01');assert.match(out.proposal.reason,/「首用」的个人复盘改了/);
  assert.match(reviewCascadeProposal(s,job,{impact:true,patch:{facts:[{item:'x',status:'差不多'}]}}).reason,/事实证据格式不对/);
 });
+
+test('个人复盘的负责人进这个单元：能只读看本单元别人的个人复盘和单元复盘，看不到别人房间里的话',()=>{
+ const three={...run,reviews:[...run.reviews,{unit:'bf01',level:'mission',ref:'bf01-m2',title:'复用',owner:'唐巨杰',verdict:'未达成',verdictReason:'没做',facts:[{ref:'t1',item:'复用',owner:'唐巨杰',status:'未达成',evidence:'无'}],nextInputs:[{ref:'t1',type:'继续',text:'接着做'}],parent:'bf01'}]};
+ let s=installReviewRound(createCollaborationState([{id:'bf01',level:'po',title:'灯塔',owner:'刘明华',version:1,children:[]}]),three,{label:'10 月复盘',now:'2026-10-27T02:33:00.000Z'});
+ const sun=memberActor('member-03',s);s=applyAction(s,sun,{type:'comment',cardId:'rv:bf01-m1',baseVersion:1,block:'facts',text:'只给我看'});
+ const tang=memberActor('member-09',s);assert.ok(tang.visibleUnits.includes('bf01'));
+ const v=sharedProjection(s,tang);assert.ok(v.drafts['rv:bf01-m1']&&v.drafts['rv:bf01']);assert.equal((v.comments['rv:bf01-m1']||[]).length,0);
+});

@@ -6,7 +6,9 @@ import {canRead,currentVersion,cardStatus,mayRevise,mayChangeOwner,unitOf,verdic
 import {reviewChanges} from './review-workflow.mjs';
 import {materializeTopics} from './topic-lifecycle.mjs';
 import {reviewDueAt} from './review-round.mjs';
-export function memberActor(id,state){const p=memberProfiles[id];if(!p)throw Object.assign(Error('请选择名单中的试用成员'),{status:400});const missions=state?.round?Object.values(state.cards).filter(c=>c.level==='mission'&&c.kind!=='review'&&ownerName(currentVersion(c).content.owner)===p.name).map(c=>c.id):p.missions;return {id,name:p.name,ceo:p.ceo,visibleUnits:[...new Set([...(p.units||[]),...missions.map(id=>state?.cards[id]?.unit).filter(Boolean)])],unitDri:p.unitDri,missionDri:missions};}
+export function memberActor(id,state){const p=memberProfiles[id];if(!p)throw Object.assign(Error('请选择名单中的试用成员'),{status:400});const missions=state?.round?Object.values(state.cards).filter(c=>c.level==='mission'&&c.kind!=='review'&&ownerName(currentVersion(c).content.owner)===p.name).map(c=>c.id):p.missions;// Whoever owns a 个人复盘 is in that unit's group (2026-10-27): they read the unit review and the unit's other 个人复盘, read-only.
+ const reviewUnits=state?Object.values(state.cards).filter(c=>c.kind==='review'&&c.level==='mission'&&String(currentVersion(c).content.owner||'').split(/[、,，\s]+/).includes(p.name)).map(c=>c.unit):[];
+ return {id,name:p.name,ceo:p.ceo,visibleUnits:[...new Set([...(p.units||[]),...missions.map(id=>state?.cards[id]?.unit).filter(Boolean),...reviewUnits])],unitDri:p.unitDri,missionDri:missions};}
 export function sharedProjection(state,actor){
  const cards=Object.values(state.cards).filter(c=>canRead(actor,c));
  // A review whose verdict was changed says from what, to what and by whom (评测 2026-10-22), so a signer sees it at once.

@@ -46,6 +46,7 @@ export default function Handshake({node,profile,onAction,signerNames={},openIssu
     <MemberAvatar name={name} className="handshake-avatar"/><strong>{name}</strong>
     {/* A fixed slot, so 确认 turning into 已确认 + time does not push the next person along (陈溪南 2026-10-27). */}
     <span className="sign-slot">{signed?<span className="sign-seal"><Check size={13} strokeWidth={2.6} aria-hidden="true"/>已确认 {shortTime(signed.createdAt)}</span>
+     :mine&&locked?<><Button className="handshake-confirm" isDisabled>确认</Button><small className="handshake-locked" title={locked.title}>{locked.text||locked}</small></>
      :mine&&gate?<><Button className="handshake-confirm" onPress={()=>{setHint(true);clearTimeout(hintTimer.current);hintTimer.current=setTimeout(()=>setHint(false),3200);gate.onPress();}}>确认</Button>{hint&&<small className="sign-hint" role="status">{gate.text}</small>}</>
      :mine?<>{locked&&<small className="handshake-locked" title={locked.title}>{locked.text||locked}</small>}<Button className="handshake-confirm" isDisabled={!!node.upstreamChange||!!locked||!!pending} onPress={confirmAll}>{pending===name?'确认中…':openIssues.length?'仍然确认':'确认'}</Button></>
      :<span className="sign-seal is-open">未确认</span>}</span>
