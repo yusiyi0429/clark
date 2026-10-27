@@ -196,7 +196,7 @@
     },
     {
       "path": "nexus-policy.mjs",
-      "sha256": "8886c0ae022fc6c9c6b93224da8ad36329d0daaa093350faa1a76341ad70f057"
+      "sha256": "2bef733e2cd8cbb55cfadc12f20c0b1b0bbd379d85468c8696a237c4e410879e"
     },
     {
       "path": "nexus-retry.mjs",
@@ -381,7 +381,7 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "8923229d57ce004757d91156bf7df8d3850309858223150baac89204010326ab"
+      "sha256": "54a10a1d8aa6f0158a7e22488c69767178dac0e160923aed1f78771b1f10c9b8"
     },
     {
       "path": "shared-projection.mjs",

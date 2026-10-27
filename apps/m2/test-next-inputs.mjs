@@ -262,3 +262,17 @@ test('个人复盘房间里的 Nexus：没点名哪张卡时看本人的复盘�
  const r=validateNexusResult({topics:[],proposals:[{cardId:'rv:bf01-m1',baseVersion:1,basis:'request',sourceIds:[ev[0].id],patch:{facts:[c.facts[0],{...c.facts[1],status:'部分达成',evidence:'10/25 客户试用一次（会议纪要）'}]}}]},{cards,evidence:ev,fresh:ev});
  assert.equal(r.proposals.length,1,JSON.stringify(r.rejected));
 });
+
+test('个人复盘房间里本人说话就算在跟 Nexus 说：不带 @ 也一定回一句；已确认的卡本人要改也能出卡',async()=>{
+ const {validateNexusResult,publicEvidence}=await import('./nexus-policy.mjs');const {reviewCardsFor}=await import('./nexus-review.mjs');
+ let s=fresh();const sun=memberActor('member-03',s);
+ s=applyAction(s,sun,{type:'insight',cardId:'rv:bf01-m1',text:'窗口靠一个人'});s=applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',slot:'missionDri',baseVersion:1});
+ s=applyAction(s,sun,{type:'message',cardId:'rv:person:孙铭泽',text:'第二条其实 10/25 客户用过一次，有会议纪要，能不能改成部分达成'});
+ const cards=reviewCardsFor(s,'person:member-03'),ev=publicEvidence(sharedProjection(s,sun).records['group:person:member-03'],'person:member-03',{retainAll:true});
+ assert.equal(cards[0].status,'已确认');
+ const quiet=validateNexusResult({topics:[],proposals:[],reply:'会议纪要还缺日期，补上后我再出卡。'},{cards,evidence:ev,fresh:ev,ownRoom:true});
+ assert.equal(quiet.reply,'会议纪要还缺日期，补上后我再出卡。','不带 @ 也回');
+ const c=currentVersion(s.cards['rv:bf01-m1']).content;
+ const r=validateNexusResult({topics:[],proposals:[{cardId:'rv:bf01-m1',baseVersion:1,basis:'request',sourceIds:[ev[0].id],patch:{facts:[c.facts[0],{...c.facts[1],status:'部分达成',evidence:'10/25 客户试用一次（会议纪要）'}]}}]},{cards,evidence:ev,fresh:ev,ownRoom:true});
+ assert.equal(r.proposals.length,1,JSON.stringify(r.rejected));
+});

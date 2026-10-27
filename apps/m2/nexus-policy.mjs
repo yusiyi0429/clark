@@ -80,7 +80,8 @@ export function reconcileReply(reply,kept=[],rejected=[],cards=[]){
  return text;
 }
 const aliasHit=(text,alias)=>new RegExp(`(?<![A-Za-z0-9])${alias.replace(/ /g,'\\s*')}(?![0-9])`,'i').test(text);
-export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=false,lastIntervention,interventionHistory=[],withdrawn=[]}){
+// ownRoom: the owner spoke in their own review room, which is speaking to Nexus (2026-10-27: Nexus decided to step in, then said nothing).
+export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=false,ownRoom=false,lastIntervention,interventionHistory=[],withdrawn=[]}){
  if(!value||typeof value!=='object'||!Array.isArray(value.topics)||!Array.isArray(value.proposals))throw Object.assign(Error('Nexus 输出格式不完整，未应用修订'),{status:502});
  const sources=new Map(evidence.map(m=>[m.id,m])),targets=new Map(cards.map(c=>[c.id,c]));
  const refersTo=(s,card,seen=new Set())=>{
@@ -138,7 +139,7 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
   // The owner's own comment on their own card is their decision (Nexus applies it directly and tells the group).
   const ownerNote=ids.some(id=>ownerAnnotation(sources.get(id),card));
   // A card both sides already confirmed is left alone unless someone explicitly asks, or its owner annotates it.
-  if(card.status==='已确认'&&!fresh.some(directQuestion)&&!ownerNote){drop(p,'这张卡已双方确认');continue;}
+  if(card.status==='已确认'&&!fresh.some(directQuestion)&&!ownerNote&&!ownRoom){drop(p,'这张卡已双方确认');continue;}
   const latest=new Map();for(const s of evidence)if(s.context?.selection?.id===card.id&&s.context.selection.version===card.version&&(Object.keys(p.patch).includes(s.context.block)||s.context.block==='card'))latest.set(s.author+':'+s.context.block,s);
   if([...latest.values()].some(s=>disagrees(s.text))){drop(p,'这张卡上还有人反对');continue;}
   if(ids.some(id=>{const selection=sources.get(id).context?.selection;return selection?.id===card.id&&selection.version<card.version;})){drop(p,'依据针对的是旧版本');continue;}
@@ -157,8 +158,8 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
    const said=(t.match(/部分达成|未达成|没达成|达成/g)||[]).map(w=>w==='没达成'?'未达成':w);const claim=said.find(w=>w!==card.verdict&&!new RegExp(`不(是|算)${w}`).test(t));
    return !!claim&&(['verdict','verdictReason'].includes(s.context?.block||s.block)||/(判|实际|其实|应该|算)/.test(t));});
   // In their own review room the owner arguing for a change is asking for it (2026-10-27): Nexus weighs the evidence either way.
-  const ownRoom=review&&ids.some(id=>{const s=sources.get(id);return !!s&&String(s.context?.scope||s.scope||'').startsWith('person:')&&String(card.owner||'').split(/[、,，\s]+/).includes(s.author)&&!disagrees(s.text);});
-  const requested=ownerNote||answersRejection||askedNexus||answered||verdictClaim||ownRoom||ids.some(id=>revisionRequest(sources.get(id).text));
+  const ownRoomAsk=review&&ids.some(id=>{const s=sources.get(id);return !!s&&String(s.context?.scope||s.scope||'').startsWith('person:')&&String(card.owner||'').split(/[、,，\s]+/).includes(s.author)&&!disagrees(s.text);});
+  const requested=ownerNote||answersRejection||askedNexus||answered||verdictClaim||ownRoomAsk||ids.some(id=>revisionRequest(sources.get(id).text));
   const follows=proposals.some(q=>ancestor(q.cardId)&&q.sourceIds.some(id=>ids.includes(id)));
   // Someone raises a point on this card (or the card above it) and its owner says 「我认了」「行」: that is agreement too
   // (2026-10-21 review drill), even when the model did not file it as an agreement topic.
@@ -185,7 +186,7 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
   if(missionCards.some(x=>x.op===m.op&&(x.missionId||x.brief)===(m.missionId||m.brief))){continue;}
   missionCards.push({op:m.op,poId:po.id,...(m.missionId?{missionId:m.missionId}:{}),...(m.op==='add-mission'?{brief:String(m.brief).trim().slice(0,600)}:{}),reason:String(m.reason||'').slice(0,300)||'按群里的要求',sourceIds:ids});
  }
- const participation=participationDecision(value,{fresh,manual,lastIntervention});
+ const participation=participationDecision(value,{fresh,manual:manual||ownRoom,lastIntervention});
  const step=verifiedIntervention(value,{cards,evidence,refersTo});
  participation.signature=step?.signature;
  if(!participation.called&&(!step||interventionHistory.some(h=>h.signature===step.signature)))participation.speak=false;
