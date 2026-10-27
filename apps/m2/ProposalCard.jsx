@@ -10,29 +10,35 @@ import {memberProfiles} from './member-profiles.mjs';
 import {enterSubmit} from './enter-submit.mjs';
 // Each change reads as 原来 / 改成 (or 新增 / 删去); unchanged items fold into one line (陈溪南 2026-10-19).
 // 事实证据 rows {item, status, evidence, gap} read as one line each, named by the item (复盘改版 2026-10-26).
-const factLine=x=>`**${x.item}：**${x.status||''}。${x.evidence||''}${x.gap?` 没做到的原因：${x.gap}`:''}`;
+// Split by part, so a change reads 事实证据 · 项 · 状态：未达成 → 部分达成, not one long line rewritten (陈溪南 2026-10-27).
+const factLines=x=>[['状态',x.status],['证据',x.evidence],['没做到的原因',x.gap]].filter(([,v])=>v).map(([k,v])=>`**${x.item} · ${k}：**${v}`);
 // Review fields hold objects: 原因 {text, ask}, 下月输入 {type, text}, 长期目标审视 {choice, reason}; compare them as lines.
-const asLines=v=>Array.isArray(v)?v.map(x=>typeof x==='string'?x:x?.item!=null&&x?.evidence!==undefined?factLine(x):x?.type?`［${x.type}］${x.text}`:x?.text!=null?x.text+(x.ask?`（追问：${x.ask}）`:''):JSON.stringify(x)):v&&typeof v==='object'?`${v.choice||''}：${v.reason||''}`:v;
+const nextLine=x=>`**${x.type}：**${x.text}${x.ask?.question?`（问 ${x.ask.to}：${x.ask.question}）`:''}`;
+const asLines=v=>Array.isArray(v)&&v.some(x=>x?.item!=null&&x?.evidence!==undefined)?v.flatMap(factLines):Array.isArray(v)&&v.some(x=>x?.type&&'ref'in(x||{}))?v.map(nextLine):Array.isArray(v)?v.map(x=>typeof x==='string'?x:x?.type?`［${x.type}］${x.text}`:x?.text!=null?x.text+(x.ask?`（追问：${x.ask}）`:''):JSON.stringify(x)):v&&typeof v==='object'?`${v.choice||''}：${v.reason||''}`:v;
 // One change per line, only the change (陈溪南 2026-10-22): which field (and which item), then the old words struck → the
 // new words. A rewrite shows the new text whole with 看原来; an added or removed item says so in its label.
 const itemTitle=t=>String(t||'').match(/^\*\*(.+?)[：:]\*\*/)?.[1]||'';
-function ChangeRow({label,row}){
+// The value without its **短标题：** (the title is already in the label).
+const bodyOf=t=>stripMarks(String(t??'').replace(/^\*\*(.+?)[：:]\*\*\s*/,''));
+// Changes read in place (陈溪南 2026-10-27): a short value as 旧 → 新 in whole words; a sentence whole, with the removed words
+// struck and the new words marked where they sit; only a near-total rewrite shows the new text with 看原来.
+function ChangeRow({label,row,part}){
  const [open,setOpen]=useState(false);
- const before=stripMarks(row.before),after=stripMarks(row.after),item=itemTitle(row.before??row.after);
- const head=t=><small className="proposal-field">{label}{item?` · ${item}`:''}{t?` · ${t}`:''}</small>;
+ const before=bodyOf(row.before),after=bodyOf(row.after),item=itemTitle(row.before??row.after);
+ const head=t=><small className={part?'proposal-part':'proposal-field'}>{part||`${label}${item?` · ${item}`:''}`}{t?` · ${t}`:''}</small>;
  if(row.kind==='added')return <div className="proposal-diff">{head('新增')}<p className="change-full">{after}</p></div>;
  if(row.kind==='removed')return <div className="proposal-diff">{head('删去')}<p className="change-full"><s className="change-old">{before}</s></p></div>;
- const c=inlineChange(before,after),whole=c.head.length+c.tail.length<6;
- // Only added words read as “+ …”, only removed words as struck; both sides only when something was replaced.
- const pair=(a,b)=><div className="proposal-diff">{head('')}<p className="change-pair">{a?<><s className="change-old">{a}</s>{b&&<span className="change-arrow">→</span>}</>:<span className="change-plus">+</span>}{b&&<mark className="diff-mark">{b}</mark>}</p></div>;
- if(whole&&before.length<=30&&after.length<=40)return pair(before,after);
- // A bare number carries its unit (9 → 10 reads as 9 人 → 10 人).
- const unit=/^[\d./-]+$/.test(c.added)&&/^[\d./-]*$/.test(c.removed)?(c.tail.match(/^\s*([^\s，。；、,.;:：]{1,2})/)?.[1]||''):'';
- if(!whole&&c.removed.length<=30&&c.added.length<=40)return pair(c.removed&&c.removed+(unit?' '+unit:''),c.added+(unit?' '+unit:''));
- return <div className="proposal-diff">{head('改写')}<p className="change-full">{after} <button type="button" className="see-before" onClick={()=>setOpen(!open)}>{open?'收起原来':'看原来'}</button></p>{open&&<del className="change-before">{before}</del>}</div>;
+ if(before.length<=14&&after.length<=20)return <div className="proposal-diff">{head('')}<p className="change-pair">{before&&<><s className="change-old">{before}</s><span className="change-arrow">→</span></>}<mark className="diff-mark">{after}</mark></p></div>;
+ const c=inlineChange(before,after),kept=c.head.length+c.tail.length;
+ if(kept<Math.min(before.length,after.length)*0.3)return <div className="proposal-diff">{head('改写')}<p className="change-full">{after} <button type="button" className="see-before" onClick={()=>setOpen(!open)}>{open?'收起原来':'看原来'}</button></p>{open&&<del className="change-before">{before}</del>}</div>;
+ return <div className="proposal-diff">{head('')}<p className="change-inline">{c.head}{c.removed&&<s className="change-old">{c.removed}</s>}{c.added&&<mark className="diff-mark">{c.added}</mark>}{c.tail}</p></div>;
 }
 function FieldChange({label,before,after}){
  const rows=proposalRows(asLines(before),asLines(after)).filter(r=>r.kind!=='same');
+ // 事实证据 lines are “项 · 状态 / 证据 / 没做到的原因”: name the item once, then one line per part.
+ const split=rows.map(r=>{const t=itemTitle(r.before??r.after),i=t.lastIndexOf(' · ');return i>0?{item:t.slice(0,i),part:t.slice(i+3)}:null;});
+ if(rows.length&&split.every(Boolean)){const groups=[];rows.forEach((r,i)=>{const g=groups.at(-1);if(g?.item===split[i].item)g.rows.push([r,split[i].part]);else groups.push({item:split[i].item,rows:[[r,split[i].part]]});});
+  return <>{groups.map((g,i)=><div key={i} className="proposal-diff-group"><small className="proposal-field">{label} · {g.item}</small>{g.rows.map(([r,p],j)=><ChangeRow key={j} label={label} row={r} part={p}/>)}</div>)}</>;}
  return <>{rows.map((r,i)=><ChangeRow key={i} label={label} row={r}/>)}</>;
 }
 // The header names what changes: 改 标题、成果、验收（+2 条）.

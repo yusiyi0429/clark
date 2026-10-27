@@ -16,7 +16,7 @@
     },
     {
       "path": "AdminPanel.jsx",
-      "sha256": "4d6a319c1e393d5d0dfe6566254d7d2ea3c9e1732c8472792eaca96d3a01df3c"
+      "sha256": "6f9e03a29ebd5f9f50f152c051d41237daf9108e57828c813725670a8c77fdd0"
     },
     {
       "path": "agent-prompts.mjs",
@@ -24,7 +24,7 @@
     },
     {
       "path": "app.jsx",
-      "sha256": "7acffa1bcf52b3da017b368987a3ecd025e46d93a0174fe8a20c583dd4021285"
+      "sha256": "0ab60796ee0f145047074a6215a5f6c063e6f36b3f20290e286b2e5d441cf07d"
     },
     {
       "path": "AuditStatus.jsx",
@@ -108,7 +108,7 @@
     },
     {
       "path": "EntryMetadata.jsx",
-      "sha256": "fe7f2d1ccac46f19c72ccaa5da3b58e4274022b4a7400d654944b0a07d601cc9"
+      "sha256": "e7c495ac61b508c296fbb41fefd80cfe6403dd87d0760796f066a4de5b25cbb6"
     },
     {
       "path": "gantt-time.mjs",
@@ -128,7 +128,7 @@
     },
     {
       "path": "Handshake.jsx",
-      "sha256": "799418efc8194e8eb14f357244bc27f66c079e174663822179fd01a662ab64c5"
+      "sha256": "4027b928db256778cc2926d3fff937e5410bc58e9af5f35e0f1ece9d962ee47e"
     },
     {
       "path": "index.html",
@@ -253,7 +253,7 @@
     },
     {
       "path": "ProposalCard.jsx",
-      "sha256": "336369eab365eb58596832dff96cdb1d16c7514f482ecf23c73b2661ae63e307"
+      "sha256": "eda09c48410e140d9e5eaa60bd375ebb13670a01866de52d6c767c7c1b710e04"
     },
     {
       "path": "reader-format.mjs",
@@ -297,7 +297,7 @@
     },
     {
       "path": "ReviewCanvas.jsx",
-      "sha256": "0a20d98169f47e75586d16ce2f4d8210985b04a02896e20ca66adf857bbcad11"
+      "sha256": "453a9817b0ea89091e2d51c7c495e9a73987843a5720b9c8a1a5034482c6a279"
     },
     {
       "path": "ReviewEditor.jsx",
@@ -397,7 +397,7 @@
     },
     {
       "path": "style.css",
-      "sha256": "920f19b42533d255856cb01ceed1ef292bbd5adb815e0f135130aa4e1b670319"
+      "sha256": "bd97f25603fcd3bf83a223cb7fdaf70961537d0f40bc642d9df4e46b87a48160"
     },
     {
       "path": "todo.mjs",
