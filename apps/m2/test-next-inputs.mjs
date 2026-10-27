@@ -178,3 +178,16 @@ test('下级有调整：上级复盘的签字人（CEO）也能核对，且在�
  assert.throws(()=>applyAction(s,tang,{type:'acknowledgeImpact',cardId:'rv:bf01',baseVersion:1}),/下级调整|不在当前领域/);
  s=applyAction(s,ceo,{type:'acknowledgeImpact',cardId:'rv:bf01',baseVersion:1});assert.equal(s.cards['rv:bf01'].downstreamChange,undefined);
 });
+
+test('群里少说：同一张上级卡短时间内多张下级改动只发一条并不断合并；没出成的卡不进群',async()=>{
+ const two={...run,reviews:[...run.reviews,{unit:'bf01',level:'mission',ref:'bf01-m2',title:'复用',owner:'孙铭泽',verdict:'未达成',verdictReason:'没做',facts:[{ref:'t1',item:'复用',owner:'孙铭泽',status:'未达成',evidence:'无'}],nextInputs:[{ref:'t1',type:'继续',text:'接着做'}],parent:'bf01'}]};
+ let s=installReviewRound(createCollaborationState([{id:'bf01',level:'po',title:'灯塔',owner:'刘明华',version:1,children:[]}]),two,{label:'10 月复盘',now:'2026-10-27T02:33:00.000Z'});
+ const sun=memberActor('member-03',s),before=s.messages.length;
+ for(const id of ['rv:bf01-m1','rv:bf01-m2']){const c=currentVersion(s.cards[id]).content;s=applyAction(s,sun,{type:'revise',cardId:id,baseVersion:1,patch:{nextInputs:[{...c.nextInputs[0],text:c.nextInputs[0].text+'（改）'}]}});}
+ const down=s.messages.slice(before).filter(m=>m.downstream);
+ assert.equal(down.length,1,'只有一条');assert.match(down[0].text,/「灯塔」的下级 「首用」、「复用」 改了下期输入/);
+ const {quietReply}=await import('./nexus-policy.mjs');
+ assert.equal(quietReply('已出修订卡，请确认。',[],[{cardId:'talent-m03',why:'这张卡上还有人反对'}]),'');
+ assert.equal(quietReply('M02 改好了，请看。另外周五前给数。',[{cardId:'talent-m02'}],[{cardId:'talent-m03',why:'x'}]),'M02 改好了，请看。另外周五前给数。');
+ assert.equal(quietReply('好的，周五前给数。',[],[]),'好的，周五前给数。');
+});

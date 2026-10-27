@@ -225,12 +225,20 @@ export function applyAction(previous,actor,action){
    parent.downstreamChange={cardId:card.id,version:v.number+1,fields:watched,staleDates:quoted,at:now};
    const owners=[...new Set(confirmationSlots(parent).map(slot=>slotHolder(state,parent,slot)).concat(upper.owner).flatMap(n=>String(n||'').split(/[、,，]/)).map(n=>n.trim()).filter(n=>n&&n!==nameOf(actor.id)))];
    const what=watched.map(k=>({time:'时间',checks:'验收',milestones:'里程碑',result:'成果',verdict:'判定',verdictReason:'判定理由',targets:'目标对照',facts:'事实证据',nextInputs:'下期输入',tier:'档位'})[k]).join('、');
-   if(owners.length)groupNotice(state,parent,`${titleOf(card)}改了${what}，上级${titleOf(parent)}${quoted.length?`还写着 ${quoted.join('、')}，`:'写到的内容'}可能要跟着改，请 ${mentionList(owners)} 看一下。`);
+   // One line per upper card for a burst of lower changes (陈溪南 2026-10-27, fewer Nexus lines): the same notice grows instead of a new one.
+   if(owners.length){const recent=[...state.messages].reverse().find(m=>m.kind==='notice'&&m.downstream&&m.cardId===parent.id&&Date.parse(now)-Date.parse(m.createdAt)<10*60e3);
+    const kids=[...new Set([...(recent?.downstream.children||[]),titleOf(card)])],fields=[...new Set([...(recent?.downstream.fields||[]),what])],dates=[...new Set([...(recent?.downstream.dates||[]),...quoted])];
+    const text=`${titleOf(parent)}的下级 ${kids.join('、')} 改了${fields.join('、')}，${titleOf(parent)}${dates.length?`还写着 ${dates.join('、')}，`:'写到的内容'}可能要跟着改，请 ${mentionList(owners)} 看一下。`;
+    if(recent)Object.assign(recent,{text,downstream:{children:kids,fields,dates},updatedAt:now});
+    else{state.sequence++;state.messages.push({id:`notice-${state.sequence}`,createdSequence:state.sequence,author:'Nexus',kind:'notice',channel:'group',scope:unitOf(parent),cardId:parent.id,version:currentVersion(parent).number,general:true,text,downstream:{children:kids,fields,dates},createdAt:now});}}
   }
   if(actor.kind!=='coagent'){
    const me=nameOf(actor.id),signers=confirmationSlots(card).map(slot=>slotHolder(state,card,slot)).filter(n=>n&&n!==me);
    const lower=children.map(c=>currentVersion(c).content.owner).filter(n=>n&&n!==me);
-   groupNotice(state,card,(action.auto?`Nexus 已按 ${me} 的批注修改${titleOf(card)}，已更新到 v${v.number+1}，可在修订记录里查看或改回。`:`${me}${action.viaProposal?`接受了 Nexus 对${titleOf(card)}的修订`:`修订了${titleOf(card)}`}，已更新到 v${v.number+1}。`)+(signers.length?`请 ${mentionList(signers)} 确认新版本。`:'')+(children.length&&!isReview(card)?`Nexus 正在按拆解规则对照下级 ${children.length} 张卡，有明显冲突的才出修订卡，其余在群里提示。`:''));
+   // The card already shows 已修改 · vN (陈溪南 2026-10-27): the group only hears who has to confirm again, and Nexus's own edits.
+   const ask=signers.length?`${titleOf(card)}已更新到 v${v.number+1}，请 ${mentionList(signers)} 重新确认。`:'',cascade=children.length&&!isReview(card)?`Nexus 正在按拆解规则对照下级 ${children.length} 张卡，有明显冲突的才出修订卡，其余在群里提示。`:'';
+   const line=action.auto?`Nexus 已按 ${me} 的批注修改${titleOf(card)}，已更新到 v${v.number+1}，可在修订记录里查看或改回。`+(signers.length?`请 ${mentionList(signers)} 重新确认。`:'')+cascade:ask+cascade;
+   if(line)groupNotice(state,card,line);
    // 下级对齐: the server checks the cards below against this version (nexus-cascade.mjs).
    if(children.length&&!isReview(card)){state.cascadeQueue??=[];state.cascadeQueue=state.cascadeQueue.filter(j=>j.cardId!==card.id);state.cascadeQueue.push({cardId:card.id,from:v.number,to:v.number+1,noticeId:`notice-${state.sequence}`,at:now});}
   }

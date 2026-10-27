@@ -58,6 +58,14 @@ export function cardName(id,cards=[]){if(String(id).startsWith('rv:')){const m=S
 // What goes to the room beside the cards (评测 2026-10-23): a card speaks for itself, but a question asked in the same
 // batch still gets its answer — 「这一条时间写错了」 and 「为什么判未达成？」 together used to leave the question unanswered.
 export function roomLine({reply,cards=0,questions=[]}){const text=String(reply||'').trim();if(!text)return '';return !cards||questions.length?text:'';}
+// What goes to the room (陈溪南 2026-10-27, fewer Nexus lines): cards that did not come out are not announced; they stay in lastAct.
+// A reply that only talked about cards says nothing; a reply with more in it keeps that part.
+export function quietReply(reply,kept=[],rejected=[],cards=[]){
+ const full=reconcileReply(reply,kept,rejected,cards),text=String(reply||'');
+ if(full===text)return text;
+ if(/^这次没/.test(full))return '';
+ return full.replace(/\s*更正：[^。]*没出成卡。$/,'');
+}
 export function reconcileReply(reply,kept=[],rejected=[],cards=[]){
  // Only a claim that a card is out needs correcting; 「你同意的话我再出卡」is a question and stays as it is (2026-10-19 Token Ops).
  const text=String(reply||''),mentions=/(已|已经|这就|现已)(出|给出|发出|生成)[^。！？?]{0,10}卡|卡[^。！？?]{0,6}(已出|已给出|已发出|已生成)|见(修订)?卡片|拟修改如下|请[^。！？?]{0,10}(接受|确认)[^。！？?]{0,6}(修订|这张卡|卡片)/.test(text);

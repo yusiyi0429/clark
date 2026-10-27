@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {normalize,allNodes} from './domain.mjs';
 import {createModelGateway,recordModelRun,patientTransport} from './model.mjs';
-import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,ownerAnnotation,isChildCard,reconcileReply,roomLine} from './nexus-policy.mjs';
+import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,ownerAnnotation,isChildCard,reconcileReply,quietReply,roomLine} from './nexus-policy.mjs';
 import {createCollaborationState,currentVersion,canRead,cardStatus,confirmationSummary,insightView} from './governance.mjs';
 import {runRoundPool} from './round-pool.mjs';
 import {redactMessages} from './redact.mjs';
@@ -413,7 +413,7 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
       // Said in the room, not swallowed: a refusal asks for the personal details to be left out (模型调用稳定性加固 2026-10-22).
       output.reply=e.code==='MODEL_REFUSAL'?'这次没能起草新增的 Mission：模型拒绝了这次请求，可能因为讨论里有具体到个人的敏感细节（薪酬、背调、考评等）。去掉这些细节后再 @Nexus。':'这次没能起草新增的 Mission，起草没有完成，请稍后再 @Nexus 试一次。';}
     }
-    const rawReply=output.reply;output.reply=reconcileReply(output.reply,output.proposals,output.rejected||[],cards);
+    const rawReply=output.reply;output.reply=quietReply(output.reply,output.proposals,output.rejected||[],cards);
     // Nobody asked and no card came out: the miss stays in lastAct for diagnosis, not in the room (2026-10-19 drill).
     if(!output.participation.called&&!output.proposals.length&&output.reply!==rawReply)output.reply='';
     const lastAct={at:new Date().toISOString(),kept:output.proposals.map(p=>p.cardId),rejected:(output.rejected||[]).slice(0,8),...(rawReply!==output.reply?{rawReply:String(rawReply).slice(0,1000)}:{})};
@@ -425,7 +425,9 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
      try{const asked=await chatGateway.complete([{role:'system',content:nexusSystemPrompt+reviewBlock},{role:'user',content:JSON.stringify({task:'下面 questions 里的提问还没有回答。只回答这些提问：按 cards 和 evidence 里的证据说明，没有依据就直说没找到，不要出修订卡。出处用大白话说（谁、哪天、哪张卡的哪一项），不写 E 开头的证据编号。返回 {"reply":"回答"}。',scope:scope.id,questions:explicitQuestions.map(q=>({id:q.id,author:handoffProfiles[q.author]?.name||q.author,text:q.text,card:q.context?.selection?.id,block:q.context?.block||q.block})),cards,evidence:ctx.evidence||evidence})}],nexusOptions);
       const said=JSON.parse(asked.answer);if(typeof said?.reply==='string')output.reply=readableAnswer(said.reply,cards);}catch{}
     }
-    const notice=roomLine({reply:output.reply,cards:output.proposals.length+missionProposals.length,questions:explicitQuestions});
+    // A question that a card in this pass answers (an answer to a 下期输入 question, say) needs no extra line beside the card.
+    const cardSources=new Set([...output.proposals,...missionProposals].flatMap(p=>p.sourceIds||[]));
+    const notice=roomLine({reply:output.reply,cards:output.proposals.length+missionProposals.length,questions:explicitQuestions.filter(q=>!cardSources.has(q.id))});
     // An answer to one question sits under that question; the question's own card stays the context.
     const answered=explicitQuestions.length===1?explicitQuestions[0]:null;
     if(notice)await store.transact(state=>{if(state.round?.id!==roundAtStart)return state;state.messages.push({id:randomUUID(),author:'Nexus',channel:'group',scope:scope.id,text:notice,...(answered?{replyTo:answered.id,replyToAuthor:answered.author,threadId:answered.threadId||answered.id,...(answered.context?{context:answered.context}:{})}:{}),createdAt:new Date().toISOString()});state.sequence++;return state;});
