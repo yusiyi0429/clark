@@ -298,13 +298,13 @@ export async function placeTask(pool: Pool, taskId: string, missionId: string | 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const row = (await client.query<{ owner_id: string }>(`SELECT t.owner_id FROM tasks t WHERE t.id=$1 AND ${UNPLACED} FOR UPDATE`, [taskId])).rows[0];
+    const row = (await client.query<{ owner_id: string; created_by: string }>(`SELECT t.owner_id,t.created_by FROM tasks t WHERE t.id=$1 AND ${UNPLACED} FOR UPDATE`, [taskId])).rows[0];
     if (!row) { await client.query("ROLLBACK"); return; }
     if (missionId) {
       const step = await appendStep(client, missionId);
       await client.query("UPDATE tasks SET mission_id=$2,step_order=$3,unplaced_reason=NULL,version=version+1,updated_at=now() WHERE id=$1", [taskId, missionId, step]);
       const title = (await client.query<{ title: string }>("SELECT title FROM missions WHERE id=$1", [missionId])).rows[0]?.title ?? missionId;
-      await tellGroup(client, taskId, row.owner_id, `按会上的内容挂到了 Mission「${title}」；不对的话在这件事里改。`);
+      await tellGroup(client, taskId, row.owner_id, `${row.created_by === "meeting" ? "按会上的内容" : "按事项内容"}挂到了 Mission「${title}」；不对的话在这件事里改。`);
     } else {
       await client.query("UPDATE tasks SET unplaced_reason=$2,version=version+1,updated_at=now() WHERE id=$1", [taskId, reason]);
     }
