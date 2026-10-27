@@ -242,3 +242,11 @@ test('个人复盘的负责人进这个单元：能只读看本单元别人的�
  const tang=memberActor('member-09',s);assert.ok(tang.visibleUnits.includes('bf01'));
  const v=sharedProjection(s,tang);assert.ok(v.drafts['rv:bf01-m1']&&v.drafts['rv:bf01']);assert.equal((v.comments['rv:bf01-m1']||[]).length,0);
 });
+
+test('复盘卡标题去掉本体标题开头的“M03｜”这类编号，名字里的编号保留',async()=>{
+ const {displayTitle}=await import('./review-generation.mjs');
+ assert.equal(displayTitle('M03｜灯塔 E&O 数据与对话服务完成真实接入'),'灯塔 E&O 数据与对话服务完成真实接入');
+ assert.equal(displayTitle('01-1 对本期可控制结果负责'),'01-1 对本期可控制结果负责');
+ assert.equal(displayTitle('CEO Agent 双 P0 真实应用'),'CEO Agent 双 P0 真实应用');
+ assert.equal(displayTitle('M03｜'),'M03｜');
+});

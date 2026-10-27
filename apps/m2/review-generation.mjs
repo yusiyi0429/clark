@@ -214,7 +214,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
   const n=(perGoal[m.goal.id]=(perGoal[m.goal.id]||0)+1),owner=ownerOf(m.object),ruOwner=ownerOf(m.goal.object);
   // No owner in the ontology: shown under 未指派 (not under the unit DRI, 读取盘点第 7 条); the unit DRI still signs for it.
   const planOwners=[...new Set(planItems(m.object).map(p=>realName(principalName.get(p.responsible))).filter(Boolean))];
-  stage1.push({...base,id:`${m.goal.unit}-m${n}`,level:'mission',unit:m.goal.unit,parent:m.goal.unit,title:m.object?.business?.title||'',owner:owner||ruOwner,ownerAssigned:Boolean(owner),
+  stage1.push({...base,id:`${m.goal.unit}-m${n}`,level:'mission',unit:m.goal.unit,parent:m.goal.unit,title:displayTitle(m.object?.business?.title),owner:owner||ruOwner,ownerAssigned:Boolean(owner),
    ...(owner?{}:{missing:[`本体里这个 Mission 没写负责人，页面归在“未指派”，由 RU DRI 代为确认${planOwners.length?`；计划条目里的负责人是 ${planOwners.join('、')}`:''}`]}),commitment:blockLines(m.object?.business?.blocks),commitmentSource:`本体 ${month} 月 Mission（${statusOf(m.object)}），服务于「${m.goal.object?.business?.title||''}」`,evidence:numbered(ev),recordFacts:recordFacts(ev),
    // 个人复盘一行一个 Task (2026-10-26): the Mission's Tasks in the ontology, so each gets its fact line.
    // Task lines from two sources (读取盘点第 1 条): the Mission's plan items lead; a Task object whose title matches adds its
@@ -270,6 +270,9 @@ export function jargonOf(text){
  for(const m of t.replace(code,' ').matchAll(/[A-Za-z][A-Za-z&-]*(?:\s+[A-Za-z][A-Za-z&-]*)*/g)){const words=m[0].split(/\s+/);if(words.some(w=>w.length>=3&&!KNOWN_WORDS.has(w.toLowerCase())))out.add(m[0]);}
  return [...out].slice(0,8);
 }
+// 「M03｜灯塔……」: a code prefix the ontology title carries is left off the review card (陈溪南 2026-10-27, no codes); a code that is
+// part of the name (「01-1 对本期……」) stays, and the ontology title itself is untouched.
+export const displayTitle=t=>{const s=String(t||'').trim(),bare=s.replace(/^[MT]\d{1,2}\s*[｜|:：]\s*/,'');return bare||s;};
 export function lengthFindings(r){
  const f=[];for(const s of textOf(r)){for(const sent of String(s).split(/[。；！？]/)){const n=visible(sent.replace(/^\*\*[^*]+\*\*/,'')).length;if(n>30)f.push({type:'长句',chars:n,text:sent.slice(0,60)});}
   for(const w of ['尚不能','仍需进一步','有待观察','闭环','赋能','打通','具备条件'])if(String(s).includes(w))f.push({type:'回避或空话',word:w,text:String(s).slice(0,60)});}
