@@ -1392,3 +1392,7 @@ body.is-col-resizing{cursor:col-resize;user-select:none}
 .review-primary>.review-card+.review-card{margin-top:16px}
 :root .person-summary-list .review-verdict{background:none!important;border:0!important;padding:0!important;font-size:12px;font-weight:400}
 .person-summary-list .review-verdict.tone-no{color:#b42318}.person-summary-list .review-verdict.tone-part{color:#a15c07}.person-summary-list .review-verdict.tone-ok{color:#1a7f37}
+.todo-flat li.has-ack{display:flex;align-items:center;gap:6px}
+.todo-flat li.has-ack .todo-item{flex:1;min-width:0}
+.todo-ack{flex:none;border:1px solid #c8d3e0;background:#fff;color:#31516f;font-size:12px;border-radius:999px;padding:3px 10px;cursor:pointer}
+.todo-ack:hover{border-color:#002fa7;color:#002fa7}
