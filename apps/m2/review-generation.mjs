@@ -333,6 +333,8 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
  }
  const companyStep='按技能「产品生成整轮复盘候选·每一步怎么做·4. 公司复盘」执行。'+fieldsHint;
  await pool(s3,async c=>{put(c,await askUnit(c,{task:companyStep,unit:unitData(c),ruReviews:c.children.map(id=>run.reviews[id]).filter(Boolean)}));await step('公司 PO 复盘');});
+ // The company review is the last answer; save once more so the job file holds every review (评测 2026-10-27).
+ await save(run);
  return run;
 }
 
