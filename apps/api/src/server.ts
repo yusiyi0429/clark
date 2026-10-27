@@ -65,6 +65,8 @@ const env: AppEnv = {
   driServiceToken: requiredEnv("DRI_SERVICE_TOKEN"),
   ontologyServiceToken: process.env.ONTOLOGY_SERVICE_TOKEN,
   internalChatToken: process.env.INTERNAL_CHAT_TOKEN || undefined,
+  // 首页对话改走独立 Chat 服务的开关：设了地址才走（还要 INTERNAL_CHAT_TOKEN），不设照旧走天枢自己的对话。
+  chatServiceUrl: process.env.CHAT_SERVICE_URL || undefined,
   // 本体：TKOS_WORLD_API_URL；凭证 TKOS_WORLD_AGENT_TOKEN 或 TKOS_WORLD_AGENT_TOKEN_FILE（只在内存里）；TKOS_WORLD_INSTANCE 选实例配置（缺省 mvp）。
   ...resolveWorldEnv(process.env),
   // 第二个只读实例（词元云集 TK scope）：TKOS_WORLD_TK_INSTANCE=tk 加 TKOS_WORLD_TK_TOKEN_FILE；不设就关闭。

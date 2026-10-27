@@ -21,6 +21,23 @@ import { MissionCardField, PersonalReviewUpdateInput, type TPersonalReviewUpdate
 import { actionFingerprint, signActionId } from "./actionToken.js";
 import { executePersonalReviewAction, getCurrentPersonalReview, getPersonalReview, personalReviewContext, personalReviewHref } from "./personalReviews.js";
 import { PERSONAL_REVIEW_WRITING_REQUIREMENTS } from "./personalReviewAgent.js";
+import { TaskQualityId, TaskRepairHandoff, TaskRepairList, TaskRepairView, TaskRepairReceiptInput } from "@warmap/contracts";
+import { ChatServiceError, type createChatService } from "./chatService.js";
+
+const QualityView = Type.Union([Type.Literal("ceo"), Type.Literal("member")]);
+const QualityList = Type.Object({ viewerRole: QualityView }, { additionalProperties: false });
+const QualityGet = Type.Object({ viewerRole: QualityView, proposalId: TaskQualityId }, { additionalProperties: false });
+const QualityReceipt = Type.Object({ viewerRole: QualityView, proposalId: TaskQualityId, receipt: TaskRepairReceiptInput }, { additionalProperties: false });
+const QualityCall = Type.Union([
+  Type.Object({ name: Type.Literal("list_task_repairs"), arguments: QualityList }),
+  Type.Object({ name: Type.Literal("get_task_repair_handoff"), arguments: QualityGet }),
+  Type.Object({ name: Type.Literal("report_task_repair_receipt"), arguments: QualityReceipt }),
+]);
+const qualityDefinitions: Tool[] = [
+  { name: "list_task_repairs", description: "列出本人指定视角的 Task 补齐草稿和上次核对状态。不会写 world。", inputSchema: QualityList as Tool["inputSchema"], annotations: { readOnlyHint: true } },
+  { name: "get_task_repair_handoff", description: "读取本人一项最新补齐请求。stage=source 时先核对个人 world scope，取得用户对这项来源的确认后用 tkos-world act 执行 request 原文；回传来源回执，再读取字段卡。stage=change 时把 package 保存为文件，用 tkos-task-writeback import <文件> --save <私有计划文件> 导入；审阅完整差异和指纹，取得用户对此项的明确确认后再 apply。重试保留原键原文，不批量批准，不通过业务门。", inputSchema: QualityGet as Tool["inputSchema"], annotations: { readOnlyHint: true } },
+  { name: "report_task_repair_receipt", description: "回传个人 world 操作的真实回执；服务只读核验原请求并复查缺口。stage=change 可不带 receiptId 以查找原请求回执。来源记录完成不等于字段完成，字段完成不等于治理确认。", inputSchema: QualityReceipt as Tool["inputSchema"], annotations: { idempotentHint: true } },
+];
 
 const ListInput = Type.Object({ status: Type.Optional(Type.Union([Type.Literal("open"), Type.Literal("all")])) }, { additionalProperties: false });
 const Uuid = Type.String({ pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" });
@@ -110,7 +127,8 @@ const taskFailure = (outcome: TaskResult | { deleted: true }) => "notFound" in o
 
 export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: string; now: () => Date;
   names: () => Map<string, string>; findPerson: (personId: string) => MemoryPerson | undefined;
-  people: () => MemoryPerson[]; initialPerson: MemoryPerson; publicOrigin?: string; authorization: string | undefined; planTasks: PlanTaskSource }) {
+  people: () => MemoryPerson[]; initialPerson: MemoryPerson; publicOrigin?: string; authorization: string | undefined; planTasks: PlanTaskSource;
+  chat?: ReturnType<typeof createChatService> }) {
   const auth = () => authenticateMcpToken(deps.q, deps.authorization, deps.pepper, deps.now(), (id) => !!deps.findPerson(id), deps.publicOrigin ? oauthUrls(deps.publicOrigin).resource : undefined);
   /** 推进人写进展、放链接会让未启动的事项变进行中、版本跟着变：把事项此刻的状态和版本一起回给外部工具，接着提交验收直接用。 */
   const itemState = async (itemId: string) =>
@@ -142,10 +160,11 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     if (!person) return { tools: [] };
     const roles = access(person);
     return { tools: [...(roles.member ? memberDefinitions : []), ...(roles.ceo ? ceoDefinitions : []),
-      ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...reviewDefinitions]
+      ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...reviewDefinitions,
+      ...(deps.chat && (roles.ceo || roles.member) ? qualityDefinitions : [])]
       .filter((tool) => !identity?.scopes || identity.scopes.includes("tianshu:write") || !MCP_WRITE_TOOLS.has(tool.name)) };
   });
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const tool = request.params.name, args = request.params.arguments ?? {};
     const identity = await auth();
     if (!identity) return result({ code: "UNAUTHORIZED", message: "身份已失效，请重新连接" }, true);
@@ -166,6 +185,16 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
         code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员或 CEO 开放" }, true);
       }
       const names = deps.names();
+      if (qualityDefinitions.some(definition => definition.name === tool)) {
+        if (!deps.chat) return result({ code: "CHAT_NOT_CONFIGURED", message: "数据质量服务尚未接通。" }, true);
+        const call = { name: tool, arguments: args };
+        if (!Value.Check(QualityCall, call)) return result({ code: "INVALID_INPUT", message: "请选择本人视角和正确的补齐记录。" }, true);
+        if (call.arguments.viewerRole === "ceo" ? !roles.ceo : !roles.member) return result({ code: "FORBIDDEN", message: "本人不能使用该视角。" }, true);
+        const viewer = { personId: person.personId, role: call.arguments.viewerRole };
+        if (call.name === "list_task_repairs") return result(await deps.chat.quality(viewer, randomUUID(), "/proposals", TaskRepairList, undefined, extra.signal));
+        if (call.name === "get_task_repair_handoff") return result(await deps.chat.quality(viewer, randomUUID(), `/proposals/${call.arguments.proposalId}/handoff`, TaskRepairHandoff, undefined, extra.signal));
+        return result(await deps.chat.quality(viewer, randomUUID(), `/proposals/${call.arguments.proposalId}/receipts`, TaskRepairView, call.arguments.receipt, extra.signal));
+      }
       const ceoContext = () => ({ q: deps.q, secret: deps.pepper, now: deps.now(), names,
         people: deps.people(), personId: identity.personId });
       switch (tool) {
@@ -372,7 +401,8 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
       }
       code = "INVALID_INPUT";
       return result({ code, message: "工具或参数不合法" }, true);
-    } catch {
+    } catch (error) {
+      if (error instanceof ChatServiceError) { code = error.code; return result({ code, message: error.message }, true); }
       code = "INTERNAL";
       return result({ code, message: "执行失败，请稍后重试" }, true);
     } finally {

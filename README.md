@@ -57,6 +57,7 @@ API 集成测试需要可建库的 PostgreSQL，通过 `TEST_PG_URL` 指定管�
 - [部署、备份与回滚](docs/guides/deployment.md)
 - [本地验收：对话、记忆与 LangSmith](docs/guides/local-memory-langsmith.md)
 - [个人 MCP 授权](docs/guides/mcp-oauth.md)
+- [Task 数据质量与本人补齐](docs/guides/task-quality.md)
 - [M2 试用](docs/guides/m2-trial.md)
 
 ## 数据与安全

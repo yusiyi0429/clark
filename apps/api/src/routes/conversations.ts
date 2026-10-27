@@ -48,6 +48,7 @@ import { createCompanyMap, defaultFocus, scopeLabel } from "../companyMap.js";
 import { acceptIssueDraft, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, saveDraftMaterial } from "../issueDrafts.js";
 import { buildSceneAnchor } from "../sceneAnchor.js";
 import type { ConversationAnchor } from "../conversationAnchor.js";
+import { ChatServiceError, createChatService } from "../chatService.js";
 import { readHomeSnapshots } from "./cards.js";
 import { idParams, type AppInstance, type RouteContext, type SessionPerson } from "./shared.js";
 
@@ -93,11 +94,18 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   };
   const conversationScopeVisible = async (person: SessionPerson, scope: TConversationScope) =>
     (await scopeObjectFor(person, scope)).visible;
+  // 首页对话改走独立 Chat（CHAT_SERVICE_URL，chatService.ts）：只管 global，对象页的对话照旧。
+  const chat = env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken }) : undefined;
+  const chatFailed = (reply: FastifyReply, error: unknown) => {
+    if (error instanceof ChatServiceError) return fail(reply, error.status, error.code, error.message);
+    throw error;
+  };
 
   app.get(
     "/api/conversations/:scope/messages",
     { preHandler: requirePerson, schema: { params: conversationParams } },
     async (req, reply) => {
+      if (chat && req.params.scope === "global") return chat.history(req.person!, String(req.id)).catch((error) => chatFailed(reply, error));
       const object = await scopeObjectFor(req.person!, req.params.scope);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
       return getConversationHistory(q, req.person!.personId, req.params.scope);
@@ -111,6 +119,11 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   ): Promise<void> => {
       const person = req.person!;
       const owner = person.personId;
+      if (chat && req.params.scope === "global") {
+        // 和天枢自己的对话同一条规则：成员不能借显式引用把 Card 带进对话。
+        if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
+        return chat.relay(person, String(req.id), req.body, reply).catch((error) => chatFailed(reply, error));
+      }
       const object = await scopeObjectFor(person, req.params.scope);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
       /** 页面左侧正在看的那份材料（只认这个 scope 的对象）；读不到抛错。read_anchor 展开时按当前权限重读。 */
@@ -736,12 +749,14 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           files.push({ filename: part.filename, mimetype: part.mimetype, buffer: await part.toBuffer() });
         }
         if (!files.length) return fail(reply, 400, "INVALID_ATTACHMENT", "缺少附件文件");
+        if (chat && req.params.scope === "global") return await chat.upload(req.person!, String(req.id), files);
         parsed = await parseMaterialBatch(files);
         const conversationId = await ensureMainConversation(pool, req.person!.personId, req.params.scope);
         const stored = await storeConversationAttachments(conversationAttachmentStorageDir, conversationId, parsed.materials);
         return { attachments: stored.map(conversationAttachmentInfo) };
       } catch (error) {
         if (error instanceof MaterialParseError) return fail(reply, 400, error.code, error.message);
+        if (error instanceof ChatServiceError) return fail(reply, error.status, error.code, error.message);
         const code = (error as { code?: string }).code;
         if (code === "FST_REQ_FILE_TOO_LARGE" || code === "FST_FILES_LIMIT") return fail(reply, 413, "MATERIAL_BATCH_TOO_LARGE", "附件文件或数量超出上限");
         throw error;

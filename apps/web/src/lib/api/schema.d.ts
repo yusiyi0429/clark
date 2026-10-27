@@ -4,6 +4,193 @@
  */
 
 export interface paths {
+    "/api/task-quality/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人 Task 数据质量与补齐记录 */
+        get: operations["getTaskQualityStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人 Task 数据质量与补齐记录 */
+        get: operations["listTaskQualityReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-quality/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人 Task 数据质量与补齐记录 */
+        get: operations["listQualityTaskCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-quality/tasks/{taskId}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人 Task 数据质量与补齐记录 */
+        post: operations["checkTaskQuality"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-quality/tasks/{taskId}/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人 Task 数据质量与补齐记录 */
+        post: operations["proposeTaskRepair"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-quality/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人 Task 数据质量与补齐记录 */
+        get: operations["listTaskRepairs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-quality/proposals/{proposalId}/revise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人 Task 数据质量与补齐记录 */
+        post: operations["reviseTaskRepair"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-quality/proposals/{proposalId}/handoff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人 Task 数据质量与补齐记录 */
+        get: operations["getTaskRepairHandoff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-quality/proposals/{proposalId}/receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人 Task 数据质量与补齐记录 */
+        post: operations["reportTaskRepairReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-quality/meetings/{meetingId}/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人 Task 数据质量与补齐记录 */
+        post: operations["analyzeMeetingTasks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-quality/meetings/{meetingId}/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人 Task 数据质量与补齐记录 */
+        post: operations["proposeMeetingTaskRepair"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/login": {
         parameters: {
             query?: never;
@@ -2311,6 +2498,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取本人的可选个人资料 */
+        get: operations["getPersonalProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 本人填写或清空可选性别字段 */
+        patch: operations["updatePersonalProfile"];
+        trace?: never;
+    };
     "/api/me/tokens": {
         parameters: {
             query?: never;
@@ -3659,6 +3864,403 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        TaskQualityStatus: {
+            enabled: boolean;
+        };
+        TaskQualityOptions: {
+            maxAgeHours?: number | null;
+        };
+        TaskQualityCatalog: {
+            items: {
+                taskId: string;
+                title: string;
+                status: string;
+            }[];
+            nextCursor: string | null;
+        };
+        TaskQualityReviewList: {
+            reviews: {
+                taskId: string;
+                title: string;
+                checkedAt: string;
+                report: {
+                    /** @constant */
+                    interface_version: "tkos.task-writeback/0.1";
+                    task: {
+                        business: {
+                            object_id: string;
+                            title: string;
+                            version: number;
+                            object_version: number;
+                            revision_id: string;
+                            attributes: {
+                                [key: string]: unknown;
+                            };
+                            blocks: unknown[];
+                            relations: unknown[];
+                            pending_change: {
+                                [key: string]: unknown;
+                            } | null;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                        records: {
+                            lifecycle: {
+                                status: string;
+                            } & {
+                                [key: string]: unknown;
+                            };
+                            latest_state: unknown;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    } & {
+                        [key: string]: unknown;
+                    };
+                    baseline: {
+                        subject_ref: string;
+                        object_version: number;
+                        snapshot_id: string | null;
+                        event_count: number;
+                    };
+                    freshness: unknown[];
+                    quality: {
+                        /** @constant */
+                        ruleset: "task-quality/0.1";
+                        observed_at: string;
+                        active: boolean;
+                        policy: {
+                            max_age_hours: number | null;
+                        };
+                        findings: {
+                            id: string;
+                            code: string;
+                            kind: "missing" | "unknown" | "stale" | "conflict" | "pending";
+                            path: string;
+                            message: string;
+                            suggested_action: string;
+                            evidence_refs: string[];
+                            handler: {
+                                role: string;
+                                principal_id: string | null;
+                            };
+                        }[];
+                        fields: {
+                            key: string;
+                            label: string;
+                            kind: "text" | "date" | "links" | "dependencies";
+                            value: string | string[] | null;
+                            target: {
+                                /** @constant */
+                                kind: "component";
+                                block_id: string;
+                                component_id: string | null;
+                                create_type: string | null;
+                                attribute: "start_date" | "finish_date" | null;
+                            } | {
+                                /** @constant */
+                                kind: "state";
+                                block_id: "current_state" | "blockers" | "materials";
+                            } | {
+                                /** @constant */
+                                kind: "depends_on";
+                            };
+                        }[];
+                        counts: {
+                            [key: string]: number;
+                        };
+                        meaning: string;
+                    };
+                } & {
+                    [key: string]: unknown;
+                };
+            }[];
+        };
+        TaskQualityReviewView: {
+            taskId: string;
+            title: string;
+            checkedAt: string;
+            report: {
+                /** @constant */
+                interface_version: "tkos.task-writeback/0.1";
+                task: {
+                    business: {
+                        object_id: string;
+                        title: string;
+                        version: number;
+                        object_version: number;
+                        revision_id: string;
+                        attributes: {
+                            [key: string]: unknown;
+                        };
+                        blocks: unknown[];
+                        relations: unknown[];
+                        pending_change: {
+                            [key: string]: unknown;
+                        } | null;
+                    } & {
+                        [key: string]: unknown;
+                    };
+                    records: {
+                        lifecycle: {
+                            status: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                        latest_state: unknown;
+                    } & {
+                        [key: string]: unknown;
+                    };
+                } & {
+                    [key: string]: unknown;
+                };
+                baseline: {
+                    subject_ref: string;
+                    object_version: number;
+                    snapshot_id: string | null;
+                    event_count: number;
+                };
+                freshness: unknown[];
+                quality: {
+                    /** @constant */
+                    ruleset: "task-quality/0.1";
+                    observed_at: string;
+                    active: boolean;
+                    policy: {
+                        max_age_hours: number | null;
+                    };
+                    findings: {
+                        id: string;
+                        code: string;
+                        kind: "missing" | "unknown" | "stale" | "conflict" | "pending";
+                        path: string;
+                        message: string;
+                        suggested_action: string;
+                        evidence_refs: string[];
+                        handler: {
+                            role: string;
+                            principal_id: string | null;
+                        };
+                    }[];
+                    fields: {
+                        key: string;
+                        label: string;
+                        kind: "text" | "date" | "links" | "dependencies";
+                        value: string | string[] | null;
+                        target: {
+                            /** @constant */
+                            kind: "component";
+                            block_id: string;
+                            component_id: string | null;
+                            create_type: string | null;
+                            attribute: "start_date" | "finish_date" | null;
+                        } | {
+                            /** @constant */
+                            kind: "state";
+                            block_id: "current_state" | "blockers" | "materials";
+                        } | {
+                            /** @constant */
+                            kind: "depends_on";
+                        };
+                    }[];
+                    counts: {
+                        [key: string]: number;
+                    };
+                    meaning: string;
+                };
+            } & {
+                [key: string]: unknown;
+            };
+        };
+        TaskRepairInput: {
+            clientRequestId: string;
+            fieldKey: string;
+            value: string | string[] | null;
+            classification: "fact" | "decision" | "suggestion" | "question";
+            quote: string;
+            occurredAt: string | null;
+        };
+        TaskRepairView: {
+            id: string;
+            taskId: string | null;
+            taskTitle: string | null;
+            fieldKey: string | null;
+            fieldLabel: string | null;
+            classification: "fact" | "decision" | "suggestion" | "question";
+            before: string | string[] | null;
+            after: string | string[] | null;
+            source: {
+                kind: "statement" | "conversation" | "meeting";
+                title: string;
+                version: string;
+                quote: string;
+                occurredAt: string | null;
+                locator: string | null;
+                links: string[];
+                meetingId: string | null;
+                meetingRevision: number | null;
+                payloadHash: string | null;
+                conversationId: string | null;
+                messageId: string | null;
+            };
+            state: "needs_input" | "pending_decision" | "needs_source" | "ready" | "handed_off" | "blocked" | "verified" | "superseded";
+            message: string | null;
+            sourceReceiptId: string | null;
+            receiptId: string | null;
+            writebackStatus: string | null;
+            updatedAt: string;
+        };
+        TaskRepairList: {
+            proposals: {
+                id: string;
+                taskId: string | null;
+                taskTitle: string | null;
+                fieldKey: string | null;
+                fieldLabel: string | null;
+                classification: "fact" | "decision" | "suggestion" | "question";
+                before: string | string[] | null;
+                after: string | string[] | null;
+                source: {
+                    kind: "statement" | "conversation" | "meeting";
+                    title: string;
+                    version: string;
+                    quote: string;
+                    occurredAt: string | null;
+                    locator: string | null;
+                    links: string[];
+                    meetingId: string | null;
+                    meetingRevision: number | null;
+                    payloadHash: string | null;
+                    conversationId: string | null;
+                    messageId: string | null;
+                };
+                state: "needs_input" | "pending_decision" | "needs_source" | "ready" | "handed_off" | "blocked" | "verified" | "superseded";
+                message: string | null;
+                sourceReceiptId: string | null;
+                receiptId: string | null;
+                writebackStatus: string | null;
+                updatedAt: string;
+            }[];
+        };
+        TaskRepairHandoff: {
+            proposal: {
+                id: string;
+                taskId: string | null;
+                taskTitle: string | null;
+                fieldKey: string | null;
+                fieldLabel: string | null;
+                classification: "fact" | "decision" | "suggestion" | "question";
+                before: string | string[] | null;
+                after: string | string[] | null;
+                source: {
+                    kind: "statement" | "conversation" | "meeting";
+                    title: string;
+                    version: string;
+                    quote: string;
+                    occurredAt: string | null;
+                    locator: string | null;
+                    links: string[];
+                    meetingId: string | null;
+                    meetingRevision: number | null;
+                    payloadHash: string | null;
+                    conversationId: string | null;
+                    messageId: string | null;
+                };
+                state: "needs_input" | "pending_decision" | "needs_source" | "ready" | "handed_off" | "blocked" | "verified" | "superseded";
+                message: string | null;
+                sourceReceiptId: string | null;
+                receiptId: string | null;
+                writebackStatus: string | null;
+                updatedAt: string;
+            };
+            scopeId: string;
+            stage: "source" | "change" | "blocked";
+            request?: {
+                [key: string]: unknown;
+            };
+            package?: {
+                [key: string]: unknown;
+            };
+            instruction: string;
+        };
+        TaskRepairReceiptInput: {
+            /** @constant */
+            stage: "source";
+            receiptId: string;
+        } | {
+            /** @constant */
+            stage: "change";
+            receiptId?: string;
+        };
+        TaskMeetingInput: {
+            taskIds: string[];
+        };
+        TaskMeetingAnalysis: {
+            meetingId: string;
+            revision: number;
+            payloadHash: string;
+            coverage: {
+                sectionId: string;
+                heading: string;
+                body: string;
+                disposition: "proposed" | "no_task_change" | "needs_clarification";
+                reason: string;
+                proposalIds: string[];
+            }[];
+            proposals: {
+                id: string;
+                taskId: string | null;
+                taskTitle: string | null;
+                fieldKey: string | null;
+                fieldLabel: string | null;
+                classification: "fact" | "decision" | "suggestion" | "question";
+                before: string | string[] | null;
+                after: string | string[] | null;
+                source: {
+                    kind: "statement" | "conversation" | "meeting";
+                    title: string;
+                    version: string;
+                    quote: string;
+                    occurredAt: string | null;
+                    locator: string | null;
+                    links: string[];
+                    meetingId: string | null;
+                    meetingRevision: number | null;
+                    payloadHash: string | null;
+                    conversationId: string | null;
+                    messageId: string | null;
+                };
+                state: "needs_input" | "pending_decision" | "needs_source" | "ready" | "handed_off" | "blocked" | "verified" | "superseded";
+                message: string | null;
+                sourceReceiptId: string | null;
+                receiptId: string | null;
+                writebackStatus: string | null;
+                updatedAt: string;
+            }[];
+        };
+        TaskMeetingRepairInput: {
+            taskId: string;
+            sectionId: string;
+            input: {
+                clientRequestId: string;
+                fieldKey: string;
+                value: string | string[] | null;
+                classification: "fact" | "decision" | "suggestion" | "question";
+                quote: string;
+                occurredAt: string | null;
+            };
+        };
+        TaskRepairRevision: {
+            taskId: string;
+            input: {
+                clientRequestId: string;
+                fieldKey: string;
+                value: string | string[] | null;
+                classification: "fact" | "decision" | "suggestion" | "question";
+                quote: string;
+                occurredAt: string | null;
+            };
+        };
         Card: {
             /** @constant */
             schemaVersion: 1;
@@ -8349,6 +8951,14 @@ export interface components {
             mcpPath: "/mcp/me";
             mcpUrl?: string;
         };
+        PersonalProfileView: {
+            personId: string;
+            displayName: string;
+            gender: string | null;
+        };
+        UpdatePersonalProfileRequest: {
+            gender: string | null;
+        };
         CreatePersonalTokenRequest: {
             name: string;
             client: "codex" | "claude" | "other" | "collector";
@@ -12037,6 +12647,959 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getTaskQualityStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本人核对结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskQualityStatus"];
+                };
+            };
+            /** @description 请求未完成 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listTaskQualityReviews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本人核对结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskQualityReviewList"];
+                };
+            };
+            /** @description 请求未完成 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listQualityTaskCatalog: {
+        parameters: {
+            query?: {
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本人核对结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskQualityCatalog"];
+                };
+            };
+            /** @description 请求未完成 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    checkTaskQuality: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskQualityOptions"];
+            };
+        };
+        responses: {
+            /** @description 本人核对结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskQualityReviewView"];
+                };
+            };
+            /** @description 请求未完成 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    proposeTaskRepair: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRepairInput"];
+            };
+        };
+        responses: {
+            /** @description 本人核对结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRepairView"];
+                };
+            };
+            /** @description 请求未完成 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listTaskRepairs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本人核对结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRepairList"];
+                };
+            };
+            /** @description 请求未完成 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    reviseTaskRepair: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRepairRevision"];
+            };
+        };
+        responses: {
+            /** @description 本人核对结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRepairView"];
+                };
+            };
+            /** @description 请求未完成 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getTaskRepairHandoff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本人核对结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRepairHandoff"];
+                };
+            };
+            /** @description 请求未完成 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    reportTaskRepairReceipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRepairReceiptInput"];
+            };
+        };
+        responses: {
+            /** @description 本人核对结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRepairView"];
+                };
+            };
+            /** @description 请求未完成 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    analyzeMeetingTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meetingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskMeetingInput"];
+            };
+        };
+        responses: {
+            /** @description 本人核对结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskMeetingAnalysis"];
+                };
+            };
+            /** @description 请求未完成 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    proposeMeetingTaskRepair: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meetingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskMeetingRepairInput"];
+            };
+        };
+        responses: {
+            /** @description 本人核对结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRepairView"];
+                };
+            };
+            /** @description 请求未完成 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 请求未完成 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     login: {
         parameters: {
             query?: never;
@@ -19094,6 +20657,86 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getPersonalProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本人资料 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalProfileView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updatePersonalProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePersonalProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description 保存后的本人资料 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalProfileView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

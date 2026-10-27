@@ -81,6 +81,7 @@ describe("migration", () => {
       expect(names).toContain("world_sync_ledger");
       expect(names).toContain("world_meeting_events");
       expect(names).toContain("personal_reviews");
+      expect(names).toContain("person_profiles");
 
       const applied = await db.query<{ id: number; filename: string }>(
         "SELECT id, filename FROM schema_migrations ORDER BY id",
@@ -185,6 +186,7 @@ describe("migration", () => {
         "208_missions_world_goal.sql",
         "209_world_sync_delegation.sql",
         "210_usage_report.sql",
+        "211_personal_profile.sql",
         "212_battlefield_summaries.sql",
         "213_task_placement.sql",
         "214_task_placement_backfill.sql",

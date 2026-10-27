@@ -25,6 +25,7 @@ import { RecordSection } from "./RecordSection";
 import { useMeetingCard } from "./useMeetingCard";
 import { WorldAnchors } from "./WorldAnchors";
 import c from "./meeting-card.module.css";
+import { MeetingTaskQuality } from "../task-quality/MeetingTaskQuality";
 
 type MeetingRecordCardProps = {
   meetingId: string;
@@ -213,6 +214,7 @@ export function MeetingRecordCard({ meetingId, initial, onView, turns = [], spea
         time={editable && card.timeInFooter && draft ? { value: companyInput(draft.occurredAt), max: nowInput, invalid: timeInvalid, onChange: setOccurredAt } : null}
         onConfirm={(input) => void card.confirm(input)} onModify={card.startEditing} onDiscard={() => void card.discard()}
         onRetry={view.canEdit ? () => void card.retry() : undefined} />
+      <MeetingTaskQuality meetingId={meetingId} revision={confirmed?.payload.revision ?? null} />
     </article>
   );
 }

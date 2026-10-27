@@ -22,6 +22,8 @@ import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { CoAgentSkinPicker } from "@/components/coagent/SkinPicker";
 import { VoiceKeysDialog } from "@/conversation/VoiceKeysDialog";
 import { CollectorInstallPanel, useCollectorStatus } from "@/components/onboarding/CollectorSetup";
+import { readTaskQualityEnabled } from "@/components/task-quality/taskQualityStatus";
+import { PersonalProfileForm } from "@/components/PersonalProfileForm";
 
 export interface Account {
   displayName: string;
@@ -44,7 +46,7 @@ export function accountSubtitle(account: Account, demo: boolean): string {
   return [account.loginId, account.role === "ceo" ? "CEO" : "成员"].filter(Boolean).join(" · ");
 }
 
-type Dialog = "voiceprint" | "radar" | "connection" | "collector" | "coagent" | "passcode" | "voice" | null;
+type Dialog = "voiceprint" | "radar" | "connection" | "collector" | "coagent" | "passcode" | "voice" | "profile" | null;
 
 export function AccountMenu({ account, compact = false, onNavigate }: { account: Account; compact?: boolean; onNavigate?: (href: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -56,6 +58,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   const [admin, setAdmin] = useState(false);
   const [voiceConfigured, setVoiceConfigured] = useState(false);
   const [feishu, setFeishu] = useState<{ enabled: boolean; connected: boolean } | null>(null);
+  const [taskQuality, setTaskQuality] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const radarTitle = account.role === "ceo" ? "雷达设置" : "我的雷达";
@@ -84,6 +87,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
       setVoiceConfigured(Boolean(voiceprint.response.ok && voiceprint.data?.configured));
     }).catch(() => setError("个人设置暂时无法读取，请重试。"));
     void readFeishuConnection().then(setFeishu);
+    void readTaskQualityEnabled().then(setTaskQuality);
   };
   const switchView = async () => {
     const view = account.role === "ceo" ? "member" : "ceo";
@@ -153,6 +157,9 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                   定时任务
                 </Button>
               ) : null}
+              {onNavigate && taskQuality ? <Button variant="ghost" className={m.item} onPress={() => { setOpen(false); onNavigate(account.role === "ceo" ? "/task-quality" : "/me/task-quality"); }}>
+                <Activity size={16} aria-hidden="true" />任务数据质量
+              </Button> : null}
               <Button ref={settingsTrigger} variant="ghost" className={m.item} data-settings aria-expanded={settingsOpen} onPress={() => setSettingsOpen((value) => !value)}>
                 <Settings size={16} aria-hidden="true" />
                 设置
@@ -162,6 +169,10 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                 <Popover.Content triggerRef={settingsTrigger} placement="end top" offset={16} crossOffset={-8} className={m.popover}>
                   <TianshuPortalTheme>
                     <Popover.Dialog className={m.menu} aria-label="设置">
+                      <Button variant="ghost" className={m.item} onPress={() => pick("profile")}>
+                        <Settings2 size={16} aria-hidden="true" />
+                        个人资料
+                      </Button>
                       <Button variant="ghost" className={m.item} onPress={() => pick("voice")}>
                         <Mic size={16} aria-hidden="true" />
                         语音输入
@@ -240,6 +251,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
           <VoiceprintCard />
         </MenuDialog>
       ) : null}
+      {dialog === "profile" ? <MenuDialog title="个人资料" onClose={() => setDialog(null)}><PersonalProfileForm /></MenuDialog> : null}
       {dialog === "radar" ? (
         <MenuDialog title={radarTitle} wide onClose={() => setDialog(null)}>
           <RadarSettingsEditor mode={account.role === "ceo" ? "company" : "person"} />

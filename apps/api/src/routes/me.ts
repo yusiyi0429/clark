@@ -1,4 +1,5 @@
 import type { FastifyReply } from "fastify";
+import { PersonalProfileView, UpdatePersonalProfileRequest } from "@warmap/contracts";
 import { Type } from "@sinclair/typebox";
 import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, ReturnTaskAcceptanceRequest, StandaloneMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, BattlefieldProgressResponse, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
@@ -33,6 +34,21 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   const { pool, q, fail, requirePerson, peopleDirectory, voiceprints, dictation, dictationRealtime, dictationPolish, materialMultipartLimitError } = ctx;
   // 实时听写签发的每人每分钟上限：每个 app 实例一份计数
   const realtimeSessionLimiter = createSessionRateLimiter();
+
+  // 资料仅本人读写；不接受目标 personId，不合并或扩大只读人员目录。
+  app.get("/api/me/profile", { preHandler: requirePerson, schema: { response: { 200: PersonalProfileView } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const person = req.person!;
+    const result = await q("SELECT gender FROM person_profiles WHERE person_id = $1", [person.personId]);
+    return { personId: person.personId, displayName: names().get(person.personId) ?? person.personId, gender: result.rows[0]?.gender ?? null };
+  });
+  app.patch("/api/me/profile", { preHandler: requirePerson, schema: { body: UpdatePersonalProfileRequest, response: { 200: PersonalProfileView } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const person = req.person!;
+    const gender = req.body.gender?.trim() || null;
+    await q("INSERT INTO person_profiles (person_id, gender) VALUES ($1, $2) ON CONFLICT (person_id) DO UPDATE SET gender = EXCLUDED.gender", [person.personId, gender]);
+    return { personId: person.personId, displayName: names().get(person.personId) ?? person.personId, gender };
+  });
 
   const names = () => personDisplayNames(peopleDirectory);
   const invitable = () => new Set(peopleDirectory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId));
