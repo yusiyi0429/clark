@@ -195,7 +195,7 @@ describe("migration", () => {
       const again = await db.query<{ count: string }>(
         "SELECT count(*) FROM schema_migrations",
       );
-      expect(Number(again.rows[0].count)).toBe(103);
+      expect(Number(again.rows[0].count)).toBe(applied.rows.length);
 
       // 时间列为 timestamptz（UTC 存储）
       const cols = await db.query<{ column_name: string; data_type: string }>(
