@@ -128,7 +128,7 @@
     },
     {
       "path": "governance.mjs",
-      "sha256": "01df7cf481e04a6d663dba7819a720dedb566c2b79fa00bc7eda00ee0388ac5b"
+      "sha256": "95a8d0ec0b2de0529e7ac1308e978898f883eb2467f56341aa7a0f307fce514b"
     },
     {
       "path": "Handshake.jsx",
@@ -245,7 +245,7 @@
     },
     {
       "path": "private-agent-context.mjs",
-      "sha256": "a95870a8ef25063ff3a546cb7adada773980cfdb922f3b5eb78060644c4dc641"
+      "sha256": "c882c06da43604d0d47945639a496611d01bc412b3dda28c7c0c6da8853740ec"
     },
     {
       "path": "proposal-confirmation.mjs",

@@ -16,15 +16,16 @@ test('复盘卡挂在同一单元：rv:前缀、上下级、原因统一成 {tex
  assert.equal(c['rv:bf01'].parentId,'rv:company');assert.equal(c['rv:bf01-m1'].parentId,'rv:bf01');assert.equal(c['rv:bf01-m1'].unit,'bf01');
  assert.deepEqual(c['rv:bf01'].causes,[{text:'**晚：**排得晚',ask:''}]);assert.deepEqual(causeOf({text:'x',ask:'y'}),{text:'x',ask:'y'});
 });
-test('握手照拆解：PO 复盘 CEO 和单元 DRI 各签一次（刘明华两个都签）；Mission 复盘按复盘里的负责人；公司复盘 CEO 签',()=>{
+test('握手：PO 复盘 CEO 和单元 DRI 各签一次（刘明华两个都签）；个人复盘只由负责人确认；公司复盘 CEO 签',()=>{
  let s=installReviewRound(plan(),sample,{label:'10 月复盘'});
  const ceo=memberActor('member-01',s),sun=memberActor('member-03',s);
  s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'ceo',baseVersion:1});
  assert.notEqual(s.cards['rv:bf01'].confirmedVersion,1,'签一次不算完成');
  s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'unitDri',baseVersion:1});
  assert.equal(s.cards['rv:bf01'].confirmedVersion,1);
- s=applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',slot:'missionDri',baseVersion:1});s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01-m1',slot:'unitDri',baseVersion:1});
- assert.throws(()=>applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',slot:'unitDri',baseVersion:1}),/确认职责/);
+ s=applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',slot:'missionDri',baseVersion:1});
+ assert.equal(s.cards['rv:bf01-m1'].confirmedVersion,1,'个人复盘负责人一人确认就完成（2026-10-27）');
+ assert.throws(()=>applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01-m1',slot:'unitDri',baseVersion:1}),/确认职责/,'单元 DRI 不再签个人复盘');
  s=applyAction(s,ceo,{type:'confirm',cardId:'rv:company',slot:'ceo',baseVersion:1});assert.equal(s.cards['rv:company'].confirmedVersion,1);
 });
 test('复盘可修订判定、原因等字段，不触发拆解的下级对齐；拆解卡不受影响',()=>{
@@ -90,7 +91,7 @@ test('复盘 → 拆解：别的复盘都确认完才能确认公司复盘；确
  const ceo=memberActor('member-01',s),sun=memberActor('member-03',s);
  assert.throws(()=>applyAction(s,ceo,{type:'confirm',cardId:'rv:company',slot:'ceo',baseVersion:1}),/还有 2 份复盘未确认/);
  s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'ceo',baseVersion:1});s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'unitDri',baseVersion:1});
- s=applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',slot:'missionDri',baseVersion:1});s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01-m1',slot:'unitDri',baseVersion:1});
+ s=applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',slot:'missionDri',baseVersion:1});
  s=applyAction(s,ceo,{type:'confirm',cardId:'rv:company',slot:'ceo',baseVersion:1});
  assert.equal(s.planHandoff.status,'requested');
  const pkg=handoffPackage(s);assert.equal(pkg.forPeriod,'2026-11');assert.equal(pkg.units[0].po.nextInputs[0].id,'bf01-1');assert.equal(pkg.company.ltoReview.choice,'维持');
@@ -119,7 +120,7 @@ test('领域内的公共通知 @所有人：复盘生成、换新一轮、本领
  const ceo=memberActor('member-01',s),sun=memberActor('member-03',s);
  s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'ceo',baseVersion:1});s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01',slot:'unitDri',baseVersion:1});
  assert.ok(!s.messages.some(m=>m.broadcast==='review-unit-done'),'还有 Mission 复盘没确认');
- s=applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',slot:'missionDri',baseVersion:1});s=applyAction(s,ceo,{type:'confirm',cardId:'rv:bf01-m1',slot:'unitDri',baseVersion:1});
+ s=applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',slot:'missionDri',baseVersion:1});
  assert.equal(s.messages.filter(m=>m.broadcast==='review-unit-done').length,1);
  s=installReviewRound(s,{...sample,period:'2026-10'},{label:'第 2 轮'});
  assert.match(s.messages.filter(m=>m.broadcast==='review-regenerated').at(-1).text,/已换成新一轮（第 2 轮）/);

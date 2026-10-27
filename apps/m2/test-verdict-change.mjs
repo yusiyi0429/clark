@@ -10,18 +10,12 @@ const sample={period:'2026-10',reviews:[
  {unit:'bf01',level:'ru',ref:'bf01',title:'灯塔',owner:'刘明华',verdict:'未达成',verdictReason:'r',targets:[],causes:[],nextInputs:[],parent:'company'},
  {unit:'bf01',level:'mission',ref:'bf01-m1',title:'首用',owner:'孙铭泽',verdict:'未达成',verdictReason:'没有真实使用记录',targets:[],causes:[],nextInputs:[],parent:'bf01'}]};
 const fresh=()=>installReviewRound(createCollaborationState([{id:'bf01',level:'po',title:'灯塔',owner:'刘明华',version:1,children:[]}]),sample,{label:'10 月复盘'});
-test('负责人直接改判定：不新增版本，出一张写明“由谁、从什么改为什么、依据”的修订卡，由对方签字人决定',()=>{
+test('个人复盘只由负责人确认（2026-10-27）：负责人自己改判定直接生效；别人提的改判交给负责人决定',()=>{
  let s=fresh();const sun=memberActor('member-03',s),ceo=memberActor('member-01',s);
  s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:1,patch:{verdict:'部分达成'},reason:'判严了，10/20 已有一次真实使用'});
- assert.equal(currentVersion(s.cards['rv:bf01-m1']).number,1,'判定没有直接生效');
- const p=s.proposals.at(-1);assert.deepEqual([p.verdictChange.from,p.verdictChange.to,p.verdictChange.by[0]],['未达成','部分达成','member-03']);
- assert.match(p.verdictChange.basis,/真实使用/);assert.deepEqual(verdictDeciders(s,s.cards['rv:bf01-m1'],p),['刘明华']);
- assert.ok(s.messages.at(-1).text.includes('@刘明华'));
- // The asker cannot accept their own verdict change; the other signer can, and sees it as theirs to handle.
- assert.throws(()=>applyAction(s,sun,{type:'acceptProposal',cardId:'rv:bf01-m1',proposalId:p.id}),/刘明华/);
- const mine=sharedProjection(s,ceo).records?.['group:bf01']?.find(r=>r.id===p.id);if(mine)assert.equal(mine.canAccept,true);
- s=applyAction(s,ceo,{type:'acceptProposal',cardId:'rv:bf01-m1',proposalId:p.id});
- assert.equal(currentVersion(s.cards['rv:bf01-m1']).content.verdict,'部分达成');
+ assert.equal(currentVersion(s.cards['rv:bf01-m1']).content.verdict,'部分达成','唯一签字人改自己的判定，不再出修订卡');
+ assert.deepEqual(verdictDeciders(s,s.cards['rv:bf01-m1'],{verdictChange:{by:['member-01']}}),['孙铭泽'],'CEO 或单元 DRI 提的改判由负责人决定');
+ assert.throws(()=>applyAction(s,ceo,{type:'revise',cardId:'rv:bf01-m1',baseVersion:2,patch:{verdict:'达成'}}),/负责人|修订/,'单元 DRI、CEO 不直接改个人复盘');
 });
 test('Nexus 按负责人批注出的判定修订卡不会自动生效；其他字段照旧由负责人批注直接改',()=>{
  let s=fresh();s.comments.push({id:'c1',author:'member-03',channel:'group',scope:'bf01',cardId:'rv:bf01-m1',text:'判严了，应判部分达成',createdAt:new Date().toISOString()});
@@ -56,9 +50,8 @@ test('下级改了日期，上级还写着旧日期：上级标“下级有调�
  s=applyAction(s,ceo,{type:'confirm',cardId:'bf01',slot:'ceo',baseVersion:1});assert.equal(s.cards.bf01.downstreamChange,undefined);
 });
 test('复盘：子 Mission 判定改了，上级 RU 复盘也被提醒',()=>{
- let s=fresh();const sun=memberActor('member-03',s),ceo=memberActor('member-01',s);
+ let s=fresh();const sun=memberActor('member-03',s);
  s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:1,patch:{verdict:'部分达成'},reason:'有一次真实使用'});
- s=applyAction(s,ceo,{type:'acceptProposal',cardId:'rv:bf01-m1',proposalId:s.proposals.at(-1).id});
  assert.equal(s.cards['rv:bf01'].downstreamChange?.cardId,'rv:bf01-m1');assert.deepEqual(s.cards['rv:bf01'].downstreamChange.fields,['verdict']);
 });
 test('复盘：子 Mission 的事实证据改了（某个 Task 状态变了），上级 RU 复盘也被提醒',()=>{

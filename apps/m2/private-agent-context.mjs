@@ -50,6 +50,6 @@ export function confirmationProgress(state,actor,readable){
   confirmedByMe:cap(confirmable.filter(c=>currentVersion(c).signatures.some(s=>s.actorId===actor.id)).map(c=>({...label(c),signedBy:signedBy(c)}))),
   waitingForMe:cap(confirmable.filter(c=>!c.upstreamChange&&mine(c).some(slot=>!currentVersion(c).signatures.some(s=>s.slot===slot))).map(c=>({...label(c),otherSideConfirmed:currentVersion(c).signatures.length>0,signedBy:signedBy(c)}))),
   waitingForOthers:cap(confirmable.filter(c=>cardStatus(c)==='待另一方确认'&&currentVersion(c).signatures.some(s=>s.actorId===actor.id)).map(label)),
-  recentConsensus:state.messages.filter(m=>m.kind==='notice'&&scopes.has(m.scope)&&/达成共识/.test(m.text)).slice(-10).map(m=>({text:m.text,createdAt:m.createdAt})),
+  recentConsensus:state.messages.filter(m=>m.kind==='notice'&&scopes.has(m.scope)&&/达成共识|已确认「/.test(m.text)).slice(-10).map(m=>({text:m.text,createdAt:m.createdAt})),
  };
 }

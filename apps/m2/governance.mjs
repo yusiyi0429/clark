@@ -109,7 +109,8 @@ const mentionList=names=>[...new Set(names.filter(Boolean))].map(n=>'@'+n).join(
 export function mayChangeOwner(actor,card){return !!actor&&(card.level==='po'?actor.ceo===true:(actor.unitDri||[]).includes(unitOf(card)));}
 // Someone a review's 下期输入 asks by name may open that one card to answer, even outside their units (2026-10-27 drill: 于斯一 asked on Agents got 403).
 export function canRead(actor,card){return !!actor&&(actor.ceo===true||(actor.visibleUnits||[]).includes(unitOf(card))||isReview(card)&&!!actor.name&&(card.versions?.at(-1)?.content?.nextInputs||[]).some(n=>n?.ask?.to===actor.name));}
-export function confirmationSlots(card){if(isReview(card))return card.level==='company'?['ceo']:card.level==='po'?['ceo','unitDri']:['unitDri','missionDri'];return card.level==='po'?['ceo','unitDri']:card.level==='mission'?['unitDri','missionDri']:[];}
+// 个人复盘 is confirmed by its owner alone (陈溪南 2026-10-27); the unit DRI still reads, comments, files cards and answers questions.
+export function confirmationSlots(card){if(isReview(card))return card.level==='company'?['ceo']:card.level==='po'?['ceo','unitDri']:['missionDri'];return card.level==='po'?['ceo','unitDri']:card.level==='mission'?['unitDri','missionDri']:[];}
 export function currentVersion(card){return card.versions.at(-1);}
 export function cardStatus(card){const v=currentVersion(card),slots=confirmationSlots(card);return card.upstreamChange?'上级有调整 · 待核对':card.downstreamChange?'下级有调整 · 待核对':slots.length===0?'负责人自主修订':slots.every(slot=>v.signatures.some(s=>s.slot===slot))?'已确认':v.signatures.length?'待另一方确认':'待确认';}
 export function mayRevise(actor,card){
@@ -184,7 +185,9 @@ export function applyAction(previous,actor,action){
   if('checks'in patch&&!patch.checks.length)fail(400,'验收标准至少保留一项');
   if(Object.entries(patch).every(([key,value])=>JSON.stringify(v.content[key])===JSON.stringify(value)))fail(400,'内容没有变化，不新增版本');
   // 判定变化一律走修订卡 (陈溪南 2026-10-22): a person changing a review's verdict files a card for the other signer instead.
-  if(isReview(card)&&actor.kind!=='coagent'&&!action.viaProposal&&'verdict'in patch&&patch.verdict!==v.content.verdict){
+  // …unless the person changing it is the only one who signs (个人复盘 since 2026-10-27): then it is just their revision.
+  const soleSigner=isReview(card)&&verdictDeciders(state,card,null).every(n=>n===nameOf(actor.id));
+  if(isReview(card)&&actor.kind!=='coagent'&&!action.viaProposal&&!soleSigner&&'verdict'in patch&&patch.verdict!==v.content.verdict){
    state.proposals??=[];state.sequence++;
    const proposal={id:`verdict-${state.sequence}`,cardId:card.id,scope:unitOf(card),baseVersion:v.number,patch:structuredClone(patch),reason:String(action.reason||patch.verdictReason||'').slice(0,2000),sourceIds:[],status:'pending',createdSequence:state.sequence,createdAt:now,
     before:Object.fromEntries(Object.keys(patch).map(k=>[k,v.content[k]??''])),verdictChange:{from:v.content.verdict||'',to:patch.verdict,by:[actor.id],basis:String(action.reason||patch.verdictReason||'').slice(0,2000)}};
@@ -271,7 +274,7 @@ export function applyAction(previous,actor,action){
    const unit=unitOf(card),done=c=>c.confirmedVersion===currentVersion(c).number;
    if(unit!=='company'){const same=c=>unitOf(c)===unit&&(isReview(c)?isReview(card):!isReview(card)&&confirmationSlots(c).length>0);const set=Object.values(state.cards).filter(same);
     const key=isReview(card)?`review:${state.reviewRound?.loadedAt||''}`:`plan:${state.round?.id||''}`;state.unitsDone??={};
-    if(set.length&&set.every(done)&&!state.unitsDone[unit+'|'+key]){state.unitsDone[unit+'|'+key]=now;broadcast(state,unit,isReview(card)?`本领域 ${reviewMonth(state)}复盘已全部确认。`:`本领域的计划已全部确认，按此执行。`,{kind:isReview(card)?'review-unit-done':'plan-unit-done',now});}}const names=[...new Set(v.signatures.map(x=>nameOf(x.actorId)))];groupNotice(state,card,`${names.join('、')} 已就${titleOf(card)} v${v.number} 达成共识，按此版本推进。`);}
+    if(set.length&&set.every(done)&&!state.unitsDone[unit+'|'+key]){state.unitsDone[unit+'|'+key]=now;broadcast(state,unit,isReview(card)?`本领域 ${reviewMonth(state)}复盘已全部确认。`:`本领域的计划已全部确认，按此执行。`,{kind:isReview(card)?'review-unit-done':'plan-unit-done',now});}}const names=[...new Set(v.signatures.map(x=>nameOf(x.actorId)))];groupNotice(state,card,names.length>1?`${names.join('、')} 已就${titleOf(card)} v${v.number} 达成共识，按此版本推进。`:`${names[0]}已确认${titleOf(card)} v${v.number}。`);}
  }else if(['insight','editInsight','deleteInsight'].includes(action.type)){
   if(actor.kind==='coagent')fail(403,'Nexus 的综合在公开后由服务端写入');
   if(!isReview(card))fail(400,'洞察只写在复盘卡上');
