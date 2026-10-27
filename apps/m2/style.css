@@ -1369,3 +1369,14 @@ body.is-col-resizing{cursor:col-resize;user-select:none}
 :root .chat-top .group-member-slot{box-shadow:0 0 0 1.5px #eef2f6}
 :root .chat-top .group-member-face{width:20px!important;height:20px!important}
 :root .chat-top .group-members-more{margin-left:6px;font-size:12px;font-weight:500;color:#5b6b7a}
+/* one group avatar in the group tab: a circle cut into four faces (2026-10-27) */
+.group-avatar{display:inline-grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:1px;width:20px;height:20px;margin-left:6px;border-radius:50%;overflow:hidden;background:#fff;flex:none;vertical-align:middle;box-shadow:0 0 0 1.5px #ffffff66}
+.group-avatar.n1{grid-template-columns:1fr;grid-template-rows:1fr}
+.group-avatar.n2{grid-template-rows:1fr}
+.group-avatar.n3 .group-avatar-cell:first-child{grid-row:span 2}
+.group-avatar-cell{display:block;overflow:hidden;background:#dbe5ef}
+.group-avatar-cell img{width:100%;height:100%;object-fit:cover;display:block}
+.group-avatar-cell i{display:grid;place-items:center;height:100%;font-style:normal;font-size:7px;color:#31516f}
+.group-avatar.is-active{cursor:pointer}.group-avatar.is-active:hover{box-shadow:0 0 0 2px #ffffffcc}
+.group-avatar:focus{outline:none}.group-avatar:focus-visible{box-shadow:0 0 0 2px #fff,0 0 0 4px #376aff88}
+:root .group-members-panel{position:fixed;z-index:60}

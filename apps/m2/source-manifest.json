@@ -4,7 +4,7 @@
   "files": [
     {
       "path": "GroupMembers.jsx",
-      "sha256": "8ed6240e91d267effcde7a2665a9c952b4dfa0763c7e6b261569c25c2e18bf8c"
+      "sha256": "d1fcd0a1a90a94427444d1fcbbe157f52a29b2b235381541dcc8185959f36a74"
     },
     {
       "path": "account-responsibilities.pending.json",
@@ -28,7 +28,7 @@
     },
     {
       "path": "app.jsx",
-      "sha256": "5ab8a57091d3fa7e8368176a2824d95e5998117b54d5a7a9bfe7ea37f51405a9"
+      "sha256": "5d37bc857f8f39a4e52529968b1728e7975eb020e027dd88fc265d4ff6728967"
     },
     {
       "path": "AuditStatus.jsx",
@@ -401,7 +401,7 @@
     },
     {
       "path": "style.css",
-      "sha256": "136b981ce327eb429cc02045521faa935336f8a9bcaba433cbe48f744c724160"
+      "sha256": "e6fb015331f4259efa8ce18c50a31f683c6b56e2956017ad4c004febb315c70d"
     },
     {
       "path": "time-context.mjs",
