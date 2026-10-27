@@ -61,6 +61,14 @@ test('复盘：子 Mission 判定改了，上级 RU 复盘也被提醒',()=>{
  s=applyAction(s,ceo,{type:'acceptProposal',cardId:'rv:bf01-m1',proposalId:s.proposals.at(-1).id});
  assert.equal(s.cards['rv:bf01'].downstreamChange?.cardId,'rv:bf01-m1');assert.deepEqual(s.cards['rv:bf01'].downstreamChange.fields,['verdict']);
 });
+test('复盘：子 Mission 的事实证据改了（某个 Task 状态变了），上级 RU 复盘也被提醒',()=>{
+ let s=fresh();const sun=memberActor('member-03',s);
+ const facts=[{ref:'t1',item:'首用',owner:'孙铭泽',status:'部分达成',evidence:'10/20 有一次真实使用（群聊记录）',gap:''}];
+ s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:1,patch:{facts},reason:'10/20 有一次真实使用'});
+ assert.equal(currentVersion(s.cards['rv:bf01-m1']).content.facts[0].status,'部分达成','事实证据直接改成新版本');
+ assert.deepEqual(s.cards['rv:bf01'].downstreamChange?.fields,['facts']);
+ assert.ok(s.messages.some(m=>m.text.includes('改了事实证据')),'提醒里写明改的是事实证据');
+});
 test('修订卡不重复、不过期：卡在上级改动后已被改过，下级对齐的卡不再发；理由引用的日期卡上已没有，不发；上级再改或确认后，旧的对齐卡归档',async()=>{
  const {queueProposals,staleDates}=await import('./nexus-memory.mjs');
  const task={id:'bf01-m2-t1',unit:'bf01',level:'task',title:'初稿',owner:'孙铭泽',checks:['11/07 初稿'],children:[]};

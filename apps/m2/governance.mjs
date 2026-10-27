@@ -205,7 +205,7 @@ export function applyAction(previous,actor,action){
   // 上级跟着看 (陈溪南 2026-10-22 走查第 3 条): a lower card's dates, checks, result or verdict changing can leave what the
   // card above wrote out of date (a PO milestone still on the old day, an RU review still saying "all three missed").
   // Its owner is told and the card shows 下级有调整 until they look; dates the upper card still quotes are named.
-  const watched=changed.filter(k=>['time','checks','milestones','result','verdict','verdictReason','targets','tier'].includes(k)),parent=card.parentId&&state.cards[card.parentId];
+  const watched=changed.filter(k=>['time','checks','milestones','result','verdict','verdictReason','targets','facts','tier'].includes(k)),parent=card.parentId&&state.cards[card.parentId];
   if(watched.length&&parent){
    // Dates compared as month/day (11/06 = 11-6); the upper card's own spelling is what the notice quotes.
    const dates=x=>new Map((JSON.stringify(x||'').match(/\d{1,2}[\/-]\d{1,2}/g)||[]).map(d=>{const [m,dd]=d.split(/[\/-]/).map(Number);return [`${m}/${dd}`,d];}));
@@ -213,7 +213,7 @@ export function applyAction(previous,actor,action){
    const upper=currentVersion(parent).content,inUpper=dates(upper),quoted=gone.filter(d=>inUpper.has(d)).map(d=>inUpper.get(d));
    parent.downstreamChange={cardId:card.id,version:v.number+1,fields:watched,staleDates:quoted,at:now};
    const owners=[...new Set(confirmationSlots(parent).map(slot=>slotHolder(state,parent,slot)).concat(upper.owner).flatMap(n=>String(n||'').split(/[、,，]/)).map(n=>n.trim()).filter(n=>n&&n!==nameOf(actor.id)))];
-   const what=watched.map(k=>({time:'时间',checks:'验收',milestones:'里程碑',result:'成果',verdict:'判定',verdictReason:'判定理由',targets:'目标对照',tier:'档位'})[k]).join('、');
+   const what=watched.map(k=>({time:'时间',checks:'验收',milestones:'里程碑',result:'成果',verdict:'判定',verdictReason:'判定理由',targets:'目标对照',facts:'事实证据',tier:'档位'})[k]).join('、');
    if(owners.length)groupNotice(state,parent,`${titleOf(card)}改了${what}，上级${titleOf(parent)}${quoted.length?`还写着 ${quoted.join('、')}，`:'写到的内容'}可能要跟着改，请 ${mentionList(owners)} 看一下。`);
   }
   if(actor.kind!=='coagent'){
