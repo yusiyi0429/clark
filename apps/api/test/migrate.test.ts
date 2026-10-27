@@ -189,7 +189,7 @@ describe("migration", () => {
         "211_personal_profile.sql",
         "212_battlefield_summaries.sql",
         "213_task_placement.sql",
-        "214_wechat_bindings.sql",
+        "215_wechat_bindings.sql",
       ]);
 
       // 幂等：重复执行不再变更
