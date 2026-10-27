@@ -435,7 +435,7 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   useEffect(() => {
     if (scope !== "global" || status === "streaming" || historyStatus !== "ready" || typeof window === "undefined") return;
     const timer = setInterval(async () => {
-      if (document.visibilityState !== "visible" || historyRun.current) return;
+      if (typeof document === "undefined" || document.visibilityState !== "visible" || historyRun.current) return;
       try {
         const response = await fetch(historyUrl, { headers: { accept: "application/json" } });
         const body = response.ok ? (await response.json()) as { messages?: unknown } : null;
