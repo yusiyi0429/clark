@@ -1,6 +1,6 @@
 // 通知卡片 (陈溪南 2026-10-26): what Tianshu's notification centre shows for one member, merged so a person sees one
 // or two cards, not a stream. Four kinds only:
-//   todo:review / todo:plan — 我的待办 for that stage (sign, revision cards, review questions, objections, checks);
+//   todo:review / todo:plan — 我的待办 for that stage (sign, revision cards, review questions, objections, checks); the review card carries dueAt;
 //   mention:<unit>          — @我 in one unit group (Nexus answering my question counts too);
 //   comments                — new comments on the cards I am responsible for, all cards in one;
 //   failure:round / failure:review — a generation that failed, for the CEO and round operators only.
@@ -15,6 +15,7 @@ import {currentVersion} from './governance.mjs';
 import {todoItems} from './todo.mjs';
 import {reviewTree,reviewTodos,ownerNames} from './review-display.mjs';
 import {ownerName} from './owner-name.mjs';
+import {reviewDueAt} from './review-round.mjs';
 
 const time=v=>Date.parse(v||'')||0;
 const iso=v=>v?new Date(v).toISOString():null;
@@ -45,7 +46,7 @@ export function notificationsFor(state,memberId,{reads={},jobs={}}={}){
   const tree=reviewTree(drafts,(state.round?.units||[]).map(u=>u.id));
   const proposals=Object.values(records).flat().filter(r=>r.kind==='revision-proposal');
   const items=reviewTodos(tree.nodes,p,comments,proposals).map(i=>({...i,at:time(drafts[i.cardId]?.history?.at?.(-1)?.at)||time(review.loadedAt)}));
-  const card=todoCard('review',items,`${month}复盘`);if(card)cards.push(card);
+  const card=todoCard('review',items,`${month}复盘`);if(card)cards.push({...card,dueAt:reviewDueAt(review)});
  }
  // 我的待办 · 拆解: only once the plan after this review is out (before that the plan page is closed).
  const job=state.roundJob,planOpen=!review?.loadedAt||state.planHandoff?.status==='generated'||job?.id===state.round?.id&&String(job?.finishedAt||'')>review.loadedAt;

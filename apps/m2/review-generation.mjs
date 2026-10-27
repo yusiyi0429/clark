@@ -12,7 +12,7 @@ import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {redactText,sensitiveRulesVersion} from './redact.mjs';
 import {bareJson} from './model.mjs';
-import {factProblem} from './governance.mjs';
+import {factProblem,nextInputProblem} from './governance.mjs';
 
 export const reviewUnits=[['bf01','灯塔项目'],['bf02','Token Ops'],['bf03','维信诺'],['rearch','Re-architecture'],['method','Method'],['agents','Agents'],['eo','E&O'],['tokenhub','TokenHub'],['talent','Talent & Organization'],['finance','Finance, Compliance & Operations']];
 // An RU object's title ("维信诺（002客户）", "E&O") to the program's unit key.
@@ -267,7 +267,8 @@ export function lengthFindings(r){
   for(const w of ['尚不能','仍需进一步','有待观察','闭环','赋能','打通','具备条件'])if(String(s).includes(w))f.push({type:'回避或空话',word:w,text:String(s).slice(0,60)});}
  // 三段式 field limits (复盘技能 2.1.0): 判定理由 60, item 30, evidence 100, gap 60.
  const over=(field,text,limit)=>{const n=visible(String(text||'')).length;if(n>limit)f.push({type:'超字数',field,chars:n,limit,text:String(text).slice(0,40)});};
- if(Array.isArray(r.facts)){over('verdictReason',r.verdictReason,60);for(const x of r.facts){over('item',x.item,30);over('evidence',x.evidence,100);over('gap',x.gap,60);}}
+ if(Array.isArray(r.facts)){over('verdictReason',r.verdictReason,60);for(const x of r.facts){over('item',x.item,30);over('evidence',x.evidence,100);over('gap',x.gap,60);}
+  for(const x of r.nextInputs||[]){over('nextInput',x?.text,60);if(x?.ask)over('ask',x.ask.question,60);}}
  return f;
 }
 // 漏行 measured, not judged: which Tasks / Missions / units the input has and the fact lines do not.
@@ -352,7 +353,8 @@ export function reviewProblems(run,input,{roster=[]}={}){
    if(!filled(r.verdictReason))out.push({unit:id,problem:'缺判定理由'});
    if(!r.facts.length)out.push({unit:id,problem:'缺事实证据'});else if(factProblem(r.facts))out.push({unit:id,problem:'事实证据格式不对：每行要有这一项、状态（达成/部分达成/未达成/未开始）和证据'});
    const c=expected.find(x=>x.id===id),lost=c?rowFacts(c,r).missing:[];if(lost.length)out.push({unit:id,problem:`这些项没有事实行：${lost.join('、').slice(0,120)}`});
-   if(r.insights!=null||r.causes!=null||r.nextInputs!=null)out.push({unit:id,problem:'生成结果里不该有洞察、原因或下月输入，这些由大家提交'});
+   if(r.insights!=null||r.causes!=null)out.push({unit:id,problem:'生成结果里不该有洞察或原因，洞察由大家提交'});
+   const next=nextInputProblem(r.nextInputs,{max:r.level==='company'?8:5,roster,allowEmpty:r.verdict==='达成'});if(next)out.push({unit:id,problem:next});
   }else{
    const miss=['verdictReason','targets','causes','nextInputs'].filter(f=>!filled(r[f]));if(miss.length)out.push({unit:id,problem:`缺 ${miss.join('、')}`});
    const bad=(r.nextInputs||[]).filter(n=>n&&typeof n==='object'&&n.type&&!nextTypes.has(n.type)).map(n=>n.type);if(bad.length)out.push({unit:id,problem:`下月输入类型“${bad.join('、')}”不对`});

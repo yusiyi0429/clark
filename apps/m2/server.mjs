@@ -36,7 +36,7 @@ import {cascadeSystem,cascadeInput,validateCascade,cascadeMessage,childrenOf} fr
 import {bareJson} from './model.mjs';
 import {loadReviewRules,reviewPromptBlock,reviewCardsFor,insightSynthesisRequest} from './nexus-review.mjs';
 import {handoffPackage,monthOf,handoffGenerated,reviewSummary} from './review-handoff.mjs';
-import {carryReviewLayer,installReviewRound} from './review-round.mjs';
+import {carryReviewLayer,installReviewRound,reviewDueAt,withDueAt} from './review-round.mjs';
 import {importReviewRound} from './deployment-review-import.mjs';
 import {createReviewJobs,httpReviewReader} from './review-generation.mjs';
 import {withdrawnFor} from './mission-structure.mjs';
@@ -108,12 +108,26 @@ const reviewJobs=createReviewJobs({store,gateway,skillRoot:reviewSkillRoot,state
  installReviewRound,archivesPath});
 await reviewJobs.recover();
 // Nexus's synthesis under each review once insights are revealed; a failure is kept on the card, not hidden (2026-10-26).
+// 公开洞察: by the admin in 管理, or by itself at the review's due time (陈溪南 2026-10-27). Returns who had not written one.
+async function revealInsights(actor,{auto=false}={}){
+ const now=new Date().toISOString();let missing=[];
+ await store.transact(s=>{if(!s.reviewRound)throw Object.assign(Error('还没有复盘'),{status:409});s.insightsRevealed??={at:now,by:auto?'auto':actor.id};
+  const viewer=actor||{ceo:true,name:''},cards=Object.values(s.cards).filter(c=>c.kind==='review');missing=cards.map(c=>({cardId:c.id,title:currentVersion(c).content.title,missing:insightView(s,c,viewer).missing})).filter(x=>x.missing.length);
+  for(const u of new Set(cards.filter(c=>c.level!=='company').map(c=>c.unit)))broadcast(s,u,`${auto?'复盘已到截止时间，':''}本月复盘的分析洞察已公开，大家可以看到彼此写的内容，Nexus 正在综合。`,{kind:'insights-revealed',now});
+  s.sequence++;return s;});
+ synthesizeInsights().catch(()=>{});
+ return missing;
+}
+{const r=store.snapshot().reviewRound,w=withDueAt(r);if(w!==r)await store.transact(s=>{s.reviewRound=withDueAt(s.reviewRound);s.sequence++;return s;});}
+setInterval(()=>{const s=store.snapshot(),due=reviewDueAt(s.reviewRound);if(due&&!s.insightsRevealed&&Date.now()>=Date.parse(due))revealInsights(null,{auto:true}).catch(()=>{});},60000).unref();
 let synthesizing=false;
 async function synthesizeInsights(){
  if(synthesizing)return;synthesizing=true;
  try{
   const rules=(await loadReviewRules(reviewSkillRoot)).rules,name=id=>handoffProfiles[id]?.name||id;
-  const todo=Object.values(store.snapshot().cards).filter(c=>c.kind==='review'&&(store.snapshot().insights?.[c.id]||[]).length&&!store.snapshot().insightNexus?.[c.id]?.text).map(c=>c.id);
+  // The company card is synthesized whenever any review has insights: it reads them all (2026-10-27).
+  const snap0=store.snapshot(),anyInsight=Object.values(snap0.insights||{}).some(l=>l?.length);
+  const todo=Object.values(snap0.cards).filter(c=>c.kind==='review'&&((snap0.insights?.[c.id]||[]).length||c.level==='company'&&anyInsight)&&!snap0.insightNexus?.[c.id]?.text).map(c=>c.id);
   await runRoundPool(todo,async id=>{
    let entry;try{const snap=store.snapshot(),r=await chatGateway.complete(redactMessages(insightSynthesisRequest(snap,snap.cards[id],rules,name)).messages,{json:true,thinking:true,reasoningEffort:'medium'});const v=JSON.parse(r.answer);if(typeof v?.text!=='string'||!v.text.trim())throw Error('综合为空');entry={text:readableAnswer(v.text,[]),createdAt:new Date().toISOString()};}
    catch(e){entry={error:e.code==='MODEL_REFUSAL'?'模型拒绝了这次综合，可能因为洞察里有具体到个人的敏感细节':'综合没有完成，可在管理里重试',at:new Date().toISOString()};}
@@ -194,13 +208,7 @@ export const server=createServer(async(req,res)=>{
   if(route.pathname==='/api/notifications/read'&&req.method==='POST'){const b=await body(req);if(!handoffProfiles[b.memberId])return json(res,400,{error:'请选择名单中的试用成员'});const ids=Array.isArray(b.ids)?b.ids.slice(0,20):[b.id];await readMarks.mark(b.memberId,ids.filter(Boolean));return json(res,200,{ok:true});}
   // 公开洞察 (陈溪南 2026-10-26): 管理 opens every review's insights at once; Nexus then writes its synthesis under each.
   if(route.pathname==='/api/reviews/reveal-insights'&&req.method==='POST'){const b=await body(req),actor=actorFor(b.memberId);if(!(actor?.ceo===true||roundOperators.includes(actor?.id)))return json(res,403,{error:'只有管理员能公开洞察'});
-   const now=new Date().toISOString();let missing=[];
-   await store.transact(s=>{if(!s.reviewRound)throw Object.assign(Error('还没有复盘'),{status:409});s.insightsRevealed??={at:now,by:actor.id};
-    const cards=Object.values(s.cards).filter(c=>c.kind==='review');missing=cards.map(c=>({cardId:c.id,title:currentVersion(c).content.title,missing:insightView(s,c,actor).missing})).filter(x=>x.missing.length);
-    for(const u of new Set(cards.filter(c=>c.level!=='company').map(c=>c.unit)))broadcast(s,u,'本月复盘的分析洞察已公开，大家可以看到彼此写的内容，Nexus 正在综合。',{kind:'insights-revealed',now});
-    s.sequence++;return s;});
-   synthesizeInsights().catch(()=>{});
-   return json(res,200,{revealedAt:store.snapshot().insightsRevealed.at,missing});}
+   const missing=await revealInsights(actor);return json(res,200,{revealedAt:store.snapshot().insightsRevealed.at,missing});}
   if(route.pathname==='/api/reviews'&&req.method==='GET')return json(res,200,{job:reviewJobs.view()});
   if(route.pathname==='/api/reviews'&&req.method==='POST'){const b=await body(req);try{return json(res,200,{job:await reviewJobs.start(actorFor(b.memberId),{regenerate:b.regenerate===true,resume:b.resume===true})});}catch(e){return json(res,e.status||500,{error:e.message,...(e.code?{code:e.code,total:e.total,confirmed:e.confirmed}:{})});}}
   if(route.pathname==='/api/reviews'&&req.method==='GET')return json(res,200,{job:reviewJobs.view()});

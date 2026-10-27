@@ -22,6 +22,14 @@ const reviewOwners=card=>String(currentVersion(card).content.owner||'').split(/[
 const reviewEditable=new Set(['verdict','verdictReason','facts','targets','causes','nextInputs','ltoReview']);
 // 复盘三段式 (陈溪南 2026-10-26): a fact line is one Task / Mission / unit — what it is, its status, the evidence and the plain gap.
 const FACT_STATUS=['达成','部分达成','未达成','未开始'];
+// 下期输入 (陈溪南 2026-10-27, back after the 三段式): what next month takes from this review; a row may name who has to answer.
+export const NEXT_TYPES=['继续','调整','停止','待决策'];
+// A review judged 达成 with nothing left open may have none (陈溪南 2026-10-27, via Skill 建设).
+export const nextInputProblem=(list,{max=5,roster=[],allowEmpty=false}={})=>(list==null||Array.isArray(list)&&!list.length)?(allowEmpty?null:'缺下期输入'):!Array.isArray(list)?'下期输入要是列表':list.length>max?`下期输入最多 ${max} 条`:
+ list.some(x=>!x||typeof x.text!=='string'||!x.text.trim()||x.text.length>300)?'每条下期输入要有正文':
+ list.some(x=>!NEXT_TYPES.includes(x.type))?`下期输入类型只能是${NEXT_TYPES.join('、')}`:
+ list.some(x=>x.ask!=null&&(typeof x.ask!=='object'||!String(x.ask.to||'').trim()||!String(x.ask.question||'').trim()||String(x.ask.question).length>300))?'要问人的下期输入要写问谁、问什么':
+ roster.length&&list.some(x=>x.ask&&!roster.includes(String(x.ask.to).trim()))?`下期输入里问的“${list.find(x=>x.ask&&!roster.includes(String(x.ask.to).trim())).ask.to}”不在公司名单里`:null;
 export const factProblem=list=>!Array.isArray(list)||list.length>40||list.some(x=>!x||typeof x.item!=='string'||!x.item.trim()||!FACT_STATUS.includes(x.status)||typeof (x.evidence??'')!=='string'||typeof (x.gap??'')!=='string'||String(x.evidence||'').length>2000||String(x.gap||'').length>1000);
 // 分析洞察 (陈溪南 2026-10-26): written by each participant under a review, never handshaken. Until 管理 reveals them,
 // only the author sees the text; others see who wrote how many. Kept apart from comments and chat so Nexus and the
@@ -164,6 +172,7 @@ export function applyAction(previous,actor,action){
   for(const [key,value]of Object.entries(patch)){
    // Review lists hold objects: causes {text, ask}, nextInputs {id, type, text}; ltoReview {choice, reason}.
    if(isReview(card)&&key==='facts'){if(factProblem(value))fail(400,'事实证据格式错误：每行要有这一项、状态（达成/部分达成/未达成/未开始）和证据');continue;}
+   if(isReview(card)&&key==='nextInputs'&&Array.isArray(currentVersion(card).content.facts)){const bad=nextInputProblem(value,{max:card.level==='company'?8:5,roster:Object.values(memberProfiles).map(m=>m.name),allowEmpty:(patch.verdict??currentVersion(card).content.verdict)==='达成'});if(bad)fail(400,bad);continue;}
    if(isReview(card)&&(key==='causes'?!Array.isArray(value)||value.length>5||value.some(x=>!x||typeof x.text!=='string'||typeof (x.ask??'')!=='string'):key==='nextInputs'?!Array.isArray(value)||value.length>5||value.some(x=>!x||typeof x.text!=='string'||!['欠账','继续验证','停止','约束','待决策'].includes(x.type)):key==='ltoReview'?!value||!['维持','修改','重开','建议维持','建议修改','建议重开'].includes(value.choice):key==='verdict'?!['达成','部分达成','未达成'].includes(value):false))fail(400,'修订内容格式错误');
    if(isReview(card)&&['causes','nextInputs','ltoReview','verdict'].includes(key))continue;
    if(Array.isArray(value)?value.length>50||value.some(x=>typeof x!=='string'||x.length>8000):['checks','milestones'].includes(key)||typeof value!=='string'||value.length>16000)fail(400,'修订内容格式错误');
@@ -205,7 +214,7 @@ export function applyAction(previous,actor,action){
   // 上级跟着看 (陈溪南 2026-10-22 走查第 3 条): a lower card's dates, checks, result or verdict changing can leave what the
   // card above wrote out of date (a PO milestone still on the old day, an RU review still saying "all three missed").
   // Its owner is told and the card shows 下级有调整 until they look; dates the upper card still quotes are named.
-  const watched=changed.filter(k=>['time','checks','milestones','result','verdict','verdictReason','targets','facts','tier'].includes(k)),parent=card.parentId&&state.cards[card.parentId];
+  const watched=changed.filter(k=>['time','checks','milestones','result','verdict','verdictReason','targets','facts','nextInputs','tier'].includes(k)),parent=card.parentId&&state.cards[card.parentId];
   if(watched.length&&parent){
    // Dates compared as month/day (11/06 = 11-6); the upper card's own spelling is what the notice quotes.
    const dates=x=>new Map((JSON.stringify(x||'').match(/\d{1,2}[\/-]\d{1,2}/g)||[]).map(d=>{const [m,dd]=d.split(/[\/-]/).map(Number);return [`${m}/${dd}`,d];}));
@@ -213,7 +222,7 @@ export function applyAction(previous,actor,action){
    const upper=currentVersion(parent).content,inUpper=dates(upper),quoted=gone.filter(d=>inUpper.has(d)).map(d=>inUpper.get(d));
    parent.downstreamChange={cardId:card.id,version:v.number+1,fields:watched,staleDates:quoted,at:now};
    const owners=[...new Set(confirmationSlots(parent).map(slot=>slotHolder(state,parent,slot)).concat(upper.owner).flatMap(n=>String(n||'').split(/[、,，]/)).map(n=>n.trim()).filter(n=>n&&n!==nameOf(actor.id)))];
-   const what=watched.map(k=>({time:'时间',checks:'验收',milestones:'里程碑',result:'成果',verdict:'判定',verdictReason:'判定理由',targets:'目标对照',facts:'事实证据',tier:'档位'})[k]).join('、');
+   const what=watched.map(k=>({time:'时间',checks:'验收',milestones:'里程碑',result:'成果',verdict:'判定',verdictReason:'判定理由',targets:'目标对照',facts:'事实证据',nextInputs:'下期输入',tier:'档位'})[k]).join('、');
    if(owners.length)groupNotice(state,parent,`${titleOf(card)}改了${what}，上级${titleOf(parent)}${quoted.length?`还写着 ${quoted.join('、')}，`:'写到的内容'}可能要跟着改，请 ${mentionList(owners)} 看一下。`);
   }
   if(actor.kind!=='coagent'){
@@ -295,7 +304,9 @@ export function applyAction(previous,actor,action){
   // A group line typed without replying is about the discussion, not about whichever card happened to be open.
   if(action.type==='message'&&action.general===true&&!entry.replyTo)entry.general=true;
   // Answering a review's 追问 is a comment on its 原因 row that names which question it answers.
-  if(action.type==='comment'&&isReview(card)&&action.answers&&Number.isInteger(action.answers.index)&&String(currentVersion(card).content.causes?.[action.answers.index]?.ask||''))entry.answers={index:action.answers.index,ask:String(currentVersion(card).content.causes[action.answers.index].ask).slice(0,300)};
+  // 三段式 cards ask on 下期输入 rows ({ask:{to,question}}); older cards on 原因 rows.
+  if(action.type==='comment'&&isReview(card)&&action.answers&&Number.isInteger(action.answers.index)){const c=currentVersion(card).content,i=action.answers.index,asNext=Array.isArray(c.facts),ask=String((asNext?c.nextInputs?.[i]?.ask?.question:c.causes?.[i]?.ask)||'');
+   if(ask)entry.answers={index:i,ask:ask.slice(0,300),...(asNext?{block:'nextInputs',to:String(c.nextInputs[i].ask.to||'')}:{})};}
   if(action.type==='message'&&!entry.context&&!entry.general&&action.block&&editable.has(action.block))entry.context={scope:entry.scope,selection:{id:card.id,version:v.number},block:action.block};
   state[action.type==='comment'?'comments':'messages'].push(entry);
   const proposal=confirmationProposal(state,entry);

@@ -84,7 +84,7 @@
     },
     {
       "path": "document-template.mjs",
-      "sha256": "8aa501da43d7fe9572b32c7724a4dae2884c601bb72cd9f4cf3868898218a6dc"
+      "sha256": "304f0594b8c9c7a116a54a5f9461fdb23c5393654f66178dfe9607d6ccbba9fe"
     },
     {
       "path": "DocumentCanvas.jsx",
@@ -124,7 +124,7 @@
     },
     {
       "path": "governance.mjs",
-      "sha256": "a19ee2eff014ad94f33785fb79e9920ceade58c09ad071807021713956499ae9"
+      "sha256": "ce09c2fd05e6d6f800b7368e26a296e84834ea5d882798493921b7fe4bb58f7a"
     },
     {
       "path": "Handshake.jsx",
@@ -200,7 +200,7 @@
     },
     {
       "path": "nexus-review.mjs",
-      "sha256": "dcb2f78c178f0bb7e4202a4eb42f88dc7e6e7bcb0865fd378a91cc65e4fd83f2"
+      "sha256": "e15a9aa3323bb516f74ac8a937cfcf46e38a292f545affebde055445f9329b8c"
     },
     {
       "path": "NexusIsland.jsx",
@@ -273,23 +273,23 @@
     },
     {
       "path": "review-display.mjs",
-      "sha256": "33964eb82ac31f0900bcccf5c1448def7e3ddfdfe0122357edf2b22c20385925"
+      "sha256": "150bbd9c0d9796bb3aabbdb7947f2cbcf396ce84e57865f17a6f3b23eebb3ab7"
     },
     {
       "path": "review-generation.mjs",
-      "sha256": "f3f4393dac05218de3a695991a543cdf58e08ae40b206bd48dd04121c9b784da"
+      "sha256": "893c2db1037d7a66870e7b4cbb3b7a552efc158756530fe207dd2bed028ab829"
     },
     {
       "path": "review-handoff.mjs",
-      "sha256": "e479c198b681cb9cf76bcd5757d3c72bb4fa7d0e89a705109a90a3e45e9ebbf1"
+      "sha256": "141d277eccdcdec9c45a0b2c85b65208d3021da91d211d44b09e9bf2fa12ee35"
     },
     {
       "path": "review-round.mjs",
-      "sha256": "b2eebfc9d12adb5e37098e1ca32829c6610711f5f6ba4b6fb65180597768e9f5"
+      "sha256": "2f6efbff53fc7d734bb3bb9bf7941cd726549afdc715013499675f8f03034ccc"
     },
     {
       "path": "review-sources.mjs",
-      "sha256": "4ea398b6d70460dbba4e5599f58b994576432efc6ac64d729b6c305632e1a60a"
+      "sha256": "33dfda7bcaf454874854c3faa1ff3d6f981562f6c56a2c4f8ce912e54a11d614"
     },
     {
       "path": "review-workflow.mjs",
@@ -373,11 +373,11 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "d5057d67dc6218c31bf9ca4e8d77fdf57ba86efb792db586b65c3b62f62aa537"
+      "sha256": "3df7af21f40514f1d3799d70642335e9dd544590b39b5d1d51ead76a04e802b7"
     },
     {
       "path": "shared-projection.mjs",
-      "sha256": "d4a34aae1526b10479e021ed86ccaf3a1cf7730bb2a802cf7562aef4c384430c"
+      "sha256": "83fc04c8f70f5d70b92472363fcb503383170bc9d9c59086134ab7420b20eee3"
     },
     {
       "path": "skill-snapshot.mjs",
@@ -425,7 +425,7 @@
     },
     {
       "path": "notifications.mjs",
-      "sha256": "ec0c7d15f7e284ce4c09832b4e911332db0120387ddd6917a0fad70b70ebf17b"
+      "sha256": "b9002e19997fcbb01b171ca32bb52b1cf11fef5546ab0292e31a5b62b8fc01bd"
     }
   ],
   "excluded": [
@@ -441,9 +441,9 @@
     "source": "~/.codex/skills/tkos-decoding"
   },
   "reviewSkill": {
-    "version": "2.1.2",
-    "fingerprint": "d21f673c3e4c",
-    "source": "apps/decoding-mvp/.runtime/eval/review/skills/tkos-review-2.1.2"
+    "version": "2.1.3",
+    "fingerprint": "8ebebbf3af71",
+    "source": "apps/decoding-mvp/.runtime/eval/review/skills/tkos-review-2.1.3"
   },
   "mergeBase": "/Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261026e"
 }

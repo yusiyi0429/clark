@@ -24,6 +24,9 @@ export function mineFirst(nodes,p){
   if(p.ceo&&(n.level==='company'||n.level==='po'))mine.add(n.id);
   if((p.unitDri||[]).includes(n.unit)&&n.level==='po')mine.add(n.id);
   if(n.level==='mission'&&ownerNames(n).includes(p.name)){mine.add(n.id);mine.add('rv:'+n.unit);}
+  // No Mission list under the PO review any more (2026-10-26): the unit DRI signs them, so they are on that DRI's list.
+  // Not the CEO's (陈溪南 2026-10-27): the CEO neither signs nor owes insights on Mission reviews.
+  if(n.level==='mission'&&(p.unitDri||[]).includes(n.unit))mine.add(n.id);
  }
  return nodes.filter(n=>mine.has(n.id));
 }
@@ -40,6 +43,9 @@ export function reviewTodos(nodes,p,comments={},proposals=[]){
   // One line per review for its open 追问, and none once the review is confirmed (陈溪南 2026-10-22).
   const asks=ownerNames(n).includes(p.name)&&n.status!=='已确认'?(n.causes||[]).map((c,i)=>c?.ask&&!answerOf(comments[n.id],i)?i:null).filter(i=>i!=null):[];
   if(asks.length)out.push({kind:'ask',cardId:n.id,index:asks[0],count:asks.length});
+  // 下期输入 that name someone (2026-10-27): on the named person's list, whoever owns the review, until answered or confirmed.
+  const named=n.status!=='已确认'?(n.nextInputs||[]).map((x,i)=>x?.ask?.to===p.name&&!answerOf(comments[n.id],i,'nextInputs')?i:null).filter(i=>i!=null):[];
+  if(named.length)out.push({kind:'ask',cardId:n.id,index:named[0],count:named.length,block:'nextInputs'});
   const slots=reviewSlots(n),signed=slot=>(n.signatures||[]).some(s=>s.slot===slot),mine=slots.find(slot=>maySign(n,slot,p)&&!signed(slot));
   // The company review can only be confirmed once every other review is; until then it is not on anyone's list.
   const waiting=n.level==='company'&&nodes.some(x=>x.level!=='company'&&x.status!=='已确认');
@@ -47,7 +53,7 @@ export function reviewTodos(nodes,p,comments={},proposals=[]){
  }
  return out;
 }
-export const answerOf=(list=[],index)=>[...list].reverse().find(c=>c.block==='causes'&&c.answers?.index===index);
+export const answerOf=(list=[],index,block='causes')=>[...list].reverse().find(c=>(c.answers?.block||c.block)===block&&c.answers?.index===index);
 // 「**资料包交下游（部分达成）：**正文」→ {name, verdict, text}
 export function targetParts(t){const m=String(t).match(/^\*\*(.+?)（(达成|部分达成|未达成)）：\*\*\s*([\s\S]*)$/);return m?{name:m[1],verdict:m[2],text:m[3]}:{name:'',verdict:'',text:String(t)};}
 // Text pieces: **bold**, [E5] evidence marks, plain text.

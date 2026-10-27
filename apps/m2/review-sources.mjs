@@ -13,9 +13,10 @@ function reviewFact(review,unit,period){
   // 三段式 (2026-10-26): fact lines, then the revealed insights and Nexus's synthesis; older reviews keep 原因 / 给下月的输入.
   ...(review.facts?.length?['**事实证据：**',...review.facts.map(f=>`- ${f.item}${f.owner?`（${f.owner}）`:''}：${f.status}。${f.evidence||''}${f.gap?` 没达成的原因：${f.gap}`:''}`)]:[]),
   ...bullets('原因',review.causes),
-  ...bullets('给下月的输入',review.nextInputs),
-  ...(review.insights?.length?['**分析洞察：**',...review.insights.map(x=>`- ${x.author}：${x.text}`)]:[]),
-  ...(review.nexusInsight?[`**Nexus 综合：**${review.nexusInsight}`]:[]),
+  // 下期输入 are what next month must take up; insights and Nexus's synthesis are reference (陈溪南 2026-10-27).
+  ...(review.facts&&review.nextInputs?.length?['**下期输入（必读，下月拆解要逐条承接）：**',...review.nextInputs.map(n=>`- ${n.type}：${n.text}${n.ask?`（问 ${n.ask.to}：${n.ask.question}${n.answer?` 答复（${n.answer.by}）：${n.answer.text}`:' 尚未答复'}）`:''}`)]:bullets('给下月的输入',review.nextInputs)),
+  ...(review.insights?.length?['**分析洞察（参考）：**',...review.insights.map(x=>`- ${x.author}：${x.text}`)]:[]),
+  ...(review.nexusInsight?[`**Nexus 综合（参考）：**${review.nexusInsight}`]:[]),
   ...(review.ltoReview?bullets('长期目标进展',Array.isArray(review.ltoReview)?review.ltoReview:[review.ltoReview]):[]),
  ].filter(Boolean);
  return {id:`${review.id}@v${review.version}`,unit,kind:'review',sourceRef:`review-card:${review.id}@v${review.version}`,
