@@ -120,3 +120,22 @@ test('环节卡：复盘装入后是“已出”并带截止时间；CEO 确认�
  assert.deepEqual([card.status,card.title,card.dueAt,card.updatedAt],['done','10 月复盘已完成',undefined,'2026-10-29T01:00:00.000Z']);
  assert.ok(!notificationsFor(s,'member-03').some(i=>i.id==='comments'),'新批注不再单独成卡');
 });
+
+test('被点名的人不在这个单元，也能打开这张复盘卡回答；别的卡照样看不到',()=>{
+ const asked=structuredClone(run);asked.reviews[2].nextInputs=[{ref:'t2',type:'待决策',text:'材料要补进本体',ask:{to:'唐巨杰',question:'灯塔的成本口径何时定下来？'}}];
+ let s=installReviewRound(createCollaborationState([{id:'bf01',level:'po',title:'灯塔',owner:'刘明华',version:1,children:[]}]),asked,{label:'10 月复盘',now:'2026-10-27T02:33:00.000Z'});
+ const yu=memberActor('member-09',s);
+ const v=sharedProjection(s,yu);assert.ok(v.drafts['rv:bf01-m1'],'被问的那张看得到');assert.equal(v.drafts['rv:bf01'],undefined,'单元复盘看不到');
+ s=applyAction(s,yu,{type:'comment',cardId:'rv:bf01-m1',baseVersion:1,block:'nextInputs',text:'11/5 前补齐',answers:{index:0}});
+ assert.equal(s.comments.at(-1).answers.to,'唐巨杰');
+ assert.throws(()=>applyAction(s,yu,{type:'comment',cardId:'rv:bf01',baseVersion:1,text:'x'}),/不在当前领域可见范围内/);
+});
+
+test('在判定上说出不同的判定（“实际是达成了”）就算改判要求，Nexus 的修订卡不被丢掉；只是附和原判定的不算',async()=>{
+ const {validateNexusResult}=await import('./nexus-policy.mjs');
+ const card={id:'rv:agents-m4',kind:'review',level:'mission',version:1,title:'M04 复盘',owner:'陈溪南',verdict:'部分达成',facts:[{ref:'t1',item:'x',status:'部分达成',evidence:'y'}],aliases:[]};
+ const ev=[{id:'c1',author:'刘明华',kind:'document-comment',text:'基本上达成的……实际是达成了',context:{selection:{id:'rv:agents-m4',version:1},block:'verdict'}}];
+ const ask=sourceIds=>validateNexusResult({topics:[],proposals:[{cardId:'rv:agents-m4',baseVersion:1,basis:'request',sourceIds,patch:{verdict:'达成'}}]},{cards:[card],evidence:ev,fresh:ev});
+ const r=ask(['c1']);assert.equal(r.proposals.length,1,JSON.stringify(r.rejected));
+ ev[0].text='部分达成没问题';assert.equal(ask(['c1']).proposals.length,0);
+});

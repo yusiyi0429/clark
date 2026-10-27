@@ -1327,3 +1327,19 @@ body.is-col-resizing{cursor:col-resize;user-select:none}
 .admin-block>.admin-line.is-failed,.admin-block>.admin-line.is-running{margin-top:10px}
 .admin-secondary{border:1px solid #002fa7!important;background:#fff!important;color:#002fa7!important}
 :root .admin-actions .admin-secondary{border:1px solid #002fa7!important;background:#fff!important;color:#002fa7!important;box-shadow:none}
+/* comment bubbles: a plain number; colour only when unread (2026-10-27) */
+.field-comment-trigger .comment-count{margin-left:2px;padding:0;background:none;font-size:11px;line-height:1;color:#8a98a6}
+.field-comment-trigger.is-unread,.field-comment-trigger.is-unread .comment-count{color:#1f4fd1}
+.field-comment-trigger.is-unread .comment-count{font-weight:600}
+
+/* review revision card digest (2026-10-27) */
+.proposal-digest{display:grid;gap:4px;margin-top:6px}
+.proposal-digest-row{margin:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;font-size:13px;line-height:1.5}
+.proposal-digest-label{color:#5b6b7a;margin-right:2px}
+.proposal-digest-label::after{content:'：'}
+.revision-message-card .proposal-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* Nexus at work: a blue veil under the dots, not white (陈溪南 2026-10-27) */
+:root .ai-revision-overlay{background:rgba(31,79,209,.14);backdrop-filter:blur(1px);-webkit-backdrop-filter:blur(1px);border-color:#376aff55}
+:root .ai-revision-overlay.presenting{background:rgba(31,79,209,.09)}
+:root .ai-revision-overlay.done{background:transparent}
+:root .ai-revision-overlay.failed{background:#fff1e8dd}

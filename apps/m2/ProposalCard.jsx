@@ -68,6 +68,17 @@ const shortTime=iso=>{const t=new Date(iso);return Number.isNaN(t.getTime())?'':
 const headline=t=>String(t||'').replace(/\s*(\[E\d+\])+/g,'').replace(/[；;，,。]?\s*接受后需[^。]*。?$/,'').replace(/^(负责人批注|负责人报告)[：:]\s*/,'').replace(/^[^，。；：:]{0,12}?(要求|提出|建议|指出|明确要求)[，,]?\s*(在|把|将)?/,'').split('。')[0].replace(/[；;，,]\s*(只改|其他|其余|原其他|原三条|原样)[^。]*$/,'').replace(/[；;，,]\s*[^；;，,。]*(保持不变|不变)。?$/,'').replace(/[。；;，,]$/,'').trim();
 // A task card (陈溪南 2026-10-22): a header that says what this is and where it stands (its colour is the state),
 // a one-sentence title of the change, the changes themselves, and the two answers at the bottom.
+// A review revision at a glance (陈溪南 2026-10-27: no taller than twice its width): the verdict and the status / type
+// changes, one line each; every wording change only counted, with 看全部 for the full comparison.
+const keyOf=x=>x?.ref||x?.item||x?.text;
+function reviewDigest(patch,before){
+ const rows=[];let words=0;
+ if('verdict'in patch&&patch.verdict!==before?.verdict)rows.push({label:'判定',from:before?.verdict||'',to:patch.verdict});
+ if('verdictReason'in patch&&String(patch.verdictReason)!==String(before?.verdictReason||''))words++;
+ if(Array.isArray(patch.facts)){const old=new Map((before?.facts||[]).map(f=>[keyOf(f),f]));for(const f of patch.facts){const o=old.get(keyOf(f));if(!o){rows.push({label:f.item,from:'',to:'新增一项'});continue;}if(o.status!==f.status)rows.push({label:f.item,from:o.status,to:f.status});if(o.evidence!==f.evidence||String(o.gap||'')!==String(f.gap||''))words++;old.delete(keyOf(f));}for(const o of old.values())rows.push({label:o.item,from:'',to:'删去'});}
+ if(Array.isArray(patch.nextInputs)){const old=new Map((before?.nextInputs||[]).map(x=>[keyOf(x),x]));for(const x of patch.nextInputs){const o=old.get(keyOf(x));if(!o){rows.push({label:'下期输入',from:'',to:`新增「${x.type}」一条`});continue;}if(o.type!==x.type)rows.push({label:`下期 · ${String(x.text).slice(0,12)}`,from:o.type,to:x.type});if(o.text!==x.text||JSON.stringify(o.ask||null)!==JSON.stringify(x.ask||null))words++;old.delete(keyOf(x));}for(const o of old.values())rows.push({label:'下期输入',from:'',to:`删去「${o.type}」一条`});}
+ return {rows,words};
+}
 export default function ProposalCard({proposal,node,onAction,onOpen,compact=false}){
  const [busy,setBusy]=useState(false),[rejecting,setRejecting]=useState(null),[showAll,setShowAll]=useState(false);
  async function handle(type,extra){if(busy)return;setBusy(true);try{await onAction({type,cardId:proposal.cardId,proposalId:proposal.id,...(extra||{})});setRejecting(null);}finally{setBusy(false);}}
@@ -81,7 +92,10 @@ export default function ProposalCard({proposal,node,onAction,onOpen,compact=fals
  const fields=shownFields(shownPatch||{}).filter(([key])=>!(vc&&key==='verdict')),label=key=>fieldLabel(node?.level,key);
  // At most three fields open; the rest fold into one line that names them.
  const open=showAll?fields:fields.slice(0,3),folded=fields.slice(open.length);
- const changes=proposal.op?<MissionChange proposal={proposal}/>:<>{verdictLine}{open.map(([key,value])=><FieldChange key={key} label={label(key)} before={proposal.before?.[key]} after={value}/>)}{folded.length>0&&<button type="button" className="proposal-more" onClick={()=>setShowAll(true)}>还改了 {folded.map(([key])=>label(key)).join('、')} · 展开</button>}</>;
+ const isReview=['facts','nextInputs','verdictReason','verdict'].some(k=>k in (shownPatch||{}))&&String(proposal.cardId||'').startsWith('rv:');
+ const digest=isReview?reviewDigest(shownPatch||{},proposal.before||{}):null;
+ const changes=digest&&!showAll?<div className="proposal-digest">{digest.rows.slice(0,5).map((r,i)=><p key={i} className="proposal-digest-row"><span className="proposal-digest-label">{r.label}</span>{r.from&&<><s className="change-old">{r.from}</s><span className="change-arrow">→</span></>}<mark className="diff-mark">{r.to}</mark></p>)}{(digest.words>0||digest.rows.length>5)&&<button type="button" className="proposal-more" onClick={()=>setShowAll(true)}>{digest.words>0?`另有 ${digest.words} 处文字修改`:'还有改动'} · 看全部</button>}</div>
+  :proposal.op?<MissionChange proposal={proposal}/>:<>{verdictLine}{open.map(([key,value])=><FieldChange key={key} label={label(key)} before={proposal.before?.[key]} after={value}/>)}{folded.length>0&&<button type="button" className="proposal-more" onClick={()=>setShowAll(true)}>还改了 {folded.map(([key])=>label(key)).join('、')} · 展开</button>}</>;
  const notes=fields.map(([key,value])=>fieldNote(label(key),proposal.before?.[key],value));
  const title=proposal.op==='add-mission'?`新增「${proposal.mission?.title||''}」`:proposal.op?`${proposal.op==='withdraw-mission'?'撤掉':'恢复'}「${proposal.missionSummary?.title||proposal.missionId}」`:headline(proposal.reason)||`改 ${notes.slice(0,3).join('、')}`;
  // Once the card moved on, the old proposal is an archive for tracing, not something to act on.
@@ -90,7 +104,7 @@ export default function ProposalCard({proposal,node,onAction,onOpen,compact=fals
  const Icon=state==='accepted'?CheckCircle2:state==='rejected'?X:Pencil;
  // One short header: the state on the left, who and when on the right (陈溪南 2026-10-22: no card name, no icon up here).
  const head={pending:`待 ${reviewer} 确认`,accepted:`已修改${proposal.resultVersion?` · v${proposal.resultVersion}`:''}`,rejected:'未采用',archived:'已归档'}[state];
- const who=state==='pending'||state==='archived'?'':`${String(reviewer).split(/[、,，]/)[0]}${when?' '+when.replace(/^\d+\/\d+\s*/,''):''}`;
+ const who=state==='pending'?(isReview&&vcWho?`${vcWho}提出`:''):state==='archived'?'':`${String(reviewer).split(/[、,，]/)[0]}${when?' '+when.replace(/^\d+\/\d+\s*/,''):''}`;
  const card=<section id={compact?undefined:'proposal-'+proposal.id} className={`${compact?'island-proposal-card':'revision-message-card'} proposal-task is-${state}`} aria-label={`Nexus 修订卡 · ${head}`}>
   <div className="proposal-head"><strong>{head}</strong>{who&&<span className="proposal-head-who">{who}</span>}</div>
   <div className="proposal-body">

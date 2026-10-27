@@ -138,7 +138,11 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
   const askedNexus=ids.some(id=>{const s=sources.get(id);return directQuestion(s)&&/(卡|改|删|加|补|调|挪|提前|推迟|换|写|列|放|拆|并成|合并|去掉|拿掉|撤)/.test(s.text)&&!disagrees(s.text);});
   // Answering a review's 追问 invites the review to be corrected by it.
   const answered=ids.some(id=>{const s=sources.get(id);return s.answers&&s.context?.selection?.id===card.id;});
-  const requested=ownerNote||answersRejection||askedNexus||answered||ids.some(id=>revisionRequest(sources.get(id).text));
+  // Saying what the verdict really is, on a review, is asking to change it (2026-10-27 drill: 刘明华 on 判定「基本上达成……实际是达成了」 got no card).
+  const verdictClaim=review&&ids.some(id=>{const s=sources.get(id),t=String(s?.text||'');if(!s||s.context?.selection?.id&&s.context.selection.id!==card.id||disagrees(t)&&!/(判|达成)/.test(t))return false;
+   const said=(t.match(/部分达成|未达成|没达成|达成/g)||[]).map(w=>w==='没达成'?'未达成':w);const claim=said.find(w=>w!==card.verdict&&!new RegExp(`不(是|算)${w}`).test(t));
+   return !!claim&&(['verdict','verdictReason'].includes(s.context?.block||s.block)||/(判|实际|其实|应该|算)/.test(t));});
+  const requested=ownerNote||answersRejection||askedNexus||answered||verdictClaim||ids.some(id=>revisionRequest(sources.get(id).text));
   const follows=proposals.some(q=>ancestor(q.cardId)&&q.sourceIds.some(id=>ids.includes(id)));
   // Someone raises a point on this card (or the card above it) and its owner says 「我认了」「行」: that is agreement too
   // (2026-10-21 review drill), even when the model did not file it as an agreement topic.

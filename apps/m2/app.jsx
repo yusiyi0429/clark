@@ -31,7 +31,7 @@ import ProposalCard from './ProposalCard.jsx';
 import DiscussionMinutes from './DiscussionMinutes.jsx';
 import {memberProfiles} from './member-profiles.mjs';
 const entryProfiles={...profiles,...memberProfiles};
-import DocumentContent from './DocumentContent.jsx';
+import DocumentContent,{setCommentSeen} from './DocumentContent.jsx';
 import {documentFieldLabel} from './document-template.mjs';
 import {planLabels,orderPlanUnits} from './plan-labels.mjs';
 
@@ -76,6 +76,10 @@ function App(){
  const markSeen=key=>setSeen(old=>{const next={...old,[key]:Date.now()};try{localStorage.setItem('m2-seen:'+role,JSON.stringify(next));}catch{}return next;});
  const openRoomLength=tab==='group'&&scope?(records['group:'+scope]||[]).length:-1,openCardComments=detail?(comments[detail.id]||[]).length:-1;
  useEffect(()=>{if(role&&openRoomLength>=0){markSeen('group:'+scope);markNotice(['mention:'+scope]);}},[role,scope,openRoomLength]);
+ // Unread comment bubbles compare with when I last looked at this card before opening it now.
+ const [cardSeenBefore,setCardSeenBefore]=useState({id:null,at:0});
+ if(detail&&cardSeenBefore.id!==detail.id)setCardSeenBefore({id:detail.id,at:seen['card:'+detail.id]||0});
+ setCommentSeen(cardSeenBefore);
  useEffect(()=>{if(role&&detail){markSeen('card:'+detail.id);if(openCardComments>0&&myCard(detail.id))markNotice(['comments']);}},[role,detail?.id,openCardComments]);
  // Opening a card flagged by an upper revision (and its Tasks) clears the red "待你处理" for that change.
  useEffect(()=>{if(!role||!detail)return;const live=allNodes(data.units).find(n=>n.id===detail.id);for(const n of [live,...(live?.children||[])])if(upstreamKey(n))markSeen(upstreamKey(n));},[role,detail?.id]);

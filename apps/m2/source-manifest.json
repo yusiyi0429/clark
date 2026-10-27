@@ -24,7 +24,7 @@
     },
     {
       "path": "app.jsx",
-      "sha256": "5cb3a16395c04c581480d6d52c14f533dfe61bab424583c01bae9c8f4c5522f0"
+      "sha256": "78468f0aea31bd81e857884af31780285d76eb3fa4907cdf0276fdcd08d388fe"
     },
     {
       "path": "AuditStatus.jsx",
@@ -92,7 +92,7 @@
     },
     {
       "path": "DocumentContent.jsx",
-      "sha256": "f23487d91527d924f92ca23b34a8fa35edc3f68777780f08b780669b484c3537"
+      "sha256": "f1e35b1e1e4fe0ef26b1d4225b1435779130c9c54788d75242276160a5ad1c72"
     },
     {
       "path": "domain.mjs",
@@ -124,7 +124,7 @@
     },
     {
       "path": "governance.mjs",
-      "sha256": "a253702fed8c2cb7e310dcda68b9df1f82cddd6231cfd13ee2f58665559a0e6e"
+      "sha256": "357183f6d1d7f4b2659f0afec656a063b5341a965b9c5afa1a98defc8e9162d9"
     },
     {
       "path": "Handshake.jsx",
@@ -192,7 +192,7 @@
     },
     {
       "path": "nexus-policy.mjs",
-      "sha256": "c3d76984fff16fd0091ace5c7408ccca0e5a924c31c72e86b519bb2784a72393"
+      "sha256": "9fdd5f566596620bb7b92d2237903c5bc88b75c131f67c0c40cb3215eb0bfc92"
     },
     {
       "path": "nexus-retry.mjs",
@@ -253,7 +253,7 @@
     },
     {
       "path": "ProposalCard.jsx",
-      "sha256": "eda09c48410e140d9e5eaa60bd375ebb13670a01866de52d6c767c7c1b710e04"
+      "sha256": "9f52eeac281015b92219a81f30cbd645454042fbfa17af9cbcec12c98e57a386"
     },
     {
       "path": "reader-format.mjs",
@@ -397,7 +397,7 @@
     },
     {
       "path": "style.css",
-      "sha256": "916357fd7957a00255d11a8cb9f731c90f4374cd743194e425d89c6aba4ceb1f"
+      "sha256": "3425e0bbbb6dcee6f3f41049c48816e2a0df9ce3f93f5d10eab61a7bbda5d728"
     },
     {
       "path": "todo.mjs",

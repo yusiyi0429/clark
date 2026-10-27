@@ -106,7 +106,8 @@ function retireCascadeCards(state,parent,version){for(const p of state.proposals
 export function confirmationSummary(state,card){const v=currentVersion(card),slots=confirmationSlots(card);return {signed:[...new Set(v.signatures.map(s=>nameOf(s.actorId)))],waiting:slots.filter(slot=>!v.signatures.some(s=>s.slot===slot)).map(slot=>slotHolder(state,card,slot)).filter(Boolean)};}
 const mentionList=names=>[...new Set(names.filter(Boolean))].map(n=>'@'+n).join('、');
 export function mayChangeOwner(actor,card){return !!actor&&(card.level==='po'?actor.ceo===true:(actor.unitDri||[]).includes(unitOf(card)));}
-export function canRead(actor,card){return !!actor&&(actor.ceo===true||(actor.visibleUnits||[]).includes(unitOf(card)));}
+// Someone a review's 下期输入 asks by name may open that one card to answer, even outside their units (2026-10-27 drill: 于斯一 asked on Agents got 403).
+export function canRead(actor,card){return !!actor&&(actor.ceo===true||(actor.visibleUnits||[]).includes(unitOf(card))||isReview(card)&&!!actor.name&&(card.versions?.at(-1)?.content?.nextInputs||[]).some(n=>n?.ask?.to===actor.name));}
 export function confirmationSlots(card){if(isReview(card))return card.level==='company'?['ceo']:card.level==='po'?['ceo','unitDri']:['unitDri','missionDri'];return card.level==='po'?['ceo','unitDri']:card.level==='mission'?['unitDri','missionDri']:[];}
 export function currentVersion(card){return card.versions.at(-1);}
 export function cardStatus(card){const v=currentVersion(card),slots=confirmationSlots(card);return card.upstreamChange?'上级有调整 · 待核对':card.downstreamChange?'下级有调整 · 待核对':slots.length===0?'负责人自主修订':slots.every(slot=>v.signatures.some(s=>s.slot===slot))?'已确认':v.signatures.length?'待另一方确认':'待确认';}

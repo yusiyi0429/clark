@@ -12,6 +12,9 @@ const CommentActions=createContext(null);
 function FieldAnnotation({field}){const a=useContext(AnnotationContext);return a?.anchor===field?a.content:null;}
 // field may name one item of a list ("nextInputs#1" = 第 2 条, 陈溪南 2026-10-23); the field's own bubble holds the rest.
 export const anchorParts=f=>{const [block,i]=String(f||'').split('#');return {block,item:i===undefined?null:Number(i)};};
+// When I last looked at the open card (set by the page each render): comments by others after that are unread (陈溪南 2026-10-27).
+let commentSeen={id:null,at:0};
+export function setCommentSeen(value){commentSeen=value;}
 export function CommentBubble({node,field,label,comments,onDetail}){
  const a=useContext(AnnotationContext),active=a?.anchor===field,actions=useContext(CommentActions);
  const {block,item}=anchorParts(field);
@@ -21,7 +24,7 @@ export function CommentBubble({node,field,label,comments,onDetail}){
  function show(){clearTimeout(timer.current);const r=trigger.current?.getBoundingClientRect();if(r)setPosition({right:Math.max(12,window.innerWidth-r.right),top:Math.max(12,Math.min(r.bottom+8,window.innerHeight-300))});setHover(true);}
  function hide(){timer.current=setTimeout(()=>setHover(false),150);}
  return <span className="field-comment-bubble" onMouseEnter={show} onMouseLeave={hide}>
-  <span ref={trigger}><Button className={`icon field-comment-trigger ${entries.length?'has-comments':''}`} aria-label={`批注 ${node.id} ${label}`} aria-expanded={Boolean(position&&(active||hover&&entries.length))} onFocus={show} onBlur={hide} onPress={()=>{show();onDetail(node,field);}}><MessageCircle size={15}/>{entries.length>0&&<span className="unread">{entries.length}</span>}</Button></span>
+  <span ref={trigger}><Button className={`icon field-comment-trigger ${entries.length?'has-comments':''}${entries.some(c=>c.author!==actions?.me&&commentSeen.id===node.id&&Date.parse(c.createdAt||'')>commentSeen.at)?' is-unread':''}`} aria-label={`批注 ${node.id} ${label}`} aria-expanded={Boolean(position&&(active||hover&&entries.length))} onFocus={show} onBlur={hide} onPress={()=>{show();onDetail(node,field);}}><MessageCircle size={15}/>{entries.length>0&&<span className="comment-count">{entries.length}</span>}</Button></span>
   {position&&(active||hover&&entries.length>0)&&createPortal(<section className="field-comment-popover" style={position} aria-label={`${label}的批注`} onMouseEnter={()=>{clearTimeout(timer.current);setHover(true);}} onMouseLeave={hide} onFocus={()=>clearTimeout(timer.current)}>
    {active?<FieldAnnotation field={field}/>:<><strong className="comment-preview-heading">{label} · {entries.length} 条批注</strong>{entries.map((c,i)=><div className="comment-preview" key={c.id||i}><small>{c.author} · v{c.version}{actions?.me===c.author&&actions.onDelete&&<button className="comment-delete" onClick={()=>{if(window.confirm('删除这条批注？'))actions.onDelete(c.id);}}>删除</button>}</small><p>{c.text}</p></div>)}<button className="comment-add-button" onClick={()=>onDetail(node,field)}>添加批注</button></>}
   </section>,document.body)}
