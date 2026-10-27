@@ -11,6 +11,1117 @@
     }
   ],
   "paths": {
+    "/api/task-quality/status": {
+      "get": {
+        "operationId": "getTaskQualityStatus",
+        "summary": "本人 Task 数据质量与补齐记录",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "本人核对结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskQualityStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/task-quality": {
+      "get": {
+        "operationId": "listTaskQualityReviews",
+        "summary": "本人 Task 数据质量与补齐记录",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "本人核对结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskQualityReviewList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/task-quality/catalog": {
+      "get": {
+        "operationId": "listQualityTaskCatalog",
+        "summary": "本人 Task 数据质量与补齐记录",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "本人核对结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskQualityCatalog"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/task-quality/tasks/{taskId}/check": {
+      "post": {
+        "operationId": "checkTaskQuality",
+        "summary": "本人 Task 数据质量与补齐记录",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskQualityOptions"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "本人核对结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskQualityReviewView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/task-quality/tasks/{taskId}/proposals": {
+      "post": {
+        "operationId": "proposeTaskRepair",
+        "summary": "本人 Task 数据质量与补齐记录",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRepairInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "本人核对结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRepairView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/task-quality/proposals": {
+      "get": {
+        "operationId": "listTaskRepairs",
+        "summary": "本人 Task 数据质量与补齐记录",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "本人核对结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRepairList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/task-quality/proposals/{proposalId}/revise": {
+      "post": {
+        "operationId": "reviseTaskRepair",
+        "summary": "本人 Task 数据质量与补齐记录",
+        "parameters": [
+          {
+            "name": "proposalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRepairRevision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "本人核对结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRepairView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/task-quality/proposals/{proposalId}/handoff": {
+      "get": {
+        "operationId": "getTaskRepairHandoff",
+        "summary": "本人 Task 数据质量与补齐记录",
+        "parameters": [
+          {
+            "name": "proposalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "本人核对结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRepairHandoff"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/task-quality/proposals/{proposalId}/receipts": {
+      "post": {
+        "operationId": "reportTaskRepairReceipt",
+        "summary": "本人 Task 数据质量与补齐记录",
+        "parameters": [
+          {
+            "name": "proposalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRepairReceiptInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "本人核对结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRepairView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/task-quality/meetings/{meetingId}/analyze": {
+      "post": {
+        "operationId": "analyzeMeetingTasks",
+        "summary": "本人 Task 数据质量与补齐记录",
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskMeetingInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "本人核对结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskMeetingAnalysis"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/task-quality/meetings/{meetingId}/proposals": {
+      "post": {
+        "operationId": "proposeMeetingTaskRepair",
+        "summary": "本人 Task 数据质量与补齐记录",
+        "parameters": [
+          {
+            "name": "meetingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskMeetingRepairInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "本人核对结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRepairView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "请求未完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/login": {
       "post": {
         "operationId": "login",
@@ -14528,6 +15639,2788 @@
   },
   "components": {
     "schemas": {
+      "TaskQualityStatus": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TaskQualityOptions": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "maxAgeHours": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "maximum": 87600,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "TaskQualityCatalog": {
+        "type": "object",
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "taskId",
+                "title",
+                "status"
+              ],
+              "properties": {
+                "taskId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "TaskQualityReviewList": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reviews"
+        ],
+        "properties": {
+          "reviews": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "taskId",
+                "title",
+                "checkedAt",
+                "report"
+              ],
+              "properties": {
+                "taskId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "checkedAt": {
+                  "type": "string"
+                },
+                "report": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "required": [
+                    "interface_version",
+                    "task",
+                    "baseline",
+                    "freshness",
+                    "quality"
+                  ],
+                  "properties": {
+                    "interface_version": {
+                      "const": "tkos.task-writeback/0.1",
+                      "type": "string"
+                    },
+                    "task": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "required": [
+                        "business",
+                        "records"
+                      ],
+                      "properties": {
+                        "business": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": [
+                            "object_id",
+                            "title",
+                            "version",
+                            "object_version",
+                            "revision_id",
+                            "attributes",
+                            "blocks",
+                            "relations",
+                            "pending_change"
+                          ],
+                          "properties": {
+                            "object_id": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "version": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "object_version": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "revision_id": {
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                              "type": "string"
+                            },
+                            "attributes": {
+                              "type": "object",
+                              "patternProperties": {
+                                "^(.*)$": {}
+                              }
+                            },
+                            "blocks": {
+                              "type": "array",
+                              "items": {}
+                            },
+                            "relations": {
+                              "type": "array",
+                              "items": {}
+                            },
+                            "pending_change": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "patternProperties": {
+                                    "^(.*)$": {}
+                                  }
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        "records": {
+                          "additionalProperties": true,
+                          "type": "object",
+                          "required": [
+                            "lifecycle",
+                            "latest_state"
+                          ],
+                          "properties": {
+                            "lifecycle": {
+                              "additionalProperties": true,
+                              "type": "object",
+                              "required": [
+                                "status"
+                              ],
+                              "properties": {
+                                "status": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "latest_state": {}
+                          }
+                        }
+                      }
+                    },
+                    "baseline": {
+                      "type": "object",
+                      "required": [
+                        "subject_ref",
+                        "object_version",
+                        "snapshot_id",
+                        "event_count"
+                      ],
+                      "properties": {
+                        "subject_ref": {
+                          "type": "string"
+                        },
+                        "object_version": {
+                          "type": "integer"
+                        },
+                        "snapshot_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "event_count": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "freshness": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "quality": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "ruleset",
+                        "observed_at",
+                        "active",
+                        "policy",
+                        "findings",
+                        "fields",
+                        "counts",
+                        "meaning"
+                      ],
+                      "properties": {
+                        "ruleset": {
+                          "const": "task-quality/0.1",
+                          "type": "string"
+                        },
+                        "observed_at": {
+                          "type": "string"
+                        },
+                        "active": {
+                          "type": "boolean"
+                        },
+                        "policy": {
+                          "type": "object",
+                          "required": [
+                            "max_age_hours"
+                          ],
+                          "properties": {
+                            "max_age_hours": {
+                              "anyOf": [
+                                {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        "findings": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "code",
+                              "kind",
+                              "path",
+                              "message",
+                              "suggested_action",
+                              "evidence_refs",
+                              "handler"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "code": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "anyOf": [
+                                  {
+                                    "const": "missing",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "unknown",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "stale",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "conflict",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "pending",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "suggested_action": {
+                                "type": "string"
+                              },
+                              "evidence_refs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "handler": {
+                                "type": "object",
+                                "required": [
+                                  "role",
+                                  "principal_id"
+                                ],
+                                "properties": {
+                                  "role": {
+                                    "type": "string"
+                                  },
+                                  "principal_id": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "fields": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "key",
+                              "label",
+                              "kind",
+                              "value",
+                              "target"
+                            ],
+                            "properties": {
+                              "key": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "anyOf": [
+                                  {
+                                    "const": "text",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "date",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "links",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "dependencies",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "value": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "target": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "kind",
+                                      "block_id",
+                                      "component_id",
+                                      "create_type",
+                                      "attribute"
+                                    ],
+                                    "properties": {
+                                      "kind": {
+                                        "const": "component",
+                                        "type": "string"
+                                      },
+                                      "block_id": {
+                                        "type": "string"
+                                      },
+                                      "component_id": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "create_type": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "attribute": {
+                                        "anyOf": [
+                                          {
+                                            "const": "start_date",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "finish_date",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "kind",
+                                      "block_id"
+                                    ],
+                                    "properties": {
+                                      "kind": {
+                                        "const": "state",
+                                        "type": "string"
+                                      },
+                                      "block_id": {
+                                        "anyOf": [
+                                          {
+                                            "const": "current_state",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "blockers",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "materials",
+                                            "type": "string"
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "kind"
+                                    ],
+                                    "properties": {
+                                      "kind": {
+                                        "const": "depends_on",
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        "counts": {
+                          "type": "object",
+                          "patternProperties": {
+                            "^(.*)$": {
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          }
+                        },
+                        "meaning": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "TaskQualityReviewView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "title",
+          "checkedAt",
+          "report"
+        ],
+        "properties": {
+          "taskId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "checkedAt": {
+            "type": "string"
+          },
+          "report": {
+            "additionalProperties": true,
+            "type": "object",
+            "required": [
+              "interface_version",
+              "task",
+              "baseline",
+              "freshness",
+              "quality"
+            ],
+            "properties": {
+              "interface_version": {
+                "const": "tkos.task-writeback/0.1",
+                "type": "string"
+              },
+              "task": {
+                "additionalProperties": true,
+                "type": "object",
+                "required": [
+                  "business",
+                  "records"
+                ],
+                "properties": {
+                  "business": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "required": [
+                      "object_id",
+                      "title",
+                      "version",
+                      "object_version",
+                      "revision_id",
+                      "attributes",
+                      "blocks",
+                      "relations",
+                      "pending_change"
+                    ],
+                    "properties": {
+                      "object_id": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "version": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "object_version": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "revision_id": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "attributes": {
+                        "type": "object",
+                        "patternProperties": {
+                          "^(.*)$": {}
+                        }
+                      },
+                      "blocks": {
+                        "type": "array",
+                        "items": {}
+                      },
+                      "relations": {
+                        "type": "array",
+                        "items": {}
+                      },
+                      "pending_change": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "patternProperties": {
+                              "^(.*)$": {}
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "records": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "required": [
+                      "lifecycle",
+                      "latest_state"
+                    ],
+                    "properties": {
+                      "lifecycle": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "latest_state": {}
+                    }
+                  }
+                }
+              },
+              "baseline": {
+                "type": "object",
+                "required": [
+                  "subject_ref",
+                  "object_version",
+                  "snapshot_id",
+                  "event_count"
+                ],
+                "properties": {
+                  "subject_ref": {
+                    "type": "string"
+                  },
+                  "object_version": {
+                    "type": "integer"
+                  },
+                  "snapshot_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "event_count": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                }
+              },
+              "freshness": {
+                "type": "array",
+                "items": {}
+              },
+              "quality": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "ruleset",
+                  "observed_at",
+                  "active",
+                  "policy",
+                  "findings",
+                  "fields",
+                  "counts",
+                  "meaning"
+                ],
+                "properties": {
+                  "ruleset": {
+                    "const": "task-quality/0.1",
+                    "type": "string"
+                  },
+                  "observed_at": {
+                    "type": "string"
+                  },
+                  "active": {
+                    "type": "boolean"
+                  },
+                  "policy": {
+                    "type": "object",
+                    "required": [
+                      "max_age_hours"
+                    ],
+                    "properties": {
+                      "max_age_hours": {
+                        "anyOf": [
+                          {
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "findings": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "code",
+                        "kind",
+                        "path",
+                        "message",
+                        "suggested_action",
+                        "evidence_refs",
+                        "handler"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "const": "missing",
+                              "type": "string"
+                            },
+                            {
+                              "const": "unknown",
+                              "type": "string"
+                            },
+                            {
+                              "const": "stale",
+                              "type": "string"
+                            },
+                            {
+                              "const": "conflict",
+                              "type": "string"
+                            },
+                            {
+                              "const": "pending",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "path": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "suggested_action": {
+                          "type": "string"
+                        },
+                        "evidence_refs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "handler": {
+                          "type": "object",
+                          "required": [
+                            "role",
+                            "principal_id"
+                          ],
+                          "properties": {
+                            "role": {
+                              "type": "string"
+                            },
+                            "principal_id": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "fields": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "key",
+                        "label",
+                        "kind",
+                        "value",
+                        "target"
+                      ],
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "const": "text",
+                              "type": "string"
+                            },
+                            {
+                              "const": "date",
+                              "type": "string"
+                            },
+                            {
+                              "const": "links",
+                              "type": "string"
+                            },
+                            {
+                              "const": "dependencies",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "value": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "target": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "kind",
+                                "block_id",
+                                "component_id",
+                                "create_type",
+                                "attribute"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "const": "component",
+                                  "type": "string"
+                                },
+                                "block_id": {
+                                  "type": "string"
+                                },
+                                "component_id": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "create_type": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "attribute": {
+                                  "anyOf": [
+                                    {
+                                      "const": "start_date",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "finish_date",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "kind",
+                                "block_id"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "const": "state",
+                                  "type": "string"
+                                },
+                                "block_id": {
+                                  "anyOf": [
+                                    {
+                                      "const": "current_state",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "blockers",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "materials",
+                                      "type": "string"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "kind"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "const": "depends_on",
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "counts": {
+                    "type": "object",
+                    "patternProperties": {
+                      "^(.*)$": {
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "meaning": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "TaskRepairInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "clientRequestId",
+          "fieldKey",
+          "value",
+          "classification",
+          "quote",
+          "occurredAt"
+        ],
+        "properties": {
+          "clientRequestId": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          },
+          "fieldKey": {
+            "minLength": 1,
+            "maxLength": 300,
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "maxLength": 12000,
+                "type": "string"
+              },
+              {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "maxLength": 2048,
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "classification": {
+            "anyOf": [
+              {
+                "const": "fact",
+                "type": "string"
+              },
+              {
+                "const": "decision",
+                "type": "string"
+              },
+              {
+                "const": "suggestion",
+                "type": "string"
+              },
+              {
+                "const": "question",
+                "type": "string"
+              }
+            ]
+          },
+          "quote": {
+            "minLength": 1,
+            "maxLength": 20000,
+            "type": "string"
+          },
+          "occurredAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "TaskRepairView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "taskId",
+          "taskTitle",
+          "fieldKey",
+          "fieldLabel",
+          "classification",
+          "before",
+          "after",
+          "source",
+          "state",
+          "message",
+          "sourceReceiptId",
+          "receiptId",
+          "writebackStatus",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "taskId": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "taskTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fieldKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fieldLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "classification": {
+            "anyOf": [
+              {
+                "const": "fact",
+                "type": "string"
+              },
+              {
+                "const": "decision",
+                "type": "string"
+              },
+              {
+                "const": "suggestion",
+                "type": "string"
+              },
+              {
+                "const": "question",
+                "type": "string"
+              }
+            ]
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "after": {
+            "anyOf": [
+              {
+                "maxLength": 12000,
+                "type": "string"
+              },
+              {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "maxLength": 2048,
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "title",
+              "version",
+              "quote",
+              "occurredAt",
+              "locator",
+              "links",
+              "meetingId",
+              "meetingRevision",
+              "payloadHash",
+              "conversationId",
+              "messageId"
+            ],
+            "properties": {
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "statement",
+                    "type": "string"
+                  },
+                  {
+                    "const": "conversation",
+                    "type": "string"
+                  },
+                  {
+                    "const": "meeting",
+                    "type": "string"
+                  }
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "quote": {
+                "type": "string"
+              },
+              "occurredAt": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "locator": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "links": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "meetingId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "meetingRevision": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "payloadHash": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "conversationId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "messageId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "state": {
+            "anyOf": [
+              {
+                "const": "needs_input",
+                "type": "string"
+              },
+              {
+                "const": "pending_decision",
+                "type": "string"
+              },
+              {
+                "const": "needs_source",
+                "type": "string"
+              },
+              {
+                "const": "ready",
+                "type": "string"
+              },
+              {
+                "const": "handed_off",
+                "type": "string"
+              },
+              {
+                "const": "blocked",
+                "type": "string"
+              },
+              {
+                "const": "verified",
+                "type": "string"
+              },
+              {
+                "const": "superseded",
+                "type": "string"
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceReceiptId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "receiptId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "writebackStatus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        }
+      },
+      "TaskRepairList": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "proposals"
+        ],
+        "properties": {
+          "proposals": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "taskId",
+                "taskTitle",
+                "fieldKey",
+                "fieldLabel",
+                "classification",
+                "before",
+                "after",
+                "source",
+                "state",
+                "message",
+                "sourceReceiptId",
+                "receiptId",
+                "writebackStatus",
+                "updatedAt"
+              ],
+              "properties": {
+                "id": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "taskId": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "taskTitle": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fieldKey": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fieldLabel": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "classification": {
+                  "anyOf": [
+                    {
+                      "const": "fact",
+                      "type": "string"
+                    },
+                    {
+                      "const": "decision",
+                      "type": "string"
+                    },
+                    {
+                      "const": "suggestion",
+                      "type": "string"
+                    },
+                    {
+                      "const": "question",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "before": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "after": {
+                  "anyOf": [
+                    {
+                      "maxLength": 12000,
+                      "type": "string"
+                    },
+                    {
+                      "maxItems": 50,
+                      "type": "array",
+                      "items": {
+                        "maxLength": 2048,
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "source": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "title",
+                    "version",
+                    "quote",
+                    "occurredAt",
+                    "locator",
+                    "links",
+                    "meetingId",
+                    "meetingRevision",
+                    "payloadHash",
+                    "conversationId",
+                    "messageId"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "statement",
+                          "type": "string"
+                        },
+                        {
+                          "const": "conversation",
+                          "type": "string"
+                        },
+                        {
+                          "const": "meeting",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "quote": {
+                      "type": "string"
+                    },
+                    "occurredAt": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "locator": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "links": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "meetingId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "meetingRevision": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "payloadHash": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "conversationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "messageId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "state": {
+                  "anyOf": [
+                    {
+                      "const": "needs_input",
+                      "type": "string"
+                    },
+                    {
+                      "const": "pending_decision",
+                      "type": "string"
+                    },
+                    {
+                      "const": "needs_source",
+                      "type": "string"
+                    },
+                    {
+                      "const": "ready",
+                      "type": "string"
+                    },
+                    {
+                      "const": "handed_off",
+                      "type": "string"
+                    },
+                    {
+                      "const": "blocked",
+                      "type": "string"
+                    },
+                    {
+                      "const": "verified",
+                      "type": "string"
+                    },
+                    {
+                      "const": "superseded",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "message": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sourceReceiptId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "receiptId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "writebackStatus": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TaskRepairHandoff": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "proposal",
+          "scopeId",
+          "stage",
+          "instruction"
+        ],
+        "properties": {
+          "proposal": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "taskId",
+              "taskTitle",
+              "fieldKey",
+              "fieldLabel",
+              "classification",
+              "before",
+              "after",
+              "source",
+              "state",
+              "message",
+              "sourceReceiptId",
+              "receiptId",
+              "writebackStatus",
+              "updatedAt"
+            ],
+            "properties": {
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "taskId": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "taskTitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "fieldKey": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "fieldLabel": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "classification": {
+                "anyOf": [
+                  {
+                    "const": "fact",
+                    "type": "string"
+                  },
+                  {
+                    "const": "decision",
+                    "type": "string"
+                  },
+                  {
+                    "const": "suggestion",
+                    "type": "string"
+                  },
+                  {
+                    "const": "question",
+                    "type": "string"
+                  }
+                ]
+              },
+              "before": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "after": {
+                "anyOf": [
+                  {
+                    "maxLength": 12000,
+                    "type": "string"
+                  },
+                  {
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "maxLength": 2048,
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "source": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "title",
+                  "version",
+                  "quote",
+                  "occurredAt",
+                  "locator",
+                  "links",
+                  "meetingId",
+                  "meetingRevision",
+                  "payloadHash",
+                  "conversationId",
+                  "messageId"
+                ],
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "const": "statement",
+                        "type": "string"
+                      },
+                      {
+                        "const": "conversation",
+                        "type": "string"
+                      },
+                      {
+                        "const": "meeting",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
+                  },
+                  "quote": {
+                    "type": "string"
+                  },
+                  "occurredAt": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "locator": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "links": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "meetingId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "meetingRevision": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "payloadHash": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "conversationId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "messageId": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              "state": {
+                "anyOf": [
+                  {
+                    "const": "needs_input",
+                    "type": "string"
+                  },
+                  {
+                    "const": "pending_decision",
+                    "type": "string"
+                  },
+                  {
+                    "const": "needs_source",
+                    "type": "string"
+                  },
+                  {
+                    "const": "ready",
+                    "type": "string"
+                  },
+                  {
+                    "const": "handed_off",
+                    "type": "string"
+                  },
+                  {
+                    "const": "blocked",
+                    "type": "string"
+                  },
+                  {
+                    "const": "verified",
+                    "type": "string"
+                  },
+                  {
+                    "const": "superseded",
+                    "type": "string"
+                  }
+                ]
+              },
+              "message": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sourceReceiptId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "receiptId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "writebackStatus": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "updatedAt": {
+                "type": "string"
+              }
+            }
+          },
+          "scopeId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "const": "source",
+                "type": "string"
+              },
+              {
+                "const": "change",
+                "type": "string"
+              },
+              {
+                "const": "blocked",
+                "type": "string"
+              }
+            ]
+          },
+          "request": {
+            "type": "object",
+            "patternProperties": {
+              "^(.*)$": {}
+            }
+          },
+          "package": {
+            "type": "object",
+            "patternProperties": {
+              "^(.*)$": {}
+            }
+          },
+          "instruction": {
+            "type": "string"
+          }
+        }
+      },
+      "TaskRepairReceiptInput": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "stage",
+              "receiptId"
+            ],
+            "properties": {
+              "stage": {
+                "const": "source",
+                "type": "string"
+              },
+              "receiptId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "stage"
+            ],
+            "properties": {
+              "stage": {
+                "const": "change",
+                "type": "string"
+              },
+              "receiptId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "TaskMeetingInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskIds"
+        ],
+        "properties": {
+          "taskIds": {
+            "maxItems": 10,
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TaskMeetingAnalysis": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "meetingId",
+          "revision",
+          "payloadHash",
+          "coverage",
+          "proposals"
+        ],
+        "properties": {
+          "meetingId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "payloadHash": {
+            "type": "string"
+          },
+          "coverage": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "sectionId",
+                "heading",
+                "body",
+                "disposition",
+                "reason",
+                "proposalIds"
+              ],
+              "properties": {
+                "sectionId": {
+                  "type": "string"
+                },
+                "heading": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "disposition": {
+                  "anyOf": [
+                    {
+                      "const": "proposed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "no_task_change",
+                      "type": "string"
+                    },
+                    {
+                      "const": "needs_clarification",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "proposalIds": {
+                  "type": "array",
+                  "items": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "proposals": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "taskId",
+                "taskTitle",
+                "fieldKey",
+                "fieldLabel",
+                "classification",
+                "before",
+                "after",
+                "source",
+                "state",
+                "message",
+                "sourceReceiptId",
+                "receiptId",
+                "writebackStatus",
+                "updatedAt"
+              ],
+              "properties": {
+                "id": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "taskId": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "taskTitle": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fieldKey": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fieldLabel": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "classification": {
+                  "anyOf": [
+                    {
+                      "const": "fact",
+                      "type": "string"
+                    },
+                    {
+                      "const": "decision",
+                      "type": "string"
+                    },
+                    {
+                      "const": "suggestion",
+                      "type": "string"
+                    },
+                    {
+                      "const": "question",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "before": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "after": {
+                  "anyOf": [
+                    {
+                      "maxLength": 12000,
+                      "type": "string"
+                    },
+                    {
+                      "maxItems": 50,
+                      "type": "array",
+                      "items": {
+                        "maxLength": 2048,
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "source": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "title",
+                    "version",
+                    "quote",
+                    "occurredAt",
+                    "locator",
+                    "links",
+                    "meetingId",
+                    "meetingRevision",
+                    "payloadHash",
+                    "conversationId",
+                    "messageId"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "statement",
+                          "type": "string"
+                        },
+                        {
+                          "const": "conversation",
+                          "type": "string"
+                        },
+                        {
+                          "const": "meeting",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "quote": {
+                      "type": "string"
+                    },
+                    "occurredAt": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "locator": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "links": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "meetingId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "meetingRevision": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "payloadHash": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "conversationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "messageId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "state": {
+                  "anyOf": [
+                    {
+                      "const": "needs_input",
+                      "type": "string"
+                    },
+                    {
+                      "const": "pending_decision",
+                      "type": "string"
+                    },
+                    {
+                      "const": "needs_source",
+                      "type": "string"
+                    },
+                    {
+                      "const": "ready",
+                      "type": "string"
+                    },
+                    {
+                      "const": "handed_off",
+                      "type": "string"
+                    },
+                    {
+                      "const": "blocked",
+                      "type": "string"
+                    },
+                    {
+                      "const": "verified",
+                      "type": "string"
+                    },
+                    {
+                      "const": "superseded",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "message": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sourceReceiptId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "receiptId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "writebackStatus": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "updatedAt": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TaskMeetingRepairInput": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "sectionId",
+          "input"
+        ],
+        "properties": {
+          "taskId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "sectionId": {
+            "minLength": 1,
+            "maxLength": 64,
+            "type": "string"
+          },
+          "input": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "clientRequestId",
+              "fieldKey",
+              "value",
+              "classification",
+              "quote",
+              "occurredAt"
+            ],
+            "properties": {
+              "clientRequestId": {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              "fieldKey": {
+                "minLength": 1,
+                "maxLength": 300,
+                "type": "string"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "maxLength": 12000,
+                    "type": "string"
+                  },
+                  {
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "maxLength": 2048,
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "classification": {
+                "anyOf": [
+                  {
+                    "const": "fact",
+                    "type": "string"
+                  },
+                  {
+                    "const": "decision",
+                    "type": "string"
+                  },
+                  {
+                    "const": "suggestion",
+                    "type": "string"
+                  },
+                  {
+                    "const": "question",
+                    "type": "string"
+                  }
+                ]
+              },
+              "quote": {
+                "minLength": 1,
+                "maxLength": 20000,
+                "type": "string"
+              },
+              "occurredAt": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "TaskRepairRevision": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "input"
+        ],
+        "properties": {
+          "taskId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "input": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "clientRequestId",
+              "fieldKey",
+              "value",
+              "classification",
+              "quote",
+              "occurredAt"
+            ],
+            "properties": {
+              "clientRequestId": {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              },
+              "fieldKey": {
+                "minLength": 1,
+                "maxLength": 300,
+                "type": "string"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "maxLength": 12000,
+                    "type": "string"
+                  },
+                  {
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "maxLength": 2048,
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "classification": {
+                "anyOf": [
+                  {
+                    "const": "fact",
+                    "type": "string"
+                  },
+                  {
+                    "const": "decision",
+                    "type": "string"
+                  },
+                  {
+                    "const": "suggestion",
+                    "type": "string"
+                  },
+                  {
+                    "const": "question",
+                    "type": "string"
+                  }
+                ]
+              },
+              "quote": {
+                "minLength": 1,
+                "maxLength": 20000,
+                "type": "string"
+              },
+              "occurredAt": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
       "Card": {
         "additionalProperties": false,
         "$id": "Card",

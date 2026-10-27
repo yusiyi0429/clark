@@ -49,6 +49,7 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | | `MISSION_CARD_KNOWN_MISSIONS_FILE` | 起草时参考的已知本月任务；文件缺失照常起草 |
 | 服务令牌 | `ONTOLOGY_SERVICE_TOKEN` | 本体拉每周进展的只读令牌；不填时对应接口返回 503 |
 | | `INTERNAL_CHAT_TOKEN` | 独立 Chat 读确认会议（`/internal/confirmed-meetings`）的服务凭据；不填时接口一律 404 |
+| | `CHAT_SERVICE_URL` | 首页对话改走独立 Chat 服务的地址（预发 `http://chat:3101`），用 `INTERNAL_CHAT_TOKEN` 转发本人身份；不填时走天枢自己的对话，对象页对话不受影响 |
 | 本体 | `TKOS_WORLD_API_URL`、`TKOS_WORLD_AGENT_TOKEN` | 都不填时本体相关能力如实显示未配置 |
 | | `TKOS_WORLD_AGENT_TOKEN_FILE` | 从文件读凭证（只在内存里）；读失败时健康接口报告错误码 |
 | | `TKOS_WORLD_INSTANCE` | `mvp`；可选 `demo`、`formal`、`tk`，对应 `apps/api/config/world-instance*.json` |

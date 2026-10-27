@@ -1,4 +1,5 @@
 import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
+import { taskQualityPaths, taskQualitySchemas } from "./taskQualityOpenapi.js";
 import { AcceptIssueDraftRequest, IssueDraftResponse } from "./issueDrafts.js";
 import {
   RequestStep, RequestPerson, RequestRecipientView, RequestQuestionView, RequestClarification, RequestView, RequestResponse,
@@ -255,6 +256,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
     },
     servers: [{ url: "/" }],
     paths: {
+      ...taskQualityPaths,
       "/api/auth/login": {
         post: {
           operationId: "login",
@@ -2908,6 +2910,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
     },
     components: {
       schemas: {
+        ...taskQualitySchemas,
         Card: Card as JsonSchema,
         CardCollection: CardCollection as JsonSchema,
         ActionDescriptor: ActionDescriptor as JsonSchema,

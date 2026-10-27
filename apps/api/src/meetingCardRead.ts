@@ -1,4 +1,4 @@
-import type { TCard, TMeetingActionItem, TMeetingCardConfirmation, TMeetingCardSync, TMeetingCardV1Payload } from "@warmap/contracts";
+import type { TCard, TMeetingActionItem, TMeetingCardConfirmation, TMeetingCardSync, TMeetingCardV1Payload, TMeetingCardKind } from "@warmap/contracts";
 import { queryTokens } from "./company.js";
 import { canReadMeetingCard, type Viewer } from "./meetingCard.js";
 import { confirmedView, currentConfirmation } from "./meetingCardConfirm.js";
@@ -22,7 +22,7 @@ export class PayloadHashMismatchError extends Error {
   }
 }
 
-type ConfirmedMeeting = { status: "confirmed"; payload: TMeetingCardV1Payload; confirmation: TMeetingCardConfirmation; syncReceipt: TMeetingCardSync };
+type ConfirmedMeeting = { status: "confirmed"; kind: TMeetingCardKind; payload: TMeetingCardV1Payload; confirmation: TMeetingCardConfirmation; syncReceipt: TMeetingCardSync };
 type CardRead = ConfirmedMeeting | { status: "unconfirmed" };
 export type ConfirmedMeetingRead = CardRead | { status: "legacy"; summary: string; items: { kind: string; text: string; status: string }[] };
 
@@ -32,7 +32,7 @@ async function readCard(q: Query, meetingId: string): Promise<CardRead | null> {
   const current = await currentConfirmation(q, meetingId);
   if (!current) return { status: "unconfirmed" };
   if (payloadHash(current.payload) !== current.confirmation.payloadHash) throw new PayloadHashMismatchError(meetingId);
-  return { status: "confirmed", payload: current.payload, confirmation: current.confirmation, syncReceipt: confirmedView(current).sync! };
+  return { status: "confirmed", kind: current.kind, payload: current.payload, confirmation: current.confirmation, syncReceipt: confirmedView(current).sync! };
 }
 
 /** 一场会的确认版；看不到或不存在返回 null。 */
