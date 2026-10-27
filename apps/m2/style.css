@@ -1320,3 +1320,10 @@ body.is-col-resizing{cursor:col-resize;user-select:none}
 :root .plan-doc-canvas .review-card .sign-line strong{font-size:13px;font-weight:700;color:#31495f}
 :root .plan-doc-canvas .review-card .sign-line:not(.is-signed):not(.is-mine) strong{color:#8a98a6;font-weight:500}
 :root .plan-doc-canvas .review-card .insight-input{font-size:13px}
+/* 管理: buttons side by side, unusual lines under them (2026-10-27) */
+.admin-actions{display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px}
+.admin-actions .admin-reveal{margin:0;display:contents}
+.admin-actions .admin-confirm,.admin-actions .admin-reveal>p,.admin-actions .admin-reveal>ul{flex-basis:100%}
+.admin-block>.admin-line.is-failed,.admin-block>.admin-line.is-running{margin-top:10px}
+.admin-secondary{border:1px solid #002fa7!important;background:#fff!important;color:#002fa7!important}
+:root .admin-actions .admin-secondary{border:1px solid #002fa7!important;background:#fff!important;color:#002fa7!important;box-shadow:none}

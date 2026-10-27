@@ -8,7 +8,7 @@ import {formatGenerationDuration} from './EntryMetadata.jsx';
 const at=iso=>{const t=new Date(iso||'');return !iso||Number.isNaN(t.getTime())?'未记录':t.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});};
 const took=ms=>Number.isFinite(ms)&&ms>0?formatGenerationDuration({durationMs:ms}):'未记录';
 // Five facts per stage, nothing else (陈溪南 2026-10-27): model, skill, ontology read, generated, time taken.
-function Stage({title,model,skill,readAt,generatedAt,durationMs,status,confirmText,button,busy,disabled,onConfirm,extra}){
+function Stage({title,model,skill,readAt,generatedAt,durationMs,status,confirmText,button,busy,disabled,onConfirm,extra,side}){
  const [sure,setSure]=useState(false);
  return <section className="admin-block">
   <h3>{title}</h3>
@@ -19,9 +19,10 @@ function Stage({title,model,skill,readAt,generatedAt,durationMs,status,confirmTe
    <div><dt>生成时间</dt><dd>{at(generatedAt)}</dd></div>
    <div><dt>耗时</dt><dd>{took(durationMs)}</dd></div>
   </dl>
+  {/* Same shape on both sides (陈溪南 2026-10-27): the facts, the buttons in one row, then anything unusual below. */}
+  <div className="admin-actions">{sure?<div className="admin-confirm"><p className="admin-warn">{confirmText}</p><div className="proposal-actions"><Button className="primary" isDisabled={busy} onPress={async()=>{await onConfirm();setSure(false);}}>{busy?'正在开始…':'确认'+button}</Button><Button className="plain" onPress={()=>setSure(false)}>取消</Button></div></div>
+   :<Button className="primary" isDisabled={disabled||busy} onPress={()=>setSure(true)}>{button}</Button>}{side}</div>
   {status}
-  {sure?<div className="admin-confirm"><p className="admin-warn">{confirmText}</p><div className="proposal-actions"><Button className="primary" isDisabled={busy} onPress={async()=>{await onConfirm();setSure(false);}}>{busy?'正在开始…':'确认'+button}</Button><Button className="plain" onPress={()=>setSure(false)}>取消</Button></div></div>
-   :<Button className="primary" isDisabled={disabled||busy} onPress={()=>setSure(true)}>{button}</Button>}
   {extra}
  </section>;
 }
@@ -33,7 +34,7 @@ function RevealInsights({memberId}){
  const names=(state?.missing||[]).map(m=>typeof m==='string'?m:Array.isArray(m.missing)?`${m.title||m.cardId}：${m.missing.join('、')}`:[m.name,m.title].filter(Boolean).join(' · '));
  return <div className="admin-reveal">
   {sure?<div className="admin-confirm"><p>公开后，所有人都能看到每份复盘下的全部洞察，Nexus 会为每份复盘写一条综合。</p><div className="proposal-actions"><Button className="primary" isDisabled={busy} onPress={reveal}>{busy?'正在公开…':'确认公开'}</Button><Button className="plain" onPress={()=>setSure(false)}>取消</Button></div></div>
-   :<Button className="plain" isDisabled={busy} onPress={()=>setSure(true)}>公开洞察</Button>}
+   :<Button className="primary admin-secondary" isDisabled={busy} onPress={()=>setSure(true)}>公开洞察</Button>}
   {state?.error&&<p className="admin-line is-failed" role="alert">{state.error}</p>}
   {state?.ok&&<p className="admin-line">{names.length?'已公开。还没交洞察的：':'已公开，大家都交了洞察。'}</p>}
   {state?.ok&&names.length>0&&<ul className="admin-checks">{names.map((t,i)=><li key={i}>{t}</li>)}</ul>}
@@ -50,7 +51,7 @@ export function RoundControls({memberId,review,plan}){
   <Stage title="复盘" skill={review?.skill} readAt={review?.readAt} generatedAt={review?.generatedAt||review?.loadedAt} model={review?.model||plan.currentModel} durationMs={review?.durationMs} button={has?'重新生成复盘':'生成复盘'} busy={busy} disabled={running} onConfirm={()=>start()}
    confirmText={has?`${review.confirmed>0?`已有 ${review.confirmed} 份复盘被确认。`:''}重新读取本体、生成新的复盘：现有复盘和所有讨论归档保存，聊天框从新一轮开始，大家要重新确认。`:'读取本体、生成本月复盘，生成好后各单元群会收到通知。'}
    status={<>{running&&<p className="admin-line is-running">正在生成复盘{job.total?`（${job.done||0}/${job.total}）`:''}</p>}{job?.status==='failed'&&<p className="admin-line is-failed">上次生成没完成：{job.error||'原因未记录'} <Button className="plain" isDisabled={busy} onPress={()=>start({resume:true})}>续跑</Button></p>}{error&&<p className="admin-line is-failed" role="alert">{error}</p>}</>}
-   extra={has&&<RevealInsights memberId={memberId}/>}/>
+   side={has&&<RevealInsights memberId={memberId}/>}/>
   <Stage title="拆解" skill={plan.skill} readAt={plan.readAt} generatedAt={plan.generatedAt} model={plan.model} durationMs={plan.durationMs} button="重新生成拆解" busy={plan.pending} disabled={planRunning} onConfirm={plan.onRestart}
    confirmText={`${unconfirmed?`复盘还有 ${review.total-review.confirmed} 份没确认，现在生成会用当前的复盘。`:''}重新读取本体、生成新的拆解，生成期间仍显示当前这一轮。`}
    extra={plan.checks} status={<>{planRunning&&<p className="admin-line is-running">正在生成拆解{pj.total?`（${pj.done||0}/${pj.total}）`:''}</p>}{pj?.status==='failed'&&<p className="admin-line is-failed">上次生成没完成：{pj.error||'原因未记录'}</p>}</>}/>
