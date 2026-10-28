@@ -7,7 +7,7 @@
 - 主机 tokenhub-prod-app-01（115.191.26.230），SSH 端口 22，ED25519 主机指纹 `SHA256:Uf7EHr9mioshiiqsNA54//XLSHRvT8W9QnVi0yLrU7E`。
 - 目录 `/srv/tokenhub/apps/tianshu`；宿主机 Nginx 把 tk.tokenkingos.com 整域名转给 `127.0.0.1:3130`（edge/Caddy）。
 - 现网 compose 组合：`infra/docker-compose.yml` + `infra/volcano.override.yml`。10/8 的发布把 api/web 的镜像、构建目录与 BUILD_SHA 写进了现网 `volcano.override.yml`（与仓库版不同，不要用仓库版覆盖它）。
-- 每个版本的源码解在 `releases/<短SHA>`，镜像在主机上构建；部署目录本身不是 Git 工作区。
+- 每个版本的源码解在 `releases/<短SHA>`，镜像在本机构建后上传加载（10/28 起）；部署目录本身不是 Git 工作区。
 
 脚本首次运行时生成 `infra/compose-files`，记下现网 compose 组合；之后切换会把本次的 `infra/release.pin.yml`（固定镜像与构建目录）追加进去。只发部分服务时，pin 里其他服务沿用现网 pin 原来的固定。**此后手工执行 compose 时也按这份清单带全部 `-f`**，否则会回到旧镜像或丢掉 M2 路由：
 
@@ -18,18 +18,19 @@ sudo docker compose $(sed 's/^/-f /' infra/compose-files) --env-file infra/.env 
 
 ## 步骤
 
-1. 本机打包合入 main 的提交并上传（不经聊天或 Git 以外的渠道）：
+1. 本机构建镜像、打包源码并上传（不经聊天或 Git 以外的渠道）。**不在正式主机上构建**：10/28 在主机上构建 be4a86f 时 8 核负载到 46 以上，持续十几分钟，期间对话请求卡住送不到 Chat。
    ```bash
-   git archive --format=tar.gz -o source-<短SHA>.tgz <完整SHA>
-   scp source-<短SHA>.tgz <用户>@115.191.26.230:/tmp/
+   bash infra/staging/build-images.sh <完整SHA>          # 只发前端时末尾加 web
+   scp source-<短SHA>.tgz images-<短SHA>.tar.gz images-<短SHA>.tar.gz.sha256 <用户>@115.191.26.230:/tmp/
    ```
+   上传后在主机 `/tmp` 下 `sha256sum -c images-<短SHA>.tar.gz.sha256`。
 2. 服务器上从源码包取出同版脚本：`tar -xzf /tmp/source-<短SHA>.tgz -O infra/staging/release.sh > /tmp/release.sh`，以下命令里的 `release.sh` 指它。新变量先写进 `infra/.env`（`sudo` 编辑，保持 600），因为构建前的 `config` 会检查必填变量。
-3. 候选构建，不碰现网：
+3. 候选准备，只加载镜像、不构建，不碰现网：
    ```bash
-   sudo env BUILD_SERVICES="api web" bash release.sh prepare <完整SHA> /tmp/source-<短SHA>.tgz
+   sudo env BUILD_SERVICES="api web" IMAGES_TAR=/tmp/images-<短SHA>.tar.gz bash release.sh prepare <完整SHA> /tmp/source-<短SHA>.tgz
    ```
-   主机直连 Docker Hub/npm 不稳定时，按 `runbook.md` §0.5 配镜像源；仍失败就在本机构建同标签镜像后 `docker save | gzip`，上传校验 SHA-256 再 `docker load`，镜像须带 `tianshu.revision=<完整SHA>` 标签。
-4. 切换（会先停 api 做一次加密备份，前台有一两分钟不可用）：
+   不给 `IMAGES_TAR` 时退回在主机上构建（只在本机构建不了时用，避开使用时段）。
+4. 切换（会先停 api 做一次加密备份，前台有一两分钟不可用，正在进行的对话会断）。避开大家使用的时段，切换前在「TKOS天枢系统」群里说一声：
    ```bash
    sudo env BUILD_SERVICES="api web" bash release.sh switch <完整SHA>
    ```
