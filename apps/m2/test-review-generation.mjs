@@ -80,6 +80,30 @@ test('复盘生成：单元按名称认，缺 RU PO 的单元不复盘，公司 
  const noOwner=buildReviewInput(sources({withMissionOwner:false}));assert.equal(noOwner.stages[0][0].owner,'刘人豪');assert.match(noOwner.stages[0][0].missing[0],/没写负责人/);
 });
 
+test('临时挂 Method 的灯塔段落按明确业务归属读取，保留未核实状态且不带入 Method 正文',()=>{
+ const src=sources();
+ src.heads.rus.push({object_id:id(4),domain_id:'d-method',title:'Method'},{object_id:id(5),domain_id:'d-bf01',title:'灯塔项目'});
+ src.heads.goals.push({object_id:id(11),domain_id:'d-method'},{object_id:id(12),domain_id:'d-bf01'});
+ src.objects[id(11)]={business:{title:'Method 10 月',blocks:blocks('评价方法')},identity:who('白田田')};
+ src.objects[id(12)]={business:{title:'灯塔 10 月',blocks:blocks('启动准备')},identity:who('刘明华')};
+ src.heads.missions.push({object_id:id(21),domain_id:'d-method'},{object_id:id(22),domain_id:'d-bf01'});
+ src.objects[id(21)]={business:{title:'评价方法',blocks:blocks('评价方法'),relations:[{field:'goal_ref',value:{object_id:id(11)}}]},identity:who('白田田')};
+ src.objects[id(22)]={business:{title:'启动准备',blocks:blocks('准备计划'),relations:[{field:'goal_ref',value:{object_id:id(12)}}]},identity:who('白田田')};
+ src.heads.snapshots.push({object_id:id(40),domain_id:'d-method'});
+ src.objects[id(40)]={title:'Method · 白田田日进展',as_of:'2026-10-20T10:00:00+08:00',subject_ref:{object_id:id(11)},blocks:[{display_name:'进展',text:'1. Method 自己的评价规则已形成，提及灯塔不代表归属灯塔。\n2. 【临时归档；业务归属：灯塔项目战场】两阶段计划工作簿 v6 已形成，尚未核实负责人接受。\n3. Method 的反馈还没收齐。'}]};
+ src.monthEvents.push({event_id:id(250),kind:'event.recorded',category:'other',occurred_at:'2026-10-20T12:00:00+08:00',subject_refs:[{object_id:id(11)}],content:{text:'1. 【临时归档；业务归属：灯塔项目战场】补充计划依赖，未验收。'}});
+ const input=buildReviewInput(src),lamp=input.stages.flat().find(c=>c.objectId===id(22)),method=input.stages.flat().find(c=>c.objectId===id(21));
+ assert.ok(lamp.evidence.some(e=>e.text.includes('两阶段计划工作簿 v6')&&e.text.includes('尚未核实负责人接受')&&e.originRef===id(40)&&/原挂载 method/.test(e.source)));
+ assert.ok(lamp.evidence.some(e=>e.text.includes('补充计划依赖，未验收')&&e.originRef===id(250)));
+ assert.ok(!lamp.evidence.some(e=>e.text.includes('Method 自己的评价规则')||e.text.includes('Method 的反馈还没收齐')));
+ assert.ok(!method.evidence.some(e=>e.text.includes('两阶段计划工作簿 v6')),'明确归属的段落不在 Method 再算一份');
+ assert.ok(method.evidence.some(e=>e.text.includes('Method 自己的评价规则')));
+ assert.ok(input.readReceipt.snapshots.includes(id(40)));assert.ok(input.readReceipt.events.includes(id(250)));
+ // A marked section after a long original paragraph is routed before clipping.
+ src.objects[id(40)].blocks[0].text='1. Method '+ '方法研究'.repeat(1200)+'\n2. 【临时归档；业务归属：灯塔项目战场】长文后的灯塔计划，待核实。';
+ const long=buildReviewInput(src).stages.flat().find(c=>c.objectId===id(22));assert.ok(long.evidence.some(e=>e.text.includes('长文后的灯塔计划，待核实')));
+});
+
 const answer=(level,verdict='未达成')=>JSON.stringify({analysis:'a',review:{verdict,verdictReason:'理由',targets:['**t：**x'],causes:[{text:'**c：**y',ask:''}],nextInputs:[{id:'x-1',type:'欠账',text:'**n：**z'}],...(level==='company'?{ltoReview:{choice:'建议维持',reason:'r'}}:{})}});
 function fakeGateway({refuse=new Set(),refuseAlways=new Set(),refuseOnce=new Set(),verdict}={}){
  const calls=[],refusedOnce=new Set();

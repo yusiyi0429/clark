@@ -41,7 +41,7 @@ export function confirmationProgress(state,actor,readable){
  const confirmable=readable.filter(c=>confirmationSlots(c).length);
  const unitTitle=c=>currentVersion(state.cards[c.unit||c.id]||c).content.title;
  const label=c=>{const v=currentVersion(c);return {title:v.content.title,level:c.level,domain:c.level==='po'?undefined:unitTitle(c),version:v.number,status:cardStatus(c)};};
- const mine=c=>confirmationSlots(c).filter(slot=>slot==='ceo'?actor.ceo===true:slot==='unitDri'?(actor.unitDri||[]).includes(c.unit||c.id):(actor.missionDri||[]).includes(c.id));
+ const mine=c=>confirmationSlots(c).filter(slot=>slot==='ceo'?actor.ceo===true:slot==='unitDri'?(actor.unitDri||[]).includes(c.unit||c.id):c.kind==='review'?String(currentVersion(c).content.owner||'').split(/[、,，\s]+/).includes(actor.name):(actor.missionDri||[]).includes(c.id));
  const signedBy=c=>currentVersion(c).signatures.map(s=>name(s.actorId));
  const counts={};for(const c of confirmable){const level=counts[c.level]??={};const st=cardStatus(c);level[st]=(level[st]||0)+1;}
  const cap=list=>list.slice(0,30);
