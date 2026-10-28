@@ -35,8 +35,8 @@ const QualityCall = Type.Union([
 ]);
 const qualityDefinitions: Tool[] = [
   { name: "list_task_repairs", description: "列出本人指定视角的 Task 补齐草稿和上次核对状态。不会写 world。", inputSchema: QualityList as Tool["inputSchema"], annotations: { readOnlyHint: true } },
-  { name: "get_task_repair_handoff", description: "读取本人一项最新补齐请求。stage=source 时先核对个人 world scope，取得用户对这项来源的确认后用 tkos-world act 执行 request 原文；回传来源回执，再读取字段卡。stage=change 时把 package 保存为文件，用 tkos-task-writeback import <文件> --save <私有计划文件> 导入；审阅完整差异和指纹，取得用户对此项的明确确认后再 apply。重试保留原键原文，不批量批准，不通过业务门。", inputSchema: QualityGet as Tool["inputSchema"], annotations: { readOnlyHint: true } },
-  { name: "report_task_repair_receipt", description: "回传个人 world 操作的真实回执；服务只读核验原请求并复查缺口。stage=change 可不带 receiptId 以查找原请求回执。来源记录完成不等于字段完成，字段完成不等于治理确认。", inputSchema: QualityReceipt as Tool["inputSchema"], annotations: { idempotentHint: true } },
+  { name: "get_task_repair_handoff", description: "读取本人一项最新补齐请求。stage=source 时先核对个人 world scope，取得用户对这项来源的确认后用 tkos-world act 执行 request 原文；回传来源回执，再读取字段卡。stage=change 时可把 package.input 原样交 world_app_prepare_task_change，或用 tkos-task-writeback import 导入 package。审阅完整差异和指纹，取得用户对此项的明确确认后才提交；保留准确 request 与 confirmation，丢响应用另一客户端按原 submission 核验。重试保留原键原文，不批量批准，不通过业务门。", inputSchema: QualityGet as Tool["inputSchema"], annotations: { readOnlyHint: true } },
+  { name: "report_task_repair_receipt", description: "回传个人 world 操作的真实回执；服务只读核验原请求并复查缺口。stage=change 时，插件 submit/verify 返回的 verification_command 原样放入 verificationCommand；不要传个人 token 或 submission。可不带 receiptId 以查找准确原命令回执。来源记录完成不等于字段完成，字段完成不等于治理确认。", inputSchema: QualityReceipt as Tool["inputSchema"], annotations: { idempotentHint: true } },
 ];
 
 const ListInput = Type.Object({ status: Type.Optional(Type.Union([Type.Literal("open"), Type.Literal("all")])) }, { additionalProperties: false });

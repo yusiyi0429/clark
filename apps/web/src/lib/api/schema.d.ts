@@ -4260,6 +4260,20 @@ export interface components {
             /** @constant */
             stage: "change";
             receiptId?: string;
+            verificationCommand?: {
+                /** @constant */
+                interface_version: "tkos.task-writeback/0.1";
+                approval_digest: string;
+                action: {
+                    [key: string]: unknown;
+                };
+                baseline: {
+                    [key: string]: unknown;
+                };
+                source: {
+                    [key: string]: unknown;
+                };
+            };
         };
         TaskMeetingInput: {
             taskIds: string[];

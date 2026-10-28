@@ -10,10 +10,11 @@ import type { FastifyInstance } from "fastify";
 import { createTestApp } from "../test/helpers.js";
 
 const config = JSON.parse(await readFile(process.argv[2], "utf8")) as {
-  worldUrl: string; readerToken: string; humanToken: string; taskId: string; scopeId: string; python: string; chatCheckout: string;
+  worldUrl: string; readerToken: string; humanToken: string; taskId: string; scopeId: string; python: string; chatCheckout: string; isolatedPort: string;
 };
 const adminUrl = new URL(process.env.TEST_PG_URL!);
-assert.equal(adminUrl.port, "55212");
+assert.equal(adminUrl.port, config.isolatedPort);
+assert.equal(adminUrl.username, "tkos_acceptance_admin");
 assert.ok(["127.0.0.1", "localhost"].includes(adminUrl.hostname));
 assert.equal(new URL(config.worldUrl).hostname, "127.0.0.1");
 const identityResponse = await fetch(config.worldUrl + "/v1/whoami", { redirect: "error", headers: { authorization: `Bearer ${config.readerToken}` } });
