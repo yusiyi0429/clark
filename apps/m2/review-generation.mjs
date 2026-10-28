@@ -273,6 +273,8 @@ export function jargonOf(text){
 // 「M03｜灯塔……」: a code prefix the ontology title carries is left off the review card (陈溪南 2026-10-27, no codes); a code that is
 // part of the name (「01-1 对本期……」) stays, and the ontology title itself is untouched.
 export const displayTitle=t=>{const s=String(t||'').trim(),bare=s.replace(/^[MT]\d{1,2}\s*[｜|:：]\s*/,'');return bare||s;};
+// 每人被问到的问题数 across the round so far (复盘技能 2.1.7, measured only): 10/27 刘明华 was asked 22.
+export const askLoad=reviews=>{const n={};for(const r of reviews)for(const x of r?.nextInputs||[])if(x?.ask?.to)n[x.ask.to]=(n[x.ask.to]||0)+1;return Object.entries(n).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count}));};
 export function lengthFindings(r){
  const f=[];for(const s of textOf(r)){for(const sent of String(s).split(/[。；！？]/)){const n=visible(sent.replace(/^\*\*[^*]+\*\*/,'')).length;if(n>30)f.push({type:'长句',chars:n,text:sent.slice(0,60)});}
   for(const w of ['尚不能','仍需进一步','有待观察','闭环','赋能','打通','具备条件'])if(String(s).includes(w))f.push({type:'回避或空话',word:w,text:String(s).slice(0,60)});}
@@ -341,7 +343,7 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
   const verdictFacts=s2.filter(c=>run.reviews[c.id]).map(c=>({ref:c.id,verdict:run.reviews[c.id].verdict,children:c.children.map(id=>({ref:id,verdict:run.reviews[id]?.verdict||'生成失败'}))}));
   const reviews=all.map(c=>run.reviews[c.id]),brief=Object.fromEntries(all.map(c=>[c.id,{commitment:c.commitment,evidence:(c.evidence||[]).map(e=>({id:e.id,asOf:e.asOf,text:e.text.slice(0,400)}))}]));
   if(!run.checked){
-   const found=(await Promise.all(skill.groups.map((g,i)=>ask('check-'+(i+1),{task:`按技能「产品生成整轮复盘候选·检查」执行第${i+1}组（${g.name}）检查，只查这些类型：${g.types.join('、')}。返回 JSON：{"issues":[{"ref":"复盘 ref","type":"问题类型","problem":"一句话","impact":"一句话","fixable":true}]}`,reviews,programFacts:{verdictFacts,perReview:facts},sources:brief}).catch(()=>({issues:[]}))))).flatMap(r=>r.issues||[]);
+   const found=(await Promise.all(skill.groups.map((g,i)=>ask('check-'+(i+1),{task:`按技能「产品生成整轮复盘候选·检查」执行第${i+1}组（${g.name}）检查，只查这些类型：${g.types.join('、')}。返回 JSON：{"issues":[{"ref":"复盘 ref","type":"问题类型","problem":"一句话","impact":"一句话","fixable":true}]}`,reviews,programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(reviews)},sources:brief}).catch(()=>({issues:[]}))))).flatMap(r=>r.issues||[]);
    run.issues=found;run.checked=true;await save(run);
   }
   const byRef=Object.groupBy(run.issues.filter(x=>x.fixable!==false&&skill.mustFix.includes(x.type)),x=>x.ref);

@@ -317,3 +317,8 @@ test('复盘技能 2.1.7 起个人复盘最多 1 个点名问题，单元 2 个�
  const roster=['刘明华','孙铭泽'],asks=o=>reviewProblems({reviews,failed:[]},input,{roster,...o}).filter(p=>/点名提问/.test(p.problem)).map(p=>p.unit+':'+p.problem);
  assert.deepEqual(asks({}),[]);assert.deepEqual(asks({askCaps:true}),['bf01-m1:点名提问最多 1 个，现在有 2 个']);
 });
+
+test('每人被问到的问题数：按人数，多的在前（只测量，交给检查）',async()=>{
+ const {askLoad}=await import('./review-generation.mjs');
+ assert.deepEqual(askLoad([{nextInputs:[{ask:{to:'刘明华'}},{ask:{to:'刘明华'}},{text:'x'}]},{nextInputs:[{ask:{to:'孙铭泽'}},{ask:{to:'刘明华'}}]},null]),[{name:'刘明华',count:3},{name:'孙铭泽',count:1}]);
+});
