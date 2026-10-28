@@ -52,3 +52,19 @@ test('模型输入不再请求隐藏原因，空改动不调用模型',async()=>
  assert.equal((await summarizer(p,{})).reason,p.reason);assert.equal(calls,1);
  assert.deepEqual(await summarizer({...p,patch:{},before:{}},{}),{changes:[],reason:p.reason});assert.equal(calls,1);
 });
+
+
+test('无效JSON和超长摘要分别反馈，完整修正后通过；所有调用共享时限',async()=>{
+ const long={id:'repair',cardId:'rv:agents-m4',before:{verdictReason:'原先缺少真实会议中的验收记录，材料仍然不完整'},patch:{verdictReason:'负责人报告会议验证过，但仍缺场次日期，暂无法核对'},reason:'原原因'};
+ let calls=0;const timeouts=[];
+ const summarize=createProposalSummarizer({complete:async(messages,opts)=>{timeouts.push(opts.timeoutMs);calls++;
+ if(calls===1)return {answer:'{"changes":[broken'};
+ if(calls===2){assert.match(messages.at(-1).content,/JSON语法错误/);return {answer:JSON.stringify({changes:[{index:0,before:'仍缺实会验收记录',after:'负责人报告会议验证过但仍然缺少具体场次及日期无法核对'.repeat(3)}]})};}
+ assert.match(messages.at(-1).content,/after共/);return {answer:JSON.stringify({changes:[{index:0,before:'仍缺实会验收记录',after:'负责人称会议验证过，缺场次日期，暂无法核对'}]})};}});
+ const result=await summarize(long,{});assert.equal(calls,3);assert.equal(result.reason,'原原因');assert.ok(timeouts.every(t=>t>0&&t<=120000));assert.ok(timeouts.at(-1)<=timeouts[0]);assert.equal((await summarize(long,{})).changes[0].after,result.changes[0].after);assert.equal(calls,3);
+});
+test('连续事实守卫失败最多三次且失败缓存清除，重试仍全量校验',async()=>{
+ const proposal={id:'unsafe',cardId:'rv:a',before:{verdictReason:'本体中没有这次持续采用行为的任何进展记录'},patch:{verdictReason:'负责人报告入会和键盘麦可用，5秒延迟仍无真实会议验收'}};
+ let calls=0;const summarize=createProposalSummarizer({complete:async()=>{calls++;return {answer:JSON.stringify({changes:[{index:0,before:'没有发生',after:'已持续采用三周，已通过验收'}]})};}});
+ await assert.rejects(summarize(proposal,{}));assert.equal(calls,3);await assert.rejects(summarize(proposal,{}));assert.equal(calls,6);
+});
