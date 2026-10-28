@@ -8,6 +8,7 @@ const feishu = { appId: "cli_test", appSecret: "test-secret", tokenKey: randomBy
 
 function fakeFeishu(openId = "ou_ceo", scope = "offline_access") {
   const exchanges: { code: string; redirectUri?: string }[] = [];
+  const sent: { to: string; text: string }[] = [];
   const client: FeishuClient = {
     authorizeUrl: (redirectUri, state, scope) => `https://accounts.feishu.cn/open-apis/authen/v1/authorize?${new URLSearchParams({ redirect_uri: redirectUri, state, scope })}`,
     async exchangeCode(code, redirectUri) {
@@ -17,8 +18,9 @@ function fakeFeishu(openId = "ou_ceo", scope = "offline_access") {
     },
     async refreshUserToken() { throw new Error("not used"); },
     async getUserInfo() { return { openId, unionId: "on_ceo", name: "测试一号位" }; },
+    async sendMessage(_type: string, to: string, _msgType: string, content: object) { sent.push({ to, text: JSON.stringify(content) }); return { messageId: "om_1" }; },
   };
-  return { client, exchanges };
+  return { client, exchanges, sent };
 }
 
 const cookiesOf = (header: string | string[] | undefined) => (Array.isArray(header) ? header : header ? [header] : []);
@@ -174,13 +176,15 @@ describe("已登录的人连接飞书", () => {
     const state = location.searchParams.get("state")!;
     const stateCookie = cookiePair(start.headers["set-cookie"], "feishu_oauth")!;
 
-    // 从飞书跳回来的这一跳带不上 SameSite=Strict 的会话 cookie，只有 state cookie。
+    // 从飞书跳回来的这一跳不一定带得上会话 cookie，这里只带 state cookie。
     const back = await t.app.inject({ method: "GET", url: `/api/auth/feishu/callback?code=c9&state=${state}`, headers: { cookie: stateCookie } });
     expect(back.statusCode).toBe(200);
     expect(back.body).toContain("已连接飞书");
     expect(back.body).toContain(`/meetings/${meetingId}`);
     expect(cookiePair(back.headers["set-cookie"], "warmap_session")).toBeUndefined();
     expect(await t.sql("SELECT person_id, open_id FROM feishu_identities")).toEqual([{ person_id: TEST_CEO.personId, open_id: "ou_ceo_feishu" }]);
+    // 第一次连上：机器人私聊打个招呼。
+    expect(fake.sent).toEqual([{ to: "ou_ceo_feishu", text: expect.stringContaining("飞书已经连好了") }]);
     expect(await status()).toEqual({ enabled: true, connected: true, calendar: false });
     // 授权里有日历权限才算能在飞书日历约会。
     await t.sql("UPDATE feishu_user_tokens SET scope = scope || ' ' || $1", [FEISHU_CALENDAR_SCOPES.join(" ")]);

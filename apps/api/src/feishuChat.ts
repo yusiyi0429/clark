@@ -172,8 +172,17 @@ export function createFeishuChat(deps: {
     void work.finally(() => running.delete(work));
   }
 
+  /** 刚连上飞书：机器人先私聊打个招呼，让人知道可以在飞书里直接问。 */
+  async function welcome(personId: string): Promise<void> {
+    const openId = (await q("SELECT open_id FROM feishu_identities WHERE person_id = $1", [personId])).rows[0]?.open_id as string | undefined;
+    const person = deps.peopleDirectory.searchPeople(undefined).find((entry) => entry.personId === personId);
+    if (!openId || !person) return;
+    await send(openId, "post", post(`${person.displayName}，飞书已经连好了。以后有事直接在这里问我就行，比如「我这周负责的事有哪些？」——问答会和天枢首页的对话存在一起。`));
+  }
+
   return {
     onMessage,
+    welcome,
     events: { [FEISHU_CHAT_EVENT]: onMessage },
     /** 测试与停机：等后台这几轮都结束。 */
     async idle(): Promise<void> { await Promise.all([...running]); },
