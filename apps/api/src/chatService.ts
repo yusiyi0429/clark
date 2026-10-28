@@ -60,8 +60,15 @@ const STOPPED_NOTE = "（已停止，以上是停止前写出的部分。）";
 const BROKEN_NOTE = "（这次回答在这里中断了，以上是已经写出的部分。）";
 const EMPTY_NOTE = "（这次回答没有完成。）";
 
-/** Chat 每一轮都是边查边写（主模型加工具），实测首字 1–2 分钟：按天枢的深度档显示「预计 1–2 分钟」。 */
-const ROUTE_EVENT = { type: "route", tier: "deep", expectSeconds: 90 };
+/**
+ * Chat 不分快慢档（每一轮都是主模型边查边写），寒暄几秒就答完、要查的要 30 秒以上：
+ * 开头按检索问答档显示「正在思考 · N 秒」；deepenAfterMs 内还没写出正文，改成深度档，界面换成「正在深度思考 · 预计 1–2 分钟」。
+ */
+export const CHAT_ROUTE = {
+  start: { type: "route", tier: "grounded", expectSeconds: 30 },
+  deep: { type: "route", tier: "deep", expectSeconds: 90 },
+  deepenAfterMs: 20_000,
+};
 
 const attachmentInfo = (file: ChatAttachment) => ({ id: file.attachmentId, fileName: file.fileName, mimeType: file.mime, sizeBytes: file.size });
 
@@ -307,6 +314,7 @@ export function createChatService(options: {
       let sequence = 0;
       let written = false;
       let outcome = "broken";
+      let deepen: ReturnType<typeof setTimeout> | undefined;
       const write = (event: ChatEvent) => {
         if (reply.raw.destroyed || reply.raw.writableEnded) return;
         reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify({ ...event, runId, scope: "global", sequence: ++sequence })}\n\n`);
@@ -316,9 +324,10 @@ export function createChatService(options: {
         switch (event.type) {
           case "turn_started":
             runId = String(event.runId);
-            return ROUTE_EVENT;
+            deepen = setTimeout(() => { if (!written) write(CHAT_ROUTE.deep); }, CHAT_ROUTE.deepenAfterMs);
+            return CHAT_ROUTE.start;
           case "message":
-            if (typeof event.delta === "string" && event.delta) written = true;
+            if (typeof event.delta === "string" && event.delta) { written = true; clearTimeout(deepen); }
             return rest;
           case "tool": {
             const label = event.phase === "started" ? TOOL_LABELS[String(event.name)] : undefined;
@@ -363,6 +372,7 @@ export function createChatService(options: {
         // 和 Chat 的连接断了（Chat 重启、网络）：不补事件，界面按回答途中断线处理，连上后自己接着写。
       } finally {
         ended = true;
+        clearTimeout(deepen);
         logEvent({ event: "chat_service.turn", requestId, runId, outcome: abort.signal.aborted ? "client_closed" : outcome,
           conversationId: current.conversation.conversationId, ...(current.started ? { newSegment: true } : {}) });
         // 这一轮写完的时刻记成这段最后一次发言（纪要闲置 15 分钟后才写）。

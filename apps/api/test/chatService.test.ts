@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { TEST_CEO, TEST_MEMBER, createTestApp } from "./helpers.js";
 import type { ConversationRuntime } from "../src/conversations.js";
 import { homeTurn } from "../src/homeTurn.js";
+import { CHAT_ROUTE } from "../src/chatService.js";
 
 const CHAT_TOKEN = "chat-token-test";
 const RUN = "6f0c1a52-6d7e-4e57-9a51-0a9a4c3e2b10";
@@ -159,7 +160,8 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
       expect(response.payload).toContain(": ping");
       const received = events(response.payload);
       expect(received.map((event) => event.type)).toEqual(["route", "thinking", "tool", "tool", "message", "message", "usage", "done"]);
-      expect(received[0]).toMatchObject({ tier: "deep", expectSeconds: 90 });
+      // 正文很快就来：一直是检索问答档，不说「预计 1–2 分钟」。
+      expect(received[0]).toMatchObject({ tier: "grounded", expectSeconds: 30 });
       expect(received[2]).toMatchObject({ phase: "started", name: "read_world_object", label: "读取本体对象" });
       expect(received.every((event, index) => event.runId === RUN && event.scope === "global" && event.sequence === index + 1)).toBe(true);
       expect(received.some((event) => "conversationId" in event)).toBe(false);
@@ -191,6 +193,35 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
     });
   });
 
+  it("迟迟没写出正文：先按检索问答档，过了时限补一次深度档（界面换成「预计 1–2 分钟」）", async () => {
+    const chat = await fakeChat({ turn: (res) => {
+      sse(res, [{ type: "turn_started", userMessageId: randomUUID() }, { type: "thinking" }], false);
+      setTimeout(() => {
+        for (const [index, event] of [{ type: "message", delta: "好的" }, { type: "done", status: "completed" }].entries())
+          res.write(`data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: index + 3, ...event })}
+
+`);
+        res.end();
+      }, 150);
+    } });
+    const before = CHAT_ROUTE.deepenAfterMs;
+    CHAT_ROUTE.deepenAfterMs = 30;
+    try {
+      await withChat(chat, countingRuntime(), async (t) => {
+        const cookie = await t.loginCookie();
+        const response = await t.app.inject({
+          method: "POST", url: "/api/conversations/global/messages",
+          headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "我这周负责的事有哪些？" },
+        });
+        const received = events(response.payload);
+        expect(received.map((event) => event.type)).toEqual(["route", "thinking", "route", "message", "done"]);
+        expect(received[0]).toMatchObject({ tier: "grounded" });
+        expect(received[2]).toMatchObject({ tier: "deep", expectSeconds: 90 });
+      });
+    } finally {
+      CHAT_ROUTE.deepenAfterMs = before;
+    }
+  });
   it("历史翻到底再转成天枢消息：没完成的那一轮补说明行，附件带上", async () => {
     const [r1, r2, r3, r4] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
     const runs = [{ runId: r1, status: "completed", errorCode: null }, { runId: r2, status: "failed", errorCode: "MODEL_FAILED" },
