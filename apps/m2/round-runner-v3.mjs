@@ -12,6 +12,7 @@ import {runRoundPool} from './round-pool.mjs';
 import {retryRoundCall,parseRoundJSON} from './round-retry.mjs';
 import {domainContext,inputCoverage,contextReceipt} from './round-context.mjs';
 import {redactSources} from './redact.mjs';
+import {tracer} from './langsmith-trace.mjs';
 import {monthSpan,dateSpan,synchronizeSchedule} from './schedule-check.mjs';
 import {readerQuality} from './reader-quality.mjs';
 import {applyCapacityDefault,canonicalOwner,mustFixTypes,checkGroups,crossCheckLimit,withIds,applyChanges,loadFacts,scheduleFacts,cardIdOf} from './round-runner.mjs';
@@ -142,6 +143,9 @@ export function scheduleShapeFacts(units,{from,period}){
  return out;
 }
 // Domain Missions whose only answered demands come from one battlefield (陈溪南 2026-10-19: Method M01 and Agents M03 served only 灯塔).
+// Mission and Task owners who are the CEO: the skill says the CEO confirms and decides, never owns work (评测 2026-10-26).
+export function ceoOwnerFacts(units){const ceo=Object.values(memberProfiles).find(p=>p.ceo)?.name;if(!ceo)return [];
+ return units.flatMap(u=>(u.missions||[]).flatMap((m,i)=>[...(m.owner===ceo?[{unit:u.po.key,card:`m${i+1}`,title:m.title}]:[]),...(m.tasks||[]).flatMap((t,j)=>t.owner===ceo?[{unit:u.po.key,card:`m${i+1}-t${j+1}`,title:t.title}]:[])]));}
 export function placementFacts(units){
  const demands=new Map(units.flatMap(u=>(u.po.demands||[]).map(d=>[d.id,u.po.key])));
  return units.filter(u=>!battlefieldKeys.includes(u.po.key)).flatMap(u=>(u.missions||[]).flatMap((m,i)=>{
@@ -187,7 +191,10 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
  const L=structuredClone(resume?.layerState||{units:{},stages:{}});
  const save=extra=>onProgress({layerState:structuredClone(L),input:structuredClone(input),...extra});
  const display=()=>keys.filter(k=>L.units[k]).map(k=>toDisplay(L.units[k],input.period));
- const ask=async payload=>{
+ // LangSmith (2026-10-27): each layer is a chain under the round's root, each asked piece a chain under it, and every
+ // attempt (retries, effort fallback, redo) an llm child of that piece.
+ const layer=(name,fn)=>tracer.withRun(name,'chain',{stage:name},fn);
+ const ask=payload=>tracer.withRun(`${payload.stage}:${payload.key||'all'}`,'chain',{stage:payload.stage,unit:payload.key},async()=>{
   const frozen=structuredClone({...payload,period:input.period,cutoff:input.cutoff,planningDate:input.businessDate,pending:input.coverage.pending});
   const receipt=contextReceipt(frozen);input.contextReceipts.push(receipt);
   try{
@@ -199,7 +206,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
    if(!check)for(const gap of answer.gaps||[])input.generationGaps.push({unitKey:payload.key||null,layer:payload.stage.split('-')[0],gap});
    receipt.status='completed';return answer;
   }catch(error){receipt.status='failed';receipt.error=error.message;if(error.partialAnswer!==undefined)await recordRoundFailure({scope:`${payload.stage}:${payload.key||'all'}`,reason:error.code||error.message,answer:error.partialAnswer}).catch(()=>{});error.unitKey??=payload.key;throw error;}
- };
+ });
  // One call; malformed output is redone once with identical settings.
  // A refusal is retried once with only this unit's and the company's material; a second refusal marks just this
  // piece (fallback) instead of stopping the round (模型调用稳定性加固, 2026-10-22). Same-request retries are not repeated.
@@ -231,6 +238,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
  const unitShape='{analysis, po:{title,owner,result,checks,contribution,done,parentLtoReference,plan:{path,tradeoffs,dependencies,risks}}, missions:[{title,owner,tier,time,gate,result,why,checks,boundary,route,risks}], upstream:[{element,source,disposition:"承接|暂缓|他域",missionTitle,ownerUnit,note}]';
  const stageUnits=async(stage,list,payload)=>{
   if(L.stages[stage])return;
+  return layer(stage,async()=>{
   const todo=list.filter(k=>!L.units[k]);let done=list.length-todo.length;
   await save({stage:`${stage==='battlefield-generate'?'战场':'能力域'}：并行生成`,done,total:list.length});
   await runRoundPool(todo,async key=>{
@@ -238,6 +246,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
    done++;await save({stage:`${stage==='battlefield-generate'?'战场':'能力域'}：并行生成`,done,total:list.length,partialUnits:display()});
   },concurrency);
   L.stages[stage]=true;await save({stage:`${stage==='battlefield-generate'?'战场':'能力域'}完成`,done:list.length,total:list.length,partialUnits:display()});
+  });
  };
  // 1. Battlefields
  await stageUnits('battlefield-generate',battlefieldKeys,key=>({stage:'battlefield-generate',task:`为「${nameOf(key)}」（key=${key}）写本月 PO、单元计划、Mission 和对能力域的需求：按技能“产品生成整轮候选·每一步怎么做·1. 战场”执行。返回 ${unitShape}, demands:[{to,what,by,use}], gaps:[]}。demands.to 写能力域 key。`,...common(key)}));
@@ -252,11 +261,12 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
 
  // Check and revise: groups in parallel, then each unit fixes its own must-fix findings by card id.
  const units=()=>keys.map(k=>L.units[k]);
- const facts=()=>({knownSupply:supply,splitFacts:splitFacts(units()),tierFacts:tierFacts(units()),loadFacts:loadFacts(units()),personDays:personDays(units()),capacityFacts:capacityFacts(units(),{from:input.scheduleFrom,period:input.period,capacity:input.capacity}),scheduleFacts:scheduleFacts(units()),scheduleShapeFacts:scheduleShapeFacts(units(),{from:input.scheduleFrom,period:input.period}),placementFacts:placementFacts(units()),demandFacts:demandFacts(units()),upstreamFacts:upstreamFactsV3(units())});
+ const facts=()=>({knownSupply:supply,splitFacts:splitFacts(units()),tierFacts:tierFacts(units()),loadFacts:loadFacts(units()),personDays:personDays(units()),capacityFacts:capacityFacts(units(),{from:input.scheduleFrom,period:input.period,capacity:input.capacity}),scheduleFacts:scheduleFacts(units()),scheduleShapeFacts:scheduleShapeFacts(units(),{from:input.scheduleFrom,period:input.period}),placementFacts:placementFacts(units()),ceoOwnerFacts:ceoOwnerFacts(units()),demandFacts:demandFacts(units()),upstreamFacts:upstreamFactsV3(units())});
  const candidates=()=>units().map(u=>({key:u.po.key,...withIds(u),upstream:u.upstream}));
  const keepFor=(before=[],now)=>{const id=i=>[i.unitKey,i.cardTitle,i.type,i.problem].join('|'),seen=new Set(now.map(id));return [...before.filter(i=>!seen.has(id(i))),...now];};
  const checkRound=async(layer,extraFor=()=>null)=>{
   const state=L.stages[layer]??={remaining:[],revised:[]};if(state.done)return;
+  return tracer.withRun(`${layer}-check`,'chain',{stage:`${layer}-check`},async()=>{
   await save({stage:`${layerNames[layer]}：检查`,done:0,total:groups.length||1});
   const all=layer==='final';
   const focus=groups.map(g=>({...g,types:all||!mustFix.length?g.types:g.types.filter(t=>mustFix.includes(t))})).filter(g=>g.types.length);
@@ -285,11 +295,12 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
    record.revised.push(key);n++;await save({stage:`${layerNames[layer]}：修改`,done:n,total:byUnit.length,partialUnits:display()});
   },concurrency);
   state.revised=issues.filter(fixable).map(i=>({...i,layer}));state.done=true;await save({stage:`${layerNames[layer]}完成`,done:1,total:1});
+  });
  };
  await checkRound('check');
 
  // 4. Tasks per Mission
- if(!L.stages.task?.done){
+ if(!L.stages.task?.done)await layer('task-generate',async()=>{
   const st=L.stages.task??={parts:{}};
   const missionLoad=Object.fromEntries(loadFacts(units()).map(p=>[p.name,p.missionCount]));
   const capacityDays=capacityFacts([],{from:input.scheduleFrom,period:input.period,capacity:input.capacity})[0]?.capacityDays||0;
@@ -309,7 +320,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
   },concurrency);
   for(const k of keys)L.units[k]={...L.units[k],missions:L.units[k].missions.map((_,i)=>st.parts[k][i])};
   st.done=true;await save({stage:'拆 Task 完成',done:items.length,total:items.length,partialUnits:display()});
- }
+ });
 
  // 4b. Global alignment: for everyone whose estimated person-days exceed capacity, one call ranks all of that person's
  // Tasks across units and decides what stays this month, what drops a tier, what moves to next month. P0 is not cut silently.
@@ -320,6 +331,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
  const danglingOf=k=>{const u=L.units[k],titles=new Set(u.missions.map(m=>m.title));return (u.upstream||[]).filter(x=>/承接/.test(String(x.disposition))&&!titles.has(x.missionTitle));};
  const repairUpstream=async()=>{
   if(L.stages.upstream?.done)return;
+  return layer('upstream-repair',async()=>{
   keys.forEach(syncUpstream);
   const todo=keys.filter(k=>!L.units[k].po?.generationFailed&&danglingOf(k).length);
   const record={layer:'upstream',round:1,issues:todo.reduce((n,k)=>n+danglingOf(k).length,0),repairable:todo.length,revised:[]};input.iterations.push(record);
@@ -340,24 +352,32 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
    n++;record.revised.push(key);await save({stage:'上级要素核对',done:n,total:todo.length});
   },concurrency);
   L.stages.upstream={done:true};
+  });
  };
  // Run again after the final revisions (陈溪南 10/22 走查：第 25 轮白田田 22.5、唐巨杰 22 of 21): those revisions add work too.
  const alignPass=async(stageName,round)=>{
   if(L.stages[stageName]?.done)return;
+  return layer(stageName,async()=>{
   const st=L.stages[stageName]??={decisions:{}};
-  // The second pass takes only people who went over after the first, or whose load grew since; a settled overload is not asked twice.
-  const before=L.stages.align?.after||{};
-  const over=capacityFacts(units(),{from:input.scheduleFrom,period:input.period,capacity:input.capacity}).filter(p=>p.over>0.5&&!st.decisions[p.name]&&(round===1||!(p.name in before)||p.plannedDays>before[p.name]+0.5));
+  // The second pass takes everyone still over after the final revisions (10/22: a gate on load growth let 唐巨杰 through at 22.9 of 21).
+  const over=capacityFacts(units(),{from:input.scheduleFrom,period:input.period,capacity:input.capacity}).filter(p=>p.over>0.5&&!st.decisions[p.name]);
   const record={layer:stageName,round,issues:over.length,repairable:over.length,revised:[]};input.iterations.push(record);
   const workOf=name=>keys.flatMap(k=>L.units[k].missions.flatMap((m,i)=>(m.tasks||[]).map((t,j)=>t.owner===name?{id:`${k}:m${i+1}-t${j+1}`,unit:k,mission:m.title,missionTier:m.tier,title:t.title,tier:t.tier,time:t.time,effort:t.effort,dependsOn:t.dependsOn,result:t.result}:null).filter(Boolean)));
   await save({stage:'全局对齐：人日与优先级',done:0,total:over.length});
   let n=0;
   await runRoundPool(over,async p=>{
    const work=workOf(p.name);
+   let last=null;
    st.decisions[p.name]=await twice(`align:${p.name}`,p.name,{stage:'align-generate',task:`对齐「${p.name}」本月全部工作：按技能“产品生成整轮候选·每一步怎么做·4b. 全局对齐”执行。返回 {analysis, changes:[{id,tier,defer:false|true,effort,reason}], decisionsForCEO:[], gaps:[]}；id 取 work 里的编号，只列要改的 Task。`,key:p.name,person:p,work,demandFacts:demandFacts(units()),capacity:input.capacity},answer=>{
     if(!Array.isArray(answer.changes))throw reject('全局对齐缺少 changes',answer,'card-contract');
-    const ids=new Set(work.map(w=>w.id));return {changes:answer.changes.filter(c=>c&&ids.has(c.id)),decisionsForCEO:list(answer.decisionsForCEO),gaps:list(answer.gaps)};
-   });
+    const ids=new Set(work.map(w=>w.id)),changes=answer.changes.filter(c=>c&&ids.has(c.id));
+    // Measured, not decided here: still over with P2 work kept means the skill's order (P2 first) was skipped (10/22 走查：唐巨杰 22.9 of 21 with 9 days of P2).
+    const days=e=>Number(String(e||'').match(/(\d+(?:\.\d+)?)\s*人日/)?.[1]||0),byId=new Map(changes.map(c=>[c.id,c]));
+    const kept=work.filter(w=>!byId.get(w.id)?.defer),load=kept.reduce((n,w)=>n+days(byId.get(w.id)?.effort||w.effort),0),p2=kept.filter(w=>normalTier(byId.get(w.id)?.tier||w.tier,w.tier)==='P2');
+    last={changes,decisionsForCEO:[...list(answer.decisionsForCEO),`${p.name} 调整后仍有 ${+load.toFixed(1)} 人日（容量 ${p.capacityDays}），还留着 ${p2.length} 个 P2 Task，自动对齐两次没有让出，请 RU DRI 决定先推哪几项。`],gaps:list(answer.gaps)};
+    if(load>p.capacityDays+0.5&&p2.length)throw reject(`调整后仍有 ${+load.toFixed(1)} 人日，超出容量 ${p.capacityDays}，但还留着 ${p2.length} 个 P2 Task：先推迟 P2，再把 P0、P1 装不下的部分交 CEO`,answer,'card-contract');
+    return {changes,decisionsForCEO:list(answer.decisionsForCEO),gaps:list(answer.gaps)};
+   }).catch(error=>{if(!last||!/两次结果均不合格/.test(error.message))throw error;input.generationGaps.push({unitKey:p.name,layer:'align',gap:error.message.slice(0,140)});return last;});
    n++;record.revised.push(p.name);await save({stage:'全局对齐：人日与优先级',done:n,total:over.length});
   },concurrency);
   // Apply: tier and effort changes in place; deferred Tasks leave this month's plan and are listed on the unit plan.
@@ -368,12 +388,23 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
   }
   for(const k of keys){
    const u=L.units[k],moved=[];
-   for(const m of u.missions){const keep=(m.tasks||[]).filter(t=>!t.deferred);for(const t of (m.tasks||[]).filter(t=>t.deferred))moved.push(`**推迟：**${m.title}·${t.title}（${t.owner}）：${t.deferred}`);if(keep.length)m.tasks=keep;else{m.tasks=m.tasks.map(({deferred,...t})=>t);m.tier='P2';}}
+   // Every Task of a Mission deferred: the whole Mission moves to next month (评测 2026-10-26: putting them back left 于斯一 at 24 of 21).
+   // Only when the unit would be left with no Mission at all are they kept, and the overload goes to the CEO below.
+   const stays=u.missions.filter(m=>(m.tasks||[]).some(t=>!t.deferred));
+   for(const m of u.missions){const keep=(m.tasks||[]).filter(t=>!t.deferred);
+    if(keep.length){for(const t of m.tasks.filter(t=>t.deferred))moved.push(`**推迟：**${m.title}·${t.title}（${t.owner}）：${t.deferred}`);m.tasks=keep;}
+    else if(stays.length)moved.push(`**推迟：**整个 Mission「${m.title}」（${m.owner}）推到下月：${[...new Set(m.tasks.map(t=>t.deferred))].join('；')}`);
+    else{moved.push(`**推迟：**${m.title}（${m.owner}）整组推迟，但这是本单元唯一的 Mission，保留为 P2，放不下的人日交 CEO 决定：${[...new Set(m.tasks.map(t=>t.deferred))].join('；')}`);m.tasks=m.tasks.map(({deferred,...t})=>t);m.tier='P2';}}
+   if(stays.length)u.missions=stays;
    if(moved.length)u.po.plan={...u.po.plan,tradeoffs:[...(u.po.plan?.tradeoffs||[]),...moved]};
   }
-  for(const [name,d] of Object.entries(st.decisions)){const was=input.alignDecisions?.[name];(input.alignDecisions??={})[name]={decisionsForCEO:[...(was?.decisionsForCEO||[]),...d.decisionsForCEO],changed:(was?.changed||0)+d.changes.length};}
-  st.after=Object.fromEntries(capacityFacts(units(),{from:input.scheduleFrom,period:input.period,capacity:input.capacity}).map(p=>[p.name,p.plannedDays]));
+  for(const [name,d] of Object.entries(st.decisions)){const was=input.alignDecisions?.[name];(input.alignDecisions??={})[name]={decisionsForCEO:[...new Set([...(was?.decisionsForCEO||[]),...d.decisionsForCEO])],changed:(was?.changed||0)+d.changes.length};}
+  // Measured after applying, not as the model reported: anyone still over goes to the CEO by name.
+  const after=capacityFacts(units(),{from:input.scheduleFrom,period:input.period,capacity:input.capacity});
+  for(const p of after.filter(p=>p.over>0.5)){const note=`${p.name} 对齐后仍有 ${p.plannedDays} 人日（容量 ${p.capacityDays}），请 RU DRI 和 CEO 决定先推哪几项。`;const d=(input.alignDecisions??={})[p.name]??={decisionsForCEO:[],changed:0};if(!d.decisionsForCEO.includes(note))d.decisionsForCEO.push(note);if(!input.generationGaps.some(g=>g.layer==='align'&&g.gap===note))input.generationGaps.push({unitKey:p.name,layer:'align',gap:note});}
+  st.after=Object.fromEntries(after.map(p=>[p.name,p.plannedDays]));
   st.done=true;await save({stage:'全局对齐完成',done:over.length,total:over.length,partialUnits:display()});
+  });
  };
  await alignPass('align',1);
 
@@ -383,7 +414,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
  await alignPass('realign',2);
  await repairUpstream();
  // 6. One shortening pass for what is still over.
- if(!L.stages.format?.done){
+ if(!L.stages.format?.done)await layer('format-revise',async()=>{
   const findings=keys.flatMap(k=>lengthFindingsOf(k).map(f=>({...f,unitKey:k})));
   const record={layer:'format',round:1,issues:findings.length,repairable:findings.length,revised:[]};input.iterations.push(record);
   const byUnit=Object.entries(findings.reduce((g,f)=>{(g[f.unitKey]??=[]).push(f);return g;},{})).filter(([k])=>!L.units[k]?.po?.generationFailed);
@@ -396,7 +427,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
    record.revised.push(key);
   },concurrency);
   L.stages.format={done:true};
- }
+ });
 
  // Assemble in the 2.x shape; Mission dates follow their Tasks.
  const raw=keys.map(k=>toDisplay(L.units[k],input.period));

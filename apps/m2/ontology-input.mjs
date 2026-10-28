@@ -23,12 +23,18 @@ export function selectFacts(facts, policy = testPolicy) {
     const reject = reason => excluded.push({ id: fact.id, reason });
     const hold = reason => pending.push({ id: fact.id, reason });
     if (!fact.sourceRef || !fact.text?.trim()) { hold('缺少来源或正文'); continue; }
-    if (fact.isAnswer || policy.excludedTypes.includes(fact.sourceType)) { reject('已有周期目标或下级拆解答案'); continue; }
+    // An earlier month's PO / Mission / Task is last month's plan (history), not this month's answer.
+    const pastPlan = fact.kind === 'history' && /^\d{4}-\d{2}$/.test(fact.historyPeriod || '') && fact.historyPeriod < policy.period;
+    if (fact.isAnswer || (policy.excludedTypes.includes(fact.sourceType) && !pastPlan)) { reject('已有周期目标或下级拆解答案'); continue; }
     // 于斯一 marks each unit's month plan with this prefix when recording (agreed 2026-10-19); it is a reference answer.
-    if (/^\s*【10 月计划】/.test(fact.text || '')) { reject('本月计划（【10 月计划】）是参考答案'); continue; }
+    const planMonth = String(fact.text || '').match(/^\s*【(\d{1,2}) 月计划】/);
+    if (planMonth && Number(planMonth[1]) === Number(String(policy.period).slice(5))) { reject(`本月计划（【${planMonth[1]} 月计划】）是参考答案`); continue; }
     if (fact.mixedAnswer) { hold('正文夹带人工答案，须先拆成独立事实再选择'); continue; }
     if (fact.conflict) { hold('来源存在实质冲突，需要有效决定'); continue; }
-    if (baselineKinds.has(fact.kind)) {
+    if (fact.kind === 'history') {
+      if (!pastPlan) { reject('只有往月的计划能作为历史读入'); continue; }
+      if (fact.baselineSelected !== true) { hold('未明确选择往月计划的版本'); continue; }
+    } else if (baselineKinds.has(fact.kind)) {
       if (fact.baselineSelected !== true) { hold('未明确选择有效基线版本'); continue; }
     } else if (historicalKinds.has(fact.kind) || fact.kind === 'intent') {
       // recordedAt/modifiedAt/as_of alone cannot prove when a fact was true.

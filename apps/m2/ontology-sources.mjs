@@ -36,11 +36,13 @@ export async function fetchOntologySources({reader=createOntologyReader(),manife
  const versionNotices=new Map();
  // Month goals are read as they stood at the cutoff (version and draft/committed); a later status change is only reported.
  const statusNotices=new Map();
+ const identityNotices=new Map();
  const verify=(s,object)=>{
   if(!object||typeof object!=='object')throw Object.assign(Error('本体没有返回对象：'+s.sourceRef),{status:409,diagnostics:{reason:'source-not-readable',sourceRef:s.sourceRef,unitKey:s.unit}});
   let source;
   if(s.eventId)source=object.events?.find(e=>e.event_id===s.eventId)?.content?.text;
-  else if(s.identityNames){const names=object.identity?.responsible?.principals?.map(p=>p.display_name).sort();if(JSON.stringify(names)!==JSON.stringify([...s.identityNames].sort()))throw Object.assign(Error('责任信息发生变化，请重新核对：'+s.unit),{status:409});return s;}
+  // Responsibility read at the cutoff stands, like a pinned version; a later change is reported, not a stop (10/26: a test-governance principal added to Agents stopped the round in 4 seconds).
+  else if(s.identityNames){const names=(object.identity?.responsible?.principals||[]).map(p=>p.display_name).sort();if(JSON.stringify(names)!==JSON.stringify([...s.identityNames].sort()))identityNotices.set(s.id||s.objectId,{unit:s.unit,objectId:s.objectId,usedNames:[...s.identityNames],latestNames:names});return s;}
   else {
    if(s.lifecycleStatus){const live=object.records?.lifecycle?.status;if(live&&live!==s.lifecycleStatus)statusNotices.set(s.objectId,{unit:s.unit,title:s.title||s.kind,objectId:s.objectId,statusAtCutoff:s.lifecycleStatus,latestStatus:live});}
    const b=(object.business?.blocks||object.blocks||object.snapshot?.blocks)?.find(b=>b.id===s.blockId);source=s.componentId?(b?.components||b?.value?.components)?.find(c=>c.id===s.componentId)?.text:b?.text;
@@ -81,7 +83,7 @@ export async function fetchOntologySources({reader=createOntologyReader(),manife
  const sources=keys.map(key=>{const items=selected.sources.filter(s=>s.unit===key);// This month's intent is marked in the text the model reads, so the skill can name it without field names.
  const content=items.map(s=>`${s.kind==='intent'?'【本月意图】':''}${s.title||s.kind} · ${s.sourceRef} · ${s.confirmation}${s.factThrough?' · 事实截至'+s.factThrough:''}\n${s.text}`).join('\n\n');return {key,title:key,content,hash:hash(content),revision:manifest.version,factRefs:items.map(s=>s.sourceRef),facts:items};});
  // Public audit contains only safe gap descriptions, not quarantined raw answers.
- return {mode:'ontology-selected-facts',period:manifest.period,cutoff:manifest.cutoff,planningDate:manifest.planningDate,retrievedAt:new Date().toISOString(),sources,capacity:manifest.capacity,audit:{pending:manifest.pending,accepted:facts.length,reviewVersion:manifest.version,sourceRetries:retries,...(manifest.answerExclusions?{excludedAnswers:manifest.answerExclusions}:{})},versionNotices:[...versionNotices.values()],statusNotices:[...statusNotices.values()],model:null};
+ return {mode:'ontology-selected-facts',period:manifest.period,cutoff:manifest.cutoff,planningDate:manifest.planningDate,retrievedAt:new Date().toISOString(),sources,capacity:manifest.capacity,audit:{pending:manifest.pending,accepted:facts.length,reviewVersion:manifest.version,sourceRetries:retries,...(manifest.answerExclusions?{excludedAnswers:manifest.answerExclusions}:{})},versionNotices:[...versionNotices.values()],statusNotices:[...statusNotices.values()],identityNotices:[...identityNotices.values()],model:null};
 }
 const codexBatch=15;
 export async function fetchCodexOntologySources({onProgress=()=>{}}={}){

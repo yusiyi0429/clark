@@ -1,7 +1,11 @@
 {
   "source": "/Users/cooper/TKOS/apps/decoding-mvp",
-  "capturedAt": "2026-10-23",
+  "capturedAt": "2026-10-26",
   "files": [
+    {
+      "path": "GroupMembers.jsx",
+      "sha256": "a645b2dfe70f8c1e0d4b1b060150dd80faa6c1289bce70962e7a2560462d8521"
+    },
     {
       "path": "account-responsibilities.pending.json",
       "sha256": "eba3e6ef5bb2a296d62e8d0b61a75aaf69830b2d1fb2632d9c298dd3fe23aa34"
@@ -16,15 +20,15 @@
     },
     {
       "path": "AdminPanel.jsx",
-      "sha256": "3a489f88653b330645931a6dab2712971db04048b9bad3502cd829e823342c91"
+      "sha256": "611273d5f14c7a05c867f172a7ad09527ddb27f621598488ed08f28c695d65ab"
     },
     {
       "path": "agent-prompts.mjs",
-      "sha256": "6bc95181b9f773745582256bb38ffaa70e14fd8b0eac6006281b90d83c86f1ee"
+      "sha256": "693d2853ce0bfcf372041a15c3e3082b740b8e7ec8896c064f0847de95c92b91"
     },
     {
       "path": "app.jsx",
-      "sha256": "96857f08a7fb2ad390ee7850d3cef99f894353705b88704f4db20f4e40e72c67"
+      "sha256": "135d3113a8aa73f9ef0cfadc4cb05c84cf489519adddb0d0ded3b348b6e9419b"
     },
     {
       "path": "AuditStatus.jsx",
@@ -48,7 +52,7 @@
     },
     {
       "path": "ChatComposer.jsx",
-      "sha256": "302b2e73dbede790194d55e8d38d32791bbadc95b3b4a1f6f16316c881d026b5"
+      "sha256": "2b9875b21d97ca0dee19c56772fe299600e916f52bd97d8dbb87b7481da2120f"
     },
     {
       "path": "ChatMessage.jsx",
@@ -84,7 +88,7 @@
     },
     {
       "path": "document-template.mjs",
-      "sha256": "5a31da783dadaad84efcaf2dce88d8495f8adb34541b6322d29e5d421dd11d54"
+      "sha256": "e0d1adb70b0ee1fc1fc963db864aead7eab14f324f30f256806d5f50cc0c28b7"
     },
     {
       "path": "DocumentCanvas.jsx",
@@ -92,7 +96,7 @@
     },
     {
       "path": "DocumentContent.jsx",
-      "sha256": "f23487d91527d924f92ca23b34a8fa35edc3f68777780f08b780669b484c3537"
+      "sha256": "f1e35b1e1e4fe0ef26b1d4225b1435779130c9c54788d75242276160a5ad1c72"
     },
     {
       "path": "domain.mjs",
@@ -108,7 +112,7 @@
     },
     {
       "path": "EntryMetadata.jsx",
-      "sha256": "fe7f2d1ccac46f19c72ccaa5da3b58e4274022b4a7400d654944b0a07d601cc9"
+      "sha256": "e7c495ac61b508c296fbb41fefd80cfe6403dd87d0760796f066a4de5b25cbb6"
     },
     {
       "path": "gantt-time.mjs",
@@ -124,15 +128,19 @@
     },
     {
       "path": "governance.mjs",
-      "sha256": "64a6cd12c6d1e0c42b0d39246d2a63f95845ac09e414f1ecef0a0f7dbbb9e1e9"
+      "sha256": "cdc6da8fa6f94ed26e91616584066004ac65d9c2d4bca6a3846654ad8be11921"
     },
     {
       "path": "Handshake.jsx",
-      "sha256": "799418efc8194e8eb14f357244bc27f66c079e174663822179fd01a662ab64c5"
+      "sha256": "b4c04754a00af788bc229a3010d03a4a032bb7a51bf7a496a3574f6a23f40928"
     },
     {
       "path": "index.html",
       "sha256": "646b1a98cfbd7fbe6c23cf88c8d5563ba51d8a5a2c3d7a63b6b5fce5ad781321"
+    },
+    {
+      "path": "langsmith-trace.mjs",
+      "sha256": "0ef0803941aefcbccd6819ed38432e12b027635506d9799c105518c513219e67"
     },
     {
       "path": "layered-mock.mjs",
@@ -164,7 +172,7 @@
     },
     {
       "path": "model.mjs",
-      "sha256": "307028bb184a97fc59b5794603b4561477a59adedd2a9fd936d4e9975fb23c04"
+      "sha256": "bd579ec53f6a88f37cec73f09de9d1cb644f893666a8efec557d9a2c392d3086"
     },
     {
       "path": "nexus-cascade.mjs",
@@ -172,11 +180,11 @@
     },
     {
       "path": "nexus-context.mjs",
-      "sha256": "27453e1b18043806b553f28ab010bbc158ea8f46ee9808fbf46ff26dc0f1cbb1"
+      "sha256": "031df5b68bde1f0ff522ce8547f2b20e681571b7fa97b55991fa08290c7209f4"
     },
     {
       "path": "nexus-listen.mjs",
-      "sha256": "a2fb684b561ceeeab87c646ef3aa4455f02b5731a245dd7b1f6fde0b23c8cecd"
+      "sha256": "dbc29f431d277b8402b89dfca47cf1ede809d405a10e6ef6890bac7628a49714"
     },
     {
       "path": "nexus-memory.mjs",
@@ -192,7 +200,7 @@
     },
     {
       "path": "nexus-policy.mjs",
-      "sha256": "f6d5a0cbd98a14a2bfb9b42ddf33209617452343322e823590d0c3c86f466d14"
+      "sha256": "d1d51ede34345c3c5ad2fa4e9b37dc4803ac7a9316fd49f61ed240d4d8e17e16"
     },
     {
       "path": "nexus-retry.mjs",
@@ -200,7 +208,7 @@
     },
     {
       "path": "nexus-review.mjs",
-      "sha256": "9c5dfd4933fddc6f82f47bf4ce0b2fcca756d3343a24a9201ace663300eade70"
+      "sha256": "d19b84ff83d8b3e7c0afc076105af2ba89753d4d1ae43be176125314d2b0c508"
     },
     {
       "path": "NexusIsland.jsx",
@@ -208,11 +216,16 @@
     },
     {
       "path": "NexusOrb.jsx",
-      "sha256": "1c58465bc0173d096528b578c7c89946ba20ac7ecd0365ecf2a21ed0dbabf1fc"
+      "sha256": "111afc9a31418d4304a9fca5293381bbebdaf329dfb81401ba2b0922774b6575"
+    },
+    {
+      "path": "ontology-input.mjs",
+      "sha256": "6415c1c3ad5a3efc3a87a6b2b4f0305129878d1abdc00afbfbbe5494fa0e494d",
+      "from": "../../tools/decoding-ontology-input.mjs"
     },
     {
       "path": "ontology-sources.mjs",
-      "sha256": "9ff6be6007d3efc3958803bbdab035825b82e4711672d7d12f829e4befcbad5b"
+      "sha256": "421d224abc3bc397f920149e27a9b68eb3b90e4bea7dd2ca1afdf81908f6ab59"
     },
     {
       "path": "owner-name.mjs",
@@ -236,7 +249,7 @@
     },
     {
       "path": "private-agent-context.mjs",
-      "sha256": "23fc2f1af4b92c287bdc618f2520cd4ffecb31bba227fc8efb56618c21bdee9b"
+      "sha256": "6111db3b26a8bd139f20ebb012c118c5fd0c19e017af4bc571e9f963a2eb398a"
     },
     {
       "path": "proposal-confirmation.mjs",
@@ -248,7 +261,7 @@
     },
     {
       "path": "ProposalCard.jsx",
-      "sha256": "eb025989fccbdd64721e4491ab8b73afc6419bbaf9e4fe3611b30d40092d55ae"
+      "sha256": "9276272f6736efc00f7075672cda08a9a4cc833a2143844a2c818517e3121b97"
     },
     {
       "path": "reader-format.mjs",
@@ -267,24 +280,28 @@
       "sha256": "1e6a5f3590d30c2f4140cfc17f2d2aa9eeff9de00605699a818704621ac60fa5"
     },
     {
+      "path": "review-cascade.mjs",
+      "sha256": "bb3c0e2df1fb94df16fd772ace0a80318bc5aeb1a95daf376d9cb1635a47b576"
+    },
+    {
       "path": "review-display.mjs",
-      "sha256": "35a773d9c9bb691103d8e44e0ba96cdf4ad70e483dd234cb69dfaa6ea2d6f57c"
+      "sha256": "e3e917780787168ebcf4cfc7d07c8d59bb135e9649674b79ec575116fdac4378"
     },
     {
       "path": "review-generation.mjs",
-      "sha256": "11c9cdb3b4e8fe7ab3692c25c3d71ca2826303a3ed20e1bc10da10c609480620"
+      "sha256": "a33b9e61c1788c7711dbc9d86345a2698e89e65e1875a0bf22754fde5e8084fc"
     },
     {
       "path": "review-handoff.mjs",
-      "sha256": "33dd7b9b9c6425875a998cdc8686f602213259db86a2b77eee0545fb024aa7da"
+      "sha256": "141d277eccdcdec9c45a0b2c85b65208d3021da91d211d44b09e9bf2fa12ee35"
     },
     {
       "path": "review-round.mjs",
-      "sha256": "39906c8674a8c8ada18e65e16f720d52610dd326c87cdd03b85155e2336be522"
+      "sha256": "2f6efbff53fc7d734bb3bb9bf7941cd726549afdc715013499675f8f03034ccc"
     },
     {
       "path": "review-sources.mjs",
-      "sha256": "84d3e9baf58f966c0d56ccf76eac26a00f12de06aa468cdfc367c2ba6c6308aa"
+      "sha256": "33dfda7bcaf454874854c3faa1ff3d6f981562f6c56a2c4f8ce912e54a11d614"
     },
     {
       "path": "review-workflow.mjs",
@@ -292,7 +309,7 @@
     },
     {
       "path": "ReviewCanvas.jsx",
-      "sha256": "70e310a8203165f3d5d2f3c1620f17e6a588343e0841000c8c4c648df8c2265b"
+      "sha256": "a521ee697c45a64cf804ec2bfe75752b6ef54c42b4d09444aebf276d0a14e6c3"
     },
     {
       "path": "ReviewEditor.jsx",
@@ -320,7 +337,7 @@
     },
     {
       "path": "round-metadata.mjs",
-      "sha256": "0e0554e12e72dee7b8627b77a5cd18b9476e1b544ef5a62fbb46bc4b7a1844d2"
+      "sha256": "3396515ab0d101b4550c387d43d4cbc73c16781f4a19fb04cdf7b9fe63a4f456"
     },
     {
       "path": "round-pool.mjs",
@@ -336,7 +353,7 @@
     },
     {
       "path": "round-runner-v3.mjs",
-      "sha256": "b7c3000a91bb0cafc39c2f20c3b602db09aa9ac654934e3900a923330db7862e"
+      "sha256": "9f59b1e8d6525025308bd4fb476e0991aeb24f0c409778f05e392c8d4f090d3c"
     },
     {
       "path": "round-runner.mjs",
@@ -368,11 +385,11 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "8d16e573e5890c357cf11dd8c93c615d25ce038558190ce30efaadbf22850b7a"
+      "sha256": "7e5dd4f67c676f5182b654469653e2f49058874785a00ab9cf77d37c27640de1"
     },
     {
       "path": "shared-projection.mjs",
-      "sha256": "50d75bdfa536f58e615b5f98c195a41aba61549de0c6a3bf619f967ebf5bda7b"
+      "sha256": "53e660434cd2646b73e05c5dfbf9f0a59e6541aadc6f945c61a202c159d9f1d5"
     },
     {
       "path": "skill-snapshot.mjs",
@@ -392,7 +409,11 @@
     },
     {
       "path": "style.css",
-      "sha256": "d507aaff9b4f86c4abaf5672639a95d5f85d05ab6a78b51431b35d7dfa611ea7"
+      "sha256": "e0b628c14e6b49fee2ce0cdbc39fdad2647c3bdf905e411a0eb1127b01267859"
+    },
+    {
+      "path": "time-context.mjs",
+      "sha256": "42205018480c19e1c2a8e99a9af8b91a626caa911e0f02118623a1a85cd291d1"
     },
     {
       "path": "todo.mjs",
@@ -400,7 +421,7 @@
     },
     {
       "path": "TodoPanel.jsx",
-      "sha256": "9b3705b15bd6e11bb2987f807457f3dad833cd7946c747fb9f27af064d3f45b0"
+      "sha256": "e8d0b63c1213a0a5cc4ede55f3da3afba2c567a5a7ab74de22a0fcb626378d1d"
     },
     {
       "path": "topic-lifecycle.mjs",
@@ -417,6 +438,10 @@
     {
       "path": "V3Blocks.jsx",
       "sha256": "e456d6630234a2ee72f213a7599cbe1a10cdc1dac0de2aae128599dd6ac54da8"
+    },
+    {
+      "path": "notifications.mjs",
+      "sha256": "e4ab578c85635ec45cc947f8a4559267fd96c19d5aedeb81de18a43b05b830ba"
     }
   ],
   "excluded": [
@@ -424,7 +449,8 @@
     "runtime state, histories and private inputs (deployment-only)",
     "tests that need this machine's seed, eval skills, browser, Codex or real model (run them in the demo workspace)",
     "lan-host.mjs and published-round.mjs (local-only; the server binds via M2_BIND_HOST and reads rounds from the private seed)",
-    "round-runner-v3.mjs and ontology-sources.mjs stay on the 2026-10-22 Tianshu version (capacity fix waits for 10/27; Tianshu reads the ontology with the product token only)"
+    "ontology-sources.mjs keeps the Tianshu reading path (product token only, private manifest); its checks follow the demo as of 2026-10-26",
+    "test-langsmith-trace.mjs (one case needs the round-08 fixture; run it in the demo workspace)"
   ],
   "skill": {
     "version": "3.1.7",
@@ -432,9 +458,9 @@
     "source": "~/.codex/skills/tkos-decoding"
   },
   "reviewSkill": {
-    "version": "2.0.4",
-    "fingerprint": "7756dce16b5d",
-    "source": "apps/decoding-mvp/.runtime/eval/review/skills/tkos-review-2.0.4"
+    "version": "2.1.8",
+    "fingerprint": "604d8fe8be68",
+    "source": "apps/decoding-mvp/.runtime/eval/review/skills/tkos-review-2.1.8"
   },
-  "mergeBase": "/Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261022c"
+  "mergeBase": "/Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261026e"
 }

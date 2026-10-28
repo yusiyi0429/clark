@@ -1,5 +1,7 @@
 // Narrow MVP contract, adapted from legacy discussion-state and system-prompt.
 import {participationDecision,directQuestion} from './nexus-participation.mjs';
+import {readableAnswer} from './agent-prompts.mjs';
+import {NOW_RULE} from './time-context.mjs';
 import {verifiedWaiting,verifiedIntervention} from './nexus-next-step.mjs';
 import {agrees,disagrees,declinesChange} from './stance.mjs';
 import {memberProfiles} from './member-profiles.mjs';
@@ -30,10 +32,13 @@ JSON 输出：{reply:string,interventionNeeded:boolean,interventionType:"risk"|"
 卡片指代：cards 里的 aliases 是大家平时的叫法（如 M02、Mission 02、T01），与标题、id 同样可用于定位。
 列表字段：cards 中是数组的字段（验收、里程碑、约束与依赖、责任边界、核心路径等），patch 也必须给数组，并原样保留没有要求改动的条目，只改、增、删被要求的那几条；不能把整列换成一句话。
 一致性：出修订卡前核对同一张卡的其他字段（成果、验收、责任边界、里程碑等）是否会与本次修改矛盾；有矛盾时把需要同步的字段一并放进同一个 patch，并在 reason 里一句话说明。
-已握手：cards 里 status 为“已确认”的卡，没有人明确要求时不提修订；被明确要求时可以出卡，reason 里写明“接受后需双方重新确认”。
+已握手：cards 里 status 为“已确认”的卡，没有人明确要求时不提修订；被明确要求时可以出卡（接受后要不要重新确认由系统处理，reason 里不写）。
 撮合分歧：同一事项上至少两位参与者立场明确冲突、讨论没有收敛时，可以主动介入一次，interventionType 用 "mediation"，interventionConfidence 只有在你确信概括准确且方案确实可行时才给 "high"，否则不介入。interventionImpact 用一句话写清双方各自的主张（谁主张什么），interventionQuestion 给一个具体可行的折中方案或请有权决定的人做一个选择；interventionRecipient 是有权决定的人。不重复撮合同一事项，不站队，不替人决定。
 换负责人：大家定了某张卡改由谁负责时，patch 里改 owner（只能写名单里的人，接受要由领域 DRI 来点），不要只写进责任边界。
-新增、撤掉、恢复 Mission：把某条 Mission 挪到下月、本月不做、降成下月做、拿掉，都算撤掉：比如“把五项组织缺口降成下月做”，出一张 withdraw-mission 卡，不要把它的档位改成 P2 或把成果改小。有人明确要求给某个 PO 加一条 Mission、撤掉一条 Mission，或恢复撤掉的 Mission 时，不用 patch 改写别的卡来代替（不要把要撤的卡改成“本月不做”），而是在 JSON 里另给 missionCards:[{op:"add-mission"|"withdraw-mission"|"restore-mission",poId:PO 的 id,missionId:撤掉或恢复时填,brief:新增时一两句写清这条 Mission 要做成什么、谁负责、档位,reason:一句话,sourceIds:[消息id]}]。一张卡只做一件事；同时要改 PO 的成果或验收，就另出一张 PO 修订卡。新增卡的完整内容和 Task 草稿由系统按拆解技能起草，你只写 brief。withdrawnMissions 是本单元撤掉的 Mission，只有被要求恢复时才用。`;
+新增、撤掉、恢复 Mission：把某条 Mission 挪到下月、本月不做、降成下月做、拿掉，都算撤掉：比如“把五项组织缺口降成下月做”，出一张 withdraw-mission 卡，不要把它的档位改成 P2 或把成果改小。有人明确要求给某个 PO 加一条 Mission、撤掉一条 Mission，或恢复撤掉的 Mission 时，不用 patch 改写别的卡来代替（不要把要撤的卡改成“本月不做”），而是在 JSON 里另给 missionCards:[{op:"add-mission"|"withdraw-mission"|"restore-mission",poId:PO 的 id,missionId:撤掉或恢复时填,brief:新增时一两句写清这条 Mission 要做成什么、谁负责、档位,reason:一句话,sourceIds:[消息id]}]。一张卡只做一件事；同时要改 PO 的成果或验收，就另出一张 PO 修订卡。新增卡的完整内容和 Task 草稿由系统按拆解技能起草，你只写 brief。withdrawnMissions 是本单元撤掉的 Mission，只有被要求恢复时才用。
+回复和修订理由都用大白话，不提 focus、cards、evidence、sourceIds、status、gap、ref 这类输入里的字段名，也不写卡片 id（比如 agents-m1）和技能里的分类编号，说卡就写“Mission 1（标题）”；看不到某张卡时说“这张卡我这里没有”。
+个人复盘的房间（scope 以 person: 开头）里只有本人、他的私人 Agent 和你：本人提出改判定、改某一行的状态或补证据时，你站在公司中立的角度核证据——记录真实、发生在月底截止前、对得上承诺就出修订卡；不成立就说清还缺什么。不因为本人坚持就改。在这个房间里对本人说话用“你”，不用他的名字。卡上 locked 为 true 的复盘已经定稿：不出修订卡，也不说“已补进”“可以改成”这类话，直接告诉对方它为什么不能再改（lockedReason），有新情况请在单元群里提。
+${NOW_RULE}`;
 // Before 2026-10-19 (no goal sense, no layered input): kept for side-by-side evaluation (NEXUS_MODE=legacy).
 export const nexusSystemPromptLegacy=nexusSystemPrompt.replace(/目标感：[^\n]*\n说话规矩：[^\n]*\n输入结构：[^\n]*\n/,'').replace('只用当前领域的公开消息、文档批注、卡片与提供的材料；facts（本体原文）和 otherUnits（其他单元摘要）只在本次需要时才提供。','只用当前领域的公开消息、文档批注、卡片与提供的飞书基础材料。');
 export const fields=['title','owner','result','time','checks','why','boundary','path','dependencies','logic','handoffs','parentLtoReference','tradeoff','expectedProgress','milestones','tier','risks','effort','stop'];
@@ -45,7 +50,7 @@ export function ownerAnnotation(s,card){return !!s&&s.kind==='document-comment'&
 // Everyday ways to ask for a change (2026-10-19 drill): 「按这个改」「帮我按刚才说的改一下」「M02 提到 P0」「我来改 M01 验收」.
 const everydayRequest=/按(这个|这|刚才|上面|前面|他|她|你|大家)[^。！？?]{0,10}(改|写|调)|帮(我|忙)?[^。！？?]{0,16}改|(提到|调到|降到|挪到|推到|移到|改到|延到|提前到)\s*(P[0-2]|\d|下周|下月|月底|1[0-2]月)|(^|[。，,；;！!？?\s])(改成|改为|改到|换成|挪到)|(删|去|拿)(了|掉)(吧|它|这)|(加|补)(上|一条)|我来改|(重新|再)出[^。！？?]{0,6}卡|重出|再出一[遍版张次]|按原来的(再)?出/;
 export function revisionRequest(text){const s=String(text||'');if(disagrees(s)||declinesChange(s))return false;if(everydayRequest.test(s))return true;return /(?:请|建议|应该|希望|需要|应当|要).{0,30}(?:修改|改成|改为|修订|调整|补充|增加|删除|去掉|限定|限于|明确|缩小|扩大|改|包含|体现|写清楚|写清|写明|注明|标明)|^(?:修改|改成|改为|修订|调整|补充|增加|删除|去掉|写明|注明)|出(?:个|一张)?修订卡|给.{0,40}出修订/u.test(s);}
-export function publicEvidence(messages,scope,{retainAll=false}={}){const rows=(Array.isArray(messages)?messages:[]).filter(m=>m.channel==='group'&&m.scope===scope&&m.id&&typeof m.text==='string'&&!['Nexus','nexus','Agent','system'].includes(m.author));return (retainAll?rows:rows.slice(-30)).map(m=>({id:String(m.id).slice(0,100),author:String(m.author).slice(0,80),text:m.text.slice(0,8000),kind:m.kind==='comment'?'document-comment':'chat',replyTo:m.replyTo,replyToAuthor:m.replyToAuthor,threadId:m.threadId,...(m.rejectsProposal?{rejectsProposal:m.rejectsProposal}:{}),...(m.answers?{answers:m.answers}:{}),context:m.context?{selection:m.context.selection,block:m.context.block,...(Number.isInteger(m.context.item)?{item:m.context.item}:{}),...(m.context.quote?{quote:m.context.quote}:{})}:null}));}
+export function publicEvidence(messages,scope,{retainAll=false}={}){const rows=(Array.isArray(messages)?messages:[]).filter(m=>m.channel==='group'&&m.scope===scope&&m.id&&typeof m.text==='string'&&!['Nexus','nexus','Agent','system'].includes(m.author));return (retainAll?rows:rows.slice(-30)).map(m=>({id:String(m.id).slice(0,100),author:String(m.author).slice(0,80),text:m.text.slice(0,8000),...(String(m.scope).startsWith('person:')?{scope:m.scope}:{}),kind:m.kind==='comment'?'document-comment':'chat',replyTo:m.replyTo,replyToAuthor:m.replyToAuthor,threadId:m.threadId,...(m.rejectsProposal?{rejectsProposal:m.rejectsProposal}:{}),...(m.answers?{answers:m.answers}:{}),context:m.context?{selection:m.context.selection,block:m.context.block,...(Number.isInteger(m.context.item)?{item:m.context.item}:{}),...(m.context.quote?{quote:m.context.quote}:{})}:null}));}
 // Everyday names for a card inside one domain: "M02"/"Mission 02" for Missions, "T01"/"Task 01" for Tasks.
 export function cardAliases(id){const m=String(id).match(/-m(\d+)(?:-t(\d+))?$/);if(!m)return [];const pad=n=>String(n).padStart(2,'0');return m[2]?[`T${pad(m[2])}`,`Task ${pad(m[2])}`,`T${Number(m[2])}`,`Task ${Number(m[2])}`]:[`M${pad(m[1])}`,`Mission ${pad(m[1])}`,`M${Number(m[1])}`,`Mission ${Number(m[1])}`];}
 export function candidateCards(nodes,candidates,scope,statusOf=()=>undefined,confirmationOf=()=>undefined){return nodes.filter(n=>(n.unit||n.id)===scope).map(n=>{const c=Array.isArray(candidates)?candidates.find(x=>x.id===n.id):null;const out={id:n.id,level:n.level,owner:n.owner,aliases:cardAliases(n.id),status:statusOf(n.id),confirmation:confirmationOf(n.id),version:Number.isInteger(c?.version)&&c.version>=n.version?c.version:n.version};for(const key of fields){if(key==='owner')continue;const value=c?.[key]??n[key];if(Array.isArray(value))out[key]=value.filter(x=>typeof x==='string').slice(0,30).map(x=>x.slice(0,3000));else if(['checks','milestones'].includes(key))out[key]=[];else if(typeof value==='string')out[key]=value.slice(0,8000);}return out;});}
@@ -53,6 +58,17 @@ export const isChildCard=(id,parent)=>String(id).startsWith(parent+'-');
 // How a card is called in the room: PO, M02, M02 的 T01.
 export function cardName(id,cards=[]){if(String(id).startsWith('rv:')){const m=String(id).match(/-m(\d+)$/);return m?`M${String(m[1]).padStart(2,'0')} 复盘`:id==='rv:company'?'公司复盘':'PO 复盘';}const m=String(id).match(/-m(\d+)(?:-t(\d+))?$/),pad=n=>String(n).padStart(2,'0');if(!m)return cards.find(c=>c.id===id)?.level==='po'||!/-/.test(id)?'PO':String(id);return m[2]?`M${pad(m[1])} 的 T${pad(m[2])}`:`M${pad(m[1])}`;}
 // The reply never claims a card that did not reach the room, and says plainly why one did not.
+// What goes to the room beside the cards (评测 2026-10-23): a card speaks for itself, but a question asked in the same
+// batch still gets its answer — 「这一条时间写错了」 and 「为什么判未达成？」 together used to leave the question unanswered.
+export function roomLine({reply,cards=0,questions=[]}){const text=String(reply||'').trim();if(!text)return '';return !cards||questions.length?text:'';}
+// What goes to the room (陈溪南 2026-10-27, fewer Nexus lines): cards that did not come out are not announced; they stay in lastAct.
+// A reply that only talked about cards says nothing; a reply with more in it keeps that part.
+export function quietReply(reply,kept=[],rejected=[],cards=[]){
+ const full=reconcileReply(reply,kept,rejected,cards),text=String(reply||'');
+ if(full===text)return text;
+ if(/^这次没/.test(full))return '';
+ return full.replace(/\s*更正：[^。]*没出成卡。$/,'');
+}
 export function reconcileReply(reply,kept=[],rejected=[],cards=[]){
  // Only a claim that a card is out needs correcting; 「你同意的话我再出卡」is a question and stays as it is (2026-10-19 Token Ops).
  const text=String(reply||''),mentions=/(已|已经|这就|现已)(出|给出|发出|生成)[^。！？?]{0,10}卡|卡[^。！？?]{0,6}(已出|已给出|已发出|已生成)|见(修订)?卡片|拟修改如下|请[^。！？?]{0,10}(接受|确认)[^。！？?]{0,6}(修订|这张卡|卡片)/.test(text);
@@ -65,7 +81,8 @@ export function reconcileReply(reply,kept=[],rejected=[],cards=[]){
  return text;
 }
 const aliasHit=(text,alias)=>new RegExp(`(?<![A-Za-z0-9])${alias.replace(/ /g,'\\s*')}(?![0-9])`,'i').test(text);
-export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=false,lastIntervention,interventionHistory=[],withdrawn=[]}){
+// ownRoom: the owner spoke in their own review room, which is speaking to Nexus (2026-10-27: Nexus decided to step in, then said nothing).
+export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=false,ownRoom=false,lastIntervention,interventionHistory=[],withdrawn=[]}){
  if(!value||typeof value!=='object'||!Array.isArray(value.topics)||!Array.isArray(value.proposals))throw Object.assign(Error('Nexus 输出格式不完整，未应用修订'),{status:502});
  const sources=new Map(evidence.map(m=>[m.id,m])),targets=new Map(cards.map(c=>[c.id,c]));
  const refersTo=(s,card,seen=new Set())=>{
@@ -110,18 +127,20 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
   // The model saw hidden details as 〔已隐去：…〕; writing that back would wipe the real text from the card.
   if(JSON.stringify(p.patch).includes('〔已隐去')){drop(p,'改动里带了隐去的占位');continue;}
   // Review cards take review fields and shapes (nexus-review.mjs); everything else below is the same rule for both.
-  const review=card.kind==='review';if(review){const bad=reviewPatchProblem(card,p.patch);if(bad){drop(p,bad);continue;}}
+  const review=card.kind==='review';if(review&&card.locked){drop(p,'这份复盘已定稿，不再修订');continue;}if(review){const bad=reviewPatchProblem(card,p.patch);if(bad){drop(p,bad);continue;}}
   // A comment on this card's parent (or the PO) may justify changing it: an upper change often has to flow down.
   const scopeCard=cards.find(c=>c.level==='po')?.id,ancestor=id=>card.id.startsWith(id+'-'),elsewhere=s=>{const id=s.context?.selection?.id;return !!id&&id!==card.id&&!ancestor(id)&&(id!==scopeCard||s.kind==='document-comment');};
   if(ids.some(id=>elsewhere(sources.get(id)))){drop(p,'依据挂在别的卡上');continue;}
-  if(!ids.some(id=>{const s=sources.get(id);return s.kind==='document-comment'?s.context?.selection?.id===card.id||ancestor(s.context?.selection?.id):refersTo(s,card)||ancestor(s.context?.selection?.id);})&&!proposals.some(q=>ancestor(q.cardId)&&q.sourceIds.some(id=>ids.includes(id)))){drop(p,'依据里没提到这张卡');continue;}
+  // A line in a person's own review room is about their reviews, so it may ground a card on any of them (2026-10-27).
+  const inOwnRoom=s=>card.kind==='review'&&String(s.scope||'').startsWith('person:')&&String(card.owner||'').split(/[、,，\s]+/).includes(s.author)&&!s.context?.selection?.id;
+  if(!ids.some(id=>{const s=sources.get(id);return s.kind==='document-comment'?s.context?.selection?.id===card.id||ancestor(s.context?.selection?.id):refersTo(s,card)||ancestor(s.context?.selection?.id)||inOwnRoom(s);})&&!proposals.some(q=>ancestor(q.cardId)&&q.sourceIds.some(id=>ids.includes(id)))){drop(p,'依据里没提到这张卡');continue;}
   // A list stays a list: replacing three dependency points with one sentence silently deletes the other two.
   if(!review&&Object.entries(p.patch).some(([k,v])=>Array.isArray(card[k])&&!Array.isArray(v))){drop(p,'列表字段被写成了一句话');continue;}
   if('tier'in p.patch&&(!['mission','task'].includes(card.level)||!['P0','P1','P2'].includes(p.patch.tier))){drop(p,'档位只能是 P0、P1、P2');continue;}
   // The owner's own comment on their own card is their decision (Nexus applies it directly and tells the group).
   const ownerNote=ids.some(id=>ownerAnnotation(sources.get(id),card));
   // A card both sides already confirmed is left alone unless someone explicitly asks, or its owner annotates it.
-  if(card.status==='已确认'&&!fresh.some(directQuestion)&&!ownerNote){drop(p,'这张卡已双方确认');continue;}
+  if(card.status==='已确认'&&!fresh.some(directQuestion)&&!ownerNote&&!ownRoom){drop(p,'这张卡已双方确认');continue;}
   const latest=new Map();for(const s of evidence)if(s.context?.selection?.id===card.id&&s.context.selection.version===card.version&&(Object.keys(p.patch).includes(s.context.block)||s.context.block==='card'))latest.set(s.author+':'+s.context.block,s);
   if([...latest.values()].some(s=>disagrees(s.text))){drop(p,'这张卡上还有人反对');continue;}
   if(ids.some(id=>{const selection=sources.get(id).context?.selection;return selection?.id===card.id&&selection.version<card.version;})){drop(p,'依据针对的是旧版本');continue;}
@@ -135,7 +154,13 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
   const askedNexus=ids.some(id=>{const s=sources.get(id);return directQuestion(s)&&/(卡|改|删|加|补|调|挪|提前|推迟|换|写|列|放|拆|并成|合并|去掉|拿掉|撤)/.test(s.text)&&!disagrees(s.text);});
   // Answering a review's 追问 invites the review to be corrected by it.
   const answered=ids.some(id=>{const s=sources.get(id);return s.answers&&s.context?.selection?.id===card.id;});
-  const requested=ownerNote||answersRejection||askedNexus||answered||ids.some(id=>revisionRequest(sources.get(id).text));
+  // Saying what the verdict really is, on a review, is asking to change it (2026-10-27 drill: 刘明华 on 判定「基本上达成……实际是达成了」 got no card).
+  const verdictClaim=review&&ids.some(id=>{const s=sources.get(id),t=String(s?.text||'');if(!s||s.context?.selection?.id&&s.context.selection.id!==card.id||disagrees(t)&&!/(判|达成)/.test(t))return false;
+   const said=(t.match(/部分达成|未达成|没达成|达成/g)||[]).map(w=>w==='没达成'?'未达成':w);const claim=said.find(w=>w!==card.verdict&&!new RegExp(`不(是|算)${w}`).test(t));
+   return !!claim&&(['verdict','verdictReason'].includes(s.context?.block||s.block)||/(判|实际|其实|应该|算)/.test(t));});
+  // In their own review room the owner arguing for a change is asking for it (2026-10-27): Nexus weighs the evidence either way.
+  const ownRoomAsk=review&&ids.some(id=>{const s=sources.get(id);return !!s&&String(s.context?.scope||s.scope||'').startsWith('person:')&&String(card.owner||'').split(/[、,，\s]+/).includes(s.author)&&!disagrees(s.text);});
+  const requested=ownerNote||answersRejection||askedNexus||answered||verdictClaim||ownRoomAsk||ids.some(id=>revisionRequest(sources.get(id).text));
   const follows=proposals.some(q=>ancestor(q.cardId)&&q.sourceIds.some(id=>ids.includes(id)));
   // Someone raises a point on this card (or the card above it) and its owner says 「我认了」「行」: that is agreement too
   // (2026-10-21 review drill), even when the model did not file it as an agreement topic.
@@ -144,7 +169,7 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
   const ownerAgreed=!!point&&[...ids.map(id=>sources.get(id)),...fresh].some(x=>x&&isOwner(x.author)&&agrees(x.text)&&!disagrees(x.text)&&String(x.createdAt||'')>=String(point.createdAt||''));
   const agreed=topics.some(t=>t.status==='agreement'&&ids.every(id=>t.sourceIds.includes(id)))||follows||ownerAgreed;
   if(!requested&&!agreed){drop(p,'没找到明确的修改要求');continue;}
-  const reason=String(p.reason||'依据公开反馈修订候选').slice(0,500);
+  const reason=readableAnswer(String(p.reason||'依据公开反馈修订候选'),cards).slice(0,500);
   proposals.push({cardId:p.cardId,baseVersion:p.baseVersion,reason:/iid_JSON|JSON_SEQUENCE|unsolicitedId|<[|]|[|]>/.test(reason)?'依据本领域公开修订请求更新候选，来源保留在修订记录中。':reason,sourceIds:ids,patch:review?normalizeReviewPatch(p.patch):p.patch});
  }
  // 新增/撤掉/恢复 Mission cards: one request each, on a PO shown here, grounded in a line that asked for it.
@@ -162,11 +187,14 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
   if(missionCards.some(x=>x.op===m.op&&(x.missionId||x.brief)===(m.missionId||m.brief))){continue;}
   missionCards.push({op:m.op,poId:po.id,...(m.missionId?{missionId:m.missionId}:{}),...(m.op==='add-mission'?{brief:String(m.brief).trim().slice(0,600)}:{}),reason:String(m.reason||'').slice(0,300)||'按群里的要求',sourceIds:ids});
  }
- const participation=participationDecision(value,{fresh,manual,lastIntervention});
+ const participation=participationDecision(value,{fresh,manual:manual||ownRoom,lastIntervention});
  const step=verifiedIntervention(value,{cards,evidence,refersTo});
  participation.signature=step?.signature;
  if(!participation.called&&(!step||interventionHistory.some(h=>h.signature===step.signature)))participation.speak=false;
  if((proposals.length||missionCards.length)&&!participation.called)participation.speak=false;
  const reply=String(value.reply||'').trim()||(participation.called&&!proposals.length&&!missionCards.length?'这次未生成有效回答，请再次 @Nexus 重试。你的问题已保存，不影响已有材料。':'');
- return {reply:participation.speak?(participation.called?wholeSentences(reply,220):step.reply):'',topics,proposals,missionCards,participation,rejected};
+ // A settled review is not argued with (评测 2026-10-28 L01: Nexus said it had 「补进」 a line on a locked card and changed nothing).
+ const reviewCards=cards.filter(c=>c.kind==='review'),lockedOnly=reviewCards.length&&reviewCards.every(c=>c.locked)||!proposals.length&&rejected.length&&rejected.every(r=>r.why==='这份复盘已定稿，不再修订');
+ if(ownRoom&&lockedOnly&&participation.speak!==false){const why=(reviewCards.find(c=>c.locked)?.lockedReason)||'这份复盘已经定稿';return {reply:`${why}，这次不改。有新情况请在单元群里提，由单元复盘的签字人决定。`,topics,proposals:[],missionCards:[],participation:{...participation,speak:true},rejected};}
+ return {reply:readableAnswer(participation.speak?(participation.called?wholeSentences(reply,220):step.reply):'',cards),topics,proposals,missionCards,participation,rejected};
 }

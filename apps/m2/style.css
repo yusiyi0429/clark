@@ -1136,3 +1136,289 @@ body.is-col-resizing{cursor:col-resize;user-select:none}
 .review-item-bubble{position:absolute;right:0;top:0;opacity:0;transition:opacity .15s}
 .review-list>li.review-item:hover .review-item-bubble,.review-item-bubble:focus-within,.review-item-bubble:has(.has-comments){opacity:1}
 .admin-skipped{color:#6b7b8a}
+
+/* 复盘改版 2026-10-26: facts lines and the insight card */
+.review-fact-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}
+.review-fact-owner{color:#5b6b7a;font-size:13px}
+.review-fact-status{font-size:13px;color:#6b7b8a}
+.review-fact.tone-no .review-fact-status{color:#b42318}.review-fact.tone-part .review-fact-status{color:#a15c07}.review-fact.tone-ok .review-fact-status{color:#1a7f37}
+.review-fact-evidence{margin:2px 0 0}
+.review-fact-gap{margin:2px 0 0;color:#475467}.review-fact-gap>span{color:#6b7b8a;font-size:13px;margin-right:6px}
+.review-facts-edit li{margin-bottom:12px}.review-facts-edit .review-fact-head select{margin-left:auto}
+.insight-card{margin-top:16px}
+.insight-guide{margin:6px 0 14px;color:#5b6b7a;font-size:13px}
+.insight-people{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:0 0 14px;padding:0}
+.insight-people li{display:flex;align-items:center;gap:6px;padding:3px 10px 3px 3px;border-radius:999px;background:#f2f5f9;font-size:12px;color:#344054}
+.insight-people li b{font-weight:500;color:#1a7f37}
+.insight-people li.is-owed{background:transparent;border:1px dashed #d0d8e2;color:#8a98a6}.insight-people li.is-owed b{color:#8a98a6}
+.insight-people li.is-owed .insight-avatar{opacity:.45}
+.insight-avatar{width:20px!important;height:20px!important;font-size:10px}
+.insight-nexus{margin:0 0 12px;padding:12px 14px;border-radius:12px;background:#f3f6ff;border:1px solid #dfe7ff}
+.insight-nexus-head{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#1f4fd1;margin-bottom:6px}
+.insight-nexus-orb{display:inline-flex;width:20px;height:20px}.insight-nexus-orb .nexus-orb{width:20px;height:20px}
+.insight-wall{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.insight-note{display:flex;flex-direction:column;justify-content:space-between;min-height:96px;padding:12px 14px;border-radius:12px;background:#fffbea;border:1px solid #f1e6bd}
+.insight-note.is-mine{background:#fffbea}
+.insight-note.is-new{background:#fff;border-color:#c9d6f5}
+.insight-note.is-add{padding:0;background:transparent;border:1px dashed #cfd8e3}
+.insight-note.is-add button{flex:1;border:0;background:transparent;color:#5b6b7a;font-size:13px;cursor:pointer;border-radius:12px}
+.insight-note.is-add button:hover{background:#f7f9fc;color:#1f4fd1}
+.insight-text{margin:0;white-space:pre-wrap;font-size:14px;line-height:1.6;color:#102c46}
+.insight-note-input{width:100%;border:0;outline:none;resize:vertical;background:transparent;font:inherit;font-size:14px;line-height:1.6;color:#102c46}
+.insight-note-foot{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:8px}
+.insight-author{display:flex;align-items:center;gap:6px;margin-right:auto;font-size:12px;color:#5b6b7a}
+.insight-actions{display:flex;gap:2px}.insight-actions .plain,.insight-note-foot>.plain{font-size:12px;min-height:0;padding:2px 6px;color:#5b6b7a}.insight-actions .insight-delete{color:#b42318}
+.insight-note-foot .proposal-confirm{min-height:0;padding:4px 12px;font-size:12px}
+.insight-note-foot .admin-line{margin-right:auto;font-size:12px}
+.admin-reveal{margin:10px 0}
+
+.review-owner-heading{font-size:13px;color:#5b6b7a;font-weight:500;margin:14px 0 6px}.review-owner-heading small{font-weight:400}
+
+/* 共同确认 inside the review card (2026-10-26) */
+.review-card>.handshake{margin:18px 0 0;padding:16px 0 0;border:0;border-top:1px solid #e8edf2;border-radius:0;background:transparent;box-shadow:none}
+.review-verdict-word.tone-no{color:#b42318}.review-verdict-word.tone-part{color:#a15c07}.review-verdict-word.tone-ok{color:#1a7f37}
+
+:root .plan-doc-canvas .review-card .card-head .review-edit-toggle{margin:-3px 0}
+:root .plan-doc-canvas .review-card>.handshake{margin:18px 0 0;padding:16px 0 0;border:0;border-top:1px solid #e8edf2;border-radius:0;background:transparent;box-shadow:none}
+:root .plan-doc-canvas .review-card>.handshake.is-complete{background:transparent}
+
+.entry-controls{margin-top:24px;max-width:760px}.entry-controls .admin-block:first-child{padding-top:0}
+/* Revision card changes in place (2026-10-27) */
+.change-inline{margin:2px 0 0;font-size:13px;line-height:1.65;color:#102c46}
+.change-inline .change-old{margin-right:2px}
+.change-inline .diff-mark{background:#fbefc4;color:#102c46;padding:0 2px;border-radius:3px}
+.proposal-diff-group+.proposal-diff-group,.proposal-diff+.proposal-diff-group,.proposal-diff-group+.proposal-diff{margin-top:12px}
+.proposal-diff-group>.proposal-diff{margin-top:4px}
+.proposal-part{display:block;font-size:12px;color:#6b7b8a}
+.insight-nexus .review-none,.insight-nexus .insight-text{margin:0;padding:0}
+
+/* 管理: 复盘 | 拆解 side by side, five facts each (2026-10-27) */
+.round-controls{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start}
+.round-controls .admin-block{border:0;padding:0;margin:0}
+.admin-facts{margin:8px 0 14px;display:grid;gap:6px}
+.admin-facts>div{display:grid;grid-template-columns:64px 1fr;gap:8px;font-size:13px}
+.admin-facts dt{color:#6b7b8a}.admin-facts dd{margin:0;color:#102c46}
+@media (max-width:640px){.round-controls{grid-template-columns:1fr}}
+
+/* 便利贴墙 (2026-10-27) */
+.insight-card h2{margin-bottom:14px}
+.insight-wall{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+.insight-note{aspect-ratio:1/1;min-height:0;padding:14px 16px;border-radius:3px;border:0;background:#fff4b8;box-shadow:0 1px 2px #0000000f,0 4px 10px #a0821c1a;overflow:hidden}
+.insight-note .insight-text{flex:1;overflow:auto;font-size:13.5px}
+.insight-note .insight-author{margin-left:auto;margin-right:0;font-size:12px;color:#7a6a2e;font-style:normal}
+.insight-note-foot{gap:4px}
+.insight-note.is-nexus{background:#e6edff;box-shadow:0 1px 2px #0000000f,0 4px 10px #1f4fd11a}.insight-note.is-nexus .insight-author{color:#1f4fd1}
+.insight-note.is-face-down{background:#fff4b8;opacity:.75}.insight-note.is-face-down .insight-text{color:#a8955a;display:grid;place-items:center;text-align:center}
+.insight-note.is-new{background:#fffbe0;box-shadow:0 0 0 2px #e8d77a inset}
+.insight-note.is-spot{background:transparent;box-shadow:none;border:1.5px dashed #d8cf9e;display:grid;place-items:center;padding:0;color:#a8955a;font-size:13px;text-align:center}
+.insight-note.is-spot small{display:block;margin-top:4px;font-size:12px;color:#b8ab78}
+.insight-note.is-spot button{width:100%;height:100%;border:0;background:transparent;color:#8a7a3a;font-size:13px;cursor:pointer}
+.insight-note.is-spot button:hover{background:#fffbe6}
+.insight-note.is-mine-spot{border-color:#c9b65a}
+.insight-note.is-spot button{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.insight-note.is-mine{background:#fff4b8}
+.insight-note .insight-actions{order:-1;margin-right:auto}
+:root .plan-doc-canvas .insight-wall .insight-note.is-spot button{display:flex!important;flex-direction:column;align-items:center!important;justify-content:center!important;text-align:center;padding:0}
+:root .plan-doc-canvas .insight-wall .insight-note.is-spot>span{text-align:center}
+:root .plan-doc-canvas .insight-wall .insight-note.is-spot{display:flex}
+:root .plan-doc-canvas .insight-wall .insight-note.is-spot>button{flex:1;align-self:stretch;width:auto;height:auto}
+:root .plan-doc-canvas .insight-wall .insight-note.is-spot>span{flex:1;align-self:center}
+.insight-note.is-nexus{grid-column:span 2;aspect-ratio:auto;min-height:180px}.insight-note.is-nexus .insight-text{overflow:visible}
+@media (max-width:640px){.insight-note.is-nexus{grid-column:auto}}
+
+/* 复盘卡里的确认：一横排 (2026-10-27) */
+.handshake-signers{display:flex;flex-wrap:wrap;gap:10px 28px;margin-top:10px}
+:root .plan-doc-canvas .handshake-signer.is-compact{display:flex;align-items:center;gap:8px;padding:0;border:0;background:transparent;min-height:0}
+.handshake-signer.is-compact strong{font-size:13px;font-weight:500;color:#8a98a6}
+.handshake-signer.is-compact.is-signed strong{color:#102c46}
+.handshake-signer.is-compact .handshake-confirm{min-height:0;height:28px;padding:0 14px;margin-left:4px}
+.handshake-signer.is-compact .signature-status{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#1a7f37}
+:root .plan-doc-canvas .review-card>.handshake .handshake-summary{margin:4px 0 0}
+:root .plan-doc-canvas .review-card>.handshake>:last-child{margin-bottom:0}
+:root .plan-doc-canvas .insight-wall .insight-note.is-spot>span{flex:1;align-self:stretch;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.insight-card .insight-wall{margin-top:14px}
+/* spots and face-down notes: content dead centre (2026-10-27) */
+:root .plan-doc-canvas .insight-wall .insight-note.is-spot,:root .plan-doc-canvas .insight-wall .insight-note.is-face-down{display:grid!important;place-items:center;padding:0;text-align:center}
+:root .plan-doc-canvas .insight-wall .insight-note.is-spot>*,:root .plan-doc-canvas .insight-wall .insight-note.is-face-down>*{grid-area:1/1;align-self:center;justify-self:center;flex:none;display:block}
+:root .plan-doc-canvas .insight-wall .insight-note.is-spot>button{align-self:stretch;justify-self:stretch;width:100%;height:100%;font-size:28px;font-weight:300;line-height:1;color:#b3a160}
+.insight-note.is-face-down>span{font-size:13px;color:#8a7a3a}
+:root .plan-doc-canvas .insight-wall .insight-note.is-spot,:root .plan-doc-canvas .insight-wall .insight-note.is-face-down{justify-content:center;align-content:center}
+:root .plan-doc-canvas .handshake>.handshake-signers{justify-content:flex-start;border:0;min-height:0;padding:0}
+/* writing on the note itself: the box is the note (2026-10-27) */
+:root .plan-doc-canvas .insight-wall .insight-note.is-new,:root .plan-doc-canvas .insight-wall .insight-note.is-editing{background:#fff4b8;box-shadow:0 1px 2px #0000000f,0 4px 10px #a0821c1a;border:0}
+:root .plan-doc-canvas .insight-wall .insight-note-input{flex:1;width:100%;height:auto;min-height:0;margin:0;padding:0;border:0!important;outline:none!important;box-shadow:none!important;border-radius:0;background:transparent!important;resize:none;font-size:13.5px;line-height:1.6;color:#102c46}
+:root .plan-doc-canvas .insight-wall .insight-note-input::placeholder{color:#b3a160}
+:root .plan-doc-canvas .insight-wall .insight-note.is-spot.is-mine-spot{border:0;background:#fffbe3;box-shadow:0 1px 2px #0000000a,0 4px 10px #a0821c12}
+:root .plan-doc-canvas .insight-wall .insight-note.is-spot.is-mine-spot>button:hover{background:#fff6c9}
+
+/* 共同确认 as the table's signature row (2026-10-27) */
+.review-sign-row th.is-agreed{color:#1a7f37}
+:root .plan-doc-canvas .review-sign-row .handshake{margin:0;padding:0;border:0;background:transparent;box-shadow:none;border-radius:0}
+:root .plan-doc-canvas .review-sign-row .handshake-signers{display:flex;flex-wrap:wrap;gap:16px 40px;margin:0;padding:0;border:0;min-height:0;justify-content:flex-start}
+.sign-line{display:flex;flex-direction:column;min-width:150px}
+.sign-ink{display:flex;align-items:flex-end;min-height:38px;padding:0 4px 4px;border-bottom:1px solid #9aa8b5;font-family:"Kaiti SC","STKaiti","KaiTi","BiauKai",serif;font-size:24px;line-height:1;color:#0b2a6b}
+.sign-line.is-mine .sign-ink{border-bottom-color:#002fa7}
+.sign-line:not(.is-signed):not(.is-mine) .sign-ink{border-bottom-style:dashed;border-bottom-color:#c3ccd6}
+.sign-ink .handshake-confirm{font-family:inherit;font-size:13px;min-height:0;height:28px;padding:0 14px;margin-bottom:2px}
+.sign-ink .handshake-locked{font-family:system-ui;font-size:12px;color:#a0600f;margin-right:8px}
+.sign-caption{display:flex;align-items:center;gap:4px;margin-top:4px;padding-left:4px;font-size:12px;color:#8a98a6}
+.sign-line.is-signed .sign-caption{color:#1a7f37}
+.insight-card .level-tag.insight-tag{background:#eef1f6;color:#344054}
+.insight-why{margin:10px 0 0;font-size:13px;line-height:1.6;color:#475467}
+.sign-ink .handshake-confirm{font-family:system-ui,-apple-system,"PingFang SC",sans-serif!important}
+/* 共同确认: one click, with a seal (2026-10-27) — replaces the ink signature lines */
+.sign-line{flex-direction:row;align-items:center;gap:8px;min-width:0}
+.sign-line strong{font-size:14px;font-weight:600;color:#102c46}
+.sign-line:not(.is-signed):not(.is-mine) strong{color:#8a98a6;font-weight:500}
+.sign-seal{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 10px;border-radius:999px;border:1px solid #9fd3b1;background:#ecf8f0;color:#137a3a;font-size:12px;font-weight:500}
+.sign-seal.is-open{border:1px dashed #c3ccd6;background:transparent;color:#8a98a6;font-weight:400}
+.sign-line .handshake-confirm{min-height:0;height:28px;padding:0 16px;font-size:13px}
+.sign-line .handshake-locked{font-size:12px;color:#a0600f}
+.sign-slot{display:inline-flex;align-items:center;gap:6px;width:156px;flex:none}
+
+/* 洞察 as a row of the review card; 先贴一条洞察 before 确认 (2026-10-27) */
+.review-insight-row th small{display:block;margin-top:4px;font-size:12px;font-weight:400;color:#8a98a6}
+.insight-row .insight-why{margin:0 0 12px}
+.insight-row .insight-wall{margin-top:0}
+.sign-line .sign-gate{min-height:0;height:28px;padding:0 12px;font-size:13px;color:#002fa7;border:1px solid #002fa7;border-radius:999px;background:#fff}
+.sign-slot{position:relative}
+.sign-hint{position:absolute;left:0;top:calc(100% + 6px);z-index:2;white-space:nowrap;padding:4px 10px;border-radius:8px;background:#fff7e6;border:1px solid #f0d9a8;color:#8a5a00;font-size:12px;box-shadow:0 2px 8px #0000000f}
+.sign-hint{top:auto;bottom:calc(100% + 6px)}
+/* 洞察 as a list with one input (2026-10-27) */
+.insight-row .insight-why{margin:0 0 8px}
+.insight-row .insight-nexus{margin:0 0 10px;padding:10px 12px;border-radius:10px;background:#f3f6ff;border:1px solid #dfe7ff}
+.insight-row .insight-nexus>strong{display:block;font-size:13px;color:#1f4fd1;margin-bottom:4px}
+.insight-row .insight-list{margin:0 0 6px}
+.insight-item{display:flex;align-items:flex-start;gap:10px}
+.insight-item .insight-text{flex:1;white-space:pre-wrap}
+.insight-item .insight-author{margin-left:8px;font-size:12px;color:#6b7b8a;white-space:nowrap}
+.insight-item .insight-actions,.insight-compose .insight-actions{display:inline-flex;align-items:center;gap:2px;flex:none}
+.insight-item .insight-actions .plain{font-size:12px;min-height:0;padding:2px 6px;color:#6b7b8a}
+.insight-item.is-editing,.insight-compose{display:flex;align-items:flex-start;gap:8px;margin-top:4px}
+.insight-input{flex:1;min-height:0}
+.insight-compose .proposal-confirm,.insight-item .proposal-confirm{min-height:0;height:30px;padding:0 14px;font-size:13px}
+.insight-others{margin:2px 0 6px;font-size:12px;color:#6b7b8a}
+.insight-add{margin-top:2px;padding:4px 10px;border:1px dashed #c3ccd6;border-radius:8px;background:transparent;color:#31516f;font-size:13px;cursor:pointer}
+.insight-add:hover{border-color:#002fa7;color:#002fa7}
+.insight-row .insight-list{counter-reset:ins;padding-left:0;list-style:none}
+.insight-item{counter-increment:ins}.insight-item::before{content:counter(ins) ".";flex:none;width:18px;color:#6b7b8a}
+
+/* 下期输入 and the deadline (2026-10-27) */
+.review-next-type{margin-right:6px;font-weight:600}
+.review-next.tone-verify .review-next-type{color:#175cd3}.review-next.tone-limit .review-next-type{color:#a15c07}.review-next.tone-stop .review-next-type{color:#60768a}.review-next.tone-decide .review-next-type{color:#6941c6}
+.review-due{font-size:12px;color:#6b7b8a;margin-right:6px}.review-due.is-over{color:#b42318}
+/* 分析洞察: one line each, 人名：内容 (2026-10-27) */
+.insight-row .insight-list{list-style:none;padding:0;margin:0 0 6px}
+.insight-item{counter-increment:none}.insight-item::before{content:none}
+.insight-item+.insight-item{margin-top:4px}
+.insight-who{font-weight:600;color:#102c46}
+.insight-sealed{color:#8a98a6}
+/* one text size on the review card: 13px like the facts (2026-10-27) */
+:root .plan-doc-canvas .review-card .insight-item,:root .plan-doc-canvas .review-card .insight-item .insight-text,:root .plan-doc-canvas .review-card .insight-sealed,:root .plan-doc-canvas .review-card .insight-nexus .insight-text{font-size:13px;line-height:1.7;color:#31495f}
+:root .plan-doc-canvas .review-card .insight-who{font-size:13px;font-weight:700;color:#31495f}
+:root .plan-doc-canvas .review-card .insight-sealed{color:#8a98a6}
+:root .plan-doc-canvas .review-card .sign-line strong{font-size:13px;font-weight:700;color:#31495f}
+:root .plan-doc-canvas .review-card .sign-line:not(.is-signed):not(.is-mine) strong{color:#8a98a6;font-weight:500}
+:root .plan-doc-canvas .review-card .insight-input{font-size:13px}
+/* 管理: buttons side by side, unusual lines under them (2026-10-27) */
+.admin-actions{display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px}
+.admin-actions .admin-reveal{margin:0;display:contents}
+.admin-actions .admin-confirm,.admin-actions .admin-reveal>p,.admin-actions .admin-reveal>ul{flex-basis:100%}
+.admin-block>.admin-line.is-failed,.admin-block>.admin-line.is-running{margin-top:10px}
+.admin-secondary{border:1px solid #002fa7!important;background:#fff!important;color:#002fa7!important}
+:root .admin-actions .admin-secondary{border:1px solid #002fa7!important;background:#fff!important;color:#002fa7!important;box-shadow:none}
+/* comment bubbles: a plain number; colour only when unread (2026-10-27) */
+.field-comment-trigger .comment-count{margin-left:2px;padding:0;background:none;font-size:11px;line-height:1;color:#8a98a6}
+.field-comment-trigger.is-unread,.field-comment-trigger.is-unread .comment-count{color:#1f4fd1}
+.field-comment-trigger.is-unread .comment-count{font-weight:600}
+
+/* review revision card digest (2026-10-27) */
+.proposal-digest{display:grid;gap:4px;margin-top:6px}
+.proposal-digest-row{margin:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;font-size:13px;line-height:1.5}
+.proposal-digest-label{color:#5b6b7a;margin-right:2px}
+.proposal-digest-label::after{content:'：'}
+.revision-message-card .proposal-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* Nexus at work: a blue veil under the dots, not white (陈溪南 2026-10-27) */
+:root .ai-revision-overlay{background:rgba(31,79,209,.14);backdrop-filter:blur(1px);-webkit-backdrop-filter:blur(1px);border-color:#376aff55}
+:root .ai-revision-overlay.presenting{background:rgba(31,79,209,.09)}
+:root .ai-revision-overlay.done{background:transparent}
+:root .ai-revision-overlay.failed{background:#fff1e8dd}
+
+/* 群成员：标题旁一排小头像 (2026-10-27) */
+.group-members{position:relative;margin-left:8px;flex:none}
+.group-members-stack{display:flex;align-items:center;height:32px;padding:0 6px 0 4px;border:0;border-radius:999px;background:transparent;cursor:pointer}
+.group-members-stack:hover{background:#eef2f7}
+.group-member-slot{display:inline-flex;margin-left:-6px;border-radius:50%;box-shadow:0 0 0 2px #fff}.group-member-slot:first-child{margin-left:0}
+.group-member-face{width:22px!important;height:22px!important;font-size:10px}
+.group-member-face .nexus-orb,.group-members .nexus-avatar .nexus-orb{width:22px;height:22px}
+.group-members-more{margin-left:4px;font-size:12px;color:#5b6b7a}
+.group-members-panel{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:260px;padding:12px;border-radius:12px;background:#fff;border:1px solid #e3e9ef;box-shadow:0 8px 24px #0f243a1f}
+.group-members-title{display:block;font-size:13px;margin-bottom:8px}
+.group-members-panel ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.group-members-panel li{display:flex;align-items:center;gap:8px}
+.group-members-panel li .group-member-face{width:26px!important;height:26px!important}
+.group-members-panel li>span{display:flex;flex-direction:column;min-width:0}
+.group-members-panel b{font-size:13px;font-weight:600;color:#102c46}
+.group-members-panel small{font-size:12px;color:#6b7b8a}
+.group-members-panel li.is-limited b{color:#6b7b8a;font-weight:500}
+/* group members: same pill as the tabs beside it, no click ring (2026-10-27) */
+:root .chat-top .group-members-stack{height:40px;padding:0 10px 0 8px;gap:0;border-radius:999px;background:#eef2f6;outline:none;box-shadow:none}
+:root .chat-top .group-members-stack:hover{background:#e6ebf1}
+:root .chat-top .group-members-stack:focus{outline:none}
+:root .chat-top .group-members-stack:focus-visible{outline:2px solid #376aff66;outline-offset:2px}
+:root .chat-top .group-member-slot{box-shadow:0 0 0 1.5px #eef2f6}
+:root .chat-top .group-member-face{width:20px!important;height:20px!important}
+:root .chat-top .group-members-more{margin-left:6px;font-size:12px;font-weight:500;color:#5b6b7a}
+/* one group avatar in the group tab: a circle cut into four faces (2026-10-27) */
+.group-avatar{display:inline-grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:1px;width:20px;height:20px;margin-left:6px;border-radius:50%;overflow:hidden;background:#fff;flex:none;vertical-align:middle;box-shadow:0 0 0 1.5px #ffffff66}
+.group-avatar.n1{grid-template-columns:1fr;grid-template-rows:1fr}
+.group-avatar.n2{grid-template-rows:1fr}
+.group-avatar.n3 .group-avatar-cell:first-child{grid-row:span 2}
+.group-avatar-cell{display:block;overflow:hidden;background:#dbe5ef}
+.group-avatar-cell img{width:100%;height:100%;object-fit:cover;display:block}
+.group-avatar-cell i{display:grid;place-items:center;height:100%;font-style:normal;font-size:7px;color:#31516f}
+.group-avatar.is-active{cursor:pointer}.group-avatar.is-active:hover{box-shadow:0 0 0 2px #ffffffcc}
+.group-avatar:focus{outline:none}.group-avatar:focus-visible{box-shadow:0 0 0 2px #fff,0 0 0 4px #376aff88}
+:root .group-members-panel{position:fixed;z-index:60}
+/* 透光烟云 orb (2026-10-27): the canvas paints the orb; the CSS gradient stays underneath as the first frame */
+.nexus-orb-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;border-radius:50%}
+.nexus-orb i,.nexus-orb b{display:none}
+
+/* 个人复盘 entry on the review home (2026-10-27) */
+.person-summary-list{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px}
+.person-summary-list li{display:flex;align-items:baseline;gap:8px;font-size:13px;color:#31495f}
+.person-summary-tag{flex:none;font-size:12px;color:#6b7b8a}
+.person-summary-list .review-verdict{margin-left:auto}
+.review-primary>.review-card+.review-card{margin-top:16px}
+:root .person-summary-list .review-verdict{background:none!important;border:0!important;padding:0!important;font-size:12px;font-weight:400}
+.person-summary-list .review-verdict.tone-no{color:#b42318}.person-summary-list .review-verdict.tone-part{color:#a15c07}.person-summary-list .review-verdict.tone-ok{color:#1a7f37}
+.todo-flat li.has-ack{display:flex;align-items:center;gap:6px}
+.todo-flat li.has-ack .todo-item{flex:1;min-width:0}
+.todo-ack{flex:none;border:1px solid #c8d3e0;background:#fff;color:#31516f;font-size:12px;border-radius:999px;padding:3px 10px;cursor:pointer}
+.todo-ack:hover{border-color:#002fa7;color:#002fa7}
+
+/* 参考：本单元的 Mission 复盘 (2026-10-27) */
+.review-refs{margin-top:18px}
+.review-refs h3{font-size:13px;font-weight:500;color:#5b6b7a;margin:0 0 8px}.review-refs h3 small{font-weight:400}
+.review-refs ul{list-style:none;margin:0;padding:0;border:1px solid #e3e9ef;border-radius:12px;background:#fff;overflow:hidden}
+.review-refs li+li{border-top:1px solid #eef2f6}
+.review-refs button{display:flex;align-items:baseline;gap:10px;width:100%;padding:10px 14px;border:0;background:transparent;text-align:left;cursor:pointer;font-size:13px;color:#31495f}
+.review-refs button:hover{background:#f7f9fc}
+.review-refs-tag{flex:none;font-size:12px;color:#6b7b8a}
+.review-refs-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#102c46}
+.review-refs-owner{flex:none;font-size:12px;color:#5b6b7a}
+.review-refs-state{flex:none;font-size:12px;color:#8a98a6}.review-refs-state[data-confirmed="true"]{color:#1a7f37}
+.sign-line .handshake-locked{position:static;white-space:nowrap;margin-left:6px}
+.sign-slot:has(.handshake-locked){width:auto}
+
+/* insights from a Mission review in the unit review; the bot face in member lists (2026-10-27) */
+.insight-source{display:inline-block;margin-right:6px;padding:0 6px;border-radius:999px;background:#eef2f7;color:#5b6b7a;font-size:11px;line-height:18px;vertical-align:1px}
+.group-member-bot{display:inline-flex}.group-member-bot>*{width:100%;height:100%}
+.review-locked{margin:4px 0 0;font-size:12px;color:#6b7b8a}
+.proposal-locked{font-size:12px;color:#6b7b8a;padding:8px 12px}
+
+/* Company review gets its own tone, apart from battlefield blue and domain green (陈溪南 2026-10-28). */
+.shell,.entry{--company:#f1ebfb;--company-ink:#6a3fb5}
+.tone-company{--tone-ink:var(--company-ink);--tone-bg:var(--company)}
+/* Disabled confirm stays readable: grey, but the word shows (陈溪南 2026-10-28). */
+.handshake-confirm[disabled],.handshake-confirm[data-disabled=true]{opacity:1!important;background:#e3e8ee!important;color:#5b6b7c!important}
