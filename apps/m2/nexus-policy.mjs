@@ -127,7 +127,7 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
   // The model saw hidden details as 〔已隐去：…〕; writing that back would wipe the real text from the card.
   if(JSON.stringify(p.patch).includes('〔已隐去')){drop(p,'改动里带了隐去的占位');continue;}
   // Review cards take review fields and shapes (nexus-review.mjs); everything else below is the same rule for both.
-  const review=card.kind==='review';if(review){const bad=reviewPatchProblem(card,p.patch);if(bad){drop(p,bad);continue;}}
+  const review=card.kind==='review';if(review&&card.locked){drop(p,'这份复盘已定稿，不再修订');continue;}if(review){const bad=reviewPatchProblem(card,p.patch);if(bad){drop(p,bad);continue;}}
   // A comment on this card's parent (or the PO) may justify changing it: an upper change often has to flow down.
   const scopeCard=cards.find(c=>c.level==='po')?.id,ancestor=id=>card.id.startsWith(id+'-'),elsewhere=s=>{const id=s.context?.selection?.id;return !!id&&id!==card.id&&!ancestor(id)&&(id!==scopeCard||s.kind==='document-comment');};
   if(ids.some(id=>elsewhere(sources.get(id)))){drop(p,'依据挂在别的卡上');continue;}

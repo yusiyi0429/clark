@@ -26,6 +26,15 @@ export const roomMember=scope=>String(scope||'').startsWith('person:')?String(sc
 export function roomOf(card){if(isReview(card)&&card.level==='mission'&&currentVersion(card).content.ownerAssigned!==false){const room=personRoomOf(reviewOwners(card)[0]);if(room)return room;}return unitOf(card);}
 export function canReadRoom(actor,scope){const m=roomMember(scope);return m?actor?.id===m:!!actor&&(actor.ceo===true||(actor.visibleUnits||[]).includes(scope));}
 // A review's due time (陈溪南 2026-10-27): 个人复盘 24 hours after the round is in, unit and company reviews 48.
+// 锁定 (陈溪南 2026-10-28): once a unit review is confirmed its 个人复盘 are settled; once the company review is, the whole round
+// is. A locked review is read and commented on only: no revision, no Nexus card, no follow-up card on the unit review.
+export function reviewLock(state,card){
+ if(!isReview(card))return null;
+ const company=Object.values(state.cards).find(c=>isReview(c)&&c.level==='company'),done=c=>!!c&&c.confirmedVersion===currentVersion(c).number;
+ if(done(company))return {reason:'公司复盘已确认，这一轮复盘只能看和批注'};
+ if(card.level==='mission'&&done(state.cards[card.parentId]))return {reason:'单元复盘已确认，个人复盘不能再改'};
+ return null;
+}
 export const reviewCardDueAt=(round,card)=>!round?.loadedAt||!round.dueAt?null:isReview(card)&&card.level==='mission'?new Date(Date.parse(round.loadedAt)+24*3600e3).toISOString():round.dueAt;
 const reviewEditable=new Set(['verdict','verdictReason','facts','targets','causes','nextInputs','ltoReview']);
 // 复盘三段式 (陈溪南 2026-10-26): a fact line is one Task / Mission / unit — what it is, its status, the evidence and the plain gap.
@@ -178,6 +187,7 @@ export function applyAction(previous,actor,action){
  if(!card||!canRead(actor,card)&&actor.kind!=='coagent')fail(403,'不在当前领域可见范围内');
  const v=currentVersion(card),now=new Date().toISOString();
  if(action.type==='revise'){
+  {const lock=reviewLock(state,card);if(lock)fail(409,lock.reason);}
   const verdictCard=action.viaProposal&&(state.proposals||[]).find(p=>p.id===action.viaProposal&&p.verdictChange);
   if(!mayRevise(actor,card)&&!(verdictCard&&verdictDeciders(state,card,verdictCard).includes(nameOf(actor.id))))fail(403,'请由当前成果负责人修订');
   if(action.baseVersion!==v.number)fail(409,'内容已更新，请检查最新版本再修订');

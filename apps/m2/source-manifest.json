@@ -128,7 +128,7 @@
     },
     {
       "path": "governance.mjs",
-      "sha256": "a510712f6e7502dd83331f1217ba9914f6fda8552ca003cd162f622d252af936"
+      "sha256": "cdc6da8fa6f94ed26e91616584066004ac65d9c2d4bca6a3846654ad8be11921"
     },
     {
       "path": "Handshake.jsx",
@@ -196,7 +196,7 @@
     },
     {
       "path": "nexus-policy.mjs",
-      "sha256": "3944c861001185315070238ccbfbf556e70a5025c7aa17d01fe9313602c026ce"
+      "sha256": "e0757957b79ca8e14467a1bcb5d35945843d508a895382f595a4da07a64de457"
     },
     {
       "path": "nexus-retry.mjs",
@@ -204,7 +204,7 @@
     },
     {
       "path": "nexus-review.mjs",
-      "sha256": "4893986ce04431d22676dbdadb896f7dbba7e424e6bbb5ef6439fca374cee4b5"
+      "sha256": "1743c3b9ebae6baf5599d43282ade34298359075192f534b6f86be149d164f74"
     },
     {
       "path": "NexusIsland.jsx",
@@ -277,7 +277,7 @@
     },
     {
       "path": "review-cascade.mjs",
-      "sha256": "250b2a7c5a2730725596e36664c0ee09cffc21aad6004fe074286ffbe547489d"
+      "sha256": "bb3c0e2df1fb94df16fd772ace0a80318bc5aeb1a95daf376d9cb1635a47b576"
     },
     {
       "path": "review-display.mjs",
@@ -381,11 +381,11 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "414eb7acf840d7fceb3a74f1be9243967fe1e4e38b60342f95b60ec2fd42b39a"
+      "sha256": "3597933c36aa65177fee43b369c68886b1ebc9c4a017a940bae2feba428179d1"
     },
     {
       "path": "shared-projection.mjs",
-      "sha256": "d666dee69a9c7e4b636a4a2b2c3c56edf56a834d4ea1ba7a7b1e0aa905e4a249"
+      "sha256": "53e660434cd2646b73e05c5dfbf9f0a59e6541aadc6f945c61a202c159d9f1d5"
     },
     {
       "path": "skill-snapshot.mjs",

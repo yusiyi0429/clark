@@ -293,3 +293,19 @@ test('给人看的话里不露内部写法：ref-3 写成第 3 项，复盘卡�
  assert.equal(readableAnswer('单元复盘 eo-m3 行里的 status 要改，nextInputs 里加一条',cards),'单元复盘 《Ontology & Data Grounding》 行里的 状态 要改，下期输入 里加一条');
  assert.equal(readableAnswer('bf01-m10 不认识就不动',cards),'bf01-m10 不认识就不动');
 });
+
+test('锁定：单元复盘确认后个人复盘不能再改、不再联动；公司复盘确认后整轮只能看和批注；投影带 locked 和原因',async()=>{
+ const {cascadeSkip}=await import('./review-cascade.mjs');const {validateNexusResult}=await import('./nexus-policy.mjs');const {reviewCardsFor}=await import('./nexus-review.mjs');
+ let s=fresh();const sun=memberActor('member-03',s),ceo=memberActor('member-01',s);
+ const c=currentVersion(s.cards['rv:bf01-m1']).content;
+ s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:1,patch:{verdictReason:'演示了，客户没真用'}});const job=s.reviewCascadeQueue.at(-1);
+ for(const [id,slot,who] of [['rv:bf01-m1','missionDri',sun],['rv:bf01','ceo',ceo],['rv:bf01','unitDri',ceo]]){s=applyAction(s,who,{type:'insight',cardId:id,text:'x'});s=applyAction(s,who,{type:'confirm',cardId:id,slot,baseVersion:currentVersion(s.cards[id]).number});}
+ assert.throws(()=>applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:2,patch:{verdictReason:'再改'}}),/单元复盘已确认，个人复盘不能再改/);
+ assert.equal(cascadeSkip(s,job),'单元复盘已确认，不再联动');
+ const d=sharedProjection(s,sun).drafts;assert.deepEqual([d['rv:bf01-m1'].locked,d['rv:bf01-m1'].lockedReason],[true,'单元复盘已确认，个人复盘不能再改']);assert.equal(d['rv:bf01'].locked,undefined);
+ const cards=reviewCardsFor(s,'person:member-03');assert.equal(cards[0].locked,true);
+ assert.equal(validateNexusResult({topics:[],proposals:[{cardId:'rv:bf01-m1',baseVersion:2,basis:'request',sourceIds:['x'],patch:{verdictReason:'y'}}]},{cards,evidence:[{id:'x',author:'孙铭泽',text:'改一下',kind:'chat',scope:'person:member-03',context:null}],fresh:[],ownRoom:true}).rejected[0].why,'这份复盘已定稿，不再修订');
+ s=applyAction(s,ceo,{type:'insight',cardId:'rv:company',text:'y'});s=applyAction(s,ceo,{type:'confirm',cardId:'rv:company',slot:'ceo',baseVersion:1});
+ assert.throws(()=>applyAction(s,ceo,{type:'revise',cardId:'rv:bf01',baseVersion:1,patch:{verdictReason:'z'}}),/公司复盘已确认/);
+ s=applyAction(s,ceo,{type:'comment',cardId:'rv:bf01',baseVersion:1,block:'facts',text:'仍可批注'});assert.equal(s.comments.at(-1).text,'仍可批注');
+});

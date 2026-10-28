@@ -2,7 +2,7 @@
 // and the unit review above it. Only a change that matters for the unit review (that Mission's fact line, the verdict's
 // grounds) becomes a revision card in the unit group, for the unit review's signers to decide; otherwise nothing is said.
 // Replaces the 下级有调整 flag for 个人复盘.
-import {currentVersion,unitOf} from './governance.mjs';
+import {currentVersion,unitOf,reviewLock} from './governance.mjs';
 import {reviewPatchProblem,normalizeReviewPatch} from './nexus-review.mjs';
 import {readableAnswer} from './agent-prompts.mjs';
 
@@ -16,9 +16,12 @@ export function reviewCascadeRequest(state,job,rules){
    mission:{id:child.id,changedFields:job.fields,before:view(before),after:view(after)},unitReview:{id:parent.id,version:currentVersion(parent).number,...view(currentVersion(parent).content)}})}];
 }
 
+// Settled already: a confirmed unit review (or a locked round) takes no follow-up card (陈溪南 2026-10-28).
+export function cascadeSkip(state,job){const parent=state.cards[job.parentId];if(!parent||!state.cards[job.childId])return '复盘不在了';if(parent.confirmedVersion===currentVersion(parent).number)return '单元复盘已确认，不再联动';const lock=reviewLock(state,parent);return lock?lock.reason:null;}
 // The card to file, or null with the reason. A patch the handshake would refuse is not filed.
 export function reviewCascadeProposal(state,job,value){
  const parent=state.cards[job.parentId];if(!parent)return {proposal:null,reason:'单元复盘不在了'};
+ const skip=cascadeSkip(state,job);if(skip)return {proposal:null,reason:skip};
  if(!value||value.impact!==true)return {proposal:null,reason:String(value?.reason||'没有实质影响').slice(0,200)};
  const v=currentVersion(parent),patch=value.patch&&typeof value.patch==='object'?Object.fromEntries(Object.entries(value.patch).filter(([k])=>['verdict','verdictReason','facts','nextInputs'].includes(k))):{};
  const bad=reviewPatchProblem({...v.content,id:parent.id,level:parent.level},patch);if(bad)return {proposal:null,reason:bad};
