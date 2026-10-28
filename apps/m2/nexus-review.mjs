@@ -20,7 +20,7 @@ const keep=['title','owner','verdict','verdictReason','facts','targets','causes'
 // unit review and only the Mission reviews nobody owns.
 export function reviewCardsFor(state,scope){
  return Object.values(state.cards).filter(c=>c.kind==='review'&&roomOf(c)===scope).map(c=>{const v=currentVersion(c);
-  return {id:c.id,kind:'review',level:c.level,aliases:[],status:cardStatus(c),...(reviewLock(state,c)?{locked:true}:{}),confirmation:confirmationSummary(state,c),version:v.number,...Object.fromEntries(keep.filter(k=>v.content[k]!==undefined).map(k=>[k,v.content[k]]))};});
+  return {id:c.id,kind:'review',level:c.level,aliases:[],status:cardStatus(c),...(reviewLock(state,c)?{locked:true,lockedReason:reviewLock(state,c).reason}:{}),confirmation:confirmationSummary(state,c),version:v.number,...Object.fromEntries(keep.filter(k=>v.content[k]!==undefined).map(k=>[k,v.content[k]]))};});
 }
 // 「PO 复盘」names the unit's review, 「Mission 01 的复盘」/「M01 复盘」a Mission review (review cards carry no aliases).
 export function reviewMention(text,card){const t=String(text||'');if(card?.kind!=='review'||!/复盘|判定|判得|判严|判松|判成|改判/.test(t))return false;const m=t.match(/(?:Mission|M)\s*0?(\d+)/i);return m?card.id.endsWith('-m'+m[1]):card.level==='po';}

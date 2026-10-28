@@ -338,3 +338,14 @@ test('同一件事只在一层问：公司复盘拿到下层已有的问题；�
  assert.ok(run.reviews.company.nextInputs[0].ask,'公司复盘自己的问题留着');assert.equal(run.reviews.company.nextInputs[0].covers,undefined,'covers 不进卡片');
  assert.deepEqual(applyCovers(run),[],'再跑一次不重复处理');
 });
+
+test('定稿的个人复盘：本人在房间里要求改，Nexus 不出卡、不说“已补进”，直接说已定稿、去单元群提（评测 L01）',async()=>{
+ const {validateNexusResult,publicEvidence}=await import('./nexus-policy.mjs');const {reviewCardsFor}=await import('./nexus-review.mjs');
+ let s=fresh();const sun=memberActor('member-03',s),ceo=memberActor('member-01',s);
+ for(const [id,slot,who] of [['rv:bf01-m1','missionDri',sun],['rv:bf01','ceo',ceo],['rv:bf01','unitDri',ceo]]){s=applyAction(s,who,{type:'insight',cardId:id,text:'x'});s=applyAction(s,who,{type:'confirm',cardId:id,slot,baseVersion:1});}
+ s=applyAction(s,sun,{type:'message',cardId:'rv:person:孙铭泽',text:'双人实测有纪要，第二条应该算达成'});
+ const cards=reviewCardsFor(s,'person:member-03'),ev=publicEvidence(sharedProjection(s,sun).records['group:person:member-03'],'person:member-03',{retainAll:true});
+ const c=currentVersion(s.cards['rv:bf01-m1']).content;
+ const out=validateNexusResult({topics:[],reply:'双人实测记录我已补进这一行，补上后可以改成达成',proposals:[{cardId:'rv:bf01-m1',baseVersion:1,basis:'request',sourceIds:[ev[0].id],patch:{facts:[c.facts[0],{...c.facts[1],status:'达成',evidence:'纪要'}]}}]},{cards,evidence:ev,fresh:ev,ownRoom:true});
+ assert.equal(out.proposals.length,0);assert.match(out.reply,/^单元复盘已确认，个人复盘不能再改，这次不改。有新情况请在单元群里提/);assert.doesNotMatch(out.reply,/补进|可以改成/);
+});

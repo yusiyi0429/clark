@@ -37,7 +37,7 @@ JSON 输出：{reply:string,interventionNeeded:boolean,interventionType:"risk"|"
 换负责人：大家定了某张卡改由谁负责时，patch 里改 owner（只能写名单里的人，接受要由领域 DRI 来点），不要只写进责任边界。
 新增、撤掉、恢复 Mission：把某条 Mission 挪到下月、本月不做、降成下月做、拿掉，都算撤掉：比如“把五项组织缺口降成下月做”，出一张 withdraw-mission 卡，不要把它的档位改成 P2 或把成果改小。有人明确要求给某个 PO 加一条 Mission、撤掉一条 Mission，或恢复撤掉的 Mission 时，不用 patch 改写别的卡来代替（不要把要撤的卡改成“本月不做”），而是在 JSON 里另给 missionCards:[{op:"add-mission"|"withdraw-mission"|"restore-mission",poId:PO 的 id,missionId:撤掉或恢复时填,brief:新增时一两句写清这条 Mission 要做成什么、谁负责、档位,reason:一句话,sourceIds:[消息id]}]。一张卡只做一件事；同时要改 PO 的成果或验收，就另出一张 PO 修订卡。新增卡的完整内容和 Task 草稿由系统按拆解技能起草，你只写 brief。withdrawnMissions 是本单元撤掉的 Mission，只有被要求恢复时才用。
 回复和修订理由都用大白话，不提 focus、cards、evidence、sourceIds、status、gap、ref 这类输入里的字段名，也不写卡片 id（比如 agents-m1）和技能里的分类编号，说卡就写“Mission 1（标题）”；看不到某张卡时说“这张卡我这里没有”。
-个人复盘的房间（scope 以 person: 开头）里只有本人、他的私人 Agent 和你：本人提出改判定、改某一行的状态或补证据时，你站在公司中立的角度核证据——记录真实、发生在月底截止前、对得上承诺就出修订卡；不成立就说清还缺什么。不因为本人坚持就改。在这个房间里对本人说话用“你”，不用他的名字。
+个人复盘的房间（scope 以 person: 开头）里只有本人、他的私人 Agent 和你：本人提出改判定、改某一行的状态或补证据时，你站在公司中立的角度核证据——记录真实、发生在月底截止前、对得上承诺就出修订卡；不成立就说清还缺什么。不因为本人坚持就改。在这个房间里对本人说话用“你”，不用他的名字。卡上 locked 为 true 的复盘已经定稿：不出修订卡，也不说“已补进”“可以改成”这类话，直接告诉对方它为什么不能再改（lockedReason），有新情况请在单元群里提。
 ${NOW_RULE}`;
 // Before 2026-10-19 (no goal sense, no layered input): kept for side-by-side evaluation (NEXUS_MODE=legacy).
 export const nexusSystemPromptLegacy=nexusSystemPrompt.replace(/目标感：[^\n]*\n说话规矩：[^\n]*\n输入结构：[^\n]*\n/,'').replace('只用当前领域的公开消息、文档批注、卡片与提供的材料；facts（本体原文）和 otherUnits（其他单元摘要）只在本次需要时才提供。','只用当前领域的公开消息、文档批注、卡片与提供的飞书基础材料。');
@@ -193,5 +193,8 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
  if(!participation.called&&(!step||interventionHistory.some(h=>h.signature===step.signature)))participation.speak=false;
  if((proposals.length||missionCards.length)&&!participation.called)participation.speak=false;
  const reply=String(value.reply||'').trim()||(participation.called&&!proposals.length&&!missionCards.length?'这次未生成有效回答，请再次 @Nexus 重试。你的问题已保存，不影响已有材料。':'');
+ // A settled review is not argued with (评测 2026-10-28 L01: Nexus said it had 「补进」 a line on a locked card and changed nothing).
+ const reviewCards=cards.filter(c=>c.kind==='review'),lockedOnly=reviewCards.length&&reviewCards.every(c=>c.locked)||!proposals.length&&rejected.length&&rejected.every(r=>r.why==='这份复盘已定稿，不再修订');
+ if(ownRoom&&lockedOnly&&participation.speak!==false){const why=(reviewCards.find(c=>c.locked)?.lockedReason)||'这份复盘已经定稿';return {reply:`${why}，这次不改。有新情况请在单元群里提，由单元复盘的签字人决定。`,topics,proposals:[],missionCards:[],participation:{...participation,speak:true},rejected};}
  return {reply:readableAnswer(participation.speak?(participation.called?wholeSentences(reply,220):step.reply):'',cards),topics,proposals,missionCards,participation,rejected};
 }
