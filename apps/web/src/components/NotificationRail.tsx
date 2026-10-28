@@ -24,6 +24,7 @@ import { RequestNotices } from "./requests/RequestNotices";
 import { MeetingCardNotices } from "./meeting/MeetingCardNotices";
 import { MeetingRecordDrop } from "./meeting/MeetingRecordDrop";
 import { RecordProcessingMeta, type RecordProcessing } from "./meeting/MeetingRecordProcessing";
+import { useFeishuEvents, type FeishuEvent } from "./meeting/useFeishuEvents";
 import d from "@/styles/meeting-record-drop.module.css";
 import { RADAR_ORIGIN_LABEL, RadarOriginIcon } from "./OriginTag";
 import { preflightInFlight } from "@/cards/meetingIssueModel";
@@ -31,7 +32,8 @@ import n from "@/styles/notifications.module.css";
 
 type RailKind = "decisions" | "meetings" | "research";
 type Tone = "red" | "amber" | "neutral";
-type RailItem = { id: string; title: string; meta: string; tone: Tone; href: string; missionRound?: Card; followUp?: boolean; canReschedule?: boolean; meetingId?: string; processing?: RecordProcessing };
+/** external：飞书日程（只读），href 是飞书里那条日程的链接，在新标签页打开。 */
+type RailItem = { id: string; title: string; meta: string; tone: Tone; href: string; missionRound?: Card; followUp?: boolean; canReschedule?: boolean; meetingId?: string; processing?: RecordProcessing; external?: boolean };
 type RailGroup = { kind: RailKind; title: string; subtitle: ReactNode; mark: ContextMarkKind; items: RailItem[] };
 
 const RAIL: Record<RailKind, { title: string; mark: ContextMarkKind }> = {
@@ -92,7 +94,8 @@ function missionRoundMeta(payload: TMissionRoundSummary): string {
  * 把首页 Card 集合整理成三组通知（clark `notifications.tsx` 的分组与顺序）。
  * 只收需要行动的：未签发的月度计划、已排期会议、红色待决议题（v0.3 §645）；打开不会让条目消失（C-05）。
  */
-export function railGroups(cards: Card[], now: Date = new Date(), viewerId?: string): RailGroup[] {
+/** feishuEvents：本人飞书日历里的日程（只读），和天枢的会按开始时间排在「战略会议安排」里。 */
+export function railGroups(cards: Card[], now: Date = new Date(), viewerId?: string, feishuEvents: FeishuEvent[] = []): RailGroup[] {
   const names = new Map<string, string>();
   for (const card of cards) {
     if (card.kind === "battlefield") names.set(payloadOf<BattlefieldPayload>(card).battlefieldId, card.title);
@@ -129,7 +132,7 @@ export function railGroups(cards: Card[], now: Date = new Date(), viewerId?: str
       return (meeting.status === "scheduled" && (!ended || meeting.leadDriId === viewerId)) || (meeting.leadDriId === viewerId && cardProcessing(meeting) !== null);
     })
     .sort((a, b) => payloadOf<MeetingPayload>(a).scheduledAt.localeCompare(payloadOf<MeetingPayload>(b).scheduledAt));
-  const meetingItems = meetings.map<RailItem>((card) => {
+  const tianshuMeetingItems = meetings.map<RailItem & { at: string }>((card) => {
     const payload = payloadOf<MeetingPayload>(card);
     const at = payload.scheduledAt;
     const processing = cardProcessing(payload) ?? undefined;
@@ -144,17 +147,30 @@ export function railGroups(cards: Card[], now: Date = new Date(), viewerId?: str
       canReschedule: card.actions.some((action) => action.actionType === "meeting.reschedule"),
       tone: "neutral",
       href: `/meetings/${card.objectRef.id}`,
+      at,
     };
   });
-  const allToday = meetings.length > 0 && meetings.every((card) => sameCompanyDay(new Date(payloadOf<MeetingPayload>(card).scheduledAt), now));
+  const feishuItems = feishuEvents.filter((event) => Date.parse(event.endsAt) > now.getTime()).map<RailItem & { at: string }>((event) => ({
+    id: `feishu:${event.eventId}`,
+    title: event.title,
+    meta: `飞书日程 · ${event.allDay ? `${sameCompanyDay(new Date(event.startsAt), now) ? "今天" : monthDayTime(event.startsAt).split(" ")[0]} 全天`
+      : sameCompanyDay(new Date(event.startsAt), now) ? clock(new Date(event.startsAt)).time : monthDayTime(event.startsAt)}`,
+    tone: "neutral",
+    href: event.url ?? "",
+    external: true,
+    at: event.startsAt,
+  }));
+  const meetingItems = [...tianshuMeetingItems, ...feishuItems].sort((a, b) => a.at.localeCompare(b.at)).map<RailItem>(({ at: _at, ...item }) => item);
+  const allToday = meetingItems.length > 0 && [...meetings.map((card) => payloadOf<MeetingPayload>(card).scheduledAt), ...feishuItems.map((item) => item.at)]
+    .every((at) => sameCompanyDay(new Date(at), now));
   const leads = new Set(
     meetings.map((card) => {
       const meeting = payloadOf<MeetingPayload>(card);
       return meeting.participants.find((person) => person.personId === meeting.leadDriId)?.displayName ?? "";
     }),
   );
-  const lead = leads.size === 1 ? [...leads][0] : "";
-  const meetingSubtitle = meetingItems.some((item) => item.followUp || item.processing) ? "含待处理的会后记录" : allToday ? `今天${lead ? ` · ${lead}主持` : ""}` : `${meetings.length} 场待开`;
+  const lead = leads.size === 1 && !feishuItems.length ? [...leads][0] : "";
+  const meetingSubtitle = meetingItems.some((item) => item.followUp || item.processing) ? "含待处理的会后记录" : allToday ? `今天${lead ? ` · ${lead}主持` : ""}` : `${meetingItems.length} 场待开`;
 
   const urgent = cards.filter((card) => card.kind === "issue" && card.urgency === "red");
   // 议题来源：雷达自动升级的（AI 候选议题）写「雷达」并带雷达小图标。
@@ -265,7 +281,8 @@ export function NotificationRail({
 }) {
   const router = useRouter();
   const now = new Date();
-  const groups = railGroups(cards, now, viewerId).filter((group) => !(m2Available && group.kind === "decisions"));
+  const feishuEvents = useFeishuEvents();
+  const groups = railGroups(cards, now, viewerId, feishuEvents).filter((group) => !(m2Available && group.kind === "decisions"));
   const rail = useRef<HTMLElement>(null);
   const positions = useRef(new Map<string, number>());
   const weeklyReviews = useWeeklyReviewBoard();
@@ -355,7 +372,8 @@ export function NotificationRail({
                     data-origin={item.href}
                     aria-current={item.href === currentHref ? "true" : undefined}
                     aria-label={`${item.title}，${item.meta}`}
-                    onPress={(event) => onNavigate(item.href, (event.target as Element).closest("[data-notice]"))}
+                    isDisabled={item.external && !item.href}
+                    onPress={(event) => item.external ? window.open(item.href, "_blank", "noopener") : onNavigate(item.href, (event.target as Element).closest("[data-notice]"))}
                   >
                     <span className={n.mark} aria-hidden="true" />
                     <span className={n.itemText}>

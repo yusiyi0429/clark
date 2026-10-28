@@ -7665,6 +7665,34 @@
         }
       }
     },
+    "/api/me/feishu-events": {
+      "get": {
+        "operationId": "listMyFeishuEvents",
+        "summary": "本人飞书主日历里接下来 7 天的日程（只读，和「会议安排」排在一起）；天枢约的会、取消的、拒绝的不列，没连飞书时为空",
+        "responses": {
+          "200": {
+            "description": "飞书日程",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeishuCalendarEventsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/cards/issues/{id}": {
       "get": {
         "operationId": "getMemberIssueCard",
@@ -44713,6 +44741,62 @@
                       "type": "boolean"
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      },
+      "FeishuCalendarEventsResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "eventId",
+                "title",
+                "startsAt",
+                "endsAt",
+                "allDay",
+                "url"
+              ],
+              "properties": {
+                "eventId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "startsAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "endsAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "allDay": {
+                  "type": "boolean"
+                },
+                "url": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }

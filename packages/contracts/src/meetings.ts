@@ -510,6 +510,25 @@ export const MemberMeetingsResponse = Type.Object(
   { meetings: Type.Array(MemberMeetingItem) },
   { additionalProperties: false },
 );
+/**
+ * 本人飞书主日历里接下来 7 天的日程（只读显示，和「会议安排」排在一起）：天枢自己约的会、取消的、本人拒绝的、已经结束的不在里面。
+ * eventId 是飞书「这一次」的 id；allDay 时 startsAt / endsAt 是北京时间当天 0 点；url 打开飞书里这条日程，没有为 null。没连飞书时是空列表。
+ */
+export const FeishuCalendarEvent = Type.Object(
+  {
+    eventId: Type.String({ minLength: 1 }),
+    title: Type.String({ minLength: 1 }),
+    startsAt: Type.String({ minLength: 1 }),
+    endsAt: Type.String({ minLength: 1 }),
+    allDay: Type.Boolean(),
+    url: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+export const FeishuCalendarEventsResponse = Type.Object(
+  { events: Type.Array(FeishuCalendarEvent) },
+  { additionalProperties: false },
+);
 
 /**
  * 天枢建会后自动在飞书约上（用建会的人本人的授权，他是组织者）：pending 排上了 / booked 约上了 / waiting_auth 等他连飞书 /
@@ -759,6 +778,7 @@ export const PreflightCandidate = Type.Object(
 );
 
 export type TMeetingStatus = Static<typeof MeetingStatus>;
+export type TFeishuCalendarEvent = Static<typeof FeishuCalendarEvent>;
 export type TMeetingParticipant = Static<typeof MeetingParticipant>;
 export type TMeetingPreflightEntryKind = Static<typeof MeetingPreflightEntryKind>;
 export type TPreflightDepth = Static<typeof PreflightDepth>;

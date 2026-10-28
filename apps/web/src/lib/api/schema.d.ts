@@ -2066,6 +2066,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/feishu-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人飞书主日历里接下来 7 天的日程（只读，和「会议安排」排在一起）；天枢约的会、取消的、拒绝的不列，没连飞书时为空 */
+        get: operations["listMyFeishuEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/cards/issues/{id}": {
         parameters: {
             query?: never;
@@ -8326,6 +8343,16 @@ export interface components {
                     since: string | null;
                     failed: boolean;
                 };
+            }[];
+        };
+        FeishuCalendarEventsResponse: {
+            events: {
+                eventId: string;
+                title: string;
+                startsAt: string;
+                endsAt: string;
+                allDay: boolean;
+                url: string | null;
             }[];
         };
         MeetingTranscriptTurnView: {
@@ -19439,6 +19466,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberMeetingsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMyFeishuEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 飞书日程 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeishuCalendarEventsResponse"];
                 };
             };
             /** @description ApiError 统一错误 */

@@ -110,6 +110,7 @@ import {
   UnreadThreadsResponse,
   MemberMeetingItem,
   MemberMeetingsResponse,
+  FeishuCalendarEventsResponse,
   MeetingTranscriptTurnView,
   MeetingTranscriptPage,
   SignalStateRequest,
@@ -1297,6 +1298,16 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           summary: "我在群里、还没开完的会，按开始时间排，给成员通知栏「会议安排」用",
           responses: {
             "200": { description: "会议安排", content: { "application/json": { schema: { $ref: "#/components/schemas/MemberMeetingsResponse" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/me/feishu-events": {
+        get: {
+          operationId: "listMyFeishuEvents",
+          summary: "本人飞书主日历里接下来 7 天的日程（只读，和「会议安排」排在一起）；天枢约的会、取消的、拒绝的不列，没连飞书时为空",
+          responses: {
+            "200": { description: "飞书日程", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuCalendarEventsResponse" } } } },
             "401": errorResponse,
           },
         },
@@ -3117,6 +3128,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         UnreadThreadsResponse: UnreadThreadsResponse as JsonSchema,
         MemberMeetingItem: MemberMeetingItem as JsonSchema,
         MemberMeetingsResponse: MemberMeetingsResponse as JsonSchema,
+        FeishuCalendarEventsResponse: FeishuCalendarEventsResponse as JsonSchema,
         MeetingTranscriptTurnView: MeetingTranscriptTurnView as JsonSchema,
         MeetingTranscriptPage: MeetingTranscriptPage as JsonSchema,
         ThreadMessage: ThreadMessage as JsonSchema,

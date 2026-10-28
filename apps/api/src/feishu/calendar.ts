@@ -10,6 +10,9 @@ import { FeishuApiError } from "./client.js";
  *   body {attendees: [{type: "user", user_id}], need_notification: true}（calendar:calendar.event:update）
  * - 改时间：PATCH /calendar/v4/calendars/{calendar_id}/events/{event_id}，body {summary, start_time, end_time, need_notification}（calendar:calendar.event:update）
  * - 删除：DELETE /calendar/v4/calendars/{calendar_id}/events/{event_id}?need_notification=true（calendar:calendar.event:delete）
+ * - 读日程（只读显示，feishuCalendarFeed.ts）：GET /calendar/v4/calendars/{calendar_id}/events/instance_view?start_time&end_time（秒，区间 < 40 天，
+ *   重复日程展开成一次次；calendar:calendar:readonly）。返回 items[]：event_id 是这一次的 id（单次日程是「日程 id_0」），summary、
+ *   start_time / end_time {timestamp | date（全天）}、status、self_rsvp_status、app_link（打开飞书里这条日程）。10/28 用 lark-cli 读真日历核对过。
  * 路径、参数和字段按 lark-cli 1.0.93 的 `lark-cli schema calendar.calendars.primary / calendar.events.create / calendar.events.patch /
  * calendar.events.delete / calendar.event.attendees.create` 与 `lark-cli calendar +create / +update / +delete --dry-run` 打出的请求核对（10/21）。
  * 建日程还没在真飞书上跑过，等后台开通日历权限后验证（特别是建好时 vchat.meeting_url 有没有值）。
@@ -20,6 +23,16 @@ const TIMEZONE = "Asia/Shanghai";
 
 export type FeishuCalendarEventInput = { summary: string; start: Date; end: Date };
 export type FeishuCalendarEvent = { eventId: string; joinUrl: string | null };
+/** 日程视图里的一次日程（只取显示要用的字段）；全天日程 start / end 是 YYYY-MM-DD，其余是秒级时间戳字符串。 */
+export type FeishuCalendarInstance = {
+  eventId: string;
+  summary: string;
+  start: { timestamp?: string; date?: string };
+  end: { timestamp?: string; date?: string };
+  status: string | null;
+  selfRsvpStatus: string | null;
+  appLink: string | null;
+};
 
 export type FeishuCalendarApi = {
   primaryCalendarId(userAccessToken: string): Promise<string>;
@@ -28,6 +41,7 @@ export type FeishuCalendarApi = {
   addAttendees(userAccessToken: string, calendarId: string, eventId: string, openIds: string[]): Promise<void>;
   updateEvent(userAccessToken: string, calendarId: string, eventId: string, input: FeishuCalendarEventInput): Promise<void>;
   deleteEvent(userAccessToken: string, calendarId: string, eventId: string): Promise<void>;
+  listInstances(userAccessToken: string, calendarId: string, from: Date, to: Date): Promise<FeishuCalendarInstance[]>;
 };
 
 type Fetch = typeof fetch;
@@ -85,6 +99,24 @@ export function createFeishuCalendarApi({ fetch: fetchImpl = fetch }: { fetch?: 
     },
     async deleteEvent(userAccessToken, calendarId, eventId) {
       await call(userAccessToken, `${eventPath(calendarId, eventId)}?need_notification=true`, { method: "DELETE" });
+    },
+    async listInstances(userAccessToken, calendarId, from, to) {
+      const seconds = (date: Date) => String(Math.floor(date.getTime() / 1000));
+      const data = await call(userAccessToken, `${eventPath(calendarId)}/instance_view?start_time=${seconds(from)}&end_time=${seconds(to)}`);
+      const text = (value: unknown) => (typeof value === "string" && value ? value : null);
+      return ((data.items ?? []) as Record<string, unknown>[]).flatMap((item) => {
+        const eventId = text(item.event_id);
+        if (!eventId) return [];
+        return [{
+          eventId,
+          summary: text(item.summary) ?? "",
+          start: (item.start_time ?? {}) as FeishuCalendarInstance["start"],
+          end: (item.end_time ?? {}) as FeishuCalendarInstance["end"],
+          status: text(item.status),
+          selfRsvpStatus: text(item.self_rsvp_status),
+          appLink: text(item.app_link),
+        }];
+      });
     },
   };
 }
