@@ -155,9 +155,10 @@ export function createFeishuChat(deps: {
     const personId = (await q("SELECT person_id FROM feishu_identities WHERE open_id = $1", [openId])).rows[0]?.person_id as string | undefined;
     const person = personId ? deps.peopleDirectory.searchPeople(undefined).find((entry) => entry.personId === personId) : undefined;
     if (!person) {
-      await send(openId, "post", post(`你的飞书还没和天枢账号关联。在飞书里打开天枢登录一次就关联好了，之后就能在这里直接问我。
+      // 关联走「连接飞书」（connect=1）：已登录的直接授权关联；没登录的先用 ID 和口令登录，再点一次。
+      await send(openId, "post", post(`你的飞书还没和天枢账号关联。在天枢点头像 › 设置 › 连接飞书，授权一次就好；在这台设备上登录过天枢的话，直接点下面也能关联。关联后就能在这里直接问我。
 
-[打开天枢](${feishuDeepLink(env.publicOrigin, "/")})`));
+[连接飞书](${env.publicOrigin}/api/auth/feishu/start?connect=1&next=%2F)`));
       return;
     }
     const text = messageText(message.message_type, message.content);
