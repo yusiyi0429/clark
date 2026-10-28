@@ -29,9 +29,9 @@ export class ChatServiceError extends Error {
 }
 
 type ChatAttachment = { attachmentId: string; fileName: string; mime: string; size: number; status?: string };
-export type ChatMessage = { position?: string; role: "user" | "assistant"; text: string; runId: string; attachments?: ChatAttachment[]; turnAt?: string };
+type ChatMessage = { position?: string; role: "user" | "assistant"; text: string; runId: string; attachments?: ChatAttachment[]; turnAt?: string };
 type ChatRun = { runId: string; status: string };
-export type ChatMessagePage = { messages: ChatMessage[]; nextCursor: string | null; runs: ChatRun[] };
+type ChatMessagePage = { messages: ChatMessage[]; nextCursor: string | null; runs: ChatRun[] };
 type ChatEvent = { type: string; [key: string]: unknown };
 
 /** 工具开始时进度行的一句（只写在查什么）。工具名归 Chat 定，没列到的不显示这一句。 */
@@ -128,8 +128,8 @@ function segmentMessages(messages: ChatMessage[], runs: ChatRun[]) {
 }
 
 /** 首页界面拼最近几天的几段、最多约这么多条（拼够了就不再往前读，每 10 秒的轮询请求数有上限）。 */
-export const HISTORY_DAYS = 7;
-export const HISTORY_MESSAGES = 200;
+const HISTORY_DAYS = 7;
+const HISTORY_MESSAGES = 200;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function createChatService(options: {

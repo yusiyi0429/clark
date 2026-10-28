@@ -11,14 +11,14 @@ import { shanghaiLabel } from "./workdays.js";
  * - read_past_conversation：读一段的完整纪要；带 cursor 时分页读原文（每页 ≤8,000 字）。
  * 范围：首页 Chat 的段按视角隔离；天枢页面的段属于本人，两种视角都能查。隐藏了的段不进目录、查不到。
  */
-export const CATALOG_DAYS = 14;
-export const CATALOG_RECENT = 10;
-export const SEARCH_PAGE = 5;
-export const EXCERPT_CHARS = 300;
-export const RAW_PAGE_CHARS = 8_000;
+const CATALOG_DAYS = 14;
+const CATALOG_RECENT = 10;
+const SEARCH_PAGE = 5;
+const EXCERPT_CHARS = 300;
+const RAW_PAGE_CHARS = 8_000;
 
 type Query = (sql: string, params?: unknown[]) => Promise<{ rows: any[] }>;
-export type RecallViewer = ChatViewer;
+type RecallViewer = ChatViewer;
 type Row = { id: string; source: "chat" | "tianshu"; source_ref: string; from_position: string; scope_label: string; started_at: Date; ended_at: Date;
   title: string; digest: string; status: string };
 

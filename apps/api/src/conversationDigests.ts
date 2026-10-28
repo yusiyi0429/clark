@@ -28,10 +28,10 @@ export const DIGEST_DEFAULTS = {
   /** Chat 段是否被隐藏：每人每视角最多这么久对一次 Chat 的会话列表。 */
   hiddenCheckMs: 10 * 60_000,
 };
-export type DigestSettings = typeof DIGEST_DEFAULTS;
+type DigestSettings = typeof DIGEST_DEFAULTS;
 
 /** 页面名：首页 / 「会议：xxx」。对象名取这一段最后一轮记下的页面对象标题。 */
-export const PAGE_KINDS: Record<string, string> = {
+const PAGE_KINDS: Record<string, string> = {
   task: "执行事项", meeting: "会议", issue: "议题", mission: "Mission", "mission-card": "任务卡", "monthly-plan": "月度计划",
   "monthly-review-item": "复盘项", "personal-review": "个人复盘", signal: "信号",
 };
@@ -129,8 +129,6 @@ function hiddenChatSegments(listed: ChatConversation[], rows: { source_ref: stri
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
 /** 已有纪要交回给模型时去掉开头那行「截至……」（由系统加）。 */
 const withoutAsOf = (digest: string) => digest.replace(/^截至[^\n]*\n/, "");
-
-export type ConversationDigests = ReturnType<typeof createConversationDigests>;
 
 export function createConversationDigests(options: {
   pool: Pool;
@@ -271,7 +269,7 @@ export function createConversationDigests(options: {
       .finally(() => { running = undefined; });
   };
   return {
-    runOnce, processNext, checkChatHidden,
+    runOnce,
     start() { if (!timer) { timer = setInterval(tick, settings.tickMs); timer.unref(); tick(); } },
     async close() { if (timer) clearInterval(timer); timer = undefined; closing.abort(new Error("DIGEST_SHUTDOWN")); await running; },
   };

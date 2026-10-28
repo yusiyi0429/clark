@@ -1,5 +1,5 @@
 -- 会话纪要（conversationDigests.ts）：一段对话一行。一段 = 两次发言间隔不到 12 小时、也没跨过北京时间凌晨 4 点的一串问答。
--- 215 已被 PR #56 的 215_wechat_bindings 占用，这里用 216。
+-- 215 已被 PR #56 的 215_wechat_bindings 占用、216 已被会议决策确认占用，这里用 217。
 -- source = chat：首页的一段 Chat 对话（source_ref = Chat 的 conversationId，from_position 恒为 0，viewer_role 是那段的视角）；
 -- source = tianshu：天枢页面对话的一段（source_ref = conversations.id，from_position / to_position 是这一段第一条、最后一条消息的 sequence，viewer_role 为空）。
 -- covered_to：纪要已覆盖到的位置（Chat 的 position 或天枢的 sequence），增量更新从它之后接着写。
