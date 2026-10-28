@@ -30,7 +30,7 @@
 | 「继续」「重新回答」 | 永远进那一轮所在的段，即使已经换段 | 同左（续写接回那一段的模型会话） |
 | 附件 | 上传和随后那一句用同一个判段规则；上传触发换段，附件就放进新段 | 附件挂在页面对话上，不受影响 |
 | 界面 | 一条连续的对话；拼最近 7 天的几段（最多约 200 条），段之间一行很淡的日期 | 一条连续的对话（本来就是），换段处同样插一行日期 |
-| 开关 | `CHAT_SESSION_ROTATION`，默认关，等 Chat 那两处上线再开 | `CONVERSATION_SEGMENTS`，默认开（只依赖天枢） |
+| 开关 | `CHAT_SESSION_ROTATION`，默认关，等 Chat 那两处上线再开 | `CONVERSATION_SEGMENTS`，默认关（=1 才开，端到端测试通过后由生产、预发的 env 显式打开） |
 
 日期行用契约里现成的 `kind: "trace"`（`Transcript.tsx` 没有 href 时就是一行淡字），不改契约。首页对话层每 10 秒轮询一次历史，拼接范围必须有界。
 
@@ -104,7 +104,7 @@
 **天枢（独立会话，从 `origin/feat/meeting-upload-link` 切分支，PR 指向它）**：
 1. 迁移 215 `conversation_digests`；纪要后台任务（读 Chat 段和对象页对话、增量生成）。
 2. 检索与读取：`search_past_conversations`、`read_past_conversation` 的服务层；会话目录（上一段完整纪要 + 近 14 天其他段）；对象页运行时接目录和两个工具。
-2b. 二级页面分段：把现有「闲置 12 小时模型侧重开」的触发换成 §2 的两条规则（闲置 12 小时或跨凌晨 4 点）；新段不带上一段原文和工具往返，交接走目录里的上一段纪要；换段处在历史里插一行日期；开关 `CONVERSATION_SEGMENTS`（默认开）。
+2b. 二级页面分段：把现有「闲置 12 小时模型侧重开」的触发换成 §2 的两条规则（闲置 12 小时或跨凌晨 4 点）；新段不带上一段原文和工具往返，交接走目录里的上一段纪要；换段处在历史里插一行日期；开关 `CONVERSATION_SEGMENTS`（默认关）。
 3. 宿主接口：`/internal/conversation-catalog`、`/internal/conversation-recall/search`、`/internal/conversation-recall/:segmentId`。
 4. 首页分段：`chatService.ts` 判段（闲置 12 小时或跨凌晨 4 点；按人 × 视角进程内互斥）、拼历史加日期行、续写进原段、附件同规则、开关 `CHAT_SESSION_ROTATION`（默认关，等 Chat 那两处上线再开）。
 5. 飞书私聊 Chat 模式取正文的修复。
