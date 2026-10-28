@@ -1,5 +1,6 @@
 import {request as httpRequest} from 'node:http';
 import {redactMessages} from './redact.mjs';
+import {tracer as sharedTracer} from './langsmith-trace.mjs';
 import {request as httpsRequest} from 'node:https';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
@@ -88,7 +89,7 @@ export function patientTransport(url,{method,headers,body,signal}){
 // A refusal is its own failure (模型调用稳定性加固 2026-10-22): the same request retried gets refused again, so callers
 // handle it apart from a cut-off answer. diagnostics.finishReason stays 'refusal' for callers that already read it.
 function refusal(model,usage,id,extra={}){const e=Error('模型拒绝回答这次请求，未应用内容');e.status=502;e.code='MODEL_REFUSAL';e.diagnostics={model,finishReason:'refusal',usage,...extra};recordModelRun({channel:'model-failure',model,usage,providerRequestId:id,failure:e.diagnostics}).catch(()=>{});return e;}
-export async function createModelGateway({env=process.env,readSecretFile=readFile,readLocalSecret=readLocalKey,transport=fetch,redact=false}={}){
+export async function createModelGateway({env=process.env,readSecretFile=readFile,readLocalSecret=readLocalKey,transport=fetch,redact=false,tracer=sharedTracer}={}){
  const base=env.DECODING_API_BASE||TOKENHUB_BASE;
  const model=env.DECODING_MODEL||TOKENHUB_MODEL;
  const endpoint=new URL(base.replace(/\/?$/,'/')+'chat/completions');
@@ -113,7 +114,7 @@ export async function createModelGateway({env=process.env,readSecretFile=readFil
   if(!r.answer||r.stop==='max_tokens'){const e=Error('模型输出不完整，未应用修改。');e.status=502;e.code='MODEL_OUTPUT_INCOMPLETE';e.partialAnswer=r.answer||'';e.diagnostics={model,finishReason:r.stop||'empty',usage,reasoningEffort:thinking?reasoningEffort:'disabled',maxTokens:limit};await recordModelRun({channel:'model-failure',model,usage,providerRequestId:r.id,failure:e.diagnostics});throw e;}
   return {answer:json?bareJson(r.answer):r.answer,usage,providerRequestId:r.id,model,durationMs:Date.now()-startedAt};
  }
- return {
+ const gateway={
   status:{ready:Boolean(key),provider:tokenhub?'TokenHub':ark?'Ark':'OpenAI-compatible',model},
   roundConcurrency:MODEL_PROFILES[model]?.roundConcurrency,
   async complete(messages,{json=false,maxTokens,timeoutMs=900000,thinking=Boolean(MODEL_PROFILES[model]),reasoningEffort='high',onDelta,signal}={}){
@@ -148,6 +149,13 @@ export async function createModelGateway({env=process.env,readSecretFile=readFil
    return {answer,usage:result.usage,providerRequestId:result.id,model,durationMs:Date.now()-startedAt};
   },
  };
+ // LangSmith (陈溪南 2026-10-27): every call is one llm run under whatever the caller is running; a no-op without a key.
+ // The trace gets the messages with the same redaction the chat model gets, applied in langsmith-trace.mjs after unrevealed
+ // insights become counts (redacting first can break the JSON payload that step reads); options.trace only names the run.
+ const send=gateway.complete;
+ gateway.complete=(messages,options={})=>tracer.llm({messages,model,provider:tokenhub?'tokenhub':ark?'ark':'openai-compatible',trace:options.trace||{},
+  settings:{thinking:options.thinking??Boolean(MODEL_PROFILES[model]),reasoningEffort:options.reasoningEffort??'high',json:options.json,maxTokens:options.maxTokens}},()=>send(messages,options));
+ return gateway;
 }
 export async function recordModelRun({channel,scope,selection,model,usage,providerRequestId,failure,durationMs}){
  const id=randomUUID(),dir=process.env.DECODING_RUNS_DIR?new URL('./model-runs/',pathToFileURL(process.env.DECODING_RUNS_DIR+'/')):process.env.NODE_ENV==='test'&&process.env.DECODING_STATE_PATH?new URL('./model-runs/',pathToFileURL(process.env.DECODING_STATE_PATH)):new URL('./.runtime/model-runs/',import.meta.url);

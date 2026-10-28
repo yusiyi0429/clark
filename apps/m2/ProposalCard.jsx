@@ -9,28 +9,36 @@ import {Pencil,CheckCircle2,X} from 'lucide-react';
 import {memberProfiles} from './member-profiles.mjs';
 import {enterSubmit} from './enter-submit.mjs';
 // Each change reads as 原来 / 改成 (or 新增 / 删去); unchanged items fold into one line (陈溪南 2026-10-19).
+// 事实证据 rows {item, status, evidence, gap} read as one line each, named by the item (复盘改版 2026-10-26).
+// Split by part, so a change reads 事实证据 · 项 · 状态：未达成 → 部分达成, not one long line rewritten (陈溪南 2026-10-27).
+const factLines=x=>[['状态',x.status],['证据',x.evidence],['没做到的原因',x.gap]].filter(([,v])=>v).map(([k,v])=>`**${x.item} · ${k}：**${v}`);
 // Review fields hold objects: 原因 {text, ask}, 下月输入 {type, text}, 长期目标审视 {choice, reason}; compare them as lines.
-const asLines=v=>Array.isArray(v)?v.map(x=>typeof x==='string'?x:x?.type?`［${x.type}］${x.text}`:x?.text!=null?x.text+(x.ask?`（追问：${x.ask}）`:''):JSON.stringify(x)):v&&typeof v==='object'?`${v.choice||''}：${v.reason||''}`:v;
+const nextLine=x=>`**${x.type}：**${x.text}${x.ask?.question?`（问 ${x.ask.to}：${x.ask.question}）`:''}`;
+const asLines=v=>Array.isArray(v)&&v.some(x=>x?.item!=null&&x?.evidence!==undefined)?v.flatMap(factLines):Array.isArray(v)&&v.some(x=>x?.type&&'ref'in(x||{}))?v.map(nextLine):Array.isArray(v)?v.map(x=>typeof x==='string'?x:x?.type?`［${x.type}］${x.text}`:x?.text!=null?x.text+(x.ask?`（追问：${x.ask}）`:''):JSON.stringify(x)):v&&typeof v==='object'?`${v.choice||''}：${v.reason||''}`:v;
 // One change per line, only the change (陈溪南 2026-10-22): which field (and which item), then the old words struck → the
 // new words. A rewrite shows the new text whole with 看原来; an added or removed item says so in its label.
 const itemTitle=t=>String(t||'').match(/^\*\*(.+?)[：:]\*\*/)?.[1]||'';
-function ChangeRow({label,row}){
+// The value without its **短标题：** (the title is already in the label).
+const bodyOf=t=>stripMarks(String(t??'').replace(/^\*\*(.+?)[：:]\*\*\s*/,''));
+// Changes read in place (陈溪南 2026-10-27): a short value as 旧 → 新 in whole words; a sentence whole, with the removed words
+// struck and the new words marked where they sit; only a near-total rewrite shows the new text with 看原来.
+function ChangeRow({label,row,part}){
  const [open,setOpen]=useState(false);
- const before=stripMarks(row.before),after=stripMarks(row.after),item=itemTitle(row.before??row.after);
- const head=t=><small className="proposal-field">{label}{item?` · ${item}`:''}{t?` · ${t}`:''}</small>;
+ const before=bodyOf(row.before),after=bodyOf(row.after),item=itemTitle(row.before??row.after);
+ const head=t=><small className={part?'proposal-part':'proposal-field'}>{part||`${label}${item?` · ${item}`:''}`}{t?` · ${t}`:''}</small>;
  if(row.kind==='added')return <div className="proposal-diff">{head('新增')}<p className="change-full">{after}</p></div>;
  if(row.kind==='removed')return <div className="proposal-diff">{head('删去')}<p className="change-full"><s className="change-old">{before}</s></p></div>;
- const c=inlineChange(before,after),whole=c.head.length+c.tail.length<6;
- // Only added words read as “+ …”, only removed words as struck; both sides only when something was replaced.
- const pair=(a,b)=><div className="proposal-diff">{head('')}<p className="change-pair">{a?<><s className="change-old">{a}</s>{b&&<span className="change-arrow">→</span>}</>:<span className="change-plus">+</span>}{b&&<mark className="diff-mark">{b}</mark>}</p></div>;
- if(whole&&before.length<=30&&after.length<=40)return pair(before,after);
- // A bare number carries its unit (9 → 10 reads as 9 人 → 10 人).
- const unit=/^[\d./-]+$/.test(c.added)&&/^[\d./-]*$/.test(c.removed)?(c.tail.match(/^\s*([^\s，。；、,.;:：]{1,2})/)?.[1]||''):'';
- if(!whole&&c.removed.length<=30&&c.added.length<=40)return pair(c.removed&&c.removed+(unit?' '+unit:''),c.added+(unit?' '+unit:''));
- return <div className="proposal-diff">{head('改写')}<p className="change-full">{after} <button type="button" className="see-before" onClick={()=>setOpen(!open)}>{open?'收起原来':'看原来'}</button></p>{open&&<del className="change-before">{before}</del>}</div>;
+ if(before.length<=14&&after.length<=20)return <div className="proposal-diff">{head('')}<p className="change-pair">{before&&<><s className="change-old">{before}</s><span className="change-arrow">→</span></>}<mark className="diff-mark">{after}</mark></p></div>;
+ const c=inlineChange(before,after),kept=c.head.length+c.tail.length;
+ if(kept<Math.min(before.length,after.length)*0.3)return <div className="proposal-diff">{head('改写')}<p className="change-full">{after} <button type="button" className="see-before" onClick={()=>setOpen(!open)}>{open?'收起原来':'看原来'}</button></p>{open&&<del className="change-before">{before}</del>}</div>;
+ return <div className="proposal-diff">{head('')}<p className="change-inline">{c.head}{c.removed&&<s className="change-old">{c.removed}</s>}{c.added&&<mark className="diff-mark">{c.added}</mark>}{c.tail}</p></div>;
 }
 function FieldChange({label,before,after}){
  const rows=proposalRows(asLines(before),asLines(after)).filter(r=>r.kind!=='same');
+ // 事实证据 lines are “项 · 状态 / 证据 / 没做到的原因”: name the item once, then one line per part.
+ const split=rows.map(r=>{const t=itemTitle(r.before??r.after),i=t.lastIndexOf(' · ');return i>0?{item:t.slice(0,i),part:t.slice(i+3)}:null;});
+ if(rows.length&&split.every(Boolean)){const groups=[];rows.forEach((r,i)=>{const g=groups.at(-1);if(g?.item===split[i].item)g.rows.push([r,split[i].part]);else groups.push({item:split[i].item,rows:[[r,split[i].part]]});});
+  return <>{groups.map((g,i)=><div key={i} className="proposal-diff-group"><small className="proposal-field">{label} · {g.item}</small>{g.rows.map(([r,p],j)=><ChangeRow key={j} label={label} row={r} part={p}/>)}</div>)}</>;}
  return <>{rows.map((r,i)=><ChangeRow key={i} label={label} row={r}/>)}</>;
 }
 // The header names what changes: 改 标题、成果、验收（+2 条）.
@@ -57,9 +65,20 @@ const shownFields=patch=>Object.entries(patch).filter(([key])=>!(key==='mileston
 const shortTime=iso=>{const t=new Date(iso);return Number.isNaN(t.getTime())?'':t.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});};
 // The card's title says what changes in one sentence; the old "接受后需双方重新确认" tail is the handshake's job.
 // Older cards wrote who asked; the title only states what changed (陈溪南 2026-10-22).
-const headline=t=>String(t||'').replace(/\s*(\[E\d+\])+/g,'').replace(/[；;，,。]?\s*接受后需[^。]*。?$/,'').replace(/^(负责人批注|负责人报告)[：:]\s*/,'').replace(/^[^，。；：:]{0,12}?(要求|提出|建议|指出|明确要求)[，,]?\s*(在|把|将)?/,'').split('。')[0].replace(/[；;，,]\s*(只改|其他|其余|原其他|原三条|原样)[^。]*$/,'').replace(/[；;，,]\s*[^；;，,。]*(保持不变|不变)。?$/,'').replace(/[。；;，,]$/,'').trim();
+const headline=t=>String(t||'').replace(/\s*(\[E\d+\])+/g,'').replace(/\s*[（(]\s*接受后需[^）)]*[）)]/g,'').replace(/[；;，,。]?\s*接受后需[^。]*。?$/,'').replace(/^(负责人批注|负责人报告)[：:]\s*/,'').replace(/^[^，。；：:]{0,12}?(要求|提出|建议|指出|明确要求)[，,]?\s*(在|把|将)?/,'').split('。')[0].replace(/[；;，,]\s*(只改|其他|其余|原其他|原三条|原样)[^。]*$/,'').replace(/[；;，,]\s*[^；;，,。]*(保持不变|不变)。?$/,'').replace(/[。；;，,]$/,'').trim();
 // A task card (陈溪南 2026-10-22): a header that says what this is and where it stands (its colour is the state),
 // a one-sentence title of the change, the changes themselves, and the two answers at the bottom.
+// A review revision at a glance (陈溪南 2026-10-27: no taller than twice its width): the verdict and the status / type
+// changes, one line each; every wording change only counted, with 看全部 for the full comparison.
+const keyOf=x=>x?.ref||x?.item||x?.text;
+function reviewDigest(patch,before){
+ const rows=[];let words=0;
+ if('verdict'in patch&&patch.verdict!==before?.verdict)rows.push({label:'判定',from:before?.verdict||'',to:patch.verdict});
+ if('verdictReason'in patch&&String(patch.verdictReason)!==String(before?.verdictReason||''))words++;
+ if(Array.isArray(patch.facts)){const old=new Map((before?.facts||[]).map(f=>[keyOf(f),f]));for(const f of patch.facts){const o=old.get(keyOf(f));if(!o){rows.push({label:f.item,from:'',to:'新增一项'});continue;}if(o.status!==f.status)rows.push({label:f.item,from:o.status,to:f.status});if(o.evidence!==f.evidence||String(o.gap||'')!==String(f.gap||''))words++;old.delete(keyOf(f));}for(const o of old.values())rows.push({label:o.item,from:'',to:'删去'});}
+ if(Array.isArray(patch.nextInputs)){const old=new Map((before?.nextInputs||[]).map(x=>[keyOf(x),x]));for(const x of patch.nextInputs){const o=old.get(keyOf(x));if(!o){rows.push({label:'下期输入',from:'',to:`新增「${x.type}」一条`});continue;}if(o.type!==x.type)rows.push({label:`下期 · ${String(x.text).slice(0,12)}`,from:o.type,to:x.type});if(o.text!==x.text||JSON.stringify(o.ask||null)!==JSON.stringify(x.ask||null))words++;old.delete(keyOf(x));}for(const o of old.values())rows.push({label:'下期输入',from:'',to:`删去「${o.type}」一条`});}
+ return {rows,words};
+}
 export default function ProposalCard({proposal,node,onAction,onOpen,compact=false}){
  const [busy,setBusy]=useState(false),[rejecting,setRejecting]=useState(null),[showAll,setShowAll]=useState(false);
  async function handle(type,extra){if(busy)return;setBusy(true);try{await onAction({type,cardId:proposal.cardId,proposalId:proposal.id,...(extra||{})});setRejecting(null);}finally{setBusy(false);}}
@@ -73,7 +92,10 @@ export default function ProposalCard({proposal,node,onAction,onOpen,compact=fals
  const fields=shownFields(shownPatch||{}).filter(([key])=>!(vc&&key==='verdict')),label=key=>fieldLabel(node?.level,key);
  // At most three fields open; the rest fold into one line that names them.
  const open=showAll?fields:fields.slice(0,3),folded=fields.slice(open.length);
- const changes=proposal.op?<MissionChange proposal={proposal}/>:<>{verdictLine}{open.map(([key,value])=><FieldChange key={key} label={label(key)} before={proposal.before?.[key]} after={value}/>)}{folded.length>0&&<button type="button" className="proposal-more" onClick={()=>setShowAll(true)}>还改了 {folded.map(([key])=>label(key)).join('、')} · 展开</button>}</>;
+ const isReview=['facts','nextInputs','verdictReason','verdict'].some(k=>k in (shownPatch||{}))&&String(proposal.cardId||'').startsWith('rv:');
+ const digest=isReview?reviewDigest(shownPatch||{},proposal.before||{}):null;
+ const changes=digest&&!showAll?<div className="proposal-digest">{digest.rows.slice(0,5).map((r,i)=><p key={i} className="proposal-digest-row"><span className="proposal-digest-label">{r.label}</span>{r.from&&<><s className="change-old">{r.from}</s><span className="change-arrow">→</span></>}<mark className="diff-mark">{r.to}</mark></p>)}{(digest.words>0||digest.rows.length>5)&&<button type="button" className="proposal-more" onClick={()=>setShowAll(true)}>{digest.words>0?`另有 ${digest.words} 处文字修改`:'还有改动'} · 看全部</button>}</div>
+  :proposal.op?<MissionChange proposal={proposal}/>:<>{verdictLine}{open.map(([key,value])=><FieldChange key={key} label={label(key)} before={proposal.before?.[key]} after={value}/>)}{folded.length>0&&<button type="button" className="proposal-more" onClick={()=>setShowAll(true)}>还改了 {folded.map(([key])=>label(key)).join('、')} · 展开</button>}</>;
  const notes=fields.map(([key,value])=>fieldNote(label(key),proposal.before?.[key],value));
  const title=proposal.op==='add-mission'?`新增「${proposal.mission?.title||''}」`:proposal.op?`${proposal.op==='withdraw-mission'?'撤掉':'恢复'}「${proposal.missionSummary?.title||proposal.missionId}」`:headline(proposal.reason)||`改 ${notes.slice(0,3).join('、')}`;
  // Once the card moved on, the old proposal is an archive for tracing, not something to act on.
@@ -82,7 +104,7 @@ export default function ProposalCard({proposal,node,onAction,onOpen,compact=fals
  const Icon=state==='accepted'?CheckCircle2:state==='rejected'?X:Pencil;
  // One short header: the state on the left, who and when on the right (陈溪南 2026-10-22: no card name, no icon up here).
  const head={pending:`待 ${reviewer} 确认`,accepted:`已修改${proposal.resultVersion?` · v${proposal.resultVersion}`:''}`,rejected:'未采用',archived:'已归档'}[state];
- const who=state==='pending'||state==='archived'?'':`${String(reviewer).split(/[、,，]/)[0]}${when?' '+when.replace(/^\d+\/\d+\s*/,''):''}`;
+ const who=state==='pending'?(isReview&&vcWho?`${vcWho}提出`:''):state==='archived'?'':`${String(reviewer).split(/[、,，]/)[0]}${when?' '+when.replace(/^\d+\/\d+\s*/,''):''}`;
  const card=<section id={compact?undefined:'proposal-'+proposal.id} className={`${compact?'island-proposal-card':'revision-message-card'} proposal-task is-${state}`} aria-label={`Nexus 修订卡 · ${head}`}>
   <div className="proposal-head"><strong>{head}</strong>{who&&<span className="proposal-head-who">{who}</span>}</div>
   <div className="proposal-body">
@@ -91,7 +113,7 @@ export default function ProposalCard({proposal,node,onAction,onOpen,compact=fals
    {state==='pending'&&changes}
    <p className="proposal-card-ref">{refButton}</p>
   </div>
-  {state==='pending'?proposal.canAccept?(rejecting!=null?<div className="proposal-foot proposal-reject-form">
+  {state==='pending'&&node?.locked?<div className="proposal-foot proposal-locked">{node.lockedReason||'这张卡已锁定，不能再改'}</div>:state==='pending'?proposal.canAccept?(rejecting!=null?<div className="proposal-foot proposal-reject-form">
    <textarea autoFocus rows={3} value={rejecting} placeholder="说说为什么不采用、想怎么改。群里的人和 Nexus 都会看到，Nexus 会按你的意思再出一版。" aria-label="不采用的理由" onChange={e=>setRejecting(e.target.value)} onKeyDown={e=>{if(e.key==='Escape'){setRejecting(null);return;}enterSubmit(e,()=>handle('rejectProposal',{reason:rejecting.trim()}),!busy&&!!rejecting.trim());}} title="回车发送，Shift＋回车换行"/>
    <div className="proposal-actions"><Button className="proposal-confirm" isDisabled={busy||!rejecting.trim()} onPress={()=>handle('rejectProposal',{reason:rejecting.trim()})}>{busy?'发送中…':'发送理由'}</Button><Button className="proposal-reject" isDisabled={busy} onPress={()=>setRejecting(null)}>取消</Button></div>
   </div>:<div className="proposal-foot proposal-actions">

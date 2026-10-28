@@ -1,6 +1,7 @@
 // Nexus listens before it acts (陈溪南 2026-10-19). Every new public line is first read with a small context:
 // which topic it belongs to, what the speaker is doing, how far that topic has moved toward a handshake,
 // and whether Nexus should step in now. Only "now" runs the full pass. Listening never posts anything.
+import {nowContext,NOW_RULE} from './time-context.mjs';
 import {directQuestion} from './nexus-participation.mjs';
 
 // The road every topic travels; each time Nexus speaks it should move one topic one step along it.
@@ -19,16 +20,17 @@ export const listenSystemPrompt=`你是 Nexus 的“倾听”环节。群里每�
 - "none"：其他情况。大家正常往前讨论、只是表态、补充信息、闲聊时，都不出场。宁可少说，不要打断。
 文档批注里的问题（“这是啥”“为什么这么判”这类，context.block 是批注的字段，item 是第几条，quote 是那一条的原文）是在问 Nexus，act 用 now，不当成随手试。
 如果出场需要本体原文里的事实（数据、日期、原话），needFacts 为 true；如果要看别的战场或能力域的卡，在 otherUnits 列出它们的 key。
-只输出 JSON：{"events":[{"id":消息id,"topicId":话题id或"new","newTitle":string,"intent":string,"addressee":string|null}],"stages":{"话题id，或 new:新话题标题":"阶段"},"act":"now"|"none","reason":"一句话","needFacts":boolean,"otherUnits":[key]}`;
+只输出 JSON：{"events":[{"id":消息id,"topicId":话题id或"new","newTitle":string,"intent":string,"addressee":string|null}],"stages":{"话题id，或 new:新话题标题":"阶段"},"act":"now"|"none","reason":"一句话","needFacts":boolean,"otherUnits":[key]}
+${NOW_RULE}`;
 
 // Small input: the new lines with what they point at, the open topics, and Nexus's last line.
-export function listenInput({scope,fresh,evidence,topics,cards,nexusLast,units=[]}){
+export function listenInput({scope,fresh,evidence,topics,cards,nexusLast,units=[],now=Date.now()}){
  const byId=new Map(evidence.map(e=>[e.id,e])),cardById=new Map(cards.map(c=>[c.id,c]));
  const label=c=>c?`${c.aliases?.[0]||c.level} ${c.title}`:null;
  // Review fields hold objects ({text, ask}, {type, text}, {choice, reason}); read them as text, not [object Object].
  const asText=x=>typeof x==='string'?x:x&&typeof x==='object'?(x.text??[x.type,x.choice,x.reason].filter(Boolean).join('：')):String(x??'');
  const field=(c,k)=>String(Array.isArray(c[k])?c[k].map(asText).join('；'):asText(c[k])).slice(0,240);
- return {scope,
+ return {scope,now:nowContext(now),
   units:units.map(u=>({key:u.key||u.id,name:u.name})),
   openTopics:(topics||[]).filter(t=>t.status!=='agreement').slice(-8).map(t=>({id:t.id,title:t.title,stage:t.stage||'讨论',last:(t.quotes||[]).slice(-2).map(q=>String(q.text).slice(0,80))})),
   nexusLast:nexusLast?{text:String(nexusLast.text).slice(0,160),at:nexusLast.createdAt}:null,

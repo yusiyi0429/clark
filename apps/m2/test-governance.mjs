@@ -74,7 +74,7 @@ test('持久化、单进程锁和并发版本冲突：不会覆盖别人修订',
   assert.equal(JSON.parse(await readFile(path)).audit.length,1);assert.equal((await stat(path)).mode&0o777,0o600);
  }finally{if(store)await store.close();await unlink(path).catch(()=>{});await rmdir(dir);}
 });
-test('协作通知：接受修订后群里 @ 需重签的人和下级负责人；双方确认后公告达成共识；同卡不同字段的建议保留',async()=>{
+test('协作通知：接受修订后群里只 @ 需重签的人（不再说谁接受了什么）并提示对照下级；双方确认后公告达成共识；同卡不同字段的建议保留',async()=>{
  const {queueProposals}=await import('./nexus-memory.mjs');
  const dri={id:'member-05',visibleUnits:['eo'],unitDri:['eo'],missionDri:[]},owner={id:'member-06',visibleUnits:['eo'],unitDri:[],missionDri:['eo-m2']};
  let s=createCollaborationState([{id:'eo',level:'po',title:'E&O',owner:'刘人豪',children:[{id:'eo-m2',unit:'eo',level:'mission',title:'受控上下文复用',owner:'于斯一',result:'旧成果',checks:['旧验收'],children:[{id:'eo-m2-t1',unit:'eo',level:'task',title:'T',owner:'孙铭泽',children:[]}]}]}]);
@@ -87,7 +87,7 @@ test('协作通知：接受修订后群里 @ 需重签的人和下级负责人�
  // Different field: still pending, carried to v2.
  assert.equal(s.proposals.find(p=>p.id===p2.id).status,'pending');assert.equal(s.proposals.find(p=>p.id===p2.id).baseVersion,2);
  const notice=s.messages.filter(m=>m.kind==='notice').at(-1).text;
- assert.match(notice,/于斯一接受了 Nexus 对「受控上下文复用」的修订，已更新到 v2/);assert.match(notice,/@刘人豪/);assert.match(notice,/正在按拆解规则对照下级 1 张卡/);assert.doesNotMatch(notice,/@于斯一/);
+ assert.match(notice,/^「受控上下文复用」已更新到 v2，请 @刘人豪 重新确认/);assert.doesNotMatch(notice,/接受了/,'不再说一遍谁接受了什么');assert.match(notice,/@刘人豪/);assert.match(notice,/正在按拆解规则对照下级 1 张卡/);assert.doesNotMatch(notice,/@于斯一/);
  s=applyAction(s,owner,{type:'confirm',cardId:'eo-m2',slot:'missionDri',baseVersion:2});
  s=applyAction(s,dri,{type:'confirm',cardId:'eo-m2',slot:'unitDri',baseVersion:2});
  assert.match(s.messages.at(-1).text,/达成共识/);

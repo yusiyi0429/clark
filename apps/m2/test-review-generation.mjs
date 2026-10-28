@@ -57,7 +57,10 @@ test('复盘生成：单元按名称认，缺 RU PO 的单元不复盘，公司 
  assert.ok(input.skipped.some(x=>/Token Ops：本体里没有 10 月 RU PO，不复盘/.test(x)));assert.ok(!input.stages.flat().some(c=>c.unit==='bf02'));
  const m=s1[0];assert.equal(m.owner,'于斯一');assert.match(m.commitment,/建模完成/);assert.match(m.commitmentSource,/本体 10 月 Mission/);
  // Mission evidence: its own snapshot and in-month event, plus the PO-level record; nothing after the cutoff or before the month.
- assert.deepEqual(m.evidence.map(e=>e.asOf),['2026-10-10','2026-10-12','2026-10-15','2026-10-16','2026-10-18','2026-10-19']);assert.deepEqual(m.evidence.map(e=>e.id),['E1','E2','E3','E4','E5','E6']);
+ const own=m.evidence.filter(e=>e.kind!=='单元层面进展'&&!/单元层面/.test(e.source));
+ assert.deepEqual(own.map(e=>e.asOf),['2026-10-10','2026-10-12','2026-10-15','2026-10-16','2026-10-18','2026-10-19']);
+ // Unit-level records reach the Mission too, marked as not evidence for any one Task (读取盘点 2026-10-26).
+ assert.ok(m.evidence.filter(e=>/单元层面进展/.test(e.source)).length>=1);assert.deepEqual(m.evidence.map(e=>e.id),m.evidence.map((_,i)=>'E'+(i+1)));
  const all=JSON.stringify(input);
  assert.ok(!all.includes('截止后的记录'));assert.ok(!all.includes('上月的事'));assert.ok(!all.includes('写错的进展'));assert.ok(all.includes('更正：模型只定了一半'));
  assert.ok(m.evidence.some(e=>e.source==='会议'&&/建模口径/.test(e.text)));
@@ -184,4 +187,29 @@ test('拒答：同样的请求先再试一次；仍失败的单元续跑时重�
  const again=fakeGateway();await runReviewSkill({gateway:again,skill,input,run});
  assert.ok(again.calls.includes('eo-m1')&&again.calls.includes('eo')&&again.calls.includes('company'));
  assert.deepEqual(run.failed,[]);assert.deepEqual(reviewProblems(run,input,{roster:['刘人豪','于斯一','刘明华']}),[]);
+});
+test('读取盘点 10/26：Task 行合并计划条目和 Task 对象；单元记录按正文归到 Mission；本月的 review 事件不当上月复盘；按条目时间认月份；留读取回执',()=>{
+ const s=sources();
+ // A plan with two items (principal ids), one matching a Task object by title.
+ s.objects[id(20)].business.blocks.push({id:'execution_plan',display_name:'Task 全景',kind:'plan',value:{components:[
+  {id:'task:t-a',type:'plan_item',text:'T01｜对象模型定稿：模型和口径定下来',attributes:{responsible:'p-yu',finish_date:'2026-10-30',expected_output:'模型定稿',quality_standard:'评审通过'},ref:`${id(20)}@3#execution_plan/task:t-a`},
+  {id:'task:t-b',type:'plan_item',text:'T02｜读写联调',attributes:{responsible:null}}]}});
+ s.heads.tasks=[{object_id:id(40)},{object_id:id(41)}];
+ s.objects[id(40)]={business:{title:'对象模型定稿',blocks:blocks('模型定稿'),relations:[{field:'parent_ref',value:{object_id:id(20)}}]},identity:{}};
+ s.objects[id(41)]={business:{title:'额外的 Task',blocks:blocks('别的'),relations:[{field:'parent_ref',value:{object_id:id(20)}}]},identity:who('刘人豪')};
+ s.monthEvents.push({event_id:'pn',principal:{principal_id:'p-yu',display_name:'于斯一'},kind:'event.recorded',category:'other',occurred_at:'2026-10-20T09:00:00+08:00',subject_refs:[{object_id:id(1)}],content:{text:'Context 建模这周把对象模型定稿推进到评审'},corrected_by:[],withdrawn_by:[]});
+ s.monthEvents.push({event_id:'rv',principal:{display_name:'刘人豪'},kind:'event.recorded',category:'review',occurred_at:'2026-10-21T09:00:00+08:00',subject_refs:[{object_id:id(10)}],content:{text:'E&O 目标重写范围决定'},corrected_by:[],withdrawn_by:[]});
+ s.monthEvents.push({event_id:'lto',principal:{display_name:'刘明华'},kind:'event.recorded',category:'other',occurred_at:'2026-10-21T09:00:00+08:00',subject_refs:[{object_id:'lto-x'}],content:{text:'明华确认了长期目标'},corrected_by:[],withdrawn_by:[]});
+ s.heads.snapshots.push({object_id:id(34),domain_id:'d-eo'});
+ s.objects[id(34)]={title:'E&O · 11/02 补记 10 月进展',as_of:'2026-11-02T10:00:00+08:00',subject_ref:{object_id:id(20)},blocks:[{id:'p',display_name:'进展',components:[{type:'progress',text:'10/21 联调过一次',attributes:{entries:[{at:'2026-10-21T10:00:00+08:00',text:'联调过一次'}]}}]}]};
+ const input=buildReviewInput(s,{ceoName:'刘明华'}),m=input.stages[0][0];
+ assert.deepEqual(m.tasks.map(t=>[t.title.slice(0,8),t.owner,t.ref.startsWith(id(40))||t.ref===id(41)?'task':'plan']),[['T01｜对象模型','于斯一','task'],['T02｜读写联调','未指派','plan'],['额外的 Task','刘人豪','task']]);
+ assert.equal(m.tasks[0].expected,'模型定稿');assert.ok(!('expectedFacts' in m));
+ assert.ok(m.evidence.some(e=>/正文提到这个 Mission/.test(e.source)&&/定稿推进到评审/.test(e.text)),'单元上的记录提到 Task 标题，归到 Mission');
+ const po=input.stages[1][0];assert.ok(po.evidence.some(e=>/重写范围决定/.test(e.text)&&e.kind!=='上月复盘'),'本月的 review 事件按本月记录');
+ assert.ok(m.evidence.some(e=>/联调过一次/.test(e.text)),'11 月补记、条目时间在 10 月的快照照读');
+ assert.ok(input.stages[2][0].evidence.some(e=>/长期目标/.test(e.text)),'挂在长期目标上的记录归到公司，不丢');
+ assert.ok(input.readReceipt.objects.length&&input.readReceipt.events.includes('pn')&&input.readReceipt.snapshots.includes(id(34)));
+ // No owner: shown as unassigned, the unit DRI still signs.
+ const o=buildReviewInput(sources({withMissionOwner:false}),{ceoName:'刘明华'}).stages[0][0];assert.equal(o.ownerAssigned,false);assert.match(o.missing[0],/未指派/);
 });
