@@ -18,6 +18,7 @@ export function m2EntryNotices(go: (href: string) => void): ActionNotice[] {
 /**
  * M2 的通知（溪南 10/27 初版接口 GET /m2/api/notifications）：环节、我的待办、@我、生成失败四种，合并少发、只读。
  * 点开时、点「知道了」时调 POST /m2/api/notifications/read 标已读（M2 页面从链接进入时也会自己标）。
+ * 环节卡同一时间只有一张（10/28）：复盘进行中 → 拆解生成中 → 拆解进行中 → 全部确认；只有全部确认的能「知道了」，看过就不显示。
  */
 export type M2Notification = {
   id: string;
@@ -26,7 +27,7 @@ export type M2Notification = {
   text?: string;
   link: string;
   dueAt?: string | null;
-  status?: "open" | "done";
+  status?: "open" | "generating" | "done";
   unread?: boolean;
 };
 const TYPES = new Set(["stage", "todo", "mention", "failure"]);
@@ -58,7 +59,7 @@ export function markM2NotificationsRead(ids: string[]): Promise<boolean> {
     .then((response) => response.ok, () => false);
 }
 
-/** 环节卡和 @我 可以在通知栏里「知道了」；待办办完、生成失败续跑成功才消失，不给关。 */
+/** 全部确认的环节卡和 @我 可以在通知栏里「知道了」；进行中、生成中的环节卡，待办和生成失败都不给关，状态变了才消失。 */
 export function m2NotificationNotices(items: M2Notification[], go: (href: string) => void, now: Date, markRead = markM2NotificationsRead): ActionNotice[] {
   return items.map((item) => {
     const deadline = item.dueAt && item.status !== "done" ? due(item.dueAt, now) : null;
@@ -68,7 +69,7 @@ export function m2NotificationNotices(items: M2Notification[], go: (href: string
       detail: [item.text, deadline?.text].filter(Boolean).join(" · "),
       tone: item.type === "failure" || deadline?.soon ? "red" : item.unread || item.type === "todo" ? "amber" : "neutral",
       onOpen: () => { void markRead([item.id]); go(`/m2/${item.link.replace(/^\/+/, "")}`); },
-      buttons: item.type === "stage" || item.type === "mention"
+      buttons: (item.type === "stage" && item.status === "done") || item.type === "mention"
         ? [{ label: "知道了", run: async () => (await markRead([item.id]) ? { ok: true as const, settled: "已读" } : { ok: false as const, error: "没标上，稍后再试" }) }]
         : [],
     };

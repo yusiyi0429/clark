@@ -33,6 +33,21 @@ describe("通知栏里去 M2 的入口卡", () => {
     expect(go).toHaveBeenCalledWith("/m2/");
   });
 
+  it("环节卡：进行中、生成中一直在、不给「知道了」；全部确认的能「知道了」，看过就不显示", async () => {
+    const stage = (status: string, unread: boolean) => ({ id: "stage:plan", type: "stage", title: "11 月拆解", link: "?stage=plan", status, unread });
+    const go = vi.fn();
+    const read = vi.fn(async () => true);
+    const now = new Date("2026-10-31T02:00:00Z");
+    const buttons = (status: string, unread: boolean) =>
+      m2NotificationNotices(visibleM2Notifications({ items: [stage(status, unread)] }), go, now, read).map((notice) => notice.buttons.map((button) => button.label));
+    expect(buttons("generating", false)).toEqual([[]]);
+    expect(buttons("open", true)).toEqual([[]]);
+    expect(buttons("done", true)).toEqual([["知道了"]]);
+    expect(buttons("done", false)).toEqual([]);
+    m2NotificationNotices(visibleM2Notifications({ items: [stage("generating", false)] }), go, now, read)[0].onOpen?.(null);
+    expect(go).toHaveBeenCalledWith("/m2/?stage=plan");
+  });
+
   it("M2 通知：认得的四种照接口显示；环节卡完成又看过的不显示；出错、空、不是列表都当没有", async () => {
     const body = { items: [
       { id: "stage:review", type: "stage", title: "10 月复盘已出", text: "", link: "?stage=review", status: "open", dueAt: "2026-10-30T10:00:00Z", unread: true },
@@ -59,12 +74,12 @@ describe("通知栏里去 M2 的入口卡", () => {
     // 不到 24 小时标红；过了截止写「已过截止」。
     expect(m2NotificationNotices(visibleM2Notifications(body), go, new Date("2026-10-29T12:00:00Z"), read)[1].tone).toBe("red");
     expect(m2NotificationNotices(visibleM2Notifications(body), go, new Date("2026-10-30T11:00:00Z"), read)[1].detail).toBe("1 份待确认、2 个追问待回答 · 已过截止");
-    // 点开：标已读再整页去 M2；环节卡和 @我 能「知道了」，待办和生成失败不给关。
+    // 点开：标已读再整页去 M2；只有 @我 能「知道了」，进行中的环节卡、待办和生成失败不给关。
     notices[2].onOpen?.(null);
     expect(read).toHaveBeenCalledWith(["mention:bf01"]);
     expect(go).toHaveBeenCalledWith("/m2/?scope=bf01&message=m-nexus");
-    expect(notices.map((notice) => notice.buttons.map((button) => button.label))).toEqual([["知道了"], [], ["知道了"], []]);
-    expect(await notices[0].buttons[0].run()).toEqual({ ok: true, settled: "已读" });
-    expect(read).toHaveBeenLastCalledWith(["stage:review"]);
+    expect(notices.map((notice) => notice.buttons.map((button) => button.label))).toEqual([[], [], ["知道了"], []]);
+    expect(await notices[2].buttons[0].run()).toEqual({ ok: true, settled: "已读" });
+    expect(read).toHaveBeenLastCalledWith(["mention:bf01"]);
   });
 });
