@@ -36,6 +36,7 @@ const STEP_LABELS: [RegExp, string][] = [
   [/^remember_personal_memory$/, "记下来"],
   [/^forget_personal_memory$/, "忘掉"],
   [/^search_conversation_history$/, "找以前的原话"],
+  [/^(search_past_conversations|read_past_conversation)$/, "找以前的对话"],
   [/^propose_/, "整理确认卡"],
   [/^(edit_|create_|update_|run_|apply_|save_)/, "保存修改"],
 ];

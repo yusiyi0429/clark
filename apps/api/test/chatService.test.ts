@@ -23,14 +23,27 @@ function sse(res: ServerResponse, events: Record<string, unknown>[], end = true)
  * 假 Chat 服务（照 Chat_Service 的接口形状）：会话列表、新建、按游标翻历史、附件、发一轮。
  * 内部凭据不对一律 401；turns 按 turn 脚本回（默认一轮正常回答）。
  */
+type FakeConversation = { conversationId: string; createdAt: string; updatedAt: string };
 async function fakeChat(options: {
-  conversations?: string[];
+  /** 最近更新的在前；只给 id 时两个时间都是现在。 */
+  conversations?: (string | FakeConversation)[];
+  /** 按游标的历史页（所有会话共用）；segments 给了某段时按段取。 */
   pages?: Record<string, Page>;
+  segments?: Record<string, Record<string, Page>>;
   turn?: (res: ServerResponse, request: ChatRequest) => void;
   upload?: (request: ChatRequest) => unknown;
 } = {}) {
   const requests: ChatRequest[] = [];
-  const conversations = [...(options.conversations ?? [])];
+  const now = () => new Date().toISOString();
+  const listed: FakeConversation[] = (options.conversations ?? []).map((item) => (typeof item === "string" ? { conversationId: item, createdAt: now(), updatedAt: now() } : item));
+  const conversations = listed.map((item) => item.conversationId);
+  const touch = (id: string) => {
+    const item = listed.find((entry) => entry.conversationId === id);
+    if (!item) return;
+    item.updatedAt = now();
+    listed.splice(listed.indexOf(item), 1);
+    listed.unshift(item);
+  };
   const server = createServer(async (req, res) => {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(chunk as Buffer);
@@ -41,15 +54,20 @@ async function fakeChat(options: {
       res.end(JSON.stringify(body));
     };
     if (req.headers.authorization !== `Bearer ${CHAT_TOKEN}`) return send(401, { error: { code: "UNAUTHORIZED", message: "内部服务凭据无效" } });
-    if (request.method === "GET" && request.url === "/conversations") return send(200, { conversations: conversations.map((conversationId) => ({ conversationId })) });
+    if (request.method === "GET" && request.url === "/conversations") return send(200, { conversations: listed.slice(0, 50) });
     if (request.method === "POST" && request.url === "/conversations") {
-      conversations.unshift(randomUUID());
-      return send(201, { conversationId: conversations[0] });
+      const created = { conversationId: randomUUID(), createdAt: now(), updatedAt: now() };
+      listed.unshift(created);
+      conversations.unshift(created.conversationId);
+      return send(201, { conversationId: created.conversationId });
     }
-    const history = /\/messages\?limit=100&cursor=(\d+)$/.exec(request.url);
-    if (request.method === "GET" && history) return send(200, options.pages?.[history[1]] ?? { messages: [], runs: [], nextCursor: null });
+    const history = /\/conversations\/([^/]+)\/messages\?limit=\d+&cursor=(\d+)$/.exec(request.url);
+    if (request.method === "GET" && history) {
+      return send(200, (options.segments?.[history[1]] ?? options.pages)?.[history[2]] ?? { messages: [], runs: [], nextCursor: null });
+    }
     if (request.method === "POST" && request.url.endsWith("/attachments")) return send(200, options.upload?.(request));
     if (request.method === "POST" && request.url.endsWith("/turns")) {
+      touch(request.url.split("/")[2]);
       if (options.turn) return options.turn(res, request);
       return sse(res, [{ type: "turn_started", userMessageId: randomUUID() }, { type: "message", delta: "好的" }, { type: "done", status: "completed" }]);
     }
@@ -60,6 +78,7 @@ async function fakeChat(options: {
     url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
     requests,
     conversations,
+    listed,
     turns: () => requests.filter((request) => request.url.endsWith("/turns")),
     close: () => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }),
   };
@@ -347,5 +366,220 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
       controller.abort();
       await expect(Promise.race([closed.then(() => "closed"), new Promise((resolve) => setTimeout(() => resolve("still open"), 3000))])).resolves.toBe("closed");
     });
+  });
+});
+
+const HOUR = 60 * 60 * 1000;
+const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+/** 最近一次北京时间凌晨 4 点（对话日的开始）。 */
+function lastFourAm(now = new Date()): Date {
+  const day = new Date(now.getTime() + 8 * HOUR - 4 * HOUR).toISOString().slice(0, 10);
+  return new Date(`${day}T04:00:00+08:00`);
+}
+const page = (messages: unknown[], runs: unknown[] = []): Page => ({ messages, runs, nextCursor: null });
+const said = (role: string, text: string, runId: string, position: number) => ({ id: randomUUID(), position: String(position), role, text, runId, attachmentIds: [], attachments: [] });
+
+async function rotating(chat: Awaited<ReturnType<typeof fakeChat>>, run: (t: Awaited<ReturnType<typeof createTestApp>>, cookie: string) => Promise<void>, rotation = true) {
+  const t = await createTestApp({ internalChatToken: CHAT_TOKEN, chatServiceUrl: chat.url, chatSessionRotation: rotation }, countingRuntime());
+  try {
+    await run(t, await t.loginCookie());
+  } finally {
+    await t.close();
+    await chat.close();
+  }
+}
+const sendHome = (t: Awaited<ReturnType<typeof createTestApp>>, cookie: string, payload: Record<string, unknown>) => t.app.inject({
+  method: "POST", url: "/api/conversations/global/messages", headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload });
+
+describe("首页分段（CHAT_SESSION_ROTATION）", () => {
+  it("同一天间隔短接着用这一段；闲置满 12 小时新开一段；跨过凌晨 4 点新开一段", async () => {
+    const recent = { conversationId: randomUUID(), createdAt: ago(2 * HOUR), updatedAt: ago(5_000) };
+    const chat = await fakeChat({ conversations: [recent] });
+    await rotating(chat, async (t, cookie) => {
+      await sendHome(t, cookie, { message: "接着问" });
+      expect(chat.conversations).toHaveLength(1);
+      expect(chat.turns()[0].url).toBe(`/conversations/${recent.conversationId}/turns`);
+    });
+
+    const idle = await fakeChat({ conversations: [{ conversationId: randomUUID(), createdAt: ago(20 * HOUR), updatedAt: ago(12 * HOUR + 60_000) }] });
+    await rotating(idle, async (t, cookie) => {
+      await sendHome(t, cookie, { message: "隔了半天" });
+      expect(idle.conversations).toHaveLength(2);
+      expect(idle.turns()[0].url).toBe(`/conversations/${idle.conversations[0]}/turns`);
+      // 这一句进了哪一段记进纪要表（视角、段 id），纪要后台据此去读。
+      expect(await t.sql("SELECT owner_id, viewer_role, source, source_ref, status FROM conversation_digests")).toEqual([
+        { owner_id: TEST_CEO.personId, viewer_role: "ceo", source: "chat", source_ref: idle.conversations[0], status: "stale" }]);
+    });
+
+    const overnight = await fakeChat({ conversations: [{ conversationId: randomUUID(), createdAt: ago(20 * HOUR), updatedAt: new Date(lastFourAm().getTime() - 60_000).toISOString() }] });
+    await rotating(overnight, async (t, cookie) => {
+      await sendHome(t, cookie, { message: "第二天" });
+      expect(overnight.conversations).toHaveLength(2);
+    });
+  });
+
+  it("开关关着：闲置再久也接着最近那一段，和分段之前一样", async () => {
+    const old = { conversationId: randomUUID(), createdAt: ago(48 * HOUR), updatedAt: ago(30 * HOUR) };
+    const chat = await fakeChat({ conversations: [old] });
+    await rotating(chat, async (t, cookie) => {
+      await sendHome(t, cookie, { message: "隔天" });
+      expect(chat.conversations).toEqual([old.conversationId]);
+      const history = (await t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie } })).json();
+      expect(history.messages.some((item: { kind?: string }) => item.kind === "trace")).toBe(false);
+    }, false);
+  });
+
+  it("「继续」进那一轮所在的旧段；之后的新问题还进最新那段", async () => {
+    const latest = { conversationId: randomUUID(), createdAt: ago(1 * HOUR), updatedAt: ago(5_000) };
+    const old = { conversationId: randomUUID(), createdAt: ago(40 * HOUR), updatedAt: ago(30 * HOUR) };
+    const chat = await fakeChat({ conversations: [latest, old], segments: {
+      [old.conversationId]: { "0": page([], [{ runId: RUN, status: "failed", errorCode: "MODEL_FAILED" }]) },
+      [latest.conversationId]: { "0": page([], [{ runId: randomUUID(), status: "completed", errorCode: null }]) },
+    } });
+    await rotating(chat, async (t, cookie) => {
+      await sendHome(t, cookie, { message: "继续", resumeRunId: RUN });
+      expect(chat.turns()[0].url).toBe(`/conversations/${old.conversationId}/turns`);
+      expect(JSON.parse(chat.turns()[0].body)).toMatchObject({ resumeRunId: RUN });
+      await sendHome(t, cookie, { message: "新问题" });
+      expect(chat.turns()[1].url).toBe(`/conversations/${latest.conversationId}/turns`);
+      expect(chat.conversations).toHaveLength(2);
+    });
+  });
+
+  it("跨天后先传附件：附件进新段，随后那一句和附件在同一段，不再开一段", async () => {
+    const attachmentId = randomUUID();
+    const chat = await fakeChat({ conversations: [{ conversationId: randomUUID(), createdAt: ago(40 * HOUR), updatedAt: ago(13 * HOUR) }],
+      upload: () => ({ attachments: [{ attachmentId, fileName: "brief.md", mime: "text/markdown", size: 15, status: "ready", extractedChars: 5, reason: null }] }) });
+    await rotating(chat, async (t, cookie) => {
+      const body = multipart("brief.md", "# 渠道备忘");
+      await t.app.inject({ method: "POST", url: "/api/conversations/global/attachments", headers: { cookie, origin: t.publicOrigin, ...body.headers }, payload: body.payload });
+      const created = chat.conversations[0];
+      expect(chat.requests.find((request) => request.url.endsWith("/attachments"))!.url).toBe(`/conversations/${created}/attachments`);
+      await sendHome(t, cookie, { message: "看附件", attachments: [{ id: attachmentId }] });
+      expect(chat.turns()[0].url).toBe(`/conversations/${created}/turns`);
+      expect(chat.requests.filter((request) => request.method === "POST" && request.url === "/conversations")).toHaveLength(1);
+    });
+  });
+
+  it("网页和飞书私聊同时发跨天后的第一句：只建一段，两句都在里面", async () => {
+    const chat = await fakeChat({ conversations: [{ conversationId: randomUUID(), createdAt: ago(40 * HOUR), updatedAt: ago(13 * HOUR) }] });
+    await rotating(chat, async (t, cookie) => {
+      await Promise.all([sendHome(t, cookie, { message: "网页这句" }), sendHome(t, cookie, { message: "飞书这句" })]);
+      expect(chat.requests.filter((request) => request.method === "POST" && request.url === "/conversations")).toHaveLength(1);
+      expect(new Set(chat.turns().map((turn) => turn.url))).toEqual(new Set([`/conversations/${chat.conversations[0]}/turns`]));
+    });
+  });
+
+  it("界面拼最近 7 天的几段，从旧到新，段之间一行日期；更早的段不读", async () => {
+    const [r1, r2, r3] = [randomUUID(), randomUUID(), randomUUID()];
+    const current = { conversationId: randomUUID(), createdAt: ago(1 * HOUR), updatedAt: ago(5_000) };
+    const earlier = { conversationId: randomUUID(), createdAt: ago(50 * HOUR), updatedAt: ago(49 * HOUR) };
+    const stale = { conversationId: randomUUID(), createdAt: ago(9 * 24 * HOUR), updatedAt: ago(8 * 24 * HOUR) };
+    const chat = await fakeChat({ conversations: [current, earlier, stale], segments: {
+      [current.conversationId]: { "0": page([said("user", "今天的问题", r3, 1), said("assistant", "今天的回答", r3, 2)], [{ runId: r3, status: "completed" }]) },
+      [earlier.conversationId]: { "0": page([said("user", "前天的问题", r2, 1), said("assistant", "前天的回答", r2, 2)], [{ runId: r2, status: "completed" }]) },
+      [stale.conversationId]: { "0": page([said("user", "上周的问题", r1, 1)], [{ runId: r1, status: "completed" }]) },
+    } });
+    await rotating(chat, async (t, cookie) => {
+      const history = (await t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie } })).json();
+      const { segmentDateLabel } = await import("../src/conversationSegments.js");
+      expect(history.messages.map((item: { sequence: number; content: string; kind?: string }) => [item.sequence, item.content, item.kind ?? null])).toEqual([
+        [1, "前天的问题", null], [2, "前天的回答", null], [3, segmentDateLabel(new Date(current.createdAt)), "trace"], [4, "今天的问题", null], [5, "今天的回答", null]]);
+      // 轮询有界：只读 7 天内的两段，更早的那段一次都不读。
+      expect(chat.requests.filter((request) => request.url.includes("/messages")).map((request) => request.url.split("/")[2]).sort())
+        .toEqual([current.conversationId, earlier.conversationId].sort());
+    });
+  });
+
+  it("当前这段已经够 200 条：更早的段不再往前读", async () => {
+    const run = randomUUID();
+    const current = { conversationId: randomUUID(), createdAt: ago(1 * HOUR), updatedAt: ago(5_000) };
+    const earlier = { conversationId: randomUUID(), createdAt: ago(30 * HOUR), updatedAt: ago(29 * HOUR) };
+    const many = Array.from({ length: 200 }, (_, index) => said(index % 2 ? "assistant" : "user", `第 ${index} 条`, run, index + 1));
+    const chat = await fakeChat({ conversations: [current, earlier], segments: { [current.conversationId]: { "0": page(many, [{ runId: run, status: "completed" }]) } } });
+    await rotating(chat, async (t, cookie) => {
+      const history = (await t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie } })).json();
+      expect(history.messages).toHaveLength(200);
+      expect(chat.requests.some((request) => request.url.startsWith(`/conversations/${earlier.conversationId}/`))).toBe(false);
+    });
+  });
+});
+
+describe("飞书私聊在首页走 Chat 时", () => {
+  it("回答不在天枢的对话记录里：用转发时流里的正文，不再说「这次回答没有完成」", async () => {
+    const sent: { kind: string; markdown: string }[] = [];
+    const feishuClient = {
+      async sendMessage(_type: string, _id: string, msgType: string, content: object) {
+        const post = (content as { zh_cn?: { content: { text: string }[][] } }).zh_cn;
+        sent.push({ kind: msgType, markdown: post ? post.content[0][0].text : "" });
+        return { messageId: `om_${sent.length}` };
+      },
+      async updateCard() {},
+    } as unknown as import("../src/feishu/client.js").FeishuClient;
+    const chat = await fakeChat({ turn: (res) => sse(res, [{ type: "turn_started" }, { type: "message", delta: "本周重点" }, { type: "message", delta: "是上线" }, { type: "done", status: "completed" }]) });
+    const t = await createTestApp({ internalChatToken: CHAT_TOKEN, chatServiceUrl: chat.url }, countingRuntime(), { feishuClient });
+    try {
+      await t.loginCookie();
+      await t.sql("INSERT INTO feishu_identities (person_id, open_id, name) VALUES ($1, 'ou_ceo', '测试甲')", [TEST_CEO.personId]);
+      await t.app.feishuChat!.onMessage({ sender: { sender_type: "user", sender_id: { open_id: "ou_ceo" } },
+        message: { message_id: "om_in_1", chat_type: "p2p", message_type: "text", content: JSON.stringify({ text: "这周重点？" }) } });
+      await t.app.feishuChat!.idle();
+      expect(sent.filter((item) => item.kind === "post").map((item) => item.markdown)).toEqual(["本周重点是上线"]);
+    } finally {
+      await t.close();
+      await chat.close();
+    }
+  });
+});
+
+describe("给 Chat 的回看接口（/internal/conversation-*）", () => {
+  const headers = (role = "ceo", owner: string = TEST_CEO.personId, token = CHAT_TOKEN) => ({ authorization: `Bearer ${token}`, "x-owner-id": owner, "x-viewer-role": role });
+  async function seedDigest(t: Awaited<ReturnType<typeof createTestApp>>, row: { owner: string; role?: "ceo" | "member"; source: "chat" | "tianshu"; ref: string;
+    title: string; digest: string; startedHoursAgo: number; label?: string; keywords?: string[] }) {
+    const id = randomUUID();
+    await t.sql(`INSERT INTO conversation_digests (id, owner_id, viewer_role, source, source_ref, scope, scope_label, started_at, ended_at, title, digest, keywords, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, now() - make_interval(hours => $8), now() - make_interval(hours => $8) + interval '1 hour', $9, $10, $11, 'ready')`,
+    [id, row.owner, row.source === "chat" ? row.role ?? "ceo" : null, row.source, row.ref, row.source === "chat" ? "global" : "issue:x", row.label ?? (row.source === "chat" ? "首页" : "议题：渠道"),
+      row.startedHoursAgo, row.title, row.digest, row.keywords ?? []]);
+    return id;
+  }
+
+  it("目录：上一段的完整纪要 + 近 14 天其他段；首页段按视角隔离、天枢页面的段两种视角都有；别人的查不到", async () => {
+    const t = await createTestApp({ internalChatToken: CHAT_TOKEN });
+    try {
+      const pageId = randomUUID();
+      await t.sql("INSERT INTO conversations (id, owner_id, scope, pi_session_id) VALUES ($1, $2, 'issue:x', $3)", [pageId, TEST_CEO.personId, randomUUID()]);
+      const current = randomUUID();
+      await seedDigest(t, { owner: TEST_CEO.personId, source: "chat", ref: current, title: "今天", digest: "截至 今天\n- 今天的", startedHoursAgo: 1 });
+      const previous = await seedDigest(t, { owner: TEST_CEO.personId, source: "chat", ref: randomUUID(), title: "昨天聊渠道", digest: "截至 昨天\n- 本人确认先做县城样板", startedHoursAgo: 26 });
+      const memberView = await seedDigest(t, { owner: TEST_CEO.personId, role: "member", source: "chat", ref: randomUUID(), title: "成员视角的", digest: "x", startedHoursAgo: 30 });
+      const onPage = await seedDigest(t, { owner: TEST_CEO.personId, source: "tianshu", ref: pageId, title: "议题页聊定价", digest: "- 助手建议，本人未表态：先提价", startedHoursAgo: 50, keywords: ["定价"] });
+      const othersPage = randomUUID();
+      await t.sql("INSERT INTO conversations (id, owner_id, scope, pi_session_id) VALUES ($1, $2, 'issue:x', $3)", [othersPage, TEST_MEMBER.personId, randomUUID()]);
+      const others = await seedDigest(t, { owner: TEST_MEMBER.personId, source: "tianshu", ref: othersPage, title: "别人的定价", digest: "y", startedHoursAgo: 3, keywords: ["定价"] });
+
+      const catalog = await t.app.inject({ url: `/internal/conversation-catalog?conversationId=${current}`, headers: headers() });
+      expect(catalog.statusCode).toBe(200);
+      expect(catalog.json()).toMatchObject({ viewerRole: "ceo", previous: { segmentId: previous, page: "首页", title: "昨天聊渠道", digest: "截至 昨天\n- 本人确认先做县城样板" } });
+      expect(catalog.json().recent.map((item: { segmentId: string }) => item.segmentId)).toEqual([onPage]);
+      expect(JSON.stringify(catalog.json())).not.toContain(memberView);
+      expect(JSON.stringify(catalog.json())).not.toContain(others);
+
+      const found = (await t.app.inject({ url: `/internal/conversation-recall/search?query=${encodeURIComponent("定价")}`, headers: headers() })).json();
+      expect(found.segments.map((item: { segmentId: string; page: string }) => [item.segmentId, item.page])).toEqual([[onPage, "议题：渠道"]]);
+      const read = await t.app.inject({ url: `/internal/conversation-recall/${previous}`, headers: headers() });
+      expect(read.json()).toMatchObject({ segmentId: previous, digest: "截至 昨天\n- 本人确认先做县城样板", rawCursor: "0" });
+      // 成员看不到 CEO 的段；从没聊过的如实说没有。
+      expect((await t.app.inject({ url: `/internal/conversation-recall/${previous}`, headers: headers("member", TEST_MEMBER.personId) })).statusCode).toBe(404);
+      const nothing = (await t.app.inject({ url: `/internal/conversation-recall/search?query=${encodeURIComponent("火星殖民")}`, headers: headers() })).json();
+      expect(nothing).toMatchObject({ segments: [], message: "本人以前的对话里没有找到相关内容。" });
+
+      expect((await t.app.inject({ url: "/internal/conversation-catalog", headers: headers("ceo", TEST_CEO.personId, "wrong") })).statusCode).toBe(401);
+      expect((await t.app.inject({ url: "/internal/conversation-catalog", headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_CEO.personId } })).json().code).toBe("VIEW_REQUIRED");
+      expect((await t.app.inject({ url: "/internal/conversation-catalog", headers: headers("member") })).statusCode).toBe(403);
+      expect((await t.app.inject({ url: "/internal/conversation-recall/search?from=yesterday", headers: headers() })).statusCode).toBe(400);
+    } finally {
+      await t.close();
+    }
   });
 });

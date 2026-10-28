@@ -68,9 +68,9 @@ test("the Pi runtime exposes search_conversation_history and returns the cite to
   } finally { await runtime.close?.(); }
 });
 
-test("the main agent gets a history search bound to the signed-in person that skips the current message (3e)", async () => {
+test("with CONVERSATION_SEGMENTS off, the main agent gets a history search bound to the signed-in person that skips the current message (3e)", async () => {
   const results: unknown[] = [];
-  const t = await createTestApp({}, { async run(input) {
+  const t = await createTestApp({ conversationSegments: false }, { async run(input) {
     if (input.message.includes("上次")) results.push(await input.searchHistory!("县城样板"));
     return { assistantMessage: "好的", runtimeEntries: input.runtimeEntries };
   } } satisfies ConversationRuntime);

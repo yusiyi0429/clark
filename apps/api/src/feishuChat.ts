@@ -166,8 +166,11 @@ export function createFeishuChat(deps: {
       let step: string | null = null;
       let lastShown = Date.now();
       let failure: string | null = null;
+      // 流里的正文：首页走独立 Chat 时回答不在天枢的对话记录里，就用它。
+      let streamed = "";
       for await (const event of sseEvents(stream)) {
         if (!runId && typeof event.runId === "string") { runId = event.runId; await markVia(runId); }
+        if (event.type === "message" && typeof event.delta === "string") streamed += event.delta;
         if (event.type === "step" && event.status === "active" && typeof event.label === "string") step = event.label;
         if (event.type === "error") failure = typeof event.message === "string" ? event.message : "这次回答没有完成。";
         if (Date.now() - lastShown >= PROGRESS_EVERY_MS) {
@@ -181,7 +184,8 @@ export function createFeishuChat(deps: {
       const saved = (await q(
         `SELECT m.content, r.input_snapshot -> 'cards' AS cards FROM conversation_messages m LEFT JOIN agent_runs r ON r.id = m.run_id
           WHERE m.run_id = $1 AND m.role = 'assistant' ORDER BY m.sequence DESC LIMIT 1`, [runId])).rows[0] as { content: string; cards: unknown } | undefined;
-      const answer = toFeishuMarkdown(saved?.content ?? failure ?? "这次回答没有完成。", env.publicOrigin);
+      const fromStream = streamed.trim() ? (failure ? `${streamed.trimEnd()}\n\n${failure}` : streamed) : null;
+      const answer = toFeishuMarkdown(saved?.content ?? fromStream ?? failure ?? "这次回答没有完成。", env.publicOrigin);
       const needsWeb = answer.richDropped || answer.truncated || (Array.isArray(saved?.cards) && saved.cards.length > 0) || failure !== null;
       await finish(openId, progress, startedAt, answer.content || "（没有文字回答）", needsWeb ? open : undefined);
       return;
