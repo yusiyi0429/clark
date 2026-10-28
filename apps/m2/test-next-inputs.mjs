@@ -323,3 +323,18 @@ test('每人被问到的问题数：按人数，多的在前（只测量，交�
  const {askLoad}=await import('./review-generation.mjs');
  assert.deepEqual(askLoad([{nextInputs:[{ask:{to:'刘明华'}},{ask:{to:'刘明华'}},{text:'x'}]},{nextInputs:[{ask:{to:'孙铭泽'}},{ask:{to:'刘明华'}}]},null]),[{name:'刘明华',count:3},{name:'孙铭泽',count:1}]);
 });
+
+test('同一件事只在一层问：公司复盘拿到下层已有的问题；它说接过哪一问，下层那一行去掉问题、标“见公司复盘”',async()=>{
+ const {askedBelow,applyCovers}=await import('./review-generation.mjs');
+ const run={reviews:{
+  'method':{level:'ru',title:'Method',nextInputs:[{ref:'m1',type:'待决策',text:'四方法升级怎么排',ask:{to:'刘明华',question:'还按原承诺做吗？'}}]},
+  'method-m1':{level:'mission',title:'四方法',nextInputs:[{ref:'t1',type:'待决策',text:'升级要不要缩',ask:{to:'刘明华',question:'缩不缩？'}}]},
+  'company':{level:'company',title:'公司',nextInputs:[{ref:'method',type:'待决策',text:'四方法和产品管理方法先保哪个',ask:{to:'刘明华',question:'先保哪个？'},covers:[{ref:'method',index:0},{ref:'method-m1',index:0},{ref:'company',index:0},{ref:'nope',index:3}]}]}}};
+ assert.deepEqual(askedBelow(run).map(a=>[a.ref,a.index,a.question]),[['method',0,'还按原承诺做吗？'],['method-m1',0,'缩不缩？']]);
+ const moved=applyCovers(run);
+ assert.deepEqual(moved.map(m=>m.from),['method','method-m1']);
+ assert.deepEqual(run.reviews.method.nextInputs[0],{ref:'m1',type:'待决策',text:'四方法升级怎么排（见公司复盘）'});
+ assert.equal(run.reviews['method-m1'].nextInputs[0].ask,undefined);
+ assert.ok(run.reviews.company.nextInputs[0].ask,'公司复盘自己的问题留着');assert.equal(run.reviews.company.nextInputs[0].covers,undefined,'covers 不进卡片');
+ assert.deepEqual(applyCovers(run),[],'再跑一次不重复处理');
+});

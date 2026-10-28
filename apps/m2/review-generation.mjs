@@ -275,6 +275,21 @@ export function jargonOf(text){
 export const displayTitle=t=>{const s=String(t||'').trim(),bare=s.replace(/^[MT]\d{1,2}\s*[｜|:：]\s*/,'');return bare||s;};
 // 每人被问到的问题数 across the round so far (复盘技能 2.1.7, measured only): 10/27 刘明华 was asked 22.
 export const askLoad=reviews=>{const n={};for(const r of reviews)for(const x of r?.nextInputs||[])if(x?.ask?.to)n[x.ask.to]=(n[x.ask.to]||0)+1;return Object.entries(n).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count}));};
+// 同一件事只在一层问 (陈溪南 2026-10-28). The company review sees every question already asked below; a 下期输入 row that takes
+// over one says so with covers:[{ref:<下层复盘 ref>, index:<0 起>}], and the lower row keeps its line but loses the question.
+export const askedBelow=run=>Object.entries(run.reviews||{}).filter(([,r])=>r?.level!=='company').flatMap(([ref,r])=>(r.nextInputs||[]).map((n,index)=>n?.ask?.to?{ref,level:r.level,title:r.title,index,type:n.type,text:n.text,to:n.ask.to,question:n.ask.question}:null).filter(Boolean));
+const rank={mission:0,ru:1,company:2};
+export function applyCovers(run){
+ const moved=[];
+ for(const [ref,r] of Object.entries(run.reviews||{}))for(const n of r?.nextInputs||[])for(const c of Array.isArray(n?.covers)?n.covers:[]){
+  const lower=run.reviews[c?.ref],row=lower?.nextInputs?.[c?.index];
+  if(!row?.ask||!(rank[lower.level]<rank[r.level]))continue;
+  const {ask,...rest}=row,where=r.level==='company'?'公司复盘':'单元复盘';
+  lower.nextInputs[c.index]={...rest,text:/（见(公司|单元)复盘）$/.test(rest.text)?rest.text:`${rest.text}（见${where}）`};moved.push({from:c.ref,index:c.index,to:ref});
+ }
+ for(const r of Object.values(run.reviews||{}))for(const n of r?.nextInputs||[])if(n&&'covers'in n)delete n.covers;
+ return moved;
+}
 export function lengthFindings(r){
  const f=[];for(const s of textOf(r)){for(const sent of String(s).split(/[。；！？]/)){const n=visible(sent.replace(/^\*\*[^*]+\*\*/,'')).length;if(n>30)f.push({type:'长句',chars:n,text:sent.slice(0,60)});}
   for(const w of ['尚不能','仍需进一步','有待观察','闭环','赋能','打通','具备条件'])if(String(s).includes(w))f.push({type:'回避或空话',word:w,text:String(s).slice(0,60)});}
@@ -350,7 +365,7 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
   await pool(Object.entries(byRef).filter(([ref])=>run.reviews[ref]),async([ref,list])=>{const c=all.find(x=>x.id===ref);put(c,await ask('revise-'+ref,{task:'按技能「产品生成整轮复盘候选·检查」中的「修改」规则，修改这份复盘。'+fieldsHint,unit:unitData(c),review:run.reviews[ref],issues:list,programFacts:facts[ref],missionReviews:c.children?.map(id=>run.reviews[id])}).catch(()=>null));});
  }
  const companyStep='按技能「产品生成整轮复盘候选·每一步怎么做·4. 公司复盘」执行。'+fieldsHint;
- await pool(s3,async c=>{put(c,await askUnit(c,{task:companyStep,unit:unitData(c),ruReviews:c.children.map(id=>run.reviews[id]).filter(Boolean)}));await step('公司 PO 复盘');});
+ await pool(s3,async c=>{put(c,await askUnit(c,{task:companyStep,unit:unitData(c),ruReviews:c.children.map(id=>run.reviews[id]).filter(Boolean),askedBelow:askedBelow(run)}));await step('公司 PO 复盘');});
  // The company review is the last answer; save once more so the job file holds every review (评测 2026-10-27).
  await save(run);
  return run;
@@ -439,6 +454,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
    await runReviewSkill({gateway,skill,input:work.input,run:work.run,save:async r=>{work.run=r;await save();},onProgress:p=>setJob(p)});
    // 个人复盘最多 1 个问题 from 复盘技能 2.1.7 (陈溪南 2026-10-28: keep questions to what is really needed).
    const rowMatch=skillAtLeast(skill.version,'2.1.6'),askCaps=skillAtLeast(skill.version,'2.1.7');
+   work.run.covered=[...(work.run.covered||[]),...applyCovers(work.run)];
    let checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps});
    if(checks.length&&checks.some(p=>work.run.reviews[p.unit])){await setJob({stage:`检查有 ${checks.length} 处问题，重写这几份`});
     await repairReviews({gateway,skill,input:work.input,run:work.run,problems:checks,save:async r=>{work.run=r;await save();}});checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps});}
