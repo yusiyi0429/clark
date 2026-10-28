@@ -3,18 +3,19 @@
 /**
  * 成员首页顶行右边的快捷卡（样稿 home-layout-v9）：方块按钮，字居中——约会议、等回复、战场进展、雷达。
  * 2×2；主区窄时（见 home-plan 样式）排成一排小方块，放不下就换行。去 M2（复盘与拆解）的入口在通知栏（M2EntryNotice）。
- * 等回复在右侧浮出请求列表（先开「发出的」，面板由首页挂），右上角是条数；战场进展进原来那张战场进展页（/me/progress）。
+ * 等回复在右侧浮出请求列表（先开「发出的」，面板由首页挂），右上角是条数。
+ * 战场进展暂停：格子留着、按下不跳转（aria-disabled，仍能键盘聚焦），悬停或聚焦时提示「该功能将在后续版本开放」；/me/progress 页面本身没删。
  * 雷达只在本人雷达开着时出（首页数据里 radar 不为空），有未读信号时右上角红点，进我的雷达页（/me/radar）。
  * 四格右下角各一件釉色小物件（纯装饰，读屏不读），意思同按钮；悬停、键盘聚焦时动一下，见样式。
  */
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
-import { Button } from "ts-design/primitives";
+import { Button, Tooltip } from "ts-design/primitives";
 import type { Navigate } from "./planFormat";
 import s from "@/styles/home-actions.module.css";
 
-const PROGRESS = "/me/progress";
 const RADAR = "/me/radar";
+const PAUSED_HINT = "该功能将在后续版本开放";
 
 /** 角落小物件画在 80×80 里，自带渐变和高光；大小、位置、悬停时的动作由样式给。渐变 id 带 ha- 前缀，免得和页面上别的 svg 撞。 */
 function Motif({ children }: { children: ReactNode }) {
@@ -104,7 +105,10 @@ export function HomeActions({ waitingReplies, radarUnread, onBookMeeting, onOpen
       <Button variant="tertiary" className={`${s.tile} ${s.plain}`} onPress={(event) => onOpenRequests(event.target as Element)}>
         {MOTIFS.waiting}等回复{waitingReplies ? <span className={s.count}>{waitingReplies}</span> : null}
       </Button>
-      <Button variant="tertiary" className={`${s.tile} ${s.plain}`} data-origin={PROGRESS} onPress={(event) => onNavigate(PROGRESS, event.target as Element)}>{MOTIFS.progress}战场进展</Button>
+      <Tooltip>
+        <Button variant="tertiary" className={`${s.tile} ${s.plain} ${s.paused}`} aria-disabled="true">{MOTIFS.progress}战场进展</Button>
+        <Tooltip.Content>{PAUSED_HINT}</Tooltip.Content>
+      </Tooltip>
       {radarUnread !== null ? (
         <Button variant="tertiary" className={`${s.tile} ${s.plain}`} data-origin={RADAR} onPress={(event) => onNavigate(RADAR, event.target as Element)}>
           {MOTIFS.radar}雷达{radarUnread > 0 ? <span className={s.unread} role="img" aria-label={`${radarUnread} 条未读`} /> : null}

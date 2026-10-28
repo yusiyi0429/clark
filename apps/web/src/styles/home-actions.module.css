@@ -4,6 +4,7 @@
  * 按钮是 ts-design Button（按下、聚焦由它管）：约会议用 primary（主题蓝实心）；
  * 其余半透明白底、细边、深灰字。「等回复」的条数是右上角 --warning 小圆角标；雷达有未读时右上角一个 --counter 红点。
  * 前四格右下角各一件釉色小物件（.motif），位置、大小一样，略出到格外（格子裁掉）；悬停、键盘聚焦时浓一点、动一下。
+ * 战场进展暂停（.paused）：格子留着，用全站统一的不可用样子，悬停出提示。
  */
 .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 8px; height: 100%; }
 
@@ -91,6 +92,17 @@
   .tile:is([data-hovered='true'], [data-focus-visible='true']) .flag { transform: skewY(-8deg); }
   .tile:is([data-hovered='true'], [data-focus-visible='true']) .sweep { transform: rotate(12deg); }
 }
+
+/*
+ * 暂停的格子（战场进展）：不可用的样子用全站统一的那套（globals.css 的 aria-disabled）。
+ * HeroUI 给 aria-disabled 的按钮关了鼠标事件，这里放开，悬停才出得了提示（Tooltip）；悬停、按下底色不变，小物件不动。
+ */
+.paused.paused {
+  --button-bg-hover: var(--button-bg);
+  --button-bg-pressed: var(--button-bg);
+  pointer-events: auto;
+}
+.paused.paused .motif.motif, .paused.paused .motif * { transform: none; }
 
 /* 主区窄：一排小方块，放不下就自动换到第二行，字不截断。小物件固定 32px；手持一列时格子太小，不画。 */
 @container (max-width: 879px) {
