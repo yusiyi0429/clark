@@ -99,9 +99,9 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
     (await scopeObjectFor(person, scope)).visible;
   // 首页对话改走独立 Chat（CHAT_SERVICE_URL，chatService.ts）：只管 global，对象页的对话照旧。
   const chat = ctx.chat;
-  // 对话分段（CONVERSATION_SEGMENTS，缺省开）：闲置满 12 小时或跨过北京时间凌晨 4 点换一段，模型侧只带这一段；上一段经会话目录里的纪要交接。
-  // 关着时照旧：闲置 12 小时模型侧只带摘要重开（CONVERSATION_IDLE_RESTART_MS）。
-  const segmentsOn = env.conversationSegments !== false;
+  // 对话分段（CONVERSATION_SEGMENTS=1 才开）：闲置满 12 小时或跨过北京时间凌晨 4 点换一段，模型侧只带这一段；上一段经会话目录里的纪要交接。
+  // 关着时（缺省）照旧：闲置 12 小时模型侧只带摘要重开（CONVERSATION_IDLE_RESTART_MS）。
+  const segmentsOn = env.conversationSegments === true;
   const chatFailed = (reply: FastifyReply, error: unknown) => {
     if (error instanceof ChatServiceError) return fail(reply, error.status, error.code, error.message);
     throw error;

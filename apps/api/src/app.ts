@@ -203,7 +203,7 @@ export type AppEnv = {
   chatServiceUrl?: string;
   /** 首页分段（CHAT_SESSION_ROTATION=1 才开）：首页的 Chat 对话闲置满 12 小时或跨过凌晨 4 点新开一段。等 Chat 接上会话目录和回看工具再开。 */
   chatSessionRotation?: boolean;
-  /** 天枢页面的对话分段（CONVERSATION_SEGMENTS，缺省开；false 时照旧闲置 12 小时重开）。 */
+  /** 天枢页面的对话分段（CONVERSATION_SEGMENTS=1 才开；关着时照旧闲置 12 小时重开）。 */
   conversationSegments?: boolean;
   buildSha: string;
   piBaseUrl: string;
@@ -685,7 +685,8 @@ export async function buildApp({
 
   personalDistillation.start();
   app.addHook("onClose", async () => personalDistillation.close());
-  conversationDigests.start();
+  // 会话纪要只给分段用：两个分段开关都关着时不跑后台（合进来不生效，也不调模型）。
+  if (env.conversationSegments === true || env.chatSessionRotation === true) conversationDigests.start();
   app.addHook("onClose", async () => conversationDigests.close());
 
   const ctx: RouteContext = {

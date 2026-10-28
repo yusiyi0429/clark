@@ -51,7 +51,7 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | | `INTERNAL_CHAT_TOKEN` | 独立 Chat 读确认会议（`/internal/confirmed-meetings`）的服务凭据；不填时接口一律 404 |
 | | `CHAT_SERVICE_URL` | 首页对话改走独立 Chat 服务的地址（预发 `http://chat:3101`），用 `INTERNAL_CHAT_TOKEN` 转发本人身份；不填时走天枢自己的对话，对象页对话不受影响 |
 | 对话分段 | `CHAT_SESSION_ROTATION` | 设为 `1` 才开首页分段：首页的 Chat 对话闲置满 12 小时或跨过北京时间凌晨 4 点新开一段，界面拼最近 7 天的几段。等 Chat 接上会话目录和回看工具（`docs/guides/chat-conversation-recall.md`）再开 |
-| | `CONVERSATION_SEGMENTS` | 天枢页面的对话分段，缺省开：同一条规则换段，模型侧只带这一段，上一段经会话目录里的纪要交接，另给两个回看工具。设为 `0` 照旧闲置 12 小时只带摘要重开 |
+| | `CONVERSATION_SEGMENTS` | 设为 `1` 才开天枢页面的对话分段：同一条规则换段，模型侧只带这一段，上一段经会话目录里的纪要交接，另给两个回看工具。缺省关，照旧闲置 12 小时只带摘要重开。两个分段开关都关时不跑会话纪要的后台任务 |
 | 本体 | `TKOS_WORLD_API_URL`、`TKOS_WORLD_AGENT_TOKEN` | 都不填时本体相关能力如实显示未配置 |
 | | `TKOS_WORLD_AGENT_TOKEN_FILE` | 从文件读凭证（只在内存里）；读失败时健康接口报告错误码 |
 | | `TKOS_WORLD_INSTANCE` | `mvp`；可选 `demo`、`formal`、`tk`，对应 `apps/api/config/world-instance*.json` |

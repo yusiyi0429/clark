@@ -59,10 +59,10 @@ describe("一条连续的对话：没有新建对话与历史对话列表", () =
   });
 });
 
-describe("闲置重开（关着 CONVERSATION_SEGMENTS 时）：闲置超过阈值的下一轮，模型侧只带摘要重新开始", () => {
+describe("闲置重开：闲置超过阈值的下一轮，模型侧只带摘要重新开始", () => {
   it("阈值内照常接着；超过阈值告诉运行时 idleRestart，并记进运行记录；重开之后紧接着的一轮照常接着", async () => {
     const runtime = recordingRuntime();
-    const t = await createTestApp({ conversationSegments: false }, runtime);
+    const t = await createTestApp({}, runtime);
     try {
       const cookie = await t.loginCookie();
       await send(t, cookie, "第一问");

@@ -72,10 +72,10 @@ describe("换段规则（北京时间）", () => {
   });
 });
 
-describe("天枢页面分段（CONVERSATION_SEGMENTS，缺省开）", () => {
+describe("天枢页面分段（CONVERSATION_SEGMENTS=1）", () => {
   it("同一段带着上一轮；闲置满 12 小时换段：模型侧开新会话、不带上一段原文，历史里一行日期，运行记录标 segmentStart", async () => {
     const runtime = recordingRuntime();
-    const t = await createTestApp({}, runtime);
+    const t = await createTestApp({ conversationSegments: true }, runtime);
     try {
       const cookie = await t.loginCookie();
       const scope = await issuePage(t);
@@ -106,7 +106,7 @@ describe("天枢页面分段（CONVERSATION_SEGMENTS，缺省开）", () => {
 
   it("上一轮在今天凌晨 4 点之前（不到 12 小时）也换段", async () => {
     const runtime = recordingRuntime();
-    const t = await createTestApp({}, runtime);
+    const t = await createTestApp({ conversationSegments: true }, runtime);
     try {
       const cookie = await t.loginCookie();
       await send(t, cookie, "global", "凌晨前");
@@ -120,7 +120,7 @@ describe("天枢页面分段（CONVERSATION_SEGMENTS，缺省开）", () => {
 
   it("换段后点「继续」：续写进原来那一段的模型会话，不换段、不插日期行", async () => {
     const runtime = recordingRuntime();
-    const t = await createTestApp({}, runtime);
+    const t = await createTestApp({ conversationSegments: true }, runtime);
     try {
       const cookie = await t.loginCookie();
       const scope = await issuePage(t);
@@ -138,9 +138,9 @@ describe("天枢页面分段（CONVERSATION_SEGMENTS，缺省开）", () => {
     }
   });
 
-  it("开关关着：照旧闲置 12 小时重开（idleRestart），不插日期行，没有会话目录，照旧给原话检索", async () => {
+  it("开关关着（缺省）：照旧闲置 12 小时重开（idleRestart），不插日期行，没有会话目录，照旧给原话检索", async () => {
     const runtime = recordingRuntime();
-    const t = await createTestApp({ conversationSegments: false }, runtime);
+    const t = await createTestApp({}, runtime);
     try {
       const cookie = await t.loginCookie();
       await send(t, cookie, "global", "第一问");
@@ -157,7 +157,7 @@ describe("天枢页面分段（CONVERSATION_SEGMENTS，缺省开）", () => {
 
   it("新段第一轮的会话目录：本页面上一段的完整纪要 + 近 14 天其他段；两个工具查得到、读得到原文；没聊过的如实说没有；没有旧段时目录为空", async () => {
     const runtime = recordingRuntime();
-    const t = await createTestApp({}, runtime);
+    const t = await createTestApp({ conversationSegments: true }, runtime);
     try {
       const cookie = await t.loginCookie();
       const scope = await issuePage(t);
@@ -236,7 +236,7 @@ describe("会话纪要（后台）", () => {
 
   it("原对话被隐藏的段标 hidden：目录里没有、查不到、读不到（天枢对话被删；Chat 段从本人的会话列表里消失）", async () => {
     const runtime = recordingRuntime();
-    const t = await createTestApp({}, runtime);
+    const t = await createTestApp({ conversationSegments: true }, runtime);
     try {
       const cookie = await t.loginCookie();
       const scope = await issuePage(t);

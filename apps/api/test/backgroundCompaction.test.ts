@@ -490,7 +490,7 @@ describe("后台压缩的生命周期（真路由、真库）", () => {
     const { runtime, seen } = await piRuntime((call) => (isSummary(call)
       ? { text: "## 一号位的决定与表态\n- 一号位否决了自建 Token 工厂（快照里的记忆）。" }
       : { text: `回答：${"内容".repeat(40)}`, usage: 5_000 }));
-    const t = await createTestApp({ conversationSegments: false }, runtime, { conversationCompactionOptions: SMALL });
+    const t = await createTestApp({}, runtime, { conversationCompactionOptions: SMALL });
     try {
       const cookie = await t.loginCookie();
       let app = t.app;
