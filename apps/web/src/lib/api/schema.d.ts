@@ -311,6 +311,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/wechat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人的微信 ClawBot 连接状态（等扫码时带二维码内容）；没接微信时 404 */
+        get: operations["getMyWechatConnection"];
+        put?: never;
+        post?: never;
+        /** 断开本人的微信 ClawBot */
+        delete: operations["disconnectMyWechat"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/wechat/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 开始连接微信：要一张绑定二维码，后台等本人扫码确认；正在等扫码时沿用同一张 */
+        post: operations["connectMyWechat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/feishu/start": {
         parameters: {
             query?: never;
@@ -4701,6 +4736,12 @@ export interface components {
             connected: boolean;
             calendar: boolean;
         };
+        WechatConnection: {
+            state: "none" | "waiting" | "scanned" | "expired" | "connected" | "stale";
+            qrcodeUrl?: string;
+            welcomed?: boolean;
+            paused?: boolean;
+        };
         ChangePasscodeRequest: {
             loginId: string;
             passcode: string;
@@ -4877,8 +4918,7 @@ export interface components {
                     }[];
                 };
                 kind?: "carried" | "trace";
-                /** @constant */
-                via?: "feishu";
+                via?: "feishu" | "wechat";
                 meta?: {
                     issueId?: string;
                     title?: string;
@@ -14267,6 +14307,100 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyWechatConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 微信连接状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WechatConnection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    disconnectMyWechat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已断开 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    connectMyWechat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 微信连接状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WechatConnection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

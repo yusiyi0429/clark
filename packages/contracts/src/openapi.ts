@@ -229,6 +229,7 @@ import {
   FeishuAuthConfigResponse,
   FeishuCodeLoginRequest,
   FeishuConnectionResponse,
+  WechatConnection,
 } from "./index.js";
 
 const errorResponse = {
@@ -348,6 +349,32 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: {
             "200": { description: "飞书连接状态", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuConnectionResponse" } } } },
             "401": errorResponse,
+          },
+        },
+      },
+      "/api/me/wechat": {
+        get: {
+          operationId: "getMyWechatConnection",
+          summary: "本人的微信 ClawBot 连接状态（等扫码时带二维码内容）；没接微信时 404",
+          responses: {
+            "200": { description: "微信连接状态", content: { "application/json": { schema: { $ref: "#/components/schemas/WechatConnection" } } } },
+            "401": errorResponse,
+          },
+        },
+        delete: {
+          operationId: "disconnectMyWechat",
+          summary: "断开本人的微信 ClawBot",
+          responses: { "204": { description: "已断开" }, "401": errorResponse },
+        },
+      },
+      "/api/me/wechat/connect": {
+        post: {
+          operationId: "connectMyWechat",
+          summary: "开始连接微信：要一张绑定二维码，后台等本人扫码确认；正在等扫码时沿用同一张",
+          responses: {
+            "200": { description: "微信连接状态", content: { "application/json": { schema: { $ref: "#/components/schemas/WechatConnection" } } } },
+            "401": errorResponse,
+            "503": errorResponse,
           },
         },
       },
@@ -2948,6 +2975,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         FeishuAuthConfigResponse: FeishuAuthConfigResponse as JsonSchema,
         FeishuCodeLoginRequest: FeishuCodeLoginRequest as JsonSchema,
         FeishuConnectionResponse: FeishuConnectionResponse as JsonSchema,
+        WechatConnection: WechatConnection as JsonSchema,
         ChangePasscodeRequest: ChangePasscodeRequest as JsonSchema,
         SessionResponse: SessionResponse as JsonSchema,
         PeopleDirectoryResponse: PeopleDirectoryResponse as JsonSchema,

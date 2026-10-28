@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { FastifyReply } from "fastify";
 import type { TConversationMessageRequest } from "@warmap/contracts";
 import { turnFailureCopy } from "./conversationRecovery.js";
+import type { HomeTurnVia } from "./homeTurn.js";
 import { logEvent } from "./observability.js";
 import { Value } from "@sinclair/typebox/value";
 import type { Static, TSchema } from "@sinclair/typebox";
@@ -23,7 +24,7 @@ export class ChatServiceError extends Error {
 }
 
 type ChatAttachment = { attachmentId: string; fileName: string; mime: string; size: number; status?: string };
-type ChatMessage = { role: "user" | "assistant"; text: string; runId: string; attachments?: ChatAttachment[] };
+type ChatMessage = { role: "user" | "assistant"; text: string; runId: string; attachments?: ChatAttachment[]; source?: HomeTurnVia | null };
 type ChatRun = { runId: string; status: string };
 type ChatEvent = { type: string; [key: string]: unknown };
 
@@ -85,20 +86,21 @@ function failure(event: ChatEvent): ChatEvent {
     : { type: "error", code: "RUNTIME_FAILED", message: `这一轮没有完成。${keep}`, partial, ...resume };
 }
 
-/** Chat 的历史 → 天枢的消息：没完成的那一轮补上说明行；序号按顺序重排（说明行也占一个）。 */
+/** Chat 的历史 → 天枢的消息：没完成的那一轮补上说明行；序号按顺序重排（说明行也占一个）；Chat 记下的来源回到 via。 */
 export function historyMessages(messages: ChatMessage[], runs: ChatRun[]) {
   const status = new Map(runs.map((run) => [run.runId, run.status]));
   const answered = new Set(messages.filter((message) => message.role === "assistant").map((message) => message.runId));
-  const ordered: { role: "user" | "assistant"; content: string; runId: string; attachments?: ReturnType<typeof attachmentInfo>[] }[] = [];
+  const ordered: { role: "user" | "assistant"; content: string; runId: string; via?: HomeTurnVia; attachments?: ReturnType<typeof attachmentInfo>[] }[] = [];
   for (const message of messages) {
     const state = status.get(message.runId);
+    const via = message.source ? { via: message.source } : {};
     if (message.role === "assistant") {
       const note = state === "aborted" ? STOPPED_NOTE : state === "failed" ? BROKEN_NOTE : undefined;
-      ordered.push({ role: "assistant", content: note ? `${message.text.trimEnd()}\n\n${note}` : message.text, runId: message.runId });
+      ordered.push({ role: "assistant", content: note ? `${message.text.trimEnd()}\n\n${note}` : message.text, runId: message.runId, ...via });
       continue;
     }
-    ordered.push({ role: "user", content: message.text, runId: message.runId, attachments: (message.attachments ?? []).map(attachmentInfo) });
-    if (state === "failed" && !answered.has(message.runId)) ordered.push({ role: "assistant", content: EMPTY_NOTE, runId: message.runId });
+    ordered.push({ role: "user", content: message.text, runId: message.runId, ...via, attachments: (message.attachments ?? []).map(attachmentInfo) });
+    if (state === "failed" && !answered.has(message.runId)) ordered.push({ role: "assistant", content: EMPTY_NOTE, runId: message.runId, ...via });
   }
   return ordered.map((message, index) => ({ sequence: index + 1, referencesSnapshot: [], attachments: [], ...message }));
 }
@@ -175,7 +177,7 @@ export function createChatService(options: { baseUrl: string; token?: string }) 
      * 发一句，把 Chat 的事件逐块翻好转给界面。开流前的拒绝抛 ChatServiceError；开流后在这里收尾。
      * 界面断开（点停止、关页面）就断开对 Chat 的请求，Chat 照它的规则停下这一轮、存下已写出的部分。
      */
-    async relay(viewer: ChatViewer, requestId: string, body: TConversationMessageRequest, reply: FastifyReply): Promise<void> {
+    async relay(viewer: ChatViewer, requestId: string, body: TConversationMessageRequest, reply: FastifyReply, via?: HomeTurnVia): Promise<void> {
       const abort = new AbortController();
       let ended = false;
       reply.raw.on("close", () => { if (!ended) abort.abort(); });
@@ -187,7 +189,8 @@ export function createChatService(options: { baseUrl: string; token?: string }) 
           body: JSON.stringify({ clientRequestId: randomUUID(), message: body.message, attachmentIds: (body.attachments ?? []).map((item) => item.id),
             ...(body.anchorSelection ? { anchorSelection: body.anchorSelection } : {}),
             ...(body.references?.length ? { references: body.references } : {}),
-            ...(body.resumeRunId ? { resumeRunId: body.resumeRunId } : {}) }),
+            ...(body.resumeRunId ? { resumeRunId: body.resumeRunId } : {}),
+            ...(via ? { source: via } : {}) }),
         });
       } catch (error) {
         if (!abort.signal.aborted) throw error;

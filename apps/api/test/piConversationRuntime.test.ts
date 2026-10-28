@@ -878,6 +878,44 @@ describe("controlled Pi conversation adapter public behavior", () => {
     }
   });
 
+  it("tells the model today, this week and this month in Beijing time every turn, for CEO and member alike", async () => {
+    const contexts: Context[] = [];
+    const runtime = await createPiConversationRuntime({
+      peopleDirectory: loadPeopleDirectory(testEnv),
+      baseUrl: "https://provider.invalid/v1/responses",
+      apiKey: "test-key",
+      modelId: "fake-light",
+      // 北京时间 2026-10-27 周二 14:27。
+      now: () => new Date("2026-10-27T06:27:00.000Z"),
+      streamSimple: (_model, context) => {
+        contexts.push(context);
+        return stream(message([{ type: "text", text: "ok" }], "stop"));
+      },
+      globalContext: async () => ({ period: "2026-10" }),
+      listMissions: async () => [],
+      listPendingIssues: async () => [],
+    });
+    const userPrompt = (context: Context) => {
+      const user = context.messages.findLast((item) => item.role === "user")!;
+      const text = typeof user.content === "string"
+        ? user.content
+        : user.content.map((block) => (block.type === "text" ? block.text : "")).join("");
+      return JSON.parse(text) as { now?: unknown };
+    };
+    const turn = (viewer: typeof CEO_VIEWER | typeof MEMBER_VIEWER, piSessionId: string) => runtime.run({
+      scope: "global", viewer, message: "我这周有哪些事项", currentObject: null, referencesSnapshot: [], runtimeEntries: [], piSessionId,
+      signal: new AbortController().signal, emit: () => undefined,
+    });
+    try {
+      await turn(MEMBER_VIEWER, "45454545-4545-4545-8545-454545454545");
+      await turn(CEO_VIEWER, "46464646-4646-4646-8646-464646464646");
+      for (const context of contexts) {
+        expect(userPrompt(context).now).toEqual({ at: "2026-10-27 周二 14:27（北京时间）", week: "2026-10-26 周一 至 2026-11-01 周日", month: "2026-10" });
+        expect(context.systemPrompt).toContain("`now`");
+      }
+    } finally { await runtime.close?.(); }
+  });
+
   it("gives a member the DRI Agent: no CEO decision tools, no global context, own identity", async () => {
     const contexts: Context[] = [];
     let globalContextReads = 0;

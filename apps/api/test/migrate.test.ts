@@ -190,6 +190,7 @@ describe("migration", () => {
         "212_battlefield_summaries.sql",
         "213_task_placement.sql",
         "214_task_placement_backfill.sql",
+        "215_wechat_bindings.sql",
         "216_meeting_card_decisions.sql",
       ]);
 

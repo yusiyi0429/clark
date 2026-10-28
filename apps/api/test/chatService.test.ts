@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import { TEST_CEO, TEST_MEMBER, createTestApp } from "./helpers.js";
 import type { ConversationRuntime } from "../src/conversations.js";
+import { homeTurn } from "../src/homeTurn.js";
 
 const CHAT_TOKEN = "chat-token-test";
 const RUN = "6f0c1a52-6d7e-4e57-9a51-0a9a4c3e2b10";
@@ -280,6 +281,39 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
       expect(chat.requests).toEqual([]);
       expect((await send({ message: "我这周做什么" })).statusCode).toBe(200);
       expect(chat.turns()[0].headers).toMatchObject({ "x-owner-id": TEST_MEMBER.personId, "x-viewer-role": "member" });
+    });
+  });
+
+  it("飞书私聊、微信里问（homeTurn）也走 Chat：来源带给 Chat；天枢库里没有这一轮，回答取流里的文字", async () => {
+    const chat = await fakeChat();
+    const runtime = countingRuntime();
+    await withChat(chat, runtime, async (t) => {
+      const deps = { app: t.app, q: t.pool.query.bind(t.pool), env: { sessionSecret: t.env.sessionSecret, publicOrigin: t.publicOrigin } };
+      const result = await homeTurn(deps, { personId: TEST_CEO.personId, role: "ceo" }, "这周怎么样", { via: "wechat" });
+      expect(result).toMatchObject({ kind: "done", runId: RUN, content: "好的", failure: null });
+      await homeTurn(deps, { personId: TEST_CEO.personId, role: "ceo" }, "下周呢", { via: "feishu" });
+      expect(chat.turns().map((turn) => JSON.parse(turn.body))).toMatchObject([
+        { message: "这周怎么样", source: "wechat" }, { message: "下周呢", source: "feishu" },
+      ]);
+      expect(runtime.calls).toBe(0);
+    });
+  });
+
+  it("历史里 Chat 记下的来源回到消息的 via，网页问的没有 via", async () => {
+    const [r1, r2] = [randomUUID(), randomUUID()];
+    const message = (role: string, text: string, runId: string, position: number, source: string | null) =>
+      ({ id: randomUUID(), position: String(position), role, text, runId, attachmentIds: [], attachments: [], source });
+    const chat = await fakeChat({
+      conversations: [randomUUID()],
+      pages: { "0": { messages: [message("user", "微信问", r1, 1, "wechat"), message("assistant", "微信答", r1, 2, "wechat"),
+        message("user", "网页问", r2, 3, null), message("assistant", "网页答", r2, 4, null)],
+      runs: [{ runId: r1, status: "completed", errorCode: null }, { runId: r2, status: "completed", errorCode: null }], nextCursor: null } },
+    });
+    await withChat(chat, countingRuntime(), async (t) => {
+      const history = (await t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie: await t.loginCookie() } })).json();
+      expect(history.messages.map((item: { content: string; via?: string }) => [item.content, item.via])).toEqual([
+        ["微信问", "wechat"], ["微信答", "wechat"], ["网页问", undefined], ["网页答", undefined],
+      ]);
     });
   });
 
