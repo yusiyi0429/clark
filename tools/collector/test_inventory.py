@@ -67,6 +67,23 @@ class FirstCheck(unittest.TestCase):
         self.assertNotIn("inventory", calls[0][1])
         self.assertNotIn("inventory_at", state)
 
+    def test_inventory_again_after_switching_server_or_token(self):
+        # 今天已经给别的天枢（或旧令牌）盘点过：换过去以后第一次检查就重新盘点
+        calls = []
+        code, state = self.run_check({"inventory_at": "2026-10-18T01:00:00Z", "inventory_for": "other-server"},
+                                     lambda _api, path, body: calls.append((path, body)) or {"consent": True})
+        self.assertEqual(code, 0)
+        self.assertIn("inventory", calls[-1][1])
+        self.assertEqual(state["inventory_for"], tkos_collector.inventory_target("https://tianshu.example", "t"))
+
+    def test_no_second_inventory_same_day_for_same_server(self):
+        calls = []
+        target = tkos_collector.inventory_target("https://tianshu.example", "t")
+        with mock.patch.object(tkos_collector, "full_inventory") as inventory:
+            self.run_check({"inventory_at": "2026-10-18T01:00:00Z", "inventory_for": target},
+                           lambda _api, path, body: calls.append((path, body)) or {"consent": True})
+        inventory.assert_not_called()
+
     def test_refused_report_stays_local_and_heartbeat_still_goes(self):
         pending = {"device": {}, "kind": "digest", "windowStart": "a", "windowEnd": "b", "items": [{"clientEventId": "x"}]}
         calls = []
