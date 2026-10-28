@@ -111,14 +111,15 @@ test('程序检查没过的那份单独重写一次再查，不整轮作废；�
  assert.deepEqual(reviewProblems(work,input,{roster}),[]);
 });
 
-test('环节卡：复盘装入后是“已出”并带截止时间；CEO 确认公司复盘后同一张变成“已完成”',()=>{
+test('稳定的环节卡：复盘进行中一直在、带截止时间；CEO 确认公司复盘后复盘卡消失，换成拆解卡（生成中）',()=>{
  const s=fresh();let card=notificationsFor(s,'member-03').find(i=>i.id==='stage:review');
- assert.deepEqual([card.status,card.title,card.dueAt],['open','10 月复盘已出','2026-10-29T02:33:00.000Z']);assert.match(card.text,/10\/29 10:33 前确认/);
+ assert.deepEqual([card.status,card.title,card.dueAt],['open','10 月复盘进行中','2026-10-29T02:33:00.000Z']);assert.match(card.text,/10\/29 10:33 前确认/);assert.match(card.link,/stage=review/);
  const late={...s,reviewRound:{...s.reviewRound,dueAt:'2026-10-01T00:00:00.000Z'}};assert.match(notificationsFor(late,'member-03').find(i=>i.id==='stage:review').text,/已过截止时间（10\/01 08:00）/);
  const company=s.cards['rv:company'],v=currentVersion(company);v.signatures.push({slot:'ceo',actorId:'member-01',version:v.number,createdAt:'2026-10-29T01:00:00.000Z'});company.confirmedVersion=v.number;
- card=notificationsFor(s,'member-03').find(i=>i.id==='stage:review');
- assert.deepEqual([card.status,card.title,card.dueAt,card.updatedAt],['done','10 月复盘已完成',undefined,'2026-10-29T01:00:00.000Z']);
- assert.ok(!notificationsFor(s,'member-03').some(i=>i.id==='comments'),'新批注不再单独成卡');
+ const items=notificationsFor(s,'member-03');
+ assert.ok(!items.some(i=>i.id==='stage:review'),'复盘卡消失');
+ const plan=items.find(i=>i.id==='stage:plan');assert.deepEqual([plan.status,plan.title,plan.updatedAt],['generating','11 月拆解生成中','2026-10-29T01:00:00.000Z']);assert.match(plan.link,/stage=plan/);
+ assert.ok(!items.some(i=>i.id==='comments'),'新批注不再单独成卡');
 });
 
 test('被点名的人不在这个单元，也能打开这张复盘卡回答；别的卡照样看不到',()=>{

@@ -1,6 +1,6 @@
 // 通知卡片 (陈溪南 2026-10-26/27): what Tianshu's notification centre shows for one member, merged so a person sees one
 // or two cards, not a stream. Four kinds only:
-//   stage:review / stage:plan — the stage has started, then the same card says it is done;
+//   stage:review / stage:plan — one stable card for the stage in progress: the review until the company review is confirmed, then the plan (生成中 → 进行中 → 全部确认);
 //   todo:review / todo:plan — 我的待办 for that stage (sign, revision cards, review questions, objections, checks); the review card carries dueAt;
 //   mention:<unit>          — @我 in one unit group (Nexus answering my question counts too);
 //   failure:round / failure:review — a generation that failed, for the M2 admin only (M2_FAILURE_NOTIFY, default 陈溪南).
@@ -44,8 +44,11 @@ export function notificationsFor(state,memberId,{reads={},jobs={}}={}){
  const hm=v=>{const d=new Date(Date.parse(v)+8*3600e3);return `${d.getUTCMonth()+1}/${String(d.getUTCDate()).padStart(2,'0')} ${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}`;};
  const signedAt=list=>latest(list.flatMap(c=>c.versions.flatMap(v=>v.signatures.map(x=>time(x.createdAt)))));
  const reviewCards=Object.values(state.cards).filter(c=>c.kind==='review'),seesReview=Object.keys(drafts).some(id=>id.startsWith('rv:'));
- if(state.reviewRound&&seesReview){const month=(m=>m?`${Number(m[1])} 月`:'')(String(state.reviewRound.period||'').match(/-(\d{2})$/)),company=reviewCards.find(c=>c.level==='company'),done=company&&company.confirmedVersion===currentVersion(company).number,due=reviewDueAt(state.reviewRound);
-  cards.push({id:'stage:review',type:'stage',stage:'review',status:done?'done':'open',title:done?`${month}复盘已完成`:`${month}复盘已出`,text:done?'CEO 已确认公司复盘，下月拆解开始生成':due&&Date.now()>Date.parse(due)?`已过截止时间（${hm(due)}），还没确认的请尽快确认`:`请看自己的复盘，${due?hm(due)+' 前确认':'按时确认'}`,count:1,link:link({stage:'review'}),updatedAt:iso(done?signedAt([company]):time(state.reviewRound.loadedAt)),...(due&&!done?{dueAt:due}:{})});}
+ // 一张稳定的环节卡 (陈溪南 2026-10-28): the review card stays until the company review is confirmed; then it gives way to the
+ // plan card, which shows from 「生成中」 until the whole plan is confirmed. One stage card at a time.
+ const company=reviewCards.find(c=>c.level==='company'),reviewDone=!!company&&company.confirmedVersion===currentVersion(company).number;
+ if(state.reviewRound&&seesReview&&!reviewDone){const month=(m=>m?`${Number(m[1])} 月`:'')(String(state.reviewRound.period||'').match(/-(\d{2})$/)),due=reviewDueAt(state.reviewRound);
+  cards.push({id:'stage:review',type:'stage',stage:'review',status:'open',title:`${month}复盘进行中`,text:due&&Date.now()>Date.parse(due)?`已过截止时间（${hm(due)}），还没确认的请尽快确认`:`点这里去复盘，${due?hm(due)+' 前确认':'按时确认'}`,count:1,link:link({stage:'review'}),updatedAt:iso(time(state.reviewRound.loadedAt)),...(due?{dueAt:due}:{})});}
  // 我的待办 · 复盘
  const review=state.reviewRound,month=(p=>{const m=String(p||'').match(/-(\d{2})$/);return m?`${Number(m[1])} 月`:'';})(review?.period);
  if(review){
@@ -63,9 +66,13 @@ export function notificationsFor(state,memberId,{reads={},jobs={}}={}){
   const items=todoItems({units,drafts,records,comments,profile:p,name}).filter(i=>['proposal','upstream','downstream','sign','objection'].includes(i.kind)&&!String(i.cardId||'').startsWith('rv:'));
   const card=todoCard('plan',items,'拆解');if(card)cards.push(card);
  }
+ const nextMonth=(m=>m?`${Number(m[1])%12+1} 月`:'')(String(state.reviewRound?.period||'').match(/-(\d{2})$/));
  if(state.round&&planOpen&&Object.keys(drafts).some(id=>!id.startsWith('rv:'))){const planCards=Object.values(state.cards).filter(c=>c.kind!=='review'&&confirmationSlots(c).length),done=planCards.length&&planCards.every(c=>c.confirmedVersion===currentVersion(c).number);
   const to=(m=>m?`${Number(m[1])} 月`:'')(String(state.round.input?.period||'').match(/-(\d{2})$/));
-  cards.push({id:'stage:plan',type:'stage',stage:'plan',status:done?'done':'open',title:done?`${to}计划已全部确认`:`${to}拆解草稿已出`,text:done?'按此执行':'请看自己负责的部分',count:1,link:link({stage:'plan'}),updatedAt:iso(done?signedAt(planCards):time(job?.finishedAt)||time(state.planHandoff?.generatedAt))});}
+  cards.push({id:'stage:plan',type:'stage',stage:'plan',status:done?'done':'open',title:done?`${to}计划已全部确认`:`${to}拆解进行中`,text:done?'按此执行':'点这里去拆解，看自己负责的部分',count:1,link:link({stage:'plan'}),updatedAt:iso(done?signedAt(planCards):time(job?.finishedAt)||time(state.planHandoff?.generatedAt))});}
+ else if(reviewDone&&seesReview){const failed=state.planHandoff?.status==='failed';
+  // The review is done and the plan is not out yet: the stage card already says the plan is next, so nothing goes missing in between.
+  cards.push({id:'stage:plan',type:'stage',stage:'plan',status:'generating',title:`${nextMonth}拆解${failed?'生成遇到问题':'生成中'}`,text:failed?'管理员在处理，好了这里就能进去':'生成好后点这里进去看；复盘在页面里还能切回去看',count:1,link:link({stage:'plan'}),updatedAt:iso(signedAt([company])||time(state.planHandoff?.requestedAt))});}
  // @我, one card per unit group: lines naming me, and Nexus answering a line of mine.
  const mineIds=new Set(state.messages.filter(m=>m.author===memberId).map(m=>m.id));
  for(const [room,list] of Object.entries(records)){
