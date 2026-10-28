@@ -453,9 +453,9 @@
     "source": "~/.codex/skills/tkos-decoding"
   },
   "reviewSkill": {
-    "version": "2.1.7",
-    "fingerprint": "e5559ba46aa6",
-    "source": "apps/decoding-mvp/.runtime/eval/review/skills/tkos-review-2.1.7"
+    "version": "2.1.8",
+    "fingerprint": "604d8fe8be68",
+    "source": "apps/decoding-mvp/.runtime/eval/review/skills/tkos-review-2.1.8"
   },
   "mergeBase": "/Users/cooper/TKOS/.codex-tmp/m2-sync-base-20261026e"
 }
