@@ -257,7 +257,7 @@
     },
     {
       "path": "ProposalCard.jsx",
-      "sha256": "4ae67158f2b9267f49e456c9a0ca1e347ab4ad4a9444c57494890067a8b01695"
+      "sha256": "9276272f6736efc00f7075672cda08a9a4cc833a2143844a2c818517e3121b97"
     },
     {
       "path": "reader-format.mjs",
@@ -285,7 +285,7 @@
     },
     {
       "path": "review-generation.mjs",
-      "sha256": "d2658bce557ab1ebf34b9c727d1c2d1c41fc43b13aaec1aa3a977fb24ffdb48d"
+      "sha256": "2d5b04c09772d7216616cd468642e9740b90284e36a211db93b69b1d6cf8298a"
     },
     {
       "path": "review-handoff.mjs",
@@ -305,7 +305,7 @@
     },
     {
       "path": "ReviewCanvas.jsx",
-      "sha256": "9a933358b97babf63337ef73050030c350285d82fef764d48beef76e5d44fdda"
+      "sha256": "79d9b17d53cd0f3d3f6690f498a9f1318739300f2a4cc33f08bbfa801303de5e"
     },
     {
       "path": "ReviewEditor.jsx",
@@ -405,7 +405,7 @@
     },
     {
       "path": "style.css",
-      "sha256": "90a4d3d98d095461f8f5b24e254eabf38a797ba245a4bb1c8d5aafb5cb3babd5"
+      "sha256": "6b7c9fe8808371c387bd79e62dd4d6c70db137f256949c266a598f45ce78da3b"
     },
     {
       "path": "time-context.mjs",

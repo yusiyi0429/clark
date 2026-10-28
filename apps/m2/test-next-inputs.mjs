@@ -309,3 +309,11 @@ test('锁定：单元复盘确认后个人复盘不能再改、不再联动；�
  assert.throws(()=>applyAction(s,ceo,{type:'revise',cardId:'rv:bf01',baseVersion:1,patch:{verdictReason:'z'}}),/公司复盘已确认/);
  s=applyAction(s,ceo,{type:'comment',cardId:'rv:bf01',baseVersion:1,block:'facts',text:'仍可批注'});assert.equal(s.comments.at(-1).text,'仍可批注');
 });
+
+test('复盘技能 2.1.7 起个人复盘最多 1 个点名问题，单元 2 个、公司 3 个；之前的版本不变',()=>{
+ const input={stages:[run.reviews.map(r=>({id:r.ref,level:r.level==='ru'?'ru':r.level,unit:r.unit,tasks:r.level==='mission'?[{ref:'t1',title:'部署'},{ref:'t2',title:'客户试用'}]:[],children:r.level==='ru'?['bf01-m1']:r.level==='company'?['bf01']:[]}))]};
+ const reviews=Object.fromEntries(run.reviews.map(r=>[r.ref,structuredClone(r)]));
+ reviews['bf01-m1'].nextInputs=[{ref:'t1',type:'待决策',text:'a',ask:{to:'刘明华',question:'甲？'}},{ref:'t2',type:'待决策',text:'b',ask:{to:'孙铭泽',question:'乙？'}}];
+ const roster=['刘明华','孙铭泽'],asks=o=>reviewProblems({reviews,failed:[]},input,{roster,...o}).filter(p=>/点名提问/.test(p.problem)).map(p=>p.unit+':'+p.problem);
+ assert.deepEqual(asks({}),[]);assert.deepEqual(asks({askCaps:true}),['bf01-m1:点名提问最多 1 个，现在有 2 个']);
+});

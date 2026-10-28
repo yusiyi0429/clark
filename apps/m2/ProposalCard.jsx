@@ -113,7 +113,7 @@ export default function ProposalCard({proposal,node,onAction,onOpen,compact=fals
    {state==='pending'&&changes}
    <p className="proposal-card-ref">{refButton}</p>
   </div>
-  {state==='pending'?proposal.canAccept?(rejecting!=null?<div className="proposal-foot proposal-reject-form">
+  {state==='pending'&&node?.locked?<div className="proposal-foot proposal-locked">{node.lockedReason||'这张卡已锁定，不能再改'}</div>:state==='pending'?proposal.canAccept?(rejecting!=null?<div className="proposal-foot proposal-reject-form">
    <textarea autoFocus rows={3} value={rejecting} placeholder="说说为什么不采用、想怎么改。群里的人和 Nexus 都会看到，Nexus 会按你的意思再出一版。" aria-label="不采用的理由" onChange={e=>setRejecting(e.target.value)} onKeyDown={e=>{if(e.key==='Escape'){setRejecting(null);return;}enterSubmit(e,()=>handle('rejectProposal',{reason:rejecting.trim()}),!busy&&!!rejecting.trim());}} title="回车发送，Shift＋回车换行"/>
    <div className="proposal-actions"><Button className="proposal-confirm" isDisabled={busy||!rejecting.trim()} onPress={()=>handle('rejectProposal',{reason:rejecting.trim()})}>{busy?'发送中…':'发送理由'}</Button><Button className="proposal-reject" isDisabled={busy} onPress={()=>setRejecting(null)}>取消</Button></div>
   </div>:<div className="proposal-foot proposal-actions">
