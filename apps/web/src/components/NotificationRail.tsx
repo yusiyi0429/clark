@@ -25,7 +25,6 @@ import { MeetingCardNotices } from "./meeting/MeetingCardNotices";
 import { MeetingRecordDrop } from "./meeting/MeetingRecordDrop";
 import { RecordProcessingMeta, type RecordProcessing } from "./meeting/MeetingRecordProcessing";
 import d from "@/styles/meeting-record-drop.module.css";
-import { CycleCountdown } from "./CycleCountdown";
 import { RADAR_ORIGIN_LABEL, RadarOriginIcon } from "./OriginTag";
 import { preflightInFlight } from "@/cards/meetingIssueModel";
 import n from "@/styles/notifications.module.css";
@@ -311,7 +310,6 @@ export function NotificationRail({
         }
       />
       <div className={n.noticeList}>
-        {m2Available ? null : <CycleCountdown />}
         <MeetingCardNotices meetingBase="/meetings" onNavigate={onNavigate} />
         {inWeeklyReviewWindow(now) ? <WeeklyReviewBoard onNavigate={onNavigate} state={weeklyReviews} /> : null}
         {m2Available ? null : <PersonalReviewBoard onNavigate={onNavigate} />}

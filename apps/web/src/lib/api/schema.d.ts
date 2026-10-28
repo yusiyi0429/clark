@@ -1009,23 +1009,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/mission-cards/world-status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 本月任务卡在本体里的签发情况：全员 Mission 按生命周期计数；本体没配或读不到时 status 为 null */
-        get: operations["getMissionCardWorldStatus"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/personal-reviews/board": {
         parameters: {
             query?: never;
@@ -6528,26 +6511,6 @@ export interface components {
                 stage: "personal_reviews" | "unit_reviews" | "company_summary" | "lto_decision" | "period_plan" | "mission_cards" | "done";
                 /** @description ISO 8601 */
                 serverNow: string;
-            } | null;
-        };
-        MissionCardStatus: {
-            period: string;
-            total: number;
-            settled: number;
-            groups: {
-                label: string;
-                count: number;
-            }[];
-        };
-        MissionCardStatusResponse: {
-            status: {
-                period: string;
-                total: number;
-                settled: number;
-                groups: {
-                    label: string;
-                    count: number;
-                }[];
             } | null;
         };
         MonthlyReviewComment: {
@@ -15871,35 +15834,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MonthlyCycleResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    getMissionCardWorldStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 任务卡签发情况 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MissionCardStatusResponse"];
                 };
             };
             /** @description ApiError 统一错误 */
