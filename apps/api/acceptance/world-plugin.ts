@@ -4,6 +4,7 @@ import { readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { createServer } from "node:http";
 import { Client as PgClient, Pool } from "pg";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -34,13 +35,35 @@ await admin.query(`CREATE DATABASE ${database}`);
 const databaseUrl = new URL(adminUrl); databaseUrl.pathname = `/${database}`;
 const pool = new Pool({ connectionString: databaseUrl.href });
 const token = `synthetic-chat-${randomUUID()}`;
+let heldLegacyDigest: string | undefined;
+let announceLegacy = () => {};
+let releaseLegacy = () => {};
+let waitForRelease = Promise.resolve();
+const worldReader = createServer(async (req, res) => {
+  let body = ""; for await (const part of req) body += part;
+  const response = await fetch(config.worldUrl + req.url, { method: req.method, redirect: "error",
+    headers: { authorization: req.headers.authorization!, "content-type": "application/json" }, ...(body ? { body } : {}) });
+  const text = await response.text();
+  if (heldLegacyDigest && req.url === "/v1/task-writeback/verify" && JSON.parse(body).command.approval_digest === heldLegacyDigest) {
+    assert.equal(JSON.parse(text).recorded, false);
+    heldLegacyDigest = undefined;
+    announceLegacy();
+    await waitForRelease;
+  }
+  res.writeHead(response.status, { "content-type": "application/json" });
+  res.end(text);
+});
+await new Promise<void>(resolve => worldReader.listen(0, "127.0.0.1", resolve));
+const readerAddress = worldReader.address();
+assert.ok(readerAddress && typeof readerAddress !== "string");
+const readerUrl = `http://127.0.0.1:${readerAddress.port}`;
 const chatModule = await import(pathToFileURL(resolve(config.chatCheckout, "dist/app.js")).href) as {
   createApp: (options: Record<string, unknown>) => Promise<FastifyInstance>;
 };
 for (const migration of ["001-baseline.sql", "002-user-sessions.sql", "003-task-quality.sql"])
   await pool.query(await readFile(resolve(config.chatCheckout, "migrations", migration), "utf8"));
 const chat = await chatModule.createApp({ internalToken: token, db: { query: (sql: string, args?: unknown[]) => pool.query(sql, args) },
-  worldUrl: config.worldUrl, worldToken: config.readerToken });
+  worldUrl: readerUrl, worldToken: config.readerToken });
 const chatUrl = await chat.listen({ host: "127.0.0.1", port: 0 });
 const tianshu = await createTestApp({ internalChatToken: token, chatServiceUrl: chatUrl });
 const clients: Client[] = [];
@@ -84,13 +107,13 @@ try {
   assert.ok(initial.report.quality.findings.some((item: { code: string }) => item.code === "missing_outcome"));
   const personal = await request("/api/me/tokens", { name: "synthetic plugin integration", client: "codex", expiresInDays: 30 });
   let rpcId = 1;
-  const rpc = async (name: string, args: Record<string, unknown>) => {
+  const rpc = async (name: string, args: Record<string, unknown>, allowError = false) => {
     const response = await fetch(url + "/mcp/me", { method: "POST", redirect: "error", headers: {
       authorization: `Bearer ${personal.token}`, "content-type": "application/json", accept: "application/json, text/event-stream" },
       body: JSON.stringify({ jsonrpc: "2.0", id: rpcId++, method: "tools/call", params: { name, arguments: { viewerRole: "ceo", ...args } } }) });
     assert.equal(response.status, 200);
     const value = await response.json();
-    assert.equal(value.result.isError, false, "Synthetic Tianshu MCP operation failed");
+    if (!allowError) assert.equal(value.result.isError, false, "Synthetic Tianshu MCP operation failed");
     return JSON.parse(value.result.content[0].text);
   };
   const proposal = await request(`/api/task-quality/tasks/${config.taskId}/proposals`, { clientRequestId: "synthetic-plugin-output", fieldKey: "new:definition/outcome",
@@ -149,10 +172,23 @@ try {
   assert.notEqual(recovered.verification_command.approval_digest, change.package.card.command.approval_digest);
   const repeated = await worldCall(recovery, "world_app_submit_task_change", original);
   assert.equal(repeated.receipt.receipt_id, recovered.receipt.receipt_id);
-  const verified = await rpc("report_task_repair_receipt", { proposalId: proposal.id,
-    receipt: { stage: "change", verificationCommand: recovered.verification_command } });
+  const legacyArrived = new Promise<void>(resolve => { announceLegacy = resolve; });
+  waitForRelease = new Promise<void>(resolve => { releaseLegacy = resolve; });
+  heldLegacyDigest = change.package.card.command.approval_digest;
+  const lateLegacy = rpc("report_task_repair_receipt", { proposalId: proposal.id, receipt: { stage: "change" } }, true);
+  let verified;
+  try {
+    await legacyArrived;
+    verified = await rpc("report_task_repair_receipt", { proposalId: proposal.id,
+      receipt: { stage: "change", verificationCommand: recovered.verification_command } });
+  } finally { releaseLegacy(); }
+  const delayed = await lateLegacy;
   assert.equal(verified.state, "verified");
   assert.equal(verified.receiptId, recovered.receipt.receipt_id);
+  const retained = (await rpc("list_task_repairs", {})).proposals.find((item: { id: string }) => item.id === proposal.id);
+  assert.equal(retained.receiptId, recovered.receipt.receipt_id, "A late legacy miss must not erase the recorded application receipt");
+  assert.equal(retained.state, "verified");
+  assert.equal(delayed.code, "REPAIR_CHANGED");
   for (let refresh = 0; refresh < 2; refresh++)
     assert.equal((await rpc("get_task_repair_handoff", { proposalId: proposal.id })).proposal.receiptId, recovered.receipt.receipt_id);
   const current = await request(`/api/task-quality/tasks/${config.taskId}/check`, {});
@@ -166,9 +202,11 @@ try {
     for (const key of ["id", "type", "text", "attributes", "scope", "refs", "artifacts"]) assert.deepEqual(after[key], before[key]);
   }
   assert.deepEqual(current.report.task.records.latest_state, initial.report.task.records.latest_state);
-  console.log(`WORLD_PLUGIN_ENGINEERING_OK: ${config.mode}, real three-service HTTP, native personal MCP, lost reply, original-request recovery and current fields`);
+  console.log(`WORLD_PLUGIN_ENGINEERING_OK: ${config.mode}, real three-service HTTP, native personal MCP, lost reply, original-request recovery, concurrent receipt retention and current fields`);
 } finally {
+  releaseLegacy();
   for (const client of clients) await client.close();
   await tianshu.close(); await chat.close(); await pool.end();
+  await new Promise<void>(resolve => { worldReader.closeAllConnections(); worldReader.close(() => resolve()); });
   await admin.query(`DROP DATABASE ${database} WITH (FORCE)`); await admin.end(); await rm(root, { recursive: true, force: true });
 }
