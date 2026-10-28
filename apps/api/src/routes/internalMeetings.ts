@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
 import type { TMeetingParticipant } from "@warmap/contracts";
 import { listPendingIssueSummaries } from "../issues.js";
+import { logEvent } from "../observability.js";
 import type { Viewer } from "../meetingCard.js";
 import { listConfirmedMeetings, PayloadHashMismatchError, readConfirmedMeeting } from "../meetingCardRead.js";
 import { DraftMeetingParams, draftMeeting, draftTimeLabel, type DraftMeetingArgs } from "../meetingDraft.js";
@@ -156,7 +157,13 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
     const view = viewOf(req, reply);
     if (!view) return reply;
     const cards = await readHomeSnapshots(ctx, view);
-    return { viewerRole: view.role, scene: view.role === "ceo" ? "公司首页" : "我的工作台", cards: cards.map((card) => ({ ...card, label: "页面" })) };
+    // 首页分段开着时多给一张「以前的对话」（第一版回看：Chat 还没接会话目录和两个工具，借首页卡交给模型）；读不到不影响首页卡。
+    const past = env.chatSessionRotation === true ? await ctx.conversationRecall.homeCard(view).catch((error: unknown) => {
+      logEvent({ event: "conversation.catalog_card_unavailable", error: (error as Error)?.message });
+      return null;
+    }) : null;
+    return { viewerRole: view.role, scene: view.role === "ceo" ? "公司首页" : "我的工作台",
+      cards: [...cards.map((card) => ({ ...card, label: "页面" })), ...(past ? [{ ...past, label: "以前的对话" }] : [])] };
   });
 
   // 回看以前的对话（10/28，conversationRecall.ts；字段见 docs/guides/chat-conversation-recall.md）：首页每轮的会话目录和两个回看工具转调这三个接口。

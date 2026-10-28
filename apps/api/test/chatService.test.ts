@@ -589,4 +589,40 @@ describe("给 Chat 的回看接口（/internal/conversation-*）", () => {
       await t.close();
     }
   });
+
+  it("首页分段开着时，首页卡后面多一张「以前的对话」：上一段纪要 + 近 14 天目录，只用 Chat 认得的字段，内容不变版本不变；没开或没有旧段时没有", async () => {
+    type Card = { cardId: string; kind: string; title: string; label: string; version: number; payload: { note?: string; summary?: string; items?: Record<string, string>[] } };
+    const homeCards = async (t: Awaited<ReturnType<typeof createTestApp>>) =>
+      (await t.app.inject({ url: "/internal/home-cards", headers: headers() })).json().cards as Card[];
+    const seed = async (t: Awaited<ReturnType<typeof createTestApp>>) => {
+      const pageId = randomUUID();
+      await t.sql("INSERT INTO conversations (id, owner_id, scope, pi_session_id) VALUES ($1, $2, 'issue:x', $3)", [pageId, TEST_CEO.personId, randomUUID()]);
+      await seedDigest(t, { owner: TEST_CEO.personId, source: "chat", ref: randomUUID(), title: "今天", digest: "截至 今天\n- 今天的", startedHoursAgo: 1 });
+      await seedDigest(t, { owner: TEST_CEO.personId, source: "chat", ref: randomUUID(), title: "昨天聊渠道", digest: "截至 昨天\n- 本人确认先做县城样板", startedHoursAgo: 26 });
+      await seedDigest(t, { owner: TEST_CEO.personId, source: "tianshu", ref: pageId, title: "议题页聊定价", digest: "截至 前天\n- 助手建议，本人未表态：先提价", startedHoursAgo: 50 });
+    };
+    const on = await createTestApp({ internalChatToken: CHAT_TOKEN, chatSessionRotation: true });
+    try {
+      expect((await homeCards(on)).some((card) => card.kind === "conversation-catalog")).toBe(false);
+      await seed(on);
+      const past = (await homeCards(on)).at(-1)!;
+      expect(past).toMatchObject({ cardId: "conversation-catalog", kind: "conversation-catalog", title: "以前的对话", label: "以前的对话" });
+      expect(Number.isSafeInteger(past.version) && past.version >= 1).toBe(true);
+      expect(past.payload.summary).toMatch(/^上一段：\d+月\d+日 · 首页 · 昨天聊渠道\n截至 昨天\n- 本人确认先做县城样板$/);
+      expect(past.payload.items).toEqual([{ occurred_at: expect.stringMatching(/^\d+月\d+日$/), title: "议题：渠道 · 议题页聊定价", summary: "- 助手建议，本人未表态：先提价" }]);
+      // Chat 只把它认得的字段转成正文（Chat_Service src/evidence-content.ts 的 LABELS），别的字段会被丢掉。
+      expect(Object.keys(past.payload).sort()).toEqual(["items", "note", "summary"]);
+      expect(past.payload.items!.every((item) => Object.keys(item).every((key) => ["occurred_at", "title", "summary"].includes(key)))).toBe(true);
+      expect((await homeCards(on)).at(-1)!.version).toBe(past.version);
+    } finally {
+      await on.close();
+    }
+    const off = await createTestApp({ internalChatToken: CHAT_TOKEN });
+    try {
+      await seed(off);
+      expect((await homeCards(off)).some((card) => card.kind === "conversation-catalog")).toBe(false);
+    } finally {
+      await off.close();
+    }
+  });
 });

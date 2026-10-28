@@ -67,7 +67,7 @@ const env: AppEnv = {
   internalChatToken: process.env.INTERNAL_CHAT_TOKEN || undefined,
   // 首页对话改走独立 Chat 服务的开关：设了地址才走（还要 INTERNAL_CHAT_TOKEN），不设照旧走天枢自己的对话。
   chatServiceUrl: process.env.CHAT_SERVICE_URL || undefined,
-  // 对话分段：值为 1 才开，缺省都关（首页的要等 Chat 接上会话目录和回看工具；天枢页面的由生产、预发的 env 显式打开）。
+  // 对话分段：值为 1 才开，缺省都关，由生产、预发的 env 显式打开。
   chatSessionRotation: process.env.CHAT_SESSION_ROTATION === "1",
   conversationSegments: process.env.CONVERSATION_SEGMENTS === "1",
   // 本体：TKOS_WORLD_API_URL；凭证 TKOS_WORLD_AGENT_TOKEN 或 TKOS_WORLD_AGENT_TOKEN_FILE（只在内存里）；TKOS_WORLD_INSTANCE 选实例配置（缺省 mvp）。

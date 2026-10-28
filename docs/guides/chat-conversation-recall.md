@@ -7,6 +7,17 @@
 1. 每轮读一次会话目录，放进本轮资料（建议放在最后一条用户消息里，不放 system）。
 2. 注册两个工具，转调下面两个回看接口。提示词加一句：「用户提到以前聊过的事，或你判断需要以前的讨论时，先看会话目录、用这两个工具查，不要说不记得。」
 
+## 第一版：Chat 不用改
+
+Chat 接上下面的目录和两个工具之前，首页先这样回看：`CHAT_SESSION_ROTATION=1` 时，天枢在 `/internal/home-cards` 的卡片最后多给一张「以前的对话」（`cardId` 为 `conversation-catalog`，`kind` 同名，`label` 为「以前的对话」）。Chat 每轮本来就读这个接口、把卡的正文放进本轮资料，模型也能用 Chat 的 `read_anchor` 分页读它。
+
+- `payload.note`：给模型的一句用法（以这里为准，没有的如实说没找到）。
+- `payload.summary`：首页上一段的完整纪要，开头一行「上一段：日期 · 页面 · 主题」。没有上一段时没有这个字段。
+- `payload.items`：近 14 天其他段（首页和各个天枢页面），每条 `occurred_at`（日期）、`title`（页面 · 主题）、`summary`（纪要开头 300 字）。
+- 只用 Chat 认得的字段名（Chat_Service `src/evidence-content.ts` 的 `LABELS`），别的字段 Chat 会丢掉。`version` 取内容的摘要值，内容不变版本不变。没有任何旧段时没有这张卡。
+
+这一版做不到的：查 14 天以前的、按关键词搜、读原话；目录在 Chat 的本轮资料里（system prompt），每轮多带约 3–5 千字。Chat 接上下面的接口后，去掉这张卡。
+
 ## 鉴权
 
 和现有 `/internal/*` 一样：`Authorization: Bearer <INTERNAL_CHAT_TOKEN>`、`X-Owner-Id: <personId>`、`X-Viewer-Role: ceo | member`。

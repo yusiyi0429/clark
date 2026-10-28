@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { ChatService, ChatViewer } from "./chatService.js";
 import { syncTianshuSegments } from "./conversationDigests.js";
 import { historyTerms, searchOwnConversationHistory } from "./conversationHistorySearch.js";
@@ -10,6 +11,7 @@ import { shanghaiLabel } from "./workdays.js";
  * - search_past_conversations：在本人的纪要里按关键词和日期查，最多 5 段一页；纪要里查不到再按原话查天枢页面的对话（Chat 段只查纪要）。
  * - read_past_conversation：读一段的完整纪要；带 cursor 时分页读原文（每页 ≤8,000 字）。
  * 范围：首页 Chat 的段按视角隔离；天枢页面的段属于本人，两种视角都能查。隐藏了的段不进目录、查不到。
+ * 首页第一版（Chat 还没接目录和两个工具）：同一份首页目录做成一张「以前的对话」卡，随 /internal/home-cards 交给 Chat（homeCard）。
  */
 const CATALOG_DAYS = 14;
 const CATALOG_RECENT = 10;
@@ -39,6 +41,8 @@ const VISIBLE = `d.owner_id = $1 AND d.status <> 'hidden' AND (d.source = 'tians
 const COLUMNS = "d.id, d.source, d.source_ref, d.from_position, d.scope_label, d.started_at, d.ended_at, d.title, d.digest, d.status";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NOTHING = "本人以前的对话里没有找到相关内容。";
+/** 「以前的对话」卡给模型的说明（Chat 把卡的正文放进本轮资料；它的提示词里还没有回看这一条）。 */
+const CARD_NOTE = "本人以前在首页和各个页面聊过的对话。摘要是首页上一段对话的纪要（换段时的交接）；事项是近 14 天其他段的目录和纪要开头。本人接着上一段说、或提到以前聊过的事时，以这里为准；这里没有的如实说没找到，不要编。纪要写明了哪些是本人确认的、哪些只是助手建议，转述时照这个区分，并说出是哪天、在哪个页面聊的。";
 
 const entry = (row: Row): CatalogEntry => ({ segmentId: row.id, date: segmentDateLabel(row.started_at), page: row.scope_label, title: row.title });
 const span = (row: Row) => `${shanghaiLabel(row.started_at)} 至 ${shanghaiLabel(row.ended_at)}`;
@@ -80,6 +84,15 @@ export function createConversationRecall(deps: { q: Query; chat?: Pick<ChatServi
 
   const empty = (catalog: ConversationCatalog) => (!catalog.previous && !catalog.recent.length ? null : catalog);
 
+  /** 首页这一轮的会话目录：conversationId 是当前这段；不给时按最新开的那段算。 */
+  async function homeCatalog(viewer: RecallViewer, conversationId?: string): Promise<ConversationCatalog | null> {
+    const rows = (await q(`SELECT ${COLUMNS} FROM conversation_digests d WHERE ${VISIBLE} AND d.source = 'chat'
+        ORDER BY d.started_at DESC LIMIT 20`, [viewer.personId, viewer.role])).rows as Row[];
+    const current = conversationId ? rows.find((row) => row.source_ref === conversationId) : rows[0];
+    const previous = rows.find((row) => row !== current && row.source_ref !== conversationId && (!current || row.started_at < current.started_at));
+    return empty({ previous: previousOf(previous), recent: await recent(viewer, [current?.id, previous?.id].filter(Boolean) as string[]) });
+  }
+
   return {
     /**
      * 天枢页面这一轮的会话目录：先把这条对话切好段（本轮这句已经存下），最新的一段是当前段，前一段是「上一段」。
@@ -92,13 +105,29 @@ export function createConversationRecall(deps: { q: Query; chat?: Pick<ChatServi
       return empty({ previous: previousOf(previous), recent: await recent(viewer, [current?.id, previous?.id].filter(Boolean) as string[]) });
     },
 
-    /** 首页这一轮的会话目录（Chat 每轮来取）：conversationId 是当前这段；不给时按最新开的那段算。 */
-    async homeCatalog(viewer: RecallViewer, conversationId?: string): Promise<ConversationCatalog | null> {
-      const rows = (await q(`SELECT ${COLUMNS} FROM conversation_digests d WHERE ${VISIBLE} AND d.source = 'chat'
-          ORDER BY d.started_at DESC LIMIT 20`, [viewer.personId, viewer.role])).rows as Row[];
-      const current = conversationId ? rows.find((row) => row.source_ref === conversationId) : rows[0];
-      const previous = rows.find((row) => row !== current && row.source_ref !== conversationId && (!current || row.started_at < current.started_at));
-      return empty({ previous: previousOf(previous), recent: await recent(viewer, [current?.id, previous?.id].filter(Boolean) as string[]) });
+    /** 首页这一轮的会话目录（Chat 每轮来取）。 */
+    homeCatalog,
+
+    /**
+     * 首页的「以前的对话」卡（第一版回看，Chat 不用改）：上一段的完整纪要 + 近 14 天其他段的目录和纪要开头。Chat 每轮把卡的正文放进本轮资料，
+     * 模型可用它的 read_anchor 读全文。只用 Chat 认得的字段（note、summary、items、occurred_at、title），别的字段 Chat 会丢掉。
+     * 版本取内容的摘要值，内容不变版本不变。没有任何旧段时没有这张卡。
+     */
+    async homeCard(viewer: RecallViewer): Promise<{ cardId: string; version: number; kind: string; title: string; payload: Record<string, unknown> } | null> {
+      const catalog = await homeCatalog(viewer);
+      if (!catalog) return null;
+      const digests = new Map((await q("SELECT id::text, digest FROM conversation_digests WHERE id = ANY($1::uuid[])",
+        [catalog.recent.map((item) => item.segmentId)])).rows.map((row: { id: string; digest: string }) => [row.id, row.digest]));
+      const previous = catalog.previous;
+      const payload = {
+        note: CARD_NOTE,
+        ...(previous ? { summary: [`上一段：${previous.date} · ${previous.page}${previous.title ? ` · ${previous.title}` : ""}`,
+          previous.digest ?? "这一段的纪要还在整理。", ...(previous.digest && previous.note ? ["这一段最后几轮还没整理进纪要。"] : [])].join("\n") } : {}),
+        ...(catalog.recent.length ? { items: catalog.recent.map((item) => ({ occurred_at: item.date, title: `${item.page} · ${item.title}`,
+          summary: clip((digests.get(item.segmentId) ?? "").replace(/^截至[^\n]*\n/, ""), EXCERPT_CHARS) })) } : {}),
+      };
+      const version = 1 + Number.parseInt(createHash("sha256").update(JSON.stringify(payload)).digest("hex").slice(0, 12), 16);
+      return { cardId: "conversation-catalog", version, kind: "conversation-catalog", title: "以前的对话", payload };
     },
 
     async search(viewer: RecallViewer, args: SearchArgs, options: { excludeRunId?: string } = {}): Promise<unknown> {

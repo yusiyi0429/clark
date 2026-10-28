@@ -201,7 +201,7 @@ export type AppEnv = {
    * 用 INTERNAL_CHAT_TOKEN 转发本人身份；不设走天枢自己的对话。对象页的对话不受影响。
    */
   chatServiceUrl?: string;
-  /** 首页分段（CHAT_SESSION_ROTATION=1 才开）：首页的 Chat 对话闲置满 12 小时或跨过凌晨 4 点新开一段。等 Chat 接上会话目录和回看工具再开。 */
+  /** 首页分段（CHAT_SESSION_ROTATION=1 才开）：首页的 Chat 对话闲置满 12 小时或跨过凌晨 4 点新开一段；回看先经首页卡里的「以前的对话」交给 Chat。 */
   chatSessionRotation?: boolean;
   /** 天枢页面的对话分段（CONVERSATION_SEGMENTS=1 才开；关着时照旧闲置 12 小时重开）。 */
   conversationSegments?: boolean;

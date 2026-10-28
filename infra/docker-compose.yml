@@ -86,7 +86,7 @@ services:
       ONTOLOGY_SERVICE_TOKEN: ${ONTOLOGY_SERVICE_TOKEN:-}
       INTERNAL_CHAT_TOKEN: ${INTERNAL_CHAT_TOKEN:-}
       CHAT_SERVICE_URL: ${CHAT_SERVICE_URL:-}
-      # 对话分段：都是设为 1 才开。首页分段等 Chat 接上回看再开；天枢页面分段由生产、预发显式打开。
+      # 对话分段：都是设为 1 才开，由生产、预发显式打开（首页分段开着时，回看经首页卡里的「以前的对话」交给 Chat）。
       CHAT_SESSION_ROTATION: ${CHAT_SESSION_ROTATION:-}
       CONVERSATION_SEGMENTS: ${CONVERSATION_SEGMENTS:-}
       TKOS_WORLD_API_URL: ${TKOS_WORLD_API_URL:-}
