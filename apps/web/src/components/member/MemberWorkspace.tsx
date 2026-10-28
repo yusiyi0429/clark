@@ -5,7 +5,6 @@ import { Lock } from "lucide-react";
 import { AccountMenu, type Account } from "@/components/AccountMenu";
 import { ActionNoticeCard } from "@/components/ActionNoticeCard";
 import { unplacedNotices } from "@/components/tasks/Unplaced";
-import { CycleCountdown } from "@/components/CycleCountdown";
 import { HeroButton } from "@/components/HeroButton";
 import { RailClock } from "@/components/NotificationRail";
 import { MissionCardNoticeGroup } from "@/components/missionCards/MissionCardNoticeGroup";
@@ -63,8 +62,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
             }
           />
           <div className={n.noticeList}>
-            {/* M2 接管复盘和拆解时，天枢自己的周期卡（任务卡签发、个人复盘、月度复盘）不出，同 CEO 通知栏。 */}
-            {api.m2Available ? null : <CycleCountdown />}
+            {/* M2 接管复盘和拆解时，天枢自己的周期卡（个人复盘、月度复盘）不出，同 CEO 通知栏；任务卡签发只看 M2。 */}
             <MeetingCardNoticeList meetings={records.meetings} minutes={records.minutes} meetingBase="/me/meetings" onNavigate={api.navigate} onChanged={records.reload} />
             <ActionNoticeCard id="weekly-sync" title="每周同步" subtitle="把本周进展写进天枢" mark="meeting" notices={weeklySyncNotices(home.weeklySync)} onSettled={() => undefined} />
             <MemberMeetingSchedule meetings={home.meetings} onNavigate={api.navigate} />
