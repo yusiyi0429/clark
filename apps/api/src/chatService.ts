@@ -30,7 +30,7 @@ export class ChatServiceError extends Error {
 }
 
 type ChatAttachment = { attachmentId: string; fileName: string; mime: string; size: number; status?: string };
-type ChatMessage = { position?: string; role: "user" | "assistant"; text: string; runId: string; attachments?: ChatAttachment[]; turnAt?: string; source?: HomeTurnVia | null };
+type ChatMessage = { position?: string; role: "user" | "assistant"; text: string; runId: string; attachments?: ChatAttachment[]; turnAt?: string; channel?: HomeTurnVia | null };
 type ChatRun = { runId: string; status: string };
 type ChatMessagePage = { messages: ChatMessage[]; nextCursor: string | null; runs: ChatRun[] };
 type ChatEvent = { type: string; [key: string]: unknown };
@@ -124,7 +124,7 @@ function segmentMessages(messages: ChatMessage[], runs: ChatRun[]) {
   const ordered: { role: "user" | "assistant"; content: string; runId: string; via?: HomeTurnVia; attachments?: ReturnType<typeof attachmentInfo>[] }[] = [];
   for (const message of messages) {
     const state = status.get(message.runId);
-    const via = message.source ? { via: message.source } : {};
+    const via = message.channel ? { via: message.channel } : {};
     if (message.role === "assistant") {
       const note = state === "aborted" ? STOPPED_NOTE : state === "failed" ? BROKEN_NOTE : undefined;
       ordered.push({ role: "assistant", content: note ? `${message.text.trimEnd()}\n\n${note}` : message.text, runId: message.runId, ...via });
@@ -294,7 +294,8 @@ export function createChatService(options: {
             ...(body.anchorSelection ? { anchorSelection: body.anchorSelection } : {}),
             ...(body.references?.length ? { references: body.references } : {}),
             ...(body.resumeRunId ? { resumeRunId: body.resumeRunId } : {}),
-            ...(via ? { source: via } : {}) }),
+            // 飞书、微信来的这一轮标上来源：Chat 的字段叫 channel，不认识的字段会整轮拒收。
+            ...(via ? { channel: via } : {}) }),
         });
       } catch (error) {
         if (!abort.signal.aborted) throw error;

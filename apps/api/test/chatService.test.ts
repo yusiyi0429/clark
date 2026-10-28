@@ -9,6 +9,8 @@ import { CHAT_ROUTE } from "../src/chatService.js";
 
 const CHAT_TOKEN = "chat-token-test";
 const RUN = "6f0c1a52-6d7e-4e57-9a51-0a9a4c3e2b10";
+/** Chat（8699279）TurnCommand 收的字段；它不收多余字段。 */
+const TURN_FIELDS = new Set(["clientRequestId", "message", "attachmentIds", "resumeRunId", "channel", "anchorSelection", "references"]);
 
 type ChatRequest = { method: string; url: string; headers: IncomingHttpHeaders; body: string };
 type Page = { messages: unknown[]; runs: unknown[]; nextCursor: string | null };
@@ -69,6 +71,9 @@ async function fakeChat(options: {
     }
     if (request.method === "POST" && request.url.endsWith("/attachments")) return send(200, options.upload?.(request));
     if (request.method === "POST" && request.url.endsWith("/turns")) {
+      // 和 Chat 的 TurnCommand 一样不收多余字段：字段名对不上时整轮 400。
+      const unknown = Object.keys(JSON.parse(request.body) as object).filter((key) => !TURN_FIELDS.has(key));
+      if (unknown.length) return send(400, { error: { code: "INVALID_INPUT", message: "请求字段或格式无效" } });
       touch(request.url.split("/")[2]);
       if (options.turn) return options.turn(res, request);
       return sse(res, [{ type: "turn_started", userMessageId: randomUUID() }, { type: "message", delta: "好的" }, { type: "done", status: "completed" }]);
@@ -343,7 +348,7 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
       expect(result).toMatchObject({ kind: "done", runId: RUN, content: "好的", failure: null });
       await homeTurn(deps, { personId: TEST_CEO.personId, role: "ceo" }, "下周呢", { via: "feishu" });
       expect(chat.turns().map((turn) => JSON.parse(turn.body))).toMatchObject([
-        { message: "这周怎么样", source: "wechat" }, { message: "下周呢", source: "feishu" },
+        { message: "这周怎么样", channel: "wechat" }, { message: "下周呢", channel: "feishu" },
       ]);
       expect(runtime.calls).toBe(0);
     });
@@ -351,8 +356,8 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
 
   it("历史里 Chat 记下的来源回到消息的 via，网页问的没有 via", async () => {
     const [r1, r2] = [randomUUID(), randomUUID()];
-    const message = (role: string, text: string, runId: string, position: number, source: string | null) =>
-      ({ id: randomUUID(), position: String(position), role, text, runId, attachmentIds: [], attachments: [], source });
+    const message = (role: string, text: string, runId: string, position: number, channel: string | null) =>
+      ({ id: randomUUID(), position: String(position), role, text, runId, attachmentIds: [], attachments: [], ...(channel ? { channel } : {}) });
     const chat = await fakeChat({
       conversations: [randomUUID()],
       pages: { "0": { messages: [message("user", "微信问", r1, 1, "wechat"), message("assistant", "微信答", r1, 2, "wechat"),
