@@ -3,7 +3,7 @@
 /**
  * 个人菜单：通知栏左下角点自己的名字（收起成窄条时是头像）弹出。一级只放每天会点的和身份相关的（样稿 voice-keys-v3）——
  * 雷达、我的记忆（成员 /me/memory、CEO /memory）、定时任务（成员 /me/schedules、CEO /schedules）、「设置 ›」、CEO 的组织配置、双身份者切换工作台，最后是退出登录。
- * 配一次就不太动的收进「设置 ›」，在菜单右边弹出二级：语音输入、声纹（已配置时）、连接飞书（接了飞书时）、连接到外部工具、本机采集器、Co-Agent 形象、修改口令、
+ * 配一次就不太动的收进「设置 ›」，在菜单右边弹出二级：语音输入、声纹（已配置时）、连接飞书（接了飞书时）、连接微信（接了微信时）、连接到外部工具、本机采集器、Co-Agent 形象、修改口令、
  * 重看首次引导、管理员视图（管理员）。
  * 声纹、雷达、口令、语音输入各开一个小弹窗，不离开当前页面。
  */
@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Modal, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, CalendarClock, ChevronRight, KeyRound, Link2, LogOut, Laptop, Mic, PlugZap, Radar, RotateCcw, Settings, Settings2, Smile, X } from "lucide-react";
+import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, CalendarClock, ChevronRight, KeyRound, Link2, LogOut, Laptop, MessageCircle, Mic, PlugZap, Radar, RotateCcw, Settings, Settings2, Smile, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { feishuConnectHref, readFeishuConnection } from "@/lib/feishuLogin";
 import { logout } from "@/lib/logout";
@@ -24,6 +24,7 @@ import { VoiceKeysDialog } from "@/conversation/VoiceKeysDialog";
 import { CollectorInstallPanel, useCollectorStatus } from "@/components/onboarding/CollectorSetup";
 import { readTaskQualityEnabled } from "@/components/task-quality/taskQualityStatus";
 import { PersonalProfileForm } from "@/components/PersonalProfileForm";
+import { WechatConnectPanel, readWechatConnection, type WechatConnection } from "@/components/WechatConnect";
 
 export interface Account {
   displayName: string;
@@ -46,7 +47,7 @@ export function accountSubtitle(account: Account, demo: boolean): string {
   return [account.loginId, account.role === "ceo" ? "CEO" : "成员"].filter(Boolean).join(" · ");
 }
 
-type Dialog = "voiceprint" | "radar" | "connection" | "collector" | "coagent" | "passcode" | "voice" | "profile" | null;
+type Dialog = "voiceprint" | "radar" | "connection" | "collector" | "coagent" | "passcode" | "voice" | "profile" | "wechat" | null;
 
 export function AccountMenu({ account, compact = false, onNavigate }: { account: Account; compact?: boolean; onNavigate?: (href: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -58,6 +59,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   const [admin, setAdmin] = useState(false);
   const [voiceConfigured, setVoiceConfigured] = useState(false);
   const [feishu, setFeishu] = useState<{ enabled: boolean; connected: boolean } | null>(null);
+  const [wechat, setWechat] = useState<WechatConnection | null>(null);
   const [taskQuality, setTaskQuality] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +89,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
       setVoiceConfigured(Boolean(voiceprint.response.ok && voiceprint.data?.configured));
     }).catch(() => setError("个人设置暂时无法读取，请重试。"));
     void readFeishuConnection().then(setFeishu);
+    void readWechatConnection().then(setWechat);
     void readTaskQualityEnabled().then(setTaskQuality);
   };
   const switchView = async () => {
@@ -182,6 +185,10 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                         我的声纹
                       </Button> : null}
                       {feishu?.enabled ? <FeishuConnectItem connected={feishu.connected} /> : null}
+                      {wechat ? <Button variant="ghost" className={m.item} onPress={() => pick("wechat")}>
+                        <MessageCircle size={16} aria-hidden="true" />
+                        {wechat.state === "connected" ? "微信已连接" : "连接微信"}
+                      </Button> : null}
                       <Button variant="ghost" className={m.item} onPress={() => pick("connection")}>
                         <PlugZap size={16} aria-hidden="true" />连接到外部工具
                       </Button>
@@ -280,6 +287,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
       {dialog === "coagent" ? <MenuDialog title="Co-Agent 形象" wide onClose={() => setDialog(null)}><CoAgentSkinPicker /></MenuDialog> : null}
       {dialog === "voice" ? <VoiceKeysDialog onClose={() => setDialog(null)} /> : null}
       {dialog === "connection" ? <MenuDialog title="连接到外部工具" wide onClose={() => setDialog(null)}><ConnectionDialog role={account.role} /></MenuDialog> : null}
+      {dialog === "wechat" ? <MenuDialog title="连接微信" onClose={() => setDialog(null)}><WechatConnectPanel onChange={setWechat} /></MenuDialog> : null}
       {dialog === "collector" ? <MenuDialog title="本机采集器" wide onClose={() => setDialog(null)}><CollectorDialog /></MenuDialog> : null}
     </>
   );

@@ -392,8 +392,8 @@ describe("飞书妙记待整理：整理成一场天枢会", () => {
       expect(row).toMatchObject({ status: "held", minutes_status: "ready" });
       expect(row.transcript.source.format).toBe("feishu_minutes");
       expect(row.outcome.status).toBe("ready");
-      const cards = await t.app.inject({ method: "GET", url: "/api/me/meeting-cards", headers: { cookie: owner } });
-      expect(cards.json().meetings).toEqual([expect.objectContaining({ meetingId, status: "pending" })]);
+      // 会议卡生成好了（10/28 起记录正文不用确认，不进通知栏）。
+      expect(await t.sql("SELECT draft_status FROM meeting_cards WHERE meeting_id = $1", [meetingId])).toEqual([{ draft_status: "draft_ready" }]);
     } finally {
       await t.close();
     }
@@ -537,8 +537,7 @@ describe("飞书妙记待整理：记到天枢里约好的会", () => {
       expect(api.calls.length).toBeGreaterThan(0);
       for (const call of api.calls) expect(call).toContain("u-person-fixture-003");
       expect((await meetingMinutes(t, meetingId)).minutes_status).toBe("ready");
-      const cards = await t.app.inject({ method: "GET", url: "/api/me/meeting-cards", headers: { cookie: host } });
-      expect(cards.json().meetings).toEqual([expect.objectContaining({ meetingId })]);
+      expect(await t.sql("SELECT draft_status FROM meeting_cards WHERE meeting_id = $1", [meetingId])).toEqual([{ draft_status: "draft_ready" }]);
       expect((await list(t, owner)).json().minutes).toEqual([]);
     } finally {
       await t.close();

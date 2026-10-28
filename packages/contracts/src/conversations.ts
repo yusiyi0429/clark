@@ -284,8 +284,8 @@ export const ConversationMessage = Type.Object(
      * 普通消息没有这个字段。
      */
     kind: Type.Optional(Type.Union([Type.Literal("carried"), Type.Literal("trace")])),
-    /** 这一轮是在飞书私聊机器人时说的（问与答都标）；网页里不标的就是在天枢里说的。 */
-    via: Type.Optional(Type.Literal("feishu")),
+    /** 这一轮是在飞书私聊机器人或微信 ClawBot 里说的（问与答都标）；网页里不标的就是在天枢里说的。 */
+    via: Type.Optional(Type.Union([Type.Literal("feishu"), Type.Literal("wechat")])),
     meta: Type.Optional(Type.Object(
       { issueId: Type.Optional(Type.String()), title: Type.Optional(Type.String()), href: Type.Optional(Type.String()) },
       { additionalProperties: false },

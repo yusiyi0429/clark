@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { TMeetingActionItem, TMeetingCardDraft, TMeetingCardSection, TMeetingCardTargetOption, TMeetingCardView } from "@warmap/contracts";
-import { assignMeetingCardSpeaker, confirmMeetingCard, getMeetingCard, retryMeetingCardSync, saveMeetingCardDraft, type CardResult } from "./meetingCardApi";
+import {
+  assignMeetingCardSpeaker, confirmMeetingCard, getMeetingCard, retryMeetingCardSync, reviewMeetingCardItem, saveMeetingCardDraft, setMeetingCardWorldChoice,
+  type CardResult,
+} from "./meetingCardApi";
 import {
   cardDiffers, draftFromConfirmed, draftReady, itemsDiffer, itemsWithoutSection, newItemId, newSectionId, restoreBlank, restoreBlankItems,
   syncPending,
@@ -17,7 +20,7 @@ const POLL_LIMIT_MS = 10 * 60_000;
 /** 自动保存的状态（卡顶右侧的小字）：保存中、已保存、保存失败、网络不通。 */
 export type SaveState = "idle" | "saving" | "saved" | "failed" | "offline";
 /** 确认、重试、重读出错时的标签（不显示服务端原话）。 */
-export type ActionError = "确认失败" | "重试失败" | "指定失败" | "本体暂不可用" | "网络不通";
+export type ActionError = "确认失败" | "重试失败" | "指定失败" | "保存失败" | "本体暂不可用" | "网络不通";
 export type ConfirmInput = { writeToWorld: boolean; kind?: "correction" | "followup"; reason?: string };
 type SectionField = "heading" | "body";
 type ItemField = "text" | "ownerPersonId" | "dueDate";
@@ -49,7 +52,8 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
   const [leftItems, setLeftItems] = useState<string[]>([]);
   const [pending, setPending] = useState<PendingSection | null>(null);
   const [editing, setEditing] = useState(() => initial.draftChange !== "none");
-  const [timeInFooter, setTimeInFooter] = useState(() => !initial.confirmed && !initial.draft?.occurredAt);
+  // 实际时间放在底部确认按钮旁：只有 10/28 之前的会议卡还要主持人整卡确认。
+  const [timeInFooter, setTimeInFooter] = useState(() => !initial.confirmed && initial.decisions === null && !initial.draft?.occurredAt);
   const [timeRejected, setTimeRejected] = useState(false);
   const [focus, setFocus] = useState<"title" | "confirmed" | null>(null);
   const [conflict, setConflict] = useState(false);
@@ -249,7 +253,34 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
     adopt(result.view, true);
     setPollUntil(Date.now() + POLL_LIMIT_MS);
     setEditing((current) => result.view.draftChange !== "none" || (current && Boolean(result.view.confirmed)));
-    setTimeInFooter(!result.view.confirmed && !result.view.draft?.occurredAt);
+    setTimeInFooter(!result.view.confirmed && result.view.decisions === null && !result.view.draft?.occurredAt);
+  };
+
+  /** 服务端换了逐条状态、写入选择（草稿版本不变）：有没存的修改时只换视图，不动本地草稿。 */
+  const refreshed = (next: TMeetingCardView) => adopt(next, !dirtyRef.current && !savingRef.current && !conflictRef.current);
+
+  /** 逐条确认一条决策（自己确认、说不对，或主持人代确认）；已经处理过、定版了的按返回的最新状态显示。 */
+  const review = async (id: string, verdict: "confirm" | "reject", reason?: string): Promise<boolean> => {
+    setBusy(true);
+    setError(null);
+    const result = await reviewMeetingCardItem(meetingId, { kind: "decision", id, verdict, ...(reason ? { reason } : {}) });
+    if (!aliveRef.current) return false;
+    setBusy(false);
+    if (result.view) refreshed(result.view);
+    if (!result.ok && !result.view) setError(actionError(result, "确认失败"));
+    if (result.ok) { setPollUntil(Date.now() + POLL_LIMIT_MS); announce(); }
+    return result.ok;
+  };
+
+  /** 定版前改「不写进本体」。 */
+  const setWorldChoice = async (writeToWorld: boolean) => {
+    setBusy(true);
+    setError(null);
+    const result = await setMeetingCardWorldChoice(meetingId, writeToWorld);
+    if (!aliveRef.current) return;
+    setBusy(false);
+    if (result.ok) refreshed(result.view);
+    else setError(actionError(result, "保存失败"));
   };
 
   /**
@@ -364,6 +395,16 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
     return () => { live = false; clearTimeout(timer); };
   }, [meetingId, waiting, tick, pollUntil]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 通知栏里点了这场会的一条（或别处改了逐条状态）：重读一次。
+  useEffect(() => {
+    const onReviewed = (event: Event) => {
+      if ((event as CustomEvent<{ meetingId?: string }>).detail?.meetingId !== meetingId) return;
+      void getMeetingCard(meetingId).then((result) => { if (aliveRef.current && result.ok) refreshed(result.view); });
+    };
+    window.addEventListener("meeting-card-reviewed", onReviewed);
+    return () => window.removeEventListener("meeting-card-reviewed", onReviewed);
+  }, [meetingId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // 挂上时：上一个会议卡卸载前的最后一次保存还在路上，先不能改，等它回来用它的结果。
   // 卸载时：清空了的必填项先恢复，还有没存的（或正在存的）就存最后一次；不再改界面、不排重试，新挂上的会议卡和读卡等它。
   useEffect(() => {
@@ -392,6 +433,6 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
     view, draft, items, leftItems, pending, editing, timeInFooter, timeRejected, focus, conflict, unsaved, saveState, busy, error,
     edit: update, leave, setOccurredAt, setSection, moveSection, deleteSection, addSection, setPendingField, leavePending, setAfter, setTarget, deleteChange,
     addItem, setItem, deleteItem, leaveItem,
-    startEditing: () => { setSaveState("idle"); setFocus("title"); setEditing(true); }, reload, confirm, discard, retry, assignSpeaker,
+    startEditing: () => { setSaveState("idle"); setFocus("title"); setEditing(true); }, reload, confirm, discard, retry, assignSpeaker, review, setWorldChoice,
   };
 }

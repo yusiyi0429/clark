@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import { TEST_CEO, TEST_MEMBER, createTestApp } from "./helpers.js";
 import type { ConversationRuntime } from "../src/conversations.js";
+import { homeTurn } from "../src/homeTurn.js";
 
 const CHAT_TOKEN = "chat-token-test";
 const RUN = "6f0c1a52-6d7e-4e57-9a51-0a9a4c3e2b10";
@@ -302,6 +303,39 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
     });
   });
 
+  it("飞书私聊、微信里问（homeTurn）也走 Chat：来源带给 Chat；天枢库里没有这一轮，回答取流里的文字", async () => {
+    const chat = await fakeChat();
+    const runtime = countingRuntime();
+    await withChat(chat, runtime, async (t) => {
+      const deps = { app: t.app, q: t.pool.query.bind(t.pool), env: { sessionSecret: t.env.sessionSecret, publicOrigin: t.publicOrigin } };
+      const result = await homeTurn(deps, { personId: TEST_CEO.personId, role: "ceo" }, "这周怎么样", { via: "wechat" });
+      expect(result).toMatchObject({ kind: "done", runId: RUN, content: "好的", failure: null });
+      await homeTurn(deps, { personId: TEST_CEO.personId, role: "ceo" }, "下周呢", { via: "feishu" });
+      expect(chat.turns().map((turn) => JSON.parse(turn.body))).toMatchObject([
+        { message: "这周怎么样", source: "wechat" }, { message: "下周呢", source: "feishu" },
+      ]);
+      expect(runtime.calls).toBe(0);
+    });
+  });
+
+  it("历史里 Chat 记下的来源回到消息的 via，网页问的没有 via", async () => {
+    const [r1, r2] = [randomUUID(), randomUUID()];
+    const message = (role: string, text: string, runId: string, position: number, source: string | null) =>
+      ({ id: randomUUID(), position: String(position), role, text, runId, attachmentIds: [], attachments: [], source });
+    const chat = await fakeChat({
+      conversations: [randomUUID()],
+      pages: { "0": { messages: [message("user", "微信问", r1, 1, "wechat"), message("assistant", "微信答", r1, 2, "wechat"),
+        message("user", "网页问", r2, 3, null), message("assistant", "网页答", r2, 4, null)],
+      runs: [{ runId: r1, status: "completed", errorCode: null }, { runId: r2, status: "completed", errorCode: null }], nextCursor: null } },
+    });
+    await withChat(chat, countingRuntime(), async (t) => {
+      const history = (await t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie: await t.loginCookie() } })).json();
+      expect(history.messages.map((item: { content: string; via?: string }) => [item.content, item.via])).toEqual([
+        ["微信问", "wechat"], ["微信答", "wechat"], ["网页问", undefined], ["网页答", undefined],
+      ]);
+    });
+  });
+
   it("对象页的对话不受开关影响，照旧走天枢自己的运行时", async () => {
     const chat = await fakeChat();
     const runtime = countingRuntime();
@@ -502,33 +536,6 @@ describe("首页分段（CHAT_SESSION_ROTATION）", () => {
       expect(history.messages).toHaveLength(200);
       expect(chat.requests.some((request) => request.url.startsWith(`/conversations/${earlier.conversationId}/`))).toBe(false);
     });
-  });
-});
-
-describe("飞书私聊在首页走 Chat 时", () => {
-  it("回答不在天枢的对话记录里：用转发时流里的正文，不再说「这次回答没有完成」", async () => {
-    const sent: { kind: string; markdown: string }[] = [];
-    const feishuClient = {
-      async sendMessage(_type: string, _id: string, msgType: string, content: object) {
-        const post = (content as { zh_cn?: { content: { text: string }[][] } }).zh_cn;
-        sent.push({ kind: msgType, markdown: post ? post.content[0][0].text : "" });
-        return { messageId: `om_${sent.length}` };
-      },
-      async updateCard() {},
-    } as unknown as import("../src/feishu/client.js").FeishuClient;
-    const chat = await fakeChat({ turn: (res) => sse(res, [{ type: "turn_started" }, { type: "message", delta: "本周重点" }, { type: "message", delta: "是上线" }, { type: "done", status: "completed" }]) });
-    const t = await createTestApp({ internalChatToken: CHAT_TOKEN, chatServiceUrl: chat.url }, countingRuntime(), { feishuClient });
-    try {
-      await t.loginCookie();
-      await t.sql("INSERT INTO feishu_identities (person_id, open_id, name) VALUES ($1, 'ou_ceo', '测试甲')", [TEST_CEO.personId]);
-      await t.app.feishuChat!.onMessage({ sender: { sender_type: "user", sender_id: { open_id: "ou_ceo" } },
-        message: { message_id: "om_in_1", chat_type: "p2p", message_type: "text", content: JSON.stringify({ text: "这周重点？" }) } });
-      await t.app.feishuChat!.idle();
-      expect(sent.filter((item) => item.kind === "post").map((item) => item.markdown)).toEqual(["本周重点是上线"]);
-    } finally {
-      await t.close();
-      await chat.close();
-    }
   });
 });
 

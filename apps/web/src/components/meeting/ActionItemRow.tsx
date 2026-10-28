@@ -1,7 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import type { TMeetingActionItem } from "@warmap/contracts";
+import type { TMeetingActionItem, TMeetingItemReview } from "@warmap/contracts";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { dateLabel } from "@/components/ui/pickerFormat";
 import { Select } from "@/components/ui/Select";
@@ -29,6 +29,8 @@ type ActionItemRowProps = {
   basis: string | null;
   /** 离开过还空着事项：标红。 */
   invalid?: boolean;
+  /** 负责人接下没有（服务端此刻的；10/28 之前的行动项没有）。 */
+  review?: TMeetingItemReview;
   onChange?: (field: ItemField, value: string | null) => void;
   /** 焦点离开这一条。 */
   onLeave?: () => void;
@@ -36,10 +38,11 @@ type ActionItemRowProps = {
 };
 
 /**
- * 一条行动项（天枢本地，拍板 4）：事项就地编辑，推成执行事项的后面标「已派」；下面一行负责人、日期、依据；右侧「⋯」删除。
+ * 一条行动项（天枢本地，拍板 4）：事项就地编辑，推成执行事项的后面标「已派」，还没接下标「待接下」、退回标「已退回」；
+ * 下面一行负责人、日期、依据；右侧「⋯」删除。
  * 只读的人只看文字。
  */
-export function ActionItemRow({ number, item, state, was, editable, locked, people, basis, invalid, onChange, onLeave, onDelete }: ActionItemRowProps) {
+export function ActionItemRow({ number, item, state, was, editable, locked, people, basis, invalid, review, onChange, onLeave, onDelete }: ActionItemRowProps) {
   const live = editable && state !== "deleted";
   const label = number ? `第 ${number} 条` : undefined;
   const wasText = state === "changed" && was && was.text !== item.text ? was.text : null;
@@ -59,7 +62,10 @@ export function ActionItemRow({ number, item, state, was, editable, locked, peop
         <div className={c.itemHead}>
           <InlineText className={c.itemText} value={item.text} editable={live} readOnly={locked} label={`${label ?? ""}事项`} placeholder="事项"
             invalid={invalid} autoFocus={live && !item.text && !item.taskId} onChange={(value) => onChange?.("text", value)} />
-          {item.taskId ? <span className={c.flag} data-tone="done">已派</span> : null}
+          {item.taskId ? <span className={c.flag} data-tone="done">已派</span>
+            : review?.status === "pending" ? <span className={c.flag} data-tone="warn">待接下</span>
+            : review?.status === "rejected" ? <span className={c.flag} data-tone="fail" title={review.reason ?? undefined}>已退回</span>
+            : review?.status === "confirmed" ? <span className={c.flag} data-tone="done">已接下</span> : null}
         </div>
         <div className={c.itemMeta}>
           {live ? (

@@ -1,6 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import {
-  AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardView, MeetingDraftStatusResponse,
+  AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardReviewRequest, MeetingCardReviewResponse, MeetingCardView,
+  MeetingCardWorldChoiceRequest, MeetingDraftStatusResponse,
   MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse, OrganizeFeishuMinuteRequest,
 } from "@warmap/contracts";
 import { askImpactCard, markImpactCardIrrelevant, readImpactCardByRequest } from "../impactCards.js";
@@ -15,9 +16,9 @@ const tokenParams = Type.Object({ token: Type.String({ minLength: 1, maxLength: 
 
 /** 会后：会议卡（待确认清单、读、存草稿、整卡确认）、挂点与会议记录状态、已推影响卡（读、追问、和我无关）。 */
 export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteContext, followThrough: MeetingFollowThrough): void {
-  // 通知栏一场会一条：我主持或创建的会里待确认、修改待确认、写入失败的会议记录。
+  // 通知栏：等我确认的决策和行动项（一条一条），和我主持或创建的会里写入失败的会议记录（一场会一条）。
   app.get("/api/me/meeting-cards", { preHandler: ctx.requirePerson, schema: { response: { 200: MyMeetingCardsResponse } } },
-    async (req) => ({ meetings: await followThrough.cards.pendingFor(req.person!.personId) }));
+    async (req) => followThrough.cards.pendingFor(req.person!.personId));
 
   // 飞书里直接开的会待整理：只认本人（列表只有本人名下的，别人的妙记一律 404）。
   app.get("/api/me/feishu-minutes", { preHandler: ctx.requirePerson, schema: { response: { 200: FeishuMinuteInboxResponse } } },
@@ -90,6 +91,28 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
   }, async (req, reply) => {
     ctx.requestContext.set(req, { actionType: "meeting_card.confirm", objectRef: `meeting:${req.params.id}` });
     const result = await followThrough.cardConfirm.confirm(req.params.id, { personId: req.person!.personId, isCeo: req.person!.role === "ceo" }, req.body);
+    if ("view" in result) return result.view;
+    const { status, code, message, view } = result.error;
+    return ctx.fail(reply, status, code, message, view ? { view } : undefined);
+  });
+
+  // 逐条确认一条决策或行动项：责任人（没有就是主持人）自己点，主持人或创建人代点；别人 404。
+  app.post("/api/meetings/:id/card/reviews", {
+    preHandler: ctx.requirePerson, schema: { params: idParams, body: MeetingCardReviewRequest, response: { 200: MeetingCardReviewResponse } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "meeting_card.review", objectRef: `meeting:${req.params.id}` });
+    const result = await followThrough.cardConfirm.review(req.params.id, { personId: req.person!.personId, isCeo: req.person!.role === "ceo" }, req.body);
+    if ("view" in result) return result;
+    const { status, code, message, view } = result.error;
+    return ctx.fail(reply, status, code, message, view ? { view } : undefined);
+  });
+
+  // 冻结前改「不写进本体」（主持人或创建人，别人 404）。
+  app.put("/api/meetings/:id/card/world", {
+    preHandler: ctx.requirePerson, schema: { params: idParams, body: MeetingCardWorldChoiceRequest, response: { 200: MeetingCardView } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "meeting_card.world_choice", objectRef: `meeting:${req.params.id}` });
+    const result = await followThrough.cards.setWorldChoice(req.params.id, { personId: req.person!.personId, isCeo: req.person!.role === "ceo" }, req.body.writeToWorld);
     if ("view" in result) return result.view;
     const { status, code, message, view } = result.error;
     return ctx.fail(reply, status, code, message, view ? { view } : undefined);

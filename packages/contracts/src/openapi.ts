@@ -6,7 +6,7 @@ import {
   DraftRequestRequest, DraftRequestResponse, RequestListItem, RequestListResponse, PrepareRequestQuestionRequest,
   PrepareRequestQuestionResponse, DraftRequestAnswerResponse, RequestSendInput, RequestAskInput, RequestAnswerInput, ExecuteRequestActionRequest,
 } from "./requests.js";
-import { MeetingCardConfirmRequest, MeetingCardDraftRequest, MeetingCardSpeakerRequest, MeetingCardView } from "./meetingCard.js";
+import { MeetingCardConfirmRequest, MeetingCardDraftRequest, MeetingCardReviewRequest, MeetingCardReviewResponse, MeetingCardSpeakerRequest, MeetingCardView, MeetingCardWorldChoiceRequest } from "./meetingCard.js";
 import { MeetingDecisionView, MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse } from "./meetingDecisions.js";
 import { AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, OrganizeFeishuMinuteRequest } from "./feishuMinuteInbox.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
@@ -229,6 +229,7 @@ import {
   FeishuAuthConfigResponse,
   FeishuCodeLoginRequest,
   FeishuConnectionResponse,
+  WechatConnection,
 } from "./index.js";
 
 const errorResponse = {
@@ -348,6 +349,32 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: {
             "200": { description: "飞书连接状态", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuConnectionResponse" } } } },
             "401": errorResponse,
+          },
+        },
+      },
+      "/api/me/wechat": {
+        get: {
+          operationId: "getMyWechatConnection",
+          summary: "本人的微信 ClawBot 连接状态（等扫码时带二维码内容）；没接微信时 404",
+          responses: {
+            "200": { description: "微信连接状态", content: { "application/json": { schema: { $ref: "#/components/schemas/WechatConnection" } } } },
+            "401": errorResponse,
+          },
+        },
+        delete: {
+          operationId: "disconnectMyWechat",
+          summary: "断开本人的微信 ClawBot",
+          responses: { "204": { description: "已断开" }, "401": errorResponse },
+        },
+      },
+      "/api/me/wechat/connect": {
+        post: {
+          operationId: "connectMyWechat",
+          summary: "开始连接微信：要一张绑定二维码，后台等本人扫码确认；正在等扫码时沿用同一张",
+          responses: {
+            "200": { description: "微信连接状态", content: { "application/json": { schema: { $ref: "#/components/schemas/WechatConnection" } } } },
+            "401": errorResponse,
+            "503": errorResponse,
           },
         },
       },
@@ -890,7 +917,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       "/api/me/meeting-cards": {
         get: {
-          operationId: "listMyMeetingCards", summary: "我主持或创建的会里待处理的会议记录：待确认、修改待确认、写入失败，一场会一条",
+          operationId: "listMyMeetingCards", summary: "通知栏的会后确认：等我确认的决策和行动项（一条一条），和我主持或创建的会里写入失败的会议记录（一场会一条）",
           responses: { "200": { description: "待处理的会议记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MyMeetingCardsResponse" } } } }, "401": errorResponse },
         },
       },
@@ -969,6 +996,24 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/MeetingCardConfirmRequest" }),
           responses: { "200": { description: "确认后的会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/card/reviews": {
+        post: {
+          operationId: "reviewMeetingCardItem",
+          summary: "逐条确认一条决策或行动项：责任人（没有就是主持人）自己点，主持人或创建人代点记为代确认；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingCardReviewRequest" }),
+          responses: { "200": { description: "处理后的会议卡（点的人读不了会议卡时 view 为 null）", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardReviewResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/card/world": {
+        put: {
+          operationId: "setMeetingCardWorldChoice",
+          summary: "冻结前主持人或创建人改「不写进本体」；冻结后 409 CARD_FROZEN",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingCardWorldChoiceRequest" }),
+          responses: { "200": { description: "改后的会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "401": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/meetings/{id}/card/retry": {
@@ -2930,6 +2975,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         FeishuAuthConfigResponse: FeishuAuthConfigResponse as JsonSchema,
         FeishuCodeLoginRequest: FeishuCodeLoginRequest as JsonSchema,
         FeishuConnectionResponse: FeishuConnectionResponse as JsonSchema,
+        WechatConnection: WechatConnection as JsonSchema,
         ChangePasscodeRequest: ChangePasscodeRequest as JsonSchema,
         SessionResponse: SessionResponse as JsonSchema,
         PeopleDirectoryResponse: PeopleDirectoryResponse as JsonSchema,
@@ -3227,6 +3273,9 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeetingCardDraftRequest: MeetingCardDraftRequest as JsonSchema,
         MeetingCardConfirmRequest: MeetingCardConfirmRequest as JsonSchema,
         MeetingCardSpeakerRequest: MeetingCardSpeakerRequest as JsonSchema,
+        MeetingCardReviewRequest: MeetingCardReviewRequest as JsonSchema,
+        MeetingCardReviewResponse: MeetingCardReviewResponse as JsonSchema,
+        MeetingCardWorldChoiceRequest: MeetingCardWorldChoiceRequest as JsonSchema,
         MeetingMinutesLinkRequest: MeetingMinutesLinkRequest as JsonSchema,
         MeetingMinutesFetchResponse: MeetingMinutesFetchResponse as JsonSchema,
         MeetingWorldAnchorsRequest: MeetingWorldAnchorsRequest as JsonSchema,

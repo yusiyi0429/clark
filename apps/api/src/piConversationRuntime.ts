@@ -49,7 +49,7 @@ import { createObjectMaterial, editObjectMaterial, listObjectMaterials, readObje
 import { isRealPerson, personDisplayNames } from "./people.js";
 import { collectMeetingEvidence, collectObjectEvidence } from "./meetingEvidence.js";
 import { issueDecisionHistory, meetingDecisionHistory } from "./issueDecisionHistory.js";
-import { withBeijingTimes } from "./agentTime.js";
+import { nowContext, withBeijingTimes } from "./agentTime.js";
 import { ANSWER_OPTIONS_RULES, DECISION_JUDGEMENT_RULES } from "./decisionJudgement.js";
 import { SOURCE_CITATION_RULES } from "./sourceCitations.js";
 import { RICH_BLOCK_RULES } from "./richBlocks.js";
@@ -69,7 +69,7 @@ import { ASK_USER_RULES, PERSONAL_REVIEW_CHECK_RULES, makeAskTool } from "./askU
 import { DraftMeetingParams, type DraftMeetingArgs } from "./meetingDraft.js";
 
 /** 场景锚点（PR #12 Anchor 层）在系统提示里的说明：CEO 与 DRI 共用。 */
-const ANCHOR_CONTEXT = `\`anchor\` 是本人当前所在的页面（scene）与聚焦的卡（focus，句柄 A1…），items 是页面上可见项的摘要目录；要看某一项的完整内容或下一页目录时用 \`read_anchor\`（handle 或 cursor），展开结果或 focus 带 changed 时说明这一项在上次读取后有更新。focus.stale 表示本人页面上看到的是旧版本，回答时提醒刷新。anchor 和 currentObject 只在本轮给出，历史里没有，不从历史推断页面现状；它们只说明场景和指代，本地页面、草稿与历史不等于本体（World）里的正式公司事实。`;
+const ANCHOR_CONTEXT = `\`anchor\` 是本人当前所在的页面（scene）与聚焦的卡（focus，句柄 A1…），items 是页面上可见项的摘要目录；要看某一项的完整内容或下一页目录时用 \`read_anchor\`（handle 或 cursor），展开结果或 focus 带 changed 时说明这一项在上次读取后有更新。focus.stale 表示本人页面上看到的是旧版本，回答时提醒刷新。anchor 和 currentObject 只在本轮给出，历史里没有，不从历史推断页面现状；它们只说明场景和指代，本地页面、草稿与历史不等于本体（World）里的正式公司事实。\`now\` 是本轮发问时的北京时间（at，含星期）、本周（周一到周日）和本月；本人说的「今天」「这周」「本月」「月底」等都按它换算，不反问本人现在是几号或几月。`;
 
 /** CEO 与 DRI Agent 共用的材料改写规则；能不能直接改按 canEdit（上传者和对象负责人），与 edit_material 是否开放一致。 */
 const MATERIAL_EDITING_RULES = `材料是上述只读边界的例外。一份材料只有上传者和对象负责人（执行事项的推进人、会议主持人、议题的 CEO）能改，list_materials 和 currentObject.viewingMaterial 的 canEdit 表示对方能不能改。对方明确要求「改」「写进去」时：canEdit=true 用 edit_material 直接改；canEdit=false 或没有 edit_material 时不直接改，用 propose_material_edit 把改法交给能改的人，按工具结果告诉对方交给了谁。对方要求新写当前议题、执行事项、会议的群组材料时用 create_material。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由能改的人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。`;
@@ -1429,6 +1429,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         let live = "";
         const prompt = await withRetrieve(RETRIEVE_SOURCES.contextPack, () => ({ scope: input.scope, references: input.referencesSnapshot?.length ?? 0 }), async () => {
           const parts = {
+            now: nowContext((options.now ?? (() => new Date()))()),
             references: input.referencesSnapshot,
             personalMemory: personalMemory.length ? personalMemory : undefined,
             myOpenTodos: input.openTodos?.length ? input.openTodos : undefined,

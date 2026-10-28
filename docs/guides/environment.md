@@ -82,6 +82,7 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | 文件目录 | `MEETING_MATERIAL_STORAGE_DIR`、`CONVERSATION_ATTACHMENT_STORAGE_DIR`、`MEETING_RECORDING_STORAGE_DIR` | 本地直跑可留空用默认目录；Compose 固定为持久卷 |
 | 飞书 | `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_TOKEN_KEY` | 三项都留空＝关闭飞书（路由 404，不起长连接）；只填一部分 API 启动失败。`FEISHU_TOKEN_KEY` 为 base64 的 32 字节，与 `SESSION_SECRET` 分开 |
 | | `FEISHU_TOKEN_KEY_VERSION` | 1；换密钥时递增，空串会被判非法 |
+| 微信 ClawBot | 无单独配置 | 接了飞书就开：个人菜单「设置 › 连接微信」扫码绑定，bot token 用 `FEISHU_TOKEN_KEY` 加密。同一个微信 bot 同一时间只能有一个进程在收消息，生产和预发不要绑同一个人的微信 |
 | | `FEISHU_BITABLE_MODE` | 只有 `live` 才写真实多维表格，其余为 mock |
 | | `FEISHU_WEB_ORIGIN` | 飞书网页域名（如 `https://tokenking.feishu.cn`）；会议事件写本体时拼妙记链接，留空不带链接 |
 | | `COLLECTIONS_ENABLED` | 只有 `1` 才开信息收集（收集接口、每分钟收集任务、对话里发起收集、定时任务里的收集项），其余关 |

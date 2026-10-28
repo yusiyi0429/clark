@@ -17,7 +17,10 @@ vi.mock("ts-design/primitives", async () => {
     if (onPress) h.presses.set(text(children), onPress);
     return <button type="button" disabled={isDisabled} data-variant={variant} {...props}>{children}</button>;
   };
-  return { Button };
+  // 提示的字记在一个空元素的属性上，不算进看得到的字。
+  const Tooltip = ({ children }: { children: ReactNode }) => <>{children}</>;
+  Tooltip.Content = ({ children }: { children: ReactNode }) => <i data-tooltip={text(children)} />;
+  return { Button, Tooltip };
 });
 
 import { HomeActions } from "./HomeActions";
@@ -71,13 +74,13 @@ describe("约会议与战场进展", () => {
     expect(book).toHaveBeenCalledOnce();
   });
 
-  it("战场进展一直在，进原来那张战场进展页", () => {
-    const navigate = vi.fn();
-    const html = render({ onNavigate: navigate });
-    expect(button(html, "战场进展")).toContain('data-origin="/me/progress"');
-    const target = {};
-    h.presses.get("战场进展")!({ target });
-    expect(navigate).toHaveBeenCalledWith("/me/progress", target);
+  it("战场进展暂停：格子留着、不可用，按下不跳转，悬停提示「该功能将在后续版本开放」", () => {
+    const html = render();
+    const tile = button(html, "战场进展");
+    expect(tile).toContain('aria-disabled="true"');
+    expect(tile).not.toContain("data-origin");
+    expect(h.presses.has("战场进展")).toBe(false);
+    expect(html).toContain('data-tooltip="该功能将在后续版本开放"');
   });
 
   it("方块的顺序：约会议、等回复、战场进展、（雷达）；没有复盘格（M2 入口在通知栏）", () => {

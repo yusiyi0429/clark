@@ -51,7 +51,7 @@ function render(minutes: TFeishuMinuteInboxItem[], onChanged = vi.fn()) {
   hooks.index = 0;
   hooks.effectIndex = 0;
   const list = MeetingCardNoticeList({ meetings: [], minutes, meetingBase: "/me/meetings", onNavigate: () => undefined, onChanged });
-  const card = nodes(list).find((node) => node.type === ActionNoticeCard)!;
+  const card = nodes(list).find((node) => node.type === ActionNoticeCard && node.props?.id === "meeting-cards")!;
   const props = card.props as { notices: ActionNotice[]; onSettled(id: string): void };
   return { notices: props.notices, onSettled: props.onSettled, tree: ActionNoticeCard(props as Parameters<typeof ActionNoticeCard>[0]) };
 }

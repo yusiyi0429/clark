@@ -49,6 +49,7 @@ import { acceptIssueDraft, createIssueSuggest, declineIssueDraft, getIssueDraftV
 import { buildSceneAnchor } from "../sceneAnchor.js";
 import type { ConversationAnchor } from "../conversationAnchor.js";
 import { ChatServiceError } from "../chatService.js";
+import { VIA_HEADER } from "../homeTurn.js";
 import { currentSegmentOf, segmentDateLabel, startsNewSegment } from "../conversationSegments.js";
 import type { PastConversations } from "../conversationRecall.js";
 import { readHomeSnapshots } from "./cards.js";
@@ -127,7 +128,9 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       if (chat && req.params.scope === "global") {
         // 和天枢自己的对话同一条规则：成员不能借显式引用把 Card 带进对话。
         if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
-        return chat.relay(person, String(req.id), req.body, reply).catch((error) => chatFailed(reply, error));
+        const via = req.headers[VIA_HEADER];
+        return chat.relay(person, String(req.id), req.body, reply, via === "feishu" || via === "wechat" ? via : undefined)
+          .catch((error) => chatFailed(reply, error));
       }
       const object = await scopeObjectFor(person, req.params.scope);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");

@@ -24,7 +24,9 @@ const TURNS = [
   { id: "turn-003", speakerId: OWNER, text: "好，我月底前把渠道看板接到 v2。" },
 ];
 
-export function cardAgent(objectChanges = [{ targetRef: "obj-po-1#target/acc-1", after: { text: "十月底前 4 家客户上线" }, basisSections: [1] }]): PostMeetingAgent {
+/** 一条决策（「接口统一改成 v2」，责任人测试丙），一处属于它的修改，一条行动项（测试丙）。 */
+export function cardAgent(objectChanges = [{ targetRef: "obj-po-1#target/acc-1", after: { text: "十月底前 4 家客户上线" }, basisSections: [1], decision: 1 }],
+  decisions = [{ text: "接口统一改成 v2", ownerPersonId: OWNER as string | null, basisSections: [1] }]): PostMeetingAgent {
   return {
     async generate() {
       return { candidate: {
@@ -33,6 +35,7 @@ export function cardAgent(objectChanges = [{ targetRef: "obj-po-1#target/acc-1",
           { heading: "接口切换", body: "已定：接口统一改成 v2。", turnIds: ["turn-002", "turn-003"] },
           { heading: "渠道预算", body: "未定：渠道预算下周看数据再定。", turnIds: ["turn-001"] },
         ],
+        decisions,
         objectChanges,
         actionItems: [{ text: "渠道看板接到 v2", ownerPersonId: OWNER, dueDate: "2026-06-30", basisSections: [1] }],
       } };
@@ -41,7 +44,7 @@ export function cardAgent(objectChanges = [{ targetRef: "obj-po-1#target/acc-1",
 }
 const preflightAgent: PreflightAgent = { async generate(input: PreflightAgentInput) { return { candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)) }; } };
 
-export async function setup(agent: PostMeetingAgent = cardAgent(), env: Pick<AppEnv, "internalChatToken" | "feishu"> = {},
+export async function setup(agent: PostMeetingAgent = cardAgent(), env: Pick<AppEnv, "internalChatToken" | "feishu" | "meetingRecordText"> = {},
   extra: { meetingFollowThroughAgents?: { minutesApi?: FeishuMinutesApi } } = {}) {
   const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, ...worldEnv, ...env }, undefined, { preflightAgent, outcomeAgent: agent, ...extra });
   const ceo = await t.loginCookie();

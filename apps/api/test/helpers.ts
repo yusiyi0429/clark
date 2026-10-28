@@ -355,6 +355,9 @@ export async function createTestApp(
     conversationDigestStream?: Parameters<typeof buildApp>[0]["conversationDigestStream"];
     /** 飞书开放接口替身；配合 seedOverrides.feishu 使用。 */
     feishuClient?: FeishuClient;
+    /** 微信 ClawBot 的 iLink 接口替身；配合 seedOverrides.feishu（借用它的令牌密钥）使用。 */
+    wechatIlink?: Parameters<typeof buildApp>[0]["wechatIlink"];
+    wechatAvatar?: Parameters<typeof buildApp>[0]["wechatAvatar"];
     /** 个人记忆的召回模型替身；不注入时不用模型、只按字面重合选（测试里不调真实模型）。 */
     personalMemoryRecall?: Parameters<typeof buildApp>[0]["personalMemoryRecall"];
     /** 记忆导入的分类与去重模型替身；不注入时按测试环境装配（测试里不调真实模型）。 */

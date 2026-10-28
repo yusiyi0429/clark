@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { beijingLabel, withBeijingTimes } from "../src/agentTime.js";
+import { beijingLabel, nowContext, withBeijingTimes } from "../src/agentTime.js";
 
 describe("交给 Agent 的时间一律是北京时间", () => {
   it("把 UTC ISO 串换成北京时间文字，跨日也正确", () => {
@@ -22,6 +22,16 @@ describe("交给 Agent 的时间一律是北京时间", () => {
     expect(JSON.stringify(out)).not.toMatch(/"\d{4}-\d{2}-\d{2}T[^"]*Z"/);
     // 原对象不被改写（接口和界面仍用 ISO）。
     expect(evidence.discussions[0].at).toBe("2026-10-09T08:20:00.000Z");
+  });
+
+  it("本周、本月按北京时间算：UTC 还是周日晚上，北京已经是周一", () => {
+    expect(nowContext(new Date("2026-11-01T15:30:00.000Z"))).toEqual({
+      at: "2026-11-01 周日 23:30（北京时间）", week: "2026-10-26 周一 至 2026-11-01 周日", month: "2026-11",
+    });
+    expect(nowContext(new Date("2026-11-01T16:30:00.000Z"))).toEqual({
+      at: "2026-11-02 周一 00:30（北京时间）", week: "2026-11-02 周一 至 2026-11-08 周日", month: "2026-11",
+    });
+    expect(nowContext(new Date("2026-09-30T16:05:00.000Z")).month).toBe("2026-10");
   });
 
   it("不是完整 UTC 时间戳的字符串保持原样", () => {

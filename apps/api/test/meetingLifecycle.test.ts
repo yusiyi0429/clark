@@ -98,7 +98,7 @@ describe("meeting notification lifecycle and host follow-through", () => {
   it("lets the host import and confirm textual minutes without exposing CEO drafts or review actions", async () => {
     const t=await createTestApp({}, undefined, { outcomeAgent: { async generate(input) {
       const turn = input.transcript.turns[0];
-      return { candidate: { summary: "已核对会议记录", sections: [{ heading: "排期", body: `已定：${turn.text}`, turnIds: [turn.id] }], objectChanges: [],
+      return { candidate: { summary: "已核对会议记录", sections: [{ heading: "排期", body: `已定：${turn.text}`, turnIds: [turn.id] }], decisions: [], objectChanges: [],
         actionItems: [{ text: turn.text, ownerPersonId: turn.speakerId, dueDate: null, basisSections: [1] }] } };
     } } });
     try {

@@ -3,10 +3,10 @@ import type { Pool } from "pg";
 import type { FeishuClient } from "./feishu/client.js";
 import { feishuDeepLink } from "./feishu/messages.js";
 import { withoutIssueSuggestBlocks } from "./issueDrafts.js";
-import { currentSessionVersion, roleOf } from "./memberAccess.js";
+import { homeTurn } from "./homeTurn.js";
+import { roleOf } from "./memberAccess.js";
 import { logEvent } from "./observability.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
-import { SESSION_COOKIE, createSessionToken } from "./session.js";
 
 /**
  * 飞书私聊天枢机器人 = 在本人首页的对话里说一句（「我的对话」，scope = global）：
@@ -16,10 +16,7 @@ import { SESSION_COOKIE, createSessionToken } from "./session.js";
  * 飞书里点不了天枢的卡和图表：回答里有这些时末尾附「在天枢查看」链接。
  */
 export const FEISHU_CHAT_EVENT = "im.message.receive_v1";
-const SCOPE = "global";
 const PROGRESS_EVERY_MS = 5_000;
-const BUSY_RETRY_MS = 5_000;
-const BUSY_GIVE_UP_MS = 10 * 60_000;
 const MAX_ANSWER_CHARS = 3_500;
 /** 网页里画成卡或图的块：飞书里不显示，改附「在天枢查看」。 */
 const RICH_FENCE = /\n*```(?:options|metric-compare|timeline|roadmap)[ \t]*\n[\s\S]*?\n```[ \t]*/g;
@@ -27,15 +24,16 @@ const RICH_FENCE = /\n*```(?:options|metric-compare|timeline|roadmap)[ \t]*\n[\s
 type Card = object;
 
 /**
- * 回答转成飞书富文本 md 段落（认加粗、斜体、链接、列表、引用，不认标题）：标题变加粗，站内链接换成免登深链接，超长截断。
+ * 回答转成飞书富文本 md 段落（认加粗、斜体、链接、列表、引用，不认标题）：标题变加粗，站内链接换成免登深链接（微信里换成普通网址），超长截断。
  * 出处标记（网页里画成小标签）去掉，只留书名号的资料名；个人记忆标记也去掉。
  */
-export function toFeishuMarkdown(text: string, publicOrigin: string): { content: string; richDropped: boolean; truncated: boolean } {
+export function toFeishuMarkdown(text: string, publicOrigin: string, linkFor: (path: string) => string = (path) => feishuDeepLink(publicOrigin, path)):
+  { content: string; richDropped: boolean; truncated: boolean } {
   let body = withoutIssueSuggestBlocks(text);
   const richDropped = RICH_FENCE.test(body);
   body = body.replace(RICH_FENCE, "")
     .replace(/([ \t]*)\[([^\]]*)\]\(cite:[^)]*\)/g, (_match, space: string, label: string) => (label.startsWith("《") ? `${space}${label}` : ""))
-    .replace(/\]\((\/[^)\s]*)\)/g, (_match, path: string) => `](${feishuDeepLink(publicOrigin, path)})`)
+    .replace(/\]\((\/[^)\s]*)\)/g, (_match, path: string) => `](${linkFor(path)})`)
     .split("\n")
     .filter((line) => !/^\s*```/.test(line))
     .map((line) => line.replace(/^#{1,6}\s+(.*)$/, "**$1**").replace(/[ 	]+$/, ""))
@@ -74,24 +72,6 @@ export function messageText(messageType: string | undefined, content: string | u
   return null;
 }
 
-type SseEvent = { type?: string; [key: string]: unknown };
-
-/** 按 SSE 的空行分块读事件（心跳注释行跳过）。 */
-async function* sseEvents(stream: AsyncIterable<Buffer | string>): AsyncGenerator<SseEvent> {
-  let buffer = "";
-  for await (const chunk of stream) {
-    buffer += typeof chunk === "string" ? chunk : chunk.toString("utf8");
-    let end: number;
-    while ((end = buffer.indexOf("\n\n")) >= 0) {
-      const block = buffer.slice(0, end);
-      buffer = buffer.slice(end + 2);
-      const data = block.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
-      if (!data) continue;
-      try { yield JSON.parse(data) as SseEvent; } catch { /* 坏块跳过 */ }
-    }
-  }
-}
-
 export type FeishuChat = ReturnType<typeof createFeishuChat>;
 
 export function createFeishuChat(deps: {
@@ -126,70 +106,40 @@ export function createFeishuChat(deps: {
 [${link.label}](${link.url})` : markdown));
   }
 
-  async function markVia(runId: string): Promise<void> {
-    await q(`UPDATE conversation_messages SET meta = COALESCE(meta, '{}'::jsonb) || '{"via":"feishu"}'::jsonb WHERE run_id = $1`, [runId]).catch(() => undefined);
-  }
-
   /** 以本人身份说这一句；上一轮还在写（网页或飞书里的）时等它写完再说。 */
   async function turn(person: { personId: string; role: "ceo" | "member" }, openId: string, text: string): Promise<void> {
-    const version = await currentSessionVersion(q, person.personId);
     const home = person.role === "ceo" ? "/" : "/me";
     const open = { label: "在天枢查看", url: feishuDeepLink(env.publicOrigin, home) };
-    if (version === null) {
-      await send(openId, "post", post("你的天枢账号还没开通，开通后就能在这里直接问我。"));
-      return;
-    }
-    const cookie = `${SESSION_COOKIE}=${createSessionToken(env.sessionSecret, 15 * 60, { pid: person.personId, v: version, view: person.role })}`;
     const startedAt = Date.now();
-    const progress = await send(openId, "interactive", card(grey("正在想…")));
-    for (;;) {
-      const response = await app.inject({
-        method: "POST", url: `/api/conversations/${SCOPE}/messages`, payloadAsStream: true,
-        headers: { cookie, origin: env.publicOrigin, accept: "text/event-stream", "content-type": "application/json" },
-        payload: JSON.stringify({ message: text }),
-      });
-      const stream = response.stream();
-      if (response.statusCode !== 200) {
-        let body = "";
-        for await (const chunk of stream) body += chunk.toString();
-        const code = (() => { try { return (JSON.parse(body) as { code?: string }).code; } catch { return undefined; } })();
-        if (code === "TURN_IN_PROGRESS" && Date.now() - startedAt < BUSY_GIVE_UP_MS) {
-          await update(progress, card(grey("上一个问题还在回答，答完马上接着答这个。")));
-          await new Promise((resolve) => setTimeout(resolve, BUSY_RETRY_MS));
-          continue;
-        }
-        logEvent({ event: "feishu_chat.turn_rejected", personId: person.personId, httpStatus: response.statusCode, code });
-        await finish(openId, progress, startedAt, "这句没能交给天枢，稍后再发一次，或者到天枢里问。", open);
-        return;
-      }
-      let runId: string | undefined;
-      let step: string | null = null;
-      let lastShown = Date.now();
-      let failure: string | null = null;
-      // 流里的正文：首页走独立 Chat 时回答不在天枢的对话记录里，就用它。
-      let streamed = "";
-      for await (const event of sseEvents(stream)) {
-        if (!runId && typeof event.runId === "string") { runId = event.runId; await markVia(runId); }
-        if (event.type === "message" && typeof event.delta === "string") streamed += event.delta;
+    let progress: string | null = null;
+    let step: string | null = null;
+    let lastShown = Date.now();
+    const result = await homeTurn({ app, q, env }, person, text, {
+      via: "feishu",
+      onStart: async () => { progress = await send(openId, "interactive", card(grey("正在想…"))); },
+      onBusy: () => update(progress, card(grey("上一个问题还在回答，答完马上接着答这个。"))),
+      onEvent: async (event) => {
         if (event.type === "step" && event.status === "active" && typeof event.label === "string") step = event.label;
-        if (event.type === "error") failure = typeof event.message === "string" ? event.message : "这次回答没有完成。";
         if (Date.now() - lastShown >= PROGRESS_EVERY_MS) {
           lastShown = Date.now();
           const seconds = Math.round((Date.now() - startedAt) / 1000);
           await update(progress, card(grey(`${step ? `正在${step}` : "正在想"}… ${seconds} 秒`)));
         }
-      }
-      if (!runId) { await finish(openId, progress, startedAt, "这次回答没有完成，稍后再发一次。", open); return; }
-      await markVia(runId);
-      const saved = (await q(
-        `SELECT m.content, r.input_snapshot -> 'cards' AS cards FROM conversation_messages m LEFT JOIN agent_runs r ON r.id = m.run_id
-          WHERE m.run_id = $1 AND m.role = 'assistant' ORDER BY m.sequence DESC LIMIT 1`, [runId])).rows[0] as { content: string; cards: unknown } | undefined;
-      const fromStream = streamed.trim() ? (failure ? `${streamed.trimEnd()}\n\n${failure}` : streamed) : null;
-      const answer = toFeishuMarkdown(saved?.content ?? fromStream ?? failure ?? "这次回答没有完成。", env.publicOrigin);
-      const needsWeb = answer.richDropped || answer.truncated || (Array.isArray(saved?.cards) && saved.cards.length > 0) || failure !== null;
-      await finish(openId, progress, startedAt, answer.content || "（没有文字回答）", needsWeb ? open : undefined);
+      },
+    });
+    if (result.kind === "inactive") {
+      await send(openId, "post", post("你的天枢账号还没开通，开通后就能在这里直接问我。"));
       return;
     }
+    if (result.kind === "rejected") {
+      logEvent({ event: "feishu_chat.turn_rejected", personId: person.personId, httpStatus: result.httpStatus, code: result.code });
+      await finish(openId, progress, startedAt, "这句没能交给天枢，稍后再发一次，或者到天枢里问。", open);
+      return;
+    }
+    if (!result.runId) { await finish(openId, progress, startedAt, "这次回答没有完成，稍后再发一次。", open); return; }
+    const answer = toFeishuMarkdown(result.content ?? result.failure ?? "这次回答没有完成。", env.publicOrigin);
+    const needsWeb = answer.richDropped || answer.truncated || (Array.isArray(result.cards) && result.cards.length > 0) || result.failure !== null;
+    await finish(openId, progress, startedAt, answer.content || "（没有文字回答）", needsWeb ? open : undefined);
   }
 
   /**

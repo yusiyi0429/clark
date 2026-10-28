@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import type { TMeetingCardV1Payload } from "@warmap/contracts";
 
 /**
  * 固定键序的 JSON：每一层的对象键按 UTF-16 码元顺序排（JS 默认的 `<` 比较，不是 localeCompare），数组保持顺序。
@@ -12,7 +11,7 @@ function canonicalJson(value: unknown): string {
       : entry);
 }
 
-/** 冻结 payload 的摘要值（sha256 hex）：不含 confirmation 和同步回执。 */
-export function payloadHash(payload: TMeetingCardV1Payload): string {
+/** 冻结 payload（或写进会议事件的那一份）的摘要值（sha256 hex）：不含 confirmation 和同步回执。 */
+export function payloadHash(payload: object): string {
   return createHash("sha256").update(canonicalJson(payload)).digest("hex");
 }

@@ -118,6 +118,26 @@ describe("给独立 Chat 的宿主只读接口", () => {
     }
   });
 
+  it("起草会议（Chat 的 book_meeting 调）：出会议卡、不建会；认不出时说原因；视角照样核对", async () => {
+    const { t } = await setup(undefined, { internalChatToken: TOKEN });
+    try {
+      const post = (personId: string, role: string, payload: object) => t.app.inject({ method: "POST", url: "/internal/meeting-drafts", payload,
+        headers: { authorization: `Bearer ${TOKEN}`, "x-owner-id": personId, "x-viewer-role": role } });
+      const before = (await t.sql("SELECT count(*)::int AS n FROM meetings"))[0].n;
+      const drafted = await post(HOST, "member", { title: "聊新 Chat 切换", date: "后天", time: "下午三点", participants: ["测试丙", "没有这个人"] });
+      expect(drafted.statusCode).toBe(200);
+      expect(drafted.json()).toMatchObject({ drafted: true, card: { title: "聊新 Chat 切换" },
+        summary: { title: "聊新 Chat 切换", participants: expect.arrayContaining(["测试丙"]), unresolved: [expect.objectContaining({ name: "没有这个人" })] } });
+      expect((await t.sql("SELECT count(*)::int AS n FROM meetings"))[0].n).toBe(before);
+      expect((await post(HOST, "member", { title: "复盘", date: "某天", time: "下午三点" })).json()).toEqual({ drafted: false, reason: "日期「某天」认不出" });
+      expect((await post(HOST, "ceo", { title: "复盘", date: "明天", time: "10:00" })).json().code).toBe("VIEW_NOT_ALLOWED");
+      expect((await t.app.inject({ method: "POST", url: "/internal/meeting-drafts", payload: { title: "x", date: "明天", time: "10:00" },
+        headers: { "x-owner-id": HOST, "x-viewer-role": "member" } })).statusCode).toBe(401);
+    } finally {
+      await t.close();
+    }
+  });
+
   it("待决议题：CEO 视角全部，成员视角只看本人在议题群里的", async () => {
     const { t } = await setup(undefined, { internalChatToken: TOKEN });
     try {

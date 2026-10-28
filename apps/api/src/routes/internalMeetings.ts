@@ -4,11 +4,12 @@ import type { TMeetingParticipant } from "@warmap/contracts";
 import { listPendingIssueSummaries } from "../issues.js";
 import type { Viewer } from "../meetingCard.js";
 import { listConfirmedMeetings, PayloadHashMismatchError, readConfirmedMeeting } from "../meetingCardRead.js";
+import { DraftMeetingParams, draftMeeting, draftTimeLabel, type DraftMeetingArgs } from "../meetingDraft.js";
 import { meetingHasEnded } from "../meetingStore.js";
 import { canUseMemberView, roleOf, type SessionRole } from "../memberAccess.js";
 import { MISSION_PLAN_TIMEOUT_MS, readMissionPlans, type MissionPlanWorld, type MissionPlanWorldOff } from "../missionPlanRead.js";
 import { companyPeriod } from "../monthlyPlans.js";
-import { personDisplayNames } from "../people.js";
+import { isRealPerson, personDisplayNames } from "../people.js";
 import { WorldClient, worldConfigured } from "../worldClient.js";
 import { readHomeSnapshots } from "./cards.js";
 import type { AppInstance, RouteContext } from "./shared.js";
@@ -189,5 +190,20 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
     if (!view) return reply;
     const period = companyPeriod(ctx.now());
     return { viewerRole: view.role, period, missions: await readMissionPlans(q, view.personId, period, planWorld) };
+  });
+
+  // 首页对话里约会议（10/28 与人豪定：Chat 的 book_meeting 工具调这里）：把本人一句话里的时间、人名换成一张会议卡，只读不写库；
+  // 本人在卡上点「约好」才建会（同天枢自己对话里的 draft_meeting）。认不出时 drafted=false 带原因，由 Chat 追问后再调。
+  app.post("/internal/meeting-drafts", { onRequest, schema: { body: DraftMeetingParams } }, async (req, reply) => {
+    const view = viewOf(req, reply);
+    if (!view) return reply;
+    const people = peopleDirectory.searchPeople(undefined).filter(isRealPerson).map(({ personId, displayName }) => ({ personId, displayName }));
+    const result = await draftMeeting({ q, viewer: view, people, now: ctx.now() }, req.body as DraftMeetingArgs);
+    if ("reason" in result) return { drafted: false, reason: result.reason };
+    const { card } = result;
+    const summary = { title: card.title, time: draftTimeLabel(new Date(card.scheduledAt), new Date(card.endsAt)),
+      host: card.host?.displayName ?? null, participants: card.participants.map((person) => person.displayName),
+      unresolved: card.unresolved, anchor: card.anchor?.title ?? null, ...(result.hostNote ? { hostNote: result.hostNote } : {}) };
+    return { drafted: true, card, summary };
   });
 }

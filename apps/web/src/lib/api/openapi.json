@@ -1424,6 +1424,91 @@
         }
       }
     },
+    "/api/me/wechat": {
+      "get": {
+        "operationId": "getMyWechatConnection",
+        "summary": "本人的微信 ClawBot 连接状态（等扫码时带二维码内容）；没接微信时 404",
+        "responses": {
+          "200": {
+            "description": "微信连接状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WechatConnection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "disconnectMyWechat",
+        "summary": "断开本人的微信 ClawBot",
+        "responses": {
+          "204": {
+            "description": "已断开"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/wechat/connect": {
+      "post": {
+        "operationId": "connectMyWechat",
+        "summary": "开始连接微信：要一张绑定二维码，后台等本人扫码确认；正在等扫码时沿用同一张",
+        "responses": {
+          "200": {
+            "description": "微信连接状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WechatConnection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/feishu/start": {
       "get": {
         "operationId": "startFeishuAuth",
@@ -5145,7 +5230,7 @@
     "/api/me/meeting-cards": {
       "get": {
         "operationId": "listMyMeetingCards",
-        "summary": "我主持或创建的会里待处理的会议记录：待确认、修改待确认、写入失败，一场会一条",
+        "summary": "通知栏的会后确认：等我确认的决策和行动项（一条一条），和我主持或创建的会里写入失败的会议记录（一场会一条）",
         "responses": {
           "200": {
             "description": "待处理的会议记录",
@@ -5811,6 +5896,152 @@
             }
           },
           "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/card/reviews": {
+      "post": {
+        "operationId": "reviewMeetingCardItem",
+        "summary": "逐条确认一条决策或行动项：责任人（没有就是主持人）自己点，主持人或创建人代点记为代确认；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeetingCardReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "处理后的会议卡（点的人读不了会议卡时 view 为 null）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingCardReviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/card/world": {
+      "put": {
+        "operationId": "setMeetingCardWorldChoice",
+        "summary": "冻结前主持人或创建人改「不写进本体」；冻结后 409 CARD_FROZEN",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeetingCardWorldChoiceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "改后的会议卡",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingCardView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -19419,6 +19650,10 @@
               "draftVersion",
               "draftStatus",
               "actionItems",
+              "decisions",
+              "hostId",
+              "viewerId",
+              "writeToWorld",
               "confirmed",
               "sync",
               "targetOptions",
@@ -19728,6 +19963,18 @@
                                 "type": "string"
                               }
                             },
+                            "decisionId": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 64,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
                             "stale": {
                               "type": "boolean"
                             }
@@ -19823,9 +20070,207 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "review": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "status",
+                        "by",
+                        "proxy",
+                        "at",
+                        "reason"
+                      ],
+                      "properties": {
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "pending",
+                              "type": "string"
+                            },
+                            {
+                              "const": "confirmed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "rejected",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "by": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "proxy": {
+                          "type": "boolean"
+                        },
+                        "at": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "reason": {
+                          "anyOf": [
+                            {
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
                     }
                   }
                 }
+              },
+              "decisions": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "text",
+                        "ownerPersonId",
+                        "basisSectionIds",
+                        "review"
+                      ],
+                      "properties": {
+                        "id": {
+                          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                          "type": "string"
+                        },
+                        "text": {
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "type": "string"
+                        },
+                        "ownerPersonId": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "basisSectionIds": {
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "minLength": 1,
+                            "maxLength": 64,
+                            "type": "string"
+                          }
+                        },
+                        "review": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "status",
+                            "by",
+                            "proxy",
+                            "at",
+                            "reason"
+                          ],
+                          "properties": {
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "pending",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "confirmed",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "rejected",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "by": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "proxy": {
+                              "type": "boolean"
+                            },
+                            "at": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 100,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "hostId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "viewerId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "writeToWorld": {
+                "type": "boolean"
               },
               "confirmed": {
                 "anyOf": [
@@ -19857,8 +20302,16 @@
                         ],
                         "properties": {
                           "schemaVersion": {
-                            "const": "meeting-card.v1",
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "const": "meeting-card.v1",
+                                "type": "string"
+                              },
+                              {
+                                "const": "meeting-card.v2",
+                                "type": "string"
+                              }
+                            ]
                           },
                           "meetingId": {
                             "minLength": 1,
@@ -20137,6 +20590,18 @@
                                     "maxLength": 64,
                                     "type": "string"
                                   }
+                                },
+                                "decisionId": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "maxLength": 64,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 }
                               }
                             }
@@ -20144,6 +20609,206 @@
                           "revision": {
                             "minimum": 1,
                             "type": "integer"
+                          },
+                          "decisions": {
+                            "maxItems": 50,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "text",
+                                "ownerPersonId",
+                                "basisSectionIds",
+                                "confirmedBy",
+                                "proxy",
+                                "confirmedAt",
+                                "sourceRefs"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "minLength": 1,
+                                  "maxLength": 300,
+                                  "type": "string"
+                                },
+                                "ownerPersonId": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "maxLength": 200,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "basisSectionIds": {
+                                  "maxItems": 50,
+                                  "type": "array",
+                                  "items": {
+                                    "minLength": 1,
+                                    "maxLength": 64,
+                                    "type": "string"
+                                  }
+                                },
+                                "confirmedBy": {
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                "proxy": {
+                                  "type": "boolean"
+                                },
+                                "confirmedAt": {
+                                  "minLength": 1,
+                                  "maxLength": 100,
+                                  "type": "string"
+                                },
+                                "sourceRefs": {
+                                  "maxItems": 100,
+                                  "type": "array",
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "sourceId",
+                                      "locator"
+                                    ],
+                                    "properties": {
+                                      "sourceId": {
+                                        "minLength": 1,
+                                        "maxLength": 64,
+                                        "type": "string"
+                                      },
+                                      "locator": {
+                                        "anyOf": [
+                                          {
+                                            "minLength": 1,
+                                            "maxLength": 500,
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "actionItems": {
+                            "maxItems": 100,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "text",
+                                "ownerPersonId",
+                                "dueDate",
+                                "basisSectionIds",
+                                "confirmedBy",
+                                "proxy",
+                                "confirmedAt",
+                                "sourceRefs"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "minLength": 1,
+                                  "maxLength": 300,
+                                  "type": "string"
+                                },
+                                "ownerPersonId": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "maxLength": 200,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "dueDate": {
+                                  "anyOf": [
+                                    {
+                                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "basisSectionIds": {
+                                  "maxItems": 50,
+                                  "type": "array",
+                                  "items": {
+                                    "minLength": 1,
+                                    "maxLength": 64,
+                                    "type": "string"
+                                  }
+                                },
+                                "confirmedBy": {
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                "proxy": {
+                                  "type": "boolean"
+                                },
+                                "confirmedAt": {
+                                  "minLength": 1,
+                                  "maxLength": 100,
+                                  "type": "string"
+                                },
+                                "sourceRefs": {
+                                  "maxItems": 100,
+                                  "type": "array",
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "sourceId",
+                                      "locator"
+                                    ],
+                                    "properties": {
+                                      "sourceId": {
+                                        "minLength": 1,
+                                        "maxLength": 64,
+                                        "type": "string"
+                                      },
+                                      "locator": {
+                                        "anyOf": [
+                                          {
+                                            "minLength": 1,
+                                            "maxLength": 500,
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
                           }
                         }
                       },
@@ -20162,8 +20827,15 @@
                             "type": "integer"
                           },
                           "confirmedBy": {
-                            "minLength": 1,
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           },
                           "confirmedAt": {
                             "minLength": 1,
@@ -20257,6 +20929,73 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            "review": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "status",
+                                "by",
+                                "proxy",
+                                "at",
+                                "reason"
+                              ],
+                              "properties": {
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "const": "pending",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "confirmed",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "rejected",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "by": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "maxLength": 200,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "proxy": {
+                                  "type": "boolean"
+                                },
+                                "at": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "maxLength": 100,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "reason": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 200,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
                             }
                           }
                         }
@@ -20607,6 +21346,52 @@
             "type": "boolean"
           },
           "calendar": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WechatConnection": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "anyOf": [
+              {
+                "const": "none",
+                "type": "string"
+              },
+              {
+                "const": "waiting",
+                "type": "string"
+              },
+              {
+                "const": "scanned",
+                "type": "string"
+              },
+              {
+                "const": "expired",
+                "type": "string"
+              },
+              {
+                "const": "connected",
+                "type": "string"
+              },
+              {
+                "const": "stale",
+                "type": "string"
+              }
+            ]
+          },
+          "qrcodeUrl": {
+            "type": "string"
+          },
+          "welcomed": {
+            "type": "boolean"
+          },
+          "paused": {
             "type": "boolean"
           }
         }
@@ -21576,8 +22361,16 @@
                   ]
                 },
                 "via": {
-                  "const": "feishu",
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "const": "feishu",
+                      "type": "string"
+                    },
+                    {
+                      "const": "wechat",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "meta": {
                   "additionalProperties": false,
@@ -66800,7 +67593,8 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "meetings"
+          "meetings",
+          "confirms"
         ],
         "properties": {
           "meetings": {
@@ -66828,18 +67622,61 @@
                   "type": "string"
                 },
                 "status": {
+                  "const": "failed",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "confirms": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "meetingId",
+                "title",
+                "kind",
+                "id",
+                "text",
+                "dueDate"
+              ],
+              "properties": {
+                "meetingId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "kind": {
                   "anyOf": [
                     {
-                      "const": "pending",
+                      "const": "decision",
                       "type": "string"
                     },
                     {
-                      "const": "edit_pending",
+                      "const": "action",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "text": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "dueDate": {
+                  "anyOf": [
+                    {
                       "type": "string"
                     },
                     {
-                      "const": "failed",
-                      "type": "string"
+                      "type": "null"
                     }
                   ]
                 }
@@ -67302,6 +68139,10 @@
           "draftVersion",
           "draftStatus",
           "actionItems",
+          "decisions",
+          "hostId",
+          "viewerId",
+          "writeToWorld",
           "confirmed",
           "sync",
           "targetOptions",
@@ -67611,6 +68452,18 @@
                             "type": "string"
                           }
                         },
+                        "decisionId": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "maxLength": 64,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "stale": {
                           "type": "boolean"
                         }
@@ -67706,9 +68559,207 @@
                       "type": "null"
                     }
                   ]
+                },
+                "review": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "by",
+                    "proxy",
+                    "at",
+                    "reason"
+                  ],
+                  "properties": {
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "pending",
+                          "type": "string"
+                        },
+                        {
+                          "const": "confirmed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "rejected",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "by": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "proxy": {
+                      "type": "boolean"
+                    },
+                    "at": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
                 }
               }
             }
+          },
+          "decisions": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "text",
+                    "ownerPersonId",
+                    "basisSectionIds",
+                    "review"
+                  ],
+                  "properties": {
+                    "id": {
+                      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                      "type": "string"
+                    },
+                    "text": {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    "ownerPersonId": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "basisSectionIds": {
+                      "maxItems": 50,
+                      "type": "array",
+                      "items": {
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "type": "string"
+                      }
+                    },
+                    "review": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "status",
+                        "by",
+                        "proxy",
+                        "at",
+                        "reason"
+                      ],
+                      "properties": {
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "pending",
+                              "type": "string"
+                            },
+                            {
+                              "const": "confirmed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "rejected",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "by": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "proxy": {
+                          "type": "boolean"
+                        },
+                        "at": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "reason": {
+                          "anyOf": [
+                            {
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hostId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "viewerId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "writeToWorld": {
+            "type": "boolean"
           },
           "confirmed": {
             "anyOf": [
@@ -67740,8 +68791,16 @@
                     ],
                     "properties": {
                       "schemaVersion": {
-                        "const": "meeting-card.v1",
-                        "type": "string"
+                        "anyOf": [
+                          {
+                            "const": "meeting-card.v1",
+                            "type": "string"
+                          },
+                          {
+                            "const": "meeting-card.v2",
+                            "type": "string"
+                          }
+                        ]
                       },
                       "meetingId": {
                         "minLength": 1,
@@ -68020,6 +69079,18 @@
                                 "maxLength": 64,
                                 "type": "string"
                               }
+                            },
+                            "decisionId": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 64,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             }
                           }
                         }
@@ -68027,6 +69098,206 @@
                       "revision": {
                         "minimum": 1,
                         "type": "integer"
+                      },
+                      "decisions": {
+                        "maxItems": 50,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "text",
+                            "ownerPersonId",
+                            "basisSectionIds",
+                            "confirmedBy",
+                            "proxy",
+                            "confirmedAt",
+                            "sourceRefs"
+                          ],
+                          "properties": {
+                            "id": {
+                              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                              "type": "string"
+                            },
+                            "text": {
+                              "minLength": 1,
+                              "maxLength": 300,
+                              "type": "string"
+                            },
+                            "ownerPersonId": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "basisSectionIds": {
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "minLength": 1,
+                                "maxLength": 64,
+                                "type": "string"
+                              }
+                            },
+                            "confirmedBy": {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            "proxy": {
+                              "type": "boolean"
+                            },
+                            "confirmedAt": {
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "type": "string"
+                            },
+                            "sourceRefs": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "sourceId",
+                                  "locator"
+                                ],
+                                "properties": {
+                                  "sourceId": {
+                                    "minLength": 1,
+                                    "maxLength": 64,
+                                    "type": "string"
+                                  },
+                                  "locator": {
+                                    "anyOf": [
+                                      {
+                                        "minLength": 1,
+                                        "maxLength": 500,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "actionItems": {
+                        "maxItems": 100,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "text",
+                            "ownerPersonId",
+                            "dueDate",
+                            "basisSectionIds",
+                            "confirmedBy",
+                            "proxy",
+                            "confirmedAt",
+                            "sourceRefs"
+                          ],
+                          "properties": {
+                            "id": {
+                              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                              "type": "string"
+                            },
+                            "text": {
+                              "minLength": 1,
+                              "maxLength": 300,
+                              "type": "string"
+                            },
+                            "ownerPersonId": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "dueDate": {
+                              "anyOf": [
+                                {
+                                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "basisSectionIds": {
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "minLength": 1,
+                                "maxLength": 64,
+                                "type": "string"
+                              }
+                            },
+                            "confirmedBy": {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            "proxy": {
+                              "type": "boolean"
+                            },
+                            "confirmedAt": {
+                              "minLength": 1,
+                              "maxLength": 100,
+                              "type": "string"
+                            },
+                            "sourceRefs": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "sourceId",
+                                  "locator"
+                                ],
+                                "properties": {
+                                  "sourceId": {
+                                    "minLength": 1,
+                                    "maxLength": 64,
+                                    "type": "string"
+                                  },
+                                  "locator": {
+                                    "anyOf": [
+                                      {
+                                        "minLength": 1,
+                                        "maxLength": 500,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
                       }
                     }
                   },
@@ -68045,8 +69316,15 @@
                         "type": "integer"
                       },
                       "confirmedBy": {
-                        "minLength": 1,
-                        "type": "string"
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "confirmedAt": {
                         "minLength": 1,
@@ -68140,6 +69418,73 @@
                               "type": "null"
                             }
                           ]
+                        },
+                        "review": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "status",
+                            "by",
+                            "proxy",
+                            "at",
+                            "reason"
+                          ],
+                          "properties": {
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "pending",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "confirmed",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "rejected",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "by": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "proxy": {
+                              "type": "boolean"
+                            },
+                            "at": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 100,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
                         }
                       }
                     }
@@ -68686,6 +70031,18 @@
                         "type": "string"
                       }
                     },
+                    "decisionId": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "maxLength": 64,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "stale": {
                       "type": "boolean"
                     }
@@ -68761,6 +70118,73 @@
                       "type": "null"
                     }
                   ]
+                },
+                "review": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "by",
+                    "proxy",
+                    "at",
+                    "reason"
+                  ],
+                  "properties": {
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "pending",
+                          "type": "string"
+                        },
+                        {
+                          "const": "confirmed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "rejected",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "by": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "proxy": {
+                      "type": "boolean"
+                    },
+                    "at": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
                 }
               }
             }
@@ -68829,6 +70253,1666 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "MeetingCardReviewRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "verdict"
+        ],
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "const": "decision",
+                "type": "string"
+              },
+              {
+                "const": "action",
+                "type": "string"
+              }
+            ]
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "type": "string"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "const": "confirm",
+                "type": "string"
+              },
+              {
+                "const": "reject",
+                "type": "string"
+              }
+            ]
+          },
+          "reason": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        }
+      },
+      "MeetingCardReviewResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "view"
+        ],
+        "properties": {
+          "view": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "draft",
+                  "draftVersion",
+                  "draftStatus",
+                  "actionItems",
+                  "decisions",
+                  "hostId",
+                  "viewerId",
+                  "writeToWorld",
+                  "confirmed",
+                  "sync",
+                  "targetOptions",
+                  "canEdit",
+                  "draftChange",
+                  "unmappedSpeakers"
+                ],
+                "properties": {
+                  "draft": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "schemaVersion",
+                          "meetingId",
+                          "title",
+                          "occurredAt",
+                          "participants",
+                          "relatedObjectRefs",
+                          "summary",
+                          "sections",
+                          "sources",
+                          "objectChanges"
+                        ],
+                        "properties": {
+                          "schemaVersion": {
+                            "const": "meeting-card.v1",
+                            "type": "string"
+                          },
+                          "meetingId": {
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "type": "string"
+                          },
+                          "title": {
+                            "minLength": 1,
+                            "maxLength": 300,
+                            "type": "string"
+                          },
+                          "occurredAt": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "maxLength": 100,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "participants": {
+                            "maxItems": 200,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "name",
+                                "personRef"
+                              ],
+                              "properties": {
+                                "name": {
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                "personRef": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "maxLength": 200,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          "relatedObjectRefs": {
+                            "maxItems": 50,
+                            "type": "array",
+                            "items": {
+                              "minLength": 1,
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          },
+                          "summary": {
+                            "maxLength": 4000,
+                            "type": "string"
+                          },
+                          "sections": {
+                            "minItems": 1,
+                            "maxItems": 100,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "heading",
+                                "body",
+                                "sourceRefs"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                  "type": "string"
+                                },
+                                "heading": {
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                "body": {
+                                  "minLength": 1,
+                                  "maxLength": 20000,
+                                  "type": "string"
+                                },
+                                "sourceRefs": {
+                                  "maxItems": 50,
+                                  "type": "array",
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "sourceId",
+                                      "locator"
+                                    ],
+                                    "properties": {
+                                      "sourceId": {
+                                        "minLength": 1,
+                                        "maxLength": 64,
+                                        "type": "string"
+                                      },
+                                      "locator": {
+                                        "anyOf": [
+                                          {
+                                            "minLength": 1,
+                                            "maxLength": 500,
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "sources": {
+                            "minItems": 1,
+                            "maxItems": 20,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "url",
+                                "title",
+                                "contentHash",
+                                "sourceVersion",
+                                "capturedAt"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                  "type": "string"
+                                },
+                                "url": {
+                                  "minLength": 1,
+                                  "maxLength": 2000,
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "minLength": 1,
+                                  "maxLength": 300,
+                                  "type": "string"
+                                },
+                                "contentHash": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "sourceVersion": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "maxLength": 200,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "capturedAt": {
+                                  "minLength": 1,
+                                  "maxLength": 100,
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "objectChanges": {
+                            "maxItems": 50,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "targetRef",
+                                "targetTitle",
+                                "expectedVersion",
+                                "before",
+                                "after",
+                                "basisSectionIds",
+                                "stale"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                  "type": "string"
+                                },
+                                "targetRef": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "maxLength": 500,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "targetTitle": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 500,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "expectedVersion": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "before": {
+                                  "anyOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "text"
+                                      ],
+                                      "properties": {
+                                        "text": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "after": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "text"
+                                  ],
+                                  "properties": {
+                                    "text": {
+                                      "minLength": 1,
+                                      "maxLength": 20000,
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "basisSectionIds": {
+                                  "maxItems": 50,
+                                  "type": "array",
+                                  "items": {
+                                    "minLength": 1,
+                                    "maxLength": 64,
+                                    "type": "string"
+                                  }
+                                },
+                                "decisionId": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "maxLength": 64,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "stale": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "draftVersion": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "draftStatus": {
+                    "anyOf": [
+                      {
+                        "const": "created",
+                        "type": "string"
+                      },
+                      {
+                        "const": "draft_ready",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "actionItems": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "text",
+                        "ownerPersonId",
+                        "dueDate",
+                        "basisSectionIds",
+                        "taskId"
+                      ],
+                      "properties": {
+                        "id": {
+                          "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                          "type": "string"
+                        },
+                        "text": {
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "type": "string"
+                        },
+                        "ownerPersonId": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "dueDate": {
+                          "anyOf": [
+                            {
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "basisSectionIds": {
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "minLength": 1,
+                            "maxLength": 64,
+                            "type": "string"
+                          }
+                        },
+                        "taskId": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "review": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "status",
+                            "by",
+                            "proxy",
+                            "at",
+                            "reason"
+                          ],
+                          "properties": {
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "pending",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "confirmed",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "rejected",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "by": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "proxy": {
+                              "type": "boolean"
+                            },
+                            "at": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 100,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "decisions": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "text",
+                            "ownerPersonId",
+                            "basisSectionIds",
+                            "review"
+                          ],
+                          "properties": {
+                            "id": {
+                              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                              "type": "string"
+                            },
+                            "text": {
+                              "minLength": 1,
+                              "maxLength": 300,
+                              "type": "string"
+                            },
+                            "ownerPersonId": {
+                              "anyOf": [
+                                {
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "basisSectionIds": {
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "minLength": 1,
+                                "maxLength": 64,
+                                "type": "string"
+                              }
+                            },
+                            "review": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "status",
+                                "by",
+                                "proxy",
+                                "at",
+                                "reason"
+                              ],
+                              "properties": {
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "const": "pending",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "confirmed",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "rejected",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "by": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "maxLength": 200,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "proxy": {
+                                  "type": "boolean"
+                                },
+                                "at": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "maxLength": 100,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "reason": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 200,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "hostId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "viewerId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "writeToWorld": {
+                    "type": "boolean"
+                  },
+                  "confirmed": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "payload",
+                          "confirmation",
+                          "kind",
+                          "actionItems"
+                        ],
+                        "properties": {
+                          "payload": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "schemaVersion",
+                              "meetingId",
+                              "title",
+                              "occurredAt",
+                              "participants",
+                              "relatedObjectRefs",
+                              "summary",
+                              "sections",
+                              "sources",
+                              "objectChanges",
+                              "revision"
+                            ],
+                            "properties": {
+                              "schemaVersion": {
+                                "anyOf": [
+                                  {
+                                    "const": "meeting-card.v1",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "meeting-card.v2",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "meetingId": {
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "type": "string"
+                              },
+                              "title": {
+                                "minLength": 1,
+                                "maxLength": 300,
+                                "type": "string"
+                              },
+                              "occurredAt": {
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "maxLength": 100,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "participants": {
+                                "maxItems": 200,
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "name",
+                                    "personRef"
+                                  ],
+                                  "properties": {
+                                    "name": {
+                                      "minLength": 1,
+                                      "maxLength": 200,
+                                      "type": "string"
+                                    },
+                                    "personRef": {
+                                      "anyOf": [
+                                        {
+                                          "minLength": 1,
+                                          "maxLength": 200,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              "relatedObjectRefs": {
+                                "maxItems": 50,
+                                "type": "array",
+                                "items": {
+                                  "minLength": 1,
+                                  "maxLength": 500,
+                                  "type": "string"
+                                }
+                              },
+                              "summary": {
+                                "maxLength": 4000,
+                                "type": "string"
+                              },
+                              "sections": {
+                                "minItems": 1,
+                                "maxItems": 100,
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "id",
+                                    "heading",
+                                    "body",
+                                    "sourceRefs"
+                                  ],
+                                  "properties": {
+                                    "id": {
+                                      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                      "type": "string"
+                                    },
+                                    "heading": {
+                                      "minLength": 1,
+                                      "maxLength": 200,
+                                      "type": "string"
+                                    },
+                                    "body": {
+                                      "minLength": 1,
+                                      "maxLength": 20000,
+                                      "type": "string"
+                                    },
+                                    "sourceRefs": {
+                                      "maxItems": 50,
+                                      "type": "array",
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "type": "object",
+                                        "required": [
+                                          "sourceId",
+                                          "locator"
+                                        ],
+                                        "properties": {
+                                          "sourceId": {
+                                            "minLength": 1,
+                                            "maxLength": 64,
+                                            "type": "string"
+                                          },
+                                          "locator": {
+                                            "anyOf": [
+                                              {
+                                                "minLength": 1,
+                                                "maxLength": 500,
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "sources": {
+                                "minItems": 1,
+                                "maxItems": 20,
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "id",
+                                    "url",
+                                    "title",
+                                    "contentHash",
+                                    "sourceVersion",
+                                    "capturedAt"
+                                  ],
+                                  "properties": {
+                                    "id": {
+                                      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                      "type": "string"
+                                    },
+                                    "url": {
+                                      "minLength": 1,
+                                      "maxLength": 2000,
+                                      "type": "string"
+                                    },
+                                    "title": {
+                                      "minLength": 1,
+                                      "maxLength": 300,
+                                      "type": "string"
+                                    },
+                                    "contentHash": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "sourceVersion": {
+                                      "anyOf": [
+                                        {
+                                          "minLength": 1,
+                                          "maxLength": 200,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "capturedAt": {
+                                      "minLength": 1,
+                                      "maxLength": 100,
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "objectChanges": {
+                                "maxItems": 50,
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "id",
+                                    "targetRef",
+                                    "targetTitle",
+                                    "expectedVersion",
+                                    "before",
+                                    "after",
+                                    "basisSectionIds"
+                                  ],
+                                  "properties": {
+                                    "id": {
+                                      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                      "type": "string"
+                                    },
+                                    "targetRef": {
+                                      "anyOf": [
+                                        {
+                                          "minLength": 1,
+                                          "maxLength": 500,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "targetTitle": {
+                                      "anyOf": [
+                                        {
+                                          "maxLength": 500,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "expectedVersion": {
+                                      "anyOf": [
+                                        {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "before": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "type": "object",
+                                          "required": [
+                                            "text"
+                                          ],
+                                          "properties": {
+                                            "text": {
+                                              "type": "string"
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "after": {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "text"
+                                      ],
+                                      "properties": {
+                                        "text": {
+                                          "minLength": 1,
+                                          "maxLength": 20000,
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "basisSectionIds": {
+                                      "maxItems": 50,
+                                      "type": "array",
+                                      "items": {
+                                        "minLength": 1,
+                                        "maxLength": 64,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "decisionId": {
+                                      "anyOf": [
+                                        {
+                                          "minLength": 1,
+                                          "maxLength": 64,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              "revision": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "decisions": {
+                                "maxItems": 50,
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "id",
+                                    "text",
+                                    "ownerPersonId",
+                                    "basisSectionIds",
+                                    "confirmedBy",
+                                    "proxy",
+                                    "confirmedAt",
+                                    "sourceRefs"
+                                  ],
+                                  "properties": {
+                                    "id": {
+                                      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                      "type": "string"
+                                    },
+                                    "text": {
+                                      "minLength": 1,
+                                      "maxLength": 300,
+                                      "type": "string"
+                                    },
+                                    "ownerPersonId": {
+                                      "anyOf": [
+                                        {
+                                          "minLength": 1,
+                                          "maxLength": 200,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "basisSectionIds": {
+                                      "maxItems": 50,
+                                      "type": "array",
+                                      "items": {
+                                        "minLength": 1,
+                                        "maxLength": 64,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "confirmedBy": {
+                                      "minLength": 1,
+                                      "maxLength": 200,
+                                      "type": "string"
+                                    },
+                                    "proxy": {
+                                      "type": "boolean"
+                                    },
+                                    "confirmedAt": {
+                                      "minLength": 1,
+                                      "maxLength": 100,
+                                      "type": "string"
+                                    },
+                                    "sourceRefs": {
+                                      "maxItems": 100,
+                                      "type": "array",
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "type": "object",
+                                        "required": [
+                                          "sourceId",
+                                          "locator"
+                                        ],
+                                        "properties": {
+                                          "sourceId": {
+                                            "minLength": 1,
+                                            "maxLength": 64,
+                                            "type": "string"
+                                          },
+                                          "locator": {
+                                            "anyOf": [
+                                              {
+                                                "minLength": 1,
+                                                "maxLength": 500,
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "actionItems": {
+                                "maxItems": 100,
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "id",
+                                    "text",
+                                    "ownerPersonId",
+                                    "dueDate",
+                                    "basisSectionIds",
+                                    "confirmedBy",
+                                    "proxy",
+                                    "confirmedAt",
+                                    "sourceRefs"
+                                  ],
+                                  "properties": {
+                                    "id": {
+                                      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                      "type": "string"
+                                    },
+                                    "text": {
+                                      "minLength": 1,
+                                      "maxLength": 300,
+                                      "type": "string"
+                                    },
+                                    "ownerPersonId": {
+                                      "anyOf": [
+                                        {
+                                          "minLength": 1,
+                                          "maxLength": 200,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "dueDate": {
+                                      "anyOf": [
+                                        {
+                                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "basisSectionIds": {
+                                      "maxItems": 50,
+                                      "type": "array",
+                                      "items": {
+                                        "minLength": 1,
+                                        "maxLength": 64,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "confirmedBy": {
+                                      "minLength": 1,
+                                      "maxLength": 200,
+                                      "type": "string"
+                                    },
+                                    "proxy": {
+                                      "type": "boolean"
+                                    },
+                                    "confirmedAt": {
+                                      "minLength": 1,
+                                      "maxLength": 100,
+                                      "type": "string"
+                                    },
+                                    "sourceRefs": {
+                                      "maxItems": 100,
+                                      "type": "array",
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "type": "object",
+                                        "required": [
+                                          "sourceId",
+                                          "locator"
+                                        ],
+                                        "properties": {
+                                          "sourceId": {
+                                            "minLength": 1,
+                                            "maxLength": 64,
+                                            "type": "string"
+                                          },
+                                          "locator": {
+                                            "anyOf": [
+                                              {
+                                                "minLength": 1,
+                                                "maxLength": 500,
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "confirmation": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "revision",
+                              "confirmedBy",
+                              "confirmedAt",
+                              "payloadHash"
+                            ],
+                            "properties": {
+                              "revision": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "confirmedBy": {
+                                "anyOf": [
+                                  {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "confirmedAt": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "payloadHash": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "const": "first",
+                                "type": "string"
+                              },
+                              {
+                                "const": "correction",
+                                "type": "string"
+                              },
+                              {
+                                "const": "followup",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "actionItems": {
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "text",
+                                "ownerPersonId",
+                                "dueDate",
+                                "basisSectionIds",
+                                "taskId"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "minLength": 1,
+                                  "maxLength": 300,
+                                  "type": "string"
+                                },
+                                "ownerPersonId": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "maxLength": 200,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "dueDate": {
+                                  "anyOf": [
+                                    {
+                                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "basisSectionIds": {
+                                  "maxItems": 50,
+                                  "type": "array",
+                                  "items": {
+                                    "minLength": 1,
+                                    "maxLength": 64,
+                                    "type": "string"
+                                  }
+                                },
+                                "taskId": {
+                                  "anyOf": [
+                                    {
+                                      "minLength": 1,
+                                      "maxLength": 200,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "review": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "status",
+                                    "by",
+                                    "proxy",
+                                    "at",
+                                    "reason"
+                                  ],
+                                  "properties": {
+                                    "status": {
+                                      "anyOf": [
+                                        {
+                                          "const": "pending",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "confirmed",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "rejected",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    "by": {
+                                      "anyOf": [
+                                        {
+                                          "minLength": 1,
+                                          "maxLength": 200,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "proxy": {
+                                      "type": "boolean"
+                                    },
+                                    "at": {
+                                      "anyOf": [
+                                        {
+                                          "minLength": 1,
+                                          "maxLength": 100,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "reason": {
+                                      "anyOf": [
+                                        {
+                                          "maxLength": 200,
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "sync": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "revision",
+                          "writeToWorld",
+                          "event",
+                          "objects"
+                        ],
+                        "properties": {
+                          "revision": {
+                            "minimum": 1,
+                            "type": "integer"
+                          },
+                          "writeToWorld": {
+                            "type": "boolean"
+                          },
+                          "event": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "status",
+                              "eventId",
+                              "error"
+                            ],
+                            "properties": {
+                              "status": {
+                                "anyOf": [
+                                  {
+                                    "const": "pending",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "succeeded",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "failed",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "skipped",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "eventId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "error": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          "objects": {
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "changeId",
+                                "title",
+                                "status",
+                                "actualVersion",
+                                "error"
+                              ],
+                              "properties": {
+                                "changeId": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "anyOf": [
+                                    {
+                                      "const": "pending",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "updated",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "failed",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "not_allowed",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "conflict",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "superseded",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "blocked",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "actualVersion": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "error": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "targetOptions": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "targetRef",
+                        "title",
+                        "componentType",
+                        "text"
+                      ],
+                      "properties": {
+                        "targetRef": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "componentType": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "text": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "canEdit": {
+                    "type": "boolean"
+                  },
+                  "draftChange": {
+                    "anyOf": [
+                      {
+                        "const": "none",
+                        "type": "string"
+                      },
+                      {
+                        "const": "items",
+                        "type": "string"
+                      },
+                      {
+                        "const": "content",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "unmappedSpeakers": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "MeetingCardWorldChoiceRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "writeToWorld"
+        ],
+        "properties": {
+          "writeToWorld": {
+            "type": "boolean"
           }
         }
       },
