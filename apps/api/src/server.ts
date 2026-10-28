@@ -175,6 +175,8 @@ const radarService = createRadarService({
     // RADAR_MODEL / RADAR_THINKING 可改，不配时 LIGHT_MODEL、不开思考
     ...agentModel(env.agentModels, "radar", { modelId: env.lightModel }),
   }),
+  // 10/28：雷达信号先不自动转议题（一号位还没在看，自动转出来的议题会淹没真正要定的事）。
+  promoteIssues: false,
   onIssuePromoted: (issueId) => {
     // DB 抖动时 start 可能抛错：不能让 fire-and-forget 的 rejection 终止进程
     researchService.start(issueId).catch((err) => console.error("research start failed", err));

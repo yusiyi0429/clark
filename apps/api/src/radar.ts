@@ -159,6 +159,7 @@ export function createRadarService({
   outlets,
   assessor,
   onIssuePromoted,
+  promoteIssues = true,
   now = () => new Date(),
   scanTimeoutMs = RADAR_SCAN_TIMEOUT_MS,
   coverImage,
@@ -170,6 +171,8 @@ export function createRadarService({
   outlets?: RadarOutletAdapter;
   assessor: RadarAssessor;
   onIssuePromoted?: (issueId: string) => void;
+  /** 信号够格时自动建议题（或挂到现有议题）；false 时只存信号，议题由一号位自己从信号建。 */
+  promoteIssues?: boolean;
   now?: () => Date;
   scanTimeoutMs?: number;
   /** 给没有配图的来源取原文封面（og:image 等）；不传就不抓。单条失败或超时只是没有图，不影响入库。 */
@@ -501,7 +504,7 @@ export function createRadarService({
             );
             const signalInserted = inserted.rowCount === 1;
             let newlyPromotedIssueId: string | null = null;
-            if (signalInserted && candidate.promotion) {
+            if (signalInserted && candidate.promotion && promoteIssues) {
               const signalId = inserted.rows[0].id as string;
               const promoted = assessPromotion({
                 promotion: candidate.promotion,
