@@ -259,7 +259,7 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
   /** 服务端换了逐条状态、写入选择（草稿版本不变）：有没存的修改时只换视图，不动本地草稿。 */
   const refreshed = (next: TMeetingCardView) => adopt(next, !dirtyRef.current && !savingRef.current && !conflictRef.current);
 
-  /** 逐条确认一条决策（自己确认、说不对，或主持人代确认）；已经处理过、定版了的按返回的最新状态显示。 */
+  /** 逐条确认一条决策（本人确认或说不对）；已经处理过、定版了的按返回的最新状态显示。 */
   const review = async (id: string, verdict: "confirm" | "reject", reason?: string): Promise<boolean> => {
     setBusy(true);
     setError(null);
