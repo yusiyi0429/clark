@@ -1,8 +1,8 @@
-import type { TMeetingActionItem, TMeetingCardDraft, TMeetingCardSection, TMeetingCardSync, TMeetingCardV1Payload } from "@warmap/contracts";
+import type { TMeetingActionItem, TMeetingCardDraft, TMeetingCardSection, TMeetingCardSync, TMeetingCardFrozenPayload } from "@warmap/contracts";
 import { COMPANY_TIMEZONE } from "@/lib/companyTime";
 
 /** 会议卡上显示的那一份：草稿或确认版（确认版的修改不带 stale）。 */
-export type CardContent = TMeetingCardDraft | TMeetingCardV1Payload;
+export type CardContent = TMeetingCardDraft | TMeetingCardFrozenPayload;
 type Change = CardContent["objectChanges"][number];
 
 const blank = (value: string) => !value.trim();
@@ -11,7 +11,7 @@ const sameChange = (a: Change, b: Change) => a.targetRef === b.targetRef && a.af
 const names = (content: CardContent) => content.participants.map((person) => person.name).join("\n");
 
 /** 草稿和当前确认版内容不同（有一份没确认的修改）。 */
-export function cardDiffers(draft: TMeetingCardDraft, payload: TMeetingCardV1Payload): boolean {
+export function cardDiffers(draft: TMeetingCardDraft, payload: TMeetingCardFrozenPayload): boolean {
   return draft.title !== payload.title || draft.occurredAt !== payload.occurredAt || draft.summary !== payload.summary || names(draft) !== names(payload)
     || draft.sections.length !== payload.sections.length
     || draft.sections.some((section, index) => section.id !== payload.sections[index].id || !sameSection(section, payload.sections[index]))
@@ -87,7 +87,7 @@ export function restoreBlank(local: TMeetingCardDraft, saved: TMeetingCardDraft 
 }
 
 /** 「放弃修改」：把草稿内容换回确认版（挂点、来源仍以服务端为准）。 */
-export function draftFromConfirmed(draft: TMeetingCardDraft, payload: TMeetingCardV1Payload): TMeetingCardDraft {
+export function draftFromConfirmed(draft: TMeetingCardDraft, payload: TMeetingCardFrozenPayload): TMeetingCardDraft {
   return { ...draft, title: payload.title, occurredAt: payload.occurredAt, participants: payload.participants, summary: payload.summary,
     sections: payload.sections, objectChanges: payload.objectChanges.map((change) => ({ ...change, stale: false })) };
 }

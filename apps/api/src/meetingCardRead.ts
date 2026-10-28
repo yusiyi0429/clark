@@ -1,4 +1,4 @@
-import type { TCard, TMeetingActionItem, TMeetingCardConfirmation, TMeetingCardSync, TMeetingCardV1Payload, TMeetingCardKind } from "@warmap/contracts";
+import type { TCard, TMeetingActionItem, TMeetingCardConfirmation, TMeetingCardSync, TMeetingCardFrozenPayload, TMeetingCardKind } from "@warmap/contracts";
 import { queryTokens } from "./company.js";
 import { canReadMeetingCard, type Viewer } from "./meetingCard.js";
 import { confirmedView, currentConfirmation } from "./meetingCardConfirm.js";
@@ -22,7 +22,7 @@ export class PayloadHashMismatchError extends Error {
   }
 }
 
-type ConfirmedMeeting = { status: "confirmed"; kind: TMeetingCardKind; payload: TMeetingCardV1Payload; confirmation: TMeetingCardConfirmation; syncReceipt: TMeetingCardSync };
+type ConfirmedMeeting = { status: "confirmed"; kind: TMeetingCardKind; payload: TMeetingCardFrozenPayload; confirmation: TMeetingCardConfirmation; syncReceipt: TMeetingCardSync };
 type CardRead = ConfirmedMeeting | { status: "unconfirmed" };
 export type ConfirmedMeetingRead = CardRead | { status: "legacy"; summary: string; items: { kind: string; text: string; status: string }[] };
 
@@ -54,7 +54,7 @@ const SNIPPET_MAX = 200;
 const SNIPPET_BEFORE = 60;
 export type ConfirmedMeetingFilter = { query?: string; from?: string; to?: string; participantId?: string; limit?: number };
 type CatalogRow = Pick<MeetingRow, "id" | "lead_dri_id" | "created_by" | "attendees_actual" | "participants"> &
-  { revision: number; payload: TMeetingCardV1Payload; confirmation: TMeetingCardConfirmation; action_items: TMeetingActionItem[] };
+  { revision: number; payload: TMeetingCardFrozenPayload; confirmation: TMeetingCardConfirmation; action_items: TMeetingActionItem[] };
 /** 确认版里能检索的一段：ref 是段落的稳定 id（summary、sec-N、chg-N、act-N），heading 是给人看的标题。 */
 type Passage = { ref: string; kind: "summary" | "section" | "objectChange" | "actionItem"; heading: string; text: string; searchText: string };
 type ConfirmedMeetingMatch = Pick<Passage, "ref" | "kind" | "heading"> & { snippet: string };

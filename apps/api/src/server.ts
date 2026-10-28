@@ -112,6 +112,8 @@ const env: AppEnv = {
   adminPersonIds: parseAdminPersonIds(process.env.TIANSHU_ADMIN_PERSON_IDS),
   // 会议事件的妙记链接：FEISHU_WEB_ORIGIN（如 https://tokenking.feishu.cn）；不配时不带链接。
   feishuWebOrigin: process.env.FEISHU_WEB_ORIGIN?.trim() || undefined,
+  // 会议记录正文能不能写进本体（等斯一答复）：值为 1 才写，缺省只写已确认的决策和行动项。
+  meetingRecordText: process.env.MEETING_WORLD_RECORD_TEXT === "1",
   collectionBitable: process.env.FEISHU_BITABLE_MODE === "live" ? "live" : "mock",
   // 信息收集、文档变更推送（D-56）：值为 1 才开，缺省关。
   collectionsEnabled: process.env.COLLECTIONS_ENABLED === "1",

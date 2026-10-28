@@ -23,6 +23,7 @@ vi.mock("@/lib/api/client", () => ({ browserApi: { GET: api.get, PUT: api.put, P
 import { ActionItemRow } from "./ActionItemRow";
 import { CardItemMenu } from "./CardItemMenu";
 import { InlineText } from "./InlineText";
+import { DecisionRow, MeetingDecisionList } from "./MeetingDecisionList";
 import { MeetingRecordCard } from "./MeetingRecordCard";
 import { ObjectChangeDiff } from "./ObjectChangeDiff";
 import { RecordCardFooter } from "./RecordCardFooter";
@@ -30,7 +31,7 @@ import { RecordSection } from "./RecordSection";
 
 type Node = { type?: unknown; props?: Record<string, unknown> };
 /** 展开会议卡自己的子组件（库组件不展开），按渲染顺序深度优先，hooks 顺序和真渲染一致。 */
-const PARTS = new Set<unknown>([ActionItemRow, CardItemMenu, InlineText, ObjectChangeDiff, RecordCardFooter, RecordSection]);
+const PARTS = new Set<unknown>([ActionItemRow, CardItemMenu, DecisionRow, InlineText, MeetingDecisionList, ObjectChangeDiff, RecordCardFooter, RecordSection]);
 function expand(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(expand);
   if (!value || typeof value !== "object") return value;
@@ -68,7 +69,8 @@ const confirmedOf = (source: TMeetingCardDraft, revision = 1): NonNullable<TMeet
 const SYNCED: TMeetingCardSync = { revision: 1, writeToWorld: true, event: { status: "succeeded", eventId: "ev-1", error: null },
   objects: [{ changeId: "chg-1", title: "接口全量切到 v2 · result", status: "updated", actualVersion: 5, error: null }] };
 const view = (overrides: Partial<TMeetingCardView> = {}): TMeetingCardView => ({
-  draft: draft(), draftVersion: 3, draftStatus: "draft_ready", actionItems: [], confirmed: null, sync: null, targetOptions: [], canEdit: true, draftChange: "none", unmappedSpeakers: [], ...overrides,
+  draft: draft(), draftVersion: 3, draftStatus: "draft_ready", actionItems: [], decisions: null, hostId: "p1", viewerId: "p1", writeToWorld: true,
+  confirmed: null, sync: null, targetOptions: [], canEdit: true, draftChange: "none", unmappedSpeakers: [], ...overrides,
 });
 const ok = (data: TMeetingCardView) => ({ data, response: { ok: true, status: 200 } });
 
@@ -89,6 +91,55 @@ beforeEach(() => {
   vi.stubGlobal("window", { dispatchEvent: vi.fn(), location: { assign: vi.fn() } });
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+describe("决策逐条确认的会议卡（10/28）", () => {
+  const PENDING = { status: "pending" as const, by: null, proxy: false, at: null, reason: null };
+  const DECISION = { id: "dec-1", text: "二期预算定为 80 万", ownerPersonId: "p2", basisSectionIds: ["sec-1"], review: PENDING };
+  const decided = (overrides: Partial<TMeetingCardView> = {}) => view({ decisions: [DECISION], hostId: "p1", viewerId: "p1", ...overrides });
+
+  it("记录不用确认：没有「确认这份记录」、不标待确认；决策写着由谁确认，主持人能代确认", async () => {
+    const tree = render(decided());
+    expect(button(tree, "确认这份记录")).toBeUndefined();
+    expect(hasText(tree, "待确认")).toBe(false);
+    expect(hasText(tree, "二期预算定为 80 万")).toBe(true);
+    expect(hasText(tree, "待周舟确认")).toBe(true);
+    expect(hasText(tree, "依据：第 1 段")).toBe(true);
+    expect(button(tree, "确认")).toBeUndefined();
+    api.post.mockResolvedValue({ data: { view: decided({ decisions: [{ ...DECISION, review: { ...PENDING, status: "confirmed", by: "p1", proxy: true, at: "2026-10-28T08:00:00.000Z" } }] }) },
+      response: { ok: true, status: 200 } });
+    click(button(tree, "代确认"));
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/card/reviews",
+      { params: { path: { id: "m1" } }, body: { kind: "decision", id: "dec-1", verdict: "confirm" } }));
+    await vi.waitFor(() => expect(hasText(render(decided()), "林晓代周舟确认")).toBe(true));
+    expect(button(render(decided()), "代确认")).toBeUndefined();
+  });
+
+  it("责任人自己：确认，或写原因说不对", async () => {
+    const tree = render(decided({ viewerId: "p2", canEdit: false }));
+    expect(button(tree, "确认")).toBeDefined();
+    expect(button(tree, "代确认")).toBeUndefined();
+    click(button(tree, "不对"));
+    const input = render(decided({ viewerId: "p2", canEdit: false })).find((node) => node.type === "input" && node.props?.["aria-label"] === "哪里不对")!;
+    (input.props!.onChange as (event: unknown) => void)({ target: { value: "会上定的是 70 万" } });
+    api.post.mockResolvedValue({ data: { view: null }, response: { ok: true, status: 200 } });
+    click(button(render(decided({ viewerId: "p2", canEdit: false })), "提交"));
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/card/reviews",
+      { params: { path: { id: "m1" } }, body: { kind: "decision", id: "dec-1", verdict: "reject", reason: "会上定的是 70 万" } }));
+  });
+
+  it("定版前底部只有「不写进本体」，点了就存；定版后没确认的写「没有确认」", async () => {
+    const tree = render(decided());
+    const toggle = tree.find((node) => node.type === "button" && node.props?.role === "switch")!;
+    expect(toggle.props!["aria-checked"]).toBe(false);
+    api.put.mockResolvedValue(ok(decided({ writeToWorld: false })));
+    click(toggle);
+    await vi.waitFor(() => expect(api.put).toHaveBeenCalledWith("/api/meetings/{id}/card/world", { params: { path: { id: "m1" } }, body: { writeToWorld: false } }));
+    hooks.values = []; hooks.refs = [];
+    const frozen = render(decided({ confirmed: confirmedOf(draft()), sync: SYNCED }));
+    expect(hasText(frozen, "周舟没有确认")).toBe(true);
+    expect(button(frozen, "代确认")).toBeUndefined();
+  });
+});
 
 describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
   it("点确认带上草稿版本", async () => {

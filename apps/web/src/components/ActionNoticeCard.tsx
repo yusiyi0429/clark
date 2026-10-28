@@ -4,11 +4,12 @@
  * 一组能在卡上办完的通知（clark `dri/surface.tsx` 的「推动」那一组）：玻璃页头 + 一条条「标题行 + 卡上的处理」。
  * 办完的那一条原位写一行回执，1.3 秒后淡出（notice-actions.module.css 的 settle），再交给调用方从列表里拿掉。
  * CEO 的「需要你确认」和成员的执行事项提醒都用它；材质、标题行、圆点沿用通知栏那一份（notifications.module.css）。
+ * paged：一次只出一条，底下左右箭头翻，「第 n 条 / 共 m 条」（会后确认）。
  */
 
 import { useEffect, useState } from "react";
 import { Card as HeroCard } from "@heroui/react";
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { ContextMark, type ContextMarkKind } from "./ContextMark";
 import { HeroButton } from "./HeroButton";
 import { NoticeActions, type NoticeButton, type NoticeReason } from "./NoticeActions";
@@ -17,6 +18,8 @@ import n from "@/styles/notifications.module.css";
 
 export interface ActionNotice {
   id: string;
+  /** 标题上面一行小字：这是哪一类要办的事（「决策确认」）。 */
+  label?: string;
   title: string;
   /** 标题下面一行灰字：一两句话把事情说全，不必点进去。 */
   detail: string;
@@ -38,6 +41,7 @@ export function ActionNoticeCard({
   notices,
   counted = true,
   plain = false,
+  paged = false,
   onSettled,
 }: {
   /** 通知栏里这一组的标识（data-notice，FLIP 动画按它对位置）。 */
@@ -50,10 +54,13 @@ export function ActionNoticeCard({
   counted?: boolean;
   /** 正文不加粗：一条写的就是事情本身（会后分派），用正文字重。 */
   plain?: boolean;
+  /** 一次只出一条，左右翻。 */
+  paged?: boolean;
   /** 这一条办完、回执也淡出了：调用方从列表里拿掉（或重新拉取）。 */
   onSettled: (noticeId: string) => void;
 }) {
   const [receipts, setReceipts] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     const ids = Object.keys(receipts);
@@ -67,6 +74,9 @@ export function ActionNoticeCard({
 
   if (!notices.length) return null;
   const open = notices.filter((notice) => !(notice.id in receipts)).length;
+  // 办完的一条拿掉后停在原位（下一条顶上来）；翻到头就停在最后一条。
+  const at = Math.min(page, notices.length - 1);
+  const shown = paged ? [notices[at]] : notices;
 
   return (
     <HeroCard<"section"> render={(props) => <section {...props} />} className={n.card} data-notice={id} data-plain={plain || undefined} aria-label={title}>
@@ -85,7 +95,7 @@ export function ActionNoticeCard({
         </span>
       </HeroCard.Header>
       <div className={n.tray}>
-        {notices.map((notice) =>
+        {shown.map((notice) =>
           notice.id in receipts ? (
             <div key={notice.id} className={a.receipt} role="status">
               <Check size={15} aria-hidden="true" />
@@ -107,6 +117,7 @@ export function ActionNoticeCard({
                   >
                     <span className={n.mark} aria-hidden="true" />
                     <span className={n.itemText}>
+                      {notice.label ? <em className={a.label}>{notice.label}</em> : null}
                       <span>{notice.title}</span>
                       {notice.detail ? <small>{notice.detail}</small> : null}
                     </span>
@@ -116,6 +127,7 @@ export function ActionNoticeCard({
                   <div className={n.item} data-tone={notice.tone ?? "neutral"}>
                     <span className={n.mark} aria-hidden="true" />
                     <span className={n.itemText}>
+                      {notice.label ? <em className={a.label}>{notice.label}</em> : null}
                       <span>{notice.title}</span>
                       {notice.detail ? <small>{notice.detail}</small> : null}
                     </span>
@@ -131,6 +143,17 @@ export function ActionNoticeCard({
             </div>
           ),
         )}
+        {paged && notices.length > 1 ? (
+          <div className={a.pager}>
+            <button type="button" aria-label="上一条" disabled={at === 0} onClick={() => setPage(at - 1)}>
+              <ChevronLeft size={16} aria-hidden="true" />
+            </button>
+            <span aria-live="polite">第 {at + 1} 条 / 共 {notices.length} 条</span>
+            <button type="button" aria-label="下一条" disabled={at === notices.length - 1} onClick={() => setPage(at + 1)}>
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
       </div>
     </HeroCard>
   );

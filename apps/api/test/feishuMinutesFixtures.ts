@@ -35,7 +35,7 @@ export const TRANSCRIPT = [
 export const CANDIDATE: TMeetingCardCandidate = {
   summary: "接口统一切到 v2",
   sections: [{ heading: "接口", body: "已定：接口统一改成 v2。", turnIds: ["turn-0001"] }],
-  objectChanges: [],
+  decisions: [], objectChanges: [],
   actionItems: [],
 };
 

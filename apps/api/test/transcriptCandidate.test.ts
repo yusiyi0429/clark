@@ -51,7 +51,7 @@ function fakeOutcomeAgent(): PostMeetingAgent & { calls: PostMeetingAgentInput[]
         candidate: {
           summary: "会议形成一项待办",
           sections: [{ heading: "排期", body: "已定：测试乙周五前给排期。", turnIds: ["turn-0002"] }],
-          objectChanges: [],
+          decisions: [], objectChanges: [],
           actionItems: [{ text: "周五前给排期", ownerPersonId: "person-fixture-002", dueDate: null, basisSections: [1] }],
         },
         runId: "outcome-run-1",
@@ -311,17 +311,12 @@ describe("妙记 Markdown Transcript 候选", () => {
 });
 
 describe("meeting.confirm_transcript_candidate", () => {
-  it("validates the mapping coverage before writing anything", async () => {
+  it("validates the mappings before writing anything; speakers left unmapped no longer block", async () => {
     const t = await newApp();
     try {
       const { cookie, meetingId } = await readyMeeting(t, "confirm-invalid");
       await upload(t, cookie, meetingId, MARKDOWN);
       const confirm = await actionId(t, cookie, meetingId, "meeting.confirm_transcript_candidate");
-
-      const incomplete = await execute(t, cookie, confirm, { speakerMappings: MAPPINGS.slice(0, 2), confirmAddParticipants: true });
-      expect(incomplete.statusCode).toBe(400);
-      expect(incomplete.json().code).toBe("INCOMPLETE_SPEAKER_MAPPING");
-      expect(incomplete.json().fieldErrors).toBeTruthy();
 
       const unknown = await execute(t, cookie, confirm, { speakerMappings: [...MAPPINGS.slice(0, 2), { speakerName: "测试丙", personId: "person-nope" }], confirmAddParticipants: true });
       expect(unknown.json().code).toBe("INVALID_SPEAKER_MAPPING");
@@ -330,6 +325,13 @@ describe("meeting.confirm_transcript_candidate", () => {
       expect(unknownSpeaker.json().code).toBe("INVALID_SPEAKER_MAPPING");
 
       expect((await t.sql("SELECT status, transcript, participants FROM meetings WHERE id = $1", [meetingId]))[0]).toMatchObject({ status: "scheduled", transcript: null });
+
+      // 说话人没全对上也能确认（10/28）：没对上的保留原名、记进 unmappedSpeakers，会议卡上再指定。
+      const partial = await execute(t, cookie, confirm, { speakerMappings: MAPPINGS.slice(0, 2), confirmAddParticipants: true });
+      expect(partial.statusCode).toBe(200);
+      const stored = (await t.sql("SELECT status, transcript FROM meetings WHERE id = $1", [meetingId]))[0];
+      expect(stored.status).toBe("held");
+      expect(stored.transcript.unmappedSpeakers).toEqual([{ id: "speaker:3", name: MAPPINGS[2].speakerName }]);
     } finally {
       await t.close();
     }

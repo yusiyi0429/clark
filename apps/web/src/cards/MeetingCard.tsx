@@ -153,12 +153,6 @@ export function speakerMappingRows(
   });
 }
 
-export function speakerMappingError(rows: SpeakerMappingRow[]): string | null {
-  const unmapped = rows.filter((row) => !row.personId).length;
-  if (unmapped > 0) return `还有 ${unmapped} 位说话人未映射，确认不可用`;
-  return null;
-}
-
 /** 相对时间：秒 → mm:ss 或 h:mm:ss。 */
 export function offsetLabel(seconds: number): string {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -170,16 +164,14 @@ export function offsetLabel(seconds: number): string {
 
 const MAPPING_STATUS_LABEL = { existing: "已是参与人", add: "确认后加入", unmapped: "未映射" } as const;
 
-/** 确认 Action input：只含 speakerName→personId 与显式标记，全量 turns 留在服务端。 */
+/** 确认 Action input：只含 speakerName→personId 与显式标记，全量 turns 留在服务端；没选人的说话人不带（保留原名，会议卡上再指定，10/28 起不拦确认）。 */
 export function confirmTranscriptInput(
   candidate: TTranscriptCandidateProjection,
   mappings: Record<string, string>,
 ): { speakerMappings: { speakerName: string; personId: string }[]; confirmAddParticipants: true } {
   return {
-    speakerMappings: candidate.speakers.map((speaker) => ({
-      speakerName: speaker.speakerName,
-      personId: mappings[speaker.speakerName],
-    })),
+    speakerMappings: candidate.speakers.flatMap((speaker) => mappings[speaker.speakerName]
+      ? [{ speakerName: speaker.speakerName, personId: mappings[speaker.speakerName] }] : []),
     confirmAddParticipants: true,
   };
 }
@@ -221,7 +213,6 @@ export function TranscriptCandidateDialog({
     Object.fromEntries(candidate.speakers.map((speaker) => [speaker.speakerName, speaker.suggestedPersonId ?? ""])),
   );
   const rows = speakerMappingRows(candidate, participants.map((person) => person.personId), mappings);
-  const error = speakerMappingError(rows);
   return (
     <dialog ref={dialogRef} className={s.candidateDialog} aria-label="妙记会议记录候选">
       <header className={s.candidateHeader}>
@@ -276,7 +267,6 @@ export function TranscriptCandidateDialog({
             </tbody>
           </table>
           {directoryError ? <p className={s.error} role="alert">{directoryError}</p> : null}
-          {error ? <p className={s.error} role="alert">{error}</p> : null}
         </section>
         <section className={s.candidateSection}>
           <h3>抽样发言</h3>
@@ -310,7 +300,7 @@ export function TranscriptCandidateDialog({
           关闭
         </button>
         {hasConfirm ? (
-          <button type="button" className={s.candidateConfirm} disabled={pending || Boolean(error)} onClick={() => onConfirm(mappings)}>
+          <button type="button" className={s.candidateConfirm} disabled={pending} onClick={() => onConfirm(mappings)}>
             {pending ? "确认中…" : "确认并写入逐字稿"}
           </button>
         ) : null}

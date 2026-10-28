@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TMeetingCardView } from "@warmap/contracts";
-import { confirm, edit, getCard, OWNER, putDraft, ready, setup } from "./meetingCardFixture.js";
+import { confirm, edit, getCard, HOST, OWNER, putDraft, ready, setup } from "./meetingCardFixture.js";
 import { projection, stubWorld } from "./worldFixture.js";
 
-// 行动项（拍板 4）：天枢本地，随整卡确认；确认后没推过的推成执行事项、taskId 回填到草稿和这次的确认快照；不重复推、推完再改不回改；不进本体。
+// 行动项：天枢本地；负责人接下（或冻结前主持人整卡确认、代接下）才推成执行事项，taskId 回填到草稿和这次的确认快照；不重复推、推完再改不回改；
+// 10/28 起确认了的行动项随会议事件写进本体（带确认人）。
 
 /** 假本体：挂点 PO（版本 5），记事件照收。 */
 function ontology() {
@@ -105,9 +106,9 @@ describe("行动项推成执行事项", () => {
     }
   });
 
-  it("确认后只改了行动项：不出新版本、不写本体、不用选原因，新的一条照推；再点一次不动", async () => {
+  it("确认后只改了行动项：不出新版本、不写本体、不用选原因；新加的一条等负责人接下才推；再点一次不动", async () => {
     const world = ontology();
-    const { t, host, meetingId, run } = await setup();
+    const { t, host, owner, meetingId, run } = await setup();
     try {
       await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
       await run();
@@ -119,15 +120,20 @@ describe("行动项推成执行事项", () => {
       const res = await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
       expect(res.statusCode).toBe(200);
       await run();
+      expect((await tasksOf(t, meetingId)).map((task) => task.origin_item_id)).toEqual(["act-1"]);
+      expect((await stored(t, meetingId)).draft[1].review).toMatchObject({ status: "pending" });
+      const accepted = await t.app.inject({ method: "POST", url: `/api/meetings/${meetingId}/card/reviews`, headers: { cookie: owner, origin: t.publicOrigin },
+        payload: { kind: "action", id: "act-new", verdict: "confirm" } });
+      expect(accepted.statusCode).toBe(200);
       const tasks = await tasksOf(t, meetingId);
       expect(tasks.map((task) => task.origin_item_id)).toEqual(["act-1", "act-new"]);
       const { draft, snapshots } = await stored(t, meetingId);
       expect(snapshots).toHaveLength(1);
-      expect(snapshots[0].map((item) => item.taskId)).toEqual([tasks[0].id, tasks[1].id]);
-      expect(draft[1].taskId).toBe(tasks[1].id);
+      expect(snapshots[0].map((item) => item.id)).toEqual(["act-1", "act-new"]);
+      expect(draft[1]).toMatchObject({ taskId: tasks[1].id, review: { status: "confirmed", by: OWNER, proxy: false } });
       expect(world.events()).toHaveLength(1);
       const after: TMeetingCardView = res.json();
-      expect(after.confirmed).toMatchObject({ confirmation: { revision: 1 }, actionItems: [{ id: "act-1" }, { id: "act-new", taskId: tasks[1].id }] });
+      expect(after.confirmed).toMatchObject({ confirmation: { revision: 1 }, actionItems: [{ id: "act-1" }, { id: "act-new", taskId: null }] });
 
       const again = await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
       expect(again.statusCode).toBe(200);
@@ -221,18 +227,16 @@ describe("行动项推成执行事项", () => {
     }
   });
 
-  it("行动项不进本体", async () => {
+  it("确认了的行动项随会议事件进本体，带确认人（冻结前主持人整卡确认算代接下）", async () => {
     const world = ontology();
     const { t, host, meetingId, run } = await setup();
     try {
       const res = await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
       await run();
       expect(world.events()).toHaveLength(1);
-      const text = world.events()[0].params.content.text as string;
-      expect(text).not.toContain("渠道看板接到 v2");
-      expect(text).not.toContain("actionItems");
-      expect(JSON.parse(text).payload).not.toHaveProperty("actionItems");
-      expect((res.json() as TMeetingCardView).confirmed!.payload).not.toHaveProperty("actionItems");
+      const payload = JSON.parse(world.events()[0].params.content.text as string).payload;
+      expect(payload.actionItems).toEqual([expect.objectContaining({ id: "act-1", text: "渠道看板接到 v2", ownerPersonId: OWNER, confirmedBy: HOST, proxy: true })]);
+      expect((res.json() as TMeetingCardView).confirmed!.payload.actionItems).toHaveLength(1);
     } finally {
       await t.close();
     }

@@ -32,7 +32,7 @@ function legacyCandidate(issueId: string, title: string): TPostMeetingCandidate 
 function outcomeAgent(): PostMeetingAgent {
   return {
     async generate(input: PostMeetingAgentInput) {
-      return { candidate: { summary: input.meeting.title, sections: [{ heading: "验收", body: "已定：按会上说的办。", turnIds: [] }], objectChanges: [], actionItems: [] } };
+      return { candidate: { summary: input.meeting.title, sections: [{ heading: "验收", body: "已定：按会上说的办。", turnIds: [] }], decisions: [], objectChanges: [], actionItems: [] } };
     },
   };
 }

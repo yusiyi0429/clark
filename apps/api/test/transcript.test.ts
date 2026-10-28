@@ -42,7 +42,7 @@ function defaultCandidate(): TMeetingCardCandidate {
       { heading: "资源", body: "已定：灯塔项目优先，TokenOps 保留最低验证力量。", turnIds: ["turn-001"] },
       { heading: "外部承诺", body: "未定：外部承诺先不签，六月前看风险清单再定。", turnIds: ["turn-003"] },
     ],
-    objectChanges: [],
+    decisions: [], objectChanges: [],
     actionItems: [{ text: "周五前提交资源排期", ownerPersonId: "person-fixture-002", dueDate: null, basisSections: [1] }],
   };
 }
@@ -487,7 +487,7 @@ const TURNS_B = [
 const CANDIDATE_B: TMeetingCardCandidate = {
   summary: "替换后的抽取",
   sections: [{ heading: "排期", body: "已定：测试乙下周三前提交资源排期。", turnIds: ["turn-002"] }],
-  objectChanges: [],
+  decisions: [], objectChanges: [],
   actionItems: [{ text: "下周三前提交排期", ownerPersonId: "person-fixture-002", dueDate: null, basisSections: [1] }],
 };
 

@@ -101,12 +101,27 @@
 .cardReceipt { display: inline-flex; align-items: center; gap: 4px; min-width: 0; color: var(--ts-info, #3a83f7); font-size: 12px; font-weight: 600; line-height: 1.5; }
 .cardReceipt svg { flex: none; }
 
+/* 标题上面那行类别小字（「决策确认」）：和处理按钮同一色，不加底。 */
+.label { color: #334d70; font-size: 12px; font-style: normal; font-weight: 600; line-height: 1.4; letter-spacing: .02em; }
+
+/* 一次只出一条时，底下翻页：左右箭头夹着「第 n 条 / 共 m 条」，和处理那一行左对齐。 */
+.pager { display: flex; align-items: center; gap: 4px; padding: 2px 8px 8px 26px; border-top: 1px solid var(--notice-separator); color: var(--notice-muted); font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.pager span { padding: 0 4px; }
+.pager.pager button { display: grid; place-items: center; width: 30px; height: 30px; margin-top: 6px; border-radius: 9px; background: #e9edf3a8; color: var(--notice-ink); }
+.pager.pager button:hover:not(:disabled) { background: rgb(38 61 92 / 9%); }
+.pager span { margin-top: 6px; }
+
 @media (max-width: 1200px) {
   .handle { padding-left: 30px; padding-right: 6px; }
+}
+@media (max-width: 959px) {
+  .label, .pager { font-size: 13px; }
 }
 @media (max-width: 759px) {
   /* 窄屏：处理那一行和填写区贴着左边铺开，按钮照样一行排不下就折行，不横向溢出。 */
   .handle { padding-left: 12px; }
+  .pager { padding-left: 8px; }
+  .pager.pager button { width: 36px; height: 36px; }
   .actions.actions > button,
   .formActions.formActions > button,
   .dues.dues button { min-height: 36px; }
