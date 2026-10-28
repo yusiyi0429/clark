@@ -23,3 +23,20 @@ test('直接PO和Task修订显示正确范围，不猜Mission编号',()=>{const 
 test('无规范编号时沿用已知referenceLabel和名称，不从标题猜号',()=>{const v=summaryInput({...p,cardId:'opaque-id'},{level:'review-mission',referenceLabel:'个人复盘 · Mission 4',title:'会议'});assert.equal(v.changes[0].targetLabel,'个人复盘 · Mission 4 · 会议');});
 test('新增、撤掉、恢复均以操作的Mission为目标，不误标父PO',()=>{for(const op of ['add-mission','withdraw-mission','restore-mission']){const v=summaryInput({op,cardId:'agents',missionId:op==='add-mission'?undefined:'agents-m4',mission:{title:'新增事项',tasks:[]},missionSummary:{title:'原事项',tasks:3},patch:{}},{id:'agents',level:'po',title:'父PO'});assert.match(v.changes[0].targetLabel,op==='add-mission'?/^Mission · 新增事项$/:/^Mission 4 · 原事项$/);assert.doesNotMatch(v.changes[0].targetLabel,/父PO/);}});
 test('before已有键盘麦也不能在after省掉，不能用其他待验收替代5秒',()=>{const input={changes:[{where:'证据',before:'入会和键盘麦都缺少真实会议中的验收材料',after:'负责人报告入会和键盘麦可用，5秒延迟仍无真实会议验收'}],reason:'负责人补充事实'};for(const after of ['负责人报告入会可用；其他待验收','入会和键盘麦可用；其他待验收','入会可用；5秒仍待验收'])assert.throws(()=>validateSummary({changes:[{index:0,before:'缺材料',after}],reason:'负责人补充事实'},input));});
+
+
+test('未变键盘麦背景可省略；改变的键盘麦能力仍必须保留',()=>{
+ const background='键盘麦10/26本人实测可用。负责人报告：键盘麦控制精准，语音唤醒可用。';
+ const input={changes:[{where:'证据',before:background+'打断、5秒延迟无真实会议验收。',after:background+'负责人报告打断和5秒延迟在真实会议验证过；场次日期未写明，材料暂无记录。'}],reason:''};
+ assert.doesNotThrow(()=>validateSummary({changes:[{index:0,before:'打断、5秒延迟无实会验收',after:'负责人称打断、5秒延迟会议验证过；场次日期未写，暂无记录'}],reason:''},input));
+ const changed={changes:[{where:'证据',before:background+'尚无验收材料。',after:'键盘麦10/26本人实测可用。负责人报告：键盘麦已获真实会议确认，语音唤醒可用。尚无验收材料。'}],reason:''};
+ assert.throws(()=>validateSummary({changes:[{index:0,before:'尚无材料',after:'语音唤醒可用，尚无材料'}],reason:''},changed),/遗漏/);
+});
+test('UUID事实复用已知个人Mission编号，PO下未知UUID不猜编号',()=>{
+ const fact={ref:'11111111-2222-4333-8444-555555555555',item:'唤醒和打断体验',evidence:'旧证据'};
+ const proposal={cardId:'rv:agents-m4',before:{facts:[fact]},patch:{facts:[{...fact,evidence:'新证据'}]}};
+ const input=summaryInput(proposal,{id:'rv:agents-m4',level:'mission',title:'参加内部飞书会议'});
+ assert.equal(input.changes[0].targetLabel,'Mission 4 · 唤醒和打断体验');
+ const po=summaryInput({...proposal,cardId:'rv:agents'},{id:'rv:agents',level:'po',title:'Agents'});
+ assert.equal(po.changes[0].targetLabel,'唤醒和打断体验');
+});

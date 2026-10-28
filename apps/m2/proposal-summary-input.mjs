@@ -10,7 +10,8 @@ export function proposalTarget(proposal,node,change={}){
  const op=proposal.op,structural=!!op,object=op==='add-mission'?proposal.mission:proposal.missionSummary;
  const id=change.itemRef||(structural?proposal.missionId||object?.id:node?.id||proposal.cardId)||'';
  const title=change.itemTitle||(structural?object?.title:node?.title)||'';
- const match=String(id).replace(/^rv:/,'').match(/(?:^|-)m(\d+)(?:-t(\d+))?(?:-a(\d+))?$/i);
+ const numbered=value=>String(value||'').replace(/^rv:/,'').match(/(?:^|-)m(\d+)(?:-t(\d+))?(?:-a(\d+))?$/i);
+ const match=numbered(id)||(!structural&&change.itemRef&&['mission','task','activity'].includes(node?.level)?numbered(node?.id||proposal.cardId):null);
  let scope='';
  if(match)scope=[`Mission ${Number(match[1])}`,match[2]&&`Task ${Number(match[2])}`,match[3]&&`Activity ${Number(match[3])}`].filter(Boolean).join(' · ');
  else if(structural)scope='Mission';

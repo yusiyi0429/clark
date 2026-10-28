@@ -8,6 +8,13 @@ function claims(text,pattern){
 }
 const numberText=t=>({一:'1',二:'2',两:'2',三:'3',四:'4',五:'5',六:'6',七:'7',八:'8',九:'9',十:'10'}[t]||t);
 const quantities=s=>new Set((normalize(s).match(/\d+(?:[./-]\d+)*|[一二三四五六七八九十两]+(?=秒|分钟|天|周|月|次|场|项|条)/g)||[]).map(numberText));
+// Remove only exactly unchanged clauses (including repeated-clause counts).
+// A capability mentioned before AND after still needs retention when its clause changed.
+function changedAfter(before,after){
+ const clauses=v=>textOf(v).split(/[。；;！？\n]+/).map(normalize).filter(Boolean),remaining=new Map();
+ for(const clause of clauses(before))remaining.set(clause,(remaining.get(clause)||0)+1);
+ return clauses(after).filter(clause=>{const n=remaining.get(clause)||0;if(!n)return true;remaining.set(clause,n-1);return false;}).join('；');
+}
 function guardMeaning(source,short){
  const s=normalize(textOf(source)),t=normalize(short);
  const patterns=[/通过(?:了)?[^，；。]{0,6}验收|验收(?:已)?通过/g,/(?:连续|持续|常态)(?:使用|采用|运行|在用)|(?:已|已经)(?:使用|用|运行)(?:了)?.{0,5}(?:天|周|月)/g,/(?:已|已经)(?:核验|核实|读回)|(?:核验|核实|读回)(?:通过|完成|完毕|无误)|完成(?:了)?核验/g];
@@ -24,8 +31,8 @@ export function validateSummary(value,input){
  const result={changes:value.changes.map((c,i)=>({where:input.changes[i].where,itemRef:input.changes[i].itemRef||'',targetLabel:input.changes[i].targetLabel,targetRef:input.changes[i].targetRef,before:typeof input.changes[i].before==='string'&&input.changes[i].before.length<=18?input.changes[i].before:c.before,after:typeof input.changes[i].after==='string'&&input.changes[i].after.length<=18?input.changes[i].after:c.after,beforeSource:input.changes[i].beforeSource||'',afterSource:input.changes[i].afterSource||''})),reason:input.reason?value.reason:''};
  for(const [i,c]of result.changes.entries()){
   const source=input.changes[i];guardMeaning(source.before,c.before);guardMeaning(source.after,c.after);
-  if(normalize(textOf(source.after)).includes('5秒')&&!normalize(c.after).includes('5秒'))throw Error('摘要省略了5秒条件');
-  if(normalize(textOf(source.after)).includes('键盘麦')&&!normalize(c.after).includes('键盘麦'))throw Error('摘要遗漏新增能力');
+  if(changedAfter(source.before,source.after).includes('5秒')&&!normalize(c.after).includes('5秒'))throw Error('摘要省略了5秒条件');
+  if(changedAfter(source.before,source.after).includes('键盘麦')&&!normalize(c.after).includes('键盘麦'))throw Error('摘要遗漏新增能力');
  }
  if(input.reason)guardMeaning(input.reason,result.reason);
  return result;
@@ -33,7 +40,7 @@ export function validateSummary(value,input){
 export function createProposalSummarizer(gateway){
  const cache=new Map();
  return async(proposal,node,context={})=>{
-  const input=summaryInput(proposal,node),key=createHash('sha256').update(JSON.stringify({version:5,context,proposalId:proposal.id,before:proposal.before,patch:proposal.edited&&proposal.acceptedPatch?proposal.acceptedPatch:proposal.patch,input})).digest('hex');
+  const input=summaryInput(proposal,node),key=createHash('sha256').update(JSON.stringify({version:6,context,proposalId:proposal.id,before:proposal.before,patch:proposal.edited&&proposal.acceptedPatch?proposal.acceptedPatch:proposal.patch,input})).digest('hex');
   if(input.ambiguous)throw Error('条目对应不明确，请查看完整对照');
   if(!input.changes.length&&!input.reason)return {changes:[],reason:''};
   if(!cache.has(key)){
