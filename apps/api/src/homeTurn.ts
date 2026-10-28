@@ -7,13 +7,15 @@ import { SESSION_COOKIE, createSessionToken } from "./session.js";
  * 从天枢以外的地方（飞书私聊、微信 ClawBot）以本人身份在首页对话里说一句（scope = global）：
  * 走同一个对话接口（同一条主对话、同一套权限和上下文），问与答存进对话记录并标上来源（via），网页打开着会自己读到。
  * 上一轮还在写（网页或别处问的）时隔几秒再试，最多等 10 分钟。
- * 首页对话切到独立 Chat（CHAT_SERVICE_URL）时这一轮存在 Chat 里、天枢库里没有：回答取流里收到的文字，来源也标不上。
+ * 首页对话切到独立 Chat（CHAT_SERVICE_URL）时这一轮存在 Chat 里、天枢库里没有：回答取流里收到的文字，来源经 VIA_HEADER 转给 Chat 记下。
  */
 const SCOPE = "global";
 const BUSY_RETRY_MS = 5_000;
 const BUSY_GIVE_UP_MS = 10 * 60_000;
 
 export type HomeTurnVia = "feishu" | "wechat";
+/** 只在服务内部转一手时带的请求头：这一轮从哪问的。 */
+export const VIA_HEADER = "x-tianshu-via";
 export type SseEvent = { type?: string; [key: string]: unknown };
 export type HomeTurnResult =
   | { kind: "inactive" }
@@ -53,7 +55,7 @@ export async function homeTurn(
   for (;;) {
     const response = await app.inject({
       method: "POST", url: `/api/conversations/${SCOPE}/messages`, payloadAsStream: true,
-      headers: { cookie, origin: env.publicOrigin, accept: "text/event-stream", "content-type": "application/json" },
+      headers: { cookie, origin: env.publicOrigin, accept: "text/event-stream", "content-type": "application/json", [VIA_HEADER]: options.via },
       payload: JSON.stringify({ message: text }),
     });
     const stream = response.stream();
