@@ -69,6 +69,9 @@ const env: AppEnv = {
   chatServiceUrl: process.env.CHAT_SERVICE_URL || undefined,
   // 微信 ClawBot 默认关（10/28 不稳定，生产先不上）；设 WECHAT_ENABLED=1 才开。
   wechatEnabled: process.env.WECHAT_ENABLED === "1",
+  // 对话分段：值为 1 才开，缺省都关，由生产、预发的 env 显式打开。
+  chatSessionRotation: process.env.CHAT_SESSION_ROTATION === "1",
+  conversationSegments: process.env.CONVERSATION_SEGMENTS === "1",
   // 本体：TKOS_WORLD_API_URL；凭证 TKOS_WORLD_AGENT_TOKEN 或 TKOS_WORLD_AGENT_TOKEN_FILE（只在内存里）；TKOS_WORLD_INSTANCE 选实例配置（缺省 mvp）。
   ...resolveWorldEnv(process.env),
   // 第二个只读实例（词元云集 TK scope）：TKOS_WORLD_TK_INSTANCE=tk 加 TKOS_WORLD_TK_TOKEN_FILE；不设就关闭。

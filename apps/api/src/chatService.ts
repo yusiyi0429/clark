@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { FastifyReply } from "fastify";
 import type { TConversationMessageRequest } from "@warmap/contracts";
 import { turnFailureCopy } from "./conversationRecovery.js";
+import { segmentDateLabel, startsNewSegment } from "./conversationSegments.js";
 import type { HomeTurnVia } from "./homeTurn.js";
 import { logEvent } from "./observability.js";
 import { Value } from "@sinclair/typebox/value";
@@ -11,10 +12,15 @@ import type { Static, TSchema } from "@sinclair/typebox";
  * 首页对话改走独立 Chat 服务（TokenkingOS/Chat_Service，开关 CHAT_SERVICE_URL）。接口以 Chat_Service 的 docs/service-contract.md 为准。
  * - 身份：天枢从登录态取本人 personId 和视角，带 INTERNAL_CHAT_TOKEN 转给 Chat（X-Owner-Id / X-Viewer-Role），浏览器碰不到凭据。
  * - 会话：Chat 里一个人一个视角可以有多段对话，首页接最近更新的那段；还没有就在发第一句、传第一个附件时新建。天枢不存对照。
+ *   开了分段（CHAT_SESSION_ROTATION）：那段闲置满 12 小时或跨过北京时间凌晨 4 点，发句、传附件时新开一段（conversationSegments.ts）；
+ *   界面拼最近 7 天的几段，段之间一行日期；「继续」进那一轮所在的段。
  * - 格式：Chat 的历史和事件翻成天枢现有对话的格式，界面不用改。Chat 没有的（步骤、范围标签、工具卡、出处标记）就没有。
  */
 
 export type ChatViewer = { personId: string; role: "ceo" | "member" };
+export type ChatConversation = { conversationId: string; createdAt: string; updatedAt: string };
+/** 首页这一句进了哪一段（纪要据此记下这段有新内容，conversationDigests.ts）。 */
+export type ChatSegmentActivity = { conversationId: string; startedAt: Date };
 
 /** 开流之前就失败：路由按天枢的错误格式回给界面。 */
 export class ChatServiceError extends Error {
@@ -24,8 +30,9 @@ export class ChatServiceError extends Error {
 }
 
 type ChatAttachment = { attachmentId: string; fileName: string; mime: string; size: number; status?: string };
-type ChatMessage = { role: "user" | "assistant"; text: string; runId: string; attachments?: ChatAttachment[]; source?: HomeTurnVia | null };
+type ChatMessage = { position?: string; role: "user" | "assistant"; text: string; runId: string; attachments?: ChatAttachment[]; turnAt?: string; source?: HomeTurnVia | null };
 type ChatRun = { runId: string; status: string };
+type ChatMessagePage = { messages: ChatMessage[]; nextCursor: string | null; runs: ChatRun[] };
 type ChatEvent = { type: string; [key: string]: unknown };
 
 /** 工具开始时进度行的一句（只写在查什么）。工具名归 Chat 定，没列到的不显示这一句。 */
@@ -38,6 +45,8 @@ const TOOL_LABELS: Record<string, string> = {
   read_confirmed_meeting: "读取会议确认版",
   read_meeting_transcript: "读取会议逐字稿",
   read_attachment: "阅读附件",
+  search_past_conversations: "查以前的对话",
+  read_past_conversation: "读以前的对话",
   web_search: "检索公开来源",
   update_memory: "记下你的偏好",
   check_task_quality: "核对任务数据缺口",
@@ -88,6 +97,21 @@ function failure(event: ChatEvent): ChatEvent {
 
 /** Chat 的历史 → 天枢的消息：没完成的那一轮补上说明行；序号按顺序重排（说明行也占一个）；Chat 记下的来源回到 via。 */
 export function historyMessages(messages: ChatMessage[], runs: ChatRun[]) {
+  return joinSegments([{ messages, runs }]);
+}
+
+/** 拼几段（从旧到新）：每段之前一行这段开始的日期（第一段不加，kind=trace，界面画成一行淡字）；序号接着排。 */
+export function joinSegments(segments: { messages: ChatMessage[]; runs: ChatRun[]; startedAt?: Date; conversationId?: string }[]) {
+  type Item = { role: "user" | "assistant"; content: string; runId: string; via?: HomeTurnVia; attachments?: ReturnType<typeof attachmentInfo>[]; kind?: "trace"; createdAt?: string };
+  const ordered: Item[] = segments.flatMap((segment, index) => [
+    ...(index && segment.startedAt ? [{ role: "assistant" as const, content: segmentDateLabel(segment.startedAt), runId: segment.conversationId ?? "",
+      kind: "trace" as const, createdAt: segment.startedAt.toISOString() }] : []),
+    ...segmentMessages(segment.messages, segment.runs),
+  ]);
+  return ordered.map((message, index) => ({ sequence: index + 1, referencesSnapshot: [], attachments: [], ...message }));
+}
+
+function segmentMessages(messages: ChatMessage[], runs: ChatRun[]) {
   const status = new Map(runs.map((run) => [run.runId, run.status]));
   const answered = new Set(messages.filter((message) => message.role === "assistant").map((message) => message.runId));
   const ordered: { role: "user" | "assistant"; content: string; runId: string; via?: HomeTurnVia; attachments?: ReturnType<typeof attachmentInfo>[] }[] = [];
@@ -102,13 +126,26 @@ export function historyMessages(messages: ChatMessage[], runs: ChatRun[]) {
     ordered.push({ role: "user", content: message.text, runId: message.runId, ...via, attachments: (message.attachments ?? []).map(attachmentInfo) });
     if (state === "failed" && !answered.has(message.runId)) ordered.push({ role: "assistant", content: EMPTY_NOTE, runId: message.runId, ...via });
   }
-  return ordered.map((message, index) => ({ sequence: index + 1, referencesSnapshot: [], attachments: [], ...message }));
+  return ordered;
 }
 
-export function createChatService(options: { baseUrl: string; token?: string }) {
+/** 首页界面拼最近几天的几段、最多约这么多条（拼够了就不再往前读，每 10 秒的轮询请求数有上限）。 */
+const HISTORY_DAYS = 7;
+const HISTORY_MESSAGES = 200;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function createChatService(options: {
+  baseUrl: string;
+  token?: string;
+  /** 首页分段（CHAT_SESSION_ROTATION）：关着时首页一直接最近更新的那一段，和分段之前一样。 */
+  rotation?: boolean;
+  /** 发一句、传附件进了哪一段（纪要据此记下有新内容）；失败只记日志，不影响这一句。 */
+  onSegment?: (viewer: ChatViewer, segment: ChatSegmentActivity) => Promise<void>;
+}) {
   if (!options.token) throw new Error("CHAT_SERVICE_URL 需要同时配置 INTERNAL_CHAT_TOKEN");
   const base = options.baseUrl.replace(/\/+$/, "");
   const token = options.token;
+  const rotation = options.rotation === true;
 
   const call = async (viewer: ChatViewer, requestId: string, path: string, init: RequestInit = {}): Promise<Response> => {
     let response: Response;
@@ -128,17 +165,72 @@ export function createChatService(options: { baseUrl: string; token?: string }) 
   };
   const json = async <T>(viewer: ChatViewer, requestId: string, path: string, init?: RequestInit) => (await (await call(viewer, requestId, path, init)).json()) as T;
 
-  /** 首页接的那段 Chat 对话：最近更新的一段；create 时没有就新建。 */
-  const conversation = async (viewer: ChatViewer, requestId: string, create: boolean): Promise<string | null> => {
-    const list = await json<{ conversations: { conversationId: string }[] }>(viewer, requestId, "/conversations");
-    if (list.conversations[0]) return list.conversations[0].conversationId;
-    if (!create) return null;
-    const created = await json<{ conversationId: string }>(viewer, requestId, "/conversations",
-      { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    return created.conversationId;
+  /** 本人本视角最近更新的 50 段（Chat 的顺序：最近更新的在前）。 */
+  const conversations = async (viewer: ChatViewer, requestId: string) =>
+    (await json<{ conversations: ChatConversation[] }>(viewer, requestId, "/conversations")).conversations;
+  const messagesPage = (viewer: ChatViewer, requestId: string, conversationId: string, cursor = "0", limit = 100) =>
+    json<ChatMessagePage>(viewer, requestId, `/conversations/${conversationId}/messages?limit=${limit}&cursor=${cursor}`);
+  const allMessages = async (viewer: ChatViewer, requestId: string, conversationId: string) => {
+    const messages: ChatMessage[] = [];
+    let runs: ChatRun[] = [];
+    for (let cursor: string | null = "0"; cursor !== null;) {
+      const page = await messagesPage(viewer, requestId, conversationId, cursor);
+      messages.push(...page.messages);
+      runs = page.runs;
+      cursor = page.nextCursor;
+    }
+    return { messages, runs };
+  };
+  /** 开了分段时「当前这段」是最新开的那段（「继续」旧段会更新旧段的时间，但不让它变成当前段）；关着时照旧是最近更新的那段。 */
+  const newestFirst = (list: ChatConversation[]) => (rotation ? [...list].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)) : list);
+
+  /** 同一个人同一视角的「判段 + 新建」排队做：网页和飞书私聊同时发跨天后的第一句，只建一段（api 一个环境一个进程，飞书也走这个进程）。 */
+  const queues = new Map<string, Promise<void>>();
+  const exclusive = async <T>(key: string, work: () => Promise<T>): Promise<T> => {
+    const previous = queues.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const tail = previous.then(() => new Promise<void>((resolve) => { release = resolve; }));
+    queues.set(key, tail);
+    await previous;
+    try { return await work(); } finally {
+      release();
+      if (queues.get(key) === tail) queues.delete(key);
+    }
+  };
+
+  /**
+   * 这一句进哪一段：当前这段；还没有，或开了分段、rotate 且它闲置满 12 小时或跨过凌晨 4 点，就新建一段（create 时）。只读历史不建。
+   * started：这一句开了新的一段。
+   */
+  const segment = async (viewer: ChatViewer, requestId: string, rotate: boolean): Promise<{ conversation: ChatConversation; started: boolean }> =>
+    exclusive(`${viewer.personId}|${viewer.role}`, async () => {
+      const [current] = newestFirst(await conversations(viewer, requestId));
+      const stale = Boolean(current && rotation && rotate && startsNewSegment(new Date(current.updatedAt), new Date()));
+      if (current && !stale) return { conversation: current, started: false };
+      const created = await json<{ conversationId: string }>(viewer, requestId, "/conversations",
+        { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      const at = new Date().toISOString();
+      return { conversation: { conversationId: created.conversationId, createdAt: at, updatedAt: at }, started: stale };
+    });
+  /** 「继续」「重新回答」那一轮所在的段：在界面拼的那几段里找（每段只读一页拿 runs）；找不到交给 Chat 判（会回 INVALID_RESUME）。 */
+  const segmentOfRun = async (viewer: ChatViewer, requestId: string, runId: string): Promise<ChatConversation | null> => {
+    for (const conversation of shownSegments(await conversations(viewer, requestId))) {
+      if ((await messagesPage(viewer, requestId, conversation.conversationId, "0", 1)).runs.some((run) => run.runId === runId)) return conversation;
+    }
+    return null;
+  };
+  /** 界面拼的那几段（从新到旧）：关着分段只有当前这段；开着是最近 7 天里说过话的几段，当前这段总在。 */
+  const shownSegments = (list: ChatConversation[]) => newestFirst(list)
+    .filter((item, index) => index === 0 || (rotation && Date.now() - Date.parse(item.updatedAt) <= HISTORY_DAYS * DAY_MS));
+  const record = (viewer: ChatViewer, requestId: string, conversation: ChatConversation) => {
+    if (!options.onSegment) return;
+    void options.onSegment(viewer, { conversationId: conversation.conversationId, startedAt: new Date(conversation.createdAt) })
+      .catch((error) => logEvent({ event: "chat_service.segment_record_failed", requestId, error: (error as Error)?.message }));
   };
 
   return {
+    conversations,
+    messagesPage,
     async quality<S extends TSchema>(viewer: ChatViewer, requestId: string, path: string, schema: S, body?: unknown, signal?: AbortSignal): Promise<Static<S>> {
       const value: unknown = await json(viewer, requestId, `/task-quality${path}`, {
         signal: AbortSignal.any([AbortSignal.timeout(180000), ...(signal ? [signal] : [])]), redirect: "error",
@@ -147,24 +239,24 @@ export function createChatService(options: { baseUrl: string; token?: string }) 
       if (!Value.Check(schema, value)) throw new ChatServiceError(502, "CHAT_CONTRACT_MISMATCH", "对话服务的数据质量接口版本不匹配，请检查部署版本。");
       return value;
     },
+    /** 界面上的一条连续对话：拼几段，从新往旧读，拼够 HISTORY_MESSAGES 条就不再往前读（当前这段总会读）。 */
     async history(viewer: ChatViewer, requestId: string) {
-      const id = await conversation(viewer, requestId, false);
-      if (!id) return { scope: "global", messages: [] };
-      const messages: ChatMessage[] = [];
-      let runs: ChatRun[] = [];
-      for (let cursor: string | null = "0"; cursor !== null;) {
-        const page: { messages: ChatMessage[]; nextCursor: string | null; runs: ChatRun[] } =
-          await json(viewer, requestId, `/conversations/${id}/messages?limit=100&cursor=${cursor}`);
-        messages.push(...page.messages);
-        runs = page.runs;
-        cursor = page.nextCursor;
+      const segments: Parameters<typeof joinSegments>[0] = [];
+      let count = 0;
+      for (const conversation of shownSegments(await conversations(viewer, requestId))) {
+        if (count >= HISTORY_MESSAGES) break;
+        const { messages, runs } = await allMessages(viewer, requestId, conversation.conversationId);
+        segments.unshift({ messages, runs, startedAt: new Date(conversation.createdAt), conversationId: conversation.conversationId });
+        count += messages.length;
       }
-      return { scope: "global", messages: historyMessages(messages, runs) };
+      return { scope: "global", messages: joinSegments(segments) };
     },
 
-    /** 附件交给 Chat 解析、存在 Chat 那段对话上；有一份读不出文字就整批不收（和天枢自己的解析一样）。 */
+    /** 附件交给 Chat 解析、存在 Chat 那段对话上；有一份读不出文字就整批不收（和天枢自己的解析一样）。上传和随后那一句同一个判段规则。 */
     async upload(viewer: ChatViewer, requestId: string, files: { filename: string; mimetype: string; buffer: Buffer }[]) {
-      const id = await conversation(viewer, requestId, true);
+      const { conversation } = await segment(viewer, requestId, true);
+      record(viewer, requestId, conversation);
+      const id = conversation.conversationId;
       const form = new FormData();
       for (const file of files) form.append("files", new Blob([new Uint8Array(file.buffer)], { type: file.mimetype }), file.filename);
       const result = await json<{ attachments: ChatAttachment[] }>(viewer, requestId, `/conversations/${id}/attachments`, { method: "POST", body: form });
@@ -182,8 +274,13 @@ export function createChatService(options: { baseUrl: string; token?: string }) 
       let ended = false;
       reply.raw.on("close", () => { if (!ended) abort.abort(); });
       let upstream: Response;
+      let current: { conversation: ChatConversation; started: boolean } | undefined;
       try {
-        const id = await conversation(viewer, requestId, true);
+        // 「继续」进那一轮所在的段；带附件的这句进附件所在的那段（上传时已判过段）；其余按规则判段。
+        const resumed = rotation && body.resumeRunId ? await segmentOfRun(viewer, requestId, body.resumeRunId) : null;
+        current = resumed ? { conversation: resumed, started: false } : await segment(viewer, requestId, !body.attachments?.length);
+        record(viewer, requestId, current.conversation);
+        const id = current.conversation.conversationId;
         upstream = await call(viewer, requestId, `/conversations/${id}/turns`, {
           method: "POST", signal: abort.signal, headers: { "content-type": "application/json", accept: "text/event-stream" },
           body: JSON.stringify({ clientRequestId: randomUUID(), message: body.message, attachmentIds: (body.attachments ?? []).map((item) => item.id),
@@ -266,7 +363,10 @@ export function createChatService(options: { baseUrl: string; token?: string }) 
         // 和 Chat 的连接断了（Chat 重启、网络）：不补事件，界面按回答途中断线处理，连上后自己接着写。
       } finally {
         ended = true;
-        logEvent({ event: "chat_service.turn", requestId, runId, outcome: abort.signal.aborted ? "client_closed" : outcome });
+        logEvent({ event: "chat_service.turn", requestId, runId, outcome: abort.signal.aborted ? "client_closed" : outcome,
+          conversationId: current.conversation.conversationId, ...(current.started ? { newSegment: true } : {}) });
+        // 这一轮写完的时刻记成这段最后一次发言（纪要闲置 15 分钟后才写）。
+        record(viewer, requestId, current.conversation);
         if (!reply.raw.writableEnded) reply.raw.end();
       }
     },

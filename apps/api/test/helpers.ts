@@ -283,6 +283,16 @@ export function noopDistillationStream() {
   return stream;
 }
 
+/** 会话纪要的假模型：一律交一份固定纪要。 */
+export function fixedDigestStream() {
+  const stream = createAssistantMessageEventStream();
+  const message: AssistantMessage = { role: "assistant", api: "openai-responses", provider: "warmap", model: "test",
+    content: [{ type: "toolCall", id: randomUUID(), name: "submit_candidate", arguments: { title: "测试纪要", digest: "- 本人问了一个问题。", keywords: ["测试"] } }],
+    stopReason: "toolUse", timestamp: Date.now(), usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } };
+  queueMicrotask(() => stream.push({ type: "done", reason: "toolUse", message }));
+  return stream;
+}
+
 /** 每个用例一个独立数据库 + 已迁移 schema + 完整 app。可覆盖人员 seed 路径。 */
 const defaultConversationRuntime: ConversationRuntime = {
   async run(input) {
@@ -292,7 +302,7 @@ const defaultConversationRuntime: ConversationRuntime = {
 };
 
 export async function createTestApp(
-  seedOverrides: Partial<Pick<AppEnv, "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "worldInstance" | "worldInstanceLocalFile" | "publicOrigin" | "feishu" | "adminPersonIds" | "onboardingDelegationStep" | "internalChatToken" | "chatServiceUrl" | "wechatEnabled" | "worldPeriodGoalGates" | "collectionsEnabled" | "docChangeEnabled">> = {},
+  seedOverrides: Partial<Pick<AppEnv, "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "worldInstance" | "worldInstanceLocalFile" | "publicOrigin" | "feishu" | "adminPersonIds" | "onboardingDelegationStep" | "internalChatToken" | "chatServiceUrl" | "wechatEnabled" | "chatSessionRotation" | "conversationSegments" | "worldPeriodGoalGates" | "collectionsEnabled" | "docChangeEnabled">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;
@@ -341,6 +351,8 @@ export async function createTestApp(
     personalRadarService?: PersonalRadarService;
     /** 个人记忆提炼的模型流；不注入时一律交 noop 候选（测试里不调真实模型）。 */
     personalDistillationStream?: Parameters<typeof buildApp>[0]["personalDistillationStream"];
+    /** 会话纪要的模型流；不注入时一律交一份固定纪要（测试里不调真实模型）。 */
+    conversationDigestStream?: Parameters<typeof buildApp>[0]["conversationDigestStream"];
     /** 飞书开放接口替身；配合 seedOverrides.feishu 使用。 */
     feishuClient?: FeishuClient;
     /** 微信 ClawBot 的 iLink 接口替身；配合 seedOverrides.feishu（借用它的令牌密钥）使用。 */
@@ -371,7 +383,7 @@ export async function createTestApp(
   client.release();
   const env = { ...testEnv, ...seedOverrides };
   const { monthlyDraftAgent, monthlyNow, recordingDeps, monthlyReviewAgents, monthlyReviewRetryDelayMs, weeklyReviewAgent, weeklyReviewPeople, ...restRuntimeOptions } = runtimeOptions;
-  const appRuntimeOptions = { backgroundPreflight: false, personalDistillationStream: noopDistillationStream, personalMemoryRecall: null, ...restRuntimeOptions };
+  const appRuntimeOptions = { backgroundPreflight: false, personalDistillationStream: noopDistillationStream, conversationDigestStream: fixedDigestStream, personalMemoryRecall: null, ...restRuntimeOptions };
   const monthlyPlans = monthlyDraftAgent
     ? createMonthlyPlanService({ pool, peopleDirectory: loadPeopleDirectory(env), company: createCompanyContext(env), agent: monthlyDraftAgent, now: monthlyNow })
     : undefined;

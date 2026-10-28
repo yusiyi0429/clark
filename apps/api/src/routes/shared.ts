@@ -35,6 +35,8 @@ import type { AppEnv } from "../app.js";
 import type { WorldReader } from "../worldReader.js";
 import type { PersonalMemory } from "../personalMemory.js";
 import type { PersonalDistillation } from "../personalDistillation.js";
+import type { ChatService } from "../chatService.js";
+import type { ConversationRecall } from "../conversationRecall.js";
 import type { CollectionAgent } from "../collectionAgent.js";
 import type { CollectionDeps } from "../collections.js";
 import type { UsageTracker } from "../usage.js";
@@ -82,6 +84,10 @@ export type RouteContext = {
   personalMemory: PersonalMemory;
   /** 个人记忆的后台提炼队列。 */
   personalDistillation: PersonalDistillation;
+  /** 首页走独立 Chat 时的客户端（CHAT_SERVICE_URL）；首页分段的互斥在这一个实例里。 */
+  chat?: ChatService;
+  /** 回看以前的对话：会话目录、按纪要查、读一段（天枢页面的运行时与 /internal 接口共用）。 */
+  conversationRecall: ConversationRecall;
   preflight: PreflightAgent;
   outcome: PostMeetingAgent;
   runtime: ConversationRuntime;

@@ -11,6 +11,9 @@ import { createCompanyContext, type CompanyContextEnv } from "./companyContext.j
 import { createPersonalMemory } from "./personalMemory.js";
 import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
+import { createChatService } from "./chatService.js";
+import { createConversationDigests, recordChatSegment } from "./conversationDigests.js";
+import { createConversationRecall } from "./conversationRecall.js";
 import { registerPersonalMemoryRoutes } from "./routes/personalMemory.js";
 import { registerMemoryImportRoutes } from "./routes/memoryImports.js";
 import { createMemoryImports } from "./memoryImports.js";
@@ -200,6 +203,10 @@ export type AppEnv = {
   chatServiceUrl?: string;
   /** 微信 ClawBot（WECHAT_ENABLED=1 才开，还要接了飞书）：10/28 生产先不上。 */
   wechatEnabled?: boolean;
+  /** 首页分段（CHAT_SESSION_ROTATION=1 才开）：首页的 Chat 对话闲置满 12 小时或跨过凌晨 4 点新开一段；回看先经首页卡里的「以前的对话」交给 Chat。 */
+  chatSessionRotation?: boolean;
+  /** 天枢页面的对话分段（CONVERSATION_SEGMENTS=1 才开；关着时照旧闲置 12 小时重开）。 */
+  conversationSegments?: boolean;
   buildSha: string;
   piBaseUrl: string;
   piApiKey: string;
@@ -270,6 +277,7 @@ export async function buildApp({
   env,
   conversationRuntime,
   personalDistillationStream,
+  conversationDigestStream,
   personalMemoryRecall,
   memoryImportModel,
   radarService,
@@ -318,6 +326,8 @@ export async function buildApp({
   conversationRuntime?: ConversationRuntime;
   /** 个人记忆提炼用的模型流（测试注入假实现）；不给时按 PI_BASE_URL 调 light 模型。 */
   personalDistillationStream?: Parameters<typeof createPersonalDistillation>[0]["streamSimple"];
+  /** 会话纪要用的模型流（测试注入假实现）；不给时按 PI_BASE_URL 调 CONVERSATION_DIGEST_MODEL（不配时 LIGHT_MODEL）。 */
+  conversationDigestStream?: Parameters<typeof createConversationDigests>[0]["streamSimple"];
   /** 个人记忆的召回模型（测试注入替身，null 表示不用模型、只按字面重合选）；不给时按 PI_BASE_URL 调分诊用的快模型。 */
   personalMemoryRecall?: MemoryRecall | null;
   /** 记忆导入的分类与去重模型（测试注入替身）；不给时按 PI_BASE_URL 调 MEMORY_IMPORT_MODEL（不配时 LIGHT_MODEL）。 */
@@ -455,6 +465,13 @@ export async function buildApp({
     ?? (env.piBaseUrl && env.piApiKey ? createMemoryImportModel({ query: pool.query.bind(pool), baseUrl: env.piBaseUrl, apiKey: env.piApiKey, personId, ...importModelChoice }) : null) });
   const personalDistillation = createPersonalDistillation({ pool, memory: personalMemory, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
     modelId: env.lightModel, streamSimple: personalDistillationStream });
+  // 首页走独立 Chat 时只建这一个客户端（首页分段的「人 × 视角」互斥在它里面）；转发的每一句记下进了哪一段，纪要据此去读。
+  const chat = env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken, rotation: env.chatSessionRotation === true,
+    onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment) }) : undefined;
+  // 会话纪要（后台，CONVERSATION_DIGEST_MODEL / CONVERSATION_DIGEST_THINKING，不配时 LIGHT_MODEL、不开思考）与回看。
+  const conversationDigests = createConversationDigests({ pool, chat, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
+    ...agentModel(env.agentModels, "conversationDigest", { modelId: env.lightModel }), streamSimple: conversationDigestStream });
+  const conversationRecall = createConversationRecall({ q: pool.query.bind(pool), chat });
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
     peopleDirectory,
     company: company.company,
@@ -670,6 +687,9 @@ export async function buildApp({
 
   personalDistillation.start();
   app.addHook("onClose", async () => personalDistillation.close());
+  // 会话纪要只给分段用：两个分段开关都关着时不跑后台（合进来不生效，也不调模型）。
+  if (env.conversationSegments === true || env.chatSessionRotation === true) conversationDigests.start();
+  app.addHook("onClose", async () => conversationDigests.close());
 
   const ctx: RouteContext = {
     world,
@@ -681,6 +701,8 @@ export async function buildApp({
     company,
     personalMemory,
     personalDistillation,
+    chat,
+    conversationRecall,
     preflight,
     outcome,
     runtime,

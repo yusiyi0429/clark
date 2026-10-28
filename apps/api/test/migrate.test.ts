@@ -192,6 +192,7 @@ describe("migration", () => {
         "214_task_placement_backfill.sql",
         "215_wechat_bindings.sql",
         "216_meeting_card_decisions.sql",
+        "217_conversation_digests.sql",
       ]);
 
       // 幂等：重复执行不再变更

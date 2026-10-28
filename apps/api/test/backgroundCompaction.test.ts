@@ -390,7 +390,8 @@ describe("后台压缩的生命周期（真路由、真库）", () => {
     const { runtime, seen } = await piRuntime((call) => (isSummary(call)
       ? { text: "## 一号位的决定与表态\n- 一号位要求结论先行、统一成一段话说。", gate }
       : { text: `回答：${"词元云集的判断。".repeat(20)}`, usage: 5_000 }));
-    const t = await createTestApp({}, runtime, { conversationCompactionOptions: SMALL });
+    // 分段开着（测试计划 A11）：同一段聊得很长也不换段，靠这里的后台压缩，不在首字前当场压缩。
+    const t = await createTestApp({ conversationSegments: true }, runtime, { conversationCompactionOptions: SMALL });
     try {
       const cookie = await t.loginCookie();
       const ask = async (message: string) => {

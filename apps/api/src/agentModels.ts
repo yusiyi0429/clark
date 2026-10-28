@@ -12,6 +12,7 @@
  * | 记忆导入分类与去重 | MEMORY_IMPORT_MODEL | MEMORY_IMPORT_THINKING | LIGHT_MODEL · 不开思考 |
  * | 战场进展汇总 | PROGRESS_SUMMARY_MODEL | PROGRESS_SUMMARY_THINKING | HEAVY_MODEL · medium |
  * | 会后事项归位 | TASK_PLACEMENT_MODEL | TASK_PLACEMENT_THINKING | LIGHT_MODEL · 不开思考 |
+ * | 会话纪要 | CONVERSATION_DIGEST_MODEL | CONVERSATION_DIGEST_THINKING | LIGHT_MODEL · 不开思考 |
  *
  * 协议与地址按模型 id 推断（conversationModel.ts）：claude-* 走 Anthropic 协议（根地址 + /anthropic），gpt-6.1-* 走根地址 + /openai，
  * 其余走 PI_BASE_URL。思考强度 off / minimal / low / medium / high / xhigh；Claude 的 off 按 effort low 发（Sonnet / Opus 5.5 不能关思考）。
@@ -19,7 +20,7 @@
  */
 import type { CandidateThinkingLevel } from "./candidateAgentRuntime.js";
 
-export type AgentModelKey = "research" | "outcome" | "radar" | "personalRadar" | "memoryImport" | "progressSummary" | "taskPlacement";
+export type AgentModelKey = "research" | "outcome" | "radar" | "personalRadar" | "memoryImport" | "progressSummary" | "taskPlacement" | "conversationDigest";
 
 export const AGENT_MODEL_ENV: Readonly<Record<AgentModelKey, { model: string; thinking: string }>> = {
   research: { model: "RESEARCH_MODEL", thinking: "RESEARCH_THINKING" },
@@ -29,6 +30,7 @@ export const AGENT_MODEL_ENV: Readonly<Record<AgentModelKey, { model: string; th
   memoryImport: { model: "MEMORY_IMPORT_MODEL", thinking: "MEMORY_IMPORT_THINKING" },
   progressSummary: { model: "PROGRESS_SUMMARY_MODEL", thinking: "PROGRESS_SUMMARY_THINKING" },
   taskPlacement: { model: "TASK_PLACEMENT_MODEL", thinking: "TASK_PLACEMENT_THINKING" },
+  conversationDigest: { model: "CONVERSATION_DIGEST_MODEL", thinking: "CONVERSATION_DIGEST_THINKING" },
 };
 
 const THINKING_LEVELS: readonly CandidateThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
