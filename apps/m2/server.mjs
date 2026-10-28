@@ -1,3 +1,4 @@
+import {createProposalSummarizer} from './proposal-summary.mjs';
 import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
@@ -68,6 +69,7 @@ const gateway=await createModelGateway();
 // DECODING_CHAT_MODEL moves Nexus and the private Agents to another model (e.g. when the generation model's channel is down); round generation keeps DECODING_MODEL.
 // Chat (Nexus, private Agent) hides sensitive personal details before the model sees them (模型调用稳定性加固 2026-10-22).
 const chatGateway=await createModelGateway({...(process.env.DECODING_CHAT_MODEL?{env:{...process.env,DECODING_MODEL:process.env.DECODING_CHAT_MODEL}}:{}),redact:true});
+const summarizeProposal=createProposalSummarizer(chatGateway);
 const ready=gateway.status.ready;
 const store=await openCollaborationStore(process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)),bootstrap.state);
 const liveUnitsFrom=s=>{const visit=n=>({...currentVersion(s.cards[n.id]).content,children:n.children.map(visit)});return (s.round?.units||units).map(visit);};
@@ -342,6 +344,13 @@ export const server=createServer(async(req,res)=>{
    // A rejection with a reason is a line in the group too; Nexus answers it like any reply.
    if(b.action.type==='rejectProposal'){const event=next.messages.at(-1);if(event?.rejectsProposal===b.action.proposalId)await scheduleNexus(event.scope,actor.id,event);}
    return json(res,200,sharedProjection(next,actor));
+  }
+  if(route.pathname==='/api/proposal-summary'&&req.method==='GET'){
+   const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state),view=sharedProjection(state,actor);
+   const proposal=Object.values(view.records).flat().find(p=>p.kind==='revision-proposal'&&p.id===route.searchParams.get('id'));
+   if(!proposal)return json(res,404,{error:'找不到可见修订卡'});
+   if(!ready)return json(res,503,{error:'修改摘要暂不可用'});
+   try{return json(res,200,await summarizeProposal(proposal,view.drafts[proposal.cardId],{actorId:actor.id,roundId:state.round?.id,reviewLoadedAt:state.reviewRound?.loadedAt,scope:proposal.scope}));}catch{return json(res,502,{error:'修改摘要未生成，请重试'});}
   }
   if(req.url==='/api/data'){const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state);const metadata=await roundMetadata(state.round,input);metadata.readerViews=visibleReaderViews(metadata.readerViews,state,actor);if(!actor.ceo)delete metadata.roundAudit;return revalidated(req,res,etagged(JSON.stringify({session:req.m2Session,canRunRounds:mayRunRounds(actor),review:reviewSummary(state),units:liveUnitsFrom(state).filter(u=>canRead(actor,state.cards[u.id])),round:state.round?.number||6,roundId:state.round?.id||null,skill:state.round?.input?.skill?.version||'旧轮未记录实际技能快照',availableSkill:loadedSkill.version,modelReady:ready,modelStatus:gateway.status,tracing:tracer.state(),chatModelStatus:chatGateway===gateway?null:chatGateway.status,auditStatus:state.round?.audit?.status||null,auditIssueCount:state.round?.audit?.issues?.length||0,auditGapCount:state.round?.audit?.gaps?.length||0,sourceTime:state.round?.input.retrievedAt||input.retrievedAt,...metadata})));}
   if(['/api/agent','/api/nexus'].includes(req.url)&&req.method==='POST'){
