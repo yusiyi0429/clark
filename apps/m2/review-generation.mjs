@@ -13,6 +13,7 @@ import {createHash} from 'node:crypto';
 import {redactText,sensitiveRulesVersion} from './redact.mjs';
 import {bareJson} from './model.mjs';
 import {factProblem,nextInputProblem} from './governance.mjs';
+import {tracer} from './langsmith-trace.mjs';
 
 export const reviewUnits=[['bf01','灯塔项目'],['bf02','Token Ops'],['bf03','维信诺'],['rearch','Re-architecture'],['method','Method'],['agents','Agents'],['eo','E&O'],['tokenhub','TokenHub'],['talent','Talent & Organization'],['finance','Finance, Compliance & Operations']];
 // An RU object's title ("维信诺（002客户）", "E&O") to the program's unit key.
@@ -321,12 +322,17 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
  run.raw??={};run.reviews??={};run.failed??=[];run.dropped??=[];
  const ask=async(key,user)=>{
   if(run.raw[key])return JSON.parse(bareJson(run.raw[key]));
+  // One chain per answer (LangSmith 2026-10-27); each attempt below is its llm child.
+  return tracer.withRun(key,'chain',{stage:/^check-/.test(key)?'check':/^revise-/.test(key)?'revise':key==='company'?'company':'review',unit:/^check-/.test(key)?undefined:key.replace(/^revise-|#nobg$/g,'')},async()=>{
   for(let attempt=1;;attempt++){
    try{const r=await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(user)}],{thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000});
     const parsed=JSON.parse(bareJson(r.answer));run.raw[key]=r.answer;await save(run);return parsed;}
    catch(e){if(e.diagnostics?.finishReason==='refusal'||e.code==='MODEL_REFUSAL'||attempt>=3){e.refusal=e.refusal||e.diagnostics?.finishReason==='refusal'||e.code==='MODEL_REFUSAL';throw e;}}
   }
+  });
  };
+ // The skill's steps as chains in the trace: Mission and RU reviews, checks, revisions, the company review.
+ const stage=(name,fn)=>tracer.withRun(name,'chain',{stage:name},fn);
  // A refusal is retried once without the month-start background; a unit that still fails is named, the round goes on.
  const askUnit=async(c,user)=>{
   try{return await ask(c.id,user);}catch(e){
@@ -349,8 +355,8 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
  const step=async label=>{done++;await onProgress({stage:label,done,total});};
  const missionStep='按技能「产品生成整轮复盘候选·每一步怎么做·1. Mission 复盘」执行。'+fieldsHint,ruStep='按技能「产品生成整轮复盘候选·每一步怎么做·2. RU 复盘」执行。'+fieldsHint;
  await onProgress({stage:'Mission 复盘和没有 Mission 的 RU PO 复盘',done,total});
- await pool(s1,async c=>{put(c,await askUnit(c,{task:c.level==='mission'?missionStep:ruStep,unit:unitData(c)}));await step('Mission 复盘和没有 Mission 的 RU PO 复盘');});
- await pool(s2,async c=>{put(c,await askUnit(c,{task:ruStep,unit:unitData(c),missionReviews:c.children.map(id=>run.reviews[id]).filter(Boolean)}));await step('RU PO 复盘');});
+ await stage('mission-and-ru',()=>pool(s1,async c=>{put(c,await askUnit(c,{task:c.level==='mission'?missionStep:ruStep,unit:unitData(c)}));await step('Mission 复盘和没有 Mission 的 RU PO 复盘');}));
+ await stage('ru',()=>pool(s2,async c=>{put(c,await askUnit(c,{task:ruStep,unit:unitData(c),missionReviews:c.children.map(id=>run.reviews[id]).filter(Boolean)}));await step('RU PO 复盘');}));
  if(skill.groups.length){
   await onProgress({stage:'检查与修改',done,total});
   const all=[...s1,...s2].filter(c=>run.reviews[c.id]);
@@ -358,14 +364,14 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
   const verdictFacts=s2.filter(c=>run.reviews[c.id]).map(c=>({ref:c.id,verdict:run.reviews[c.id].verdict,children:c.children.map(id=>({ref:id,verdict:run.reviews[id]?.verdict||'生成失败'}))}));
   const reviews=all.map(c=>run.reviews[c.id]),brief=Object.fromEntries(all.map(c=>[c.id,{commitment:c.commitment,evidence:(c.evidence||[]).map(e=>({id:e.id,asOf:e.asOf,text:e.text.slice(0,400)}))}]));
   if(!run.checked){
-   const found=(await Promise.all(skill.groups.map((g,i)=>ask('check-'+(i+1),{task:`按技能「产品生成整轮复盘候选·检查」执行第${i+1}组（${g.name}）检查，只查这些类型：${g.types.join('、')}。返回 JSON：{"issues":[{"ref":"复盘 ref","type":"问题类型","problem":"一句话","impact":"一句话","fixable":true}]}`,reviews,programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(reviews)},sources:brief}).catch(()=>({issues:[]}))))).flatMap(r=>r.issues||[]);
+   const found=(await stage('checks',()=>Promise.all(skill.groups.map((g,i)=>ask('check-'+(i+1),{task:`按技能「产品生成整轮复盘候选·检查」执行第${i+1}组（${g.name}）检查，只查这些类型：${g.types.join('、')}。返回 JSON：{"issues":[{"ref":"复盘 ref","type":"问题类型","problem":"一句话","impact":"一句话","fixable":true}]}`,reviews,programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(reviews)},sources:brief}).catch(()=>({issues:[]})))))).flatMap(r=>r.issues||[]);
    run.issues=found;run.checked=true;await save(run);
   }
   const byRef=Object.groupBy(run.issues.filter(x=>x.fixable!==false&&skill.mustFix.includes(x.type)),x=>x.ref);
-  await pool(Object.entries(byRef).filter(([ref])=>run.reviews[ref]),async([ref,list])=>{const c=all.find(x=>x.id===ref);put(c,await ask('revise-'+ref,{task:'按技能「产品生成整轮复盘候选·检查」中的「修改」规则，修改这份复盘。'+fieldsHint,unit:unitData(c),review:run.reviews[ref],issues:list,programFacts:facts[ref],missionReviews:c.children?.map(id=>run.reviews[id])}).catch(()=>null));});
+  await stage('revisions',()=>pool(Object.entries(byRef).filter(([ref])=>run.reviews[ref]),async([ref,list])=>{const c=all.find(x=>x.id===ref);put(c,await ask('revise-'+ref,{task:'按技能「产品生成整轮复盘候选·检查」中的「修改」规则，修改这份复盘。'+fieldsHint,unit:unitData(c),review:run.reviews[ref],issues:list,programFacts:facts[ref],missionReviews:c.children?.map(id=>run.reviews[id])}).catch(()=>null));}));
  }
  const companyStep='按技能「产品生成整轮复盘候选·每一步怎么做·4. 公司复盘」执行。'+fieldsHint;
- await pool(s3,async c=>{put(c,await askUnit(c,{task:companyStep,unit:unitData(c),ruReviews:c.children.map(id=>run.reviews[id]).filter(Boolean),askedBelow:askedBelow(run)}));await step('公司 PO 复盘');});
+ await stage('company',()=>pool(s3,async c=>{put(c,await askUnit(c,{task:companyStep,unit:unitData(c),ruReviews:c.children.map(id=>run.reviews[id]).filter(Boolean),askedBelow:askedBelow(run)}));await step('公司 PO 复盘');}));
  // The company review is the last answer; save once more so the job file holds every review (评测 2026-10-27).
  await save(run);
  return run;
@@ -381,7 +387,7 @@ export async function repairReviews({gateway,skill,input,run,problems,save=async
  run.repaired??=[];
  await Promise.all(Object.entries(byUnit).map(async([id,list])=>{
   const c=items.find(x=>x.id===id),key='repair-'+id+'-'+run.repaired.filter(x=>x===id).length;if(!c)return;
-  try{const answer=run.raw[key]||(await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify({task:'按技能「产品生成整轮复盘候选·检查」中的「修改」规则修改这份复盘：只改下面程序检查出的问题，其余照原样保留。'+fieldsHint,unit:unitData(c),review:run.reviews[id],issues:list.map(p=>({type:'程序检查',problem:p.problem}))})}],{thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000})).answer;
+  try{const answer=run.raw[key]||(await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify({task:'按技能「产品生成整轮复盘候选·检查」中的「修改」规则修改这份复盘：只改下面程序检查出的问题，其余照原样保留。'+fieldsHint,unit:unitData(c),review:run.reviews[id],issues:list.map(p=>({type:'程序检查',problem:p.problem}))})}],{thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000,trace:{name:key,stage:'repair',metadata:{unit:id}}})).answer;
    run.raw[key]=answer;const res=JSON.parse(bareJson(answer));
    if(res?.review)run.reviews[id]={...res.review,unit:c.unit,level:c.level,ref:c.id,title:c.title,owner:c.owner,...(c.parent?{parent:c.parent==='company'?'company':c.parent}:{})};
   }catch{}
@@ -441,13 +447,22 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
  let flight=false;
  const setJob=patch=>store.transact(s=>{s.reviewJob={...s.reviewJob,...patch,updatedAt:new Date().toISOString()};s.sequence++;return s;});
  const view=job=>job&&{id:job.id,status:job.status,stage:job.stage||null,done:job.done??null,total:job.total??null,error:job.error||null,checks:job.checks||[],inputCutoff:job.inputCutoff||null,period:job.period,createdAt:job.createdAt,finishedAt:job.finishedAt||null,skipped:job.skipped||[],skill:job.skill||null};
- async function run(id,{period,cutoff,resume}){
+ // One trace per attempt (root = this job; a resume is its own trace). Its id stays on the job and on the installed
+ // review round, so verdict changes and signatures there become feedback on it, and a failure is feedback too.
+ function run(id,{period,cutoff,resume}){
+  const trace=tracer.startRun({name:'review-generation',metadata:{review_job_id:id,period,resume:Boolean(resume),model}});
+  return tracer.within(trace,()=>attempt(id,{period,cutoff,resume},trace));
+ }
+ const failed=(trace,why)=>{tracer.annotate({error:why},trace);if(trace)tracer.feedback({runId:trace.id,key:'review_generation_failed',score:0,value:'failed',comment:why});};
+ async function attempt(id,{period,cutoff,resume},trace){
   flight=true;let work=resume?JSON.parse(await readFile(workFile(id),'utf8').catch(()=>'null')):null;
   const save=async()=>{await mkdir(dir,{recursive:true,mode:0o700});await writeFile(workFile(id),JSON.stringify(work),{mode:0o600});};
   try{
+   if(trace)await setJob(tracer.ref(trace));
    const skill=await loadReviewSkill(skillRoot);
+   tracer.annotate({metadata:{skill_version:skill.version,skill_hash:skill.hash.slice(0,12)}},trace);
    if(!work?.input){
-    const sources=await collectReviewSources({reader:await reader(),period,cutoff,onProgress:p=>setJob(p)});
+    const sources=await tracer.withRun('read-ontology','tool',{stage:'read-ontology'},async()=>collectReviewSources({reader:await reader(),period,cutoff,onProgress:p=>setJob(p)}));
     work={input:buildReviewInput(sources,{companyDirection:await companyDirection(period),ceoName}),run:{raw:{},reviews:{},failed:[],dropped:[]}};await save();
    }
    await setJob({inputCutoff:work.input.readAt,skipped:work.input.skipped,skill:{version:skill.version,hash:skill.hash.slice(0,12)}});
@@ -457,8 +472,8 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
    work.run.covered=[...(work.run.covered||[]),...applyCovers(work.run)];
    let checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps});
    if(checks.length&&checks.some(p=>work.run.reviews[p.unit])){await setJob({stage:`检查有 ${checks.length} 处问题，重写这几份`});
-    await repairReviews({gateway,skill,input:work.input,run:work.run,problems:checks,save:async r=>{work.run=r;await save();}});checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps});}
-   if(checks.length){await setJob({status:'failed',stage:'检查没过，没有装入',error:`有 ${checks.length} 处问题，现有复盘没动`,checks,finishedAt:new Date().toISOString()});return;}
+    await tracer.withRun('repair-reviews','chain',{stage:'repair',problems:checks.length},()=>repairReviews({gateway,skill,input:work.input,run:work.run,problems:checks,save:async r=>{work.run=r;await save();}}));checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps});}
+   if(checks.length){failed(trace,`checks failed (${checks.length}): ${checks.slice(0,5).map(p=>`${p.unit} ${p.problem}`).join('; ')}`);await setJob({status:'failed',stage:'检查没过，没有装入',error:`有 ${checks.length} 处问题，现有复盘没动`,checks,finishedAt:new Date().toISOString()});return;}
    const label=`${Number(period.slice(5))} 月复盘 ${skill.version||''}（${cutoff.slice(5,10).replace('-','/')}）`.replace('  ',' ');
    const file=reviewFile(work.run,work.input,{skill,model,label,startedAt:store.snapshot().reviewJob?.createdAt||null});
    // The whole earlier collaboration state is kept before the new round opens on clean rooms (same as importReviewRound).
@@ -469,10 +484,10 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
    await store.transact(s=>{
     if(s.roundJob?.status==='running'||s.planHandoff?.status==='generating')throw Object.assign(Error('拆解正在生成，复盘没有装入'),{status:409});
     delete s.planHandoff;delete s.unitsDone;s.roundAttempts=[];s.cascadeQueue=[];
-    const next=installReviewRound(s,file,{label,source:`生成任务 ${id}`,now});
+    const next=installReviewRound(s,file,{label,source:`生成任务 ${id}`,now});if(trace&&next.reviewRound)next.reviewRound.traceRunId=trace.id;
     next.reviewJob={...s.reviewJob,status:'done',stage:'已装入',checks:[],error:null,finishedAt:now,updatedAt:now};next.sequence++;return next;
    });
-  }catch(e){await setJob({status:'failed',error:`${String(e.message||e).replace(/[；;]?\s*旧轮未替换/,'').slice(0,240)}；现有复盘没动，可以续跑`,finishedAt:new Date().toISOString()}).catch(()=>{});}
+  }catch(e){failed(trace,String(e.message||e).slice(0,300));await setJob({status:'failed',error:`${String(e.message||e).replace(/[；;]?\s*旧轮未替换/,'').slice(0,240)}；现有复盘没动，可以续跑`,finishedAt:new Date().toISOString()}).catch(()=>{});}
   finally{flight=false;}
  }
  return {

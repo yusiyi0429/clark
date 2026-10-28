@@ -139,6 +139,10 @@
       "sha256": "646b1a98cfbd7fbe6c23cf88c8d5563ba51d8a5a2c3d7a63b6b5fce5ad781321"
     },
     {
+      "path": "langsmith-trace.mjs",
+      "sha256": "0ef0803941aefcbccd6819ed38432e12b027635506d9799c105518c513219e67"
+    },
+    {
       "path": "layered-mock.mjs",
       "sha256": "81d87dc13cca1bc20297b799a4b1ef2c33e60ae190f36d10f08f452c5d863b5c"
     },
@@ -168,7 +172,7 @@
     },
     {
       "path": "model.mjs",
-      "sha256": "307028bb184a97fc59b5794603b4561477a59adedd2a9fd936d4e9975fb23c04"
+      "sha256": "bd579ec53f6a88f37cec73f09de9d1cb644f893666a8efec557d9a2c392d3086"
     },
     {
       "path": "nexus-cascade.mjs",
@@ -285,7 +289,7 @@
     },
     {
       "path": "review-generation.mjs",
-      "sha256": "f4980cbceeb5517ee2f78ccfd55403305259a2ff324bc578f98c7b35371b7e26"
+      "sha256": "a33b9e61c1788c7711dbc9d86345a2698e89e65e1875a0bf22754fde5e8084fc"
     },
     {
       "path": "review-handoff.mjs",
@@ -349,7 +353,7 @@
     },
     {
       "path": "round-runner-v3.mjs",
-      "sha256": "f0c2285a2d3f17d82cb85a03ebc1e38449b96a840209d5add03b9e2959eeb67f"
+      "sha256": "9f59b1e8d6525025308bd4fb476e0991aeb24f0c409778f05e392c8d4f090d3c"
     },
     {
       "path": "round-runner.mjs",
@@ -381,7 +385,7 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "3597933c36aa65177fee43b369c68886b1ebc9c4a017a940bae2feba428179d1"
+      "sha256": "7e5dd4f67c676f5182b654469653e2f49058874785a00ab9cf77d37c27640de1"
     },
     {
       "path": "shared-projection.mjs",
@@ -445,7 +449,8 @@
     "runtime state, histories and private inputs (deployment-only)",
     "tests that need this machine's seed, eval skills, browser, Codex or real model (run them in the demo workspace)",
     "lan-host.mjs and published-round.mjs (local-only; the server binds via M2_BIND_HOST and reads rounds from the private seed)",
-    "ontology-sources.mjs keeps the Tianshu reading path (product token only, private manifest); its checks follow the demo as of 2026-10-26"
+    "ontology-sources.mjs keeps the Tianshu reading path (product token only, private manifest); its checks follow the demo as of 2026-10-26",
+    "test-langsmith-trace.mjs (one case needs the round-08 fixture; run it in the demo workspace)"
   ],
   "skill": {
     "version": "3.1.7",

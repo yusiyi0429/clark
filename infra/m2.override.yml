@@ -26,6 +26,10 @@ services:
       # generate: when the CEO confirms the company review, the server starts next month's plan from the confirmed reviews; prepare: only builds the input package.
       DECODING_PLAN_HANDOFF: ${M2_PLAN_HANDOFF:-generate}
       TKOS_WORLD_PRODUCT_TOKEN: ${M2_WORLD_READ_TOKEN:-}
+      # LangSmith traces of model calls (project m2). No key: nothing is sent and M2 runs as before; upload failures never block it.
+      LANGSMITH_API_KEY: ${M2_LANGSMITH_API_KEY:-}
+      LANGSMITH_PROJECT: ${M2_LANGSMITH_PROJECT:-m2}
+      LANGSMITH_ENDPOINT: ${M2_LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}
     volumes:
       - ${M2_SEED_DIR:?M2_SEED_DIR required}:/var/lib/m2/seed:ro
       - m2_state:/repo/apps/m2/.runtime

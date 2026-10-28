@@ -12,6 +12,7 @@ import {runRoundPool} from './round-pool.mjs';
 import {retryRoundCall,parseRoundJSON} from './round-retry.mjs';
 import {domainContext,inputCoverage,contextReceipt} from './round-context.mjs';
 import {redactSources} from './redact.mjs';
+import {tracer} from './langsmith-trace.mjs';
 import {monthSpan,dateSpan,synchronizeSchedule} from './schedule-check.mjs';
 import {readerQuality} from './reader-quality.mjs';
 import {applyCapacityDefault,canonicalOwner,mustFixTypes,checkGroups,crossCheckLimit,withIds,applyChanges,loadFacts,scheduleFacts,cardIdOf} from './round-runner.mjs';
@@ -190,7 +191,10 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
  const L=structuredClone(resume?.layerState||{units:{},stages:{}});
  const save=extra=>onProgress({layerState:structuredClone(L),input:structuredClone(input),...extra});
  const display=()=>keys.filter(k=>L.units[k]).map(k=>toDisplay(L.units[k],input.period));
- const ask=async payload=>{
+ // LangSmith (2026-10-27): each layer is a chain under the round's root, each asked piece a chain under it, and every
+ // attempt (retries, effort fallback, redo) an llm child of that piece.
+ const layer=(name,fn)=>tracer.withRun(name,'chain',{stage:name},fn);
+ const ask=payload=>tracer.withRun(`${payload.stage}:${payload.key||'all'}`,'chain',{stage:payload.stage,unit:payload.key},async()=>{
   const frozen=structuredClone({...payload,period:input.period,cutoff:input.cutoff,planningDate:input.businessDate,pending:input.coverage.pending});
   const receipt=contextReceipt(frozen);input.contextReceipts.push(receipt);
   try{
@@ -202,7 +206,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
    if(!check)for(const gap of answer.gaps||[])input.generationGaps.push({unitKey:payload.key||null,layer:payload.stage.split('-')[0],gap});
    receipt.status='completed';return answer;
   }catch(error){receipt.status='failed';receipt.error=error.message;if(error.partialAnswer!==undefined)await recordRoundFailure({scope:`${payload.stage}:${payload.key||'all'}`,reason:error.code||error.message,answer:error.partialAnswer}).catch(()=>{});error.unitKey??=payload.key;throw error;}
- };
+ });
  // One call; malformed output is redone once with identical settings.
  // A refusal is retried once with only this unit's and the company's material; a second refusal marks just this
  // piece (fallback) instead of stopping the round (模型调用稳定性加固, 2026-10-22). Same-request retries are not repeated.
@@ -234,6 +238,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
  const unitShape='{analysis, po:{title,owner,result,checks,contribution,done,parentLtoReference,plan:{path,tradeoffs,dependencies,risks}}, missions:[{title,owner,tier,time,gate,result,why,checks,boundary,route,risks}], upstream:[{element,source,disposition:"承接|暂缓|他域",missionTitle,ownerUnit,note}]';
  const stageUnits=async(stage,list,payload)=>{
   if(L.stages[stage])return;
+  return layer(stage,async()=>{
   const todo=list.filter(k=>!L.units[k]);let done=list.length-todo.length;
   await save({stage:`${stage==='battlefield-generate'?'战场':'能力域'}：并行生成`,done,total:list.length});
   await runRoundPool(todo,async key=>{
@@ -241,6 +246,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
    done++;await save({stage:`${stage==='battlefield-generate'?'战场':'能力域'}：并行生成`,done,total:list.length,partialUnits:display()});
   },concurrency);
   L.stages[stage]=true;await save({stage:`${stage==='battlefield-generate'?'战场':'能力域'}完成`,done:list.length,total:list.length,partialUnits:display()});
+  });
  };
  // 1. Battlefields
  await stageUnits('battlefield-generate',battlefieldKeys,key=>({stage:'battlefield-generate',task:`为「${nameOf(key)}」（key=${key}）写本月 PO、单元计划、Mission 和对能力域的需求：按技能“产品生成整轮候选·每一步怎么做·1. 战场”执行。返回 ${unitShape}, demands:[{to,what,by,use}], gaps:[]}。demands.to 写能力域 key。`,...common(key)}));
@@ -260,6 +266,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
  const keepFor=(before=[],now)=>{const id=i=>[i.unitKey,i.cardTitle,i.type,i.problem].join('|'),seen=new Set(now.map(id));return [...before.filter(i=>!seen.has(id(i))),...now];};
  const checkRound=async(layer,extraFor=()=>null)=>{
   const state=L.stages[layer]??={remaining:[],revised:[]};if(state.done)return;
+  return tracer.withRun(`${layer}-check`,'chain',{stage:`${layer}-check`},async()=>{
   await save({stage:`${layerNames[layer]}：检查`,done:0,total:groups.length||1});
   const all=layer==='final';
   const focus=groups.map(g=>({...g,types:all||!mustFix.length?g.types:g.types.filter(t=>mustFix.includes(t))})).filter(g=>g.types.length);
@@ -288,11 +295,12 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
    record.revised.push(key);n++;await save({stage:`${layerNames[layer]}：修改`,done:n,total:byUnit.length,partialUnits:display()});
   },concurrency);
   state.revised=issues.filter(fixable).map(i=>({...i,layer}));state.done=true;await save({stage:`${layerNames[layer]}完成`,done:1,total:1});
+  });
  };
  await checkRound('check');
 
  // 4. Tasks per Mission
- if(!L.stages.task?.done){
+ if(!L.stages.task?.done)await layer('task-generate',async()=>{
   const st=L.stages.task??={parts:{}};
   const missionLoad=Object.fromEntries(loadFacts(units()).map(p=>[p.name,p.missionCount]));
   const capacityDays=capacityFacts([],{from:input.scheduleFrom,period:input.period,capacity:input.capacity})[0]?.capacityDays||0;
@@ -312,7 +320,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
   },concurrency);
   for(const k of keys)L.units[k]={...L.units[k],missions:L.units[k].missions.map((_,i)=>st.parts[k][i])};
   st.done=true;await save({stage:'拆 Task 完成',done:items.length,total:items.length,partialUnits:display()});
- }
+ });
 
  // 4b. Global alignment: for everyone whose estimated person-days exceed capacity, one call ranks all of that person's
  // Tasks across units and decides what stays this month, what drops a tier, what moves to next month. P0 is not cut silently.
@@ -323,6 +331,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
  const danglingOf=k=>{const u=L.units[k],titles=new Set(u.missions.map(m=>m.title));return (u.upstream||[]).filter(x=>/承接/.test(String(x.disposition))&&!titles.has(x.missionTitle));};
  const repairUpstream=async()=>{
   if(L.stages.upstream?.done)return;
+  return layer('upstream-repair',async()=>{
   keys.forEach(syncUpstream);
   const todo=keys.filter(k=>!L.units[k].po?.generationFailed&&danglingOf(k).length);
   const record={layer:'upstream',round:1,issues:todo.reduce((n,k)=>n+danglingOf(k).length,0),repairable:todo.length,revised:[]};input.iterations.push(record);
@@ -343,10 +352,12 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
    n++;record.revised.push(key);await save({stage:'上级要素核对',done:n,total:todo.length});
   },concurrency);
   L.stages.upstream={done:true};
+  });
  };
  // Run again after the final revisions (陈溪南 10/22 走查：第 25 轮白田田 22.5、唐巨杰 22 of 21): those revisions add work too.
  const alignPass=async(stageName,round)=>{
   if(L.stages[stageName]?.done)return;
+  return layer(stageName,async()=>{
   const st=L.stages[stageName]??={decisions:{}};
   // The second pass takes everyone still over after the final revisions (10/22: a gate on load growth let 唐巨杰 through at 22.9 of 21).
   const over=capacityFacts(units(),{from:input.scheduleFrom,period:input.period,capacity:input.capacity}).filter(p=>p.over>0.5&&!st.decisions[p.name]);
@@ -393,6 +404,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
   for(const p of after.filter(p=>p.over>0.5)){const note=`${p.name} 对齐后仍有 ${p.plannedDays} 人日（容量 ${p.capacityDays}），请 RU DRI 和 CEO 决定先推哪几项。`;const d=(input.alignDecisions??={})[p.name]??={decisionsForCEO:[],changed:0};if(!d.decisionsForCEO.includes(note))d.decisionsForCEO.push(note);if(!input.generationGaps.some(g=>g.layer==='align'&&g.gap===note))input.generationGaps.push({unitKey:p.name,layer:'align',gap:note});}
   st.after=Object.fromEntries(after.map(p=>[p.name,p.plannedDays]));
   st.done=true;await save({stage:'全局对齐完成',done:over.length,total:over.length,partialUnits:display()});
+  });
  };
  await alignPass('align',1);
 
@@ -402,7 +414,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
  await alignPass('realign',2);
  await repairUpstream();
  // 6. One shortening pass for what is still over.
- if(!L.stages.format?.done){
+ if(!L.stages.format?.done)await layer('format-revise',async()=>{
   const findings=keys.flatMap(k=>lengthFindingsOf(k).map(f=>({...f,unitKey:k})));
   const record={layer:'format',round:1,issues:findings.length,repairable:findings.length,revised:[]};input.iterations.push(record);
   const byUnit=Object.entries(findings.reduce((g,f)=>{(g[f.unitKey]??=[]).push(f);return g;},{})).filter(([k])=>!L.units[k]?.po?.generationFailed);
@@ -415,7 +427,7 @@ export async function generateRoundV3({gateway,rules,fetchSources=fetchRoundSour
    record.revised.push(key);
   },concurrency);
   L.stages.format={done:true};
- }
+ });
 
  // Assemble in the 2.x shape; Mission dates follow their Tasks.
  const raw=keys.map(k=>toDisplay(L.units[k],input.period));
