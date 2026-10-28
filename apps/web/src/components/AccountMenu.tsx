@@ -22,6 +22,7 @@ import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { CoAgentSkinPicker } from "@/components/coagent/SkinPicker";
 import { VoiceKeysDialog } from "@/conversation/VoiceKeysDialog";
 import { CollectorInstallPanel, useCollectorStatus } from "@/components/onboarding/CollectorSetup";
+import { CollectorReview } from "@/components/onboarding/ReviewLists";
 import { readTaskQualityEnabled } from "@/components/task-quality/taskQualityStatus";
 import { PersonalProfileForm } from "@/components/PersonalProfileForm";
 import { WechatConnectPanel, readWechatConnection, type WechatConnection } from "@/components/WechatConnect";
@@ -293,10 +294,15 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   );
 }
 
-/** 个人菜单里的本机采集器：和首次引导同一块安装面板，开着时读状态，令牌只在这次打开里留着。 */
+/** 个人菜单里的本机采集器：和首次引导同一块安装面板，开着时读状态，令牌只在这次打开里留着；盘点到了，下面确认清单。 */
 function CollectorDialog() {
   const [token, setToken] = useState<string | null>(null);
-  return <CollectorInstallPanel token={token} onToken={setToken} status={useCollectorStatus(true)} />;
+  const status = useCollectorStatus(true);
+  const memoryFiles = status?.devices.length && status.consent ? status.inventory.memoryFiles : null;
+  return <>
+    <CollectorInstallPanel token={token} onToken={setToken} status={status} />
+    <CollectorReview scannedAt={status?.scannedAt ?? null} memoryFiles={memoryFiles} />
+  </>;
 }
 
 /** 个人菜单里的飞书：没连好时「连接飞书」，整页去飞书授权、授权完回到这一页；连好了只显示状态。 */

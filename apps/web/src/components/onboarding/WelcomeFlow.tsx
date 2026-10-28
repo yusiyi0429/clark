@@ -39,6 +39,8 @@ export function onboardingSteps(data: OnboardingData, skipReview = false): Step[
 
 /** 扫描等第一次盘点最多这么久；超时就停在那一步，用已有的数据整理清单，不让人卡在这一页。 */
 export const SCAN_TIMEOUT_MS = 120_000;
+/** 扫描超过这么久还没完，主按钮变成「后台继续」：跳过确认清单，盘点到了在 设置 › 本机采集器 里确认。 */
+export const SCAN_SKIP_MS = 10_000;
 
 /** 结束页设置摘要里的雷达一行（只有成员走到结束页）：写开没开。 */
 export function radarSummaryLine(radar: { enabled: boolean }): string {
@@ -111,6 +113,9 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
   /** 本次上手生成的采集器令牌：前后翻页不丢，也不重复生成。 */
   const [collectorToken, setCollectorToken] = useState<string | null>(null);
   const [scanTimedOut, setScanTimedOut] = useState(false);
+  /** 扫描等了 SCAN_SKIP_MS 还没完，可以后台继续；本人选了后台继续，这次上手就跳过确认清单。 */
+  const [scanSkippable, setScanSkippable] = useState(false);
+  const [scanDeferred, setScanDeferred] = useState(false);
   /** 扫描页结束时读好的两份清单；确认清单提交后换成服务端返回的最新一份。 */
   const [reviewLists, setReviewLists] = useState<ReviewLists | null>(null);
   /** 确认清单提交过（之后默认勾选按入库的来）、明细里改过的勾选、提交中、提交失败。 */
@@ -123,7 +128,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
   const collector = useCollectorStatus(unskipped === "collector" || unskipped === "scan");
   const collectorConnected = Boolean(collector?.devices.length);
   const memoryFiles = collectorConnected && collector!.consent ? collector!.inventory.memoryFiles : null;
-  const steps = onboardingSteps(data, !reviewed && reviewLists !== null && reviewEmpty(reviewLists, memoryFiles));
+  const steps = onboardingSteps(data, scanDeferred || (!reviewed && reviewLists !== null && reviewEmpty(reviewLists, memoryFiles)));
   const step = steps[index];
   const last = index === steps.length - 1;
   const scanFinished = Boolean(collector) && (!collectorConnected || !collector?.consent || Boolean(collector?.scannedAt) || scanTimedOut);
@@ -158,6 +163,11 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
     const timer = window.setTimeout(() => setScanTimedOut(true), SCAN_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
   }, [step, collectorConnected, collector?.scannedAt, scanTimedOut]);
+  useEffect(() => {
+    if (step !== "scan" || scanReady || scanSkippable) return;
+    const timer = window.setTimeout(() => setScanSkippable(true), SCAN_SKIP_MS);
+    return () => window.clearTimeout(timer);
+  }, [step, scanReady, scanSkippable]);
   useEffect(() => {
     if (step !== "scan" || !scanFinished || reviewLists) return;
     // 扫完才整理清单：读不到就隔几秒再读，步骤停在「整理清单」。
@@ -227,6 +237,11 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
       }
       return;
     }
+    if (step === "scan" && !scanReady && scanSkippable) {
+      setScanDeferred(true);
+      move(1);
+      return;
+    }
     if (step === "voiceprint" && voice.phase === "recorded") {
       const saved = await voice.save();
       if (saved) { setRerecord(false); move(1); }
@@ -251,11 +266,11 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
   const busy = finishing || voice.phase === "saving" || reviewSaving;
   const voiceReady = voice.status?.enrolled && !rerecord && voice.phase === "idle";
   const primaryDisabled = busy || (!error && ((step === "voiceprint" && !voiceReady && (voice.phase !== "recorded" || voice.tooShort))
-    || (step === "collector" && !collectorConnected) || (step === "scan" && !scanReady)));
+    || (step === "collector" && !collectorConnected) || (step === "scan" && !scanReady && !scanSkippable)));
   const disabledHint = step === "voiceprint" && primaryDisabled && !busy
     ? voice.recording ? "录好后再继续，也可以选「稍后」" : voice.tooShort ? "请重新录满 15 秒，或者选「稍后」" : voice.consent ? "录好一段 15–30 秒的朗读，或者选「稍后」" : "先勾选同意并录好，或者选「稍后」"
     : null;
-  const primaryLabel = finishing ? "正在进入…" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : last ? returnPath ? "继续刚才的页面" : "进入工作台" : step === "review" ? reviewSaving ? "正在保存…" : "完成" : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : "下一步";
+  const primaryLabel = finishing ? "正在进入…" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : last ? returnPath ? "继续刚才的页面" : "进入工作台" : step === "review" ? reviewSaving ? "正在保存…" : "完成" : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : step === "scan" && !scanReady && scanSkippable ? "后台继续" : "下一步";
 
   return <main className={s.page} onKeyDown={onKeyDown} style={{ "--direction": direction } as CSSProperties}>
     <MorningCanvas progress={index} />

@@ -36,6 +36,9 @@
 .status[data-state="on"] { color: var(--onboarding-ink); }
 .status[data-state="on"] i { background: #34c759; box-shadow: 0 0 0 3px rgb(52 199 89 / 18%); }
 .consentTop { margin-bottom: 12px; }
+.laterReview { margin-top: 20px; }
+.laterReview h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: var(--onboarding-ink); }
+.laterActions { display: flex; justify-content: flex-end; margin-top: 12px; }
 .error { margin: 10px 0 0; color: var(--onboarding-error); font-size: 13px; }
 
 /* 系统切换：iOS 分段控件 */

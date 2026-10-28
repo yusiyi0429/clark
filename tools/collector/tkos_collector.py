@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import date, datetime, time, timedelta, timezone
+import hashlib
 import json
 from pathlib import Path
 import platform
@@ -30,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import collect_sessions as cs  # noqa: E402
 import sanitize  # noqa: E402
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 HOME = Path.home() / ".tkos-world"
 DIGEST_EVERY = timedelta(hours=3)
 INVENTORY_EVERY = timedelta(hours=24)  # 本机清单每天完整盘点一次，随心跳带上；装好后第一次检查就盘点
@@ -211,9 +212,15 @@ def full_inventory(now: datetime, codex_home: Path, claude_home: Path) -> dict[s
     return {"scheduledTasks": scheduled_tasks(), "feishuDocs": feishu_docs(sessions), "memoryFiles": memory_files(claude_home, codex_home)}
 
 
-def inventory_due(state: dict[str, Any], now: datetime) -> bool:
+def inventory_target(server: str, token: str) -> str:
+    """上次盘点发给了谁：天枢地址 + 令牌的指纹。换了天枢地址或重新配对，就当还没盘点过。"""
+    return hashlib.sha256(f"{server.rstrip('/')}\n{token}".encode("utf-8")).hexdigest()[:16]
+
+
+def inventory_due(state: dict[str, Any], now: datetime, target: str) -> bool:
     last = state.get("inventory_at")
-    return not last or now - datetime.fromisoformat(last.replace("Z", "+00:00")) >= INVENTORY_EVERY
+    return not last or state.get("inventory_for") != target \
+        or now - datetime.fromisoformat(last.replace("Z", "+00:00")) >= INVENTORY_EVERY
 
 
 # ---------- 上报 ----------
@@ -335,14 +342,15 @@ def run(mode: str, args: argparse.Namespace) -> int:
 
     # 4. 今天没发出上报，或者到了每天盘点的时候，就发心跳，带上各来源的信息截至。
     #    本机清单（定时任务、读过的飞书文档、记忆文件）要天枢回话说本人已经同意采集才盘点、才上传（D-18）；没同意就不碰，下次检查再问。
-    take_inventory = inventory_due(state, now)
+    target = inventory_target(config["server"], api.token)
+    take_inventory = inventory_due(state, now, target)
     if not sent or take_inventory:
         coverage = datetime.fromisoformat(state["watermark"].replace("Z", "+00:00"))
         beat: dict[str, Any] = {"device": device, "version": VERSION, "sources": source_states(status, state, coverage)}
         reply = api.post("/api/collector/heartbeat", beat)
         if take_inventory and reply.get("consent") is True:
             api.post("/api/collector/heartbeat", {**beat, "inventory": full_inventory(now, args.codex_home, args.claude_home)})
-            state["inventory_at"] = iso(now)
+            state["inventory_at"], state["inventory_for"] = iso(now), target
     if not args.dry_run:
         save_json(args.state, state)
     return 0

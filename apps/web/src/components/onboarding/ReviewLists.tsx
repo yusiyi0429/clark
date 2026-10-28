@@ -4,7 +4,7 @@
  * 上手的「确认清单」一步（前端交互说明 10a 第 4 步）：一屏摘要，记忆文件、文档、定时任务各一行，数字是帮本人选好的；
  * 点一行展开勾选明细，改了以摘要为准；数量为 0 的不显示。底栏「完成」把两份清单按当前勾选分别提交。
  */
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
@@ -129,4 +129,48 @@ export function ReviewSummary({ lists, reviewed, picks, onPick, memoryFiles, sav
     </li>)}</ul>
     {error ? <p className={c.error} role="alert">{error}</p> : null}
   </div>;
+}
+
+/**
+ * 个人菜单 › 设置 › 本机采集器：上手时扫描没等完就「后台继续」的，盘点到了在这里确认清单；以后想改也在这里。
+ * 三项都没有可确认的就不显示。入过库的按入库的勾，一项都没入过就全勾（同上手）。
+ */
+export function CollectorReview({ scannedAt, memoryFiles }: { scannedAt: string | null; memoryFiles: number | null }) {
+  const [lists, setLists] = useState<ReviewLists | null>(null);
+  const [picks, setPicks] = useState<ReviewPicks>({});
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!scannedAt) return;
+    let alive = true;
+    void loadReviewLists().then((next) => { if (alive) setLists(next); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [scannedAt]);
+  if (!lists || reviewEmpty(lists, memoryFiles)) return null;
+  const reviewed = lists.basis.some((item) => item.confirmed) || lists.schedules.some((item) => item.imported);
+
+  async function save() {
+    if (!lists) return;
+    setSaving(true);
+    setError(null);
+    try {
+      setLists(await submitReview(lists, reviewed, picks));
+      setPicks({});
+      setSaved(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "没有存上，请重试");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <section className={c.laterReview} aria-label="确认清单">
+    <h3>确认清单</h3>
+    <ReviewSummary lists={lists} reviewed={reviewed} picks={picks} memoryFiles={memoryFiles} saving={saving} error={error}
+      onPick={(key, checked) => { setSaved(false); setPicks((current) => ({ ...current, [key]: checked })); }} />
+    <div className={c.laterActions}>
+      <button type="button" className={f.primary} onClick={() => void save()} disabled={saving || saved}>{saving ? "正在保存…" : saved ? "已保存" : "保存"}</button>
+    </div>
+  </section>;
 }
