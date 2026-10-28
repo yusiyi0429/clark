@@ -60,7 +60,7 @@ describe("CEO login → real Card journey", () => {
     }
   });
 
-  it("issues an HttpOnly Secure SameSite=Strict cookie and serves real home Cards", async () => {
+  it("issues an HttpOnly Secure SameSite=Lax cookie and serves real home Cards", async () => {
     const t = await createTestApp();
     const { app } = t;
     try {
@@ -76,7 +76,7 @@ describe("CEO login → real Card journey", () => {
       const setCookie = login.headers["set-cookie"] as string;
       expect(setCookie).toContain("HttpOnly");
       expect(setCookie).toContain("Secure");
-      expect(setCookie).toContain("SameSite=Strict");
+      expect(setCookie).toContain("SameSite=Lax");
 
       const cookie = setCookie.split(";")[0];
       const res = await app.inject({

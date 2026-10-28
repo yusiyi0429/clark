@@ -51,11 +51,12 @@ export function readSessionToken(secret: string, token: string | undefined): Ses
 
 export function sessionSetCookie(secret: string, maxAgeSeconds: number, claims: SessionClaims): string {
   // Secure：浏览器把 localhost/127.0.0.1 视为安全上下文，本地 http 调试也能写入；线上由 Nginx 终止 TLS。
-  return `${SESSION_COOKIE}=${createSessionToken(secret, maxAgeSeconds, claims)}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly; Secure; SameSite=Strict`;
+  // Lax：从飞书消息等外部链接打开也带得上会话（Strict 会让每次外链打开都回锁屏）；跨站写请求仍不带。
+  return `${SESSION_COOKIE}=${createSessionToken(secret, maxAgeSeconds, claims)}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly; Secure; SameSite=Lax`;
 }
 
 export function sessionClearCookie(): string {
-  return `${SESSION_COOKIE}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict`;
+  return `${SESSION_COOKIE}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax`;
 }
 
 export function parseCookies(header: string | undefined): Record<string, string> {

@@ -50,7 +50,7 @@ export type FeishuConnectIntent = { personId: string; sessionVersion: number };
 
 /**
  * 发起授权：随机 state 与 next 一起签名放进 cookie（SameSite=Lax，飞书授权页跳回来的顶层 GET 会带上），
- * 回调时比对 query 里的 state。连接飞书（connect）时把发起的人一起签进去：会话 cookie 是 SameSite=Strict，回调那一跳带不上。
+ * 回调时比对 query 里的 state。连接飞书（connect）时把发起的人一起签进去：回调那一跳不一定带得上会话 cookie。
  */
 export function createOAuthState(secret: string, next: string, nowMs = Date.now(), connect?: FeishuConnectIntent): { state: string; setCookie: string } {
   const state = randomBytes(24).toString("base64url");
