@@ -4,6 +4,7 @@ import {fieldCommentTarget,fieldCommentAction,fieldCommentActive} from './field-
 import {createCollaborationState,applyAction,currentVersion} from './governance.mjs';
 import {installReviewRound} from './review-round.mjs';
 import {memberActor} from './shared-projection.mjs';
+import {confirmationProgress} from './private-agent-context.mjs';
 
 const state=()=>installReviewRound(createCollaborationState([{id:'agents',unit:'agents',level:'po',title:'Agents',owner:'刘明华',version:1,children:[]}]),{period:'2026-10',reviews:[
  {ref:'agents-m1',unit:'agents',level:'mission',owner:'陈溪南',title:'复盘与分解',verdict:'未达成',verdictReason:'缺完成证据',facts:[{ref:'t1',item:'读取',owner:'陈溪南',status:'未达成',evidence:'缺完成证据',gap:''}],nextInputs:[]},
@@ -29,4 +30,12 @@ test('批注保留开始写时的卡片版本，后台更新后不悄悄换成�
  const s=state(),id='rv:agents-m1',node={...currentVersion(s.cards[id]).content,id};
  const target=fieldCommentTarget(node,'verdict');node.version=2;
  assert.equal(fieldCommentAction(target,'旧版意见').baseVersion,1);
+});
+
+test('私人 Agent 待确认包含本人复盘，确认后移除，不混入他人的个人复盘',()=>{
+ const s=state(),actor=memberActor('member-04',s),readable=Object.values(s.cards);
+ const waiting=confirmationProgress(s,actor,readable).waitingForMe.map(c=>c.title);
+ assert.ok(waiting.includes('复盘与分解'));assert.ok(waiting.includes('会议'));assert.ok(!waiting.includes('天枢'));
+ s.cards['rv:agents-m1'].versions.at(-1).signatures=[{slot:'missionDri',actorId:actor.id,version:1}];
+ assert.ok(!confirmationProgress(s,actor,readable).waitingForMe.some(c=>c.title==='复盘与分解'));
 });
