@@ -22509,6 +22509,12 @@
                 "type": "string"
               }
             }
+          },
+          "pagePath": {
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^/",
+            "type": "string"
           }
         }
       },

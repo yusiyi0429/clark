@@ -4951,6 +4951,7 @@ export interface components {
                 from?: string;
                 to?: string;
             };
+            pagePath?: string;
         };
         ConversationSseEvent: {
             runId: string;

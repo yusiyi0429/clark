@@ -193,6 +193,8 @@ export const ConversationMessageRequest = Type.Object(
     resumeRunId: Type.Optional(Type.String({ format: "uuid" })),
     /** 本人在范围标签上改过的读取范围：这一轮三层取用的工具一律按它读。 */
     scopeOverride: Type.Optional(ReadScopeParams),
+    /** 本人此刻所在页面的路径（如 /me/task-quality）：首页对话据此告诉 Agent 这是哪个页面、能做什么。 */
+    pagePath: Type.Optional(Type.String({ minLength: 1, maxLength: 200, pattern: "^/" })),
   },
   { additionalProperties: false },
 );

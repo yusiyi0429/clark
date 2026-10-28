@@ -5,6 +5,7 @@ import { turnFailureCopy } from "./conversationRecovery.js";
 import { segmentDateLabel, startsNewSegment } from "./conversationSegments.js";
 import type { HomeTurnVia } from "./homeTurn.js";
 import { logEvent } from "./observability.js";
+import type { PageGuide } from "./pageGuides.js";
 import { Value } from "@sinclair/typebox/value";
 import type { Static, TSchema } from "@sinclair/typebox";
 
@@ -148,6 +149,8 @@ export function createChatService(options: {
   rotation?: boolean;
   /** 发一句、传附件进了哪一段（纪要据此记下有新内容）；失败只记日志，不影响这一句。 */
   onSegment?: (viewer: ChatViewer, segment: ChatSegmentActivity) => Promise<void>;
+  /** 页面目录（CHAT_PAGE_CONTEXT=1 才给）：本人在二级页面问时，这一轮带上 page（这页的名字和说明）。Chat 不收多余字段，没接 page 之前别开。 */
+  pageGuide?: (path: string) => PageGuide | null;
 }) {
   if (!options.token) throw new Error("CHAT_SERVICE_URL 需要同时配置 INTERNAL_CHAT_TOKEN");
   const base = options.baseUrl.replace(/\/+$/, "");
@@ -288,6 +291,7 @@ export function createChatService(options: {
         current = resumed ? { conversation: resumed, started: false } : await segment(viewer, requestId, !body.attachments?.length);
         record(viewer, requestId, current.conversation);
         const id = current.conversation.conversationId;
+        const page = body.pagePath ? options.pageGuide?.(body.pagePath) ?? null : null;
         upstream = await call(viewer, requestId, `/conversations/${id}/turns`, {
           method: "POST", signal: abort.signal, headers: { "content-type": "application/json", accept: "text/event-stream" },
           body: JSON.stringify({ clientRequestId: randomUUID(), message: body.message, attachmentIds: (body.attachments ?? []).map((item) => item.id),
@@ -295,7 +299,8 @@ export function createChatService(options: {
             ...(body.references?.length ? { references: body.references } : {}),
             ...(body.resumeRunId ? { resumeRunId: body.resumeRunId } : {}),
             // 飞书、微信来的这一轮标上来源：Chat 的字段叫 channel，不认识的字段会整轮拒收。
-            ...(via ? { channel: via } : {}) }),
+            ...(via ? { channel: via } : {}),
+            ...(page ? { page } : {}) }),
         });
       } catch (error) {
         if (!abort.signal.aborted) throw error;
