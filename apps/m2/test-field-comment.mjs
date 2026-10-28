@@ -30,4 +30,3 @@ test('批注保留开始写时的卡片版本，后台更新后不悄悄换成�
  const target=fieldCommentTarget(node,'verdict');node.version=2;
  assert.equal(fieldCommentAction(target,'旧版意见').baseVersion,1);
 });
-
