@@ -311,6 +311,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/wechat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人的微信 ClawBot 连接状态（等扫码时带二维码内容）；没接微信时 404 */
+        get: operations["getMyWechatConnection"];
+        put?: never;
+        post?: never;
+        /** 断开本人的微信 ClawBot */
+        delete: operations["disconnectMyWechat"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/wechat/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 开始连接微信：要一张绑定二维码，后台等本人扫码确认；正在等扫码时沿用同一张 */
+        post: operations["connectMyWechat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/feishu/start": {
         parameters: {
             query?: never;
@@ -1390,7 +1425,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 我主持或创建的会里待处理的会议记录：待确认、修改待确认、写入失败，一场会一条 */
+        /** 通知栏的会后确认：等我确认的决策和行动项（一条一条），和我主持或创建的会里写入失败的会议记录（一场会一条） */
         get: operations["listMyMeetingCards"];
         put?: never;
         post?: never;
@@ -1536,6 +1571,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meetings/{id}/card/speakers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 主持人或创建人指定一位没对上人的说话人：对到某人（卡里的原名换成这个人、加进参会人），或选「不是天枢里的人」保留原名；draftVersion 过期 409 DRAFT_CHANGED（带 view） */
+        post: operations["assignMeetingCardSpeaker"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings/{id}/card/confirm": {
         parameters: {
             query?: never;
@@ -1547,6 +1599,40 @@ export interface paths {
         put?: never;
         /** 主持人或创建人整卡确认：冻结一个确认版本并排写本体（选了不写入只留天枢）；draftVersion 过期 409 DRAFT_CHANGED（带 view），同一草稿再确认不出新版本；已有确认版时 kind 必填（400 KIND_REQUIRED），没有实际时间或在将来 400 OCCURRED_AT_REQUIRED */
         post: operations["confirmMeetingCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/card/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 逐条确认一条决策或行动项：责任人（没有就是主持人）自己点，主持人或创建人代点记为代确认；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view） */
+        post: operations["reviewMeetingCardItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/card/world": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 冻结前主持人或创建人改「不写进本体」；冻结后 409 CARD_FROZEN */
+        put: operations["setMeetingCardWorldChoice"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4462,6 +4548,7 @@ export interface components {
                             text: string;
                         };
                         basisSectionIds: string[];
+                        decisionId?: string | null;
                         stale: boolean;
                     }[];
                 } | null;
@@ -4474,11 +4561,33 @@ export interface components {
                     dueDate: string | null;
                     basisSectionIds: string[];
                     taskId: string | null;
+                    review?: {
+                        status: "pending" | "confirmed" | "rejected";
+                        by: string | null;
+                        proxy: boolean;
+                        at: string | null;
+                        reason: string | null;
+                    };
                 }[];
+                decisions: {
+                    id: string;
+                    text: string;
+                    ownerPersonId: string | null;
+                    basisSectionIds: string[];
+                    review: {
+                        status: "pending" | "confirmed" | "rejected";
+                        by: string | null;
+                        proxy: boolean;
+                        at: string | null;
+                        reason: string | null;
+                    };
+                }[] | null;
+                hostId: string;
+                viewerId: string;
+                writeToWorld: boolean;
                 confirmed: {
                     payload: {
-                        /** @constant */
-                        schemaVersion: "meeting-card.v1";
+                        schemaVersion: "meeting-card.v1" | "meeting-card.v2";
                         meetingId: string;
                         title: string;
                         occurredAt: string | null;
@@ -4517,12 +4626,40 @@ export interface components {
                                 text: string;
                             };
                             basisSectionIds: string[];
+                            decisionId?: string | null;
                         }[];
                         revision: number;
+                        decisions?: {
+                            id: string;
+                            text: string;
+                            ownerPersonId: string | null;
+                            basisSectionIds: string[];
+                            confirmedBy: string;
+                            proxy: boolean;
+                            confirmedAt: string;
+                            sourceRefs: {
+                                sourceId: string;
+                                locator: string | null;
+                            }[];
+                        }[];
+                        actionItems?: {
+                            id: string;
+                            text: string;
+                            ownerPersonId: string | null;
+                            dueDate: string | null;
+                            basisSectionIds: string[];
+                            confirmedBy: string;
+                            proxy: boolean;
+                            confirmedAt: string;
+                            sourceRefs: {
+                                sourceId: string;
+                                locator: string | null;
+                            }[];
+                        }[];
                     };
                     confirmation: {
                         revision: number;
-                        confirmedBy: string;
+                        confirmedBy: string | null;
                         confirmedAt: string;
                         payloadHash: string;
                     };
@@ -4534,6 +4671,13 @@ export interface components {
                         dueDate: string | null;
                         basisSectionIds: string[];
                         taskId: string | null;
+                        review?: {
+                            status: "pending" | "confirmed" | "rejected";
+                            by: string | null;
+                            proxy: boolean;
+                            at: string | null;
+                            reason: string | null;
+                        };
                     }[];
                 } | null;
                 sync: {
@@ -4560,6 +4704,10 @@ export interface components {
                 }[];
                 canEdit: boolean;
                 draftChange: "none" | "items" | "content";
+                unmappedSpeakers: {
+                    id: string;
+                    name: string;
+                }[];
             };
         };
         LoginRequest: {
@@ -4586,6 +4734,13 @@ export interface components {
         FeishuConnectionResponse: {
             enabled: boolean;
             connected: boolean;
+            calendar: boolean;
+        };
+        WechatConnection: {
+            state: "none" | "waiting" | "scanned" | "expired" | "connected" | "stale";
+            qrcodeUrl?: string;
+            welcomed?: boolean;
+            paused?: boolean;
         };
         ChangePasscodeRequest: {
             loginId: string;
@@ -4763,8 +4918,7 @@ export interface components {
                     }[];
                 };
                 kind?: "carried" | "trace";
-                /** @constant */
-                via?: "feishu";
+                via?: "feishu" | "wechat";
                 meta?: {
                     issueId?: string;
                     title?: string;
@@ -8013,6 +8167,8 @@ export interface components {
             unmappedSpeakers?: {
                 id: string;
                 name: string;
+                /** @constant */
+                kept?: true;
             }[];
         };
         PostMeetingCandidate: {
@@ -8158,6 +8314,10 @@ export interface components {
             hostName: string;
             href: string;
             followUp?: boolean;
+            processing?: {
+                since: string | null;
+                failed: boolean;
+            };
         };
         MemberMeetingsResponse: {
             meetings: {
@@ -8168,6 +8328,10 @@ export interface components {
                 hostName: string;
                 href: string;
                 followUp?: boolean;
+                processing?: {
+                    since: string | null;
+                    failed: boolean;
+                };
             }[];
         };
         MeetingTranscriptTurnView: {
@@ -11644,7 +11808,16 @@ export interface components {
                 meetingId: string;
                 title: string;
                 endedAt: string;
-                status: "pending" | "edit_pending" | "failed";
+                /** @constant */
+                status: "failed";
+            }[];
+            confirms: {
+                meetingId: string;
+                title: string;
+                kind: "decision" | "action";
+                id: string;
+                text: string;
+                dueDate: string | null;
             }[];
         };
         FeishuMinuteInboxResponse: {
@@ -11748,6 +11921,7 @@ export interface components {
                         text: string;
                     };
                     basisSectionIds: string[];
+                    decisionId?: string | null;
                     stale: boolean;
                 }[];
             } | null;
@@ -11760,11 +11934,33 @@ export interface components {
                 dueDate: string | null;
                 basisSectionIds: string[];
                 taskId: string | null;
+                review?: {
+                    status: "pending" | "confirmed" | "rejected";
+                    by: string | null;
+                    proxy: boolean;
+                    at: string | null;
+                    reason: string | null;
+                };
             }[];
+            decisions: {
+                id: string;
+                text: string;
+                ownerPersonId: string | null;
+                basisSectionIds: string[];
+                review: {
+                    status: "pending" | "confirmed" | "rejected";
+                    by: string | null;
+                    proxy: boolean;
+                    at: string | null;
+                    reason: string | null;
+                };
+            }[] | null;
+            hostId: string;
+            viewerId: string;
+            writeToWorld: boolean;
             confirmed: {
                 payload: {
-                    /** @constant */
-                    schemaVersion: "meeting-card.v1";
+                    schemaVersion: "meeting-card.v1" | "meeting-card.v2";
                     meetingId: string;
                     title: string;
                     occurredAt: string | null;
@@ -11803,12 +11999,40 @@ export interface components {
                             text: string;
                         };
                         basisSectionIds: string[];
+                        decisionId?: string | null;
                     }[];
                     revision: number;
+                    decisions?: {
+                        id: string;
+                        text: string;
+                        ownerPersonId: string | null;
+                        basisSectionIds: string[];
+                        confirmedBy: string;
+                        proxy: boolean;
+                        confirmedAt: string;
+                        sourceRefs: {
+                            sourceId: string;
+                            locator: string | null;
+                        }[];
+                    }[];
+                    actionItems?: {
+                        id: string;
+                        text: string;
+                        ownerPersonId: string | null;
+                        dueDate: string | null;
+                        basisSectionIds: string[];
+                        confirmedBy: string;
+                        proxy: boolean;
+                        confirmedAt: string;
+                        sourceRefs: {
+                            sourceId: string;
+                            locator: string | null;
+                        }[];
+                    }[];
                 };
                 confirmation: {
                     revision: number;
-                    confirmedBy: string;
+                    confirmedBy: string | null;
                     confirmedAt: string;
                     payloadHash: string;
                 };
@@ -11820,6 +12044,13 @@ export interface components {
                     dueDate: string | null;
                     basisSectionIds: string[];
                     taskId: string | null;
+                    review?: {
+                        status: "pending" | "confirmed" | "rejected";
+                        by: string | null;
+                        proxy: boolean;
+                        at: string | null;
+                        reason: string | null;
+                    };
                 }[];
             } | null;
             sync: {
@@ -11846,6 +12077,10 @@ export interface components {
             }[];
             canEdit: boolean;
             draftChange: "none" | "items" | "content";
+            unmappedSpeakers: {
+                id: string;
+                name: string;
+            }[];
         };
         MeetingCardDraftRequest: {
             draftVersion: number;
@@ -11890,6 +12125,7 @@ export interface components {
                         text: string;
                     };
                     basisSectionIds: string[];
+                    decisionId?: string | null;
                     stale: boolean;
                 }[];
             };
@@ -11900,6 +12136,13 @@ export interface components {
                 dueDate: string | null;
                 basisSectionIds: string[];
                 taskId: string | null;
+                review?: {
+                    status: "pending" | "confirmed" | "rejected";
+                    by: string | null;
+                    proxy: boolean;
+                    at: string | null;
+                    reason: string | null;
+                };
             }[];
         };
         MeetingCardConfirmRequest: {
@@ -11907,6 +12150,225 @@ export interface components {
             writeToWorld: boolean;
             kind?: "correction" | "followup";
             reason?: string;
+        };
+        MeetingCardSpeakerRequest: {
+            draftVersion: number;
+            speakerId: string;
+            personId: string | null;
+        };
+        MeetingCardReviewRequest: {
+            kind: "decision" | "action";
+            id: string;
+            verdict: "confirm" | "reject";
+            reason?: string;
+        };
+        MeetingCardReviewResponse: {
+            view: {
+                draft: {
+                    /** @constant */
+                    schemaVersion: "meeting-card.v1";
+                    meetingId: string;
+                    title: string;
+                    occurredAt: string | null;
+                    participants: {
+                        name: string;
+                        personRef: string | null;
+                    }[];
+                    relatedObjectRefs: string[];
+                    summary: string;
+                    sections: {
+                        id: string;
+                        heading: string;
+                        body: string;
+                        sourceRefs: {
+                            sourceId: string;
+                            locator: string | null;
+                        }[];
+                    }[];
+                    sources: {
+                        id: string;
+                        url: string;
+                        title: string;
+                        contentHash: string;
+                        sourceVersion: string | null;
+                        capturedAt: string;
+                    }[];
+                    objectChanges: {
+                        id: string;
+                        targetRef: string | null;
+                        targetTitle: string | null;
+                        expectedVersion: number | null;
+                        before: {
+                            text: string;
+                        } | null;
+                        after: {
+                            text: string;
+                        };
+                        basisSectionIds: string[];
+                        decisionId?: string | null;
+                        stale: boolean;
+                    }[];
+                } | null;
+                draftVersion: number;
+                draftStatus: "created" | "draft_ready";
+                actionItems: {
+                    id: string;
+                    text: string;
+                    ownerPersonId: string | null;
+                    dueDate: string | null;
+                    basisSectionIds: string[];
+                    taskId: string | null;
+                    review?: {
+                        status: "pending" | "confirmed" | "rejected";
+                        by: string | null;
+                        proxy: boolean;
+                        at: string | null;
+                        reason: string | null;
+                    };
+                }[];
+                decisions: {
+                    id: string;
+                    text: string;
+                    ownerPersonId: string | null;
+                    basisSectionIds: string[];
+                    review: {
+                        status: "pending" | "confirmed" | "rejected";
+                        by: string | null;
+                        proxy: boolean;
+                        at: string | null;
+                        reason: string | null;
+                    };
+                }[] | null;
+                hostId: string;
+                viewerId: string;
+                writeToWorld: boolean;
+                confirmed: {
+                    payload: {
+                        schemaVersion: "meeting-card.v1" | "meeting-card.v2";
+                        meetingId: string;
+                        title: string;
+                        occurredAt: string | null;
+                        participants: {
+                            name: string;
+                            personRef: string | null;
+                        }[];
+                        relatedObjectRefs: string[];
+                        summary: string;
+                        sections: {
+                            id: string;
+                            heading: string;
+                            body: string;
+                            sourceRefs: {
+                                sourceId: string;
+                                locator: string | null;
+                            }[];
+                        }[];
+                        sources: {
+                            id: string;
+                            url: string;
+                            title: string;
+                            contentHash: string;
+                            sourceVersion: string | null;
+                            capturedAt: string;
+                        }[];
+                        objectChanges: {
+                            id: string;
+                            targetRef: string | null;
+                            targetTitle: string | null;
+                            expectedVersion: number | null;
+                            before: {
+                                text: string;
+                            } | null;
+                            after: {
+                                text: string;
+                            };
+                            basisSectionIds: string[];
+                            decisionId?: string | null;
+                        }[];
+                        revision: number;
+                        decisions?: {
+                            id: string;
+                            text: string;
+                            ownerPersonId: string | null;
+                            basisSectionIds: string[];
+                            confirmedBy: string;
+                            proxy: boolean;
+                            confirmedAt: string;
+                            sourceRefs: {
+                                sourceId: string;
+                                locator: string | null;
+                            }[];
+                        }[];
+                        actionItems?: {
+                            id: string;
+                            text: string;
+                            ownerPersonId: string | null;
+                            dueDate: string | null;
+                            basisSectionIds: string[];
+                            confirmedBy: string;
+                            proxy: boolean;
+                            confirmedAt: string;
+                            sourceRefs: {
+                                sourceId: string;
+                                locator: string | null;
+                            }[];
+                        }[];
+                    };
+                    confirmation: {
+                        revision: number;
+                        confirmedBy: string | null;
+                        confirmedAt: string;
+                        payloadHash: string;
+                    };
+                    kind: "first" | "correction" | "followup";
+                    actionItems: {
+                        id: string;
+                        text: string;
+                        ownerPersonId: string | null;
+                        dueDate: string | null;
+                        basisSectionIds: string[];
+                        taskId: string | null;
+                        review?: {
+                            status: "pending" | "confirmed" | "rejected";
+                            by: string | null;
+                            proxy: boolean;
+                            at: string | null;
+                            reason: string | null;
+                        };
+                    }[];
+                } | null;
+                sync: {
+                    revision: number;
+                    writeToWorld: boolean;
+                    event: {
+                        status: "pending" | "succeeded" | "failed" | "skipped";
+                        eventId: string | null;
+                        error: string | null;
+                    };
+                    objects: {
+                        changeId: string;
+                        title: string;
+                        status: "pending" | "updated" | "failed" | "not_allowed" | "conflict" | "superseded" | "blocked";
+                        actualVersion: number | null;
+                        error: string | null;
+                    }[];
+                } | null;
+                targetOptions: {
+                    targetRef: string;
+                    title: string;
+                    componentType: string;
+                    text: string;
+                }[];
+                canEdit: boolean;
+                draftChange: "none" | "items" | "content";
+                unmappedSpeakers: {
+                    id: string;
+                    name: string;
+                }[];
+            } | null;
+        };
+        MeetingCardWorldChoiceRequest: {
+            writeToWorld: boolean;
         };
         MeetingMinutesLinkRequest: {
             url: string;
@@ -13845,6 +14307,100 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyWechatConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 微信连接状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WechatConnection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    disconnectMyWechat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已断开 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    connectMyWechat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 微信连接状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WechatConnection"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -17402,6 +17958,68 @@ export interface operations {
             };
         };
     };
+    assignMeetingCardSpeaker: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingCardSpeakerRequest"];
+            };
+        };
+        responses: {
+            /** @description 指定后的会议卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingCardView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     confirmMeetingCard: {
         parameters: {
             query?: never;
@@ -17464,6 +18082,121 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    reviewMeetingCardItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingCardReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description 处理后的会议卡（点的人读不了会议卡时 view 为 null） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingCardReviewResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    setMeetingCardWorldChoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingCardWorldChoiceRequest"];
+            };
+        };
+        responses: {
+            /** @description 改后的会议卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingCardView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

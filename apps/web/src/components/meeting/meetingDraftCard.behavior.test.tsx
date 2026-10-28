@@ -95,17 +95,17 @@ describe("对话里的会议卡", () => {
     // 读到约好没有之前，两个按钮都不能点。
     const first = render(CEO_DRAFT);
     expect(button(first, "约好")!.props!.disabled).toBe(true);
-    expect(button(first, "改")!.props!.disabled).toBe(true);
-    await vi.waitFor(() => expect(button(render(CEO_DRAFT), "改")!.props!.disabled).toBe(false));
+    expect(button(first, "修改")!.props!.disabled).toBe(true);
+    await vi.waitFor(() => expect(button(render(CEO_DRAFT), "修改")!.props!.disabled).toBe(false));
     const tree = render(CEO_DRAFT);
     expect(text(tree.find((node) => node.type === "h3")!)).toBe("新 Chat 切换");
     const rows = Object.fromEntries(tree.filter((node) => node.type === "dt").map((dt, index) => [text(dt), tree.filter((node) => node.type === "dd")[index]]));
-    expect(Object.keys(rows)).toEqual(["时间", "主持人", "参会人", "挂到"]);
+    expect(Object.keys(rows)).toEqual(["时间", "主持人", "参会人", "所属"]);
     expect(text(rows["时间"])).toBe("10 月 27 日 周二 15:00–15:30");
     expect(text(rows["主持人"])).toBe("刘明华");
     expect(nodes(rows["参会人"]).filter((node) => node.type === "li").map(text)).toEqual(["刘人豪", "于斯一", "王总？"]);
     expect(nodes(rows["参会人"]).find((node) => text(node) === "王总？")!.props!["data-unresolved"]).toBe("not_found");
-    expect(button(tree, "选")).toBeTruthy();
+    expect(button(tree, "选择")).toBeTruthy();
     expect(button(tree, "约好")!.props!.disabled).toBe(true);
     expect(api.get).toHaveBeenCalledWith("/api/meeting-drafts/{draftId}", { params: { path: { draftId: CEO_DRAFT.draftId } } });
   });
@@ -113,7 +113,7 @@ describe("对话里的会议卡", () => {
   it("CEO 在卡上选挂点后能约；「约好」连点只发一次，约好后原地变成已约、带去会议页的链接", async () => {
     const card: Draft = { ...CEO_DRAFT, unresolved: [] };
     await settled(card);
-    click(button(render(card), "选"));
+    click(button(render(card), "选择"));
     await vi.waitFor(() => expect(render(card).some((node) => node.props?.["aria-label"] === "搜对象")).toBe(true));
     expect(api.get).toHaveBeenCalledWith("/api/world-anchor-options", { params: { query: { period: "2026-10" } } });
     click(render(card).find((node) => node.type === "button" && text(node).includes("CEO 的 Mission")));
@@ -135,7 +135,7 @@ describe("对话里的会议卡", () => {
     await vi.waitFor(() => expect(render(card).find((node) => node.type === "section")!.props!["data-status"]).toBe("booked"));
     const after = render(card);
     expect(button(after, "约好")).toBeUndefined();
-    expect(button(after, "改")).toBeUndefined();
+    expect(button(after, "修改")).toBeUndefined();
     const link = after.find((node) => node.type === "a")!;
     expect(link.props!.href).toBe("/meetings/meet-1");
     click(link);
@@ -149,7 +149,7 @@ describe("对话里的会议卡", () => {
     await vi.waitFor(() => expect(render(MEMBER_DRAFT).find((node) => node.type === "section")!.props!["data-status"]).toBe("booked"));
     const tree = render(MEMBER_DRAFT);
     expect(button(tree, "约好")).toBeUndefined();
-    expect(button(tree, "换")).toBeUndefined();
+    expect(button(tree, "更换")).toBeUndefined();
     expect(tree.find((node) => node.type === "a")!.props!.href).toBe("/me/meetings/meet-9");
     expect(api.post).not.toHaveBeenCalled();
   });
@@ -158,7 +158,7 @@ describe("对话里的会议卡", () => {
     workspace.viewerId = "p-member";
     await settled(MEMBER_DRAFT);
     expect(button(render(MEMBER_DRAFT), "约好")!.props!.disabled).toBe(false);
-    click(button(render(MEMBER_DRAFT), "改"));
+    click(button(render(MEMBER_DRAFT), "修改"));
     expect(workspace.bookMeetingFrom).toHaveBeenCalledWith({ draftId: MEMBER_DRAFT.draftId, title: "新 Chat 切换",
       scheduledAt: MEMBER_DRAFT.scheduledAt, endsAt: MEMBER_DRAFT.endsAt, leadDriId: "p-member", participants: ["p-renhao", "p-siyi"],
       anchors: [{ kind: "mission", id: "m-chat", title: "新 Chat 上线" }] });

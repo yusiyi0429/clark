@@ -86,6 +86,9 @@ services:
       ONTOLOGY_SERVICE_TOKEN: ${ONTOLOGY_SERVICE_TOKEN:-}
       INTERNAL_CHAT_TOKEN: ${INTERNAL_CHAT_TOKEN:-}
       CHAT_SERVICE_URL: ${CHAT_SERVICE_URL:-}
+      # 对话分段：都是设为 1 才开，由生产、预发显式打开（首页分段开着时，回看经首页卡里的「以前的对话」交给 Chat）。
+      CHAT_SESSION_ROTATION: ${CHAT_SESSION_ROTATION:-}
+      CONVERSATION_SEGMENTS: ${CONVERSATION_SEGMENTS:-}
       TKOS_WORLD_API_URL: ${TKOS_WORLD_API_URL:-}
       TKOS_WORLD_AGENT_TOKEN: ${TKOS_WORLD_AGENT_TOKEN:-}
       # 本体可选项（worldClient.ts）：实例名缺省 mvp；凭证文件、本地人员补充文件与 TK 只读实例都写容器内路径（放进只读挂载的 /repo/seed）。
@@ -140,6 +143,8 @@ services:
       PROGRESS_SUMMARY_THINKING: ${PROGRESS_SUMMARY_THINKING:-}
       TASK_PLACEMENT_MODEL: ${TASK_PLACEMENT_MODEL:-}
       TASK_PLACEMENT_THINKING: ${TASK_PLACEMENT_THINKING:-}
+      CONVERSATION_DIGEST_MODEL: ${CONVERSATION_DIGEST_MODEL:-}
+      CONVERSATION_DIGEST_THINKING: ${CONVERSATION_DIGEST_THINKING:-}
       # Radar Provider 可选：缺失时 Radar Card 如实显示未配置。
       # 唯一 Web Search Provider 为博查；公众号只经内网 MCP sidecar，账号级、非关键词替代。
       BOCHA_API_KEY: ${BOCHA_API_KEY:-}

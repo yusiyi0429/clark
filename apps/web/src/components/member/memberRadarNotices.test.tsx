@@ -37,7 +37,7 @@ describe("成员首页操作区的「雷达」", () => {
   const radarPill = (html: string) => html.match(/<button[^>]*data-origin="\/me\/radar"[^>]*>.*?<\/button>/)?.[0] ?? "";
 
   it("雷达开着、有未读：操作区出「雷达」带红点，进我的雷达页；没有雷达小卡，左栏照样出值得注意的信号", () => {
-    home.radar = brief({ highlights: [signal(1)] });
+    home.radar = brief({ highlights: [signal(1, { collectedAt: new Date().toISOString() })] });
     const html = renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽" />);
     expect(html).not.toContain("雷达信号");
     expect(radarPill(html)).toContain('aria-label="2 条未读"');
@@ -55,9 +55,12 @@ describe("成员首页操作区的「雷达」", () => {
 });
 
 describe("雷达值得注意的通知", () => {
-  it("只选未读且相关度 5 的个人信号；空时不显示通知组", () => {
-    const radar = brief({ highlights: [signal(1), signal(2, { relevance: 4 }), signal(3, { state: { read: true, saved: false, dismissed: false } })] });
-    expect(noteworthySignals(radar).map((item) => item.id)).toEqual([signal(1).id]);
+  it("只选最近 24 小时未读且相关度 5 的最新一条；空时不显示通知组", () => {
+    const now = new Date("2026-09-27T12:00:00.000Z");
+    const radar = brief({ highlights: [signal(1), signal(2, { relevance: 4 }), signal(3, { state: { read: true, saved: false, dismissed: false } }),
+      signal(4, { collectedAt: "2026-09-27T08:00:00.000Z" }), signal(5, { collectedAt: "2026-09-25T08:00:00.000Z" })] });
+    expect(noteworthySignals(radar, now).map((item) => item.id)).toEqual([signal(4).id]);
+    expect(noteworthySignals(brief({ highlights: [signal(5, { collectedAt: "2026-09-25T08:00:00.000Z" })] }), now)).toEqual([]);
     expect(noteworthySignals(null)).toEqual([]);
     expect(renderToStaticMarkup(<MemberRadarNotices signals={[]} onNavigate={vi.fn()} onRead={vi.fn()} />)).toBe("");
   });
@@ -79,11 +82,11 @@ describe("雷达值得注意的通知", () => {
   });
 
   it("有值得注意的信号时不显示空通知提示，读过后恢复提示", () => {
-    home.radar = brief({ highlights: [signal(1)] });
+    home.radar = brief({ highlights: [signal(1, { collectedAt: new Date().toISOString() })] });
     const active = renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽" />);
     expect(active).toContain("雷达 · 值得注意");
     expect(active).not.toContain("暂时没有新通知");
-    home.radar = brief({ highlights: [signal(1, { state: { read: true, saved: false, dismissed: false } })] });
+    home.radar = brief({ highlights: [signal(1, { collectedAt: new Date().toISOString(), state: { read: true, saved: false, dismissed: false } })] });
     const read = renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽" />);
     expect(read).not.toContain("雷达 · 值得注意");
     expect(read).toContain("暂时没有新通知");

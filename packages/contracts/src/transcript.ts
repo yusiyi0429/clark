@@ -66,6 +66,8 @@ export const UnmappedSpeaker = Type.Object(
   {
     id: Type.String({ pattern: "^speaker:\\d+$", maxLength: 50 }),
     name: Type.String({ minLength: 1, maxLength: 200 }),
+    /** 主持人在会议卡上选了「不是天枢里的人」：保留原名，不再让他指定。 */
+    kept: Type.Optional(Type.Literal(true)),
   },
   { additionalProperties: false },
 );

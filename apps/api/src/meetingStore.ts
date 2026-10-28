@@ -205,7 +205,15 @@ export function meetingHasEnded(row: Pick<MeetingRow, "ended_at" | "ends_at">, a
 }
 
 export function hasMeetingNotice(row: MeetingRow, viewerId: string, at: Date): boolean {
-  return row.status === "scheduled" && (!meetingHasEnded(row, at) || row.lead_dri_id === viewerId);
+  return (row.status === "scheduled" && (!meetingHasEnded(row, at) || row.lead_dri_id === viewerId))
+    || (row.lead_dri_id === viewerId && meetingCardInProgress(row, at));
+}
+
+/** 交了记录、还在生成会议卡（没生成出来的只留三天）：主持人的通知栏里这一行原地显示进度，生成好了转到「会议记录」待确认。 */
+export function meetingCardInProgress(row: MeetingRow, at: Date): boolean {
+  const status = row.outcome?.status;
+  return row.status === "held" && (status === "pending" || status === "running"
+    || (status === "failed" && at.getTime() - row.scheduled_at.getTime() < 3 * 86_400_000));
 }
 
 export function projectMeetingCard(row: MeetingRow, secret: string, at = new Date()): TCard {

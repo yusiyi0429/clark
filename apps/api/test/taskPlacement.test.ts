@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { emptyDraft, emptyPreflight } from "../src/meetingStore.js";
 import { dispatchMeetingTodo, TASK_PLACE_JOB } from "../src/tasks.js";
@@ -57,7 +58,7 @@ describe("待归位：会后分派和外部 Agent 建的事项必须挂到 Missi
       expect(placed).toMatchObject({ mission: { missionId: "execution-one" } });
       expect(placed.unplaced).toBeUndefined();
       const messages = await f.t.sql("SELECT content FROM thread_messages WHERE object_type='task' AND object_id=$1 ORDER BY id", [id]);
-      expect(messages.at(-1)!.content).toContain("挂到了 Mission「上线」");
+      expect(messages.at(-1)!.content).toContain("把所属 Mission 定为「上线」");
       // 已经挂好的不再动。
       await runPlacement(f, fakeAgent({ missionId: "execution-two", reason: "x" }), id);
       expect(await task(f, id)).toMatchObject({ mission: { missionId: "execution-one" } });
@@ -104,6 +105,28 @@ describe("待归位：会后分派和外部 Agent 建的事项必须挂到 Missi
       expect(created.statusCode).toBe(200);
       expect(created.json().unplaced).toBeUndefined();
       expect((await call(f, f.member, "GET", "/api/me/home-plan")).json().unplaced).toEqual([]);
+    } finally { await f.t.close(); }
+  });
+
+  it("10/27 补一遍归位：还在待归位的会议、Agent 事项各排一次，本人自己建的、已挂好、确认不属于任何 Mission、已完成的不排", async () => {
+    const f = await executionFixture();
+    try {
+      const at = await meeting(f, [{ kind: "po", id: "<po>", title: "本期目标" }]);
+      const [fromMeeting, fromAgent, mine, standalone, done, placed] = await Promise.all(
+        ["会上分的", "Agent 建的", "本人建的", "不属于 Mission", "已完成", "已挂好"].map((text) => dispatch(f, at, text)));
+      await f.t.sql("UPDATE tasks SET created_by='agent' WHERE id=$1", [fromAgent]);
+      await f.t.sql("UPDATE tasks SET created_by='self' WHERE id=$1", [mine]);
+      await f.t.sql("UPDATE tasks SET standalone_at=now() WHERE id=$1", [standalone]);
+      await f.t.sql("UPDATE tasks SET status='done' WHERE id=$1", [done]);
+      await f.t.sql("UPDATE tasks SET mission_id='execution-one',step_order=99 WHERE id=$1", [placed]);
+      await f.t.sql(readFileSync(new URL("../migrations/214_task_placement_backfill.sql", import.meta.url), "utf8"));
+      const jobs = await f.t.sql("SELECT payload->>'taskId' AS id FROM jobs WHERE kind=$1 AND dedupe_key LIKE 'task.place:backfill-%' ORDER BY id", [TASK_PLACE_JOB]);
+      expect(jobs.map((row) => row.id).sort()).toEqual([fromMeeting, fromAgent].sort());
+      const agent = fakeAgent({ missionId: "execution-two", reason: "在推进验证" });
+      await runPlacement(f, agent, fromAgent);
+      expect(await task(f, fromAgent)).toMatchObject({ mission: { missionId: "execution-two" } });
+      const messages = await f.t.sql("SELECT content FROM thread_messages WHERE object_type='task' AND object_id=$1 ORDER BY id", [fromAgent]);
+      expect(messages.at(-1)!.content).toContain("按事项内容把所属 Mission 定为「验证」");
     } finally { await f.t.close(); }
   });
 });

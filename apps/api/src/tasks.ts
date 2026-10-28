@@ -214,7 +214,7 @@ async function createInTransaction(client: PoolClient, ownerId: string, names: M
   const row = (await getTaskRow(queryOf(client),id))!;
   const ownerName = names.get(ownerId) ?? ownerId;
   // 开场写进群里就不再回改，所以不写会随拆分变化的「第 n 步，共 m 步」。
-  const belonging = row.mission_title ? `所属个人任务「${row.mission_title}」` : input.source === "agent" ? "还没挂到 Mission" : "独立事项";
+  const belonging = row.mission_title ? `所属个人任务「${row.mission_title}」` : input.source === "agent" ? "还没有所属 Mission" : "独立事项";
   const messageId = await threadMessage(client,id,`这个群讨论${ownerName}推进的执行事项「${input.title}」（${belonging}），截止 ${input.dueDate ?? "待定"}。`);
   await readThrough(client,id,ownerId,messageId);
   return { task: (await getTaskView(queryOf(client),id,names))! };
@@ -298,13 +298,13 @@ export async function placeTask(pool: Pool, taskId: string, missionId: string | 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const row = (await client.query<{ owner_id: string }>(`SELECT t.owner_id FROM tasks t WHERE t.id=$1 AND ${UNPLACED} FOR UPDATE`, [taskId])).rows[0];
+    const row = (await client.query<{ owner_id: string; created_by: string }>(`SELECT t.owner_id,t.created_by FROM tasks t WHERE t.id=$1 AND ${UNPLACED} FOR UPDATE`, [taskId])).rows[0];
     if (!row) { await client.query("ROLLBACK"); return; }
     if (missionId) {
       const step = await appendStep(client, missionId);
       await client.query("UPDATE tasks SET mission_id=$2,step_order=$3,unplaced_reason=NULL,version=version+1,updated_at=now() WHERE id=$1", [taskId, missionId, step]);
       const title = (await client.query<{ title: string }>("SELECT title FROM missions WHERE id=$1", [missionId])).rows[0]?.title ?? missionId;
-      await tellGroup(client, taskId, row.owner_id, `按会上的内容挂到了 Mission「${title}」；不对的话在这件事里改。`);
+      await tellGroup(client, taskId, row.owner_id, `${row.created_by === "meeting" ? "按会上的内容" : "按事项内容"}把所属 Mission 定为「${title}」；不对的话在这件事里更换。`);
     } else {
       await client.query("UPDATE tasks SET unplaced_reason=$2,version=version+1,updated_at=now() WHERE id=$1", [taskId, reason]);
     }
@@ -517,7 +517,7 @@ export async function dispatchMeetingTodo(client: PoolClient, meeting: { id:stri
   await client.query("INSERT INTO task_members(task_id,person_id,role,added_by) VALUES($1,$2,'owner','meeting')",[taskId,ownerId]);
   await client.query("INSERT INTO thread_members(object_type,object_id,person_id,added_by) VALUES('task',$1,$2,'meeting')",[taskId,ownerId]);
   const mission = missionId ? (await client.query<{ title: string }>("SELECT title FROM missions WHERE id=$1",[missionId])).rows[0]?.title : null;
-  const belonging = mission ? `所属个人任务「${mission}」` : "还没挂到 Mission";
+  const belonging = mission ? `所属个人任务「${mission}」` : "还没有所属 Mission";
   const id = await threadMessage(client,taskId,`这个群讨论${meeting.ownerName ?? ownerId}推进的执行事项「${title(item.text)}」（${belonging}${meeting.title ? `，来自会议「${meeting.title}」` : ""}），截止 ${item.dueDate ?? "待定"}。`);
   await readThrough(client,taskId,ownerId,id);
   await insertNotification(client,{personId:ownerId,kind:"meeting_action_assigned",objectType:"task",objectId:taskId});

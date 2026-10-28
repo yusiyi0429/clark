@@ -24,7 +24,7 @@ import { WORLD_READ_TIMEOUT_MS, type WorldReader } from "./worldReader.js";
 /**
  * 会后链路的装配（G 会议链路 + 会议卡）：
  * - 解读纪要时对照的公司地图（按池注册给会后整理）；
- * - 会后只有会议卡一个入口：草稿好了提醒主持人和创建人（meetingCard.ts），整卡确认后写会议事件；不再逐条分层、提醒代判或推影响卡；
+ * - 会后只有会议卡一个入口：决策和行动项逐条交责任人确认（meetingCard.ts），凑齐或 48 小时后冻结、写会议事件；不再逐条分层、提醒代判或推影响卡；
  * - 后台任务（server.ts 的 jobs worker 注册）：妙记轮询与「妙记生成」事件、整卡确认后写会议事件（meeting.world_sync）、在飞书约会（meeting.feishu_event）、
  *   飞书里直接开的会待整理的扫描（「妙记生成」事件先照原样对天枢的会，再排一次扫描）。
  */
@@ -40,6 +40,8 @@ export type MeetingFollowThroughEnv = WorldEnv & {
   feishu?: FeishuEnv;
   /** FEISHU_WEB_ORIGIN（如 https://tokenking.feishu.cn）：逐字稿来源地址拼妙记链接 <origin>/minutes/<minute_token>；不配时用天枢会议页。 */
   feishuWebOrigin?: string;
+  /** MEETING_WORLD_RECORD_TEXT：记录正文能不能写进本体（缺省不能）。 */
+  meetingRecordText?: boolean;
 };
 
 export type MeetingFollowThrough = {
@@ -83,12 +85,12 @@ export function createMeetingFollowThrough({ pool, env, peopleDirectory, world, 
   // 挂点选项里的 LTO、本月 PO：同一条件下只列对象，用读的超时（预约表单在等）。
   const anchorWorld = worldClient ? new WorldClient(q, env, undefined, { timeoutMs: WORLD_READ_TIMEOUT_MS }) : undefined;
   // 会议卡草稿：生成（会后整理按池取）和读写共用同一套依赖；挂点对象、修改目标读本体（同一条件下用读的超时）。
-  // 配了飞书：草稿好了的提醒同时推飞书。
-  const cardDeps = { world: anchorWorld, publicOrigin: env.publicOrigin, names: () => personDisplayNames(peopleDirectory), feishuNotify: Boolean(env.feishu) };
+  const recordText = Boolean(env.meetingRecordText);
+  const cardDeps = { world: anchorWorld, publicOrigin: env.publicOrigin, names: () => personDisplayNames(peopleDirectory), people: () => peopleDirectory.searchPeople(undefined), recordText };
   registerMeetingCardDeps(pool, cardDeps);
   const cards = createMeetingCardService(pool, cardDeps);
   const objectSync = worldClient ? createMeetingObjectSync({ q, world: worldClient, refreshDraft: cards.refreshDraft }) : undefined;
-  const cardConfirm = createMeetingCardConfirmService({ pool, world: anchorWorld, meetingWorld, objectSync, names: cardDeps.names, view: cards.view, now });
+  const cardConfirm = createMeetingCardConfirmService({ pool, world: anchorWorld, meetingWorld, objectSync, names: cardDeps.names, view: cards.view, recordText, now });
   const decisions = createMeetingDecisionService({ pool, peopleDirectory, anchorWorld, onAnchorsChanged: cards.anchorsChanged });
   const feishuMinutes = env.feishu ? { feishu: { env: env.feishu, api: minutesApi ?? createFeishuMinutesApi() } } : {};
   const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now, feishuWebOrigin: env.feishuWebOrigin, ...feishuMinutes });

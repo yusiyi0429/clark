@@ -1,8 +1,8 @@
-import type { TMeetingActionItem, TMeetingCardConfirmRequest, TMeetingCardDraft, TMeetingCardView } from "@warmap/contracts";
+import type { TMeetingActionItem, TMeetingCardConfirmRequest, TMeetingCardDraft, TMeetingCardReviewRequest, TMeetingCardView } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
 /**
- * 会议卡（FR-4、FR-5）的四个接口：读卡、整份存草稿、整卡确认、重试会议事件写入。
+ * 会议卡（FR-4、FR-5）的接口：读卡、整份存草稿、指定说话人、整卡确认、重试会议事件写入。
  * 结果统一成 ok / 失败两种；失败只带状态码和错误码（界面按错误码显示标签，不显示服务端原话）。
  * status 0 是网络不通。
  */
@@ -33,3 +33,28 @@ export const confirmMeetingCard = (meetingId: string, body: TMeetingCardConfirmR
 
 export const retryMeetingCardSync = (meetingId: string) =>
   settle(browserApi.POST("/api/meetings/{id}/card/retry", { params: { path: { id: meetingId } } }));
+
+/**
+ * 逐条确认一条决策或行动项（通知栏、会议页共用）：ok 时 view 是最新会议卡（点的人读不了会议卡时为 null）；
+ * 409 带着最新会议卡的也交回 view。
+ */
+export type ReviewResult = { ok: true; view: TMeetingCardView | null } | { ok: false; status: number; code: string; view?: TMeetingCardView };
+export async function reviewMeetingCardItem(meetingId: string, body: TMeetingCardReviewRequest): Promise<ReviewResult> {
+  try {
+    const { data, error, response } = await browserApi.POST("/api/meetings/{id}/card/reviews", { params: { path: { id: meetingId } }, body });
+    if (response.status === 401) window.location.assign("/access");
+    if (response.ok && data) return { ok: true, view: data.view };
+    const failure = error as { code?: string; view?: TMeetingCardView } | undefined;
+    return { ok: false, status: response.status, code: failure?.code ?? "", ...(failure?.view ? { view: failure.view } : {}) };
+  } catch {
+    return { ok: false, status: 0, code: "NETWORK" };
+  }
+}
+
+/** 冻结前改「不写进本体」。 */
+export const setMeetingCardWorldChoice = (meetingId: string, writeToWorld: boolean) =>
+  settle(browserApi.PUT("/api/meetings/{id}/card/world", { params: { path: { id: meetingId } }, body: { writeToWorld } }));
+
+/** 把没对上人的说话人指定给某人；personId 为 null 是「不是天枢里的人」。 */
+export const assignMeetingCardSpeaker = (meetingId: string, draftVersion: number, speakerId: string, personId: string | null) =>
+  settle(browserApi.POST("/api/meetings/{id}/card/speakers", { params: { path: { id: meetingId } }, body: { draftVersion, speakerId, personId } }));

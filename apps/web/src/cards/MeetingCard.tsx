@@ -17,7 +17,7 @@ import { MaterialPane, useMaterialPreview, type MaterialMeta } from "@/component
 import { IssueDecisionBlock } from "@/components/meeting/IssueDecisionBlock";
 import type { HistoryView } from "@/components/meeting/DecisionHistoryLayers";
 import { MeetingOutline, saveReadingPosition, useOutlineSpy, useReadingAnchor, useRestoreReadingPosition, type OutlineItem } from "@/components/meeting/MeetingOutline";
-import { SourceList, SourceNavigatorProvider, useSourceNavigator, type SourceObject } from "@/components/meeting/SourceViewer";
+import { SourceList, SourceNavigatorProvider, SourceToggle, useSourceNavigator, type SourceObject } from "@/components/meeting/SourceViewer";
 import { DECISION_HISTORY_CHANGED, useDecisionHistory } from "@/components/meeting/useDecisionHistory";
 import { MeetingWorldSection } from "@/components/meeting/MeetingWorldBar";
 import { MeetingRecordCard } from "@/components/meeting/MeetingRecordCard";
@@ -153,12 +153,6 @@ export function speakerMappingRows(
   });
 }
 
-export function speakerMappingError(rows: SpeakerMappingRow[]): string | null {
-  const unmapped = rows.filter((row) => !row.personId).length;
-  if (unmapped > 0) return `还有 ${unmapped} 位说话人未映射，确认不可用`;
-  return null;
-}
-
 /** 相对时间：秒 → mm:ss 或 h:mm:ss。 */
 export function offsetLabel(seconds: number): string {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -170,16 +164,14 @@ export function offsetLabel(seconds: number): string {
 
 const MAPPING_STATUS_LABEL = { existing: "已是参与人", add: "确认后加入", unmapped: "未映射" } as const;
 
-/** 确认 Action input：只含 speakerName→personId 与显式标记，全量 turns 留在服务端。 */
+/** 确认 Action input：只含 speakerName→personId 与显式标记，全量 turns 留在服务端；没选人的说话人不带（保留原名，会议卡上再指定，10/28 起不拦确认）。 */
 export function confirmTranscriptInput(
   candidate: TTranscriptCandidateProjection,
   mappings: Record<string, string>,
 ): { speakerMappings: { speakerName: string; personId: string }[]; confirmAddParticipants: true } {
   return {
-    speakerMappings: candidate.speakers.map((speaker) => ({
-      speakerName: speaker.speakerName,
-      personId: mappings[speaker.speakerName],
-    })),
+    speakerMappings: candidate.speakers.flatMap((speaker) => mappings[speaker.speakerName]
+      ? [{ speakerName: speaker.speakerName, personId: mappings[speaker.speakerName] }] : []),
     confirmAddParticipants: true,
   };
 }
@@ -221,7 +213,6 @@ export function TranscriptCandidateDialog({
     Object.fromEntries(candidate.speakers.map((speaker) => [speaker.speakerName, speaker.suggestedPersonId ?? ""])),
   );
   const rows = speakerMappingRows(candidate, participants.map((person) => person.personId), mappings);
-  const error = speakerMappingError(rows);
   return (
     <dialog ref={dialogRef} className={s.candidateDialog} aria-label="妙记会议记录候选">
       <header className={s.candidateHeader}>
@@ -276,7 +267,6 @@ export function TranscriptCandidateDialog({
             </tbody>
           </table>
           {directoryError ? <p className={s.error} role="alert">{directoryError}</p> : null}
-          {error ? <p className={s.error} role="alert">{error}</p> : null}
         </section>
         <section className={s.candidateSection}>
           <h3>抽样发言</h3>
@@ -310,7 +300,7 @@ export function TranscriptCandidateDialog({
           关闭
         </button>
         {hasConfirm ? (
-          <button type="button" className={s.candidateConfirm} disabled={pending || Boolean(error)} onClick={() => onConfirm(mappings)}>
+          <button type="button" className={s.candidateConfirm} disabled={pending} onClick={() => onConfirm(mappings)}>
             {pending ? "确认中…" : "确认并写入逐字稿"}
           </button>
         ) : null}
@@ -522,7 +512,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const payload: MeetingPayload & { purpose?: string | null } = memberReadOnly ? {
     ...source,
     issueIds: [], ceoParticipantId: "", originRef: null,
-    preflight: { status: source.preflight.status, pendingSince: null, runId: null, entries: [], basis: "",
+    // 主持人和受邀参会人拿到完整预审（带 entries），照原样排；其他人只有一句话。
+    preflight: source.preflight.entries ? source.preflight : { status: source.preflight.status, pendingSince: null, runId: null, entries: [], basis: "",
       brief: source.preflight.brief, error: null, generatedAt: null,
       ...(source.preflight.readiness ? { readiness: source.preflight.readiness } : {}),
       ...(source.preflight.summary ? { summary: source.preflight.summary } : {}) },
@@ -897,7 +888,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const coreEntry = meetingEntries.find((entry) => entry.kind === "core_judgment");
   /** 会议层面的一号位追问在琥珀参考盒里，按陈述列表编号，不在别处重复。 */
   const lensEntries = meetingEntries.filter((entry) => entry.kind === "leader_lens");
-  const preflightGroups = groupPreflight(meetingEntries, Boolean(payload.preflight.taskDefinition))
+  const preflightGroups = groupPreflight(meetingEntries, Boolean(payload.preflight.taskDefinition || payload.preflight.depth))
     .map((group) => ({ ...group, entries: group.entries.filter((entry) => entry.kind !== "leader_lens" && entry !== coreEntry) }))
     .filter((group) => group.entries.length > 0);
   const checkedCount = payload.draft.checkedEntryIds.filter((id) => payload.preflight.entries.some((entry) => entry.id === id)).length;
@@ -1101,6 +1092,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const beforePair = firstPairIndex === -1 ? preflightGroups : preflightGroups.slice(0, firstPairIndex);
   const pairGroups = preflightGroups.filter((group) => isPairKey(group.key));
   const afterPair = firstPairIndex === -1 ? [] : preflightGroups.slice(firstPairIndex).filter((group) => !isPairKey(group.key));
+  /** 要聊的问题、要拍板的事按 01、02 编号。 */
+  const numbered = (key: string) => key === "meeting_question" || key === "discussion_question";
   const renderGroup = (group: (typeof preflightGroups)[number]) => (
     <section key={group.key} className={s.reviewSection} data-group={group.key}>
       <header>
@@ -1110,9 +1103,9 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       {group.entries.map((entry, index) => {
         const checked = payload.draft.checkedEntryIds.includes(entry.id);
         return (
-          <article key={entry.id} className={s.quoteItem} data-checked={checked} data-question={group.key === "meeting_question" || undefined}>
+          <article key={entry.id} className={s.quoteItem} data-checked={checked} data-question={numbered(group.key) || undefined}>
             <div className={s.entryTitle}>
-              {group.key === "meeting_question" ? <span>{String(index + 1).padStart(2, "0")}</span> : null}
+              {numbered(group.key) ? <span>{String(index + 1).padStart(2, "0")}</span> : null}
               <strong>{entry.title}</strong>
             </div>
             <p className={s.entryBody}>{entry.body}</p>
@@ -1127,7 +1120,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
                 {entry.ceoDecision.delayCost ? <span><small>延迟代价</small>{entry.ceoDecision.delayCost}</span> : null}
               </div>
             ) : null}
-            <SourceList refs={entry.sourceRefs} />
+            <SourceToggle refs={entry.sourceRefs} />
             {readOnly ? null : entryActions(entry)}
           </article>
         );
@@ -1328,7 +1321,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       </div>
       {!coreEntry && payload.issueIds.length && payload.preflight.status !== "running" && payload.preflight.brief ? (
         /* 预审条目都归到了议题下（单议题会全部归它）时，没有会议层面的整场判断块；预审那句「这次会只需要定哪一件事」不能因此丢掉。 */
-        <p className={s.briefLine}><small>整场判断</small>{cleanDisplayText(payload.preflight.brief)}</p>
+        <p className={s.briefLine}><small>{payload.preflight.depth === "thin" ? "待补" : "整场判断"}</small>{cleanDisplayText(payload.preflight.brief)}</p>
       ) : null}
       {showStale ? (
         /* 资料在报告之后（或生成期间）变了：不把旧报告当成基于最新资料（feedback 12），可直接用最新资料重新预审。 */
@@ -1354,7 +1347,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       ) : null}
       {coreEntry || !payload.issueIds.length ? (
         <div className={s.judgmentHero} data-checked={coreEntry ? payload.draft.checkedEntryIds.includes(coreEntry.id) || undefined : undefined}>
-          <small>{payload.issueIds.length ? "整场判断" : "核心判断"}</small>
+          <small>{payload.preflight.depth === "thin" ? "待补" : payload.issueIds.length ? "整场判断" : "核心判断"}</small>
           <h2>{coreEntry?.title ?? "会前预审"}</h2>
           <p>{(coreEntry?.body ?? payload.preflight.brief) || (ended ? "该会议会前未进行预审。" : "尚无会前预审。")}</p>
           {payload.preflight.summary && !singleIssue ? (
@@ -1363,7 +1356,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
               <span><small>最关键问题</small>{payload.preflight.summary.criticalIssue}</span>
             </div>
           ) : null}
-          {coreEntry ? <SourceList refs={coreEntry.sourceRefs} /> : null}
+          {coreEntry ? <SourceToggle refs={coreEntry.sourceRefs} /> : null}
           {coreEntry && !readOnly ? entryActions(coreEntry) : null}
         </div>
       ) : !payload.preflight.entries.length ? (
@@ -1374,6 +1367,15 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         /* 问题不设下限（feedback 18）：预审认为没有需要当场拍板的事、且议题都已处理时才如实写出；还有待决定议题时不写，免得与「待决定」自相矛盾。 */
         <p className={s.noQuestion}>本次会议无需当场决策的问题。</p>
       ) : null}
+    </section>
+  );
+
+  /* 预审依据、读取的资料、评审范围、预审过程：收在整段预审末尾一行「依据与过程」里，点开才看。 */
+  const showProgressRecord = payload.preflight.status !== "running" && Boolean(payload.preflight.progress?.steps.length);
+  const basisTail = payload.preflight.inputCoverage || usedMaterials.length || duplicateLegacy.length || evidence?.skippedObjects
+    || payload.preflight.taskDefinition || (payload.preflight.depth && payload.preflight.basis) || showProgressRecord ? (
+    <details className={s.taskContext}>
+      <summary>依据与过程</summary>
       {payload.preflight.inputCoverage ? (
         <div className={s.coverage}>
           <small>预审依据</small>
@@ -1400,18 +1402,19 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         </div>
       ) : null}
       {payload.preflight.taskDefinition ? (
-        <details className={s.taskContext}>
-          <summary>材料与评审范围</summary>
+        <>
           <div><small>材料目的</small><p>{stripInternalRefs(payload.preflight.taskDefinition.materialPurpose)}</p></div>
           <div><small>本次评审目的</small><p>{stripInternalRefs(payload.preflight.taskDefinition.reviewPurpose)}</p></div>
           <div><small>读者下一动作</small><p>{stripInternalRefs(payload.preflight.taskDefinition.readerAction)}</p></div>
           <div><small>本材料非目标</small><p>{stripInternalRefs(payload.preflight.taskDefinition.nonGoal)}</p></div>
           <div><small>证据边界</small><p>{stripInternalRefs(payload.preflight.basis)}</p></div>
-        </details>
+        </>
+      ) : payload.preflight.depth && payload.preflight.basis ? (
+        <div><p>{stripInternalRefs(payload.preflight.basis)}</p></div>
       ) : null}
-      {payload.preflight.status !== "running" ? <PreflightProgress progress={payload.preflight.progress} status={payload.preflight.status} /> : null}
-    </section>
-  );
+      {showProgressRecord ? <PreflightProgress progress={payload.preflight.progress} status={payload.preflight.status} /> : null}
+    </details>
+  ) : null;
 
   /* 材料自带的待决题逐条判断与开放分歧（v4）：不专属某个议题，放在议题之后、会议层面的判断之前。 */
   const reviewExtras = showReviewExtras ? (
@@ -1476,6 +1479,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
         {payload.issueIds.length ? <div className={s.issueList} aria-label="关联议题">{issueBlocks("decision")}</div> : null}
         {reviewExtras}
         {meetingSection}
+        {noPreflight ? null : basisTail}
 
         {readOnly ? null : (
           <div className={s.prepSection} data-outline="prep" aria-label="会前准备">
@@ -1572,9 +1576,12 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   const feishuEvent = !ended && payload.status === "scheduled" ? source.feishuEvent ?? null : null;
   const retryBooking = actionOf("meeting.retry_feishu_booking");
   const feishuEntry = !feishuEvent ? null
-    : feishuEvent.status === "waiting_auth" && feishuEvent.organizerId === workspace.viewerId ? (
-      <button type="button" className={s.feishuAction}
-        onClick={() => window.location.assign(feishuConnectHref(`${window.location.pathname}${window.location.search}`))}>连接飞书</button>
+    : feishuEvent.status === "waiting_auth" ? (
+      <span className={s.feishuEntry}>
+        <span className={s.feishuFailed}>未同步到飞书日历</span>
+        {feishuEvent.organizerId === workspace.viewerId ? <button type="button" className={s.feishuAction}
+          onClick={() => window.location.assign(feishuConnectHref(`${window.location.pathname}${window.location.search}`))}>连接飞书</button> : null}
+      </span>
     ) : feishuEvent.status === "failed" && retryBooking ? (
       <span className={s.feishuEntry}>
         <span className={s.feishuFailed}>飞书未约上</span>
@@ -1602,7 +1609,8 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
           // 整卡确认了：重取会议卡（会议记为已处理完），进度线最后一步换成已确认。
           if (view.confirmed && source.status === "held") void reloadCard();
         }}
-        turns={source.transcript?.turns ?? []} speakerName={(speakerId) => speakerLabel(speakerId, people)} people={payload.participants} />
+        turns={source.transcript?.turns ?? []} speakerName={(speakerId) => speakerLabel(speakerId, people)} people={payload.participants}
+        onSpeakers={() => void reloadCard()} />
     </>
   ) : null;
   const legacyRecord = recordCard.status === "legacy";
@@ -1788,7 +1796,7 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
       </section>
     );
 
-  // 页头下面一块（会前会后都在）：挂点一行、进度线一行。再读、贴妙记链接只给主持人和建会的人；读完重取会议卡。
+  // 页头下面一块（会前会后都在）：进度线和操作一行、挂点一行。再读、贴妙记链接只给主持人和建会的人；读完重取会议卡。
   const reloadCard = async () => {
     const next = memberReadOnly
       ? (await browserApi.GET("/api/me/cards/meetings/{id}", { params: { path: { id: meetingId } } })).data
@@ -1797,14 +1805,16 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
   };
   // 能上传会议记录的人（CEO、主持人）：进度线上待交记录后面的「上传会议记录」打开这里的选文件。
   const canUpload = payload.status === "scheduled" && (!memberReadOnly || isHost);
-  // 等开会、进行中时「进入飞书会议」在页头最右那一格；待交记录时进度线下面单独一块给贴妙记链接、上传会议记录这几样补救。
+  // 等开会、进行中时「进入飞书会议」在页头最右那一格；待交记录时正文最上面单独一块给贴妙记链接、上传会议记录这几样补救。
   const joinUrl = live === "waiting" || live === "live" ? payload.feishuEvent?.joinUrl ?? null : null;
   const progressActions = progress?.upload ? (
     <MinutesRecovery meetingId={meetingId} status={source.minutesStatus ?? "none"} failure={source.minutesFailure ?? null}
       canFetch={canFetchMinutes} onFetched={() => void reloadCard()} onUpload={canUpload ? () => uploadRef.current?.click() : undefined}
       uploading={uploading} uploadError={uploadError} />
   ) : null;
-  const worldLine = <MeetingWorldSection meetingId={meetingId} viewerId={workspace.viewerId ?? ""} progress={progress ? <MeetingProgress model={progress} below={progressActions} /> : null} />;
+  // 页头正下方一行：左边进度线，右边这场会的文字操作（重新安排会议、结束会议…）；挂点在它下面。交记录的补救是正文第一块。
+  const progressLine = progress ? <MeetingProgress model={progress} /> : null;
+  const worldLine = <MeetingWorldSection meetingId={meetingId} viewerId={workspace.viewerId ?? ""} />;
   // 会开完、还没有确认的逐字稿时，主栏整块能拖会议记录进来（FileDropZone）。
   const recordDrop = canUpload && ended && !source.transcript;
   // 选会议记录文件：会议记录区的「上传会议记录」和进度线上的共用，上传块不出现时也在。
@@ -1854,11 +1864,19 @@ export function MeetingCard({ card, collection, onCard, onNavigate, readOnly: me
               {outline ? <MeetingOutline items={outline} active={outlineActive} onJump={jumpOutline} label={recordShown ? "会后目录" : "议题目录"} /> : null}
               <div className={s.readingMain} data-material-column ref={mainRef} onMouseUp={onQuoteMouseUp}>
                 <FileDropZone disabled={!recordDrop} busy={recordDrop && uploading} onFile={(file) => void importTranscriptFile(file)}>
-                {worldLine}
-                <MeetingStatus phase={phase} facts={facts} now={statusNow} endedAt={payload.endedAt}>{feishuEntry}</MeetingStatus>
-                {(memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose) ?
-                  <p className={s.agenda}>{stripInternalRefs(memberReadOnly ? payload.purpose : payload.preflight.taskDefinition?.reviewPurpose)}</p> : null}
-                {preflightToolbar}
+                <header className={s.docHead}>
+                  {progressLine || preflightToolbar ? (
+                    <div className={s.docTop}>
+                      {progressLine ? <div className={s.docProgress}>{progressLine}</div> : null}
+                      {preflightToolbar}
+                    </div>
+                  ) : null}
+                  {worldLine}
+                  <MeetingStatus phase={phase} facts={facts} now={statusNow} endedAt={payload.endedAt}>{feishuEntry}</MeetingStatus>
+                </header>
+                {progressActions ? <div className={s.docRecovery}>{progressActions}</div> : null}
+                {(memberReadOnly ? payload.purpose : payload.preflight.decision ?? payload.preflight.taskDefinition?.reviewPurpose) ?
+                  <p className={s.agenda}>{stripInternalRefs(memberReadOnly ? payload.purpose : payload.preflight.decision ?? payload.preflight.taskDefinition?.reviewPurpose)}</p> : null}
                 <section className={s.material} aria-label={showing.title} data-running={payload.preflight.status === "running" && payload.preflight.entries.length ? "true" : undefined}>
                   {view.current === RECORD_TAB.id ? (
                     recordView

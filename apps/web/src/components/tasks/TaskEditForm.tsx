@@ -65,16 +65,16 @@ export function TaskEditForm({ detail, busy, onSave, onCancel }: { detail: Detai
       <Label>所属个人任务</Label>
       <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
       <Select.Popover><TianshuPortalTheme><ListBox>
-        <ListBox.Item id="independent" textValue="不挂个人任务（独立事项）">不挂个人任务（独立事项）<ListBox.ItemIndicator /></ListBox.Item>
+        <ListBox.Item id="independent" textValue="不指定个人任务（独立事项）">不指定个人任务（独立事项）<ListBox.ItemIndicator /></ListBox.Item>
         {missionOptions.map((option) => <ListBox.Item key={option.missionId} id={option.missionId} textValue={option.title}>{option.title} · {option.battlefieldName}<ListBox.ItemIndicator /></ListBox.Item>)}
       </ListBox></TianshuPortalTheme></Select.Popover>
     </Select>
-    {taskOptions.length || gone ? <Select aria-label="挂到 Task" selectedKey={draft.planTaskId || "none"}
+    {taskOptions.length || gone ? <Select aria-label="所属 Task" selectedKey={draft.planTaskId || "none"}
       onSelectionChange={(key) => set("planTaskId", key === "none" ? "" : String(key))}>
-      <Label>挂到 Task</Label>
+      <Label>所属 Task</Label>
       <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
       <Select.Popover><TianshuPortalTheme><ListBox>
-        <ListBox.Item id="none" textValue="不挂">不挂<ListBox.ItemIndicator /></ListBox.Item>
+        <ListBox.Item id="none" textValue="不指定">不指定<ListBox.ItemIndicator /></ListBox.Item>
         {gone ? <ListBox.Item id={opened.planTaskId} textValue="已不存在的 Task">已不存在的 Task<ListBox.ItemIndicator /></ListBox.Item> : null}
         {taskOptions.map((option) => <ListBox.Item key={option.taskId} id={option.taskId} textValue={option.name}>{option.name}<ListBox.ItemIndicator /></ListBox.Item>)}
       </ListBox></TianshuPortalTheme></Select.Popover>

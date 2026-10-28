@@ -172,7 +172,7 @@ describe("执行事项新建与邀请", () => {
     const html = renderToStaticMarkup(<CreateTaskScreen />);
     expect(html).toContain("这件事是什么？"); expect(html).toContain("执行事项标题");
     expect(html).toContain("推进哪个 Mission"); expect(html).toContain("时间与完成标准"); expect(html).toContain("下一步");
-    expect(html).not.toContain("不挂个人任务"); expect(html).not.toContain("开启执行事项</button>");
+    expect(html).not.toContain("不指定个人任务"); expect(html).not.toContain("开启执行事项</button>");
   });
   it("邀请弹层只展示详情提供的可邀请同事，并说明加入群聊", () => {
     const html = renderToStaticMarkup(<CollaboratorsDialog taskId="task-1" options={detail("owner").collaboratorOptions} isOpen onClose={vi.fn()} onAdded={vi.fn()} />);

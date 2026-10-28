@@ -50,7 +50,7 @@ export function WeeklyReviewScreen({ initialReview }: { initialReview: TWeeklyRe
   const draftText = (field: TWeeklyReviewField) => drafts[field] === undefined ? undefined : fromEditable(drafts[field], savedText(field));
   const dirtyFields = WEEKLY_FIELDS.filter((field) => drafts[field] !== undefined && draftText(field) !== savedText(field));
 
-  useRegisterDetail(useMemo(() => ({ scope: "global", label: title, mark: "monthly" as const, cards: NO_CARDS }), [title]));
+  useRegisterDetail(useMemo(() => ({ scope: "global", label: title, mark: "review" as const, cards: NO_CARDS }), [title]));
 
   const accept = useCallback((next: TWeeklyReviewPayload) => setReview((current) => next.version < current.version ? current : next), []);
   const latest = useCallback(async () => {

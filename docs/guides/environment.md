@@ -50,6 +50,8 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | 服务令牌 | `ONTOLOGY_SERVICE_TOKEN` | 本体拉每周进展的只读令牌；不填时对应接口返回 503 |
 | | `INTERNAL_CHAT_TOKEN` | 独立 Chat 读确认会议（`/internal/confirmed-meetings`）的服务凭据；不填时接口一律 404 |
 | | `CHAT_SERVICE_URL` | 首页对话改走独立 Chat 服务的地址（预发 `http://chat:3101`），用 `INTERNAL_CHAT_TOKEN` 转发本人身份；不填时走天枢自己的对话，对象页对话不受影响 |
+| 对话分段 | `CHAT_SESSION_ROTATION` | 设为 `1` 才开首页分段：首页的 Chat 对话闲置满 12 小时或跨过北京时间凌晨 4 点新开一段，界面拼最近 7 天的几段；同时在 `/internal/home-cards` 末尾多给 Chat 一张「以前的对话」卡（上一段纪要 + 近 14 天目录，见 `docs/guides/chat-conversation-recall.md`） |
+| | `CONVERSATION_SEGMENTS` | 设为 `1` 才开天枢页面的对话分段：同一条规则换段，模型侧只带这一段，上一段经会话目录里的纪要交接，另给两个回看工具。缺省关，照旧闲置 12 小时只带摘要重开。两个分段开关都关时不跑会话纪要的后台任务 |
 | 本体 | `TKOS_WORLD_API_URL`、`TKOS_WORLD_AGENT_TOKEN` | 都不填时本体相关能力如实显示未配置 |
 | | `TKOS_WORLD_AGENT_TOKEN_FILE` | 从文件读凭证（只在内存里）；读失败时健康接口报告错误码 |
 | | `TKOS_WORLD_INSTANCE` | `mvp`；可选 `demo`、`formal`、`tk`，对应 `apps/api/config/world-instance*.json` |
@@ -68,6 +70,7 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | | `MEMORY_IMPORT_MODEL`、`MEMORY_IMPORT_THINKING` | 记忆导入分类与去重：`LIGHT_MODEL` |
 | | `PROGRESS_SUMMARY_MODEL`、`PROGRESS_SUMMARY_THINKING` | 战场进展汇总（每天 07:30 与页面打开时）：`HEAVY_MODEL`、思考 medium |
 | | `TASK_PLACEMENT_MODEL`、`TASK_PLACEMENT_THINKING` | 会后分派的事项归位（挑挂到哪个 Mission）：`LIGHT_MODEL`、不开思考 |
+| | `CONVERSATION_DIGEST_MODEL`、`CONVERSATION_DIGEST_THINKING` | 会话纪要（后台，一段闲置 15 分钟后增量写）：`LIGHT_MODEL`、不开思考；设计上用 TokenHub 上的 qwen 快模型 |
 | 雷达 | `BOCHA_API_KEY` | 博查是唯一 Web Search；缺失时雷达卡如实显示未配置 |
 | | `WECHAT_MCP_URL`、`WECHAT_MCP_TOKEN` | 公众号 sidecar 的内网 MCP；Compose 地址缺省 `http://wechat:5000/mcp` |
 | 录音与声纹 | `TOS_ACCESS_KEY`、`TOS_SECRET_KEY`、`TOS_ENDPOINT`、`TOS_REGION`、`TOS_BUCKET` | 五项配全才能上传录音 |
@@ -79,6 +82,7 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | 文件目录 | `MEETING_MATERIAL_STORAGE_DIR`、`CONVERSATION_ATTACHMENT_STORAGE_DIR`、`MEETING_RECORDING_STORAGE_DIR` | 本地直跑可留空用默认目录；Compose 固定为持久卷 |
 | 飞书 | `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_TOKEN_KEY` | 三项都留空＝关闭飞书（路由 404，不起长连接）；只填一部分 API 启动失败。`FEISHU_TOKEN_KEY` 为 base64 的 32 字节，与 `SESSION_SECRET` 分开 |
 | | `FEISHU_TOKEN_KEY_VERSION` | 1；换密钥时递增，空串会被判非法 |
+| 微信 ClawBot | 无单独配置 | 接了飞书就开：个人菜单「设置 › 连接微信」扫码绑定，bot token 用 `FEISHU_TOKEN_KEY` 加密。同一个微信 bot 同一时间只能有一个进程在收消息，生产和预发不要绑同一个人的微信 |
 | | `FEISHU_BITABLE_MODE` | 只有 `live` 才写真实多维表格，其余为 mock |
 | | `FEISHU_WEB_ORIGIN` | 飞书网页域名（如 `https://tokenking.feishu.cn`）；会议事件写本体时拼妙记链接，留空不带链接 |
 | | `COLLECTIONS_ENABLED` | 只有 `1` 才开信息收集（收集接口、每分钟收集任务、对话里发起收集、定时任务里的收集项），其余关 |

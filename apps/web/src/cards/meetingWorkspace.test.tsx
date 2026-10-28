@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Card } from "@/lib/api/client";
 import type { TTranscriptCandidateProjection } from "@warmap/contracts";
-import { MeetingCard, confirmTranscriptInput, fromCompanyInput, meetingNow, offsetLabel, preflightErrorText, speakerMappingError, speakerMappingRows, toCompanyInput } from "./MeetingCard";
+import { MeetingCard, confirmTranscriptInput, fromCompanyInput, meetingNow, offsetLabel, preflightErrorText, speakerMappingRows, toCompanyInput } from "./MeetingCard";
 import { meetingCountdown, meetingDayWord, meetingSlot, meetingTimeline, meetingTimelineLabel } from "@/components/meeting/MeetingHeader";
 
 // 会议页读取外壳的首页集合（关联议题的位置名）；单测里给一个空集合。
@@ -465,16 +465,15 @@ describe("妙记 Markdown 候选预览", () => {
     expect(html).toContain("重新上传会议记录");
   });
 
-  it("未映射说话人时给出行内错误并禁用确认，全部唯一映射后放行", () => {
+  it("有说话人没对上也能确认（保留原名，会议卡上再指定）", () => {
     const confirmAction = { actionId: "c1", actionType: "meeting.confirm_transcript_candidate", label: "确认会议记录" };
     const unresolved = render(meetingCard({ transcriptCandidate: candidateBase }, [confirmAction]));
-    expect(unresolved).toContain("还有 1 位说话人未映射，确认不可用");
     expect(unresolved).toContain('data-status="unmapped"');
-    expect(buttonMarkup(unresolved, "确认并写入逐字稿")).toContain("disabled");
+    expect(unresolved).not.toContain('role="alert"');
+    expect(buttonMarkup(unresolved, "确认并写入逐字稿")).not.toContain("disabled");
 
     const resolved = { ...candidateBase, speakers: candidateBase.speakers.map((speaker) => ({ ...speaker, suggestedPersonId: speaker.suggestedPersonId ?? "p3" })) };
     const html = render(meetingCard({ transcriptCandidate: resolved }, [confirmAction]));
-    expect(html).not.toContain("未映射，确认不可用");
     expect(html).not.toContain('data-status="unmapped"');
     expect(buttonMarkup(html, "确认并写入逐字稿")).not.toContain("disabled");
 
@@ -502,12 +501,10 @@ describe("妙记 Markdown 候选预览", () => {
   it("行状态按已参与/待加入/未映射标注", () => {
     const rows = speakerMappingRows(candidateBase, ["p1"], {});
     expect(rows.map((row) => row.status)).toEqual(["existing", "add", "unmapped"]);
-    expect(speakerMappingError(rows)).toContain("未映射");
 
     // 飞书会把同一个人拆成两个说话人：两行选同一人照常放行
     const samePerson = speakerMappingRows(candidateBase, ["p1"], { 外部顾问: "p1" });
     expect(samePerson.map((row) => [row.personId, row.status])).toEqual([["p1", "existing"], ["p2", "add"], ["p1", "existing"]]);
-    expect(speakerMappingError(samePerson)).toBeNull();
     expect(speakerMappingRows({ ...candidateBase, speakers: candidateBase.speakers.slice(0, 2) }, ["p1", "p2"], {})).toHaveLength(2);
   });
 
@@ -528,5 +525,7 @@ describe("妙记 Markdown 候选预览", () => {
       confirmAddParticipants: true,
     });
     expect(JSON.stringify(input)).not.toContain("turns");
+    // 没选人的说话人不带。
+    expect(confirmTranscriptInput(candidateBase, { 林晓: "p1", 陈珂: "p2" }).speakerMappings.map((mapping) => mapping.speakerName)).toEqual(["林晓", "陈珂"]);
   });
 });

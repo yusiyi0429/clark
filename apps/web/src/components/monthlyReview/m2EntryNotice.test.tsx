@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { M2EntryNotice, inM2Window, m2EntryNotices } from "./M2EntryNotice";
+import { M2EntryNotice, inM2Window, m2EntryNotices, m2NotificationNotices, visibleM2Notifications } from "./M2EntryNotice";
 
 const render = (available: boolean, now = new Date("2026-10-29T02:00:00Z")) => renderToStaticMarkup(<M2EntryNotice available={available} now={now} />);
 
@@ -31,5 +31,55 @@ describe("通知栏里去 M2 的入口卡", () => {
     const go = vi.fn();
     m2EntryNotices(go)[0].onOpen?.(null);
     expect(go).toHaveBeenCalledWith("/m2/");
+  });
+
+  it("环节卡：进行中、生成中一直在、不给「知道了」；全部确认的能「知道了」，看过就不显示", async () => {
+    const stage = (status: string, unread: boolean) => ({ id: "stage:plan", type: "stage", title: "11 月拆解", link: "?stage=plan", status, unread });
+    const go = vi.fn();
+    const read = vi.fn(async () => true);
+    const now = new Date("2026-10-31T02:00:00Z");
+    const buttons = (status: string, unread: boolean) =>
+      m2NotificationNotices(visibleM2Notifications({ items: [stage(status, unread)] }), go, now, read).map((notice) => notice.buttons.map((button) => button.label));
+    expect(buttons("generating", false)).toEqual([[]]);
+    expect(buttons("open", true)).toEqual([[]]);
+    expect(buttons("done", true)).toEqual([["知道了"]]);
+    expect(buttons("done", false)).toEqual([]);
+    m2NotificationNotices(visibleM2Notifications({ items: [stage("generating", false)] }), go, now, read)[0].onOpen?.(null);
+    expect(go).toHaveBeenCalledWith("/m2/?stage=plan");
+  });
+
+  it("M2 通知：认得的四种照接口显示；环节卡完成又看过的不显示；出错、空、不是列表都当没有", async () => {
+    const body = { items: [
+      { id: "stage:review", type: "stage", title: "10 月复盘已出", text: "", link: "?stage=review", status: "open", dueAt: "2026-10-30T10:00:00Z", unread: true },
+      { id: "stage:plan", type: "stage", title: "计划已全部确认", link: "?stage=plan", status: "done", unread: false },
+      { id: "todo:review", type: "todo", title: "10 月复盘：你有待办", text: "1 份待确认、2 个追问待回答", link: "?stage=review&todo=1&card=rv%3Abf01-m1", dueAt: "2026-10-30T10:00:00Z", unread: false },
+      { id: "mention:bf01", type: "mention", title: "灯塔群：2 条消息与你有关", text: "Nexus：因为写回接口还没上线。", link: "?scope=bf01&message=m-nexus", unread: true },
+      { id: "failure:round", type: "failure", title: "拆解生成失败", link: "?admin=1" },
+      { id: "x", type: "other", title: "不认得", link: "?" },
+    ], at: "2026-10-29T02:00:00Z" };
+    expect(visibleM2Notifications(body).map((item) => item.id)).toEqual(["stage:review", "todo:review", "mention:bf01", "failure:round"]);
+    expect(visibleM2Notifications({ items: [], error: "通知暂时取不到" })).toEqual([]);
+    expect(visibleM2Notifications(null)).toEqual([]);
+    expect(visibleM2Notifications("<html>404</html>")).toEqual([]);
+
+    const go = vi.fn();
+    const read = vi.fn(async () => true);
+    const notices = m2NotificationNotices(visibleM2Notifications(body), go, new Date("2026-10-29T02:00:00Z"), read);
+    expect(notices.map((notice) => [notice.title, notice.detail, notice.tone])).toEqual([
+      ["10 月复盘已出", "截止 10/30 周五 18:00", "amber"],
+      ["10 月复盘：你有待办", "1 份待确认、2 个追问待回答 · 截止 10/30 周五 18:00", "amber"],
+      ["灯塔群：2 条消息与你有关", "Nexus：因为写回接口还没上线。", "amber"],
+      ["拆解生成失败", "", "red"],
+    ]);
+    // 不到 24 小时标红；过了截止写「已过截止」。
+    expect(m2NotificationNotices(visibleM2Notifications(body), go, new Date("2026-10-29T12:00:00Z"), read)[1].tone).toBe("red");
+    expect(m2NotificationNotices(visibleM2Notifications(body), go, new Date("2026-10-30T11:00:00Z"), read)[1].detail).toBe("1 份待确认、2 个追问待回答 · 已过截止");
+    // 点开：标已读再整页去 M2；只有 @我 能「知道了」，进行中的环节卡、待办和生成失败不给关。
+    notices[2].onOpen?.(null);
+    expect(read).toHaveBeenCalledWith(["mention:bf01"]);
+    expect(go).toHaveBeenCalledWith("/m2/?scope=bf01&message=m-nexus");
+    expect(notices.map((notice) => notice.buttons.map((button) => button.label))).toEqual([[], [], ["知道了"], []]);
+    expect(await notices[2].buttons[0].run()).toEqual({ ok: true, settled: "已读" });
+    expect(read).toHaveBeenLastCalledWith(["mention:bf01"]);
   });
 });

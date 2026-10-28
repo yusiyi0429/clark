@@ -49,7 +49,7 @@ import { createObjectMaterial, editObjectMaterial, listObjectMaterials, readObje
 import { isRealPerson, personDisplayNames } from "./people.js";
 import { collectMeetingEvidence, collectObjectEvidence } from "./meetingEvidence.js";
 import { issueDecisionHistory, meetingDecisionHistory } from "./issueDecisionHistory.js";
-import { withBeijingTimes } from "./agentTime.js";
+import { nowContext, withBeijingTimes } from "./agentTime.js";
 import { ANSWER_OPTIONS_RULES, DECISION_JUDGEMENT_RULES } from "./decisionJudgement.js";
 import { SOURCE_CITATION_RULES } from "./sourceCitations.js";
 import { RICH_BLOCK_RULES } from "./richBlocks.js";
@@ -63,12 +63,13 @@ import { logEvent } from "./observability.js";
 import type { CompanyReader } from "./company.js";
 import { THREE_LAYER_RULES } from "./companyMap.js";
 import { composeTurnContext, withTurnContext, type ProviderTurn } from "./turnContext.js";
+import type { PastConversations } from "./conversationRecall.js";
 import { ISSUE_SUGGEST_RULES } from "./issueDrafts.js";
 import { ASK_USER_RULES, PERSONAL_REVIEW_CHECK_RULES, makeAskTool } from "./askUser.js";
 import { DraftMeetingParams, type DraftMeetingArgs } from "./meetingDraft.js";
 
 /** 场景锚点（PR #12 Anchor 层）在系统提示里的说明：CEO 与 DRI 共用。 */
-const ANCHOR_CONTEXT = `\`anchor\` 是本人当前所在的页面（scene）与聚焦的卡（focus，句柄 A1…），items 是页面上可见项的摘要目录；要看某一项的完整内容或下一页目录时用 \`read_anchor\`（handle 或 cursor），展开结果或 focus 带 changed 时说明这一项在上次读取后有更新。focus.stale 表示本人页面上看到的是旧版本，回答时提醒刷新。anchor 和 currentObject 只在本轮给出，历史里没有，不从历史推断页面现状；它们只说明场景和指代，本地页面、草稿与历史不等于本体（World）里的正式公司事实。`;
+const ANCHOR_CONTEXT = `\`anchor\` 是本人当前所在的页面（scene）与聚焦的卡（focus，句柄 A1…），items 是页面上可见项的摘要目录；要看某一项的完整内容或下一页目录时用 \`read_anchor\`（handle 或 cursor），展开结果或 focus 带 changed 时说明这一项在上次读取后有更新。focus.stale 表示本人页面上看到的是旧版本，回答时提醒刷新。anchor 和 currentObject 只在本轮给出，历史里没有，不从历史推断页面现状；它们只说明场景和指代，本地页面、草稿与历史不等于本体（World）里的正式公司事实。\`now\` 是本轮发问时的北京时间（at，含星期）、本周（周一到周日）和本月；本人说的「今天」「这周」「本月」「月底」等都按它换算，不反问本人现在是几号或几月。`;
 
 /** CEO 与 DRI Agent 共用的材料改写规则；能不能直接改按 canEdit（上传者和对象负责人），与 edit_material 是否开放一致。 */
 const MATERIAL_EDITING_RULES = `材料是上述只读边界的例外。一份材料只有上传者和对象负责人（执行事项的推进人、会议主持人、议题的 CEO）能改，list_materials 和 currentObject.viewingMaterial 的 canEdit 表示对方能不能改。对方明确要求「改」「写进去」时：canEdit=true 用 edit_material 直接改；canEdit=false 或没有 edit_material 时不直接改，用 propose_material_edit 把改法交给能改的人，按工具结果告诉对方交给了谁。对方要求新写当前议题、执行事项、会议的群组材料时用 create_material。双方就当前在看的材料达成明确共识（对方同意了某个具体改法），但没有明确要求执行时，主动用 propose_material_edit 提议，由能改的人点「按这个改」才生效，不直接改；不确定是否共识就不提议。只能改 Markdown 和 HTML，改 HTML 时保持标签结构完整，不加外链脚本；新写材料仍只用 Markdown。修改或提议前先用 read_material 读当前版本。「这份」「这里」指 currentObject.viewingMaterial，不确定改哪里先问，改完用一句话说明。其他写入仍禁止。`;
@@ -194,6 +195,17 @@ web_search 直接返回来源标题、URL 与摘要，本运行最多 8 次，�
 
 ${CONVERSATION_WRITING_STYLE}`;
 }
+
+/** CEO 与 DRI 提示里指向原话检索的那一句；分段时换成 PAST_CONVERSATION_LINE，另附 PAST_CONVERSATION_RULES。 */
+export const HISTORY_SEARCH_LINE = "要找本人以前在任何页面聊过的原话（哪怕是很久以前、已归档的对话）时用 `search_conversation_history`，引用原话时照抄它给的 cite。";
+export const PAST_CONVERSATION_LINE = "本人以前聊过的事先看 `conversationCatalog`，再用 `search_past_conversations`、`read_past_conversation` 查（见「以前的对话」）。";
+export const PAST_CONVERSATION_RULES = `# 以前的对话
+
+对话按天分段：闲置满 12 小时或过了北京时间凌晨 4 点就是新的一段，你只看得到这一段的原文。\`conversationCatalog\`（有时才出现）是本人以前的会话目录：previous 是上一段的纪要（首页对话里是首页的上一段，页面对话里是本页面的上一段），本人接着上一段说（「接着昨天的说」「刚才那个方案」）时以它为准；recent 是近 14 天其他段的一行目录（日期、页面、主题），首页和各个页面的都有。
+
+本人提到以前聊过的事，或你判断这一问要靠以前的讨论时，先看目录，再用 \`search_past_conversations\` 按关键词或日期查，用 \`read_past_conversation\` 读那一段的纪要；要原话时带 cursor 读原文，引用原话照抄。不要直接说不记得，也不要让本人把背景重说一遍。
+
+纪要写明了哪些是本人确认的、哪些只是助手建议，转述时照这个区分，并说出是哪天、在哪个页面聊的。查过仍没有就如实说没找到，不编。目录和纪要记的是以前的对话，不是公司事实；事实照常以本体和页面为准。`;
 
 /** DRI Agent 去掉的工具：它们读的是只给 CEO 看的决策面。 */
 const CEO_ONLY_TOOLS = new Set(["get_warmap_overview", "list_pending_issues", "read_ontology"]);
@@ -879,7 +891,31 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
             execute: async (_id, args) => textResult({ forgotten: await personal.forget(args as { id: string }) }),
           }),
         ] : []),
-        ...(input.searchHistory ? [defineTool({
+        // 分段时的回看（conversationRecall.ts）：两个工具代替 search_conversation_history（纪要里查不到时它自己退回按原话查）。
+        ...(input.pastConversations ? [defineTool({
+          name: "search_past_conversations",
+          label: "查以前的对话",
+          description: "在本人以前的会话纪要里查（首页和各个页面的都有，只有本人的）。query 是关键词；from / to 是北京时间的日期 YYYY-MM-DD，「上周二」这类说法先换成日期。返回最多 5 段：日期、页面、主题、纪要开头和 segmentId，nextPage 表示还有下一页；纪要里查不到时退回按原话查，返回 hits。要看一段的完整纪要或原话用 read_past_conversation。",
+          parameters: Type.Object({
+            query: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+            from: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
+            to: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
+            page: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
+          }, { additionalProperties: false }),
+          execute: async (_id, args) => textResult(await withRetrieve(RETRIEVE_SOURCES.conversationHistory, () => ({ hasQuery: Boolean((args as { query?: string }).query) }),
+            () => input.pastConversations!.search(args as Parameters<PastConversations["search"]>[0]))),
+        }), defineTool({
+          name: "read_past_conversation",
+          label: "读以前的对话",
+          description: "读本人以前的一段对话。segmentId 取自 conversationCatalog 或 search_past_conversations。不带 cursor 返回这一段的完整纪要；要原话时带 cursor（第一次用返回的 rawCursor）分页读原文，每页 8,000 字以内，nextCursor 为空就是读完了。",
+          parameters: Type.Object({
+            segmentId: Type.String({ minLength: 1, maxLength: 64 }),
+            cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 24 })),
+          }, { additionalProperties: false }),
+          execute: async (_id, args) => textResult(await withRetrieve(RETRIEVE_SOURCES.conversationHistory, () => ({ segment: true }),
+            () => input.pastConversations!.read(args as Parameters<PastConversations["read"]>[0]))),
+        })] : []),
+        ...(input.searchHistory && !input.pastConversations ? [defineTool({
           name: "search_conversation_history",
           label: "检索历史对话",
           description: "按关键词检索本人以前在任何页面聊过的原话（含已归档的对话，只有本人的）。返回片段与 cite；引用原话时照抄 cite 作为出处地址。",
@@ -1174,16 +1210,20 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         ];
       })() : [];
       const recreated = !validRuntimeEntries(input.runtimeEntries, input.piSessionId);
-      // 闲置太久（路由层按 CONVERSATION_IDLE_RESTART_MS 判断）：模型侧换一条新会话，只带摘要和最近几轮问答的文字。
-      const idleRestart = Boolean(input.idleRestart) && !recreated && input.runtimeEntries.length > 0;
+      // 换段（路由层按闲置 12 小时或跨凌晨 4 点判断）：模型侧开一段新会话，不带上一段的原文、工具往返和压缩摘要，交接靠上下文包里的会话目录。
+      const segmentStart = Boolean(input.segmentStart) && !recreated && input.runtimeEntries.length > 0;
+      // 不分段时闲置太久（路由层按 CONVERSATION_IDLE_RESTART_MS 判断）：模型侧换一条新会话，只带摘要和最近几轮问答的文字。
+      const idleRestart = !segmentStart && Boolean(input.idleRestart) && !recreated && input.runtimeEntries.length > 0;
       const idleSummary = idleRestart ? latestCompactionSummary(input.runtimeEntries, input.piSessionId) : undefined;
-      const piSessionId = recreated || idleRestart ? randomUUID() : input.piSessionId;
+      const piSessionId = recreated || idleRestart || segmentStart ? randomUUID() : input.piSessionId;
       const warning = recreated ? "Pi runtime entries were corrupted; rebuilt from current object and recent raw messages" : undefined;
       const manager = SessionManager.inMemory(
         process.cwd(),
         { id: piSessionId },
-        recreated || idleRestart ? undefined : structuredClone(input.runtimeEntries) as Parameters<typeof SessionManager.inMemory>[2],
+        recreated || idleRestart || segmentStart ? undefined : structuredClone(input.runtimeEntries) as Parameters<typeof SessionManager.inMemory>[2],
       );
+      if (segmentStart) logEvent({ event: "conversation.segment_start", runId: input.runId, scope: input.scope, previousEntries: input.runtimeEntries.length,
+        catalogPrevious: Boolean(input.pastConversations?.catalog?.previous) });
       // pi 自带的自动压缩全部关掉（轮前、轮中两次工具之间、轮末，都会让一号位干等）：压缩只在后台做（conversationCompaction.ts），
       // 这一轮开始前路由层已把就绪的快照换进历史；历史仍太长时这一轮走窗口兜底（见 execute）。
       const settings = SettingsManager.inMemory({ compaction: { enabled: false, reserveTokens: OUTPUT_RESERVE_TOKENS, keepRecentTokens: 20_000 }, retry: { enabled: false } });
@@ -1216,7 +1256,10 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         : isCeo ? CEO_SYSTEM_PROMPT
         : driSystemPrompt(input.viewer.displayName);
       // 三层取用、深聊转议题的说明只在有这些工具时拼上（在表达要求之后，快答档裁剪检索条款时不受影响）。
-      const fullPrompt = [basePrompt, ...(layerTools.length ? [THREE_LAYER_RULES] : []), ...(issueTools.length ? [ISSUE_SUGGEST_RULES] : []),
+      // 分段时以前的对话靠会话目录和两个回看工具：系统提示里那一句换成指向它们（只随开关变，不随轮次变）。
+      const pastRules = input.pastConversations ? [PAST_CONVERSATION_RULES] : [];
+      const rolePrompt = input.pastConversations ? basePrompt.replace(HISTORY_SEARCH_LINE, PAST_CONVERSATION_LINE) : basePrompt;
+      const fullPrompt = [rolePrompt, ...pastRules, ...(layerTools.length ? [THREE_LAYER_RULES] : []), ...(issueTools.length ? [ISSUE_SUGGEST_RULES] : []),
         ...(asking ? [ASK_USER_RULES, ...(input.scope.startsWith("personal-review:") ? [PERSONAL_REVIEW_CHECK_RULES] : [])] : [])].join("\n\n");
       const toolTimeoutMs = options.toolTimeoutMs ?? TOOL_TIMEOUT_MS;
       const turnTools = [...anchorTools, ...peopleTools, ...memoryTools, ...entryTools, ...layerTools, ...issueTools, ...viewerBoardTools, ...missionCardTools, ...materialTools, ...reviewTools, ...evidenceTools, ...outletFeedTools, searchTool,
@@ -1386,6 +1429,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         let live = "";
         const prompt = await withRetrieve(RETRIEVE_SOURCES.contextPack, () => ({ scope: input.scope, references: input.referencesSnapshot?.length ?? 0 }), async () => {
           const parts = {
+            now: nowContext((options.now ?? (() => new Date()))()),
             references: input.referencesSnapshot,
             personalMemory: personalMemory.length ? personalMemory : undefined,
             myOpenTodos: input.openTodos?.length ? input.openTodos : undefined,
@@ -1398,7 +1442,10 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
             answerMode: TIER_GUIDANCE[route.tier],
             resume: input.resume?.instruction,
           };
-          live = composeTurnContext({ anchor: anchor?.view, message: input.message, parts: { currentObject: input.currentObject, ...parts } });
+          // 会话目录和页面对象一样只在发给模型的那份里（每轮重新给，不进 Pi 历史）。
+          const catalog = input.pastConversations?.catalog;
+          live = composeTurnContext({ anchor: anchor?.view, message: input.message,
+            parts: { currentObject: input.currentObject, ...(catalog ? { conversationCatalog: catalog } : {}), ...parts } });
           return composeTurnContext({ message: input.message, parts });
         }, (packed) => ({ chars: live.length, persistedChars: packed.length, anchorItems: anchor?.view.items.length ?? 0, currentObject: Boolean(input.currentObject), references: input.referencesSnapshot?.length ?? 0,
           globalContext: Boolean(globalLoad), prefetched: Boolean(prefetched), ...(focus ? { focus: focus === "all" ? "all" : focus.join(",") || "none" } : {}) }));

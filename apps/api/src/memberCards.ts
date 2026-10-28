@@ -30,15 +30,18 @@ export function projectMemberMeetingCardFromCard(card: TCard, viewerId?: string)
   const isHost = payload.leadDriId === viewerId;
   // 原文和完整纪要只给实际参会的人（飞书参会名单，中途加入的也算；拿不到时是手填的参会人）和 CEO；其他人只看已确认的决定和待办。
   const attended = isHost || Boolean(viewerId && payload.attendees?.personIds.includes(viewerId));
+  // 会前预审是给开会的人准备用的：主持人和受邀参会人看完整预审（一号位追问仍只给 CEO）；其他人只看一句话。
+  const invited = isHost || Boolean(viewerId && payload.participants.some((person) => person.personId === viewerId));
   return { ...card, payload: {
     status: payload.status, scheduledAt: payload.scheduledAt, endsAt: payload.endsAt, endedAt: payload.endedAt,
     startedAt: payload.startedAt ?? null, hasEnded: payload.hasEnded,
     ...(isHost ? { transcriptCandidate: payload.transcriptCandidate } : {}),
     leadDriId: payload.leadDriId, createdBy: payload.createdBy ?? null, participants: payload.participants,
-    purpose: payload.preflight.taskDefinition?.reviewPurpose ?? null,
+    purpose: payload.preflight.decision ?? payload.preflight.taskDefinition?.reviewPurpose ?? null,
     materials: payload.materials,
-    preflight: { status: payload.preflight.status, brief: payload.preflight.brief,
-      readiness: payload.preflight.readiness ?? null, summary: payload.preflight.summary ?? null },
+    preflight: invited ? { ...payload.preflight, entries: payload.preflight.entries.filter((entry) => entry.kind !== "leader_lens") }
+      : { status: payload.preflight.status, brief: payload.preflight.brief,
+        readiness: payload.preflight.readiness ?? null, summary: payload.preflight.summary ?? null },
     outcome: payload.outcome ? {
       // 生成会议卡的阶段和用时（排上、开跑的时刻）参会的人也看得到。
       ...(attended ? { summary: payload.outcome.summary, status: payload.outcome.status,

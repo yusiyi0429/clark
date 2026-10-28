@@ -2,13 +2,15 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
 import type { TMeetingParticipant } from "@warmap/contracts";
 import { listPendingIssueSummaries } from "../issues.js";
+import { logEvent } from "../observability.js";
 import type { Viewer } from "../meetingCard.js";
 import { listConfirmedMeetings, PayloadHashMismatchError, readConfirmedMeeting } from "../meetingCardRead.js";
+import { DraftMeetingParams, draftMeeting, draftTimeLabel, type DraftMeetingArgs } from "../meetingDraft.js";
 import { meetingHasEnded } from "../meetingStore.js";
 import { canUseMemberView, roleOf, type SessionRole } from "../memberAccess.js";
 import { MISSION_PLAN_TIMEOUT_MS, readMissionPlans, type MissionPlanWorld, type MissionPlanWorldOff } from "../missionPlanRead.js";
 import { companyPeriod } from "../monthlyPlans.js";
-import { personDisplayNames } from "../people.js";
+import { isRealPerson, personDisplayNames } from "../people.js";
 import { WorldClient, worldConfigured } from "../worldClient.js";
 import { readHomeSnapshots } from "./cards.js";
 import type { AppInstance, RouteContext } from "./shared.js";
@@ -22,6 +24,15 @@ const catalogQuery = Type.Object({
 }, { additionalProperties: false });
 const meetingParams = Type.Object({ meetingId: Type.String({ minLength: 1 }) }, { additionalProperties: false });
 const windowQuery = Type.Object({ from: Type.Optional(Type.String()), to: Type.Optional(Type.String()) }, { additionalProperties: false });
+const catalogOfQuery = Type.Object({ conversationId: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })) }, { additionalProperties: false });
+const recallSearchQuery = Type.Object({
+  query: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  from: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
+  to: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
+  page: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
+}, { additionalProperties: false });
+const segmentParams = Type.Object({ segmentId: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false });
+const recallReadQuery = Type.Object({ cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 24 })) }, { additionalProperties: false });
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type View = { personId: string; role: SessionRole };
@@ -146,7 +157,35 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
     const view = viewOf(req, reply);
     if (!view) return reply;
     const cards = await readHomeSnapshots(ctx, view);
-    return { viewerRole: view.role, scene: view.role === "ceo" ? "公司首页" : "我的工作台", cards: cards.map((card) => ({ ...card, label: "页面" })) };
+    // 首页分段开着时多给一张「以前的对话」（第一版回看：Chat 还没接会话目录和两个工具，借首页卡交给模型）；读不到不影响首页卡。
+    const past = env.chatSessionRotation === true ? await ctx.conversationRecall.homeCard(view).catch((error: unknown) => {
+      logEvent({ event: "conversation.catalog_card_unavailable", error: (error as Error)?.message });
+      return null;
+    }) : null;
+    return { viewerRole: view.role, scene: view.role === "ceo" ? "公司首页" : "我的工作台",
+      cards: [...cards.map((card) => ({ ...card, label: "页面" })), ...(past ? [{ ...past, label: "以前的对话" }] : [])] };
+  });
+
+  // 回看以前的对话（10/28，conversationRecall.ts；字段见 docs/guides/chat-conversation-recall.md）：首页每轮的会话目录和两个回看工具转调这三个接口。
+  // 只看本人的；首页的段按视角隔离，天枢页面的段两种视角都能查；隐藏了的段查不到。
+  app.get("/internal/conversation-catalog", { onRequest, schema: { querystring: catalogOfQuery } }, async (req, reply) => {
+    const view = viewOf(req, reply);
+    if (!view) return reply;
+    const catalog = await ctx.conversationRecall.homeCatalog(view, req.query.conversationId);
+    return { viewerRole: view.role, previous: catalog?.previous ?? null, recent: catalog?.recent ?? [] };
+  });
+  app.get("/internal/conversation-recall/search", { onRequest, schema: { querystring: recallSearchQuery } }, async (req, reply) => {
+    const view = viewOf(req, reply);
+    if (!view) return reply;
+    const result = await ctx.conversationRecall.search(view, req.query) as { error?: string; message?: string };
+    return result.error ? fail(reply, 400, "INVALID_INPUT", result.message ?? "参数不对") : { viewerRole: view.role, ...result };
+  });
+  app.get("/internal/conversation-recall/:segmentId", { onRequest, schema: { params: segmentParams, querystring: recallReadQuery } }, async (req, reply) => {
+    const view = viewOf(req, reply);
+    if (!view) return reply;
+    const result = await ctx.conversationRecall.read(view, { segmentId: req.params.segmentId, cursor: req.query.cursor }) as { error?: string; message?: string };
+    if (result.error === "SEGMENT_NOT_FOUND") return fail(reply, 404, result.error, result.message ?? "没有这一段");
+    return result.error ? fail(reply, 400, "INVALID_INPUT", result.message ?? "参数不对") : { viewerRole: view.role, ...result };
   });
 
   // 本人本月 Mission 的本体计划（10/23 诊断方案二）：两种视角都是本人的；本体配了、实例也开了读才读（只读，每次请求 2.5 秒、整次 5 秒），否则 plan 为 null。
@@ -158,5 +197,20 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
     if (!view) return reply;
     const period = companyPeriod(ctx.now());
     return { viewerRole: view.role, period, missions: await readMissionPlans(q, view.personId, period, planWorld) };
+  });
+
+  // 首页对话里约会议（10/28 与人豪定：Chat 的 book_meeting 工具调这里）：把本人一句话里的时间、人名换成一张会议卡，只读不写库；
+  // 本人在卡上点「约好」才建会（同天枢自己对话里的 draft_meeting）。认不出时 drafted=false 带原因，由 Chat 追问后再调。
+  app.post("/internal/meeting-drafts", { onRequest, schema: { body: DraftMeetingParams } }, async (req, reply) => {
+    const view = viewOf(req, reply);
+    if (!view) return reply;
+    const people = peopleDirectory.searchPeople(undefined).filter(isRealPerson).map(({ personId, displayName }) => ({ personId, displayName }));
+    const result = await draftMeeting({ q, viewer: view, people, now: ctx.now() }, req.body as DraftMeetingArgs);
+    if ("reason" in result) return { drafted: false, reason: result.reason };
+    const { card } = result;
+    const summary = { title: card.title, time: draftTimeLabel(new Date(card.scheduledAt), new Date(card.endsAt)),
+      host: card.host?.displayName ?? null, participants: card.participants.map((person) => person.displayName),
+      unresolved: card.unresolved, anchor: card.anchor?.title ?? null, ...(result.hostNote ? { hostNote: result.hostNote } : {}) };
+    return { drafted: true, card, summary };
   });
 }

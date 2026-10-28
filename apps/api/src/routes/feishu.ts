@@ -4,7 +4,7 @@ import { FeishuAuthConfigResponse, FeishuCodeLoginRequest, FeishuConnectionRespo
 import { parseCookies, sessionSetCookie } from "../session.js";
 import type { FeishuClient } from "../feishu/client.js";
 import {
-  FEISHU_OAUTH_SCOPE, FEISHU_STATE_COOKIE, clearOAuthStateCookie, completeFeishuLogin, createOAuthState, feishuConnected, safeNextPath, verifyOAuthState,
+  FEISHU_CALENDAR_SCOPES, FEISHU_OAUTH_SCOPE, FEISHU_STATE_COOKIE, clearOAuthStateCookie, completeFeishuLogin, createOAuthState, feishuConnected, safeNextPath, verifyOAuthState,
   type FeishuConnectIntent, type FeishuLoginOutcome,
 } from "../feishu/oauth.js";
 import { isAllowedOrigin, type AppInstance, type RouteContext } from "./shared.js";
@@ -45,7 +45,11 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
     feishu && client ? { enabled: true, appId: feishu.appId, scopes: FEISHU_OAUTH_SCOPE.split(" ") } : { enabled: false });
 
   app.get("/api/me/feishu", { preHandler: requirePerson, schema: { response: { 200: FeishuConnectionResponse } } }, async (req) =>
-    feishu && client ? { enabled: true, connected: await feishuConnected(q, feishu, req.person!.personId, now()) } : { enabled: false, connected: false });
+    feishu && client ? {
+      enabled: true,
+      connected: await feishuConnected(q, feishu, req.person!.personId, now()),
+      calendar: await feishuConnected(q, feishu, req.person!.personId, now(), FEISHU_CALENDAR_SCOPES),
+    } : { enabled: false, connected: false, calendar: false });
 
   if (!feishu || !client) return;
 
@@ -62,12 +66,15 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
     if (!code) return reply.status(400).send(connectFailurePage(error ? "你取消了飞书授权。" : "飞书没有返回授权码，请再试一次。", next));
     const access = (await q("SELECT session_version FROM member_access WHERE person_id = $1", [intent.personId])).rows[0] as { session_version: number } | undefined;
     if (access?.session_version !== intent.sessionVersion) return reply.status(401).send(connectFailurePage("登录已失效，请重新登录天枢后再连接飞书。", "/access"));
+    const linkedBefore = (await q("SELECT 1 FROM feishu_identities WHERE person_id = $1", [intent.personId])).rows.length > 0;
     const outcome = await completeFeishuLogin({
       q, env: feishu, client, peopleDirectory, code, redirectUri, sessionPersonId: intent.personId, connect: true, now: now(),
     });
     if (outcome.kind !== "ok") return reply.status(outcome.kind === "code_invalid" ? 400 : OUTCOME_STATUS[outcome.kind].status).send(connectFailurePage(outcome.message, next));
     await app.meetingFollowThrough.minutes.resumeFor(intent.personId);
     await app.meetingFollowThrough.feishuEvents.resumeFor(intent.personId);
+    // 第一次连上才打招呼；发送失败只记日志（feishuChat 里的 send），不影响连接结果。
+    if (!linkedBefore) await app.feishuChat?.welcome(intent.personId);
     return reply.send(page("已连接飞书", `<a href="${escapeHtml(next)}">没有自动跳转请点这里</a>`, next));
   };
 

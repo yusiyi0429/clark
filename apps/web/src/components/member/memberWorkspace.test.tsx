@@ -25,8 +25,9 @@ describe("成员工作台外壳", () => {
     const html = renderToStaticMarkup(<MemberWorkspace displayName="孙铭泽" viewerId="sun" />);
     expect(html).toContain('aria-label="常用操作"');
     expect(html).toContain("等回复");
-    // 战场进展一直在，进原来那张战场进展页。
-    expect(html).toContain('data-origin="/me/progress"');
+    // 战场进展暂停：格子留着，不再进战场进展页。
+    expect(html).toContain("战场进展");
+    expect(html).not.toContain('data-origin="/me/progress"');
     // 雷达按钮只在本人雷达开着时出；还没读到首页数据（radar 为空）时不出。
     expect(html).not.toContain('data-origin="/me/radar"');
     // 旧执行事项区的工具条（「N 项执行事项在推进」）和区块都不在了；「开启执行事项」现在在 Mission 卡片的三栏里。

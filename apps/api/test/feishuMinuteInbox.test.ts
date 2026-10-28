@@ -290,7 +290,11 @@ describe("飞书妙记待整理：整理成一场天枢会", () => {
   async function setup(durationSeconds?: number | null) {
     const api = fakeApi([minute(TOKEN, { durationSeconds })]);
     api.participants = async () => ["ou_owner", "ou_host", "ou_guest"];
-    const preflight = { meetingIds: [] as string[], async generate(input) { preflight.meetingIds.push(input.meeting.id); return { candidate: preflightCandidate([]) }; } } satisfies PreflightAgent & { meetingIds: string[] };
+    // 这里的会只有标题和时间：预审只能写缺什么（thin）。
+    const preflight = { meetingIds: [] as string[], async generate(input) {
+      preflight.meetingIds.push(input.meeting.id);
+      return { candidate: { ...preflightCandidate([`meeting:${input.meeting.id}`]), depth: "thin" as const, questions: [], decisions: [], gaps: ["缺会前材料，补上后能定这场会要拍板的事"] } };
+    } } satisfies PreflightAgent & { meetingIds: string[] };
     const t = await inboxApp(api, { preflightAgent: preflight });
     const period = shanghaiDate(api.minutes[0].createdAt!).slice(0, 7);
     await t.pool.query("INSERT INTO capability_config (id, version, name, \"group\", six_month_outcome, code, owner_id) VALUES ('unit-inbox', 1, '待整理单元', 'test', '', '98', $1)", [TEST_MEMBER.personId]);
@@ -332,6 +336,10 @@ describe("飞书妙记待整理：整理成一场天枢会", () => {
         payload: { url: `https://example.feishu.cn/minutes/${TOKEN}` } });
       expect(pasted.statusCode).toBe(409);
       expect(pasted.json().code).toBe("MINUTE_TAKEN");
+      // 说出是哪场会：会名和开会时刻（北京时间）。
+      const title = (await t.sql("SELECT title FROM meetings WHERE id = $1", [meetingId]))[0].title;
+      expect(pasted.json().message).toMatch(/^这份妙记已经用在「.+」（\d{1,2}\/\d{1,2} \d{2}:\d{2}）上了/);
+      expect(pasted.json().message).toContain(`「${title}」`);
     } finally {
       await t.close();
     }
@@ -384,8 +392,8 @@ describe("飞书妙记待整理：整理成一场天枢会", () => {
       expect(row).toMatchObject({ status: "held", minutes_status: "ready" });
       expect(row.transcript.source.format).toBe("feishu_minutes");
       expect(row.outcome.status).toBe("ready");
-      const cards = await t.app.inject({ method: "GET", url: "/api/me/meeting-cards", headers: { cookie: owner } });
-      expect(cards.json().meetings).toEqual([expect.objectContaining({ meetingId, status: "pending" })]);
+      // 会议卡生成好了（10/28 起记录正文不用确认，不进通知栏）。
+      expect(await t.sql("SELECT draft_status FROM meeting_cards WHERE meeting_id = $1", [meetingId])).toEqual([{ draft_status: "draft_ready" }]);
     } finally {
       await t.close();
     }
@@ -529,8 +537,7 @@ describe("飞书妙记待整理：记到天枢里约好的会", () => {
       expect(api.calls.length).toBeGreaterThan(0);
       for (const call of api.calls) expect(call).toContain("u-person-fixture-003");
       expect((await meetingMinutes(t, meetingId)).minutes_status).toBe("ready");
-      const cards = await t.app.inject({ method: "GET", url: "/api/me/meeting-cards", headers: { cookie: host } });
-      expect(cards.json().meetings).toEqual([expect.objectContaining({ meetingId })]);
+      expect(await t.sql("SELECT draft_status FROM meeting_cards WHERE meeting_id = $1", [meetingId])).toEqual([{ draft_status: "draft_ready" }]);
       expect((await list(t, owner)).json().minutes).toEqual([]);
     } finally {
       await t.close();

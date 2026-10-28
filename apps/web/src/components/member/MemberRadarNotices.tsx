@@ -8,11 +8,16 @@ import n from "@/styles/notifications.module.css";
 
 type Navigate = (href: string, origin?: Element | null) => void;
 
-export function noteworthySignals(radar: MemberRadarBrief | null): PersonalSignalBrief[] {
-  return radar?.highlights.filter((signal) => !signal.state.read && !signal.state.dismissed && signal.relevance === 5) ?? [];
+/** 雷达平时不进通知栏（10/28）：只放最近 24 小时里、相关度 5、还没读的最新一条；其余都在雷达页。 */
+const FRESH_MS = 24 * 60 * 60_000;
+export function noteworthySignals(radar: MemberRadarBrief | null, now = new Date()): PersonalSignalBrief[] {
+  return (radar?.highlights ?? [])
+    .filter((signal) => !signal.state.read && !signal.state.dismissed && signal.relevance === 5 && now.getTime() - Date.parse(signal.collectedAt) < FRESH_MS)
+    .sort((a, b) => Date.parse(b.collectedAt) - Date.parse(a.collectedAt))
+    .slice(0, 1);
 }
 
-/** 首页摘要里非常相关且未读的信号，打开阅读页时标记已读并退出通知栏。 */
+/** 首页摘要里最近一天非常相关且未读的一条信号，打开阅读页时标记已读并退出通知栏。 */
 export function MemberRadarNotices({ signals, currentHref, onNavigate, onRead }: { signals: PersonalSignalBrief[]; currentHref?: string; onNavigate: Navigate; onRead: (id: string) => Promise<boolean> }) {
   if (!signals.length) return null;
   return <section className={n.card} data-slot="card" data-notice="radar" aria-label="雷达 · 值得注意">

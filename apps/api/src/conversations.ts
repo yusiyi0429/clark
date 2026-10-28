@@ -37,6 +37,7 @@ import { canReadTask, getTaskView } from "./tasks.js";
 import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
 import type { HistoryHit } from "./conversationHistorySearch.js";
+import type { PastConversations } from "./conversationRecall.js";
 
 export type ConversationRuntimeEvent =
   | { type: "message"; delta: string }
@@ -88,8 +89,13 @@ export type ConversationRuntime = {
     personalMemory?: PersonalMemoryContext[] | Promise<PersonalMemoryContext[]>;
     /** 本人个人记忆的检索与「记住 / 改成 / 忘掉」，已绑定本人；运行时据此给主 Agent 提供工具。失败时抛错，只作为工具报错。 */
     personalMemoryTools?: PersonalMemoryTools;
-    /** 检索本人历史对话原文（跨所有页面与归档，只读、已绑定本人）；运行时据此提供 search_conversation_history。 */
+    /** 检索本人历史对话原文（跨所有页面与归档，只读、已绑定本人）；运行时据此提供 search_conversation_history。不分段时才给。 */
     searchHistory?: (query: string) => Promise<{ hits: HistoryHit[]; message?: string }>;
+    /**
+     * 分段时的回看（conversationRecall.ts，已绑定本人与视角）：会话目录放进本轮上下文包的 conversationCatalog，
+     * 运行时据此提供 search_past_conversations、read_past_conversation（代替 search_conversation_history）。
+     */
+    pastConversations?: PastConversations;
     /** 本人手上没完成的待办（标题、发起人、发出时间、类型）：每轮放进上下文包的 myOpenTodos。 */
     openTodos?: { title: string; from: string; sentAt: string; kind: string }[];
     /** 对话里的一句话入口（生成复盘、帮我问问、请同事帮忙），已绑定本人与这一轮；运行时据此提供对应工具。 */
@@ -130,6 +136,11 @@ export type ConversationRuntime = {
      * （不回放之前的工具往返、推理与上游条目）。界面上的历史不变。
      */
     idleRestart?: boolean;
+    /**
+     * 这一轮开始新的一段（CONVERSATION_SEGMENTS 开着，闲置满 12 小时或跨过凌晨 4 点）：模型侧开一段新会话，
+     * 不带上一段的原文、工具往返和压缩摘要；交接靠 pastConversations 的会话目录。界面上的历史不变。
+     */
+    segmentStart?: boolean;
   }): Promise<{
     assistantMessage: string;
     runtimeEntries: unknown[];
@@ -412,7 +423,7 @@ function historyMessage(row: MessageRow): TConversationHistory["messages"][numbe
     // 回答 Agent 提问的那条：问答记录存在 meta.answers（routes/conversations.ts 按提问卡核对后写入）。
     ...(row.role === "user" && row.meta?.answers && typeof row.meta.answers === "object" ? { answers: row.meta.answers as TAskAnswerRecord } : {}),
     ...(row.kind === "carried" || row.kind === "trace" ? { kind: row.kind } : {}),
-    ...(row.meta?.via === "feishu" ? { via: "feishu" as const } : {}),
+    ...(row.meta?.via === "feishu" || row.meta?.via === "wechat" ? { via: row.meta.via as "feishu" | "wechat" } : {}),
     ...(row.kind === "trace" && row.meta ? { meta: Object.fromEntries((["issueId", "title", "href"] as const)
       .flatMap((key) => (typeof row.meta?.[key] === "string" ? [[key, row.meta[key]]] : []))) } : {}),
   };

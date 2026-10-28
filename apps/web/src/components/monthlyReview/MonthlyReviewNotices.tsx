@@ -45,7 +45,7 @@ export function useMonthlyReviewNotices(ceo = false): { notices: TMonthlyReviewN
 /** 通知栏里的「月末复盘」一组；没有待办时不出现。 */
 export function MonthlyReviewNotices({ onNavigate, ceo = false }: { onNavigate: (href: string, origin?: Element | null) => void; ceo?: boolean }) {
   const { notices, start } = useMonthlyReviewNotices(ceo);
-  return <ActionNoticeCard id="monthly-review" title="月末复盘" mark="monthly"
+  return <ActionNoticeCard id="monthly-review" title="月末复盘" mark="review"
     notices={[
       ...(start ? [{ id: `monthly-review:start:${start.period}`, title: `开始 ${Number(start.period.slice(5))} 月复盘`, detail: "", tone: "neutral" as const, onOpen: (from: Element | null) => onNavigate(start.href, from), buttons: [] }] : []),
       // 个人复盘的待办在「个人复盘」看板卡的卡顶处理（PersonalReviewBoard），这里不重复。

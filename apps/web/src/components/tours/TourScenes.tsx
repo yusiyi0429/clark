@@ -158,7 +158,7 @@ function SceneAccept() {
 
 export const TOUR_STEPS = [
   { title: "从你的任务出发", body: "任务卡上的每一步，都可以开启成一件执行事项。", duration: 3200, Scene: SceneStart },
-  { title: "开启一件执行事项", body: "写清要做成什么，挂到对应的任务，定好日期。", duration: 5200, Scene: SceneCreate },
+  { title: "开启一件执行事项", body: "写清要做成什么，选好所属任务，定好日期。", duration: 5200, Scene: SceneCreate },
   { title: "拉同事一起做", body: "邀请协作后，同事能看到这件事，和你一起推进。", duration: 4400, Scene: SceneInvite },
   { title: "在文档上写批注", body: "协作的人划出一段，直接写下自己的意见。", duration: 4800, Scene: SceneAnnotate },
   { title: "让 Agent 动手改", body: "在对话里说一句，Agent 按批注改好文档，改了哪里一眼能看到。", duration: 6200, Scene: SceneAgent },

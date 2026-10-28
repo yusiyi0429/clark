@@ -136,7 +136,10 @@ describe("会议页进度线：用时与样子", () => {
     expect(html.startsWith('<ol class="')).toBe(true);
     expect(html.match(/<li /g)).toHaveLength(6);
     expect(html.match(/aria-current="step"/g)).toHaveLength(1);
-    expect(html).toMatch(/data-step="record" data-state="current" data-tone="breathe" aria-current="step">.*待交记录.*上传会议记录<\/button><\/span><\/li>/);
+    expect(html).toMatch(/data-step="record" data-state="current" data-tone="breathe" aria-current="step">.*待交记录.*上传会议记录<\/button><\/span><svg[^>]*>.*?<\/svg><\/li>/);
+    // 箭头跟在一步后面（折行时新的一行不以箭头开头）：最后一步后面没有箭头。
+    expect(html).not.toMatch(/<li [^>]*>\s*<svg/);
+    expect(html).toMatch(/<\/span><\/li><\/ol>$/);
     expect(html.match(/上传会议记录/g)).toHaveLength(1);
     // 第一格前面没有箭头，后面每一格前面一个。
     expect(html.match(/<svg/g)).toHaveLength(5);

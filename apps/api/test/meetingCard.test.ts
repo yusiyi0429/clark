@@ -38,7 +38,8 @@ function cardAgent(target = ACCEPTANCE) {
           { heading: "接口切换", body: "已定：接口统一改成 v2，测试丙月底前把渠道看板接到 v2。", turnIds: ["turn-002", "turn-003"] },
           { heading: "渠道预算", body: "未定：渠道预算这个月先不动，下周看数据再定。", turnIds: ["turn-001"] },
         ],
-        objectChanges: [{ targetRef: target, after: { text: "十月底前 4 家客户上线" }, basisSections: [1] }],
+        decisions: [{ text: "接口统一改成 v2", ownerPersonId: OWNER, basisSections: [1] }],
+        objectChanges: [{ targetRef: target, after: { text: "十月底前 4 家客户上线" }, basisSections: [1], decision: 1 }],
         actionItems: [{ text: "渠道看板接到 v2", ownerPersonId: OWNER, dueDate: "2026-06-30", basisSections: [1] }],
       } };
     },
@@ -128,15 +129,19 @@ describe("会议卡草稿", () => {
       expect(draft.sources).toHaveLength(1);
       expect(draft.sources[0]).toMatchObject({ id: "src-1", title: "接口切换会", sourceVersion: null, contentHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
       expect(draft.participants.map((person) => person.name)).toEqual(["测试甲", "测试乙", "测试丙"]);
-      expect(view.actionItems).toEqual([{ id: "act-1", text: "渠道看板接到 v2", ownerPersonId: OWNER, dueDate: "2026-06-30", basisSectionIds: ["sec-1"], taskId: null }]);
+      const pending = { status: "pending", by: null, proxy: false, at: null, reason: null };
+      expect(view.actionItems).toEqual([{ id: "act-1", text: "渠道看板接到 v2", ownerPersonId: OWNER, dueDate: "2026-06-30", basisSectionIds: ["sec-1"], taskId: null, review: pending }]);
+      // 决策单列：一句话、责任人（这场会的人）、出处段落，待确认。
+      expect(view.decisions).toEqual([{ id: "dec-1", text: "接口统一改成 v2", ownerPersonId: OWNER, basisSectionIds: ["sec-1"], review: pending }]);
+      expect(view).toMatchObject({ hostId: HOST, writeToWorld: true });
 
       // 会后整理只记进度：没有逐条条目和摘要，没有分层任务、主持人条目，也没有推成执行事项（确认后才推）。
       const row = (await t.sql("SELECT status, outcome FROM meetings WHERE id = $1", [meetingId]))[0];
       expect(row.outcome).toMatchObject({ status: "ready", items: [], summary: "" });
       const worker = createJobWorker({ pool: t.pool, handlers: t.app.meetingFollowThrough.jobs().handlers });
       while (await worker.tick() > 0);
-      // 生成不排任何后台任务（没有分层、提醒、代判）：跑完能跑的之后队列里不剩待办。
-      expect(await t.sql("SELECT kind FROM jobs WHERE status <> 'done'")).toEqual([]);
+      // 生成只排一次 48 小时后的冻结（没有分层、提醒、代判）：跑完能跑的之后队列里只剩它。
+      expect(await t.sql("SELECT kind FROM jobs WHERE status <> 'done'")).toEqual([{ kind: "meeting.card_freeze" }]);
       expect((await t.sql("SELECT count(*)::int AS n FROM meeting_decisions WHERE meeting_id = $1", [meetingId]))[0].n).toBe(0);
       expect(await taskCount(t, meetingId)).toBe(tasksBefore);
     } finally {
@@ -150,7 +155,7 @@ describe("会议卡草稿", () => {
     try {
       const view = await viewOf(t, host, meetingId);
       expect(view.draft!.objectChanges).toEqual([{ id: "chg-1", targetRef: ACCEPTANCE, targetTitle: "十月交付 · 验收标准", expectedVersion: 5,
-        before: { text: "十月底前 3 家客户上线" }, after: { text: "十月底前 4 家客户上线" }, basisSectionIds: ["sec-1"], stale: false }]);
+        before: { text: "十月底前 3 家客户上线" }, after: { text: "十月底前 4 家客户上线" }, basisSectionIds: ["sec-1"], decisionId: "dec-1", stale: false }]);
       expect(view.targetOptions.map((option) => option.targetRef)).toEqual([ACCEPTANCE, "obj-po-1#target/out-1"]);
     } finally {
       await t.close();
@@ -389,7 +394,7 @@ describe("会后待确认入口", () => {
   const myCards = async (t: TestApp, cookie: string) => {
     const res = await t.app.inject({ method: "GET", url: "/api/me/meeting-cards", headers: { cookie } });
     expect(res.statusCode).toBe(200);
-    return res.json().meetings as { meetingId: string; title: string; endedAt: string; status: string }[];
+    return res.json() as { meetings: { meetingId: string; status: string }[]; confirms: { meetingId: string; kind: string; id: string; text: string }[] };
   };
 
   it("新会议不再给逐条动作；旧会议照旧显示条目，也不再给", async () => {
@@ -416,33 +421,28 @@ describe("会后待确认入口", () => {
     }
   });
 
-  it("草稿好了提醒一次：主持人和创建人各一条，再存草稿、重新生成都不多发", async () => {
+  it("记录正文不用确认：草稿好了不提醒主持人和创建人，只排一次 48 小时后的冻结，再存草稿、重新生成都不多排，不推飞书", async () => {
     ontology();
     const { agent } = cardAgent();
     const { t, host, meetingId } = await setup(agent, { createdBy: CEO, feishu: true });
     try {
-      expect(await pendingNotices(t, meetingId)).toEqual([{ person_id: CEO, object_type: "meeting" }, { person_id: HOST, object_type: "meeting" }]);
+      expect(await pendingNotices(t, meetingId)).toEqual([]);
+      const freezes = () => t.sql("SELECT dedupe_key, run_at > now() + interval '47 hours' AS later FROM jobs WHERE kind = 'meeting.card_freeze'");
+      expect(await freezes()).toEqual([{ dedupe_key: `meeting.card_freeze:${meetingId}:48h`, later: true }]);
       const view = await viewOf(t, host, meetingId);
       expect((await putDraft(t, host, meetingId, { draftVersion: view.draftVersion, draft: { ...view.draft, summary: "改过的摘要" } })).statusCode).toBe(200);
-      // 重新生成（会后整理失败后重试）：草稿版本加一，提醒不再多发。
       await t.pool.query(`UPDATE meetings SET outcome = jsonb_set(outcome, '{status}', '"failed"') WHERE id = $1`, [meetingId]);
       await runOutcome(t.pool, agent, meetingId);
       expect((await viewOf(t, host, meetingId)).draftVersion).toBe(3);
-      expect(await pendingNotices(t, meetingId)).toHaveLength(2);
-      // 通知文案「会名 · 会议记录待确认」；飞书各推一次，点了去会议页。
-      const notices = (await t.app.inject({ method: "GET", url: "/api/me/notifications", headers: { cookie: host } })).json().notifications as { kind: string; text: string }[];
-      expect(notices.filter((notice) => notice.kind === "meeting_card_pending").map((notice) => notice.text)).toEqual(["接口切换会 · 会议记录待确认"]);
-      const feishu = (await t.sql("SELECT payload FROM jobs WHERE kind = 'feishu.notify' ORDER BY payload->>'personId'")).map((row) => row.payload);
-      expect(feishu).toEqual([
-        { personId: CEO, title: "接口切换会 · 会议记录待确认", body: "6月1日 10:00", links: [{ label: "去确认", path: `/meetings/${meetingId}` }] },
-        { personId: HOST, title: "接口切换会 · 会议记录待确认", body: "6月1日 10:00", links: [{ label: "去确认", path: `/me/meetings/${meetingId}` }] },
-      ]);
+      expect(await freezes()).toHaveLength(1);
+      expect(await pendingNotices(t, meetingId)).toEqual([]);
+      expect(await t.sql("SELECT payload FROM jobs WHERE kind = 'feishu.notify'")).toEqual([]);
     } finally {
       await t.close();
     }
   });
 
-  it("到期不代判：时钟拨过一个工作日跑后台任务，没有 agent_judged，会议记录仍待确认", async () => {
+  it("到期不代判；生成满 48 小时自动冻结：没人确认的决策不进确认版，没有已确认的决策就不写本体", async () => {
     ontology();
     const { t, host, meetingId } = await setup(cardAgent().agent);
     try {
@@ -457,35 +457,28 @@ describe("会后待确认入口", () => {
       const worker = createJobWorker({ pool: t.pool, handlers: jobs.handlers, recurring: jobs.recurring, now: () => later });
       while (await worker.tick() > 0);
       expect(await t.sql("SELECT status FROM meeting_decisions WHERE meeting_id = $1", [meetingId])).toEqual([{ status: "pending" }]);
-      const world = await t.app.inject({ method: "GET", url: `/api/meetings/${meetingId}/world`, headers: { cookie: host } });
-      expect(world.json().world.record).toMatchObject({ status: "pending", version: 0 });
-      expect((await viewOf(t, host, meetingId)).confirmed).toBeNull();
+      const view = await viewOf(t, host, meetingId);
+      expect(view.confirmed).toMatchObject({ kind: "first", confirmation: { revision: 1, confirmedBy: null },
+        payload: { schemaVersion: "meeting-card.v2", decisions: [], actionItems: [], objectChanges: [], occurredAt: "2026-06-01T02:00:00.000Z" } });
+      expect(view.sync).toMatchObject({ writeToWorld: false, event: { status: "skipped" } });
+      expect(view.decisions![0].review.status).toBe("pending");
     } finally {
       await t.close();
     }
   });
 
-  it("待确认清单按会议：主持人和创建人有这场会，参会人没有；确认后不再列，改了列成修改待确认", async () => {
+  it("通知栏按人列要确认的条目：责任人有决策和行动项，主持人、CEO 没有；冻结后决策不再列，行动项照旧", async () => {
     ontology();
     const { t, ceo, host, owner, meetingId } = await setup(cardAgent().agent, { createdBy: CEO });
     try {
-      expect(await myCards(t, host)).toEqual([{ meetingId, title: "接口切换会", endedAt: expect.any(String), status: "pending" }]);
-      expect((await myCards(t, ceo)).map((item) => item.meetingId)).toEqual([meetingId]);
-      expect(await myCards(t, owner)).toEqual([]);
-      const view = await viewOf(t, host, meetingId);
-      const saved = await putDraft(t, host, meetingId, { draftVersion: view.draftVersion, draft: { ...view.draft, occurredAt: "2026-06-01T10:02:00+08:00" } });
-      expect(saved.statusCode).toBe(200);
-      const confirmed = await t.app.inject({ method: "POST", url: `/api/meetings/${meetingId}/card/confirm`, headers: { cookie: host, origin: t.publicOrigin },
-        payload: { draftVersion: saved.json().draftVersion, writeToWorld: false } });
-      expect(confirmed.statusCode).toBe(200);
-      expect(await myCards(t, host)).toEqual([]);
-      // 确认后主持人和创建人的「会议记录待确认」提醒都标为已读，不再挂着。
-      expect(await t.sql("SELECT person_id FROM notifications WHERE kind = 'meeting_card_pending' AND object_id = $1 AND read_at IS NULL", [meetingId])).toEqual([]);
-      expect(await t.sql("SELECT person_id FROM notifications WHERE kind = 'meeting_card_pending' AND object_id = $1 ORDER BY person_id", [meetingId]))
-        .toEqual([{ person_id: CEO }, { person_id: HOST }]);
-      const after = await viewOf(t, host, meetingId);
-      expect((await putDraft(t, host, meetingId, { draftVersion: after.draftVersion, draft: { ...after.draft, summary: "会后补一句" } })).statusCode).toBe(200);
-      expect((await myCards(t, host)).map((item) => item.status)).toEqual(["edit_pending"]);
+      expect(await myCards(t, owner)).toEqual({ meetings: [], confirms: [
+        { meetingId, title: "接口切换会", kind: "decision", id: "dec-1", text: "接口统一改成 v2", dueDate: null },
+        { meetingId, title: "接口切换会", kind: "action", id: "act-1", text: "渠道看板接到 v2", dueDate: "2026-06-30" },
+      ] });
+      expect(await myCards(t, host)).toEqual({ meetings: [], confirms: [] });
+      expect(await myCards(t, ceo)).toEqual({ meetings: [], confirms: [] });
+      await t.app.meetingFollowThrough.cardConfirm.freeze(meetingId);
+      expect((await myCards(t, owner)).confirms.map((item) => item.id)).toEqual(["act-1"]);
     } finally {
       await t.close();
     }

@@ -141,6 +141,22 @@ describe("雷达升级前查重", () => {
   });
 });
 
+describe("不自动转议题（10/28）", () => {
+  it("promoteIssues=false：够格的信号照常入库，但不建议题、也不挂到现有议题", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await setup(db);
+      const items = [webItem("竞品下调企业套餐价格引发行业关注", "https://example.com/a")];
+      const assessor: RadarAssessor = {
+        async assess({ sources }) { return { candidates: sources.map((source) => candidateFor(source.sourceFingerprint, { question: "是否调整 TokenOps 定价重点？" })) }; },
+      };
+      const radar = createRadarService({ pool, web: { configured: true, async search() { return items; } }, assessor, now: () => NOW, promoteIssues: false });
+      expect(await radar.runManual()).toMatchObject({ createdSignals: 1 });
+      expect((await db.query("SELECT count(*)::int AS n FROM issues")).rows[0].n).toBe(0);
+      expect((await db.query("SELECT promoted_issue_id FROM signals")).rows[0].promoted_issue_id).toBeNull();
+    });
+  });
+});
+
 describe("信号层同文去重", () => {
   it("同一篇文章不同 URL（转载 / 移动版）本轮只留一条，下一轮再出现也不再入库", async () => {
     await createTestDb(async ({ db, pool }) => {

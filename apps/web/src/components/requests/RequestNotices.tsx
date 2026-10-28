@@ -7,10 +7,11 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Card as HeroCard } from "@heroui/react";
-import { ChevronRight, Plus, Send, Waypoints } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import type { TRequestListItem } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import { monthDayTime } from "@/lib/companyTime";
+import { ContextMark } from "@/components/ContextMark";
 import { REQUESTS_CHANGED } from "./requestApi";
 import n from "@/styles/notifications.module.css";
 import s from "./requests.module.css";
@@ -101,7 +102,7 @@ export function RequestNotices({ base, currentHref, onNavigate, header = true, o
     {impacts.length ? (
       <HeroCard<"section"> render={(props) => <section {...props} />} className={n.card} data-notice="impacts" aria-label="影响">
         <HeroCard.Header<"header"> render={(props) => <header {...props} />} className={n.glassHeader}>
-          <span className={`${n.glyph} ${s.glyph}`} aria-hidden="true"><Waypoints size={17} /></span>
+          <ContextMark kind="impact" className={n.glyph} />
           <span className={n.identity}><strong>影响<b className={n.count}>{impacts.length}</b></strong></span>
         </HeroCard.Header>
         <div className={n.tray}>{impacts.map(row)}</div>
@@ -111,7 +112,7 @@ export function RequestNotices({ base, currentHref, onNavigate, header = true, o
       <HeroCard<"section"> render={(props) => <section {...props} />} className={n.card} data-notice="requests" aria-label="请求">
         {header ? (
           <HeroCard.Header<"header"> render={(props) => <header {...props} />} className={n.glassHeader}>
-            <span className={`${n.glyph} ${s.glyph}`} aria-hidden="true"><Send size={17} /></span>
+            <ContextMark kind="request" className={n.glyph} />
             <button type="button" className={`${n.identity} ${s.headerOpen}`} onClick={(event) => onNavigate(base, origin(event.target))} aria-label="打开请求列表">
               <strong>请求{notices.length ? <b className={n.count}>{notices.length}</b> : null}</strong>
             </button>

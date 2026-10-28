@@ -254,7 +254,7 @@ export function createConversationEntries(deps: EntryDeps): ConversationEntries 
         host: card.host?.displayName ?? null, participants: card.participants.map((person) => person.displayName),
         ...(card.unresolved.length ? { unresolved: card.unresolved.map((item) => `${item.name}（${item.reason === "ambiguous" ? "对上不止一个人" : "人员目录里没有"}${item.host ? "，主持人" : ""}）`) } : {}),
         anchor: card.anchor?.title ?? null, ...(result.hostNote ? { hostNote: result.hostNote } : {}),
-        note: "会议卡已放在回答下面，本人点「约好」才建会、发飞书邀请，点「改」可以改。回答只用一句话复述名称、时间和参会人；有 unresolved 时说清哪几个名字没对上、请本人点「改」补上，不替本人猜是谁；anchor 为 null 时说请在卡上选挂到哪；有 hostNote 时照实说。不要说已经约好或已经发出邀请。",
+        note: "会议卡已放在回答下面，本人点「约好」才建会、发飞书邀请，点「修改」可以改。回答只用一句话复述名称、时间和参会人；有 unresolved 时说清哪几个名字没对上、请本人点「修改」补上，不替本人猜是谁；anchor 为 null 时说请在卡上选择所属；有 hostNote 时照实说。不要说已经约好或已经发出邀请。",
       };
     },
 

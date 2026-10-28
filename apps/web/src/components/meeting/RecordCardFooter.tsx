@@ -8,7 +8,8 @@ import type { SyncRow } from "./meetingCardModel";
 import type { ActionError, ConfirmInput } from "./useMeetingCard";
 import c from "./meeting-card.module.css";
 
-export type FooterMode = "first" | "confirmed" | "editing" | "readonly";
+/** first：10/28 之前的会议卡待整卡确认；open：逐条确认的会议卡还没定版（只有「不写进本体」）。 */
+export type FooterMode = "first" | "open" | "confirmed" | "editing" | "readonly";
 const KINDS = [["correction", "更正原记录"], ["followup", "会后新决定"]] as const;
 
 type RecordCardFooterProps = {
@@ -35,6 +36,8 @@ type RecordCardFooterProps = {
   onDiscard?: () => void;
   /** 只给能编辑的人（会议事件写入失败时的「重试」）。 */
   onRetry?: () => void;
+  /** open：「不写进本体」一点就存（定版时照它写不写）。 */
+  onWorldChoice?: (writeToWorld: boolean) => void;
 };
 
 /**
@@ -44,19 +47,22 @@ type RecordCardFooterProps = {
  * 写进本体却没有挂点对象时开关旁标「未挂对象」，确认按钮不可点。
  */
 export function RecordCardFooter(props: RecordCardFooterProps) {
-  const { mode, confirmation, rows, busy, ready, anchored, time, skipWorld: skipDefault, error, change = "none", focusLine, onConfirm, onModify, onDiscard, onRetry } = props;
+  const { mode, confirmation, rows, busy, ready, anchored, time, skipWorld: skipDefault, error, change = "none", focusLine, onConfirm, onModify, onDiscard, onRetry, onWorldChoice } = props;
   const [skipWorld, setSkipWorld] = useState(skipDefault);
   const [kind, setKind] = useState<ConfirmInput["kind"] | null>(null);
   const [reason, setReason] = useState("");
   const lineRef = useRef<HTMLSpanElement>(null);
   useEffect(() => { if (focusLine) lineRef.current?.focus(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const confirmedLine = confirmation ? `已确认 · v${confirmation.revision} · ${monthDayTime(confirmation.confirmedAt)}` : null;
-  const noAnchor = !anchored && !skipWorld;
+  // open：开关就是服务端存的选择，点了就存。
+  const skipping = mode === "open" ? skipDefault : skipWorld;
+  const noAnchor = !anchored && !skipping;
   const canConfirm = ready && !busy && !noAnchor;
   const worldSwitch = (
     <span className={c.worldChoice}>
       <label className={c.toggle}>
-        <button type="button" role="switch" aria-checked={skipWorld} className={c.switch} disabled={busy} onClick={() => setSkipWorld((value) => !value)}>
+        <button type="button" role="switch" aria-checked={skipping} className={c.switch} disabled={busy}
+          onClick={() => (mode === "open" ? onWorldChoice?.(skipping) : setSkipWorld((value) => !value))}>
           <span aria-hidden="true" />
         </button>
         <span>不写进本体</span>
@@ -91,6 +97,12 @@ export function RecordCardFooter(props: RecordCardFooterProps) {
             </span>
           ) : null}
           <button type="button" className={c.primary} disabled={!canConfirm} onClick={() => onConfirm?.({ writeToWorld: !skipWorld })}>确认这份记录</button>
+        </div>
+      ) : mode === "open" ? (
+        <div className={c.actions}>
+          {worldSwitch}
+          <span className={c.spacer} />
+          {errorFlag}
         </div>
       ) : mode === "editing" ? (
         <>

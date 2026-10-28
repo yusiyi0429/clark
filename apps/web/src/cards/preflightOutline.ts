@@ -8,12 +8,13 @@ const SECTION_LABEL: [string, string, string][] = [
   ["strategic_alignment", "战略一致性判断", "战略一致性判断"],
   ["positive_signal", "积极信号", "积极信号"],
   ["risk_calibration", "潜在风险 & 待校准问题", "潜在风险与待校准"],
-  ["meeting_question", "建议会议重点追问的问题", "建议追问问题"],
+  ["discussion_question", "要聊的问题", "要聊的问题"],
+  ["meeting_question", "要拍板的事", "要拍板"],
   ["next_step", "下阶段推动建议", "下阶段推动建议"],
   ["leader_lens", "一号位追问", "一号位追问"],
 ];
 
-/** 七段结果按固定顺序分组；核心判断单独作为 Hero，不进目录。旧 preflight 没有 taskDefinition，平铺为单组。 */
+/** 各段结果按固定顺序分组；核心判断单独作为 Hero，不进目录。更早的 preflight 既没有 taskDefinition 也没有 depth，平铺为单组。 */
 export function groupPreflight(entries: TMeetingPreflightEntry[], structured: boolean): PreflightGroup[] {
   if (!structured) return [{ key: "legacy", label: "预审条目", shortLabel: "预审条目", entries }];
   return SECTION_LABEL.filter(([kind]) => kind !== "core_judgment")

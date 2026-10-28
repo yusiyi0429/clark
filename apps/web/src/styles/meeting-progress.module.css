@@ -29,7 +29,7 @@
 }
 
 /* 箭头两侧收紧：600 宽的阅读栏里六步连同用时放得下一行。 */
-.arrow { flex: none; margin: 0 2px 0 0; color: #c3c8d0; }
+.arrow { flex: none; margin: 0 6px 0 -2px; color: #c3c8d0; }
 
 .dot {
   flex: none;
@@ -69,9 +69,7 @@
 
 .actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-left: 6px; font-weight: 400; }
 
-/* 待交记录时进度线下面那一块：和进度线隔开，左边对齐进度点后的字。第一行贴链接读取（首选），第二行安静的文字链接。 */
-.withBelow { display: grid; gap: 14px; min-width: 0; }
-.below { min-width: 0; padding-left: 13px; }
+/* 待交记录时的补救（会议页正文第一块）：第一行贴链接读取（首选），第二行安静的文字链接。 */
 .recovery { display: grid; gap: 12px; justify-items: start; min-width: 0; }
 .others { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; }
 

@@ -48,7 +48,10 @@ import { createCompanyMap, defaultFocus, scopeLabel } from "../companyMap.js";
 import { acceptIssueDraft, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, saveDraftMaterial } from "../issueDrafts.js";
 import { buildSceneAnchor } from "../sceneAnchor.js";
 import type { ConversationAnchor } from "../conversationAnchor.js";
-import { ChatServiceError, createChatService } from "../chatService.js";
+import { ChatServiceError } from "../chatService.js";
+import { VIA_HEADER } from "../homeTurn.js";
+import { currentSegmentOf, segmentDateLabel, startsNewSegment } from "../conversationSegments.js";
+import type { PastConversations } from "../conversationRecall.js";
 import { readHomeSnapshots } from "./cards.js";
 import { idParams, type AppInstance, type RouteContext, type SessionPerson } from "./shared.js";
 
@@ -95,7 +98,10 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   const conversationScopeVisible = async (person: SessionPerson, scope: TConversationScope) =>
     (await scopeObjectFor(person, scope)).visible;
   // 首页对话改走独立 Chat（CHAT_SERVICE_URL，chatService.ts）：只管 global，对象页的对话照旧。
-  const chat = env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken }) : undefined;
+  const chat = ctx.chat;
+  // 对话分段（CONVERSATION_SEGMENTS=1 才开）：闲置满 12 小时或跨过北京时间凌晨 4 点换一段，模型侧只带这一段；上一段经会话目录里的纪要交接。
+  // 关着时（缺省）照旧：闲置 12 小时模型侧只带摘要重开（CONVERSATION_IDLE_RESTART_MS）。
+  const segmentsOn = env.conversationSegments === true;
   const chatFailed = (reply: FastifyReply, error: unknown) => {
     if (error instanceof ChatServiceError) return fail(reply, error.status, error.code, error.message);
     throw error;
@@ -122,7 +128,9 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       if (chat && req.params.scope === "global") {
         // 和天枢自己的对话同一条规则：成员不能借显式引用把 Card 带进对话。
         if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
-        return chat.relay(person, String(req.id), req.body, reply).catch((error) => chatFailed(reply, error));
+        const via = req.headers[VIA_HEADER];
+        return chat.relay(person, String(req.id), req.body, reply, via === "feishu" || via === "wechat" ? via : undefined)
+          .catch((error) => chatFailed(reply, error));
       }
       const object = await scopeObjectFor(person, req.params.scope);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
@@ -265,12 +273,23 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         const runtimeMessage = attachments.length
           ? `${req.body.message}\n\n${attachments.map((attachment) => `[附件 ${attachment.fileName}]\n${attachment.extractedText}`).join("\n\n")}`
           : req.body.message;
-        const next = await client.query<{ sequence: number; last_at: Date | null }>(
-          `SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence, MAX(created_at) AS last_at
+        const next = await client.query<{ sequence: number; last_at: Date | null; last_said: Date | null }>(
+          `SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence, MAX(created_at) AS last_at, MAX(created_at) FILTER (WHERE kind = 'message') AS last_said
              FROM conversation_messages WHERE conversation_id = $1`,
           [row.id],
         );
-        const userSequence = next.rows[0].sequence;
+        let userSequence = next.rows[0].sequence;
+        // 换段：上一次问答闲置满 12 小时或在今天凌晨 4 点之前。「继续」那一轮进原来那一段，不换。
+        // 换段处在历史里插一行日期（界面画成一行淡字）；模型侧开一段新会话（segmentStart）。
+        const lastSaid = next.rows[0].last_said;
+        const segmentStart = segmentsOn && !resume && lastSaid !== null && startsNewSegment(lastSaid, new Date());
+        if (segmentStart) {
+          await client.query(
+            "INSERT INTO conversation_messages (conversation_id, sequence, role, content, run_id, kind) VALUES ($1, $2, 'assistant', $3, $4, 'trace')",
+            [row.id, userSequence, segmentDateLabel(new Date()), randomUUID()],
+          );
+          userSequence += 1;
+        }
         // 转议题时从首页带进来、模型还没见过的那一段：排在最后一轮普通问答之后的 carried 消息（运行时接进模型历史）。
         const carried = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
           `SELECT role, content, created_at FROM conversation_messages WHERE conversation_id = $1 AND kind = 'carried'
@@ -280,7 +299,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         );
         // 闲置太久：这一轮模型侧只带摘要重新开始（「继续」那一轮要接上原来的工具结果，不重开）。
         const lastAt = next.rows[0].last_at;
-        const idleRestart = !resume && Array.isArray(row.runtime_entries) && row.runtime_entries.length > 0
+        const idleRestart = !segmentsOn && !resume && Array.isArray(row.runtime_entries) && row.runtime_entries.length > 0
           && lastAt !== null && Date.now() - lastAt.getTime() >= CONVERSATION_IDLE_RESTART_MS;
         // 后台压缩（conversationCompaction.ts）：已就绪的快照这时换进这一轮的模型历史（毫秒级，不调模型、不等后台任务）；
         // 闲置重开用的也是换进来之后最近的那份摘要。历史已经很长又没有快照在做时，顺手在后台补起一次。
@@ -327,13 +346,25 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         // 本人手上没完成的待办，每轮带进上下文（条数少，只有标题、发起人、时间、类型）；读不到不影响这一轮。
         const names = personDisplayNames(peopleDirectory);
         const openTodos = await openTodoContext(q, owner, names).catch(() => []);
-        const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date }>(
-          `SELECT role, content, created_at
+        const recent = await client.query<{ role: "user" | "assistant"; content: string; created_at: Date; kind: string }>(
+          `SELECT role, content, created_at, kind
              FROM conversation_messages
             WHERE conversation_id = $1 AND run_id <> $2 AND kind <> 'trace'
             ORDER BY sequence DESC LIMIT 20`,
           [row.id, runId],
         );
+        // 分段时模型只看这一段：最近的原文只留当前这一段的（刚换段就没有）。
+        const recentMessages = segmentStart ? [] : segmentsOn ? currentSegmentOf(recent.rows.reverse()) : recent.rows.reverse();
+        // 会话目录（本页上一段的纪要 + 近 14 天其他段）和两个回看工具，都只看本人；读不到目录不影响这一轮。
+        const recallViewer = { personId: owner, role: person.role };
+        const pastConversations: PastConversations | undefined = segmentsOn ? {
+          catalog: await ctx.conversationRecall.pageCatalog(recallViewer, row.id).catch((error: unknown) => {
+            logEvent({ event: "conversation.catalog_unavailable", requestId: String(req.id), runId, scope: req.params.scope, error: (error as Error)?.message });
+            return null;
+          }),
+          search: (args) => ctx.conversationRecall.search(recallViewer, args, { excludeRunId: runId }),
+          read: (args) => ctx.conversationRecall.read(recallViewer, args),
+        } : undefined;
         await client.query(
           `INSERT INTO agent_runs (id, kind, object_ref, status, model_slot, prompt_hash, input_snapshot)
            VALUES ($1, 'conversation', $2::jsonb, 'running', $3, $4, $5::jsonb)`,
@@ -350,6 +381,10 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
               message: resume ? resume.question : req.body.message,
               ...(req.body.resumeRunId ? { resumeOf: req.body.resumeRunId } : {}),
               ...(idleRestart ? { idleRestart: true } : {}),
+              ...(segmentStart ? { segmentStart: true } : {}),
+              // 这一轮交给模型的会话目录（只记段 id，便于对照）。
+              ...(pastConversations?.catalog ? { catalog: { previous: pastConversations.catalog.previous?.segmentId ?? null,
+                recent: pastConversations.catalog.recent.map((item) => item.segmentId) } } : {}),
               currentObject: object.snapshot,
               // 场景锚点的聚焦卡引用（id@版本）：「继续」这一轮时按它重建锚点。
               anchorFocus: anchor.focus ? { cardId: anchor.focus.cardId, version: anchor.focus.version } : null,
@@ -556,8 +591,9 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
             referencesSnapshot: references.snapshots,
             personalMemory,
             personalMemoryTools,
-            // 本人历史对话原文检索（3e）：跨所有页面与归档，只查本人，本轮这条不算。
-            searchHistory: (query: string) => searchOwnConversationHistory(q, { personId: owner, query, excludeRunId: runId }),
+            // 分段时：会话目录 + 两个回看工具（纪要里查不到再按原话查）；不分段时照旧是本人历史对话原文检索（3e），本轮这条不算。
+            ...(pastConversations ? { pastConversations }
+              : { searchHistory: (query: string) => searchOwnConversationHistory(q, { personId: owner, query, excludeRunId: runId }) }),
             openTodos,
             entries,
             ask,
@@ -567,7 +603,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
             ...(issueSuggest ? { issueSuggest } : {}),
             ...(issueContext ? { issueContext } : {}),
             ...(carried.rows.length ? { carriedOver: carried.rows.map((message) => ({ role: message.role, content: message.content, createdAt: message.created_at.toISOString() })) } : {}),
-            recentMessages: recent.rows.reverse().map((message) => ({
+            recentMessages: recentMessages.map((message) => ({
               role: message.role,
               content: message.content,
               createdAt: message.created_at.toISOString(),
@@ -578,6 +614,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
             emit,
             ...(resume ? { resume } : {}),
             ...(idleRestart ? { idleRestart: true } : {}),
+            ...(segmentStart ? { segmentStart: true } : {}),
             checkpoint: async (runtimeEntries) => {
               await client.query(
                 "UPDATE conversations SET runtime_entries = $2::jsonb, runtime_updated_at = now() WHERE id = $1",
@@ -669,6 +706,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           ...(recoverySummary ? { originalModel: recoverySummary.originalModel, fallbackModel: recoverySummary.fallbackModel,
             recoveryReasons: recoverySummary.reasons, recoveryActions: recoverySummary.actions, recoveryRetries: recoverySummary.retries } : {}),
           ...(idleRestart ? { idleRestart: true } : {}),
+          ...(segmentStart ? { segmentStart: true } : {}),
         });
         // 用了备用模型或走过恢复：单独一条，便于按事件检索（原模型、备用模型、原因、次数；报错原文在 conversation.recovery 与 agent_runs.error）。
         if (recoverySummary) logEvent({ event: "conversation.fallback", requestId: String(req.id), runId, scope: req.params.scope, status: runStatus,

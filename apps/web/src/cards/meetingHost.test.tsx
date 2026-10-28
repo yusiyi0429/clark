@@ -44,22 +44,22 @@ describe("成员主持会议", () => {
     world.detail = { world: { excluded: false, excludedBy: null, record: { status: "pending", version: 0, eventId: null, confirmedAt: null }, at: null,
       anchors, edited: false, canEdit: true }, decisions: [] };
     const host = render();
-    expect(host).toContain("挂到");
+    expect(host).toContain("所属");
     expect(host).toContain("接口全量切到 v2");
-    expect(host).toContain(">改<");
+    expect(host).toContain(">更换<");
     expect(host).not.toContain("记录 ·");
     expect(host.indexOf("接口全量切到 v2")).toBeLessThan(host.indexOf("p1主持") === -1 ? host.indexOf("主持") : host.indexOf("p1主持"));
-    // 挂到一行：挂到 → 挂点 → 「改」，进度线在它下面。
-    expect(host.indexOf(">挂到<")).toBeLessThan(host.indexOf("接口全量切到 v2"));
-    expect(host.indexOf("接口全量切到 v2")).toBeLessThan(host.indexOf(">改<"));
-    expect(host.indexOf(">改<")).toBeLessThan(host.indexOf('aria-label="进度"'));
+    // 挂到一行：挂到 → 挂点 → 「改」，进度线在它上面（页头正下方那一行）。
+    expect(host.indexOf(">所属<")).toBeLessThan(host.indexOf("接口全量切到 v2"));
+    expect(host.indexOf("接口全量切到 v2")).toBeLessThan(host.indexOf(">更换<"));
+    expect(host.indexOf('aria-label="进度"')).toBeLessThan(host.indexOf(">所属<"));
     viewer.id = "someone-else";
     world.detail = { world: { excluded: false, excludedBy: null, record: null, at: null, anchors, edited: false, canEdit: false }, decisions: [] };
     const attendee = render();
     expect(attendee).toContain("接口全量切到 v2");
-    expect(attendee).not.toContain(">改<");
+    expect(attendee).not.toContain(">更换<");
     world.detail = null;
-    expect(render()).not.toContain("挂到");
+    expect(render()).not.toContain("所属");
     // 看不到挂点的人也看得到进度线。
     expect(render()).toContain('aria-label="进度"');
   });
@@ -85,11 +85,13 @@ describe("飞书会议入口", () => {
     expect(render(feishu("pending"))).not.toContain("飞书");
   });
 
-  it("等连飞书：只有约的人本人看到「连接飞书」", () => {
+  it("等连飞书：都看到「未同步到飞书日历」，只有约的人本人看到「连接飞书」", () => {
     viewer.id = "p1";
     expect(render(feishu("waiting_auth"))).toContain("连接飞书");
+    expect(render(feishu("waiting_auth"))).toContain("未同步到飞书日历");
     viewer.id = "someone-else";
     expect(render(feishu("waiting_auth"))).not.toContain("连接飞书");
+    expect(render(feishu("waiting_auth"))).toContain("未同步到飞书日历");
   });
 
   it("没约上：主持人看到短状态和「重试」，别人看不到", () => {
@@ -227,5 +229,9 @@ describe("在飞书约上的会跟着飞书会议开始和结束", () => {
     expect(current(html)).not.toContain("重新安排会议");
     expect(html).toContain("重新安排会议");
     expect(html).toContain("结束会议");
+    // 页头正下方一行：左边进度线、右边两个文字操作；挂点和主持、参会那一行在它下面，再往下才是会议内容。
+    const order = ['aria-label="进度"', ">重新安排会议<", ">结束会议<", "主持 · ", 'aria-label="AI 预审：'].map((mark) => html.indexOf(mark));
+    expect(order.every((index) => index > -1)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 });

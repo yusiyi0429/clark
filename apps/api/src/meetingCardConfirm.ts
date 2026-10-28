@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { Pool, PoolClient } from "pg";
 import type {
-  TMeetingActionItem, TMeetingCardConfirmation, TMeetingCardConfirmRequest, TMeetingCardDraft, TMeetingCardKind, TMeetingCardSync, TMeetingCardV1Payload,
-  TMeetingCardView, TMeetingConfirmedObjectChange, TMeetingDraftChange, TMeetingObjectResult, TMeetingRecordStatus,
+  TMeetingActionItem, TMeetingCardConfirmation, TMeetingCardConfirmRequest, TMeetingCardDecision, TMeetingCardDraft, TMeetingCardFrozenPayload, TMeetingCardKind,
+  TMeetingCardReviewRequest, TMeetingCardSync, TMeetingCardView, TMeetingConfirmedObjectChange, TMeetingDraftChange, TMeetingItemReview, TMeetingObjectResult,
+  TMeetingRecordStatus,
 } from "@warmap/contracts";
 import { enqueueJob, JOB_MAX_ATTEMPTS, type JobHandler } from "./jobs.js";
 import { payloadHash } from "./meetingCardHash.js";
@@ -29,16 +30,23 @@ import type { MeetingEventWorld } from "./worldMeetingEvent.js";
  * - 选了不写入：回执 skipped，不发请求；已经写进去的不撤回。
  * - 对象修改（meetingObjectSync）：确认时排好每条的回执（上一版已改成、这次没动的沿用结果），新版确认后旧版还没提交的作废；
  *   事件写成后同一任务里接着按顺序提交这一版的修改。
+ * - 决策逐条确认（10/28，decisions 不为 null 的会议卡）：决策和行动项由责任人（没有就是主持人）在通知栏或会议页逐条点，主持人或创建人可以代点；
+ *   行动项「接下」时才推成执行事项。决策都有了结果、或生成满 48 小时，自动冻结 revision 1（meeting.card_freeze，confirmedBy 为 null）：
+ *   payload v2 只放已确认的决策和行动项（各带确认人）、只留已确认决策的对象修改；没有已确认的决策时不写本体（记录正文能写时除外，见 recordText）。
+ *   之后的修改照旧由主持人确认出新版本。主持人在冻结前直接整卡确认，等于代确认所有还没处理的条目后冻结。
  */
 export const MEETING_WORLD_SYNC_KIND = "meeting.world_sync";
+export const MEETING_CARD_FREEZE_KIND = "meeting.card_freeze";
+export const PENDING_REVIEW: TMeetingItemReview = { status: "pending", by: null, proxy: false, at: null, reason: null };
 
 type Viewer = { personId: string; isCeo: boolean };
 type ConfirmError = { status: number; code: string; message: string; view?: TMeetingCardView };
 type ConfirmResult = { view: TMeetingCardView } | { error: ConfirmError };
+type Reviewable = { id: string; ownerPersonId: string | null; review?: TMeetingItemReview };
 
 /** 当前确认版连同它的同步回执。 */
 type ConfirmationRow = {
-  revision: number; draft_version: number; kind: TMeetingCardKind; payload: TMeetingCardV1Payload; confirmation: TMeetingCardConfirmation;
+  revision: number; draft_version: number; kind: TMeetingCardKind; payload: TMeetingCardFrozenPayload; confirmation: TMeetingCardConfirmation;
   action_items: TMeetingActionItem[]; write_to_world: boolean; created_at: Date;
   event_status: TMeetingCardSync["event"]["status"]; event_id: string | null; event_error: string | null; objects: TMeetingObjectResult[];
 };
@@ -67,15 +75,43 @@ export function confirmedView(row: ConfirmationRow | null): Pick<TMeetingCardVie
 const bareRef = (ref: string) => ref.replace(/@\d+$/, "");
 /** 修改里人定的部分（目标标题、原内容、版本、stale 由服务填）。 */
 const decided = ({ id, targetRef, after, basisSectionIds }: TMeetingConfirmedObjectChange) => ({ id, targetRef, after, basisSectionIds });
-/** 行动项里人定的部分（taskId 由服务填）。 */
-const itemDecided = ({ taskId: _taskId, ...item }: TMeetingActionItem) => item;
-/** 草稿和确认版的会议内容（payload 部分）不同（不算服务填的修改字段和挂点对象的版本）。 */
-function contentDiffers(draft: TMeetingCardDraft, payload: TMeetingCardV1Payload): boolean {
-  const { revision: _revision, ...confirmed } = payload;
+/** 行动项里人定的部分（taskId、review 由服务填）。 */
+const itemDecided = ({ taskId: _taskId, review: _review, ...item }: TMeetingActionItem) => item;
+const recordOf = ({ meetingId, title, occurredAt, participants, summary, sections, sources }: TMeetingCardDraft | TMeetingCardFrozenPayload) =>
+  ({ meetingId, title, occurredAt, participants, summary, sections, sources });
+/**
+ * 草稿和确认版的会议内容（payload 部分）不同（不算服务填的修改字段和挂点对象的版本）。
+ * v2 只比已确认决策的对象修改（没确认的决策的修改本来就不进 payload）。
+ */
+function contentDiffers(draft: TMeetingCardDraft, payload: TMeetingCardFrozenPayload): boolean {
+  const kept = payload.decisions ? new Set(payload.decisions.map((decision) => decision.id)) : null;
+  const changes = kept ? draft.objectChanges.filter((change) => change.decisionId && kept.has(change.decisionId)) : draft.objectChanges;
   return !isDeepStrictEqual(
-    { ...confirmed, relatedObjectRefs: confirmed.relatedObjectRefs.map(bareRef), objectChanges: confirmed.objectChanges.map(decided) },
-    { ...draft, relatedObjectRefs: [...new Set(draft.relatedObjectRefs)], objectChanges: draft.objectChanges.map(decided) },
+    { ...recordOf(payload), relatedObjectRefs: payload.relatedObjectRefs.map(bareRef), objectChanges: payload.objectChanges.map(decided) },
+    { ...recordOf(draft), relatedObjectRefs: [...new Set(draft.relatedObjectRefs)], objectChanges: changes.map(decided) },
   );
+}
+
+/**
+ * 冻结的 payload：草稿的会议内容加挂点对象版本。decisions 为 null（10/28 之前的会议卡）出 v1；
+ * 否则出 v2，只放已确认的决策和行动项（带确认人和出处位置），对象修改只留已确认决策的。
+ */
+function frozenPayload(draft: TMeetingCardDraft, revision: number, relatedObjectRefs: string[], decisions: TMeetingCardDecision[] | null,
+  items: TMeetingActionItem[]): TMeetingCardFrozenPayload {
+  const base = { ...recordOf(draft), relatedObjectRefs, revision };
+  const objectChanges = draft.objectChanges.map(({ stale: _stale, ...change }) => change);
+  if (!decisions) return { schemaVersion: "meeting-card.v1", ...base, objectChanges };
+  const sourceRefsOf = (ids: string[]) => draft.sections.filter((section) => ids.includes(section.id)).flatMap((section) => section.sourceRefs);
+  const confirmed = <T extends Reviewable & { basisSectionIds: string[] }>(list: T[]) => list.flatMap((item) => item.review?.status === "confirmed"
+    ? [{ item, review: { confirmedBy: item.review.by!, proxy: item.review.proxy, confirmedAt: item.review.at!, sourceRefs: sourceRefsOf(item.basisSectionIds) } }] : []);
+  const kept = confirmed(decisions);
+  const ids = new Set(kept.map(({ item }) => item.id));
+  return {
+    schemaVersion: "meeting-card.v2", ...base,
+    objectChanges: objectChanges.filter((change) => change.decisionId && ids.has(change.decisionId)),
+    decisions: kept.map(({ item: { id, text, ownerPersonId, basisSectionIds }, review }) => ({ id, text, ownerPersonId, basisSectionIds, ...review })),
+    actionItems: confirmed(items).map(({ item: { id, text, ownerPersonId, dueDate, basisSectionIds }, review }) => ({ id, text, ownerPersonId, dueDate, basisSectionIds, ...review })),
+  };
 }
 /** 行动项和确认时的快照不同（不算 taskId）。 */
 const itemsDiffer = (items: TMeetingActionItem[], snapshot: TMeetingActionItem[]) => !isDeepStrictEqual(items.map(itemDecided), snapshot.map(itemDecided));
@@ -104,7 +140,7 @@ export async function meetingRecordState(q: Query, meetingId: string, nameOf: (p
     : !current.write_to_world ? "excluded"
     : current.event_status === "succeeded" ? "committed" : current.event_status === "failed" ? "failed" : "writing";
   return { status, version: current.revision, confirmedAt: new Date(current.created_at).toISOString(),
-    excludedBy: current.write_to_world ? null : nameOf(current.confirmation.confirmedBy), ...base };
+    excludedBy: current.write_to_world || !current.confirmation.confirmedBy ? null : nameOf(current.confirmation.confirmedBy), ...base };
 }
 
 export type MeetingCardConfirmDeps = {
@@ -119,11 +155,13 @@ export type MeetingCardConfirmDeps = {
   names?: () => Map<string, string>;
   /** 最新的会议卡视图（会议卡服务的 view）。 */
   view: (meetingId: string, viewer: Viewer) => Promise<{ view: TMeetingCardView } | { error: { status: number; code: string; message: string } }>;
+  /** 记录正文能不能写进本体（等斯一答复，MEETING_WORLD_RECORD_TEXT，默认不能）：不能时会议事件只带已确认的决策和行动项，没有已确认决策的会不写。 */
+  recordText?: boolean;
   now?: () => Date;
 };
 
 const NOT_FOUND = { error: { status: 404, code: "MEETING_NOT_FOUND", message: "会议不存在" } } as const;
-const WORLD_UNAVAILABLE = { error: { status: 503, code: "WORLD_UNAVAILABLE", message: "读不到挂点对象的当前版本，稍后再确认" } } as const;
+const WORLD_UNAVAILABLE = { error: { status: 503, code: "WORLD_UNAVAILABLE", message: "读不到所属对象的当前版本，稍后再确认" } } as const;
 const bad = (code: string, message: string): ConfirmResult => ({ error: { status: 400, code, message } });
 const isHostOrCreator = (meeting: Pick<MeetingRow, "lead_dri_id" | "created_by">, personId: string) =>
   meeting.lead_dri_id === personId || (meeting.created_by ?? meeting.lead_dri_id) === personId;
@@ -161,8 +199,8 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
   }
   /** 锁住会议卡，核对草稿版本和当前确认版没被别人动过。 */
   async function lockCard(cq: Query, meetingId: string, draftVersion: number, currentRevision: number | null) {
-    const locked = (await cq("SELECT draft_version, current_revision, action_items FROM meeting_cards WHERE meeting_id = $1 FOR UPDATE", [meetingId])).rows[0] as
-      { draft_version: number; current_revision: number | null; action_items: TMeetingActionItem[] };
+    const locked = (await cq("SELECT draft_version, current_revision, action_items, decisions FROM meeting_cards WHERE meeting_id = $1 FOR UPDATE", [meetingId])).rows[0] as
+      { draft_version: number; current_revision: number | null; action_items: TMeetingActionItem[]; decisions: TMeetingCardDecision[] | null };
     const conflict: Locked | null = locked.draft_version !== draftVersion ? "changed" : locked.current_revision !== currentRevision ? "rerun" : null;
     return { locked, conflict };
   }
@@ -221,30 +259,17 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
       if (conflict) return conflict;
       const revision = (locked.current_revision ?? 0) + 1;
       kind = locked.current_revision ? input.kind! : "first";
-      const objectChanges = draft.objectChanges.map(({ stale: _stale, ...change }) => change);
-      const payload: TMeetingCardV1Payload = {
-        schemaVersion: draft.schemaVersion, meetingId: draft.meetingId, revision, title: draft.title, occurredAt: draft.occurredAt, participants: draft.participants,
-        relatedObjectRefs, summary: draft.summary, sections: draft.sections, sources: draft.sources, objectChanges,
-      };
+      // 第一次（冻结前）主持人直接整卡确认：还没处理的决策和行动项都算他代确认；之后的修改不动逐条状态。
+      const sweep = { by: viewer.personId, at: at.toISOString(), all: !locked.current_revision };
+      const actionItems = await dispatchItems(client, meeting, locked.action_items, sweep);
+      const decisions = locked.decisions && sweep.all ? locked.decisions.map((decision) => decision.review.status === "pending"
+        ? { ...decision, review: reviewed(meeting, decision, sweep.by, sweep.at, "confirm", null) } : decision) : locked.decisions;
+      const payload = frozenPayload(draft, revision, relatedObjectRefs, decisions, actionItems);
       const confirmation: TMeetingCardConfirmation = { revision, confirmedBy: viewer.personId, confirmedAt: at.toISOString(), payloadHash: payloadHash(payload) };
-      const actionItems = await dispatchItems(client, meeting, locked.action_items);
       // 上一版已改成的同一处修改沿用结果，不再提交（回执现读，锁住后不会再出新版本）。
       const applied = appliedChanges(locked.current_revision ? await currentConfirmation(cq, meetingId) : null);
-      await cq(
-        `INSERT INTO meeting_card_confirmations (meeting_id, revision, draft_version, kind, reason, payload, confirmation, action_items, write_to_world, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10)`,
-        [meetingId, revision, input.draftVersion, kind, reason, JSON.stringify(payload), JSON.stringify(confirmation), JSON.stringify(actionItems), input.writeToWorld, at],
-      );
-      await cq("INSERT INTO meeting_card_syncs (meeting_id, revision, event_status, objects, updated_at) VALUES ($1, $2, $3, $4::jsonb, $5)",
-        [meetingId, revision, input.writeToWorld ? "pending" : "skipped", JSON.stringify(initialObjectResults(objectChanges, input.writeToWorld, applied)), at]);
-      await supersedeObjects(cq, meetingId, revision);
-      // 确认后草稿的 stale 清掉（差异已经看过、确认过）；草稿版本不变，同一草稿再确认还认得出来。
-      await cq(`UPDATE meeting_cards SET current_revision = $2, draft = jsonb_set(draft, '{objectChanges}', $3::jsonb), action_items = $4::jsonb, updated_at = now()
-        WHERE meeting_id = $1`, [meetingId, revision, JSON.stringify(draft.objectChanges.map((change) => ({ ...change, stale: false }))), JSON.stringify(actionItems)]);
-      // 第一次确认：会后事项算处理完；主持人和创建人的「会议记录待确认」提醒标为已读。
-      await cq("UPDATE meetings SET status = 'reviewed', version = version + 1, updated_at = now() WHERE id = $1 AND status = 'held'", [meetingId]);
-      await cq("UPDATE notifications SET read_at = now() WHERE kind = 'meeting_card_pending' AND object_id = $1 AND read_at IS NULL", [meetingId]);
-      if (input.writeToWorld) await queueSync(cq, meetingId);
+      await insertRevision(cq, { meetingId, draft, draftVersion: input.draftVersion, kind, reason, payload, confirmation, actionItems, decisions,
+        writeToWorld: input.writeToWorld, at, applied });
       return "done";
     });
     // 读和锁之间别人改了草稿：409；别人刚确认过（比如连点两次）：照最新的确认版重新走一遍。
@@ -254,17 +279,133 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     return { view: await latestView(meetingId, viewer) };
   }
 
-  /** 行动项里还没 taskId 的推成执行事项（负责人缺省主持人；是 CEO 的不建，taskId 留空），返回回填后的行动项。 */
-  async function dispatchItems(client: PoolClient, meeting: MeetingRow, items: TMeetingActionItem[]): Promise<TMeetingActionItem[]> {
+  /**
+   * 存一个确认版本（整卡确认和自动冻结共用，在锁住会议卡的事务里）：确认表、待同步回执、作废上一版没提交的修改；
+   * 草稿的 stale 清掉（差异已经看过）、实际时间按 payload 补上，草稿版本不变（同一草稿再确认还认得出来）；第一次确认时会后事项算处理完；选了写入就排写本体。
+   */
+  async function insertRevision(cq: Query, input: {
+    meetingId: string; draft: TMeetingCardDraft; draftVersion: number; kind: TMeetingCardKind; reason: string | null; payload: TMeetingCardFrozenPayload;
+    confirmation: TMeetingCardConfirmation; actionItems: TMeetingActionItem[]; decisions: TMeetingCardDecision[] | null; writeToWorld: boolean; at: Date;
+    applied: ReturnType<typeof appliedChanges>;
+  }): Promise<void> {
+    const { meetingId, payload, writeToWorld, at } = input;
+    const { revision } = payload;
+    await cq(
+      `INSERT INTO meeting_card_confirmations (meeting_id, revision, draft_version, kind, reason, payload, confirmation, action_items, write_to_world, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10)`,
+      [meetingId, revision, input.draftVersion, input.kind, input.reason, JSON.stringify(payload), JSON.stringify(input.confirmation), JSON.stringify(input.actionItems), writeToWorld, at],
+    );
+    await cq("INSERT INTO meeting_card_syncs (meeting_id, revision, event_status, objects, updated_at) VALUES ($1, $2, $3, $4::jsonb, $5)",
+      [meetingId, revision, writeToWorld ? "pending" : "skipped", JSON.stringify(initialObjectResults(payload.objectChanges, writeToWorld, input.applied)), at]);
+    await supersedeObjects(cq, meetingId, revision);
+    const draft = { ...input.draft, occurredAt: payload.occurredAt, objectChanges: input.draft.objectChanges.map((change) => ({ ...change, stale: false })) };
+    await cq(`UPDATE meeting_cards SET current_revision = $2, draft = $3::jsonb, action_items = $4::jsonb, decisions = $5::jsonb, updated_at = now() WHERE meeting_id = $1`,
+      [meetingId, revision, JSON.stringify(draft), JSON.stringify(input.actionItems), input.decisions ? JSON.stringify(input.decisions) : null]);
+    // 第一次确认：会后事项算处理完；10/28 之前提醒主持人和创建人的「会议记录待确认」标为已读。
+    await cq("UPDATE meetings SET status = 'reviewed', version = version + 1, updated_at = now() WHERE id = $1 AND status = 'held'", [meetingId]);
+    await cq("UPDATE notifications SET read_at = now() WHERE kind = 'meeting_card_pending' AND object_id = $1 AND read_at IS NULL", [meetingId]);
+    if (writeToWorld) await queueSync(cq, meetingId);
+  }
+
+  /** 一条决策或行动项处理后的状态：by 不是责任人（没有就是主持人）时记为代确认。 */
+  function reviewed(meeting: MeetingRow, item: Reviewable, by: string, at: string, verdict: TMeetingCardReviewRequest["verdict"], reason: string | null): TMeetingItemReview {
+    return { status: verdict === "confirm" ? "confirmed" : "rejected", by, proxy: (item.ownerPersonId ?? meeting.lead_dri_id) !== by, at, reason };
+  }
+
+  /** 一条行动项推成执行事项（负责人缺省主持人；是 CEO 的不建，返回 null）。 */
+  const dispatchTodo = (client: PoolClient, meeting: MeetingRow, item: TMeetingActionItem) =>
+    dispatchMeetingTodo(client, { id: meeting.id, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id,
+      ownerName: nameOf(meeting.participants, item.ownerPersonId ?? meeting.lead_dri_id), title: meeting.title, now: now() }, { ...item, dueDate: item.dueDate ?? undefined, quote: null });
+
+  /**
+   * 整卡确认时推行动项，返回回填后的行动项：10/28 之前的（没有 review）还没 taskId 的照旧推；逐条确认的只在 sweep.all（冻结前主持人整卡确认）时
+   * 把还没处理的算他代接下、推出去，别的等负责人自己点。
+   */
+  async function dispatchItems(client: PoolClient, meeting: MeetingRow, items: TMeetingActionItem[], sweep: { by: string; at: string; all: boolean }): Promise<TMeetingActionItem[]> {
     const dispatched: TMeetingActionItem[] = [];
     for (const item of items) {
-      if (item.taskId) { dispatched.push(item); continue; }
-      const owner = item.ownerPersonId ?? meeting.lead_dri_id;
-      const taskId = await dispatchMeetingTodo(client, { id: meeting.id, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id,
-        ownerName: nameOf(meeting.participants, owner), title: meeting.title, now: now() }, { ...item, dueDate: item.dueDate ?? undefined, quote: null });
-      dispatched.push({ ...item, taskId });
+      const swept = item.review?.status === "pending" && sweep.all;
+      if (item.taskId || (item.review && !swept)) { dispatched.push(item); continue; }
+      const taskId = await dispatchTodo(client, meeting, item);
+      dispatched.push({ ...item, taskId, ...(swept ? { review: reviewed(meeting, item, sweep.by, sweep.at, "confirm", null) } : {}) });
     }
     return dispatched;
+  }
+
+  /**
+   * 逐条确认一条决策或行动项：责任人（没有就是主持人）自己点，主持人或创建人代点（记为代确认）；别人当会议不存在。
+   * 行动项「接下」就推成执行事项（自己接下的不再出「分给你的事」那一条，代接下的照旧通知负责人）。决策都有了结果，排一次冻结。
+   * 返回最新会议卡；点的人读不了会议卡时 view 为 null。
+   */
+  async function review(meetingId: string, viewer: Viewer, input: TMeetingCardReviewRequest): Promise<{ view: TMeetingCardView | null } | { error: ConfirmError }> {
+    if (!UUID_PATTERN.test(meetingId)) return NOT_FOUND;
+    const meeting = await getMeetingRow(q, meetingId);
+    if (!meeting) return NOT_FOUND;
+    const reason = input.reason?.trim() ?? "";
+    if (input.verdict === "reject" && !reason) return bad("REASON_REQUIRED", "要写一句原因");
+    const at = now().toISOString();
+    const outcome = await transaction(async (cq, client): Promise<"missing" | "reviewed" | "frozen" | "done"> => {
+      const card = (await cq("SELECT decisions, action_items, current_revision FROM meeting_cards WHERE meeting_id = $1 FOR UPDATE", [meetingId])).rows[0] as
+        { decisions: TMeetingCardDecision[] | null; action_items: TMeetingActionItem[]; current_revision: number | null } | undefined;
+      const list: Reviewable[] = !card ? [] : input.kind === "decision" ? card.decisions ?? [] : card.action_items;
+      const item = list.find((candidate) => candidate.id === input.id);
+      if (!card || !item?.review) return "missing";
+      const result = reviewed(meeting, item, viewer.personId, at, input.verdict, input.verdict === "reject" ? reason : null);
+      if (result.proxy && !isHostOrCreator(meeting, viewer.personId)) return "missing";
+      if (item.review.status !== "pending") return "reviewed";
+      if (input.kind === "decision") {
+        if (card.current_revision) return "frozen";
+        const decisions = card.decisions!.map((decision) => (decision.id === item.id ? { ...decision, review: result } : decision));
+        await cq("UPDATE meeting_cards SET decisions = $2::jsonb, updated_at = now() WHERE meeting_id = $1", [meetingId, JSON.stringify(decisions)]);
+        if (decisions.every((decision) => decision.review.status !== "pending")) {
+          await enqueueJob(cq, { kind: MEETING_CARD_FREEZE_KIND, dedupeKey: `${MEETING_CARD_FREEZE_KIND}:${meetingId}:decided`, payload: { meetingId } });
+        }
+        return "done";
+      }
+      const actionItem = item as TMeetingActionItem;
+      const taskId = input.verdict === "confirm" ? await dispatchTodo(client, meeting, actionItem) : null;
+      if (taskId && !result.proxy) await cq("UPDATE notifications SET read_at = now() WHERE kind = 'meeting_action_assigned' AND object_id = $1 AND read_at IS NULL", [taskId]);
+      const items = card.action_items.map((candidate) => (candidate.id === item.id ? { ...candidate, taskId: taskId ?? candidate.taskId, review: result } : candidate));
+      await cq("UPDATE meeting_cards SET action_items = $2::jsonb, updated_at = now() WHERE meeting_id = $1", [meetingId, JSON.stringify(items)]);
+      return "done";
+    });
+    if (outcome === "missing") return NOT_FOUND;
+    const found = await deps.view(meetingId, viewer);
+    const view = "view" in found ? found.view : null;
+    if (outcome === "reviewed") return { error: { status: 409, code: "ALREADY_REVIEWED", message: "这一条已经处理过了", ...(view ? { view } : {}) } };
+    if (outcome === "frozen") return { error: { status: 409, code: "CARD_FROZEN", message: "这场会的决策已经定版", ...(view ? { view } : {}) } };
+    logEvent({ event: "meeting_card.review", objectRef: `meeting:${meetingId}`, status: `${input.kind}:${input.verdict}` });
+    return { view };
+  }
+
+  /**
+   * 自动冻结（meeting.card_freeze：决策都有了结果，或生成满 48 小时）：还没冻结的逐条确认会议卡冻结 revision 1，confirmedBy 为 null。
+   * 实际时间没填的用会议实际开始（没有就预约时间）。写本体要：选了写入、挂了对象、本体可写，并且有已确认的决策（记录正文能写时没有也写）；
+   * 要写时读不到挂点对象的版本就抛错，交给 jobs 重试。已冻结、10/28 之前的会议卡不动。
+   */
+  async function freeze(meetingId: string): Promise<void> {
+    if (!UUID_PATTERN.test(meetingId)) return;
+    const meeting = await getMeetingRow(q, meetingId);
+    const card = (await q("SELECT draft, decisions, current_revision, write_to_world FROM meeting_cards WHERE meeting_id = $1", [meetingId])).rows[0] as
+      { draft: TMeetingCardDraft | null; decisions: TMeetingCardDecision[] | null; current_revision: number | null; write_to_world: boolean } | undefined;
+    if (!meeting || !card?.draft || !card.decisions || card.current_revision) return;
+    const canWrite = Boolean(deps.meetingWorld) && card.write_to_world && card.draft.relatedObjectRefs.length > 0;
+    const relatedObjectRefs = canWrite ? await versionedRefs(card.draft.relatedObjectRefs) : [...new Set(card.draft.relatedObjectRefs)];
+    const at = now();
+    const done = await transaction(async (cq) => {
+      const locked = (await cq("SELECT draft, decisions, action_items, draft_version, current_revision, write_to_world FROM meeting_cards WHERE meeting_id = $1 FOR UPDATE",
+        [meetingId])).rows[0] as { draft: TMeetingCardDraft; decisions: TMeetingCardDecision[] | null; action_items: TMeetingActionItem[]; draft_version: number;
+          current_revision: number | null; write_to_world: boolean };
+      if (locked.current_revision || !locked.decisions) return false;
+      const draft = { ...locked.draft, occurredAt: locked.draft.occurredAt ?? (meeting.started_at ?? meeting.scheduled_at).toISOString() };
+      const payload = frozenPayload(draft, 1, relatedObjectRefs, locked.decisions, locked.action_items);
+      const writeToWorld = canWrite && locked.write_to_world && (payload.decisions!.length > 0 || Boolean(deps.recordText));
+      const confirmation: TMeetingCardConfirmation = { revision: 1, confirmedBy: null, confirmedAt: at.toISOString(), payloadHash: payloadHash(payload) };
+      await insertRevision(cq, { meetingId, draft, draftVersion: locked.draft_version, kind: "first", reason: null, payload, confirmation,
+        actionItems: locked.action_items, decisions: locked.decisions, writeToWorld, at, applied: appliedChanges(null) });
+      return true;
+    });
+    if (done) logEvent({ event: "meeting_card.freeze", objectRef: `meeting:${meetingId}`, status: "frozen" });
   }
 
   /**
@@ -275,7 +416,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     const outcome = await transaction(async (cq, client): Promise<Locked> => {
       const { locked, conflict } = await lockCard(cq, meetingId, input.draftVersion, current.revision);
       if (conflict) return conflict;
-      const actionItems = JSON.stringify(await dispatchItems(client, meeting, locked.action_items));
+      const actionItems = JSON.stringify(await dispatchItems(client, meeting, locked.action_items, { by: viewer.personId, at: now().toISOString(), all: false }));
       await cq("UPDATE meeting_card_confirmations SET action_items = $3::jsonb, draft_version = $4 WHERE meeting_id = $1 AND revision = $2",
         [meetingId, current.revision, actionItems, input.draftVersion]);
       await cq("UPDATE meeting_cards SET action_items = $2::jsonb, updated_at = now() WHERE meeting_id = $1", [meetingId, actionItems]);
@@ -377,9 +518,11 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
           WHERE meeting_id = $1 AND revision < $2 AND event_status = 'succeeded' ORDER BY revision DESC LIMIT 1`,
         [meetingId, row.revision],
       )).rows[0] as { revision: number; event_id: string; event_subject_refs: string[] | null; event_occurred_at: string | null } | undefined;
+      // 写进 reason 的确认人：整卡确认的那个人；自动冻结的是逐条确认决策的人。
+      const confirmers = row.confirmation.confirmedBy ? [row.confirmation.confirmedBy] : [...new Set((row.payload.decisions ?? []).map((decision) => decision.confirmedBy))];
       try {
-        const written = await world.write({ meetingId, kind: row.kind, payload: row.payload, confirmation: row.confirmation,
-          confirmerName: nameOf(row.participants, row.confirmation.confirmedBy),
+        const written = await world.write({ meetingId, kind: row.kind, payload: row.payload, confirmation: row.confirmation, recordText: Boolean(deps.recordText),
+          confirmerName: confirmers.map((personId) => nameOf(row.participants, personId)).join("、"),
           previous: previous ? { eventId: previous.event_id, revision: previous.revision, subjectRefs: previous.event_subject_refs, occurredAt: previous.event_occurred_at } : null,
           revisionRefs: writtenRevisionRefs(row.payload.objectChanges, objects) });
         // 记下实际写进去的 subject_refs 和 occurred_at：之后更正这条时沿用。
@@ -401,11 +544,15 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     }
   }
 
-  return { confirm, retry, syncWorld };
+  return { confirm, review, freeze, retry, syncWorld };
 }
 
 export type MeetingCardConfirmService = ReturnType<typeof createMeetingCardConfirmService>;
 
 export function meetingCardConfirmJobs(service: MeetingCardConfirmService): Record<string, JobHandler> {
-  return { [MEETING_WORLD_SYNC_KIND]: (payload, job) => service.syncWorld(String((payload as { meetingId?: unknown }).meetingId), job.attempts >= JOB_MAX_ATTEMPTS) };
+  const meetingIdOf = (payload: unknown) => String((payload as { meetingId?: unknown }).meetingId);
+  return {
+    [MEETING_WORLD_SYNC_KIND]: (payload, job) => service.syncWorld(meetingIdOf(payload), job.attempts >= JOB_MAX_ATTEMPTS),
+    [MEETING_CARD_FREEZE_KIND]: (payload) => service.freeze(meetingIdOf(payload)),
+  };
 }

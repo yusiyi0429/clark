@@ -6,7 +6,7 @@ import { createTestApp, preflightCandidate, type TestApp } from "./helpers.js";
 import type { PreflightAgent, PreflightAgentHooks, PreflightAgentInput } from "../src/meetingPreflight.js";
 import { PREFLIGHT_PROMPT, preflightThinkingLevel } from "../src/preflightAgent.js";
 import { PreflightProgressRecorder, cleanThought, createAgentProgressHandler, createCandidateProgress, latestParagraphLead, materialStepLabel } from "../src/preflightProgress.js";
-import { MEETING_QUESTION_MIN_OPTIONS } from "../src/promptRules.js";
+import { PREFLIGHT_DECISIONS_MAX, PREFLIGHT_OPTIONS_MIN } from "../src/promptRules.js";
 
 const MEETING_INPUT = {
   title: "增长战场渠道复盘会",
@@ -180,11 +180,9 @@ describe("会前预审 v4：过程可见", () => {
         emit({ type: "tool_start", toolCallId: "c1", name: "search_sections", args: { query: "增长战场 责任边界" } });
         emit({ type: "tool_end", toolCallId: "c1", name: "search_sections", isError: false,
           result: { content: [{ type: "text", text: JSON.stringify({ results: [{ id: "a#s1", title: "增长战场的责任边界" }] }) }] } });
-        emit({ type: "tool_args", name: "submit_candidate", args: { taskDefinition: {}, readiness: "revise", materialQuestions: { total: 2, items: [
-          { question: "是否转向华南", verdict: "ceo", reason: "跨战场预算" }] } } });
-        emit({ type: "tool_args", name: "submit_candidate", args: { taskDefinition: {}, readiness: "revise", materialQuestions: { total: 2, items: [
-          { question: "是否转向华南", verdict: "ceo", reason: "跨战场预算" }, { question: "首批渠道选谁", verdict: "owner", reason: "负责人可定" }] },
-          entries: [{ kind: "core_judgment", title: "先定渠道主线" }, { kind: "meeting_question", title: "华南是否转向" }] } });
+        emit({ type: "tool_args", name: "submit_candidate", args: { depth: "standard", decision: "定渠道主线" } });
+        emit({ type: "tool_args", name: "submit_candidate", args: { depth: "standard", decision: "定渠道主线", judgment: { headline: "先定渠道主线" },
+          questions: [{ question: "华南是否转向" }, { question: "首批渠道选谁" }] } });
         // 节流写库之后再读一次卡片：运行中的进度已经在库里。
         await new Promise((resolve) => setTimeout(resolve, 900));
         const res = await t.app.inject({ method: "GET", url: `/api/cards/meetings/${meetingId}`, headers: { cookie } });
@@ -200,9 +198,10 @@ describe("会前预审 v4：过程可见", () => {
       expect(midRun!.thought).toBe("对照历史决定与材料里的待决题");
       const midLabels = midRun!.steps.map((step) => step.label);
       expect(midLabels).toContain("已查找企业知识「增长战场 责任边界」");
-      expect(midLabels).toContain("第 1 题「是否转向华南」：需要一号位判断");
-      expect(midLabels).toContain("第 2 题「首批渠道选谁」：负责人职责内可定");
+      expect(midLabels).toContain("会议类型：普通会");
+      expect(midLabels).toContain("要定的事：定渠道主线");
       expect(midLabels).toContain("已形成核心判断：先定渠道主线");
+      expect(midLabels).toContain("已形成要聊的问题：华南是否转向");
 
       const payload = regenerate.json().cards[0].payload;
       expect(Value.Check(MeetingCardPayload, payload)).toBe(true);
@@ -211,11 +210,10 @@ describe("会前预审 v4：过程可见", () => {
       expect(progress.thought).toBeUndefined();
       expect(progress.steps.every((step) => step.state === "done")).toBe(true);
       const keys = progress.steps.map((step) => step.key);
-      // 顺序：读取输入 → 开始分析 → 企业知识 → 写结论 → 待决题 → 条目 → 核对。
-      const order = ["collect", "analysis", "knowledge:1", "compose", "material_questions", "material_question:1", "material_question:2", "entry:1", "check"];
+      // 顺序：读取输入 → 开始分析 → 企业知识 → 写结论 → 档位 → 要定的事 → 核心判断 → 要聊的问题 → 核对。
+      const order = ["collect", "analysis", "knowledge:1", "compose", "depth", "decision", "judgment", "questions:1", "check"];
       expect(order.map((key) => keys.indexOf(key))).toEqual([...order.map((key) => keys.indexOf(key))].sort((a, b) => a - b));
       expect(order.every((key) => keys.includes(key))).toBe(true);
-      expect(progress.steps.find((step) => step.key === "material_questions")!.label).toBe("已逐条判断材料自带的 2 道待决题：1 道需要一号位判断，1 道负责人可定");
       expect(progress.steps.find((step) => step.key === "check")!.label).toBe("已核对引用和结构");
       expect(payload.preflight.model).toEqual({ id: "test-sol", thinking: "high" });
       // 时间点单调：每一步的出现时间不早于前一步。
@@ -247,43 +245,44 @@ describe("会前预审 v4：过程可见", () => {
     }
   });
 
-  it("候选写作的进度只在一项写完之后计数：待决题第几道、会议问题第几条", () => {
+  it("候选写作的进度只在一项写完之后计数：要聊的问题第几个、要拍板的事第几件", () => {
     const writes: TPreflightProgress[] = [];
     const recorder = new PreflightProgressRecorder(async (progress) => { writes.push(progress); }, () => new Date("2026-10-13T00:00:00Z"), 0);
     const onCandidate = createCandidateProgress(recorder).candidate;
-    onCandidate({ readiness: "revise", materialQuestions: { total: 5, items: [{ question: "第一题", verdict: "ceo", reason: "跨战场" }] } });
-    expect(recorder.snapshot().steps.find((step) => step.key === "material_questions")!.label).toBe("正在逐条判断材料自带的 5 道待决题（0/5）");
-    onCandidate({ readiness: "revise", materialQuestions: { total: 5, items: [{ question: "第一题", verdict: "ceo", reason: "跨战场" }, { question: "第二" }] } });
-    expect(recorder.snapshot().steps.find((step) => step.key === "material_questions")!.label).toBe("正在逐条判断材料自带的 5 道待决题（1/5）");
-    onCandidate({ readiness: "revise", materialQuestions: { total: 5, items: [{ question: "第一题", verdict: "ceo", reason: "跨战场" }] },
-      entries: [{ kind: "meeting_question", title: "华南是否转向" }] }, true);
+    onCandidate({ depth: "strategic", questions: [{ question: "第一题" }] });
+    expect(recorder.snapshot().steps.map((step) => step.key)).not.toContain("questions:1");
+    expect(recorder.snapshot().steps.find((step) => step.key === "depth")!.label).toBe("会议类型：战略决策会");
+    onCandidate({ depth: "strategic", questions: [{ question: "第一题" }, { question: "第二" }] });
+    expect(recorder.snapshot().steps.find((step) => step.key === "questions:1")!.label).toBe("已形成要聊的问题：第一题");
+    onCandidate({ depth: "strategic", questions: [{ question: "第一题" }, { question: "第二题" }], decisions: [{ question: "是否转向华南" }] }, true);
     const labels = recorder.snapshot().steps.map((step) => step.label);
-    expect(labels).toContain("已形成会议问题：华南是否转向");
-    expect(labels).toContain("已形成 1 条判断与建议，其中会议问题 1 条");
+    expect(labels).toContain("已形成要聊的问题：第二题");
+    expect(labels).toContain("已形成要拍板的事：是否转向华南");
+    expect(labels).toContain("已形成要聊的问题 2 个、要拍板的事 1 个");
   });
 
-  it("阶段性结论工具：待决题先于最终候选显示（total 写在后面也能计数）；历史对照写出是哪一条决定", () => {
+  it("信息不足档的过程不显示模型顺手填的要定的事和判断", () => {
+    const recorder = new PreflightProgressRecorder(async () => undefined, () => new Date("2026-10-13T00:00:00Z"), 0);
+    createCandidateProgress(recorder).candidate({ depth: "thin", decision: "待补", judgment: { headline: "不适用" }, gaps: ["缺本周完成情况"] }, true);
+    const keys = recorder.snapshot().steps.map((step) => step.key);
+    expect(recorder.snapshot().steps.find((step) => step.key === "depth")!.label).toBe("会议类型：信息还不够下判断");
+    expect(keys).not.toContain("decision");
+    expect(keys).not.toContain("judgment");
+  });
+
+  it("阶段性结论工具：历史对照写出是哪一条决定；交完之后显示在权衡取舍，最终候选开始写时让位", () => {
     const recorder = new PreflightProgressRecorder(async () => undefined, () => new Date("2026-10-13T00:00:00Z"), 0);
     const refLabels = new Map([["outcome:m1#d4", "技术型 FDE 保持轻团队，不得演变为单纯 Token 转售"]]);
     const handler = createAgentProgressHandler(recorder, { refLabels });
     const label = (key: string) => recorder.snapshot().steps.find((step) => step.key === key)?.label;
-    handler({ type: "tool_args", name: "report_material_questions", args: { items: [{ question: "首批上游选谁", verdict: "owner", reason: "负责人可定" }, { question: "房懂懂" }] } });
-    expect(label("material_questions")).toBe("正在逐条判断材料自带的待决题（已判断 1 道）");
-    expect(label("material_question:1")).toBe("第 1 题「首批上游选谁」：负责人职责内可定");
-    handler({ type: "tool_args", name: "report_material_questions", final: true, args: { items: [
-      { question: "首批上游选谁", verdict: "owner", reason: "负责人可定" }, { question: "房懂懂 001 是否验证国产路线", verdict: "ceo", reason: "跨战场" }], total: 2 } });
-    expect(label("material_questions")).toBe("已逐条判断材料自带的 2 道待决题：1 道需要一号位判断，1 道负责人可定");
-    expect(label("compose")).toBeUndefined();
     handler({ type: "tool_args", name: "report_history_check", final: true, args: { checks: [
       { ref: "outcome:m1#d4", relation: "tension", note: "材料把交易分发放在近期重点" }] } });
     expect(label("history_check:1")).toBe("「技术型 FDE 保持轻团队，不得演变为单纯 Token 转售」：存在张力");
     expect(recorder.snapshot().steps.find((step) => step.key === "history_check:1")!.detail).toBe("材料把交易分发放在近期重点");
     expect(label("history_checks")).toBe("已对照 1 条历史决定：存在张力 1");
-    // 阶段性结论交完：显示在权衡取舍；最终候选里重复的待决题不会把已完成的进度拉回去。
     handler({ type: "tool_end", toolCallId: "r2", name: "report_history_check", isError: false, result: {} });
-    expect(recorder.snapshot().steps.find((step) => step.key === "deliberate")).toMatchObject({ state: "active", label: "正在权衡取舍，形成会议问题、一号位追问与开放分歧" });
-    handler({ type: "tool_args", name: "submit_candidate", args: { materialQuestions: { total: 2, items: [{ question: "首批上游选谁" }] } } });
-    expect(label("material_questions")).toBe("已逐条判断材料自带的 2 道待决题：1 道需要一号位判断，1 道负责人可定");
+    expect(recorder.snapshot().steps.find((step) => step.key === "deliberate")).toMatchObject({ state: "active", label: "正在权衡取舍，形成核心判断与要聊的问题" });
+    handler({ type: "tool_args", name: "submit_candidate", args: { depth: "strategic" } });
     expect(recorder.snapshot().steps.find((step) => step.key === "deliberate")!.state).toBe("done");
     expect(label("compose")).toBe("正在写出预审结论");
   });
@@ -316,22 +315,21 @@ describe("会前预审 v4：过程可见", () => {
   });
 });
 
-describe("会前预审 v4：提示词", () => {
-  it("没有凑数要求：条目只有上限，没有「至少几条」「每类都要」之类的数量要求", () => {
-    // 唯一的「至少」是会议问题的可选路径（一道取舍至少两条路），不是条目数量。
-    const optionRule = `meeting_question 至少 ${MEETING_QUESTION_MIN_OPTIONS} 条`;
-    const rest = PREFLIGHT_PROMPT.replace(optionRule, "").replace("至少两条可行路径", "");
-    expect(rest).not.toMatch(/(至少|不少于|最少|不得少于|起码)\s*[0-9一二两三四五六七八九十]+\s*[条个道处项]/);
-    expect(rest).not.toMatch(/凑满|凑齐|补足.{0,4}条|每类(都)?(至少|必须)/);
-    expect(PREFLIGHT_PROMPT).toContain("数量没有下限");
-    expect(PREFLIGHT_PROMPT).toContain("宁缺毋滥，不为凑数造问题");
-    expect(PREFLIGHT_PROMPT).toContain("没有真实分歧就不写，不为凑类别编造");
+describe("会前预审 v5：提示词", () => {
+  it("要拍板的事没有下限；信息不足只写缺什么；没有「至少几条要拍板的事」之类的凑数要求", () => {
+    expect(PREFLIGHT_PROMPT).toContain(`decisions 写零到 ${PREFLIGHT_DECISIONS_MAX} 个`);
+    expect(PREFLIGHT_PROMPT).toContain("不写 judgment，decisions 为空数组");
+    expect(PREFLIGHT_PROMPT).toContain("整场没有能下判断的内容时用 thin，只写缺什么");
+    expect(PREFLIGHT_PROMPT).toContain(`每条写 ${PREFLIGHT_OPTIONS_MIN} 到`);
+    expect(PREFLIGHT_PROMPT).not.toMatch(/decisions[^。\n]{0,10}(至少|不少于)/);
+    expect(PREFLIGHT_PROMPT).not.toMatch(/凑满|凑齐|补足.{0,4}条|每类(都)?(至少|必须)/);
   });
 
-  it("逐条判断材料自带的待决题、分歧三类、追问写出不同回答的含义、近期会议分层", () => {
-    for (const text of ["必须逐条判断，写进 materialQuestions", "ceo 是需要一号位判断", "owner 是负责人职责内可以定", "monitor 是事实还不够",
-      "fact_gap 是事实不足", "judgment 是判断分歧", "value_tradeoff 是价值取舍", "可能得到的两三种回答", "impact 写这种回答意味着什么",
-      "pendingDecisions 是会后候选，尚未经一号位确认", "battlefield 同一战场", "企业披露、待核验"]) {
+  it("先定档位；按案例写要定的事、核心判断、要聊的问题、要拍板的事；挂点与本体内容的用法", () => {
+    for (const text of ["一、先定档位 depth", "strategic 战略决策会", "standard 普通会", "thin 信息不足", "按要定的事判断，会议标题怎么起不算数",
+      "先把要定的事说清", "结论先行，判断有立场", "判断落回我们自己", "要聊的问题能当场回答或当场定", "拍板的事给选项、推荐和改判条件",
+      "竞品、对标、案例研究类材料", "我们原以为的差异化在它面前还成不成立", "企业披露、待核验", "写出不该做的事",
+      "readState=title_only 时只有名称，不要编内容", "pendingDecisions 尚未确认", "battlefield 同一战场"]) {
       expect(PREFLIGHT_PROMPT).toContain(text);
     }
   });

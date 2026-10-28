@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import Markdown from "react-markdown";
 import { REMARK_PLUGINS } from "@/lib/markdown";
 import { ArrowUpRight, CornerUpLeft, Download, MessageSquareQuote, X } from "lucide-react";
@@ -172,6 +172,24 @@ export function SourceList({ refs, issueId, label = "依据" }: { refs: string[]
     <div className={d.sourceRow}>
       <small>{label}</small>
       {unique.map((ref) => <SourceChip key={ref} sourceRef={ref} issueId={issueId} />)}
+    </div>
+  );
+}
+
+/** 依据收起：正文末尾一行灰字「依据 n」；鼠标悬停浮出这串依据，点一下在原处展开 / 收起（触屏、键盘同样可用）。 */
+export function SourceToggle({ refs, issueId }: { refs: string[]; issueId?: string | null }) {
+  const [open, setOpen] = useState(false);
+  const popId = useId();
+  const unique = [...new Set(refs)].slice(0, 10);
+  if (!unique.length) return null;
+  return (
+    <div className={d.sourceToggle} data-open={open}>
+      <button type="button" className={d.sourceTrigger} aria-expanded={open} aria-controls={popId} onClick={() => setOpen((value) => !value)}>
+        依据 {unique.length}
+      </button>
+      <div id={popId} className={d.sourcePop} role="group" aria-label="依据">
+        {unique.map((ref) => <SourceChip key={ref} sourceRef={ref} issueId={issueId} />)}
+      </div>
     </div>
   );
 }

@@ -30,6 +30,21 @@ describe("通知栏分组（clark 三组）", () => {
     const html = renderToStaticMarkup(<NotificationRail cards={[ended]} viewerId="host" onNavigate={() => undefined} />);
     expect(html).toContain("重新安排"); expect(html).toContain(">上传<"); expect(html).toContain("待交记录");
   });
+
+  it("交了记录还在生成会议卡：主持人这一行原地显示进度并带流光，生成好了或不是主持人就不列", () => {
+    const now = new Date("2026-09-30T08:00:00Z");
+    const outcome = (status: string) => ({ status, pendingSince: "2026-09-30T07:59:00Z", startedAt: status === "running" ? "2026-09-30T07:59:30Z" : null });
+    const held = (status: string) => card("meeting", status, `会议 ${status}`, { status: "held", scheduledAt: "2026-09-30T07:00:00Z", endsAt: "2026-09-30T07:30:00Z", endedAt: null,
+      leadDriId: "host", participants: [], outcome: outcome(status) });
+    const [running, failed, ready] = [held("running"), held("failed"), held("ready")];
+    expect(railGroups([running, failed, ready], now, "host")[0].items.map((item) => [item.meta, item.followUp, item.processing])).toEqual([
+      ["生成会议卡", false, { since: "2026-09-30T07:59:30Z", failed: false }],
+      ["会议卡没生成", false, { since: "2026-09-30T07:59:00Z", failed: true }],
+    ]);
+    expect(railGroups([running], now, "attendee")).toEqual([]);
+    const html = renderToStaticMarkup(<NotificationRail cards={[running]} viewerId="host" onNavigate={() => undefined} />);
+    expect(html).toContain("生成会议卡"); expect(html).toContain('role="timer"'); expect(html).not.toContain(">上传<");
+  });
   it("只收需要行动的：未签发月度计划、已排期会议、红色待决议题；顺序固定", () => {
     const now = new Date("2026-09-23T01:00:00Z");
     const groups = railGroups(

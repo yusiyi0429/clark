@@ -6,7 +6,7 @@ import { Card, MeetingCardPayload, StoredTranscript, type TTranscriptSource } fr
 import { createTestApp, preflightCandidate, type TestApp } from "./helpers.js";
 import type { PostMeetingAgent, PostMeetingAgentInput } from "../src/outcome.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
-import { buildTranscriptCandidate } from "../src/transcriptCandidate.js";
+import { buildTranscriptCandidate, suggestByAttendees } from "../src/transcriptCandidate.js";
 
 const PEOPLE_SEED = fileURLToPath(new URL("./fixtures/company-people-candidate.json", import.meta.url));
 
@@ -51,7 +51,7 @@ function fakeOutcomeAgent(): PostMeetingAgent & { calls: PostMeetingAgentInput[]
         candidate: {
           summary: "会议形成一项待办",
           sections: [{ heading: "排期", body: "已定：测试乙周五前给排期。", turnIds: ["turn-0002"] }],
-          objectChanges: [],
+          decisions: [], objectChanges: [],
           actionItems: [{ text: "周五前给排期", ownerPersonId: "person-fixture-002", dueDate: null, basisSections: [1] }],
         },
         runId: "outcome-run-1",
@@ -159,6 +159,30 @@ describe("buildTranscriptCandidate", () => {
     ]);
     expect(candidate.warnings).toHaveLength(2);
     expect(candidate.turns).toEqual(turns);
+  });
+});
+
+describe("suggestByAttendees：按飞书参会名单排除法", () => {
+  const source: TTranscriptSource = { format: "miaoji_markdown", fileName: "m.md", sizeBytes: 10, sha256: "a".repeat(64), parserVersion: "miaoji-markdown.v1", timeAnchor: null };
+  const people = [
+    { personId: "p1", displayName: "甲", roles: ["ceo"], sourceRef: "s", updatedAt: "t" },
+    { personId: "p2", displayName: "乙", roles: ["participant"], sourceRef: "s", updatedAt: "t" },
+  ];
+  const turns = [{ speakerName: "甲", offsetSeconds: 1, text: "a" }, { speakerName: "Speaker 1", offsetSeconds: 2, text: "b" }];
+  const base = buildTranscriptCandidate(turns, people, source);
+
+  it("名单里只剩一个人、只有一位通用说话人没对上：对到这个人", () => {
+    const candidate = suggestByAttendees(base, { personIds: ["p1", "p2"], unknown: 0 }, people);
+    expect(candidate.speakers[1]).toMatchObject({ speakerName: "Speaker 1", suggestedPersonId: "p2", suggestedDisplayName: "乙" });
+    expect(candidate.warnings).toEqual(["说话人「Speaker 1」按飞书参会名单对到「乙」"]);
+  });
+
+  it("名单里有天枢外的人、剩下不止一个人、或没对上的不是通用名：不猜", () => {
+    expect(suggestByAttendees(base, { personIds: ["p1", "p2"], unknown: 1 }, people)).toBe(base);
+    expect(suggestByAttendees(base, { personIds: ["p1"], unknown: 0 }, people)).toBe(base);
+    expect(suggestByAttendees(base, null, people)).toBe(base);
+    const named = buildTranscriptCandidate([turns[0], { speakerName: "Nexus", offsetSeconds: 2, text: "b" }], people, source);
+    expect(suggestByAttendees(named, { personIds: ["p1", "p2"], unknown: 0 }, people)).toBe(named);
   });
 });
 
@@ -287,17 +311,12 @@ describe("妙记 Markdown Transcript 候选", () => {
 });
 
 describe("meeting.confirm_transcript_candidate", () => {
-  it("validates the mapping coverage before writing anything", async () => {
+  it("validates the mappings before writing anything; speakers left unmapped no longer block", async () => {
     const t = await newApp();
     try {
       const { cookie, meetingId } = await readyMeeting(t, "confirm-invalid");
       await upload(t, cookie, meetingId, MARKDOWN);
       const confirm = await actionId(t, cookie, meetingId, "meeting.confirm_transcript_candidate");
-
-      const incomplete = await execute(t, cookie, confirm, { speakerMappings: MAPPINGS.slice(0, 2), confirmAddParticipants: true });
-      expect(incomplete.statusCode).toBe(400);
-      expect(incomplete.json().code).toBe("INCOMPLETE_SPEAKER_MAPPING");
-      expect(incomplete.json().fieldErrors).toBeTruthy();
 
       const unknown = await execute(t, cookie, confirm, { speakerMappings: [...MAPPINGS.slice(0, 2), { speakerName: "测试丙", personId: "person-nope" }], confirmAddParticipants: true });
       expect(unknown.json().code).toBe("INVALID_SPEAKER_MAPPING");
@@ -306,6 +325,13 @@ describe("meeting.confirm_transcript_candidate", () => {
       expect(unknownSpeaker.json().code).toBe("INVALID_SPEAKER_MAPPING");
 
       expect((await t.sql("SELECT status, transcript, participants FROM meetings WHERE id = $1", [meetingId]))[0]).toMatchObject({ status: "scheduled", transcript: null });
+
+      // 说话人没全对上也能确认（10/28）：没对上的保留原名、记进 unmappedSpeakers，会议卡上再指定。
+      const partial = await execute(t, cookie, confirm, { speakerMappings: MAPPINGS.slice(0, 2), confirmAddParticipants: true });
+      expect(partial.statusCode).toBe(200);
+      const stored = (await t.sql("SELECT status, transcript FROM meetings WHERE id = $1", [meetingId]))[0];
+      expect(stored.status).toBe("held");
+      expect(stored.transcript.unmappedSpeakers).toEqual([{ id: "speaker:3", name: MAPPINGS[2].speakerName }]);
     } finally {
       await t.close();
     }

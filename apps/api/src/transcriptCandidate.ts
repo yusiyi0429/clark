@@ -37,7 +37,7 @@ export type TranscriptCandidateResult =
   | { status: 200; card: TCard }
   | { status: 400 | 404 | 409; code: string; message: string; fieldErrors?: Record<string, string> };
 
-function projectPerson(person: TPersonResult): TMeetingParticipant {
+export function projectPerson(person: TPersonResult): TMeetingParticipant {
   return { personId: person.personId, displayName: person.displayName, roles: [...person.roles], sourceRef: person.sourceRef, updatedAt: person.updatedAt };
 }
 
@@ -84,6 +84,28 @@ export function buildTranscriptCandidate(
   return { source, createdAt: new Date().toISOString(), speakers, turns, warnings };
 }
 
+const GENERIC_SPEAKER = /^(speaker|说话人)\s*\d+$/i;
+/**
+ * 飞书参会名单排除法（10/27）：按名字对完以后，只剩一个没对上的说话人、名单里也只剩一个没对上的人，而且名单里每个人都认得，就是他。
+ * 只认飞书的泛称（Speaker 1、说话人 1）；别的名字（例如账号名「Nexus」）不猜。对不上就原样返回，留给主持人在会议卡上指定。
+ */
+export function suggestByAttendees(candidate: TStoredTranscriptCandidate, attendees: { personIds: string[]; unknown: number } | null, people: TPersonResult[]): TStoredTranscriptCandidate {
+  if (!attendees || attendees.unknown > 0) return candidate;
+  const open = candidate.speakers.filter((speaker) => !speaker.suggestedPersonId);
+  const named = new Set(candidate.speakers.flatMap((speaker) => speaker.suggestedPersonId ? [speaker.suggestedPersonId] : []));
+  const left = [...new Set(attendees.personIds)].filter((personId) => !named.has(personId));
+  const person = left.length === 1 ? people.find((candidatePerson) => candidatePerson.personId === left[0]) : undefined;
+  if (open.length !== 1 || !person || !GENERIC_SPEAKER.test(open[0].speakerName.trim())) return candidate;
+  const speakerName = open[0].speakerName;
+  return {
+    ...candidate,
+    speakers: candidate.speakers.map((speaker) => speaker.speakerName === speakerName
+      ? { ...speaker, suggestedPersonId: person.personId, suggestedDisplayName: person.displayName } : speaker),
+    warnings: [...candidate.warnings.filter((warning) => !warning.startsWith(`说话人「${speakerName}」`)),
+      `说话人「${speakerName}」按飞书参会名单对到「${person.displayName}」`],
+  };
+}
+
 /**
  * 上传会议记录（md/txt/html/docx/pdf）：认得出说话人的只生成候选并 bump version，不改 status、不跑 Outcome；
  * 认不出说话人的按纪要（「会议纪要」一个说话人）存候选后直接确认，和飞书妙记自动确认一样保留为未对上人的说话人，随即生成会议卡。
@@ -128,7 +150,6 @@ export async function createTranscriptCandidate(
     {
       speakerMappings: candidate.speakers.flatMap((speaker) => speaker.suggestedPersonId ? [{ speakerName: speaker.speakerName, personId: speaker.suggestedPersonId }] : []),
       confirmAddParticipants: true,
-      keepUnmapped: true,
     },
     `meeting-notes:${sha256}:${saved.row.version}`, hostId, { background: true });
   if ("error" in confirmed) return { status: confirmed.error.status as 400 | 404 | 409, code: confirmed.error.code, message: confirmed.error.message };
@@ -189,8 +210,8 @@ export async function saveTranscriptCandidate(
 /**
  * 确认候选：同事务补齐 participants、写标准 Transcript（startedAt = 锁内最新 scheduledAt + offset）、
  * 清候选、status→held、outcome→pending；提交后才启动既有 Outcome Agent。
- * keepUnmapped（只给飞书妙记自动确认用，接口不收）：没映射的说话人不对到人，保留原名记进 unmappedSpeakers，
- * 发言的 speakerId 用合成编号 speaker:<n>（n 是说话人首次出现的次序），不进参会人。
+ * 说话人不用全部对上（10/28）：没映射的不对到人，保留原名记进 unmappedSpeakers，发言的 speakerId 用合成编号 speaker:<n>
+ * （n 是说话人首次出现的次序），不进参会人；会议卡上还能指定是谁，不拦任何事。
  */
 export async function executeConfirmTranscriptCandidate(
   pool: Pool,
@@ -198,7 +219,7 @@ export async function executeConfirmTranscriptCandidate(
   outcomeAgent: PostMeetingAgent,
   secret: string,
   scope: ActionScope,
-  input: { speakerMappings: { speakerName: string; personId: string }[]; confirmAddParticipants: true; keepUnmapped?: boolean },
+  input: { speakerMappings: { speakerName: string; personId: string }[]; confirmAddParticipants: true },
   fingerprint: string,
   hostId?: string,
   /** 上传纪要时：逐字稿确认完就返回，会议卡在后台接着生成（会议页显示「生成会议卡」带用时），不让上传一直转圈。 */
@@ -227,14 +248,9 @@ export async function executeConfirmTranscriptCandidate(
       mappingBySpeaker.set(mapping.speakerName, mapping.personId);
       usedPersonIds.add(mapping.personId);
     }
-    const unmappedSpeakers: TUnmappedSpeaker[] = input.keepUnmapped
-      ? candidate.speakers.flatMap((speaker, index) => mappingBySpeaker.has(speaker.speakerName) ? [] : [{ id: `speaker:${index + 1}`, name: speaker.speakerName }])
-      : [];
+    const unmappedSpeakers: TUnmappedSpeaker[] = candidate.speakers.flatMap((speaker, index) =>
+      mappingBySpeaker.has(speaker.speakerName) ? [] : [{ id: `speaker:${index + 1}`, name: speaker.speakerName }]);
     for (const speaker of unmappedSpeakers) mappingBySpeaker.set(speaker.name, speaker.id);
-    const missing = [...known].filter((speakerName) => !mappingBySpeaker.has(speakerName));
-    if (missing.length > 0) {
-      return { error: { status: 400, code: "INCOMPLETE_SPEAKER_MAPPING", message: `缺少说话人映射：${missing.join("、")}`, fieldErrors: { speakerMappings: "missing mapping" } } };
-    }
 
     const existingIds = new Set(row.participants.map((participant) => participant.personId));
     const added = [...usedPersonIds].filter((personId) => !existingIds.has(personId)).map((personId) => projectPerson(personById.get(personId)!));

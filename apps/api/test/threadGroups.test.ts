@@ -136,7 +136,8 @@ describe("议题与会议群", () => {
       expect(agentObject?.payload).not.toHaveProperty("recording");
       expect(agentObject?.payload).not.toHaveProperty("transcript");
       expect((agentObject?.payload as { transcriptCandidate?: unknown } | undefined)?.transcriptCandidate).toBeNull();
-      expect((agentObject?.payload as { preflight?: unknown } | undefined)?.preflight).not.toHaveProperty("entries");
+      // 主持人的 Agent 看完整预审，但不含一号位追问。
+      expect((agentObject?.payload as { preflight: { entries: { kind: string }[] } } | undefined)?.preflight.entries.some((entry) => entry.kind === "leader_lens")).toBe(false);
       expect((await t.app.inject({ method: "GET", url: "/api/me/meetings", headers: { cookie: member } })).json().meetings[0]).toMatchObject({ meetingId: id, href: `/me/meetings/${id}` });
       expect((await t.app.inject({ method: "POST", url: `/api/threads/meeting/${id}/leave`, headers: { cookie: member, origin: t.publicOrigin } })).statusCode).toBe(409);
       expect((await t.app.inject({ method: "POST", url: `/api/threads/meeting/${id}/leave`, headers: { cookie: ceo, origin: t.publicOrigin } })).statusCode).toBe(204);
@@ -180,6 +181,12 @@ describe("议题与会议群", () => {
     for (const key of ["draft", "recording", "transcript", "transcriptCandidate", "originRef", "issueIds"]) expect(payload).not.toHaveProperty(key);
     expect(payload.preflight).not.toHaveProperty("entries");
     expect(JSON.stringify(payload)).not.toMatch(/private-key|private-hash|材料解析全文|私有编辑|私有请求|CEO 备注|逐字稿|未确认|CEO 战略项|CEO 来源/);
+
+    // 主持人和受邀参会人看完整预审，一号位追问和 CEO 的私有编辑仍不给。
+    row.preflight.entries.push({ id: "core", kind: "core_judgment", title: "预算可批", body: "依据充分", sourceRefs: [] });
+    const invited = projectMemberMeetingCard(row, "test-secret", TEST_MEMBER.personId).payload as { preflight: { entries: { id: string }[] } };
+    expect(invited.preflight.entries.map((entry) => entry.id)).toEqual(["core"]);
+    expect(JSON.stringify(invited)).not.toMatch(/不公开|私有编辑|CEO 备注/);
   });
 
   it("会议更换主持人时把新主持人同步进群", async () => {

@@ -61,7 +61,7 @@ export function WeeklyReviewBoard({ onNavigate, state }: { onNavigate: Navigate;
 
   return <HeroCard<"section"> render={(props) => <section {...props} />} className={n.card} data-notice="weekly-review" aria-label="周复盘">
     <HeroCard.Header<"header"> render={(props) => <header {...props} />} className={n.glassHeader}>
-      <ContextMark kind="monthly" className={n.glyph} />
+      <ContextMark kind="review" className={n.glyph} />
       <span className={n.identity}>
         <strong>周复盘<b className={`${n.count} ${b.ratio}`} aria-label={`已提交 ${board.counts.submitted} / ${board.counts.total}`}>{board.counts.submitted}/{board.counts.total}</b></strong>
         <small className={w.week}>

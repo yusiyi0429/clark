@@ -10,7 +10,7 @@ import { MINUTES_GIVE_UP_MS, MINUTES_RECENT_MS, minutesStatusOf } from "./meetin
 import { getMeetingRow, meetingColumns, type MeetingRow, type Query } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
 import type { PostMeetingAgent } from "./outcome.js";
-import { buildTranscriptCandidate, executeConfirmTranscriptCandidate, saveTranscriptCandidate } from "./transcriptCandidate.js";
+import { buildTranscriptCandidate, executeConfirmTranscriptCandidate, saveTranscriptCandidate, suggestByAttendees } from "./transcriptCandidate.js";
 import { capturedAtOf, transcriptContentHash } from "./transcriptHash.js";
 import { FEISHU_TRANSCRIPT_PARSER_VERSION, parseFeishuTranscriptText } from "./transcriptMarkdown.js";
 
@@ -67,6 +67,13 @@ type FeishuIdentity = { person_id: string; open_id: string; name: string | null 
 type IngestResult = { kind: "ready" | "failed" | "taken" } | { kind: "rejected"; status: 404 | 409; code: string; message: string };
 /** 代读结果：text 是飞书原文；contentHash 算它，confirmedContentHash 是确认时那份逐字稿来源记下的（没有为 null）。 */
 type TranscriptRead = { meetingId: string; source: { url: string | null; title: string }; text: string; contentHash: string; confirmedContentHash: string | null };
+const SHANGHAI_MINUTE = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+/** 「10/26 16:03」：北京时间。 */
+function monthDayTime(at: Date): string {
+  const parts = Object.fromEntries(SHANGHAI_MINUTE.formatToParts(at).map((part) => [part.type, part.value]));
+  return `${Number(parts.month)}/${Number(parts.day)} ${parts.hour}:${parts.minute}`;
+}
+
 type MinutesFetchResult = TMeetingMinutesFetchResponse | { error: { status: 400 | 404 | 409; code: string; message: string } };
 
 /** 飞书错误码归到读取失败的原因（待联调：按开放平台妙记错误码，2091002 / 2091004 不存在或已删，2091005 与 99991672 / 99991679 没权限）。 */
@@ -220,12 +227,13 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
   }
 
   /** 实际参会名单：飞书会议的参会人 open_id 换成天枢的人；一个都对不上时不改（退回手填名单）。 */
-  async function actualAttendees(token: string, feishuMeetingId: string): Promise<string[] | null> {
+  /** 飞书会议的实际参会人：认得的（连过飞书的）换成 person_id，认不得的只记个数（排除法要求名单里每个人都认得）。 */
+  async function actualAttendees(token: string, feishuMeetingId: string): Promise<{ personIds: string[]; unknown: number } | null> {
     if (!feishu) return null;
     const openIds = await feishu.api.meetingParticipants(token, feishuMeetingId).catch(() => [] as string[]);
     if (!openIds.length) return null;
-    const mapped = (await q("SELECT person_id FROM feishu_identities WHERE open_id = ANY($1::text[]) ORDER BY person_id", [openIds])).rows.map((row) => row.person_id as string);
-    return mapped.length ? mapped : null;
+    const rows = (await q("SELECT open_id, person_id FROM feishu_identities WHERE open_id = ANY($1::text[]) ORDER BY person_id", [openIds])).rows as { open_id: string; person_id: string }[];
+    return { personIds: rows.map((row) => row.person_id), unknown: openIds.filter((openId) => !rows.some((row) => row.open_id === openId)).length };
   }
 
   /** 说话人对人：人员目录的显示名之外，再认飞书账号的名字。 */
@@ -286,7 +294,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     if (!parsed.ok) return fail(meeting.id, "fetch_failed", `妙记逐字稿解析失败：${parsed.error.message}`);
     const meetingRef = feishuMeetingId ?? minute.meetingId;
     const attendees = meetingRef ? await actualAttendees(token, meetingRef) : null;
-    if (attendees) await q("UPDATE meetings SET attendees_actual = $2::jsonb WHERE id = $1", [meeting.id, JSON.stringify(attendees)]);
+    if (attendees?.personIds.length) await q("UPDATE meetings SET attendees_actual = $2::jsonb WHERE id = $1", [meeting.id, JSON.stringify(attendees.personIds)]);
 
     const bytes = Buffer.from(text, "utf8");
     const title = minute.title || meeting.title;
@@ -302,7 +310,8 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
       contentHash: transcriptContentHash(text),
       capturedAt,
     };
-    const candidate = buildTranscriptCandidate(parsed.transcript.turns, await peopleWithFeishuNames(), source);
+    const people = await peopleWithFeishuNames();
+    const candidate = suggestByAttendees(buildTranscriptCandidate(parsed.transcript.turns, people, source), attendees, people);
     const saved = await saveTranscriptCandidate(pool, meeting.id, candidate, undefined, { keepExisting: !manual });
     if (!("row" in saved)) {
       await q("UPDATE meetings SET minute_token = $3 WHERE id = $1 AND minute_token = $2", [meeting.id, minute.token, meeting.minute_token]);
@@ -320,7 +329,6 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
       {
         speakerMappings: candidate.speakers.flatMap((speaker) => speaker.suggestedPersonId ? [{ speakerName: speaker.speakerName, personId: speaker.suggestedPersonId }] : []),
         confirmAddParticipants: true,
-        keepUnmapped: true,
       },
       `feishu-minutes:${minute.token}`);
     return { kind: "ready" };
@@ -478,9 +486,17 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     return meeting && (meeting.lead_dri_id === viewerId || (meeting.created_by ?? meeting.lead_dri_id) === viewerId) ? meeting : null;
   }
 
-  async function respond(meetingId: string, result: IngestResult): Promise<MinutesFetchResult> {
+  /** 妙记已经对到别的会上：说出是哪场会（会名和开会时刻），对不上就只说已经用过。 */
+  async function takenMessage(meetingId: string, minuteToken: string | undefined): Promise<string> {
+    const other = minuteToken
+      ? (await q("SELECT title, scheduled_at FROM meetings WHERE minute_token = $1 AND id <> $2 LIMIT 1", [minuteToken, meetingId])).rows[0] as { title: string; scheduled_at: Date } | undefined
+      : undefined;
+    return other ? `这份妙记已经用在「${other.title}」（${monthDayTime(other.scheduled_at)}）上了，一份妙记只能对一场会` : "这份妙记已经用在别的会上了，一份妙记只能对一场会";
+  }
+
+  async function respond(meetingId: string, result: IngestResult, minuteToken?: string): Promise<MinutesFetchResult> {
     if (result.kind === "rejected") return { error: { status: result.status, code: result.code, message: result.message } };
-    if (result.kind === "taken") return { error: { status: 409, code: "MINUTE_TAKEN", message: "这份妙记已经对到别的会上了" } };
+    if (result.kind === "taken") return { error: { status: 409, code: "MINUTE_TAKEN", message: await takenMessage(meetingId, minuteToken) } };
     const row = (await getMeetingRow(q, meetingId))!;
     const status = minutesStatusOf(row);
     return { minutesStatus: status, minutesFailure: status === "failed" ? row.minutes_failure ?? null : null };
@@ -514,7 +530,7 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
     if (meeting.status !== "scheduled") return { error: NOT_SCHEDULED };
     const readers = await fetchers(meeting);
     if (!feishu || !readers.length) return respond(meeting.id, await fail(meeting.id, "no_permission", NO_AUTH));
-    return respond(meeting.id, await ingestByToken(feishu.api, meeting, readers, minuteToken, true));
+    return respond(meeting.id, await ingestByToken(feishu.api, meeting, readers, minuteToken, true), minuteToken);
   }
 
   /**

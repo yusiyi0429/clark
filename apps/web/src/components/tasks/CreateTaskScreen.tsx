@@ -167,7 +167,7 @@ export function CreateTaskScreen() {
           <div className={c.link}>
             <div className={c.switchRow}>
               <span className={c.switchText}>
-                <span id="create-task-link">挂在 Mission 下</span>
+                <span id="create-task-link">所属 Mission</span>
                 {loading ? <small>正在读取你的 Mission…</small> : linked ? null : <small>独立事项</small>}
               </span>
               <button type="button" role="switch" aria-checked={linked} aria-labelledby="create-task-link" className={c.switch} disabled={loading} onClick={toggle} autoFocus><span aria-hidden /></button>
@@ -180,10 +180,10 @@ export function CreateTaskScreen() {
             </div> : null}
             {linked && missions.length === 1 ? <p className={c.only}>{missions[0].title}<small>{missions[0].battlefield}</small></p> : null}
           </div>
-          {taskOptions.length ? <div className={c.field} role="group" aria-label="挂到 Task">
-            <span className={c.label}>挂到 Task</span>
+          {taskOptions.length ? <div className={c.field} role="group" aria-label="所属 Task">
+            <span className={c.label}>所属 Task</span>
             <div className={c.chips}>
-              {[{ taskId: "", name: "不挂" }, ...taskOptions].map((task) => <button key={task.taskId || "none"} type="button" className={`${c.chip} ${c.taskChip}`} title={task.name}
+              {[{ taskId: "", name: "不指定" }, ...taskOptions].map((task) => <button key={task.taskId || "none"} type="button" className={`${c.chip} ${c.taskChip}`} title={task.name}
                 data-on={planTaskId === task.taskId || undefined} aria-pressed={planTaskId === task.taskId} onClick={() => change(setPlanTaskId, task.taskId)}><span>{task.name}</span></button>)}
             </div>
           </div> : null}

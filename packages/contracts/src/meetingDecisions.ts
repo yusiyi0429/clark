@@ -155,10 +155,9 @@ export const WorldAnchorOption = Type.Object(
 export const MeetingWorldAnchorOptionsResponse = Type.Object({ options: Type.Array(WorldAnchorOption) }, { additionalProperties: false });
 
 /**
- * 我要处理的会议记录（通知栏置顶，一场会一条）：我是主持人或创建人、草稿已生成的会里，
- * pending 还没确认过、edit_pending 确认后又改了、failed 写入失败。提醒只提示，不改状态。
+ * 我要处理的会议记录（通知栏，一场会一条）：记录正文不用确认（10/28），只剩我主持或创建的会里写入失败的（failed，卡上重试）。
  */
-export const MyMeetingCardStatus = Type.Union([Type.Literal("pending"), Type.Literal("edit_pending"), Type.Literal("failed")]);
+export const MyMeetingCardStatus = Type.Literal("failed");
 export const MyMeetingCard = Type.Object(
   {
     meetingId: Type.String({ minLength: 1 }),
@@ -169,7 +168,22 @@ export const MyMeetingCard = Type.Object(
   },
   { additionalProperties: false },
 );
-export const MyMeetingCardsResponse = Type.Object({ meetings: Type.Array(MyMeetingCard) }, { additionalProperties: false });
+/**
+ * 等我确认的一条（通知栏「会后确认」，一次只看一条）：我是责任人（没有责任人时我是主持人）的决策（还没冻结的会）和行动项。
+ * text 是决策或事项本身；title 是来自的那场会。
+ */
+export const MyMeetingConfirm = Type.Object(
+  {
+    meetingId: Type.String({ minLength: 1 }),
+    title: Type.String({ minLength: 1 }),
+    kind: Type.Union([Type.Literal("decision"), Type.Literal("action")]),
+    id: Type.String({ minLength: 1 }),
+    text: Type.String({ minLength: 1 }),
+    dueDate: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+export const MyMeetingCardsResponse = Type.Object({ meetings: Type.Array(MyMeetingCard), confirms: Type.Array(MyMeetingConfirm) }, { additionalProperties: false });
 
 export type TMeetingMinutesStatus = Static<typeof MeetingMinutesStatus>;
 export type TMeetingMinutesFailure = Static<typeof MeetingMinutesFailure>;
@@ -182,6 +196,7 @@ export type TMeetingDecisionRecommendation = Static<typeof MeetingDecisionRecomm
 export type TMeetingDecisionView = Static<typeof MeetingDecisionView>;
 export type TMyMeetingCardStatus = Static<typeof MyMeetingCardStatus>;
 export type TMyMeetingCard = Static<typeof MyMeetingCard>;
+export type TMyMeetingConfirm = Static<typeof MyMeetingConfirm>;
 export type TMyMeetingCardsResponse = Static<typeof MyMeetingCardsResponse>;
 export type TWorldAnchor = Static<typeof WorldAnchor>;
 export type TWorldAnchorOption = Static<typeof WorldAnchorOption>;

@@ -2,13 +2,14 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DECISION_QUESTION_MAX_LENGTH, PreflightReviewEntryKind } from "@warmap/contracts";
+import { DECISION_QUESTION_MAX_LENGTH, PreflightCandidate } from "@warmap/contracts";
 import {
-  LEADER_LENS_FORBIDDEN_TEXT,
-  LEADER_LENS_MAX,
-  MEETING_QUESTION_MAX,
-  MEETING_QUESTION_MIN_OPTIONS,
-  PREFLIGHT_ENTRY_KINDS,
+  PREFLIGHT_DECISIONS_MAX,
+  PREFLIGHT_GAPS_MAX,
+  PREFLIGHT_LENGTH,
+  PREFLIGHT_OPTIONS_MAX,
+  PREFLIGHT_OPTIONS_MIN,
+  PREFLIGHT_QUESTIONS_MAX,
 } from "../src/promptRules.js";
 import { ADDRESS_STYLE, findForbiddenPhrase, HUMAN_WRITING_STYLE } from "../src/promptStyle.js";
 import { PERSONAL_REVIEW_DRAFT_PROMPT } from "../src/personalReviewAgent.js";
@@ -45,18 +46,13 @@ describe("turn-phrase validation", () => {
 
 describe("shared rules reach the prompts", () => {
   it("preflight prompt carries the constant caps and phrases, without any question quota", () => {
-    expect(PREFLIGHT_PROMPT).toContain(`meeting_question 最多 ${MEETING_QUESTION_MAX} 条，leader_lens 最多 ${LEADER_LENS_MAX} 条`);
-    expect(PREFLIGHT_PROMPT).toContain(`meeting_question 至少 ${MEETING_QUESTION_MIN_OPTIONS} 条`);
-    expect(PREFLIGHT_PROMPT).toContain("数量没有下限");
-    expect(PREFLIGHT_PROMPT).not.toMatch(/meeting_question 必须 \d/);
-    expect(PREFLIGHT_PROMPT).not.toMatch(/leader_lens 必须 \d/);
-    expect(PREFLIGHT_PROMPT).toContain("whyNow");
-    expect(PREFLIGHT_PROMPT).toContain("whyCeo");
-    expect(PREFLIGHT_PROMPT).toContain("material:<id>@v<版本>");
-    expect(PREFLIGHT_PROMPT).toContain("discussion:<id>");
-    expect(PREFLIGHT_PROMPT).toContain("decision:<id>");
-    expect(PREFLIGHT_PROMPT).toContain(PREFLIGHT_ENTRY_KINDS.join("、"));
-    expect(PREFLIGHT_PROMPT).toContain(`禁止出现${LEADER_LENS_FORBIDDEN_TEXT}`);
+    expect(PREFLIGHT_PROMPT).toContain(`questions 写一到 ${PREFLIGHT_QUESTIONS_MAX} 个`);
+    expect(PREFLIGHT_PROMPT).toContain(`decisions 写零到 ${PREFLIGHT_DECISIONS_MAX} 个`);
+    expect(PREFLIGHT_PROMPT).toContain(`gaps 写一到 ${PREFLIGHT_GAPS_MAX} 句`);
+    expect(PREFLIGHT_PROMPT).toContain(`每条写 ${PREFLIGHT_OPTIONS_MIN} 到 ${PREFLIGHT_OPTIONS_MAX} 个 options`);
+    expect(PREFLIGHT_PROMPT).toContain(`headline 不超过 ${PREFLIGHT_LENGTH.headline} 字`);
+    expect(PREFLIGHT_PROMPT).not.toMatch(/decisions 必须 \d/);
+    for (const text of ["whyNow", "whyCeo", "changeIf", "material:<id>@v<版本>", "discussion:<id>", "decision:<id>"]) expect(PREFLIGHT_PROMPT).toContain(text);
   });
 
   it("radar prompt carries the contract decisionQuestion limit", () => {
@@ -83,9 +79,13 @@ describe("shared rules reach the prompts", () => {
     }
   });
 
-  it("PREFLIGHT_ENTRY_KINDS matches the contract union", () => {
-    const contractKinds = PreflightReviewEntryKind.anyOf.map((schema) => (schema as { const: string }).const);
-    expect([...PREFLIGHT_ENTRY_KINDS]).toEqual(contractKinds);
+  it("preflight caps in the prompt match the candidate contract", () => {
+    const { questions, decisions, gaps } = PreflightCandidate.properties;
+    expect(questions.maxItems).toBe(PREFLIGHT_QUESTIONS_MAX);
+    expect(decisions.maxItems).toBe(PREFLIGHT_DECISIONS_MAX);
+    expect(gaps.maxItems).toBe(PREFLIGHT_GAPS_MAX);
+    expect(decisions.items.properties.options.minItems).toBe(PREFLIGHT_OPTIONS_MIN);
+    expect(decisions.items.properties.options.maxItems).toBe(PREFLIGHT_OPTIONS_MAX);
   });
 });
 

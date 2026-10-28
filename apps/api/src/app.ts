@@ -11,6 +11,9 @@ import { createCompanyContext, type CompanyContextEnv } from "./companyContext.j
 import { createPersonalMemory } from "./personalMemory.js";
 import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
+import { createChatService } from "./chatService.js";
+import { createConversationDigests, recordChatSegment } from "./conversationDigests.js";
+import { createConversationRecall } from "./conversationRecall.js";
 import { registerPersonalMemoryRoutes } from "./routes/personalMemory.js";
 import { registerMemoryImportRoutes } from "./routes/memoryImports.js";
 import { createMemoryImports } from "./memoryImports.js";
@@ -34,7 +37,7 @@ import { agentModel, type AgentModelEnv } from "./agentModels.js";
 import type { PostMeetingAgent } from "./outcome.js";
 import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
 import { companyPeriod } from "./monthlyPlans.js";
-import { createWorldReader, mergeWorldGoalsIntoContext, ontologyToolResult, type OntologyQuery } from "./worldReader.js";
+import { WORLD_READ_TIMEOUT_MS, createWorldReader, mergeWorldGoalsIntoContext, ontologyToolResult, type OntologyQuery } from "./worldReader.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
 import type { DriExporter, Query } from "./meetingStore.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
@@ -47,6 +50,9 @@ import { clientTagFor, enterRequestClient, tracingEnabled } from "./tracing.js";
 import type { FeishuEnv } from "./feishu/config.js";
 import { createFeishuClient, type FeishuClient } from "./feishu/client.js";
 import { createFeishuChat, type FeishuChat } from "./feishuChat.js";
+import { createIlink, type Ilink } from "./wechat/ilink.js";
+import { createWechatService, type WechatService } from "./wechat/service.js";
+import { registerWechatRoutes } from "./routes/wechat.js";
 import { registerFeishuAuthRoutes } from "./routes/feishu.js";
 import { createMeetingFollowThrough, type MeetingFollowThrough } from "./meetingFollowThrough.js";
 import type { ImpactAgent } from "./impactAgent.js";
@@ -140,6 +146,16 @@ function worldPlanTaskSource(q: Query, env: AppEnv, mainReads: boolean): PlanTas
   return createWorldPlanTaskSource(clients[0], { scopes });
 }
 
+/** 会前预审读挂点内容用的本体客户端（只读 GET，每次 8 秒）：本体没配或配置不对时不给，预审照常跑。 */
+function preflightWorld(q: Query, env: AppEnv): WorldClient | undefined {
+  if (!worldConfigured(env)) return undefined;
+  try {
+    return new WorldClient(q, env, undefined, { timeoutMs: WORLD_READ_TIMEOUT_MS });
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * 一轮对话的绝对上限：只防死循环，不用来截断正常的长回答（10/13 起取消 180 秒硬上限）。
  * 是否卡住按进展判断：一次模型调用连续 90 秒没有任何新事件就就地恢复（conversationRecovery.ts），
@@ -185,6 +201,12 @@ export type AppEnv = {
    * 用 INTERNAL_CHAT_TOKEN 转发本人身份；不设走天枢自己的对话。对象页的对话不受影响。
    */
   chatServiceUrl?: string;
+  /** 微信 ClawBot（WECHAT_ENABLED=1 才开，还要接了飞书）：10/28 生产先不上。 */
+  wechatEnabled?: boolean;
+  /** 首页分段（CHAT_SESSION_ROTATION=1 才开）：首页的 Chat 对话闲置满 12 小时或跨过凌晨 4 点新开一段；回看先经首页卡里的「以前的对话」交给 Chat。 */
+  chatSessionRotation?: boolean;
+  /** 天枢页面的对话分段（CONVERSATION_SEGMENTS=1 才开；关着时照旧闲置 12 小时重开）。 */
+  conversationSegments?: boolean;
   buildSha: string;
   piBaseUrl: string;
   piApiKey: string;
@@ -222,6 +244,8 @@ export type AppEnv = {
   adminPersonIds?: string[];
   /** 飞书网页域名（FEISHU_WEB_ORIGIN）：会议事件里拼妙记链接用；不配时不带链接。 */
   feishuWebOrigin?: string;
+  /** 会议记录正文（摘要、正文段落）能不能随会议事件写进本体（MEETING_WORLD_RECORD_TEXT=1，等斯一答复）：缺省不能，只写已确认的决策和行动项，没有决策的会不写。 */
+  meetingRecordText?: boolean;
   /** ③ 信息收集的飞书多维表格：live 以发起人身份调开放接口（要先在飞书后台开通 base 权限，见 feishu/bitable.ts）；缺省 mock，不调飞书（FEISHU_BITABLE_MODE）。 */
   collectionBitable?: "live" | "mock";
   /** ③ 信息收集（COLLECTIONS_ENABLED=1 才开，D-56）：关着时不接收集路由、不跑每分钟的收集任务、对话里没有「发起信息收集」，定时任务里不列收集项。 */
@@ -243,6 +267,8 @@ declare module "fastify" {
     /** 会后分派的归位（task.place）；server.ts 注册给 jobs worker。 */
     taskPlacementJobs: Record<string, JobHandler>;
     feishuChat: FeishuChat | undefined;
+    /** 微信 ClawBot；server.ts 启动后调 start() 开始收消息和推送。没接飞书（借用它的令牌密钥）时为空。 */
+    wechat: WechatService | undefined;
   }
 }
 
@@ -251,6 +277,7 @@ export async function buildApp({
   env,
   conversationRuntime,
   personalDistillationStream,
+  conversationDigestStream,
   personalMemoryRecall,
   memoryImportModel,
   radarService,
@@ -280,6 +307,8 @@ export async function buildApp({
   webSearch,
   outlets,
   feishuClient,
+  wechatIlink,
+  wechatAvatar,
   meetingFollowThroughAgents,
   docChangeAgent,
   battlefieldSummaryAgent,
@@ -297,6 +326,8 @@ export async function buildApp({
   conversationRuntime?: ConversationRuntime;
   /** 个人记忆提炼用的模型流（测试注入假实现）；不给时按 PI_BASE_URL 调 light 模型。 */
   personalDistillationStream?: Parameters<typeof createPersonalDistillation>[0]["streamSimple"];
+  /** 会话纪要用的模型流（测试注入假实现）；不给时按 PI_BASE_URL 调 CONVERSATION_DIGEST_MODEL（不配时 LIGHT_MODEL）。 */
+  conversationDigestStream?: Parameters<typeof createConversationDigests>[0]["streamSimple"];
   /** 个人记忆的召回模型（测试注入替身，null 表示不用模型、只按字面重合选）；不给时按 PI_BASE_URL 调分诊用的快模型。 */
   personalMemoryRecall?: MemoryRecall | null;
   /** 记忆导入的分类与去重模型（测试注入替身）；不给时按 PI_BASE_URL 调 MEMORY_IMPORT_MODEL（不配时 LIGHT_MODEL）。 */
@@ -344,6 +375,10 @@ export async function buildApp({
   outlets?: RadarOutletAdapter;
   /** 飞书开放接口；缺省按 env.feishu 装配真实客户端（测试注入假实现）。 */
   feishuClient?: FeishuClient;
+  /** 微信 ClawBot 的 iLink 接口；缺省用真实接口（测试注入假实现）。 */
+  wechatIlink?: Ilink;
+  /** 连上微信后发的天枢头像图；缺省读网页的应用图标（测试注入）。 */
+  wechatAvatar?: () => Promise<Buffer>;
   /** 影响卡追问、妙记与日历接口（测试注入假实现）；缺省用 heavy 模型与真实飞书接口。 */
   meetingFollowThroughAgents?: { impact?: ImpactAgent; minutesApi?: FeishuMinutesApi; calendarApi?: FeishuCalendarApi };
   /** 文档变更找候选的 Agent（测试注入假实现）；缺省用快模型。 */
@@ -384,6 +419,8 @@ export async function buildApp({
     translateThought: env.piBaseUrl && env.piApiKey
       ? createPreflightThoughtTranslator({ baseUrl: env.piBaseUrl, apiKey: env.piApiKey, ...fastModels })
       : undefined,
+    // 挂点里长期目标、本月目标的内容按挂点定向读本体（只读）；本体没配时挂点只有名称和天枢里的 Mission。
+    world: preflightWorld(pool.query.bind(pool), env),
   }), background: backgroundPreflight };
   // 会后提取：OUTCOME_MODEL / OUTCOME_THINKING 可改，不配时 HEAVY_MODEL、不开思考（agentModels.ts）。
   const outcome = outcomeAgent ?? createPostMeetingAgent({
@@ -428,6 +465,13 @@ export async function buildApp({
     ?? (env.piBaseUrl && env.piApiKey ? createMemoryImportModel({ query: pool.query.bind(pool), baseUrl: env.piBaseUrl, apiKey: env.piApiKey, personId, ...importModelChoice }) : null) });
   const personalDistillation = createPersonalDistillation({ pool, memory: personalMemory, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
     modelId: env.lightModel, streamSimple: personalDistillationStream });
+  // 首页走独立 Chat 时只建这一个客户端（首页分段的「人 × 视角」互斥在它里面）；转发的每一句记下进了哪一段，纪要据此去读。
+  const chat = env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken, rotation: env.chatSessionRotation === true,
+    onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment) }) : undefined;
+  // 会话纪要（后台，CONVERSATION_DIGEST_MODEL / CONVERSATION_DIGEST_THINKING，不配时 LIGHT_MODEL、不开思考）与回看。
+  const conversationDigests = createConversationDigests({ pool, chat, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
+    ...agentModel(env.agentModels, "conversationDigest", { modelId: env.lightModel }), streamSimple: conversationDigestStream });
+  const conversationRecall = createConversationRecall({ q: pool.query.bind(pool), chat });
   const runtime = conversationRuntime ?? await createPiConversationRuntime({
     peopleDirectory,
     company: company.company,
@@ -643,6 +687,9 @@ export async function buildApp({
 
   personalDistillation.start();
   app.addHook("onClose", async () => personalDistillation.close());
+  // 会话纪要只给分段用：两个分段开关都关着时不跑后台（合进来不生效，也不调模型）。
+  if (env.conversationSegments === true || env.chatSessionRotation === true) conversationDigests.start();
+  app.addHook("onClose", async () => conversationDigests.close());
 
   const ctx: RouteContext = {
     world,
@@ -654,6 +701,8 @@ export async function buildApp({
     company,
     personalMemory,
     personalDistillation,
+    chat,
+    conversationRecall,
     preflight,
     outcome,
     runtime,
@@ -759,6 +808,16 @@ export async function buildApp({
   const feishuChat = feishuApi ? createFeishuChat({ app, pool, client: feishuApi, env, peopleDirectory }) : undefined;
   app.decorate("feishuChat", feishuChat);
   if (feishuChat) app.addHook("onClose", async () => { await feishuChat.idle(); });
+  // 微信 ClawBot（wechat/）：本人扫码后在微信里问天枢、收通知。bot token 用飞书的令牌密钥加密，所以接了飞书才开。
+  const wechat = env.feishu && env.wechatEnabled ? createWechatService({
+    app, pool, ilink: wechatIlink ?? createIlink(), avatar: wechatAvatar, peopleDirectory,
+    env: { sessionSecret: env.sessionSecret, publicOrigin: env.publicOrigin, tokenKey: env.feishu.tokenKey, tokenKeyVersion: env.feishu.tokenKeyVersion },
+  }) : undefined;
+  app.decorate("wechat", wechat);
+  if (wechat) {
+    registerWechatRoutes(app, ctx, wechat);
+    app.addHook("onClose", async () => { await wechat.close(); });
+  }
 
   return app;
 }

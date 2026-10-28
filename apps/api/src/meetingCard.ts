@@ -3,31 +3,36 @@ import { Value } from "@sinclair/typebox/value";
 import {
   MeetingCardCandidate,
   MeetingCardDraftRequest,
+  MeetingCardSpeakerRequest,
   type TMeetingActionItem,
   type TMeetingCardCandidate,
+  type TMeetingCardDecision,
   type TMeetingCardDraft,
   type TMeetingCardTargetOption,
   type TMeetingCardView,
   type TMeetingObjectChange,
   type TMeetingSource,
   type TMyMeetingCard,
+  type TMyMeetingConfirm,
+  type TPersonResult,
+  type TStoredTranscript,
 } from "@warmap/contracts";
-import { confirmedView, currentConfirmation, draftChangeOf, meetingRecordState } from "./meetingCardConfirm.js";
-import { feishuNotifier, type FeishuNotify } from "./feishu/notify.js";
+import { enqueueJob } from "./jobs.js";
+import { confirmedView, currentConfirmation, draftChangeOf, MEETING_CARD_FREEZE_KIND, meetingRecordState, PENDING_REVIEW } from "./meetingCardConfirm.js";
 import { attendeesOf } from "./meetingDecisionView.js";
 import { getMeetingRow, type MeetingRow, type Query } from "./meetingStore.js";
 import { appliedChanges, type AppliedChanges } from "./meetingObjectSync.js";
 import { meetingAnchorGroups } from "./meetingWorld.js";
-import { insertNotification } from "./notifications.js";
 import { logEvent } from "./observability.js";
 import { capturedAtOf, meetingTranscriptUrl, transcriptContentHash } from "./transcriptHash.js";
-import { shanghaiLabel } from "./workdays.js";
+import { projectPerson } from "./transcriptCandidate.js";
 import type { WorldClient } from "./worldClient.js";
 import { anchorHead, recordedStart, type AnchorHeadClient } from "./worldMeetingEvent.js";
 
 /**
  * 会议卡草稿（FR-4.3–4.5）：逐字稿确认后生成一张统一会议卡草稿，取代会后逐条抽取。
- * - 模型只填摘要、按议题的正文段落、拟修改内容和行动项；ID、来源、参会人、挂点对象、时间、修改的原内容和版本由这里填写或核验。
+ * - 模型只填摘要、按议题的正文段落、决策、拟修改内容和行动项；ID、来源、参会人、挂点对象、时间、修改的原内容和版本由这里填写或核验。
+ * - 决策和行动项逐条待确认（10/28）：生成时排一次 48 小时后的冻结（meetingCardConfirm.ts）；记录正文不用确认，也不再提醒主持人。
  * - 修改只能定到挂点对象里有文字的组件（拍板 5），targetRef 是「<对象 id>#<块 id>/<组件 id>」，不在候选里的当目标未定。
  * - 主持人或创建人带 draftVersion 整份保存；读卡时目标对象版本变了，重读原内容、标 stale、草稿版本加一。
  * - 本体读失败不拦着生成和读卡：读不到的对象不给候选、不刷新。
@@ -42,12 +47,17 @@ export type MeetingCardDeps = {
   publicOrigin?: string;
   /** 参会人的显示名（会议成员里没有的人从人员目录取）。 */
   names?: () => Map<string, string>;
-  /** 配了飞书：草稿好了的提醒同时推飞书。 */
-  feishuNotify?: boolean;
+  /** 人员目录：在会议卡上把说话人指定给某人时，按它补进参会人。 */
+  people?: () => TPersonResult[];
+  /** 记录正文能不能写进本体（等斯一答复，MEETING_WORLD_RECORD_TEXT）：能时，没有决策的会生成后直接冻结写入。 */
+  recordText?: boolean;
 };
 export type Viewer = { personId: string; isCeo: boolean };
 type CardError = { status: number; code: string; message: string; fieldErrors?: Record<string, string>; view?: TMeetingCardView };
-type CardRow = { draft: TMeetingCardDraft | null; action_items: TMeetingActionItem[]; draft_version: number; draft_status: "created" | "draft_ready" };
+type CardRow = {
+  draft: TMeetingCardDraft | null; action_items: TMeetingActionItem[]; draft_version: number; draft_status: "created" | "draft_ready";
+  decisions: TMeetingCardDecision[] | null; write_to_world: boolean;
+};
 
 /** 会后整理（runOutcome）按池取装配好的依赖；app 在 createMeetingFollowThrough 里注册。 */
 const registered = new WeakMap<Pool, MeetingCardDeps>();
@@ -186,10 +196,12 @@ export function stripEmphasis(text: string): string {
 }
 
 /**
- * 模型候选 → 草稿和行动项：段落编号 sec-N，turnId 换成出处（连着的发言并成一处）；修改编号 chg-N，目标不在候选里的当未定；
- * 行动项编号 act-N，负责人不是这场会的人、日期不合法的当没填；依据段落序号换成段落 id，指不到的丢掉。候选不合 schema 返回 null。
+ * 模型候选 → 草稿、决策和行动项：段落编号 sec-N，turnId 换成出处（连着的发言并成一处）；决策编号 dec-N；修改编号 chg-N，目标不在候选里的当未定，
+ * 所属决策序号指不到的当不属于任何决策（冻结时不提交）；行动项编号 act-N；决策和行动项的负责人不是这场会的人当没填（由主持人确认），
+ * 日期不合法的当没填；依据段落序号换成段落 id，指不到的丢掉。决策和行动项都待确认。候选不合 schema 返回 null。
  */
-export function buildCardDraft(pool: Pool, prepared: CardGeneration, candidate: unknown): { draft: TMeetingCardDraft; actionItems: TMeetingActionItem[] } | null {
+export type BuiltCard = { draft: TMeetingCardDraft; decisions: TMeetingCardDecision[]; actionItems: TMeetingActionItem[] };
+export function buildCardDraft(pool: Pool, prepared: CardGeneration, candidate: unknown): BuiltCard | null {
   if (!Value.Check(MeetingCardCandidate, candidate)) return null;
   const value: TMeetingCardCandidate = candidate;
   const deps = registered.get(pool) ?? {};
@@ -211,22 +223,28 @@ export function buildCardDraft(pool: Pool, prepared: CardGeneration, candidate: 
       : [{ sourceId: "src-1", locator: null }];
     return { id: sectionIds[index], heading: section.heading, body: stripEmphasis(section.body), sourceRefs };
   });
+  const members = memberIds(meeting);
+  const owner = (personId: string | null) => (personId && members.has(personId) ? personId : null);
+  const decisions = value.decisions.map((decision, index) => ({
+    id: `dec-${index + 1}`, text: decision.text, ownerPersonId: owner(decision.ownerPersonId), basisSectionIds: basis(decision.basisSections), review: PENDING_REVIEW,
+  }));
   const options = new Set(prepared.targetOptions.map((option) => option.targetRef));
   const objectChanges = value.objectChanges.map((change, index) => ({
     id: `chg-${index + 1}`,
     ...resolveTarget(options.has(change.targetRef) ? change.targetRef : null, prepared.objects),
     after: { text: change.after.text },
     basisSectionIds: basis(change.basisSections),
+    decisionId: change.decision !== null ? decisions[change.decision - 1]?.id ?? null : null,
     stale: false,
   }));
-  const members = memberIds(meeting);
   const actionItems = value.actionItems.map((item, index) => ({
     id: `act-${index + 1}`,
     text: item.text,
-    ownerPersonId: item.ownerPersonId && members.has(item.ownerPersonId) ? item.ownerPersonId : null,
+    ownerPersonId: owner(item.ownerPersonId),
     dueDate: item.dueDate && isCalendarDate(item.dueDate) ? item.dueDate : null,
     basisSectionIds: basis(item.basisSections),
     taskId: null,
+    review: PENDING_REVIEW,
   }));
   return {
     draft: {
@@ -234,36 +252,31 @@ export function buildCardDraft(pool: Pool, prepared: CardGeneration, candidate: 
       participants: participantsOf(meeting, deps), relatedObjectRefs: prepared.relatedObjectRefs, summary: stripEmphasis(value.summary), sections,
       sources: [sourceOf(meeting, deps.publicOrigin ?? "")], objectChanges,
     },
+    decisions,
     actionItems,
   };
 }
 
-/**
- * 存下生成的草稿（和会后整理的 ready 同一事务）：第一次 draft_version 为 1，重新生成在原版本上加一。
- * 同一事务里提醒主持人和创建人去确认（见 notifyCardPending）。
- */
-export async function saveGeneratedCard(pool: Pool, client: PoolClient, meetingId: string, built: { draft: TMeetingCardDraft; actionItems: TMeetingActionItem[] }): Promise<void> {
-  await client.query(
-    `INSERT INTO meeting_cards (meeting_id, draft, action_items, draft_version, draft_status) VALUES ($1, $2::jsonb, $3::jsonb, 1, 'draft_ready')
-     ON CONFLICT (meeting_id) DO UPDATE SET draft = EXCLUDED.draft, action_items = EXCLUDED.action_items,
-       draft_version = meeting_cards.draft_version + 1, draft_status = 'draft_ready', updated_at = now()`,
-    [meetingId, JSON.stringify(built.draft), JSON.stringify(built.actionItems)],
-  );
-  await notifyCardPending(client, meetingId, registered.get(pool)?.feishuNotify ? feishuNotifier(client.query.bind(client)) : undefined);
-}
+/** 会议卡生成后多久冻结（决策没都确认完也冻结，只写已确认的）。 */
+export const FREEZE_AFTER_MS = 48 * 3_600_000;
 
 /**
- * 草稿好了：主持人和创建人各一条「<会名> · 会议记录待确认」，一场会只发一次（唯一约束兜底，再存草稿、重新生成都不再发）；
- * 配了飞书同时推一次，点了去会议页。提醒只提示，不改任何状态。
+ * 存下生成的草稿（和会后整理的 ready 同一事务）：第一次 draft_version 为 1，重新生成在原版本上加一（已冻结的会，决策不再换）。
+ * 同一事务里排 48 小时后的冻结（按第一次生成算，重新生成不顺延）；记录正文能写进本体、又没有决策的，现在就冻结。
  */
-async function notifyCardPending(client: PoolClient, meetingId: string, notify?: FeishuNotify): Promise<void> {
-  const meeting = (await client.query("SELECT title, scheduled_at, lead_dri_id, created_by, ceo_participant_id FROM meetings WHERE id = $1", [meetingId])).rows[0] as
-    Pick<MeetingRow, "title" | "scheduled_at" | "lead_dri_id" | "created_by" | "ceo_participant_id">;
-  const title = `${meeting.title} · 会议记录待确认`;
-  for (const personId of new Set([meeting.lead_dri_id, meeting.created_by ?? meeting.lead_dri_id])) {
-    if (!await insertNotification(client, { personId, kind: "meeting_card_pending", objectType: "meeting", objectId: meetingId })) continue;
-    await notify?.({ personId, title, body: shanghaiLabel(new Date(meeting.scheduled_at)),
-      links: [{ label: "去确认", path: `${personId === meeting.ceo_participant_id ? "" : "/me"}/meetings/${meetingId}` }] }, `meeting-card-pending:${meetingId}:${personId}`);
+export async function saveGeneratedCard(pool: Pool, client: PoolClient, meetingId: string, built: BuiltCard): Promise<void> {
+  await client.query(
+    `INSERT INTO meeting_cards (meeting_id, draft, decisions, action_items, draft_version, draft_status) VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb, 1, 'draft_ready')
+     ON CONFLICT (meeting_id) DO UPDATE SET draft = EXCLUDED.draft, action_items = EXCLUDED.action_items,
+       decisions = CASE WHEN meeting_cards.current_revision IS NULL THEN EXCLUDED.decisions ELSE meeting_cards.decisions END,
+       draft_version = meeting_cards.draft_version + 1, draft_status = 'draft_ready', updated_at = now()`,
+    [meetingId, JSON.stringify(built.draft), JSON.stringify(built.decisions), JSON.stringify(built.actionItems)],
+  );
+  const q: Query = client.query.bind(client);
+  const payload = { meetingId };
+  await enqueueJob(q, { kind: MEETING_CARD_FREEZE_KIND, dedupeKey: `${MEETING_CARD_FREEZE_KIND}:${meetingId}:48h`, payload, runAt: new Date(Date.now() + FREEZE_AFTER_MS) });
+  if (!built.decisions.length && registered.get(pool)?.recordText) {
+    await enqueueJob(q, { kind: MEETING_CARD_FREEZE_KIND, dedupeKey: `${MEETING_CARD_FREEZE_KIND}:${meetingId}:empty`, payload });
   }
 }
 
@@ -275,14 +288,16 @@ function fieldPath(path: string): string {
 
 export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
   const q: Query = pool.query.bind(pool);
+  const CARD_COLUMNS = "draft, action_items, draft_version, draft_status, decisions, write_to_world";
   const cardRow = async (meetingId: string) =>
-    (await q("SELECT draft, action_items, draft_version, draft_status FROM meeting_cards WHERE meeting_id = $1", [meetingId])).rows[0] as CardRow | undefined;
+    (await q(`SELECT ${CARD_COLUMNS} FROM meeting_cards WHERE meeting_id = $1`, [meetingId])).rows[0] as CardRow | undefined;
 
   /** 读卡见 canReadMeetingCard；编辑只给主持人和创建人。 */
   async function access(meetingId: string, viewer: Viewer) {
     const meeting = await getMeetingRow(q, meetingId);
-    return meeting && canReadMeetingCard(meeting, viewer) ? { meeting, canEdit: isHostOrCreator(meeting, viewer.personId) } : null;
+    return meeting && canReadMeetingCard(meeting, viewer) ? { meeting, viewer, canEdit: isHostOrCreator(meeting, viewer.personId) } : null;
   }
+  type Access = NonNullable<Awaited<ReturnType<typeof access>>>;
 
   /**
    * 目标对象版本变了的修改：重读原内容和版本、标 stale（组件没了就成目标未定）；返回刷新后的修改，没有变化时 null。
@@ -316,7 +331,7 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
       if (changes) {
         const updated = await q(
           `UPDATE meeting_cards SET draft = jsonb_set(draft, '{objectChanges}', $3::jsonb), draft_version = draft_version + 1, updated_at = now()
-            WHERE meeting_id = $1 AND draft_version = $2 RETURNING draft, action_items, draft_version, draft_status`,
+            WHERE meeting_id = $1 AND draft_version = $2 RETURNING ${CARD_COLUMNS}`,
           [meetingId, row.draft_version, JSON.stringify(changes)],
         );
         // 别人刚好也改了：读最新的，不再刷新。
@@ -326,18 +341,87 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     return { row, draft, objects, current };
   }
 
-  async function buildView(meetingId: string, canEdit: boolean): Promise<TMeetingCardView> {
+  async function buildView(meetingId: string, { meeting, viewer, canEdit }: Access): Promise<TMeetingCardView> {
     const { row, draft, objects, current } = await refreshDraft(meetingId, canEdit);
     const targetOptions: TMeetingCardTargetOption[] = draft && canEdit ? targetOptionsOf(draft.relatedObjectRefs, objects) : [];
     return {
       draft: row?.draft ?? null, draftVersion: row?.draft_version ?? 0, draftStatus: row?.draft_status ?? "created", actionItems: row?.action_items ?? [],
+      decisions: row?.decisions ?? null, hostId: meeting.lead_dri_id, viewerId: viewer.personId, writeToWorld: row?.write_to_world ?? true,
       ...confirmedView(current), targetOptions, canEdit, draftChange: draftChangeOf(row?.draft ?? null, row?.action_items ?? [], current),
+      unmappedSpeakers: canEdit ? await openSpeakers(meetingId) : [],
     };
+  }
+
+  /** 逐字稿里还没对上人、主持人也没选「不是天枢里的人」的说话人。 */
+  async function openSpeakers(meetingId: string): Promise<{ id: string; name: string }[]> {
+    const transcript = (await q("SELECT transcript FROM meetings WHERE id = $1", [meetingId])).rows[0]?.transcript as TStoredTranscript | null | undefined;
+    return (transcript?.unmappedSpeakers ?? []).filter((speaker) => !speaker.kept).map((speaker) => ({ id: speaker.id, name: speaker.name }));
+  }
+
+  /**
+   * 在会议卡上指定说话人（排除法对不完的由主持人点一下）：对到某人时，逐字稿里这位说话人的发言改记到这个人、他补进参会人，
+   * 卡里写着原名的地方换成他的名字，草稿版本加一（行动项负责人这时就能选到他）；选「不是天枢里的人」只记下不再提示，卡不动。
+   */
+  async function assignSpeaker(meetingId: string, viewer: Viewer, body: unknown): Promise<{ view: TMeetingCardView } | { error: CardError }> {
+    const found = await access(meetingId, viewer);
+    if (!found?.canEdit) return NOT_FOUND;
+    if (!Value.Check(MeetingCardSpeakerRequest, body)) return { error: { status: 400, code: "INVALID_INPUT", message: "要指定的说话人或人员不合格式" } };
+    const person = body.personId ? deps.people?.().find((candidate) => candidate.personId === body.personId) : undefined;
+    if (body.personId && !person) return { error: { status: 400, code: "UNKNOWN_PERSON", message: "人员目录里没有这个人" } };
+    const client = await pool.connect();
+    let outcome: "done" | "changed" | "missing" = "done";
+    try {
+      await client.query("BEGIN");
+      const meeting = (await client.query("SELECT transcript, participants FROM meetings WHERE id = $1 FOR UPDATE", [meetingId])).rows[0] as
+        Pick<MeetingRow, "participants"> & { transcript: TStoredTranscript | null } | undefined;
+      const card = (await client.query("SELECT draft, action_items, draft_version FROM meeting_cards WHERE meeting_id = $1 FOR UPDATE", [meetingId])).rows[0] as
+        Pick<CardRow, "draft" | "action_items" | "draft_version"> | undefined;
+      const speakers = meeting?.transcript?.unmappedSpeakers ?? [];
+      const speaker = speakers.find((candidate) => candidate.id === body.speakerId && !candidate.kept);
+      if (!card?.draft || card.draft_version !== body.draftVersion) outcome = "changed";
+      else if (!meeting?.transcript || !speaker) outcome = "missing";
+      else if (!person) {
+        const transcript = { ...meeting.transcript, unmappedSpeakers: speakers.map((candidate) => candidate.id === speaker.id ? { ...candidate, kept: true as const } : candidate) };
+        await client.query("UPDATE meetings SET transcript = $2::jsonb, version = version + 1, updated_at = now() WHERE id = $1", [meetingId, JSON.stringify(transcript)]);
+      } else {
+        const rest = speakers.filter((candidate) => candidate.id !== speaker.id);
+        const transcript = {
+          ...meeting.transcript,
+          turns: meeting.transcript.turns.map((turn) => turn.speakerId === speaker.id ? { ...turn, speakerId: person.personId } : turn),
+          unmappedSpeakers: rest.length ? rest : undefined,
+        };
+        const participants = meeting.participants.some((existing) => existing.personId === person.personId) ? meeting.participants : [...meeting.participants, projectPerson(person)];
+        await client.query("UPDATE meetings SET transcript = $2::jsonb, participants = $3::jsonb, version = version + 1, updated_at = now() WHERE id = $1",
+          [meetingId, JSON.stringify(transcript), JSON.stringify(participants)]);
+        // 「Speaker 1」不能顺带换掉「Speaker 10」。
+        const pattern = new RegExp(`${speaker.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![0-9])`, "g");
+        const named = (text: string) => text.replace(pattern, person.displayName);
+        const draft: TMeetingCardDraft = {
+          ...card.draft,
+          summary: named(card.draft.summary),
+          sections: card.draft.sections.map((section) => ({ ...section, heading: named(section.heading), body: named(section.body) })),
+          participants: card.draft.participants.some((existing) => existing.name === person.displayName) ? card.draft.participants
+            : [...card.draft.participants, { name: person.displayName, personRef: deps.world?.config.people[person.personId] ?? null }],
+        };
+        const actionItems = card.action_items.map((item) => ({ ...item, text: named(item.text) }));
+        await client.query("UPDATE meeting_cards SET draft = $2::jsonb, action_items = $3::jsonb, draft_version = draft_version + 1, updated_at = now() WHERE meeting_id = $1",
+          [meetingId, JSON.stringify(draft), JSON.stringify(actionItems)]);
+      }
+      await client.query(outcome === "done" ? "COMMIT" : "ROLLBACK");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+    if (outcome === "changed") return { error: { status: 409, code: "DRAFT_CHANGED", message: "会议卡已被修改，请查看最新内容", view: await buildView(meetingId, found) } };
+    if (outcome === "missing") return { error: { status: 404, code: "SPEAKER_NOT_FOUND", message: "这位说话人已经指定过了" } };
+    return { view: await buildView(meetingId, found) };
   }
 
   async function view(meetingId: string, viewer: Viewer): Promise<{ view: TMeetingCardView } | typeof NOT_FOUND> {
     const found = await access(meetingId, viewer);
-    return found ? { view: await buildView(meetingId, found.canEdit) } : NOT_FOUND;
+    return found ? { view: await buildView(meetingId, found) } : NOT_FOUND;
   }
 
   /**
@@ -355,7 +439,7 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     const row = await cardRow(meetingId);
     if (!row?.draft) return { error: { status: 409, code: "CARD_NOT_READY", message: "会议卡草稿还没生成" } };
     const changedError = async (): Promise<{ error: CardError }> => ({ error: { status: 409, code: "DRAFT_CHANGED", message: "会议卡已被修改，请查看最新内容",
-      view: await buildView(meetingId, true) } });
+      view: await buildView(meetingId, found) } });
     if (body.draftVersion !== row.draft_version) return changedError();
 
     const current = row.draft;
@@ -396,12 +480,14 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
         if (keep && unread) target = kept!;
         else if (!keep) {
           invalidTarget = true;
-          fieldErrors[`objectChanges[${i}].targetRef`] = "目标只能从挂点对象的文字组件里选";
+          fieldErrors[`objectChanges[${i}].targetRef`] = "目标只能从所属对象的文字组件里选";
         }
       }
       // 同一目标、对象版本这次读到的和草稿里的不同：差异已按新版本重读，标 stale 让主持人重看（保存不能悄悄把基准挪到新版本）。
       const stale = keep && !done && target.targetRef !== null ? before.stale || target.expectedVersion !== before.expectedVersion : false;
-      return { id: change.id, ...target, after: { text: change.after.text }, basisSectionIds: change.basisSectionIds, stale };
+      // 所属决策只由服务填：沿用这处修改原来的（新加的不属于任何决策）。
+      const decisionId = before?.decisionId === undefined ? {} : { decisionId: before.decisionId };
+      return { id: change.id, ...target, after: { text: change.after.text }, basisSectionIds: change.basisSectionIds, ...decisionId, stale };
     });
     const members = memberIds(found.meeting);
     const items = body.actionItems ?? row.action_items;
@@ -411,10 +497,11 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
       if (item.ownerPersonId !== null && !members.has(item.ownerPersonId)) fieldErrors[`actionItems[${i}].ownerPersonId`] = "负责人要是这场会的人";
       if (item.dueDate !== null && !isCalendarDate(item.dueDate)) fieldErrors[`actionItems[${i}].dueDate`] = "日期不合法";
       checkBasis(item.basisSectionIds, `actionItems[${i}]`);
-      return { ...item, taskId: null }; // 前端传的不算，写入时按行里已存的回填
+      const { review: _review, ...rest } = item;
+      return { ...rest, taskId: null }; // taskId、review 前端传的不算，写入时按行里已存的回填
     });
     if (Object.keys(fieldErrors).length) {
-      return { error: { status: 400, code: invalidTarget ? "INVALID_TARGET" : "INVALID_DRAFT", message: invalidTarget ? "修改的目标不在挂点对象里" : "会议卡草稿没通过校验", fieldErrors } };
+      return { error: { status: 400, code: invalidTarget ? "INVALID_TARGET" : "INVALID_DRAFT", message: invalidTarget ? "修改的目标不在所属对象里" : "会议卡草稿没通过校验", fieldErrors } };
     }
 
     const personRefs = new Map(current.participants.map((person) => [person.name, person.personRef]));
@@ -424,17 +511,20 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
       participants: input.participants.map((person) => ({ name: person.name, personRef: personRefs.get(person.name) ?? null })),
       objectChanges,
     };
-    // taskId 取写入这一刻行里的（同时确认刚回填的不被读到的旧值盖掉）：并发更新后 UPDATE 按最新的行重算。
+    // taskId、review 取写入这一刻行里的（同时确认、接下刚回填的不被读到的旧值盖掉）：并发更新后 UPDATE 按最新的行重算。
+    // 新加的行动项：逐条确认的会议卡（decisions 不为空）上待负责人确认；10/28 之前的会议卡照旧随整卡确认推出去，不带 review。
     const saved = await q(
       `UPDATE meeting_cards k SET draft = $3::jsonb, draft_version = draft_version + 1, updated_at = now(), action_items = (
-          SELECT COALESCE(jsonb_agg(item || jsonb_build_object('taskId',
-            (SELECT old -> 'taskId' FROM jsonb_array_elements(k.action_items) old WHERE old ->> 'id' = item ->> 'id' LIMIT 1)) ORDER BY ord), '[]'::jsonb)
-            FROM jsonb_array_elements($4::jsonb) WITH ORDINALITY AS input(item, ord))
+          SELECT COALESCE(jsonb_agg(item || jsonb_build_object('taskId', old.value -> 'taskId')
+              || COALESCE(CASE WHEN old.value IS NULL THEN CASE WHEN k.decisions IS NOT NULL THEN jsonb_build_object('review', $5::jsonb) END
+                WHEN old.value ? 'review' THEN jsonb_build_object('review', old.value -> 'review') END, '{}'::jsonb) ORDER BY ord), '[]'::jsonb)
+            FROM jsonb_array_elements($4::jsonb) WITH ORDINALITY AS input(item, ord)
+            LEFT JOIN LATERAL (SELECT o AS value FROM jsonb_array_elements(k.action_items) o WHERE o ->> 'id' = item ->> 'id' LIMIT 1) old ON TRUE)
         WHERE meeting_id = $1 AND draft_version = $2`,
-      [meetingId, body.draftVersion, JSON.stringify(draft), JSON.stringify(actionItems)],
+      [meetingId, body.draftVersion, JSON.stringify(draft), JSON.stringify(actionItems), JSON.stringify(PENDING_REVIEW)],
     );
     if (saved.rowCount !== 1) return changedError();
-    return { view: await buildView(meetingId, true) };
+    return { view: await buildView(meetingId, found) };
   }
 
   /**
@@ -468,26 +558,42 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
   }
 
   /**
-   * 我要处理的会议记录（通知栏一场会一条）：我是主持人或创建人、草稿已生成的会里，还没确认过的、确认后又改了的、写入失败的。
-   * 已确认在写入中、已写入、选了不写入的不列。只读，不改任何状态。
+   * 通知栏（10/28 只出要确认的条目）：confirms 是等我确认的决策（还没冻结的会）和行动项——我是责任人，或没有责任人、我是主持人；
+   * 按会议结束从晚到早、会里按原顺序。meetings 是我主持或创建的会里写入失败的会议记录（一场会一条，卡上重试）。只读，不改任何状态。
    */
-  async function pendingFor(personId: string): Promise<TMyMeetingCard[]> {
+  async function pendingFor(personId: string): Promise<{ meetings: TMyMeetingCard[]; confirms: TMyMeetingConfirm[] }> {
     const rows = (await q(
-      `SELECT m.id, m.title, COALESCE(m.ended_at, m.ends_at) AS ended_at FROM meetings m JOIN meeting_cards k ON k.meeting_id = m.id
-        WHERE k.draft_status = 'draft_ready' AND (m.lead_dri_id = $1 OR COALESCE(m.created_by, m.lead_dri_id) = $1)
+      `SELECT m.id, m.title, m.lead_dri_id, m.created_by, COALESCE(m.ended_at, m.ends_at) AS ended_at, k.decisions, k.action_items, k.current_revision
+         FROM meetings m JOIN meeting_cards k ON k.meeting_id = m.id
+        WHERE k.draft_status = 'draft_ready' AND (m.lead_dri_id = $1 OR COALESCE(m.created_by, m.lead_dri_id) = $1
+          OR EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(k.decisions, '[]'::jsonb) || k.action_items) e WHERE e ->> 'ownerPersonId' = $1))
         ORDER BY COALESCE(m.ended_at, m.ends_at) DESC`,
       [personId],
-    )).rows as { id: string; title: string; ended_at: Date }[];
+    )).rows as (Pick<MeetingRow, "id" | "title" | "lead_dri_id" | "created_by"> & { ended_at: Date; decisions: TMeetingCardDecision[] | null;
+      action_items: TMeetingActionItem[]; current_revision: number | null })[];
     const meetings: TMyMeetingCard[] = [];
+    const confirms: TMyMeetingConfirm[] = [];
     for (const row of rows) {
-      const record = await meetingRecordState(q, row.id, (id) => id);
-      const status = record.version === 0 ? "pending" : record.status === "edit_pending" || record.status === "failed" ? record.status : null;
-      if (status) meetings.push({ meetingId: row.id, title: row.title, endedAt: new Date(row.ended_at).toISOString(), status });
+      const mine = (item: { ownerPersonId: string | null; review?: { status: string } }) => item.review?.status === "pending" && (item.ownerPersonId ?? row.lead_dri_id) === personId;
+      const at = { meetingId: row.id, title: row.title };
+      if (!row.current_revision) for (const decision of (row.decisions ?? []).filter(mine)) confirms.push({ ...at, kind: "decision", id: decision.id, text: decision.text, dueDate: null });
+      for (const item of row.action_items.filter(mine)) confirms.push({ ...at, kind: "action", id: item.id, text: item.text, dueDate: item.dueDate });
+      if (!isHostOrCreator(row, personId) || !row.current_revision) continue;
+      if ((await meetingRecordState(q, row.id, (id) => id)).status === "failed") meetings.push({ ...at, endedAt: new Date(row.ended_at).toISOString(), status: "failed" });
     }
-    return meetings;
+    return { meetings, confirms };
   }
 
-  return { view, saveDraft, anchorsChanged, pendingFor, refreshDraft: async (meetingId: string) => { await refreshDraft(meetingId); } };
+  /** 冻结前主持人或创建人改「不写进本体」；冻结后 409（走修改确认）。 */
+  async function setWorldChoice(meetingId: string, viewer: Viewer, writeToWorld: boolean): Promise<{ view: TMeetingCardView } | { error: CardError }> {
+    const found = await access(meetingId, viewer);
+    if (!found?.canEdit) return NOT_FOUND;
+    const updated = await q("UPDATE meeting_cards SET write_to_world = $2, updated_at = now() WHERE meeting_id = $1 AND current_revision IS NULL", [meetingId, writeToWorld]);
+    if (!updated.rowCount) return { error: { status: 409, code: "CARD_FROZEN", message: "会议记录已经定版，要改请点「修改」", view: await buildView(meetingId, found) } };
+    return { view: await buildView(meetingId, found) };
+  }
+
+  return { view, saveDraft, assignSpeaker, anchorsChanged, pendingFor, setWorldChoice, refreshDraft: async (meetingId: string) => { await refreshDraft(meetingId); } };
 }
 
 export type MeetingCardService = ReturnType<typeof createMeetingCardService>;

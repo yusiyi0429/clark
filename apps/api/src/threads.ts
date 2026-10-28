@@ -160,7 +160,7 @@ export async function threadIntroInput(q: Query, peopleDirectory: PeopleDirector
   } else if (ref.objectType === "meeting") {
     const row = (await q("SELECT title, scheduled_at, ends_at, preflight FROM meetings WHERE id::text=$1", [ref.objectId])).rows[0];
     title = row?.title ?? "会议";
-    const purpose = row?.preflight?.taskDefinition?.reviewPurpose;
+    const purpose = row?.preflight?.decision ?? row?.preflight?.taskDefinition?.reviewPurpose;
     description = row ? `会议时间 ${meetingSlot(new Date(row.scheduled_at), new Date(row.ends_at))}${purpose ? `，目的是${purpose}` : ""}` : "会议安排在页面左边";
   } else if (ref.objectType === "task") {
     const row = (await q("SELECT t.title,t.due_date::text AS due_date,m.title AS mission_title FROM tasks t LEFT JOIN missions m ON m.id=t.mission_id WHERE t.id::text=$1", [ref.objectId])).rows[0];
