@@ -1422,3 +1422,72 @@ body.is-col-resizing{cursor:col-resize;user-select:none}
 .tone-company{--tone-ink:var(--company-ink);--tone-bg:var(--company)}
 /* Disabled confirm stays readable: grey, but the word shows (陈溪南 2026-10-28). */
 .handshake-confirm[disabled],.handshake-confirm[data-disabled=true]{opacity:1!important;background:#e3e8ee!important;color:#5b6b7c!important}
+
+/* v2: the whole card is at most two times its measured border-box width. */
+.proposal-task.proposal-summary-card{display:flex;flex-direction:column;box-sizing:border-box;min-height:0;overflow:hidden}
+.proposal-summary-card .proposal-head{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;margin:0;flex:none;min-width:0}
+.proposal-summary-card .proposal-head>div{min-width:0;flex:1}
+.proposal-summary-card .proposal-head strong{white-space:normal;font-size:11px;line-height:1.6;max-width:88px;text-align:right}
+.proposal-summary-card .proposal-summary-location{display:block;border:0;background:none;padding:0;text-align:left;font-family:inherit;font-size:12px;font-weight:600;line-height:1.5;color:inherit;cursor:pointer;overflow-wrap:anywhere}
+.proposal-summary-card .proposal-summary-meta{display:block;font-size:10px;line-height:1.6;opacity:.7;margin-top:2px}
+.proposal-summary-card .proposal-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:10px 12px;scrollbar-gutter:stable}
+.proposal-summary-card .proposal-summary-caption{font-size:10px;color:#6f8190;margin-bottom:8px}
+.proposal-summary-card .proposal-summary-group+.proposal-summary-group{margin-top:10px}
+.proposal-summary-card .proposal-summary-group h4{font-size:12px;line-height:1.5;color:#17364e;margin:0 0 5px;font-weight:600;overflow-wrap:anywhere}
+.proposal-summary-card .proposal-summary-change+ .proposal-summary-change{margin-top:7px}
+.proposal-summary-card .proposal-summary-change>small{display:block;font-size:10px;color:#64788c;line-height:1.5;margin-bottom:3px}
+.proposal-summary-card .proposal-summary-pair{border-left:2px solid #d2e0ef;padding-left:8px}
+.proposal-summary-card .proposal-summary-pair p{margin:0;padding:0;font-size:12px;line-height:1.65;overflow-wrap:anywhere;white-space:pre-wrap}
+.proposal-summary-card .proposal-summary-pair p:first-child{color:#7b8894;margin-bottom:3px}
+.proposal-summary-card .proposal-summary-pair p:last-child{color:#163b59}
+.proposal-summary-card .proposal-summary-pair span,.proposal-summary-card .proposal-summary-reason>span{display:inline-block;color:#748595;font-size:10px;margin-right:6px}
+.proposal-summary-card .proposal-summary-reason{margin:10px 0 0;padding-top:8px;border-top:1px solid #dfe7ef;font-size:11px;line-height:1.65;color:#576d80;overflow-wrap:anywhere}
+.proposal-summary-card .proposal-foot{flex:none;margin:0;padding:9px 12px;border-top:1px solid #dfe7ef;max-height:40%;overflow-y:auto}
+.proposal-summary-card .proposal-foot.proposal-actions{margin:0;padding:9px 12px}
+.proposal-summary-card .proposal-summary-loading,.proposal-summary-card .proposal-summary-error{font-size:12px;color:#64788c;line-height:1.6}
+.proposal-summary-card .proposal-summary-error button{background:none;border:0;padding:0;color:#315e88;text-decoration:underline}
+.proposal-summary-card .proposal-reject-form textarea{min-height:44px}
+.proposal-summary-card .proposal-summary-caption{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.proposal-summary-card .proposal-summary-caption button{font-size:10px;color:#527597;padding:0}
+.proposal-comparison-dialog{width:min(760px,92vw);max-height:85vh;overflow:auto;border:1px solid #d7e1eb;border-radius:14px;padding:20px;color:#17364e;box-shadow:0 24px 70px #102c4633}
+.proposal-comparison-dialog::backdrop{background:#102c4655}
+.proposal-comparison-header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.proposal-comparison-header h3{font-size:16px;margin:0}.proposal-comparison-header button{background:#edf3f8;border-radius:6px;padding:6px 10px}
+.proposal-comparison-dialog section{margin-top:16px;padding-top:12px;border-top:1px solid #e1e7ee}.proposal-comparison-dialog h4{margin:0 0 8px;font-size:13px}.proposal-comparison-dialog p{font-size:13px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0}.proposal-comparison-dialog p b{display:block;color:#768696;font-size:11px}
+
+/* v3: reserve room for the summary and actions even with unbounded source titles. */
+.proposal-summary-card .proposal-head{max-height:calc(var(--proposal-card-width,280px) * .5);overflow:hidden}
+.proposal-summary-card .proposal-summary-location{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;max-height:3em;line-height:1.5;overflow-wrap:anywhere}
+.proposal-summary-card .proposal-summary-meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proposal-summary-card .proposal-head strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;max-height:4.8em;overflow-wrap:anywhere;flex-shrink:1}
+.proposal-summary-card .proposal-foot{max-height:calc(var(--proposal-card-width,280px) * .7)}
+.proposal-comparison-side{margin:10px 0;font-size:13px;line-height:1.7;overflow-wrap:anywhere}
+.proposal-comparison-side>b{display:block;color:#768696;font-size:11px;margin-bottom:5px}
+.proposal-comparison-fields{margin:5px 0;padding:0}
+.proposal-comparison-fields>div{display:grid;grid-template-columns:82px minmax(0,1fr);gap:10px;margin:6px 0}
+.proposal-comparison-fields dt{color:#64788c;font-size:12px}
+.proposal-comparison-fields dd{margin:0;min-width:0}
+.proposal-comparison-list{margin:0;padding-left:20px}
+.proposal-comparison-list li+li{margin-top:8px}
+.proposal-comparison-text{white-space:pre-wrap;overflow-wrap:anywhere}
+.proposal-summary-card .proposal-summary-source{display:block;font-size:10px;line-height:1.5;color:#7a8c9b;font-style:normal}
+/* User-selected v4: one status line, explicit item, uniform typography. */
+.proposal-task.proposal-summary-card,.proposal-task.proposal-summary-card :is(header,div,p,span,strong,small,h4,em,button,textarea){font-size:13px!important;line-height:1.6}
+.proposal-summary-card .proposal-head{padding:9px 12px;max-height:none;display:block}
+.proposal-summary-card .proposal-head strong{display:block;max-width:none;max-height:none;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;text-align:left;font-weight:600;-webkit-line-clamp:unset}
+.proposal-summary-card .proposal-body{padding:12px;overscroll-behavior:auto}
+.proposal-summary-card .proposal-summary-group h4{font-weight:600;color:#162b3c;margin:0 0 10px}
+.proposal-summary-card .proposal-summary-field{display:block;font-weight:600;margin:0 0 4px;color:#162b3c}
+.proposal-summary-card .proposal-summary-change+.proposal-summary-change{margin-top:12px}
+.proposal-summary-card .proposal-summary-pair p:first-child,.proposal-summary-card .proposal-summary-pair p:first-child span{color:#78838d}
+.proposal-summary-card .proposal-summary-pair p:last-child,.proposal-summary-card .proposal-summary-pair p:last-child span{color:#111}
+.proposal-summary-card .proposal-summary-pair span{margin-right:7px;min-width:26px;font-weight:400}
+.proposal-summary-card .proposal-summary-pair p:first-child{margin-bottom:4px}
+.proposal-summary-card .proposal-foot{padding:9px 12px}
+
+/* Latest local presentation: compact body, grey before, yellow after. */
+.proposal-summary-card .proposal-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.proposal-summary-card .proposal-head>strong{flex:none;font-weight:600}
+.proposal-summary-card .proposal-head .proposal-reviewer{font-weight:400;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
+.proposal-task.proposal-summary-card .proposal-body,.proposal-task.proposal-summary-card .proposal-body :is(div,p,span,strong,small,h4,em,button){font-size:12px!important}
+.proposal-summary-card .proposal-summary-pair p:last-child,.proposal-summary-card .proposal-summary-pair p:last-child span{color:#a66b00}

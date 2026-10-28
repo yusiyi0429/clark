@@ -17,7 +17,7 @@ export default function GroupMembers({members,active}){
  return <>
   <span ref={ref} className={`group-avatar n${people.length}${active?' is-active':''}`} role={active?'button':undefined} tabIndex={active?0:-1} aria-label={`群成员 ${members.length} 人`} title={active?`群成员 ${members.length} 人`:undefined}
    onPointerDown={e=>{if(active)e.stopPropagation();}} onClick={toggle} onKeyDown={e=>{if(active&&(e.key==='Enter'||e.key===' '))toggle(e);}}>
-   {people.map(m=>{const id=memberIdFor(m.name);return <span key={m.name} className="group-avatar-cell">{id?<img src={`/avatars/${id}.png`} alt=""/>:<i>{m.name.slice(0,1)}</i>}</span>;})}
+   {people.map(m=>{const id=memberIdFor(m.name);return <span key={m.name} className="group-avatar-cell">{id?<img src={`/m2/avatars/${id}.png`} alt=""/>:<i>{m.name.slice(0,1)}</i>}</span>;})}
   </span>
   {pos&&createPortal(<div ref={panel} className="group-members-panel" style={{top:pos.top,right:pos.right}} role="dialog" aria-label="群成员"><strong className="group-members-title">群成员 · {members.length}</strong>
    <ul>{members.map(m=><li key={m.name} className={m.limited?'is-limited':undefined}>{face(m)}<span><b>{m.name}</b><small>{m.roles.join('、')}</small></span></li>)}</ul></div>,document.body)}
