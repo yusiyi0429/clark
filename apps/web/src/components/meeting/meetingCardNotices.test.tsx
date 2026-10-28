@@ -1,34 +1,67 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { TFeishuMinuteInboxItem, TMyMeetingCard } from "@warmap/contracts";
-import { MeetingCardNoticeList, meetingCardNotices, minuteNotices, type MinuteActs } from "./MeetingCardNotices";
+import type { TFeishuMinuteInboxItem, TMyMeetingCard, TMyMeetingConfirm } from "@warmap/contracts";
+import { confirmNotices, MeetingCardNoticeList, meetingCardNotices, minuteNotices, type ConfirmActs, type MinuteActs } from "./MeetingCardNotices";
 
-const meeting = (overrides: Partial<TMyMeetingCard>): TMyMeetingCard => ({
-  meetingId: "m1", title: "接口切换会", endedAt: "2026-10-20T06:00:00.000Z", status: "pending", ...overrides,
+const meeting = (overrides: Partial<TMyMeetingCard> = {}): TMyMeetingCard => ({
+  meetingId: "m1", title: "接口切换会", endedAt: "2026-10-20T06:00:00.000Z", status: "failed", ...overrides,
+});
+const confirm = (overrides: Partial<TMyMeetingConfirm> = {}): TMyMeetingConfirm => ({
+  meetingId: "m1", title: "AIDC 月中会", kind: "decision", id: "dec-1", text: "AIDC 11 月预算从 A 线挪 30 万到 B 线", dueDate: null, ...overrides,
 });
 
-describe("会议记录待确认：一场会一条", () => {
-  it("两场会待确认是两条，各有会名和「待确认」；没有逐条确认、Co-Agent 和 CEO 分流的字样", () => {
-    const meetings = [meeting({}), meeting({ meetingId: "m2", title: "渠道预算会" })];
-    const html = renderToStaticMarkup(<MeetingCardNoticeList meetings={meetings} meetingBase="/me/meetings" onNavigate={() => undefined} />);
-    expect(html).toContain("接口切换会");
-    expect(html).toContain("渠道预算会");
-    expect(html.match(/待确认/g)?.length).toBeGreaterThanOrEqual(2);
-    for (const word of ["Co-Agent", "CEO 已确认", "Agent 代判", "其实没定", "不同意"]) expect(html).not.toContain(word);
-    const notices = meetingCardNotices(meetings, "/me/meetings", vi.fn());
-    expect(notices.map((notice) => [notice.title, notice.detail])).toEqual([["接口切换会", "待确认"], ["渠道预算会", "待确认"]]);
-    expect(notices.every((notice) => notice.buttons.length === 0 && !notice.reason)).toBe(true);
+describe("会后确认：只出要确认的决策和行动项，一次一条", () => {
+  it("决策：标签「决策确认」、正文是决策本身、小字来自哪场会；当场确认，不对要写原因", async () => {
+    const review = vi.fn<ConfirmActs["review"]>(async () => ({ ok: true }));
+    const [notice] = confirmNotices([confirm()], { review });
+    expect(notice).toMatchObject({ label: "决策确认", title: "AIDC 11 月预算从 A 线挪 30 万到 B 线", detail: "来自「AIDC 月中会」" });
+    expect(notice.onOpen).toBeUndefined();
+    expect(notice.buttons.map((button) => button.label)).toEqual(["确认"]);
+    expect(await notice.buttons[0].run()).toEqual({ ok: true, settled: "已确认" });
+    expect(review).toHaveBeenCalledWith(confirm(), "confirm");
+    expect(notice.reason).toMatchObject({ label: "不对", submitLabel: "提交" });
+    expect(await notice.reason!.run("会上没定数")).toEqual({ ok: true, settled: "已标为不对" });
+    expect(review).toHaveBeenLastCalledWith(confirm(), "reject", "会上没定数");
   });
 
-  it("状态标签：修改待确认、写入失败；点了去会议页", () => {
+  it("行动项：标签「执行事项确认」，带截止；接下 / 退回；失败照原因提示", async () => {
+    const review = vi.fn<ConfirmActs["review"]>(async () => ({ ok: false, error: "已经处理过了" }));
+    const [notice] = confirmNotices([confirm({ kind: "action", id: "act-1", text: "交 TK 试用 scope 写入演练报告", dueDate: "2026-10-31" })], { review });
+    expect(notice.label).toBe("执行事项确认");
+    expect(notice.detail).toMatch(/^来自「AIDC 月中会」 · 截止 /);
+    expect(notice.buttons.map((button) => button.label)).toEqual(["接下"]);
+    expect(notice.reason?.label).toBe("退回");
+    expect(await notice.buttons[0].run()).toEqual({ ok: false, error: "已经处理过了" });
+  });
+
+  it("多条时只出第一条，底下「第 1 条 / 共 2 条」和左右箭头；一条时不出翻页", () => {
+    const two = [confirm(), confirm({ id: "dec-2", text: "11 月起周会改到周一 10:00" })];
+    const html = renderToStaticMarkup(<MeetingCardNoticeList meetings={[]} confirms={two} meetingBase="/me/meetings" onNavigate={() => undefined} />);
+    expect(html).toContain("会后确认");
+    expect(html).toContain("AIDC 11 月预算从 A 线挪 30 万到 B 线");
+    expect(html).not.toContain("11 月起周会改到周一 10:00");
+    expect(html).toContain("第 1 条 / 共 2 条");
+    expect(html).toContain('aria-label="上一条"');
+    expect(html).toContain('aria-label="下一条"');
+    const one = renderToStaticMarkup(<MeetingCardNoticeList meetings={[]} confirms={[confirm()]} meetingBase="/me/meetings" onNavigate={() => undefined} />);
+    expect(one).not.toContain("共 1 条");
+    // 记录正文不进通知栏：没有「会议记录待确认」。
+    expect(html).not.toContain("待确认");
+  });
+
+  it("写入失败的会议记录：卡上重试，点了去会议页", async () => {
     const navigate = vi.fn();
-    const notices = meetingCardNotices([meeting({ status: "edit_pending" }), meeting({ meetingId: "m2", title: "渠道预算会", status: "failed" })], "/meetings", navigate);
-    expect(notices.map((notice) => notice.detail)).toEqual(["修改待确认", "写入失败"]);
-    notices[1].onOpen?.(null);
+    const retry = vi.fn(async () => ({ ok: true as const, settled: "已重新写入" }));
+    const [notice] = meetingCardNotices([meeting({ meetingId: "m2", title: "渠道预算会" })], "/meetings", navigate, retry);
+    expect(notice).toMatchObject({ title: "渠道预算会", detail: "写入失败", tone: "red" });
+    expect(notice.buttons.map((button) => button.label)).toEqual(["重试"]);
+    await notice.buttons[0].run();
+    expect(retry).toHaveBeenCalled();
+    notice.onOpen?.(null);
     expect(navigate).toHaveBeenCalledWith("/meetings/m2", null);
   });
 
-  it("没有待确认的会时不显示", () => {
+  it("没有要确认、也没有写入失败时不显示", () => {
     expect(renderToStaticMarkup(<MeetingCardNoticeList meetings={[]} meetingBase="/meetings" onNavigate={() => undefined} />)).toBe("");
   });
 });

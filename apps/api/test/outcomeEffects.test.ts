@@ -50,7 +50,7 @@ function outcomeAgent(): PostMeetingAgent & { calls: PostMeetingAgentInput[] } {
     calls: [] as PostMeetingAgentInput[],
     async generate(input: PostMeetingAgentInput) {
       agent.calls.push(input);
-      return { candidate: { summary: "灯塔项目优先", sections: [{ heading: "资源", body: "已定：灯塔项目优先。", turnIds: ["turn-001"] }], objectChanges: [], actionItems: [] } };
+      return { candidate: { summary: "灯塔项目优先", sections: [{ heading: "资源", body: "已定：灯塔项目优先。", turnIds: ["turn-001"] }], decisions: [], objectChanges: [], actionItems: [] } };
     },
   };
   return agent;

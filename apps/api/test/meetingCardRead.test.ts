@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TMeetingCardV1Payload } from "@warmap/contracts";
+import type { TMeetingCardFrozenPayload } from "@warmap/contracts";
 import { getScopeObject } from "../src/conversations.js";
 import { getMeeting } from "../src/mcpCeoReads.js";
 import { payloadHash } from "../src/meetingCardHash.js";
@@ -56,9 +56,9 @@ async function cloneConfirmed(t: TestApp, meetingId: string, n: number): Promise
   return ids;
 }
 /** 改一场会的确认版正文，并重算确认时记下的摘要值（当作正常确认过的）。 */
-async function rewriteConfirmed(t: TestApp, meetingId: string, change: (payload: TMeetingCardV1Payload) => void) {
+async function rewriteConfirmed(t: TestApp, meetingId: string, change: (payload: TMeetingCardFrozenPayload) => void) {
   const [row] = await t.sql("SELECT payload FROM meeting_card_confirmations WHERE meeting_id = $1", [meetingId]);
-  const payload = row.payload as TMeetingCardV1Payload;
+  const payload = row.payload as TMeetingCardFrozenPayload;
   change(payload);
   await t.sql("UPDATE meeting_card_confirmations SET payload = $2::jsonb, confirmation = jsonb_set(confirmation, '{payloadHash}', to_jsonb($3::text)) WHERE meeting_id = $1",
     [meetingId, JSON.stringify(payload), payloadHash(payload)]);
@@ -72,7 +72,8 @@ const teardownAgent: PostMeetingAgent = {
         { heading: "预发环境", body: "已定：预发环境回收提前，由 10/28 前调整为 10/27 前停服务、删卷和站点。", turnIds: ["turn-002"] },
         { heading: "渠道预算", body: "未定：渠道预算下周看数据再定。", turnIds: ["turn-001"] },
       ],
-      objectChanges: [{ targetRef: "obj-po-1#target/acc-1", after: { text: "十月底前 4 家客户上线" }, basisSections: [1] }],
+      decisions: [{ text: "接口统一改成 v2", ownerPersonId: OWNER, basisSections: [1] }],
+      objectChanges: [{ targetRef: "obj-po-1#target/acc-1", after: { text: "十月底前 4 家客户上线" }, basisSections: [1], decision: 1 }],
       actionItems: [{ text: "渠道看板接到 v2", ownerPersonId: OWNER, dueDate: "2026-06-30", basisSections: [2] }],
     } };
   },

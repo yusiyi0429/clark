@@ -329,7 +329,6 @@ export function createMeetingMinutesService(deps: MeetingMinutesDeps) {
       {
         speakerMappings: candidate.speakers.flatMap((speaker) => speaker.suggestedPersonId ? [{ speakerName: speaker.speakerName, personId: speaker.suggestedPersonId }] : []),
         confirmAddParticipants: true,
-        keepUnmapped: true,
       },
       `feishu-minutes:${minute.token}`);
     return { kind: "ready" };

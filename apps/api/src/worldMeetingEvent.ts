@@ -1,4 +1,4 @@
-import type { TMeetingCardConfirmation, TMeetingCardKind, TMeetingCardV1Payload, TWorldAnchor } from "@warmap/contracts";
+import type { TMeetingCardConfirmation, TMeetingCardFrozenPayload, TMeetingCardKind, TWorldAnchor } from "@warmap/contracts";
 import { payloadHash } from "./meetingCardHash.js";
 import type { MeetingRow, Query } from "./meetingStore.js";
 import { WorldClient, WorldError, worldErrorCode, worldRef, type WorldAction, type WorldHead } from "./worldClient.js";
@@ -15,14 +15,20 @@ import { WorldClient, WorldError, worldErrorCode, worldRef, type WorldAction, ty
  * - 前次没有写成的事件就按 first 写。幂等键 tianshu-meeting:<会议 ID>:v<revision>:event（10/21 起；更早写成的用的是不带 :event 的旧键）；
  *   结果未知时同键重放台账里的原请求（拍板 3）。
  * - 写完按挂点对象取事件读回：找到这条，正文解析出的 confirmation.payloadHash 和确认的一致、并且按解析出的 payload 重算也一致，才算写成。
+ * - v2（10/28 决策逐条确认）自动冻结的（confirmedBy 为 null）：trigger「会议决策逐条确认」（没有决策、只写记录时「会议记录生成」），reason 写逐条确认的人；
+ *   主持人自己整卡确认的版本照旧「会议记录整卡确认」。
+ *   记录正文不能写进本体时（recordText 为 false，等斯一答复）：事件里的 payload 去掉 summary 和 sections，只带已确认的决策和行动项（出处见各条的 sourceRefs 和原文链接），
+ *   confirmation.payloadHash 换成事件里这份 payload 的摘要值（天枢存的确认版仍是全文的摘要值）。
  */
 export type MeetingEventWrite = {
   meetingId: string;
   kind: TMeetingCardKind;
-  payload: TMeetingCardV1Payload;
+  payload: TMeetingCardFrozenPayload;
   confirmation: TMeetingCardConfirmation;
-  /** 确认人的显示名（写进 reason）。 */
+  /** 确认人的显示名（写进 reason；几个人时用顿号连）。 */
   confirmerName: string;
+  /** 记录正文（摘要、正文段落）能不能写进本体；只对 v2 起作用。 */
+  recordText?: boolean;
   /** 前次写成的会议事件（同一会议更早的确认版本）和它实际写进去的 subject_refs、occurred_at（没记下为 null）；没有前次就按 first 写。 */
   previous: { eventId: string; revision: number; subjectRefs: string[] | null; occurredAt: string | null } | null;
   /** 这一版真正写成的对象修改（writtenRevisionRefs）；没有为空。 */
@@ -78,7 +84,7 @@ function readBackMatches(event: Record<string, unknown>, expected: string): bool
   const text = (event.content as { text?: unknown } | undefined)?.text;
   if (typeof text !== "string") return false;
   try {
-    const parsed = JSON.parse(text) as { payload?: TMeetingCardV1Payload; confirmation?: { payloadHash?: unknown } };
+    const parsed = JSON.parse(text) as { payload?: Record<string, unknown>; confirmation?: { payloadHash?: unknown } };
     return parsed.confirmation?.payloadHash === expected && Boolean(parsed.payload) && payloadHash(parsed.payload!) === expected;
   } catch {
     return false;
@@ -87,7 +93,14 @@ function readBackMatches(event: Record<string, unknown>, expected: string): bool
 
 export function createMeetingEventWorld({ client }: { client: WorldClient }): MeetingEventWorld {
   return {
-    async write({ meetingId, kind: requested, payload, confirmation, confirmerName, previous, revisionRefs = [] }) {
+    async write({ meetingId, kind: requested, payload, confirmation: confirmed, confirmerName, recordText = false, previous, revisionRefs = [] }) {
+      const v2 = payload.schemaVersion === "meeting-card.v2";
+      const withheld = v2 && !recordText;
+      const { summary: _summary, sections: _sections, ...decisionsOnly } = payload;
+      const eventPayload = withheld ? decisionsOnly : payload;
+      const confirmation = withheld ? { ...confirmed, payloadHash: payloadHash(eventPayload) } : confirmed;
+      // 主持人整卡确认的（v1，或冻结前后主持人自己确认的版本）照旧；自动冻结的按有没有已确认的决策。
+      const trigger = confirmed.confirmedBy ? "会议记录整卡确认" : payload.decisions?.length ? "会议决策逐条确认" : "会议记录生成";
       const kind = previous ? requested : "first";
       let subjectRefs = [...new Set(payload.relatedObjectRefs)];
       let occurredAt = shanghai(new Date(payload.occurredAt!));
@@ -109,18 +122,18 @@ export function createMeetingEventWorld({ client }: { client: WorldClient }): Me
         const scene = await client.getHead(sceneId);
         return {
           action_type: "world_record_event", contract_version: scene.contract_version, target: null, expected_versions: [], idempotency_key: key,
-          reason: `天枢会议记录整卡确认（${confirmerName}）`,
+          reason: confirmerName ? `天枢${trigger}（${confirmerName}）` : `天枢${trigger}`,
           params: {
             category: kind === "correction" ? "correction" : "meeting",
             subject_refs: subjectRefs,
             occurred_at: occurredAt,
             ...(kind === "correction" ? { supersedes_event_id: previous!.eventId } : {}),
             content: {
-              text: JSON.stringify({ payload, confirmation }),
+              text: JSON.stringify({ payload: eventPayload, confirmation }),
               ...(refs.length ? { refs } : {}),
               artifacts: [...new Set(payload.sources.map((source) => source.url))],
             },
-            declaration: { scene: worldRef(scene), trigger: "会议记录整卡确认", human_acceptance: { required: false } },
+            declaration: { scene: worldRef(scene), trigger, human_acceptance: { required: false } },
           },
         } satisfies WorldAction;
       });
