@@ -198,6 +198,8 @@ export type AppEnv = {
    * 用 INTERNAL_CHAT_TOKEN 转发本人身份；不设走天枢自己的对话。对象页的对话不受影响。
    */
   chatServiceUrl?: string;
+  /** 微信 ClawBot（WECHAT_ENABLED=1 才开，还要接了飞书）：10/28 生产先不上。 */
+  wechatEnabled?: boolean;
   buildSha: string;
   piBaseUrl: string;
   piApiKey: string;
@@ -785,7 +787,7 @@ export async function buildApp({
   app.decorate("feishuChat", feishuChat);
   if (feishuChat) app.addHook("onClose", async () => { await feishuChat.idle(); });
   // 微信 ClawBot（wechat/）：本人扫码后在微信里问天枢、收通知。bot token 用飞书的令牌密钥加密，所以接了飞书才开。
-  const wechat = env.feishu ? createWechatService({
+  const wechat = env.feishu && env.wechatEnabled ? createWechatService({
     app, pool, ilink: wechatIlink ?? createIlink(), avatar: wechatAvatar, peopleDirectory,
     env: { sessionSecret: env.sessionSecret, publicOrigin: env.publicOrigin, tokenKey: env.feishu.tokenKey, tokenKeyVersion: env.feishu.tokenKeyVersion },
   }) : undefined;

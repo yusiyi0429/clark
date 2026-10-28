@@ -47,7 +47,7 @@ const CONFIRMED: QrStatus = { status: "confirmed", bot_token: "bot-secret", ilin
 
 async function start(statuses: QrStatus[], runtime: ConversationRuntime = answering("好的")) {
   const fake = fakeIlink(statuses);
-  t = await createTestApp({ feishu: { appId: "cli_test", appSecret: "test-secret", tokenKey: randomBytes(32), tokenKeyVersion: 1 } }, runtime, { wechatIlink: fake.ilink, wechatAvatar: async () => Buffer.from("png") });
+  t = await createTestApp({ feishu: { appId: "cli_test", appSecret: "test-secret", tokenKey: randomBytes(32), tokenKeyVersion: 1 }, wechatEnabled: true }, runtime, { wechatIlink: fake.ilink, wechatAvatar: async () => Buffer.from("png") });
   const cookie = await t.loginCookie();
   return { ...fake, cookie };
 }
