@@ -1,0 +1,57 @@
+{
+  "version": "owner-evidence-2.1.9",
+  "fixture": ".runtime/eval/nexus-eval/base-review-1027.json",
+  "note": "已按2026-10-28用户新口径确定；不改原题库，不改变标签或确认权。 本轮检查以保存待接受修订卡为必要结果；依既有“出卡不重复播报”规则，不额外要求口头复述。有口头回复时仍检查称呼。原始回放的 replied 检查失败记录保留在报告中。",
+  "cases": [
+    {
+      "id": "O01",
+      "title": "负责人具体陈述足以提出修订，不以本体补记为前提",
+      "draft": false,
+      "source": "2026-10-28 用户明确：保留原标签，人工纠正应重评，负责人陈述作为有来源的证据。复用既有 P01 语句，更新原先待决定的期望。",
+      "scope": "person:member-03",
+      "card": "rv:person:孙铭泽",
+      "steps": [
+        {
+          "as": "member-03",
+          "say": "Mission 1 第一条「会议内容写进本体」我觉得应该算达成：10/26 下午我和溪南在飞书会议里做了双人实测，会后写进本体一条会议事件，读回一致，飞书会议纪要里有记录。"
+        }
+      ],
+      "expect": [
+        {
+          "type": "you_form",
+          "name": "孙铭泽"
+        },
+        {
+          "type": "proposal",
+          "card": "rv:agents-m1",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "O02",
+      "title": "负责人反对原判定并补具体事实，仍应出修订候选",
+      "draft": false,
+      "source": "2026-10-28 用户明确：保留原标签，人工纠正应重评，负责人陈述作为有来源的证据。复用既有 P01 语句，更新原先待决定的期望。",
+      "scope": "person:member-03",
+      "card": "rv:person:孙铭泽",
+      "steps": [
+        {
+          "as": "member-03",
+          "say": "我不同意这个判定。Mission 1 第一条「会议内容写进本体」我觉得应该算达成：10/26 下午我和溪南在飞书会议里做了双人实测，会后写进本体一条会议事件，读回一致，飞书会议纪要里有记录。"
+        }
+      ],
+      "expect": [
+        {
+          "type": "you_form",
+          "name": "孙铭泽"
+        },
+        {
+          "type": "proposal",
+          "card": "rv:agents-m1",
+          "status": "pending"
+        }
+      ]
+    }
+  ]
+}
