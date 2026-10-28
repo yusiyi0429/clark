@@ -11,8 +11,6 @@ type MeetingDecisionListProps = {
   /** 没有责任人的由主持人确认。 */
   hostId: string;
   viewerId: string;
-  /** 主持人或创建人：能代确认。 */
-  canEdit: boolean;
   /** 已定版：不能再点。 */
   frozen: boolean;
   busy: boolean;
@@ -21,33 +19,33 @@ type MeetingDecisionListProps = {
 };
 
 /**
- * 会议卡上的「决策」：每条写着由谁确认、确认了没有。责任人（没有就是主持人）自己点「确认 / 不对」，
- * 主持人或创建人可以「代确认」（记为代确认）；定版后只读。
+ * 会议卡上的「决策」：每条写着由谁确认、确认了没有。只有责任人（没有就是主持人）本人能点「确认 / 不对」，
+ * 别人只看；定版后只读。
  */
-export function MeetingDecisionList({ decisions, sections, hostId, viewerId, canEdit, frozen, busy, nameOf, onReview }: MeetingDecisionListProps) {
+export function MeetingDecisionList({ decisions, sections, hostId, viewerId, frozen, busy, nameOf, onReview }: MeetingDecisionListProps) {
   return (
     <section className={c.block}>
       <h3 className={c.blockLabel}>决策</h3>
       <div className={c.items}>
         {decisions.map((decision, index) => (
           <DecisionRow key={decision.id} number={index + 1} decision={decision} basis={basisLabel(decision.basisSectionIds, sections)}
-            confirmer={decision.ownerPersonId ?? hostId} viewerId={viewerId} canEdit={canEdit} frozen={frozen} busy={busy} nameOf={nameOf} onReview={onReview} />
+            confirmer={decision.ownerPersonId ?? hostId} viewerId={viewerId} frozen={frozen} busy={busy} nameOf={nameOf} onReview={onReview} />
         ))}
       </div>
     </section>
   );
 }
 
-export function DecisionRow({ number, decision, basis, confirmer, viewerId, canEdit, frozen, busy, nameOf, onReview }: {
+export function DecisionRow({ number, decision, basis, confirmer, viewerId, frozen, busy, nameOf, onReview }: {
   number: number; decision: TMeetingCardDecision; basis: string | null; confirmer: string;
-} & Pick<MeetingDecisionListProps, "viewerId" | "canEdit" | "frozen" | "busy" | "nameOf" | "onReview">) {
+} & Pick<MeetingDecisionListProps, "viewerId" | "frozen" | "busy" | "nameOf" | "onReview">) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const { review } = decision;
   const open = review.status === "pending" && !frozen;
   const self = confirmer === viewerId;
   const who = review.by ? nameOf(review.by) : "";
-  const status = review.status === "confirmed" ? (review.proxy ? `${who}代${nameOf(confirmer)}确认` : `${who}确认`)
+  const status = review.status === "confirmed" ? `${who}确认`
     : review.status === "rejected" ? `${who}：${review.reason ?? ""}`
     : frozen ? `${nameOf(confirmer)}没有确认` : `待${nameOf(confirmer)}确认`;
   const reject = async () => {
@@ -78,10 +76,6 @@ export function DecisionRow({ number, decision, basis, confirmer, viewerId, canE
             <span className={c.spacer} />
             <button type="button" className={c.ghost} disabled={busy} onClick={() => setRejecting(false)}>取消</button>
             <button type="button" className={c.primary} disabled={busy || !reason.trim()} onClick={() => void reject()}>提交</button>
-          </div>
-        ) : open && canEdit ? (
-          <div className={c.actions}>
-            <button type="button" className={c.ghost} disabled={busy} onClick={() => void onReview(decision.id, "confirm")}>代确认</button>
           </div>
         ) : null}
       </div>

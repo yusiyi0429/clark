@@ -30,14 +30,14 @@ import type { MeetingEventWorld } from "./worldMeetingEvent.js";
  * - 选了不写入：回执 skipped，不发请求；已经写进去的不撤回。
  * - 对象修改（meetingObjectSync）：确认时排好每条的回执（上一版已改成、这次没动的沿用结果），新版确认后旧版还没提交的作废；
  *   事件写成后同一任务里接着按顺序提交这一版的修改。
- * - 决策逐条确认（10/28，decisions 不为 null 的会议卡）：决策和行动项由责任人（没有就是主持人）在通知栏或会议页逐条点，主持人或创建人可以代点；
- *   行动项「接下」时才推成执行事项。决策都有了结果、或生成满 48 小时，自动冻结 revision 1（meeting.card_freeze，confirmedBy 为 null）：
- *   payload v2 只放已确认的决策和行动项（各带确认人）、只留已确认决策的对象修改；没有已确认的决策时不写本体（记录正文能写时除外，见 recordText）。
- *   之后的修改照旧由主持人确认出新版本。主持人在冻结前直接整卡确认，等于代确认所有还没处理的条目后冻结。
+ * - 决策逐条确认（10/28，decisions 不为 null 的会议卡）：决策和行动项只由责任人本人（没有就是主持人）在通知栏或会议页逐条点，
+ *   别人不能代点（斯一第 4 条）；行动项「接下」时才推成执行事项。决策都有了结果、或生成满 48 小时，自动冻结 revision 1（meeting.card_freeze，confirmedBy 为 null）：
+ *   payload v2 只放已确认的决策和行动项（各带确认人），不带对象修改（斯一第 7 条：确认决策不等于批准修改）；
+ *   没有已确认的决策时不写本体（记录正文能写时除外，见 recordText）。冻结前不能整卡确认（409 REVIEW_PER_ITEM）；冻结后的修改照旧由主持人确认出新版本。
  */
 export const MEETING_WORLD_SYNC_KIND = "meeting.world_sync";
 export const MEETING_CARD_FREEZE_KIND = "meeting.card_freeze";
-export const PENDING_REVIEW: TMeetingItemReview = { status: "pending", by: null, proxy: false, at: null, reason: null };
+export const PENDING_REVIEW: TMeetingItemReview = { status: "pending", by: null, at: null, reason: null };
 
 type Viewer = { personId: string; isCeo: boolean };
 type ConfirmError = { status: number; code: string; message: string; view?: TMeetingCardView };
@@ -80,12 +80,10 @@ const itemDecided = ({ taskId: _taskId, review: _review, ...item }: TMeetingActi
 const recordOf = ({ meetingId, title, occurredAt, participants, summary, sections, sources }: TMeetingCardDraft | TMeetingCardFrozenPayload) =>
   ({ meetingId, title, occurredAt, participants, summary, sections, sources });
 /**
- * 草稿和确认版的会议内容（payload 部分）不同（不算服务填的修改字段和挂点对象的版本）。
- * v2 只比已确认决策的对象修改（没确认的决策的修改本来就不进 payload）。
+ * 草稿和确认版的会议内容（payload 部分）不同（不算服务填的修改字段和挂点对象的版本）。v2 不带对象修改，不比。
  */
 function contentDiffers(draft: TMeetingCardDraft, payload: TMeetingCardFrozenPayload): boolean {
-  const kept = payload.decisions ? new Set(payload.decisions.map((decision) => decision.id)) : null;
-  const changes = kept ? draft.objectChanges.filter((change) => change.decisionId && kept.has(change.decisionId)) : draft.objectChanges;
+  const changes = payload.decisions ? [] : draft.objectChanges;
   return !isDeepStrictEqual(
     { ...recordOf(payload), relatedObjectRefs: payload.relatedObjectRefs.map(bareRef), objectChanges: payload.objectChanges.map(decided) },
     { ...recordOf(draft), relatedObjectRefs: [...new Set(draft.relatedObjectRefs)], objectChanges: changes.map(decided) },
@@ -94,22 +92,18 @@ function contentDiffers(draft: TMeetingCardDraft, payload: TMeetingCardFrozenPay
 
 /**
  * 冻结的 payload：草稿的会议内容加挂点对象版本。decisions 为 null（10/28 之前的会议卡）出 v1；
- * 否则出 v2，只放已确认的决策和行动项（带确认人和出处位置），对象修改只留已确认决策的。
+ * 否则出 v2，只放已确认的决策和行动项（带确认人和出处位置），不带对象修改（不提交）。
  */
 function frozenPayload(draft: TMeetingCardDraft, revision: number, relatedObjectRefs: string[], decisions: TMeetingCardDecision[] | null,
   items: TMeetingActionItem[]): TMeetingCardFrozenPayload {
   const base = { ...recordOf(draft), relatedObjectRefs, revision };
-  const objectChanges = draft.objectChanges.map(({ stale: _stale, ...change }) => change);
-  if (!decisions) return { schemaVersion: "meeting-card.v1", ...base, objectChanges };
+  if (!decisions) return { schemaVersion: "meeting-card.v1", ...base, objectChanges: draft.objectChanges.map(({ stale: _stale, ...change }) => change) };
   const sourceRefsOf = (ids: string[]) => draft.sections.filter((section) => ids.includes(section.id)).flatMap((section) => section.sourceRefs);
   const confirmed = <T extends Reviewable & { basisSectionIds: string[] }>(list: T[]) => list.flatMap((item) => item.review?.status === "confirmed"
-    ? [{ item, review: { confirmedBy: item.review.by!, proxy: item.review.proxy, confirmedAt: item.review.at!, sourceRefs: sourceRefsOf(item.basisSectionIds) } }] : []);
-  const kept = confirmed(decisions);
-  const ids = new Set(kept.map(({ item }) => item.id));
+    ? [{ item, review: { confirmedBy: item.review.by!, confirmedAt: item.review.at!, sourceRefs: sourceRefsOf(item.basisSectionIds) } }] : []);
   return {
-    schemaVersion: "meeting-card.v2", ...base,
-    objectChanges: objectChanges.filter((change) => change.decisionId && ids.has(change.decisionId)),
-    decisions: kept.map(({ item: { id, text, ownerPersonId, basisSectionIds }, review }) => ({ id, text, ownerPersonId, basisSectionIds, ...review })),
+    schemaVersion: "meeting-card.v2", ...base, objectChanges: [],
+    decisions: confirmed(decisions).map(({ item: { id, text, ownerPersonId, basisSectionIds }, review }) => ({ id, text, ownerPersonId, basisSectionIds, ...review })),
     actionItems: confirmed(items).map(({ item: { id, text, ownerPersonId, dueDate, basisSectionIds }, review }) => ({ id, text, ownerPersonId, dueDate, basisSectionIds, ...review })),
   };
 }
@@ -219,9 +213,11 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     if (!UUID_PATTERN.test(meetingId)) return NOT_FOUND;
     const meeting = await getMeetingRow(q, meetingId);
     if (!meeting || !isHostOrCreator(meeting, viewer.personId)) return NOT_FOUND;
-    const card = (await q("SELECT draft, action_items, draft_version, current_revision FROM meeting_cards WHERE meeting_id = $1", [meetingId])).rows[0] as
-      { draft: TMeetingCardDraft | null; action_items: TMeetingActionItem[]; draft_version: number; current_revision: number | null } | undefined;
+    const card = (await q("SELECT draft, action_items, decisions, draft_version, current_revision FROM meeting_cards WHERE meeting_id = $1", [meetingId])).rows[0] as
+      { draft: TMeetingCardDraft | null; action_items: TMeetingActionItem[]; decisions: TMeetingCardDecision[] | null; draft_version: number; current_revision: number | null } | undefined;
     if (!card?.draft) return { error: { status: 409, code: "CARD_NOT_READY", message: "会议卡草稿还没生成" } };
+    // 逐条确认的会议卡冻结前不能整卡确认（主持人不能替责任人确认）：到期或都有结果后自动冻结。
+    if (card.decisions && !card.current_revision) return { error: { status: 409, code: "REVIEW_PER_ITEM", message: "这场会的决策由责任人逐条确认" } };
     if (input.draftVersion !== card.draft_version) return changed(meetingId, viewer);
     const current = card.current_revision ? await currentConfirmation(q, meetingId) : null;
     // 同一草稿版本只算一次确认（拍板 8）：不出新版本、不要求选原因。
@@ -259,11 +255,9 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
       if (conflict) return conflict;
       const revision = (locked.current_revision ?? 0) + 1;
       kind = locked.current_revision ? input.kind! : "first";
-      // 第一次（冻结前）主持人直接整卡确认：还没处理的决策和行动项都算他代确认；之后的修改不动逐条状态。
-      const sweep = { by: viewer.personId, at: at.toISOString(), all: !locked.current_revision };
-      const actionItems = await dispatchItems(client, meeting, locked.action_items, sweep);
-      const decisions = locked.decisions && sweep.all ? locked.decisions.map((decision) => decision.review.status === "pending"
-        ? { ...decision, review: reviewed(meeting, decision, sweep.by, sweep.at, "confirm", null) } : decision) : locked.decisions;
+      // 逐条确认的会议卡走到这里时已经冻结过，修改不动逐条状态。
+      const actionItems = await dispatchItems(client, meeting, locked.action_items);
+      const { decisions } = locked;
       const payload = frozenPayload(draft, revision, relatedObjectRefs, decisions, actionItems);
       const confirmation: TMeetingCardConfirmation = { revision, confirmedBy: viewer.personId, confirmedAt: at.toISOString(), payloadHash: payloadHash(payload) };
       // 上一版已改成的同一处修改沿用结果，不再提交（回执现读，锁住后不会再出新版本）。
@@ -307,34 +301,25 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     if (writeToWorld) await queueSync(cq, meetingId);
   }
 
-  /** 一条决策或行动项处理后的状态：by 不是责任人（没有就是主持人）时记为代确认。 */
-  function reviewed(meeting: MeetingRow, item: Reviewable, by: string, at: string, verdict: TMeetingCardReviewRequest["verdict"], reason: string | null): TMeetingItemReview {
-    return { status: verdict === "confirm" ? "confirmed" : "rejected", by, proxy: (item.ownerPersonId ?? meeting.lead_dri_id) !== by, at, reason };
-  }
+  /** 一条决策或行动项本人处理后的状态。 */
+  const reviewed = (by: string, at: string, verdict: TMeetingCardReviewRequest["verdict"], reason: string | null): TMeetingItemReview =>
+    ({ status: verdict === "confirm" ? "confirmed" : "rejected", by, at, reason });
 
   /** 一条行动项推成执行事项（负责人缺省主持人；是 CEO 的不建，返回 null）。 */
   const dispatchTodo = (client: PoolClient, meeting: MeetingRow, item: TMeetingActionItem) =>
     dispatchMeetingTodo(client, { id: meeting.id, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id,
       ownerName: nameOf(meeting.participants, item.ownerPersonId ?? meeting.lead_dri_id), title: meeting.title, now: now() }, { ...item, dueDate: item.dueDate ?? undefined, quote: null });
 
-  /**
-   * 整卡确认时推行动项，返回回填后的行动项：10/28 之前的（没有 review）还没 taskId 的照旧推；逐条确认的只在 sweep.all（冻结前主持人整卡确认）时
-   * 把还没处理的算他代接下、推出去，别的等负责人自己点。
-   */
-  async function dispatchItems(client: PoolClient, meeting: MeetingRow, items: TMeetingActionItem[], sweep: { by: string; at: string; all: boolean }): Promise<TMeetingActionItem[]> {
+  /** 整卡确认时推行动项，返回回填后的行动项：10/28 之前的（没有 review）还没 taskId 的照旧推；逐条确认的等负责人自己点。 */
+  async function dispatchItems(client: PoolClient, meeting: MeetingRow, items: TMeetingActionItem[]): Promise<TMeetingActionItem[]> {
     const dispatched: TMeetingActionItem[] = [];
-    for (const item of items) {
-      const swept = item.review?.status === "pending" && sweep.all;
-      if (item.taskId || (item.review && !swept)) { dispatched.push(item); continue; }
-      const taskId = await dispatchTodo(client, meeting, item);
-      dispatched.push({ ...item, taskId, ...(swept ? { review: reviewed(meeting, item, sweep.by, sweep.at, "confirm", null) } : {}) });
-    }
+    for (const item of items) dispatched.push(item.taskId || item.review ? item : { ...item, taskId: await dispatchTodo(client, meeting, item) });
     return dispatched;
   }
 
   /**
-   * 逐条确认一条决策或行动项：责任人（没有就是主持人）自己点，主持人或创建人代点（记为代确认）；别人当会议不存在。
-   * 行动项「接下」就推成执行事项（自己接下的不再出「分给你的事」那一条，代接下的照旧通知负责人）。决策都有了结果，排一次冻结。
+   * 逐条确认一条决策或行动项：只有责任人本人（没有就是主持人）能点，别人（包括主持人、创建人）当会议不存在。
+   * 行动项「接下」就推成执行事项（自己接下的，不再出「分给你的事」那一条）。决策都有了结果，排一次冻结。
    * 返回最新会议卡；点的人读不了会议卡时 view 为 null。
    */
   async function review(meetingId: string, viewer: Viewer, input: TMeetingCardReviewRequest): Promise<{ view: TMeetingCardView | null } | { error: ConfirmError }> {
@@ -349,9 +334,8 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
         { decisions: TMeetingCardDecision[] | null; action_items: TMeetingActionItem[]; current_revision: number | null } | undefined;
       const list: Reviewable[] = !card ? [] : input.kind === "decision" ? card.decisions ?? [] : card.action_items;
       const item = list.find((candidate) => candidate.id === input.id);
-      if (!card || !item?.review) return "missing";
-      const result = reviewed(meeting, item, viewer.personId, at, input.verdict, input.verdict === "reject" ? reason : null);
-      if (result.proxy && !isHostOrCreator(meeting, viewer.personId)) return "missing";
+      if (!card || !item?.review || (item.ownerPersonId ?? meeting.lead_dri_id) !== viewer.personId) return "missing";
+      const result = reviewed(viewer.personId, at, input.verdict, input.verdict === "reject" ? reason : null);
       if (item.review.status !== "pending") return "reviewed";
       if (input.kind === "decision") {
         if (card.current_revision) return "frozen";
@@ -364,7 +348,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
       }
       const actionItem = item as TMeetingActionItem;
       const taskId = input.verdict === "confirm" ? await dispatchTodo(client, meeting, actionItem) : null;
-      if (taskId && !result.proxy) await cq("UPDATE notifications SET read_at = now() WHERE kind = 'meeting_action_assigned' AND object_id = $1 AND read_at IS NULL", [taskId]);
+      if (taskId) await cq("UPDATE notifications SET read_at = now() WHERE kind = 'meeting_action_assigned' AND object_id = $1 AND read_at IS NULL", [taskId]);
       const items = card.action_items.map((candidate) => (candidate.id === item.id ? { ...candidate, taskId: taskId ?? candidate.taskId, review: result } : candidate));
       await cq("UPDATE meeting_cards SET action_items = $2::jsonb, updated_at = now() WHERE meeting_id = $1", [meetingId, JSON.stringify(items)]);
       return "done";
@@ -416,7 +400,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     const outcome = await transaction(async (cq, client): Promise<Locked> => {
       const { locked, conflict } = await lockCard(cq, meetingId, input.draftVersion, current.revision);
       if (conflict) return conflict;
-      const actionItems = JSON.stringify(await dispatchItems(client, meeting, locked.action_items, { by: viewer.personId, at: now().toISOString(), all: false }));
+      const actionItems = JSON.stringify(await dispatchItems(client, meeting, locked.action_items));
       await cq("UPDATE meeting_card_confirmations SET action_items = $3::jsonb, draft_version = $4 WHERE meeting_id = $1 AND revision = $2",
         [meetingId, current.revision, actionItems, input.draftVersion]);
       await cq("UPDATE meeting_cards SET action_items = $2::jsonb, updated_at = now() WHERE meeting_id = $1", [meetingId, actionItems]);

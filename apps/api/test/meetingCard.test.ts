@@ -26,8 +26,8 @@ const TURNS = [
 ];
 const ACCEPTANCE = "obj-po-1#target/acc-1";
 
-/** 假模型：两段、一条修改、一条行动项；target 可换成别的。 */
-function cardAgent(target = ACCEPTANCE) {
+/** 假模型：两段、一条决策、一条行动项（会后整理不拟对象修改，给空数组）。 */
+function cardAgent() {
   const calls: PostMeetingAgentInput[] = [];
   const agent: PostMeetingAgent = {
     async generate(input) {
@@ -39,13 +39,17 @@ function cardAgent(target = ACCEPTANCE) {
           { heading: "渠道预算", body: "未定：渠道预算这个月先不动，下周看数据再定。", turnIds: ["turn-001"] },
         ],
         decisions: [{ text: "接口统一改成 v2", ownerPersonId: OWNER, basisSections: [1] }],
-        objectChanges: [{ targetRef: target, after: { text: "十月底前 4 家客户上线" }, basisSections: [1], decision: 1 }],
+        objectChanges: [],
         actionItems: [{ text: "渠道看板接到 v2", ownerPersonId: OWNER, dueDate: "2026-06-30", basisSections: [1] }],
       } };
     },
   };
   return { agent, calls };
 }
+/** 10/28 之前的会议卡上那处修改（当时由模型拟、服务填目标）：直接放进草稿，草稿版本不动；存草稿、读卡刷新这些照旧要处理它。 */
+const legacyChange = (t: TestApp, meetingId: string) => t.pool.query("UPDATE meeting_cards SET draft = jsonb_set(draft, '{objectChanges}', $2::jsonb) WHERE meeting_id = $1",
+  [meetingId, JSON.stringify([{ id: "chg-1", targetRef: ACCEPTANCE, targetTitle: "十月交付 · 验收标准", expectedVersion: 5,
+    before: { text: "十月底前 3 家客户上线" }, after: { text: "十月底前 4 家客户上线" }, basisSectionIds: ["sec-1"], stale: false }])]);
 const preflightAgent: PreflightAgent = { async generate(input: PreflightAgentInput) { return { candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)) }; } };
 
 /** 假本体：挂点 PO 带一个验收组件、一个结果组件和一个没有文字的引用组件；版本和文字可以改。 */
@@ -129,7 +133,9 @@ describe("会议卡草稿", () => {
       expect(draft.sources).toHaveLength(1);
       expect(draft.sources[0]).toMatchObject({ id: "src-1", title: "接口切换会", sourceVersion: null, contentHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
       expect(draft.participants.map((person) => person.name)).toEqual(["测试甲", "测试乙", "测试丙"]);
-      const pending = { status: "pending", by: null, proxy: false, at: null, reason: null };
+      // 会后整理不拟对象修改（斯一 10/28 第 7 条）。
+      expect(draft.objectChanges).toEqual([]);
+      const pending = { status: "pending", by: null, at: null, reason: null };
       expect(view.actionItems).toEqual([{ id: "act-1", text: "渠道看板接到 v2", ownerPersonId: OWNER, dueDate: "2026-06-30", basisSectionIds: ["sec-1"], taskId: null, review: pending }]);
       // 决策单列：一句话、责任人（这场会的人）、出处段落，待确认。
       expect(view.decisions).toEqual([{ id: "dec-1", text: "接口统一改成 v2", ownerPersonId: OWNER, basisSectionIds: ["sec-1"], review: pending }]);
@@ -149,14 +155,16 @@ describe("会议卡草稿", () => {
     }
   });
 
-  it("修改定到目标组件：targetRef、组件当前文字、对象版本由服务填", async () => {
+  it("模型给了修改也丢掉；能编辑的人照样拿到挂点对象里有文字的组件", async () => {
     ontology();
-    const { t, host, meetingId } = await setup(cardAgent().agent);
+    const { agent } = cardAgent();
+    const { t, host, meetingId } = await setup(agent);
     try {
-      const view = await viewOf(t, host, meetingId);
-      expect(view.draft!.objectChanges).toEqual([{ id: "chg-1", targetRef: ACCEPTANCE, targetTitle: "十月交付 · 验收标准", expectedVersion: 5,
-        before: { text: "十月底前 3 家客户上线" }, after: { text: "十月底前 4 家客户上线" }, basisSectionIds: ["sec-1"], decisionId: "dec-1", stale: false }]);
-      expect(view.targetOptions.map((option) => option.targetRef)).toEqual([ACCEPTANCE, "obj-po-1#target/out-1"]);
+      const { candidate } = await agent.generate({} as PostMeetingAgentInput);
+      const built = buildCardDraft(t.pool, await prepareCardGeneration(t.pool, meetingId), { ...(candidate as object),
+        objectChanges: [{ targetRef: ACCEPTANCE, after: { text: "十月底前 4 家客户上线" }, basisSections: [1] }] });
+      expect(built!.draft.objectChanges).toEqual([]);
+      expect((await viewOf(t, host, meetingId)).targetOptions.map((option) => option.targetRef)).toEqual([ACCEPTANCE, "obj-po-1#target/out-1"]);
     } finally {
       await t.close();
     }
@@ -214,21 +222,11 @@ describe("会议卡草稿", () => {
     }
   });
 
-  it("目标不在候选里就是未定", async () => {
-    ontology();
-    const { t, host, meetingId } = await setup(cardAgent("obj-other#target/x").agent);
-    try {
-      const change = (await viewOf(t, host, meetingId)).draft!.objectChanges[0];
-      expect(change).toMatchObject({ targetRef: null, targetTitle: null, before: null, expectedVersion: null, after: { text: "十月底前 4 家客户上线" } });
-    } finally {
-      await t.close();
-    }
-  });
-
   it("存草稿：整份替换、版本加一，服务重读 before 和版本、忽略前端传的 stale 和 taskId；目标保存前变了标 stale；旧版本 409 带最新视图", async () => {
     const world = ontology();
     const { t, host, meetingId } = await setup(cardAgent().agent);
     try {
+      await legacyChange(t, meetingId);
       const view = await viewOf(t, host, meetingId);
       const draft = structuredClone(view.draft!);
       draft.sections[1].body = "已定：渠道预算这个月不动。";
@@ -264,6 +262,7 @@ describe("会议卡草稿", () => {
     ontology();
     const { t, host, meetingId } = await setup(cardAgent().agent);
     try {
+      await legacyChange(t, meetingId);
       const view = await viewOf(t, host, meetingId);
       const badSource = structuredClone(view.draft!);
       badSource.sections[0].sourceRefs[0].sourceId = "src-9";
@@ -294,6 +293,7 @@ describe("会议卡草稿", () => {
     const world = ontology();
     const { t, host, meetingId } = await setup(cardAgent().agent);
     try {
+      await legacyChange(t, meetingId);
       expect((await viewOf(t, host, meetingId)).draftVersion).toBe(1);
       world.po.object_version = 6;
       world.po.version = 6;
@@ -335,6 +335,7 @@ describe("会议卡草稿", () => {
     ontology();
     const { t, host, meetingId } = await setup(cardAgent().agent);
     try {
+      await legacyChange(t, meetingId);
       const res = await t.app.inject({ method: "PUT", url: `/api/meetings/${meetingId}/world-anchors`, headers: { cookie: host, origin: t.publicOrigin }, payload: { anchors: null } });
       expect(res.statusCode).toBe(200);
       const view = await viewOf(t, host, meetingId);
@@ -354,6 +355,7 @@ describe("会议卡草稿", () => {
     const world = ontology();
     const { t, host, meetingId } = await setup(cardAgent().agent);
     try {
+      await legacyChange(t, meetingId);
       const view = await viewOf(t, host, meetingId);
       world.po.blocks[0].components.splice(0, 1);
       const saved = await putDraft(t, host, meetingId, { draftVersion: view.draftVersion, draft: view.draft });
