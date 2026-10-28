@@ -210,5 +210,20 @@ export const MonthlyCycleResponse = Type.Object(
   { additionalProperties: false },
 );
 
+/** 通知栏「N 月任务卡」：本体里本月全员 Mission 按生命周期计数（10/28 起签发看本体，不再看 72 小时倒计时）。 */
+export const MissionCardStatus = Type.Object(
+  {
+    period: MonthlyPlanPeriod,
+    total: Type.Integer({ minimum: 0 }),
+    /** 已成立、已关闭的张数。 */
+    settled: Type.Integer({ minimum: 0 }),
+    groups: Type.Array(Type.Object({ label: Type.String(), count: Type.Integer({ minimum: 1 }) }, { additionalProperties: false })),
+  },
+  { additionalProperties: false },
+);
+/** 本体没配或读不到时为 null。 */
+export const MissionCardStatusResponse = Type.Object({ status: Type.Union([MissionCardStatus, Type.Null()]) }, { additionalProperties: false });
+export type TMissionCardStatus = Static<typeof MissionCardStatus>;
+
 export type TMonthlyCycle = Static<typeof MonthlyCycle>;
 export type TMonthlyCycleResponse = Static<typeof MonthlyCycleResponse>;

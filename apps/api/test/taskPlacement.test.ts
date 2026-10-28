@@ -58,7 +58,7 @@ describe("待归位：会后分派和外部 Agent 建的事项必须挂到 Missi
       expect(placed).toMatchObject({ mission: { missionId: "execution-one" } });
       expect(placed.unplaced).toBeUndefined();
       const messages = await f.t.sql("SELECT content FROM thread_messages WHERE object_type='task' AND object_id=$1 ORDER BY id", [id]);
-      expect(messages.at(-1)!.content).toContain("挂到了 Mission「上线」");
+      expect(messages.at(-1)!.content).toContain("把所属 Mission 定为「上线」");
       // 已经挂好的不再动。
       await runPlacement(f, fakeAgent({ missionId: "execution-two", reason: "x" }), id);
       expect(await task(f, id)).toMatchObject({ mission: { missionId: "execution-one" } });
@@ -126,7 +126,7 @@ describe("待归位：会后分派和外部 Agent 建的事项必须挂到 Missi
       await runPlacement(f, agent, fromAgent);
       expect(await task(f, fromAgent)).toMatchObject({ mission: { missionId: "execution-two" } });
       const messages = await f.t.sql("SELECT content FROM thread_messages WHERE object_type='task' AND object_id=$1 ORDER BY id", [fromAgent]);
-      expect(messages.at(-1)!.content).toContain("按事项内容挂到了 Mission「验证」");
+      expect(messages.at(-1)!.content).toContain("按事项内容把所属 Mission 定为「验证」");
     } finally { await f.t.close(); }
   });
 });

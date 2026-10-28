@@ -68,7 +68,7 @@ export function createMeetingDecisionService(deps: MeetingDecisionDeps) {
       for (const anchor of anchors) {
         if (chosen.some((other) => other.kind === anchor.kind && other.id === anchor.id)) continue;
         const option = known.find((candidate) => candidate.kind === anchor.kind && candidate.id === anchor.id);
-        if (!option) return { error: { status: 400, code: "ANCHOR_NOT_FOUND", message: "挂点只能是 LTO、本月 PO、本月 Mission 或责任单元" } };
+        if (!option) return { error: { status: 400, code: "ANCHOR_NOT_FOUND", message: "所属对象只能是 LTO、本月 PO、本月 Mission 或责任单元" } };
         chosen.push(storedAnchor(option));
       }
     }

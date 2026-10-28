@@ -47,9 +47,9 @@ const RECORD = { status: "committed" as const, version: 1, eventId: "ev-1", conf
 const world = (overrides: Partial<TMeetingWorldView> = {}): TMeetingWorldView => ({
   excluded: false, excludedBy: null, record: RECORD, at: "2026-10-19T10:42:00.000Z", anchors: [MISSION], edited: false, canEdit: true, ...overrides,
 });
-const render = (view: TMeetingWorldView, progress?: unknown, onChange = vi.fn()) => {
+const render = (view: TMeetingWorldView, onChange = vi.fn()) => {
   hooks.index = 0;
-  return nodes(expand(MeetingWorldBar({ meetingId: "m1", world: view, onChange, progress: progress as never })));
+  return nodes(expand(MeetingWorldBar({ meetingId: "m1", world: view, onChange })));
 };
 const option = (anchor: { kind: TWorldAnchorOption["kind"]; id: string; title: string }, brief: string | null = null, lifecycle: string | null = null): TWorldAnchorOption =>
   ({ ...anchor, brief, lifecycle, ownerId: null, parentId: null });
@@ -61,7 +61,7 @@ describe("会议页页头：这场会挂到哪", () => {
     const tree = render(world());
     const line = tree.find((node) => node.type === "div" && nodes(node.props?.children).some((child) => child.type === WorldAnchors))!;
     const parts = nodes(line.props!.children).filter((node) => node.type === "span" || node.type === WorldAnchors || node.type === "button");
-    expect(parts.map((node) => node.type === WorldAnchors ? "anchors" : text(node))).toEqual(["挂到", "anchors", "改"]);
+    expect(parts.map((node) => node.type === WorldAnchors ? "anchors" : text(node))).toEqual(["所属", "anchors", "更换"]);
     expect(tree.find((node) => node.type === WorldAnchors)!.props).toEqual({ anchors: [MISSION] });
     expect(tree.some((node) => text(node).startsWith("记录 ·"))).toBe(false);
     expect(tree.some((node) => node.props?.["data-tone"] !== undefined)).toBe(false);
@@ -69,7 +69,7 @@ describe("会议页页头：这场会挂到哪", () => {
     hooks.values = [];
     const after = render(world({ excluded: true, excludedBy: "林晓", record: { ...RECORD, status: "excluded" } }));
     expect(after.some((node) => text(node).startsWith("记录 ·"))).toBe(false);
-    expect(after.some((node) => node.type === "button" && text(node) === "改")).toBe(false);
+    expect(after.some((node) => node.type === "button" && text(node) === "更换")).toBe(false);
   });
 
   it("挂到一行整行靠左：不再有推到右边的那一段；「改」是安静的文字链接", () => {
@@ -82,21 +82,15 @@ describe("会议页页头：这场会挂到哪", () => {
   it("参会人：只看挂点，不能改", () => {
     const tree = render(world({ record: null, at: null, canEdit: false }));
     expect(tree.find((node) => node.type === WorldAnchors)!.props).toEqual({ anchors: [MISSION] });
-    expect(tree.some((node) => node.type === "button" && text(node) === "改")).toBe(false);
+    expect(tree.some((node) => node.type === "button" && text(node) === "更换")).toBe(false);
   });
 
-  it("进度线排在挂到那一行下面", () => {
-    const progress = <ol aria-label="进度"><li>等妙记</li></ol>;
-    const tree = render(world(), progress);
-    const order = tree.filter((node) => node.type === WorldAnchors || node.props?.["aria-label"] === "进度").map((node) => node.type === WorldAnchors ? "anchors" : "progress");
-    expect(order).toEqual(["anchors", "progress"]);
-  });
 
   it("会前也能看到挂点条", () => {
     const tree = render(world({ record: { ...RECORD, status: "pending", eventId: null, confirmedAt: null }, at: null }));
-    expect(tree.some((node) => node.type === "span" && text(node) === "挂到")).toBe(true);
+    expect(tree.some((node) => node.type === "span" && text(node) === "所属")).toBe(true);
     expect(tree.find((node) => node.type === WorldAnchors)!.props).toEqual({ anchors: [MISSION] });
-    expect(tree.some((node) => node.type === "button" && text(node) === "改")).toBe(true);
+    expect(tree.some((node) => node.type === "button" && text(node) === "更换")).toBe(true);
   });
 
   it("挂点标签：类型和名称一样时只写一次（公司）", () => {
@@ -111,7 +105,7 @@ describe("会议页页头：这场会挂到哪", () => {
     const po = { kind: "po" as const, id: "<po>", title: "十月目标" };
     api.get.mockResolvedValue({ data: { options: [option(po, "十月跑通预约", "committed"), option(MISSION, null, "draft"), option(unit, "智能体")] }, response: { ok: true, status: 200 } });
     const view = world({ edited: true });
-    (render(view).find((node) => node.type === "button" && text(node) === "改")!.props!.onClick as () => void)();
+    (render(view).find((node) => node.type === "button" && text(node) === "更换")!.props!.onClick as () => void)();
     await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/meetings/{id}/world-anchor-options", { params: { path: { id: "m1" } } }));
     await vi.waitFor(() => expect(render(view).some((node) => node.props?.["aria-label"] === "搜对象")).toBe(true));
     // 没有自己的 Mission：只有「别人的 Mission」「PO」两行，单元不列。

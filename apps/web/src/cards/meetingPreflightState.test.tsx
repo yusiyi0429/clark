@@ -117,3 +117,34 @@ describe("预审条目都归到议题下时，整场判断那一句仍在会议�
     expect(html.match(/本周交付按计划推进/g)?.length).toBe(1);
   });
 });
+
+describe("会前预审 v5：要定的事、要聊的问题、要拍板的事", () => {
+  const v5 = (preflight: Record<string, unknown>) => card({ taskDefinition: undefined, readiness: undefined, summary: undefined, ...preflight });
+
+  it("要定的事在议程行；要聊的问题排在要拍板的事前面；依据可展开", () => {
+    const html = render(v5({
+      depth: "strategic", decision: "定 Decitron 的竞品级别", basis: "已读《Decitron 产品深度分析》第一版", brief: "Decitron 已进入决策治理层",
+      entries: [
+        entry("entry-1", "core_judgment", "Decitron 已进入决策治理层", "按持续决策议题收费"),
+        entry("entry-2", "discussion_question", "首批试点是否以动作改变为验收？", "决定春节前的验收口径"),
+        entry("entry-3", "meeting_question", "Decitron 定为哪一级竞品？", "建议定为相邻竞品。", { ceoDecision: { whyNow: "春节前要定试点范围", whyCeo: "影响公司级竞争定义",
+          options: [{ label: "相邻竞品", impact: "保留客户入口" }, { label: "直接竞品", impact: "加快补齐预测" }] } }),
+      ],
+    }));
+    for (const text of ["定 Decitron 的竞品级别", "要聊的问题", "要拍板的事", "首批试点是否以动作改变为验收？", "Decitron 定为哪一级竞品？",
+      "可选：相邻竞品", "已读《Decitron 产品深度分析》第一版"]) expect(html).toContain(text);
+    expect(html.indexOf("首批试点是否以动作改变为验收？")).toBeLessThan(html.indexOf("Decitron 定为哪一级竞品？"));
+    // 依据默认收起：每条只露一行「依据 n」；预审依据与过程收在整段末尾、默认关着的「依据与过程」里。
+    expect(html).toMatch(/aria-expanded="false"[^>]*>依据 1<\/button>/);
+    expect(html).toMatch(/<details class="[^"]*"><summary>依据与过程<\/summary>/);
+    expect(html.indexOf("Decitron 定为哪一级竞品？")).toBeLessThan(html.indexOf("依据与过程"));
+    expect(html.indexOf("依据与过程")).toBeLessThan(html.indexOf("已读《Decitron 产品深度分析》第一版"));
+  });
+
+  it("信息不足档只写待补的内容，不出现核心判断", () => {
+    const html = render(v5({ depth: "thin", entries: [], brief: "还没有本周完成情况，补上后能定月底是否按期。", basis: "只读到会议名称和时间" }));
+    expect(html).toContain("<small>待补</small>");
+    expect(html).toContain("还没有本周完成情况，补上后能定月底是否按期。");
+    expect(html).not.toContain("<small>核心判断</small>");
+  });
+});

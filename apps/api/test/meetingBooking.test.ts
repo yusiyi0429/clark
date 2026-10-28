@@ -92,8 +92,9 @@ describe("预约建会", () => {
       await seed(t);
       const created = await book(t, await t.memberCookie(), body({ anchors: [{ kind: "po", id: PO.object_id }, { kind: "mission", id: MISSION }] }));
       expect(created.statusCode).toBe(200);
-      // 校验挂点只列对象，不取 PO 的内容。
-      expect(calls.some((call) => call.url.pathname.startsWith("/v1/world/objects/"))).toBe(false);
+      // 校验挂点只列对象；取对象内容的只有会前预审按挂点读这个本月目标（只读 GET）。
+      expect(calls.filter((call) => call.url.pathname.startsWith("/v1/world/objects/"))
+        .every((call) => call.method === "GET" && call.url.pathname === `/v1/world/objects/${encodeURIComponent(PO.object_id)}`)).toBe(true);
       const worker = createJobWorker({ pool: t.pool, handlers: t.app.meetingFollowThrough.jobs().handlers });
       while (await worker.tick() > 0);
       expect(calls.filter((call) => call.url.pathname.startsWith("/v1/actions"))).toEqual([]);

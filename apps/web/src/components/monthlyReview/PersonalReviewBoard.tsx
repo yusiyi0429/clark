@@ -61,8 +61,9 @@ export function PersonalReviewBoard({ onNavigate }: { onNavigate: Navigate }) {
   if (!board || !board.rows.length) return null;
 
   const month = Number(board.period.slice(5));
-  const done = board.counts.submitted + board.counts.skipped;
   const selfRow = board.rows.find((row) => row.isSelf);
+  const others = board.rows.filter((row) => !row.isSelf);
+  const othersDone = others.filter((row) => personalDone(row.status)).length;
   const copy = async () => {
     try { await navigator.clipboard.writeText(REVIEW_INSTRUCTION); setCopied(true); setError(""); }
     catch { setError("复制失败，请到复盘页手动复制。"); }
@@ -78,18 +79,22 @@ export function PersonalReviewBoard({ onNavigate }: { onNavigate: Navigate }) {
 
   return <HeroCard<"section"> render={(props) => <section {...props} />} className={n.card} data-notice="personal-review" aria-label={`${month} 月个人复盘`}>
     <HeroCard.Header<"header"> render={(props) => <header {...props} />} className={n.glassHeader}>
-      <ContextMark kind="monthly" className={n.glyph} />
+      <ContextMark kind="review" className={n.glyph} />
       <span className={n.identity}>
-        <strong>{month} 月个人复盘<b className={`${n.count} ${b.ratio}`} aria-label={`已交 ${done} / ${board.counts.total}`}>{done}/{board.counts.total}</b></strong>
-        {board.complete ? <small>已交齐</small> : null}
+        <strong>{month} 月个人复盘{selfRow && !personalDone(selfRow.status) ? <b className={`${n.count} ${b.due}`}>你还没交</b> : null}</strong>
       </span>
     </HeroCard.Header>
     <div className={n.tray}>
       {selfRow && !personalDone(selfRow.status) ? <SelfBlock row={selfRow} mine={mine} month={month} copied={copied} onCopy={() => void copy()} onNavigate={onNavigate} /> : null}
       {selfRow && personalDone(selfRow.status) ? <p className={b.selfDone} role="status"><Check size={15} aria-hidden />你的 {month} 月复盘已提交</p> : null}
       {error ? <p className={a.error} role="alert">{error}</p> : null}
-      <ul className={b.roster} aria-label="提交情况">
-        {board.rows.map((row) => {
+      {/* 别人交没交：DRI 也能看，但只是一行淡淡的汇总，点开才列名单（10/28）。 */}
+      {others.length ? <details className={b.others}>
+        <summary aria-label={`其他人已交 ${othersDone} / ${others.length}，展开名单`}>
+          <span>{board.complete ? "其他人已交齐" : `其他人 ${othersDone}/${others.length} 已交`}</span><ChevronRight size={13} aria-hidden />
+        </summary>
+      <ul className={b.roster} aria-label="其他人的提交情况">
+        {others.map((row) => {
           const tone = row.status === "submitted" ? "done" : row.status === "skipped" ? "skipped" : "open";
           const skipAction = row.actions.some((candidate) => candidate.actionType === "personal-review.skip");
           const label = <><span className={b.name}>{row.personName}{row.isSelf ? <em>（你）</em> : null}</span><span className={b.state} data-tone={tone}>{personalStatusText(row.status, false)}</span></>;
@@ -101,6 +106,7 @@ export function PersonalReviewBoard({ onNavigate }: { onNavigate: Navigate }) {
           </li>;
         })}
       </ul>
+      </details> : null}
     </div>
     {dialog}
   </HeroCard>;

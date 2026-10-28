@@ -14,7 +14,7 @@ const KIND = { lto: "LTO", po: "PO", mission: "Mission", task: "Task", unit: "�
 export function WorldAnchors({ anchors, onRemove }: { anchors: TWorldAnchor[]; onRemove?: (anchor: TWorldAnchor) => void }) {
   if (!anchors.length) return null;
   return (
-    <ul className={d.anchors} aria-label="挂到">
+    <ul className={d.anchors} aria-label="所属">
       {anchors.map((anchor) => {
         const Icon = ICON[anchor.kind];
         return (

@@ -54,7 +54,7 @@ import {
   MonthlyReviewComment, CreateMonthlyReviewCommentRequest, CreateMonthlyReviewCommentResponse,
   MonthlyReviewItemUpdateInput, MonthlyReviewResolveSuggestionInput, MonthlyReviewReturnInput, MonthlyReviewUpdateSummaryInput, MonthlyReviewDecideLtcoInput,
   PersonalReviewPayload, PersonalReviewGenerationStep, PersonalReviewBoard, PersonalReviewBoardRow, PersonalReviewBoardResponse, PersonalReviewResponse,
-  ExecutePersonalReviewActionRequest, ExecutePersonalReviewActionResponse, PersonalReviewUpdateInput, MonthlyCycle, MonthlyCycleResponse,
+  ExecutePersonalReviewActionRequest, ExecutePersonalReviewActionResponse, PersonalReviewUpdateInput, MonthlyCycle, MonthlyCycleResponse, MissionCardStatus, MissionCardStatusResponse,
   MissionCardFeedbackView, PersonalMissionCardMission, PersonalMissionCardPayload,
   MissionCardClarificationView, MissionCardAnnotationView, MissionCardRevisionView, MissionCardAnnotationsResponse, CreateMissionCardAnnotationRequest, CreateMissionCardAnnotationResponse,
   AnswerMissionCardAnnotationRequest, RetryMissionCardAnnotationRequest, ResolveMissionCardAnnotationRequest, MissionCardRevisionsResponse, SetMissionCardOwnerConfirmationRequest,
@@ -728,6 +728,12 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         get: {
           operationId: "getMonthlyCycle", summary: "当前月度经营周期的总倒计时（从个人复盘收集起 72 小时到签发下月任务卡）；全员可读，没有周期时 cycle 为 null",
           responses: { "200": { description: "月度周期", content: { "application/json": { schema: { $ref: "#/components/schemas/MonthlyCycleResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/mission-cards/world-status": {
+        get: {
+          operationId: "getMissionCardWorldStatus", summary: "本月任务卡在本体里的签发情况：全员 Mission 按生命周期计数；本体没配或读不到时 status 为 null",
+          responses: { "200": { description: "任务卡签发情况", content: { "application/json": { schema: { $ref: "#/components/schemas/MissionCardStatusResponse" } } } }, "401": errorResponse },
         },
       },
       "/api/personal-reviews/board": {
@@ -2984,6 +2990,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         PersonalReviewUpdateInput: PersonalReviewUpdateInput as JsonSchema,
         MonthlyCycle: MonthlyCycle as JsonSchema,
         MonthlyCycleResponse: MonthlyCycleResponse as JsonSchema,
+        MissionCardStatus: MissionCardStatus as JsonSchema,
+        MissionCardStatusResponse: MissionCardStatusResponse as JsonSchema,
         MonthlyReviewComment: MonthlyReviewComment as JsonSchema,
         CreateMonthlyReviewCommentRequest: CreateMonthlyReviewCommentRequest as JsonSchema,
         CreateMonthlyReviewCommentResponse: CreateMonthlyReviewCommentResponse as JsonSchema,

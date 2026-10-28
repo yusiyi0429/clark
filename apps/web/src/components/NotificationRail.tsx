@@ -36,9 +36,9 @@ type RailItem = { id: string; title: string; meta: string; tone: Tone; href: str
 type RailGroup = { kind: RailKind; title: string; subtitle: ReactNode; mark: ContextMarkKind; items: RailItem[] };
 
 const RAIL: Record<RailKind, { title: string; mark: ContextMarkKind }> = {
-  decisions: { title: "战略决策更新", mark: "issue" },
+  decisions: { title: "战略决策更新", mark: "decision" },
   meetings: { title: "战略会议安排", mark: "meeting" },
-  research: { title: "战略问题研究", mark: "signal" },
+  research: { title: "战略问题研究", mark: "issue" },
 };
 
 /** 通知栏时钟：按公司时区拼「9月18日 / 星期五 / 10:30」。 */

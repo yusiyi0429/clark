@@ -290,7 +290,11 @@ describe("飞书妙记待整理：整理成一场天枢会", () => {
   async function setup(durationSeconds?: number | null) {
     const api = fakeApi([minute(TOKEN, { durationSeconds })]);
     api.participants = async () => ["ou_owner", "ou_host", "ou_guest"];
-    const preflight = { meetingIds: [] as string[], async generate(input) { preflight.meetingIds.push(input.meeting.id); return { candidate: preflightCandidate([]) }; } } satisfies PreflightAgent & { meetingIds: string[] };
+    // 这里的会只有标题和时间：预审只能写缺什么（thin）。
+    const preflight = { meetingIds: [] as string[], async generate(input) {
+      preflight.meetingIds.push(input.meeting.id);
+      return { candidate: { ...preflightCandidate([`meeting:${input.meeting.id}`]), depth: "thin" as const, questions: [], decisions: [], gaps: ["缺会前材料，补上后能定这场会要拍板的事"] } };
+    } } satisfies PreflightAgent & { meetingIds: string[] };
     const t = await inboxApp(api, { preflightAgent: preflight });
     const period = shanghaiDate(api.minutes[0].createdAt!).slice(0, 7);
     await t.pool.query("INSERT INTO capability_config (id, version, name, \"group\", six_month_outcome, code, owner_id) VALUES ('unit-inbox', 1, '待整理单元', 'test', '', '98', $1)", [TEST_MEMBER.personId]);

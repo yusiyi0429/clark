@@ -11,6 +11,16 @@
 .sourceChip:hover{border-color:#c6d9f2;background:#e8f1ff}
 .sourceChip:focus-visible{outline:2px solid #007aff80;outline-offset:2px}
 .sourceStatic{display:inline-flex;padding:3px 8px;border-radius:7px;background:#f0f1f3;color:#666c75;font-size:11.5px;line-height:1.5}
+/* 依据收起：一行灰字「依据 n」；悬停浮出（只在有鼠标的设备），点开后在原处接着这行排开。 */
+.sourceToggle{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:6px;width:fit-content;max-width:100%;margin-top:8px}
+.sourceTrigger{padding:0;border:0;background:none;color:#6e6e73;font:inherit;font-size:11px;line-height:1.5;cursor:pointer}
+.sourceTrigger:hover,.sourceTrigger[aria-expanded=true]{color:#0a5dc2}
+.sourceTrigger:focus-visible{outline:2px solid #007aff80;outline-offset:2px;border-radius:4px}
+.sourcePop{display:none}
+.sourceToggle[data-open=true]>.sourcePop{display:contents}
+@media(hover:hover) and (pointer:fine){
+ .sourceToggle[data-open=false]:hover>.sourcePop{position:absolute;top:100%;left:0;z-index:6;display:flex;flex-direction:column;align-items:flex-start;gap:6px;width:max-content;max-width:min(520px,calc(100vw - 48px));box-sizing:border-box;padding:10px 12px;border:1px solid #e6e9ed;border-radius:14px;background:#fff;box-shadow:0 10px 28px #0a0f1e33}
+}
 
 /* 三层历史：仍有效（绿点）、此后变化（蓝点）、本次待判断（琥珀点，虚线框）；已失效的收在折叠里。 */
 .layers{display:flex;flex-direction:column;gap:14px;min-width:0}
@@ -87,7 +97,7 @@
 /* 手持（≤959）：底部有输入条，回到原位置的钮让开；字号下限 13 / 14。 */
 @media(max-width:959px){
  .returnChip{bottom:calc(120px + env(safe-area-inset-bottom))}
- .sourceChip.sourceChip,.sourceStatic.sourceStatic,.entryMeta.entryMeta,.sourceRow.sourceRow>small,.layer.layer>h4>span,.changeKind.changeKind,.badge.badge{font-size:13px}
+ .sourceChip.sourceChip,.sourceStatic.sourceStatic,.sourceTrigger.sourceTrigger,.entryMeta.entryMeta,.sourceRow.sourceRow>small,.layer.layer>h4>span,.changeKind.changeKind,.badge.badge{font-size:13px}
  .entryText.entryText,.changeText.changeText,.layerEmpty.layerEmpty,.pendingNote.pendingNote,.drawerMeta.drawerMeta,.muted.muted{font-size:14px}
 }
 @media(prefers-reduced-motion:reduce){.entry[data-flash=true]{animation:none;box-shadow:0 0 0 3px #3a83f766}}
@@ -165,6 +175,9 @@
     left: min(0px, calc((100% - var(--touch-hit, 44px)) / 2));
     right: min(0px, calc((100% - var(--touch-hit, 44px)) / 2));
   }
+  /* 「依据 n」：同样只外扩热区。 */
+  .sourceTrigger { position: relative; }
+  .sourceTrigger::after { content: ""; position: absolute; inset: min(0px, calc((100% - var(--touch-hit, 44px)) / 2)); }
   /* 「已失效」折叠行、读取失败的「重试」、知识库重试、依据抽屉的关闭 / 操作钮、「回到刚才的位置」：都 44。 */
   .inactive > summary { padding-block: 13px; }
   .errorLine button, .knowledgeRetry, .drawerAction { min-height: var(--touch-hit, 44px); font-size: 14px; }

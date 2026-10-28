@@ -4,7 +4,7 @@ import { FeishuAuthConfigResponse, FeishuCodeLoginRequest, FeishuConnectionRespo
 import { parseCookies, sessionSetCookie } from "../session.js";
 import type { FeishuClient } from "../feishu/client.js";
 import {
-  FEISHU_OAUTH_SCOPE, FEISHU_STATE_COOKIE, clearOAuthStateCookie, completeFeishuLogin, createOAuthState, feishuConnected, safeNextPath, verifyOAuthState,
+  FEISHU_CALENDAR_SCOPES, FEISHU_OAUTH_SCOPE, FEISHU_STATE_COOKIE, clearOAuthStateCookie, completeFeishuLogin, createOAuthState, feishuConnected, safeNextPath, verifyOAuthState,
   type FeishuConnectIntent, type FeishuLoginOutcome,
 } from "../feishu/oauth.js";
 import { isAllowedOrigin, type AppInstance, type RouteContext } from "./shared.js";
@@ -45,7 +45,11 @@ export function registerFeishuAuthRoutes(app: AppInstance, ctx: RouteContext, cl
     feishu && client ? { enabled: true, appId: feishu.appId, scopes: FEISHU_OAUTH_SCOPE.split(" ") } : { enabled: false });
 
   app.get("/api/me/feishu", { preHandler: requirePerson, schema: { response: { 200: FeishuConnectionResponse } } }, async (req) =>
-    feishu && client ? { enabled: true, connected: await feishuConnected(q, feishu, req.person!.personId, now()) } : { enabled: false, connected: false });
+    feishu && client ? {
+      enabled: true,
+      connected: await feishuConnected(q, feishu, req.person!.personId, now()),
+      calendar: await feishuConnected(q, feishu, req.person!.personId, now(), FEISHU_CALENDAR_SCOPES),
+    } : { enabled: false, connected: false, calendar: false });
 
   if (!feishu || !client) return;
 

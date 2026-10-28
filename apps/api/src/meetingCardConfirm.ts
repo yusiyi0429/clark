@@ -123,7 +123,7 @@ export type MeetingCardConfirmDeps = {
 };
 
 const NOT_FOUND = { error: { status: 404, code: "MEETING_NOT_FOUND", message: "会议不存在" } } as const;
-const WORLD_UNAVAILABLE = { error: { status: 503, code: "WORLD_UNAVAILABLE", message: "读不到挂点对象的当前版本，稍后再确认" } } as const;
+const WORLD_UNAVAILABLE = { error: { status: 503, code: "WORLD_UNAVAILABLE", message: "读不到所属对象的当前版本，稍后再确认" } } as const;
 const bad = (code: string, message: string): ConfirmResult => ({ error: { status: 400, code, message } });
 const isHostOrCreator = (meeting: Pick<MeetingRow, "lead_dri_id" | "created_by">, personId: string) =>
   meeting.lead_dri_id === personId || (meeting.created_by ?? meeting.lead_dri_id) === personId;

@@ -109,7 +109,7 @@ describe("约会议", () => {
 
   it("换：我的 Mission 直接列，其余收成几行；进 PO 选中后往下挑它的 Mission", async () => {
     await fill(MEMBER);
-    click(button(render(MEMBER), "换"));
+    click(button(render(MEMBER), "更换"));
     let tree = render(MEMBER);
     expect(tree.filter((node) => node.type === "h4").map(text)).toEqual(["我的 Mission", "其他"]);
     expect(tree.filter((node) => node.props?.["data-level"] !== undefined).map((node) => node.props!["data-level"])).toEqual(["others", "po"]);
@@ -172,7 +172,7 @@ describe("约会议", () => {
 
   it("提交带上挂点", async () => {
     await fill(MEMBER);
-    click(button(render(MEMBER), "换"));
+    click(button(render(MEMBER), "更换"));
     click(render(MEMBER).find((node) => node.props?.["data-level"] === "po"));
     click(render(MEMBER).find((node) => node.props?.["aria-pressed"] === false && text(node).includes(PO.title)));
     api.post.mockResolvedValue({ data: { card: { objectRef: { id: "m-new" }, navigation: [{ href: "/me/meetings/m-new", label: "会议" }] } }, response: { ok: true, status: 200 } });
@@ -212,6 +212,39 @@ describe("约会议", () => {
     expect(body).toMatchObject({ title: "新 Chat 切换", leadDriId: "p-third", participants: ["p-member"], anchors: [{ kind: "po", id: PO.id }], draftId: draft.draftId });
     expect(new Date(body.scheduledAt as string).toISOString()).toBe("2026-10-27T07:00:00.000Z");
     expect(new Date(body.endsAt as string).toISOString()).toBe("2026-10-27T07:30:00.000Z");
+  });
+
+  it("飞书不能在日历约会时，按钮上方一行提示和「连接飞书」；能约时不出", async () => {
+    const hint = (tree: Node[]) => tree.find((node) => node.type === "p" && text(node).includes("没连飞书，会议不会进你的飞书日历"));
+    const base = api.get.getMockImplementation()!;
+    let calendar = false;
+    api.get.mockImplementation(async (path: string, init?: unknown) => path === "/api/me/feishu"
+      ? { data: { enabled: true, connected: true, calendar }, response: { ok: true, status: 200 } } : base(path, init));
+    await vi.waitFor(() => expect(hint(render(MEMBER))).toBeDefined());
+    const link = nodes(hint(render(MEMBER))!.props!.children).find((node) => node.type === "a")!;
+    expect(text(link)).toBe("连接飞书");
+    expect(String(link.props!.href)).toContain("/api/auth/feishu/start?connect=1");
+    expect(link.props!.target).toBe("_blank");
+    // 在新标签页连好，回来窗口拿回焦点时再读一次。
+    calendar = true;
+    window.dispatchEvent(new Event("focus"));
+    await vi.waitFor(() => expect(hint(render(MEMBER))).toBeUndefined());
+  });
+
+  it("可选材料：点选多份、去掉一份；约好后一份一份传进这场会的群材料，再跳到会议页", async () => {
+    const upload = vi.fn(async (_url: string, _init: RequestInit) => ({ ok: true, json: async () => ({}) }));
+    vi.stubGlobal("fetch", upload);
+    await fill(MEMBER);
+    const pick = (files: File[]) => change(field(render(MEMBER), "上传材料"), { target: { files, value: "x" } });
+    pick([new File(["# a"], "议程.md"), new File(["b"], "数据.pdf"), new File(["c"], "多余.docx")]);
+    click(render(MEMBER).find((node) => node.props?.["aria-label"] === "去掉 多余.docx"));
+    pick([new File(["x"], "图.png")]);
+    expect(render(MEMBER).some((node) => node.props?.role === "alert" && text(node) === "只支持 PDF、Word、Markdown 和 HTML")).toBe(true);
+    api.post.mockResolvedValue({ data: { card: { objectRef: { id: "m-new" }, navigation: [{ href: "/me/meetings/m-new", label: "会议" }] } }, response: { ok: true, status: 200 } });
+    click(button(render(MEMBER), "约好"));
+    await vi.waitFor(() => expect(workspace.navigate).toHaveBeenCalledWith("/me/meetings/m-new"));
+    expect(upload.mock.calls.map(([url, init]) => [url, ((init.body as FormData).get("file") as File).name]))
+      .toEqual([["/api/materials/meeting/m-new", "议程.md"], ["/api/materials/meeting/m-new", "数据.pdf"]]);
   });
 
   it("换了月份：旧选项先收起，读不到时标出来，再读到就清掉", async () => {

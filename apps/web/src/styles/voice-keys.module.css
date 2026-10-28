@@ -45,6 +45,16 @@
 .row:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
 .row[data-live="true"] { background: #fff; box-shadow: 0 0 0 2px var(--wx); }
 .row em { color: #16a874; font-size: 14px; font-style: normal; }
+.row[data-known="true"] { background: #e9f8f1; }
+.row[data-just="true"] { animation: voice-key-ok 900ms ease-out; }
+.ok { display: inline-flex; align-items: center; gap: 5px; color: #0f9a66; font-size: 15px; font-weight: 600; }
+.ready { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; margin: 16px 0 0; padding: 12px 14px; border-radius: 14px;
+  background: #e9f8f1; color: #0b7d53; font-size: 14px; font-weight: 600; }
+@keyframes voice-key-ok {
+  0% { box-shadow: 0 0 0 0 #1fbf8666; background: #c9f0de; }
+  100% { box-shadow: 0 0 0 10px #1fbf8600; background: #e9f8f1; }
+}
+@media (prefers-reduced-motion: reduce) { .row[data-just="true"] { animation: none; } }
 .keys { display: flex; align-items: center; gap: 6px; }
 .keys kbd {
   display: inline-flex;

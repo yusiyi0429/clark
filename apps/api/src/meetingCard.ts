@@ -461,7 +461,7 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
         if (keep && unread) target = kept!;
         else if (!keep) {
           invalidTarget = true;
-          fieldErrors[`objectChanges[${i}].targetRef`] = "目标只能从挂点对象的文字组件里选";
+          fieldErrors[`objectChanges[${i}].targetRef`] = "目标只能从所属对象的文字组件里选";
         }
       }
       // 同一目标、对象版本这次读到的和草稿里的不同：差异已按新版本重读，标 stale 让主持人重看（保存不能悄悄把基准挪到新版本）。
@@ -479,7 +479,7 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
       return { ...item, taskId: null }; // 前端传的不算，写入时按行里已存的回填
     });
     if (Object.keys(fieldErrors).length) {
-      return { error: { status: 400, code: invalidTarget ? "INVALID_TARGET" : "INVALID_DRAFT", message: invalidTarget ? "修改的目标不在挂点对象里" : "会议卡草稿没通过校验", fieldErrors } };
+      return { error: { status: 400, code: invalidTarget ? "INVALID_TARGET" : "INVALID_DRAFT", message: invalidTarget ? "修改的目标不在所属对象里" : "会议卡草稿没通过校验", fieldErrors } };
     }
 
     const personRefs = new Map(current.participants.map((person) => [person.name, person.personRef]));

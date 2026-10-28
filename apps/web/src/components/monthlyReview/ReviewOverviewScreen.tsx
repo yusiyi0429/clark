@@ -37,7 +37,7 @@ export function ReviewOverviewScreen({ initial }: { initial: TMonthlyReviewRespo
   const title = `${month} 月复盘`;
 
   // 总览没有自己的对象对话：右列就是 CEO 的全局 Agent。
-  useRegisterDetail(useMemo(() => ({ scope: "global", label: title, mark: "monthly" as const, cards: NO_CARDS }), [title]));
+  useRegisterDetail(useMemo(() => ({ scope: "global", label: title, mark: "review" as const, cards: NO_CARDS }), [title]));
 
   const refresh = useCallback(async () => {
     try {

@@ -116,5 +116,5 @@ export function M2EntryNotice({ available, now = new Date() }: { available: bool
   const go = (href: string) => window.location.assign(href);
   const notices = [...m2NotificationNotices(items, go, now), ...(inM2Window(now) ? m2EntryNotices(go) : [])];
   if (!notices.length) return null;
-  return <ActionNoticeCard id="m2-entry" title="目标拆解与协作" mark="monthly" counted={false} notices={notices} onSettled={dismiss} />;
+  return <ActionNoticeCard id="m2-entry" title="目标拆解与协作" mark="m2" counted={false} notices={notices} onSettled={dismiss} />;
 }

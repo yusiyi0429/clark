@@ -44,6 +44,7 @@ const ANALYSIS_LABEL: Record<string, string> = {
   strategic_alignment: "战略一致性判断",
   positive_signal: "积极信号",
   risk_calibration: "潜在风险 & 待校准问题",
+  discussion_question: "要聊的问题",
   legacy: "预审条目",
 };
 

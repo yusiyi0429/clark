@@ -51,7 +51,7 @@ export function ReviewItemScreen({ initialItem }: { initialItem: TMonthlyReviewI
   const editable = Boolean(action("monthly-review-item.update"));
   const dirtyFields = FIELDS.filter((field) => drafts[field] !== undefined && drafts[field] !== (item.selfReview?.[field].text ?? ""));
 
-  useRegisterDetail(useMemo(() => ({ scope: item.conversationScope, label: title, mark: "monthly" as const, cards: NO_CARDS }), [item.conversationScope, title]));
+  useRegisterDetail(useMemo(() => ({ scope: item.conversationScope, label: title, mark: "review" as const, cards: NO_CARDS }), [item.conversationScope, title]));
 
   const accept = useCallback((next: TMonthlyReviewItemPayload) => setItem((current) => next.version < current.version ? current : next), []);
   const refresh = useCallback(async () => {

@@ -310,7 +310,7 @@ export function resolveAnchors(picked: TPickedWorldAnchor[], options: TWorldAnch
   for (const anchor of picked) {
     if (anchors.some((other) => other.kind === anchor.kind && other.id === anchor.id)) continue;
     const option = options.find((candidate) => candidate.kind === anchor.kind && candidate.id === anchor.id);
-    if (!option) return { error: { status: 400, code: "ANCHOR_NOT_FOUND", message: "挂点只能是 LTO、本月 PO、本月 Mission 或责任单元", fieldErrors: { anchors: "unknown anchor" } } };
+    if (!option) return { error: { status: 400, code: "ANCHOR_NOT_FOUND", message: "所属对象只能是 LTO、本月 PO、本月 Mission 或责任单元", fieldErrors: { anchors: "unknown anchor" } } };
     anchors.push(storedAnchor(option));
   }
   return anchors;

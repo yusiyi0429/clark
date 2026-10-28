@@ -320,45 +320,32 @@ describe("radar public contract", () => {
 
 describe("meeting public contract", () => {
   const sourceRefs = ["issue:00000000-0000-4000-8000-000000000001"];
-  const entry = (kind: string, title: string) => ({ kind, title, body: title, sourceRefs });
+  const option = (label: string) => ({ label, impact: `${label}的后果` });
   const candidate = {
-    taskDefinition: {
-      materialPurpose: "说明渠道投入选择",
-      reviewPurpose: "支持 CEO 会前判断",
-      primaryRole: "research_analysis",
-      secondaryRole: null,
-      maturity: "internal_alignment",
-      readerAction: "判断是否进入决策讨论",
-      nonGoal: "不替 CEO 批准投入",
-    },
-    readiness: "revise",
-    entries: [
-      entry("core_judgment", "核心判断"),
-      entry("strategic_alignment", "战略一致性"),
-      entry("positive_signal", "积极信号"),
-      entry("risk_calibration", "风险校准"),
-      entry("meeting_question", "追问一"),
-      entry("meeting_question", "追问二"),
-      entry("meeting_question", "追问三"),
-      entry("next_step", "下一步"),
-      entry("leader_lens", "视角预判，非权威发言"),
-    ],
-    basis: "依据关联 Issue",
-    brief: "CEO 会前需确认节奏",
-    summary: { criticalIssue: "证据不足", priorityAction: "补充选择后果" },
+    depth: "strategic",
+    decision: "渠道预算是否在六月前转向华南",
+    judgment: { headline: "华南窗口真实，转化证据只够支撑试点", body: "两家客户转化高于华东，样本只有两家。", sourceRefs },
+    questions: [{ question: "华南转化样本够不够支撑整笔预算？", why: "决定是试点还是整体转向。", sourceRefs }],
+    decisions: [{
+      question: "渠道预算是否在六月前转向华南",
+      recommendation: "先拿两成预算试点",
+      changeIf: "试点首月转化低于华东一半时停止",
+      whyNow: "六月窗口关闭",
+      whyCeo: "跨战场预算",
+      options: [option("先试点"), option("整体转向")],
+      sourceRefs,
+    }],
+    gaps: [],
+    basis: "依据关联议题",
   };
 
   it("accepts a strict Preflight candidate and rejects model overreach", () => {
     expect(Value.Check(PreflightCandidate, candidate)).toBe(true);
+    expect(Value.Check(PreflightCandidate, { ...candidate, depth: "deep" })).toBe(false);
+    expect(Value.Check(PreflightCandidate, { ...candidate, judgment: { ...candidate.judgment, sourceRefs: [] } })).toBe(false);
+    expect(Value.Check(PreflightCandidate, { ...candidate, decisions: [{ ...candidate.decisions[0], options: [option("只有一条路")] }] })).toBe(false);
+    expect(Value.Check(PreflightCandidate, { ...candidate, questions: [...candidate.questions, ...candidate.questions, ...candidate.questions, ...candidate.questions] })).toBe(false);
     expect(Value.Check(PreflightCandidate, { ...candidate, entries: [] })).toBe(false);
-    expect(Value.Check(PreflightCandidate, {
-      ...candidate,
-      entries: [{ ...candidate.entries[0], sourceRefs: [] }],
-    })).toBe(false);
-    expect(Value.Check(PreflightCandidate, {
-      ...candidate,
-      entries: [{ ...candidate.entries[0], kind: "decision" }],
-    })).toBe(false);
     expect(Value.Check(PreflightCandidate, { ...candidate, extra: true })).toBe(false);
   });
 

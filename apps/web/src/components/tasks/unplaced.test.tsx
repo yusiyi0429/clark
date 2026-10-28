@@ -23,7 +23,7 @@ beforeEach(() => {
 describe("待归位", () => {
   it("小字写从哪来和为什么没挂上；没有原因、Agent 建的也有一句", () => {
     expect(unplacedLine(task())).toBe("「inception review」分配给你 · 你名下没有和数据源调研对得上的 Mission");
-    expect(unplacedLine(task({ origin: null, source: "agent", unplaced: { reason: null } }))).toBe("外部工具建的 · 还没挂到 Mission");
+    expect(unplacedLine(task({ origin: null, source: "agent", unplaced: { reason: null } }))).toBe("外部工具建的 · 还没有所属 Mission");
   });
 
   it("通知栏一条：「挂到…」进事项详情；「不属于任何 Mission」写一句就办完", async () => {

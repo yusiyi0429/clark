@@ -79,10 +79,12 @@ export async function getMeeting(ctx: Context, meetingId: string) {
     endedAt: payload.endedAt, host: ctx.names.get(payload.leadDriId) ?? payload.leadDriId,
     participants: payload.participants.map((person) => ({ personId: person.personId, displayName: person.displayName })),
     status: payload.status, preflight: { status: payload.preflight.status, brief: short(payload.preflight.brief),
+      decision: payload.preflight.decision ?? null,
       readiness: payload.preflight.readiness ?? null,
       summary: payload.preflight.summary ? { criticalIssue: short(payload.preflight.summary.criticalIssue),
         priorityAction: short(payload.preflight.summary.priorityAction) } : null },
-    agenda: payload.preflight.entries.filter((entry) => entry.kind === "agenda" || entry.kind === "meeting_question")
+    // 议程：要聊的问题与要拍板的事（v5）；旧报告是 agenda 与会议问题。
+    agenda: payload.preflight.entries.filter((entry) => entry.kind === "agenda" || entry.kind === "discussion_question" || entry.kind === "meeting_question")
       .map((entry) => ({ title: entry.title, body: short(payload.draft.editsByEntryId[entry.id] ?? entry.body) })),
     outcome: !meetingCard && payload.outcome ? { status: payload.outcome.status, summary: short(payload.outcome.summary),
       items: payload.outcome.items.map((item) => ({ kind: item.kind, text: short(item.text), status: item.review?.status ?? "open" })) } : null,

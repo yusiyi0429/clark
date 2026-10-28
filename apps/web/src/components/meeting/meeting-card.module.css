@@ -4,7 +4,8 @@
  * 手持与触屏（≤959 或粗指针）：改前 / 改后上下排，按钮和小钮热区 44，可编辑文字 16 号（iOS 小于 16 聚焦会放大整页）。
  */
 
-.card { position: relative; display: grid; gap: 16px; min-width: 0; padding: 22px 24px 20px; border: 1px solid #e6e9ed; border-radius: 20px; background: #fff; color: var(--doc-ink-1, #17171b); }
+/* 会议页正文里的一段（文档式）：不套框，左右和正文对齐；改动标记的蓝线落在左边页边里。 */
+.card { position: relative; display: grid; gap: 16px; min-width: 0; color: var(--doc-ink-1, #17171b); }
 
 .topLine { display: flex; align-items: center; gap: 8px; min-height: 22px; margin-bottom: -6px; }
 .tag { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 999px; background: #eaf2ff; color: #1f5fd6; font-size: 12px; line-height: 22px; font-weight: 600; white-space: nowrap; }
@@ -164,7 +165,7 @@ button.source:focus-visible { outline: 2px solid #1f5fd6; outline-offset: 2px; b
 .reason { width: 100%; }
 
 @media (max-width: 959px), (pointer: coarse) {
-  .card { gap: 14px; padding: 18px 16px 16px; border-radius: 18px; }
+  .card { gap: 14px; }
   .section[data-changed]::before, .item[data-changed]::before, .block[data-changed]::before, .change[data-changed]::before, .titleBlock[data-changed]::before, .props > div[data-changed]::before { left: -10px; }
   .summary, .body, .heading, .side, .itemText { font-size: 16px; }
   .itemMeta { font-size: 14px; }

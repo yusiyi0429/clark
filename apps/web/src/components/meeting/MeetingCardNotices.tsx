@@ -94,7 +94,7 @@ export function MeetingCardNoticeList({ meetings, minutes = [], meetingBase, onN
   const notices = [...minuteNotices(minutes, act), ...meetingCardNotices(meetings, meetingBase, onNavigate)].filter((notice) => !hidden.includes(notice.id));
   return (
     <>
-      <ActionNoticeCard id="meeting-cards" title="会议记录" mark="meeting" notices={notices} onSettled={onSettled} />
+      <ActionNoticeCard id="meeting-cards" title="会议记录" mark="record" notices={notices} onSettled={onSettled} />
       {organizing ? (
         <MeetingBookingSheet
           key={organizing.minute.minuteToken}

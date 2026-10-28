@@ -1,5 +1,12 @@
-/* 个人复盘看板：通知卡里的一份名单，未交的在前、琥珀点；已交绿色；跳过灰色。 */
-.ratio { min-width: 30px; }
+/* 个人复盘看板：突出本人交没交；别人的提交情况收成一行淡色汇总，展开才是名单（未交的在前、琥珀点；已交绿色；跳过灰色）。 */
+.due { padding: 0 8px; background: #f6ecd6; color: #8a6415; font-weight: 600; }
+
+.others { margin: 2px 0 0; }
+.others > summary { display: flex; align-items: center; gap: 4px; min-height: 30px; padding: 4px 12px; border-radius: 10px; color: var(--notice-muted); font-size: 12px; line-height: 18px; cursor: pointer; list-style: none; }
+.others > summary::-webkit-details-marker { display: none; }
+.others > summary:hover { color: var(--notice-ink); background: rgb(38 61 92 / 5%); }
+.others > summary > svg { flex: none; color: #a2a6ad; transition: transform 140ms ease; }
+.others[open] > summary > svg { transform: rotate(90deg); }
 
 .roster { display: flex; flex-direction: column; gap: 0; margin: 4px 0 2px; padding: 4px 0 0; list-style: none; border-top: 1px solid var(--notice-separator); }
 .row { display: flex; align-items: center; gap: 6px; min-width: 0; }

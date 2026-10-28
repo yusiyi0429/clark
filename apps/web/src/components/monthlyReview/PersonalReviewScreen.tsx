@@ -62,7 +62,7 @@ export function PersonalReviewScreen({ initialReview }: { initialReview: TPerson
   const dirtyFields = FIELDS.filter((field) => drafts[field] !== undefined && draftText(field) !== savedText(field));
 
   // 对话只给本人（上传材料、和自己的 Agent 聊）；CEO 看别人的复盘时右边是自己的全局对话。
-  useRegisterDetail(useMemo(() => ({ scope: isSelf ? review.conversationScope : "global", label: title, mark: "monthly" as const, cards: NO_CARDS }), [isSelf, review.conversationScope, title]));
+  useRegisterDetail(useMemo(() => ({ scope: isSelf ? review.conversationScope : "global", label: title, mark: "review" as const, cards: NO_CARDS }), [isSelf, review.conversationScope, title]));
 
   const accept = useCallback((next: TPersonalReviewPayload) => setReview((current) => next.version < current.version ? current : next), []);
   const refresh = useCallback(async () => {

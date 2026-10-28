@@ -34,7 +34,7 @@ import { agentModel, type AgentModelEnv } from "./agentModels.js";
 import type { PostMeetingAgent } from "./outcome.js";
 import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
 import { companyPeriod } from "./monthlyPlans.js";
-import { createWorldReader, mergeWorldGoalsIntoContext, ontologyToolResult, type OntologyQuery } from "./worldReader.js";
+import { WORLD_READ_TIMEOUT_MS, createWorldReader, mergeWorldGoalsIntoContext, ontologyToolResult, type OntologyQuery } from "./worldReader.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
 import type { DriExporter, Query } from "./meetingStore.js";
 import type { MonthlyPlanService } from "./monthlyDraft.js";
@@ -138,6 +138,16 @@ function worldPlanTaskSource(q: Query, env: AppEnv, mainReads: boolean): PlanTas
   const scopes = new Map<string, WorldClient>();
   for (const client of clients) if (!scopes.has(client.config.scope_id)) scopes.set(client.config.scope_id, client);
   return createWorldPlanTaskSource(clients[0], { scopes });
+}
+
+/** 会前预审读挂点内容用的本体客户端（只读 GET，每次 8 秒）：本体没配或配置不对时不给，预审照常跑。 */
+function preflightWorld(q: Query, env: AppEnv): WorldClient | undefined {
+  if (!worldConfigured(env)) return undefined;
+  try {
+    return new WorldClient(q, env, undefined, { timeoutMs: WORLD_READ_TIMEOUT_MS });
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -384,6 +394,8 @@ export async function buildApp({
     translateThought: env.piBaseUrl && env.piApiKey
       ? createPreflightThoughtTranslator({ baseUrl: env.piBaseUrl, apiKey: env.piApiKey, ...fastModels })
       : undefined,
+    // 挂点里长期目标、本月目标的内容按挂点定向读本体（只读）；本体没配时挂点只有名称和天枢里的 Mission。
+    world: preflightWorld(pool.query.bind(pool), env),
   }), background: backgroundPreflight };
   // 会后提取：OUTCOME_MODEL / OUTCOME_THINKING 可改，不配时 HEAVY_MODEL、不开思考（agentModels.ts）。
   const outcome = outcomeAgent ?? createPostMeetingAgent({

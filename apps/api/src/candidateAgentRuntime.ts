@@ -85,6 +85,11 @@ export type CandidateAgentOptions<T extends TSchema> = {
   thinkingLevel?: CandidateThinkingLevel;
   /** 单次输出 token 上限；不给时 16384。 */
   maxTokens?: number;
+  /**
+   * schema 之外的业务校验（如会前预审的档位规则、引用白名单）：返回问题说明时 submit_candidate 报错，模型按说明改好再交；
+   * 返回 null 才收下。重交次数受 maxModelCalls 约束。
+   */
+  validate?: (candidate: Static<T>) => string | null;
   /** 运行事件；回调里抛错不影响运行。 */
   onEvent?: (event: CandidateAgentEvent) => void;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
@@ -168,7 +173,13 @@ async function runCandidateAgentUntraced<T extends TSchema>(options: CandidateAg
       description: "提交唯一的结构化候选并结束本轮；散文输出不会被保存",
       parameters: options.schema,
       execute: async (_id, value) => {
-        if (!Value.Check(options.schema, value)) throw new Error("submit_candidate schema validation failed");
+        if (!Value.Check(options.schema, value)) {
+          // 带上前几处不合规的位置，模型才知道改哪里（只回给模型，不进日志）。
+          const where = [...Value.Errors(options.schema, value)].slice(0, 3).map((error) => `${error.path || "/"} ${error.message}`);
+          throw new Error(`submit_candidate schema validation failed: ${where.join("; ")}`);
+        }
+        const problem = options.validate?.(value as Static<T>);
+        if (problem) throw new Error(`submit_candidate 未通过校验：${problem}。按说明改好后重新提交。`);
         candidate = structuredClone(value) as Static<T>;
         queueMicrotask(() => { void abortAfterSubmit?.(); });
         return { content: [{ type: "text" as const, text: "candidate accepted" }], details: {} };

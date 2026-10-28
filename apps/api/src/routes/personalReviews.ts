@@ -1,11 +1,14 @@
 import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { ExecutePersonalReviewActionRequest, ExecutePersonalReviewActionResponse, PersonalReviewBoardResponse,
-  PersonalReviewResponse, PersonalReviewUpdateInput, MonthlyCycleResponse } from "@warmap/contracts";
+  PersonalReviewResponse, PersonalReviewUpdateInput, MonthlyCycleResponse, MissionCardStatusResponse } from "@warmap/contracts";
 import { actionFingerprint, verifyActionId } from "../actionToken.js";
 import { createPersonalReviewDraftAgent } from "../personalReviewAgent.js";
 import { executePersonalReviewAction, getPersonalReview, projectPersonalReview, readPersonalReviewBoard } from "../personalReviews.js";
 import { readMonthlyCycle } from "../monthlyCycle.js";
+import { createMissionCardStatusReader } from "../missionCardStatus.js";
+import { companyPeriod } from "../monthlyPlans.js";
+import { WorldClient, worldConfigured } from "../worldClient.js";
 import { personDisplayNames } from "../people.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
@@ -16,6 +19,11 @@ export function registerPersonalReviewRoutes(app: AppInstance, ctx: RouteContext
     personName: (personId) => personDisplayNames(ctx.peopleDirectory).get(personId) });
   app.get("/api/monthly-cycle", { preHandler: ctx.requirePerson, schema: { response: { 200: MonthlyCycleResponse } } },
     async () => ({ cycle: await readMonthlyCycle(ctx.q, ctx.now()) }));
+  // 本月任务卡在本体里的签发情况：只读一张 Mission 列表（不看读侧集成开关，和会议卡读对象一样）；每次请求最多 4 秒。
+  const missionCards = createMissionCardStatusReader(worldConfigured(ctx.env) ? new WorldClient(ctx.q, ctx.env, undefined, { timeoutMs: 4000 }) : null,
+    ctx.now, companyPeriod);
+  app.get("/api/mission-cards/world-status", { preHandler: ctx.requirePerson, schema: { response: { 200: MissionCardStatusResponse } } },
+    async () => ({ status: await missionCards() }));
   app.get("/api/personal-reviews/board", { preHandler: ctx.requirePerson, schema: { response: { 200: PersonalReviewBoardResponse } } },
     async (req) => ({ board: await readPersonalReviewBoard(ctx.q, req.person!, personDisplayNames(ctx.peopleDirectory), secret) }));
   app.get("/api/personal-reviews/:personalReviewId", {

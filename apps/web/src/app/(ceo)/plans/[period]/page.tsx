@@ -8,5 +8,5 @@ export default async function MonthlyPlanPage({ params }: { params: Promise<{ pe
   const { cards } = await loadMonthlyPlanCards(cookie);
   const plan = cards.find((card) => (card.payload as { period?: string }).period === period);
   if (!plan) notFound();
-  return <DetailPanel initialCards={[plan]} scope={`monthly-plan:${plan.objectRef.id}`} label={plan.title} mark="monthly" />;
+  return <DetailPanel initialCards={[plan]} scope={`monthly-plan:${plan.objectRef.id}`} label={plan.title} mark="mission" />;
 }

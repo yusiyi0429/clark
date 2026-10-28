@@ -76,7 +76,7 @@ export function taskPlacementJobs(deps: { pool: Pool; agent: TaskPlacementAgent;
         await placeTask(deps.pool, taskId, missionId, missionId ? null : placement.reason);
       } catch (cause) {
         logEvent({ event: "task.place_failed", taskId, error: cause instanceof Error ? cause.message : String(cause) });
-        await placeTask(deps.pool, taskId, null, "没能自动判断该挂到哪个 Mission");
+        await placeTask(deps.pool, taskId, null, "没能自动判断所属 Mission");
       }
     },
   };

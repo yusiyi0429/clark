@@ -112,15 +112,15 @@ export function MeetingDraftCard({ card }: { card: Draft }) {
             </ul>
           ) : "—"}
         </dd>
-        <dt>挂到</dt>
+        <dt>所属</dt>
         <dd>
           {anchor && !picking ? (
             <div className={d.bookAnchor} data-anchor-row>
               <span>{anchor.title}</span>
-              {live ? <button type="button" onClick={() => setPicking(true)}>换</button> : null}
+              {live ? <button type="button" onClick={() => setPicking(true)}>更换</button> : null}
             </div>
           ) : null}
-          {!anchor && !picking ? (live ? <button type="button" className={d.link} onClick={() => setPicking(true)}>选</button> : "—") : null}
+          {!anchor && !picking ? (live ? <button type="button" className={d.link} onClick={() => setPicking(true)}>选择</button> : "—") : null}
           {picking && options ? (
             <WorldAnchorPicker options={options} value={anchor ? [anchor] : []} viewerId={viewerId ?? ""} nameOf={nameOf} company={ceo}
               onChange={(next) => { setAnchor(next[0] ?? null); if (next[0]?.kind !== "po") setPicking(false); }} />
@@ -135,7 +135,7 @@ export function MeetingDraftCard({ card }: { card: Draft }) {
         </div>
       ) : (
         <div className={d.bookActions}>
-          {bookMeetingFrom ? <button type="button" className={d.ghost} disabled={!live || busy} onClick={edit}>改</button> : null}
+          {bookMeetingFrom ? <button type="button" className={d.ghost} disabled={!live || busy} onClick={edit}>修改</button> : null}
           <button type="button" className={d.primary} disabled={!ready} onClick={() => void book()}>约好</button>
         </div>
       )}

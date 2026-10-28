@@ -22,17 +22,10 @@ export const MeetingParticipant = Type.Object(
   { additionalProperties: false },
 );
 
-/** advisor-review 后端场景的七段会前预审；旧三类保留用于历史 Meeting 展示。 */
-export const PreflightReviewEntryKind = Type.Union([
-  Type.Literal("core_judgment"),
-  Type.Literal("strategic_alignment"),
-  Type.Literal("positive_signal"),
-  Type.Literal("risk_calibration"),
-  Type.Literal("meeting_question"),
-  Type.Literal("next_step"),
-  Type.Literal("leader_lens"),
-]);
-
+/**
+ * 预审条目类别。v5（10/28）起只写三类：core_judgment 核心判断、discussion_question 要聊的问题、meeting_question 要拍板的事；
+ * 其余类别是 v4 及更早的报告，保留用于历史 Meeting 展示。
+ */
 export const MeetingPreflightEntryKind = Type.Union([
   Type.Literal("agenda"),
   Type.Literal("evidence"),
@@ -44,6 +37,17 @@ export const MeetingPreflightEntryKind = Type.Union([
   Type.Literal("meeting_question"),
   Type.Literal("next_step"),
   Type.Literal("leader_lens"),
+  Type.Literal("discussion_question"),
+]);
+
+/**
+ * 会前预审 v5 的档位：strategic 公司层面的战略决策会（照管理层汇报案例写）；standard 普通会（短而具体）；
+ * thin 除标题、时间、参会人和挂点名称外没有可下判断的内容（只写缺什么）。
+ */
+export const PreflightDepth = Type.Union([
+  Type.Literal("strategic"),
+  Type.Literal("standard"),
+  Type.Literal("thin"),
 ]);
 
 export const PreflightReadiness = Type.Union([
@@ -363,6 +367,9 @@ export const MeetingPreflight = Type.Object(
     brief: Type.String(),
     error: Type.Union([MeetingPreflightError, Type.Null()]),
     generatedAt: Type.Union([Type.String(), Type.Null()]),
+    /** v5 起：会议档位与这场会要定的事（会议页顶部那一行）；旧报告没有。 */
+    depth: Type.Optional(PreflightDepth),
+    decision: Type.Optional(Type.String({ minLength: 1 })),
     /** 新版 advisor-review 场景字段；Optional 保证旧 Meeting JSONB 继续可读。 */
     inputCoverage: Type.Optional(PreflightInputCoverage),
     taskDefinition: Type.Optional(PreflightTaskDefinition),
@@ -701,40 +708,60 @@ export const DriMeetingImportRequest = Type.Object(
   { additionalProperties: false },
 );
 
-/** Preflight Agent 的唯一结构化输出；散文不进入 Meeting。 */
+const PreflightRefs = (maxItems: number) => Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { minItems: 1, maxItems });
+
+/**
+ * Preflight Agent 的唯一结构化输出（v5，10/28 按管理层汇报案例重写）：要定什么、核心判断、要聊的问题、要拍板的事、缺什么、依据。
+ * 各档位必填哪几项由服务端校验（meetingPreflight.ts preflightCandidateError），长度上限放宽到提示词目标的两三倍，只防失控。
+ */
 export const PreflightCandidate = Type.Object(
   {
-    taskDefinition: PreflightTaskDefinition,
-    readiness: PreflightReadiness,
-    /** 材料自带待决题逐条判断；材料没有自带待决题时 total 为 0、items 为空。写在 entries 之前。 */
-    materialQuestions: Type.Optional(PreflightMaterialQuestions),
-    entries: Type.Array(
-      Type.Object(
-        {
-          kind: PreflightReviewEntryKind,
-          title: Type.String({ minLength: 1, maxLength: 200 }),
-          body: Type.String({ minLength: 1, maxLength: 4000 }),
-          sourceRefs: Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { minItems: 1, maxItems: 10 }),
-          /** meeting_question / leader_lens 必填（服务端校验）；其他类别忽略。 */
-          ceoDecision: Type.Optional(PreflightCeoDecision),
-        },
-        { additionalProperties: false },
-      ),
-      { minItems: 1, maxItems: 20 },
-    ),
-    /** 开放分歧按三类写；没有分歧时为空数组或省略。 */
-    divergences: Type.Optional(Type.Array(PreflightDivergence, { maxItems: 8 })),
-    basis: Type.String({ minLength: 1, maxLength: 4000 }),
-    brief: Type.String({ minLength: 1, maxLength: 4000 }),
-    summary: PreflightSummary,
+    depth: PreflightDepth,
+    /** 这场会要定的事：一句话、会上能有结论。strategic 必填。 */
+    decision: Type.Optional(Type.String({ minLength: 1, maxLength: 300 })),
+    /** 核心判断：headline 一句话结论，body 两三句关键依据与对我们的含义。thin 不写，其余必填。 */
+    judgment: Type.Optional(Type.Object(
+      {
+        headline: Type.String({ minLength: 1, maxLength: 120 }),
+        body: Type.String({ minLength: 1, maxLength: 600 }),
+        sourceRefs: PreflightRefs(8),
+      },
+      { additionalProperties: false },
+    )),
+    /** 要聊的问题：能当场回答或当场定的问题，why 写它影响什么决定或缺什么证据。 */
+    questions: Type.Array(Type.Object(
+      {
+        question: Type.String({ minLength: 1, maxLength: 150 }),
+        why: Type.String({ minLength: 1, maxLength: 300 }),
+        sourceRefs: PreflightRefs(6),
+      },
+      { additionalProperties: false },
+    ), { maxItems: 3 }),
+    /** 要拍板的事：超出负责人授权、有时效、至少两条路都走得通的取舍；可以没有。 */
+    decisions: Type.Array(Type.Object(
+      {
+        question: Type.String({ minLength: 1, maxLength: 150 }),
+        recommendation: Type.String({ minLength: 1, maxLength: 300 }),
+        changeIf: Type.String({ minLength: 1, maxLength: 240 }),
+        whyNow: Type.String({ minLength: 1, maxLength: 240 }),
+        whyCeo: Type.String({ minLength: 1, maxLength: 240 }),
+        options: Type.Array(PreflightCeoOption, { minItems: 2, maxItems: 3 }),
+        sourceRefs: PreflightRefs(6),
+      },
+      { additionalProperties: false },
+    ), { maxItems: 2 }),
+    /** 信息不足时缺什么（只在 thin 写）：缺的具体内容，补上之后能定什么。 */
+    gaps: Type.Array(Type.String({ minLength: 1, maxLength: 200 }), { maxItems: 2 }),
+    /** 依据与边界：读了什么、什么是对方或企业自述、缺什么会改变结论。给人看的正文，不写引用写法。 */
+    basis: Type.String({ minLength: 1, maxLength: 1200 }),
   },
   { additionalProperties: false },
 );
 
 export type TMeetingStatus = Static<typeof MeetingStatus>;
 export type TMeetingParticipant = Static<typeof MeetingParticipant>;
-export type TPreflightReviewEntryKind = Static<typeof PreflightReviewEntryKind>;
 export type TMeetingPreflightEntryKind = Static<typeof MeetingPreflightEntryKind>;
+export type TPreflightDepth = Static<typeof PreflightDepth>;
 export type TPreflightInputCoverage = Static<typeof PreflightInputCoverage>;
 export type TPreflightEvidenceMaterial = Static<typeof PreflightEvidenceMaterial>;
 export type TPreflightEvidenceLegacyMaterial = Static<typeof PreflightEvidenceLegacyMaterial>;

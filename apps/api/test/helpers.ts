@@ -83,42 +83,29 @@ function migratedTemplateDatabase(): Promise<string> {
 export type TestDb = { db: import("pg").PoolClient; pool: Pool; admin: Pool; database: string };
 
 /**
- * 新版 advisor-review 场景的合法候选；各领域测试只替换其关心的内容。
- * 问题不设下限（feedback 18）：这里是一个真实取舍——一条会议问题、一条不重复的一号位追问，各带 ceoDecision。
+ * 会前预审 v5 的合法候选（普通会）；各领域测试只替换其关心的内容。
+ * 写成条目是 entry-1 核心判断、entry-2 要聊的问题、entry-3 要拍板的事（带 ceoDecision）。
  */
 export function preflightCandidate(sourceRefs: string[]): TPreflightCandidate {
-  const entry = (kind: TPreflightCandidate["entries"][number]["kind"], title: string, body: string) =>
-    ({ kind, title, body, sourceRefs });
-  const question = (kind: "meeting_question" | "leader_lens", title: string, body: string, options: { label: string; impact: string }[]) => ({
-    ...entry(kind, title, body),
-    ceoDecision: { whyNow: "渠道窗口六月关闭，晚于五月底决定就错过本季投放", whyCeo: "涉及跨战场预算调配，超出渠道负责人授权", options },
-  });
   return {
-    taskDefinition: {
-      materialPurpose: "说明渠道投入选择",
-      reviewPurpose: "支持 CEO 会前判断材料是否足以进入讨论",
-      primaryRole: "research_analysis",
-      secondaryRole: null,
-      maturity: "internal_alignment",
-      readerAction: "判断是否进入渠道投入决策讨论",
-      nonGoal: "不在预审阶段替 CEO 批准投入",
-    },
-    readiness: "revise",
-    entries: [
-      entry("core_judgment", "核心判断", "材料可进入讨论，但关键证据仍需补足"),
-      entry("strategic_alignment", "战略一致性", "当前选择需与公司主线校准"),
-      entry("positive_signal", "积极信号", "材料已经提出明确选择"),
-      entry("risk_calibration", "风险与校准", "投入后果仍缺少验证依据"),
-      question("meeting_question", "渠道预算是否转向华南", "是否在六月前把渠道预算从华东转到华南？", [
+    depth: "standard",
+    decision: "定渠道预算是否在六月前转向华南",
+    judgment: { headline: "华南窗口真实，但转化证据只够支撑小额试点", body: "华南转化率只来自两家客户，样本撑不起整笔预算调整。", sourceRefs },
+    questions: [{ question: "华南转化率来自哪几家客户，样本够不够支撑整笔预算调整？", why: "决定预算是一次转过去还是先拿两成试点。", sourceRefs }],
+    decisions: [{
+      question: "渠道预算是否在六月前转向华南",
+      recommendation: "先拿两成预算在华南试点",
+      changeIf: "试点首月转化低于华东一半时停止",
+      whyNow: "渠道窗口六月关闭，晚于五月底决定就错过本季投放",
+      whyCeo: "涉及跨战场预算调配，超出渠道负责人授权",
+      options: [
         { label: "六月前转向华南", impact: "抢到本季窗口，但华东存量客户的续约投入减少" },
         { label: "维持华东投入", impact: "保住续约节奏，本季华南窗口放弃" },
-      ]),
-      entry("next_step", "下一阶段建议", "提交人先补齐推荐路径与后果"),
-      question("leader_lens", "华南转化依据", "华南转化率来自哪几家客户，样本够不够支撑整笔预算调整？", []),
-    ],
-    basis: "依据关联 Issue、ResearchDoc 与本体公司事实，只形成候选材料",
-    brief: "材料可进入讨论，但关键证据仍需补足",
-    summary: { criticalIssue: "缺少推荐路径的验证依据", priorityAction: "补齐选择后果与推翻条件" },
+      ],
+      sourceRefs,
+    }],
+    gaps: [],
+    basis: "依据关联议题、预研与本体公司事实，只形成候选材料",
   };
 }
 

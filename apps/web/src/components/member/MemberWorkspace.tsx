@@ -12,7 +12,7 @@ import { MissionCardNoticeGroup } from "@/components/missionCards/MissionCardNot
 import { MonthlyReviewNotices } from "@/components/monthlyReview/MonthlyReviewNotices";
 import { M2EntryNotice } from "@/components/monthlyReview/M2EntryNotice";
 import { PersonalReviewBoard } from "@/components/monthlyReview/PersonalReviewBoard";
-import { useWeeklyReviewBoard, WeeklyReviewBoard } from "@/components/weeklyReview/WeeklyReviewBoard";
+import { inWeeklyReviewWindow, useWeeklyReviewBoard, WeeklyReviewBoard } from "@/components/weeklyReview/WeeklyReviewBoard";
 import { RequestNotices, type RequestCounts } from "@/components/requests/RequestNotices";
 import { RequestListPanel } from "@/components/requests/RequestListScreen";
 import { MeetingCardNoticeList, useMeetingRecords } from "@/components/meeting/MeetingCardNotices";
@@ -63,22 +63,23 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
             }
           />
           <div className={n.noticeList}>
-            <CycleCountdown />
+            {/* M2 接管复盘和拆解时，天枢自己的周期卡（任务卡签发、个人复盘、月度复盘）不出，同 CEO 通知栏。 */}
+            {api.m2Available ? null : <CycleCountdown />}
             <MeetingCardNoticeList meetings={records.meetings} minutes={records.minutes} meetingBase="/me/meetings" onNavigate={api.navigate} onChanged={records.reload} />
             <ActionNoticeCard id="weekly-sync" title="每周同步" subtitle="把本周进展写进天枢" mark="meeting" notices={weeklySyncNotices(home.weeklySync)} onSettled={() => undefined} />
             <MemberMeetingSchedule meetings={home.meetings} onNavigate={api.navigate} />
-            <WeeklyReviewBoard onNavigate={api.navigate} state={weeklyReviews} />
-            <PersonalReviewBoard onNavigate={api.navigate} />
+            {inWeeklyReviewWindow(new Date()) ? <WeeklyReviewBoard onNavigate={api.navigate} state={weeklyReviews} /> : null}
+            {api.m2Available ? null : <PersonalReviewBoard onNavigate={api.navigate} />}
             <RequestNotices base="/me/requests" currentHref={currentHref} onNavigate={api.navigate} header={false} onCounts={setRequests} />
             <M2EntryNotice available={api.m2Available ?? false} />
-            <MonthlyReviewNotices onNavigate={api.navigate} />
+            {api.m2Available ? null : <MonthlyReviewNotices onNavigate={api.navigate} />}
             {home.rounds.map((round) => <MissionCardNoticeGroup key={round.roundId} round={round} entry="member" currentHref={currentHref} onNavigate={api.navigate} onRefresh={home.refresh} />)}
-            <ActionNoticeCard id="unplaced" plain title="待归位的事项" subtitle="还没挂到 Mission" mark="issue"
+            <ActionNoticeCard id="unplaced" plain title="待归位的事项" subtitle="还没有所属 Mission" mark="unplaced"
               notices={unplacedNotices(plan.plan?.unplaced ?? [], (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from))} onSettled={() => undefined} />
-            <ActionNoticeCard id="assigned" plain title="分给你的事与邀请" subtitle="会后分派与协作邀请" mark="meeting" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).assigned} onSettled={home.settle} />
-            <ActionNoticeCard id="results" title="回复与结果" mark="issue" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openAcceptance: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}?accept=1`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).results} onSettled={home.settle} />
-            <ActionNoticeCard id="progress" title="协作进展" mark="issue" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openAcceptance: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}?accept=1`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).progress} onSettled={home.settle} />
-            <ActionNoticeCard id="thread-unread" title="群聊新消息" mark="issue" notices={home.unreadThreads.map((item) => ({ id: `${item.objectType}:${item.objectId}`, title: `${item.objectType === "issue" ? "议题" : item.objectType === "meeting" ? "会议" : "执行事项"}「${item.title}」 · ${item.unread} 条新消息`, detail: "群聊", onOpen: (from: Element | null) => {
+            <ActionNoticeCard id="assigned" plain title="分给你的事与邀请" subtitle="会后分派与协作邀请" mark="assign" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).assigned} onSettled={home.settle} />
+            <ActionNoticeCard id="results" title="回复与结果" mark="progress" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openAcceptance: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}?accept=1`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).results} onSettled={home.settle} />
+            <ActionNoticeCard id="progress" title="协作进展" mark="progress" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openAcceptance: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}?accept=1`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).progress} onSettled={home.settle} />
+            <ActionNoticeCard id="thread-unread" title="群聊新消息" mark="chat" notices={home.unreadThreads.map((item) => ({ id: `${item.objectType}:${item.objectId}`, title: `${item.objectType === "issue" ? "议题" : item.objectType === "meeting" ? "会议" : "执行事项"}「${item.title}」 · ${item.unread} 条新消息`, detail: "群聊", onOpen: (from: Element | null) => {
               window.dispatchEvent(new CustomEvent("open-thread-channel", { detail: { objectType: item.objectType, objectId: item.objectId } }));
               api.navigate(`${item.href}?channel=group`, from);
             }, buttons: [] })).concat(home.unreadMissionGroups.map((item) => ({ id: `mission-card:${item.cardId}`, title: `任务卡「${item.title}」 · ${item.unread} 条新消息`, detail: "群聊", onOpen: (from: Element | null) => {

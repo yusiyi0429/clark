@@ -91,7 +91,7 @@ it("新建时选了有 Task 的 Mission 才出「挂到 Task」，默认不挂�
   answerGets();
   let tree = render(() => CreateTaskScreen());
   await settle(2);
-  const taskGroup = () => find(tree, (node) => node.props?.role === "group" && node.props?.["aria-label"] === "挂到 Task");
+  const taskGroup = () => find(tree, (node) => node.props?.role === "group" && node.props?.["aria-label"] === "所属 Task");
   const chip = (title: string) => find(tree, (node) => node.type === "button" && node.props?.title === title)!;
   tree = render(() => CreateTaskScreen());
   (find(tree, (node) => node.props?.name === "title")!.props!.onChange as (event: { target: { value: string } }) => void)({ target: { value: "联系两家客户" } });
@@ -102,7 +102,7 @@ it("新建时选了有 Task 的 Mission 才出「挂到 Task」，默认不挂�
   (find(tree, (node) => node.props?.role === "switch")!.props!.onClick as () => void)();
   tree = render(() => CreateTaskScreen());
   expect(taskGroup()).toBeDefined();
-  expect(chip("不挂").props!["aria-pressed"]).toBe(true);
+  expect(chip("不指定").props!["aria-pressed"]).toBe(true);
   expect(chip("回流方案定稿")).toBeDefined(); expect(chip("真实会议跑通")).toBeDefined();
   (chip("回流方案定稿").props!.onClick as () => void)();
   // 换到没有 Task 的 Mission：整组不出，选过的 Task 作废。
@@ -112,7 +112,7 @@ it("新建时选了有 Task 的 Mission 才出「挂到 Task」，默认不挂�
   expect(taskGroup()).toBeUndefined();
   (find(tree, (node) => node.type === "input" && node.props?.value === "m1")!.props!.onChange as () => void)();
   tree = render(() => CreateTaskScreen());
-  expect(chip("不挂").props!["aria-pressed"]).toBe(true);
+  expect(chip("不指定").props!["aria-pressed"]).toBe(true);
   (chip("真实会议跑通").props!.onClick as () => void)();
   actions.post.mockResolvedValue({ data: { id: "task-new" } });
   for (let step = 0; step < 2; step++) {
@@ -133,11 +133,11 @@ it("编辑表单：所属 Mission 有 Task 时能改「挂到 Task」，换 Miss
   const props = { detail: opened, busy: false, onSave, onCancel: vi.fn() };
   let fields = render(() => TaskEditForm(props), form);
   await settle(2);
-  const picker = () => find(fields, (node) => node.props?.["aria-label"] === "挂到 Task");
+  const picker = () => find(fields, (node) => node.props?.["aria-label"] === "所属 Task");
   const save = () => { fields = render(() => TaskEditForm(props), form); (find(fields, (node) => node.props?.children === "保存")!.props!.onPress as () => void)(); };
   fields = render(() => TaskEditForm(props), form);
   expect(picker()?.props?.selectedKey).toBe("t1");
-  expect(findAll(picker(), (node) => node.props?.id !== undefined).map((node) => [node.props!.id, node.props!.textValue])).toEqual([["none", "不挂"], ["t1", "回流方案定稿"], ["t2", "真实会议跑通"]]);
+  expect(findAll(picker(), (node) => node.props?.id !== undefined).map((node) => [node.props!.id, node.props!.textValue])).toEqual([["none", "不指定"], ["t1", "回流方案定稿"], ["t2", "真实会议跑通"]]);
   (picker()!.props!.onSelectionChange as (key: string) => void)("none");
   save();
   expect(onSave).toHaveBeenLastCalledWith({ planTaskId: null });
@@ -166,10 +166,10 @@ it("编辑表单：挂着的 Task 已不在本体里时单列「已不存在的 
   let form: unknown[] = [];
   let fields = render(() => TaskEditForm({ detail: goneDetail, busy: false, onSave, onCancel }), form);
   await settle(2);
-  const picker = () => find(fields, (node) => node.props?.["aria-label"] === "挂到 Task");
+  const picker = () => find(fields, (node) => node.props?.["aria-label"] === "所属 Task");
   fields = render(() => TaskEditForm({ detail: goneDetail, busy: false, onSave, onCancel }), form);
   expect(picker()?.props?.selectedKey).toBe("t-gone");
-  expect(findAll(picker(), (node) => node.props?.id !== undefined).map((node) => node.props!.textValue)).toEqual(["不挂", "已不存在的 Task", "回流方案定稿", "真实会议跑通"]);
+  expect(findAll(picker(), (node) => node.props?.id !== undefined).map((node) => node.props!.textValue)).toEqual(["不指定", "已不存在的 Task", "回流方案定稿", "真实会议跑通"]);
   (picker()!.props!.onSelectionChange as (key: string) => void)("none");
   fields = render(() => TaskEditForm({ detail: goneDetail, busy: false, onSave, onCancel }), form);
   expect(picker()?.props?.selectedKey).toBe("none");

@@ -7,26 +7,33 @@
  * 挂到：选项到了就默认挂上自己本月的第一个 Mission（没有就空着、直接展开去挑），收起时一行写着挂点和「我的 Mission / PO …」，右边「换」；
  * 换的时候是 WorldAnchorPicker，挑了 Mission、LTO 就收起，挑了 PO 不收（下面展开它的 Mission 可以再往下挑）。
  * 「约好」建会（只存天枢，不写本体），成功后跳到会议页。
+ * 材料（可不传）：拖进来或点选，可多份；约好拿到会议 id 后一份一份传进这场会的群材料，传不上的提示一句，会照样约好。
+ * 本人的飞书授权不能在飞书日历约会（没连、过期或缺日历权限）时，按钮上方一行提示和「连接飞书」（新标签页里连，表单不丢）。
  * 整理模式（organize）：飞书里直接开的会待整理，用这份妙记建会；时间、参会人取自妙记只读，没有主持人一栏，挂点按妙记那个月取。
  * 对话里会议卡的「改」（draft）：名称、时间、主持人、参会人、挂到先按草稿填好（草稿没挂就空着，不默认挂），约好时带 draftId。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type DragEvent } from "react";
+import { Upload } from "lucide-react";
 import type { TFeishuMinuteInboxItem, TPickedWorldAnchor, TWorldAnchor, TWorldAnchorOption } from "@warmap/contracts";
 import { COMPANY_TIMEZONE, companyMonth, dateSpan } from "@/lib/companyTime";
-import { refreshWorkspace } from "@/lib/toast";
+import { feishuConnectHref, readFeishuConnection } from "@/lib/feishuLogin";
+import { refreshWorkspace, showWorkspaceToast } from "@/lib/toast";
 import { DetailFrame } from "@/components/shell/DetailFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Select } from "@/components/ui/Select";
 import { SidePanel } from "@/components/ui/SidePanel";
 import { timeOptions } from "@/components/ui/pickerFormat";
-import { bookMeeting, listPeople, listPersonDirectory, listWorldAnchorOptions, organizeFeishuMinute, type DirectoryPerson } from "./meetingDecisionApi";
+import { bookMeeting, listPeople, listPersonDirectory, listWorldAnchorOptions, organizeFeishuMinute, uploadMeetingMaterial, type DirectoryPerson } from "./meetingDecisionApi";
 import { anchorRole, WorldAnchorPicker } from "./WorldAnchorPicker";
 import d from "./meeting-decisions.module.css";
 
-export const BOOK_ERROR: Record<string, string> = { ANCHOR_NOT_FOUND: "挂点已失效", FORBIDDEN: "没有权限", INVALID_LEAD_DRI: "主持人不可选", INVALID_PARTICIPANT: "参会人不可选", MEETING_DRAFT_BUSY: "正在约" };
-const ORGANIZE_ERROR: Record<string, string> = { MINUTE_TAKEN: "已经记到别的会上了", MINUTE_NOT_PENDING: "已经处理过了", ANCHOR_NOT_FOUND: "挂点已失效" };
+export const BOOK_ERROR: Record<string, string> = { ANCHOR_NOT_FOUND: "所属对象已失效", FORBIDDEN: "没有权限", INVALID_LEAD_DRI: "主持人不可选", INVALID_PARTICIPANT: "参会人不可选", MEETING_DRAFT_BUSY: "正在约" };
+const ORGANIZE_ERROR: Record<string, string> = { MINUTE_TAKEN: "已经记到别的会上了", MINUTE_NOT_PENDING: "已经处理过了", ANCHOR_NOT_FOUND: "所属对象已失效" };
 const pad = (value: number) => String(value).padStart(2, "0");
+/** 群材料能收的格式和大小（同 ObjectMaterialArea）。 */
+const MATERIAL_ACCEPT = ".md,.pdf,.docx,.html,.htm";
+const MATERIAL_MAX_BYTES = 20 * 1024 * 1024;
 
 /** 默认下一个整点开、开一小时（公司时区）。 */
 function nextSlot(now = new Date()): { date: string; start: string; end: string } {
@@ -76,6 +83,12 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
   const [error, setError] = useState("");
   const [optionsError, setOptionsError] = useState(false);
   const [picking, setPicking] = useState(false);
+  /** 约好后要放进群材料的几份。 */
+  const [files, setFiles] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
+  /** 约好后正在传第几份（按钮上显示）。 */
+  const [uploadingAt, setUploadingAt] = useState(0);
+  const [feishu, setFeishu] = useState<{ enabled: boolean; calendar: boolean } | null>(null);
   const period = organize ? companyMonth(new Date(organize.minute.startsAt)) : slot.date.slice(0, 7);
 
   // 整理会议不取人员名册（参会人取自妙记）。
@@ -86,6 +99,15 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
     if (role === "ceo") void listPeople().then((next) => { if (live) setHosts(next.filter((person) => person.roles.includes("dri"))); }, () => undefined);
     return () => { live = false; };
   }, [open, role]);
+  // 本人的飞书能不能在日历约会：打开时读一次；在新标签页连完回来（窗口拿回焦点）再读。整理会议不在飞书约，不读。
+  useEffect(() => {
+    if (!open || organize) return;
+    let live = true;
+    const load = () => void readFeishuConnection().then((next) => { if (live) setFeishu(next); });
+    load();
+    window.addEventListener("focus", load);
+    return () => { live = false; window.removeEventListener("focus", load); };
+  }, [open, organize]);
   // 挂点按开会那个月取：换了月份先收起旧选项再重取，已选的不在新选项里就去掉。
   useEffect(() => {
     if (!open) return;
@@ -128,6 +150,18 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
       setBusy(false);
     }
   };
+  const addFiles = (picked: File[]) => {
+    if (!picked.length) return;
+    if (picked.some((file) => !/\.(md|pdf|docx|html|htm)$/i.test(file.name))) return setError("只支持 PDF、Word、Markdown 和 HTML");
+    if (picked.some((file) => file.size > MATERIAL_MAX_BYTES)) return setError("单份材料不能超过 20 MB");
+    setError("");
+    setFiles((current) => [...current, ...picked]);
+  };
+  const dropping = {
+    onDragOver: (event: DragEvent<HTMLLabelElement>) => { if (!event.dataTransfer.types.includes("Files")) return; event.preventDefault(); setDragging(true); },
+    onDragLeave: (event: DragEvent<HTMLLabelElement>) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); },
+    onDrop: (event: DragEvent<HTMLLabelElement>) => { event.preventDefault(); setDragging(false); addFiles([...event.dataTransfer.files]); },
+  };
   const submit = async (viewer: Viewer) => {
     setBusy(true); setError("");
     try {
@@ -141,6 +175,13 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
         ...(draft ? { draftId: draft.draftId } : {}),
       });
       if ("code" in result) { setError(BOOK_ERROR[result.code] ?? "没有约成"); return; }
+      // 会已经约好：材料一份一份传，传不上的不挡跳转，提示一句（会议页的材料区还能再传）。
+      let failed = 0;
+      for (const [index, file] of files.entries()) {
+        setUploadingAt(index + 1);
+        if (await uploadMeetingMaterial(result.card.objectRef.id, file)) failed += 1;
+      }
+      if (failed) showWorkspaceToast({ text: `${failed} 份材料没传上，可在会议页再传` });
       window.dispatchEvent(new Event("meeting-changed"));
       refreshWorkspace();
       onClose();
@@ -149,6 +190,7 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
       setError("没有约成");
     } finally {
       setBusy(false);
+      setUploadingAt(0);
     }
   };
 
@@ -208,14 +250,14 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
               onChange={(personId) => { if (personId) setParticipants((current) => [...current, personId]); }} />}
           </div>
           <div className={d.bookField}>
-            <span>挂到</span>
+            <span>所属</span>
             {options && anchors.length && !picking ? (
               <div className={d.bookAnchor} data-anchor-row>
                 <span>
                   {anchors[0].title}
                   <small>{anchorOption(anchors[0]) ? anchorRole(anchorOption(anchors[0])!, me, nameOf) : ""}</small>
                 </span>
-                <button type="button" onClick={() => setPicking(true)}>换</button>
+                <button type="button" onClick={() => setPicking(true)}>更换</button>
               </div>
             ) : null}
             {options && (picking || !anchors.length) ? (
@@ -224,10 +266,36 @@ export function MeetingBookingSheet({ open, onClose, viewer, organize, initialPa
             ) : null}
             {optionsError ? <p className={d.worldError} role="alert">没有读到对象</p> : null}
           </div>
+          {organize ? null : <div className={d.bookField}>
+            <span>材料</span>
+            {files.length ? (
+              <ul className={d.bookPeople}>
+                {files.map((file, index) => (
+                  <li key={`${index}:${file.name}`}>
+                    {file.name}
+                    <button type="button" aria-label={`去掉 ${file.name}`} disabled={busy}
+                      onClick={() => setFiles((current) => current.filter((_, at) => at !== index))}>×</button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <label className={d.bookDrop} data-dragging={dragging || undefined} {...dropping}>
+              <Upload size={15} strokeWidth={1.8} aria-hidden />
+              拖入或点选文件
+              <input className={d.bookFile} type="file" accept={MATERIAL_ACCEPT} multiple aria-label="上传材料" disabled={busy}
+                onChange={(event) => { addFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />
+            </label>
+          </div>}
           {error ? <p className={d.worldError} role="alert">{error}</p> : null}
+          {!organize && feishu?.enabled && !feishu.calendar ? (
+            <p className={d.bookFeishu} role="status">
+              没连飞书，会议不会进你的飞书日历
+              <a href={feishuConnectHref(window.location?.pathname ?? "/")} target="_blank" rel="noopener">连接飞书</a>
+            </p>
+          ) : null}
           <div className={d.bookActions}>
             <button type="button" className={d.ghost} disabled={busy} onClick={onClose}>取消</button>
-            <button type="button" className={d.primary} disabled={busy || !valid} onClick={() => void (organize ? submitOrganize(organize) : submit(viewer))}>{organize ? "整理" : "约好"}</button>
+            <button type="button" className={d.primary} disabled={busy || !valid} onClick={() => void (organize ? submitOrganize(organize) : submit(viewer))}>{organize ? "整理" : uploadingAt ? `上传材料 ${uploadingAt}/${files.length}` : "约好"}</button>
           </div>
         </div>
       </DetailFrame>

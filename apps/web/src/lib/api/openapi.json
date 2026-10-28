@@ -3754,6 +3754,34 @@
         }
       }
     },
+    "/api/mission-cards/world-status": {
+      "get": {
+        "operationId": "getMissionCardWorldStatus",
+        "summary": "本月任务卡在本体里的签发情况：全员 Mission 按生命周期计数；本体没配或读不到时 status 为 null",
+        "responses": {
+          "200": {
+            "description": "任务卡签发情况",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionCardStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/personal-reviews/board": {
       "get": {
         "operationId": "getPersonalReviewBoard",
@@ -20596,13 +20624,17 @@
         "type": "object",
         "required": [
           "enabled",
-          "connected"
+          "connected",
+          "calendar"
         ],
         "properties": {
           "enabled": {
             "type": "boolean"
           },
           "connected": {
+            "type": "boolean"
+          },
+          "calendar": {
             "type": "boolean"
           }
         }
@@ -32342,6 +32374,110 @@
                   "serverNow": {
                     "description": "ISO 8601",
                     "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "MissionCardStatus": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "period",
+          "total",
+          "settled",
+          "groups"
+        ],
+        "properties": {
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "total": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "settled": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "label",
+                "count"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "count": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "MissionCardStatusResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "period",
+                  "total",
+                  "settled",
+                  "groups"
+                ],
+                "properties": {
+                  "period": {
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "type": "string"
+                  },
+                  "total": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "settled": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "groups": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "label",
+                        "count"
+                      ],
+                      "properties": {
+                        "label": {
+                          "type": "string"
+                        },
+                        "count": {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      }
+                    }
                   }
                 }
               },

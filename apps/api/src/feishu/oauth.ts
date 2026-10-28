@@ -81,9 +81,10 @@ export function verifyOAuthState(secret: string, cookieValue: string | undefined
 
 /**
  * 本人的飞书连好了没有（账户菜单、会议页「连接飞书」看它）：关联了飞书账号，授权有效（没标重新授权、密钥版本对得上、
- * 续期凭据没过期），并且授权里有会后拿妙记要的权限。
+ * 续期凭据没过期），并且授权里有 scopes 这几项权限（默认会后拿妙记要的；约会议看日历的传 FEISHU_CALENDAR_SCOPES）。
  */
-export async function feishuConnected(q: Query, env: Pick<FeishuEnv, "tokenKeyVersion">, personId: string, now: Date): Promise<boolean> {
+export async function feishuConnected(q: Query, env: Pick<FeishuEnv, "tokenKeyVersion">, personId: string, now: Date,
+  scopes: readonly string[] = FEISHU_MINUTES_READ_SCOPES): Promise<boolean> {
   const row = (await q(
     `SELECT t.status, t.key_version, t.scope, t.access_expires_at, t.refresh_expires_at
        FROM feishu_user_tokens t JOIN feishu_identities i ON i.person_id = t.person_id WHERE t.person_id = $1`,
@@ -92,7 +93,7 @@ export async function feishuConnected(q: Query, env: Pick<FeishuEnv, "tokenKeyVe
   if (!row || row.status !== "active" || row.key_version !== env.tokenKeyVersion) return false;
   if ((row.refresh_expires_at ?? row.access_expires_at).getTime() <= now.getTime()) return false;
   const granted = new Set((row.scope ?? "").split(/\s+/));
-  return FEISHU_MINUTES_READ_SCOPES.every((scope) => granted.has(scope));
+  return scopes.every((scope) => granted.has(scope));
 }
 
 export type FeishuLoginOutcome =

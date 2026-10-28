@@ -1,4 +1,4 @@
-/* 总倒计时：只有玻璃页头一条，右侧是剩余时间，底边一条细进度（剩余比例）。 */
+/* 「N 月任务卡」：只有玻璃页头一条，右侧是已成立 / 总数，底边一条细进度（已成立的比例）。 */
 .header.header { grid-template-columns: auto minmax(0, 1fr) auto; padding-right: 16px; border-bottom: 0; border-radius: calc(var(--notice-radius) - 1px); }
 .figure { position: relative; z-index: 1; flex: none; color: #fff; font-size: 15px; font-weight: 600; line-height: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .figure[data-tone="overdue"] { padding: 2px 8px; border-radius: 999px; background: #d9443c; color: #fff; box-shadow: 0 2px 8px rgb(120 20 16 / 30%); text-shadow: none; }

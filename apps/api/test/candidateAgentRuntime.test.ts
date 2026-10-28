@@ -93,6 +93,34 @@ describe("batch candidate runtime public seam", () => {
     });
   });
 
+  it("业务校验不通过时把说明回给模型，改好重交才收下", async () => {
+    await createTestDb(async ({ db }) => {
+      await migrate(db);
+      const contexts: Context[] = [];
+      const result = await runCandidateAgent({
+        query: db.query.bind(db),
+        kind: "meeting_preflight",
+        input: { meeting: "fixture" },
+        prompt: "只提交结构化候选。",
+        schema: Candidate,
+        baseUrl: "https://provider.invalid/v1/responses",
+        apiKey: "test-key",
+        modelId: "fake-heavy",
+        maxModelCalls: 3,
+        validate: (candidate) => candidate.summary.includes("而是") ? "summary 用了「不是……而是……」句式，改成正面直接陈述" : null,
+        streamSimple: (_model, context) => {
+          contexts.push(context);
+          const summary = contexts.length === 1 ? "不是渠道问题，而是窗口问题" : "华南窗口还有六周";
+          return stream([{ type: "toolCall", id: `submit-${contexts.length}`, name: "submit_candidate", arguments: { summary } }], "toolUse");
+        },
+      });
+
+      expect(result.candidate).toEqual({ summary: "华南窗口还有六周" });
+      expect(contexts).toHaveLength(2);
+      expect(JSON.stringify(contexts[1].messages)).toContain("未通过校验：summary 用了「不是……而是……」句式");
+    });
+  });
+
   it("rejects prose output and records one failed run without hidden retry", async () => {
     await createTestDb(async ({ db }) => {
       await migrate(db);

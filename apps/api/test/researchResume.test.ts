@@ -84,7 +84,7 @@ describe("场次启动后补跑议题预研", () => {
       const preflightAgent: PreflightAgent = { background: true, async generate(input) {
         events.push("preflight");
         const candidate = preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`));
-        candidate.entries[0].sourceRefs.push(`meeting:${input.meeting.id}`);
+        candidate.judgment!.sourceRefs.push(`meeting:${input.meeting.id}`);
         return { candidate };
       } };
 

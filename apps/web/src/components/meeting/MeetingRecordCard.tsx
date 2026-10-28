@@ -1,19 +1,18 @@
 "use client";
 
 /**
- * 会议卡（FR-4.3–4.5、FR-5.1/5.4/5.5）：会后一张卡审阅整场会——会名和实际时间、参会人、挂点、摘要、按议题的正文各段（带出处）、
+ * 会议卡（FR-4.3–4.5、FR-5.1/5.4/5.5）：会后一张卡审阅整场会——实际时间、参会人（会名和挂点在会议页页头，编辑时才出现会名）、摘要、按议题的正文各段（带出处）、
  * 行动项（天枢本地：随整卡确认推成执行事项，不进本体）、对象修改（改前 / 改后）；主持人或创建人就地编辑、停顿自动保存，整卡确认一次；
  * 确认后可「修改」（更正原记录或会后新决定），修改中改过的地方原文划线显示在新内容上方；底部逐行显示会议事件和对象修改的同步状态。
  * 别人只读：有确认版看确认版（行动项看确认时的快照），没有看草稿（标「待确认」）。
  */
 import { useEffect, useState } from "react";
-import type { TMeetingCardView, TWorldAnchor } from "@warmap/contracts";
+import type { TMeetingCardView } from "@warmap/contracts";
 import { Plus } from "lucide-react";
 import { DateTimePicker } from "@/components/ui/DatePicker";
 import { Select } from "@/components/ui/Select";
 import { browserApi } from "@/lib/api/client";
 import { monthDayClock } from "@/lib/companyTime";
-import { getMeetingWorld } from "./meetingDecisionApi";
 import {
   basisLabel, changeRows, companyInput, draftReady, fromCompanyInput, inFuture, itemRows, itemsReady, sectionRows, syncRows, type CardContent, type RecordTurn,
 } from "./meetingCardModel";
@@ -23,7 +22,6 @@ import { ObjectChangeDiff } from "./ObjectChangeDiff";
 import { RecordCardFooter, type FooterMode } from "./RecordCardFooter";
 import { RecordSection } from "./RecordSection";
 import { useMeetingCard } from "./useMeetingCard";
-import { WorldAnchors } from "./WorldAnchors";
 import c from "./meeting-card.module.css";
 import { MeetingTaskQuality } from "../task-quality/MeetingTaskQuality";
 
@@ -50,8 +48,6 @@ const NOT_IN_TIANSHU = "none";
 
 export function MeetingRecordCard({ meetingId, initial, onView, turns = [], speakerName = noSpeaker, people = noPeople, onSpeakers }: MeetingRecordCardProps) {
   const card = useMeetingCard(meetingId, initial, onView);
-  const [anchors, setAnchors] = useState<TWorldAnchor[]>([]);
-  useEffect(() => { void getMeetingWorld(meetingId).then((detail) => setAnchors(detail?.world.anchors ?? []), () => undefined); }, [meetingId]);
   // 没对上人的说话人由主持人或创建人从人员目录里点一下指定。
   const speakers = card.view.canEdit && card.draft ? card.view.unmappedSpeakers : [];
   const [directory, setDirectory] = useState<MeetingPerson[]>([]);
@@ -105,11 +101,14 @@ export function MeetingRecordCard({ meetingId, initial, onView, turns = [], spea
         </div>
       ) : null}
 
-      <div className={c.titleBlock} data-changed={wasTitle !== null ? "" : undefined}>
-        {wasTitle !== null ? <del className={`${c.was} ${c.title}`}>{wasTitle}</del> : null}
-        <InlineText as="h2" className={c.title} value={content.title} editable={editable} readOnly={locked} single label="会议名" invalid={!content.title.trim()}
-          autoFocus={card.focus === "title"} onChange={(title) => card.edit((current) => ({ ...current, title }))} onBlur={card.leave} />
-      </div>
+      {/* 会议名和挂点页头已经写了：只读时不再重复，只在编辑（能改会议名）时出现。 */}
+      {editable ? (
+        <div className={c.titleBlock} data-changed={wasTitle !== null ? "" : undefined}>
+          {wasTitle !== null ? <del className={`${c.was} ${c.title}`}>{wasTitle}</del> : null}
+          <InlineText as="h2" className={c.title} value={content.title} editable={editable} readOnly={locked} single label="会议名" invalid={!content.title.trim()}
+            autoFocus={card.focus === "title"} onChange={(title) => card.edit((current) => ({ ...current, title }))} onBlur={card.leave} />
+        </div>
+      ) : null}
       <dl className={c.props}>
         {editable && !card.timeInFooter ? (
           <div data-changed={wasTime !== null ? "" : undefined}><dt>时间</dt><dd>
@@ -138,7 +137,6 @@ export function MeetingRecordCard({ meetingId, initial, onView, turns = [], spea
             ))}
           </dd></div>
         ) : null}
-        {anchors.length ? <div><dt>挂到</dt><dd><WorldAnchors anchors={anchors} /></dd></div> : null}
       </dl>
 
       {editable || content.summary.trim() ? (

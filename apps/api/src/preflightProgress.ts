@@ -3,8 +3,8 @@ import type { CandidateAgentEvent } from "./candidateAgentRuntime.js";
 import type { PreflightGroupMaterialInput, PreflightAgentInput } from "./meetingPreflight.js";
 
 /**
- * 会前预审的过程可见（v4）：每一步由系统按实际发生的事生成——读了哪份材料、找到了哪场同战场的会、查了哪一节企业知识、
- * 模型正在写第几道待决题、已经形成了哪一条结论。没有估算的百分比，也不按时间假装推进。
+ * 会前预审的过程可见（v4 起，v5 换成新的结论结构）：每一步由系统按实际发生的事生成——读了哪个挂点、哪份材料、找到了哪场同战场的会、
+ * 查了哪一节企业知识、已经形成了核心判断和哪几个要聊的问题。没有估算的百分比，也不按时间假装推进。
  *
  * 写进 meetings.preflight.progress（同一次预审才写，见 pendingSince 条件），所以页面刷新或离开再回来能接着看；
  * 写入不加 meetings.version，不打断一号位在预审期间的勾选与草稿（这些操作按 version 防冲突）。
@@ -171,11 +171,16 @@ export function materialStepLabel(material: Pick<PreflightGroupMaterialInput, "f
 }
 
 const MATCH_LABEL: Record<string, string> = { shared_issue: "同一议题", battlefield: "同一战场", unit: "同一单元" };
+const ANCHOR_LABEL: Record<PreflightAgentInput["anchors"][number]["kind"], string> = { lto: "长期目标", po: "本月目标", mission: "Mission", unit: "责任单元" };
 
-/** 输入阶段的步骤：材料、群讨论、议题历史、对照的近期会议与同战场决定。 */
-export function inputProgressEvents(input: Pick<PreflightAgentInput, "groupMaterials" | "materials" | "discussions" | "decisionHistory" | "relatedMeetings" | "battlefieldDecisions">,
+/** 输入阶段的步骤：挂点、材料、群讨论、议题历史、对照的近期会议与同战场决定。 */
+export function inputProgressEvents(input: Pick<PreflightAgentInput, "anchors" | "groupMaterials" | "materials" | "discussions" | "decisionHistory" | "relatedMeetings" | "battlefieldDecisions">,
   paragraphCounts: Map<string, number>): ProgressEvent[] {
   const events: ProgressEvent[] = [];
+  input.anchors.forEach((anchor, index) => {
+    const name = `${ANCHOR_LABEL[anchor.kind]}「${clip(anchor.title, 30)}」`;
+    events.push({ key: `anchor:${index + 1}`, kind: "input", label: anchor.readState === "ok" ? `已读取挂点：${name}` : `挂点${name}只读到名称` });
+  });
   for (const material of input.groupMaterials) {
     events.push({ key: `material:${material.sourceRef}`, kind: "input",
       label: materialStepLabel({ ...material, paragraphCount: paragraphCounts.get(material.sourceRef) ?? 0 }) });
@@ -245,27 +250,18 @@ export function latestParagraphLead(summary: string): string | undefined {
   return lead.length >= 8 ? lead.slice(0, 120) : undefined;
 }
 
-/** 预审 Agent 的两个阶段性结论工具（定义在 preflightAgent.ts）：模型边分析边交出，界面先显示。 */
-export const REPORT_MATERIAL_QUESTIONS = "report_material_questions";
+/** 预审 Agent 的阶段性结论工具（定义在 preflightAgent.ts）：模型边分析边交出，界面先显示。 */
 export const REPORT_HISTORY_CHECK = "report_history_check";
 
 export type ThoughtTranslator = (heading: string, signal?: AbortSignal) => Promise<string | null>;
 
-// ── 模型写候选的过程：从工具的流式参数里读出已写完的待决题判断、历史对照与条目。
+// ── 模型写候选的过程：从工具的流式参数里读出历史对照，以及已写完的要定什么、核心判断、要聊的问题、要拍板的事。
 
-const VERDICT_LABEL: Record<string, string> = { ceo: "需要一号位判断", owner: "负责人职责内可定", monitor: "事实不足，转监测" };
-const KIND_LABEL: Record<string, string> = {
-  core_judgment: "核心判断", meeting_question: "会议问题", leader_lens: "一号位追问", risk_calibration: "风险与待校准",
-  next_step: "推动建议", positive_signal: "积极信号", strategic_alignment: "战略一致性判断",
-};
-const DIVERGENCE_LABEL: Record<string, string> = { fact_gap: "事实不足", judgment: "判断分歧", value_tradeoff: "价值取舍" };
+const DEPTH_LABEL: Record<string, string> = { strategic: "战略决策会", standard: "普通会", thin: "信息还不够下判断" };
 const RELATION_LABEL: Record<string, string> = { consistent: "一致", tension: "存在张力", conflict: "冲突" };
-/** 逐条出现在过程里的条目类别（其余只计数）。 */
-const LISTED_KINDS = new Set(["core_judgment", "meeting_question", "leader_lens"]);
 
-type PartialQuestion = { question?: unknown; verdict?: unknown; reason?: unknown };
-type PartialEntry = { kind?: unknown; title?: unknown };
-type PartialCandidate = { materialQuestions?: { total?: unknown; items?: unknown }; entries?: unknown; divergences?: unknown };
+type PartialItem = { question?: unknown };
+type PartialCandidate = { depth?: unknown; decision?: unknown; judgment?: { headline?: unknown }; questions?: unknown; decisions?: unknown };
 type PartialCheck = { ref?: unknown; relation?: unknown; note?: unknown };
 
 const str = (value: unknown) => (typeof value === "string" ? value : "");
@@ -282,51 +278,14 @@ const completedCount = (items: unknown[], finished: boolean) => (items.length ? 
 
 /**
  * 把模型写的流式参数变成过程步骤；只在有新内容时更新。
- * - materialQuestions：材料自带待决题（单独的 report_material_questions，或 submit_candidate 里的同名字段）；
  * - historyCheck：对照近期会议决定的结论（report_history_check）；refLabels 给出每条决定的原文，用于写「哪一条」；
- * - candidate：submit_candidate 的条目与分歧。
+ * - candidate：submit_candidate 的档位、要定什么、核心判断、要聊的问题、要拍板的事（一项写完才出现）。
  */
 export function createCandidateProgress(recorder: PreflightProgressRecorder, refLabels: Map<string, string> = new Map()) {
-  let questionsJudged = 0;
-  /** 待决题已由阶段性结论工具完整交出：最终候选里的同名字段不再改动过程。 */
-  let questionsDelivered = false;
   let checksDone = 0;
-  let entriesDone = 0;
+  let questionsDone = 0;
+  let decisionsDone = 0;
   let writingStarted = false;
-  const kindCounts = new Map<string, number>();
-
-  const materialQuestions = (raw: unknown, finished: boolean, fromCandidate = false) => {
-    if (!raw || typeof raw !== "object" || (fromCandidate && questionsDelivered)) return;
-    if (finished && !fromCandidate) questionsDelivered = true;
-    const questions = raw as { total?: unknown; items?: unknown } & Record<string, unknown>;
-    const items = Array.isArray(questions.items) ? questions.items as PartialQuestion[] : [];
-    // total 可能写在 items 之后：没有 total 时只写已判断几道。
-    const itemsFinished = finished || startedAfter(questions, "items");
-    const total = typeof questions.total === "number" ? questions.total : null;
-    const judged = Math.min(completedCount(items, itemsFinished), items.length);
-    for (let index = questionsJudged; index < judged; index += 1) {
-      const item = items[index];
-      const verdict = VERDICT_LABEL[str(item.verdict)];
-      if (!verdict || !str(item.question)) continue;
-      recorder.step({ key: `material_question:${index + 1}`, kind: "material_question",
-        label: `第 ${index + 1} 题「${clip(str(item.question), 40)}」：${verdict}`, ...(str(item.reason) ? { detail: str(item.reason) } : {}) });
-    }
-    questionsJudged = Math.max(questionsJudged, judged);
-    if (!items.length && !finished && total === null) return;
-    const counts = { ceo: 0, owner: 0, monitor: 0 } as Record<string, number>;
-    for (const item of items.slice(0, judged)) counts[str(item.verdict)] = (counts[str(item.verdict)] ?? 0) + 1;
-    const count = total ?? judged;
-    if (finished || (total !== null && judged >= total && itemsFinished)) {
-      recorder.step(count === 0
-        ? { key: "material_questions", kind: "material_question", label: "材料没有自带的待决题" }
-        : { key: "material_questions", kind: "material_question",
-          label: `已逐条判断材料自带的 ${count} 道待决题：${[counts.ceo ? `${counts.ceo} 道需要一号位判断` : "", counts.owner ? `${counts.owner} 道负责人可定` : "",
-            counts.monitor ? `${counts.monitor} 道转监测` : ""].filter(Boolean).join("，") || "均已判断"}` });
-    } else {
-      recorder.step({ key: "material_questions", kind: "material_question", state: "active",
-        label: total !== null ? `正在逐条判断材料自带的 ${total} 道待决题（${judged}/${total}）` : `正在逐条判断材料自带的待决题（已判断 ${judged} 道）` });
-    }
-  };
 
   const historyCheck = (raw: unknown, finished: boolean) => {
     if (!raw || typeof raw !== "object") return;
@@ -360,42 +319,31 @@ export function createCandidateProgress(recorder: PreflightProgressRecorder, ref
       recorder.done("deliberate", "已权衡取舍");
       recorder.step({ key: "compose", kind: "finding", label: "正在写出预审结论", state: "active" });
     }
-    if (value.materialQuestions) materialQuestions(value.materialQuestions, finishedField("materialQuestions"), true);
+    if (DEPTH_LABEL[str(value.depth)] && finishedField("depth")) recorder.step({ key: "depth", kind: "finding", label: `会议类型：${DEPTH_LABEL[str(value.depth)]}` });
+    // 信息不足档只给缺什么：模型顺手填的要定的事、判断（常是占位话）最后会被去掉，过程里也不显示。
+    const thin = str(value.depth) === "thin";
+    if (!thin && str(value.decision) && finishedField("decision")) recorder.step({ key: "decision", kind: "finding", label: `要定的事：${clip(str(value.decision), 60)}` });
+    const headline = str(value.judgment?.headline);
+    if (!thin && headline && finishedField("judgment")) recorder.step({ key: "judgment", kind: "finding", label: `已形成核心判断：${clip(headline, 50)}` });
 
-    const entries = Array.isArray(value.entries) ? value.entries as PartialEntry[] : [];
-    const entriesFinished = finishedField("entries");
-    const completed = completedCount(entries, entriesFinished);
-    for (let index = entriesDone; index < completed; index += 1) {
-      const entry = entries[index];
-      const kind = str(entry.kind);
-      if (!KIND_LABEL[kind] || !str(entry.title)) continue;
-      kindCounts.set(kind, (kindCounts.get(kind) ?? 0) + 1);
-      if (LISTED_KINDS.has(kind)) {
-        recorder.step({ key: `entry:${index + 1}`, kind: "finding", label: `已形成${KIND_LABEL[kind]}：${clip(str(entry.title), 50)}` });
+    const listed = (field: "questions" | "decisions", done: number, label: string): number => {
+      const items = Array.isArray(value[field]) ? value[field] as PartialItem[] : [];
+      const completed = completedCount(items, finishedField(field));
+      for (let index = done; index < completed; index += 1) {
+        const question = str(items[index]?.question);
+        if (question) recorder.step({ key: `${field}:${index + 1}`, kind: "finding", label: `已形成${label}：${clip(question, 50)}` });
       }
-    }
-    if (completed > entriesDone) {
-      entriesDone = completed;
-      const total = [...kindCounts.values()].reduce((sum, n) => sum + n, 0);
-      const questions = kindCounts.get("meeting_question") ?? 0;
-      const lens = kindCounts.get("leader_lens") ?? 0;
-      const within = [questions ? `会议问题 ${questions} 条` : "", lens ? `一号位追问 ${lens} 条` : ""].filter(Boolean).join("、");
-      recorder.step({ key: "findings", kind: "finding", state: entriesFinished ? "done" : "active",
-        label: `已形成 ${total} 条判断与建议${within ? `，其中${within}` : ""}` });
-    }
-
-    if (Array.isArray(value.divergences) && finishedField("divergences")) {
-      const divergences = value.divergences as { type?: unknown }[];
-      if (divergences.length) {
-        const counts = new Map<string, number>();
-        for (const item of divergences) counts.set(str(item.type), (counts.get(str(item.type)) ?? 0) + 1);
-        recorder.step({ key: "divergences", kind: "finding",
-          label: `已归类 ${divergences.length} 处开放分歧：${[...counts.entries()].filter(([type]) => DIVERGENCE_LABEL[type]).map(([type, n]) => `${DIVERGENCE_LABEL[type]} ${n}`).join("、")}` });
-      }
+      return Math.max(done, completed);
+    };
+    questionsDone = listed("questions", questionsDone, "要聊的问题");
+    decisionsDone = listed("decisions", decisionsDone, "要拍板的事");
+    if (questionsDone || decisionsDone) {
+      recorder.step({ key: "findings", kind: "finding", state: finishedField("decisions") ? "done" : "active",
+        label: `已形成要聊的问题 ${questionsDone} 个${decisionsDone ? `、要拍板的事 ${decisionsDone} 个` : ""}` });
     }
   };
 
-  return { candidate, materialQuestions, historyCheck };
+  return { candidate, historyCheck };
 }
 
 /** 企业知识工具的进度：开始时写在查什么，结束时写读到了什么。 */
@@ -473,8 +421,8 @@ export function createAgentProgressHandler(recorder: PreflightProgressRecorder,
       }
       case "tool_end": {
         // 阶段性结论交出之后、最终候选开始写之前：模型在权衡取舍（按提示词的工作顺序，下一步就是写最终候选）。
-        if ((event.name === REPORT_MATERIAL_QUESTIONS || event.name === REPORT_HISTORY_CHECK) && !event.isError && !recorder.has("compose")) {
-          recorder.restart({ key: "deliberate", kind: "thinking", label: "正在权衡取舍，形成会议问题、一号位追问与开放分歧", state: "active" });
+        if (event.name === REPORT_HISTORY_CHECK && !event.isError && !recorder.has("compose")) {
+          recorder.restart({ key: "deliberate", kind: "thinking", label: "正在权衡取舍，形成核心判断与要聊的问题", state: "active" });
           return;
         }
         const known = knowledgeKeys.get(event.toolCallId);
@@ -486,10 +434,6 @@ export function createAgentProgressHandler(recorder: PreflightProgressRecorder,
       }
       case "tool_args":
         if (event.name === "submit_candidate") progress.candidate(event.args, event.final === true);
-        else if (event.name === REPORT_MATERIAL_QUESTIONS) {
-          if (!recorder.has("compose")) recorder.remove("deliberate");
-          progress.materialQuestions(event.args, event.final === true);
-        }
         else if (event.name === REPORT_HISTORY_CHECK) {
           // 又交出一份阶段性结论：上一句「正在权衡取舍」让位，交完之后再接上。
           if (!recorder.has("compose")) recorder.remove("deliberate");

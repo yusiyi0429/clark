@@ -27,6 +27,17 @@ describe("Meeting 评审目录", () => {
     expect(groups.find((group) => group.key === "meeting_question")?.entries).toHaveLength(2);
   });
 
+  it("v5 结构：要聊的问题排在要拍板的事前面", () => {
+    const groups = groupPreflight(
+      [entry("a", "core_judgment"), entry("b", "meeting_question"), entry("c", "discussion_question"), entry("d", "discussion_question")],
+      true,
+    );
+    expect(groups.map((group) => [group.key, group.label, group.shortLabel, group.entries.length])).toEqual([
+      ["discussion_question", "要聊的问题", "要聊的问题", 2],
+      ["meeting_question", "要拍板的事", "要拍板", 1],
+    ]);
+  });
+
   it("丢弃没有条目的章节，避免渲染空目录项", () => {
     const groups = groupPreflight([entry("a", "next_step")], true);
     expect(groups).toHaveLength(1);

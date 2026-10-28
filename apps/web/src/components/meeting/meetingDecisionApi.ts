@@ -65,6 +65,19 @@ export async function bookMeeting(body: TMeetingBookingRequest): Promise<{ card:
   return response.ok && data ? { card: data.card } : { code: (error as { code?: string } | undefined)?.code ?? "FAILED" };
 }
 
+/** 约好后把一份材料放进这场会的群材料（POST /api/materials/meeting/:id，一次一份）：成功 null，失败给原因。 */
+export async function uploadMeetingMaterial(meetingId: string, file: File): Promise<string | null> {
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(`/api/materials/meeting/${encodeURIComponent(meetingId)}`, { method: "POST", body: form });
+    if (response.ok) return null;
+    return ((await response.json().catch(() => ({}))) as { message?: string }).message ?? "上传失败";
+  } catch {
+    return "上传失败";
+  }
+}
+
 /** 对话里的一张会议卡约好没有：约好了给那场会，没约为 null。 */
 export async function meetingDraftStatus(draftId: string): Promise<TMeetingDraftStatusResponse["meeting"]> {
   const { data, response } = await browserApi.GET("/api/meeting-drafts/{draftId}", { params: { path: { draftId } } });

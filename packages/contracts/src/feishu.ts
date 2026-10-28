@@ -12,9 +12,12 @@ export const FeishuCodeLoginRequest = Type.Object(
   { additionalProperties: false },
 );
 
-/** 本人的飞书连好了没有：enabled=false 是这套天枢没接飞书；connected 要求授权有效、带着会后拿妙记要的权限。 */
+/**
+ * 本人的飞书连好了没有：enabled=false 是这套天枢没接飞书；connected 要求授权有效、带着会后拿妙记要的权限；
+ * calendar 要求授权有效、带着在飞书日历约会要的权限（约会议时没有就提示会议不会进他的飞书日历）。
+ */
 export const FeishuConnectionResponse = Type.Object(
-  { enabled: Type.Boolean(), connected: Type.Boolean() },
+  { enabled: Type.Boolean(), connected: Type.Boolean(), calendar: Type.Boolean() },
   { additionalProperties: false },
 );
 

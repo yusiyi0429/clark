@@ -12,6 +12,7 @@ import { createMaterialAnnotation, decideMaterialAnnotation, decideMaterialPropo
 import { createMaterialAnnotationAgent, type MaterialAnnotationAgent } from "../materialAnnotationAgent.js";
 import { createMaterialAnnotationQueue } from "../materialAnnotationQueue.js";
 import { injectMaterialSelection } from "../materialSelection.js";
+import { schedulePreflightRerun } from "../preflightRerun.js";
 
 const params = Type.Object({ objectType: MaterialObjectType, objectId: ThreadObjectId });
 const itemParams = Type.Object({ objectType: MaterialObjectType, objectId: ThreadObjectId, materialId: Type.String({ format: "uuid" }) });
@@ -39,6 +40,10 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext, anno
     if (cause instanceof ObjectMaterialError) return fail(reply, cause.status, cause.code, cause.message);
     throw cause;
   };
+  // 会议群里的材料变了（上传、删除、恢复、采纳修改）：防抖后按最新材料重跑会前预审（preflightRerun.ts）。
+  const materialsChanged = (ref: { objectType: string; objectId: string }) => {
+    if (ref.objectType === "meeting") schedulePreflightRerun({ pool, peopleDirectory, preflightAgent: ctx.preflight }, ref.objectId);
+  };
 
   // 依据面板：对话回答里的群材料引用只带材料 id，先问它在哪个对象下，再按对象读那一版正文。静态段优先于 :objectType。
   app.get("/api/materials/locate/:materialId", { preHandler: requirePerson,
@@ -65,6 +70,7 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext, anno
       if (!files.length) return fail(reply, 400, "INVALID_MATERIAL", "请选择一份材料");
       parsed = await parseMaterialBatch(files, { allowHtml: true });
       const material = await uploadObjectMaterial(pool, req.params, viewer(req.person!), parsed.materials[0], materialStorageDir, names);
+      materialsChanged(req.params);
       return reply.status(201).send(material);
     } catch (cause) {
       if (cause instanceof MaterialParseError) return fail(reply, cause.code === "MATERIAL_FILE_TOO_LARGE" ? 413 : 400, cause.code, cause.message);
@@ -105,6 +111,7 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext, anno
     schema: { params: itemParams, body: RestoreMaterialRemovedRequest } }, async (req, reply) => {
     try {
       await restoreMaterialRemoved(pool, req.params, req.params.materialId, viewer(req.person!), req.body, names);
+      materialsChanged(req.params);
       return await getObjectMaterialDetail(q, req.params, req.params.materialId, viewer(req.person!), names);
     } catch (cause) { return error(reply, cause); }
   });
@@ -112,6 +119,7 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext, anno
     schema: { params: Type.Composite([itemParams, Type.Object({ proposalId: Type.String({ format: "uuid" }) })]), body: DecideMaterialEditProposalRequest } }, async (req, reply) => {
     try {
       await decideMaterialProposal(pool, req.params, req.params.materialId, req.params.proposalId, viewer(req.person!), req.body.decision);
+      materialsChanged(req.params);
       return await getObjectMaterialDetail(q, req.params, req.params.materialId, viewer(req.person!), names);
     } catch (cause) { return error(reply, cause); }
   });
@@ -175,7 +183,11 @@ export function registerMaterialRoutes(app: AppInstance, ctx: RouteContext, anno
   });
   app.delete("/api/materials/:objectType/:objectId/:materialId", { preHandler: requirePerson,
     schema: { params: itemParams } }, async (req, reply) => {
-    try { await deleteObjectMaterial(q, req.params, req.params.materialId, viewer(req.person!)); return reply.status(204).send(); }
+    try {
+      await deleteObjectMaterial(q, req.params, req.params.materialId, viewer(req.person!));
+      materialsChanged(req.params);
+      return reply.status(204).send();
+    }
     catch (cause) { return error(reply, cause); }
   });
 }

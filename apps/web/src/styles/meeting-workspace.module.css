@@ -9,7 +9,7 @@
 .reading>*{max-width:var(--material-column,656px);margin-inline:auto;box-sizing:border-box}
 @media (min-width: 960px){.reading>*{padding-inline:clamp(12px,calc((100% - var(--material-measure,600px)) / 2),28px)}}
 .pane{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
-.agenda{margin:0;padding-left:12px;border-left:2px solid var(--ts-border,#e3e8ef);font-size:var(--ts-type-body,14px);line-height:1.9;color:var(--ts-text-muted,#6b7482)}
+.agenda{margin:0 0 24px;font-size:15px;line-height:1.85;color:var(--doc-ink-2,#535358)}
 .material{display:flex;flex-direction:column;gap:16px;min-width:0;margin-top:8px}
 @media (min-width: 960px) and (max-width: 1000px){.reading{padding:12px var(--conversation-lane,0px) 130px 0}}
 @media (max-width: 959px){.reading{padding:12px 18px 140px}}
@@ -19,6 +19,16 @@
 .toolbar>button{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:0;border-radius:8px;background:transparent;font:inherit;font-size:13px;color:#4f5866;cursor:pointer}
 .toolbar>button:hover{background:#1f35560d;color:#1f2a3d}
 .toolbar>button:disabled{opacity:.55;cursor:default}
+/* 文档式页头（页头正下方到正文之前）：一行进度线（左）+ 文字操作（右，放不下折到下一行仍靠右）；下面挂点、主持参会；一条发丝线和正文隔开。
+   操作的弹层（重新安排会议）以整行为准挂在下面，靠右。 */
+.docHead{display:grid;gap:10px;min-width:0;margin:0 0 24px;padding:0 0 20px;border-bottom:1px solid var(--doc-rule,#17171b17)}
+.docTop{position:relative;display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px 16px;min-width:0}
+.docProgress{flex:1 1 280px;min-width:0;padding-top:3px}
+.docTop>.toolbar{position:static;margin-left:auto;margin-right:-8px;gap:2px}
+.docTop>.toolbar>button{padding:4px 8px;color:var(--doc-ink-2,#535358)}
+@media (min-width: 1001px){.docTop .editPopover{left:auto;right:0}}
+/* 待交记录时的补救（贴妙记链接、再读、上传会议记录）：细线下面正文的第一块。 */
+.docRecovery{min-width:0;margin:0 0 28px}
 /* 文字输入 / 下拉的聚焦只换边色（globals.css 的统一输入框样式），这里的外框只给按钮 */
 .workspace button:focus-visible{outline:3px solid #007aff60;outline-offset:2px}
 
@@ -52,7 +62,7 @@
  */
 .readingGrid{display:grid;grid-template-columns:minmax(0,1fr);row-gap:0;column-gap:28px;min-width:0}
 .readingMain{position:relative;display:grid;grid-template-columns:minmax(0,1fr);gap:14px;min-width:0}
-.decisionWorkspace{display:flex;flex-direction:column;gap:16px;min-width:0}
+.decisionWorkspace{display:flex;flex-direction:column;gap:28px;min-width:0}
 .tocAside{display:none}
 .tocBar{position:sticky;top:calc(var(--detail-header-height,48px) + 6px);z-index:3;display:flex;justify-content:flex-end;height:0}
 .tocToggle{display:inline-flex;align-items:center;gap:6px;height:32px;max-width:min(260px,72vw);padding:0 12px;border:1px solid #dfe5ee;border-radius:999px;background:#ffffffeb;box-shadow:0 6px 18px #10203a1f;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);color:#3c4350;font:inherit;font-size:12px;cursor:pointer}
@@ -87,7 +97,8 @@
 }
 
 /* 会议概况：预审结论、资料是否过期、整场判断、四输入边界、预审读了哪些资料。 */
-.overview{display:flex;flex-direction:column;gap:14px;padding:20px 24px;border:1px solid #e6e9ed;border-radius:20px;background:#fff}
+/* 文档式：区块不套框，靠字号、字重、留白和发丝线分层；会议概况（核心判断所在）是第一段，不加分隔线。 */
+.overview{display:flex;flex-direction:column;gap:16px}
 .overviewTop{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 18px}
 .overviewIssues{margin:0;color:#4f5866;font-size:12.5px}
 .overviewTop>.count{margin-left:auto}
@@ -101,16 +112,15 @@
 .inputMaterials{display:flex;flex-direction:column;gap:4px}
 .inputMaterials>div{margin-top:0}
 .gapLine{margin:0;color:#8a6220;font-size:12px;line-height:1.7}
-.noQuestion{margin:0;padding:9px 12px;border-radius:10px;background:#f4f6f9;color:#4f5866;font-size:12.5px;line-height:1.7}
-.meetingLevel{display:flex;flex-direction:column;gap:16px;min-width:0}
-.blockLabel{display:flex;align-items:baseline;gap:8px;margin:6px 0 -4px!important;padding:0 4px;font-size:13px!important;font-weight:600!important;color:#4f5866}
+.noQuestion{margin:0;color:#4f5866;font-size:12.5px;line-height:1.7}
+.meetingLevel{display:flex;flex-direction:column;gap:28px;min-width:0}
+.blockLabel{display:flex;align-items:baseline;gap:8px;margin:6px 0 -4px!important;padding:0;font-size:13px!important;font-weight:600!important;color:#4f5866}
 .blockLabel>span{font-size:11px;font-weight:400;color:#6e6e73}
 .prepSection{display:flex;flex-direction:column;gap:16px}
 
 /* 议题块：首屏核心判断，往下历史与变化、事实与依据、选项与后果、建议、你的决定、实际结果。 */
-.issueList{display:flex;flex-direction:column;gap:16px}
-.issueBlock{display:flex;flex-direction:column;min-width:0;padding:22px 24px 6px;border:1px solid #e6e9ed;border-radius:20px;background:#fff}
-.issueBlock[data-status=decided]{border-color:#d8ebdd}
+.issueList{display:flex;flex-direction:column;gap:28px}
+.issueBlock{display:flex;flex-direction:column;min-width:0;padding:24px 0 0;border-top:1px solid var(--doc-rule,#17171b17)}
 .issueBlock[data-flash=true],.decisionRecord[data-flash=true]{animation:anchorFlash 1.8s ease-out}
 .issueHead{display:flex;flex-direction:column;gap:6px;padding-bottom:14px}
 .issueEyebrow{margin:0;color:#6e6e73;font-size:11.5px}
@@ -205,18 +215,21 @@
 .leaderLens ol{display:flex;flex-direction:column;gap:6px;margin:0;padding-left:18px;color:#8a6220;font-size:11px;line-height:18px}
 .coverage{display:flex;flex-wrap:wrap;gap:6px}
 .coverage>small{flex-basis:100%}
-.coverage span{display:flex;justify-content:space-between;gap:8px;padding:5px 8px;border-radius:8px;background:#f7f8fa;color:#4f5866;font-size:11px}
+.coverage span{display:flex;justify-content:space-between;gap:8px;color:#4f5866;font-size:11px}
 .coverage b{font-weight:600;color:#1d1d1f}
 /* 卡片统一白 r20 stroke #E6E9ED。 */
 .decisionWorkspace>*{width:100%;box-sizing:border-box;flex:none}
-.judgmentHero{display:flex;flex-direction:column;gap:8px;padding:24px 26px;border:1px solid #e6e9ed;border-radius:20px;background:#fff}
-.judgmentHero>small{color:#4f5866;font-size:11px;letter-spacing:1px}
-.judgmentHero h2{margin:0;font-size:19px!important;line-height:1.5!important;font-weight:600!important;color:#1d1d1f}
-.judgmentHero>p{margin:0;color:#3c4350;font-size:14px;line-height:25px}
-.heroSummary{display:grid;gap:6px;margin-top:4px}
-.heroSummary span{color:#3c4350;font-size:13px;line-height:1.7}
-.heroSummary small{margin-right:8px;color:#4f5866;font-size:11px}
-.reviewSection{padding:20px 24px;border:1px solid #e6e9ed;border-radius:20px;background:#fff}
+/* 核心判断是这页的主结论段：小标签、大一号的结论句、正文字号的论述；最优先动作 / 最关键问题是结论下面的两行要点（左标签右正文），发丝线隔开。 */
+.judgmentHero{display:flex;flex-direction:column;gap:10px}
+.judgmentHero>small{color:var(--doc-ink-3,#6b6b70);font-size:12px;font-weight:600;letter-spacing:.08em}
+.judgmentHero h2{margin:0;font-size:22px!important;line-height:1.5!important;font-weight:600!important;color:var(--doc-ink-1,#17171b)}
+.judgmentHero>p{margin:0;color:var(--doc-ink-1,#17171b);font-size:16px;line-height:30px}
+.heroSummary{display:grid;gap:10px;margin-top:6px;padding-top:14px;border-top:1px solid var(--doc-rule,#17171b17)}
+.heroSummary span{display:grid;grid-template-columns:6em minmax(0,1fr);gap:12px;color:var(--doc-ink-1,#17171b);font-size:15px;line-height:1.75}
+.heroSummary small{padding-top:2px;color:var(--doc-ink-3,#6b6b70);font-size:12px;font-weight:600}
+.reviewSection{padding:24px 0 0;border-top:1px solid var(--doc-rule,#17171b17)}
+/* 紧接在页头发丝线下面的第一段不再画一条。 */
+.decisionWorkspace>.reviewSection:first-child,.review>.reviewSection:first-child{padding-top:0;border-top:0}
 .reviewSection>header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 .reviewSection h3{margin:0;font-size:15px;font-weight:600}
 .reviewSection header span{font-size:11px;color:#4f5866}
@@ -225,8 +238,9 @@
 .pairRow .reviewSection{min-width:0}
 /* 会议层面的判断只剩一组时独占整行，不留半行空白。 */
 .pairRow>:only-child{grid-column:1/-1}
-.taskContext{border:1px solid #e6e9ed;border-radius:20px;background:#fff;padding:0 24px}
-.taskContext>summary{padding:14px 0;cursor:pointer;color:#4f5866;font-size:12px;font-weight:600}
+.taskContext{border-top:1px solid var(--doc-rule,#17171b17)}
+.taskContext>summary{padding:14px 0;cursor:pointer;color:#4f5866;font-size:12px}
+.taskContext .gapLine{color:#8a6220}
 .taskContext>div{padding:11px 0;border-top:1px solid #1d1d1f0a}
 .taskContext small{display:block;margin-bottom:5px;color:var(--ink-muted);font-size:11px}
 .taskContext p{margin:0;color:#3c4350;font-size:12px;line-height:1.7}
@@ -240,9 +254,8 @@
 .entryBody{margin:8px 0 0!important;color:#4f5866;font-size:13px;line-height:22px}
 .quoteItem[data-checked=true]{opacity:.64}
 .quoteItem[data-checked=true] .entryTitle strong{text-decoration:line-through;text-decoration-color:#8b949e}
-.quoteItem[data-question]{margin-top:8px;padding:14px 16px;border:1px solid #f1f3f6;border-radius:12px;background:#fff}
-.quoteItem[data-question]:first-of-type{margin-top:0}
-.quoteItem[data-question][data-checked=true]{background:#f0f4fa;border-color:#f0f4fa;opacity:1}
+.quoteItem[data-question]{padding:14px 0}
+.quoteItem[data-question]:first-of-type{padding-top:4px}
 .quoteItem[data-question][data-checked=true] .entryTitle strong{text-decoration:none}
 /* 卡内操作按钮统一 12px；已核对 = #E8F6EC/#2F7A44。 */
 .briefActions{display:flex;gap:8px;margin-top:10px}
@@ -271,15 +284,14 @@
 .requestUpload small{color:#0a5dc2}
 
 /* 会议记录（会后）：摘要、逐项处理、Transcript、危险替换，一栏。 */
-.review{display:flex;flex-direction:column;gap:16px;min-width:0}
+.review{display:flex;flex-direction:column;gap:28px;min-width:0}
 .dangerSection{border-color:#f0d9d5}
 .dangerSection h3{color:#a1443c}
 /* 纪要里 Action Item 按负责人分组：组名一行小标题，下面是他的几条。 */
 .ownerGroup{display:flex;flex-direction:column;gap:10px}
 .ownerGroup+.ownerGroup{margin-top:8px}
 .ownerGroup>h4{margin:2px 0 0;font-size:13px;font-weight:600;color:#3c4350}
-.decisionRecord{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border:1px solid #eef0f4;border-radius:12px;background:#fff}
-.decisionRecord[data-kind=decision],.decisionRecord[data-kind=ceoJudgment]{border-color:#dce7f5;background:#f7faff}
+.decisionRecord{display:flex;flex-direction:column;gap:8px;padding:14px 0;border-top:1px solid #1d1d1f0b}
 .itemHead{display:flex;align-items:flex-start;gap:10px}
 .kindBadge{flex:none;padding:3px 8px;border-radius:6px;background:#f1f3f6;color:#6e6e73;font-size:12px;font-weight:600;line-height:1.5}
 .decisionRecord[data-kind=decision] .kindBadge{background:#e8f1ff;color:#0a5dc2}
@@ -359,11 +371,11 @@
 @media(max-width:900px){.candidateDialog{width:calc(100vw - 24px);max-height:calc(100dvh - 40px)}}
 /* 手持（≤959）字号下限：标签、角标、编号 13px，说明性的辅助字 14px（老花眼也看得清）；三屏和桌面不变。 */
 @media(max-width:959px){.briefActions.briefActions>button,.summaryEdit.summaryEdit>span,.reviewSection.reviewSection>header>span,.readinessBlock.readinessBlock>small,.judgmentHero.judgmentHero>small,.issueEyebrow.issueEyebrow,.issueState.issueState,.issueLink.issueLink,.sectionLabel.sectionLabel>span,.keyLine.keyLine>small,.sinceLine.sinceLine>small,.questionCard.questionCard>small,.analysisItem.analysisItem>small,.optionHead.optionHead>span,.optionFrom.optionFrom,.tocList.tocList em,.tocToggle.tocToggle{font-size:13px}.summaryEdit.summaryEdit,.empty.empty,.warnings.warnings,.readiness.readiness,.gapLine.gapLine,.overviewIssues.overviewIssues,.staleNotice.staleNotice,.resultStatus.resultStatus,.receipt.receipt small,.evidenceList.evidenceList small,.consequences.consequences,.overrideCheck.overrideCheck{font-size:14px}
- .overview,.issueBlock{padding-inline:18px}.consequences{padding-left:22px}.optionFrom,.chooseButton{margin-left:0}.receipt{flex-direction:column}}
+ .consequences{padding-left:22px}.optionFrom,.chooseButton{margin-left:0}.receipt{flex-direction:column}}
 @media(prefers-reduced-motion:reduce){.issueBlock[data-flash=true],.decisionRecord[data-flash=true]{animation:none;box-shadow:0 0 0 3px #3a83f766}}
 
-/* 已结束的会整页降一档（「归档」感）：阅读面偏暖灰、标题稍淡。阶段的判定见 MeetingHeader 的 meetingTimeline。 */
-.workspace[data-timeline=ended] :global(.ts-detail){--ts-reading-surface:#f6f5f2}
+/* 会议页是一张白纸（文档式），会前会后都一样；已结束的会只把标题稍淡（「归档」感）。阶段的判定见 MeetingHeader 的 meetingTimeline。 */
+.workspace :global(.ts-detail){--ts-reading-surface:#fff}
 .workspace[data-timeline=ended] :global(.ts-detail-header > h1){color:#566173}
 
 /* 会议标题右侧的「编辑会议」铅笔：和标题同一行、次墨、不抢标题；浮层用编辑表单原样式，只是不再绝对定位。 */
@@ -393,7 +405,7 @@
 .readingGrid[data-type-pair=preflight] .judgmentText p,.readingGrid[data-type-pair=preflight] .judgmentText ul,.readingGrid[data-type-pair=preflight] .questionCard strong,.readingGrid[data-type-pair=preflight] .analysisItem strong,.readingGrid[data-type-pair=preflight] .optionHead strong,.readingGrid[data-type-pair=preflight] .judgmentHero>p,.readingGrid[data-type-pair=preflight] .entryTitle,.readingGrid[data-type-pair=preflight] .entryTitle strong,.readingGrid[data-type-pair=preflight] .keyLine,.readingGrid[data-type-pair=preflight] .heroSummary span,.readingGrid[data-type-pair=preflight] .consequences,.readingGrid[data-type-pair=preflight] .entryBody,.readingGrid[data-type-pair=preflight] .itemText,.readingGrid[data-type-pair=preflight] .itemQuote,.readingGrid[data-type-pair=preflight] .subDecision>p,.readingGrid[data-type-pair=preflight] .unknowns p,.readingGrid[data-type-pair=preflight] .analysisItem>p,.readingGrid[data-type-pair=preflight] .questionCard>p{font-size:16px}
 .readingGrid[data-type-pair=preflight] small{color:#6b7280}
 @media(min-width:960px) and (pointer:fine){
-.readingGrid[data-type-pair=preflight] small,.readingGrid[data-type-pair=preflight] .briefLine small,.readingGrid[data-type-pair=preflight] .gapLine,.readingGrid[data-type-pair=preflight] .issueLink,.readingGrid[data-type-pair=preflight] .overviewIssues,.readingGrid[data-type-pair=preflight] .staleNotice,.readingGrid[data-type-pair=preflight] .noQuestion,.readingGrid[data-type-pair=preflight] .sinceLine,.readingGrid[data-type-pair=preflight] .empty,.readingGrid[data-type-pair=preflight] .warnings,.readingGrid[data-type-pair=preflight] .leaderLens small,.readingGrid[data-type-pair=preflight] .leaderLens ol,.readingGrid[data-type-pair=preflight] .lensAnswers,.readingGrid[data-type-pair=preflight] .progressHead small,.readingGrid[data-type-pair=preflight] .progressHead span,.readingGrid[data-type-pair=preflight] .progressRecord>summary,.readingGrid[data-type-pair=preflight] .verdictLine>b,.readingGrid[data-type-pair=preflight] .tocList button,.readingGrid[data-type-pair=preflight] .tocSub button,.readingGrid[data-type-pair=preflight] .runningNotice,.readingGrid[data-type-pair=preflight] .evidenceList p,.readingGrid[data-type-pair=preflight] .decidedLine p,.readingGrid[data-type-pair=preflight] .receipt p,.readingGrid[data-type-pair=preflight] button,.readingGrid[data-type-pair=preflight] label{font-size:13px}
+.readingGrid[data-type-pair=preflight] small,.readingGrid[data-type-pair=preflight] .briefLine small,.readingGrid[data-type-pair=preflight] .gapLine,.readingGrid[data-type-pair=preflight] .issueLink,.readingGrid[data-type-pair=preflight] .overviewIssues,.readingGrid[data-type-pair=preflight] .staleNotice,.readingGrid[data-type-pair=preflight] .noQuestion,.readingGrid[data-type-pair=preflight] .sinceLine,.readingGrid[data-type-pair=preflight] .empty,.readingGrid[data-type-pair=preflight] .warnings,.readingGrid[data-type-pair=preflight] .leaderLens small,.readingGrid[data-type-pair=preflight] .leaderLens ol,.readingGrid[data-type-pair=preflight] .lensAnswers,.readingGrid[data-type-pair=preflight] .progressHead small,.readingGrid[data-type-pair=preflight] .progressHead span,.readingGrid[data-type-pair=preflight] .progressRecord>summary,.readingGrid[data-type-pair=preflight] .taskContext>summary,.readingGrid[data-type-pair=preflight] .verdictLine>b,.readingGrid[data-type-pair=preflight] .tocList button,.readingGrid[data-type-pair=preflight] .tocSub button,.readingGrid[data-type-pair=preflight] .runningNotice,.readingGrid[data-type-pair=preflight] .evidenceList p,.readingGrid[data-type-pair=preflight] .decidedLine p,.readingGrid[data-type-pair=preflight] .receipt p,.readingGrid[data-type-pair=preflight] button,.readingGrid[data-type-pair=preflight] label{font-size:13px}
 .readingGrid[data-type-pair=preflight] .blockLabel>span,.readingGrid[data-type-pair=preflight] .sectionLabel>span,.readingGrid[data-type-pair=preflight] .keyLine small,.readingGrid[data-type-pair=preflight] .questionCard>small,.readingGrid[data-type-pair=preflight] .sinceLine>small,.readingGrid[data-type-pair=preflight] .analysisItem>small,.readingGrid[data-type-pair=preflight] .unknowns small,.readingGrid[data-type-pair=preflight] .optionHead>span,.readingGrid[data-type-pair=preflight] .optionFrom,.readingGrid[data-type-pair=preflight] .outcomeGroup>small,.readingGrid[data-type-pair=preflight] .coverage>small,.readingGrid[data-type-pair=preflight] .coverage span,.readingGrid[data-type-pair=preflight] .judgmentHero>small,.readingGrid[data-type-pair=preflight] .heroSummary small,.readingGrid[data-type-pair=preflight] .reviewSection header span,.readingGrid[data-type-pair=preflight] .count,.readingGrid[data-type-pair=preflight] .tocList em,.readingGrid[data-type-pair=preflight] .issueEyebrow,.readingGrid[data-type-pair=preflight] .issueState,.readingGrid[data-type-pair=preflight] .evidenceList small,.readingGrid[data-type-pair=preflight] .receipt small,.readingGrid[data-type-pair=preflight] .kindBadge,.readingGrid[data-type-pair=preflight] .divergenceGroup>small,.readingGrid[data-type-pair=preflight] .progressTime{font-size:12px}
 }
 
@@ -459,7 +471,7 @@
 .progressMark{display:inline-flex;color:#6e6e73}
 .progressStep[data-state=active] .progressMark svg{animation:runningSpin 1s linear infinite}
 .progressText small{display:block;color:#4f5866;font-size:12px;line-height:1.6}
-.progressRecord{margin:0;padding:0 16px;border:1px solid #e6e9ed;border-radius:12px;background:#fff}
+.progressRecord{margin:0;padding:0;border-top:1px solid var(--doc-rule,#17171b17)}
 .progressRecord>summary{padding:10px 0;cursor:pointer;color:#4f5866;font-size:12px}
 .progressRecord>.progressList{padding:0 0 12px}
 @media(prefers-reduced-motion:reduce){.progressStep[data-state=active] .progressMark svg{animation:none}}

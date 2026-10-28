@@ -123,26 +123,26 @@ function ProgressClock({ since, expectedMs }: { since: string; expectedMs: numbe
   return <time className={p.clock} role="timer" dateTime={since} suppressHydrationWarning>{progressClock(since, now, expectedMs)}</time>;
 }
 
-/** 进度线本身；`actions` 跟在这一步后面，`below` 是进度线下面单独一块（待交记录时的补救）。 */
-export function MeetingProgress({ model, actions, below }: { model: MeetingProgressModel; actions?: ReactNode; below?: ReactNode }) {
-  const line = (
+/** 进度线本身；`actions` 跟在这一步后面。待交记录时的补救（MinutesRecovery）由会议页放在正文最上面。 */
+export function MeetingProgress({ model, actions }: { model: MeetingProgressModel; actions?: ReactNode }) {
+  return (
     <ol className={p.progress} aria-label="进度">
       {model.steps.map((step, index) => {
         const current = step.state === "current";
         return (
           <li key={step.key} className={p.step} data-step={step.key} data-state={step.state} data-tone={current ? model.tone : undefined}
             aria-current={current ? "step" : undefined}>
-            {index ? <ChevronRight size={12} strokeWidth={2} aria-hidden className={p.arrow} /> : null}
             <i className={p.dot} aria-hidden />
             <span>{step.label}</span>
             {current && model.since ? <ProgressClock since={model.since} expectedMs={model.expectedMs} /> : null}
             {current && actions ? <span className={p.actions}>{actions}</span> : null}
+            {/* 箭头跟在这一步后面：折行时新的一行不会以箭头开头。 */}
+            {index < model.steps.length - 1 ? <ChevronRight size={12} strokeWidth={2} aria-hidden className={p.arrow} /> : null}
           </li>
         );
       })}
     </ol>
   );
-  return below ? <div className={p.withBelow}>{line}<div className={p.below}>{below}</div></div> : line;
 }
 
 /** 再读、贴链接没成功时的短标签（不显示服务端原话）；妙记已用在别的会上时照服务端说的是哪场会。 */

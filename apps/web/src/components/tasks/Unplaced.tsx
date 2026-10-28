@@ -21,15 +21,15 @@ const changed = () => window.dispatchEvent(new Event("member-tasks-changed"));
 /** 小字：从哪来 · 为什么没挂上。 */
 export function unplacedLine(task: Task): string {
   const from = task.origin ? `「${task.origin.meetingTitle}」分配给你` : "外部工具建的";
-  return `${from} · ${task.unplaced?.reason ?? "还没挂到 Mission"}`;
+  return `${from} · ${task.unplaced?.reason ?? "还没有所属 Mission"}`;
 }
 
 export async function attachTask(task: Task, missionId: string): Promise<string | null> {
   try {
     const { data, error } = await browserApi.PATCH("/api/me/tasks/{id}", { params: { path: { id: task.id } }, body: { version: task.version, missionId } });
     if (data) { changed(); return null; }
-    return error?.message ?? "没挂上，请重试";
-  } catch { return "没挂上，网络断了"; }
+    return error?.message ?? "没保存，请重试";
+  } catch { return "没保存，网络断了"; }
 }
 
 export async function standaloneTask(task: Task, reason: string): Promise<string | null> {
@@ -48,7 +48,7 @@ export function unplacedNotices(tasks: Task[], open: (id: string, from: Element 
     detail: unplacedLine(task),
     tone: "amber",
     onOpen: (from) => open(task.id, from),
-    buttons: [{ label: "挂到…", emphasis: true, run: async (): Promise<NoticeOutcome> => { open(task.id, null); return { ok: false, cancelled: true }; } }],
+    buttons: [{ label: "选择所属 Mission", emphasis: true, run: async (): Promise<NoticeOutcome> => { open(task.id, null); return { ok: false, cancelled: true }; } }],
     reason: {
       label: "不属于任何 Mission",
       fieldLabel: "为什么不属于任何 Mission",
@@ -78,7 +78,7 @@ export function UnplacedActions({ task, missions, compact = false, onDone }: { t
   };
   return (
     <div className={u.unplaced} data-unplaced data-compact={compact || undefined}>
-      {compact ? null : <p className={u.line}>没挂到 Mission<span> · {task.unplaced?.reason ?? (task.origin ? `来自「${task.origin.meetingTitle}」` : "外部工具建的")}</span></p>}
+      {compact ? null : <p className={u.line}>没有所属 Mission<span> · {task.unplaced?.reason ?? (task.origin ? `来自「${task.origin.meetingTitle}」` : "外部工具建的")}</span></p>}
       {standalone ? (
         <form className={u.row} onSubmit={(event) => { event.preventDefault(); if (reason.trim()) void run(() => standaloneTask(task, reason.trim())); }}>
           <input className={u.reason} aria-label="为什么不属于任何 Mission" placeholder="为什么不属于任何 Mission" value={reason} maxLength={200}
@@ -89,9 +89,9 @@ export function UnplacedActions({ task, missions, compact = false, onDone }: { t
       ) : (
         <div className={u.row}>
           {missions.length ? <>
-            <Select aria-label="挂到哪个 Mission" placeholder="挂到哪个 Mission" size="compact" className={u.select} value={missionId}
+            <Select aria-label="所属 Mission" placeholder="所属 Mission" size="compact" className={u.select} value={missionId}
               options={missions.map((mission) => ({ value: mission.missionId, label: mission.title }))} onChange={setMissionId} disabled={busy} />
-            <button type="button" className={u.primary} disabled={busy || !missionId} onClick={() => void run(() => attachTask(task, missionId))}>挂上</button>
+            <button type="button" className={u.primary} disabled={busy || !missionId} onClick={() => void run(() => attachTask(task, missionId))}>确定</button>
           </> : null}
           <button type="button" className={u.quiet} disabled={busy} onClick={() => setStandalone(true)}>不属于任何 Mission</button>
         </div>

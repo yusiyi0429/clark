@@ -7,8 +7,6 @@ import {
   type TMeetingPreflight,
   type TMeetingPreflightEntry,
   type TMeetingParticipant,
-  type TPreflightDivergence,
-  type TPreflightMaterialQuestions,
   type TPreflightProgress,
   type TPreflightEvidenceRecord,
   type TPreflightInputCoverage,
@@ -22,6 +20,7 @@ import type { MaterialViewer } from "./objectMaterials.js";
 import { personDisplayNames } from "./people.js";
 import { computeStaleInputs } from "./preflightStaleness.js";
 import type { CandidateAgentEvent } from "./candidateAgentRuntime.js";
+import { readAnchorContext, type PreflightAnchorContext, type PreflightWorld } from "./preflightAnchors.js";
 import {
   battlefieldDecisionsForPreflight,
   historyScope,
@@ -36,18 +35,7 @@ import {
   inputProgressEvents,
   type ThoughtTranslator,
 } from "./preflightProgress.js";
-import {
-  CEO_QUESTION_CONTAINMENT_MIN_CHARS,
-  CEO_QUESTION_DUPLICATE_SIMILARITY,
-  CEO_QUESTION_KINDS,
-  LEADER_LENS_FORBIDDEN_PHRASES,
-  LEADER_LENS_FORBIDDEN_TEXT,
-  LEADER_LENS_MAX,
-  MEETING_QUESTION_MAX,
-  MEETING_QUESTION_MIN_OPTIONS,
-  PREFLIGHT_AT_MOST_ONE_KINDS,
-  PREFLIGHT_EXACTLY_ONE_KINDS,
-} from "./promptRules.js";
+import { CEO_QUESTION_CONTAINMENT_MIN_CHARS, CEO_QUESTION_DUPLICATE_SIMILARITY } from "./promptRules.js";
 import { findForbiddenPhrase } from "./promptStyle.js";
 import { issueOriginFields } from "./dataOrigin.js";
 import {
@@ -60,6 +48,7 @@ import {
   type MeetingActionOutcome,
   type Query,
 } from "./meetingStore.js";
+import { shanghaiDate } from "./workdays.js";
 
 const PREFLIGHT_AGENT_FAILED = "preflight_agent_failed";
 const INVALID_PREFLIGHT_CANDIDATE = "invalid_preflight_candidate";
@@ -100,6 +89,8 @@ export type PreflightDiscussionInput = {
 
 export type PreflightAgentInput = {
   meeting: { id: string; title: string; scheduledAt: string; participants: TMeetingParticipant[] };
+  /** 约会议时挑的挂点及读到的内容（长期目标、本月目标、Mission、责任单元；v5）。没挑过挂点的会为空。 */
+  anchors: PreflightAnchorContext[];
   /** nature / origin 只在 AI 候选议题上出现（dataOrigin.ts），真实议题没有这两项。 */
   issues: { id: string; title: string; location: unknown; urgency: unknown; research: unknown; nature?: "ai_suggested"; origin?: string }[];
   /** 旧会前材料（meetings.materials），已去掉与群材料同名或同内容的重复项。 */
@@ -117,8 +108,14 @@ export type PreflightAgentInput = {
   battlefieldDecisions: BattlefieldDecision[];
 };
 
-/** 预审运行时的回调：过程事件（思考、候选写作）。 */
-export type PreflightAgentHooks = { onEvent?: (event: CandidateAgentEvent) => void };
+/**
+ * 预审运行时的回调：过程事件（思考、候选写作）；validate 是提交时的业务校验（档位规则、引用白名单、翻案句），
+ * 返回说明时让模型按说明改好再交，不必整轮重来。
+ */
+export type PreflightAgentHooks = {
+  onEvent?: (event: CandidateAgentEvent) => void;
+  validate?: (candidate: TPreflightCandidate) => string | null;
+};
 
 export type PreflightAgent = {
   promptHash?: string;
@@ -131,6 +128,8 @@ export type PreflightAgent = {
   timeoutMs?: number;
   /** 英文推理小标题译成中文思考要点；不给时只显示中文要点。 */
   translateThought?: ThoughtTranslator;
+  /** 读挂点里长期目标、本月目标内容的本体客户端（只读）；没有时挂点只有名称和天枢里的 Mission。 */
+  world?: PreflightWorld;
   generate(input: PreflightAgentInput, signal?: AbortSignal, hooks?: PreflightAgentHooks): Promise<{ candidate: unknown; runId?: string }>;
 };
 export async function executeRunPreflight(
@@ -202,59 +201,74 @@ export const executeRegeneratePreflight = (
 ) => executeExplicitPreflight(pool, peopleDirectory, preflightAgent, secret, scope, fingerprint, "ready");
 type IssueSnapshotRow = { id: string; title: string; location: unknown; urgency: unknown; research: unknown; origin_ref?: unknown };
 
-type CandidateEntry = TPreflightCandidate["entries"][number];
-const isCeoQuestion = (entry: CandidateEntry) => (CEO_QUESTION_KINDS as readonly string[]).includes(entry.kind);
+/** 候选引用的白名单：本次输入里显式出现的来源，以及每份群材料实际给出的段落数。 */
+export type PreflightRefScope = {
+  allowed: Set<string>; paragraphCounts: Map<string, number>;
+  /** 这场会只有标题、时间、参会人和挂点名称（公司事实只是背景，不算）：只能写 thin，不凭公司事实下判断。 */
+  thinOnly?: boolean;
+};
+export type PreflightCandidateProblem = { code: typeof INVALID_PREFLIGHT_CANDIDATE | typeof INVALID_SOURCE_REF; message: string };
 
 /**
- * 结构校验（feedback 18）：核心判断恰好 1 条；战略一致性最多 1 条；其余类别没有下限，
- * 会议问题与一号位追问可以为 0，只保留上限。每条 CEO 级问题必须说清为什么现在、为什么需要 CEO、选项与影响。
+ * 信息不足档只给缺什么：模型常把可选的 judgment、decision 也填上占位话（实测「待补」「不适用」反复重交），
+ * 这里直接去掉，不当成错误让模型重写。
  */
-export function preflightStructureError(candidate: TPreflightCandidate): string | null {
-  const count = (kind: CandidateEntry["kind"]) => candidate.entries.filter((entry) => entry.kind === kind).length;
-  for (const kind of PREFLIGHT_EXACTLY_ONE_KINDS) {
-    if (count(kind) !== 1) return `${kind} 必须恰好 1 条`;
-  }
-  for (const kind of PREFLIGHT_AT_MOST_ONE_KINDS) {
-    if (count(kind) > 1) return `${kind} 最多 1 条`;
-  }
-  if (count("meeting_question") > MEETING_QUESTION_MAX) return `meeting_question 最多 ${MEETING_QUESTION_MAX} 条`;
-  if (count("leader_lens") > LEADER_LENS_MAX) return `leader_lens 最多 ${LEADER_LENS_MAX} 条`;
-  for (const entry of candidate.entries) {
-    if (entry.kind === "leader_lens" && LEADER_LENS_FORBIDDEN_PHRASES.some((phrase) => entry.body.includes(phrase))) {
-      return `leader_lens 不得出现${LEADER_LENS_FORBIDDEN_TEXT}`;
-    }
-    if (!isCeoQuestion(entry)) continue;
-    const decision = entry.ceoDecision;
-    if (!decision || !decision.whyNow.trim() || !decision.whyCeo.trim()) {
-      return `${entry.kind}「${entry.title}」必须说明为什么现在、为什么需要 CEO 判断`;
-    }
-    if (entry.kind === "meeting_question" && decision.options.length < MEETING_QUESTION_MIN_OPTIONS) {
-      return `meeting_question「${entry.title}」至少需要 ${MEETING_QUESTION_MIN_OPTIONS} 个可选路径及其影响`;
-    }
-  }
-  if (candidate.taskDefinition.secondaryRole === candidate.taskDefinition.primaryRole) {
-    return "secondaryRole 不能与 primaryRole 相同";
-  }
-  return null;
+export function withoutThinJudgment(candidate: TPreflightCandidate): TPreflightCandidate {
+  if (candidate.depth !== "thin") return candidate;
+  const { judgment: _judgment, decision: _decision, ...rest } = candidate;
+  return rest;
 }
 
-/** 只检查用户可见的散文：entries.body、CEO 级问题的说明、brief、summary 两段。 */
-function findForbiddenPhraseInPreflight(candidate: TPreflightCandidate): string | null {
-  const fields = [
-    ...candidate.entries.flatMap((entry) => [
-      entry.body,
-      ...(entry.ceoDecision ? [entry.ceoDecision.whyNow, entry.ceoDecision.whyCeo, entry.ceoDecision.delayCost ?? "",
-        ...entry.ceoDecision.options.flatMap((option) => [option.label, option.impact])] : []),
-    ]),
-    ...(candidate.materialQuestions?.items ?? []).flatMap((item) => [item.question, item.reason]),
-    ...(candidate.divergences ?? []).flatMap((item) => [item.title, item.body, item.converged ?? ""]),
-    candidate.brief,
-    candidate.summary.criticalIssue,
-    candidate.summary.priorityAction,
-  ];
-  for (const text of fields) {
+/** 候选里给人看的文字，逐项带字段名：命中翻案句时告诉模型改哪一处。 */
+function candidateProse(candidate: TPreflightCandidate): [string, string][] {
+  const prose: [string, string][] = [["decision", candidate.decision ?? ""]];
+  if (candidate.judgment) prose.push(["judgment.headline", candidate.judgment.headline], ["judgment.body", candidate.judgment.body]);
+  candidate.questions.forEach((item, index) => prose.push([`questions[${index}].question`, item.question], [`questions[${index}].why`, item.why]));
+  candidate.decisions.forEach((item, index) => {
+    prose.push([`decisions[${index}].question`, item.question], [`decisions[${index}].recommendation`, item.recommendation],
+      [`decisions[${index}].changeIf`, item.changeIf], [`decisions[${index}].whyNow`, item.whyNow], [`decisions[${index}].whyCeo`, item.whyCeo]);
+    item.options.forEach((option, at) => prose.push([`decisions[${index}].options[${at}]`, `${option.label}。${option.impact}`]));
+  });
+  candidate.gaps.forEach((gap, index) => prose.push([`gaps[${index}]`, gap]));
+  prose.push(["basis", candidate.basis]);
+  return prose;
+}
+
+/**
+ * v5 候选的业务校验（提交时交给模型按说明改；生成后再核一次）：各档必填项、翻案句、引用白名单。合格返回 null。
+ * - strategic：decision、judgment 必写，questions 至少 1 个（提示词要求二到三个）；
+ * - standard：judgment 必写，questions 至少 1 个；这两档 gaps 为空，缺的事实写进 basis 或写成要聊的问题；
+ * - thin：不写 judgment 和 decisions，questions 最多 2 个，gaps 写 1 到 2 句缺什么。
+ * 输入只有标题、时间、参会人和挂点名称时（refs.thinOnly）只能是 thin。要拍板的事没有下限（可以为 0），只有契约上的上限。
+ * thin 档顺手写的 judgment、decision 不算错，先由 withoutThinJudgment 去掉再校验。
+ */
+export function preflightCandidateError(candidate: TPreflightCandidate, refs: PreflightRefScope): PreflightCandidateProblem | null {
+  const problem = (message: string): PreflightCandidateProblem => ({ code: INVALID_PREFLIGHT_CANDIDATE, message });
+  const { depth } = candidate;
+  if (refs.thinOnly && depth !== "thin") return problem("这场会除了标题、时间、参会人和挂点名称没有别的内容，公司事实不能代替会议内容：depth 只能是 thin，在 gaps 写缺什么");
+  candidate = withoutThinJudgment(candidate);
+  if (depth === "thin") {
+    if (candidate.decisions.length) return problem("depth=thin 时 decisions 必须为空数组");
+    if (candidate.questions.length > 2) return problem("depth=thin 时 questions 最多 2 个");
+    if (!candidate.gaps.length) return problem("depth=thin 时 gaps 写 1 到 2 句：缺哪一项具体内容、补上之后能定什么");
+  } else {
+    if (!candidate.judgment) return problem(`depth=${depth} 时必须写 judgment`);
+    if (!candidate.questions.length) return problem(`depth=${depth} 时 questions 至少写 1 个`);
+    if (candidate.gaps.length) return problem(`depth=${depth} 时 gaps 必须为空数组，缺的事实写进 basis 或写成要聊的问题`);
+    if (depth === "strategic" && !candidate.decision) return problem("depth=strategic 时必须写 decision（这场会要定的事）");
+  }
+  for (const [field, text] of candidateProse(candidate)) {
     const hit = findForbiddenPhrase(text);
-    if (hit) return hit;
+    if (hit) return problem(`${field} 用了「${hit}」句式，改成正面直接陈述`);
+  }
+  const lists: [string, string[]][] = [
+    ...(candidate.judgment ? [["judgment", candidate.judgment.sourceRefs] as [string, string[]]] : []),
+    ...candidate.questions.map((item, index) => [`questions[${index}]`, item.sourceRefs] as [string, string[]]),
+    ...candidate.decisions.map((item, index) => [`decisions[${index}]`, item.sourceRefs] as [string, string[]]),
+  ];
+  for (const [field, list] of lists) {
+    const checked = normalizeSourceRefs(list, refs.allowed, refs.paragraphCounts);
+    if (checked.bad) return { code: INVALID_SOURCE_REF, message: `${field}.sourceRefs 里的 ${checked.bad} 不在输入里，只能用输入里显式出现的引用` };
   }
   return null;
 }
@@ -290,32 +304,40 @@ export function isDuplicateQuestion(a: string, b: string): boolean {
   return total > 0 && (2 * shared) / total >= CEO_QUESTION_DUPLICATE_SIMILARITY;
 }
 
-/**
- * 同一疑问只保留一条：meeting_question 优先于 leader_lens，同类保留先出现的；被合并项的来源并入保留项（最多 10 条）。
- * 返回保留的 entries（原顺序）与合并掉的条数。
- */
-export function mergeDuplicateQuestions(entries: CandidateEntry[]): { entries: CandidateEntry[]; merged: number } {
-  const order = entries
-    .map((entry, index) => ({ entry, index }))
-    .filter(({ entry }) => isCeoQuestion(entry))
-    .sort((a, b) => (a.entry.kind === b.entry.kind ? a.index - b.index : a.entry.kind === "meeting_question" ? -1 : 1));
-  const kept: { entry: CandidateEntry; index: number }[] = [];
-  const dropped = new Set<number>();
-  const extraRefs = new Map<number, string[]>();
-  for (const item of order) {
-    const twin = kept.find((candidate) => isDuplicateQuestion(candidate.entry.body, item.entry.body));
-    if (!twin) { kept.push(item); continue; }
-    dropped.add(item.index);
-    extraRefs.set(twin.index, [...(extraRefs.get(twin.index) ?? []), ...item.entry.sourceRefs]);
+/** 同一个问题只出现一次：要聊的问题与要拍板的事说的是同一件事时留要拍板的事，要聊的问题之间留先出现的；来源并进保留项（最多 6 条）。 */
+export function dropDuplicateQuestions(candidate: TPreflightCandidate): TPreflightCandidate {
+  const decisions = candidate.decisions.map((item) => ({ ...item, sourceRefs: [...item.sourceRefs] }));
+  const questions: TPreflightCandidate["questions"] = [];
+  for (const item of candidate.questions) {
+    const twin = decisions.find((decision) => isDuplicateQuestion(decision.question, item.question))
+      ?? questions.find((kept) => isDuplicateQuestion(kept.question, item.question));
+    if (twin) {
+      twin.sourceRefs = [...new Set([...twin.sourceRefs, ...item.sourceRefs])].slice(0, 6);
+      continue;
+    }
+    questions.push({ ...item, sourceRefs: [...item.sourceRefs] });
   }
-  return {
-    entries: entries.flatMap((entry, index) => {
-      if (dropped.has(index)) return [];
-      const extra = extraRefs.get(index);
-      return [extra ? { ...entry, sourceRefs: [...new Set([...entry.sourceRefs, ...extra])].slice(0, 10) } : entry];
-    }),
-    merged: dropped.size,
-  };
+  return { ...candidate, questions, decisions };
+}
+
+const sentence = (text: string) => (/[。！？.!?]$/.test(text.trim()) ? text.trim() : `${text.trim()}。`);
+
+/**
+ * v5 候选写成会议预审条目（id 按顺序 entry-1…，每条可核对、可请人补材料）：
+ * 核心判断 core_judgment（标题是一句话结论）；要聊的问题 discussion_question（正文是为什么要聊）；
+ * 要拍板的事 meeting_question（正文是推荐与改判条件，ceoDecision 带决策时机、为什么需要一号位和选项）。
+ */
+export function preflightEntries(candidate: TPreflightCandidate, refs: PreflightRefScope): TMeetingPreflightEntry[] {
+  const normalized = (list: string[]) => normalizeSourceRefs(list, refs.allowed, refs.paragraphCounts).refs;
+  const entries: Omit<TMeetingPreflightEntry, "id">[] = [
+    ...(candidate.judgment ? [{ kind: "core_judgment" as const, title: candidate.judgment.headline, body: candidate.judgment.body,
+      sourceRefs: normalized(candidate.judgment.sourceRefs) }] : []),
+    ...candidate.questions.map((item) => ({ kind: "discussion_question" as const, title: item.question, body: item.why, sourceRefs: normalized(item.sourceRefs) })),
+    ...candidate.decisions.map((item) => ({ kind: "meeting_question" as const, title: item.question,
+      body: `${sentence(item.recommendation)}${sentence(item.changeIf)}`, sourceRefs: normalized(item.sourceRefs),
+      ceoDecision: { whyNow: item.whyNow, whyCeo: item.whyCeo, options: item.options } })),
+  ];
+  return entries.map((entry, index) => ({ id: `entry-${index + 1}`, ...entry }));
 }
 
 /**
@@ -376,16 +398,18 @@ export async function startPreflight(
   await marked;
 }
 
-/** 来源列表只留白名单内的（规范化后），一条都不剩返回 null。新增的两类（待决题、分歧）不因个别引用整份失败。 */
-function keepValidRefs(refs: string[], allowed: Set<string>, paragraphCounts: Map<string, number>): string[] | null {
-  const kept = refs.flatMap((ref) => {
-    const checked = normalizeSourceRefs([ref], allowed, paragraphCounts);
-    return checked.bad ? [] : checked.refs;
-  });
-  return kept.length ? [...new Set(kept)].slice(0, 10) : null;
-}
+/** 一次预审最多跑几轮：模型出错、超时或交不出合格候选时自动再跑一轮，两轮都没成才显示失败、等人点重试。 */
+export const PREFLIGHT_ATTEMPTS = 2;
+/**
+ * 这个进程里每场会正在跑的那一次预审：同一场会又开始一次（材料又变了、有人点了重新预审）时，旧的一次立即停下，
+ * 不再白跑模型（它的结果本来也会因为 pendingSince 不是自己而写不进库）。
+ */
+const activeRuns = new Map<string, AbortController>();
 
-/** 运行一次会前预审：严格候选校验失败可见，Agent 失败不自动重试。过程逐步写进 preflight.progress。 */
+/**
+ * 运行一次会前预审（v5）：读输入（含挂点内容）→ 模型生成 → 校验 → 写成核心判断、要聊的问题、要拍板的事。
+ * 提交时的校验不合格先让模型按说明改；整轮失败自动重跑一轮（PREFLIGHT_ATTEMPTS），再失败才可见。过程逐步写进 preflight.progress。
+ */
 export async function runPreflight(
   pool: Pool,
   peopleDirectory: PeopleDirectory,
@@ -399,11 +423,14 @@ export async function runPreflight(
   const startedAt = new Date().toISOString();
   const { progress: _previousProgress, ...previous } = meeting.preflight;
   const initialProgress: TPreflightProgress = { startedAt, updatedAt: startedAt, steps: [
-    { key: "collect", kind: "input", label: "正在读取会议材料、群讨论与历史决定", state: "active", at: startedAt, updatedAt: startedAt },
+    { key: "collect", kind: "input", label: "正在读取挂点、会议材料与历史决定", state: "active", at: startedAt, updatedAt: startedAt },
   ] };
   const running: TMeetingPreflight = { ...previous, status: "running", pendingSince: startedAt, error: null, progress: initialProgress };
   await q("UPDATE meetings SET preflight = $2::jsonb, version = version + 1, updated_at = now() WHERE id = $1", [meetingId, JSON.stringify(running)]);
   onRunning?.();
+  const run = new AbortController();
+  activeRuns.get(meetingId)?.abort(new Error("同一场会开始了新的一次预审"));
+  activeRuns.set(meetingId, run);
   // 后台跑时可能又被触发了一次：只有仍是本次「预审中」时才写结果，旧的一次不覆盖新的一次。
   const mine = "preflight->>'pendingSince' = $3";
 
@@ -415,7 +442,7 @@ export async function runPreflight(
       [meetingId, JSON.stringify(progress), running.pendingSince],
     );
   });
-  recorder.step({ key: "collect", kind: "input", label: "正在读取会议材料、群讨论与历史决定", state: "active" });
+  recorder.step({ key: "collect", kind: "input", label: "正在读取挂点、会议材料与历史决定", state: "active" });
   const model = preflightAgent.model;
 
   // 失败保留 last-good entries 供页面展示，但旧条目即将被重建，核对与编辑一并失效
@@ -449,6 +476,9 @@ export async function runPreflight(
       displayName: names.get(meeting.ceo_participant_id) ?? meeting.ceo_participant_id };
     const evidence = await collectMeetingEvidence(q, meeting.id, viewer, { names });
     if (!evidence) throw new Error("Meeting 不存在，无法读取预审输入");
+    // 约会议时挑的挂点：长期目标、本月目标读本体，Mission、责任单元读天枢（读不到只给名称）。
+    const anchors = await readAnchorContext(q, preflightAgent.world, meeting.world_anchors ?? [],
+      { period: shanghaiDate(meeting.scheduled_at).slice(0, 7), names });
     // 每个关联议题的有效历史分层：跨所有相关会议检索，不只取最近一场。
     const ceoName = meeting.participants.find((person) => person.personId === meeting.ceo_participant_id)?.displayName ?? viewer.displayName;
     const decisionHistory: TIssueDecisionHistory[] = [];
@@ -467,7 +497,7 @@ export async function runPreflight(
     const readableGroup = evidence.materials.filter((material) => material.state === "used" && material.text);
     const hasResearch = issues.some((issue) => Boolean(issue.research && (issue.research as { doc?: unknown }).doc));
     const inputCoverage: TPreflightInputCoverage = {
-      background: issues.length > 0 ? "available" : "missing",
+      background: issues.length > 0 || anchors.some((anchor) => anchor.readState === "ok") ? "available" : "missing",
       purpose: "derived",
       sourceMaterial: hasResearch || legacyUsed.length > 0 || readableGroup.length > 0 ? "available" : "missing",
       relatedMeeting: relatedMeetings.length ? "available" : "missing",
@@ -503,6 +533,10 @@ export async function runPreflight(
     for (const issue of issues) {
       if (!useUploadedMaterials && issue.research && (issue.research as { doc?: unknown }).doc) allowedSourceRefs.add(`research:${issue.id}`);
     }
+    // 只有标题、时间、参会人和挂点名称：没有议题、可读材料、群讨论、读到内容的挂点和可对照的历史，只写缺什么。
+    const thinOnly = !issues.length && !readableGroup.length && !legacyUsed.length && !evidence.discussions.length
+      && !anchors.some((anchor) => anchor.readState === "ok") && !relatedMeetings.length && !battlefieldDecisions.length;
+    const refs: PreflightRefScope = { allowed: allowedSourceRefs, paragraphCounts, thinOnly };
 
     const evidenceRecord: TPreflightEvidenceRecord = {
       collectedAt: evidence.collectedAt,
@@ -527,6 +561,7 @@ export async function runPreflight(
 
     const input: PreflightAgentInput = {
       meeting: { id: meeting.id, title: meeting.title, scheduledAt: meeting.scheduled_at.toISOString(), participants: meeting.participants },
+      anchors,
       // AI 候选议题带来源性质：预审报告引用它时不写来源标注，但不当作已发生的事实。
       issues: issues.map((issue) => ({ id: issue.id, title: issue.title, location: issue.location, urgency: issue.urgency, research: useUploadedMaterials ? null : issue.research,
         ...issueOriginFields(issue.origin_ref) })),
@@ -542,111 +577,97 @@ export async function runPreflight(
       battlefieldDecisions,
     };
 
-    // 输入阶段的过程：每份材料读了几段、找到了哪几场同战场的会。
+    // 输入阶段的过程：读到了哪些挂点、每份材料读了几段、找到了哪几场同战场的会。
     for (const event of inputProgressEvents(input, paragraphCounts)) recorder.step(event);
     recorder.done("collect", "已读取会前资料");
     recorder.step({ key: "analysis", kind: "thinking", label: analysisLabel(input), state: "active" });
     await recorder.flush();
 
-    // 超时保护：悬挂的模型不阻塞；开了深度思考的预审时限更长（见 PreflightAgent.timeoutMs）。
-    const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(new Error(`Preflight exceeded ${timeoutMs}ms`)), timeoutMs);
-    timer.unref();
     // 阶段性对照结论里的决定引用 → 原文（过程里写「哪一条」）。
     const refLabels = new Map<string, string>([
       ...relatedMeetings.flatMap((related) => [...related.confirmedDecisions, ...related.pendingDecisions].map((decision) => [decision.ref, decision.text] as [string, string])),
       ...battlefieldDecisions.map((decision) => [decision.ref, decision.text] as [string, string]),
       ...decisionHistory.flatMap((history) => history.effective.map((entry) => [entry.ref, entry.text] as [string, string])),
     ]);
-    const onEvent = createAgentProgressHandler(recorder, { translate: preflightAgent.translateThought, signal: abort.signal, refLabels });
-    let generated: { candidate: unknown; runId?: string };
-    try {
-      generated = await preflightAgent.generate(input, abort.signal, { onEvent });
-    } finally {
-      clearTimeout(timer);
-    }
-    recorder.done("analysis", analysisLabel(input, true));
-    recorder.done("compose", "已写出预审结论");
-    recorder.step({ key: "check", kind: "check", label: "正在核对引用和结构", state: "active" });
-    if (!Value.Check(PreflightCandidate, generated.candidate)) {
-      await fail(INVALID_PREFLIGHT_CANDIDATE, "Preflight candidate 不符合严格 schema");
-      return;
-    }
-    const structureError = preflightStructureError(generated.candidate);
-    if (structureError) {
-      await fail(INVALID_PREFLIGHT_CANDIDATE, structureError);
-      return;
-    }
-    const forbiddenPhrase = findForbiddenPhraseInPreflight(generated.candidate);
-    if (forbiddenPhrase) {
-      await fail(INVALID_PREFLIGHT_CANDIDATE, `Preflight 出现翻案句：${forbiddenPhrase}`);
-      return;
-    }
-    const normalized: CandidateEntry[] = [];
-    for (const entry of generated.candidate.entries) {
-      const checked = normalizeSourceRefs(entry.sourceRefs, allowedSourceRefs, paragraphCounts);
-      if (checked.bad) {
-        await fail(INVALID_SOURCE_REF, `Preflight sourceRef 不在允许来源内: ${checked.bad}`);
-        return;
+    /** 跑一轮：超时保护（开了深度思考的预审时限更长，见 PreflightAgent.timeoutMs）；被新的一次取代时随之停下。 */
+    const attempt = async (): Promise<{ candidate: TPreflightCandidate; runId?: string } | { error: { code: string; message: string } }> => {
+      const timeout = new AbortController();
+      const timer = setTimeout(() => timeout.abort(new Error(`Preflight exceeded ${timeoutMs}ms`)), timeoutMs);
+      timer.unref();
+      const signal = AbortSignal.any([run.signal, timeout.signal]);
+      const onEvent = createAgentProgressHandler(recorder, { translate: preflightAgent.translateThought, signal, refLabels });
+      let generated: { candidate: unknown; runId?: string };
+      try {
+        generated = await preflightAgent.generate(input, signal, { onEvent, validate: (candidate) => preflightCandidateError(candidate, refs)?.message ?? null });
+      } catch (error) {
+        return { error: { code: PREFLIGHT_AGENT_FAILED, message: (error as Error).message || "Preflight Agent 失败" } };
+      } finally {
+        clearTimeout(timer);
       }
-      normalized.push({ ...entry, sourceRefs: checked.refs });
+      if (!Value.Check(PreflightCandidate, generated.candidate)) return { error: { code: INVALID_PREFLIGHT_CANDIDATE, message: "Preflight candidate 不符合严格 schema" } };
+      const candidate = withoutThinJudgment(generated.candidate);
+      const problem = preflightCandidateError(candidate, refs);
+      return problem ? { error: problem } : { candidate, runId: generated.runId };
+    };
+
+    let failure = { code: PREFLIGHT_AGENT_FAILED, message: "Preflight Agent 失败" };
+    for (let round = 1; round <= PREFLIGHT_ATTEMPTS; round += 1) {
+      if (round > 1) {
+        recorder.step({ key: "retry", kind: "check", label: "第一轮没有完成，正在自动重新预审", detail: failure.message });
+        recorder.restart({ key: "analysis", kind: "thinking", label: analysisLabel(input), state: "active" });
+      }
+      const outcome = await attempt();
+      // 被同一场会更新的一次预审取代：那一次负责写结果，这一次什么都不写。
+      if (run.signal.aborted) return;
+      if ("error" in outcome) {
+        failure = outcome.error;
+        continue;
+      }
+      recorder.done("analysis", analysisLabel(input, true));
+      recorder.done("compose", "已写出预审结论");
+      recorder.step({ key: "check", kind: "check", label: "正在核对引用和结构", state: "active" });
+      // 同一个问题只出现一次（确定性合并，来源并入保留项），再写成可核对的条目。
+      const candidate = dropDuplicateQuestions(outcome.candidate);
+      const entries = preflightEntries(candidate, refs);
+      // 生成期间材料或讨论变了：报告照常保存，但如实标记“生成时已不是最新资料”，不冒充最新报告。
+      const after = await collectMeetingEvidence(q, meeting.id, viewer, { names, withContent: false, discussionSince: evidence.discussionMaxId });
+      const inputsChangedDuringRun = !after || computeStaleInputs(evidenceRecord, evidenceVersions(after)) !== null;
+      recorder.done("check", "已核对引用和结构");
+      const progress = await recorder.finish();
+      // entries 整体重建：指向旧表述的核对与编辑一并失效，read/carried/note 保留
+      await q(
+        `UPDATE meetings
+            SET preflight = $2::jsonb,
+                draft = jsonb_set(jsonb_set(draft, '{checkedEntryIds}', '[]'::jsonb), '{editsByEntryId}', '{}'::jsonb),
+                version = version + 1,
+                updated_at = now()
+          WHERE id = $1 AND ${mine}`,
+        [meetingId, JSON.stringify({
+          status: "ready",
+          pendingSince: running.pendingSince,
+          runId: outcome.runId ?? randomUUID(),
+          entries,
+          basis: candidate.basis,
+          // 一句话：有核心判断时是它的结论，信息不足时是缺什么。
+          brief: candidate.judgment?.headline ?? candidate.gaps.map(sentence).join(""),
+          depth: candidate.depth,
+          ...(candidate.decision ? { decision: candidate.decision } : {}),
+          inputCoverage: { ...inputCoverage, evidence: evidenceRecord },
+          progress,
+          ...(model ? { model } : {}),
+          error: null,
+          generatedAt: new Date().toISOString(),
+          ...(inputsChangedDuringRun ? { inputsChangedDuringRun: true } : {}),
+        }), running.pendingSince],
+      );
+      return;
     }
-    // 材料自带待决题与开放分歧：引用同样走白名单；个别引用不合规只去掉那一条引用，一条都不剩时去掉这一项。
-    const rawQuestions = generated.candidate.materialQuestions;
-    const questionItems = rawQuestions?.items.flatMap((item) => {
-      const refs = keepValidRefs(item.sourceRefs, allowedSourceRefs, paragraphCounts);
-      return refs ? [{ ...item, sourceRefs: refs.slice(0, 6) }] : [];
-    });
-    const materialQuestions: TPreflightMaterialQuestions | undefined = questionItems ? { total: questionItems.length, items: questionItems } : undefined;
-    const divergences: TPreflightDivergence[] | undefined = generated.candidate.divergences?.flatMap((item) => {
-      const refs = keepValidRefs(item.sourceRefs, allowedSourceRefs, paragraphCounts);
-      return refs ? [{ ...item, sourceRefs: refs }] : [];
-    });
-    // 同一疑问不在会议问题与一号位追问里重复出现：确定性合并，来源并入保留项。
-    const deduped = mergeDuplicateQuestions(normalized);
-    const entries: TMeetingPreflightEntry[] = deduped.entries.map((entry, index) => ({
-      id: `entry-${index + 1}`,
-      kind: entry.kind,
-      title: entry.title,
-      body: entry.body,
-      sourceRefs: [...entry.sourceRefs],
-      ...(isCeoQuestion(entry) && entry.ceoDecision ? { ceoDecision: entry.ceoDecision } : {}),
-    }));
-    // 生成期间材料或讨论变了：报告照常保存，但如实标记“生成时已不是最新资料”，不冒充最新报告。
-    const after = await collectMeetingEvidence(q, meeting.id, viewer, { names, withContent: false, discussionSince: evidence.discussionMaxId });
-    const inputsChangedDuringRun = !after || computeStaleInputs(evidenceRecord, evidenceVersions(after)) !== null;
-    recorder.done("check", "已核对引用和结构");
-    const progress = await recorder.finish();
-    // entries 整体重建：指向旧表述的核对与编辑一并失效，read/carried/note 保留
-    await q(
-      `UPDATE meetings
-          SET preflight = $2::jsonb,
-              draft = jsonb_set(jsonb_set(draft, '{checkedEntryIds}', '[]'::jsonb), '{editsByEntryId}', '{}'::jsonb),
-              version = version + 1,
-              updated_at = now()
-        WHERE id = $1 AND ${mine}`,
-      [meetingId, JSON.stringify({
-        status: "ready",
-        pendingSince: running.pendingSince,
-        runId: generated.runId ?? randomUUID(),
-        entries,
-        basis: generated.candidate.basis,
-        brief: generated.candidate.brief,
-        inputCoverage: { ...inputCoverage, evidence: evidenceRecord },
-        taskDefinition: generated.candidate.taskDefinition,
-        readiness: generated.candidate.readiness,
-        summary: generated.candidate.summary,
-        ...(materialQuestions ? { materialQuestions } : {}),
-        ...(divergences ? { divergences } : {}),
-        progress,
-        ...(model ? { model } : {}),
-        error: null,
-        generatedAt: new Date().toISOString(),
-        ...(inputsChangedDuringRun ? { inputsChangedDuringRun: true } : {}),
-      }), running.pendingSince],
-    );
+    await fail(failure.code, failure.message);
   } catch (err) {
+    if (run.signal.aborted) return;
     await fail(PREFLIGHT_AGENT_FAILED, (err as Error).message || "Preflight Agent 失败");
+  } finally {
+    if (activeRuns.get(meetingId) === run) activeRuns.delete(meetingId);
   }
 }
 /** 待整理的妙记整理成的会（已开完，不跑预审）：启动恢复和补跑都不碰。 */

@@ -23,13 +23,13 @@ const MEETING_INPUT = {
 
 type FakeAgent = PreflightAgent & { calls: PreflightAgentInput[] };
 
-/** 可编排的 Preflight Agent：第 failFirst 次调用返回不合法 sourceRef，之后返回合法候选。 */
-function fakeAgent(failFirst = false): FakeAgent {
+/** 可编排的 Preflight Agent：前 failCalls 次调用返回不合法 sourceRef，之后返回合法候选。 */
+function fakeAgent(failCalls = 0): FakeAgent {
   const agent = {
     calls: [] as PreflightAgentInput[],
     async generate(input: PreflightAgentInput) {
       agent.calls.push(input);
-      if (failFirst && agent.calls.length === 1) {
+      if (agent.calls.length <= failCalls) {
         return { candidate: preflightCandidate(["memory:not-a-section"]) };
       }
       return { candidate: validCandidate(input), runId: `preflight-run-${agent.calls.length}` };
@@ -40,7 +40,7 @@ function fakeAgent(failFirst = false): FakeAgent {
 
 function validCandidate(input: PreflightAgentInput): TPreflightCandidate {
   const candidate = preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`));
-  candidate.entries[0].sourceRefs.push(`meeting:${input.meeting.id}`);
+  candidate.judgment!.sourceRefs.push(`meeting:${input.meeting.id}`);
   return candidate;
 }
 
@@ -185,14 +185,22 @@ describe("Issue → Meeting Card/Action user journey", () => {
       expect(payload.status).toBe("scheduled");
       expect(payload.issueIds).toEqual([issue.id]);
       expect(payload.preflight.status).toBe("ready");
-      expect(payload.preflight.entries.map((entry: { id: string }) => entry.id)).toEqual([
-        "entry-1", "entry-2", "entry-3", "entry-4", "entry-5", "entry-6", "entry-7",
+      // v5：核心判断、要聊的问题、要拍板的事各一条；会议页顶部那一行是要定的事。
+      expect(payload.preflight.entries.map((entry: { id: string; kind: string }) => [entry.id, entry.kind])).toEqual([
+        ["entry-1", "core_judgment"], ["entry-2", "discussion_question"], ["entry-3", "meeting_question"],
       ]);
       expect(payload.preflight).toMatchObject({
-        readiness: "revise",
+        depth: "standard",
+        decision: "定渠道预算是否在六月前转向华南",
+        brief: "华南窗口真实，但转化证据只够支撑小额试点",
         inputCoverage: { background: "available", purpose: "derived", relatedMeeting: "missing" },
-        taskDefinition: { primaryRole: "research_analysis", maturity: "internal_alignment" },
       });
+      expect(payload.preflight.entries[2]).toMatchObject({
+        title: "渠道预算是否在六月前转向华南",
+        body: "先拿两成预算在华南试点。试点首月转化低于华东一半时停止。",
+        ceoDecision: { whyCeo: "涉及跨战场预算调配，超出渠道负责人授权" },
+      });
+      expect(payload.preflight.taskDefinition).toBeUndefined();
       // CEO 身份可确定识别，participant 保存创建时的身份快照
       expect(payload.ceoParticipantId).toBe("person-fixture-001");
       expect(payload.participants).toEqual(expect.arrayContaining([
@@ -236,7 +244,7 @@ describe("Issue → Meeting Card/Action user journey", () => {
         currentObject: {
           cardId: meetingCard.id,
           payload: {
-            preflight: { status: "ready", readiness: "revise" },
+            preflight: { status: "ready", depth: "standard" },
             linkedIssues: [{ cardId: `issue:${issue.id}`, title: expect.stringContaining("是否在六月前调整渠道投入") }],
           },
         },
@@ -466,7 +474,8 @@ describe("Candidate Preflight", () => {
     const agent: PreflightAgent = {
       async generate(input) {
         calls += 1;
-        if (calls === 2) throw new Error("model down");
+        // 重新预审的两轮（含自动重跑）都失败才是可见失败
+        if (calls >= 2) throw new Error("model down");
         return { candidate: validCandidate(input) };
       },
     };
@@ -514,8 +523,22 @@ describe("Candidate Preflight", () => {
     });
   });
 
-  it("fails visibly on an invalid candidate and only regenerates on an explicit retry", async () => {
-    const agent = fakeAgent(true);
+  it("retries one round automatically when the first candidate is invalid", async () => {
+    const agent = fakeAgent(1);
+    const t = await createTestApp({}, undefined, { preflightAgent: agent });
+    try {
+      const { card } = await readyMeeting(t, "dri-meeting-300-auto");
+      expect(card.payload.preflight).toMatchObject({ status: "ready", error: null });
+      expect(agent.calls).toHaveLength(2);
+      const steps = card.payload.preflight.progress.steps as { key: string; label: string }[];
+      expect(steps.find((step) => step.key === "retry")?.label).toBe("第一轮没有完成，正在自动重新预审");
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("fails visibly only after the automatic retry also fails, and regenerates on an explicit retry", async () => {
+    const agent = fakeAgent(2);
     const t = await createTestApp({}, undefined, { preflightAgent: agent });
     try {
       const { cookie, meetingId, card } = await readyMeeting(t, "dri-meeting-300");
@@ -526,20 +549,20 @@ describe("Candidate Preflight", () => {
         entries: [],
       });
       expect(card.actions.map((action: { actionType: string }) => action.actionType)).toContain("meeting.retry_preflight");
-      // 失败可见且不自动重试
-      expect(agent.calls).toHaveLength(1);
+      // 自动重试过一轮，两轮都没成才可见
+      expect(agent.calls).toHaveLength(2);
 
       const retryAction = await meetingAction(t, cookie, meetingId, "meeting.retry_preflight");
       const retried = await execute(t, cookie, retryAction);
       expect(retried.statusCode).toBe(200);
       expect(retried.json().cards[0].payload.preflight).toMatchObject({ status: "ready", error: null });
-      expect(agent.calls).toHaveLength(2);
+      expect(agent.calls).toHaveLength(3);
 
       // 重放同一 retry Action：幂等返回，不再调用 Agent
       const replay = await execute(t, cookie, retryAction);
       expect(replay.statusCode).toBe(200);
       expect(replay.json().cards[0].payload.preflight.status).toBe("ready");
-      expect(agent.calls).toHaveLength(2);
+      expect(agent.calls).toHaveLength(3);
     } finally {
       await t.close();
     }
@@ -557,7 +580,7 @@ describe("Candidate Preflight", () => {
       const regenerated = await execute(t, cookie, regenerate);
       expect(regenerated.statusCode).toBe(200);
       expect(regenerated.json().cards[0].payload).toMatchObject({
-        preflight: { status: "ready", readiness: "revise", taskDefinition: { primaryRole: "research_analysis" } },
+        preflight: { status: "ready", depth: "standard" },
         draft: { checkedEntryIds: [] },
       });
       expect(agent.calls).toHaveLength(2);
@@ -618,15 +641,10 @@ describe("Candidate Preflight", () => {
   });
 });
 
-  it("rejects a CEO question that cannot say why now / why CEO", async () => {
+  it("rejects a standard candidate without a core judgment (after the automatic retry)", async () => {
     const agent: PreflightAgent = {
       async generate(input) {
-        const candidate = preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`));
-        candidate.entries = candidate.entries.map((entry) => {
-          if (entry.kind !== "leader_lens") return entry;
-          const { ceoDecision: _dropped, ...rest } = entry;
-          return rest;
-        });
+        const { judgment: _dropped, ...candidate } = preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`));
         return { candidate };
       },
     };
@@ -635,30 +653,27 @@ describe("Candidate Preflight", () => {
       const { card } = await readyMeeting(t, "dri-meeting-invalid-structure");
       expect(card.payload.preflight).toMatchObject({
         status: "failed",
-        error: { code: "invalid_preflight_candidate", message: "leader_lens「华南转化依据」必须说明为什么现在、为什么需要 CEO 判断" },
+        error: { code: "invalid_preflight_candidate", message: "depth=standard 时必须写 judgment" },
       });
     } finally {
       await t.close();
     }
   });
 
-  it("rejects a leader_lens statement that falls back to disclaimer wording", async () => {
+  it("keeps only what is missing for a thin candidate, dropping the placeholder judgment the model filled in", async () => {
     const agent: PreflightAgent = {
       async generate(input) {
         const candidate = preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`));
-        candidate.entries = candidate.entries.map((entry) =>
-          entry.kind === "leader_lens" ? { ...entry, body: "视角预判，非权威发言：首先追问代价" } : entry,
-        );
-        return { candidate };
+        return { candidate: { ...candidate, depth: "thin" as const, judgment: { ...candidate.judgment!, headline: "待补", body: "待补" },
+          decisions: [], questions: [], gaps: ["还没有本周完成情况，补上后能定月底是否按期"] } };
       },
     };
     const t = await createTestApp({}, undefined, { preflightAgent: agent });
     try {
-      const { card } = await readyMeeting(t, "dri-meeting-lens-disclaimer");
-      expect(card.payload.preflight).toMatchObject({
-        status: "failed",
-        error: { code: "invalid_preflight_candidate", message: "leader_lens 不得出现“视角预判”“非权威发言”" },
-      });
+      const { card } = await readyMeeting(t, "dri-meeting-thin-judgment");
+      const preflight = (card.payload as { preflight: Record<string, unknown> }).preflight;
+      expect(preflight).toMatchObject({ status: "ready", depth: "thin", entries: [], brief: "还没有本周完成情况，补上后能定月底是否按期。" });
+      expect(preflight.decision).toBeUndefined();
     } finally {
       await t.close();
     }
@@ -668,10 +683,7 @@ describe("Candidate Preflight", () => {
     const agent: PreflightAgent = {
       async generate(input) {
         const candidate = preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`));
-        candidate.entries = candidate.entries.map((entry) =>
-          entry.kind === "core_judgment" ? { ...entry, body: "这不是材料问题，而是决策节奏问题" } : entry,
-        );
-        return { candidate };
+        return { candidate: { ...candidate, judgment: { ...candidate.judgment!, body: "这不是材料问题，而是决策节奏问题" } } };
       },
     };
     const t = await createTestApp({}, undefined, { preflightAgent: agent });
@@ -679,7 +691,7 @@ describe("Candidate Preflight", () => {
       const { card } = await readyMeeting(t, "dri-meeting-turn-phrase");
       expect(card.payload.preflight).toMatchObject({
         status: "failed",
-        error: { code: "invalid_preflight_candidate", message: "Preflight 出现翻案句：不是……而是……" },
+        error: { code: "invalid_preflight_candidate", message: "judgment.body 用了「不是……而是……」句式，改成正面直接陈述" },
       });
     } finally {
       await t.close();

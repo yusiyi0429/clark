@@ -38,7 +38,7 @@ export function LtcoDecisionScreen({ review }: { review: TMonthlyReviewPayload }
   const [error, setError] = useState("");
   const inFlight = useRef(false);
   const month = monthOf(review.period);
-  useRegisterDetail(useMemo(() => ({ scope: "global", label: `${month} 月复盘 · 长期目标审视`, mark: "monthly" as const, cards: NO_CARDS }), [month]));
+  useRegisterDetail(useMemo(() => ({ scope: "global", label: `${month} 月复盘 · 长期目标审视`, mark: "review" as const, cards: NO_CARDS }), [month]));
 
   const decide = review.actions.find((candidate) => candidate.actionType === "monthly-review.decide_ltco");
   const ltcoChanged = ltcoText.trim() !== "" && ltcoText.trim() !== review.ltco.current.trim();
