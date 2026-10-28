@@ -246,7 +246,7 @@ function App(){
    const go=(id,block=null)=>{const r=reviews.byId.get(id);if(r){setStage('review');openDetail(asReview(r),block);return true;}const n=findNode(id);if(n&&planOpen){setStage('plan');openDetail(n,block);return true;}return false;};
    const ids=[];
    if(link.stage==='review'||link.stage==='plan')setStage(link.stage==='plan'&&!planOpen?'review':link.stage);
-   if(link.scope&&link.message&&String(link.scope).startsWith('person:')){openDetail({id:'rv:person:'+p.name,level:'person',person:p.name});setStage('review');pointAt(`[data-message-id="${CSS.escape(link.message)}"]`);ids.push('mention:'+link.scope);}
+   if(link.scope&&link.message&&String(link.scope).startsWith('person:')){setStage('review');openDetail({id:'rv:person:'+p.name,level:'person',person:p.name});pointAt(`[data-message-id="${CSS.escape(link.message)}"]`);ids.push('mention:'+link.scope);}
    else if(link.scope&&link.message){const first=link.stage==='plan'||stage==='plan'&&!link.stage?[link.scope,'rv:'+link.scope]:['rv:'+link.scope,link.scope];if(first.some(id=>go(id))){setTab('group');setGroupView('chat');pointAt(`[data-message-id="${CSS.escape(link.message)}"]`);ids.push('mention:'+link.scope);}}
    else if(link.card&&link.comment){const c=(comments[link.card]||[]).find(c=>c.id===link.comment);const field=c?.block&&c.block!=='card'?(Number.isInteger(c.item)?`${c.block}#${c.item}`:c.block):'title';if(go(link.card,field))ids.push('comments');}
    else if(link.todo==='1'){
