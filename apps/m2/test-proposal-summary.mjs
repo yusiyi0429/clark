@@ -68,3 +68,17 @@ test('连续事实守卫失败最多三次且失败缓存清除，重试仍全�
  let calls=0;const summarize=createProposalSummarizer({complete:async()=>{calls++;return {answer:JSON.stringify({changes:[{index:0,before:'没有发生',after:'已持续采用三周，已通过验收'}]})};}});
  await assert.rejects(summarize(proposal,{}));assert.equal(calls,3);await assert.rejects(summarize(proposal,{}));assert.equal(calls,6);
 });
+
+
+test('清空字段由程序显示清空，原空字段显示空白，不改变输入或patch',()=>{
+ for(const status of ['pending','accepted'])for(const empty of ['','  ']){
+ const fact={ref:'fact-uuid',item:'入会体验',gap:'原有原因',evidence:'负责人报告入会可用'};
+ const proposal={id:'empty-'+status,status,cardId:'rv:agents-m4',before:{facts:[fact]},patch:{facts:[{...fact,gap:empty}]}};
+ const snapshot=JSON.stringify(proposal);const input=summaryInput(proposal,{});
+ const result=validateSummary({changes:[{index:0,before:'模型旧',after:'模型不应新增内容'}]},input);
+ assert.equal(result.changes[0].after,'清空');assert.equal(JSON.stringify(proposal),snapshot);assert.equal(input.changes[0].after,empty);
+ const addInput=summaryInput({...proposal,before:{facts:[{...fact,gap:empty}]},patch:{facts:[{...fact,gap:'补充记录'}]}},{});
+ const add=validateSummary({changes:[{index:0,before:'模型旧',after:'模型新'}]},addInput);
+ assert.equal(add.changes[0].before,'空白');assert.equal(add.changes[0].after,'补充记录');
+ }
+});

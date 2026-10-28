@@ -28,7 +28,7 @@ export function validateSummary(value,input){
  if(input.ambiguous)throw Error('条目对应不明确，无法生成修改摘要');
  if(!Array.isArray(value?.changes)||value.changes.length!==input.changes.length)throw Error('修改摘要格式不完整');
  for(const [i,c]of value.changes.entries()){if(c.index!==i)throw Error(`changes[${i}].index必须为${i}`);for(const [field,max]of [['before',32],['after',38]]){if(typeof c[field]!=='string'||!c[field].trim())throw Error(`changes[${i}].${field}必须是非空字符串`);if(c[field].length>max)throw Error(`changes[${i}].${field}共${c[field].length}字，最多${max}字；必须重新概括，不能截断或丢失关键变化与限制`);}}
- const result={changes:value.changes.map((c,i)=>({where:input.changes[i].where,itemRef:input.changes[i].itemRef||'',targetLabel:input.changes[i].targetLabel,targetRef:input.changes[i].targetRef,before:typeof input.changes[i].before==='string'&&input.changes[i].before.length<=18?input.changes[i].before:c.before,after:typeof input.changes[i].after==='string'&&input.changes[i].after.length<=18?input.changes[i].after:c.after,beforeSource:input.changes[i].beforeSource||'',afterSource:input.changes[i].afterSource||''})),reason:input.reason||''};
+ const result={changes:value.changes.map((c,i)=>({where:input.changes[i].where,itemRef:input.changes[i].itemRef||'',targetLabel:input.changes[i].targetLabel,targetRef:input.changes[i].targetRef,before:typeof input.changes[i].before==='string'&&input.changes[i].before.length<=18?(input.changes[i].before.trim()?input.changes[i].before:'空白'):c.before,after:typeof input.changes[i].after==='string'&&input.changes[i].after.length<=18?(input.changes[i].after.trim()?input.changes[i].after:'清空'):c.after,beforeSource:input.changes[i].beforeSource||'',afterSource:input.changes[i].afterSource||''})),reason:input.reason||''};
  for(const [i,c]of result.changes.entries()){
   const source=input.changes[i];guardMeaning(source.before,c.before);guardMeaning(source.after,c.after);
   if(changedAfter(source.before,source.after).includes('5秒')&&!normalize(c.after).includes('5秒'))throw Error('摘要省略了5秒条件');
@@ -39,7 +39,7 @@ export function validateSummary(value,input){
 export function createProposalSummarizer(gateway){
  const cache=new Map();
  return async(proposal,node,context={})=>{
-  const input=summaryInput(proposal,node),key=createHash('sha256').update(JSON.stringify({version:8,context,proposalId:proposal.id,before:proposal.before,patch:proposal.edited&&proposal.acceptedPatch?proposal.acceptedPatch:proposal.patch,input})).digest('hex');
+  const input=summaryInput(proposal,node),key=createHash('sha256').update(JSON.stringify({version:9,context,proposalId:proposal.id,before:proposal.before,patch:proposal.edited&&proposal.acceptedPatch?proposal.acceptedPatch:proposal.patch,input})).digest('hex');
   if(input.ambiguous)throw Error('条目对应不明确，请查看完整对照');
   if(!input.changes.length)return {changes:[],reason:input.reason||''};
   if(!cache.has(key)){
