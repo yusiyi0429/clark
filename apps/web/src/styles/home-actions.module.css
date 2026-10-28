@@ -73,23 +73,21 @@
   opacity: .9;
   transition: opacity var(--dur-base) var(--ease-swift), transform var(--dur-base) var(--ease-swift);
 }
-.motif * { transition: transform var(--dur-base) var(--ease-swift), stroke-dashoffset var(--dur-base) var(--ease-swift); }
+.motif * { transition: transform var(--dur-base) var(--ease-swift); }
 .page { transform-box: fill-box; transform-origin: 0 100%; }
 .hands { transform-origin: 58px 58px; }
 .dot + .dot { transition-delay: 40ms; }
 .dot + .dot + .dot { transition-delay: 80ms; }
-.trail { stroke-dasharray: 1 4; }
 .flag { transform-box: fill-box; transform-origin: 0 50%; }
-.sweep { transform-origin: 76px 76px; }
+.sweep { transform-origin: 36px 48px; }
 
 .tile:is([data-hovered='true'], [data-focus-visible='true']) .motif.motif { opacity: 1; }
-/* 动一下：整件往上浮 1px；日历页翘起、表针走一格；省略号依次跳起；旗子飘、山路往上走；光束扫过 12°。减少动效时只变浓淡。 */
+/* 动一下：整件往上浮 1px；日历页翘起、表针走一格；省略号依次跳起；旗子飘；光束扫过 12°。减少动效时只变浓淡。 */
 @media (prefers-reduced-motion: no-preference) {
   .tile:is([data-hovered='true'], [data-focus-visible='true']) .motif.motif { transform: translateY(-1px); }
   .tile:is([data-hovered='true'], [data-focus-visible='true']) .page { transform: translateY(-1px) rotate(-4deg); }
   .tile:is([data-hovered='true'], [data-focus-visible='true']) .hands { transform: rotate(60deg); }
   .tile:is([data-hovered='true'], [data-focus-visible='true']) .dot { transform: translateY(-2px); }
-  .tile:is([data-hovered='true'], [data-focus-visible='true']) .trail { stroke-dashoffset: -10; }
   .tile:is([data-hovered='true'], [data-focus-visible='true']) .flag { transform: skewY(-8deg); }
   .tile:is([data-hovered='true'], [data-focus-visible='true']) .sweep { transform: rotate(12deg); }
 }

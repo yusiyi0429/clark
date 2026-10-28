@@ -24,7 +24,7 @@ function Motif({ children }: { children: ReactNode }) {
 /**
  * 釉色小物件（样稿 quick-art-v1 方向 A）：柔和渐变、顶部一道高光、很淡的投影，像捏出来的瓷片。
  * 约会议：一页日历带个小钟（蓝底上用半透明白）；等回复：前后两个气泡，前面那个带省略号；
- * 战场进展：两层山坡、一条小路、山头一面旗；雷达：三道同心圆、一束扫过的光和一个光点。
+ * 战场进展、雷达照等回复的配法：后面一件淡紫蓝、前面一件白瓷带投影——战场进展是前后两座山丘，山头一面旗；雷达是前后两个圆盘，前面那个带两圈色环、一束扫过的光和一个光点。
  */
 const MOTIFS = {
   meeting: (
@@ -60,27 +60,30 @@ const MOTIFS = {
   progress: (
     <Motif>
       <defs>
-        <linearGradient id="ha-hill-near" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#dfe7e1" /><stop offset="1" stopColor="#c5d3cb" /></linearGradient>
-        <linearGradient id="ha-hill-far" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#eef2f6" /><stop offset="1" stopColor="#d9e0ea" /></linearGradient>
+        <linearGradient id="ha-prog-back" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#e7ebff" /><stop offset="1" stopColor="#c9d3f5" /></linearGradient>
+        <linearGradient id="ha-prog-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fff" /><stop offset="1" stopColor="#eef1f6" /></linearGradient>
+        <filter id="ha-prog-shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#29334c" floodOpacity=".12" /></filter>
       </defs>
-      <path d="M0 80C10 58 22 48 38 46c10-1 20 4 42 22v12z" fill="url(#ha-hill-far)" />
-      <path d="M14 80c8-16 18-26 32-30 12-3 22 2 34 12v18z" fill="url(#ha-hill-near)" />
-      <path className={s.trail} d="M26 74c6-6 12-10 20-12" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-      <path d="M47 50V28" stroke="#8a96a8" strokeWidth="2" strokeLinecap="round" />
-      <path className={s.flag} d="M48 28l13 4-13 5z" fill="#d98c6b" fillOpacity=".85" />
+      <path d="M28 66c0-15 11-26 24-26s24 11 24 26a4 4 0 0 1-4 4H32a4 4 0 0 1-4-4z" fill="url(#ha-prog-back)" opacity=".8" />
+      <rect x="31" y="14" width="4" height="36" rx="2" fill="#9aa6bb" />
+      <path className={s.flag} d="M35 15h17c2.2 0 3 2.8 1.2 4L49 22.5l4.2 3.5c1.8 1.2 1 4-1.2 4H35z" fill="url(#ha-prog-back)" filter="url(#ha-prog-shadow)" />
+      <path d="M6 72c0-16 12-28 27-28s27 12 27 28a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4z" fill="url(#ha-prog-front)" filter="url(#ha-prog-shadow)" />
     </Motif>
   ),
   radar: (
     <Motif>
       <defs>
-        <radialGradient id="ha-radar-glow" cx="1" cy="1" r="1"><stop offset="0" stopColor="#e6edf7" /><stop offset="1" stopColor="#f6f8fb" stopOpacity="0" /></radialGradient>
-        <linearGradient id="ha-radar-beam" x1="1" y1="1" x2="0" y2="0"><stop offset="0" stopColor="#7fa4d8" stopOpacity=".55" /><stop offset="1" stopColor="#7fa4d8" stopOpacity="0" /></linearGradient>
+        <linearGradient id="ha-radar-back" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#e7ebff" /><stop offset="1" stopColor="#c9d3f5" /></linearGradient>
+        <linearGradient id="ha-radar-front" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fff" /><stop offset="1" stopColor="#eef1f6" /></linearGradient>
+        <linearGradient id="ha-radar-beam" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="#c9d3f5" /><stop offset="1" stopColor="#e7ebff" stopOpacity=".3" /></linearGradient>
+        <filter id="ha-radar-shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#29334c" floodOpacity=".12" /></filter>
       </defs>
-      <circle cx="76" cy="76" r="68" fill="url(#ha-radar-glow)" />
-      <g fill="none" stroke="#b9c4d4" strokeWidth="1"><circle cx="76" cy="76" r="22" /><circle cx="76" cy="76" r="44" /><circle cx="76" cy="76" r="66" /></g>
-      <path className={s.sweep} d="M76 76L22 34A68 68 0 0 1 52 12z" fill="url(#ha-radar-beam)" />
-      <circle cx="40" cy="38" r="7" fill="#5f84bd" fillOpacity=".15" />
-      <circle cx="40" cy="38" r="3.2" fill="#5f84bd" />
+      <circle cx="50" cy="32" r="20" fill="url(#ha-radar-back)" opacity=".8" />
+      <circle cx="36" cy="48" r="28" fill="url(#ha-radar-front)" filter="url(#ha-radar-shadow)" />
+      <circle cx="36" cy="48" r="19" fill="#eef1f6" />
+      <circle cx="36" cy="48" r="10" fill="#e7ebff" />
+      <path className={s.sweep} d="M36 48V20a28 28 0 0 1 24.2 14z" fill="url(#ha-radar-beam)" />
+      <circle cx="47" cy="34" r="3" fill="#9aa6bb" />
     </Motif>
   ),
 };
