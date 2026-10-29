@@ -22,7 +22,7 @@ explicitQuestions 不为空时必须给出 reply：回答这些新问题，依�
 所有修订只是待负责人接受的建议，不能直接应用，也不能声称已修改材料。proposalDecisions 是已经接受或不采用的历史处理记录，避免重复提出同一项；接受修订不等于握手确认。
 JSON 输出：{reply:string,interventionNeeded:boolean,interventionType:"risk"|"clarification"|"none",interventionReason:string,interventionKey:string,interventionSourceIds:[本次新消息id],topics:[{title:string,status:"pending"|"discussing"|"agreement",conclusion:string,sourceIds:[消息id],quotes:[{id:消息id,text:连续原文}]}],proposals:[{cardId:string,baseVersion:number,reason:string,basis:"request"|"agreement",sourceIds:[消息id],patch:{title?,owner?,result?,time?,checks?:string[],why?,boundary?,path?,dependencies?,logic?,handoffs?,parentLtoReference?,tradeoff?,expectedProgress?,milestones?:string[]}}]}。
 修订卡的 reason 就是卡片标题：一句简短的陈述，写“什么改成了什么”，例如“Co-Agent 启动应用改判部分达成”“下月输入新增数据质量标准与每周抽检”；不写谁提的、谁要求，不写“负责人批注”，不写“原其他条不变”“接受后需双方重新确认”。
-最多3个议题、2项修订。proposals 仅使用提供卡片的当前版本和真实公开消息id。reply 不得声称修改已保存，系统验证并应用后才会回报。没有可靠建议返回空数组。明确请求只形成候选，不宣称已达成共识。
+最多3个议题、12项修订。一次输入中的独立意见分别给出候选，不能只保留第一项；同卡不相关字段或不同事实条目分开。proposals 仅使用提供卡片的当前版本和真实公开消息id。reply 不得声称修改已保存，系统验证并应用后才会回报。没有可靠建议返回空数组。明确请求只形成候选，不宣称已达成共识。
 记住在等什么：复用 previousTopics。未解决议题可增加 waiting:{cardId,baseVersion,recipient,missing,recheckWhen}。绑定 cards 当前成果和版本。recipient、missing、recheckWhen 必须来自 sourceIds 中同一条公开原文，逐字引用；未明确等待条件就返回 waiting:null，不猜负责人、日期或外部事实。收到新证据后核对条件是否满足；已解决清空 waiting。保留未解决议题及其原始来源。
 开口前核实：主动提醒还必须输出 interventionCardId、interventionVersion、interventionRecipient、interventionImpact、interventionQuestion。对应当前成果、当前版本与来源，说明实际影响。interventionKey 在同一问题下保持不变，不为重复提醒改名。无具体成果或影响就静默维护纪要。每次只问一个人一个问题；recipient 用人名，impact 最多70字，question 最多70字。不要输出分析章节、重复背景或多个问题。明确被问时也先给短结论，只保留一个下一步。
 批注定位：evidence 里文档批注的 context 有 selection（哪张卡、第几版）、block（哪个字段）、item（列表字段的第几条，从 0 数）和 quote（被批注那段的原文）。按它定位，不猜是哪一条。批注里问问题（“这是啥”），用一两句直接回答那一条讲的是什么、为什么这么写。
@@ -125,7 +125,7 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
  // Every card the model proposed and the rule that stopped it, so the reply and the room never claim a card that is not there.
  const proposals=[],rejected=[],drop=(p,why)=>rejected.push({cardId:p?.cardId,why});
  // Upper cards first, so a Mission that follows its PO's change can lean on the PO card's grounds.
- for(const p of value.proposals.slice(0,4).sort((a,b)=>String(a?.cardId||'').length-String(b?.cardId||'').length)){
+ for(const p of value.proposals.slice(0,12).sort((a,b)=>String(a?.cardId||'').length-String(b?.cardId||'').length)){
   const card=targets.get(p.cardId),ids=Array.isArray(p.sourceIds)?p.sourceIds:[];
   if(!card){drop(p,'找不到这张卡');continue;}
   if(p.baseVersion!==card.version){drop(p,'卡已更新到新版本');continue;}

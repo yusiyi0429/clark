@@ -1,3 +1,4 @@
+import {splitProposal,patchPaths,pathsOverlap} from './proposal-units.mjs';
 import {createHash,randomUUID} from 'node:crypto';
 import {currentVersion,applyAction,mayRevise} from './governance.mjs';
 import {memberActor} from './shared-projection.mjs';
@@ -41,7 +42,7 @@ const monthDays=x=>new Set((String(x||'').match(/\d{1,2}[\/-]\d{1,2}/g)||[]).map
 export function staleDates(reason,content){const said=monthDays(reason);if(!said.size||!/(仍|还)(写|是|在|停在|留着)/.test(String(reason||'')))return false;const has=monthDays(JSON.stringify(content));return ![...said].some(d=>has.has(d));}
 export function queueProposals(state,scope,proposals){
  state.proposals??=[];
- for(const proposal of proposals){
+ for(const proposal of proposals.flatMap(p=>splitProposal(p,state.cards[p.cardId]?.versions.at(-1)?.content||{}))){
   // 新增/撤掉/恢复 Mission: its own card on the PO, one request each; the same request waiting is not filed twice.
   if(proposal.op){if(!state.cards[proposal.cardId])continue;const same=p=>p.op===proposal.op&&p.status==='pending'&&(proposal.missionId?p.missionId===proposal.missionId:p.mission?.title===proposal.mission?.title);if(state.proposals.some(same))continue;
    state.proposals.push({...structuredClone(proposal),patch:{},id:randomUUID(),scope,status:'pending',createdSequence:state.sequence+1,before:{},createdAt:new Date().toISOString()});continue;}
@@ -54,7 +55,7 @@ export function queueProposals(state,scope,proposals){
   if(!version||version.number!==proposal.baseVersion||Object.entries(proposal.patch).every(([k,v])=>JSON.stringify(version.content[k])===JSON.stringify(v)))continue;
   if(state.proposals.some(p=>p.cardId===proposal.cardId&&p.baseVersion===proposal.baseVersion&&JSON.stringify(p.patch)===JSON.stringify(proposal.patch)&&(p.status==='pending'||proposal.sourceIds.every(id=>p.sourceIds.includes(id)))))continue;
   // One card waiting per card and version: a second pass does not stack a near-copy of the same fields on top (2026-10-19 replay); other fields still get their own card.
-  if(state.proposals.some(p=>p.cardId===proposal.cardId&&p.baseVersion===proposal.baseVersion&&p.status==='pending'&&Object.keys(p.patch).some(k=>k in proposal.patch)))continue;
+  if(state.proposals.some(p=>p.cardId===proposal.cardId&&p.baseVersion===proposal.baseVersion&&p.status==='pending'&&pathsOverlap(patchPaths(p.before,p.patch),patchPaths(version.content,proposal.patch))))continue;
   // 判定变化 (陈溪南 2026-10-22): named on the card — from what to what, who asked, on what basis — and never applied by itself.
   const verdictChange=card.kind==='review'&&'verdict'in proposal.patch&&proposal.patch.verdict!==version.content.verdict?{from:version.content.verdict||'',to:proposal.patch.verdict,by:[...new Set([...state.comments,...state.messages].filter(e=>proposal.sourceIds.includes(e.id)).map(e=>e.author))],basis:proposal.reason||''}:null;
   state.proposals.push({...structuredClone(proposal),id:randomUUID(),scope,status:'pending',createdSequence:state.sequence+1,before:Object.fromEntries(Object.keys(proposal.patch).map(k=>[k,version.content[k]??''])),...(verdictChange?{verdictChange}:{}),createdAt:new Date().toISOString()});
@@ -66,6 +67,7 @@ export function queueProposals(state,scope,proposals){
 export function applyOwnerAnnotations(state,scope){
  let next=state;
  for(const p of (state.proposals||[]).filter(p=>p.scope===scope&&p.status==='pending')){
+  if(p.requiresConfirmation)continue;
   const card=next.cards[p.cardId],sources=[...next.comments,...next.messages].filter(e=>p.sourceIds.includes(e.id));
   const authors=new Set(sources.map(e=>e.author));
   // An answer to a review's 追问 is not an edit instruction: Nexus's rewrite still waits for the owner's 确认.

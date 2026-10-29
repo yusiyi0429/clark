@@ -41,7 +41,7 @@ export function installReviewRound(state,file,{label,source,sample=false,now=new
   const from=next.reviewRound?.loadedAt||'',talk=m=>ids.has(m.cardId)||ids.has(m.context?.selection?.id)||m.author==='Nexus'&&from&&String(m.createdAt||'')>=from&&/复盘|修订卡/.test(String(m.text||''));
   next.reviewArchives.at(-1).messages=next.messages.filter(talk);next.messages=next.messages.filter(m=>!talk(m));}
  // Insights belong to the round they were written in: archived with it, and the new round opens with the window closed.
- if(next.insights||next.insightsRevealed){(next.reviewArchives??=[]).push({round:next.reviewRound||null,insights:next.insights||{},insightNexus:next.insightNexus||{},insightsRevealed:next.insightsRevealed||null,archivedAt:now});delete next.insights;delete next.insightNexus;delete next.insightsRevealed;}
+ if(next.insights||next.insightsRevealed){(next.reviewArchives??=[]).push({round:next.reviewRound||null,insights:next.insights||{},insightPublications:next.insightPublications||{},insightNexus:next.insightNexus||{},insightsRevealed:next.insightsRevealed||null,archivedAt:now});delete next.insights;delete next.insightPublications;delete next.insightNexus;delete next.insightsRevealed;}
  // 复盘和拆解是一整轮 (陈溪南 2026-10-22): a new month-end round opens with clean rooms. Everything said before it —
  // group and private chat, field comments, revision cards, Nexus minutes — goes to talkArchives, kept for tracing.
  if(next.messages.length||next.comments.length||(next.proposals||[]).length){(next.talkArchives??=[]).push({archivedAt:now,reason:'新一轮复盘',messages:next.messages,comments:next.comments,proposals:next.proposals||[],nexus:next.nexus||{}});next.messages=[];next.comments=[];next.proposals=[];next.nexus={};}
@@ -66,7 +66,7 @@ export function carryReviewLayer(old,next){
  const ids=new Set(Object.values(old.cards||{}).filter(c=>c.kind==='review').map(c=>c.id));
  if(!ids.size&&!old.planHandoff)return next;
  for(const id of ids)next.cards[id]=structuredClone(old.cards[id]);
- for(const k of ['reviewRound','reviewArchives','planHandoff','unitsDone','insights','insightNexus','insightsRevealed'])if(old[k]!==undefined)next[k]=structuredClone(old[k]);
+ for(const k of ['reviewRound','reviewArchives','planHandoff','unitsDone','insights','insightNexus','insightPublications','insightsRevealed'])if(old[k]!==undefined)next[k]=structuredClone(old[k]);
  const from=old.reviewRound?.loadedAt||'';
  const talk=m=>ids.has(m.cardId)||ids.has(m.context?.selection?.id)||Boolean(m.broadcast)||m.author==='Nexus'&&from&&String(m.createdAt||'')>=from&&/复盘|修订卡/.test(String(m.text||''));
  next.messages=[...(old.messages||[]).filter(talk).map(m=>structuredClone(m)),...(next.messages||[])];

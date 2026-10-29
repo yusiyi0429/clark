@@ -1491,3 +1491,7 @@ body.is-col-resizing{cursor:col-resize;user-select:none}
 .proposal-summary-card .proposal-head .proposal-reviewer{font-weight:400;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
 .proposal-task.proposal-summary-card .proposal-body,.proposal-task.proposal-summary-card .proposal-body :is(div,p,span,strong,small,h4,em,button){font-size:12px!important}
 .proposal-summary-card .proposal-summary-pair p:last-child,.proposal-summary-card .proposal-summary-pair p:last-child span{color:#a66b00}
+
+.review-home-heading{font-size:13px;font-weight:600;color:#64788a;margin:4px 0 12px}
+
+.md-transfer-backdrop{position:fixed;inset:0;background:#132d4544;z-index:200;display:grid;place-items:center}.md-transfer{width:min(680px,90vw);max-height:85vh;overflow:auto;background:#fff;border:1px solid #dce5ee;border-radius:14px;padding:20px;box-shadow:0 12px 48px #102c4633}.md-transfer header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.md-transfer h3{font-size:14px}.md-transfer button,.md-transfer label{font-size:13px;padding:8px 12px;background:#eef3f8;border-radius:8px;cursor:pointer}.md-transfer-options{display:flex;gap:12px;flex-wrap:wrap}.md-transfer-options label input{display:block;margin-top:8px;max-width:240px}.md-transfer-diff p{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}.md-before{color:#78838d}.md-transfer footer{display:flex;gap:12px;margin-top:16px}.md-transfer footer button:first-child{background:#002fa7;color:#fff}

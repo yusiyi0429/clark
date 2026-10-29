@@ -1,3 +1,4 @@
+import {exportMarkdown,parseStandardMarkdown,prepareTransfer,applyTransfer,transferCards,transferStamp,nonstandardRequest,markdownImportPrompt,assertImportGrounded} from './markdown-transfer.mjs';
 import {createProposalSummarizer} from './proposal-summary.mjs';
 import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
@@ -5,7 +6,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {normalize,allNodes} from './domain.mjs';
 import {createModelGateway,recordModelRun,patientTransport} from './model.mjs';
 import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,ownerAnnotation,isChildCard,reconcileReply,quietReply,roomLine} from './nexus-policy.mjs';
-import {createCollaborationState,currentVersion,canRead,cardStatus,confirmationSummary,insightView,roomMember,canReadRoom} from './governance.mjs';
+import {createCollaborationState,currentVersion,canRead,cardStatus,confirmationSummary,insightView,publishedMissionInsights,roomMember,canReadRoom} from './governance.mjs';
 import {reviewCascadeRequest,reviewCascadeProposal,cascadeSkip} from './review-cascade.mjs';
 import {runRoundPool} from './round-pool.mjs';
 import {redactMessages} from './redact.mjs';
@@ -132,7 +133,7 @@ async function revealInsights(actor,{auto=false}={}){
   const viewer=actor||{ceo:true,name:''},cards=Object.values(s.cards).filter(c=>c.kind==='review');missing=cards.map(c=>({cardId:c.id,title:currentVersion(c).content.title,missing:insightView(s,c,viewer).missing})).filter(x=>x.missing.length);
   for(const u of new Set(cards.filter(c=>c.level!=='company').map(c=>c.unit)))broadcast(s,u,`${auto?'复盘已到截止时间，':''}本月复盘的分析洞察已公开，大家可以看到彼此写的内容，Nexus 正在综合。`,{kind:'insights-revealed',now});
   // Like comments, the revealed insights go into each card's group (陈溪南 2026-10-27): one line per review.
-  for(const c of cards){const list=s.insights?.[c.id]||[];if(!list.length)continue;s.sequence++;s.messages.push({id:`notice-${s.sequence}`,createdSequence:s.sequence,author:'Nexus',kind:'notice',channel:'group',scope:c.level==='company'?'company':c.unit,cardId:c.id,version:currentVersion(c).number,general:true,createdAt:now,
+  for(const c of cards){const list=c.level==='mission'?publishedMissionInsights(s,c):s.insights?.[c.id]||[];if(!list.length)continue;s.sequence++;s.messages.push({id:`notice-${s.sequence}`,createdSequence:s.sequence,author:'Nexus',kind:'notice',channel:'group',scope:c.level==='company'?'company':c.unit,cardId:c.id,version:currentVersion(c).number,general:true,createdAt:now,
    text:`「${currentVersion(c).content.title}」的分析洞察（${list.length} 条）：\n${list.map(x=>`- ${handoffProfiles[x.author]?.name||x.author}：${String(x.text).slice(0,300)}`).join('\n')}`});}
   s.sequence++;return s;});
  synthesizeInsights().catch(()=>{});
@@ -208,7 +209,8 @@ function revalidated(req,res,{body,etag},contentType='application/json; charset=
 // A state is replaced, never changed, on each write, so a body built from it stays valid for that state.
 const readCache=new WeakMap();
 function cachedRead(state,key,build){let bodies=readCache.get(state);if(!bodies)readCache.set(state,bodies=new Map());if(!bodies.has(key))bodies.set(key,etagged(JSON.stringify(build())));return bodies.get(key);}
-async function body(req){let s='';for await(const b of req){s+=b;if(s.length>100000)throw new Error('请求太大');}const value=JSON.parse(s);if(req.m2Session?.memberId)value.memberId=req.m2Session.memberId;return value;}
+async function body(req,limit=100000){let s='';for await(const b of req){s+=b;if(s.length>limit)throw new Error('请求太大');}const value=JSON.parse(s);if(req.m2Session?.memberId)value.memberId=req.m2Session.memberId;return value;}
+const markdownPreviews=new Map();
 export const server=createServer(async(req,res)=>{
  let analyzedScope,analyzedRound,streamReply=false,streamTimer,refusalTo;
  try {
@@ -222,6 +224,31 @@ export const server=createServer(async(req,res)=>{
   if(req.m2Session.memberId){route.searchParams.set('member',req.m2Session.memberId);}
   // Installing a review run from the private seed folder: internal only (import-review.mjs inside the container).
   if(route.pathname==='/api/review-import'&&req.method==='POST'){if(!req.m2Session.internal)return json(res,403,{error:'只能在服务器内部导入复盘'});const b=await body(req);return json(res,200,await importReviewRound(store,b,{seedDir:seedRoot(),statePath:process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)),busy:roundFlight||auditFlight}));}
+  if(route.pathname==='/api/markdown/export'&&req.method==='GET'){
+   const actor=actorFor(req.m2Session.memberId),selection={stage:route.searchParams.get('stage'),rootId:route.searchParams.get('rootId')||null,person:route.searchParams.get('person')||null};
+   return json(res,200,{markdown:exportMarkdown(store.snapshot(),actor,selection,{blank:route.searchParams.get('blank')==='true'})});
+  }
+  if(route.pathname==='/api/markdown/preview'&&req.method==='POST'){
+   const b=await body(req,600000),actor=actorFor(b.memberId),snap=store.snapshot(),selection={stage:b.stage,rootId:b.rootId||null,person:b.person||null};
+   if(typeof b.text!=='string'||Buffer.byteLength(b.text)>512000)return json(res,400,{error:'文件过大，最多500 KB'});
+   let objects=parseStandardMarkdown(b.text);
+   if(!objects){const payload=nonstandardRequest(snap,actor,selection,b.text);if(!ready)return json(res,503,{error:'模型暂不可用，请用标准模板导入'});
+    const result=await chatGateway.complete([{role:'system',content:markdownImportPrompt},{role:'user',content:JSON.stringify(payload)}],{json:true,thinking:false,maxTokens:12000,timeoutMs:120000});
+    let parsed;try{parsed=JSON.parse(result.answer);}catch{return json(res,422,{error:'文件未能整理成标准结构，请用标准模板导入'});}
+    if(!Array.isArray(parsed.objects)||!Array.isArray(parsed.unmapped)||parsed.unmapped.length)return json(res,422,{error:'有内容无法对应当前对象，请调整文件后重试',unmapped:parsed.unmapped||[]});objects=parsed.objects;assertImportGrounded(snap,objects,b.text);
+   }
+   const preview=prepareTransfer(snap,actor,selection,objects),token=randomUUID();
+   for(const [key,value]of markdownPreviews)if(value.expires<Date.now())markdownPreviews.delete(key);
+   if(markdownPreviews.size>=100)return json(res,429,{error:'预览过多，请稍后重试'});
+   markdownPreviews.set(token,{...preview,actorId:actor.id,expires:Date.now()+10*60000});
+   return json(res,200,{token,changes:preview.changes});
+  }
+  if(route.pathname==='/api/markdown/apply'&&req.method==='POST'){
+   const b=await body(req),actor=actorFor(b.memberId),preview=markdownPreviews.get(b.token);
+   if(!preview||preview.actorId!==actor.id||preview.expires<Date.now())return json(res,409,{error:'预览已失效，请重新导入'});
+   const next=await store.transact(state=>{const currentActor=memberActor(actor.id,state);if(transferStamp(state,transferCards(state,currentActor,preview.selection))!==preview.stamp)throw Object.assign(Error('内容或轮次已变化，请重新预览'),{status:409});return applyTransfer(state,currentActor,preview.changes);});
+   markdownPreviews.delete(b.token);runCascades();return json(res,200,sharedProjection(next,actor));
+  }
   if(route.pathname==='/api/session'&&req.method==='GET')return json(res,200,{authenticated:true,...req.m2Session});
   if(route.pathname==='/api/ontology/status'&&req.method==='GET')return json(res,200,await ontologyConnectionStatus());
   // Never in M2's own path: an error here answers this call only and the page works as before.

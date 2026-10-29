@@ -76,6 +76,7 @@ test('截止时间：复盘装入后 48 小时，投影和通知卡片都带着'
 
 test('公司复盘的 Nexus 综合读所有复盘下的洞察，按复盘分组；其他复盘只读自己的',()=>{
  const s=fresh();s.insights={'rv:bf01-m1':[{id:'i1',author:'member-03',text:'客户窗口靠单点联系'}],'rv:company':[{id:'i2',author:'member-01',text:'目标定得太满'}]};
+ s.cards['rv:bf01-m1'].confirmedVersion=1;
  const name=id=>({'member-01':'刘明华','member-03':'孙铭泽'})[id]||id;
  const company=JSON.parse(insightSynthesisRequest(s,s.cards['rv:company'],'',name)[1].content);
  assert.deepEqual(company.insights,[{author:'刘明华',text:'目标定得太满'}]);
@@ -207,10 +208,12 @@ test('个人复盘的房间：只有本人能说，话进 person:<id>，别人�
  assert.equal(sharedProjection(s,sun).records['group:person:member-03'].length,3);
 });
 
-test('洞察公开后，个人复盘的洞察汇进单元复盘，带“来自 Mission N”；公开前不汇；个人复盘截止 24 小时、其余 48 小时',()=>{
+test('个人复盘确认后立即汇入洞察，带来源；未确认仍私密，截止时间保留',()=>{
  let s=fresh();const sun=memberActor('member-03',s),ceo=memberActor('member-01',s);
  s=applyAction(s,sun,{type:'insight',cardId:'rv:bf01-m1',text:'客户窗口只靠一个人'});
- assert.equal(sharedProjection(s,ceo).drafts['rv:bf01'].insights.items,undefined);
+ assert.deepEqual(sharedProjection(s,ceo).drafts['rv:bf01'].insights.items,[]);
+ s=applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',baseVersion:1,slot:'missionDri'});
+ assert.equal(sharedProjection(s,ceo).drafts['rv:bf01'].insights.items.length,1);
  s.insightsRevealed={at:'2026-10-29T02:33:00.000Z',by:'auto'};
  const items=sharedProjection(s,ceo).drafts['rv:bf01'].insights.items;
  assert.deepEqual(items.map(i=>[i.text,i.source?.label,i.source?.cardId]),[['客户窗口只靠一个人','Mission 1','rv:bf01-m1']]);

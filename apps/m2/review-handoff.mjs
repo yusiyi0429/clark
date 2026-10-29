@@ -1,7 +1,7 @@
 // 复盘 → 拆解 (陈溪南 2026-10-21): when the CEO confirms the company review — the end of the review and the start of
 // the plan — every confirmed review becomes context for next month's decomposition. The plan page stays as it is;
 // the reviews only travel as input. Until the full run is wanted, the server prepares this package without generating.
-import {currentVersion} from './governance.mjs';
+import {currentVersion,publishedMissionInsights} from './governance.mjs';
 import {memberProfiles} from './member-profiles.mjs';
 import {broadcast} from './broadcasts.mjs';
 import {nextPeriod,monthOf} from './review-display.mjs';
@@ -18,7 +18,7 @@ export function handoffPackage(state){
   return {id:c.id,ref:v.ref,unit:v.unit,level:c.level,title:v.title,owner:v.owner,version:currentVersion(c).number,verdict:v.verdict,verdictReason:v.verdictReason,
    // 下期输入 (2026-10-27) are what the decomposition must take up; an answer given in a comment and not yet folded into the row travels with it.
    ...(Array.isArray(v.facts)?{facts:v.facts,nextInputs:(v.nextInputs||[]).map((n,i)=>{const a=[...(state.comments||[])].reverse().find(m=>m.cardId===c.id&&m.answers?.block==='nextInputs'&&m.answers.index===i);return a?{...n,answer:{by:name(a.author),text:String(a.text||'').slice(0,300)}}:n;})}:{targets:v.targets||[],causes:(v.causes||[]).map(x=>typeof x==='string'?x:x.text),nextInputs:v.nextInputs||[],...(v.ltoReview?{ltoReview:v.ltoReview}:{})}),
-   ...(revealed?{insights:(state.insights?.[c.id]||[]).map(x=>({author:name(x.author),text:x.text})),...(nexus?{nexusInsight:nexus}:{})}:{})};});
+   ...(revealed?{insights:(c.level==='mission'?publishedMissionInsights(state,c):state.insights?.[c.id]||[]).map(x=>({author:name(x.author),text:x.text})),...(nexus?{nexusInsight:nexus}:{})}:{})};});
  const company=reviews.find(r=>r.level==='company')||null,units=[...new Set(reviews.filter(r=>r.level!=='company').map(r=>r.unit))];
  return {fromPeriod:state.reviewRound?.period||null,forPeriod:nextPeriod(state.reviewRound?.period),reviewRound:state.reviewRound?.label||null,
   company,units:units.map(u=>({unit:u,po:reviews.find(r=>r.unit===u&&r.level==='po')||null,missions:reviews.filter(r=>r.unit===u&&r.level==='mission')}))};
