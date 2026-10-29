@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 个人菜单「Co-Agent 形象」弹窗里的内容：三种形象各一行，左边一颗活的胶囊预览，选中即生效。
+ * 个人菜单「伙伴形象」弹窗里的内容：三种形象各一行，左边一颗活的胶囊预览，选中即生效。
  * 上面一个小开关看两种姿势（在听 / 在说），预览的声音是模拟的。
  */
 
@@ -41,7 +41,7 @@ export function CoAgentSkinPicker() {
           </label>
         ))}
       </div>
-      <div className={s.options} role="radiogroup" aria-label="Co-Agent 形象">
+      <div className={s.options} role="radiogroup" aria-label="伙伴形象">
         {COAGENT_SKINS.map((item) => (
           <label key={item.id} className={s.option} data-selected={skin === item.id || undefined}>
             <input type="radio" name="coagent-skin" value={item.id} checked={skin === item.id} onChange={() => setSkin(item.id)} />
