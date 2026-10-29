@@ -1,3 +1,4 @@
+import {ownerEditCommands,requestedEditPaths,automaticChangePaths,allChangesRequested,automaticValuesRequested} from './owner-edit-intent.mjs';
 import {splitProposal,patchPaths,pathsOverlap,remainingPatch} from './proposal-units.mjs';
 import {createHash,randomUUID} from 'node:crypto';
 import {currentVersion,applyAction,mayRevise,roomOf} from './governance.mjs';
@@ -80,21 +81,25 @@ export function queueProposals(state,scope,proposals){
 // Intent and target come from the owner's real source events, never a model's authorization label.
 export function explicitOwnerEdit(event,card,state){
  const text=String(event.text||'').trim();
- if(/(?:别|不要|不能|不应|不想|不建议).{0,30}(?:改|修改|调整|删|补|加)|假如|如果|例如|比如|举例|讨论|能否|可否|想听/.test(text))return false;
- if(!text||event.answers||/[?？]|是否|要不要|能不能|可不可以|(?:吗|呢|么)[。！!\s]*$|(?:不要|不用|无需|不必|没必要).{0,4}(?:改|修改|调整|删)/.test(text))return false;
- if(!/(?:改成|改为|修改为|调整为|换成|设为|写成|删掉|删除|去掉|补上|增加|新增|补充|加上|加一句|补一句)\s*[^，。；;\s]+/.test(text))return false;
+ if(event.answers||!ownerEditCommands(text).length)return false;
  const selected=event.context?.selection?.id||(!event.general&&event.cardId);
  if(selected)return selected===card.id;
  const title=currentVersion(card).content.title;
  const mentioned=Object.values(state.cards).filter(c=>c.kind===card.kind&&currentVersion(c).content.title&&text.includes(currentVersion(c).content.title));
- return !!title&&mentioned.length===1&&mentioned[0].id===card.id;
+ if(title&&mentioned.length===1)return mentioned[0].id===card.id;
+ const numbers=[...text.matchAll(/Mission\s*(\d+)/gi)].map(m=>Number(m[1]));if(new Set(numbers).size!==1)return false;
+ const numbered=Object.values(state.cards).filter(c=>c.kind===card.kind&&roomOf(c)===event.scope&&Number(String(c.id).match(/(?:^|-)m(\d+)$/)?.[1])===numbers[0]);
+ return numbered.length===1&&numbered[0].id===card.id;
 }
-function ownerRequestedPaths(event,card,state){
- const text=String(event.text||''),map={verdict:'结果判定|判定(?!理由)',verdictReason:'判定理由',facts:'事实证据|证据|原因',nextInputs:'下期输入',title:'标题|名称',result:'成果|结果',checks:'验收|标准|经济性',time:'日期|时间',tier:'档位',owner:'负责人',dependencies:'依赖',path:'路径',boundary:'边界',milestones:'里程碑'};
- const fields=new Set(Object.entries(map).filter(([,pattern])=>new RegExp(pattern).test(text)).map(([key])=>key));
- const block=event.context?.block||event.block;if(block&&block!=='card')fields.add(block);
- const v=currentVersion(card).content,index=event.context?.item??event.item;
- return [...fields].flatMap(field=>{if(['facts','nextInputs'].includes(field)&&Number.isInteger(index)){const row=v[field]?.[index],ref=row?.ref||row?.id;return ref?[field+'/'+ref]:[];}return [field];});
+function sourceBaseVersion(event,card,proposal){
+ const selected=event.context?.selection;return selected?.id===card.id?(selected.version??proposal.originalBaseVersion??proposal.baseVersion):!event.general&&event.cardId===card.id?(event.version??proposal.originalBaseVersion??proposal.baseVersion):proposal.originalBaseVersion??proposal.baseVersion;
+}
+function sourceVersionCurrent(state,card,event,proposal,actor){
+ const version=sourceBaseVersion(event,card,proposal),current=currentVersion(card).number;
+ if(version==null||version===current)return true;if(version>current)return false;
+ // Only automatic versions produced by this exact source batch may advance its own baseline.
+ // A manual edit, other evidence, signer, or unrelated proposal breaks this chain.
+ return card.versions.filter(v=>v.number>version).every(v=>state.proposals.some(p=>p.status==='accepted'&&p.auto===true&&p.resultVersion===v.number&&p.handledBy===actor.id&&p.cardId===card.id&&p.sourceIds.length===proposal.sourceIds.length&&p.sourceIds.every(id=>proposal.sourceIds.includes(id))));
 }
 export function applyOwnerAnnotations(state,scope){
  let next=state;
@@ -103,11 +108,12 @@ export function applyOwnerAnnotations(state,scope){
   const card=next.cards[p.cardId],sources=[...next.comments,...next.messages].filter(e=>p.sourceIds.includes(e.id));
   const authors=new Set(sources.map(e=>e.author));
   if(!card||roomOf(card)!==scope||authors.size!==1||!sources.length||!sources.every(e=>e.channel==='group'&&e.scope===scope&&explicitOwnerEdit(e,card,next)))continue;
-  const requested=sources.flatMap(event=>ownerRequestedPaths(event,card,next));
-  if(patchPaths(p.before,p.patch).some(path=>!pathsOverlap([path],requested)))continue;
+  const requested=sources.flatMap(event=>requestedEditPaths(event,card.versions.find(v=>v.number===sourceBaseVersion(event,card,p))?.content||currentVersion(card).content));
+  if(!allChangesRequested(automaticChangePaths(p.before,p.patch),requested))continue;
+  if(!automaticChangePaths(p.before,p.patch).every(path=>sources.some(event=>automaticValuesRequested(event,card.versions.find(v=>v.number===sourceBaseVersion(event,card,p))?.content||currentVersion(card).content,p.before,p.patch,[path]))))continue;
   let actor;try{actor=memberActor([...authors][0],next);}catch{continue;}const v=currentVersion(card);
   if(!mayRevise(actor,card)||!String(v.content.owner||'').split(/[、,，\s]+/).includes(actor.name)||v.signatures?.length||card.confirmedVersion===v.number)continue;
-  if(sources.some(e=>(e.context?.selection?.version??e.version)!=null&&(e.context?.selection?.version??e.version)!==v.number))continue;
+  if(sources.some(e=>!sourceVersionCurrent(next,card,e,p,actor)))continue;
   try{next=applyAction(next,actor,{type:'acceptProposal',cardId:p.cardId,proposalId:p.id,auto:true});}catch{}
  }
  return next;

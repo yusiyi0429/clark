@@ -68,7 +68,7 @@ function patchFrom(n,v){const lines=t=>String(t).split('\n').map(x=>x.trim()).fi
 function EditRow({label,children}){return <tr><th scope="row">{label}</th><td>{children}</td></tr>;}
 function ReviewEdit({node,onSave,onCancel}){
  const [v,setV]=useState(()=>startValues(node)),[busy,setBusy]=useState(false),set=k=>e=>setV(o=>({...o,[k]:e.target.value}));
- const save=async()=>{const patch=patchFrom(node,v);if(!Object.keys(patch).length)return onCancel();setBusy(true);try{await onSave(patch);}finally{setBusy(false);}};
+ const save=async()=>{const patch=patchFrom(node,v);if(!Object.keys(patch).length)return onCancel();setBusy(true);try{await onSave(patch);}catch(e){if(e.code!=='CANCELLED')throw e;}finally{setBusy(false);}};
  const keys=e=>{if(e.key==='Escape')onCancel();else enterSubmit(e,save,!busy);};
  const setFact=(i,k)=>e=>setV(o=>({...o,facts:o.facts.map((f,j)=>j===i?{...f,[k]:e.target.value}:f)}));
  const factArea=(i,k,rows,hint)=><textarea className="inline-field-input" rows={Math.max(rows,String(v.facts[i][k]).split('\n').length)} value={v.facts[i][k]} placeholder={hint} onChange={setFact(i,k)} onKeyDown={keys} title="回车保存，Shift＋回车换行，Esc 取消"/>;

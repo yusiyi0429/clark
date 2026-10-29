@@ -85,3 +85,35 @@ test('已存下级来源过期时接受409，投影为不可采纳；晚到父�
  assert.equal(reviewCascadeProposal(s,{childId:id,parentId:'rv:bf01',toVersion:1},{impact:true,patch:{verdictReason:'旧分析'}}).proposal,null);
  s=applyAction(s,memberActor('member-01',s),{type:'revise',cardId:'rv:bf01',baseVersion:1,patch:{verdictReason:'人工上级'}});assert.equal(reviewCascadeProposal(s,{childId:id,parentId:'rv:bf01',toVersion:2,parentVersion:1},{impact:true,patch:{verdictReason:'晚到分析'}}).proposal,null);
 });
+
+test('正向指令须是本人真实意图，反对、引用、假设与问法均不授自动权',()=>{
+ for(const text of ['我不同意把判定理由改为已通过验收','我反对把判定理由改为已通过验收','我不认可把判定理由改为已通过验收','他说把判定理由改为已通过验收','仅转述原话，把判定理由改为已通过验收','我想知道把判定理由改为已通过验收会怎样','把我不同意把判定理由改为已通过验收这句话记录下来','“把判定理由改为已通过验收”是个例子','把判定理由改为已通过验收，我反对','请不要把判定理由改为已通过验收','如果把判定理由改为已通过验收','建议讨论把判定理由改为已通过验收']){
+ let s=fresh();s=applyAction(s,owner(s),{type:'comment',cardId:id,baseVersion:1,block:'verdictReason',text});const patch={verdictReason:'已通过验收'};queueProposals(s,scope,[{...p(s,patch),sourceIds:[s.comments.at(-1).id]}]);const original=JSON.stringify(s.proposals[0].patch);s=applyOwnerAnnotations(s,scope);assert.equal(s.proposals[0].status,'pending',text);assert.equal(currentVersion(s.cards[id]).number,1);assert.equal(JSON.stringify(s.proposals[0].patch),original);}
+});
+test('事实证据仅授权evidence，额外status/gap/owner保持整张pending且原patch不改',()=>{
+ for(const extra of [{status:'达成'},{gap:'没有差距'},{owner:'刘明华'}]){let s=fresh();s=applyAction(s,owner(s),{type:'comment',cardId:id,baseVersion:1,block:'facts',item:0,text:'把这一项证据改为新的证据'});queueProposals(s,scope,[{...p(s,{facts:facts.map((f,i)=>i?f:{...f,evidence:'新的证据',...extra})}),sourceIds:[s.comments.at(-1).id]}]);const original=JSON.stringify(s.proposals[0].patch);s=applyOwnerAnnotations(s,scope);assert.equal(s.proposals[0].status,'pending');assert.deepEqual(currentVersion(s.cards[id]).content.facts,facts);assert.equal(JSON.stringify(s.proposals[0].patch),original);}
+ let s=fresh();s=applyAction(s,owner(s),{type:'comment',cardId:id,baseVersion:1,block:'facts',item:0,text:'把这一项证据改为新的证据'});queueProposals(s,scope,[{...p(s,{facts:facts.map((f,i)=>i?f:{...f,evidence:'新的证据'})}),sourceIds:[s.comments.at(-1).id]}]);s=applyOwnerAnnotations(s,scope);assert.equal(s.proposals[0].status,'accepted');assert.equal(currentVersion(s.cards[id]).content.facts[0].status,'未达成');
+});
+test('明确目标字段优先于批注所在字段，不能顺带自动修改原批注字段',()=>{
+ let s=fresh();s=applyAction(s,owner(s),{type:'comment',cardId:id,baseVersion:1,block:'verdictReason',text:'把结果判定改为达成'});queueProposals(s,scope,[{...p(s,{verdict:'达成',verdictReason:'顺带改理由'}),sourceIds:[s.comments.at(-1).id]}]);s=applyOwnerAnnotations(s,scope);assert.equal(s.proposals[0].status,'pending');assert.equal(currentVersion(s.cards[id]).number,1);
+});
+test('同源明确多ref可完整自动，但人工修改或其他来源不能借批次放宽版本检查',()=>{
+ for(const manual of [false,true]){let s=fresh();s=applyAction(s,owner(s),{type:'comment',cardId:id,baseVersion:1,block:'facts',text:'把甲和乙的证据都改为负责人补充记录'});const source=s.comments.at(-1).id;queueProposals(s,scope,[{...p(s,{facts:facts.map(f=>({...f,evidence:'负责人补充记录'}))}),sourceIds:[source]}]);
+ if(manual)s=applyAction(s,owner(s),{type:'revise',cardId:id,baseVersion:1,patch:{verdictReason:'人工改动'}});
+ s=applyOwnerAnnotations(s,scope);assert.deepEqual(s.proposals.map(p=>p.status),manual?['pending','pending']:['accepted','accepted']);assert.deepEqual(currentVersion(s.cards[id]).content.facts.map(f=>f.evidence),manual?facts.map(f=>f.evidence):['负责人补充记录','负责人补充记录']);assert.equal(currentVersion(s.cards[id]).signatures.length,0);}
+});
+
+test('明确@Nexus本人指令可自动，@Nexus反对语句仍不授权',()=>{
+ for(const text of ['@Nexus 把判定理由改为新理由','@Nexus 我不同意把判定理由改为新理由']){let s=fresh();s=applyAction(s,owner(s),{type:'message',cardId:id,baseVersion:1,block:'verdictReason',text});queueProposals(s,scope,[{...p(s,{verdictReason:'新理由'}),sourceIds:[s.messages.at(-1).id]}]);s=applyOwnerAnnotations(s,scope);assert.equal(s.proposals[0].status,text.includes('不同意')?'pending':'accepted');}
+});
+
+test('礼貌和空格正向指令可落正文，新值必须来自本人明确内容',()=>{
+ for(const text of ['请把判定理由改为新理由','请 把判定理由改为新理由','把判定理由改为 新理由']){let s=fresh();s=applyAction(s,owner(s),{type:'comment',cardId:id,baseVersion:1,block:'verdictReason',text});queueProposals(s,scope,[{...p(s,{verdictReason:'新理由'}),sourceIds:[s.comments.at(-1).id]}]);s=applyOwnerAnnotations(s,scope);assert.equal(s.proposals[0].status,'accepted',text);}
+ let s=fresh();s=applyAction(s,owner(s),{type:'comment',cardId:id,baseVersion:1,block:'verdictReason',text:'把判定理由改为新理由'});queueProposals(s,scope,[{...p(s,{verdictReason:'模型另添了已通过验收'}),sourceIds:[s.comments.at(-1).id]}]);s=applyOwnerAnnotations(s,scope);assert.equal(s.proposals[0].status,'pending');assert.equal(currentVersion(s.cards[id]).number,1);
+});
+test('个人群明确点名第二卡不借第一卡版本；真正手改后的旧来源仍不能自动',()=>{
+ let s=fresh();const second='rv:bf01-m2';s.cards[second]=structuredClone(s.cards[id]);s.cards[second].id=second;s.cards[second].versions[0].content.id=second;s.cards[second].versions[0].content.title='第二复盘';
+ s=applyAction(s,owner(s),{type:'revise',cardId:id,baseVersion:1,patch:{verdictReason:'第一卡新版本'}});
+ s=applyAction(s,owner(s),{type:'message',cardId:'rv:person:孙铭泽',text:'把第二复盘的判定理由改为第二卡新理由'});const source=s.messages.at(-1);assert.equal(source.general,true);assert.equal(source.version,2);
+ queueProposals(s,scope,[{cardId:second,baseVersion:1,patch:{verdictReason:'第二卡新理由'},sourceIds:[source.id]}]);s=applyOwnerAnnotations(s,scope);assert.equal(s.proposals[0].status,'accepted');assert.equal(currentVersion(s.cards[second]).content.verdictReason,'第二卡新理由');assert.equal(currentVersion(s.cards[id]).content.verdictReason,'第一卡新版本');
+});

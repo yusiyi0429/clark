@@ -12,7 +12,7 @@ export default function ProposalCard({proposal,node,onAction,onOpen,compact=fals
  const stamp=JSON.stringify([proposal.id,proposal.baseVersion,proposal.before,patch,proposal.reason]);
  useEffect(()=>{let active=true;setSummary(null);setError('');setFull(false);if(simpleComparison(proposal,node))return;readSummary(proposal.id,stamp).then(v=>{if(active)setSummary(v);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[stamp,retry]);
  useLayoutEffect(()=>{const observer=new ResizeObserver(([entry])=>setWidth(entry.borderBoxSize?.[0]?.inlineSize||entry.target.getBoundingClientRect().width));observer.observe(element.current);return()=>observer.disconnect();},[]);
- async function handle(type,extra){if(busy)return;setBusy(true);try{await onAction({type,cardId:proposal.cardId,proposalId:proposal.id,...(extra||{})});setRejecting(null);}finally{setBusy(false);}}
+ async function handle(type,extra){if(busy)return;setBusy(true);try{await onAction({type,cardId:proposal.cardId,proposalId:proposal.id,...(extra||{})});setRejecting(null);}catch(e){if(e.code!=='CANCELLED')throw e;}finally{setBusy(false);}}
  const reviewer=proposal.reviewerName||node?.owner||'成果负责人';
  const ref=node?.referenceLabel||'当前文档';
  const title=proposal.op==='add-mission'?`新增 ${proposal.mission?.title||'Mission'}`:proposal.op?`${proposal.op==='withdraw-mission'?'撤掉':'恢复'} ${proposal.missionSummary?.title||proposal.missionId}`:node?.level==='po'&&node?.title?.includes('：')?node.title.split('：')[0]:node?.title||ref;
