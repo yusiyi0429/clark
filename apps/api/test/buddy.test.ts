@@ -18,7 +18,7 @@ describe("本人的伙伴", () => {
       expect((await own()).json()).toEqual({ name: "团团", form: "panda" });
       const session = await t.app.inject({ method: "GET", url: "/api/auth/session", headers: { cookie } });
       expect(session.json()).toMatchObject({ buddy: { name: "团团", form: "panda" } });
-      expect((await save({ name: "蓝蓝", form: "whale" })).json()).toEqual({ name: "蓝蓝", form: "whale" });
+      expect((await save({ name: "蓝蓝", form: "alive" })).json()).toEqual({ name: "蓝蓝", form: "alive" });
       const other = await t.app.inject({ method: "GET", url: "/api/me/buddy", headers: { cookie: await t.loginCookie() } });
       expect(other.json()).toBeNull();
     } finally { await t.close(); }
@@ -37,10 +37,10 @@ describe("本人的伙伴", () => {
       const thirteen = "一二三四五六七八九十甲乙丙";
       const twelve = "一二三四五六七八九十甲乙";
       expect((await save({ name: thirteen, form: "panda" })).statusCode).toBe(400);
-      expect((await save({ name: "团团", form: "dog" })).statusCode).toBe(400);
+      expect((await save({ name: "团团", form: "cat" })).statusCode).toBe(400);
       expect((await save({ name: "团团" })).statusCode).toBe(400);
       expect((await t.app.inject({ method: "GET", url: "/api/me/buddy", headers: { cookie } })).json()).toBeNull();
-      expect((await save({ name: twelve, form: "capsule-alive" })).json()).toEqual({ name: twelve, form: "capsule-alive" });
+      expect((await save({ name: twelve, form: "classic" })).json()).toEqual({ name: twelve, form: "classic" });
     } finally { await t.close(); }
   });
 });

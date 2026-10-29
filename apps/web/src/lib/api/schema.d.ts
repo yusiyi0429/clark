@@ -4803,7 +4803,7 @@ export interface components {
             admin?: boolean;
             buddy?: {
                 name: string;
-                form: "capsule-classic" | "capsule-alive" | "capsule-panda" | "panda" | "cat" | "whale" | "drop";
+                form: "classic" | "alive" | "panda";
             } | null;
         };
         PeopleDirectoryResponse: {
@@ -9154,9 +9154,9 @@ export interface components {
         };
         Buddy: {
             name: string;
-            form: "capsule-classic" | "capsule-alive" | "capsule-panda" | "panda" | "cat" | "whale" | "drop";
+            form: "classic" | "alive" | "panda";
         };
-        BuddyForm: "capsule-classic" | "capsule-alive" | "capsule-panda" | "panda" | "cat" | "whale" | "drop";
+        BuddyForm: "classic" | "alive" | "panda";
         CreatePersonalTokenRequest: {
             name: string;
             client: "codex" | "claude" | "other" | "collector";

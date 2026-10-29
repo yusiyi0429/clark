@@ -21631,31 +21631,15 @@
                   "form": {
                     "anyOf": [
                       {
-                        "const": "capsule-classic",
+                        "const": "classic",
                         "type": "string"
                       },
                       {
-                        "const": "capsule-alive",
-                        "type": "string"
-                      },
-                      {
-                        "const": "capsule-panda",
+                        "const": "alive",
                         "type": "string"
                       },
                       {
                         "const": "panda",
-                        "type": "string"
-                      },
-                      {
-                        "const": "cat",
-                        "type": "string"
-                      },
-                      {
-                        "const": "whale",
-                        "type": "string"
-                      },
-                      {
-                        "const": "drop",
                         "type": "string"
                       }
                     ]
@@ -49898,31 +49882,15 @@
           "form": {
             "anyOf": [
               {
-                "const": "capsule-classic",
+                "const": "classic",
                 "type": "string"
               },
               {
-                "const": "capsule-alive",
-                "type": "string"
-              },
-              {
-                "const": "capsule-panda",
+                "const": "alive",
                 "type": "string"
               },
               {
                 "const": "panda",
-                "type": "string"
-              },
-              {
-                "const": "cat",
-                "type": "string"
-              },
-              {
-                "const": "whale",
-                "type": "string"
-              },
-              {
-                "const": "drop",
                 "type": "string"
               }
             ]
@@ -49932,31 +49900,15 @@
       "BuddyForm": {
         "anyOf": [
           {
-            "const": "capsule-classic",
+            "const": "classic",
             "type": "string"
           },
           {
-            "const": "capsule-alive",
-            "type": "string"
-          },
-          {
-            "const": "capsule-panda",
+            "const": "alive",
             "type": "string"
           },
           {
             "const": "panda",
-            "type": "string"
-          },
-          {
-            "const": "cat",
-            "type": "string"
-          },
-          {
-            "const": "whale",
-            "type": "string"
-          },
-          {
-            "const": "drop",
             "type": "string"
           }
         ]
