@@ -76,8 +76,8 @@ export type ConversationRuntime = {
   modelId?: string;
   run(input: {
     scope: TConversationScope;
-    /** 这一轮是谁在问：CEO 用 CEO Agent；成员用 DRI Agent（不带 CEO 决策面工具与首页全局上下文）。 */
-    viewer: { personId: string; displayName: string; role: SessionRole };
+    /** 这一轮是谁在问：CEO 用 CEO Agent；成员用 DRI Agent（不带 CEO 决策面工具与首页全局上下文）。buddyName：本人给伙伴起的名字，没选伙伴时没有。 */
+    viewer: { personId: string; displayName: string; role: SessionRole; buddyName?: string };
     message: string;
     currentObject: TReferenceSnapshot | null;
     runId?: string;

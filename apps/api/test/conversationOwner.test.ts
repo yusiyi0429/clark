@@ -156,3 +156,26 @@ describe("我的 Agent 按人私有", () => {
     }
   });
 });
+
+describe("伙伴的名字跟着本人进对话", () => {
+  it("本人选了伙伴后，runtime 收到的 viewer 带上伙伴名字；别人不受影响", async () => {
+    const runtime = recordingRuntime();
+    const t = await createTestApp({}, runtime);
+    try {
+      const ceo = await t.loginCookie();
+      const member = await t.memberCookie();
+      const send = (cookie: string) => t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "在吗" } });
+      expect((await t.app.inject({ method: "PUT", url: "/api/me/buddy", headers: { cookie: member, origin: t.publicOrigin },
+        payload: { name: "团团", form: "panda" } })).statusCode).toBe(200);
+      expect((await send(member)).statusCode).toBe(200);
+      expect((await send(ceo)).statusCode).toBe(200);
+      expect(runtime.viewers).toEqual([
+        { personId: TEST_MEMBER.personId, displayName: "测试乙", role: "member", buddyName: "团团" },
+        { personId: TEST_CEO.personId, displayName: "测试甲", role: "ceo" },
+      ]);
+    } finally {
+      await t.close();
+    }
+  });
+});

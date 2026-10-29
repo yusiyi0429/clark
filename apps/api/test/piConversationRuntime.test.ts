@@ -980,3 +980,23 @@ describe("controlled Pi conversation adapter public behavior", () => {
     }
   });
 });
+
+describe("伙伴的名字进人设（spec 5.5）", () => {
+  async function prompts(viewer: { personId: string; displayName: string; role: "ceo" | "member"; buddyName?: string }) {
+    const seen: string[] = [];
+    const runtime = await createPiConversationRuntime({ peopleDirectory: loadPeopleDirectory(testEnv),
+      baseUrl: "https://provider.invalid/v1/responses", apiKey: "test-key", modelId: "fake-light",
+      streamSimple: (_model, context) => { seen.push(context.systemPrompt ?? ""); return stream(message([{ type: "text", text: "在。" }], "stop")); } });
+    try {
+      await runtime.run({ scope: "signal:11111111-1111-4111-8111-111111111111", viewer, message: "你叫什么", currentObject: null,
+        referencesSnapshot: [], runtimeEntries: [], piSessionId: randomUUID(), signal: new AbortController().signal, emit: () => undefined });
+    } finally { await runtime.close?.(); }
+    return seen.join("\n");
+  }
+
+  it("有伙伴时提示里写明它叫什么、是谁的伙伴；CEO 写「CEO 的伙伴」；没有伙伴时不写", async () => {
+    expect(await prompts({ ...MEMBER_VIEWER, buddyName: "团团" })).toContain("你叫团团，是测试乙的伙伴。");
+    expect(await prompts({ ...CEO_VIEWER, buddyName: "圆圆" })).toContain("你叫圆圆，是 CEO 的伙伴。");
+    expect(await prompts(MEMBER_VIEWER)).not.toContain("的伙伴。");
+  });
+});
