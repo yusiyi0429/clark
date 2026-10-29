@@ -2,13 +2,13 @@ import {currentVersion} from './governance.mjs';
 import {splitProposal} from './proposal-units.mjs';
 const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const sourceCurrent=(state,p)=>[p.fromParent,p.fromMission].every(ref=>!ref||state.cards[ref.id]&&currentVersion(state.cards[ref.id]).number===ref.version);
-const sameSuggestion=(a,b)=>a.cardId===b.cardId&&(a.op||null)===(b.op||null)&&(a.op?equal([a.missionId,a.mission],[b.missionId,b.mission]):(equal(a.patch,b.patch)||a.originalPatch&&equal(a.originalPatch,b.patch)));
+const sameSuggestion=(a,b,original=false)=>a.cardId===b.cardId&&(a.op||null)===(b.op||null)&&(a.op?equal([a.missionId,a.mission],[b.missionId,b.mission]):(equal(a.patch,b.patch)||original&&a.originalPatch&&equal(a.originalPatch,b.patch)));
 // A model's intention is not a delivered card. Inspect the result of the actual state transaction.
 export function proposalDelivery(state,previousIds,scope,planned){
  const saved=(state.proposals||[]).filter(p=>p.scope===scope&&!previousIds.has(p.id)&&!p.carriedFrom&&['pending','accepted'].includes(p.status));
  const units=planned.flatMap(p=>splitProposal(p,state.cards[p.cardId]?.versions.find(v=>v.number===p.baseVersion)?.content||{}));
  const outcomes=units.map(p=>{
-  const created=saved.filter(q=>sameSuggestion(q,p));if(created.length)return {cardId:p.cardId,status:'saved',proposalIds:created.map(q=>q.id)};
+  const created=saved.filter(q=>sameSuggestion(q,p,true));if(created.length)return {cardId:p.cardId,status:'saved',proposalIds:created.map(q=>q.id)};
   const card=state.cards[p.cardId],v=card&&currentVersion(card);
   if(!p.op&&v&&Object.keys(p.patch||{}).length&&Object.entries(p.patch||{}).every(([key,value])=>equal(v.content[key],value)))return {cardId:p.cardId,status:'unchanged'};
   const existing=(state.proposals||[]).find(q=>q.scope===scope&&q.status==='pending'&&q.baseVersion===v?.number&&sourceCurrent(state,q)&&sameSuggestion(q,p));

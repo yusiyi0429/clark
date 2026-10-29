@@ -33,3 +33,8 @@ test('独立ref拆成两张按实际2张计数，剩余旧carriedFrom不冒充�
 test('已自动应用的实际卡也算交付，保留auto且不代签',()=>{
  let s=fresh(),owner={id:'member-03',name:'孙铭泽',visibleUnits:[scope],missionDri:[id]};s=applyAction(s,owner,{type:'comment',cardId:id,baseVersion:1,block:'result',text:'把成果改为本人新成果'});const p=make({result:'本人新成果'},{sourceIds:[s.comments.at(-1).id]}),ids=new Set((s.proposals||[]).map(p=>p.id));queueProposals(s,scope,[p]);s=applyOwnerAnnotations(s,scope);const d=proposalDelivery(s,ids,scope,[p]);assert.equal(d.saved.length,1);assert.equal(d.saved[0].status,'accepted');assert.equal(d.saved[0].auto,true);assert.equal(currentVersion(s.cards[id]).signatures.length,0);
 });
+
+test('同批建议部分被后续项替换，历史originalPatch不冒充现有相同pending',()=>{
+ const s=fresh(),a=make({result:'旧本轮建议',checks:['保留验收']},{originSequence:1}),b=make({result:'最新本轮建议'},{originSequence:2}),d=commit(s,[a,b]);
+ assert.equal(d.saved.length,1);assert.equal(d.saved[0].patch.result,'最新本轮建议');assert.ok(s.proposals.some(p=>p.carriedFrom&&p.patch.checks));assert.deepEqual(d.outcomes.map(o=>o.status),['skipped','saved']);assert.doesNotMatch(deliveryNotice(d),/已有相同/);
+});
