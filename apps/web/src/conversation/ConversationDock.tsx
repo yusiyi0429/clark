@@ -37,6 +37,7 @@ const ATTACH_EXIT_MS = 340;
 export const ConversationDock = memo(function ConversationDock({
   data,
   label,
+  agentName,
   global,
   detail,
   keyboard,
@@ -307,7 +308,7 @@ export const ConversationDock = memo(function ConversationDock({
               if (voiceIntroDue()) setVoiceKeys(true);
             }} aria-expanded={false}>
               <MessageCircle size={18} strokeWidth={1.8} aria-hidden />
-              <span>对话天枢</span>
+              <span>对话{agentName ?? "天枢"}</span>
             </button>
           </div>
           <div className={d.textLayer} aria-hidden={!keyboard} inert={!keyboard}>
@@ -395,6 +396,8 @@ export const ConversationDock = memo(function ConversationDock({
 type DockProps = {
   data: ConversationData;
   label: string;
+  /** 本人给伙伴起的名字：收起时的主按钮写「对话<名字>」，没选伙伴时写「对话天枢」。 */
+  agentName?: string;
   /** 全局对话：引用只属于它（clark：引用为全局对话准备草稿）。 */
   global: boolean;
   /** 在二级页里（外壳把输入条移进右侧对话列）。 */

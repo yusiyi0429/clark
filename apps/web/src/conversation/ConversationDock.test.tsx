@@ -114,6 +114,12 @@ describe("全局输入条（clark workspace 614–640）", () => {
     expect(html).not.toContain("对话记录");
   });
 
+  it("选了伙伴：主按钮写伙伴的名字「对话团团」", () => {
+    const html = dock({ agentName: "团团" });
+    expect(html).toContain("对话团团");
+    expect(html).not.toContain("对话天枢");
+  });
+
   it("键盘面：首页占位「问点什么，或者说要约的会…」，二级页「继续讨论…」，批注后改为围绕批注", () => {
     expect(dock({ keyboard: true })).toContain('placeholder="问点什么，或者说要约的会…"');
     expect(dock({ keyboard: true })).toContain('aria-label="全局对话输入"');

@@ -28,7 +28,7 @@ import { MissionGroupTranscript } from "./MissionGroupTranscript";
 import { MissionGroupComposer } from "./MissionGroupComposer";
 import { PresenceCapsule } from "@/components/coagent/PresenceCapsule";
 import { useListening } from "@/components/coagent/presence";
-import { useBuddy } from "@/components/buddy/useBuddy";
+import { useBuddy, type Buddy } from "@/components/buddy/useBuddy";
 import type { DetailGroup } from "./missionCardGroup";
 import { MESSAGE_REPLY, type QuotePrefill, type QuoteSource, type TextQuote } from "./quotes";
 import groupStyles from "@/styles/mission-group.module.css";
@@ -94,10 +94,12 @@ export function ConversationHost({
 }) {
   const onPage = Boolean(detailOpen && page && !ui.globalView);
   const target = onPage && page ? page : GLOBAL;
-  return <ScopedConversation key={target.scope} target={target} detailOpen={detailOpen} rail={rail} agentTitle={agentTitle} ui={ui} />;
+  // 本人的伙伴（spec 5.5）：首页输入条和右列页头都用它的名字，右列胶囊用它选的样子；在这里读一次，换页不重读。
+  const { buddy } = useBuddy();
+  return <ScopedConversation key={target.scope} target={target} detailOpen={detailOpen} rail={rail} agentTitle={agentTitle} buddy={buddy} ui={ui} />;
 }
 
-function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { target: ConversationTarget; detailOpen: boolean; rail: boolean; agentTitle: string; ui: ConversationUiState }) {
+function ScopedConversation({ target, detailOpen, rail, agentTitle, buddy, ui }: { target: ConversationTarget; detailOpen: boolean; rail: boolean; agentTitle: string; buddy: Buddy | null; ui: ConversationUiState }) {
   const router = useRouter();
   const [viewingMaterial, setViewingMaterial] = useState<{ id: string; editable: boolean; format?: string } | null>(null);
   useEffect(() => {
@@ -170,7 +172,7 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { targ
   const scopeQuotes = useMemo(() => ui.quotes.filter((item) => item.source?.scope === target.scope), [ui.quotes, target.scope]);
 
   if (rail && !ui.historyOpen) {
-    return <RailConversation data={data} target={target} agentTitle={agentTitle} ui={ui} references={global ? [] : items} onDiscussGlobal={discussGlobal} />;
+    return <RailConversation data={data} target={target} agentTitle={agentTitle} buddy={buddy} ui={ui} references={global ? [] : items} onDiscussGlobal={discussGlobal} />;
   }
 
   return (
@@ -187,6 +189,7 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, ui }: { targ
       <ConversationDock
         data={data}
         label={target.label}
+        agentName={buddy?.name}
         global={global}
         detail={detailOpen}
         keyboard={ui.historyOpen}
@@ -221,6 +224,7 @@ function RailConversation({
   data,
   target,
   agentTitle,
+  buddy,
   ui,
   references,
   onDiscussGlobal,
@@ -228,6 +232,7 @@ function RailConversation({
   data: ConversationData;
   target: ConversationTarget;
   agentTitle: string;
+  buddy: Buddy | null;
   ui: ConversationUiState;
   references: Card[];
   onDiscussGlobal: () => void;
@@ -256,7 +261,6 @@ function RailConversation({
   const group = useMissionGroup(missionGroup, groupVisible);
   const thread = useThreadGroup(otherThread?.objectType ?? "task", taskGroup?.taskId ?? otherThread?.objectId, groupVisible);
   const listening = useListening(target.scope);
-  const { buddy } = useBuddy();
   // 新人第一次进群、群里有 Co-Agent 讲的来龙去脉：群聊看得见时，胶囊出现几秒，那段话同时亮一下。每段只一次。
   const [catchUp, setCatchUp] = useState<{ id: number; leaving: boolean } | null>(null);
   const shownCatchUps = useRef(new Set<number>());

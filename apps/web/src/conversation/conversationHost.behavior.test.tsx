@@ -402,4 +402,14 @@ describe("伙伴露脸（spec 5.5）", () => {
     expect(rail().channels[0].title).toBe("团团");
     expect(rail().coagent?.props.skin).toBe("panda");
   });
+
+  it("首页输入条收起时的主按钮也用伙伴的名字；没有伙伴时不传", () => {
+    const { props, render } = setup();
+    props.rail = false;
+    render();
+    expect((harness.dock as unknown as { agentName?: string }).agentName).toBeUndefined();
+    harness.buddy = { name: "团团", form: "classic" };
+    render();
+    expect((harness.dock as unknown as { agentName?: string }).agentName).toBe("团团");
+  });
 });
