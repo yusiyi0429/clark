@@ -68,9 +68,18 @@ export function insightOwed(state,card){
  return [...new Set(confirmationSlots(card).map(slot=>slotHolder(state,card,slot)).flatMap(n=>String(n||'').split(/[、,，\s]+/)).filter(Boolean))];
 }
 // Confirmed snapshots survive later drafts, and are scoped to the current review round.
+function legacyConfirmedInsights(state,card){
+ const confirmed=card.versions.find(v=>v.number===card.confirmedVersion),times=(confirmed?.signatures||[]).filter(s=>s.slot==='missionDri').map(s=>Date.parse(s.createdAt)).filter(Number.isFinite),cutoff=times.length?Math.max(...times):null;
+ if(cutoff==null)return [];
+ // Edited text newer than (or indistinguishable from) confirmation cannot stand in for lost old text.
+ return (state.insights?.[card.id]||[]).filter(x=>Number.isFinite(Date.parse(x.createdAt))&&Date.parse(x.createdAt)<=cutoff&&(!x.updatedAt||Date.parse(x.updatedAt)<cutoff));
+}
 export function publishedMissionInsights(state,card){
- const saved=state.insightPublications?.[card.id];
- return saved? saved.items : card.confirmedVersion===currentVersion(card).number ? (state.insights?.[card.id]||[]) : [];
+ const saved=state.insightPublications?.[card.id];return saved?saved.items:legacyConfirmedInsights(state,card);
+}
+function freezeLegacyInsights(state,card){
+ if(!isReview(card)||card.level!=='mission'||!card.confirmedVersion||state.insightPublications?.[card.id])return;
+ state.insightPublications??={};state.insightPublications[card.id]={version:card.confirmedVersion,items:structuredClone(legacyConfirmedInsights(state,card)),legacy:true};
 }
 // What one member sees of a review's insights: before the reveal, who wrote how many and their own; after, everything.
 export function insightView(state,card,actor){
@@ -187,6 +196,7 @@ export function applyAction(previous,actor,action){
   card=Object.values(state.cards).find(c=>isReview(c)&&c.level==='mission'&&roomOf(c)===personRoomOf(who));if(!card)fail(404,'没有你的个人复盘');action={...action,general:true};}
  if(!card||!canRead(actor,card)&&actor.kind!=='coagent')fail(403,'不在当前领域可见范围内');
  const v=currentVersion(card),now=new Date().toISOString();
+ freezeLegacyInsights(state,card);
  if(action.type==='revise'){
   {const lock=reviewLock(state,card);if(lock)fail(409,lock.reason);}
   const verdictCard=action.viaProposal&&(state.proposals||[]).find(p=>p.id===action.viaProposal&&p.verdictChange);
@@ -245,8 +255,8 @@ export function applyAction(previous,actor,action){
    const notify=(label,from,to,scope)=>{if(from===to)return;groupNotice(state,card,`${nameOf(actor.id)}将${label}从「${from||'未判定'}」改为「${to||'未判定'}」。`,scope);state.messages.at(-1).reviewTransition={cardId:card.id,version:v.number+1,from,to,label};};
    if(card.level==='mission'){
     if(changed.includes('verdict'))notify(titleOf(card),v.content.verdict,content.verdict,unitOf(card));
-    const beforeFacts=new Map((v.content.facts||[]).filter(f=>f.ref||f.id).map(f=>[f.ref||f.id,f]));
-    for(const fact of content.facts||[]){const old=beforeFacts.get(fact.ref||fact.id);if(old&&old.status!==fact.status)notify(`「${fact.item}」`,old.status,fact.status,roomOf(card));}
+    const rows=v.content.facts||[],afterRows=content.facts||[],key=f=>f.ref||f.id,unique=(list,id)=>!!id&&list.filter(f=>key(f)===id).length===1;
+    for(const fact of afterRows){const ref=key(fact),old=unique(rows,ref)&&unique(afterRows,ref)?rows.find(f=>key(f)===ref):null;if(old&&old.status!==fact.status)notify(`「${fact.item}」`,old.status,fact.status,roomOf(card));}
    }else if(card.level==='task'&&changed.includes('verdict')){const parentReview=state.cards[card.parentId];if(parentReview)notify(titleOf(card),v.content.verdict,content.verdict,roomOf(parentReview));}
   }
   retireCascadeCards(state,card,v.number+1);
@@ -307,7 +317,7 @@ export function applyAction(previous,actor,action){
   if(!v.signatures.some(s=>s.slot===slot))v.signatures.push({slot,actorId:actor.id,version:v.number,createdAt:now});
   // Signing after the 下级有调整 notice is having looked at it.
   if(card.downstreamChange&&(actor.ceo||mayRevise(actor,card)))delete card.downstreamChange;
-  if(slots.every(s=>v.signatures.some(x=>x.slot===s))){card.confirmedVersion=v.number;if(isReview(card)&&card.level==='mission'){state.insightPublications??={};state.insightPublications[card.id]={version:v.number,items:structuredClone(state.insights?.[card.id]||[]),publishedAt:now};}retireCascadeCards(state,card,v.number);
+  if(slots.every(s=>v.signatures.some(x=>x.slot===s))){card.confirmedVersion=v.number;if(isReview(card)&&card.level==='mission'){state.insightPublications??={};state.insightPublications[card.id]={version:v.number,items:structuredClone(state.insights?.[card.id]||[]),publishedAt:now};if(state.insightNexus){delete state.insightNexus[card.id];delete state.insightNexus[card.parentId];for(const c of Object.values(state.cards))if(isReview(c)&&c.level==='company')delete state.insightNexus[c.id];}}retireCascadeCards(state,card,v.number);
    // Confirming the company review starts next month's decomposition; the server picks this up.
    if(isReview(card)&&card.level==='company')state.planHandoff={status:'requested',requestedAt:now,reviewVersion:v.number};
    // The whole unit is done: everyone in its group hears it once.
@@ -330,7 +340,7 @@ export function applyAction(previous,actor,action){
    else{const text=typeof action.text==='string'?action.text.trim():'';if(!text||text.length>4000)fail(400,'请写下你的洞察（4000 字以内）');list[i]={...list[i],text,updatedAt:now};}
   }
   // After the reveal (陈溪南 2026-10-27): late insights are welcome, show in the group like comments, and Nexus redoes this card's and the company's synthesis.
-  if(state.insightsRevealed){
+  if(state.insightsRevealed&&card.level!=='mission'){
    // Revealed insights are the unit's to read, so a late one goes to the unit group, a 个人复盘's included.
    if(action.type!=='deleteInsight')groupNotice(state,card,`${actor.name}${action.type==='insight'?'在':'改了在'}${titleOf(card)}下的分析洞察：${String(action.text).trim().slice(0,300)}`,unitOf(card));
    if(state.insightNexus){delete state.insightNexus[card.id];if(card.level==='mission'&&card.parentId)delete state.insightNexus[card.parentId];const company=Object.values(state.cards).find(c=>isReview(c)&&c.level==='company');if(company)delete state.insightNexus[company.id];}

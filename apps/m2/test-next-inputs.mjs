@@ -76,7 +76,7 @@ test('截止时间：复盘装入后 48 小时，投影和通知卡片都带着'
 
 test('公司复盘的 Nexus 综合读所有复盘下的洞察，按复盘分组；其他复盘只读自己的',()=>{
  const s=fresh();s.insights={'rv:bf01-m1':[{id:'i1',author:'member-03',text:'客户窗口靠单点联系'}],'rv:company':[{id:'i2',author:'member-01',text:'目标定得太满'}]};
- s.cards['rv:bf01-m1'].confirmedVersion=1;
+ s.cards['rv:bf01-m1'].confirmedVersion=1;s.cards['rv:bf01-m1'].versions[0].signatures=[{slot:'missionDri',createdAt:'2026-10-29T03:00:00Z'}];s.insights['rv:bf01-m1'][0].createdAt='2026-10-28T01:00:00Z';
  const name=id=>({'member-01':'刘明华','member-03':'孙铭泽'})[id]||id;
  const company=JSON.parse(insightSynthesisRequest(s,s.cards['rv:company'],'',name)[1].content);
  assert.deepEqual(company.insights,[{author:'刘明华',text:'目标定得太满'}]);
@@ -93,12 +93,11 @@ test('确认前至少贴一条洞察：应交洞察的人没交，从任何入�
  assert.ok(currentVersion(s.cards['rv:bf01-m1']).signatures.some(x=>x.slot==='missionDri'));
 });
 
-test('公开后还能补交洞察：补交的进群里，这份复盘和公司复盘的 Nexus 综合作废重写',()=>{
- let s=fresh();const sun=memberActor('member-03',s);
- s.insightsRevealed={at:'2026-10-29T02:33:00.000Z',by:'auto'};s.insightNexus={'rv:bf01-m1':{text:'旧综合'},'rv:company':{text:'公司旧综合'},'rv:bf01':{text:'单元综合'}};
- s=applyAction(s,sun,{type:'insight',cardId:'rv:bf01-m1',text:'演示和真用要分开验收'});
- assert.match(s.messages.at(-1).text,/孙铭泽在「首用」下的分析洞察：演示和真用要分开验收/);assert.equal(s.messages.at(-1).scope,'bf01','公开后的洞察进单元群');
- assert.equal(s.insightNexus['rv:bf01-m1'],undefined);assert.equal(s.insightNexus['rv:company'],undefined);assert.equal(s.insightNexus['rv:bf01'],undefined,'单元复盘的综合也读 Mission 洞察，一起重写');
+test('公开后个人洞察补交仍私密，确认后再刷新公开综合',()=>{
+ let s=fresh();const actor=memberActor('member-03',s);s.insightsRevealed={at:'2026-10-29T02:33:00.000Z'};s.insightNexus={'rv:bf01-m1':{text:'旧综合'},'rv:company':{text:'旧公司综合'}};
+ s=applyAction(s,actor,{type:'insight',cardId:'rv:bf01-m1',text:'演示和真用要分开验收'});
+ assert.ok(!s.messages.some(m=>m.text.includes('演示和真用要分开验收')));assert.equal(s.insightNexus['rv:company'].text,'旧公司综合');
+ s=applyAction(s,actor,{type:'confirm',cardId:'rv:bf01-m1',baseVersion:1,slot:'missionDri'});assert.equal(s.insightNexus['rv:company'],undefined);
 });
 
 test('程序检查没过的那份单独重写一次再查，不整轮作废；重写还不对的照样挡住',async()=>{

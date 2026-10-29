@@ -1,8 +1,10 @@
+import {readableField,parseReadableField} from './readable-markdown.mjs';
 import {createHash} from 'node:crypto';
 import {applyAction,canRead,currentVersion,isReview,mayRevise} from './governance.mjs';
 import {editableTemplateFields,documentFieldLabel} from './document-template.mjs';
 const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const fail=(message,status=400)=>{throw Object.assign(Error(message),{status});};
+const commentJSON=value=>JSON.stringify(value).replace(/</g,'\\u003c').replace(/>/g,'\\u003e');
 const reviewKeys=['verdict','verdictReason','facts','targets','causes','nextInputs','ltoReview'];
 export function transferFields(card){return isReview(card)?reviewKeys.filter(k=>k in currentVersion(card).content):editableTemplateFields(card.level,currentVersion(card).content).map(([k])=>k).filter(k=>k in currentVersion(card).content);}
 export function transferCards(state,actor,{stage,rootId,person}){
@@ -16,20 +18,28 @@ export function transferCards(state,actor,{stage,rootId,person}){
 export function transferStamp(state,cards){return createHash('sha256').update(JSON.stringify([state.round?.id,state.reviewRound?.loadedAt,cards.map(c=>[c.id,currentVersion(c).number])])).digest('hex');}
 export function exportMarkdown(state,actor,selection,{blank=false}={}){
  const cards=transferCards(state,actor,selection);
- const blocks=cards.map(c=>{const v=currentVersion(c);return `## ${v.content.title||c.id}\n<!-- m2-object:${JSON.stringify({id:c.id,version:v.number,level:c.level})} -->\n\n`+transferFields(c).map(k=>{let value=v.content[k];if(blank)value=['facts','nextInputs'].includes(k)&&Array.isArray(value)?value.map(row=>Object.fromEntries(Object.entries(row).map(([key,val])=>[key,['ref','id','owner','item','type'].includes(key)?val:typeof val==='string'?'':Array.isArray(val)?[]:val&&typeof val==='object'?{}:val]))):Array.isArray(value)?[]:typeof value==='object'&&value?{}:'';return `### ${documentFieldLabel(c.level,k)} <!-- field:${k} -->\n\n\`\`\`json\n${JSON.stringify(value,null,2)}\n\`\`\`\n`;}).join('\n');});
- return `# TKOS MD · v1\n\n<!-- tkos-md:1 -->\n\n${blocks.join('\n')}`;
+ const blocks=cards.map(c=>{const v=currentVersion(c);return `## ${readableField('title',v.content.title||c.id).body}\n<!-- m2-object:${commentJSON({id:c.id,version:v.number,level:c.level})} -->\n\n`+transferFields(c).map(k=>{
+  const {meta,body}=readableField(k,v.content[k],{blank});
+  return `### ${documentFieldLabel(c.level,k)}\n<!-- m2-field:${commentJSON(meta)} -->\n\n${body}\n\n<!-- /m2-field -->\n`;
+ }).join('\n');});
+ return `# ${selection.stage==='review'?'复盘':'拆解'}\n\n<!-- tkos-md:2 -->\n\n${blocks.join('\n')}`;
 }
 export function parseStandardMarkdown(text){
  if(typeof text!=='string'||Buffer.byteLength(text)>512000)fail('文件过大，最多500 KB');
- if(!text.includes('<!-- tkos-md:1 -->'))return null;
+ text=text.replace(/\r\n/g,'\n');
+ if(!text.includes('<!-- tkos-md:2 -->'))return null;
  const sections=text.split(/<!-- m2-object:([^\n]*?) -->/);if(sections.length===1)fail('标准模板中没有对象');
- const out=[];const seen=new Set();
+ const out=[],seen=new Set();
  for(let i=1;i<sections.length;i+=2){let identity;try{identity=JSON.parse(sections[i]);}catch{fail('对象标记格式错误');}
   if(!identity||typeof identity.id!=='string'||!Number.isInteger(identity.version)||Object.keys(identity).some(k=>!['id','version','level'].includes(k)))fail('对象标记格式错误');
   if(seen.has(identity.id))fail('同一对象重复出现');seen.add(identity.id);
   const fields={},source=sections[i+1];let matches=0;
-  for(const m of source.matchAll(/<!-- field:([a-zA-Z]+) -->\s*```json\s*\n([\s\S]*?)\n```/g)){if(m[1] in fields)fail('同一字段重复出现');try{fields[m[1]]=JSON.parse(m[2]);}catch{fail(`字段${m[1]}的JSON格式错误`);}matches++;}
-  if(!matches||matches!==(source.match(/<!-- field:/g)||[]).length)fail('字段模板不完整，请保留字段标记与JSON围栏');
+  for(const m of source.matchAll(/<!-- m2-field:([^\n]*?) -->\n\n([\s\S]*?)\n\n<!-- \/m2-field -->/g)){
+   let meta;try{meta=JSON.parse(m[1]);}catch{fail('字段标记格式错误');}
+   if(!meta||typeof meta.key!=='string'||meta.key in fields)fail('字段重复或不明确');
+   fields[meta.key]=parseReadableField(meta,m[2]);matches++;
+  }
+  if(!matches||matches!==(source.match(/<!-- m2-field:/g)||[]).length||matches!==(source.match(/<!-- \/m2-field -->/g)||[]).length)fail('字段模板不完整，请保留隐藏标记');
   out.push({id:identity.id,version:identity.version,fields});
  }
  return out;
@@ -67,6 +77,6 @@ export const markdownImportPrompt='你只将用户主动导入的文件映射为
 // New leaf values from model normalization must be present in the uploaded text, not invented from instructions.
 export function assertImportGrounded(state,objects,text){
  const normalized=v=>String(v).replace(/[\s*#`>：:，,。；;、"“”「」]/g,''),source=normalized(text);
- const visit=(value,old)=>{if(equal(value,old))return;if(typeof value==='string'||typeof value==='number'){if(String(value).trim()&&!source.includes(normalized(value)))fail('整理结果含文件中未提供的内容，请用标准模板导入',422);}else if(Array.isArray(value))value.forEach((v,i)=>visit(v,old?.[i]));else if(value&&typeof value==='object')for(const [k,v]of Object.entries(value))visit(v,old?.[k]);};
+ const visit=(value,old)=>{if(equal(value,old))return;if(typeof value==='string'||typeof value==='number'){const clauses=String(value).split(/[。！？；;\n]+/).map(normalized).filter(Boolean);if(clauses.some(clause=>!source.includes(clause)))fail('整理结果含文件中未提供的内容，请用标准模板导入',422);}else if(Array.isArray(value))value.forEach((v,i)=>visit(v,old?.[i]));else if(value&&typeof value==='object')for(const [k,v]of Object.entries(value))visit(v,old?.[k]);};
  for(const row of objects||[])visit(row.fields,currentVersion(state.cards[row.id]||{versions:[{content:{}}]}).content);
 }

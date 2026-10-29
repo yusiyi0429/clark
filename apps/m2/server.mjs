@@ -366,7 +366,7 @@ export const server=createServer(async(req,res)=>{
    if(before)actionFeedback(tracer,before,next,b.action,actor);
    runCascades();
    if(next.planHandoff?.status==='requested'){await prepareHandoff();next=store.snapshot();}
-   if(['insight','editInsight','deleteInsight'].includes(b.action.type)&&next.insightsRevealed)synthesizeInsights().catch(()=>{});
+   if(['insight','editInsight','deleteInsight','confirm'].includes(b.action.type)&&next.insightsRevealed)synthesizeInsights().catch(()=>{});
    if(['message','comment'].includes(b.action.type)){const event=next[b.action.type==='comment'?'comments':'messages'].at(-1);if(!event.acceptedProposalId)await scheduleNexus(event.scope,actor.id,event);}
    // A rejection with a reason is a line in the group too; Nexus answers it like any reply.
    if(b.action.type==='rejectProposal'){const event=next.messages.at(-1);if(event?.rejectsProposal===b.action.proposalId)await scheduleNexus(event.scope,actor.id,event);}

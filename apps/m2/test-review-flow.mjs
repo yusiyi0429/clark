@@ -64,3 +64,34 @@ test('重新装入复盘将已确认洞察快照归档，旧快照不串入新�
  const next=installReviewRound(s,{period:'2026-11',reviews:[{unit:'bf01',level:'mission',ref:'bf01-m1',parent:'bf01',title:'新复盘',owner:'孙铭泽',verdict:'未达成',verdictReason:'新',facts,nextInputs:[]}]});
  assert.equal(next.insightPublications,undefined);assert.ok(next.reviewArchives.some(a=>a.insightPublications?.[id]?.items?.[0]?.text==='上一轮已确认洞察'));
 });
+
+test('privacy: unconfirmed new insight after reveal never enters group',()=>{
+ let s=fresh();const a=memberActor('member-03',s),ceo=memberActor('member-01',s);s.insightsRevealed={at:new Date().toISOString()};
+ s=applyAction(s,a,{type:'insight',cardId:id,text:'PRIVATE_UNCONFIRMED_NEW'});
+ assert.ok(!JSON.stringify(sharedProjection(s,ceo).records).includes('PRIVATE_UNCONFIRMED_NEW'));
+});
+test('privacy: edit after confirmed snapshot never broadcasts draft',()=>{
+ let s=fresh();const a=memberActor('member-03',s),ceo=memberActor('member-01',s);
+ s=applyAction(s,a,{type:'insight',cardId:id,text:'CONFIRMED_ORIGINAL'});s=applyAction(s,a,{type:'confirm',cardId:id,baseVersion:1,slot:'missionDri'});s.insightsRevealed={at:new Date().toISOString()};
+ s=applyAction(s,a,{type:'editInsight',cardId:id,insightId:s.insights[id][0].id,text:'PRIVATE_POST_CONFIRM_EDIT'});
+ assert.equal(insightView(s,s.cards[po],ceo).items[0].text,'CONFIRMED_ORIGINAL');assert.ok(!JSON.stringify(sharedProjection(s,ceo).records).includes('PRIVATE_POST_CONFIRM_EDIT'));
+});
+test('privacy: legacy confirmed data without publication cannot leak later edit',()=>{
+ let s=fresh();const a=memberActor('member-03',s),ceo=memberActor('member-01',s);
+ s=applyAction(s,a,{type:'insight',cardId:id,text:'LEGACY_CONFIRMED'});s=applyAction(s,a,{type:'confirm',cardId:id,baseVersion:1,slot:'missionDri'});delete s.insightPublications;
+ s=applyAction(s,a,{type:'editInsight',cardId:id,insightId:s.insights[id][0].id,text:'PRIVATE_LEGACY_EDIT'});
+ assert.ok(!JSON.stringify(insightView(s,s.cards[po],ceo)).includes('PRIVATE_LEGACY_EDIT'));
+});
+test('notice: duplicate refs with unchanged row statuses must not fake transition',()=>{
+ let s=fresh();const a=memberActor('member-03',s);const rows=[{...facts[0],ref:'dup',status:'未达成'},{...facts[1],ref:'dup',status:'达成'}];s.cards[id].versions[0].content.facts=rows;
+ s=revise(s,a,{facts:rows.map(x=>({...x,evidence:x.evidence+'补来源'}))});assert.equal(s.messages.filter(m=>m.reviewTransition).length,0);
+});
+
+test('旧确认值缺签字时间或编辑晚于签字时不冒充已确认文本',()=>{
+ for(const mode of ['no-signature-time','edited-later']){
+  let s=fresh(),actor=memberActor('member-03',s),ceo=memberActor('member-01',s);s=applyAction(s,actor,{type:'insight',cardId:id,text:'不能证实的旧文本'});s=applyAction(s,actor,{type:'confirm',cardId:id,baseVersion:1,slot:'missionDri'});delete s.insightPublications;
+  if(mode==='no-signature-time')delete s.cards[id].versions[0].signatures[0].createdAt;else s.insights[id][0].updatedAt='2099-01-01T00:00:00Z';
+  assert.equal(insightView(s,s.cards[po],ceo).items.length,0);
+  s=applyAction(s,actor,{type:'editInsight',cardId:id,insightId:s.insights[id][0].id,text:'新草稿'});assert.equal(insightView(s,s.cards[po],ceo).items.length,0);
+ }
+});
