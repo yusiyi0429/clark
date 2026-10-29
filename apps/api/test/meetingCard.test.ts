@@ -474,8 +474,8 @@ describe("会后待确认入口", () => {
     const { t, ceo, host, owner, meetingId } = await setup(cardAgent().agent, { createdBy: CEO });
     try {
       expect(await myCards(t, owner)).toEqual({ meetings: [], confirms: [
-        { meetingId, title: "接口切换会", kind: "decision", id: "dec-1", text: "接口统一改成 v2", dueDate: null },
-        { meetingId, title: "接口切换会", kind: "action", id: "act-1", text: "渠道看板接到 v2", dueDate: "2026-06-30" },
+        { meetingId, title: "接口切换会", kind: "decision", id: "dec-1", text: "接口统一改成 v2", dueDate: null, needsOwner: false },
+        { meetingId, title: "接口切换会", kind: "action", id: "act-1", text: "渠道看板接到 v2", dueDate: "2026-06-30", needsOwner: false },
       ] });
       expect(await myCards(t, host)).toEqual({ meetings: [], confirms: [] });
       expect(await myCards(t, ceo)).toEqual({ meetings: [], confirms: [] });

@@ -155,8 +155,8 @@ export function MeetingRecordCard({ meetingId, initial, onView, turns = [], spea
       ) : null}
 
       {view.decisions?.length ? (
-        <MeetingDecisionList decisions={view.decisions} sections={content.sections} hostId={view.hostId} viewerId={view.viewerId}
-          frozen={Boolean(confirmed)} busy={card.busy} nameOf={nameOf} onReview={card.review} />
+        <MeetingDecisionList decisions={view.decisions} sections={content.sections} hostId={view.hostId} viewerId={view.viewerId} people={people}
+          frozen={Boolean(confirmed)} busy={card.busy} nameOf={nameOf} onReview={card.review} onAssign={card.assignOwner} />
       ) : null}
 
       <section className={c.block}>
