@@ -5,9 +5,18 @@ import { describe, expect, it } from "vitest";
 import { TEST_CEO, TEST_MEMBER, createTestApp } from "./helpers.js";
 import type { ConversationRuntime } from "../src/conversations.js";
 import { homeTurn } from "../src/homeTurn.js";
+import { CHAT_ROUTE } from "../src/chatService.js";
 
 const CHAT_TOKEN = "chat-token-test";
 const RUN = "6f0c1a52-6d7e-4e57-9a51-0a9a4c3e2b10";
+/** Chat（8699279）TurnCommand 收的字段；它不收多余字段。 */
+const TURN_FIELDS = new Set(["clientRequestId", "message", "attachmentIds", "resumeRunId", "channel", "anchorSelection", "references", "page"]);
+/** Chat 的 page：path、title、guide 都必填，最多 200、40、150 字（10/29 人豪）。 */
+const validPage = (page: unknown) => {
+  if (page === undefined) return true;
+  const { path, title, guide } = (page ?? {}) as Record<string, unknown>;
+  return [[path, 200], [title, 40], [guide, 150]].every(([value, max]) => typeof value === "string" && value.length > 0 && value.length <= (max as number));
+};
 
 type ChatRequest = { method: string; url: string; headers: IncomingHttpHeaders; body: string };
 type Page = { messages: unknown[]; runs: unknown[]; nextCursor: string | null };
@@ -68,6 +77,10 @@ async function fakeChat(options: {
     }
     if (request.method === "POST" && request.url.endsWith("/attachments")) return send(200, options.upload?.(request));
     if (request.method === "POST" && request.url.endsWith("/turns")) {
+      // 和 Chat 的 TurnCommand 一样不收多余字段：字段名对不上时整轮 400。
+      const command = JSON.parse(request.body) as Record<string, unknown>;
+      const unknown = Object.keys(command).filter((key) => !TURN_FIELDS.has(key));
+      if (unknown.length || !validPage(command.page)) return send(400, { error: { code: "INVALID_INPUT", message: "请求字段或格式无效" } });
       touch(request.url.split("/")[2]);
       if (options.turn) return options.turn(res, request);
       return sse(res, [{ type: "turn_started", userMessageId: randomUUID() }, { type: "message", delta: "好的" }, { type: "done", status: "completed" }]);
@@ -119,8 +132,8 @@ function multipart(filename: string, content: string): { headers: Record<string,
 }
 
 async function withChat(chat: Awaited<ReturnType<typeof fakeChat>>, runtime: ConversationRuntime,
-  run: (t: Awaited<ReturnType<typeof createTestApp>>) => Promise<void>, token = CHAT_TOKEN) {
-  const t = await createTestApp({ internalChatToken: token, chatServiceUrl: chat.url }, runtime);
+  run: (t: Awaited<ReturnType<typeof createTestApp>>) => Promise<void>, token = CHAT_TOKEN, extra: { chatPageContext?: boolean } = {}) {
+  const t = await createTestApp({ internalChatToken: token, chatServiceUrl: chat.url, ...extra }, runtime);
   try {
     await run(t);
   } finally {
@@ -159,7 +172,8 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
       expect(response.payload).toContain(": ping");
       const received = events(response.payload);
       expect(received.map((event) => event.type)).toEqual(["route", "thinking", "tool", "tool", "message", "message", "usage", "done"]);
-      expect(received[0]).toMatchObject({ tier: "deep", expectSeconds: 90 });
+      // 正文很快就来：一直是检索问答档，不说「预计 1–2 分钟」。
+      expect(received[0]).toMatchObject({ tier: "grounded", expectSeconds: 30 });
       expect(received[2]).toMatchObject({ phase: "started", name: "read_world_object", label: "读取本体对象" });
       expect(received.every((event, index) => event.runId === RUN && event.scope === "global" && event.sequence === index + 1)).toBe(true);
       expect(received.some((event) => "conversationId" in event)).toBe(false);
@@ -191,6 +205,35 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
     });
   });
 
+  it("迟迟没写出正文：先按检索问答档，过了时限补一次深度档（界面换成「预计 1–2 分钟」）", async () => {
+    const chat = await fakeChat({ turn: (res) => {
+      sse(res, [{ type: "turn_started", userMessageId: randomUUID() }, { type: "thinking" }], false);
+      setTimeout(() => {
+        for (const [index, event] of [{ type: "message", delta: "好的" }, { type: "done", status: "completed" }].entries())
+          res.write(`data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: index + 3, ...event })}
+
+`);
+        res.end();
+      }, 150);
+    } });
+    const before = CHAT_ROUTE.deepenAfterMs;
+    CHAT_ROUTE.deepenAfterMs = 30;
+    try {
+      await withChat(chat, countingRuntime(), async (t) => {
+        const cookie = await t.loginCookie();
+        const response = await t.app.inject({
+          method: "POST", url: "/api/conversations/global/messages",
+          headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "我这周负责的事有哪些？" },
+        });
+        const received = events(response.payload);
+        expect(received.map((event) => event.type)).toEqual(["route", "thinking", "route", "message", "done"]);
+        expect(received[0]).toMatchObject({ tier: "grounded" });
+        expect(received[2]).toMatchObject({ tier: "deep", expectSeconds: 90 });
+      });
+    } finally {
+      CHAT_ROUTE.deepenAfterMs = before;
+    }
+  });
   it("历史翻到底再转成天枢消息：没完成的那一轮补说明行，附件带上", async () => {
     const [r1, r2, r3, r4] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
     const runs = [{ runId: r1, status: "completed", errorCode: null }, { runId: r2, status: "failed", errorCode: "MODEL_FAILED" },
@@ -312,7 +355,7 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
       expect(result).toMatchObject({ kind: "done", runId: RUN, content: "好的", failure: null });
       await homeTurn(deps, { personId: TEST_CEO.personId, role: "ceo" }, "下周呢", { via: "feishu" });
       expect(chat.turns().map((turn) => JSON.parse(turn.body))).toMatchObject([
-        { message: "这周怎么样", source: "wechat" }, { message: "下周呢", source: "feishu" },
+        { message: "这周怎么样", channel: "wechat" }, { message: "下周呢", channel: "feishu" },
       ]);
       expect(runtime.calls).toBe(0);
     });
@@ -320,8 +363,8 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
 
   it("历史里 Chat 记下的来源回到消息的 via，网页问的没有 via", async () => {
     const [r1, r2] = [randomUUID(), randomUUID()];
-    const message = (role: string, text: string, runId: string, position: number, source: string | null) =>
-      ({ id: randomUUID(), position: String(position), role, text, runId, attachmentIds: [], attachments: [], source });
+    const message = (role: string, text: string, runId: string, position: number, channel: string | null) =>
+      ({ id: randomUUID(), position: String(position), role, text, runId, attachmentIds: [], attachments: [], ...(channel ? { channel } : {}) });
     const chat = await fakeChat({
       conversations: [randomUUID()],
       pages: { "0": { messages: [message("user", "微信问", r1, 1, "wechat"), message("assistant", "微信答", r1, 2, "wechat"),
@@ -624,5 +667,40 @@ describe("给 Chat 的回看接口（/internal/conversation-*）", () => {
     } finally {
       await off.close();
     }
+  });
+});
+
+describe("首页对话带上本人所在页面（CHAT_PAGE_CONTEXT）", () => {
+  const send = async (t: Awaited<ReturnType<typeof createTestApp>>, pagePath?: string) => {
+    const response = await t.app.inject({
+      method: "POST", url: "/api/conversations/global/messages",
+      headers: { cookie: await t.loginCookie(), origin: t.publicOrigin, accept: "text/event-stream" },
+      payload: { message: "这页是干嘛的", ...(pagePath ? { pagePath } : {}) },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(events(response.payload).map((event) => event.type)).toContain("done");
+  };
+  const pages = (chat: Awaited<ReturnType<typeof fakeChat>>) => chat.turns().map((request) => (JSON.parse(request.body) as { page?: unknown }).page ?? null);
+
+  it("开着时二级页面带上页面名和说明，首页和目录里没有的页面不带，Chat 照常受理", async () => {
+    const chat = await fakeChat();
+    await withChat(chat, countingRuntime(), async (t) => {
+      await send(t, "/me/task-quality");
+      await send(t, "/me");
+      await send(t, "/no-such-page");
+      await send(t);
+      const [taskQuality, ...rest] = pages(chat);
+      expect(taskQuality).toMatchObject({ path: "/me/task-quality", title: "任务数据质量" });
+      expect((taskQuality as { guide: string }).guide).toContain("现在核对");
+      expect(rest).toEqual([null, null, null]);
+    }, CHAT_TOKEN, { chatPageContext: true });
+  });
+
+  it("关着时（缺省）即使网页带了页面路径也不发 page", async () => {
+    const chat = await fakeChat();
+    await withChat(chat, countingRuntime(), async (t) => {
+      await send(t, "/me/task-quality");
+      expect(pages(chat)).toEqual([null]);
+    });
   });
 });

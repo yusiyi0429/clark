@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import {
-  AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardReviewRequest, MeetingCardReviewResponse, MeetingCardView,
+  AttachFeishuMinuteRequest, FeishuCalendarEventsResponse, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardReviewRequest, MeetingCardReviewResponse, MeetingCardView,
   MeetingCardWorldChoiceRequest, MeetingDraftStatusResponse,
   MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse, OrganizeFeishuMinuteRequest,
 } from "@warmap/contracts";
@@ -23,6 +23,10 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
   // 飞书里直接开的会待整理：只认本人（列表只有本人名下的，别人的妙记一律 404）。
   app.get("/api/me/feishu-minutes", { preHandler: ctx.requirePerson, schema: { response: { 200: FeishuMinuteInboxResponse } } },
     async (req) => ({ minutes: await followThrough.minuteInbox.listFor(req.person!.personId) }));
+
+  // 本人飞书日历里接下来 7 天的日程：只读，和「会议安排」排在一起（天枢约的会不重复列）。
+  app.get("/api/me/feishu-events", { preHandler: ctx.requirePerson, schema: { response: { 200: FeishuCalendarEventsResponse } } },
+    async (req) => ({ events: await followThrough.calendarFeed.listFor(req.person!.personId) }));
 
   // 整理：建一场已开完的会，后台用所有者本人的授权读妙记；不约飞书日程。
   app.post("/api/me/feishu-minutes/:token/organize", {

@@ -110,6 +110,7 @@ import {
   UnreadThreadsResponse,
   MemberMeetingItem,
   MemberMeetingsResponse,
+  FeishuCalendarEventsResponse,
   MeetingTranscriptTurnView,
   MeetingTranscriptPage,
   SignalStateRequest,
@@ -992,7 +993,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/meetings/{id}/card/confirm": {
         post: {
           operationId: "confirmMeetingCard",
-          summary: "主持人或创建人整卡确认：冻结一个确认版本并排写本体（选了不写入只留天枢）；draftVersion 过期 409 DRAFT_CHANGED（带 view），同一草稿再确认不出新版本；已有确认版时 kind 必填（400 KIND_REQUIRED），没有实际时间或在将来 400 OCCURRED_AT_REQUIRED",
+          summary: "主持人或创建人整卡确认：冻结一个确认版本并排写本体（选了不写入只留天枢）；draftVersion 过期 409 DRAFT_CHANGED（带 view），同一草稿再确认不出新版本；已有确认版时 kind 必填（400 KIND_REQUIRED），没有实际时间或在将来 400 OCCURRED_AT_REQUIRED；逐条确认的会议卡冻结前不能整卡确认（409 REVIEW_PER_ITEM）",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/MeetingCardConfirmRequest" }),
           responses: { "200": { description: "确认后的会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardView" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse },
@@ -1001,7 +1002,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/meetings/{id}/card/reviews": {
         post: {
           operationId: "reviewMeetingCardItem",
-          summary: "逐条确认一条决策或行动项：责任人（没有就是主持人）自己点，主持人或创建人代点记为代确认；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view）",
+          summary: "逐条确认一条决策或行动项：只有责任人本人（没有就是主持人）能点，别人 404；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view）",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/MeetingCardReviewRequest" }),
           responses: { "200": { description: "处理后的会议卡（点的人读不了会议卡时 view 为 null）", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardReviewResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
@@ -1297,6 +1298,16 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           summary: "我在群里、还没开完的会，按开始时间排，给成员通知栏「会议安排」用",
           responses: {
             "200": { description: "会议安排", content: { "application/json": { schema: { $ref: "#/components/schemas/MemberMeetingsResponse" } } } },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/me/feishu-events": {
+        get: {
+          operationId: "listMyFeishuEvents",
+          summary: "本人飞书主日历里接下来 7 天的日程（只读，和「会议安排」排在一起）；天枢约的会、取消的、拒绝的不列，没连飞书时为空",
+          responses: {
+            "200": { description: "飞书日程", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuCalendarEventsResponse" } } } },
             "401": errorResponse,
           },
         },
@@ -3117,6 +3128,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         UnreadThreadsResponse: UnreadThreadsResponse as JsonSchema,
         MemberMeetingItem: MemberMeetingItem as JsonSchema,
         MemberMeetingsResponse: MemberMeetingsResponse as JsonSchema,
+        FeishuCalendarEventsResponse: FeishuCalendarEventsResponse as JsonSchema,
         MeetingTranscriptTurnView: MeetingTranscriptTurnView as JsonSchema,
         MeetingTranscriptPage: MeetingTranscriptPage as JsonSchema,
         ThreadMessage: ThreadMessage as JsonSchema,

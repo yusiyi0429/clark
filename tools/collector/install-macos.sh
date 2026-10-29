@@ -81,4 +81,4 @@ fi
 plist > "$PLIST"
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
-echo "已注册 launchd 任务 $LABEL，日志在 $ROOT/logs/collector.log。"
+echo "已注册 launchd 任务 ${LABEL}，日志在 $ROOT/logs/collector.log。"

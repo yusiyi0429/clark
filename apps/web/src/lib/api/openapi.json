@@ -5823,7 +5823,7 @@
     "/api/meetings/{id}/card/confirm": {
       "post": {
         "operationId": "confirmMeetingCard",
-        "summary": "主持人或创建人整卡确认：冻结一个确认版本并排写本体（选了不写入只留天枢）；draftVersion 过期 409 DRAFT_CHANGED（带 view），同一草稿再确认不出新版本；已有确认版时 kind 必填（400 KIND_REQUIRED），没有实际时间或在将来 400 OCCURRED_AT_REQUIRED",
+        "summary": "主持人或创建人整卡确认：冻结一个确认版本并排写本体（选了不写入只留天枢）；draftVersion 过期 409 DRAFT_CHANGED（带 view），同一草稿再确认不出新版本；已有确认版时 kind 必填（400 KIND_REQUIRED），没有实际时间或在将来 400 OCCURRED_AT_REQUIRED；逐条确认的会议卡冻结前不能整卡确认（409 REVIEW_PER_ITEM）",
         "parameters": [
           {
             "name": "id",
@@ -5911,7 +5911,7 @@
     "/api/meetings/{id}/card/reviews": {
       "post": {
         "operationId": "reviewMeetingCardItem",
-        "summary": "逐条确认一条决策或行动项：责任人（没有就是主持人）自己点，主持人或创建人代点记为代确认；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view）",
+        "summary": "逐条确认一条决策或行动项：只有责任人本人（没有就是主持人）能点，别人 404；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view）",
         "parameters": [
           {
             "name": "id",
@@ -7648,6 +7648,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MemberMeetingsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/feishu-events": {
+      "get": {
+        "operationId": "listMyFeishuEvents",
+        "summary": "本人飞书主日历里接下来 7 天的日程（只读，和「会议安排」排在一起）；天枢约的会、取消的、拒绝的不列，没连飞书时为空",
+        "responses": {
+          "200": {
+            "description": "飞书日程",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeishuCalendarEventsResponse"
                 }
               }
             }
@@ -19963,18 +19991,6 @@
                                 "type": "string"
                               }
                             },
-                            "decisionId": {
-                              "anyOf": [
-                                {
-                                  "minLength": 1,
-                                  "maxLength": 64,
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
                             "stale": {
                               "type": "boolean"
                             }
@@ -20077,7 +20093,6 @@
                       "required": [
                         "status",
                         "by",
-                        "proxy",
                         "at",
                         "reason"
                       ],
@@ -20109,9 +20124,6 @@
                               "type": "null"
                             }
                           ]
-                        },
-                        "proxy": {
-                          "type": "boolean"
                         },
                         "at": {
                           "anyOf": [
@@ -20192,7 +20204,6 @@
                           "required": [
                             "status",
                             "by",
-                            "proxy",
                             "at",
                             "reason"
                           ],
@@ -20224,9 +20235,6 @@
                                   "type": "null"
                                 }
                               ]
-                            },
-                            "proxy": {
-                              "type": "boolean"
                             },
                             "at": {
                               "anyOf": [
@@ -20590,18 +20598,6 @@
                                     "maxLength": 64,
                                     "type": "string"
                                   }
-                                },
-                                "decisionId": {
-                                  "anyOf": [
-                                    {
-                                      "minLength": 1,
-                                      "maxLength": 64,
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
                                 }
                               }
                             }
@@ -20622,7 +20618,6 @@
                                 "ownerPersonId",
                                 "basisSectionIds",
                                 "confirmedBy",
-                                "proxy",
                                 "confirmedAt",
                                 "sourceRefs"
                               ],
@@ -20661,9 +20656,6 @@
                                   "minLength": 1,
                                   "maxLength": 200,
                                   "type": "string"
-                                },
-                                "proxy": {
-                                  "type": "boolean"
                                 },
                                 "confirmedAt": {
                                   "minLength": 1,
@@ -20717,7 +20709,6 @@
                                 "dueDate",
                                 "basisSectionIds",
                                 "confirmedBy",
-                                "proxy",
                                 "confirmedAt",
                                 "sourceRefs"
                               ],
@@ -20767,9 +20758,6 @@
                                   "minLength": 1,
                                   "maxLength": 200,
                                   "type": "string"
-                                },
-                                "proxy": {
-                                  "type": "boolean"
                                 },
                                 "confirmedAt": {
                                   "minLength": 1,
@@ -20936,7 +20924,6 @@
                               "required": [
                                 "status",
                                 "by",
-                                "proxy",
                                 "at",
                                 "reason"
                               ],
@@ -20968,9 +20955,6 @@
                                       "type": "null"
                                     }
                                   ]
-                                },
-                                "proxy": {
-                                  "type": "boolean"
                                 },
                                 "at": {
                                   "anyOf": [
@@ -22553,6 +22537,12 @@
                 "type": "string"
               }
             }
+          },
+          "pagePath": {
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^/",
+            "type": "string"
           }
         }
       },
@@ -44751,6 +44741,62 @@
                       "type": "boolean"
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      },
+      "FeishuCalendarEventsResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "eventId",
+                "title",
+                "startsAt",
+                "endsAt",
+                "allDay",
+                "url"
+              ],
+              "properties": {
+                "eventId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "startsAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "endsAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "allDay": {
+                  "type": "boolean"
+                },
+                "url": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -68452,18 +68498,6 @@
                             "type": "string"
                           }
                         },
-                        "decisionId": {
-                          "anyOf": [
-                            {
-                              "minLength": 1,
-                              "maxLength": 64,
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
                         "stale": {
                           "type": "boolean"
                         }
@@ -68566,7 +68600,6 @@
                   "required": [
                     "status",
                     "by",
-                    "proxy",
                     "at",
                     "reason"
                   ],
@@ -68598,9 +68631,6 @@
                           "type": "null"
                         }
                       ]
-                    },
-                    "proxy": {
-                      "type": "boolean"
                     },
                     "at": {
                       "anyOf": [
@@ -68681,7 +68711,6 @@
                       "required": [
                         "status",
                         "by",
-                        "proxy",
                         "at",
                         "reason"
                       ],
@@ -68713,9 +68742,6 @@
                               "type": "null"
                             }
                           ]
-                        },
-                        "proxy": {
-                          "type": "boolean"
                         },
                         "at": {
                           "anyOf": [
@@ -69079,18 +69105,6 @@
                                 "maxLength": 64,
                                 "type": "string"
                               }
-                            },
-                            "decisionId": {
-                              "anyOf": [
-                                {
-                                  "minLength": 1,
-                                  "maxLength": 64,
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
                             }
                           }
                         }
@@ -69111,7 +69125,6 @@
                             "ownerPersonId",
                             "basisSectionIds",
                             "confirmedBy",
-                            "proxy",
                             "confirmedAt",
                             "sourceRefs"
                           ],
@@ -69150,9 +69163,6 @@
                               "minLength": 1,
                               "maxLength": 200,
                               "type": "string"
-                            },
-                            "proxy": {
-                              "type": "boolean"
                             },
                             "confirmedAt": {
                               "minLength": 1,
@@ -69206,7 +69216,6 @@
                             "dueDate",
                             "basisSectionIds",
                             "confirmedBy",
-                            "proxy",
                             "confirmedAt",
                             "sourceRefs"
                           ],
@@ -69256,9 +69265,6 @@
                               "minLength": 1,
                               "maxLength": 200,
                               "type": "string"
-                            },
-                            "proxy": {
-                              "type": "boolean"
                             },
                             "confirmedAt": {
                               "minLength": 1,
@@ -69425,7 +69431,6 @@
                           "required": [
                             "status",
                             "by",
-                            "proxy",
                             "at",
                             "reason"
                           ],
@@ -69457,9 +69462,6 @@
                                   "type": "null"
                                 }
                               ]
-                            },
-                            "proxy": {
-                              "type": "boolean"
                             },
                             "at": {
                               "anyOf": [
@@ -70031,18 +70033,6 @@
                         "type": "string"
                       }
                     },
-                    "decisionId": {
-                      "anyOf": [
-                        {
-                          "minLength": 1,
-                          "maxLength": 64,
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
                     "stale": {
                       "type": "boolean"
                     }
@@ -70125,7 +70115,6 @@
                   "required": [
                     "status",
                     "by",
-                    "proxy",
                     "at",
                     "reason"
                   ],
@@ -70157,9 +70146,6 @@
                           "type": "null"
                         }
                       ]
-                    },
-                    "proxy": {
-                      "type": "boolean"
                     },
                     "at": {
                       "anyOf": [
@@ -70629,18 +70615,6 @@
                                     "type": "string"
                                   }
                                 },
-                                "decisionId": {
-                                  "anyOf": [
-                                    {
-                                      "minLength": 1,
-                                      "maxLength": 64,
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                },
                                 "stale": {
                                   "type": "boolean"
                                 }
@@ -70743,7 +70717,6 @@
                           "required": [
                             "status",
                             "by",
-                            "proxy",
                             "at",
                             "reason"
                           ],
@@ -70775,9 +70748,6 @@
                                   "type": "null"
                                 }
                               ]
-                            },
-                            "proxy": {
-                              "type": "boolean"
                             },
                             "at": {
                               "anyOf": [
@@ -70858,7 +70828,6 @@
                               "required": [
                                 "status",
                                 "by",
-                                "proxy",
                                 "at",
                                 "reason"
                               ],
@@ -70890,9 +70859,6 @@
                                       "type": "null"
                                     }
                                   ]
-                                },
-                                "proxy": {
-                                  "type": "boolean"
                                 },
                                 "at": {
                                   "anyOf": [
@@ -71256,18 +71222,6 @@
                                         "maxLength": 64,
                                         "type": "string"
                                       }
-                                    },
-                                    "decisionId": {
-                                      "anyOf": [
-                                        {
-                                          "minLength": 1,
-                                          "maxLength": 64,
-                                          "type": "string"
-                                        },
-                                        {
-                                          "type": "null"
-                                        }
-                                      ]
                                     }
                                   }
                                 }
@@ -71288,7 +71242,6 @@
                                     "ownerPersonId",
                                     "basisSectionIds",
                                     "confirmedBy",
-                                    "proxy",
                                     "confirmedAt",
                                     "sourceRefs"
                                   ],
@@ -71327,9 +71280,6 @@
                                       "minLength": 1,
                                       "maxLength": 200,
                                       "type": "string"
-                                    },
-                                    "proxy": {
-                                      "type": "boolean"
                                     },
                                     "confirmedAt": {
                                       "minLength": 1,
@@ -71383,7 +71333,6 @@
                                     "dueDate",
                                     "basisSectionIds",
                                     "confirmedBy",
-                                    "proxy",
                                     "confirmedAt",
                                     "sourceRefs"
                                   ],
@@ -71433,9 +71382,6 @@
                                       "minLength": 1,
                                       "maxLength": 200,
                                       "type": "string"
-                                    },
-                                    "proxy": {
-                                      "type": "boolean"
                                     },
                                     "confirmedAt": {
                                       "minLength": 1,
@@ -71602,7 +71548,6 @@
                                   "required": [
                                     "status",
                                     "by",
-                                    "proxy",
                                     "at",
                                     "reason"
                                   ],
@@ -71634,9 +71579,6 @@
                                           "type": "null"
                                         }
                                       ]
-                                    },
-                                    "proxy": {
-                                      "type": "boolean"
                                     },
                                     "at": {
                                       "anyOf": [

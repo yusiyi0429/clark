@@ -12,6 +12,7 @@ import { createPersonalMemory } from "./personalMemory.js";
 import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
 import { createChatService } from "./chatService.js";
+import { pageGuide } from "./pageGuides.js";
 import { createConversationDigests, recordChatSegment } from "./conversationDigests.js";
 import { createConversationRecall } from "./conversationRecall.js";
 import { registerPersonalMemoryRoutes } from "./routes/personalMemory.js";
@@ -207,6 +208,8 @@ export type AppEnv = {
   chatSessionRotation?: boolean;
   /** 天枢页面的对话分段（CONVERSATION_SEGMENTS=1 才开；关着时照旧闲置 12 小时重开）。 */
   conversationSegments?: boolean;
+  /** 首页对话带上本人所在页面的名字和说明（CHAT_PAGE_CONTEXT=1 才开；要 Chat 先接 page 字段）。 */
+  chatPageContext?: boolean;
   buildSha: string;
   piBaseUrl: string;
   piApiKey: string;
@@ -467,6 +470,7 @@ export async function buildApp({
     modelId: env.lightModel, streamSimple: personalDistillationStream });
   // 首页走独立 Chat 时只建这一个客户端（首页分段的「人 × 视角」互斥在它里面）；转发的每一句记下进了哪一段，纪要据此去读。
   const chat = env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken, rotation: env.chatSessionRotation === true,
+    ...(env.chatPageContext ? { pageGuide } : {}),
     onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment) }) : undefined;
   // 会话纪要（后台，CONVERSATION_DIGEST_MODEL / CONVERSATION_DIGEST_THINKING，不配时 LIGHT_MODEL、不开思考）与回看。
   const conversationDigests = createConversationDigests({ pool, chat, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,

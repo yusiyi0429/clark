@@ -89,6 +89,7 @@ services:
       # 对话分段：都是设为 1 才开，由生产、预发显式打开（首页分段开着时，回看经首页卡里的「以前的对话」交给 Chat）。
       CHAT_SESSION_ROTATION: ${CHAT_SESSION_ROTATION:-}
       CONVERSATION_SEGMENTS: ${CONVERSATION_SEGMENTS:-}
+      CHAT_PAGE_CONTEXT: ${CHAT_PAGE_CONTEXT:-}
       TKOS_WORLD_API_URL: ${TKOS_WORLD_API_URL:-}
       TKOS_WORLD_AGENT_TOKEN: ${TKOS_WORLD_AGENT_TOKEN:-}
       # 本体可选项（worldClient.ts）：实例名缺省 mvp；凭证文件、本地人员补充文件与 TK 只读实例都写容器内路径（放进只读挂载的 /repo/seed）。

@@ -1597,7 +1597,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 主持人或创建人整卡确认：冻结一个确认版本并排写本体（选了不写入只留天枢）；draftVersion 过期 409 DRAFT_CHANGED（带 view），同一草稿再确认不出新版本；已有确认版时 kind 必填（400 KIND_REQUIRED），没有实际时间或在将来 400 OCCURRED_AT_REQUIRED */
+        /** 主持人或创建人整卡确认：冻结一个确认版本并排写本体（选了不写入只留天枢）；draftVersion 过期 409 DRAFT_CHANGED（带 view），同一草稿再确认不出新版本；已有确认版时 kind 必填（400 KIND_REQUIRED），没有实际时间或在将来 400 OCCURRED_AT_REQUIRED；逐条确认的会议卡冻结前不能整卡确认（409 REVIEW_PER_ITEM） */
         post: operations["confirmMeetingCard"];
         delete?: never;
         options?: never;
@@ -1614,7 +1614,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 逐条确认一条决策或行动项：责任人（没有就是主持人）自己点，主持人或创建人代点记为代确认；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view） */
+        /** 逐条确认一条决策或行动项：只有责任人本人（没有就是主持人）能点，别人 404；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view） */
         post: operations["reviewMeetingCardItem"];
         delete?: never;
         options?: never;
@@ -2058,6 +2058,23 @@ export interface paths {
         };
         /** 我在群里、还没开完的会，按开始时间排，给成员通知栏「会议安排」用 */
         get: operations["listMyMeetings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/feishu-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人飞书主日历里接下来 7 天的日程（只读，和「会议安排」排在一起）；天枢约的会、取消的、拒绝的不列，没连飞书时为空 */
+        get: operations["listMyFeishuEvents"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4548,7 +4565,6 @@ export interface components {
                             text: string;
                         };
                         basisSectionIds: string[];
-                        decisionId?: string | null;
                         stale: boolean;
                     }[];
                 } | null;
@@ -4564,7 +4580,6 @@ export interface components {
                     review?: {
                         status: "pending" | "confirmed" | "rejected";
                         by: string | null;
-                        proxy: boolean;
                         at: string | null;
                         reason: string | null;
                     };
@@ -4577,7 +4592,6 @@ export interface components {
                     review: {
                         status: "pending" | "confirmed" | "rejected";
                         by: string | null;
-                        proxy: boolean;
                         at: string | null;
                         reason: string | null;
                     };
@@ -4626,7 +4640,6 @@ export interface components {
                                 text: string;
                             };
                             basisSectionIds: string[];
-                            decisionId?: string | null;
                         }[];
                         revision: number;
                         decisions?: {
@@ -4635,7 +4648,6 @@ export interface components {
                             ownerPersonId: string | null;
                             basisSectionIds: string[];
                             confirmedBy: string;
-                            proxy: boolean;
                             confirmedAt: string;
                             sourceRefs: {
                                 sourceId: string;
@@ -4649,7 +4661,6 @@ export interface components {
                             dueDate: string | null;
                             basisSectionIds: string[];
                             confirmedBy: string;
-                            proxy: boolean;
                             confirmedAt: string;
                             sourceRefs: {
                                 sourceId: string;
@@ -4674,7 +4685,6 @@ export interface components {
                         review?: {
                             status: "pending" | "confirmed" | "rejected";
                             by: string | null;
-                            proxy: boolean;
                             at: string | null;
                             reason: string | null;
                         };
@@ -4958,6 +4968,7 @@ export interface components {
                 from?: string;
                 to?: string;
             };
+            pagePath?: string;
         };
         ConversationSseEvent: {
             runId: string;
@@ -8332,6 +8343,16 @@ export interface components {
                     since: string | null;
                     failed: boolean;
                 };
+            }[];
+        };
+        FeishuCalendarEventsResponse: {
+            events: {
+                eventId: string;
+                title: string;
+                startsAt: string;
+                endsAt: string;
+                allDay: boolean;
+                url: string | null;
             }[];
         };
         MeetingTranscriptTurnView: {
@@ -11921,7 +11942,6 @@ export interface components {
                         text: string;
                     };
                     basisSectionIds: string[];
-                    decisionId?: string | null;
                     stale: boolean;
                 }[];
             } | null;
@@ -11937,7 +11957,6 @@ export interface components {
                 review?: {
                     status: "pending" | "confirmed" | "rejected";
                     by: string | null;
-                    proxy: boolean;
                     at: string | null;
                     reason: string | null;
                 };
@@ -11950,7 +11969,6 @@ export interface components {
                 review: {
                     status: "pending" | "confirmed" | "rejected";
                     by: string | null;
-                    proxy: boolean;
                     at: string | null;
                     reason: string | null;
                 };
@@ -11999,7 +12017,6 @@ export interface components {
                             text: string;
                         };
                         basisSectionIds: string[];
-                        decisionId?: string | null;
                     }[];
                     revision: number;
                     decisions?: {
@@ -12008,7 +12025,6 @@ export interface components {
                         ownerPersonId: string | null;
                         basisSectionIds: string[];
                         confirmedBy: string;
-                        proxy: boolean;
                         confirmedAt: string;
                         sourceRefs: {
                             sourceId: string;
@@ -12022,7 +12038,6 @@ export interface components {
                         dueDate: string | null;
                         basisSectionIds: string[];
                         confirmedBy: string;
-                        proxy: boolean;
                         confirmedAt: string;
                         sourceRefs: {
                             sourceId: string;
@@ -12047,7 +12062,6 @@ export interface components {
                     review?: {
                         status: "pending" | "confirmed" | "rejected";
                         by: string | null;
-                        proxy: boolean;
                         at: string | null;
                         reason: string | null;
                     };
@@ -12125,7 +12139,6 @@ export interface components {
                         text: string;
                     };
                     basisSectionIds: string[];
-                    decisionId?: string | null;
                     stale: boolean;
                 }[];
             };
@@ -12139,7 +12152,6 @@ export interface components {
                 review?: {
                     status: "pending" | "confirmed" | "rejected";
                     by: string | null;
-                    proxy: boolean;
                     at: string | null;
                     reason: string | null;
                 };
@@ -12205,7 +12217,6 @@ export interface components {
                             text: string;
                         };
                         basisSectionIds: string[];
-                        decisionId?: string | null;
                         stale: boolean;
                     }[];
                 } | null;
@@ -12221,7 +12232,6 @@ export interface components {
                     review?: {
                         status: "pending" | "confirmed" | "rejected";
                         by: string | null;
-                        proxy: boolean;
                         at: string | null;
                         reason: string | null;
                     };
@@ -12234,7 +12244,6 @@ export interface components {
                     review: {
                         status: "pending" | "confirmed" | "rejected";
                         by: string | null;
-                        proxy: boolean;
                         at: string | null;
                         reason: string | null;
                     };
@@ -12283,7 +12292,6 @@ export interface components {
                                 text: string;
                             };
                             basisSectionIds: string[];
-                            decisionId?: string | null;
                         }[];
                         revision: number;
                         decisions?: {
@@ -12292,7 +12300,6 @@ export interface components {
                             ownerPersonId: string | null;
                             basisSectionIds: string[];
                             confirmedBy: string;
-                            proxy: boolean;
                             confirmedAt: string;
                             sourceRefs: {
                                 sourceId: string;
@@ -12306,7 +12313,6 @@ export interface components {
                             dueDate: string | null;
                             basisSectionIds: string[];
                             confirmedBy: string;
-                            proxy: boolean;
                             confirmedAt: string;
                             sourceRefs: {
                                 sourceId: string;
@@ -12331,7 +12337,6 @@ export interface components {
                         review?: {
                             status: "pending" | "confirmed" | "rejected";
                             by: string | null;
-                            proxy: boolean;
                             at: string | null;
                             reason: string | null;
                         };
@@ -19461,6 +19466,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberMeetingsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMyFeishuEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 飞书日程 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeishuCalendarEventsResponse"];
                 };
             };
             /** @description ApiError 统一错误 */

@@ -79,10 +79,9 @@ describe("整卡确认与会议事件", () => {
         objects: [{ changeId: "chg-1", title: "十月交付 · 验收标准", status: "pending", actualVersion: null, error: null }] });
       // 第一次确认：会议算处理完。
       expect((await t.sql("SELECT status FROM meetings WHERE id = $1", [meetingId]))[0].status).toBe("reviewed");
-      // 行动项快照留在确认表；冻结前主持人整卡确认，还没处理的决策和行动项算他代确认，进 payload v2。
+      // 行动项快照留在确认表，不进 payload。
       expect((await t.sql("SELECT action_items FROM meeting_card_confirmations WHERE meeting_id = $1", [meetingId]))[0].action_items).toEqual(view.actionItems);
-      expect(view.confirmed!.payload).toMatchObject({ schemaVersion: "meeting-card.v2",
-        decisions: [{ id: "dec-1", confirmedBy: HOST, proxy: true }], actionItems: [{ id: "act-1", confirmedBy: HOST, proxy: true }] });
+      expect(view.confirmed!.payload).not.toHaveProperty("actionItems");
       // 已确认、事件还在写：页头是「写入中」，不是待确认。
       expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "writing", version: 1, eventId: null });
       await run();
@@ -98,9 +97,7 @@ describe("整卡确认与会议事件", () => {
       expect(Object.keys(body.params.content).sort()).toEqual(["artifacts", "text"]);
       expect(body.params.content.artifacts).toEqual([view.confirmed!.payload.sources[0].url]);
       const { payload, confirmation } = parsed(body);
-      // 记录正文不写进本体（等斯一答复）：事件里的 payload 去掉摘要和正文段落，摘要值按事件里这一份算。
-      const { summary: _summary, sections: _sections, ...withoutRecord } = view.confirmed!.payload;
-      expect(payload).toEqual(withoutRecord);
+      expect(payload).toEqual(view.confirmed!.payload);
       expect(payload.revision).toBe(1);
       expect(confirmation.payloadHash).toBe(payloadHash(payload));
       // 读回：写完按挂点对象取事件，带 since。
@@ -427,8 +424,7 @@ describe("整卡确认与会议事件", () => {
       expect(second.idempotency_key).toBe(`tianshu-meeting:${meetingId}:v2:event`);
       expect(second.params).toMatchObject({ category: "correction", supersedes_event_id: "ev-1", subject_refs: first.params.subject_refs, occurred_at: first.params.occurred_at });
       expect(second.params.content).not.toHaveProperty("refs");
-      expect(parsed(second).payload).not.toHaveProperty("sections");
-      expect(view.confirmed!.payload.sections[0].body).toBe("已定：接口统一改成 v2，十月底切换。");
+      expect(parsed(second).payload.sections[0].body).toBe("已定：接口统一改成 v2，十月底切换。");
       expect((await worldOf(t, host, meetingId)).world.record).toMatchObject({ status: "committed", version: 2, eventId: "ev-2" });
     } finally {
       await t.close();

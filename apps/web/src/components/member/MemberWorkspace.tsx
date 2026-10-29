@@ -15,6 +15,7 @@ import { inWeeklyReviewWindow, useWeeklyReviewBoard, WeeklyReviewBoard } from "@
 import { RequestNotices, type RequestCounts } from "@/components/requests/RequestNotices";
 import { RequestListPanel } from "@/components/requests/RequestListScreen";
 import { MeetingCardNoticeList, useMeetingRecords } from "@/components/meeting/MeetingCardNotices";
+import { useFeishuEvents } from "@/components/meeting/useFeishuEvents";
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { logout } from "@/lib/logout";
@@ -41,6 +42,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
   const plan = useHomePlan();
   const weeklyReviews = useWeeklyReviewBoard();
   const records = useMeetingRecords();
+  const feishuEvents = useFeishuEvents();
   const radarSignals = noteworthySignals(home.radar);
   const account = { displayName, loginId, role: "member" as const };
   return (
@@ -65,7 +67,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
             {/* M2 接管复盘和拆解时，天枢自己的周期卡（个人复盘、月度复盘）不出，同 CEO 通知栏；任务卡签发只看 M2。 */}
             <MeetingCardNoticeList meetings={records.meetings} confirms={records.confirms} minutes={records.minutes} meetingBase="/me/meetings" onNavigate={api.navigate} onChanged={records.reload} />
             <ActionNoticeCard id="weekly-sync" title="每周同步" subtitle="把本周进展写进天枢" mark="meeting" notices={weeklySyncNotices(home.weeklySync)} onSettled={() => undefined} />
-            <MemberMeetingSchedule meetings={home.meetings} onNavigate={api.navigate} />
+            <MemberMeetingSchedule meetings={home.meetings} feishuEvents={feishuEvents} onNavigate={api.navigate} />
             {inWeeklyReviewWindow(new Date()) ? <WeeklyReviewBoard onNavigate={api.navigate} state={weeklyReviews} /> : null}
             {api.m2Available ? null : <PersonalReviewBoard onNavigate={api.navigate} />}
             <RequestNotices base="/me/requests" currentHref={currentHref} onNavigate={api.navigate} header={false} onCounts={setRequests} />
@@ -85,7 +87,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
               api.navigate(`${item.href}?channel=group`, from);
             }, buttons: [] })))} onSettled={() => undefined} />
             <MemberRadarNotices signals={radarSignals} currentHref={currentHref} onNavigate={api.navigate} onRead={home.readRadarNotice} />
-            {(plan.plan?.unplaced.length ?? 0) + requests.items + records.meetings.length + records.confirms.length + records.minutes.length + home.rounds.length + home.meetings.length + home.unreadThreads.length + home.unreadMissionGroups.length + quietNoticeCount(home.notifications) + radarSignals.length + (home.weeklySync ? 1 : 0) + (weeklyReviews.board?.rows.length ?? 0) === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
+            {(plan.plan?.unplaced.length ?? 0) + requests.items + records.meetings.length + records.confirms.length + records.minutes.length + home.rounds.length + home.meetings.length + feishuEvents.length + home.unreadThreads.length + home.unreadMissionGroups.length + quietNoticeCount(home.notifications) + radarSignals.length + (home.weeklySync ? 1 : 0) + (weeklyReviews.board?.rows.length ?? 0) === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
           </div>
           <div className={n.railFoot}>
             <AccountMenu account={account} onNavigate={api.navigate} />

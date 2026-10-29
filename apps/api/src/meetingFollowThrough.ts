@@ -14,6 +14,7 @@ import { createMeetingCardConfirmService, meetingCardConfirmJobs, type MeetingCa
 import { createMeetingFeishuEventService, meetingFeishuEventJobs, type MeetingFeishuEventService } from "./meetingFeishuEvent.js";
 import { createMeetingObjectSync } from "./meetingObjectSync.js";
 import { createMeetingMinutesService, FEISHU_MINUTES_EVENT, meetingMinutesJobs, type MeetingMinutesService } from "./meetingMinutes.js";
+import { createFeishuCalendarFeedService, type FeishuCalendarFeedService } from "./feishuCalendarFeed.js";
 import { createFeishuMinuteInboxService, feishuMinuteInboxJobs, type FeishuMinuteInboxService } from "./feishuMinuteInbox.js";
 import { setOutcomeContextProvider, type PostMeetingAgent } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
@@ -54,6 +55,8 @@ export type MeetingFollowThrough = {
   minuteInbox: FeishuMinuteInboxService;
   /** 建会后在飞书约上、改时间、取消。 */
   feishuEvents: MeetingFeishuEventService;
+  /** 本人飞书日历里的日程，只读显示在「会议安排」里。 */
+  calendarFeed: FeishuCalendarFeedService;
   /** 已推影响卡（旧会议、文档变更）上的追问。 */
   impact: ImpactAgent;
   context: () => Promise<InterpretationContext>;
@@ -95,9 +98,11 @@ export function createMeetingFollowThrough({ pool, env, peopleDirectory, world, 
   const feishuMinutes = env.feishu ? { feishu: { env: env.feishu, api: minutesApi ?? createFeishuMinutesApi() } } : {};
   const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now, feishuWebOrigin: env.feishuWebOrigin, ...feishuMinutes });
   const minuteInbox = createFeishuMinuteInboxService({ pool, peopleDirectory, minutes, anchorChoicesFor: decisions.anchorChoicesFor, now, ...feishuMinutes });
-  const feishuEvents = createMeetingFeishuEventService({ pool, now, ...(env.feishu ? { feishu: { env: env.feishu, api: calendarApi ?? createFeishuCalendarApi() } } : {}) });
+  const feishuCalendar = env.feishu ? { feishu: { env: env.feishu, api: calendarApi ?? createFeishuCalendarApi() } } : {};
+  const feishuEvents = createMeetingFeishuEventService({ pool, now, ...feishuCalendar });
+  const calendarFeed = createFeishuCalendarFeedService({ pool, now, ...feishuCalendar });
   return {
-    decisions, cards, cardConfirm, minutes, minuteInbox, feishuEvents, impact: impactAgent, context,
+    decisions, cards, cardConfirm, minutes, minuteInbox, feishuEvents, calendarFeed, impact: impactAgent, context,
     jobs() {
       const minuteJobs = meetingMinutesJobs(minutes);
       const inboxJobs = feishuMinuteInboxJobs(minuteInbox);

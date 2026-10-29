@@ -4,8 +4,8 @@ import { Type, type Static } from "@sinclair/typebox";
  * 会议卡（FR-4、FR-5）：会议 Card 与会议 Event 共用一份冻结 payload（MeetingCardFrozenPayload）。
  * - 草稿（MeetingCardDraft = payload 去掉 revision）存天枢，主持人或创建人带 draftVersion 编辑。
  * - 模型只填摘要、正文段落、决策、拟修改内容和行动项；身份、ID、版本、来源摘要值、时间和对象原内容由服务填写或核验。
- * - 10/28 起（meeting-card.v2）：记录正文不用确认；会上提取的决策和行动项逐条由责任人确认（没有责任人的由主持人），主持人可以代确认。
- *   决策都有了结果或会议卡生成满 48 小时，冻结一版：只放已确认的决策和行动项（各带确认人），写一条会议事件。
+ * - 10/28 起（meeting-card.v2）：记录正文不用确认；会上提取的决策和行动项逐条只由责任人本人确认（没有责任人的由主持人），不能代确认。
+ *   决策都有了结果或会议卡生成满 48 小时，冻结一版：只放已确认的决策和行动项（各带确认人），不带对象修改，写一条会议事件。
  * - v1（10/28 之前）：主持人整卡确认，行动项不进 payload。
  */
 export const MeetingCardSchemaVersion = Type.Literal("meeting-card.v1");
@@ -53,8 +53,6 @@ const objectChangeFields = {
   before: Type.Union([Type.Object({ text: Type.String() }, { additionalProperties: false }), Type.Null()]),
   after: Type.Object({ text: Type.String({ minLength: 1, maxLength: 20000 }) }, { additionalProperties: false }),
   basisSectionIds: Type.Array(Type.String({ minLength: 1, maxLength: 64 }), { maxItems: 50 }),
-  /** 这处修改属于哪条决策（只由服务填）：决策确认了才提交；v1 没有。 */
-  decisionId: Type.Optional(NullableString({ minLength: 1, maxLength: 64 })),
 };
 export const MeetingConfirmedObjectChange = Type.Object(objectChangeFields, { additionalProperties: false });
 /** 草稿里的修改多一个 stale：读卡时发现目标变过、差异已刷新（确认时清掉，不进冻结 payload）。 */
@@ -78,13 +76,12 @@ const payloadFields = {
 };
 /**
  * 逐条确认（决策和行动项共用，只由服务改）：pending 待确认、confirmed 确认（行动项是「接下」）、rejected 不对（行动项是「退回」，reason 必填）。
- * by 是点的人（personId）；proxy 为 true 时是主持人或创建人代责任人点的。
+ * by 是点的人（personId），就是责任人本人（没有责任人时是主持人）。
  */
 export const MeetingItemReview = Type.Object(
   {
     status: Type.Union([Type.Literal("pending"), Type.Literal("confirmed"), Type.Literal("rejected")]),
     by: NullableString({ minLength: 1, maxLength: 200 }),
-    proxy: Type.Boolean(),
     at: NullableString({ minLength: 1, maxLength: 100 }),
     reason: NullableString({ maxLength: 200 }),
   },
@@ -104,10 +101,9 @@ export const MeetingCardDecision = Type.Object(
   },
   { additionalProperties: false },
 );
-/** 冻结进 payload 的一条（只有已确认的）：确认人、是否代确认、确认时刻；sourceRefs 是出处段落在原文里的位置（不带正文时也能找到出处）。 */
+/** 冻结进 payload 的一条（只有已确认的）：确认人、确认时刻；sourceRefs 是出处段落在原文里的位置（不带正文时也能找到出处）。 */
 const frozenReviewFields = {
   confirmedBy: Type.String({ minLength: 1, maxLength: 200 }),
-  proxy: Type.Boolean(),
   confirmedAt: Type.String({ minLength: 1, maxLength: 100 }),
   sourceRefs: Type.Array(MeetingCardSourceRef, { maxItems: 100 }),
 };
@@ -149,7 +145,7 @@ export const MeetingCardFrozenPayload = Type.Object(
 );
 export const MeetingCardDraft = Type.Object({ ...payloadFields, objectChanges: Type.Array(MeetingObjectChange, { maxItems: 50 }) }, { additionalProperties: false });
 
-/** 天枢本地的行动项（拍板 4）：会上明确分给某人的待办；负责人「接下」（或主持人代接下）才推成执行事项，taskId 回填（taskId、review 只由服务改）。 */
+/** 天枢本地的行动项（拍板 4）：会上明确分给某人的待办；负责人本人「接下」才推成执行事项，taskId 回填（taskId、review 只由服务改）。 */
 export const MeetingActionItem = Type.Object(
   {
     id: CardItemId,
@@ -228,9 +224,9 @@ export const MeetingCardView = Type.Object(
     actionItems: Type.Array(MeetingActionItem),
     /** 会上提取的决策和逐条确认状态；10/28 之前生成的会议卡为 null（照旧由主持人整卡确认）。 */
     decisions: Type.Union([Type.Array(MeetingCardDecision), Type.Null()]),
-    /** 主持人：没有责任人的决策和行动项由他确认，也能代别人确认。 */
+    /** 主持人：没有责任人的决策和行动项由他确认。 */
     hostId: Type.String({ minLength: 1 }),
-    /** 读卡的人：和责任人（没有就是主持人）是同一个人时自己确认，否则能编辑的人代确认。 */
+    /** 读卡的人：和责任人（没有就是主持人）是同一个人时能确认。 */
     viewerId: Type.String({ minLength: 1 }),
     /** 冻结时写不写进本体（主持人或创建人在冻结前定；冻结后看 sync.writeToWorld）。 */
     writeToWorld: Type.Boolean(),
@@ -278,6 +274,7 @@ export const MeetingCardDraftRequest = Type.Object(
 /**
  * POST /api/meetings/:id/card/confirm：主持人或创建人整卡确认。draftVersion 不是当前的 409 DRAFT_CHANGED（带 view）；
  * 同一草稿版本再确认不出新版本。已有确认版时 kind 必填（correction 更正原记录 / followup 会后新决定），第一次确认忽略 kind。
+ * 逐条确认的会议卡（decisions 不为 null）冻结前不能整卡确认：409 REVIEW_PER_ITEM。
  */
 export const MeetingCardConfirmRequest = Type.Object(
   {
@@ -291,7 +288,7 @@ export const MeetingCardConfirmRequest = Type.Object(
 
 /**
  * POST /api/meetings/:id/card/reviews：逐条确认一条决策（kind decision）或行动项（kind action）。
- * 责任人（没有就是主持人）自己点；主持人或创建人代点记为代确认。reject 要写原因。冻结后决策不能再点（409 CARD_FROZEN），已处理过的 409 ALREADY_REVIEWED。
+ * 只有责任人本人（没有就是主持人）能点，别人 404。reject 要写原因。冻结后决策不能再点（409 CARD_FROZEN），已处理过的 409 ALREADY_REVIEWED。
  */
 export const MeetingCardReviewRequest = Type.Object(
   {
@@ -342,7 +339,6 @@ export const MeetingCardCandidate = Type.Object(
           targetRef: Type.String({ minLength: 1, maxLength: 500 }),
           after: Type.Object({ text: Type.String({ minLength: 1, maxLength: 20000 }) }, { additionalProperties: false }),
           basisSections: Type.Array(Type.Integer({ minimum: 1 }), { maxItems: 50 }),
-          decision: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
         },
         { additionalProperties: false },
       ),

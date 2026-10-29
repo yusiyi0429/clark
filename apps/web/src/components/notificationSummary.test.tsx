@@ -20,6 +20,20 @@ const meeting = (id: string, scheduledAt: string, lead = "bai") =>
   card("meeting", id, `会议 ${id}`, { status: "scheduled", scheduledAt, leadDriId: lead, participants: [{ personId: "bai", displayName: "白田田" }], issueIds: [] });
 
 describe("通知栏分组（clark 三组）", () => {
+  it("飞书日程（只读）按开始时间排进战略会议安排，点开去飞书，只有飞书日程时也成组", () => {
+    const now = new Date("2026-10-28T15:00:00Z");
+    const feishu = { eventId: "e1_0", title: "M2 本月复盘模拟", startsAt: "2026-10-29T01:30:00Z", endsAt: "2026-10-29T02:30:00Z", allDay: false, url: "https://applink.feishu.cn/x" };
+    const ended = { ...feishu, eventId: "e0_0", title: "开完了", startsAt: "2026-10-28T13:00:00Z", endsAt: "2026-10-28T14:00:00Z" };
+    const [group] = railGroups([meeting("m", "2026-10-29T03:00:00Z")], now, "bai", [feishu, ended]);
+    expect(group.items.map((item) => [item.title, item.meta, item.external ?? false])).toEqual([
+      ["M2 本月复盘模拟", "飞书日程 · 10/29 09:30", true],
+      ["会议 m", "10/29 11:00", false],
+    ]);
+    expect(group.items[0].href).toBe("https://applink.feishu.cn/x");
+    expect(group.subtitle).toBe("2 场待开");
+    expect(railGroups([], now, "bai", [feishu])[0]).toMatchObject({ kind: "meetings", items: [{ id: "feishu:e1_0" }] });
+  });
+
   it("到结束时间或手动结束后退出参会人通知，主持人保留改期与纪要入口", () => {
     const now = new Date("2026-09-30T08:00:00Z");
     const ended = card("meeting", "ended", "已结束会议", { status: "scheduled", scheduledAt: "2026-09-30T07:00:00Z", endsAt: now.toISOString(), endedAt: null, leadDriId: "host", participants: [] },

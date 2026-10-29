@@ -64,7 +64,9 @@ async function rewriteConfirmed(t: TestApp, meetingId: string, change: (payload:
     [meetingId, JSON.stringify(payload), payloadHash(payload)]);
 }
 /** 决定只写在段落正文里的会（10/23 诊断：「预发环境回收提前到 10/27」不在会议名、摘要和段落标题里）。 */
-const teardownAgent: PostMeetingAgent = {
+const teardownAgent: PostMeetingAgent & { objectChanges: { targetRef: string; after: { text: string }; basisSections: number[] }[] } = {
+  // 10/28 之前的会议卡上的修改（setup 造老会议卡时放进草稿）。
+  objectChanges: [{ targetRef: "obj-po-1#target/acc-1", after: { text: "十月底前 4 家客户上线" }, basisSections: [1] }],
   async generate() {
     return { candidate: {
       summary: "接口统一切到 v2，渠道预算下周再定。",
@@ -72,8 +74,8 @@ const teardownAgent: PostMeetingAgent = {
         { heading: "预发环境", body: "已定：预发环境回收提前，由 10/28 前调整为 10/27 前停服务、删卷和站点。", turnIds: ["turn-002"] },
         { heading: "渠道预算", body: "未定：渠道预算下周看数据再定。", turnIds: ["turn-001"] },
       ],
-      decisions: [{ text: "接口统一改成 v2", ownerPersonId: OWNER, basisSections: [1] }],
-      objectChanges: [{ targetRef: "obj-po-1#target/acc-1", after: { text: "十月底前 4 家客户上线" }, basisSections: [1], decision: 1 }],
+      decisions: [],
+      objectChanges: [],
       actionItems: [{ text: "渠道看板接到 v2", ownerPersonId: OWNER, dueDate: "2026-06-30", basisSections: [2] }],
     } };
   },

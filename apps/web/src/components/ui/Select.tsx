@@ -8,7 +8,8 @@
  */
 import { Check, ChevronDown } from "lucide-react";
 import type { Key } from "react-aria-components";
-import { Button, Label, ListBox, ListBoxItem, Modal, ModalOverlay, Popover, Select as AriaSelect, SelectValue, Text } from "react-aria-components";
+import { useContext, type ReactNode } from "react";
+import { Button, Label, ListBox, ListBoxItem, Modal, ModalOverlay, Popover, Select as AriaSelect, SelectStateContext, SelectValue, Text } from "react-aria-components";
 import { TianshuPortalTheme } from "ts-design";
 import { useHandheld } from "./useHandheld";
 import p from "./picker.module.css";
@@ -64,7 +65,7 @@ export function Select({ options, value, onChange, label, placeholder = "请选�
         否则集合为空，触发器只显示占位、sheet 打不开、隐藏的原生下拉没有选项。 */}
     {handheld ? <Popover isOpen={false}>{list}</Popover> : null}
     {handheld
-      ? <ModalOverlay className={p.overlay} isDismissable>
+      ? <HandheldSheet>
         <Modal className={p.sheet}>
           <TianshuPortalTheme className={p.sheetBody}>
             <span className={p.handle} aria-hidden />
@@ -72,9 +73,20 @@ export function Select({ options, value, onChange, label, placeholder = "请选�
             {list}
           </TianshuPortalTheme>
         </Modal>
-      </ModalOverlay>
+      </HandheldSheet>
       : <Popover className={p.popover} placement="bottom start" offset={6}>
         <TianshuPortalTheme>{list}</TianshuPortalTheme>
       </Popover>}
   </AriaSelect>;
+}
+
+/**
+ * 手持的底部选择层只认这个下拉自己的开关。不给 isOpen 时 ModalOverlay 取最近的 OverlayTriggerStateContext：
+ * React Aria 预渲染选项集合时那一份拿到的是外层弹窗的（比如「约会议」），下拉放在弹窗里就会跟着弹窗一起打开、点遮罩关掉的是整个弹窗。
+ */
+function HandheldSheet({ children }: { children: ReactNode }) {
+  const state = useContext(SelectStateContext);
+  return <ModalOverlay className={p.overlay} isDismissable isOpen={state?.isOpen ?? false} onOpenChange={(open) => state?.setOpen(open)}>
+    {children}
+  </ModalOverlay>;
 }
