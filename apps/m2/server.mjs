@@ -1,3 +1,4 @@
+import {proposalDelivery,deliveryNotice,withoutUnsentCardClaims} from './proposal-delivery.mjs';
 import {createRevisionAcknowledgements} from './revision-ack.mjs';
 import {exportMarkdown,parseStandardMarkdown,prepareTransfer,applyTransfer,transferCards,transferStamp,nonstandardRequest,markdownImportPrompt,assertImportGrounded} from './markdown-transfer.mjs';
 import {createProposalSummarizer} from './proposal-summary.mjs';
@@ -6,7 +7,7 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {normalize,allNodes} from './domain.mjs';
 import {createModelGateway,recordModelRun,patientTransport} from './model.mjs';
-import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,ownerAnnotation,isChildCard,reconcileReply,quietReply,roomLine} from './nexus-policy.mjs';
+import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,ownerAnnotation,isChildCard,reconcileReply,quietReply,roomLine,cardName} from './nexus-policy.mjs';
 import {createCollaborationState,applyAction,currentVersion,canRead,cardStatus,confirmationSummary,insightView,publishedMissionInsights,roomMember,canReadRoom} from './governance.mjs';
 import {reviewCascadeRequest,reviewCascadeProposal,cascadeSkip} from './review-cascade.mjs';
 import {runRoundPool} from './round-pool.mjs';
@@ -456,7 +457,7 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
     const cut=(why,keep)=>{output.rejected=output.rejected||[];output.proposals=output.proposals.filter(p=>{const k=keep(p);if(!k)output.rejected.push({cardId:p.cardId,why});return k;});};
     // Revisions only for cards Nexus was actually shown in full (a focused card's children included).
     if(!legacy&&ctx.focusCardIds.length)cut('这张卡不在这次讨论的范围里',p=>ctx.focusCardIds.some(id=>id===p.cardId||isChildCard(p.cardId,id)));
-    const requests=(b.trigger==='automatic'?fresh:evidence).filter(e=>(!n||e.context?.selection?.id===n.id)&&(revisionRequest(e.text)||ownerAnnotation(e,cards.find(c=>c.id===e.context?.selection?.id)))&&cards.some(c=>c.id===e.context?.selection?.id)&&!store.snapshot().proposals?.some(p=>p.cardId===e.context.selection.id&&(p.status==='pending'||p.sourceIds.includes(e.id))));
+    const requests=(b.trigger==='automatic'?fresh:evidence).filter(e=>(!n||e.context?.selection?.id===n.id)&&(revisionRequest(e.text)||ownerAnnotation(e,cards.find(c=>c.id===e.context?.selection?.id)))&&cards.some(c=>c.id===e.context?.selection?.id)&&!store.snapshot().proposals?.some(p=>p.cardId===e.context.selection.id&&p.sourceIds.includes(e.id)));
     if(requests.length&&!output.proposals.length&&!(output.missionCards||[]).length){
      const repair=await chatGateway.complete([{role:'system',content:nexusSystemPrompt},{role:'user',content:JSON.stringify({task:'公开反馈含明确修改意见，但上一轮没有通过验证的拟修改卡片。请核对revisionRequests，仅改对应对象的必要字段，在proposals给出完整拟修改正文供负责人确认。这些修订依据是明确修改请求，basis必须是request，不要标为agreement；sourceIds只引用revisionRequests中明确定位对象的修改意见ID，不要引用无定位的“确认”或Nexus自身消息。无需再证明两人共识，也不要要求提意见的人再说一次同意。不能仅在reply询问是否修改。若确实有分歧、对象或改动不明，说明具体缺口，禁止猜测。仍返回完整约定JSON。',scope:scope.id,cards,evidence,freshEvidence:fresh,revisionRequests:requests,proposalDecisions,previousTopics})}],named('revision-request'));
      const repaired=validateNexusResult(JSON.parse(repair.answer),{cards,evidence,fresh,lastIntervention,interventionHistory,manual:b.trigger!=='automatic',ownRoom:scope.level==='person'&&fresh.some(e=>!['Nexus','Agent','system'].includes(e.author)),withdrawn:withdrawnFor(store.snapshot(),scope.id)});
@@ -490,23 +491,28 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
     // In a person's own room there is no @ to retry with, and a card may already be waiting (评测 2026-10-27).
     if(scope.level==='person'&&/这次未生成有效回答/.test(output.reply||'')){const waiting=(store.snapshot().proposals||[]).some(p=>p.status==='pending'&&p.scope===scope.id);
      output.reply=waiting?'已有修订卡在等你确认，新补的证据我记下了；需要的话我按新证据改那张卡。':'这次我没理出结论。你可以再说一下要改哪一项、依据是什么（哪天、谁记的、在哪能查到）。';}
-    const rawReply=output.reply;output.reply=quietReply(output.reply,output.proposals,output.rejected||[],cards);
-    // Nobody asked and no card came out: the miss stays in lastAct for diagnosis, not in the room (2026-10-19 drill).
-    if(!output.participation.called&&!output.proposals.length&&output.reply!==rawReply)output.reply='';
-    const lastAct={at:new Date().toISOString(),kept:output.proposals.map(p=>p.cardId),rejected:(output.rejected||[]).slice(0,8),...(rawReply!==output.reply?{rawReply:String(rawReply).slice(0,1000)}:{})};
-    // Each card keeps the id of this pass's run, so the owner's accept or reject becomes feedback on it.
-    const trace=tracer.ref();
-    await store.transact(state=>{if(state.round?.id!==roundAtStart)throw Object.assign(Error('轮次已切换，建议未保存'),{status:409});return applyOwnerAnnotations(queueProposals(state,scope.id,[...output.proposals,...missionProposals].map(p=>({...p,originSequence:proposalSequenceAtStart,...trace}))),scope.id);});
+    const rawReply=output.reply,planned=[...output.proposals,...missionProposals];
+    // Each card keeps the run reference; receipt counts come only from the committed transaction.
+    const trace=tracer.ref();let delivery;
+    await store.transact(state=>{if(state.round?.id!==roundAtStart)throw Object.assign(Error('轮次已切换，建议未保存'),{status:409});const previousIds=new Set((state.proposals||[]).map(p=>p.id));const next=applyOwnerAnnotations(queueProposals(state,scope.id,planned.map(p=>({...p,originSequence:proposalSequenceAtStart,...trace}))),scope.id);delivery=proposalDelivery(next,previousIds,scope.id,planned);return next;});
+    const unsubmitted=delivery.outcomes.filter(o=>o.status!=='saved'),receipt=output.participation.called||requests.length?deliveryNotice(delivery,id=>cardName(id,cards)):'';
+    output.reply=quietReply(output.reply,delivery.saved,[...(output.rejected||[]),...unsubmitted.map(o=>({cardId:o.cardId,why:o.status==='stale'?'正文或依据已更新':'本次没有新增修订卡'}))],cards);
+    if(unsubmitted.length)output.reply=withoutUnsentCardClaims(output.reply);
+    if(!output.participation.called&&!delivery.saved.length&&output.reply!==rawReply)output.reply='';
+    // A directly addressed request must not vanish when its candidate was filtered or not saved.
+    const lastAct={at:new Date().toISOString(),kept:[...new Set(delivery.saved.map(p=>p.cardId))],proposed:output.proposals.map(p=>p.cardId),delivery:delivery.outcomes,rejected:(output.rejected||[]).slice(0,8),...(rawReply!==output.reply?{rawReply:String(rawReply).slice(0,1000)}:{})};
     runCascades();
     // A card speaks for itself: no extra line beside it. The owner's accept or reject is synced to the group afterwards (陈溪南 2026-10-21).
     // …and a question asked in the same batch is still answered: when the pass wrote no answer, one short call answers it.
-    if(explicitQuestions.length&&!String(output.reply||'').trim()){
-     try{const asked=await chatGateway.complete([{role:'system',content:nexusSystemPrompt+reviewBlock},{role:'user',content:JSON.stringify({task:'下面 questions 里的提问还没有回答。只回答这些提问：按 cards 和 evidence 里的证据说明，没有依据就直说没找到，不要出修订卡。出处用大白话说（谁、哪天、哪张卡的哪一项），不写 E 开头的证据编号。返回 {"reply":"回答"}。',scope:scope.id,questions:explicitQuestions.map(q=>({id:q.id,author:handoffProfiles[q.author]?.name||q.author,text:q.text,card:q.context?.selection?.id,block:q.context?.block||q.block})),cards,evidence:ctx.evidence||evidence})}],named('answer'));
+    const cardSources=new Set(delivery.saved.flatMap(p=>p.sourceIds||[])),unansweredQuestions=explicitQuestions.filter(q=>!cardSources.has(q.id));
+    if(unansweredQuestions.length&&!String(output.reply||'').trim()&&(!receipt||unansweredQuestions.some(q=>/[?？]|为什么|为何|怎么|啥|什么|是否|哪|吗/.test(q.text)))){
+     try{const asked=await chatGateway.complete([{role:'system',content:nexusSystemPrompt+reviewBlock},{role:'user',content:JSON.stringify({task:'下面 questions 里的提问还没有回答。只回答这些提问：按 cards 和 evidence 里的证据说明，没有依据就直说没找到，不要出修订卡。出处用大白话说（谁、哪天、哪张卡的哪一项），不写 E 开头的证据编号。返回 {"reply":"回答"}。',scope:scope.id,questions:unansweredQuestions.map(q=>({id:q.id,author:handoffProfiles[q.author]?.name||q.author,text:q.text,card:q.context?.selection?.id,block:q.context?.block||q.block})),cards,evidence:ctx.evidence||evidence})}],named('answer'));
       const said=JSON.parse(asked.answer);if(typeof said?.reply==='string')output.reply=readableAnswer(said.reply,cards);}catch{}
     }
     // A question that a card in this pass answers (an answer to a 下期输入 question, say) needs no extra line beside the card.
-    const cardSources=new Set([...output.proposals,...missionProposals].flatMap(p=>p.sourceIds||[]));
-    const notice=roomLine({reply:output.reply,cards:output.proposals.length+missionProposals.length,questions:explicitQuestions.filter(q=>!cardSources.has(q.id))});
+    if(output.participation.called&&!delivery.saved.length&&!output.reply&&!receipt&&(planned.length||(output.rejected||[]).length||rawReply!==output.reply))output.reply='这次没能生成可确认的新修订卡，正文没有因此修改。';
+    const baseNotice=roomLine({reply:output.reply,cards:delivery.saved.length,questions:unansweredQuestions});
+    const notice=[baseNotice,receipt].filter(Boolean).join(' ');
     // An answer to one question sits under that question; the question's own card stays the context.
     const answered=explicitQuestions.length===1?explicitQuestions[0]:null;
     if(notice)await store.transact(state=>{if(state.round?.id!==roundAtStart)return state;state.messages.push({id:randomUUID(),author:'Nexus',channel:'group',scope:scope.id,text:notice,...(answered?{replyTo:answered.id,replyToAuthor:answered.author,threadId:answered.threadId||answered.id,...(answered.context?{context:answered.context}:{})}:{}),createdAt:new Date().toISOString()});state.sequence++;return state;});
@@ -514,8 +520,8 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
     const deferIds=output.participation.deferred?output.participation.deferIds:[];
     await store.transact(s=>{if(s.round?.id!==roundAtStart)return s;const n=s.nexus[scope.id];n.pendingSourceIds=(n.pendingSourceIds||[]).filter(id=>!pendingSourceIds.includes(id)||deferIds.includes(id));if(deferIds.length)n.deferUntil=output.participation.deferUntil;else delete n.deferUntil;if(!n.pendingSourceIds.length)delete n.pendingSince;return s;});
     const runId=await recordModelRun({channel:'group',scope:scope.id,selection:n?.id,model:result.model,usage:result.usage,providerRequestId:result.providerRequestId});
-    tracer.annotate({outputs:{answer:output.reply,proposals:output.proposals.map(p=>p.cardId),missionCards:missionProposals.length,rejected:(output.rejected||[]).length,listen:listened?.act||null}});
-    return json(res,200,{...output,topics:store.snapshot().nexus[scope.id].topics,applied,skipped,collaboration:sharedProjection(store.snapshot(),actor),answer:output.reply,context:{scope:scope.id},runId,kind:'candidate-proposals',createdAt:new Date().toISOString()});
+    tracer.annotate({outputs:{answer:notice,proposals:delivery.saved.filter(p=>!p.op).map(p=>p.cardId),proposed:output.proposals.map(p=>p.cardId),delivery:delivery.outcomes,missionCards:delivery.saved.filter(p=>p.op).length,rejected:(output.rejected||[]).length,listen:listened?.act||null}});
+    return json(res,200,{...output,proposals:delivery.saved.filter(p=>!p.op),missionCards:delivery.saved.filter(p=>p.op),delivery:delivery.outcomes,topics:store.snapshot().nexus[scope.id].topics,applied,skipped,collaboration:sharedProjection(store.snapshot(),actor),answer:notice,context:{scope:scope.id},runId,kind:'candidate-proposals',createdAt:new Date().toISOString()});
    }
    // Source contents are evidence, never instructions. Only server-owned allowlisted sources are sent.
    const roundInput=store.snapshot().round?.input||input;

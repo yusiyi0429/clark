@@ -1,0 +1,44 @@
+import {test,after} from 'node:test';
+import assert from 'node:assert/strict';
+import {createServer,request} from 'node:http';
+import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {normalize} from './domain.mjs';
+import {createCollaborationState} from './governance.mjs';
+import {installReviewRound} from './review-round.mjs';
+import {queueProposals} from './nexus-memory.mjs';
+const dir=await mkdtemp(join(tmpdir(),'m2-delivery-http-')),scope='person:member-03',cardId='rv:agents-m1';
+const units=normalize([{key:'agents',name:'Agents',owner:'刘明华',title:'Agents',result:'测试',checks:[],missions:[{title:'供应选择',owner:'孙铭泽',result:'测试',checks:[],tasks:[]}]}]);
+const facts=[{ref:'price',item:'报价',owner:'孙铭泽',status:'未达成',evidence:'原报价',gap:'待核对'}];
+const state=installReviewRound(createCollaborationState(units),{period:'2026-10',reviews:[{ref:'company',unit:'company',level:'company',title:'公司',owner:'刘明华',verdict:'未达成',verdictReason:'测试',facts:[],nextInputs:[]},{ref:'agents',unit:'agents',level:'ru',parent:'company',title:'单元',owner:'刘明华',verdict:'未达成',verdictReason:'测试',facts:[],nextInputs:[]},{ref:'agents-m1',unit:'agents',level:'mission',parent:'agents',title:'供应选择',owner:'孙铭泽',verdict:'未达成',verdictReason:'测试',facts,nextInputs:[]}]});
+state.round={id:'delivery-http',number:1,units,input:{mode:'synthetic-test',sources:[]}};
+state.messages.push({id:'price-feedback',author:'member-03',channel:'group',scope,text:'供应选择的报价纠正为 GPT 72折、Claude 8折、Gemini 7折，请重新修改。',createdAt:new Date().toISOString()});
+queueProposals(state,scope,[{cardId,baseVersion:1,sourceIds:[],patch:{facts:facts.map(f=>({...f,evidence:'旧候选报价'}))},originSequence:0}]);
+const oldId=state.proposals.at(-1).id;
+await writeFile(join(dir,'bootstrap.json'),JSON.stringify({schemaVersion:1,state}));
+await writeFile(join(dir,'accounts.json'),JSON.stringify({schemaVersion:1,bindings:[{personId:'owner',memberId:'member-03'}]}));
+const legacy=createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({authenticated:true,personId:'owner',role:'member'}));});
+await new Promise(r=>legacy.listen(0,'127.0.0.1',r));
+Object.assign(process.env,{NODE_ENV:'test',M2_INTERNAL_TOKEN:'synthetic-internal-token-at-least-32-chars',LANGSMITH_TRACING:'false',PUBLIC_ORIGIN:'http://trial.example',M2_AUTH_API_URL:`http://127.0.0.1:${legacy.address().port}/api/auth/session`,M2_ACCOUNT_MAP_FILE:join(dir,'accounts.json'),M2_SEED_DIR:dir,DECODING_STATE_PATH:join(dir,'state.json'),DECODING_DISABLE_LOCAL_KEY:'1',DECODING_API_KEY:'synthetic-test-key',DECODING_API_BASE:'https://model-fixture.invalid/v1',DECODING_MODEL:'aliyun/deepseek-v4.1-flash'});
+const originalFetch=globalThis.fetch;let beforeReturn=null,extraEvidence='';
+globalThis.fetch=async(url,options)=>{
+ if(new URL(url).hostname!=='model-fixture.invalid')return originalFetch(url,options);
+ const input=JSON.parse(JSON.parse(options.body).messages.at(-1).content);
+ if(beforeReturn){const hook=beforeReturn;beforeReturn=null;await hook();}
+ const card=(input.cards||input.focus?.cards||[]).find(c=>c.id===cardId);assert.ok(card,'真实HTTP路径提供目标卡');
+ const value={reply:'已生成修订卡，请确认。',topics:[],proposals:[{cardId,baseVersion:card.version,basis:'request',reason:'报价纠正',sourceIds:['price-feedback'],patch:{facts:facts.map(f=>({...f,evidence:'GPT 72折；Claude 8折；Gemini 7折'+extraEvidence}))}}]};
+ return new Response(JSON.stringify({id:'fixture',choices:[{message:{content:JSON.stringify(value)},finish_reason:'stop'}]}),{headers:{'Content-Type':'application/json'}});
+};
+const {server}=await import('./server.mjs');await new Promise(r=>server.listen(0,'127.0.0.1',r));
+const call=(path,body)=>new Promise((resolve,reject)=>{const req=request(`http://127.0.0.1:${server.address().port}/m2${path}`,{method:body?'POST':'GET',headers:{host:'trial.example',cookie:'warmap_session=owner',...(body?{origin:'http://trial.example','Content-Type':'application/json'}:{})}},res=>{const chunks=[];res.on('data',b=>chunks.push(b));res.on('end',()=>resolve({status:res.statusCode,data:JSON.parse(Buffer.concat(chunks))}));});req.on('error',reject);req.end(body?JSON.stringify(body):undefined);});
+const act=()=>call('/api/nexus',{text:'请按纠正后的报价更新供应选择',context:{scope}});
+after(async()=>{await new Promise(r=>server.close(r));await new Promise(r=>legacy.close(r));globalThis.fetch=originalFetch;await rm(dir,{recursive:true,force:true});});
+test('HTTP：纠正未接受建议→重复→模型执行中手改，保存数量、正文、lastAct及回信一致',async()=>{
+ const first=await act();assert.equal(first.status,200,JSON.stringify(first.data));assert.equal(first.data.proposals.length,1);assert.equal(first.data.delivery[0].status,'saved');
+ let saved=JSON.parse(await readFile(join(dir,'state.json'),'utf8'));assert.equal(saved.proposals.find(p=>p.id===oldId).status,'superseded');assert.match(saved.proposals.at(-1).patch.facts[0].evidence,/GPT 72折；Claude 8折；Gemini 7折/);assert.equal(saved.cards[cardId].versions.length,1);assert.deepEqual(saved.nexus[scope].lastAct.kept,[cardId]);
+ const duplicate=await act();assert.equal(duplicate.status,200,JSON.stringify(duplicate.data));assert.equal(duplicate.data.proposals.length,0);assert.equal(duplicate.data.delivery[0].status,'duplicate');assert.match(duplicate.data.answer,/已有相同待确认/);assert.doesNotMatch(duplicate.data.answer,/已生成/);
+ extraEvidence='，待再次核对';beforeReturn=async()=>{const r=await call('/api/actions',{action:{type:'revise',cardId,baseVersion:1,patch:{verdictReason:'模型执行期间人工修改'}}});assert.equal(r.status,200,JSON.stringify(r.data));};
+ const stale=await act();assert.equal(stale.status,200,JSON.stringify(stale.data));assert.equal(stale.data.proposals.length,0);assert.equal(stale.data.delivery[0].status,'stale');assert.match(stale.data.answer,/没有覆盖新版本/);
+ saved=JSON.parse(await readFile(join(dir,'state.json'),'utf8'));assert.deepEqual(saved.nexus[scope].lastAct.kept,[]);assert.equal(saved.nexus[scope].lastAct.delivery[0].status,'stale');assert.equal(saved.cards[cardId].versions.at(-1).content.verdictReason,'模型执行期间人工修改');assert.equal(saved.messages.at(-1).text,stale.data.answer);
+});
