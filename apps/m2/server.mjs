@@ -1,3 +1,4 @@
+import {createRevisionAcknowledgements} from './revision-ack.mjs';
 import {exportMarkdown,parseStandardMarkdown,prepareTransfer,applyTransfer,transferCards,transferStamp,nonstandardRequest,markdownImportPrompt,assertImportGrounded} from './markdown-transfer.mjs';
 import {createProposalSummarizer} from './proposal-summary.mjs';
 import {createServer} from 'node:http';
@@ -6,7 +7,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {normalize,allNodes} from './domain.mjs';
 import {createModelGateway,recordModelRun,patientTransport} from './model.mjs';
 import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,ownerAnnotation,isChildCard,reconcileReply,quietReply,roomLine} from './nexus-policy.mjs';
-import {createCollaborationState,currentVersion,canRead,cardStatus,confirmationSummary,insightView,publishedMissionInsights,roomMember,canReadRoom} from './governance.mjs';
+import {createCollaborationState,applyAction,currentVersion,canRead,cardStatus,confirmationSummary,insightView,publishedMissionInsights,roomMember,canReadRoom} from './governance.mjs';
 import {reviewCascadeRequest,reviewCascadeProposal,cascadeSkip} from './review-cascade.mjs';
 import {runRoundPool} from './round-pool.mjs';
 import {redactMessages} from './redact.mjs';
@@ -71,6 +72,7 @@ const gateway=await createModelGateway();
 // Chat (Nexus, private Agent) hides sensitive personal details before the model sees them (模型调用稳定性加固 2026-10-22).
 const chatGateway=await createModelGateway({...(process.env.DECODING_CHAT_MODEL?{env:{...process.env,DECODING_MODEL:process.env.DECODING_CHAT_MODEL}}:{}),redact:true});
 const summarizeProposal=createProposalSummarizer(chatGateway);
+const revisionAcknowledgements=createRevisionAcknowledgements();
 const ready=gateway.status.ready;
 const store=await openCollaborationStore(process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)),bootstrap.state);
 const liveUnitsFrom=s=>{const visit=n=>({...currentVersion(s.cards[n.id]).content,children:n.children.map(visit)});return (s.round?.units||units).map(visit);};
@@ -98,7 +100,7 @@ function runReviewCascades(){if(process.env.DECODING_CASCADE==='off'||reviewCasc
  try{const snap=store.snapshot();if(!snap.cards[job.childId]||!snap.cards[job.parentId])continue;{const skip=cascadeSkip(snap,job);if(skip){await log({impact:false,reason:skip});continue;}}const rules=(await loadReviewRules(reviewSkillRoot)).rules;
   const r=await chatGateway.complete(redactMessages(reviewCascadeRequest(snap,job,rules)).messages,{json:true,thinking:true,reasoningEffort:'medium'});
   const value=JSON.parse(bareJson(r.answer));let reason='';
-  await store.transact(s=>{const out=reviewCascadeProposal(s,job,value);reason=out.reason||'';return out.proposal?queueProposals(s,out.scope,[out.proposal]):s;});await log({impact:!reason,reason});
+  await store.transact(s=>{const out=reviewCascadeProposal(s,{...job,parentVersion:currentVersion(snap.cards[job.parentId]).number},value);reason=out.reason||'';return out.proposal?queueProposals(s,out.scope,[{...out.proposal,originSequence:snap.sequence}]):s;});await log({impact:!reason,reason});
  }catch(e){await log({error:String(e.message).slice(0,160)});}}}finally{reviewCascading=false;}})();}
 async function cascadeOnce(job){
  const start=store.snapshot(),roundAtStart=start.round?.id,parent=start.cards[job.cardId];if(!parent||!childrenOf(start,job.cardId).length)return;
@@ -110,7 +112,7 @@ async function cascadeOnce(job){
   const checked=validateCascade(value,{state:s,parentId:job.cardId}),scope=s.cards[job.cardId].unit||(s.cards[job.cardId].level==='po'?job.cardId:unitOfCard(s,job.cardId));
   // The line that explains the cards is stamped first, so the cards sit under it in the room (评测 2026-10-22).
   const said=new Date().toISOString();
-  const next=queueProposals(s,scope,checked.proposals.map(p=>({...p,sourceIds:[job.noticeId],skill:skill.version,fromParent:{id:job.cardId,version:job.to,at:job.at},...trace})));
+  const next=queueProposals(s,scope,checked.proposals.map(p=>({...p,originSequence:start.sequence,sourceIds:[job.noticeId],skill:skill.version,fromParent:{id:job.cardId,version:job.to,at:job.at},...trace})));
   next.messages.push({id:randomUUID(),author:'Nexus',channel:'group',scope,cardId:job.cardId,text:cascadeMessage(next,job.cardId,checked),cascade:{cardId:job.cardId,version:job.to,skill:skill.version},createdAt:said});next.sequence++;return next;});
 }
 async function cascadeFailed(job,e){await store.transact(s=>{const card=s.cards[job.cardId];if(!card)return s;const scope=unitOfCard(s,job.cardId),owners=[...new Set(childrenOf(s,job.cardId).map(c=>currentVersion(c).content.owner).filter(Boolean))];s.messages.push({id:randomUUID(),author:'Nexus',channel:'group',scope,cardId:job.cardId,text:`下级对照这次没做成（${String(e.message).slice(0,60)}），请 ${owners.map(n=>'@'+n).join('、')} 自己核对一下是否需要调整。`,createdAt:new Date().toISOString()});s.sequence++;return s;}).catch(()=>{});}
@@ -246,7 +248,7 @@ export const server=createServer(async(req,res)=>{
   if(route.pathname==='/api/markdown/apply'&&req.method==='POST'){
    const b=await body(req),actor=actorFor(b.memberId),preview=markdownPreviews.get(b.token);
    if(!preview||preview.actorId!==actor.id||preview.expires<Date.now())return json(res,409,{error:'预览已失效，请重新导入'});
-   const next=await store.transact(state=>{const currentActor=memberActor(actor.id,state);if(transferStamp(state,transferCards(state,currentActor,preview.selection))!==preview.stamp)throw Object.assign(Error('内容或轮次已变化，请重新预览'),{status:409});return applyTransfer(state,currentActor,preview.changes);});
+   const next=await store.transact(state=>{const currentActor=memberActor(actor.id,state);if(transferStamp(state,transferCards(state,currentActor,preview.selection))!==preview.stamp)throw Object.assign(Error('内容或轮次已变化，请重新预览'),{status:409});return revisionAcknowledgements.run(state,currentActor,{type:'markdown',token:b.token,ackToken:b.ackToken},ack=>applyTransfer(state,currentActor,preview.changes,{reconfirmVersion:ack.reconfirmVersion}));});
    markdownPreviews.delete(b.token);runCascades();return json(res,200,sharedProjection(next,actor));
   }
   if(route.pathname==='/api/session'&&req.method==='GET')return json(res,200,{authenticated:true,...req.m2Session});
@@ -361,7 +363,7 @@ export const server=createServer(async(req,res)=>{
     return json(res,200,sharedProjection(await privateMessage(actor.id,actor.id,b.action.text.trim()),actor));
    }
    const before=tracer.enabled?store.snapshot():null;
-   let next=await store.apply(actor,b.action||{});
+   let next=await store.transact(state=>{const currentActor=memberActor(actor.id,state);return revisionAcknowledgements.run(state,currentActor,{...b.action,ackToken:b.ackToken},action=>applyAction(state,currentActor,action));});
    // Accepted or turned-down cards, verdict changes and signatures become LangSmith feedback on the run that made them.
    if(before)actionFeedback(tracer,before,next,b.action,actor);
    runCascades();
@@ -376,7 +378,6 @@ export const server=createServer(async(req,res)=>{
    const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state),view=sharedProjection(state,actor);
    const proposal=Object.values(view.records).flat().find(p=>p.kind==='revision-proposal'&&p.id===route.searchParams.get('id'));
    if(!proposal)return json(res,404,{error:'找不到可见修订卡'});
-   if(!ready)return json(res,503,{error:'修改摘要暂不可用'});
    try{return json(res,200,await summarizeProposal(proposal,view.drafts[proposal.cardId],{actorId:actor.id,roundId:state.round?.id,reviewLoadedAt:state.reviewRound?.loadedAt,scope:proposal.scope}));}catch{return json(res,502,{error:'修改摘要未生成，请重试'});}
   }
   if(req.url==='/api/data'){const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state);const metadata=await roundMetadata(state.round,input);metadata.readerViews=visibleReaderViews(metadata.readerViews,state,actor);if(!actor.ceo)delete metadata.roundAudit;return revalidated(req,res,etagged(JSON.stringify({session:req.m2Session,canRunRounds:mayRunRounds(actor),review:reviewSummary(state),units:liveUnitsFrom(state).filter(u=>canRead(actor,state.cards[u.id])),round:state.round?.number||6,roundId:state.round?.id||null,skill:state.round?.input?.skill?.version||'旧轮未记录实际技能快照',availableSkill:loadedSkill.version,modelReady:ready,modelStatus:gateway.status,tracing:tracer.state(),chatModelStatus:chatGateway===gateway?null:chatGateway.status,auditStatus:state.round?.audit?.status||null,auditIssueCount:state.round?.audit?.issues?.length||0,auditGapCount:state.round?.audit?.gaps?.length||0,sourceTime:state.round?.input.retrievedAt||input.retrievedAt,...metadata})));}
@@ -399,6 +400,7 @@ export const server=createServer(async(req,res)=>{
     analyzedScope=scope.id;analyzedRound={id:roundAtStart};await nexusActivity(scope.id,{running:true,error:null},analyzedRound);
     const projection=sharedProjection(store.snapshot(),actor);
     const feedbackStamp=s=>[...s.comments,...s.messages].filter(e=>e.scope===scope.id&&e.channel==='group'&&!['Nexus','Agent','system'].includes(e.author)).map(e=>e.id).join('|');
+    const proposalSequenceAtStart=store.snapshot().sequence;
     const feedbackAtStart=feedbackStamp(store.snapshot());
     const topicState=store.snapshot();
     const previousTopics=materializeTopics(topicState.nexus?.[scope.id]?.topics,[...topicState.comments,...topicState.messages].filter(e=>e.scope===scope.id));
@@ -494,7 +496,7 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
     const lastAct={at:new Date().toISOString(),kept:output.proposals.map(p=>p.cardId),rejected:(output.rejected||[]).slice(0,8),...(rawReply!==output.reply?{rawReply:String(rawReply).slice(0,1000)}:{})};
     // Each card keeps the id of this pass's run, so the owner's accept or reject becomes feedback on it.
     const trace=tracer.ref();
-    await store.transact(state=>{if(state.round?.id!==roundAtStart)throw Object.assign(Error('轮次已切换，建议未保存'),{status:409});return applyOwnerAnnotations(queueProposals(state,scope.id,[...output.proposals,...missionProposals].map(p=>({...p,...trace}))),scope.id);});
+    await store.transact(state=>{if(state.round?.id!==roundAtStart)throw Object.assign(Error('轮次已切换，建议未保存'),{status:409});return applyOwnerAnnotations(queueProposals(state,scope.id,[...output.proposals,...missionProposals].map(p=>({...p,originSequence:proposalSequenceAtStart,...trace}))),scope.id);});
     runCascades();
     // A card speaks for itself: no extra line beside it. The owner's accept or reject is synced to the group afterwards (陈溪南 2026-10-21).
     // …and a question asked in the same batch is still answered: when the pass wrote no answer, one short call answers it.
@@ -551,7 +553,7 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
    if(refusalTo.shared&&refusalTo.called)await store.transact(st=>{st.messages.push({id:randomUUID(),author:'Nexus',channel:'group',scope:refusalTo.scope,text:why,createdAt:new Date().toISOString()});st.sequence++;return st;}).catch(()=>{});
    if(!refusalTo.shared)await privateMessage(refusalTo.memberId,'Agent',why).catch(()=>{});
    e.message=why;}
-  if(analyzedScope)await nexusActivity(analyzedScope,{running:false,error:e.status?e.message:'分析未完成，反馈已保存，请重试'},analyzedRound);const error=e.status?e.message:'回答中断，请重试；未保存不完整回答。';if(streamReply){if(!res.destroyed)res.end(JSON.stringify({type:'error',error})+'\n');}else json(res,e.status||500,{error,code:e.code});}finally{clearInterval(streamTimer);if(analyzedScope)nexusRunning.delete(analyzedScope);}
+  if(analyzedScope)await nexusActivity(analyzedScope,{running:false,error:e.status?e.message:'分析未完成，反馈已保存，请重试'},analyzedRound);const error=e.status?e.message:'回答中断，请重试；未保存不完整回答。';if(streamReply){if(!res.destroyed)res.end(JSON.stringify({type:'error',error})+'\n');}else json(res,e.status||500,{error,code:e.code,...(e.reconfirmToken?{reconfirmToken:e.reconfirmToken}:{})});}finally{clearInterval(streamTimer);if(analyzedScope)nexusRunning.delete(analyzedScope);}
 });
 server.on('close',()=>{nexusClosing=true;for(const timer of nexusTimers.values())clearTimeout(timer);store.close();});
 server.on('listening',()=>{for(const [scope,n] of Object.entries(store.snapshot().nexus||{}))if(n.pendingSourceIds?.length&&n.pendingMemberId)scheduleNexus(scope,n.pendingMemberId);});

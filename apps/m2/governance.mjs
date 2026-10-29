@@ -150,6 +150,10 @@ export function mayRevise(actor,card){
  const missionId=card.level==='mission'?card.id:card.id.split('-t')[0];
  return (actor.missionDri||[]).includes(missionId);
 }
+export function requireRevisionAcknowledgement(card,action){
+ const v=currentVersion(card);if(!(v.signatures?.length||card.confirmedVersion===v.number))return;
+ if(action.auto===true||action.reconfirmVersion!==v.number)throw Object.assign(Error('这张卡已确认，修改后需重新确认'),{status:409,code:'RECONFIRM_REQUIRED',cardId:card.id,version:v.number});
+}
 export function applyAction(previous,actor,action){
  if(['acceptProposal','rejectProposal'].includes(action.type)){
   const proposal=previous.proposals?.find(p=>p.id===action.proposalId&&p.cardId===action.cardId);
@@ -164,6 +168,7 @@ export function applyAction(previous,actor,action){
   // A Mission card (新增/撤掉/恢复) does not change the PO, so a newer PO version does not make it stale.
   if(!proposal.op&&currentVersion(target).number!==proposal.baseVersion)fail(409,'材料已更新，请重新分析，不能覆盖新版本');
   if(action.type==='acceptProposal'){
+   for(const ref of [proposal.fromParent,proposal.fromMission])if(ref&&(!previous.cards[ref.id]||currentVersion(previous.cards[ref.id]).number!==ref.version))fail(409,'来源已更新，请使用新的修订建议');
    const objections=[...previous.comments,...previous.messages].filter(e=>e.channel==='group'&&e.scope===proposal.scope&&e.createdAt>=proposal.createdAt&&e.author!=='Nexus'&&disagrees(e.text));
    if(objections.some(e=>e.cardId===target.id||e.context?.selection?.id===target.id||e.replyTo===proposal.id||e.threadId===proposal.id||proposal.sourceIds.includes(e.replyTo)||proposal.sourceIds.includes(e.threadId)))fail(409,'建议提出后出现新分歧，请先核对讨论再修订');
   }
@@ -172,7 +177,7 @@ export function applyAction(previous,actor,action){
    if(typeof action.patch!=='object'||Array.isArray(action.patch)||Object.keys(action.patch).some(k=>!(k in proposal.patch)))fail(400,'只能修改这条建议涉及的字段');
    patch={...proposal.patch,...action.patch};
   }
-  const next=action.type==='acceptProposal'&&proposal.op?applyMissionCard(previous,actor,proposal):action.type==='acceptProposal'?applyAction(previous,actor,{type:'revise',cardId:proposal.cardId,baseVersion:proposal.baseVersion,patch,evidenceIds:proposal.sourceIds,viaProposal:proposal.id,auto:action.auto===true}):structuredClone(previous);
+  const next=action.type==='acceptProposal'&&proposal.op?applyMissionCard(previous,actor,proposal):action.type==='acceptProposal'?applyAction(previous,actor,{type:'revise',cardId:proposal.cardId,baseVersion:proposal.baseVersion,patch,evidenceIds:proposal.sourceIds,viaProposal:proposal.id,auto:action.auto===true,reconfirmVersion:action.reconfirmVersion}):structuredClone(previous);
   const saved=next.proposals.find(p=>p.id===proposal.id);saved.status=action.type==='acceptProposal'?'accepted':'rejected';saved.handledBy=actor.id;saved.handledAt=new Date().toISOString();if(action.auto===true)saved.auto=true;if(patch!==proposal.patch){saved.edited=true;saved.acceptedPatch=patch;}
   if(saved.status==='accepted'&&!proposal.op){const v=currentVersion(next.cards[proposal.cardId]);v.proposedBy='Nexus';v.reason=proposal.reason;saved.resultVersion=v.number;
    // The topics this card answered are settled: close them in the minutes so 共同确认 stops listing them (2026-10-19).
@@ -220,6 +225,7 @@ export function applyAction(previous,actor,action){
   if('result'in patch&&!patch.result.trim())fail(400,'成果不能为空');
   if('checks'in patch&&!patch.checks.length)fail(400,'验收标准至少保留一项');
   if(Object.entries(patch).every(([key,value])=>JSON.stringify(v.content[key])===JSON.stringify(value)))fail(400,'内容没有变化，不新增版本');
+  requireRevisionAcknowledgement(card,action);
   // 判定变化一律走修订卡 (陈溪南 2026-10-22): a person changing a review's verdict files a card for the other signer instead.
   // …unless the person changing it is the only one who signs (个人复盘 since 2026-10-27): then it is just their revision.
   const soleSigner=isReview(card)&&verdictDeciders(state,card,null).every(n=>n===nameOf(actor.id));
@@ -260,21 +266,21 @@ export function applyAction(previous,actor,action){
    }else if(card.level==='task'&&changed.includes('verdict')){const parentReview=state.cards[card.parentId];if(parentReview)notify(titleOf(card),v.content.verdict,content.verdict,roomOf(parentReview));}
   }
   retireCascadeCards(state,card,v.number+1);
-  for(const p of state.proposals||[])if(p.cardId===card.id&&p.status==='pending'&&p.id!==action.viaProposal){if(pathsOverlap(patchPaths(p.before,p.patch),patchPaths(v.content,patch))){p.status='superseded';p.supersededBy=v.number+1;}else{p.patch=rebasePatch(p.before,p.patch,content);p.before=Object.fromEntries(Object.keys(p.patch).map(k=>[k,structuredClone(content[k]??'')]));p.baseVersion=v.number+1;}}
+  for(const p of state.proposals||[])if(p.cardId===card.id&&p.status==='pending'&&p.id!==action.viaProposal){if(pathsOverlap(patchPaths(p.before,p.patch),patchPaths(v.content,patch))){p.status='superseded';p.supersededBy=v.number+1;}else{p.originalPatch??=structuredClone(p.patch);p.originalBaseVersion??=p.baseVersion;p.originalBefore??=structuredClone(p.before);p.patch=rebasePatch(p.before,p.patch,content);p.before=Object.fromEntries(Object.keys(p.patch).map(k=>[k,structuredClone(content[k]??'')]));p.baseVersion=v.number+1;}}
   // 上级跟着看 (陈溪南 2026-10-22 走查第 3 条): a lower card's dates, checks, result or verdict changing can leave what the
   // card above wrote out of date (a PO milestone still on the old day, an RU review still saying "all three missed").
   // Its owner is told and the card shows 下级有调整 until they look; dates the upper card still quotes are named.
   const watched=changed.filter(k=>['time','checks','milestones','result','verdict','verdictReason','targets','facts','nextInputs','tier'].includes(k)),parent=card.parentId&&state.cards[card.parentId];
   // A 个人复盘 change no longer flags its unit review (陈溪南 2026-10-27): Nexus reads the change and, only when it matters for the
   // unit review, files a card there for its signers (server: review-cascade.mjs).
-  if(watched.length&&parent&&isReview(card)&&card.level==='mission'&&isReview(parent)){(state.reviewCascadeQueue??=[]).push({childId:card.id,parentId:parent.id,fromVersion:v.number,toVersion:v.number+1,fields:watched,at:now});}
+  if(watched.length&&parent&&isReview(card)&&card.level==='mission'&&isReview(parent)){if(!changed.includes('verdict'))groupNotice(state,card,`${nameOf(actor.id)}修改了${titleOf(card)}，Nexus 将核对单元复盘是否需要修订。`,unitOf(parent));(state.reviewCascadeQueue??=[]).push({childId:card.id,parentId:parent.id,fromVersion:v.number,toVersion:v.number+1,fields:watched,at:now});}
   else if(watched.length&&parent){
    // Dates compared as month/day (11/06 = 11-6); the upper card's own spelling is what the notice quotes.
    const dates=x=>new Map((JSON.stringify(x||'').match(/\d{1,2}[\/-]\d{1,2}/g)||[]).map(d=>{const [m,dd]=d.split(/[\/-]/).map(Number);return [`${m}/${dd}`,d];}));
    const was=dates(watched.map(k=>v.content[k])),now2=dates(watched.map(k=>patch[k])),gone=[...was.keys()].filter(d=>!now2.has(d));
    const upper=currentVersion(parent).content,inUpper=dates(upper),quoted=gone.filter(d=>inUpper.has(d)).map(d=>inUpper.get(d));
    parent.downstreamChange={cardId:card.id,version:v.number+1,fields:watched,staleDates:quoted,at:now};
-   const owners=[...new Set(confirmationSlots(parent).map(slot=>slotHolder(state,parent,slot)).concat(upper.owner).flatMap(n=>String(n||'').split(/[、,，]/)).map(n=>n.trim()).filter(n=>n&&n!==nameOf(actor.id)))];
+   const owners=[...new Set(confirmationSlots(parent).map(slot=>slotHolder(state,parent,slot)).concat(upper.owner).flatMap(n=>String(n||'').split(/[、,，]/)).map(n=>n.trim()).filter(Boolean))];
    const what=watched.map(k=>({time:'时间',checks:'验收',milestones:'里程碑',result:'成果',verdict:'判定',verdictReason:'判定理由',targets:'目标对照',facts:'事实证据',nextInputs:'下期输入',tier:'档位'})[k]).join('、');
    // One line per upper card for a burst of lower changes (陈溪南 2026-10-27, fewer Nexus lines): the same notice grows instead of a new one.
    if(owners.length){const recent=[...state.messages].reverse().find(m=>m.kind==='notice'&&m.downstream&&m.cardId===parent.id&&Date.parse(now)-Date.parse(m.createdAt)<10*60e3);
@@ -389,7 +395,7 @@ export function applyAction(previous,actor,action){
   if(proposal&&mayRevise(actor,state.cards[proposal.cardId])){
    entry.acceptedProposalId=proposal.id;
    state.sequence++;state.audit.push({id:`audit-${state.sequence}`,actorId:actor.id,type:action.type,cardId:card.id,version:v.number,createdAt:now});
-   return applyAction(state,actor,{type:'acceptProposal',cardId:proposal.cardId,proposalId:proposal.id});
+   return applyAction(state,actor,{type:'acceptProposal',cardId:proposal.cardId,proposalId:proposal.id,reconfirmVersion:action.reconfirmVersion});
   }
   state.nexus??={};const discussion=state.nexus[entry.scope]??={};discussion.topics??=[];
   recordTopic(discussion.topics,entry);

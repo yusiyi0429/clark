@@ -9,7 +9,7 @@ import {exportMarkdown,parseStandardMarkdown,prepareTransfer,applyTransfer,trans
 const facts=[{ref:'task-a',item:'任务甲',owner:'孙铭泽',status:'未达成',evidence:'原记录甲',gap:'未完成'},{ref:'task-b',item:'任务乙',owner:'孙铭泽',status:'未达成',evidence:'原记录乙',gap:'未完成'}];
 const fresh=()=>installReviewRound(createCollaborationState([{id:'bf01',level:'po',title:'灯塔',owner:'刘明华',version:1,result:'客户使用',checks:['上线'],children:[{id:'bf01-m1',level:'mission',title:'首用',owner:'孙铭泽',version:1,result:'正式使用',checks:['验收'],children:[]}]}]),{period:'2026-10',reviews:[{unit:'company',level:'company',ref:'company',title:'公司',owner:'刘明华',verdict:'未达成',verdictReason:'原',facts:[],nextInputs:[]},{unit:'bf01',level:'ru',ref:'bf01',parent:'company',title:'灯塔复盘',owner:'刘明华',verdict:'未达成',verdictReason:'原',facts:[],nextInputs:[]},{unit:'bf01',level:'mission',ref:'bf01-m1',parent:'bf01',title:'首用复盘',owner:'孙铭泽',verdict:'未达成',verdictReason:'原',facts,nextInputs:[{ref:'task-a',type:'继续',text:'完成任务甲'}]}]});
 const id='rv:bf01-m1',po='rv:bf01';
-const revise=(s,actor,patch)=>applyAction(s,actor,{type:'revise',cardId:id,baseVersion:currentVersion(s.cards[id]).number,patch});
+const revise=(s,actor,patch)=>applyAction(s,actor,{type:'revise',cardId:id,baseVersion:currentVersion(s.cards[id]).number,reconfirmVersion:currentVersion(s.cards[id]).number,patch});
 test('首页按签字职责分组且同卡不重复，已确认个人条目保留',()=>{
  let s=fresh();const actor=memberActor('member-03',s),p={...actor,missions:actor.missionDri};
  let tree=reviewTree(sharedProjection(s,actor).drafts);const groups=reviewHomeGroups(tree.nodes,p);

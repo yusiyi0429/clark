@@ -51,3 +51,11 @@ export function summaryInput(proposal,node){
  if(proposal.op==='restore-mission')add('恢复 Mission',{mission:proposal.missionSummary,missionId:proposal.missionId,status:'已撤掉'},{mission:proposal.missionSummary,missionId:proposal.missionId,status:'恢复到原 PO',impact:'恢复1个 Mission 及其全部 Task，确认状态与撤掉前相同。'});
  return {cardId:proposal.cardId,baseVersion:proposal.baseVersion,changes,reason:proposal.reason||'',verdictChange:proposal.verdictChange||null,ambiguous};
 }
+
+// Full source values remain available even when alignment or model compression fails.
+export function completeComparison(proposal,node){
+ const patch=proposal.edited&&proposal.acceptedPatch?proposal.acceptedPatch:proposal.patch||{},plain=value=>typeof value==='string'?value:value==null?'':JSON.stringify(value,null,2);
+ if(proposal.op){const input=summaryInput(proposal,node);return {changes:input.changes.map(c=>({...c,before:plain(c.before),after:plain(c.after)})),full:true,reason:proposal.reason||''};}
+ return {changes:Object.entries(patch).map(([field,after])=>({where:documentFieldLabel(node?.level,field),...proposalTarget(proposal,node),before:plain(proposal.before?.[field]),after:plain(after)})),full:true,reason:proposal.reason||''};
+}
+export function simpleComparison(proposal,node){const input=summaryInput(proposal,node);if(input.ambiguous||input.changes.some(c=>typeof c.before!=='string'||typeof c.after!=='string'||c.before.length>32||c.after.length>38))return null;return {changes:input.changes.map(c=>({...c,before:c.before||'空白',after:c.after||'清空'})),reason:proposal.reason||''};}

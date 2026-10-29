@@ -10,7 +10,7 @@ export function patchPaths(before,patch){return Object.entries(patch).flatMap(([
 export const pathsOverlap=(a,b)=>a.some(x=>b.some(y=>x===y||x.startsWith(y+'/')||y.startsWith(x+'/')));
 export function splitProposal(proposal,content){
  if(proposal.op)return [proposal];const patch=proposal.patch||{};
- const one=p=>({...p,requiresConfirmation:true});
+ const one=p=>({...p});
  // A verdict and its supporting facts/next input form one decision; never split their invariants.
  if('verdict'in patch)return [one(proposal)];
  const fields=Object.keys(patch);
@@ -22,4 +22,13 @@ export function splitProposal(proposal,content){
 
 export function rebasePatch(before,patch,current){
  return Object.fromEntries(Object.entries(patch).map(([f,value])=>{const rows=['facts','nextInputs'].includes(f)?rowChanges(before?.[f],value):null;if(!rows)return [f,value];const changed=new Map(rows.map(x=>[key(x),x]));return [f,current[f].map(x=>changed.get(key(x))||x)];}));
+}
+
+export function remainingPatch(before,patch,replacedPaths){
+ const result={};for(const [field,value]of Object.entries(patch)){
+  const rows=['facts','nextInputs'].includes(field)?rowChanges(before?.[field],value):null;
+  if(!rows){if(!pathsOverlap([field],replacedPaths))result[field]=value;continue;}
+  const keep=new Map(rows.filter(row=>!pathsOverlap([field+'/'+key(row)],replacedPaths)).map(row=>[key(row),row]));
+  if(keep.size)result[field]=before[field].map(row=>keep.get(key(row))||row);
+ }return result;
 }
