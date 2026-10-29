@@ -547,7 +547,8 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
   }
 
   /**
-   * 通知栏（10/28 只出要确认的条目）：confirms 是等我确认的决策（还没冻结的会）和行动项——我是责任人，或没有责任人、我是主持人；
+   * 通知栏（10/28 只出要确认的条目）：confirms 是等我处理的决策（还没冻结的会）和行动项——我是责任人，或没有责任人、我是主持人
+   * （没有责任人的决策由主持人补归属，needsOwner；10/29）；
    * 按会议结束从晚到早、会里按原顺序。meetings 是我主持或创建的会里写入失败的会议记录（一场会一条，卡上重试）。只读，不改任何状态。
    */
   async function pendingFor(personId: string): Promise<{ meetings: TMyMeetingCard[]; confirms: TMyMeetingConfirm[] }> {
@@ -565,8 +566,11 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     for (const row of rows) {
       const mine = (item: { ownerPersonId: string | null; review?: { status: string } }) => item.review?.status === "pending" && (item.ownerPersonId ?? row.lead_dri_id) === personId;
       const at = { meetingId: row.id, title: row.title };
-      if (!row.current_revision) for (const decision of (row.decisions ?? []).filter(mine)) confirms.push({ ...at, kind: "decision", id: decision.id, text: decision.text, dueDate: null });
-      for (const item of row.action_items.filter(mine)) confirms.push({ ...at, kind: "action", id: item.id, text: item.text, dueDate: item.dueDate });
+      // 决策：有责任人的给责任人确认；没有的给主持人补归属。
+      if (!row.current_revision) for (const decision of (row.decisions ?? []).filter(mine)) {
+        confirms.push({ ...at, kind: "decision", id: decision.id, text: decision.text, dueDate: null, needsOwner: !decision.ownerPersonId });
+      }
+      for (const item of row.action_items.filter(mine)) confirms.push({ ...at, kind: "action", id: item.id, text: item.text, dueDate: item.dueDate, needsOwner: false });
       if (!isHostOrCreator(row, personId) || !row.current_revision) continue;
       if ((await meetingRecordState(q, row.id, (id) => id)).status === "failed") meetings.push({ ...at, endedAt: new Date(row.ended_at).toISOString(), status: "failed" });
     }

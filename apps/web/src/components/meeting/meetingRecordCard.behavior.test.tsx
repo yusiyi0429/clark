@@ -121,6 +121,23 @@ describe("决策逐条确认的会议卡（10/28）", () => {
       { params: { path: { id: "m1" } }, body: { kind: "decision", id: "dec-1", verdict: "reject", reason: "会上定的是 70 万" } }));
   });
 
+  it("没有责任人的决策：主持人从参会人里选一位交给他确认，自己不能点确认；别人只看「待林晓指定责任人」", async () => {
+    const unowned = { ...DECISION, ownerPersonId: null };
+    const tree = render(decided({ decisions: [unowned] }));
+    expect(button(tree, "确认")).toBeUndefined();
+    const picker = tree.find((node) => node.props?.["aria-label"] === "第 1 条决策交给谁确认" && "options" in node.props)!;
+    expect(picker.props!.options).toEqual([{ value: "p1", label: "林晓" }, { value: "p2", label: "周舟" }]);
+    api.post.mockResolvedValue({ data: { view: null }, response: { ok: true, status: 200 } });
+    (picker.props!.onChange as (value: string) => void)("p2");
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/card/owners",
+      { params: { path: { id: "m1" } }, body: { id: "dec-1", ownerPersonId: "p2" } }));
+    hooks.values = []; hooks.refs = [];
+    const other = render(decided({ decisions: [unowned], viewerId: "p2", canEdit: false }));
+    expect(hasText(other, "待林晓指定责任人")).toBe(true);
+    expect(other.some((node) => node.props?.["aria-label"] === "第 1 条决策交给谁确认")).toBe(false);
+    expect(button(other, "确认")).toBeUndefined();
+  });
+
   it("定版前底部只有「不写进本体」，点了就存；定版后没确认的写「没有确认」", async () => {
     const tree = render(decided());
     const toggle = tree.find((node) => node.type === "button" && node.props?.role === "switch")!;

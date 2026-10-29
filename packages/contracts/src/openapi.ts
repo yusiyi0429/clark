@@ -6,7 +6,7 @@ import {
   DraftRequestRequest, DraftRequestResponse, RequestListItem, RequestListResponse, PrepareRequestQuestionRequest,
   PrepareRequestQuestionResponse, DraftRequestAnswerResponse, RequestSendInput, RequestAskInput, RequestAnswerInput, ExecuteRequestActionRequest,
 } from "./requests.js";
-import { MeetingCardConfirmRequest, MeetingCardDraftRequest, MeetingCardReviewRequest, MeetingCardReviewResponse, MeetingCardSpeakerRequest, MeetingCardView, MeetingCardWorldChoiceRequest } from "./meetingCard.js";
+import { MeetingCardConfirmRequest, MeetingCardDraftRequest, MeetingCardOwnerRequest, MeetingCardReviewRequest, MeetingCardReviewResponse, MeetingCardSpeakerRequest, MeetingCardView, MeetingCardWorldChoiceRequest } from "./meetingCard.js";
 import { MeetingDecisionView, MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse } from "./meetingDecisions.js";
 import { AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, OrganizeFeishuMinuteRequest } from "./feishuMinuteInbox.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
@@ -1002,10 +1002,19 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/meetings/{id}/card/reviews": {
         post: {
           operationId: "reviewMeetingCardItem",
-          summary: "逐条确认一条决策或行动项：只有责任人本人（没有就是主持人）能点，别人 404；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view）",
+          summary: "逐条确认一条决策或行动项：只有责任人本人能点（没有负责人的行动项由主持人点），别人 404；没有责任人的决策要先补归属（409 OWNER_REQUIRED）；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view）",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/MeetingCardReviewRequest" }),
           responses: { "200": { description: "处理后的会议卡（点的人读不了会议卡时 view 为 null）", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardReviewResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/meetings/{id}/card/owners": {
+        post: {
+          operationId: "assignMeetingDecisionOwner",
+          summary: "冻结前主持人给没有责任人的决策补归属（只能选参会人），补上后由那个人确认；别人 404；不是参会人 400 NOT_PARTICIPANT；已有责任人 409 OWNER_SET；已处理过 409 ALREADY_REVIEWED；冻结后 409 CARD_FROZEN",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/MeetingCardOwnerRequest" }),
+          responses: { "200": { description: "补归属后的会议卡", content: { "application/json": { schema: { $ref: "#/components/schemas/MeetingCardReviewResponse" } } } }, "400": errorResponse, "401": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/meetings/{id}/card/world": {
@@ -3286,6 +3295,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MeetingCardConfirmRequest: MeetingCardConfirmRequest as JsonSchema,
         MeetingCardSpeakerRequest: MeetingCardSpeakerRequest as JsonSchema,
         MeetingCardReviewRequest: MeetingCardReviewRequest as JsonSchema,
+        MeetingCardOwnerRequest: MeetingCardOwnerRequest as JsonSchema,
         MeetingCardReviewResponse: MeetingCardReviewResponse as JsonSchema,
         MeetingCardWorldChoiceRequest: MeetingCardWorldChoiceRequest as JsonSchema,
         MeetingMinutesLinkRequest: MeetingMinutesLinkRequest as JsonSchema,

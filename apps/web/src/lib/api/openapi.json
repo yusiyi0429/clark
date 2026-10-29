@@ -5911,7 +5911,7 @@
     "/api/meetings/{id}/card/reviews": {
       "post": {
         "operationId": "reviewMeetingCardItem",
-        "summary": "逐条确认一条决策或行动项：只有责任人本人（没有就是主持人）能点，别人 404；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view）",
+        "summary": "逐条确认一条决策或行动项：只有责任人本人能点（没有负责人的行动项由主持人点），别人 404；没有责任人的决策要先补归属（409 OWNER_REQUIRED）；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view）",
         "parameters": [
           {
             "name": "id",
@@ -5935,6 +5935,84 @@
         "responses": {
           "200": {
             "description": "处理后的会议卡（点的人读不了会议卡时 view 为 null）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingCardReviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/card/owners": {
+      "post": {
+        "operationId": "assignMeetingDecisionOwner",
+        "summary": "冻结前主持人给没有责任人的决策补归属（只能选参会人），补上后由那个人确认；别人 404；不是参会人 400 NOT_PARTICIPANT；已有责任人 409 OWNER_SET；已处理过 409 ALREADY_REVIEWED；冻结后 409 CARD_FROZEN",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeetingCardOwnerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "补归属后的会议卡",
             "content": {
               "application/json": {
                 "schema": {
@@ -67685,7 +67763,8 @@
                 "kind",
                 "id",
                 "text",
-                "dueDate"
+                "dueDate",
+                "needsOwner"
               ],
               "properties": {
                 "meetingId": {
@@ -67725,6 +67804,9 @@
                       "type": "null"
                     }
                   ]
+                },
+                "needsOwner": {
+                  "type": "boolean"
                 }
               }
             }
@@ -70280,6 +70362,25 @@
             ]
           },
           "reason": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        }
+      },
+      "MeetingCardOwnerRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "ownerPersonId"
+        ],
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "type": "string"
+          },
+          "ownerPersonId": {
+            "minLength": 1,
             "maxLength": 200,
             "type": "string"
           }

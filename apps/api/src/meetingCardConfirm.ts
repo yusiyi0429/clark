@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { Pool, PoolClient } from "pg";
 import type {
   TMeetingActionItem, TMeetingCardConfirmation, TMeetingCardConfirmRequest, TMeetingCardDecision, TMeetingCardDraft, TMeetingCardFrozenPayload, TMeetingCardKind,
-  TMeetingCardReviewRequest, TMeetingCardSync, TMeetingCardView, TMeetingConfirmedObjectChange, TMeetingDraftChange, TMeetingItemReview, TMeetingObjectResult,
+  TMeetingCardOwnerRequest, TMeetingCardReviewRequest, TMeetingCardSync, TMeetingCardView, TMeetingConfirmedObjectChange, TMeetingDraftChange, TMeetingItemReview, TMeetingObjectResult,
   TMeetingRecordStatus,
 } from "@warmap/contracts";
 import { enqueueJob, JOB_MAX_ATTEMPTS, type JobHandler } from "./jobs.js";
@@ -30,8 +30,8 @@ import type { MeetingEventWorld } from "./worldMeetingEvent.js";
  * - 选了不写入：回执 skipped，不发请求；已经写进去的不撤回。
  * - 对象修改（meetingObjectSync）：确认时排好每条的回执（上一版已改成、这次没动的沿用结果），新版确认后旧版还没提交的作废；
  *   事件写成后同一任务里接着按顺序提交这一版的修改。
- * - 决策逐条确认（10/28，decisions 不为 null 的会议卡）：决策和行动项只由责任人本人（没有就是主持人）在通知栏或会议页逐条点，
- *   别人不能代点（斯一第 4 条）；行动项「接下」时才推成执行事项。决策都有了结果、或生成满 48 小时，自动冻结 revision 1（meeting.card_freeze，confirmedBy 为 null）：
+ * - 决策逐条确认（10/28，decisions 不为 null 的会议卡）：决策和行动项只由责任人本人在通知栏或会议页逐条点（没有负责人的行动项由主持人点），
+ *   别人不能代点（斯一第 4 条）；行动项「接下」时才推成执行事项。没有责任人的决策，冻结前由主持人在参会人里补归属，再由那个人确认（斯一第 3 条，10/29）。决策都有了结果、或生成满 48 小时，自动冻结 revision 1（meeting.card_freeze，confirmedBy 为 null）：
  *   payload v2 只放已确认的决策和行动项（各带确认人），不带对象修改（斯一第 7 条：确认决策不等于批准修改）；
  *   没有已确认的决策时不写本体（记录正文能写时除外，见 recordText）。冻结前不能整卡确认（409 REVIEW_PER_ITEM）；冻结后的修改照旧由主持人确认出新版本。
  */
@@ -318,9 +318,9 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
   }
 
   /**
-   * 逐条确认一条决策或行动项：只有责任人本人（没有就是主持人）能点，别人（包括主持人、创建人）当会议不存在。
-   * 行动项「接下」就推成执行事项（自己接下的，不再出「分给你的事」那一条）。决策都有了结果，排一次冻结。
-   * 返回最新会议卡；点的人读不了会议卡时 view 为 null。
+   * 逐条确认一条决策或行动项：只有责任人本人能点（没有负责人的行动项由主持人点），别人（包括主持人、创建人）当会议不存在。
+   * 没有责任人的决策主持人点 409 OWNER_REQUIRED（先补归属）。行动项「接下」就推成执行事项（自己接下的，不再出「分给你的事」那一条）。
+   * 决策都有了结果，排一次冻结。返回最新会议卡；点的人读不了会议卡时 view 为 null。
    */
   async function review(meetingId: string, viewer: Viewer, input: TMeetingCardReviewRequest): Promise<{ view: TMeetingCardView | null } | { error: ConfirmError }> {
     if (!UUID_PATTERN.test(meetingId)) return NOT_FOUND;
@@ -329,12 +329,17 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     const reason = input.reason?.trim() ?? "";
     if (input.verdict === "reject" && !reason) return bad("REASON_REQUIRED", "要写一句原因");
     const at = now().toISOString();
-    const outcome = await transaction(async (cq, client): Promise<"missing" | "reviewed" | "frozen" | "done"> => {
+    const outcome = await transaction(async (cq, client): Promise<"missing" | "reviewed" | "frozen" | "unowned" | "done"> => {
       const card = (await cq("SELECT decisions, action_items, current_revision FROM meeting_cards WHERE meeting_id = $1 FOR UPDATE", [meetingId])).rows[0] as
         { decisions: TMeetingCardDecision[] | null; action_items: TMeetingActionItem[]; current_revision: number | null } | undefined;
       const list: Reviewable[] = !card ? [] : input.kind === "decision" ? card.decisions ?? [] : card.action_items;
       const item = list.find((candidate) => candidate.id === input.id);
-      if (!card || !item?.review || (item.ownerPersonId ?? meeting.lead_dri_id) !== viewer.personId) return "missing";
+      if (!card || !item?.review) return "missing";
+      if (input.kind === "decision" && !item.ownerPersonId) {
+        if (meeting.lead_dri_id !== viewer.personId) return "missing";
+        return card.current_revision ? "frozen" : item.review.status !== "pending" ? "reviewed" : "unowned";
+      }
+      if ((item.ownerPersonId ?? meeting.lead_dri_id) !== viewer.personId) return "missing";
       const result = reviewed(viewer.personId, at, input.verdict, input.verdict === "reject" ? reason : null);
       if (item.review.status !== "pending") return "reviewed";
       if (input.kind === "decision") {
@@ -358,7 +363,38 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     const view = "view" in found ? found.view : null;
     if (outcome === "reviewed") return { error: { status: 409, code: "ALREADY_REVIEWED", message: "这一条已经处理过了", ...(view ? { view } : {}) } };
     if (outcome === "frozen") return { error: { status: 409, code: "CARD_FROZEN", message: "这场会的决策已经定版", ...(view ? { view } : {}) } };
+    if (outcome === "unowned") return { error: { status: 409, code: "OWNER_REQUIRED", message: "这条决策还没有责任人，先交给一位参会人", ...(view ? { view } : {}) } };
     logEvent({ event: "meeting_card.review", objectRef: `meeting:${meetingId}`, status: `${input.kind}:${input.verdict}` });
+    return { view };
+  }
+
+  /**
+   * 冻结前主持人给没有责任人的决策补归属（斯一第 3 条）：只能选参会人；责任人写上后确认状态仍是待确认，由那个人自己在通知栏或会议页点。
+   * 别人当会议不存在；返回最新会议卡。
+   */
+  async function assignOwner(meetingId: string, viewer: Viewer, input: TMeetingCardOwnerRequest): Promise<{ view: TMeetingCardView | null } | { error: ConfirmError }> {
+    if (!UUID_PATTERN.test(meetingId)) return NOT_FOUND;
+    const meeting = await getMeetingRow(q, meetingId);
+    if (!meeting || meeting.lead_dri_id !== viewer.personId) return NOT_FOUND;
+    if (!meeting.participants.some((person) => person.personId === input.ownerPersonId)) return bad("NOT_PARTICIPANT", "只能交给这场会的参会人");
+    const outcome = await transaction(async (cq): Promise<"missing" | "owned" | "reviewed" | "frozen" | "done"> => {
+      const card = (await cq("SELECT decisions, current_revision FROM meeting_cards WHERE meeting_id = $1 FOR UPDATE", [meetingId])).rows[0] as
+        { decisions: TMeetingCardDecision[] | null; current_revision: number | null } | undefined;
+      const decision = card?.decisions?.find((candidate) => candidate.id === input.id);
+      if (!card || !decision) return "missing";
+      if (card.current_revision) return "frozen";
+      if (decision.ownerPersonId) return "owned";
+      if (decision.review.status !== "pending") return "reviewed";
+      const decisions = card.decisions!.map((candidate) => (candidate.id === decision.id ? { ...candidate, ownerPersonId: input.ownerPersonId } : candidate));
+      await cq("UPDATE meeting_cards SET decisions = $2::jsonb, updated_at = now() WHERE meeting_id = $1", [meetingId, JSON.stringify(decisions)]);
+      return "done";
+    });
+    if (outcome === "missing") return NOT_FOUND;
+    const found = await deps.view(meetingId, viewer);
+    const view = "view" in found ? found.view : null;
+    const conflict = { owned: ["OWNER_SET", "这条决策已经有责任人"], reviewed: ["ALREADY_REVIEWED", "这一条已经处理过了"], frozen: ["CARD_FROZEN", "这场会的决策已经定版"] } as const;
+    if (outcome !== "done") return { error: { status: 409, code: conflict[outcome][0], message: conflict[outcome][1], ...(view ? { view } : {}) } };
+    logEvent({ event: "meeting_card.assign_owner", objectRef: `meeting:${meetingId}`, status: "decision" });
     return { view };
   }
 
@@ -528,7 +564,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     }
   }
 
-  return { confirm, review, freeze, retry, syncWorld };
+  return { confirm, review, assignOwner, freeze, retry, syncWorld };
 }
 
 export type MeetingCardConfirmService = ReturnType<typeof createMeetingCardConfirmService>;

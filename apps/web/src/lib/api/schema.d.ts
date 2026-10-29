@@ -1614,8 +1614,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 逐条确认一条决策或行动项：只有责任人本人（没有就是主持人）能点，别人 404；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view） */
+        /** 逐条确认一条决策或行动项：只有责任人本人能点（没有负责人的行动项由主持人点），别人 404；没有责任人的决策要先补归属（409 OWNER_REQUIRED）；reject 要写原因（400 REASON_REQUIRED）；已处理过 409 ALREADY_REVIEWED，冻结后的决策 409 CARD_FROZEN（都带 view） */
         post: operations["reviewMeetingCardItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{id}/card/owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 冻结前主持人给没有责任人的决策补归属（只能选参会人），补上后由那个人确认；别人 404；不是参会人 400 NOT_PARTICIPANT；已有责任人 409 OWNER_SET；已处理过 409 ALREADY_REVIEWED；冻结后 409 CARD_FROZEN */
+        post: operations["assignMeetingDecisionOwner"];
         delete?: never;
         options?: never;
         head?: never;
@@ -11839,6 +11856,7 @@ export interface components {
                 id: string;
                 text: string;
                 dueDate: string | null;
+                needsOwner: boolean;
             }[];
         };
         FeishuMinuteInboxResponse: {
@@ -12173,6 +12191,10 @@ export interface components {
             id: string;
             verdict: "confirm" | "reject";
             reason?: string;
+        };
+        MeetingCardOwnerRequest: {
+            id: string;
+            ownerPersonId: string;
         };
         MeetingCardReviewResponse: {
             view: {
@@ -18112,6 +18134,68 @@ export interface operations {
         };
         responses: {
             /** @description 处理后的会议卡（点的人读不了会议卡时 view 为 null） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingCardReviewResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    assignMeetingDecisionOwner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingCardOwnerRequest"];
+            };
+        };
+        responses: {
+            /** @description 补归属后的会议卡 */
             200: {
                 headers: {
                     [name: string]: unknown;

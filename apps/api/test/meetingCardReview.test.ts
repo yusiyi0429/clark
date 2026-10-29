@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TMeetingCardView } from "@warmap/contracts";
-import { cardAgent, confirm, getCard, OWNER, ready, setup } from "./meetingCardFixture.js";
+import { cardAgent, confirm, getCard, HOST, OWNER, ready, setup } from "./meetingCardFixture.js";
 import { projection, stubWorld } from "./worldFixture.js";
 
-// 会议决策逐条确认（10/28 方案 B）：决策和行动项只由责任人本人（没有就是主持人）逐条确认，不能代确认（斯一第 4 条）；
+// 会议决策逐条确认（10/28 方案 B）：决策和行动项只由责任人本人逐条确认，不能代确认（斯一第 4 条）；没有责任人的决策由主持人在参会人里补归属，
+// 再由那个人确认（斯一第 3 条，10/29 起）；没有负责人的行动项照旧由主持人接下或退回。
 // 决策都有了结果或生成满 48 小时冻结一版，写一条会议事件：只带已确认的决策和行动项（各带确认人），不提交对象修改（斯一第 7 条），记录正文默认不写。
 
 /** 假本体：挂点 PO（版本 5，两个文字组件）；记事件按幂等键去重、能读回；修订照收（版本加一）。 */
@@ -43,7 +44,7 @@ function ontology() {
   return { events: () => actions("world_record_event"), revisions: () => actions("world_revise_object") };
 }
 
-/** 两条决策：「接口统一改成 v2」责任人测试丙，「验收按 4 家算」没有责任人（主持人确认）。 */
+/** 两条决策：「接口统一改成 v2」责任人测试丙，「验收按 4 家算」没有责任人（主持人补归属）。 */
 const TWO_DECISIONS = cardAgent([],
   [{ text: "接口统一改成 v2", ownerPersonId: OWNER, basisSections: [1] }, { text: "验收按 4 家客户上线算", ownerPersonId: null, basisSections: [1] }]);
 const V2 = { v2: true };
@@ -51,20 +52,24 @@ const V2 = { v2: true };
 type Setup = Awaited<ReturnType<typeof setup>>;
 const review = (s: Setup, cookie: string, body: Record<string, unknown>) =>
   s.t.app.inject({ method: "POST", url: `/api/meetings/${s.meetingId}/card/reviews`, headers: { cookie, origin: s.t.publicOrigin }, payload: body });
+const assign = (s: Setup, cookie: string, body: Record<string, unknown>) =>
+  s.t.app.inject({ method: "POST", url: `/api/meetings/${s.meetingId}/card/owners`, headers: { cookie, origin: s.t.publicOrigin }, payload: body });
+/** 通知栏里的条目：要补责任人的写成 owner:<决策 id>。 */
 const confirmsOf = async (s: Setup, cookie: string) =>
-  ((await s.t.app.inject({ method: "GET", url: "/api/me/meeting-cards", headers: { cookie } })).json().confirms as { kind: string; id: string }[]).map((item) => `${item.kind}:${item.id}`);
+  ((await s.t.app.inject({ method: "GET", url: "/api/me/meeting-cards", headers: { cookie } })).json().confirms as { kind: string; id: string; needsOwner: boolean }[])
+    .map((item) => `${item.needsOwner ? "owner" : item.kind}:${item.id}`);
 const parsed = (body: any) => JSON.parse(body.params.content.text) as { payload: any; confirmation: any };
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("会议决策逐条确认", { timeout: 30_000 }, () => {
-  it("责任人和主持人各自确认；决策都有了结果就冻结，事件只带已确认的决策和行动项（各带确认人），不带记录正文，不提交对象修改", async () => {
+  it("责任人各自确认；决策都有了结果就冻结，事件只带已确认的决策和行动项（各带确认人），不带记录正文，不提交对象修改", async () => {
     const world = ontology();
     const s = await setup(TWO_DECISIONS, {}, V2);
     try {
-      // 有责任人的给责任人，没有的给主持人；行动项给负责人。
+      // 有责任人的给责任人，没有的给主持人补归属；行动项给负责人。
       expect(await confirmsOf(s, s.owner)).toEqual(["decision:dec-1", "action:act-1"]);
-      expect(await confirmsOf(s, s.host)).toEqual(["decision:dec-2"]);
+      expect(await confirmsOf(s, s.host)).toEqual(["owner:dec-2"]);
 
       const confirmed = await review(s, s.owner, { kind: "decision", id: "dec-1", verdict: "confirm" });
       expect(confirmed.statusCode).toBe(200);
@@ -76,9 +81,10 @@ describe("会议决策逐条确认", { timeout: 30_000 }, () => {
       expect(await s.t.sql("SELECT read_at IS NOT NULL AS read FROM notifications WHERE kind = 'meeting_action_assigned' AND object_id = $1", [tasks[0].id])).toEqual([{ read: true }]);
       expect(await confirmsOf(s, s.owner)).toEqual([]);
 
-      // 不对要写原因。
-      expect((await review(s, s.host, { kind: "decision", id: "dec-2", verdict: "reject" })).json()).toMatchObject({ code: "REASON_REQUIRED" });
-      expect((await review(s, s.host, { kind: "decision", id: "dec-2", verdict: "reject", reason: "会上没定数" })).statusCode).toBe(200);
+      // 主持人补归属给测试丙；不对要写原因。
+      expect((await assign(s, s.host, { id: "dec-2", ownerPersonId: OWNER })).statusCode).toBe(200);
+      expect((await review(s, s.owner, { kind: "decision", id: "dec-2", verdict: "reject" })).json()).toMatchObject({ code: "REASON_REQUIRED" });
+      expect((await review(s, s.owner, { kind: "decision", id: "dec-2", verdict: "reject", reason: "会上没定数" })).statusCode).toBe(200);
       expect(await s.t.sql("SELECT kind FROM jobs WHERE dedupe_key = $1", [`meeting.card_freeze:${s.meetingId}:decided`])).toHaveLength(1);
       await s.run();
 
@@ -102,7 +108,7 @@ describe("会议决策逐条确认", { timeout: 30_000 }, () => {
       expect(world.revisions()).toEqual([]);
 
       // 冻结后决策不能再点。
-      expect((await review(s, s.host, { kind: "decision", id: "dec-2", verdict: "confirm" })).json()).toMatchObject({ code: "ALREADY_REVIEWED" });
+      expect((await review(s, s.owner, { kind: "decision", id: "dec-2", verdict: "confirm" })).json()).toMatchObject({ code: "ALREADY_REVIEWED" });
     } finally {
       await s.t.close();
     }
@@ -137,6 +143,40 @@ describe("会议决策逐条确认", { timeout: 30_000 }, () => {
     }
   });
 
+  it("没有责任人的决策：主持人不能直接确认，只能在参会人里补归属；补上后由那个人本人确认，事件里记他确认", async () => {
+    ontology();
+    const s = await setup(TWO_DECISIONS, {}, V2);
+    try {
+      const direct = await review(s, s.host, { kind: "decision", id: "dec-2", verdict: "confirm" });
+      expect(direct.statusCode).toBe(409);
+      expect(direct.json()).toMatchObject({ code: "OWNER_REQUIRED" });
+      // 只有主持人能补；只能补参会人；已有责任人的不能改。
+      expect((await assign(s, s.owner, { id: "dec-2", ownerPersonId: OWNER })).statusCode).toBe(404);
+      expect((await assign(s, s.host, { id: "dec-2", ownerPersonId: "person-not-here" })).json()).toMatchObject({ code: "NOT_PARTICIPANT" });
+      expect((await assign(s, s.host, { id: "dec-1", ownerPersonId: HOST })).json()).toMatchObject({ code: "OWNER_SET" });
+      expect(await confirmsOf(s, s.owner)).toEqual(["decision:dec-1", "action:act-1"]);
+
+      const assigned = await assign(s, s.host, { id: "dec-2", ownerPersonId: OWNER });
+      expect(assigned.statusCode).toBe(200);
+      expect((assigned.json().view as TMeetingCardView).decisions![1]).toMatchObject({ ownerPersonId: OWNER, review: { status: "pending", by: null } });
+      expect(await confirmsOf(s, s.host)).toEqual([]);
+      expect(await confirmsOf(s, s.owner)).toEqual(["decision:dec-1", "decision:dec-2", "action:act-1"]);
+      // 补完主持人也不能替他点。
+      expect((await review(s, s.host, { kind: "decision", id: "dec-2", verdict: "confirm" })).statusCode).toBe(404);
+
+      expect((await review(s, s.owner, { kind: "decision", id: "dec-1", verdict: "confirm" })).statusCode).toBe(200);
+      expect((await review(s, s.owner, { kind: "decision", id: "dec-2", verdict: "confirm" })).statusCode).toBe(200);
+      await s.run();
+      expect((await getCard(s.t, s.host, s.meetingId)).confirmed!.payload.decisions).toEqual([
+        expect.objectContaining({ id: "dec-1", confirmedBy: OWNER }),
+        expect.objectContaining({ id: "dec-2", ownerPersonId: OWNER, confirmedBy: OWNER }),
+      ]);
+      expect((await assign(s, s.host, { id: "dec-2", ownerPersonId: HOST })).json()).toMatchObject({ code: "CARD_FROZEN" });
+    } finally {
+      await s.t.close();
+    }
+  });
+
   it("冻结前选了不写进本体：冻结后只留天枢；冻结后再改 409", async () => {
     const world = ontology();
     const s = await setup(TWO_DECISIONS, {}, V2);
@@ -147,7 +187,8 @@ describe("会议决策逐条确认", { timeout: 30_000 }, () => {
         payload: { writeToWorld: false } })).statusCode).toBe(404);
       expect(((await put(false)).json() as TMeetingCardView).writeToWorld).toBe(false);
       await review(s, s.owner, { kind: "decision", id: "dec-1", verdict: "confirm" });
-      await review(s, s.host, { kind: "decision", id: "dec-2", verdict: "confirm" });
+      await assign(s, s.host, { id: "dec-2", ownerPersonId: OWNER });
+      await review(s, s.owner, { kind: "decision", id: "dec-2", verdict: "confirm" });
       await s.run();
       expect((await getCard(s.t, s.host, s.meetingId)).sync).toMatchObject({ writeToWorld: false, event: { status: "skipped" } });
       expect(world.events()).toEqual([]);

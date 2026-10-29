@@ -1,4 +1,4 @@
-import type { TMeetingActionItem, TMeetingCardConfirmRequest, TMeetingCardDraft, TMeetingCardReviewRequest, TMeetingCardView } from "@warmap/contracts";
+import type { TMeetingActionItem, TMeetingCardConfirmRequest, TMeetingCardDraft, TMeetingCardOwnerRequest, TMeetingCardReviewRequest, TMeetingCardView } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
 /**
@@ -35,13 +35,13 @@ export const retryMeetingCardSync = (meetingId: string) =>
   settle(browserApi.POST("/api/meetings/{id}/card/retry", { params: { path: { id: meetingId } } }));
 
 /**
- * 逐条确认一条决策或行动项（通知栏、会议页共用）：ok 时 view 是最新会议卡（点的人读不了会议卡时为 null）；
+ * 逐条确认一条决策或行动项、给决策补归属（通知栏、会议页共用）：ok 时 view 是最新会议卡（点的人读不了会议卡时为 null）；
  * 409 带着最新会议卡的也交回 view。
  */
 export type ReviewResult = { ok: true; view: TMeetingCardView | null } | { ok: false; status: number; code: string; view?: TMeetingCardView };
-export async function reviewMeetingCardItem(meetingId: string, body: TMeetingCardReviewRequest): Promise<ReviewResult> {
+async function itemResult(call: Promise<{ data?: { view: TMeetingCardView | null }; error?: unknown; response: Response }>): Promise<ReviewResult> {
   try {
-    const { data, error, response } = await browserApi.POST("/api/meetings/{id}/card/reviews", { params: { path: { id: meetingId } }, body });
+    const { data, error, response } = await call;
     if (response.status === 401) window.location.assign("/access");
     if (response.ok && data) return { ok: true, view: data.view };
     const failure = error as { code?: string; view?: TMeetingCardView } | undefined;
@@ -50,6 +50,11 @@ export async function reviewMeetingCardItem(meetingId: string, body: TMeetingCar
     return { ok: false, status: 0, code: "NETWORK" };
   }
 }
+export const reviewMeetingCardItem = (meetingId: string, body: TMeetingCardReviewRequest) =>
+  itemResult(browserApi.POST("/api/meetings/{id}/card/reviews", { params: { path: { id: meetingId } }, body }));
+/** 主持人把一条没有责任人的决策交给一位参会人确认。 */
+export const assignMeetingDecisionOwner = (meetingId: string, body: TMeetingCardOwnerRequest) =>
+  itemResult(browserApi.POST("/api/meetings/{id}/card/owners", { params: { path: { id: meetingId } }, body }));
 
 /** 冻结前改「不写进本体」。 */
 export const setMeetingCardWorldChoice = (meetingId: string, writeToWorld: boolean) =>

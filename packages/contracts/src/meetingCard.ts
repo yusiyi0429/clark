@@ -4,7 +4,8 @@ import { Type, type Static } from "@sinclair/typebox";
  * 会议卡（FR-4、FR-5）：会议 Card 与会议 Event 共用一份冻结 payload（MeetingCardFrozenPayload）。
  * - 草稿（MeetingCardDraft = payload 去掉 revision）存天枢，主持人或创建人带 draftVersion 编辑。
  * - 模型只填摘要、正文段落、决策、拟修改内容和行动项；身份、ID、版本、来源摘要值、时间和对象原内容由服务填写或核验。
- * - 10/28 起（meeting-card.v2）：记录正文不用确认；会上提取的决策和行动项逐条只由责任人本人确认（没有责任人的由主持人），不能代确认。
+ * - 10/28 起（meeting-card.v2）：记录正文不用确认；会上提取的决策和行动项逐条只由责任人本人确认，不能代确认。没有负责人的行动项由主持人确认；
+ *   没有责任人的决策由主持人在参会人里补归属，再由那个人确认（10/29）。
  *   决策都有了结果或会议卡生成满 48 小时，冻结一版：只放已确认的决策和行动项（各带确认人），不带对象修改，写一条会议事件。
  * - v1（10/28 之前）：主持人整卡确认，行动项不进 payload。
  */
@@ -76,7 +77,7 @@ const payloadFields = {
 };
 /**
  * 逐条确认（决策和行动项共用，只由服务改）：pending 待确认、confirmed 确认（行动项是「接下」）、rejected 不对（行动项是「退回」，reason 必填）。
- * by 是点的人（personId），就是责任人本人（没有责任人时是主持人）。
+ * by 是点的人（personId），就是责任人本人（没有负责人的行动项是主持人）。
  */
 export const MeetingItemReview = Type.Object(
   {
@@ -224,9 +225,9 @@ export const MeetingCardView = Type.Object(
     actionItems: Type.Array(MeetingActionItem),
     /** 会上提取的决策和逐条确认状态；10/28 之前生成的会议卡为 null（照旧由主持人整卡确认）。 */
     decisions: Type.Union([Type.Array(MeetingCardDecision), Type.Null()]),
-    /** 主持人：没有责任人的决策和行动项由他确认。 */
+    /** 主持人：没有负责人的行动项由他确认；没有责任人的决策由他补归属。 */
     hostId: Type.String({ minLength: 1 }),
-    /** 读卡的人：和责任人（没有就是主持人）是同一个人时能确认。 */
+    /** 读卡的人：和责任人是同一个人时能确认（没有负责人的行动项看主持人）。 */
     viewerId: Type.String({ minLength: 1 }),
     /** 冻结时写不写进本体（主持人或创建人在冻结前定；冻结后看 sync.writeToWorld）。 */
     writeToWorld: Type.Boolean(),
@@ -288,7 +289,8 @@ export const MeetingCardConfirmRequest = Type.Object(
 
 /**
  * POST /api/meetings/:id/card/reviews：逐条确认一条决策（kind decision）或行动项（kind action）。
- * 只有责任人本人（没有就是主持人）能点，别人 404。reject 要写原因。冻结后决策不能再点（409 CARD_FROZEN），已处理过的 409 ALREADY_REVIEWED。
+ * 只有责任人本人能点（没有负责人的行动项由主持人点），别人 404；没有责任人的决策要先补归属（主持人点 409 OWNER_REQUIRED）。
+ * reject 要写原因。冻结后决策不能再点（409 CARD_FROZEN），已处理过的 409 ALREADY_REVIEWED。
  */
 export const MeetingCardReviewRequest = Type.Object(
   {
@@ -297,6 +299,14 @@ export const MeetingCardReviewRequest = Type.Object(
     verdict: Type.Union([Type.Literal("confirm"), Type.Literal("reject")]),
     reason: Type.Optional(Type.String({ maxLength: 200 })),
   },
+  { additionalProperties: false },
+);
+/**
+ * POST /api/meetings/:id/card/owners：冻结前主持人给一条没有责任人的决策补归属（斯一第 3 条），只能选参会人；补上后由那个人确认。
+ * 别人 404；不是参会人 400 NOT_PARTICIPANT；已有责任人 409 OWNER_SET；已处理过 409 ALREADY_REVIEWED；冻结后 409 CARD_FROZEN。
+ */
+export const MeetingCardOwnerRequest = Type.Object(
+  { id: CardItemId, ownerPersonId: Type.String({ minLength: 1, maxLength: 200 }) },
   { additionalProperties: false },
 );
 /** 逐条确认的结果：处理后的会议卡；点的人读不了这场会的会议卡（会上点名、没实际参会的责任人）时为 null。 */
@@ -374,6 +384,7 @@ export type TMeetingFrozenDecision = Static<typeof MeetingFrozenDecision>;
 export type TMeetingFrozenActionItem = Static<typeof MeetingFrozenActionItem>;
 export type TMeetingCardReviewRequest = Static<typeof MeetingCardReviewRequest>;
 export type TMeetingCardReviewResponse = Static<typeof MeetingCardReviewResponse>;
+export type TMeetingCardOwnerRequest = Static<typeof MeetingCardOwnerRequest>;
 export type TMeetingCardWorldChoiceRequest = Static<typeof MeetingCardWorldChoiceRequest>;
 export type TMeetingCardTargetOption = Static<typeof MeetingCardTargetOption>;
 export type TMeetingCardKind = Static<typeof MeetingCardKind>;
