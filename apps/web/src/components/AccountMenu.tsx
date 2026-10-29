@@ -19,7 +19,7 @@ import { VoiceprintCard } from "@/components/member/VoiceprintCard";
 import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import m from "@/styles/account-menu.module.css";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
-import { CoAgentSkinPicker } from "@/components/coagent/SkinPicker";
+import { BuddySettings } from "@/components/buddy/BuddySettings";
 import { VoiceKeysDialog } from "@/conversation/VoiceKeysDialog";
 import { CollectorInstallPanel, useCollectorStatus } from "@/components/onboarding/CollectorSetup";
 import { CollectorReview } from "@/components/onboarding/ReviewLists";
@@ -285,7 +285,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
           <PasscodeForm loginId={account.loginId} onDone={() => setDialog(null)} />
         </MenuDialog>
       ) : null}
-      {dialog === "coagent" ? <MenuDialog title="伙伴形象" wide onClose={() => setDialog(null)}><CoAgentSkinPicker /></MenuDialog> : null}
+      {dialog === "coagent" ? <MenuDialog title="伙伴形象" wide onClose={() => setDialog(null)}><BuddySettings onDone={() => setDialog(null)} /></MenuDialog> : null}
       {dialog === "voice" ? <VoiceKeysDialog onClose={() => setDialog(null)} /> : null}
       {dialog === "connection" ? <MenuDialog title="连接到外部工具" wide onClose={() => setDialog(null)}><ConnectionDialog role={account.role} /></MenuDialog> : null}
       {dialog === "wechat" ? <MenuDialog title="连接微信" onClose={() => setDialog(null)}><WechatConnectPanel onChange={setWechat} /></MenuDialog> : null}

@@ -28,7 +28,7 @@ import { MissionGroupTranscript } from "./MissionGroupTranscript";
 import { MissionGroupComposer } from "./MissionGroupComposer";
 import { PresenceCapsule } from "@/components/coagent/PresenceCapsule";
 import { useListening } from "@/components/coagent/presence";
-import { useCoAgentSkin } from "@/components/coagent/skin";
+import { useBuddy } from "@/components/buddy/useBuddy";
 import type { DetailGroup } from "./missionCardGroup";
 import { MESSAGE_REPLY, type QuotePrefill, type QuoteSource, type TextQuote } from "./quotes";
 import groupStyles from "@/styles/mission-group.module.css";
@@ -256,7 +256,7 @@ function RailConversation({
   const group = useMissionGroup(missionGroup, groupVisible);
   const thread = useThreadGroup(otherThread?.objectType ?? "task", taskGroup?.taskId ?? otherThread?.objectId, groupVisible);
   const listening = useListening(target.scope);
-  const [skin] = useCoAgentSkin();
+  const { buddy } = useBuddy();
   // 新人第一次进群、群里有 Co-Agent 讲的来龙去脉：群聊看得见时，胶囊出现几秒，那段话同时亮一下。每段只一次。
   const [catchUp, setCatchUp] = useState<{ id: number; leaving: boolean } | null>(null);
   const shownCatchUps = useRef(new Set<number>());
@@ -271,12 +271,12 @@ function RailConversation({
     return () => { window.clearTimeout(leave); window.clearTimeout(gone); };
   }, [thread.catchUp, groupVisible]);
   const capsule = listening || catchUp
-    ? <PresenceCapsule skin={skin} pose={catchUp && (!catchUp.leaving || !listening) ? "speaking" : "listening"} leaving={!listening && !!catchUp?.leaving} />
+    ? <PresenceCapsule skin={buddy?.form ?? "classic"} pose={catchUp && (!catchUp.leaving || !listening) ? "speaking" : "listening"} leaving={!listening && !!catchUp?.leaving} />
     : undefined;
   const members = threadGroup ? (thread.view?.members ?? threadGroup.members) : (group.view?.members ?? missionGroup?.members ?? []);
   const groupLabel = otherThread?.objectType === "issue" ? "议题群聊" : otherThread?.objectType === "meeting" ? "会议群聊" : "事项群组";
   const channels: ConversationChannel[] = [
-    { id: "agent", kind: "agent", label: "天枢", title: agentTitle, unread: 0 },
+    { id: "agent", kind: "agent", label: "天枢", title: buddy?.name ?? agentTitle, unread: 0 },
     ...(hasGroup ? [{ id: "group", kind: "group" as const, label: `${groupLabel} · ${members.length + (missionGroup ? 1 : 0)}`,
       title: otherThread ? `${target.label} · ${members.length} 人` : `${groupLabel} · ${members.length + (missionGroup ? 1 : 0)}`,
       unread: threadGroup ? (thread.view?.unread ?? 0) : (group.view?.unread ?? 0) }] : []),

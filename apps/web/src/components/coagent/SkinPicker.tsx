@@ -1,13 +1,13 @@
 "use client";
 
 /**
- * 个人菜单「伙伴形象」弹窗里的内容：三种形象各一行，左边一颗活的胶囊预览，选中即生效。
+ * 选伙伴时的三颗胶囊（引导第一步和个人菜单「伙伴形象」共用，外面包一层 BuddyPicker）：三种形象各一行，左边一颗活的胶囊预览。
  * 上面一个小开关看两种姿势（在听 / 在说），预览的声音是模拟的。
  */
 
 import { useEffect, useState } from "react";
 import { PresenceCapsule, type CapsulePose } from "./PresenceCapsule";
-import { COAGENT_SKINS, useCoAgentSkin } from "./skin";
+import { COAGENT_SKINS, type CoAgentSkin } from "./skin";
 import s from "@/styles/coagent-skin-picker.module.css";
 
 /** 模拟一个人在说话：几条不同快慢的正弦叠起来，偶尔停顿。 */
@@ -27,8 +27,7 @@ function useSimulatedLevel(active: boolean) {
   return level;
 }
 
-export function CoAgentSkinPicker() {
-  const [skin, setSkin] = useCoAgentSkin();
+export function CoAgentSkinPicker({ value: skin, onChange: setSkin }: { value: CoAgentSkin; onChange: (skin: CoAgentSkin) => void }) {
   const [pose, setPose] = useState<CapsulePose>("listening");
   const level = useSimulatedLevel(pose === "listening");
   return (
