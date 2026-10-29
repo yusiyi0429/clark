@@ -6,12 +6,17 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {normalize} from './domain.mjs';
 import {createCollaborationState} from './governance.mjs';
+import {queueProposals} from './nexus-memory.mjs';
 
 const dir=await mkdtemp(join(tmpdir(),'m2-deployment-'));
 const keys=['bf01','bf02','bf03','rearch','method','agents','eo','tokenhub','talent','finance'];
 const raw=keys.map((key,i)=>({key,name:key,owner:i===0?'刘明华':'刘人豪',title:`synthetic ${key}`,result:'测试成果',checks:['测试验收'],missions:[{title:'测试 Mission',owner:i===0?'白田田':'孙铭泽',result:'测试结果',checks:['通过'],tasks:[{title:'测试 Task',owner:i===0?'白田田':'孙铭泽',result:'测试交付',checks:['通过']}]}]}));
 const units=normalize(raw),state=createCollaborationState(units);
 state.round={id:'test-round',number:1,units,input:{mode:'synthetic-test',sources:[],retrievedAt:'2026-10-14T00:00:00Z'}};
+queueProposals(state,'bf01',[{cardId:'bf01',baseVersion:1,sourceIds:[],patch:{result:'摘要接口公开测试'},reason:'测试修改'}]);
+const publicSummaryId=state.proposals.at(-1).id;
+queueProposals(state,'person:member-02',[{cardId:'bf01-m1',baseVersion:1,sourceIds:[],patch:{title:'本人私房间摘要测试'},reason:'本人补充'}]);
+const privateSummaryId=state.proposals.at(-1).id;
 await writeFile(join(dir,'bootstrap.json'),JSON.stringify({schemaVersion:1,state}));
 await writeFile(join(dir,'source-manifest.json'),JSON.stringify({version:1,period:'2026-10',cutoff:'2026-10-09T23:59:59+08:00',selections:[],pending:[]}));
 await writeFile(join(dir,'accounts.json'),JSON.stringify({schemaVersion:1,bindings:[{personId:'ceo',memberId:'member-01'},{personId:'owner',memberId:'member-02'},{personId:'other',memberId:'member-03'}]}));
@@ -72,4 +77,14 @@ test('A round operator may start a round like the CEO; other members may not',as
  assert.equal((await (await call('/api/data','other')).json()).canRunRounds,true);
  assert.equal((await (await call('/api/data','owner')).json()).canRunRounds,false);
  assert.equal((await (await call('/api/data','ceo')).json()).canRunRounds,true);
+});
+
+test('Proposal summaries authenticate and filter visible rooms before model readiness; reads do not alter collaboration state',async()=>{
+ const before=await readFile(join(dir,'collaboration.json'),'utf8');
+ assert.equal((await call('/api/proposal-summary?id='+publicSummaryId)).status,401);
+ assert.equal((await call('/api/proposal-summary?id=missing','owner')).status,404);
+ assert.equal((await call('/api/proposal-summary?id='+privateSummaryId,'ceo')).status,404);
+ assert.equal((await call('/api/proposal-summary?id='+publicSummaryId,'owner')).status,503);
+ assert.equal((await call('/api/proposal-summary?id='+privateSummaryId,'owner')).status,503);
+ assert.equal(await readFile(join(dir,'collaboration.json'),'utf8'),before);
 });

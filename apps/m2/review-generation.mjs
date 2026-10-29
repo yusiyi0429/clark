@@ -14,6 +14,7 @@ import {redactText,sensitiveRulesVersion} from './redact.mjs';
 import {bareJson} from './model.mjs';
 import {factProblem,nextInputProblem} from './governance.mjs';
 import {tracer} from './langsmith-trace.mjs';
+import {splitBusinessEvidence} from './review-evidence-routing.mjs';
 
 export const reviewUnits=[['bf01','灯塔项目'],['bf02','Token Ops'],['bf03','维信诺'],['rearch','Re-architecture'],['method','Method'],['agents','Agents'],['eo','E&O'],['tokenhub','TokenHub'],['talent','Talent & Organization'],['finance','Finance, Compliance & Operations']];
 // An RU object's title ("维信诺（002客户）", "E&O") to the program's unit key.
@@ -156,14 +157,24 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  const cited=new Set(heads.snapshots.flatMap(h=>(objects[h.object_id]?.source_event_refs||[]).map(r=>r.event_id||String(r.ref||'').replace(/^event:/,''))));
  const usedSnapshots=new Set(),usedEvents=new Set();
  const seen=new Set(),once=(key,item)=>{const k=key+'|'+item.asOf+'|'+item.text.slice(0,300);if(seen.has(k))return null;seen.add(k);return item;};
+ // Route only explicit business ownership, not names or keywords. Preserve the
+ // original source and uncertainty; a cross-unit excerpt is still unit evidence.
+ const routeBusiness=(item,sourceUnit,originRef,max=4000)=>{
+  const clip=text=>text.length>max?text.slice(0,max)+'……（截断）':text;
+  const split=splitBusinessEvidence(item.text,sourceUnit,name=>{const key=unitKeyOfTitle(name);return goals[key]?key:null;});
+  for(const part of split.routed){const entry=once(part.unit,{...item,text:clip(part.text),originRef,source:`【按正文业务归属转入，原挂载 ${sourceUnit||'其他对象'}】${item.source}`});if(entry)put(byUnit,part.unit,entry);}
+  return {item:split.text?{...item,text:clip(split.text)}:null,moved:split.routed.length>0};
+ };
  for(const h of heads.snapshots){
   // A progress entry's own time is the fact time; a snapshot written in November about October still counts.
   const s=objects[h.object_id],entryTimes=JSON.stringify(s?.blocks||s?.snapshot?.blocks||[]).match(/"at":\s*"([^"]+)"/g)?.map(x=>x.split('"')[3])||[];
   if(!s||!inMonth(s.as_of)&&!entryTimes.some(inMonth)&&!startingPoint(String(s.title||'')))continue;
-  let text=blockLines(s.blocks||s.snapshot?.blocks);if(!text)continue;if(text.length>4000)text=text.slice(0,4000)+'……（截断）';
+  const text=blockLines(s.blocks||s.snapshot?.blocks);if(!text)continue;
   const baseline=startingPoint(String(s.title||''));
-  const item=once(s.subject_ref?.object_id,{kind:baseline?'月初起点':'本月进展',source:(baseline?'【月初起点，不算本月结果】':'')+s.title,asOf:String(s.as_of||'').slice(0,10),text,by:s.generator?.display_name||''});
-  if(item){place(s.subject_ref?.object_id,h.domain_id,item,s.title);usedSnapshots.add(h.object_id);}
+  const raw={kind:baseline?'月初起点':'本月进展',source:(baseline?'【月初起点，不算本月结果】':'')+s.title,asOf:String(s.as_of||'').slice(0,10),text,by:s.generator?.display_name||''};
+  const routed=routeBusiness(raw,unitOfDomain.get(h.domain_id),h.object_id),item=routed.item&&once(s.subject_ref?.object_id,routed.item);
+  if(item)place(s.subject_ref?.object_id,h.domain_id,item,s.title);
+  if(item||routed.moved)usedSnapshots.add(h.object_id);
  }
  for(const e of monthEvents){
   if((e.corrected_by||[]).length||(e.withdrawn_by||[]).length||cited.has(e.event_id))continue;
@@ -179,9 +190,11 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
    if(!STEP[e.kind])continue;
    label='过程记录';text=`${STEP[e.kind]}：${subjects.map(titleOf).filter(Boolean).join('、')||'对象'}${e.principal?.display_name?`（${e.principal.display_name}）`:''}`;
   }
-  if(text.length>2000)text=text.slice(0,2000)+'……（截断）';
   const item={kind,source:label+(e.category==='meeting'||e.category==='delivery'?'':` · ${e.kind}`),asOf:eventAt(e).slice(0,10),text,by:e.principal?.display_name||''};
-  for(const id of subjects){const it=once(id,item);if(it){place(id,null,it);usedEvents.add(e.event_id);}}
+  const subjectUnit=subjects.map(id=>goalOfId.get(id)?.unit||missions.find(m=>m.id===id)?.goal.unit||unitOfRu.get(id)||unitOfDomain.get(objects[id]?.business?.domain_id)).find(Boolean);
+  const routed=routeBusiness(item,subjectUnit,e.event_id,2000);
+  if(routed.moved)usedEvents.add(e.event_id);
+  if(routed.item)for(const id of subjects){const it=once(id,routed.item);if(it){place(id,null,it);usedEvents.add(e.event_id);}}
  }
  // Issues raised on a PO or Mission and not yet handled.
  for(const id of [...goalOfId.keys(),...missionIds])for(const i of objects[id]?.records?.open_issues||[])place(id,null,{kind:'本月进展',source:'未处置的问题',asOf:String(i.raised_at||i.at||'').slice(0,10),text:[i.title||i.summary||i.text,i.status&&`状态：${i.status}`].filter(Boolean).join('；')||String(i.issue_ref||'问题'),by:''});

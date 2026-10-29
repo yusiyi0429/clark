@@ -346,7 +346,7 @@ export function applyAction(previous,actor,action){
    const raw=pick!==undefined?pick:Array.isArray(val)?undefined:val,txt=typeof raw==='string'?raw:raw&&typeof raw==='object'?(raw.text??[raw.choice,raw.reason].filter(Boolean).join('：')):'';
    if(txt)entry.quote=String(txt).replace(/\*\*/g,'').replace(/\s*(\[E\d+\])+/g,'').trim().slice(0,400);}
   if(action.replyTo){
-   const source=[...state.comments,...state.messages,...(state.proposals||[]).map(p=>({...p,channel:'group',author:'Nexus',cardId:p.cardId,version:p.baseVersion,block:'card',text:'拟修改确认：'+Object.entries(p.patch).map(([key,value])=>key+'：'+(Array.isArray(value)?value.join('；'):value)).join('；')}))].find(e=>e.id===action.replyTo&&e.channel==='group'&&e.scope===unitOf(card));
+   const source=[...state.comments,...state.messages,...(state.proposals||[]).map(p=>({...p,channel:'group',author:'Nexus',cardId:p.cardId,version:p.baseVersion,block:'card',text:'拟修改确认：'+Object.entries(p.patch).map(([key,value])=>key+'：'+(Array.isArray(value)?value.join('；'):value)).join('；')}))].find(e=>e.id===action.replyTo&&e.channel==='group'&&e.scope===room);
    if(!source)fail(400,'引用消息不在当前领域或已不可用');
    entry.replyTo=source.id;entry.replyToAuthor=source.author;entry.threadId=source.threadId||source.id;
    entry.context=source.context||{scope:source.scope,selection:source.cardId?{id:source.cardId,version:source.version}:null,block:source.block};
