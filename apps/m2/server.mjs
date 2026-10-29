@@ -495,6 +495,8 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
     // Each card keeps the run reference; receipt counts come only from the committed transaction.
     const trace=tracer.ref();let delivery;
     await store.transact(state=>{if(state.round?.id!==roundAtStart)throw Object.assign(Error('轮次已切换，建议未保存'),{status:409});const previousIds=new Set((state.proposals||[]).map(p=>p.id));const next=applyOwnerAnnotations(queueProposals(state,scope.id,planned.map(p=>({...p,originSequence:proposalSequenceAtStart,...trace}))),scope.id);delivery=proposalDelivery(next,previousIds,scope.id,planned);return next;});
+    // Validation failures are undelivered requests too, including when another card succeeded.
+    delivery.outcomes.push(...(output.rejected||[]).map(p=>({cardId:p.cardId,status:'rejected',why:p.why})));
     const unsubmitted=delivery.outcomes.filter(o=>o.status!=='saved'),receipt=output.participation.called||requests.length?deliveryNotice(delivery,id=>cardName(id,cards)):'';
     output.reply=quietReply(output.reply,delivery.saved,[...(output.rejected||[]),...unsubmitted.map(o=>({cardId:o.cardId,why:o.status==='stale'?'正文或依据已更新':'本次没有新增修订卡'}))],cards);
     if(unsubmitted.length)output.reply=withoutUnsentCardClaims(output.reply);

@@ -21,7 +21,7 @@ export function proposalDelivery(state,previousIds,scope,planned){
 export function deliveryNotice(delivery,label=id=>id){
  const misses=delivery.outcomes.filter(o=>o.status!=='saved');if(!misses.length)return '';
  const why={duplicate:'已有相同待确认修订卡，正文未因此修改',unchanged:'当前正文已是这份内容，未新增版本',stale:'正文或依据已更新，这次没有覆盖新版本',skipped:'这次没有保存新修订，正文未因此修改'};
- const parts=[...new Map(misses.map(o=>[o.cardId+'|'+o.status,`${label(o.cardId)}：${why[o.status]}`])).values()];
+ const parts=[...new Map(misses.map(o=>[o.cardId+'|'+o.status,`${label(o.cardId)}：${o.status==='rejected'?'未生成修订卡（'+(o.why||'候选未通过核对')+'）':why[o.status]}`])).values()];
  return (delivery.saved.length?'另有建议未新增：':'本次没有新增修改：')+parts.join('；')+'。';
 }
 // Retain substantive answers, but never announce cards that the state transaction did not deliver.
