@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 页面样子</title>
+<style>
+  :root {
+    --paper: #f1f1f3; --surface: #fdfdfe; --ink: #17171b; --ink-muted: #535358; --ink-faint: #6b6b70;
+    --judgment: #b45309; --confirmed: #0f766e; --counter: #be123c; --factual: #0369a1;
+    --brand-deep: #075ccb; --brand-bright: #1684ff; --morning-end: #fbfcfe;
+    --hairline: color-mix(in oklab, var(--ink) 9%, transparent);
+    --hairline-strong: color-mix(in oklab, var(--ink) 16%, transparent);
+    --c: #3a83f7;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px 48px; background: linear-gradient(180deg, #eef1f6, #f6f8fb); color: var(--ink);
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  button { font: inherit; }
+
+  /* ── 看样子用的切换条（不是产品界面） ── */
+  .review { max-width: 1040px; margin: 0 auto 14px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .review b { font-size: 12px; color: var(--ink-faint); font-weight: 500; margin-right: 6px; }
+  .review button { border: 1px dashed #b9c2cf; background: transparent; border-radius: 999px; padding: 4px 11px; color: var(--ink-muted); cursor: pointer; font-size: 12px; }
+  .review button[aria-pressed="true"] { border-style: solid; border-color: var(--ink); color: var(--ink); background: #fff; }
+
+  /* ── Mission 详情卡（照现有 home-plan 的样子） ── */
+  .card { max-width: 1040px; margin: 0 auto; padding: 22px 24px 24px; border: 1px solid #dfe4e9; border-radius: 22px;
+    background: linear-gradient(160deg, color-mix(in oklab, var(--c) 7%, white) 0%, #fcfdfe 38%, var(--morning-end) 100%); }
+  .head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 20px; font-size: 15px; font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); display: inline-block; transform: translateY(-1px); }
+  .sep { color: color-mix(in oklab, var(--ink-faint) 55%, transparent); font-weight: 400; }
+  .current { color: var(--ink-muted); font-weight: 400; }
+  .split { display: grid; grid-template-columns: 228px minmax(0, 1fr); gap: 24px; }
+  @media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
+
+  /* Task 列 */
+  .tasks { display: grid; gap: 8px; align-content: start; }
+  .task { border: 1px solid transparent; border-radius: 14px; padding: 11px 13px; cursor: pointer; }
+  .task[data-selected] { border-color: #e3e7ee; background: #fff; box-shadow: 0 1px 3px #29334c0d; }
+  .taskName { font-size: 13.5px; font-weight: 500; line-height: 1.4; }
+  .task[data-selected] .taskName { font-weight: 600; }
+  .taskMeta { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+  .chip.neutral { background: color-mix(in oklab, var(--ink) 5%, transparent); color: var(--ink-muted); }
+  .chip.work { background: color-mix(in oklab, var(--brand-bright) 10%, white); color: var(--brand-deep); }
+  .chip.ok { background: color-mix(in oklab, var(--confirmed) 9%, white); color: var(--confirmed); }
+  .chip.part { background: color-mix(in oklab, var(--judgment) 9%, white); color: var(--judgment); }
+  .chip.no { background: color-mix(in oklab, var(--counter) 8%, white); color: var(--counter); }
+
+  /* 右边：交付物与评审 */
+  .panel { display: grid; gap: 14px; min-width: 0; }
+  .facts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: 12px; color: var(--ink-faint); }
+  .who { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-muted); }
+  .face { width: 18px; height: 18px; border-radius: 50%; background: #dfe6f1; display: inline-grid; place-items: center; font-size: 10px; color: var(--ink-muted); }
+  .block { background: #fff; border: 1px solid #e6eaf0; border-radius: 16px; padding: 14px 16px; }
+  .block h3 { margin: 0 0 10px; font-size: 12px; font-weight: 600; color: var(--ink-faint); display: flex; align-items: center; gap: 8px; }
+  .block h3 small { font-weight: 400; }
+
+  /* 评审标准 */
+  .criteria { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+  .crit { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 10px; align-items: start; }
+  .mark { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; margin-top: 1px; }
+  .mark.wait { border: 1.5px solid #cdd4de; }
+  .mark.ok { background: var(--confirmed); color: #fff; }
+  .mark.part { background: var(--judgment); color: #fff; }
+  .mark.no { background: var(--counter); color: #fff; }
+  .critText { font-size: 13px; color: var(--ink); }
+  .critWhy { display: block; color: var(--ink-muted); font-size: 12.5px; margin-top: 2px; }
+  .more { margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: #f6f8fb; display: grid; gap: 6px; font-size: 12.5px; color: var(--ink-muted); }
+  .more b { color: var(--ink); font-weight: 600; margin-right: 6px; }
+  .quote { border-left: 2px solid #cdd4de; padding-left: 8px; color: var(--ink-muted); }
+  .ghost { border: 1px solid #e3e7ee; background: #fff; border-radius: 10px; height: 28px; padding: 0 10px; color: var(--ink-muted); cursor: pointer; font-size: 12px; white-space: nowrap; }
+
+  /* 交付物 */
+  .versions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .ver { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid #e3e7ee; background: #fff; font-size: 12px; color: var(--ink-muted); display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+  .ver[data-on] { border-color: var(--ink); color: var(--ink); font-weight: 600; }
+  .files { display: flex; flex-wrap: wrap; gap: 8px; }
+  .file { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 7px 10px; border-radius: 12px; background: #f6f8fb; font-size: 12.5px; }
+  .file .kind { font-size: 10.5px; font-weight: 700; color: #fff; background: #8a94a6; border-radius: 4px; padding: 1px 4px; }
+  .file .kind.pdf { background: #c2410c; } .file .kind.img { background: #0e7490; } .file .kind.link { background: var(--brand-deep); }
+  .file .state { color: var(--ink-faint); font-size: 11.5px; }
+  .file .state.no { color: var(--counter); }
+  .drop { border: 1.5px dashed #cdd4de; border-radius: 14px; padding: 22px 16px; display: grid; justify-items: center; gap: 10px; background: #fafbfd; }
+  .drop .icon { width: 36px; height: 36px; border-radius: 12px; background: color-mix(in oklab, var(--brand-bright) 10%, white); display: grid; place-items: center; color: var(--brand-deep); font-size: 20px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .statusNote { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: #f6f8fb; color: var(--ink-muted); font-size: 12.5px; }
+  .statusNote em { font-style: normal; color: var(--ink-faint); font-size: 11.5px; display: block; margin-bottom: 2px; }
+
+  /* 评审中 */
+  .steps { display: grid; gap: 8px; }
+  .step { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--ink-faint); }
+  .step i { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid #cdd4de; flex: none; }
+  .step[data-done] { color: var(--ink-muted); } .step[data-done] i { background: var(--confirmed); border-color: var(--confirmed); }
+  .step[data-now] { color: var(--ink); font-weight: 600; } .step[data-now] i { border-color: var(--brand-bright); border-top-color: transparent; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .elapsed { margin-top: 10px; font-size: 12px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+
+  /* 报告头 */
+  .summary { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; align-items: center; margin-bottom: 14px; }
+  .ring { width: 64px; height: 64px; }
+  .sumTitle { font-size: 15px; font-weight: 600; }
+  .sumLine { color: var(--ink-muted); font-size: 12.5px; margin-top: 2px; }
+  .sumMeta { color: var(--ink-faint); font-size: 11.5px; margin-top: 4px; }
+
+  /* 底部动作条 */
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .actions .grow { flex: 1; }
+  .btn { height: 34px; padding: 0 14px; border-radius: 11px; border: 1px solid #e3e7ee; background: #fff; color: var(--ink); cursor: pointer; font-size: 13px; font-weight: 500; }
+  .btn.primary { background: var(--ink); color: #fafafb; border-color: var(--ink); }
+  .btn.primary[disabled] { background: #e9ecf1; border-color: #e9ecf1; color: #9aa1ad; cursor: not-allowed; }
+  .hint { font-size: 12px; color: var(--ink-faint); }
+
+  /* 版本说明（伙伴写的） */
+  .note { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px; padding: 14px 16px; border-radius: 16px;
+    background: linear-gradient(160deg, color-mix(in oklab, var(--confirmed) 6%, white), #fff 60%); border: 1px solid color-mix(in oklab, var(--confirmed) 18%, white); }
+  .note h4 { margin: 0 0 4px; font-size: 13.5px; }
+  .note p { margin: 0 0 4px; color: var(--ink-muted); font-size: 12.5px; }
+  .note .tools { display: flex; gap: 6px; margin-top: 6px; }
+  .handed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 12.5px; color: var(--ink-muted); }
+  .handed .spin { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #cdd4de; border-top-color: transparent; animation: spin 1.2s linear infinite; }
+  .verdict { display: grid; gap: 6px; padding: 14px 16px; border-radius: 16px; border: 1px solid; }
+  .verdict.ok { border-color: color-mix(in oklab, var(--confirmed) 25%, white); background: color-mix(in oklab, var(--confirmed) 5%, white); }
+  .verdict.no { border-color: color-mix(in oklab, var(--judgment) 25%, white); background: color-mix(in oklab, var(--judgment) 5%, white); }
+  .verdict .line { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .verdict p { margin: 0; color: var(--ink-muted); font-size: 12.5px; }
+  .fold { font-size: 12.5px; color: var(--ink-faint); padding: 2px 4px; cursor: pointer; }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="review" role="group" aria-label="看不同状态">
+  <b>看不同状态</b>
+  <button data-go="empty">还没交</button>
+  <button data-go="reviewing">评审中</button>
+  <button data-go="short">报告：还差 1 条</button>
+  <button data-go="ready">报告：全部达到</button>
+  <button data-go="submitted">已提交</button>
+  <button data-go="passed">Co-Agent：到节点</button>
+  <button data-go="notyet">Co-Agent：没到节点</button>
+</div>
+
+<section class="card" id="card" data-state="short">
+  <div class="head"><i class="dot"></i>Chat 与会议回流 10/28 上线<span class="sep">/</span><span class="current">对话质量达标</span></div>
+  <div class="split">
+
+    <!-- 左：Task 列 -->
+    <div class="tasks">
+      <div class="task"><div class="taskName">会议内容写进本体</div><div class="taskMeta"><span>10/28</span><span class="chip ok">✓ 到节点</span></div></div>
+      <div class="task" data-selected>
+        <div class="taskName">对话质量达标</div>
+        <div class="taskMeta"><span>10/28</span>
+          <span class="chip neutral" data-show="empty">未开始</span>
+          <span class="chip work" data-show="reviewing">评审中</span>
+          <span class="chip part" data-show="short">迭代中 · 50</span>
+          <span class="chip ok" data-show="ready">迭代中 · 100</span>
+          <span class="chip work" data-show="submitted">已提交</span>
+          <span class="chip ok" data-show="passed">✓ 到节点</span>
+          <span class="chip part" data-show="notyet">没到节点</span>
+        </div>
+      </div>
+      <div class="task"><div class="taskName">10/28 上线并支撑月末复盘</div><div class="taskMeta"><span>10/31</span><span class="chip neutral">未开始</span></div></div>
+    </div>
+
+    <!-- 右：交付物与评审 -->
+    <div class="panel">
+      <div class="facts">
+        <span class="who"><span class="face">孙</span>孙铭泽</span>
+        <span>计划 10/28 完成</span>
+        <span>本体 · 验收标准 2 条</span>
+      </div>
+
+      <!-- 报告 -->
+      <div class="block" data-show="short ready">
+        <h3>评审报告 · v2</h3>
+        <div class="summary">
+          <svg class="ring" viewBox="0 0 64 64" aria-hidden="true">
+            <circle cx="32" cy="32" r="27" fill="none" stroke="#edf0f4" stroke-width="7"/>
+            <circle data-show="short" cx="32" cy="32" r="27" fill="none" stroke="var(--judgment)" stroke-width="7" stroke-linecap="round" stroke-dasharray="84.8 169.6" transform="rotate(-90 32 32)"/>
+            <circle data-show="ready" cx="32" cy="32" r="27" fill="none" stroke="var(--confirmed)" stroke-width="7" stroke-linecap="round" stroke-dasharray="169.6 169.6" transform="rotate(-90 32 32)"/>
+            <text data-show="short" x="32" y="37" text-anchor="middle" font-size="15" font-weight="700" fill="var(--ink)">1/2</text>
+            <text data-show="ready" x="32" y="37" text-anchor="middle" font-size="15" font-weight="700" fill="var(--ink)">2/2</text>
+          </svg>
+          <div>
+            <div class="sumTitle" data-show="short">还差第 2 条：缺题库打分结果</div>
+            <div class="sumTitle" data-show="ready">两条都达到了</div>
+            <div class="sumLine" data-show="short">第 1 条有据可查；内网监控面板打不开，没算进依据。</div>
+            <div class="sumLine" data-show="ready">比 v1 多达到第 2 条：补上了题库评测，78 分、没有否决项。</div>
+            <div class="sumMeta">按本体验收标准评 · 读了 3 份 · 用时 1 分 52 秒</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 评审标准 -->
+      <div class="block">
+        <h3>评审标准</h3>
+        <ol class="criteria">
+          <li class="crit">
+            <span class="mark wait" data-show="empty reviewing"></span>
+            <span class="mark ok" data-show="short ready submitted passed notyet">✓</span>
+            <span class="critText">10/26 进程内发布，10/28 随上线
+              <span class="critWhy" data-show="short ready submitted passed notyet">上线记录里有 10/28 21:40 的正式环境部署和健康检查。</span>
+            </span>
+            <span></span>
+          </li>
+          <li class="crit">
+            <span class="mark wait" data-show="empty reviewing"></span>
+            <span class="mark no" data-show="short">✗</span>
+            <span class="mark ok" data-show="ready submitted passed notyet">✓</span>
+            <span class="critText">题库打分 75 分且无否决项
+              <span class="critWhy" data-show="short">交付物里没有题库打分结果，只有对话截图。</span>
+              <span class="critWhy" data-show="ready submitted passed notyet">题库评测 78 分，否决项 0 条。</span>
+              <span class="more" data-show="short">
+                <span><b>依据</b><span class="quote">上线截图.png：首页对话一轮问答，没有分数。</span></span>
+                <span><b>怎么补</b>传人豪那边的题库评测报告，要有总分和否决项那一栏。</span>
+              </span>
+            </span>
+            <button class="ghost" data-show="short">我不同意</button>
+          </li>
+        </ol>
+      </div>
+
+      <!-- 还没交：上传区 -->
+      <div class="block" data-show="empty">
+        <h3>交付物</h3>
+        <div class="drop">
+          <div class="icon">＋</div>
+          <div class="row">
+            <button class="btn">上传文件</button>
+            <button class="btn">粘贴链接</button>
+            <button class="btn">说说现状</button>
+          </div>
+          <span class="hint">PDF · Word · 图片 · 飞书文档 · 网页</span>
+        </div>
+      </div>
+
+      <!-- 有版本以后：交付物 -->
+      <div class="block" data-show="reviewing short ready submitted passed notyet">
+        <h3>交付物</h3>
+        <div class="versions">
+          <span class="ver" data-show="short">v1 · 50</span>
+          <span class="ver" data-on data-show="short">v2 · 评审完</span>
+          <span class="ver" data-show="reviewing ready submitted passed notyet">v1 · 50</span>
+          <span class="ver" data-on data-show="reviewing">v2 · 评审中</span>
+          <span class="ver" data-on data-show="ready submitted passed notyet">v2 · 100</span>
+        </div>
+        <div class="files">
+          <span class="file"><span class="kind pdf">PDF</span>10-28 上线记录.pdf<span class="state">已读 · 6 页</span></span>
+          <span class="file"><span class="kind img">图</span>上线截图.png<span class="state">已看</span></span>
+          <span class="file" data-show="reviewing ready submitted passed notyet"><span class="kind link">链接</span>题库评测 · 飞书文档<span class="state">已读</span></span>
+          <span class="file" data-show="short"><span class="kind link">链接</span>内网监控面板<span class="state no">打不开 · 请导出后上传</span></span>
+        </div>
+      </div>
+
+      <!-- 评审中 -->
+      <div class="block" data-show="reviewing">
+        <h3>评审中</h3>
+        <div class="steps">
+          <div class="step" data-done><i></i>读交付物（3 份）</div>
+          <div class="step" data-done><i></i>对照第 1 条</div>
+          <div class="step" data-now><i></i>对照第 2 条</div>
+          <div class="step"><i></i>写报告</div>
+        </div>
+        <div class="elapsed">已用 0:41 / 约 2 分钟</div>
+      </div>
+
+      <!-- 提交以后：伙伴写的版本说明 -->
+      <div class="note" data-show="submitted passed notyet">
+        <svg class="capsule" width="56" height="24" viewBox="0 0 56 24" aria-hidden="true"><defs><linearGradient id="glass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3d6fe0"/><stop offset="1" stop-color="#1f3f9e"/></linearGradient><linearGradient id="wave" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4ee6ff"/><stop offset=".5" stop-color="#9b7dff"/><stop offset="1" stop-color="#ff86d2"/></linearGradient></defs><rect x="0.5" y="0.5" width="55" height="23" rx="11.5" fill="url(#glass)"/><path d="M10 12 C16 5 20 19 28 12 S40 6 46 12" fill="none" stroke="url(#wave)" stroke-width="2.6" stroke-linecap="round"/></svg>
+        <div>
+          <h4>v2 达成了：对话质量过了 75 分线</h4>
+          <p>这一版多做到的：补上题库评测，78 分、没有否决项。</p>
+          <p>为什么变了：10/27 和人豪的会上把评测口径定成「75 分加否决」，之后按题库重跑了一轮，不再只看截图。</p>
+          <p>经验：交付物里直接放评测报告，比放对话截图更能说明问题。</p>
+          <div class="tools"><button class="ghost">改一改</button><button class="ghost">不要这段</button></div>
+        </div>
+      </div>
+
+      <div class="handed" data-show="submitted"><span class="spin"></span>已交给 Co-Agent · 12 分钟<button class="ghost">撤回</button></div>
+
+      <div class="verdict ok" data-show="passed">
+        <div class="line"><span class="mark ok">✓</span>Co-Agent：到了节点，进展记 1</div>
+        <p>两条验收标准都有依据；Mission「Chat 与会议回流 10/28 上线」的进展已更新。</p>
+      </div>
+      <div class="verdict no" data-show="notyet">
+        <div class="line"><span class="mark part">!</span>Co-Agent：还没到节点，进展仍是 0</div>
+        <p>风险：评测只覆盖成员视角，CEO 视角的题目还没跑。</p>
+        <div><button class="ghost">按这条继续改</button></div>
+      </div>
+
+      <!-- 动作条 -->
+      <div class="actions" data-show="short ready reviewing">
+        <button class="btn">上传新版本</button>
+        <button class="btn">说说现状</button>
+        <span class="grow"></span>
+        <span class="hint" data-show="short">还差 1 条</span>
+        <button class="btn primary" data-show="short reviewing" disabled>提交给 Co-Agent</button>
+        <button class="btn primary" data-show="ready">提交给 Co-Agent</button>
+      </div>
+
+      <div class="fold">▸ 我的事项 3</div>
+    </div>
+  </div>
+</section>
+
+<script>
+  const card = document.getElementById("card");
+  const show = (state) => {
+    card.dataset.state = state;
+    document.querySelectorAll("[data-show]").forEach((el) => {
+      const off = !el.dataset.show.split(" ").includes(state);
+      if (el instanceof SVGElement) el.style.display = off ? "none" : "";
+      else el.hidden = off;
+    });
+    document.querySelectorAll("[data-go]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.go === state)));
+  };
+  document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => show(b.dataset.go)));
+  show(location.hash.slice(1) || card.dataset.state);
+</script>
+</body>
+</html>
