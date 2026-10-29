@@ -2619,6 +2619,24 @@ export interface paths {
         patch: operations["updatePersonalProfile"];
         trace?: never;
     };
+    "/api/me/buddy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取本人的伙伴；还没选过时是 null */
+        get: operations["getBuddy"];
+        /** 本人给伙伴起名字、选外形 */
+        put: operations["saveBuddy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/tokens": {
         parameters: {
             query?: never;
@@ -4783,6 +4801,10 @@ export interface components {
             onboarded?: boolean;
             canSwitchView?: boolean;
             admin?: boolean;
+            buddy?: {
+                name: string;
+                form: "capsule-classic" | "capsule-alive" | "capsule-panda" | "panda" | "cat" | "whale" | "drop";
+            } | null;
         };
         PeopleDirectoryResponse: {
             people: {
@@ -9130,6 +9152,11 @@ export interface components {
         UpdatePersonalProfileRequest: {
             gender: string | null;
         };
+        Buddy: {
+            name: string;
+            form: "capsule-classic" | "capsule-alive" | "capsule-panda" | "panda" | "cat" | "whale" | "drop";
+        };
+        BuddyForm: "capsule-classic" | "capsule-alive" | "capsule-panda" | "panda" | "cat" | "whale" | "drop";
         CreatePersonalTokenRequest: {
             name: string;
             client: "codex" | "claude" | "other" | "collector";
@@ -21464,6 +21491,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PersonalProfileView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getBuddy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本人的伙伴 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Buddy"] | null;
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    saveBuddy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Buddy"];
+            };
+        };
+        responses: {
+            /** @description 保存后的伙伴 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Buddy"];
                 };
             };
             /** @description ApiError 统一错误 */

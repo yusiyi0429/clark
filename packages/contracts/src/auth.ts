@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { BuddyOrNull } from "./buddy.js";
 
 /** 会话身份：按 company-people seed 判断，roles 含 ceo 的是 CEO，其余是成员。 */
 export const SessionRole = Type.Union([Type.Literal("ceo"), Type.Literal("member")]);
@@ -38,6 +39,8 @@ export const SessionResponse = Type.Object(
     canSwitchView: Type.Optional(Type.Boolean()),
     /** 管理员（TIANSHU_ADMIN_PERSON_IDS）才有，为 true：个人菜单里多一项「管理员」。 */
     admin: Type.Optional(Type.Boolean()),
+    /** 本人的伙伴；null 是还没选过，页面先请本人「选择你的伙伴」。 */
+    buddy: Type.Optional(BuddyOrNull),
   },
   { additionalProperties: false },
 );

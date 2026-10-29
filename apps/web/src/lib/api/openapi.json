@@ -10171,6 +10171,97 @@
         }
       }
     },
+    "/api/me/buddy": {
+      "get": {
+        "operationId": "getBuddy",
+        "summary": "读取本人的伙伴；还没选过时是 null",
+        "responses": {
+          "200": {
+            "description": "本人的伙伴",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Buddy"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "saveBuddy",
+        "summary": "本人给伙伴起名字、选外形",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Buddy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "保存后的伙伴",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Buddy"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/tokens": {
       "get": {
         "operationId": "listPersonalTokens",
@@ -21521,6 +21612,60 @@
           },
           "admin": {
             "type": "boolean"
+          },
+          "buddy": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "name",
+                  "form"
+                ],
+                "properties": {
+                  "name": {
+                    "minLength": 1,
+                    "maxLength": 12,
+                    "type": "string"
+                  },
+                  "form": {
+                    "anyOf": [
+                      {
+                        "const": "capsule-classic",
+                        "type": "string"
+                      },
+                      {
+                        "const": "capsule-alive",
+                        "type": "string"
+                      },
+                      {
+                        "const": "capsule-panda",
+                        "type": "string"
+                      },
+                      {
+                        "const": "panda",
+                        "type": "string"
+                      },
+                      {
+                        "const": "cat",
+                        "type": "string"
+                      },
+                      {
+                        "const": "whale",
+                        "type": "string"
+                      },
+                      {
+                        "const": "drop",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -49736,6 +49881,85 @@
             ]
           }
         }
+      },
+      "Buddy": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "form"
+        ],
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "maxLength": 12,
+            "type": "string"
+          },
+          "form": {
+            "anyOf": [
+              {
+                "const": "capsule-classic",
+                "type": "string"
+              },
+              {
+                "const": "capsule-alive",
+                "type": "string"
+              },
+              {
+                "const": "capsule-panda",
+                "type": "string"
+              },
+              {
+                "const": "panda",
+                "type": "string"
+              },
+              {
+                "const": "cat",
+                "type": "string"
+              },
+              {
+                "const": "whale",
+                "type": "string"
+              },
+              {
+                "const": "drop",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "BuddyForm": {
+        "anyOf": [
+          {
+            "const": "capsule-classic",
+            "type": "string"
+          },
+          {
+            "const": "capsule-alive",
+            "type": "string"
+          },
+          {
+            "const": "capsule-panda",
+            "type": "string"
+          },
+          {
+            "const": "panda",
+            "type": "string"
+          },
+          {
+            "const": "cat",
+            "type": "string"
+          },
+          {
+            "const": "whale",
+            "type": "string"
+          },
+          {
+            "const": "drop",
+            "type": "string"
+          }
+        ]
       },
       "CreatePersonalTokenRequest": {
         "additionalProperties": false,

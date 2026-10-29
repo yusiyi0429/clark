@@ -12,6 +12,7 @@ import { AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeeti
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import { UsageResponse, OnboardingStepUsageRequest } from "./usage.js";
 import { PersonalProfileView, UpdatePersonalProfileRequest } from "./personalProfile.js";
+import { Buddy, BuddyForm } from "./buddy.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
   CollectionField, CollectionEntryView, CollectionRoundView, CollectionView, CollectionResponse, DraftCollectionRequest, DraftCollectionResponse,
@@ -1812,6 +1813,17 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "保存后的本人资料", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalProfileView" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse },
         },
       },
+      "/api/me/buddy": {
+        get: {
+          operationId: "getBuddy", summary: "读取本人的伙伴；还没选过时是 null",
+          responses: { "200": { description: "本人的伙伴", content: { "application/json": { schema: { anyOf: [{ $ref: "#/components/schemas/Buddy" }, { type: "null" }] } } } }, "401": errorResponse },
+        },
+        put: {
+          operationId: "saveBuddy", summary: "本人给伙伴起名字、选外形",
+          requestBody: jsonBody({ $ref: "#/components/schemas/Buddy" }),
+          responses: { "200": { description: "保存后的伙伴", content: { "application/json": { schema: { $ref: "#/components/schemas/Buddy" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse },
+        },
+      },
       "/api/me/tokens": {
         get: {
           operationId: "listPersonalTokens", summary: "列出本人未撤销的个人 MCP 令牌",
@@ -3175,6 +3187,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ListPersonalTokensResponse: ListPersonalTokensResponse as JsonSchema,
         PersonalProfileView: PersonalProfileView as JsonSchema,
         UpdatePersonalProfileRequest: UpdatePersonalProfileRequest as JsonSchema,
+        Buddy: Buddy as JsonSchema,
+        BuddyForm: BuddyForm as JsonSchema,
         CreatePersonalTokenRequest: CreatePersonalTokenRequest as JsonSchema,
         CreatePersonalTokenResponse: CreatePersonalTokenResponse as JsonSchema,
         CollectorHeartbeatRequest: CollectorHeartbeatRequest as JsonSchema,
