@@ -34,7 +34,7 @@ function todoCard(stage,items,label){
   link:link({stage,todo:'1',...(first?.cardId?{card:first.cardId}:{})}),updatedAt:iso(latest(items.map(i=>i.at||0)))};
 }
 
-export function notificationsFor(state,memberId,{reads={},jobs={}}={}){
+export function notificationsFor(state,memberId,{reads={},jobs={},now=Date.now()}={}){
  const profile=memberProfiles[memberId];if(!profile)return [];
  const actor=memberActor(memberId,state),view=sharedProjection(state,actor),name=actor.name;
  const p={...profile,name,ceo:actor.ceo===true,unitDri:actor.unitDri||[],missions:actor.missionDri||[],units:actor.visibleUnits};
@@ -48,7 +48,7 @@ export function notificationsFor(state,memberId,{reads={},jobs={}}={}){
  // plan card, which shows from 「生成中」 until the whole plan is confirmed. One stage card at a time.
  const company=reviewCards.find(c=>c.level==='company'),reviewDone=!!company&&company.confirmedVersion===currentVersion(company).number;
  if(state.reviewRound&&seesReview&&!reviewDone){const month=(m=>m?`${Number(m[1])} 月`:'')(String(state.reviewRound.period||'').match(/-(\d{2})$/)),due=reviewDueAt(state.reviewRound);
-  cards.push({id:'stage:review',type:'stage',stage:'review',status:'open',title:`${month}复盘进行中`,text:due&&Date.now()>Date.parse(due)?`已过截止时间（${hm(due)}），还没确认的请尽快确认`:`点这里去复盘，${due?hm(due)+' 前确认':'按时确认'}`,count:1,link:link({stage:'review'}),updatedAt:iso(time(state.reviewRound.loadedAt)),...(due?{dueAt:due}:{})});}
+  cards.push({id:'stage:review',type:'stage',stage:'review',status:'open',title:`${month}复盘进行中`,text:due&&now>Date.parse(due)?`已过截止时间（${hm(due)}），还没确认的请尽快确认`:`点这里去复盘，${due?hm(due)+' 前确认':'按时确认'}`,count:1,link:link({stage:'review'}),updatedAt:iso(time(state.reviewRound.loadedAt)),...(due?{dueAt:due}:{})});}
  // 我的待办 · 复盘
  const review=state.reviewRound,month=(p=>{const m=String(p||'').match(/-(\d{2})$/);return m?`${Number(m[1])} 月`:'';})(review?.period);
  if(review){

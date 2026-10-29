@@ -112,11 +112,11 @@ test('程序检查没过的那份单独重写一次再查，不整轮作废；�
 });
 
 test('稳定的环节卡：复盘进行中一直在、带截止时间；CEO 确认公司复盘后复盘卡消失，换成拆解卡（生成中）',()=>{
- const s=fresh();let card=notificationsFor(s,'member-03').find(i=>i.id==='stage:review');
+ const s=fresh(),clock={now:Date.parse('2026-10-28T00:00:00Z')};let card=notificationsFor(s,'member-03',clock).find(i=>i.id==='stage:review');
  assert.deepEqual([card.status,card.title,card.dueAt],['open','10 月复盘进行中','2026-10-29T02:33:00.000Z']);assert.match(card.text,/10\/29 10:33 前确认/);assert.match(card.link,/stage=review/);
- const late={...s,reviewRound:{...s.reviewRound,dueAt:'2026-10-01T00:00:00.000Z'}};assert.match(notificationsFor(late,'member-03').find(i=>i.id==='stage:review').text,/已过截止时间（10\/01 08:00）/);
+ const late={...s,reviewRound:{...s.reviewRound,dueAt:'2026-10-01T00:00:00.000Z'}};assert.match(notificationsFor(late,'member-03',clock).find(i=>i.id==='stage:review').text,/已过截止时间（10\/01 08:00）/);
  const company=s.cards['rv:company'],v=currentVersion(company);v.signatures.push({slot:'ceo',actorId:'member-01',version:v.number,createdAt:'2026-10-29T01:00:00.000Z'});company.confirmedVersion=v.number;
- const items=notificationsFor(s,'member-03');
+ const items=notificationsFor(s,'member-03',clock);
  assert.ok(!items.some(i=>i.id==='stage:review'),'复盘卡消失');
  const plan=items.find(i=>i.id==='stage:plan');assert.deepEqual([plan.status,plan.title,plan.updatedAt],['generating','11 月拆解生成中','2026-10-29T01:00:00.000Z']);assert.match(plan.link,/stage=plan/);
  assert.ok(!items.some(i=>i.id==='comments'),'新批注不再单独成卡');
@@ -348,4 +348,13 @@ test('定稿的个人复盘：本人在房间里要求改，Nexus 不出卡、�
  const c=currentVersion(s.cards['rv:bf01-m1']).content;
  const out=validateNexusResult({topics:[],reply:'双人实测记录我已补进这一行，补上后可以改成达成',proposals:[{cardId:'rv:bf01-m1',baseVersion:1,basis:'request',sourceIds:[ev[0].id],patch:{facts:[c.facts[0],{...c.facts[1],status:'达成',evidence:'纪要'}]}}]},{cards,evidence:ev,fresh:ev,ownRoom:true});
  assert.equal(out.proposals.length,0);assert.match(out.reply,/^单元复盘已确认，个人复盘不能再改，这次不改。有新情况请在单元群里提/);assert.doesNotMatch(out.reply,/补进|可以改成/);
+});
+
+test('环节卡截止提示使用传入时刻：截止前、截止时、截止后与默认真实时钟',t=>{
+ const s=fresh(),due=Date.parse(s.reviewRound.dueAt),card=now=>notificationsFor(s,'member-03',{now}).find(i=>i.id==='stage:review');
+ assert.equal(card(due-1).text,'点这里去复盘，10/29 10:33 前确认');
+ assert.equal(card(due).text,'点这里去复盘，10/29 10:33 前确认');
+ assert.equal(card(due+1).text,'已过截止时间（10/29 10:33），还没确认的请尽快确认');
+ t.mock.timers.enable({apis:['Date'],now:due+1});
+ assert.equal(notificationsFor(s,'member-03').find(i=>i.id==='stage:review').text,card(due+1).text,'不传now仍使用当前时间');
 });
