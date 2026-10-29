@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>伙伴候选</title>
+<style>
+  :root {
+    --paper: #f1f1f3; --surface: #fdfdfe; --ink: #17171b; --ink-muted: #535358; --ink-faint: #6b6b70;
+    --brand-deep: #075ccb; --brand-bright: #1684ff; --onboarding-blue: #3a83f7;
+    --hairline: color-mix(in oklab, var(--ink) 9%, transparent);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; padding: 40px 16px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    background: radial-gradient(80% 60% at 50% 0%, rgb(58 131 247 / 10%), transparent 70%), linear-gradient(180deg, #f7f9fc, #fbfcfe);
+  }
+  h1 { font-size: 20px; font-weight: 600; text-align: center; margin: 0 0 28px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; max-width: 920px; margin: 0 auto; }
+  .card { background: var(--surface); border-radius: 20px; box-shadow: 0 0 0 0.5px var(--hairline), 0 12px 30px -18px rgb(7 92 203 / 30%); padding: 24px 16px 18px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .big { width: 132px; height: 132px; }
+  .name { font-size: 15px; font-weight: 600; }
+  .header { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px 0 4px; border-radius: 999px; background: #f4f6fa; box-shadow: 0 0 0 0.5px var(--hairline); font-size: 13px; color: var(--ink-muted); }
+  .header svg { width: 28px; height: 28px; }
+  .header b { color: var(--ink); font-weight: 600; }
+  .blink { animation: blink 4.6s infinite; transform-origin: center; transform-box: fill-box; }
+  @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+  @media (prefers-reduced-motion: reduce) { .blink { animation: none; } }
+</style>
+</head>
+<body>
+<h1>选择你的伙伴 · 候选</h1>
+<div class="grid">
+
+  <!-- 熊猫 -->
+  <div class="card">
+    <svg class="big" viewBox="0 0 120 120" aria-label="熊猫">
+      <defs>
+        <linearGradient id="pandaHead" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e9edf4"/></linearGradient>
+      </defs>
+      <circle cx="30" cy="34" r="15" fill="#17171b"/>
+      <circle cx="90" cy="34" r="15" fill="#17171b"/>
+      <ellipse cx="60" cy="66" rx="45" ry="41" fill="url(#pandaHead)"/>
+      <ellipse cx="42" cy="63" rx="12" ry="15.5" transform="rotate(-28 42 63)" fill="#17171b"/>
+      <ellipse cx="78" cy="63" rx="12" ry="15.5" transform="rotate(28 78 63)" fill="#17171b"/>
+      <g class="blink"><circle cx="44.5" cy="62" r="4.6" fill="#fdfdfe"/><circle cx="75.5" cy="62" r="4.6" fill="#fdfdfe"/></g>
+      <ellipse cx="60" cy="78" rx="5.5" ry="3.8" fill="#17171b"/>
+      <path d="M54 85 q6 5 12 0" fill="none" stroke="#17171b" stroke-width="2.4" stroke-linecap="round"/>
+      <ellipse cx="31" cy="80" rx="7" ry="4.5" fill="rgb(58 131 247 / 18%)"/>
+      <ellipse cx="89" cy="80" rx="7" ry="4.5" fill="rgb(58 131 247 / 18%)"/>
+    </svg>
+    <div class="name">熊猫</div>
+    <div class="header"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="30" cy="34" r="15" fill="#17171b"/><circle cx="90" cy="34" r="15" fill="#17171b"/><ellipse cx="60" cy="66" rx="45" ry="41" fill="#f6f8fb"/><ellipse cx="42" cy="63" rx="12" ry="15.5" transform="rotate(-28 42 63)" fill="#17171b"/><ellipse cx="78" cy="63" rx="12" ry="15.5" transform="rotate(28 78 63)" fill="#17171b"/><circle cx="44.5" cy="62" r="4.6" fill="#fdfdfe"/><circle cx="75.5" cy="62" r="4.6" fill="#fdfdfe"/><ellipse cx="60" cy="78" rx="5.5" ry="3.8" fill="#17171b"/></svg><b>团团</b></div>
+  </div>
+
+  <!-- 小猫 -->
+  <div class="card">
+    <svg class="big" viewBox="0 0 120 120" aria-label="小猫">
+      <defs>
+        <linearGradient id="catHead" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dfe5ee"/><stop offset="1" stop-color="#c5cfdd"/></linearGradient>
+      </defs>
+      <path d="M20 58 L26 16 L52 36 Z" fill="#cbd4e1"/>
+      <path d="M100 58 L94 16 L68 36 Z" fill="#cbd4e1"/>
+      <path d="M27 46 L30 26 L43 36 Z" fill="rgb(58 131 247 / 22%)"/>
+      <path d="M93 46 L90 26 L77 36 Z" fill="rgb(58 131 247 / 22%)"/>
+      <ellipse cx="60" cy="68" rx="44" ry="38" fill="url(#catHead)"/>
+      <path d="M48 36 q12 -6 24 0 q-12 9 -24 0 Z" fill="rgb(83 83 88 / 22%)"/>
+      <g class="blink"><ellipse cx="44" cy="66" rx="5.2" ry="7.2" fill="#17171b"/><ellipse cx="76" cy="66" rx="5.2" ry="7.2" fill="#17171b"/></g>
+      <circle cx="45.8" cy="63" r="1.8" fill="#fdfdfe"/><circle cx="77.8" cy="63" r="1.8" fill="#fdfdfe"/>
+      <path d="M56 77 h8 l-4 4 Z" fill="#535358"/>
+      <path d="M53 84 q3.5 3 7 0 q3.5 3 7 0" fill="none" stroke="#535358" stroke-width="2.2" stroke-linecap="round"/>
+      <ellipse cx="30" cy="80" rx="6.5" ry="4" fill="rgb(58 131 247 / 18%)"/>
+      <ellipse cx="90" cy="80" rx="6.5" ry="4" fill="rgb(58 131 247 / 18%)"/>
+    </svg>
+    <div class="name">小猫</div>
+    <div class="header"><svg viewBox="0 0 120 120" aria-hidden="true"><path d="M20 58 L26 16 L52 36 Z" fill="#cbd4e1"/><path d="M100 58 L94 16 L68 36 Z" fill="#cbd4e1"/><ellipse cx="60" cy="68" rx="44" ry="38" fill="#d3dbe6"/><ellipse cx="44" cy="66" rx="5.2" ry="7.2" fill="#17171b"/><ellipse cx="76" cy="66" rx="5.2" ry="7.2" fill="#17171b"/><path d="M56 77 h8 l-4 4 Z" fill="#535358"/></svg><b>灰灰</b></div>
+  </div>
+
+  <!-- 小鲸 -->
+  <div class="card">
+    <svg class="big" viewBox="0 0 120 120" aria-label="小鲸">
+      <defs>
+        <linearGradient id="whaleBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1684ff"/><stop offset="1" stop-color="#075ccb"/></linearGradient>
+      </defs>
+      <circle cx="52" cy="18" r="3.4" fill="rgb(91 216 246 / 55%)"/>
+      <circle cx="44" cy="24" r="2.6" fill="rgb(91 216 246 / 45%)"/>
+      <circle cx="60" cy="25" r="2.4" fill="rgb(91 216 246 / 45%)"/>
+      <path d="M96 62 q14 -14 18 -6 q-6 6 -6 14 q6 6 2 12 q-8 2 -16 -10 Z" fill="#0b67d8"/>
+      <path d="M14 70 C14 44 36 32 58 32 C84 32 102 48 102 70 C102 92 82 102 58 102 C34 102 14 92 14 70 Z" fill="url(#whaleBody)"/>
+      <path d="M22 80 C30 96 50 100 64 99 C82 98 96 90 99 78 C80 88 44 90 22 80 Z" fill="#e4f0ff"/>
+      <g class="blink"><circle cx="44" cy="62" r="5" fill="#fdfdfe"/><circle cx="70" cy="62" r="5" fill="#fdfdfe"/></g>
+      <circle cx="45" cy="63" r="2.6" fill="#17171b"/><circle cx="71" cy="63" r="2.6" fill="#17171b"/>
+      <path d="M51 72 q6 5 12 0" fill="none" stroke="#fdfdfe" stroke-width="2.4" stroke-linecap="round"/>
+      <ellipse cx="32" cy="72" rx="6" ry="3.8" fill="rgb(255 255 255 / 22%)"/>
+      <ellipse cx="82" cy="72" rx="6" ry="3.8" fill="rgb(255 255 255 / 22%)"/>
+    </svg>
+    <div class="name">小鲸</div>
+    <div class="header"><svg viewBox="0 0 120 120" aria-hidden="true"><path d="M96 62 q14 -14 18 -6 q-6 6 -6 14 q6 6 2 12 q-8 2 -16 -10 Z" fill="#0b67d8"/><path d="M14 70 C14 44 36 32 58 32 C84 32 102 48 102 70 C102 92 82 102 58 102 C34 102 14 92 14 70 Z" fill="#1376ee"/><path d="M22 80 C30 96 50 100 64 99 C82 98 96 90 99 78 C80 88 44 90 22 80 Z" fill="#e4f0ff"/><circle cx="44" cy="62" r="5" fill="#fdfdfe"/><circle cx="70" cy="62" r="5" fill="#fdfdfe"/><circle cx="45" cy="63" r="2.6" fill="#17171b"/><circle cx="71" cy="63" r="2.6" fill="#17171b"/></svg><b>蓝蓝</b></div>
+  </div>
+
+  <!-- 小水滴 -->
+  <div class="card">
+    <svg class="big" viewBox="0 0 120 120" aria-label="小水滴">
+      <defs>
+        <linearGradient id="drop" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0" stop-color="#7fe0f8"/><stop offset="0.55" stop-color="#3a83f7"/><stop offset="1" stop-color="#1684ff"/></linearGradient>
+      </defs>
+      <path d="M60 10 C72 30 98 52 98 76 C98 98 80 110 60 110 C40 110 22 98 22 76 C22 52 48 30 60 10 Z" fill="url(#drop)"/>
+      <path d="M40 58 C44 46 52 38 56 34 C52 44 48 56 46 66 C44 70 38 66 40 58 Z" fill="rgb(255 255 255 / 42%)"/>
+      <g class="blink"><ellipse cx="48" cy="80" rx="4.6" ry="6.2" fill="#17171b"/><ellipse cx="72" cy="80" rx="4.6" ry="6.2" fill="#17171b"/></g>
+      <circle cx="49.6" cy="77.4" r="1.7" fill="#fdfdfe"/><circle cx="73.6" cy="77.4" r="1.7" fill="#fdfdfe"/>
+      <path d="M55 90 q5 4.5 10 0" fill="none" stroke="#17171b" stroke-width="2.3" stroke-linecap="round"/>
+      <ellipse cx="38" cy="90" rx="6" ry="3.6" fill="rgb(255 255 255 / 28%)"/>
+      <ellipse cx="82" cy="90" rx="6" ry="3.6" fill="rgb(255 255 255 / 28%)"/>
+    </svg>
+    <div class="name">小水滴</div>
+    <div class="header"><svg viewBox="0 0 120 120" aria-hidden="true"><path d="M60 10 C72 30 98 52 98 76 C98 98 80 110 60 110 C40 110 22 98 22 76 C22 52 48 30 60 10 Z" fill="#3a8ef8"/><ellipse cx="48" cy="80" rx="4.6" ry="6.2" fill="#17171b"/><ellipse cx="72" cy="80" rx="4.6" ry="6.2" fill="#17171b"/></svg><b>滴滴</b></div>
+  </div>
+
+</div>
+</body>
+</html>
