@@ -96,7 +96,7 @@ export const UsageQuery = Type.Object({ week: Type.Optional(Day) }, { additional
 
 /** 上手走到的一步（界面打开这一步时报一次）；步骤名与上手流程一致。 */
 export const OnboardingStepName = Type.Union([
-  Type.Literal("hello"), Type.Literal("tour-notifications"), Type.Literal("tour-board"), Type.Literal("mission-flow"), Type.Literal("work"),
+  Type.Literal("buddy"), Type.Literal("hello"), Type.Literal("tour-notifications"), Type.Literal("tour-board"), Type.Literal("mission-flow"), Type.Literal("work"),
   Type.Literal("radar"), Type.Literal("voiceprint"), Type.Literal("connect"), Type.Literal("collector"), Type.Literal("scan"), Type.Literal("review"),
   Type.Literal("delegation"), Type.Literal("start"),
 ]);

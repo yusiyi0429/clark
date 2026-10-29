@@ -9483,7 +9483,7 @@ export interface components {
             };
         };
         OnboardingStepUsageRequest: {
-            step: "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "work" | "radar" | "voiceprint" | "connect" | "collector" | "scan" | "review" | "delegation" | "start";
+            step: "buddy" | "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "work" | "radar" | "voiceprint" | "connect" | "collector" | "scan" | "review" | "delegation" | "start";
         };
         CollectorStatusResponse: {
             consent: boolean;

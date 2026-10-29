@@ -52048,6 +52048,10 @@
           "step": {
             "anyOf": [
               {
+                "const": "buddy",
+                "type": "string"
+              },
+              {
                 "const": "hello",
                 "type": "string"
               },

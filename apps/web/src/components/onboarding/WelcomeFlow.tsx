@@ -6,11 +6,14 @@ import { TianshuMark } from "@/components/TianshuMark";
 import { useVoiceprintEnrollment, VOICEPRINT_SCRIPT, VOICEPRINT_CONSENT } from "@/components/member/useVoiceprintEnrollment";
 import { browserApi } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
-import { onboardingDestination, onboardingReturnPath } from "@/lib/access-paths";
+import { landingPath, onboardingDestination, onboardingReturnPath } from "@/lib/access-paths";
 import { monthDayTime } from "@/lib/companyTime";
 import { useRoundNow } from "@/components/missionCards/useRoundNow";
 import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import { ConnectAgentForm } from "@/components/ConnectAgentForm";
+import { BuddyPicker } from "@/components/buddy/BuddyPicker";
+import { buddyNameValid, saveBuddy, type Buddy } from "@/components/buddy/useBuddy";
+import { readStoredSkin } from "@/components/coagent/skin";
 import { CollectorInstallPanel, ScanProgress, scanSteps, useCollectorStatus } from "./CollectorSetup";
 import { loadReviewLists, reviewEmpty, ReviewSummary, submitReview, type ReviewLists, type ReviewPicks } from "./ReviewLists";
 import { DelegationPanel } from "./DelegationPanel";
@@ -24,16 +27,19 @@ import f from "./foundation.module.css";
 import s from "./welcome.module.css";
 
 export type OnboardingData = components["schemas"]["OnboardingResponse"];
-type Step = "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "work" | "radar" | "voiceprint" | "connect" | "collector" | "scan" | "review" | "delegation" | "start";
+type Step = "buddy" | "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "work" | "radar" | "voiceprint" | "connect" | "collector" | "scan" | "review" | "delegation" | "start";
 
 /**
  * CEO 只看工作台三页（你好 → 通知栏 → 公司全局和对话），最后一页直接进工作台；雷达、外部工具、采集器都在个人菜单里。
  * 成员看完工作台，接着看每月 Mission 的形成与执行；连上 AI 工具之后：安装本机采集器 → 后台扫描 → 确认清单
  * （10a 第 2–4 步；扫完三项都没有可确认的就跳过）；委托授权（第 7 步）由配置打开。
+ * 还没有伙伴的人，最前面先「选择你的伙伴」（spec 5.5）；已经引导过、只差伙伴的人只走这一步。
  */
-export function onboardingSteps(data: OnboardingData, skipReview = false): Step[] {
-  if (data.role === "ceo") return ["hello", "tour-notifications", "tour-board"];
-  return ["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "connect",
+export function onboardingSteps(data: OnboardingData, skipReview = false, buddyStep: "none" | "first" | "only" = "none"): Step[] {
+  if (buddyStep === "only") return ["buddy"];
+  const first: Step[] = buddyStep === "first" ? ["buddy"] : [];
+  if (data.role === "ceo") return [...first, "hello", "tour-notifications", "tour-board"];
+  return [...first, "hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "connect",
     "collector", "scan", ...(skipReview ? [] : ["review" as const]), ...(data.delegationStep ? ["delegation" as const] : []), "start"];
 }
 
@@ -92,8 +98,10 @@ export function WorkSnapshot({ data, onRefresh }: { data: Extract<OnboardingData
   </div>;
 }
 
-export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData; nextPath?: string }) {
+/** buddy：本人的伙伴，null 是还没选（undefined 当作已经有了）；buddyOnly：已经引导过、只差伙伴。 */
+export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false }: { data: OnboardingData; nextPath?: string; buddy?: Buddy | null; buddyOnly?: boolean }) {
   const { data, refresh, refreshError } = useOnboardingData(initial);
+  const buddyStep = buddy !== null ? "none" : buddyOnly ? "only" : "first";
   const returnPath = onboardingReturnPath(data.role, nextPath);
   const [index, setIndex] = useState(0);
   const [acknowledge, setAcknowledge] = useState(0);
@@ -123,12 +131,16 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
   const [reviewPicks, setReviewPicks] = useState<ReviewPicks>({});
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  /** 选伙伴这一步的草稿：名字空着等本人起；样子在浏览器里再换成这台电脑原来选过的那颗。 */
+  const [buddyDraft, setBuddyDraft] = useState<Buddy>({ name: "", form: "classic" });
+  const [buddySaving, setBuddySaving] = useState(false);
+  const [buddyError, setBuddyError] = useState<string | null>(null);
   // 确认清单在扫描之后：跳不跳过，采集器、扫描两步的位置都一样。
-  const unskipped = onboardingSteps(data)[index];
+  const unskipped = onboardingSteps(data, false, buddyStep)[index];
   const collector = useCollectorStatus(unskipped === "collector" || unskipped === "scan");
   const collectorConnected = Boolean(collector?.devices.length);
   const memoryFiles = collectorConnected && collector!.consent ? collector!.inventory.memoryFiles : null;
-  const steps = onboardingSteps(data, scanDeferred || (!reviewed && reviewLists !== null && reviewEmpty(reviewLists, memoryFiles)));
+  const steps = onboardingSteps(data, scanDeferred || (!reviewed && reviewLists !== null && reviewEmpty(reviewLists, memoryFiles)), buddyStep);
   const step = steps[index];
   const last = index === steps.length - 1;
   const scanFinished = Boolean(collector) && (!collectorConnected || !collector?.consent || Boolean(collector?.scannedAt) || scanTimedOut);
@@ -158,6 +170,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
     recordResult.current?.scrollIntoView({ block: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   }, [step, voice.phase]);
   useEffect(() => () => { outgoing.current?.remove(); if (outgoingTimer.current) clearTimeout(outgoingTimer.current); }, []);
+  useEffect(() => { setBuddyDraft((draft) => ({ ...draft, form: readStoredSkin() })); }, []);
   useEffect(() => {
     if (step !== "scan" || !collectorConnected || !collector?.consent || collector?.scannedAt || scanTimedOut) return;
     const timer = window.setTimeout(() => setScanTimedOut(true), SCAN_TIMEOUT_MS);
@@ -220,7 +233,23 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
     }
   }
 
+  async function saveBuddyStep() {
+    if (buddySaving || !buddyNameValid(buddyDraft.name)) return;
+    setBuddySaving(true);
+    setBuddyError(null);
+    try {
+      await saveBuddy(buddyDraft);
+      if (buddyOnly) { window.location.replace(landingPath(data.role, nextPath)); return; }
+      setBuddySaving(false);
+      move(1);
+    } catch (cause) {
+      setBuddyError(cause instanceof Error ? cause.message : "没有存上，请重试");
+      setBuddySaving(false);
+    }
+  }
+
   async function forward() {
+    if (step === "buddy") return saveBuddyStep();
     if (last || error) return finish();
     if (step === "review" && reviewLists) {
       setReviewSaving(true);
@@ -259,24 +288,24 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
       : step === "connect" && !connectDownloaded ? connectPrimary?.querySelector<HTMLButtonElement>("button") : primary.current)?.click();
   }
 
-  const heading = step === "collector" ? "安装本机采集器" : step === "scan" ? scanReady ? "扫描完成" : "正在扫描" : step === "review" ? "确认清单" : step === "delegation" ? "授权天枢替你记进本体" : step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "work" ? "你这个月的工作" : step === "radar" ? "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : step === "connect" ? "连上你自己的 AI 工具" : "可以开始了";
+  const heading = step === "buddy" ? "选择你的伙伴" : step === "collector" ? "安装本机采集器" : step === "scan" ? scanReady ? "扫描完成" : "正在扫描" : step === "review" ? "确认清单" : step === "delegation" ? "授权天枢替你记进本体" : step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "work" ? "你这个月的工作" : step === "radar" ? "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : step === "connect" ? "连上你自己的 AI 工具" : "可以开始了";
   // 手机首页是一条滚动：最上面是通知，往下 CEO 是公司全局、成员是自己的工作。
   const noticeCopy = data.role === "ceo" ? "会后要你确认的会议卡、月末的复盘与拆解，到时候会出现在这里。" : "任务卡的讨论、分给你的事和别人的回复，按轻重排在这里。";
   const phoneHeading = step === "tour-notifications" ? "最上面是通知" : step === "tour-board" ? data.role === "ceo" ? "往下是公司全局" : "往下是你的工作" : null;
-  const busy = finishing || voice.phase === "saving" || reviewSaving;
+  const busy = finishing || voice.phase === "saving" || reviewSaving || buddySaving;
   const voiceReady = voice.status?.enrolled && !rerecord && voice.phase === "idle";
-  const primaryDisabled = busy || (!error && ((step === "voiceprint" && !voiceReady && (voice.phase !== "recorded" || voice.tooShort))
+  const primaryDisabled = busy || (step === "buddy" && !buddyNameValid(buddyDraft.name)) || (!error && ((step === "voiceprint" && !voiceReady && (voice.phase !== "recorded" || voice.tooShort))
     || (step === "collector" && !collectorConnected) || (step === "scan" && !scanReady && !scanSkippable)));
   const disabledHint = step === "voiceprint" && primaryDisabled && !busy
     ? voice.recording ? "录好后再继续，也可以选「稍后」" : voice.tooShort ? "请重新录满 15 秒，或者选「稍后」" : voice.consent ? "录好一段 15–30 秒的朗读，或者选「稍后」" : "先勾选同意并录好，或者选「稍后」"
     : null;
-  const primaryLabel = finishing ? "正在进入…" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : last ? returnPath ? "继续刚才的页面" : "进入工作台" : step === "review" ? reviewSaving ? "正在保存…" : "完成" : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : step === "scan" && !scanReady && scanSkippable ? "后台继续" : "下一步";
+  const primaryLabel = finishing ? "正在进入…" : step === "buddy" ? buddySaving ? "正在保存…" : "继续" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : last ? returnPath ? "继续刚才的页面" : "进入工作台" : step === "review" ? reviewSaving ? "正在保存…" : "完成" : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : step === "scan" && !scanReady && scanSkippable ? "后台继续" : "下一步";
 
   return <main className={s.page} onKeyDown={onKeyDown} style={{ "--direction": direction } as CSSProperties}>
     <MorningCanvas progress={index} />
     <header className={s.header}>
       <div className={s.brand} aria-label="天枢"><TianshuMark /><span>天枢</span></div>
-      {!last ? <button type="button" className={f.textButton} onClick={() => void finish()} disabled={busy}>先进入工作台</button> : null}
+      {!last && step !== "buddy" ? <button type="button" className={f.textButton} onClick={() => void finish()} disabled={busy}>先进入工作台</button> : null}
     </header>
     <div className={s.flow} data-step={step} data-role={data.role}>
       <CoAgentCapsule acknowledge={acknowledge} state={voice.recording ? "listening" : "idle"} level={voice.level} />
@@ -293,6 +322,10 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
             {step === "start" && !returnPath ? <p className={s.description}>{data.next.text}</p> : null}
           </div>
           <div className={s.details}>
+            {step === "buddy" ? <div className={`${f.glass} ${s.connectPanel}`}>
+              <BuddyPicker value={buddyDraft} onChange={setBuddyDraft} disabled={buddySaving} />
+              {buddyError ? <p className={s.error} role="alert">{buddyError}</p> : null}
+            </div> : null}
             {(step === "tour-notifications" || step === "tour-board") ? <WorkspaceSchematic role={data.role} focus={step === "tour-notifications" ? "notifications" : "board"} /> : null}
             {step === "mission-flow" && data.role === "member" ? <MissionFlow /> : null}
             {step === "work" && data.role === "member" ? <WorkSnapshot data={data} onRefresh={refresh} /> : null}

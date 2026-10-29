@@ -48,6 +48,7 @@ import { revisedLabel, reviewEmpty, ReviewSummary, submitReview, type ReviewList
 import { MemoryImportPanel } from "./MemoryImportSlot";
 import { CollectorConsentSwitch } from "./CollectorConsentSwitch";
 import { browserApi } from "@/lib/api/client";
+import { BuddyPicker } from "@/components/buddy/BuddyPicker";
 
 const base = { displayName: "测试", companyName: null, delegationStep: false, voiceprint: { configured: false, enrolled: false, updatedAt: null }, next: { text: "可以开始工作", action: "进入工作台", href: "/me" } };
 const member: Extract<OnboardingData, { role: "member" }> = { ...base, role: "member", radar: { configured: false, enabled: false, directions: 0 }, work: { period: "2026-10", planStatus: "none", battlefields: [], missions: [], missionCards: [] } };
@@ -491,5 +492,65 @@ describe("确认清单：一屏摘要", () => {
 
   it("提交失败在摘要里原位显示", () => {
     expect(elements(summary({ error: "没有存上，请重试" })).find((element) => element.props.role === "alert")).toBeDefined();
+  });
+});
+
+describe("选择你的伙伴（spec 5.5）", () => {
+  const flow = (data: OnboardingData, options: { nextPath?: string; buddyOnly?: boolean } = {}) => {
+    hooks.begin();
+    return WelcomeFlow({ data, nextPath: options.nextPath, buddy: null, buddyOnly: options.buddyOnly });
+  };
+  const picker = (tree: ReactNode) => {
+    const match = elements(tree).find((element) => element.type === BuddyPicker);
+    expect(match, "这一步应嵌入起名字、选胶囊的 BuddyPicker").toBeDefined();
+    return match!.props as unknown as { value: { name: string; form: string }; onChange: (next: { name: string; form: string }) => void };
+  };
+
+  it("还没有伙伴时排在最前面，CEO 和成员都走；已经引导过的只走这一步；有伙伴的不走", () => {
+    expect(onboardingSteps(ceo, false, "first")).toEqual(["buddy", "hello", "tour-notifications", "tour-board"]);
+    expect(onboardingSteps(member, false, "first").slice(0, 2)).toEqual(["buddy", "hello"]);
+    expect(onboardingSteps(member, false, "only")).toEqual(["buddy"]);
+    expect(onboardingSteps(member)[0]).toBe("hello");
+    hooks.begin();
+    expect(text(WelcomeFlow({ data: ceo, buddy: { name: "团团", form: "panda" } }))).not.toContain("选择你的伙伴");
+  });
+
+  it("这一步没有「先进入工作台」，名字空着不能继续；起好名字存下再往下走", async () => {
+    vi.stubGlobal("window", new EventTarget());
+    const put = vi.spyOn(browserApi, "PUT").mockResolvedValue({ data: { name: "团团", form: "panda" }, response: new Response(null, { status: 200 }) } as never);
+    let tree = flow(ceo);
+    expect(text(tree)).toContain("选择你的伙伴");
+    expect(text(tree)).not.toContain("先进入工作台");
+    expect(picker(tree).value).toEqual({ name: "", form: "classic" });
+    expect(button(tree, "继续").props.disabled).toBe(true);
+    picker(tree).onChange({ name: " 团团 ", form: "panda" });
+    tree = flow(ceo);
+    expect(button(tree, "继续").props.disabled).toBe(false);
+    (button(tree, "继续").props.onClick as () => void)();
+    await vi.waitFor(() => expect(text(flow(ceo))).toContain("你好，测试"));
+    expect(put).toHaveBeenCalledExactlyOnceWith("/api/me/buddy", { body: { name: "团团", form: "panda" } });
+  });
+
+  it("存不上就留在这一步并说明，不往下走", async () => {
+    vi.stubGlobal("window", new EventTarget());
+    vi.spyOn(browserApi, "PUT").mockResolvedValue({ data: undefined, error: { message: "伙伴要有名字" }, response: new Response(null, { status: 400 }) } as never);
+    picker(flow(ceo)).onChange({ name: "团团", form: "classic" });
+    (button(flow(ceo), "继续").props.onClick as () => void)();
+    await vi.waitFor(() => expect(text(flow(ceo))).toContain("伙伴要有名字"));
+    expect(text(flow(ceo))).toContain("选择你的伙伴");
+  });
+
+  it("已经引导过、只差伙伴的人：存好就回原来要去的页面，不再记一次引导完成", async () => {
+    const replace = vi.fn();
+    vi.stubGlobal("window", Object.assign(new EventTarget(), { location: { replace } }));
+    vi.spyOn(browserApi, "PUT").mockResolvedValue({ data: { name: "团团", form: "alive" }, response: new Response(null, { status: 200 }) } as never);
+    const complete = vi.spyOn(browserApi, "POST").mockResolvedValue({ data: undefined, response: new Response(null, { status: 204 }) } as never);
+    const options = { nextPath: "/radar", buddyOnly: true };
+    picker(flow(ceo, options)).onChange({ name: "团团", form: "alive" });
+    const tree = flow(ceo, options);
+    expect(elements(tree).find((element) => element.type === OnboardingProgress)?.props).toMatchObject({ current: 1, total: 1 });
+    (button(tree, "继续").props.onClick as () => void)();
+    await vi.waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith("/radar"));
+    expect(complete).not.toHaveBeenCalledWith("/api/me/onboarding/complete");
   });
 });
