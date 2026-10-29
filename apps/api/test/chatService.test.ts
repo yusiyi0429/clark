@@ -10,7 +10,13 @@ import { CHAT_ROUTE } from "../src/chatService.js";
 const CHAT_TOKEN = "chat-token-test";
 const RUN = "6f0c1a52-6d7e-4e57-9a51-0a9a4c3e2b10";
 /** Chat（8699279）TurnCommand 收的字段；它不收多余字段。 */
-const TURN_FIELDS = new Set(["clientRequestId", "message", "attachmentIds", "resumeRunId", "channel", "anchorSelection", "references"]);
+const TURN_FIELDS = new Set(["clientRequestId", "message", "attachmentIds", "resumeRunId", "channel", "anchorSelection", "references", "page"]);
+/** Chat 的 page：path、title、guide 都必填，最多 200、40、150 字（10/29 人豪）。 */
+const validPage = (page: unknown) => {
+  if (page === undefined) return true;
+  const { path, title, guide } = (page ?? {}) as Record<string, unknown>;
+  return [[path, 200], [title, 40], [guide, 150]].every(([value, max]) => typeof value === "string" && value.length > 0 && value.length <= (max as number));
+};
 
 type ChatRequest = { method: string; url: string; headers: IncomingHttpHeaders; body: string };
 type Page = { messages: unknown[]; runs: unknown[]; nextCursor: string | null };
@@ -72,8 +78,9 @@ async function fakeChat(options: {
     if (request.method === "POST" && request.url.endsWith("/attachments")) return send(200, options.upload?.(request));
     if (request.method === "POST" && request.url.endsWith("/turns")) {
       // 和 Chat 的 TurnCommand 一样不收多余字段：字段名对不上时整轮 400。
-      const unknown = Object.keys(JSON.parse(request.body) as object).filter((key) => !TURN_FIELDS.has(key));
-      if (unknown.length) return send(400, { error: { code: "INVALID_INPUT", message: "请求字段或格式无效" } });
+      const command = JSON.parse(request.body) as Record<string, unknown>;
+      const unknown = Object.keys(command).filter((key) => !TURN_FIELDS.has(key));
+      if (unknown.length || !validPage(command.page)) return send(400, { error: { code: "INVALID_INPUT", message: "请求字段或格式无效" } });
       touch(request.url.split("/")[2]);
       if (options.turn) return options.turn(res, request);
       return sse(res, [{ type: "turn_started", userMessageId: randomUUID() }, { type: "message", delta: "好的" }, { type: "done", status: "completed" }]);
@@ -125,8 +132,8 @@ function multipart(filename: string, content: string): { headers: Record<string,
 }
 
 async function withChat(chat: Awaited<ReturnType<typeof fakeChat>>, runtime: ConversationRuntime,
-  run: (t: Awaited<ReturnType<typeof createTestApp>>) => Promise<void>, token = CHAT_TOKEN) {
-  const t = await createTestApp({ internalChatToken: token, chatServiceUrl: chat.url }, runtime);
+  run: (t: Awaited<ReturnType<typeof createTestApp>>) => Promise<void>, token = CHAT_TOKEN, extra: { chatPageContext?: boolean } = {}) {
+  const t = await createTestApp({ internalChatToken: token, chatServiceUrl: chat.url, ...extra }, runtime);
   try {
     await run(t);
   } finally {
@@ -660,5 +667,40 @@ describe("给 Chat 的回看接口（/internal/conversation-*）", () => {
     } finally {
       await off.close();
     }
+  });
+});
+
+describe("首页对话带上本人所在页面（CHAT_PAGE_CONTEXT）", () => {
+  const send = async (t: Awaited<ReturnType<typeof createTestApp>>, pagePath?: string) => {
+    const response = await t.app.inject({
+      method: "POST", url: "/api/conversations/global/messages",
+      headers: { cookie: await t.loginCookie(), origin: t.publicOrigin, accept: "text/event-stream" },
+      payload: { message: "这页是干嘛的", ...(pagePath ? { pagePath } : {}) },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(events(response.payload).map((event) => event.type)).toContain("done");
+  };
+  const pages = (chat: Awaited<ReturnType<typeof fakeChat>>) => chat.turns().map((request) => (JSON.parse(request.body) as { page?: unknown }).page ?? null);
+
+  it("开着时二级页面带上页面名和说明，首页和目录里没有的页面不带，Chat 照常受理", async () => {
+    const chat = await fakeChat();
+    await withChat(chat, countingRuntime(), async (t) => {
+      await send(t, "/me/task-quality");
+      await send(t, "/me");
+      await send(t, "/no-such-page");
+      await send(t);
+      const [taskQuality, ...rest] = pages(chat);
+      expect(taskQuality).toMatchObject({ path: "/me/task-quality", title: "任务数据质量" });
+      expect((taskQuality as { guide: string }).guide).toContain("现在核对");
+      expect(rest).toEqual([null, null, null]);
+    }, CHAT_TOKEN, { chatPageContext: true });
+  });
+
+  it("关着时（缺省）即使网页带了页面路径也不发 page", async () => {
+    const chat = await fakeChat();
+    await withChat(chat, countingRuntime(), async (t) => {
+      await send(t, "/me/task-quality");
+      expect(pages(chat)).toEqual([null]);
+    });
   });
 });
