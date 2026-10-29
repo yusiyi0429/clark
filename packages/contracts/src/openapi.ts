@@ -13,6 +13,7 @@ import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse
 import { UsageResponse, OnboardingStepUsageRequest } from "./usage.js";
 import { PersonalProfileView, UpdatePersonalProfileRequest } from "./personalProfile.js";
 import { Buddy, BuddyForm } from "./buddy.js";
+import { DeliverableDissentRequest, DeliverableItem, DeliverableNote, DeliverableNotePatch, DeliverableReview, DeliverableVersion, ReviewCriterion, TaskDeliverableResponse, TaskDeliverableStatus } from "./deliverables.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
   CollectionField, CollectionEntryView, CollectionRoundView, CollectionView, CollectionResponse, DraftCollectionRequest, DraftCollectionResponse,
@@ -1429,6 +1430,86 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "401": errorResponse,
             "403": errorResponse,
           },
+        },
+      },
+      "/api/plan-tasks/{taskId}/deliverable": {
+        get: {
+          operationId: "getTaskDeliverable",
+          summary: "本人 Mission 下一个 Task 的交付物：按哪几条标准评、各版本的材料、评审报告、交付和版本说明（新的版本在前）",
+          parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "交付物", content: { "application/json": { schema: { $ref: "#/components/schemas/TaskDeliverableResponse" } } } },
+            "401": errorResponse, "403": errorResponse, "404": errorResponse,
+          },
+        },
+      },
+      "/api/plan-tasks/{taskId}/deliverable/versions": {
+        post: {
+          operationId: "createDeliverableVersion",
+          summary: "传一个新版本并开始评审（multipart：files 若干份 PDF/Word/Markdown/HTML/图片；links 是 JSON 数组；statement 是附的一句话或现状说明；keep 是 JSON 数组，沿用上一版里的哪几样）",
+          parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: {
+            required: true,
+            content: { "multipart/form-data": { schema: { type: "object", properties: {
+              files: { type: "array", items: { type: "string", format: "binary" } },
+              links: { type: "string" }, statement: { type: "string" }, keep: { type: "string" },
+            } } } },
+          },
+          responses: {
+            "201": { description: "新版本（评审已排队）", content: { "application/json": { schema: { $ref: "#/components/schemas/DeliverableVersion" } } } },
+            "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "413": errorResponse,
+          },
+        },
+      },
+      "/api/plan-tasks/{taskId}/deliverable/items/{itemId}": {
+        get: {
+          operationId: "readDeliverableItem",
+          summary: "打开交付物里的一份文件或图片（原文件）",
+          parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }, { name: "itemId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { "200": { description: "原文件" }, "401": errorResponse, "403": errorResponse, "404": errorResponse },
+        },
+      },
+      "/api/plan-tasks/{taskId}/deliverable/versions/{versionId}/review": {
+        post: {
+          operationId: "retryDeliverableReview",
+          summary: "评审没做完时重新评审这一版",
+          parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }, { name: "versionId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { "200": { description: "这一版", content: { "application/json": { schema: { $ref: "#/components/schemas/DeliverableVersion" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/plan-tasks/{taskId}/deliverable/versions/{versionId}/criteria/{index}/dissent": {
+        post: {
+          operationId: "dissentDeliverableCriterion",
+          summary: "本人不同意某一条的判定：写一句为什么，带着这句话重评这一条",
+          parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }, { name: "versionId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+            { name: "index", in: "path", required: true, schema: { type: "integer", minimum: 1 } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/DeliverableDissentRequest" }),
+          responses: { "200": { description: "这一版", content: { "application/json": { schema: { $ref: "#/components/schemas/DeliverableVersion" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/plan-tasks/{taskId}/deliverable/versions/{versionId}/deliver": {
+        post: {
+          operationId: "deliverDeliverableVersion",
+          summary: "交付这一版：最新一版、评审完、每一条都达到时才能交付；交付后伙伴写版本说明",
+          parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }, { name: "versionId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { "200": { description: "这一版", content: { "application/json": { schema: { $ref: "#/components/schemas/DeliverableVersion" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/plan-tasks/{taskId}/deliverable/versions/{versionId}/withdraw": {
+        post: {
+          operationId: "withdrawDeliverableVersion",
+          summary: "撤回交付",
+          parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }, { name: "versionId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { "200": { description: "这一版", content: { "application/json": { schema: { $ref: "#/components/schemas/DeliverableVersion" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/plan-tasks/{taskId}/deliverable/versions/{versionId}/note": {
+        patch: {
+          operationId: "patchDeliverableNote",
+          summary: "改版本说明里的几句，或者不要这段",
+          parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }, { name: "versionId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/DeliverableNotePatch" }),
+          responses: { "200": { description: "这一版", content: { "application/json": { schema: { $ref: "#/components/schemas/DeliverableVersion" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/me/battlefield-progress": {
@@ -3228,6 +3309,15 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         HomePlanGate: HomePlanGate as JsonSchema,
         HomePlanMark: HomePlanMark as JsonSchema,
         HomePlanTask: HomePlanTask as JsonSchema,
+        TaskDeliverableStatus: TaskDeliverableStatus as JsonSchema,
+        TaskDeliverableResponse: TaskDeliverableResponse as JsonSchema,
+        DeliverableVersion: DeliverableVersion as JsonSchema,
+        DeliverableItem: DeliverableItem as JsonSchema,
+        DeliverableReview: DeliverableReview as JsonSchema,
+        ReviewCriterion: ReviewCriterion as JsonSchema,
+        DeliverableNote: DeliverableNote as JsonSchema,
+        DeliverableDissentRequest: DeliverableDissentRequest as JsonSchema,
+        DeliverableNotePatch: DeliverableNotePatch as JsonSchema,
         HomePlanMission: HomePlanMission as JsonSchema,
         HomePlanActivity: HomePlanActivity as JsonSchema,
         HomePlanResponse: HomePlanResponse as JsonSchema,

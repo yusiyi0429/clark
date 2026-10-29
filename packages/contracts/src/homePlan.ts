@@ -1,5 +1,6 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { DateOnly, Period, TaskView } from "./tasks.js";
+import { TaskDeliverableStatus } from "./deliverables.js";
 
 /** 计划点名字最多 10 个字。 */
 const MarkLabel = Type.String({ minLength: 1, maxLength: 10 });
@@ -22,7 +23,11 @@ export const HomePlanMark = Type.Object(
   { additionalProperties: false },
 );
 
-/** 本体里挂在 Mission 下的 Task：name 是对象标题，doneDefinition 和 criteria 取自 definition 块。 */
+/**
+ * 本体里挂在 Mission 下的 Task：name 是对象标题，doneDefinition 和 criteria 取自 definition 块；
+ * responsibleId 是本体登记的负责人（对不上天枢的人或没登记时为 null）；deliverable 是交付物走到哪了。
+ * 这两项首页计划一定带；其他用到 Task 的地方（MCP、周复盘）不带。
+ */
 export const HomePlanTask = Type.Object(
   {
     taskId: Type.String({ minLength: 1 }),
@@ -30,6 +35,8 @@ export const HomePlanTask = Type.Object(
     name: Type.String(),
     doneDefinition: Type.Union([Type.String(), Type.Null()]),
     criteria: Type.Array(Type.String()),
+    responsibleId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    deliverable: Type.Optional(TaskDeliverableStatus),
   },
   { additionalProperties: false },
 );

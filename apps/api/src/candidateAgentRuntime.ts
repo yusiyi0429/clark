@@ -16,6 +16,7 @@ import {
   InMemoryModelsStore,
   type AssistantMessageEventStream,
   type Context,
+  type ImageContent,
   type Model,
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
@@ -90,6 +91,8 @@ export type CandidateAgentOptions<T extends TSchema> = {
    * 返回 null 才收下。重交次数受 maxModelCalls 约束。
    */
   validate?: (candidate: Static<T>) => string | null;
+  /** 随输入一起发给模型的图片（如交付物评审）；给了就把模型注册成能看图。 */
+  images?: ImageContent[];
   /** 运行事件；回调里抛错不影响运行。 */
   onEvent?: (event: CandidateAgentEvent) => void;
   streamSimple?: (model: Model<any>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
@@ -143,7 +146,8 @@ async function runCandidateAgentUntraced<T extends TSchema>(options: CandidateAg
       modelsPath: null,
       refreshOnCreate: false,
     });
-    const definition = candidateModelDefinition({ modelId: options.modelId, baseUrl: options.baseUrl, thinkingLevel: thinking, maxTokens: options.maxTokens });
+    const base = candidateModelDefinition({ modelId: options.modelId, baseUrl: options.baseUrl, thinkingLevel: thinking, maxTokens: options.maxTokens });
+    const definition = options.images?.length ? { ...base, input: ["text" as const, "image" as const] } : base;
     const anthropic = definition.api === "anthropic-messages";
     const provider = anthropic ? ANTHROPIC_PROVIDER : "warmap";
     // 两种协议都经过追踪包装：追踪启用时每次真实模型请求一个 llm 节点（Claude 不能落到 pi 内建实现上绕过它）。
@@ -219,7 +223,8 @@ async function runCandidateAgentUntraced<T extends TSchema>(options: CandidateAg
     const onAbort = () => void session!.abort();
     options.signal?.addEventListener("abort", onAbort, { once: true });
     try {
-      await session.prompt(JSON.stringify({ input: options.input }), { expandPromptTemplates: false, source: "rpc" });
+      await session.prompt(JSON.stringify({ input: options.input }), { expandPromptTemplates: false, source: "rpc",
+        ...(options.images?.length ? { images: options.images } : {}) });
     } finally {
       options.signal?.removeEventListener("abort", onAbort);
       unsubscribe();

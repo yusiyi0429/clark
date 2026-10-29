@@ -91,6 +91,11 @@ vi.mock("./MonthCalendar", () => ({ MonthCalendar: (props: Record<string, unknow
 vi.mock("@/components/tours/StartTaskButton", () => ({ StartTaskButton: () => null }));
 vi.mock("@/components/tasks/AcceptDialog", () => ({ AcceptDialog: (props: Record<string, unknown>) => { h.accept = props; return <div data-accept-dialog="true" />; } }));
 vi.mock("@/lib/api/client", () => ({ browserApi: h.api }));
+// 交付物面板自己有测试（deliverable/taskDeliverable.test.tsx）；这里只看它拿到哪个 Task，执行事项三栏照样画在它里面。
+vi.mock("./deliverable/TaskDeliverable", () => ({
+  TaskDeliverable: ({ task, activities, activityCount }: { task: { taskId: string }; activities: ReactNode; activityCount: number }) =>
+    <div data-deliverable={task.taskId} data-activity-count={activityCount}>{activities}</div>,
+}));
 
 import { HomePlan } from "./HomePlan";
 import { HOME_PLAN_CHANGED, useHomePlan } from "./useHomePlan";
@@ -127,8 +132,9 @@ const plan = (overrides: Partial<THomePlanResponse> = {}): THomePlanResponse => 
   ],
   marks: [{ id: "k1", missionId: "m1", date: "2026-10-23", label: "联调" }],
   tasks: [
-    { taskId: "t1", missionId: "m1", name: "会议写进本体", doneDefinition: "会后自动出会议卡，整卡确认后写进本体。", criteria: ["真实工作会走完全链路，读回一致", "飞书里直接开的会也接得住"] },
-    { taskId: "t2", missionId: "m1", name: "对话质量达标", doneDefinition: null, criteria: [] },
+    { taskId: "t1", missionId: "m1", name: "会议写进本体", doneDefinition: "会后自动出会议卡，整卡确认后写进本体。", criteria: ["真实工作会走完全链路，读回一致", "飞书里直接开的会也接得住"],
+      responsibleId: "p1", deliverable: { status: "iterating", score: 50 } },
+    { taskId: "t2", missionId: "m1", name: "对话质量达标", doneDefinition: null, criteria: [], responsibleId: null, deliverable: { status: "none", score: null } },
     { taskId: "t3", missionId: "m2", name: "Chat 客户版", doneDefinition: null, criteria: [] },
   ],
   unplaced: [],
@@ -368,13 +374,26 @@ describe("HomePlan：选某个 Mission 时的详情", () => {
     expect(heading(other.html)).toBe("CEO / DRI Agent 从能用到在用 / 先放着");
   });
 
-  it("Task 小卡：名字、「已完成 a / b」、最近的未完成截止日、进度线；没有「全部 Task」", () => {
+  it("Task 小卡：名字、最近的未完成截止日、交付物状态小标；没有「全部 Task」、没有完成件数和进度线", () => {
     const view = mount();
     view.mission("m1");
-    expect(text(taskCard(view.html, "t1")).trim()).toBe("会议写进本体 已完成 1 / 2 10/24");
-    expect(taskCard(view.html, "t1")).toMatch(/_bar_[^>]*aria-hidden="true"><span style="width:50%"/);
-    expect(text(taskCard(view.html, "t2")).trim()).toBe("对话质量达标 已完成 0 / 1 10/16");
+    expect(text(taskCard(view.html, "t1")).trim()).toBe("会议写进本体 10/24 迭代中 · 50");
+    expect(taskCard(view.html, "t1")).toMatch(/data-tone="judgment"/);
+    expect(text(taskCard(view.html, "t2")).trim()).toBe("对话质量达标 10/16 未开始");
     expect(view.html).not.toContain("全部 Task");
+    expect(view.html).not.toContain("已完成 1 / 2");
+  });
+
+  it("选中真 Task：右边是它的交付物面板，执行事项三栏折在面板里；选「未归入 Task」照旧是三栏", () => {
+    const view = mount();
+    view.mission("m1");
+    expect(view.html).toMatch(/data-deliverable="t1" data-activity-count="2"/);
+    view.task("t2");
+    expect(view.html).toMatch(/data-deliverable="t2"/);
+    expect(view.html).not.toMatch(/data-deliverable="t1"/);
+    view.task("loose");
+    expect(view.html).not.toMatch(/data-deliverable=/);
+    expect(view.html).toMatch(/data-activity="/);
   });
 
   it("点另一个 Task：它浮起来（aria-pressed、data-selected），头部换名字，三栏换成它的事项；再点一次不取消", () => {

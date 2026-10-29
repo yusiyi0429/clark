@@ -2238,6 +2238,142 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/plan-tasks/{taskId}/deliverable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人 Mission 下一个 Task 的交付物：按哪几条标准评、各版本的材料、评审报告、交付和版本说明（新的版本在前） */
+        get: operations["getTaskDeliverable"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/deliverable/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 传一个新版本并开始评审（multipart：files 若干份 PDF/Word/Markdown/HTML/图片；links 是 JSON 数组；statement 是附的一句话或现状说明；keep 是 JSON 数组，沿用上一版里的哪几样） */
+        post: operations["createDeliverableVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/deliverable/items/{itemId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 打开交付物里的一份文件或图片（原文件） */
+        get: operations["readDeliverableItem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/deliverable/versions/{versionId}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 评审没做完时重新评审这一版 */
+        post: operations["retryDeliverableReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/deliverable/versions/{versionId}/criteria/{index}/dissent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人不同意某一条的判定：写一句为什么，带着这句话重评这一条 */
+        post: operations["dissentDeliverableCriterion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/deliverable/versions/{versionId}/deliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 交付这一版：最新一版、评审完、每一条都达到时才能交付；交付后伙伴写版本说明 */
+        post: operations["deliverDeliverableVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/deliverable/versions/{versionId}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 撤回交付 */
+        post: operations["withdrawDeliverableVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/deliverable/versions/{versionId}/note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 改版本说明里的几句，或者不要这段 */
+        patch: operations["patchDeliverableNote"];
+        trace?: never;
+    };
     "/api/me/battlefield-progress": {
         parameters: {
             query?: never;
@@ -10354,6 +10490,222 @@ export interface components {
             name: string;
             doneDefinition: string | null;
             criteria: string[];
+            responsibleId?: string | null;
+            deliverable?: {
+                status: "none" | "reviewing" | "iterating" | "ready" | "delivered";
+                score: number | null;
+            };
+        };
+        TaskDeliverableStatus: {
+            status: "none" | "reviewing" | "iterating" | "ready" | "delivered";
+            score: number | null;
+        };
+        TaskDeliverableResponse: {
+            taskId: string;
+            responsibleId: string | null;
+            responsibleName: string | null;
+            canEdit: boolean;
+            basis: "acceptance" | "definition" | "none";
+            criteria: string[];
+            versions: {
+                /** Format: uuid */
+                id: string;
+                number: number;
+                statement: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                items: {
+                    /** Format: uuid */
+                    id: string;
+                    kind: "file" | "image" | "link";
+                    name: string;
+                    mimeType: string | null;
+                    sizeBytes: number | null;
+                    pageCount: number | null;
+                    url: string | null;
+                    read: "pending" | "read" | "unreadable";
+                    readNote: string | null;
+                }[];
+                review: {
+                    status: "queued" | "running" | "done" | "failed";
+                    phase: {
+                        step: number;
+                        total: number;
+                        label: string;
+                    } | null;
+                    startedAt: string | null;
+                    finishedAt: string | null;
+                    expectedSeconds: number;
+                    basis: "acceptance" | "definition" | "none";
+                    headline: string | null;
+                    summary: string | null;
+                    gain: string | null;
+                    score: number | null;
+                    met: number;
+                    total: number;
+                    ready: boolean;
+                    criteria: {
+                        index: number;
+                        text: string;
+                        verdict: "met" | "partial" | "unmet";
+                        reason: string;
+                        evidence: string | null;
+                        fix: string | null;
+                        dissent: {
+                            reason: string;
+                            upheld: boolean | null;
+                        } | null;
+                    }[];
+                    error: string | null;
+                };
+                deliveredAt: string | null;
+                note: {
+                    status: "writing" | "done" | "failed";
+                    achieved: string | null;
+                    gain: string | null;
+                    why: string | null;
+                    lesson: string | null;
+                    edited: boolean;
+                    dismissed: boolean;
+                } | null;
+            }[];
+        };
+        DeliverableVersion: {
+            /** Format: uuid */
+            id: string;
+            number: number;
+            statement: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            items: {
+                /** Format: uuid */
+                id: string;
+                kind: "file" | "image" | "link";
+                name: string;
+                mimeType: string | null;
+                sizeBytes: number | null;
+                pageCount: number | null;
+                url: string | null;
+                read: "pending" | "read" | "unreadable";
+                readNote: string | null;
+            }[];
+            review: {
+                status: "queued" | "running" | "done" | "failed";
+                phase: {
+                    step: number;
+                    total: number;
+                    label: string;
+                } | null;
+                startedAt: string | null;
+                finishedAt: string | null;
+                expectedSeconds: number;
+                basis: "acceptance" | "definition" | "none";
+                headline: string | null;
+                summary: string | null;
+                gain: string | null;
+                score: number | null;
+                met: number;
+                total: number;
+                ready: boolean;
+                criteria: {
+                    index: number;
+                    text: string;
+                    verdict: "met" | "partial" | "unmet";
+                    reason: string;
+                    evidence: string | null;
+                    fix: string | null;
+                    dissent: {
+                        reason: string;
+                        upheld: boolean | null;
+                    } | null;
+                }[];
+                error: string | null;
+            };
+            deliveredAt: string | null;
+            note: {
+                status: "writing" | "done" | "failed";
+                achieved: string | null;
+                gain: string | null;
+                why: string | null;
+                lesson: string | null;
+                edited: boolean;
+                dismissed: boolean;
+            } | null;
+        };
+        DeliverableItem: {
+            /** Format: uuid */
+            id: string;
+            kind: "file" | "image" | "link";
+            name: string;
+            mimeType: string | null;
+            sizeBytes: number | null;
+            pageCount: number | null;
+            url: string | null;
+            read: "pending" | "read" | "unreadable";
+            readNote: string | null;
+        };
+        DeliverableReview: {
+            status: "queued" | "running" | "done" | "failed";
+            phase: {
+                step: number;
+                total: number;
+                label: string;
+            } | null;
+            startedAt: string | null;
+            finishedAt: string | null;
+            expectedSeconds: number;
+            basis: "acceptance" | "definition" | "none";
+            headline: string | null;
+            summary: string | null;
+            gain: string | null;
+            score: number | null;
+            met: number;
+            total: number;
+            ready: boolean;
+            criteria: {
+                index: number;
+                text: string;
+                verdict: "met" | "partial" | "unmet";
+                reason: string;
+                evidence: string | null;
+                fix: string | null;
+                dissent: {
+                    reason: string;
+                    upheld: boolean | null;
+                } | null;
+            }[];
+            error: string | null;
+        };
+        ReviewCriterion: {
+            index: number;
+            text: string;
+            verdict: "met" | "partial" | "unmet";
+            reason: string;
+            evidence: string | null;
+            fix: string | null;
+            dissent: {
+                reason: string;
+                upheld: boolean | null;
+            } | null;
+        };
+        DeliverableNote: {
+            status: "writing" | "done" | "failed";
+            achieved: string | null;
+            gain: string | null;
+            why: string | null;
+            lesson: string | null;
+            edited: boolean;
+            dismissed: boolean;
+        };
+        DeliverableDissentRequest: {
+            reason: string;
+        };
+        DeliverableNotePatch: {
+            achieved?: string;
+            gain?: string;
+            why?: string;
+            lesson?: string | null;
+            dismissed?: boolean;
         };
         HomePlanMission: {
             missionId: string;
@@ -10481,6 +10833,11 @@ export interface components {
                 name: string;
                 doneDefinition: string | null;
                 criteria: string[];
+                responsibleId?: string | null;
+                deliverable?: {
+                    status: "none" | "reviewing" | "iterating" | "ready" | "delivered";
+                    score: number | null;
+                };
             }[];
             activities: {
                 item: {
@@ -19985,6 +20342,501 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getTaskDeliverable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 交付物 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDeliverableResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createDeliverableVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    files?: string[];
+                    links?: string;
+                    statement?: string;
+                    keep?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 新版本（评审已排队） */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliverableVersion"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readDeliverableItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 原文件 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    retryDeliverableReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                versionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 这一版 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliverableVersion"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    dissentDeliverableCriterion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                versionId: string;
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliverableDissentRequest"];
+            };
+        };
+        responses: {
+            /** @description 这一版 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliverableVersion"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    deliverDeliverableVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                versionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 这一版 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliverableVersion"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    withdrawDeliverableVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                versionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 这一版 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliverableVersion"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    patchDeliverableNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                versionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliverableNotePatch"];
+            };
+        };
+        responses: {
+            /** @description 这一版 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliverableVersion"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

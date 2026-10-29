@@ -91,6 +91,22 @@ describe("首页 Task 行的本体来源", () => {
     } finally { logs.mockRestore(); }
   });
 
+  it("负责人：identity.responsible 第一个主体优先，没有再看 attributes.responsible；按 personOf 换成天枢的人，对不上为 null，没登记不带", async () => {
+    const withResponsible = (id: string, extra: Record<string, unknown>, attributes: Record<string, unknown> = {}) => {
+      const object = taskObject(id, id, ref("<mission-1>"), []) as { business: Record<string, unknown> } & Record<string, unknown>;
+      return { ...object, ...extra, business: { ...object.business, attributes } };
+    };
+    const { world } = stubWorld({
+      "<task-a>": withResponsible("<task-a>", { identity: { responsible: { principals: [{ principal_id: "principal-sun" }, { principal_id: "principal-li" }] } } }, { responsible: "principal-li" }),
+      "<task-b>": withResponsible("<task-b>", {}, { responsible: "principal-li" }),
+      "<task-c>": withResponsible("<task-c>", { identity: { responsible: { principals: [{ principal_id: "principal-unknown" }] } } }),
+      "<task-d>": withResponsible("<task-d>", {}),
+    });
+    const people = new Map([["principal-sun", "sun-mingze"], ["principal-li", "li-si"]]);
+    const tasks = await createWorldPlanTaskSource(world, { personOf: (principal) => people.get(principal) ?? null })([{ id: "execution-one", code: "execution-one" }]);
+    expect(tasks.map((task) => [task.taskId, task.responsibleId])).toEqual([["<task-a>", "sun-mingze"], ["<task-b>", "li-si"], ["<task-c>", null], ["<task-d>", undefined]]);
+  });
+
   it("列 Task 失败：整次作废，不再去取对象", async () => {
     const { world, calls } = stubWorld({ "<task-a>": taskObject("<task-a>", "回流方案定稿", ref("<mission-1>"), []) }, { listFails: true });
     await expect(createWorldPlanTaskSource(world)([{ id: "execution-one", code: "execution-one" }])).rejects.toThrow("列表读失败");

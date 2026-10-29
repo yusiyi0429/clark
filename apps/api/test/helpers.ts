@@ -318,6 +318,9 @@ export async function createTestApp(
     taskAcceptanceAgent?: TaskAcceptanceAgent;
     /** 首页 Task 行的假来源；不注入时一个 Task 都没有。 */
     planTasks?: Parameters<typeof buildApp>[0]["planTasks"];
+    /** Task 交付物的假评审、假版本说明 Agent 和假链接读取。 */
+    deliverableAgents?: Parameters<typeof buildApp>[0]["deliverableAgents"];
+    deliverableFetcher?: Parameters<typeof buildApp>[0]["deliverableFetcher"];
     materialAnnotationAgent?: MaterialAnnotationAgent;
     missionCardAnnotationAgent?: MissionCardAnnotationAgent;
     missionCardReviewAgent?: MissionCardReviewAgent;

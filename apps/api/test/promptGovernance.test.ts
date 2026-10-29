@@ -19,6 +19,7 @@ import { MISSION_CARD_REVIEW_PROMPT } from "../src/missionCardReview.js";
 import { MISSION_CARD_DRAFT_PROMPT } from "../src/missionCardDraftAgent.js";
 import { MISSION_CARD_DRAFT_REVIEW_PROMPT } from "../src/missionCardWritingRules.js";
 import { TASK_ACCEPTANCE_PROMPT } from "../src/taskAcceptanceDraft.js";
+import { DELIVERABLE_NOTE_PROMPT, DELIVERABLE_REVIEW_PROMPT } from "../src/deliverableReview.js";
 import { THREAD_INTRO_PROMPT } from "../src/threadIntro.js";
 import { driSystemPrompt, MISSION_CARD_EDITING_PROMPT, SYSTEM_PROMPT } from "../src/piConversationRuntime.js";
 import { PREFLIGHT_PROMPT } from "../src/preflightAgent.js";
@@ -111,10 +112,12 @@ describe("address and opening rule reaches every prompt", () => {
       ["material-annotation", MATERIAL_ANNOTATION_PROMPT], ["mission-card-annotation", MISSION_CARD_ANNOTATION_PROMPT], ["mission-card-review", MISSION_CARD_REVIEW_PROMPT],
       ["mission-card-draft", MISSION_CARD_DRAFT_PROMPT], ["mission-card-draft-review", MISSION_CARD_DRAFT_REVIEW_PROMPT],
       ["task-acceptance", TASK_ACCEPTANCE_PROMPT], ["thread-intro", THREAD_INTRO_PROMPT],
+      ["deliverable-review", DELIVERABLE_REVIEW_PROMPT], ["deliverable-note", DELIVERABLE_NOTE_PROMPT],
       ["ceo-conversation", SYSTEM_PROMPT],
       ["dri-conversation", driSystemPrompt("测试乙")], ["dri-mission-card", `${driSystemPrompt("测试乙", true)}\n\n${MISSION_CARD_EDITING_PROMPT}`],
     ];
     for (const [name, prompt] of prompts) expect(prompt, name).toContain(ADDRESS_STYLE);
+    for (const prompt of [DELIVERABLE_REVIEW_PROMPT, DELIVERABLE_NOTE_PROMPT]) expect(findForbiddenPhrase(prompt)).toBeNull();
   });
 
   it("no prompt source in apps/api/src is left without the rule (dictation polish only rewrites the speaker's own words)", () => {

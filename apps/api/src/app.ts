@@ -127,6 +127,9 @@ import { realDictationPolishDeps, type DictationPolishDeps } from "./dictationPo
 import { createThreadIntroAgent, type ThreadIntroAgent } from "./threadIntro.js";
 import { createTaskAcceptanceAgent, type TaskAcceptanceAgent } from "./taskAcceptanceDraft.js";
 import { createWorldPlanTaskSource, emptyPlanTaskSource, type PlanTaskSource } from "./planTasks.js";
+import { registerDeliverableRoutes } from "./routes/deliverables.js";
+import type { DeliverableAgents, DeliverableQueue } from "./deliverableReview.js";
+import type { ArticleFetcher } from "./articleText.js";
 import { personDisplayNames } from "./people.js";
 import { listPendingIssueSummaries } from "./issues.js";
 
@@ -144,7 +147,9 @@ function worldPlanTaskSource(q: Query, env: AppEnv, mainReads: boolean): PlanTas
   if (!clients.length) return emptyPlanTaskSource;
   const scopes = new Map<string, WorldClient>();
   for (const client of clients) if (!scopes.has(client.config.scope_id)) scopes.set(client.config.scope_id, client);
-  return createWorldPlanTaskSource(clients[0], { scopes });
+  // Task 负责人：各实例配置的 people（personId → 本体主体）反查；主实例优先。
+  const people = new Map([...clients].reverse().flatMap((client) => Object.entries(client.config.people).map(([personId, principal]) => [principal, personId] as const)));
+  return createWorldPlanTaskSource(clients[0], { scopes, personOf: (principal) => people.get(principal) ?? null });
 }
 
 /** 会前预审读挂点内容用的本体客户端（只读 GET，每次 8 秒）：本体没配或配置不对时不给，预审照常跑。 */
@@ -232,6 +237,8 @@ export type AppEnv = {
   preflightModel?: string;
   /** 会前预审思考强度（off / low / medium / high / xhigh）；不配时 high。 */
   preflightThinking?: string;
+  /** 交付物评审与版本说明的模型（REVIEW_MODEL / REVIEW_BASE_URL / REVIEW_API_KEY / REVIEW_THINKING，指向 TokenHub）；不配时用 PI_BASE_URL、PI_API_KEY、HEAVY_MODEL，思考 medium。 */
+  review?: { model?: string; baseUrl?: string; apiKey?: string; thinking?: string };
   /** 会后提取等候选 Agent 的模型与思考强度（OUTCOME_MODEL 等，agentModels.ts）；不配时与之前一致。 */
   agentModels?: AgentModelEnv;
   materialStorageDir?: string;
@@ -267,6 +274,8 @@ declare module "fastify" {
     collectionJobs: { handlers: Record<string, JobHandler>; recurring: RecurringJob[] };
     /** 战场进展汇总；server.ts 用它的 jobs() 注册每天 07:30 的生成。 */
     battlefieldSummaries: BattlefieldSummaries;
+    /** Task 交付物的评审与版本说明队列（测试用 idle() 等它跑完）。 */
+    deliverables: DeliverableQueue;
     /** 会后分派的归位（task.place）；server.ts 注册给 jobs worker。 */
     taskPlacementJobs: Record<string, JobHandler>;
     feishuChat: FeishuChat | undefined;
@@ -300,6 +309,8 @@ export async function buildApp({
   threadIntroAgent,
   taskAcceptanceAgent,
   planTasks,
+  deliverableAgents,
+  deliverableFetcher,
   materialAnnotationAgent,
   missionCardAnnotationAgent,
   missionCardReviewAgent,
@@ -361,6 +372,10 @@ export async function buildApp({
   taskAcceptanceAgent?: TaskAcceptanceAgent;
   /** 首页 Task 行的来源；缺省一个 Task 都没有（测试注入假实现）。 */
   planTasks?: PlanTaskSource;
+  /** Task 交付物的评审与版本说明 Agent；缺省按 REVIEW_* 装配（测试注入假实现）。 */
+  deliverableAgents?: Partial<DeliverableAgents>;
+  /** 交付物里链接的正文读取；缺省抓公网页（测试注入假实现）。 */
+  deliverableFetcher?: ArticleFetcher;
   materialAnnotationAgent?: MaterialAnnotationAgent;
   missionCardAnnotationAgent?: MissionCardAnnotationAgent;
   missionCardReviewAgent?: MissionCardReviewAgent;
@@ -774,6 +789,7 @@ export async function buildApp({
   registerOnboardingRoutes(app, ctx, feishuApi && env.feishu ? { client: feishuApi, env: env.feishu } : undefined);
   registerSeenMarkRoutes(app, ctx);
   registerMissionCardRoutes(app, ctx, missionCardAnnotationAgent, missionCardReviewAgent);
+  registerDeliverableRoutes(app, ctx, { agents: deliverableAgents, fetchArticle: deliverableFetcher });
   registerMyRadarRoutes(app, ctx);
   registerMonthlyReviewRoutes(app, ctx);
   registerRequestRoutes(app, ctx, deliveryAgent);

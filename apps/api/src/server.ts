@@ -104,6 +104,9 @@ const env: AppEnv = {
   preflightThinking: process.env.PREFLIGHT_THINKING || undefined,
   // 预研、会后提取、雷达的模型与思考强度（RESEARCH_MODEL / OUTCOME_MODEL / RADAR_MODEL 等，可选，agentModels.ts）。
   agentModels: agentModelEnvFrom(process.env),
+  // 交付物评审与版本说明（可选，指向 TokenHub）：不配时用 PI_BASE_URL / PI_API_KEY / HEAVY_MODEL、思考 medium。
+  review: { model: process.env.REVIEW_MODEL || undefined, baseUrl: process.env.REVIEW_BASE_URL || undefined,
+    apiKey: process.env.REVIEW_API_KEY || undefined, thinking: process.env.REVIEW_THINKING || undefined },
   buildSha: process.env.BUILD_SHA ?? "dev",
   materialStorageDir: process.env.MEETING_MATERIAL_STORAGE_DIR,
   conversationAttachmentStorageDir: process.env.CONVERSATION_ATTACHMENT_STORAGE_DIR,
