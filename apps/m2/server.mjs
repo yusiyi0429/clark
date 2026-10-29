@@ -225,11 +225,11 @@ export const server=createServer(async(req,res)=>{
   // Installing a review run from the private seed folder: internal only (import-review.mjs inside the container).
   if(route.pathname==='/api/review-import'&&req.method==='POST'){if(!req.m2Session.internal)return json(res,403,{error:'只能在服务器内部导入复盘'});const b=await body(req);return json(res,200,await importReviewRound(store,b,{seedDir:seedRoot(),statePath:process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)),busy:roundFlight||auditFlight}));}
   if(route.pathname==='/api/markdown/export'&&req.method==='GET'){
-   const actor=actorFor(req.m2Session.memberId),selection={stage:route.searchParams.get('stage'),rootId:route.searchParams.get('rootId')||null,person:route.searchParams.get('person')||null};
+   const actor=actorFor(req.m2Session.memberId),selection={stage:route.searchParams.get('stage'),rootId:route.searchParams.get('rootId')||null,onlyRoot:true};
    return json(res,200,{markdown:exportMarkdown(store.snapshot(),actor,selection,{blank:route.searchParams.get('blank')==='true'})});
   }
   if(route.pathname==='/api/markdown/preview'&&req.method==='POST'){
-   const b=await body(req,600000),actor=actorFor(b.memberId),snap=store.snapshot(),selection={stage:b.stage,rootId:b.rootId||null,person:b.person||null};
+   const b=await body(req,600000),actor=actorFor(b.memberId),snap=store.snapshot(),selection={stage:b.stage,rootId:b.rootId||null,onlyRoot:true};
    if(typeof b.text!=='string'||Buffer.byteLength(b.text)>512000)return json(res,400,{error:'文件过大，最多500 KB'});
    let objects=parseStandardMarkdown(b.text);
    if(!objects){const payload=nonstandardRequest(snap,actor,selection,b.text);if(!ready)return json(res,503,{error:'模型暂不可用，请用标准模板导入'});

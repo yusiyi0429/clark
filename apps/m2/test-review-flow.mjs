@@ -95,3 +95,17 @@ test('旧确认值缺签字时间或编辑晚于签字时不冒充已确认文�
   s=applyAction(s,actor,{type:'editInsight',cardId:id,insightId:s.insights[id][0].id,text:'新草稿'});assert.equal(insightView(s,s.cards[po],ceo).items.length,0);
  }
 });
+
+test('卡片导入导出只选当前卡，缺少卡片或跨卡及多对象均拒绝',()=>{
+ const s=fresh(),actor=memberActor('member-01',s),selection={stage:'plan',rootId:'bf01',onlyRoot:true};
+ assert.deepEqual(transferCards(s,actor,selection).map(c=>c.id),['bf01']);
+ const rows=parseStandardMarkdown(exportMarkdown(s,actor,selection));assert.equal(rows.length,1);
+ assert.throws(()=>transferCards(s,actor,{stage:'plan',onlyRoot:true}),/具体卡片/);
+ const child=parseStandardMarkdown(exportMarkdown(s,actor,{stage:'plan',rootId:'bf01-m1',onlyRoot:true}))[0];
+ assert.throws(()=>prepareTransfer(s,actor,selection,[child]),/范围/);
+ assert.throws(()=>prepareTransfer(s,actor,selection,[rows[0],child]),/范围/);
+ assert.throws(()=>prepareTransfer(s,actor,selection,[rows[0],rows[0]]),/重复/);
+ rows[0].fields.result='粘贴的新结果';const before=JSON.stringify(s),preview=prepareTransfer(s,actor,selection,rows);
+ assert.equal(preview.changes.length,1);assert.equal(preview.changes[0].cardId,'bf01');assert.equal(JSON.stringify(s),before);
+ const after=applyTransfer(s,actor,preview.changes);assert.equal(currentVersion(after.cards['bf01-m1']).number,1);
+});
