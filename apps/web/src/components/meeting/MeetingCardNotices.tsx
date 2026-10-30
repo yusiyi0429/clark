@@ -41,7 +41,7 @@ export type ConfirmActs = {
 };
 const CONFIRM_WORDS = {
   decision: { label: "决策确认", confirm: "确认", confirmed: "已确认", reject: "不对", field: "哪里不对", submit: "提交", rejected: "已标为不对" },
-  action: { label: "执行事项确认", confirm: "接下", confirmed: "已接下", reject: "退回", field: "退回的原因", submit: "退回", rejected: "已退回" },
+  action: { label: "行动项确认", confirm: "接下", confirmed: "已接下", reject: "退回", field: "退回的原因", submit: "退回", rejected: "已退回" },
 } as const;
 const receipt = (outcome: NoticeOutcome, text: string): NoticeOutcome => (outcome.ok ? { ok: true, settled: text } : outcome);
 

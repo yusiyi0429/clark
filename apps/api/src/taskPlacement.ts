@@ -7,7 +7,7 @@ import { ADDRESS_STYLE } from "./promptStyle.js";
 import { listAvailableMissions, placeTask, TASK_PLACE_JOB, UNPLACED } from "./tasks.js";
 
 /**
- * 会后分派的归位（10/26）：会议挂点对不上负责人的 Mission 时，dispatchMeetingTodo 排一个 task.place，
+ * 会后分派的归位（10/26）：会议挂点对不上负责人的 Mission 时，会后分派排过一个 task.place（10/30 起不再会后分派、不再有新的入队，这里只处理已入队的），
  * 这里用快模型按事项原文、会议和挂点，在负责人此刻能挂的 Mission 里挑一个；挑不出就写一句为什么，事项留在待归位等本人处理。
  * 只动还在待归位的事项：本人已经手动挂好或确认不属于任何 Mission 的不碰。
  */

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import type { Pool, PoolClient } from "pg";
+import type { Pool } from "pg";
 import type {
   TMeetingActionItem, TMeetingCardConfirmation, TMeetingCardConfirmRequest, TMeetingCardDecision, TMeetingCardDraft, TMeetingCardFrozenPayload, TMeetingCardKind,
   TMeetingCardOwnerRequest, TMeetingCardReviewRequest, TMeetingCardSync, TMeetingCardView, TMeetingConfirmedObjectChange, TMeetingDraftChange, TMeetingItemReview, TMeetingObjectResult,
@@ -11,7 +11,6 @@ import { payloadHash } from "./meetingCardHash.js";
 import { getMeetingRow, UUID_PATTERN, type MeetingRow, type Query } from "./meetingStore.js";
 import { appliedChanges, initialObjectResults, supersedeObjects, worldErrorLabel, writtenRevisionRefs, type MeetingObjectSync } from "./meetingObjectSync.js";
 import { logEvent } from "./observability.js";
-import { dispatchMeetingTodo } from "./tasks.js";
 import { WorldError, worldRef, type WorldClient } from "./worldClient.js";
 import type { MeetingEventWorld } from "./worldMeetingEvent.js";
 
@@ -22,8 +21,8 @@ import type { MeetingEventWorld } from "./worldMeetingEvent.js";
  *   已有确认版时要选修改原因：correction 更正原记录、followup 会后新决定。confirmation.confirmedBy 是确认人的 personId（拍板 9）。
  * - 冻结时 relatedObjectRefs 换成确认时的 <对象 id>@<版本>（确认时本体读不到、选了不写入的，到同一草稿改成写入时再补版本），
  *   修改去掉 stale，算 payloadHash；行动项快照存确认表，不进 payload。
- * - 行动项（拍板 4）：同一事务里把还没 taskId 的推成执行事项（dispatchMeetingTodo，负责人缺省主持人、是 CEO 的不建），taskId 回填到草稿和这次的快照；
- *   已推的不再推，推完再改不回改执行事项。负责人是 CEO 的 taskId 一直空着，之后每次新确认版会再走一遍，照样不建。
+ * - 行动项（拍板 4）：确认时只存进这次的快照，不建执行事项（10/30 起会后分派关掉，执行事项由本人建）。
+ *   10/30 之前推成执行事项的行动项带着 taskId，照旧留着，不回改那件执行事项。
  * - 写本体按 revision 串行（jobs worker 逐条执行）：一直写最早一版待写的，前次写成的那条在写的时候现找（写入中又确认了新版，新版指回刚写成的那条）。
  *   NETWORK_ERROR 抛出交给 jobs 按原幂等键重放，任务最后一次仍是网络错误、其他错误都记 failed 和原因（拍板 8：不设正文上限，本体回超长就如实记下）；
  *   原因记短标签（worldErrorLabel），本体原话只进日志。
@@ -31,7 +30,7 @@ import type { MeetingEventWorld } from "./worldMeetingEvent.js";
  * - 对象修改（meetingObjectSync）：确认时排好每条的回执（上一版已改成、这次没动的沿用结果），新版确认后旧版还没提交的作废；
  *   事件写成后同一任务里接着按顺序提交这一版的修改。
  * - 决策逐条确认（10/28，decisions 不为 null 的会议卡）：决策和行动项只由责任人本人在通知栏或会议页逐条点（没有负责人的行动项由主持人点），
- *   别人不能代点（斯一第 4 条）；行动项「接下」时才推成执行事项。没有责任人的决策，冻结前由主持人在参会人里补归属，再由那个人确认（斯一第 3 条，10/29）。决策都有了结果、或生成满 48 小时，自动冻结 revision 1（meeting.card_freeze，confirmedBy 为 null）：
+ *   别人不能代点（斯一第 4 条）；行动项「接下」只记在会议卡上，不建执行事项（10/30 起）。没有责任人的决策，冻结前由主持人在参会人里补归属，再由那个人确认（斯一第 3 条，10/29）。决策都有了结果、或生成满 48 小时，自动冻结 revision 1（meeting.card_freeze，confirmedBy 为 null）：
  *   payload v2 只放已确认的决策和行动项（各带确认人），不带对象修改（斯一第 7 条：确认决策不等于批准修改）；
  *   没有已确认的决策时不写本体（记录正文能写时除外，见 recordText）。冻结前不能整卡确认（409 REVIEW_PER_ITEM）；冻结后的修改照旧由主持人确认出新版本。
  */
@@ -177,11 +176,11 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     participants.find((person) => person.personId === personId)?.displayName ?? deps.names?.().get(personId) ?? personId;
 
   /** 一个事务；读到冲突时提交的是空事务（等同回滚）。连接在返回前放回，之后再读本体、重走确认。 */
-  async function transaction<T>(run: (cq: Query, client: PoolClient) => Promise<T>): Promise<T> {
+  async function transaction<T>(run: (cq: Query) => Promise<T>): Promise<T> {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      const result = await run(client.query.bind(client), client);
+      const result = await run(client.query.bind(client));
       await client.query("COMMIT");
       return result;
     } catch (error) {
@@ -230,7 +229,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
 
     const draft = card.draft;
     // 会议内容没变（只改了行动项，或改了又改回）：不出新版本、不要求选原因（Ruling 20、21）。
-    if (current && draftChangeOf(draft, card.action_items, current) !== "content") return confirmItems(meetingId, viewer, input, meeting, current);
+    if (current && draftChangeOf(draft, card.action_items, current) !== "content") return confirmItems(meetingId, viewer, input, current);
     const at = now();
     const occurredAt = draft.occurredAt ? Date.parse(draft.occurredAt) : NaN;
     if (!draft.title.trim()) return bad("TITLE_REQUIRED", "会议名不能为空");
@@ -250,14 +249,13 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     }
 
     let kind: TMeetingCardKind = "first";
-    const outcome = await transaction(async (cq, client): Promise<Locked> => {
+    const outcome = await transaction(async (cq): Promise<Locked> => {
       const { locked, conflict } = await lockCard(cq, meetingId, input.draftVersion, card.current_revision);
       if (conflict) return conflict;
       const revision = (locked.current_revision ?? 0) + 1;
       kind = locked.current_revision ? input.kind! : "first";
       // 逐条确认的会议卡走到这里时已经冻结过，修改不动逐条状态。
-      const actionItems = await dispatchItems(client, meeting, locked.action_items);
-      const { decisions } = locked;
+      const { action_items: actionItems, decisions } = locked;
       const payload = frozenPayload(draft, revision, relatedObjectRefs, decisions, actionItems);
       const confirmation: TMeetingCardConfirmation = { revision, confirmedBy: viewer.personId, confirmedAt: at.toISOString(), payloadHash: payloadHash(payload) };
       // 上一版已改成的同一处修改沿用结果，不再提交（回执现读，锁住后不会再出新版本）。
@@ -305,21 +303,9 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
   const reviewed = (by: string, at: string, verdict: TMeetingCardReviewRequest["verdict"], reason: string | null): TMeetingItemReview =>
     ({ status: verdict === "confirm" ? "confirmed" : "rejected", by, at, reason });
 
-  /** 一条行动项推成执行事项（负责人缺省主持人；是 CEO 的不建，返回 null）。 */
-  const dispatchTodo = (client: PoolClient, meeting: MeetingRow, item: TMeetingActionItem) =>
-    dispatchMeetingTodo(client, { id: meeting.id, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id,
-      ownerName: nameOf(meeting.participants, item.ownerPersonId ?? meeting.lead_dri_id), title: meeting.title, now: now() }, { ...item, dueDate: item.dueDate ?? undefined, quote: null });
-
-  /** 整卡确认时推行动项，返回回填后的行动项：10/28 之前的（没有 review）还没 taskId 的照旧推；逐条确认的等负责人自己点。 */
-  async function dispatchItems(client: PoolClient, meeting: MeetingRow, items: TMeetingActionItem[]): Promise<TMeetingActionItem[]> {
-    const dispatched: TMeetingActionItem[] = [];
-    for (const item of items) dispatched.push(item.taskId || item.review ? item : { ...item, taskId: await dispatchTodo(client, meeting, item) });
-    return dispatched;
-  }
-
   /**
    * 逐条确认一条决策或行动项：只有责任人本人能点（没有负责人的行动项由主持人点），别人（包括主持人、创建人）当会议不存在。
-   * 没有责任人的决策主持人点 409 OWNER_REQUIRED（先补归属）。行动项「接下」就推成执行事项（自己接下的，不再出「分给你的事」那一条）。
+   * 没有责任人的决策主持人点 409 OWNER_REQUIRED（先补归属）。行动项「接下」「退回」只记在会议卡上，不建执行事项。
    * 决策都有了结果，排一次冻结。返回最新会议卡；点的人读不了会议卡时 view 为 null。
    */
   async function review(meetingId: string, viewer: Viewer, input: TMeetingCardReviewRequest): Promise<{ view: TMeetingCardView | null } | { error: ConfirmError }> {
@@ -329,7 +315,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
     const reason = input.reason?.trim() ?? "";
     if (input.verdict === "reject" && !reason) return bad("REASON_REQUIRED", "要写一句原因");
     const at = now().toISOString();
-    const outcome = await transaction(async (cq, client): Promise<"missing" | "reviewed" | "frozen" | "unowned" | "done"> => {
+    const outcome = await transaction(async (cq): Promise<"missing" | "reviewed" | "frozen" | "unowned" | "done"> => {
       const card = (await cq("SELECT decisions, action_items, current_revision FROM meeting_cards WHERE meeting_id = $1 FOR UPDATE", [meetingId])).rows[0] as
         { decisions: TMeetingCardDecision[] | null; action_items: TMeetingActionItem[]; current_revision: number | null } | undefined;
       const list: Reviewable[] = !card ? [] : input.kind === "decision" ? card.decisions ?? [] : card.action_items;
@@ -351,10 +337,7 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
         }
         return "done";
       }
-      const actionItem = item as TMeetingActionItem;
-      const taskId = input.verdict === "confirm" ? await dispatchTodo(client, meeting, actionItem) : null;
-      if (taskId) await cq("UPDATE notifications SET read_at = now() WHERE kind = 'meeting_action_assigned' AND object_id = $1 AND read_at IS NULL", [taskId]);
-      const items = card.action_items.map((candidate) => (candidate.id === item.id ? { ...candidate, taskId: taskId ?? candidate.taskId, review: result } : candidate));
+      const items = card.action_items.map((candidate) => (candidate.id === item.id ? { ...candidate, review: result } : candidate));
       await cq("UPDATE meeting_cards SET action_items = $2::jsonb, updated_at = now() WHERE meeting_id = $1", [meetingId, JSON.stringify(items)]);
       return "done";
     });
@@ -429,17 +412,15 @@ export function createMeetingCardConfirmService(deps: MeetingCardConfirmDeps) {
   }
 
   /**
-   * 确认后会议内容没变（Ruling 20、21）：当前确认版不变，只把行动项推出去、换掉它的行动项快照，草稿版本记成这一版
+   * 确认后会议内容没变（Ruling 20、21）：当前确认版不变，只换掉它的行动项快照，草稿版本记成这一版
    * （同一草稿再确认按原样返回）；不出新版本。这一版原先不写入、这次选了写入的，记完接着按同一草稿改成写入（enableWrite）。
    */
-  async function confirmItems(meetingId: string, viewer: Viewer, input: TMeetingCardConfirmRequest, meeting: MeetingRow, current: ConfirmationRow): Promise<ConfirmResult> {
-    const outcome = await transaction(async (cq, client): Promise<Locked> => {
+  async function confirmItems(meetingId: string, viewer: Viewer, input: TMeetingCardConfirmRequest, current: ConfirmationRow): Promise<ConfirmResult> {
+    const outcome = await transaction(async (cq): Promise<Locked> => {
       const { locked, conflict } = await lockCard(cq, meetingId, input.draftVersion, current.revision);
       if (conflict) return conflict;
-      const actionItems = JSON.stringify(await dispatchItems(client, meeting, locked.action_items));
       await cq("UPDATE meeting_card_confirmations SET action_items = $3::jsonb, draft_version = $4 WHERE meeting_id = $1 AND revision = $2",
-        [meetingId, current.revision, actionItems, input.draftVersion]);
-      await cq("UPDATE meeting_cards SET action_items = $2::jsonb, updated_at = now() WHERE meeting_id = $1", [meetingId, actionItems]);
+        [meetingId, current.revision, JSON.stringify(locked.action_items), input.draftVersion]);
       return "done";
     });
     if (outcome === "changed") return changed(meetingId, viewer);
