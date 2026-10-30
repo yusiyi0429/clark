@@ -1,3 +1,4 @@
+import {capturePageFocus} from './confirmation-focus.mjs';
 import React,{useState} from 'react';
 import {Button} from '@heroui/react';
 import {MessageCircle,Pencil,X} from 'lucide-react';
@@ -68,8 +69,8 @@ function patchFrom(n,v){const lines=t=>String(t).split('\n').map(x=>x.trim()).fi
 function EditRow({label,children}){return <tr><th scope="row">{label}</th><td>{children}</td></tr>;}
 function ReviewEdit({node,onSave,onCancel}){
  const [v,setV]=useState(()=>startValues(node)),[busy,setBusy]=useState(false),set=k=>e=>setV(o=>({...o,[k]:e.target.value}));
- const save=async()=>{const patch=patchFrom(node,v);if(!Object.keys(patch).length)return onCancel();setBusy(true);try{await onSave(patch);}catch(e){if(e.code!=='CANCELLED')throw e;}finally{setBusy(false);}};
- const keys=e=>{if(e.key==='Escape')onCancel();else enterSubmit(e,save,!busy);};
+ const save=async event=>{const confirmationFocus=capturePageFocus(event);const patch=patchFrom(node,v);if(!Object.keys(patch).length)return onCancel();setBusy(true);try{await onSave(patch,{confirmationFocus});}catch(e){if(e.code!=='CANCELLED')throw e;}finally{setBusy(false);}};
+ const keys=e=>{if(e.key==='Escape')onCancel();else enterSubmit(e,()=>save(e),!busy);};
  const setFact=(i,k)=>e=>setV(o=>({...o,facts:o.facts.map((f,j)=>j===i?{...f,[k]:e.target.value}:f)}));
  const factArea=(i,k,rows,hint)=><textarea className="inline-field-input" rows={Math.max(rows,String(v.facts[i][k]).split('\n').length)} value={v.facts[i][k]} placeholder={hint} onChange={setFact(i,k)} onKeyDown={keys} title="回车保存，Shift＋回车换行，Esc 取消"/>;
  const area=(k,rows)=><textarea className="inline-field-input" rows={Math.max(rows,String(v[k]).split('\n').length+1)} value={v[k]} onChange={set(k)} onKeyDown={keys} title="回车保存，Shift＋回车换行，Esc 取消"/>;
@@ -91,7 +92,7 @@ export function ReviewCard({node,profile,comments=[],onDetail,onAnswer,evidence,
   <h2>{node.title}</h2>
   {/* Locked after the unit or company review is confirmed (陈溪南 2026-10-28): read and comment only. */}
   {node.locked&&<p className="review-locked">{node.lockedReason||'这份复盘已锁定，只能看和批注'}</p>}
-  {editing?<ReviewEdit node={node} onCancel={()=>setEditing(false)} onSave={async patch=>{await onRevise(node,patch);setEditing(false);}}/>:<div className="template-content card-simple"><table className="review-table"><tbody>
+  {editing?<ReviewEdit node={node} onCancel={()=>setEditing(false)} onSave={async(patch,options)=>{await onRevise(node,patch,options);setEditing(false);}}/>:<div className="template-content card-simple"><table className="review-table"><tbody>
    <Row node={node} field="verdict" label="结果判定" comments={comments} onDetail={onDetail}><p className="review-verdict-line">{node.verdictChange&&<span className="verdict-changed">由「{node.verdictChange.from}」改为「{node.verdictChange.to}」· {node.verdictChange.by} · v{node.verdictChange.version}</span>}{/* 结果判定 opens with the verdict itself, then the reasoning (陈溪南 2026-10-26). */}<span className="review-verdict-reason">{node.verdict&&<span className={`review-verdict-word tone-${verdictTone(node.verdict)}`}>{node.verdict}，</span>}<Rich text={reasonAfter(node.verdict,node.verdictReason)} evidence={evidence}/></span></p></Row>
    {isFactsCard(node)?<><Row node={node} field="facts" label="事实证据" comments={comments} onDetail={onDetail}>{node.facts.length?<Facts node={node} comments={comments} onDetail={onDetail} evidence={evidence}/>:<p className="review-none">这份复盘没有列出事实。</p>}</Row>
     {Array.isArray(node.nextInputs)&&node.nextInputs.length>0&&<Row node={node} field="nextInputs" label="下期输入" comments={comments} onDetail={onDetail}><NextInputs node={node} comments={comments} onDetail={onDetail} evidence={evidence} profile={profile} onAnswer={onAnswer}/></Row>}</>:<>
@@ -112,7 +113,7 @@ export function ReviewCard({node,profile,comments=[],onDetail,onAnswer,evidence,
 function InsightLine({item,mine,me,onEdit,onDelete}){
  const [editing,setEditing]=useState(false),[text,setText]=useState(item.text),[sure,setSure]=useState(false),[busy,setBusy]=useState(false);
  const save=async()=>{const t=text.trim();if(!t||busy)return;if(t===item.text)return setEditing(false);setBusy(true);try{await onEdit(item.id,t);setEditing(false);}catch{}finally{setBusy(false);}};
- if(editing)return <li className="insight-item is-editing"><textarea className="inline-field-input insight-input" rows={Math.max(2,text.split('\n').length)} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Escape'){setText(item.text);setEditing(false);}else enterSubmit(e,save,!busy);}} autoFocus aria-label="修改洞察" title="回车保存，Shift＋回车换行，Esc 取消"/><span className="insight-actions"><Button className="proposal-confirm" isDisabled={busy||!text.trim()} onPress={save}>{busy?'保存中…':'保存'}</Button><Button className="plain" onPress={()=>{setText(item.text);setEditing(false);}}>取消</Button></span></li>;
+ if(editing)return <li className="insight-item is-editing"><textarea className="inline-field-input insight-input" rows={Math.max(2,text.split('\n').length)} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Escape'){setText(item.text);setEditing(false);}else enterSubmit(e,()=>save(e),!busy);}} autoFocus aria-label="修改洞察" title="回车保存，Shift＋回车换行，Esc 取消"/><span className="insight-actions"><Button className="proposal-confirm" isDisabled={busy||!text.trim()} onPress={save}>{busy?'保存中…':'保存'}</Button><Button className="plain" onPress={()=>{setText(item.text);setEditing(false);}}>取消</Button></span></li>;
  return <li className="insight-item"><span className="insight-text"><strong className="insight-who">{item.author||me}：</strong>{item.source?.label&&<span className="insight-source">来自 {item.source.label} 复盘</span>}<Rich text={item.text}/></span>
   {mine&&<span className="insight-actions">{sure?<><Button className="plain insight-delete" isDisabled={busy} onPress={async()=>{setBusy(true);try{await onDelete(item.id);}catch{}finally{setBusy(false);setSure(false);}}}>确认删除</Button><Button className="plain" onPress={()=>setSure(false)}>取消</Button></>:<><Button className="plain" onPress={()=>setEditing(true)}>修改</Button><Button className="plain" onPress={()=>setSure(true)}>删除</Button></>}</span>}</li>;
 }

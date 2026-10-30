@@ -1,5 +1,7 @@
 // Capture before a request can disable its initiating control.
-export function capturePageFocus(){
+export function capturePageFocus(event){
+ const triggered=event?.currentTarget||event?.target;
+ if(triggered?.focus)return triggered;
  const doc=globalThis.document,element=doc?.activeElement;
  return element&&element!==doc.body&&element!==doc.documentElement?element:null;
 }

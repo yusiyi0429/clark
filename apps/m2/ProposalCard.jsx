@@ -1,3 +1,4 @@
+import {capturePageFocus} from './confirmation-focus.mjs';
 import React,{useState,useRef,useEffect,useLayoutEffect} from 'react';
 import {Button} from '@heroui/react';
 import {m2Fetch} from './deployment-client.mjs';
@@ -12,7 +13,7 @@ export default function ProposalCard({proposal,node,onAction,onOpen,compact=fals
  const stamp=JSON.stringify([proposal.id,proposal.baseVersion,proposal.before,patch,proposal.reason]);
  useEffect(()=>{let active=true;setSummary(null);setError('');setFull(false);if(simpleComparison(proposal,node))return;readSummary(proposal.id,stamp).then(v=>{if(active)setSummary(v);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[stamp,retry]);
  useLayoutEffect(()=>{const observer=new ResizeObserver(([entry])=>setWidth(entry.borderBoxSize?.[0]?.inlineSize||entry.target.getBoundingClientRect().width));observer.observe(element.current);return()=>observer.disconnect();},[]);
- async function handle(type,extra){if(busy)return;setBusy(true);try{await onAction({type,cardId:proposal.cardId,proposalId:proposal.id,...(extra||{})});setRejecting(null);}catch(e){if(e.code!=='CANCELLED')throw e;}finally{setBusy(false);}}
+ async function handle(type,extra,event){if(busy)return;const confirmationFocus=capturePageFocus(event)||element.current?.querySelector('.proposal-actions .proposal-confirm');setBusy(true);try{await onAction({type,cardId:proposal.cardId,proposalId:proposal.id,...(extra||{})},{confirmationFocus});setRejecting(null);}catch(e){if(e.code!=='CANCELLED')throw e;}finally{setBusy(false);}}
  const reviewer=proposal.reviewerName||node?.owner||'成果负责人';
  const ref=node?.referenceLabel||'当前文档';
  const title=proposal.op==='add-mission'?`新增 ${proposal.mission?.title||'Mission'}`:proposal.op?`${proposal.op==='withdraw-mission'?'撤掉':'恢复'} ${proposal.missionSummary?.title||proposal.missionId}`:node?.level==='po'&&node?.title?.includes('：')?node.title.split('：')[0]:node?.title||ref;
@@ -36,8 +37,8 @@ export default function ProposalCard({proposal,node,onAction,onOpen,compact=fals
   </div>
   {state==='pending'&&node?.locked?<div className="proposal-foot proposal-locked">{node.lockedReason||'这张卡已锁定，不能再改'}</div>:state==='pending'&&proposal.canAccept?(rejecting!=null?<div className="proposal-foot proposal-reject-form">
    <textarea autoFocus rows={2} value={rejecting} placeholder="说说为什么不采用、想怎么改" aria-label="不采用的理由" onChange={e=>setRejecting(e.target.value)} onKeyDown={e=>{if(e.key==='Escape'){setRejecting(null);return;}enterSubmit(e,()=>handle('rejectProposal',{reason:rejecting.trim()}),!busy&&!!rejecting.trim());}}/>
-   <div className="proposal-actions"><Button className="proposal-confirm" isDisabled={busy||!rejecting.trim()} onPress={()=>handle('rejectProposal',{reason:rejecting.trim()})}>{busy?'发送中…':'发送理由'}</Button><Button className="proposal-reject" isDisabled={busy} onPress={()=>setRejecting(null)}>取消</Button></div>
-  </div>:<div className="proposal-foot proposal-actions"><Button className="proposal-confirm" isDisabled={busy} onPress={()=>handle('acceptProposal')}>{busy?'处理中…':'确认修改'}</Button><Button className="proposal-reject" isDisabled={busy} onPress={()=>setRejecting('')}>不采用</Button></div>):null}
+   <div className="proposal-actions"><Button className="proposal-confirm" isDisabled={busy||!rejecting.trim()} onPress={event=>handle('rejectProposal',{reason:rejecting.trim()},event)}>{busy?'发送中…':'发送理由'}</Button><Button className="proposal-reject" isDisabled={busy} onPress={()=>setRejecting(null)}>取消</Button></div>
+  </div>:<div className="proposal-foot proposal-actions"><Button className="proposal-confirm" isDisabled={busy} onPress={event=>handle('acceptProposal',null,event)}>{busy?'处理中…':'确认修改'}</Button><Button className="proposal-reject" isDisabled={busy} onPress={()=>setRejecting('')}>不采用</Button></div>):null}
  </section>;
  return compact?card:<div className="message nexus-revision-message"><span className="avatar nexus-avatar"><NexusOrb/></span><div><small>Nexus</small>{card}</div></div>;
 }

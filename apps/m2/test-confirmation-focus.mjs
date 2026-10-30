@@ -9,7 +9,7 @@ test('焦点在请求前保留，关闭时按钮仍禁用则等恢复；不抢�
  globalThis.MutationObserver=class{constructor(cb){mutation=cb;}observe(){}disconnect(){disconnected++;}};
  globalThis.requestAnimationFrame=cb=>{frames.push(cb);return frames.length;};globalThis.cancelAnimationFrame=()=>{};
  try{
-  const origin=capturePageFocus();assert.equal(origin,button);button.disabled=true;globalThis.document.activeElement=body;assert.equal(capturePageFocus(),null);
+  const origin=capturePageFocus();assert.equal(origin,button);button.disabled=true;globalThis.document.activeElement=body;assert.equal(capturePageFocus(),null);assert.equal(capturePageFocus({target:button}),button);assert.equal(capturePageFocus({currentTarget:button,target:other}),button);
   restoreConfirmationFocus(origin);frames.shift()();assert.equal(focused,0);button.disabled=false;mutation();assert.equal(focused,1);assert.ok(disconnected);
   globalThis.document.activeElement=body;button.disabled=true;restoreConfirmationFocus(button);frames.shift()();globalThis.document.activeElement=other;button.disabled=false;mutation();assert.equal(focused,1);
   globalThis.document.activeElement=body;button.isConnected=false;restoreConfirmationFocus(button);frames.shift()();assert.equal(focused,1);
