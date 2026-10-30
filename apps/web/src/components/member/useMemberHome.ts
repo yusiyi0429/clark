@@ -10,7 +10,6 @@ import type { TMissionRoundSummary } from "@warmap/contracts";
 import type { components } from "@/lib/api/schema";
 import { browserApi } from "@/lib/api/client";
 import { RADAR_SETTINGS_CHANGED, type MemberRadarBrief } from "@/components/radar/personalRadar";
-import type { WeeklySyncReminder } from "./weeklySyncNotice";
 
 type MemberTask = components["schemas"]["TaskView"];
 
@@ -44,7 +43,6 @@ export function useMemberHome() {
   /** 雷达关着时为 null，首页整块不出现。 */
   const [radar, setRadar] = useState<MemberRadarBrief | null>(null);
   /** 周五 18:00 到周日本周还没同步时由服务端给出；其余时间为 null。 */
-  const [weeklySync, setWeeklySync] = useState<WeeklySyncReminder | null>(null);
   const [homeError, setHomeError] = useState<string | null>(null);
   const loadInFlight = useRef<Promise<void> | null>(null);
 
@@ -56,7 +54,7 @@ export function useMemberHome() {
         window.location.assign("/access?next=%2Fme");
         return;
       }
-      if (home.data) { setTasks(home.data.myTasks as MemberTask[]); setRadar(home.data.radar ?? null); setWeeklySync(home.data.weeklySync ?? null); }
+      if (home.data) { setTasks(home.data.myTasks as MemberTask[]); setRadar(home.data.radar ?? null); }
       setHomeError(home.data ? null : REFRESH_ERROR);
       if (list.data) setNotifications(list.data.notifications as MemberNotification[]);
       if (meetingList.data) setMeetings(meetingList.data.meetings);
@@ -153,5 +151,5 @@ export function useMemberHome() {
     [load],
   );
 
-  return { tasks, notifications, meetings, unreadThreads, unreadMissionGroups, rounds, radar, weeklySync, homeError, refresh: load, returnTask, markSeen, readRadarNotice, settle };
+  return { tasks, notifications, meetings, unreadThreads, unreadMissionGroups, rounds, radar, homeError, refresh: load, returnTask, markSeen, readRadarNotice, settle };
 }

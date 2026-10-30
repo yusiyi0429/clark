@@ -56695,8 +56695,7 @@
         "required": [
           "myTasks",
           "work",
-          "radar",
-          "weeklySync"
+          "radar"
         ],
         "properties": {
           "myTasks": {
@@ -57670,34 +57669,6 @@
                         }
                       }
                     }
-                  }
-                }
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "weeklySync": {
-            "anyOf": [
-              {
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                  "reason"
-                ],
-                "properties": {
-                  "reason": {
-                    "anyOf": [
-                      {
-                        "const": "no_connection",
-                        "type": "string"
-                      },
-                      {
-                        "const": "not_synced",
-                        "type": "string"
-                      }
-                    ]
                   }
                 }
               },
@@ -60061,27 +60032,6 @@
             "minLength": 1,
             "maxLength": 10,
             "type": "string"
-          }
-        }
-      },
-      "WeeklySyncReminder": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "reason"
-        ],
-        "properties": {
-          "reason": {
-            "anyOf": [
-              {
-                "const": "no_connection",
-                "type": "string"
-              },
-              {
-                "const": "not_synced",
-                "type": "string"
-              }
-            ]
           }
         }
       },

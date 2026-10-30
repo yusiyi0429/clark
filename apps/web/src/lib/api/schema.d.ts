@@ -10315,9 +10315,6 @@ export interface components {
                     collectedAt: string;
                 }[];
             } | null;
-            weeklySync: {
-                reason: "no_connection" | "not_synced";
-            } | null;
         };
         HomePlanDay: {
             date: string;
@@ -10672,9 +10669,6 @@ export interface components {
         PatchPlanMarkRequest: {
             date?: string;
             label?: string;
-        };
-        WeeklySyncReminder: {
-            reason: "no_connection" | "not_synced";
         };
         MemberWork: {
             period: string;

@@ -20,7 +20,6 @@ import { idParams, type AppInstance, type Guard, type RouteContext } from "./sha
 import { readMemberWork } from "../memberWork.js";
 import { readMemberBattlefield } from "../memberBattlefields.js";
 import { readMemberRadarBrief } from "../personalSignals.js";
-import { readWeeklySyncReminder } from "../weeklySyncReminder.js";
 import { appendTaskProgress } from "../taskProgress.js";
 import { createPersonalToken, listPersonalTokens, revokePersonalToken } from "../personalTokens.js";
 import { getIssueRow } from "../issues.js";
@@ -65,13 +64,12 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   };
 
   app.get("/api/me/home", { preHandler: requireMember, schema: { response: { 200: MeHomeResponse } } }, async (req) => {
-    const [myTasks, { work }, radar, weeklySync] = await Promise.all([
+    const [myTasks, { work }, radar] = await Promise.all([
       listMyTasks(q, req.person!.personId, names()),
       readMemberWork(q, peopleDirectory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, ctx.now()),
       readMemberRadarBrief(q, req.person!, ctx.now()),
-      readWeeklySyncReminder(q, req.person!.personId, ctx.now()),
     ]);
-    return { myTasks, work, radar, weeklySync };
+    return { myTasks, work, radar };
   });
   app.get("/api/me/home-plan", { preHandler: requireMember, schema: { response: { 200: HomePlanResponse } } }, async (req) =>
     readHomePlan(q, req.person!, ctx.now(), { planTasks: ctx.planTasks, names: names() }));

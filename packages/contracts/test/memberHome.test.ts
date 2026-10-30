@@ -7,7 +7,9 @@ describe("member home contract", () => {
   it("requires shared current-month work alongside execution items", () => {
     expect(Value.Check(contracts.MeHomeResponse, { myTasks: [] })).toBe(false);
     const work = { period: "2026-10", planStatus: "none", battlefields: [], missions: [], missionCards: [] };
-    expect(Value.Check(contracts.MeHomeResponse, { myTasks: [], work, radar: null, weeklySync: null })).toBe(true);
+    expect(Value.Check(contracts.MeHomeResponse, { myTasks: [], work, radar: null })).toBe(true);
+    // 10/31 起不再有周五兜底提醒：首页不带 weeklySync。
+    expect(Value.Check(contracts.MeHomeResponse, { myTasks: [], work, radar: null, weeklySync: null })).toBe(false);
     // 个人雷达小组件是必填字段：关着时明确为 null，不靠缺省。
     expect(Value.Check(contracts.MeHomeResponse, { myTasks: [], work })).toBe(false);
   });

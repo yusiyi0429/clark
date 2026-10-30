@@ -7,7 +7,7 @@ export type TokenClient = AgentClient | "collector";
 export const clientName = (client: TokenClient) => client === "codex" ? "Codex" : client === "claude" ? "Claude Code" : client === "collector" ? "本机采集器" : "AI 工具";
 
 /** 用户说「同步本周进展」时照这段做（本人明确要求的同步）。 */
-export const SYNC_INSTRUCTION = `用天枢 MCP 同步我本周的工作进展：先调用 tianshu 的 list_my_items（status=all）看我负责的执行事项；我已知的协作事项用 get_item 核对。再根据我这周实际做过的事（当前目录及其下各仓库的提交、文档，以及我们的对话），为每件有进展的事项调用一次 append_progress，写清做了什么、证据链接和下一步；做出来的文档、设计稿、PR 这类有链接的东西，用 add_link 放进对应事项。实际推进了、但天枢里还没有对应事项的工作，够一件执行事项（Mission 卡上一个带 ◆ 关口的 Activity，一般 1–2 周）才用 create_item 建一条（必须挂到对应的 Mission，实在对不上就写清为什么，交给我处理）再写进展；过程步骤、修小问题、配置、一次会、一次问答、跑完一个子任务都只写进展，不新建。我推进的事项已经做完的，用 submit_for_acceptance 提交验收，对照完成标准逐条写明是否达到和依据，完成由我在天枢逐条确认。没有进展的事项不要写，不要编造。最后列出你写了哪几条、新建了哪几条。`;
+export const SYNC_INSTRUCTION = `用天枢 MCP 同步我本周的工作进展：先调用 tianshu 的 list_my_items（status=all）看我负责的执行事项；我已知的协作事项用 get_item 核对。再根据我这周实际做过的事（当前目录及其下各仓库的提交、文档，以及我们的对话），为每件有进展的事项调用一次 append_progress，写清做了什么、证据链接和下一步；做出来的文档、设计稿、PR 这类有链接的东西，用 add_link 放进对应事项。实际推进了、但天枢里还没有对应事项的工作，不要新建事项，也不要硬写进不相干的事项，最后列给我，由我决定要不要建。我推进的事项已经做完的，用 submit_for_acceptance 提交验收，对照完成标准逐条写明是否达到和依据，完成由我在天枢逐条确认。没有进展的事项不要写，不要编造。最后列出你写了哪几条，以及哪些工作在天枢里还没有对应事项。`;
 
 /** Codex 的天枢配置：令牌直接写请求头（桌面 App、IDE 插件、命令行读同一份，不依赖环境变量）；
  *  放行天枢工具：本人叫 Agent 写的时候不用再点一次确认。 */

@@ -16,6 +16,10 @@ describe("连接说明文件", () => {
     expect(text).not.toContain("不用等用户开口");
     // 「同步本周进展」是本人开口要的，照旧；10/30 起不再让 Agent 建每周五的定时同步。
     expect(text).toContain(`用户说「同步本周进展」时，照这段做：${SYNC_INSTRUCTION}`);
+    // 同步只写进展：天枢里还没有的工作列给本人，不替他建事项，也没有 ◆ 粒度规定。
+    expect(SYNC_INSTRUCTION).toContain("不要新建事项");
+    expect(SYNC_INSTRUCTION).not.toContain("create_item");
+    expect(SYNC_INSTRUCTION).not.toContain("◆");
     expect(text).not.toContain("第三步");
     expect(text).not.toContain("每周五");
     expect(text).not.toContain("定时");
