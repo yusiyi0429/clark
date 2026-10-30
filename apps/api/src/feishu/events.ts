@@ -35,11 +35,23 @@ export function feishuEventDedupeKey(data: Record<string, unknown>): string | nu
   return typeof eventId === "string" && eventId ? `event:${eventId}` : null;
 }
 
+/** 单聊里发给机器人的消息：有人在等回答（feishuChat.ts）。 */
+function isDirectMessage(eventType: string, data: Record<string, unknown>): boolean {
+  return eventType === "im.message.receive_v1" && (data.message as { chat_type?: unknown } | undefined)?.chat_type === "p2p";
+}
+
 /**
  * 收到事件只做这一件事：落库并在同一条语句里排一个 feishu.event 任务，然后立即返回（3 秒内 ack）。
  * 重复投递撞上 dedupe_key 唯一约束，既不新建事件也不重复排任务。
+ * 单聊消息不等每 5 秒一轮的轮询（上一批没跑完还要整轮跳过）：给了 dispatchNow（jobs 的 runNow）就立即派这条任务，不等它跑完就返回。
+ * 任务照常排着兜底：派之前进程退出，轮询照样领到；直派和轮询只有一方领得到。其他事件照旧等轮询。
  */
-export async function recordFeishuEvent(pool: Pool, eventType: string, data: Record<string, unknown>): Promise<"recorded" | "duplicate" | "ignored"> {
+export async function recordFeishuEvent(
+  pool: Pool,
+  eventType: string,
+  data: Record<string, unknown>,
+  dispatchNow?: (jobId: string) => Promise<unknown>,
+): Promise<"recorded" | "duplicate" | "ignored"> {
   const dedupeKey = feishuEventDedupeKey(data);
   if (!dedupeKey) return "ignored";
   // 事件里的 token 是事件订阅的校验凭据，不进库。
@@ -54,7 +66,12 @@ export async function recordFeishuEvent(pool: Pool, eventType: string, data: Rec
      RETURNING id`,
     [dedupeKey, eventType, typeof data.event_id === "string" ? data.event_id : null, JSON.stringify(payload), FEISHU_EVENT_KIND],
   );
-  return result.rows.length ? "recorded" : "duplicate";
+  const jobId = result.rows[0]?.id as string | undefined;
+  if (!jobId) return "duplicate";
+  if (dispatchNow && isDirectMessage(eventType, data)) {
+    void dispatchNow(jobId).catch((error: Error) => console.warn(`feishu event dispatch failed, left to jobs: ${error.message}`));
+  }
+  return "recorded";
 }
 
 /**
@@ -76,12 +93,17 @@ export function feishuEventJobs(pool: Pool, handlers: FeishuEventHandlers = {}):
 
 /**
  * 长连接（仅企业自建应用支持，每个应用最多 50 条）：SDK 在处理函数返回后 ack；落库失败时抛错，飞书会重新投递。
+ * dispatchNow：单聊消息落库后立即派（见 recordFeishuEvent）。
  */
-export function startFeishuEventStream(pool: Pool, env: Pick<FeishuEnv, "appId" | "appSecret">): { close: () => void } {
+export function startFeishuEventStream(
+  pool: Pool,
+  env: Pick<FeishuEnv, "appId" | "appSecret">,
+  dispatchNow?: (jobId: string) => Promise<unknown>,
+): { close: () => void } {
   const dispatcher = new Lark.EventDispatcher({ loggerLevel: Lark.LoggerLevel.warn });
   dispatcher.register(Object.fromEntries(FEISHU_SUBSCRIBED_EVENTS.map((eventType) => [
     eventType,
-    async (data: Record<string, unknown>) => { await recordFeishuEvent(pool, eventType, data); },
+    async (data: Record<string, unknown>) => { await recordFeishuEvent(pool, eventType, data, dispatchNow); },
   ])));
   const client = new Lark.WSClient({
     appId: env.appId,

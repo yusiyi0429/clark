@@ -329,8 +329,8 @@ jobWorker.start();
 weeklyReviewScheduler.start();
 collectorDistillScheduler.start();
 await app.listen({ port, host: "0.0.0.0" });
-// 飞书长连接：收到事件只落库并排 jobs，3 秒内 ack。
-feishuEvents = env.feishu ? startFeishuEventStream(pool, env.feishu) : undefined;
+// 飞书长连接：收到事件只落库并排 jobs，3 秒内 ack；单聊消息落库后直接交给 worker 跑那一条，不等下一轮。
+feishuEvents = env.feishu ? startFeishuEventStream(pool, env.feishu, jobWorker.runNow) : undefined;
 // 微信 ClawBot：已绑定的人开始收消息，定时推送通知；停机时 app.close() 收尾。
 void app.wechat?.start().catch((error: Error) => console.error("wechat start failed", error));
 console.log(`warmap api listening on :${port} (${join(".", "migrations")} applied, build ${env.buildSha})`);
