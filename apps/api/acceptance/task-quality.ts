@@ -10,10 +10,11 @@ import type { FastifyInstance } from "fastify";
 import { createTestApp } from "../test/helpers.js";
 
 const config = JSON.parse(await readFile(process.argv[2], "utf8")) as {
-  worldUrl: string; readerToken: string; humanToken: string; taskId: string; scopeId: string; python: string; chatCheckout: string;
+  worldUrl: string; readerToken: string; humanToken: string; taskId: string; scopeId: string; python: string; chatCheckout: string; isolatedPort: string;
 };
 const adminUrl = new URL(process.env.TEST_PG_URL!);
-assert.equal(adminUrl.port, "55212");
+assert.equal(adminUrl.port, config.isolatedPort);
+assert.equal(adminUrl.username, "tkos_acceptance_admin");
 assert.ok(["127.0.0.1", "localhost"].includes(adminUrl.hostname));
 assert.equal(new URL(config.worldUrl).hostname, "127.0.0.1");
 const identityResponse = await fetch(config.worldUrl + "/v1/whoami", { redirect: "error", headers: { authorization: `Bearer ${config.readerToken}` } });
@@ -34,7 +35,7 @@ const chatModule = await import(pathToFileURL(resolve(config.chatCheckout, "dist
   createApp: (options: Record<string, unknown>) => Promise<FastifyInstance>;
 };
 const db = { query: (sql: string, args?: unknown[]) => pool.query(sql, args) };
-for (const migration of ["001-baseline.sql", "002-user-sessions.sql", "003-task-quality.sql"])
+for (const migration of ["001-baseline.sql", "002-user-sessions.sql", "003-task-quality.sql", "007-task-repair-prior-commands.sql"])
   await pool.query(await readFile(resolve(config.chatCheckout, "migrations", migration), "utf8"));
 const chat = await chatModule.createApp({ internalToken: token, db, worldUrl: config.worldUrl, worldToken: config.readerToken });
 const chatUrl = await chat.listen({ host: "127.0.0.1", port: 0 });

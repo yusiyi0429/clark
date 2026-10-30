@@ -59,9 +59,14 @@ export const TaskRepairView = Type.Object({
   sourceReceiptId: NullableText, receiptId: NullableText, writebackStatus: NullableText, updatedAt: Type.String(),
 }, { additionalProperties: false });
 export const TaskRepairList = Type.Object({ proposals: Type.Array(TaskRepairView) }, { additionalProperties: false });
+export const TaskRepairVerificationCommand = Type.Object({
+  interface_version: Type.Literal("tkos.task-writeback/0.1"), approval_digest: Type.String({ pattern: "^[0-9a-f]{64}$" }),
+  action: Type.Record(Type.String(), Type.Unknown()), baseline: Type.Record(Type.String(), Type.Unknown()), source: Type.Record(Type.String(), Type.Unknown()),
+}, { additionalProperties: false });
 export const TaskRepairReceiptInput = Type.Union([
   Type.Object({ stage: Type.Literal("source"), receiptId: TaskQualityId }, { additionalProperties: false }),
-  Type.Object({ stage: Type.Literal("change"), receiptId: Type.Optional(TaskQualityId) }, { additionalProperties: false }),
+  Type.Object({ stage: Type.Literal("change"), receiptId: Type.Optional(TaskQualityId),
+    verificationCommand: Type.Optional(TaskRepairVerificationCommand) }, { additionalProperties: false }),
 ]);
 export const TaskRepairRevision = Type.Object({ taskId: TaskQualityId, input: TaskRepairInput }, { additionalProperties: false });
 export const TaskRepairHandoff = Type.Object({

@@ -18224,6 +18224,45 @@
               "receiptId": {
                 "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                 "type": "string"
+              },
+              "verificationCommand": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "interface_version",
+                  "approval_digest",
+                  "action",
+                  "baseline",
+                  "source"
+                ],
+                "properties": {
+                  "interface_version": {
+                    "const": "tkos.task-writeback/0.1",
+                    "type": "string"
+                  },
+                  "approval_digest": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "action": {
+                    "type": "object",
+                    "patternProperties": {
+                      "^(.*)$": {}
+                    }
+                  },
+                  "baseline": {
+                    "type": "object",
+                    "patternProperties": {
+                      "^(.*)$": {}
+                    }
+                  },
+                  "source": {
+                    "type": "object",
+                    "patternProperties": {
+                      "^(.*)$": {}
+                    }
+                  }
+                }
               }
             }
           }
