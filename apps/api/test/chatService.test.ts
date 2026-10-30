@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type IncomingHttpHeaders, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TEST_CEO, TEST_MEMBER, createTestApp } from "./helpers.js";
 import type { ConversationRuntime } from "../src/conversations.js";
 import { homeTurn } from "../src/homeTurn.js";
@@ -483,9 +483,9 @@ describe("首页分段（CHAT_SESSION_ROTATION）", () => {
       await sendHome(t, cookie, { message: "隔了半天" });
       expect(idle.conversations).toHaveLength(2);
       expect(idle.turns()[0].url).toBe(`/conversations/${idle.conversations[0]}/turns`);
-      // 这一句进了哪一段记进纪要表（视角、段 id），纪要后台据此去读。
-      expect(await t.sql("SELECT owner_id, viewer_role, source, source_ref, status FROM conversation_digests")).toEqual([
-        { owner_id: TEST_CEO.personId, viewer_role: "ceo", source: "chat", source_ref: idle.conversations[0], status: "stale" }]);
+      // 这一句进了哪一段记进纪要表（视角、段 id），纪要后台据此去读。登记在后台写、不挡回复，所以等它落库。
+      await vi.waitFor(async () => expect(await t.sql("SELECT owner_id, viewer_role, source, source_ref, status FROM conversation_digests")).toEqual([
+        { owner_id: TEST_CEO.personId, viewer_role: "ceo", source: "chat", source_ref: idle.conversations[0], status: "stale" }]), { timeout: 5000 });
     });
 
     const overnight = await fakeChat({ conversations: [{ conversationId: randomUUID(), createdAt: ago(20 * HOUR), updatedAt: new Date(lastFourAm().getTime() - 60_000).toISOString() }] });
