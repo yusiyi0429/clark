@@ -65,7 +65,7 @@ test('MD已确认卡允许只读预览，真正应用要求确认，不能通过
  const s=sign(fresh()),actor=owner(s),selection={stage:'review',rootId:id,onlyRoot:true},rows=parseStandardMarkdown(exportMarkdown(s,actor,selection));rows[0].fields.verdictReason='MD新理由';const before=JSON.stringify(s),preview=prepareTransfer(s,actor,selection,rows);assert.equal(JSON.stringify(s),before);
  assert.throws(()=>applyTransfer(s,actor,preview.changes),e=>e.code==='RECONFIRM_REQUIRED');const next=applyTransfer(s,actor,preview.changes,{reconfirmVersion:1});assert.equal(currentVersion(next.cards[id]).signatures.length,0);assert.equal(next.cards[id].versions[0].signatures.length,1);
 });
-test('下级正文变化先通知上级，不自动改上级',()=>{let s=fresh();s=applyAction(s,owner(s),{type:'revise',cardId:id,baseVersion:1,patch:{verdictReason:'下级新理由'}});assert.ok(s.messages.some(m=>m.scope==='bf01'&&m.author==='Nexus'&&m.text.includes('修改了')));assert.equal(currentVersion(s.cards['rv:bf01']).number,1);assert.equal(s.reviewCascadeQueue.length,1);});
+test('无上级实际引用的下级正文变化不广播，不自动改上级',()=>{let s=fresh();s=applyAction(s,owner(s),{type:'revise',cardId:id,baseVersion:1,patch:{verdictReason:'下级新理由'}});assert.ok(!s.messages.some(m=>m.scope==='bf01'&&m.author==='Nexus'&&m.text.includes('修改了')));assert.equal(currentVersion(s.cards['rv:bf01']).number,1);assert.equal(s.reviewCascadeQueue?.length||0,0);});
 test('简单状态无需模型；附带合法摘要复用；复杂失败完整对照只调用一次且不改patch',async()=>{
  let calls=0;const summarize=createProposalSummarizer({complete:async()=>{calls++;throw Error('timeout');}}),node={level:'mission',title:'复盘'};
  const simple={id:'simple',cardId:id,before:{verdict:'未达成'},patch:{verdict:'达成'}};assert.equal((await summarize(simple,node)).changes[0].after,'达成');assert.equal(calls,0);

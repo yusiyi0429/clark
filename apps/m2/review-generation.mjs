@@ -1,3 +1,4 @@
+import {childContract,childVerdictProblem,objectExclusion} from './review-child-contract.mjs';
 // 复盘生成 (陈溪南 2026-10-23): the month-end review is generated inside the product, started from 管理 on her account,
 // instead of on a laptop and imported. Three levels: Mission 复盘, RU PO 复盘, 公司 PO 复盘.
 // Targets are that month's RU POs and Missions in the ontology; evidence is everything the ontology recorded that month about
@@ -132,8 +133,8 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  const goals={},companyGoal=heads.goals.find(g=>companyDomain.has(g.domain_id));
  for(const g of heads.goals){const unit=unitOfDomain.get(g.domain_id);if(unit&&!goals[unit])goals[unit]={id:g.object_id,unit,object:objects[g.object_id]};}
  const goalOfId=new Map(Object.values(goals).map(g=>[g.id,g]));
- const missions=[];
- for(const m of [...heads.missions].sort((a,b)=>String(a.object_id).localeCompare(String(b.object_id)))){const o=objects[m.object_id],goal=goalOfId.get(relationTo(o,'goal_ref'))||goals[unitOfDomain.get(m.domain_id)];if(!goal)continue;missions.push({id:m.object_id,goal,object:o});}
+ const missions=[],excludedMissions=[];
+ for(const m of [...heads.missions].sort((a,b)=>String(a.object_id).localeCompare(String(b.object_id)))){const o=objects[m.object_id],parent=relationTo(o,'goal_ref'),goal=parent?goalOfId.get(parent):goals[unitOfDomain.get(m.domain_id)];const exclusion=objectExclusion(o,m.object_id,cutoff);if(exclusion){excludedMissions.push({...exclusion,unit:goal?.unit||unitOfDomain.get(m.domain_id)});continue;}if(!goal){const old=goals[unitOfDomain.get(m.domain_id)];if(parent&&old)excludedMissions.push({ref:m.object_id,unit:old.unit,reason:'正式父级已移出本PO',authority:`${m.object_id}@${o?.business?.version??'?'}#goal_ref`,effectiveAt:null});continue;}missions.push({id:m.object_id,goal,object:o});}
  const missionIds=new Set(missions.map(m=>m.id));
  const missionOfTask=new Map(heads.tasks.map(t=>[t.object_id,relationTo(objects[t.object_id],'mission_ref')||relationTo(objects[t.object_id],'parent_ref')]));
  const titleOf=id=>objects[id]?.business?.title||objects[id]?.title||heads.rus.find(r=>r.object_id===id)?.title||'';
@@ -208,9 +209,9 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
   const items=planItems(m.object),objs=heads.tasks.filter(t=>missionOfTask.get(t.object_id)===m.id).map(t=>({id:t.object_id,o:objects[t.object_id]}));
   const used=new Set(),lines=items.map((p,i)=>{const hit=objs.find(t=>!used.has(t.id)&&bare(t.o?.business?.title)&&(bare(p.title)===bare(t.o?.business?.title)||p.title.includes(bare(t.o?.business?.title))));if(hit)used.add(hit.id);
    const owner=realName(ownerOf(hit?.o))||realName(principalName.get(p.responsible))||'未指派';
-   return {ref:hit?.id||p.ref||`plan-${i+1}`,title:p.title,owner,status:hit?statusOf(hit.o):'计划条目',...(p.expected?{expected:p.expected}:{}),...(p.quality?{quality:p.quality}:{}),...(p.finish?{finish:p.finish}:{}),...(hit?{definition:blockLines(hit.o?.business?.blocks).slice(0,1200)}:{})};});
-  for(const t of objs)if(!used.has(t.id))lines.push({ref:t.id,title:t.o?.business?.title||'',owner:realName(ownerOf(t.o))||'未指派',status:statusOf(t.o),definition:blockLines(t.o?.business?.blocks).slice(0,1200)});
-  return lines;
+   return {source:hit?'object':'planItem',objectId:hit?.id||null,version:hit?(hit.o?.business?.version||null):(m.object?.business?.version||null),parentRef:m.id,commitmentRef:p.ref||null,ref:hit?.id||p.ref||`plan-${i+1}`,title:p.title,owner,status:hit?statusOf(hit.o):'计划条目',...(p.expected?{expected:p.expected}:{}),...(p.quality?{quality:p.quality}:{}),...(p.finish?{finish:p.finish}:{}),...(hit?{definition:blockLines(hit.o?.business?.blocks).slice(0,1200)}:{})};});
+  for(const t of objs)if(!used.has(t.id))lines.push({source:'object',objectId:t.id,version:t.o?.business?.version||null,parentRef:m.id,ref:t.id,title:t.o?.business?.title||'',owner:realName(ownerOf(t.o))||'未指派',status:statusOf(t.o),definition:blockLines(t.o?.business?.blocks).slice(0,1200)});
+  return lines.filter(t=>!t.objectId||!objectExclusion(objects[t.objectId],t.objectId,cutoff));
  }
  // Unit- and PO-level records that name a Mission (its title, its code such as 09-1, or one of its Task titles) belong to
  // that Mission; the rest reach every Mission of the unit as 单元层面进展, not evidence for any one Task (读取盘点第 2 条).
@@ -237,11 +238,19 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
    // Neither plan items nor Tasks: the Mission's own success criteria are the lines to report on, one each.
    ...(taskLines(m).length?{}:{expectedFacts:successCriteria(m.object).map((text,i)=>({ref:`ref-${i+1}`,item:text}))}),objectId:m.id});
  }
+ // Declare which lines are actual direct commitments. Missing provenance blocks the new rule rather than becoming zero children.
+ for(const c of stage1){const m=missions.find(m=>m.id===c.objectId),items=(c.tasks||[]).map(t=>({ref:t.ref,kind:'Task',parentRef:m.id,period,effective:true,source:t.source,objectId:t.objectId,version:t.version,status:t.status})),excluded=heads.tasks.filter(t=>missionOfTask.get(t.object_id)===m.id).map(t=>objectExclusion(objects[t.object_id],t.object_id,cutoff)).filter(Boolean),gaps=[];
+  if(!m.object?.business?.version)gaps.push('Mission有效版本缺失');
+  for(const t of heads.tasks)if((!objects[t.object_id]||!missionOfTask.get(t.object_id))&&(!t.domain_id||unitOfDomain.get(t.domain_id)===m.goal.unit))gaps.push('Task读取或父级关系不完整：'+t.object_id);
+  for(const t of c.tasks||[])if(t.source==='planItem'&&(!t.commitmentRef||!m.object?.business?.formal?.effective_revision_id||m.object.business.formal.effective_revision_id!==m.object.business.revision_id||!['已成立','进行中','已关闭','established','in_progress','closed'].includes(statusOf(m.object))))gaps.push('执行计划条目缺正式有效计划或稳定组件引用：'+t.ref);
+  c.childCommitments=childContract(items,excluded,gaps);
+ }
  for(const [unit,g] of Object.entries(goals)){
   const ev=[...(bySubject[g.id]||[]),...(byUnit[unit]||[])];
   const children=stage1.filter(c=>c.level==='mission'&&c.unit===unit).map(c=>c.id);
   const c={...base,id:unit,level:'ru',unit,parent:'company',title:g.object?.business?.title||'',owner:ownerOf(g.object)||ownerOf(ruObject.get(unit)),commitment:blockLines(g.object?.business?.blocks),commitmentSource:`本体 ${month} 月 RU PO（${statusOf(g.object)}）`,evidence:numbered(ev),recordFacts:recordFacts(ev),objectId:g.id,...(children.length?{children}:{})};
   // A unit with no Mission reports on its PO's success criteria, one line each (评测 2026-10-26).
+  c.childCommitments=childContract(children.map(id=>{const m=stage1.find(x=>x.id===id),o=objects[m.objectId];return {ref:id,kind:'Mission',parentRef:g.id,period,effective:true,source:'object',objectId:m.objectId,version:o?.business?.version||null,status:statusOf(o)};}),excludedMissions.filter(x=>x.unit===unit).map(({unit,...x})=>x),children.filter(id=>relationTo(objects[stage1.find(x=>x.id===id).objectId],'goal_ref')!==g.id).map(id=>'Mission父级引用未明确：'+id));
   if(!children.length){const crit=successCriteria(g.object);if(crit.length)c.expectedFacts=crit.map((text,i)=>({ref:`ref-${i+1}`,item:text}));}
   (children.length?stage2:stage1).push(c);
  }
@@ -325,12 +334,13 @@ export function rowFacts(c,r){
  return {expected:want.length,lines:(r?.facts||[]).length,missing:want.filter(w=>!lines.has(w.ref)&&!lines.has(w.item)).map(w=>w.item)};
 }
 function evidenceFacts(c,r){const ids=new Set((c.evidence||[]).map(e=>e.id));const used=[...new Set(JSON.stringify(r).match(/E\d+/g)||[])];return {missingIds:used.filter(id=>ids.size&&!ids.has(id)),usedCount:used.length};}
-const unitData=c=>({id:c.id,level:c.level,unit:c.unit,title:c.title,owner:c.owner,period:c.period,cutoff:c.cutoff,commitment:c.commitment,commitmentSource:c.commitmentSource,evidence:c.evidence,missing:c.missing,note:c.note,recordFacts:c.recordFacts,...(c.tasks?.length?{tasks:c.tasks}:{}),...(c.expectedFacts?{expectedFacts:c.expectedFacts}:{})});
+const unitData=c=>({id:c.id,level:c.level,unit:c.unit,title:c.title,owner:c.owner,period:c.period,cutoff:c.cutoff,commitment:c.commitment,commitmentSource:c.commitmentSource,evidence:c.evidence,missing:c.missing,note:c.note,recordFacts:c.recordFacts,...(c.childCommitments?{childCommitments:c.childCommitments}:{}),...(c.tasks?.length?{tasks:c.tasks}:{}),...(c.expectedFacts?{expectedFacts:c.expectedFacts}:{})});
 const fieldsHint='返回 JSON：{"analysis":"不展示的分析，600 字内","review":{按 round-stages.md「字段」写全本层字段}}';
 
 // Runs the skill's stages on a built input. `run` holds what is done so far (raw answers by call), so a failed run
 // resumes where it stopped; save(run) is called after every answer.
 export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{},failed:[],dropped:[]},save=async()=>{},onProgress=async()=>{},concurrency=8}){
+ if(skillAtLeast(skill.version,'2.1.10')){const incomplete=input.stages.flat().filter(c=>['mission','ru'].includes(c.level)&&!c.childCommitments?.complete);if(incomplete.length)throw Error('有效直接子项元信息不完整：'+incomplete.map(c=>c.id+' '+(c.childCommitments?.missing||[]).join('；')).join('；'));}
  const system=`你是 TKOS 的月度复盘助手。按下面的技能工作。仅返回有效 JSON 对象，不加代码围栏。\n${skill.rules}`;
  run.raw??={};run.reviews??={};run.failed??=[];run.dropped??=[];
  const ask=async(key,user)=>{
@@ -400,7 +410,7 @@ export async function repairReviews({gateway,skill,input,run,problems,save=async
  run.repaired??=[];
  await Promise.all(Object.entries(byUnit).map(async([id,list])=>{
   const c=items.find(x=>x.id===id),key='repair-'+id+'-'+run.repaired.filter(x=>x===id).length;if(!c)return;
-  try{const answer=run.raw[key]||(await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify({task:'按技能「产品生成整轮复盘候选·检查」中的「修改」规则修改这份复盘：只改下面程序检查出的问题，其余照原样保留。'+fieldsHint,unit:unitData(c),review:run.reviews[id],issues:list.map(p=>({type:'程序检查',problem:p.problem}))})}],{thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000,trace:{name:key,stage:'repair',metadata:{unit:id}}})).answer;
+  try{const answer=run.raw[key]||(await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify({task:'按技能「产品生成整轮复盘候选·检查」中的「修改」规则修改这份复盘：只改下面程序检查出的问题，其余照原样保留。'+fieldsHint,unit:unitData(c),missionReviews:c.children?.map(id=>run.reviews[id]).filter(Boolean),review:run.reviews[id],issues:list.map(p=>({type:'程序检查',problem:p.problem}))})}],{thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000,trace:{name:key,stage:'repair',metadata:{unit:id}}})).answer;
    run.raw[key]=answer;const res=JSON.parse(bareJson(answer));
    if(res?.review)run.reviews[id]={...res.review,unit:c.unit,level:c.level,ref:c.id,title:c.title,owner:c.owner,...(c.parent?{parent:c.parent==='company'?'company':c.parent}:{})};
   }catch{}
@@ -411,7 +421,7 @@ export async function repairReviews({gateway,skill,input,run,problems,save=async
 const tiers=['达成','部分达成','未达成'],nextTypes=new Set(['欠账','继续验证','停止','约束','待决策']),ltoChoices=new Set(['建议维持','建议修改','建议重开']);
 // rowMatch (复盘技能 2.1.6 起): each 下期输入 sits on one fact row, one per row, at most one for the whole card.
 export const skillAtLeast=(version,min)=>{const a=String(version||'').split('.').map(Number),b=min.split('.').map(Number);for(let i=0;i<b.length;i++){if((a[i]||0)!==b[i])return (a[i]||0)>b[i];}return true;};
-export function reviewProblems(run,input,{roster=[],rowMatch=false,askCaps=false}={}){
+export function reviewProblems(run,input,{roster=[],rowMatch=false,askCaps=false,childRule=false}={}){
  const out=[],filled=v=>v!=null&&(Array.isArray(v)?v.length>0:String(v).trim()!=='');
  const expected=input.stages.flat();
  if(!run.reviews.company)out.push({unit:'company',problem:'公司 PO 复盘没有生成出来，CEO 确认后才会开始拆解，必须有'});
@@ -419,6 +429,7 @@ export function reviewProblems(run,input,{roster=[],rowMatch=false,askCaps=false
  const refused=id=>run.failed.some(f=>f.id===id&&f.finishReason==='refusal');
  for(const c of expected)if(!run.reviews[c.id]&&c.id!=='company'&&!refused(c.id))out.push({unit:c.id,problem:'没有生成出来'});
  for(const [id,r] of Object.entries(run.reviews)){
+  if(childRule&&['mission','ru'].includes(r.level)){const c=expected.find(x=>x.id===id),bad=childVerdictProblem(r,c?.childCommitments,{childReviews:expected.filter(x=>x.parent===id).map(x=>run.reviews[x.id]).filter(Boolean)});if(bad)out.push({unit:id,problem:bad});}
   if(!tiers.includes(r.verdict))out.push({unit:id,problem:`判定写成“${r.verdict??'空'}”，只能是达成、部分达成、未达成`});
   if(Array.isArray(r.facts)){
    // 三段式 (2026-10-26): a verdict with one line of reason, then fact lines; insights are written by people, not generated.
@@ -447,7 +458,7 @@ export function reviewFile(run,input,{skill,model,label,startedAt=null}){
  const generatedAt=new Date().toISOString();
  return {name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,
   // Facts the review cards need from the input: which object each review is about, and whether the Mission has an owner.
-  reviews:Object.fromEntries(Object.entries(run.reviews).map(([id,r])=>{const c=input.stages.flat().find(x=>x.id===id);return [id,{...r,...(c?.objectId?{objectId:c.objectId}:{}),...(c?.ownerAssigned===false?{ownerAssigned:false}:{})}];})),
+  reviews:Object.fromEntries(Object.entries(run.reviews).map(([id,r])=>{const c=input.stages.flat().find(x=>x.id===id);return [id,{...r,...(c?.childCommitments?{childCommitments:structuredClone(c.childCommitments)}:{}),...(c?.objectId?{objectId:c.objectId}:{}),...(c?.ownerAssigned===false?{ownerAssigned:false}:{})}];})),
   failed:run.failed,dropped:run.dropped,skipped:input.skipped,readAt:input.readAt,redactions:input.redactions,readReceipt:input.readReceipt||null};
 }
 
@@ -474,18 +485,19 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
    if(trace)await setJob(tracer.ref(trace));
    const skill=await loadReviewSkill(skillRoot);
    tracer.annotate({metadata:{skill_version:skill.version,skill_hash:skill.hash.slice(0,12)}},trace);
+   if(work?.input&&work.skillSnapshot?.hash!==skill.hash&&skillAtLeast(skill.version,'2.1.10'))throw Error('复盘工作文件的技能版本不一致，请保留原任务并重新准备候选，不能混用旧输出');
    if(!work?.input){
     const sources=await tracer.withRun('read-ontology','tool',{stage:'read-ontology'},async()=>collectReviewSources({reader:await reader(),period,cutoff,onProgress:p=>setJob(p)}));
-    work={input:buildReviewInput(sources,{companyDirection:await companyDirection(period),ceoName}),run:{raw:{},reviews:{},failed:[],dropped:[]}};await save();
+    work={skillSnapshot:{version:skill.version,hash:skill.hash},input:buildReviewInput(sources,{companyDirection:await companyDirection(period),ceoName}),run:{raw:{},reviews:{},failed:[],dropped:[]}};await save();
    }
    await setJob({inputCutoff:work.input.readAt,skipped:work.input.skipped,skill:{version:skill.version,hash:skill.hash.slice(0,12)}});
    await runReviewSkill({gateway,skill,input:work.input,run:work.run,save:async r=>{work.run=r;await save();},onProgress:p=>setJob(p)});
    // 个人复盘最多 1 个问题 from 复盘技能 2.1.7 (陈溪南 2026-10-28: keep questions to what is really needed).
-   const rowMatch=skillAtLeast(skill.version,'2.1.6'),askCaps=skillAtLeast(skill.version,'2.1.7');
+   const rowMatch=skillAtLeast(skill.version,'2.1.6'),askCaps=skillAtLeast(skill.version,'2.1.7'),childRule=skillAtLeast(skill.version,'2.1.10');
    work.run.covered=[...(work.run.covered||[]),...applyCovers(work.run)];
-   let checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps});
+   let checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps,childRule});
    if(checks.length&&checks.some(p=>work.run.reviews[p.unit])){await setJob({stage:`检查有 ${checks.length} 处问题，重写这几份`});
-    await tracer.withRun('repair-reviews','chain',{stage:'repair',problems:checks.length},()=>repairReviews({gateway,skill,input:work.input,run:work.run,problems:checks,save:async r=>{work.run=r;await save();}}));checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps});}
+    await tracer.withRun('repair-reviews','chain',{stage:'repair',problems:checks.length},()=>repairReviews({gateway,skill,input:work.input,run:work.run,problems:checks,save:async r=>{work.run=r;await save();}}));checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps,childRule});}
    if(checks.length){failed(trace,`checks failed (${checks.length}): ${checks.slice(0,5).map(p=>`${p.unit} ${p.problem}`).join('; ')}`);await setJob({status:'failed',stage:'检查没过，没有装入',error:`有 ${checks.length} 处问题，现有复盘没动`,checks,finishedAt:new Date().toISOString()});return;}
    const label=`${Number(period.slice(5))} 月复盘 ${skill.version||''}（${cutoff.slice(5,10).replace('-','/')}）`.replace('  ',' ');
    const file=reviewFile(work.run,work.input,{skill,model,label,startedAt:store.snapshot().reviewJob?.createdAt||null});

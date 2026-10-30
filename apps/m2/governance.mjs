@@ -1,3 +1,4 @@
+import {syncConfirmedMissionStatus,confirmedMissionSourceProblem,quotedReviewFields} from './confirmed-review-status.mjs';
 import {patchPaths,pathsOverlap,rebasePatch} from './proposal-units.mjs';
 // Actors are resolved server-side from the approved roster. Internal trial has no authentication.
 // This module records application confirmations, not formal ontology writes.
@@ -168,6 +169,7 @@ export function applyAction(previous,actor,action){
   // A Mission card (新增/撤掉/恢复) does not change the PO, so a newer PO version does not make it stale.
   if(!proposal.op&&currentVersion(target).number!==proposal.baseVersion)fail(409,'材料已更新，请重新分析，不能覆盖新版本');
   if(action.type==='acceptProposal'){
+   {const bad=confirmedMissionSourceProblem(previous,proposal,action.patch?{...proposal.patch,...action.patch}:proposal.patch);if(bad)fail(409,bad);}
    for(const ref of [proposal.fromParent,proposal.fromMission])if(ref&&(!previous.cards[ref.id]||currentVersion(previous.cards[ref.id]).number!==ref.version))fail(409,'来源已更新，请使用新的修订建议');
    const objections=[...previous.comments,...previous.messages].filter(e=>e.channel==='group'&&e.scope===proposal.scope&&e.createdAt>=proposal.createdAt&&e.author!=='Nexus'&&disagrees(e.text));
    if(objections.some(e=>e.cardId===target.id||e.context?.selection?.id===target.id||e.replyTo===proposal.id||e.threadId===proposal.id||proposal.sourceIds.includes(e.replyTo)||proposal.sourceIds.includes(e.threadId)))fail(409,'建议提出后出现新分歧，请先核对讨论再修订');
@@ -260,11 +262,12 @@ export function applyAction(previous,actor,action){
   if(isReview(card)){
    const notify=(label,from,to,scope)=>{if(from===to)return;groupNotice(state,card,`${nameOf(actor.id)}将${label}从「${from||'未判定'}」改为「${to||'未判定'}」。`,scope);state.messages.at(-1).reviewTransition={cardId:card.id,version:v.number+1,from,to,label};};
    if(card.level==='mission'){
-    if(changed.includes('verdict'))notify(titleOf(card),v.content.verdict,content.verdict,unitOf(card));
+    if(changed.includes('verdict'))notify(titleOf(card),v.content.verdict,content.verdict,roomOf(card));
     const rows=v.content.facts||[],afterRows=content.facts||[],key=f=>f.ref||f.id,unique=(list,id)=>!!id&&list.filter(f=>key(f)===id).length===1;
     for(const fact of afterRows){const ref=key(fact),old=unique(rows,ref)&&unique(afterRows,ref)?rows.find(f=>key(f)===ref):null;if(old&&old.status!==fact.status)notify(`「${fact.item}」`,old.status,fact.status,roomOf(card));}
    }else if(card.level==='task'&&changed.includes('verdict')){const parentReview=state.cards[card.parentId];if(parentReview)notify(titleOf(card),v.content.verdict,content.verdict,roomOf(parentReview));}
   }
+  for(const p of state.proposals||[])if(p.status==='pending'&&p.confirmedMission&&p.fromMission?.id===card.id){p.status='superseded';p.supersededBy=`个人复盘 v${v.number+1} 草稿`;p.supersededAt=now;}
   retireCascadeCards(state,card,v.number+1);
   for(const p of state.proposals||[])if(p.cardId===card.id&&p.status==='pending'&&p.id!==action.viaProposal){if(pathsOverlap(patchPaths(p.before,p.patch),patchPaths(v.content,patch))){p.status='superseded';p.supersededBy=v.number+1;}else{p.originalPatch??=structuredClone(p.patch);p.originalBaseVersion??=p.baseVersion;p.originalBefore??=structuredClone(p.before);p.patch=rebasePatch(p.before,p.patch,content);p.before=Object.fromEntries(Object.keys(p.patch).map(k=>[k,structuredClone(content[k]??'')]));p.baseVersion=v.number+1;}}
   // 上级跟着看 (陈溪南 2026-10-22 走查第 3 条): a lower card's dates, checks, result or verdict changing can leave what the
@@ -273,7 +276,7 @@ export function applyAction(previous,actor,action){
   const watched=changed.filter(k=>['time','checks','milestones','result','verdict','verdictReason','targets','facts','nextInputs','tier'].includes(k)),parent=card.parentId&&state.cards[card.parentId];
   // A 个人复盘 change no longer flags its unit review (陈溪南 2026-10-27): Nexus reads the change and, only when it matters for the
   // unit review, files a card there for its signers (server: review-cascade.mjs).
-  if(watched.length&&parent&&isReview(card)&&card.level==='mission'&&isReview(parent)){if(!changed.includes('verdict'))groupNotice(state,card,`${nameOf(actor.id)}修改了${titleOf(card)}，Nexus 将核对单元复盘是否需要修订。`,unitOf(parent));(state.reviewCascadeQueue??=[]).push({childId:card.id,parentId:parent.id,fromVersion:v.number,toVersion:v.number+1,fields:watched,at:now});}
+  if(watched.length&&parent&&isReview(card)&&card.level==='mission'&&isReview(parent)){const quoted=quotedReviewFields(parent,card,v.content,content);if(quoted.length)(state.reviewCascadeQueue??=[]).push({childId:card.id,parentId:parent.id,fromVersion:v.number,toVersion:v.number+1,fields:quoted,kind:'quoted-facts',round:state.reviewRound?.loadedAt||null,at:now});}
   else if(watched.length&&parent){
    // Dates compared as month/day (11/06 = 11-6); the upper card's own spelling is what the notice quotes.
    const dates=x=>new Map((JSON.stringify(x||'').match(/\d{1,2}[\/-]\d{1,2}/g)||[]).map(d=>{const [m,dd]=d.split(/[\/-]/).map(Number);return [`${m}/${dd}`,d];}));
@@ -323,7 +326,7 @@ export function applyAction(previous,actor,action){
   if(!v.signatures.some(s=>s.slot===slot))v.signatures.push({slot,actorId:actor.id,version:v.number,createdAt:now});
   // Signing after the 下级有调整 notice is having looked at it.
   if(card.downstreamChange&&(actor.ceo||mayRevise(actor,card)))delete card.downstreamChange;
-  if(slots.every(s=>v.signatures.some(x=>x.slot===s))){card.confirmedVersion=v.number;if(isReview(card)&&card.level==='mission'){state.insightPublications??={};state.insightPublications[card.id]={version:v.number,items:structuredClone(state.insights?.[card.id]||[]),publishedAt:now};if(state.insightNexus){delete state.insightNexus[card.id];delete state.insightNexus[card.parentId];for(const c of Object.values(state.cards))if(isReview(c)&&c.level==='company')delete state.insightNexus[c.id];}}retireCascadeCards(state,card,v.number);
+  if(slots.every(s=>v.signatures.some(x=>x.slot===s))){card.confirmedVersion=v.number;if(isReview(card)&&card.level==='mission'&&!reviewLock(state,card)){syncConfirmedMissionStatus(state,card,now);}if(isReview(card)&&card.level==='mission'){state.insightPublications??={};state.insightPublications[card.id]={version:v.number,items:structuredClone(state.insights?.[card.id]||[]),publishedAt:now};if(state.insightNexus){delete state.insightNexus[card.id];delete state.insightNexus[card.parentId];for(const c of Object.values(state.cards))if(isReview(c)&&c.level==='company')delete state.insightNexus[c.id];}}retireCascadeCards(state,card,v.number);
    // Confirming the company review starts next month's decomposition; the server picks this up.
    if(isReview(card)&&card.level==='company')state.planHandoff={status:'requested',requestedAt:now,reviewVersion:v.number};
    // The whole unit is done: everyone in its group hears it once.

@@ -4,7 +4,7 @@
 // This file supplies the review cards, the review rules and the review field checks to that one pass.
 import {readFile} from 'node:fs/promises';
 import {currentVersion,cardStatus,confirmationSummary,factProblem,nextInputProblem,roomOf,publishedMissionInsights,missionLabel,reviewLock} from './governance.mjs';
-const files=['SKILL.md','references/revision-loop.md','references/method.md','references/quality-bars.md','references/reader-format.md','references/round-stages.md'];
+const files=['SKILL.md','references/contracts.md','references/revision-loop.md','references/method.md','references/quality-bars.md','references/reader-format.md','references/round-stages.md'];
 export async function loadReviewRules(root){
  const parts=[];for(const f of files){try{parts.push(`\n--- ${f} ---\n`+await readFile(new URL(f,root),'utf8'));}catch{}}
  if(!parts.some(p=>p.includes('revision-loop.md')))throw Error('复盘技能里没有修改规则（references/revision-loop.md）');
@@ -15,7 +15,7 @@ export async function loadReviewRules(root){
 export function reviewPromptBlock(rules){
  return `\n复盘卡（focus.cards 里 kind 为 review、id 以 rv: 开头）：按下面复盘技能的“讨论中的修改”出修订卡——先判断新意见是补了新证据、对原因有不同解释、认为承诺口径不对，还是只改文字；只改意见涉及的和直接受影响的内容。人工纠正按复盘技能 revision-loop.md“人工纠正”执行，证据采信按 method.md“负责人陈述”执行。有人回答了追问（证据里带 answers）：一定出修订卡，把回答写进对应那条原因的 text（写成“负责人报告：……”，和底层记录对不上时两边都写），并把这条的 ask 置空；回答改变了判定依据时，同步改判定理由。新格式的复盘卡（有 facts）有三段要握手：判定（verdict、verdictReason 一句话）、事实证据 facts（[{ref, item, owner, status: 达成|部分达成|未达成|未开始, evidence, gap}]，一行一项，只写事实）和下期输入 nextInputs（[{ref, type: 继续|调整|停止|待决策, text, ask?:{to, question}}]，1–5 条，公司复盘最多 8 条；判定为达成且没有未了事项时可以为空）。被点名的人回答了下期输入里的提问（证据里带 answers 且 block 为 nextInputs）：一定出修订卡，把回答写进那一条的 text（写成“某某答复：……”），去掉这条的 ask；回答改变了下月要做的事时，同步改 type。分析洞察由参与者另外提交，不在卡上，也不通过修订卡改。可改字段：verdict、verdictReason、facts、nextInputs。只有旧格式的卡（有 targets、causes）才改 targets（字符串数组）、causes（[{text, ask}]）、旧的 nextInputs（[{id, type, text}]）、ltoReview。basis 写 request。\n${rules}`;
 }
-const keep=['title','owner','verdict','verdictReason','facts','targets','causes','nextInputs','ltoReview','recordFacts'];
+const keep=['title','owner','verdict','verdictReason','facts','targets','causes','nextInputs','ltoReview','recordFacts','childCommitments'];
 // The review cards a room's Nexus works on (2026-10-27): a person's room has their Mission reviews; a unit group has the
 // unit review and only the Mission reviews nobody owns.
 export function reviewCardsFor(state,scope){

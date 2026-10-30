@@ -17,12 +17,12 @@ test('首页按签字职责分组且同卡不重复，已确认个人条目保�
  assert.equal(new Set([...groups.confirm,...groups.watch].flatMap(e=>e.cards.map(n=>n.id))).size,2);
  s=applyAction(s,actor,{type:'insight',cardId:id,text:'分析'});s=applyAction(s,actor,{type:'confirm',cardId:id,baseVersion:1,slot:'missionDri'});tree=reviewTree(sharedProjection(s,actor).drafts);assert.equal(reviewHomeGroups(tree.nodes,p).confirm[0].cards[0].status,'已确认');
 });
-test('实际Task状态改变进个人房间，Mission判定改变进PO；出候选不发变化通知',()=>{
+test('实际Task状态改变进个人房间，Mission未确认判定仍留本人；出候选不发变化通知',()=>{
  let s=fresh(),actor=memberActor('member-03',s);const patch={facts:facts.map((f,i)=>i?f:{...f,status:'部分达成'})};
  queueProposals(s,'person:member-03',[{cardId:id,baseVersion:1,patch,sourceIds:[],reason:'补证'}]);assert.equal(s.messages.filter(m=>m.reviewTransition).length,0);
  s=applyAction(s,actor,{type:'acceptProposal',cardId:id,proposalId:s.proposals[0].id});
  const n=s.messages.filter(m=>m.reviewTransition);assert.equal(n.length,1);assert.equal(n[0].scope,'person:member-03');assert.match(n[0].text,/孙铭泽.*任务甲.*未达成.*部分达成/);
- s=revise(s,actor,{verdict:'部分达成'});assert.equal(s.messages.filter(m=>m.reviewTransition).length,2);assert.equal(s.messages.filter(m=>m.reviewTransition).at(-1).scope,'bf01');assert.equal(currentVersion(s.cards[po]).content.verdict,'未达成');
+ s=revise(s,actor,{verdict:'部分达成'});assert.equal(s.messages.filter(m=>m.reviewTransition).length,2);assert.equal(s.messages.filter(m=>m.reviewTransition).at(-1).scope,'person:member-03');assert.equal(currentVersion(s.cards[po]).content.verdict,'未达成');
  assert.throws(()=>revise(s,actor,{verdict:'部分达成'}),/没有变化/);
 });
 test('强制洞察仅签字人，确认后快照立即汇PO，未确认编辑不泄露且重确认替换去重',()=>{

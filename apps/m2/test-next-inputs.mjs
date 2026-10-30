@@ -44,7 +44,7 @@ test('装入后卡上有下期输入并参与握手；改成不合法的类型�
  const sun=memberActor('member-03',s);
  s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:1,patch:{nextInputs:[...c.nextInputs,{ref:'',type:'停止',text:'不再做演示版'}]}});
  assert.equal(currentVersion(s.cards['rv:bf01-m1']).content.nextInputs.length,3);
- assert.ok(s.reviewCascadeQueue?.some(j=>j.childId==='rv:bf01-m1'&&j.fields.includes('nextInputs')),'交给 Nexus 判断对单元复盘的影响');
+ assert.equal(s.reviewCascadeQueue?.length||0,0,'未被单元引用的下期输入不传播');
  assert.throws(()=>applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:2,patch:{nextInputs:[{type:'欠账',text:'x'}]}}),/类型只能是/);
  assert.match(reviewPatchProblem(s.cards['rv:bf01-m1'],{nextInputs:[{type:'欠账',text:'x'}]}),/下期输入格式不对/);
 });
@@ -180,13 +180,13 @@ test('下级有调整（单元复盘改了，公司复盘标出来）：签字�
  s=applyAction(s,ceo,{type:'acknowledgeImpact',cardId:'rv:company',baseVersion:1});assert.equal(s.cards['rv:company'].downstreamChange,undefined);
 });
 
-test('群里少说：两份个人复盘实际修改先通知单元群，再排给 Nexus 判断；没出成的卡不进群',async()=>{
+test('群里少说：两份个人复盘无上级实际引用的修改不通知单元群；没出成的卡不进群',async()=>{
  const two={...run,reviews:[...run.reviews,{unit:'bf01',level:'mission',ref:'bf01-m2',title:'复用',owner:'孙铭泽',verdict:'未达成',verdictReason:'没做',facts:[{ref:'t1',item:'复用',owner:'孙铭泽',status:'未达成',evidence:'无'}],nextInputs:[{ref:'t1',type:'继续',text:'接着做'}],parent:'bf01'}]};
  let s=installReviewRound(createCollaborationState([{id:'bf01',level:'po',title:'灯塔',owner:'刘明华',version:1,children:[]}]),two,{label:'10 月复盘',now:'2026-10-27T02:33:00.000Z'});
  const sun=memberActor('member-03',s),before=s.messages.length;
  for(const id of ['rv:bf01-m1','rv:bf01-m2']){const c=currentVersion(s.cards[id]).content;s=applyAction(s,sun,{type:'revise',cardId:id,baseVersion:1,patch:{nextInputs:[{...c.nextInputs[0],text:c.nextInputs[0].text+'（改）'}]}});}
- assert.equal(s.messages.slice(before).filter(m=>m.scope==='bf01').length,2,'每次实际修改先通知上级');
- assert.deepEqual(s.reviewCascadeQueue.map(j=>j.childId),['rv:bf01-m1','rv:bf01-m2']);
+ assert.equal(s.messages.slice(before).filter(m=>m.scope==='bf01').length,0,'无真实上级引用的草稿不广播');
+ assert.equal(s.reviewCascadeQueue?.length||0,0);
  const {quietReply}=await import('./nexus-policy.mjs');
  assert.equal(quietReply('已出修订卡，请确认。',[],[{cardId:'talent-m03',why:'这张卡上还有人反对'}]),'');
  assert.equal(quietReply('M02 改好了，请看。另外周五前给数。',[{cardId:'talent-m02'}],[{cardId:'talent-m03',why:'x'}]),'M02 改好了，请看。另外周五前给数。');
@@ -228,6 +228,7 @@ test('私人 Agent 在个人复盘里读本人房间的话，读不到别人房�
  assert.throws(()=>privateAgentContext(s,ceo,{scope:'person:member-03'}),/不在成员可见范围/);
  assert.ok(!privateAgentContext(s,ceo,{selection:{id:'rv:bf01-m1'}}).annotations.some(a=>/10\/25/.test(a.text)),'CEO 只读卡，不读房间里的话');
  const c=currentVersion(s.cards['rv:bf01-m1']).content;
+ c.facts[1].evidence='10/20 演示记录尚未完成客户试用';currentVersion(s.cards['rv:bf01']).content.facts[0].evidence=c.facts[1].evidence;
  s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:1,patch:{facts:[c.facts[0],{...c.facts[1],status:'部分达成',evidence:'10/25 客户试用一次'}]}});
  const job=s.reviewCascadeQueue.at(-1),req=JSON.parse(reviewCascadeRequest(s,job,'规则')[1].content);
  assert.equal(req.mission.before.facts[1].status,'未达成');assert.equal(req.mission.after.facts[1].status,'部分达成');assert.equal(req.unitReview.id,'rv:bf01');
@@ -235,7 +236,7 @@ test('私人 Agent 在个人复盘里读本人房间的话，读不到别人房�
  const pf=currentVersion(s.cards['rv:bf01']).content.facts;
  const out=reviewCascadeProposal(s,job,{impact:true,reason:'首用那一行要改成部分达成',patch:{facts:[{...pf[0],status:'部分达成',evidence:'10/20 演示，10/25 客户试用一次'}]}});
  assert.equal(out.scope,'bf01');assert.equal(out.proposal.cardId,'rv:bf01');assert.match(out.proposal.reason,/「首用」的个人复盘改了/);
- assert.match(reviewCascadeProposal(s,job,{impact:true,patch:{facts:[{item:'x',status:'差不多'}]}}).reason,/事实证据格式不对/);
+ assert.match(reviewCascadeProposal(s,job,{impact:true,patch:{facts:[{item:'x',status:'差不多'}]}}).reason,/事实证据格式不对|事实回查不能修改/);
 });
 
 test('个人复盘的负责人进这个单元：能只读看本单元别人的个人复盘和单元复盘，看不到别人房间里的话',()=>{
@@ -301,6 +302,7 @@ test('锁定：单元复盘确认后个人复盘不能再改，上级本身仍�
  const {cascadeSkip}=await import('./review-cascade.mjs');const {validateNexusResult}=await import('./nexus-policy.mjs');const {reviewCardsFor}=await import('./nexus-review.mjs');
  let s=fresh();const sun=memberActor('member-03',s),ceo=memberActor('member-01',s);
  const c=currentVersion(s.cards['rv:bf01-m1']).content;
+ c.verdictReason='演示了但是客户没有真实使用';currentVersion(s.cards['rv:bf01']).content.verdictReason=c.verdictReason;
  s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:1,patch:{verdictReason:'演示了，客户没真用'}});const job=s.reviewCascadeQueue.at(-1);
  for(const [id,slot,who] of [['rv:bf01-m1','missionDri',sun],['rv:bf01','ceo',ceo],['rv:bf01','unitDri',ceo]]){s=applyAction(s,who,{type:'insight',cardId:id,text:'x'});s=applyAction(s,who,{type:'confirm',cardId:id,slot,baseVersion:currentVersion(s.cards[id]).number});}
  assert.throws(()=>applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:2,patch:{verdictReason:'再改'}}),/单元复盘已确认，个人复盘不能再改/);

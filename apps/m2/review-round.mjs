@@ -16,7 +16,7 @@ export function reviewCards(file,{now=new Date().toISOString()}={}){
    // 下期输入 back on 2026-10-27 as {ref, type, text, ask?:{to, question}}; runs from 10/26 have none.
    ...(Array.isArray(r.facts)?{facts:r.facts.map(f=>({ref:f.ref||'',item:String(f.item||''),owner:f.owner||'',status:f.status,evidence:String(f.evidence||''),gap:String(f.gap||'')})),
     ...(Array.isArray(r.nextInputs)?{nextInputs:r.nextInputs.map(n=>({ref:n.ref||'',type:n.type,text:String(n.text||''),...(n.ask?.to?{ask:{to:String(n.ask.to),question:String(n.ask.question||'')}}:{})}))}:{})}:{targets:r.targets||[],causes:(r.causes||[]).map(causeOf),nextInputs:r.nextInputs||[],...(r.ltoReview?{ltoReview:r.ltoReview}:{})}),
-   evidenceRefs:r.evidenceRefs||[],recordFacts:r.recordFacts||null,...(r.objectId?{objectId:r.objectId}:{}),...(r.ownerAssigned===false?{ownerAssigned:false}:{})};
+   evidenceRefs:r.evidenceRefs||[],recordFacts:r.recordFacts||null,...(r.childCommitments?{childCommitments:structuredClone(r.childCommitments)}:{}),...(r.objectId?{objectId:r.objectId}:{}),...(r.ownerAssigned===false?{ownerAssigned:false}:{})};
   cards[id]={...content,id,kind:'review',parentId:parent,versions:[{number:1,content:structuredClone(content),author:'Review',signatures:[],createdAt:now}],confirmedVersion:null};
  }
  return cards;
