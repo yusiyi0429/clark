@@ -35,7 +35,7 @@ const chatModule = await import(pathToFileURL(resolve(config.chatCheckout, "dist
   createApp: (options: Record<string, unknown>) => Promise<FastifyInstance>;
 };
 const db = { query: (sql: string, args?: unknown[]) => pool.query(sql, args) };
-for (const migration of ["001-baseline.sql", "002-user-sessions.sql", "003-task-quality.sql"])
+for (const migration of ["001-baseline.sql", "002-user-sessions.sql", "003-task-quality.sql", "007-task-repair-prior-commands.sql"])
   await pool.query(await readFile(resolve(config.chatCheckout, "migrations", migration), "utf8"));
 const chat = await chatModule.createApp({ internalToken: token, db, worldUrl: config.worldUrl, worldToken: config.readerToken });
 const chatUrl = await chat.listen({ host: "127.0.0.1", port: 0 });
