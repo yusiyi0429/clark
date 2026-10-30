@@ -60,7 +60,10 @@ export function queueProposals(state,scope,proposals){
   // A card whose reason quotes dates the card no longer has was written against old content.
   if(version&&staleDates(proposal.reason,version.content))continue;
   if(!version||version.number!==proposal.baseVersion||Object.entries(proposal.patch).every(([k,v])=>JSON.stringify(version.content[k])===JSON.stringify(v)))continue;
-  if(state.proposals.some(p=>p.cardId===proposal.cardId&&p.baseVersion===proposal.baseVersion&&JSON.stringify(p.patch)===JSON.stringify(proposal.patch)&&(p.status==='pending'||proposal.sourceIds.every(id=>p.sourceIds.includes(id)))))continue;
+  // Confirmation receipts are identified by the confirmed source, not the empty sourceIds set.
+  // A rejected/repeated same-version confirmation stays quiet; a new confirmed version may replace old history.
+  const sameConfirmedSource=p=>p.confirmedMission&&p.confirmedMission.round===proposal.confirmedMission.round&&p.confirmedMission.ref===proposal.confirmedMission.ref&&p.fromMission?.id===proposal.fromMission?.id&&p.fromMission?.version===proposal.fromMission?.version;
+  if(state.proposals.some(p=>p.cardId===proposal.cardId&&p.baseVersion===proposal.baseVersion&&JSON.stringify(p.patch)===JSON.stringify(proposal.patch)&&(proposal.confirmedMission?sameConfirmedSource(p):(p.status==='pending'||proposal.sourceIds.every(id=>p.sourceIds.includes(id))))))continue;
   // New evidence replaces overlapping pending paths, retaining their history and independent paths.
   const paths=patchPaths(version.content,proposal.patch),order=proposalOrder(state,proposal);
   const overlaps=state.proposals.filter(p=>p.cardId===proposal.cardId&&p.status==='pending'&&pathsOverlap(patchPaths(p.before,p.patch),paths));
