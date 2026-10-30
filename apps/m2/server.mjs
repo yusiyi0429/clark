@@ -1,11 +1,14 @@
+import {proposalDelivery,deliveryNotice,withoutUnsentCardClaims} from './proposal-delivery.mjs';
+import {createRevisionAcknowledgements} from './revision-ack.mjs';
+import {exportMarkdown,parseStandardMarkdown,prepareTransfer,applyTransfer,transferCards,transferStamp,nonstandardRequest,markdownImportPrompt,assertImportGrounded} from './markdown-transfer.mjs';
 import {createProposalSummarizer} from './proposal-summary.mjs';
 import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {normalize,allNodes} from './domain.mjs';
 import {createModelGateway,recordModelRun,patientTransport} from './model.mjs';
-import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,ownerAnnotation,isChildCard,reconcileReply,quietReply,roomLine} from './nexus-policy.mjs';
-import {createCollaborationState,currentVersion,canRead,cardStatus,confirmationSummary,insightView,roomMember,canReadRoom} from './governance.mjs';
+import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,ownerAnnotation,isChildCard,reconcileReply,quietReply,roomLine,cardName} from './nexus-policy.mjs';
+import {createCollaborationState,applyAction,currentVersion,canRead,cardStatus,confirmationSummary,insightView,publishedMissionInsights,roomMember,canReadRoom} from './governance.mjs';
 import {reviewCascadeRequest,reviewCascadeProposal,cascadeSkip} from './review-cascade.mjs';
 import {runRoundPool} from './round-pool.mjs';
 import {redactMessages} from './redact.mjs';
@@ -70,6 +73,7 @@ const gateway=await createModelGateway();
 // Chat (Nexus, private Agent) hides sensitive personal details before the model sees them (模型调用稳定性加固 2026-10-22).
 const chatGateway=await createModelGateway({...(process.env.DECODING_CHAT_MODEL?{env:{...process.env,DECODING_MODEL:process.env.DECODING_CHAT_MODEL}}:{}),redact:true});
 const summarizeProposal=createProposalSummarizer(chatGateway);
+const revisionAcknowledgements=createRevisionAcknowledgements();
 const ready=gateway.status.ready;
 const store=await openCollaborationStore(process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)),bootstrap.state);
 const liveUnitsFrom=s=>{const visit=n=>({...currentVersion(s.cards[n.id]).content,children:n.children.map(visit)});return (s.round?.units||units).map(visit);};
@@ -97,7 +101,7 @@ function runReviewCascades(){if(process.env.DECODING_CASCADE==='off'||reviewCasc
  try{const snap=store.snapshot();if(!snap.cards[job.childId]||!snap.cards[job.parentId])continue;{const skip=cascadeSkip(snap,job);if(skip){await log({impact:false,reason:skip});continue;}}const rules=(await loadReviewRules(reviewSkillRoot)).rules;
   const r=await chatGateway.complete(redactMessages(reviewCascadeRequest(snap,job,rules)).messages,{json:true,thinking:true,reasoningEffort:'medium'});
   const value=JSON.parse(bareJson(r.answer));let reason='';
-  await store.transact(s=>{const out=reviewCascadeProposal(s,job,value);reason=out.reason||'';return out.proposal?queueProposals(s,out.scope,[out.proposal]):s;});await log({impact:!reason,reason});
+  await store.transact(s=>{const out=reviewCascadeProposal(s,{...job,parentVersion:currentVersion(snap.cards[job.parentId]).number},value);reason=out.reason||'';return out.proposal?queueProposals(s,out.scope,[{...out.proposal,originSequence:snap.sequence}]):s;});await log({impact:!reason,reason});
  }catch(e){await log({error:String(e.message).slice(0,160)});}}}finally{reviewCascading=false;}})();}
 async function cascadeOnce(job){
  const start=store.snapshot(),roundAtStart=start.round?.id,parent=start.cards[job.cardId];if(!parent||!childrenOf(start,job.cardId).length)return;
@@ -109,7 +113,7 @@ async function cascadeOnce(job){
   const checked=validateCascade(value,{state:s,parentId:job.cardId}),scope=s.cards[job.cardId].unit||(s.cards[job.cardId].level==='po'?job.cardId:unitOfCard(s,job.cardId));
   // The line that explains the cards is stamped first, so the cards sit under it in the room (评测 2026-10-22).
   const said=new Date().toISOString();
-  const next=queueProposals(s,scope,checked.proposals.map(p=>({...p,sourceIds:[job.noticeId],skill:skill.version,fromParent:{id:job.cardId,version:job.to,at:job.at},...trace})));
+  const next=queueProposals(s,scope,checked.proposals.map(p=>({...p,originSequence:start.sequence,sourceIds:[job.noticeId],skill:skill.version,fromParent:{id:job.cardId,version:job.to,at:job.at},...trace})));
   next.messages.push({id:randomUUID(),author:'Nexus',channel:'group',scope,cardId:job.cardId,text:cascadeMessage(next,job.cardId,checked),cascade:{cardId:job.cardId,version:job.to,skill:skill.version},createdAt:said});next.sequence++;return next;});
 }
 async function cascadeFailed(job,e){await store.transact(s=>{const card=s.cards[job.cardId];if(!card)return s;const scope=unitOfCard(s,job.cardId),owners=[...new Set(childrenOf(s,job.cardId).map(c=>currentVersion(c).content.owner).filter(Boolean))];s.messages.push({id:randomUUID(),author:'Nexus',channel:'group',scope,cardId:job.cardId,text:`下级对照这次没做成（${String(e.message).slice(0,60)}），请 ${owners.map(n=>'@'+n).join('、')} 自己核对一下是否需要调整。`,createdAt:new Date().toISOString()});s.sequence++;return s;}).catch(()=>{});}
@@ -132,7 +136,7 @@ async function revealInsights(actor,{auto=false}={}){
   const viewer=actor||{ceo:true,name:''},cards=Object.values(s.cards).filter(c=>c.kind==='review');missing=cards.map(c=>({cardId:c.id,title:currentVersion(c).content.title,missing:insightView(s,c,viewer).missing})).filter(x=>x.missing.length);
   for(const u of new Set(cards.filter(c=>c.level!=='company').map(c=>c.unit)))broadcast(s,u,`${auto?'复盘已到截止时间，':''}本月复盘的分析洞察已公开，大家可以看到彼此写的内容，Nexus 正在综合。`,{kind:'insights-revealed',now});
   // Like comments, the revealed insights go into each card's group (陈溪南 2026-10-27): one line per review.
-  for(const c of cards){const list=s.insights?.[c.id]||[];if(!list.length)continue;s.sequence++;s.messages.push({id:`notice-${s.sequence}`,createdSequence:s.sequence,author:'Nexus',kind:'notice',channel:'group',scope:c.level==='company'?'company':c.unit,cardId:c.id,version:currentVersion(c).number,general:true,createdAt:now,
+  for(const c of cards){const list=c.level==='mission'?publishedMissionInsights(s,c):s.insights?.[c.id]||[];if(!list.length)continue;s.sequence++;s.messages.push({id:`notice-${s.sequence}`,createdSequence:s.sequence,author:'Nexus',kind:'notice',channel:'group',scope:c.level==='company'?'company':c.unit,cardId:c.id,version:currentVersion(c).number,general:true,createdAt:now,
    text:`「${currentVersion(c).content.title}」的分析洞察（${list.length} 条）：\n${list.map(x=>`- ${handoffProfiles[x.author]?.name||x.author}：${String(x.text).slice(0,300)}`).join('\n')}`});}
   s.sequence++;return s;});
  synthesizeInsights().catch(()=>{});
@@ -208,7 +212,8 @@ function revalidated(req,res,{body,etag},contentType='application/json; charset=
 // A state is replaced, never changed, on each write, so a body built from it stays valid for that state.
 const readCache=new WeakMap();
 function cachedRead(state,key,build){let bodies=readCache.get(state);if(!bodies)readCache.set(state,bodies=new Map());if(!bodies.has(key))bodies.set(key,etagged(JSON.stringify(build())));return bodies.get(key);}
-async function body(req){let s='';for await(const b of req){s+=b;if(s.length>100000)throw new Error('请求太大');}const value=JSON.parse(s);if(req.m2Session?.memberId)value.memberId=req.m2Session.memberId;return value;}
+async function body(req,limit=100000){let s='';for await(const b of req){s+=b;if(s.length>limit)throw new Error('请求太大');}const value=JSON.parse(s);if(req.m2Session?.memberId)value.memberId=req.m2Session.memberId;return value;}
+const markdownPreviews=new Map();
 export const server=createServer(async(req,res)=>{
  let analyzedScope,analyzedRound,streamReply=false,streamTimer,refusalTo;
  try {
@@ -222,6 +227,31 @@ export const server=createServer(async(req,res)=>{
   if(req.m2Session.memberId){route.searchParams.set('member',req.m2Session.memberId);}
   // Installing a review run from the private seed folder: internal only (import-review.mjs inside the container).
   if(route.pathname==='/api/review-import'&&req.method==='POST'){if(!req.m2Session.internal)return json(res,403,{error:'只能在服务器内部导入复盘'});const b=await body(req);return json(res,200,await importReviewRound(store,b,{seedDir:seedRoot(),statePath:process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)),busy:roundFlight||auditFlight}));}
+  if(route.pathname==='/api/markdown/export'&&req.method==='GET'){
+   const actor=actorFor(req.m2Session.memberId),selection={stage:route.searchParams.get('stage'),rootId:route.searchParams.get('rootId')||null,onlyRoot:true};
+   return json(res,200,{markdown:exportMarkdown(store.snapshot(),actor,selection,{blank:route.searchParams.get('blank')==='true'})});
+  }
+  if(route.pathname==='/api/markdown/preview'&&req.method==='POST'){
+   const b=await body(req,600000),actor=actorFor(b.memberId),snap=store.snapshot(),selection={stage:b.stage,rootId:b.rootId||null,onlyRoot:true};
+   if(typeof b.text!=='string'||Buffer.byteLength(b.text)>512000)return json(res,400,{error:'文件过大，最多500 KB'});
+   let objects=parseStandardMarkdown(b.text);
+   if(!objects){const payload=nonstandardRequest(snap,actor,selection,b.text);if(!ready)return json(res,503,{error:'模型暂不可用，请用标准模板导入'});
+    const result=await chatGateway.complete([{role:'system',content:markdownImportPrompt},{role:'user',content:JSON.stringify(payload)}],{json:true,thinking:false,maxTokens:12000,timeoutMs:120000});
+    let parsed;try{parsed=JSON.parse(result.answer);}catch{return json(res,422,{error:'文件未能整理成标准结构，请用标准模板导入'});}
+    if(!Array.isArray(parsed.objects)||!Array.isArray(parsed.unmapped)||parsed.unmapped.length)return json(res,422,{error:'有内容无法对应当前对象，请调整文件后重试',unmapped:parsed.unmapped||[]});objects=parsed.objects;assertImportGrounded(snap,objects,b.text);
+   }
+   const preview=prepareTransfer(snap,actor,selection,objects),token=randomUUID();
+   for(const [key,value]of markdownPreviews)if(value.expires<Date.now())markdownPreviews.delete(key);
+   if(markdownPreviews.size>=100)return json(res,429,{error:'预览过多，请稍后重试'});
+   markdownPreviews.set(token,{...preview,actorId:actor.id,expires:Date.now()+10*60000});
+   return json(res,200,{token,changes:preview.changes});
+  }
+  if(route.pathname==='/api/markdown/apply'&&req.method==='POST'){
+   const b=await body(req),actor=actorFor(b.memberId),preview=markdownPreviews.get(b.token);
+   if(!preview||preview.actorId!==actor.id||preview.expires<Date.now())return json(res,409,{error:'预览已失效，请重新导入'});
+   const next=await store.transact(state=>{const currentActor=memberActor(actor.id,state);if(transferStamp(state,transferCards(state,currentActor,preview.selection))!==preview.stamp)throw Object.assign(Error('内容或轮次已变化，请重新预览'),{status:409});return revisionAcknowledgements.run(state,currentActor,{type:'markdown',token:b.token,ackToken:b.ackToken},ack=>applyTransfer(state,currentActor,preview.changes,{reconfirmVersion:ack.reconfirmVersion}));});
+   markdownPreviews.delete(b.token);runCascades();return json(res,200,sharedProjection(next,actor));
+  }
   if(route.pathname==='/api/session'&&req.method==='GET')return json(res,200,{authenticated:true,...req.m2Session});
   if(route.pathname==='/api/ontology/status'&&req.method==='GET')return json(res,200,await ontologyConnectionStatus());
   // Never in M2's own path: an error here answers this call only and the page works as before.
@@ -334,12 +364,12 @@ export const server=createServer(async(req,res)=>{
     return json(res,200,sharedProjection(await privateMessage(actor.id,actor.id,b.action.text.trim()),actor));
    }
    const before=tracer.enabled?store.snapshot():null;
-   let next=await store.apply(actor,b.action||{});
+   let next=await store.transact(state=>{const currentActor=memberActor(actor.id,state);return revisionAcknowledgements.run(state,currentActor,{...b.action,ackToken:b.ackToken},action=>applyAction(state,currentActor,action));});
    // Accepted or turned-down cards, verdict changes and signatures become LangSmith feedback on the run that made them.
    if(before)actionFeedback(tracer,before,next,b.action,actor);
    runCascades();
    if(next.planHandoff?.status==='requested'){await prepareHandoff();next=store.snapshot();}
-   if(['insight','editInsight','deleteInsight'].includes(b.action.type)&&next.insightsRevealed)synthesizeInsights().catch(()=>{});
+   if(['insight','editInsight','deleteInsight','confirm'].includes(b.action.type)&&next.insightsRevealed)synthesizeInsights().catch(()=>{});
    if(['message','comment'].includes(b.action.type)){const event=next[b.action.type==='comment'?'comments':'messages'].at(-1);if(!event.acceptedProposalId)await scheduleNexus(event.scope,actor.id,event);}
    // A rejection with a reason is a line in the group too; Nexus answers it like any reply.
    if(b.action.type==='rejectProposal'){const event=next.messages.at(-1);if(event?.rejectsProposal===b.action.proposalId)await scheduleNexus(event.scope,actor.id,event);}
@@ -349,7 +379,6 @@ export const server=createServer(async(req,res)=>{
    const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state),view=sharedProjection(state,actor);
    const proposal=Object.values(view.records).flat().find(p=>p.kind==='revision-proposal'&&p.id===route.searchParams.get('id'));
    if(!proposal)return json(res,404,{error:'找不到可见修订卡'});
-   if(!ready)return json(res,503,{error:'修改摘要暂不可用'});
    try{return json(res,200,await summarizeProposal(proposal,view.drafts[proposal.cardId],{actorId:actor.id,roundId:state.round?.id,reviewLoadedAt:state.reviewRound?.loadedAt,scope:proposal.scope}));}catch{return json(res,502,{error:'修改摘要未生成，请重试'});}
   }
   if(req.url==='/api/data'){const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state);const metadata=await roundMetadata(state.round,input);metadata.readerViews=visibleReaderViews(metadata.readerViews,state,actor);if(!actor.ceo)delete metadata.roundAudit;return revalidated(req,res,etagged(JSON.stringify({session:req.m2Session,canRunRounds:mayRunRounds(actor),review:reviewSummary(state),units:liveUnitsFrom(state).filter(u=>canRead(actor,state.cards[u.id])),round:state.round?.number||6,roundId:state.round?.id||null,skill:state.round?.input?.skill?.version||'旧轮未记录实际技能快照',availableSkill:loadedSkill.version,modelReady:ready,modelStatus:gateway.status,tracing:tracer.state(),chatModelStatus:chatGateway===gateway?null:chatGateway.status,auditStatus:state.round?.audit?.status||null,auditIssueCount:state.round?.audit?.issues?.length||0,auditGapCount:state.round?.audit?.gaps?.length||0,sourceTime:state.round?.input.retrievedAt||input.retrievedAt,...metadata})));}
@@ -372,6 +401,7 @@ export const server=createServer(async(req,res)=>{
     analyzedScope=scope.id;analyzedRound={id:roundAtStart};await nexusActivity(scope.id,{running:true,error:null},analyzedRound);
     const projection=sharedProjection(store.snapshot(),actor);
     const feedbackStamp=s=>[...s.comments,...s.messages].filter(e=>e.scope===scope.id&&e.channel==='group'&&!['Nexus','Agent','system'].includes(e.author)).map(e=>e.id).join('|');
+    const proposalSequenceAtStart=store.snapshot().sequence;
     const feedbackAtStart=feedbackStamp(store.snapshot());
     const topicState=store.snapshot();
     const previousTopics=materializeTopics(topicState.nexus?.[scope.id]?.topics,[...topicState.comments,...topicState.messages].filter(e=>e.scope===scope.id));
@@ -427,7 +457,7 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
     const cut=(why,keep)=>{output.rejected=output.rejected||[];output.proposals=output.proposals.filter(p=>{const k=keep(p);if(!k)output.rejected.push({cardId:p.cardId,why});return k;});};
     // Revisions only for cards Nexus was actually shown in full (a focused card's children included).
     if(!legacy&&ctx.focusCardIds.length)cut('这张卡不在这次讨论的范围里',p=>ctx.focusCardIds.some(id=>id===p.cardId||isChildCard(p.cardId,id)));
-    const requests=(b.trigger==='automatic'?fresh:evidence).filter(e=>(!n||e.context?.selection?.id===n.id)&&(revisionRequest(e.text)||ownerAnnotation(e,cards.find(c=>c.id===e.context?.selection?.id)))&&cards.some(c=>c.id===e.context?.selection?.id)&&!store.snapshot().proposals?.some(p=>p.cardId===e.context.selection.id&&(p.status==='pending'||p.sourceIds.includes(e.id))));
+    const requests=(b.trigger==='automatic'?fresh:evidence).filter(e=>(!n||e.context?.selection?.id===n.id)&&(revisionRequest(e.text)||ownerAnnotation(e,cards.find(c=>c.id===e.context?.selection?.id)))&&cards.some(c=>c.id===e.context?.selection?.id)&&!store.snapshot().proposals?.some(p=>p.cardId===e.context.selection.id&&p.sourceIds.includes(e.id)));
     if(requests.length&&!output.proposals.length&&!(output.missionCards||[]).length){
      const repair=await chatGateway.complete([{role:'system',content:nexusSystemPrompt},{role:'user',content:JSON.stringify({task:'公开反馈含明确修改意见，但上一轮没有通过验证的拟修改卡片。请核对revisionRequests，仅改对应对象的必要字段，在proposals给出完整拟修改正文供负责人确认。这些修订依据是明确修改请求，basis必须是request，不要标为agreement；sourceIds只引用revisionRequests中明确定位对象的修改意见ID，不要引用无定位的“确认”或Nexus自身消息。无需再证明两人共识，也不要要求提意见的人再说一次同意。不能仅在reply询问是否修改。若确实有分歧、对象或改动不明，说明具体缺口，禁止猜测。仍返回完整约定JSON。',scope:scope.id,cards,evidence,freshEvidence:fresh,revisionRequests:requests,proposalDecisions,previousTopics})}],named('revision-request'));
      const repaired=validateNexusResult(JSON.parse(repair.answer),{cards,evidence,fresh,lastIntervention,interventionHistory,manual:b.trigger!=='automatic',ownRoom:scope.level==='person'&&fresh.some(e=>!['Nexus','Agent','system'].includes(e.author)),withdrawn:withdrawnFor(store.snapshot(),scope.id)});
@@ -461,23 +491,30 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
     // In a person's own room there is no @ to retry with, and a card may already be waiting (评测 2026-10-27).
     if(scope.level==='person'&&/这次未生成有效回答/.test(output.reply||'')){const waiting=(store.snapshot().proposals||[]).some(p=>p.status==='pending'&&p.scope===scope.id);
      output.reply=waiting?'已有修订卡在等你确认，新补的证据我记下了；需要的话我按新证据改那张卡。':'这次我没理出结论。你可以再说一下要改哪一项、依据是什么（哪天、谁记的、在哪能查到）。';}
-    const rawReply=output.reply;output.reply=quietReply(output.reply,output.proposals,output.rejected||[],cards);
-    // Nobody asked and no card came out: the miss stays in lastAct for diagnosis, not in the room (2026-10-19 drill).
-    if(!output.participation.called&&!output.proposals.length&&output.reply!==rawReply)output.reply='';
-    const lastAct={at:new Date().toISOString(),kept:output.proposals.map(p=>p.cardId),rejected:(output.rejected||[]).slice(0,8),...(rawReply!==output.reply?{rawReply:String(rawReply).slice(0,1000)}:{})};
-    // Each card keeps the id of this pass's run, so the owner's accept or reject becomes feedback on it.
-    const trace=tracer.ref();
-    await store.transact(state=>{if(state.round?.id!==roundAtStart)throw Object.assign(Error('轮次已切换，建议未保存'),{status:409});return applyOwnerAnnotations(queueProposals(state,scope.id,[...output.proposals,...missionProposals].map(p=>({...p,...trace}))),scope.id);});
+    const rawReply=output.reply,planned=[...output.proposals,...missionProposals];
+    // Each card keeps the run reference; receipt counts come only from the committed transaction.
+    const trace=tracer.ref();let delivery;
+    await store.transact(state=>{if(state.round?.id!==roundAtStart)throw Object.assign(Error('轮次已切换，建议未保存'),{status:409});const previousIds=new Set((state.proposals||[]).map(p=>p.id));const next=applyOwnerAnnotations(queueProposals(state,scope.id,planned.map(p=>({...p,originSequence:proposalSequenceAtStart,...trace}))),scope.id);delivery=proposalDelivery(next,previousIds,scope.id,planned);return next;});
+    // Validation failures are undelivered requests too, including when another card succeeded.
+    delivery.outcomes.push(...(output.rejected||[]).map(p=>({cardId:p.cardId,status:'rejected',why:p.why})));
+    const unsubmitted=delivery.outcomes.filter(o=>o.status!=='saved'),receipt=output.participation.called||requests.length?deliveryNotice(delivery,id=>cardName(id,cards)):'';
+    output.reply=quietReply(output.reply,delivery.saved,[...(output.rejected||[]),...unsubmitted.map(o=>({cardId:o.cardId,why:o.status==='stale'?'正文或依据已更新':'本次没有新增修订卡'}))],cards);
+    if(unsubmitted.length)output.reply=withoutUnsentCardClaims(output.reply);
+    if(!output.participation.called&&!delivery.saved.length&&output.reply!==rawReply)output.reply='';
+    // A directly addressed request must not vanish when its candidate was filtered or not saved.
+    const lastAct={at:new Date().toISOString(),kept:[...new Set(delivery.saved.map(p=>p.cardId))],proposed:output.proposals.map(p=>p.cardId),delivery:delivery.outcomes,rejected:(output.rejected||[]).slice(0,8),...(rawReply!==output.reply?{rawReply:String(rawReply).slice(0,1000)}:{})};
     runCascades();
     // A card speaks for itself: no extra line beside it. The owner's accept or reject is synced to the group afterwards (陈溪南 2026-10-21).
     // …and a question asked in the same batch is still answered: when the pass wrote no answer, one short call answers it.
-    if(explicitQuestions.length&&!String(output.reply||'').trim()){
-     try{const asked=await chatGateway.complete([{role:'system',content:nexusSystemPrompt+reviewBlock},{role:'user',content:JSON.stringify({task:'下面 questions 里的提问还没有回答。只回答这些提问：按 cards 和 evidence 里的证据说明，没有依据就直说没找到，不要出修订卡。出处用大白话说（谁、哪天、哪张卡的哪一项），不写 E 开头的证据编号。返回 {"reply":"回答"}。',scope:scope.id,questions:explicitQuestions.map(q=>({id:q.id,author:handoffProfiles[q.author]?.name||q.author,text:q.text,card:q.context?.selection?.id,block:q.context?.block||q.block})),cards,evidence:ctx.evidence||evidence})}],named('answer'));
+    const cardSources=new Set(delivery.saved.flatMap(p=>p.sourceIds||[])),unansweredQuestions=explicitQuestions.filter(q=>!cardSources.has(q.id));
+    if(unansweredQuestions.length&&!String(output.reply||'').trim()&&(!receipt||unansweredQuestions.some(q=>/[?？]|为什么|为何|怎么|啥|什么|是否|哪|吗/.test(q.text)))){
+     try{const asked=await chatGateway.complete([{role:'system',content:nexusSystemPrompt+reviewBlock},{role:'user',content:JSON.stringify({task:'下面 questions 里的提问还没有回答。只回答这些提问：按 cards 和 evidence 里的证据说明，没有依据就直说没找到，不要出修订卡。出处用大白话说（谁、哪天、哪张卡的哪一项），不写 E 开头的证据编号。返回 {"reply":"回答"}。',scope:scope.id,questions:unansweredQuestions.map(q=>({id:q.id,author:handoffProfiles[q.author]?.name||q.author,text:q.text,card:q.context?.selection?.id,block:q.context?.block||q.block})),cards,evidence:ctx.evidence||evidence})}],named('answer'));
       const said=JSON.parse(asked.answer);if(typeof said?.reply==='string')output.reply=readableAnswer(said.reply,cards);}catch{}
     }
     // A question that a card in this pass answers (an answer to a 下期输入 question, say) needs no extra line beside the card.
-    const cardSources=new Set([...output.proposals,...missionProposals].flatMap(p=>p.sourceIds||[]));
-    const notice=roomLine({reply:output.reply,cards:output.proposals.length+missionProposals.length,questions:explicitQuestions.filter(q=>!cardSources.has(q.id))});
+    if(output.participation.called&&!delivery.saved.length&&!output.reply&&!receipt&&(planned.length||(output.rejected||[]).length||rawReply!==output.reply))output.reply='这次没能生成可确认的新修订卡，正文没有因此修改。';
+    const baseNotice=roomLine({reply:output.reply,cards:delivery.saved.length,questions:unansweredQuestions});
+    const notice=[baseNotice,receipt].filter(Boolean).join(' ');
     // An answer to one question sits under that question; the question's own card stays the context.
     const answered=explicitQuestions.length===1?explicitQuestions[0]:null;
     if(notice)await store.transact(state=>{if(state.round?.id!==roundAtStart)return state;state.messages.push({id:randomUUID(),author:'Nexus',channel:'group',scope:scope.id,text:notice,...(answered?{replyTo:answered.id,replyToAuthor:answered.author,threadId:answered.threadId||answered.id,...(answered.context?{context:answered.context}:{})}:{}),createdAt:new Date().toISOString()});state.sequence++;return state;});
@@ -485,8 +522,8 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
     const deferIds=output.participation.deferred?output.participation.deferIds:[];
     await store.transact(s=>{if(s.round?.id!==roundAtStart)return s;const n=s.nexus[scope.id];n.pendingSourceIds=(n.pendingSourceIds||[]).filter(id=>!pendingSourceIds.includes(id)||deferIds.includes(id));if(deferIds.length)n.deferUntil=output.participation.deferUntil;else delete n.deferUntil;if(!n.pendingSourceIds.length)delete n.pendingSince;return s;});
     const runId=await recordModelRun({channel:'group',scope:scope.id,selection:n?.id,model:result.model,usage:result.usage,providerRequestId:result.providerRequestId});
-    tracer.annotate({outputs:{answer:output.reply,proposals:output.proposals.map(p=>p.cardId),missionCards:missionProposals.length,rejected:(output.rejected||[]).length,listen:listened?.act||null}});
-    return json(res,200,{...output,topics:store.snapshot().nexus[scope.id].topics,applied,skipped,collaboration:sharedProjection(store.snapshot(),actor),answer:output.reply,context:{scope:scope.id},runId,kind:'candidate-proposals',createdAt:new Date().toISOString()});
+    tracer.annotate({outputs:{answer:notice,proposals:delivery.saved.filter(p=>!p.op).map(p=>p.cardId),proposed:output.proposals.map(p=>p.cardId),delivery:delivery.outcomes,missionCards:delivery.saved.filter(p=>p.op).length,rejected:(output.rejected||[]).length,listen:listened?.act||null}});
+    return json(res,200,{...output,proposals:delivery.saved.filter(p=>!p.op),missionCards:delivery.saved.filter(p=>p.op),delivery:delivery.outcomes,topics:store.snapshot().nexus[scope.id].topics,applied,skipped,collaboration:sharedProjection(store.snapshot(),actor),answer:notice,context:{scope:scope.id},runId,kind:'candidate-proposals',createdAt:new Date().toISOString()});
    }
    // Source contents are evidence, never instructions. Only server-owned allowlisted sources are sent.
    const roundInput=store.snapshot().round?.input||input;
@@ -524,7 +561,7 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
    if(refusalTo.shared&&refusalTo.called)await store.transact(st=>{st.messages.push({id:randomUUID(),author:'Nexus',channel:'group',scope:refusalTo.scope,text:why,createdAt:new Date().toISOString()});st.sequence++;return st;}).catch(()=>{});
    if(!refusalTo.shared)await privateMessage(refusalTo.memberId,'Agent',why).catch(()=>{});
    e.message=why;}
-  if(analyzedScope)await nexusActivity(analyzedScope,{running:false,error:e.status?e.message:'分析未完成，反馈已保存，请重试'},analyzedRound);const error=e.status?e.message:'回答中断，请重试；未保存不完整回答。';if(streamReply){if(!res.destroyed)res.end(JSON.stringify({type:'error',error})+'\n');}else json(res,e.status||500,{error,code:e.code});}finally{clearInterval(streamTimer);if(analyzedScope)nexusRunning.delete(analyzedScope);}
+  if(analyzedScope)await nexusActivity(analyzedScope,{running:false,error:e.status?e.message:'分析未完成，反馈已保存，请重试'},analyzedRound);const error=e.status?e.message:'回答中断，请重试；未保存不完整回答。';if(streamReply){if(!res.destroyed)res.end(JSON.stringify({type:'error',error})+'\n');}else json(res,e.status||500,{error,code:e.code,...(e.reconfirmToken?{reconfirmToken:e.reconfirmToken}:{})});}finally{clearInterval(streamTimer);if(analyzedScope)nexusRunning.delete(analyzedScope);}
 });
 server.on('close',()=>{nexusClosing=true;for(const timer of nexusTimers.values())clearTimeout(timer);store.close();});
 server.on('listening',()=>{for(const [scope,n] of Object.entries(store.snapshot().nexus||{}))if(n.pendingSourceIds?.length&&n.pendingMemberId)scheduleNexus(scope,n.pendingMemberId);});

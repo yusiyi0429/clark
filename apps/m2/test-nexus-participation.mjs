@@ -42,6 +42,6 @@ test('已拒绝建议无新证据不再出现，提出后反对阻止接受',()=
  const actor={id:'甲',ceo:true,unitDri:['bf01']};let s=createCollaborationState([{id:'bf01',level:'po',title:'客户试用',children:[]}]);
  s=applyAction(s,actor,{type:'comment',cardId:'bf01',block:'title',text:'请修改名称'});const p={cardId:'bf01',baseVersion:1,sourceIds:[s.comments[0].id],patch:{title:'新标题'}};queueProposals(s,'bf01',[p]);
  const id=s.proposals[0].id;s=applyAction(s,actor,{type:'rejectProposal',cardId:'bf01',proposalId:id});queueProposals(s,'bf01',[p]);assert.equal(s.proposals.length,1);
- queueProposals(s,'bf01',[{...p,sourceIds:['new']}]);assert.equal(s.proposals.length,2);
+ s=applyAction(s,actor,{type:'comment',cardId:'bf01',block:'title',text:'把标题改为新标题'});queueProposals(s,'bf01',[{...p,sourceIds:[s.comments.at(-1).id]}]);assert.equal(s.proposals.length,2);
  s=applyAction(s,actor,{type:'comment',cardId:'bf01',block:'title',text:'不同意这个修改'});assert.throws(()=>applyAction(s,actor,{type:'acceptProposal',cardId:'bf01',proposalId:s.proposals[1].id}),/新分歧/);
 });

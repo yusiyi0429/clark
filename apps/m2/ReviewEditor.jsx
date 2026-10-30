@@ -1,3 +1,5 @@
+import {capturePageFocus} from './confirmation-focus.mjs';
+import {confirmInPage} from './page-confirmation.mjs';
 import React,{useState,useEffect} from 'react';
 import {createPortal} from 'react-dom';
 import {Button} from '@heroui/react';
@@ -16,10 +18,10 @@ export default function ReviewEditor({node,editable,history,onSave,onAssist,onDi
  const dirty=editing&&changes.length>0;
  const [saving,setSaving]=useState(false);
  const canSave=!!values.title.trim()&&changes.length>0&&baseVersion===node.version&&!saving;
- async function save(){if(!canSave)return;setSaving(true);try{const edited=Object.fromEntries(changes.map(c=>[c.field,patch[c.field]]));if(await onSave(edited,baseVersion)){setEditing(false);setBaseVersion(baseVersion+1);setBaseline({...node,...edited,version:baseVersion+1});}}finally{setSaving(false);}}
+ async function save(event){if(!canSave)return;const confirmationFocus=capturePageFocus(event);setSaving(true);try{const edited=Object.fromEntries(changes.map(c=>[c.field,patch[c.field]]));if(await onSave(edited,baseVersion,{confirmationFocus})){setEditing(false);setBaseVersion(baseVersion+1);setBaseline({...node,...edited,version:baseVersion+1});}}finally{setSaving(false);}}
  useEffect(()=>{onDirtyChange?.(dirty);return()=>onDirtyChange?.(false);},[dirty,onDirtyChange]);
- useEffect(()=>{onEditingChange?.({id:node.id,editing:editing&&editable,values,onChange:(key,value)=>setValues(v=>({...v,[key]:value})),onKeyDown:e=>enterSubmit(e,save,canSave)});},[node.id,editing,editable,values,canSave,baseVersion,onEditingChange]);
- function toggleEditing(){if(editing){if(dirty&&!window.confirm('丢弃尚未保存的修订？'))return;setEditing(false);return;}setValues(Object.fromEntries(reviewFields.map(([key])=>[key,editValue(node[key])])));setBaseline(node);setBaseVersion(node.version);setEditing(true);}
+ useEffect(()=>{onEditingChange?.({id:node.id,editing:editing&&editable,values,onChange:(key,value)=>setValues(v=>({...v,[key]:value})),onKeyDown:e=>enterSubmit(e,()=>save(e),canSave)});},[node.id,editing,editable,values,canSave,baseVersion,onEditingChange]);
+ async function toggleEditing(){if(editing){if(dirty&&!await confirmInPage('丢弃尚未保存的修订？'))return;setEditing(false);return;}setValues(Object.fromEntries(reviewFields.map(([key])=>[key,editValue(node[key])])));setBaseline(node);setBaseVersion(node.version);setEditing(true);}
  // Icon buttons (陈溪南 2026-10-19); the label stays as tooltip and accessible name.
  const actions=<><Button className="icon toolbar-icon" aria-label="请 Agent 审阅" title="请 Agent 审阅" onPress={onAssist}><Sparkles size={16}/></Button>{editable&&<Button className={`icon toolbar-icon${editing?' is-active':''}`} aria-label={editing?'收起编辑':'编辑成果与计划'} title={editing?'收起编辑':'编辑成果与计划'} onPress={toggleEditing}>{editing?<X size={16}/>:<Pencil size={16}/>}</Button>}</>;
  return <section className="review-editor">{actionsTarget&&createPortal(actions,actionsTarget)}

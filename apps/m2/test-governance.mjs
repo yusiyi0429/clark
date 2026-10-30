@@ -24,7 +24,7 @@ test('新版 PO 的交付衔接、LTO 引用与共同里程碑可修订且保留
 });
 test('已确认 PO 修订保留旧版与签名，新版必须重新双方确认',()=>{
  let s=confirm(confirm(seed(),dri,'bf01','unitDri'),ceo,'bf01','ceo');
- s=applyAction(s,dri,{type:'revise',cardId:'bf01',baseVersion:1,patch:{title:'新 PO'}});
+ s=applyAction(s,dri,{type:'revise',cardId:'bf01',baseVersion:1,reconfirmVersion:1,patch:{title:'新 PO'}});
  assert.equal(s.cards.bf01.confirmedVersion,1);assert.equal(s.cards.bf01.versions[0].signatures.length,2);assert.equal(currentVersion(s.cards.bf01).signatures.length,0);
  assert.equal(cardStatus(s.cards.bf01),'待确认');assert.throws(()=>confirm(s,ceo,'bf01','ceo'),/当前版本/);
  s=confirm(s,ceo,'bf01','ceo',2);assert.equal(cardStatus(s.cards.bf01),'待另一方确认');
@@ -44,7 +44,7 @@ test('Mission 由领域 DRI 和 Mission DRI 同版本共同确认；Task 不握�
 test('Mission 任一方先确认均可；修订后双方必须重新确认新版本',()=>{
  let s=confirm(seed(),owner,mission.id,'missionDri');assert.equal(cardStatus(s.cards[mission.id]),'待另一方确认');
  s=confirm(s,dri,mission.id,'unitDri');
- s=applyAction(s,owner,{type:'revise',cardId:mission.id,baseVersion:1,patch:{title:'修订 Mission'}});
+ s=applyAction(s,owner,{type:'revise',cardId:mission.id,baseVersion:1,reconfirmVersion:1,patch:{title:'修订 Mission'}});
  assert.equal(s.cards[mission.id].versions[0].signatures.length,2);assert.equal(currentVersion(s.cards[mission.id]).signatures.length,0);
  assert.throws(()=>confirm(s,dri,mission.id,'unitDri',1),/当前版本/);
  s=confirm(s,owner,mission.id,'missionDri',2);assert.equal(cardStatus(s.cards[mission.id]),'待另一方确认');

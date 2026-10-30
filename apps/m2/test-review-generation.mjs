@@ -227,7 +227,8 @@ test('读取盘点 10/26：Task 行合并计划条目和 Task 对象；单元记
  s.heads.snapshots.push({object_id:id(34),domain_id:'d-eo'});
  s.objects[id(34)]={title:'E&O · 11/02 补记 10 月进展',as_of:'2026-11-02T10:00:00+08:00',subject_ref:{object_id:id(20)},blocks:[{id:'p',display_name:'进展',components:[{type:'progress',text:'10/21 联调过一次',attributes:{entries:[{at:'2026-10-21T10:00:00+08:00',text:'联调过一次'}]}}]}]};
  const input=buildReviewInput(s,{ceoName:'刘明华'}),m=input.stages[0][0];
- assert.deepEqual(m.tasks.map(t=>[t.title.slice(0,8),t.owner,t.ref.startsWith(id(40))||t.ref===id(41)?'task':'plan']),[['T01｜对象模型','于斯一','task'],['T02｜读写联调','未指派','plan'],['额外的 Task','刘人豪','task']]);
+ assert.equal(m.tasks[0].planTitle,'T01｜对象模型定稿：模型和口径定下来');
+ assert.deepEqual(m.tasks.map(t=>[t.title.slice(0,8),t.owner,t.ref.startsWith(id(40))||t.ref===id(41)?'task':'plan']),[['对象模型定稿','于斯一','task'],['T02｜读写联调','未指派','plan'],['额外的 Task','刘人豪','task']]);
  assert.equal(m.tasks[0].expected,'模型定稿');assert.ok(!('expectedFacts' in m));
  assert.ok(m.evidence.some(e=>/正文提到这个 Mission/.test(e.source)&&/定稿推进到评审/.test(e.text)),'单元上的记录提到 Task 标题，归到 Mission');
  const po=input.stages[1][0];assert.ok(po.evidence.some(e=>/重写范围决定/.test(e.text)&&e.kind!=='上月复盘'),'本月的 review 事件按本月记录');

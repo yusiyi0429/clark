@@ -1,3 +1,4 @@
+import {capturePageFocus} from './confirmation-focus.mjs';
 import React,{useState} from 'react';
 import {Button} from '@heroui/react';
 import {MessageCircle,Pencil,X} from 'lucide-react';
@@ -5,7 +6,7 @@ import Handshake from './Handshake.jsx';
 import TodoPanel from './TodoPanel.jsx';
 import {enterSubmit} from './enter-submit.mjs';
 import {CommentBubble,CommentScope} from './DocumentContent.jsx';
-import {verdictTone,targetParts,richParts,reviewLabel,reviewSlots,maySign,mineFirst,reviewTodos,answerOf,ownerNames,confirmState,unitShort,personId,personCards} from './review-display.mjs';
+import {verdictTone,targetParts,richParts,reviewLabel,reviewSlots,maySign,mineFirst,reviewTodos,reviewHomeGroups,answerOf,ownerNames,confirmState,unitShort,personId,personCards} from './review-display.mjs';
 // 复盘 pages (陈溪南 2026-10-20/21): the plan's layout, five rows per review, same groups, comments and handshake.
 const Verdict=({value,small})=><span className={`review-verdict tone-${verdictTone(value)}${small?' is-small':''}`}>{value||'待判定'}</span>;
 function Rich({text,evidence}){return richParts(text).map((p,i)=>p.bold?<strong key={i}>{p.bold}</strong>:p.evidence?<sup key={i} className="review-evidence" title={evidence?.[p.evidence]?`${p.evidence} · ${evidence[p.evidence].date||''} · ${evidence[p.evidence].title||''}`:`${p.evidence}：证据来源见本轮输入`}>{p.evidence}</sup>:<React.Fragment key={i}>{p.text}</React.Fragment>);}
@@ -68,8 +69,8 @@ function patchFrom(n,v){const lines=t=>String(t).split('\n').map(x=>x.trim()).fi
 function EditRow({label,children}){return <tr><th scope="row">{label}</th><td>{children}</td></tr>;}
 function ReviewEdit({node,onSave,onCancel}){
  const [v,setV]=useState(()=>startValues(node)),[busy,setBusy]=useState(false),set=k=>e=>setV(o=>({...o,[k]:e.target.value}));
- const save=async()=>{const patch=patchFrom(node,v);if(!Object.keys(patch).length)return onCancel();setBusy(true);try{await onSave(patch);}finally{setBusy(false);}};
- const keys=e=>{if(e.key==='Escape')onCancel();else enterSubmit(e,save,!busy);};
+ const save=async event=>{const confirmationFocus=capturePageFocus(event);const patch=patchFrom(node,v);if(!Object.keys(patch).length)return onCancel();setBusy(true);try{await onSave(patch,{confirmationFocus});}catch(e){if(e.code!=='CANCELLED')throw e;}finally{setBusy(false);}};
+ const keys=e=>{if(e.key==='Escape')onCancel();else enterSubmit(e,()=>save(e),!busy);};
  const setFact=(i,k)=>e=>setV(o=>({...o,facts:o.facts.map((f,j)=>j===i?{...f,[k]:e.target.value}:f)}));
  const factArea=(i,k,rows,hint)=><textarea className="inline-field-input" rows={Math.max(rows,String(v.facts[i][k]).split('\n').length)} value={v.facts[i][k]} placeholder={hint} onChange={setFact(i,k)} onKeyDown={keys} title="回车保存，Shift＋回车换行，Esc 取消"/>;
  const area=(k,rows)=><textarea className="inline-field-input" rows={Math.max(rows,String(v[k]).split('\n').length+1)} value={v[k]} onChange={set(k)} onKeyDown={keys} title="回车保存，Shift＋回车换行，Esc 取消"/>;
@@ -84,14 +85,15 @@ function ReviewEdit({node,onSave,onCancel}){
   {node.ltoReview&&<EditRow label="长期目标审视"><select value={v.ltoChoice} onChange={set('ltoChoice')}>{['建议维持','建议修改','建议重开'].map(x=><option key={x}>{x}</option>)}</select>{area('ltoReason',2)}</EditRow>}
  </tbody></table><div className="proposal-actions"><Button className="proposal-confirm" isDisabled={busy} onPress={save}>{busy?'保存中…':'保存新版本'}</Button><Button className="proposal-reject" onPress={onCancel}>取消</Button></div></div>;
 }
-export function ReviewCard({node,profile,comments=[],onDetail,onAnswer,evidence,unitLabel,tone='domain',onRevise,footer=null,insight=null,insightState='',dueAt=null}){
+export function ReviewCard({node,profile,comments=[],onDetail,onAnswer,evidence,unitLabel,tone='domain',onRevise,footer=null,insight=null,insightState='',dueAt=null,transfer=null}){
  const mineToAnswer=ownerNames(node).includes(profile.name),[editing,setEditing]=useState(false),canEdit=!!onRevise&&!node.locked&&mayEdit(node,profile);
  return <article className={`plan-doc-node review-card doc-${node.level==='mission'?'mission':'po'} tone-${tone}`} data-document-node={node.id}>
-  <div className="card-head"><span className="level-tag">{cardTag(node,unitLabel)}</span><span className="card-meta"><span className="person">{personOf(node)}</span><span>v{node.version}</span></span><span className="card-head-end">{canEdit&&<Button className="icon review-edit-toggle" aria-label={editing?'收起编辑':'编辑复盘'} title={editing?'收起编辑':'编辑复盘'} onPress={()=>setEditing(x=>!x)}>{editing?<X size={15}/>:<Pencil size={15}/>}</Button>}{/* Same head as the home card: verdict and status on the right (陈溪南 2026-10-23). */}{dueAt&&node.status!=='已确认'&&<Due at={dueAt}/>}{node.verdict&&<Verdict value={node.verdict} small/>}{/* One word until it is confirmed (陈溪南 2026-10-27): 待确认, not 待某某确认. */}<span className="state" data-confirmed={node.status==='已确认'}>{node.status==='已确认'?'已确认':'待确认'}</span></span></div>
+  <div className="card-head"><span className="level-tag">{cardTag(node,unitLabel)}</span><span className="card-meta"><span className="person">{personOf(node)}</span><span>v{node.version}</span></span><span className="card-head-end">{transfer}{canEdit&&<Button className="icon review-edit-toggle" aria-label={editing?'收起编辑':'编辑复盘'} title={editing?'收起编辑':'编辑复盘'} onPress={()=>setEditing(x=>!x)}>{editing?<X size={15}/>:<Pencil size={15}/>}</Button>}{/* Same head as the home card: verdict and status on the right (陈溪南 2026-10-23). */}{dueAt&&node.status!=='已确认'&&<Due at={dueAt}/>}{node.verdict&&<Verdict value={node.verdict} small/>}{/* One word until it is confirmed (陈溪南 2026-10-27): 待确认, not 待某某确认. */}<span className="state" data-confirmed={node.status==='已确认'}>{node.status==='已确认'?'已确认':'待确认'}</span></span></div>
   <h2>{node.title}</h2>
+  {node.sourceBasis?.basisMode==='latest-source-candidate'&&(node.sourceBasis.effective!==true||node.childCommitments?.items?.some(t=>t.effective!==true))&&<p className="review-locked">取自本体最新计划；未确认内容不代表正式生效。</p>}
   {/* Locked after the unit or company review is confirmed (陈溪南 2026-10-28): read and comment only. */}
   {node.locked&&<p className="review-locked">{node.lockedReason||'这份复盘已锁定，只能看和批注'}</p>}
-  {editing?<ReviewEdit node={node} onCancel={()=>setEditing(false)} onSave={async patch=>{await onRevise(node,patch);setEditing(false);}}/>:<div className="template-content card-simple"><table className="review-table"><tbody>
+  {editing?<ReviewEdit node={node} onCancel={()=>setEditing(false)} onSave={async(patch,options)=>{await onRevise(node,patch,options);setEditing(false);}}/>:<div className="template-content card-simple"><table className="review-table"><tbody>
    <Row node={node} field="verdict" label="结果判定" comments={comments} onDetail={onDetail}><p className="review-verdict-line">{node.verdictChange&&<span className="verdict-changed">由「{node.verdictChange.from}」改为「{node.verdictChange.to}」· {node.verdictChange.by} · v{node.verdictChange.version}</span>}{/* 结果判定 opens with the verdict itself, then the reasoning (陈溪南 2026-10-26). */}<span className="review-verdict-reason">{node.verdict&&<span className={`review-verdict-word tone-${verdictTone(node.verdict)}`}>{node.verdict}，</span>}<Rich text={reasonAfter(node.verdict,node.verdictReason)} evidence={evidence}/></span></p></Row>
    {isFactsCard(node)?<><Row node={node} field="facts" label="事实证据" comments={comments} onDetail={onDetail}>{node.facts.length?<Facts node={node} comments={comments} onDetail={onDetail} evidence={evidence}/>:<p className="review-none">这份复盘没有列出事实。</p>}</Row>
     {Array.isArray(node.nextInputs)&&node.nextInputs.length>0&&<Row node={node} field="nextInputs" label="下期输入" comments={comments} onDetail={onDetail}><NextInputs node={node} comments={comments} onDetail={onDetail} evidence={evidence} profile={profile} onAnswer={onAnswer}/></Row>}</>:<>
@@ -112,7 +114,7 @@ export function ReviewCard({node,profile,comments=[],onDetail,onAnswer,evidence,
 function InsightLine({item,mine,me,onEdit,onDelete}){
  const [editing,setEditing]=useState(false),[text,setText]=useState(item.text),[sure,setSure]=useState(false),[busy,setBusy]=useState(false);
  const save=async()=>{const t=text.trim();if(!t||busy)return;if(t===item.text)return setEditing(false);setBusy(true);try{await onEdit(item.id,t);setEditing(false);}catch{}finally{setBusy(false);}};
- if(editing)return <li className="insight-item is-editing"><textarea className="inline-field-input insight-input" rows={Math.max(2,text.split('\n').length)} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Escape'){setText(item.text);setEditing(false);}else enterSubmit(e,save,!busy);}} autoFocus aria-label="修改洞察" title="回车保存，Shift＋回车换行，Esc 取消"/><span className="insight-actions"><Button className="proposal-confirm" isDisabled={busy||!text.trim()} onPress={save}>{busy?'保存中…':'保存'}</Button><Button className="plain" onPress={()=>{setText(item.text);setEditing(false);}}>取消</Button></span></li>;
+ if(editing)return <li className="insight-item is-editing"><textarea className="inline-field-input insight-input" rows={Math.max(2,text.split('\n').length)} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Escape'){setText(item.text);setEditing(false);}else enterSubmit(e,()=>save(e),!busy);}} autoFocus aria-label="修改洞察" title="回车保存，Shift＋回车换行，Esc 取消"/><span className="insight-actions"><Button className="proposal-confirm" isDisabled={busy||!text.trim()} onPress={save}>{busy?'保存中…':'保存'}</Button><Button className="plain" onPress={()=>{setText(item.text);setEditing(false);}}>取消</Button></span></li>;
  return <li className="insight-item"><span className="insight-text"><strong className="insight-who">{item.author||me}：</strong>{item.source?.label&&<span className="insight-source">来自 {item.source.label} 复盘</span>}<Rich text={item.text}/></span>
   {mine&&<span className="insight-actions">{sure?<><Button className="plain insight-delete" isDisabled={busy} onPress={async()=>{setBusy(true);try{await onDelete(item.id);}catch{}finally{setBusy(false);setSure(false);}}}>确认删除</Button><Button className="plain" onPress={()=>setSure(false)}>取消</Button></>:<><Button className="plain" onPress={()=>setEditing(true)}>修改</Button><Button className="plain" onPress={()=>setSure(true)}>删除</Button></>}</span>}</li>;
 }
@@ -126,10 +128,10 @@ export function InsightCard({node,data,profile,onInsight}){
  const items=revealed?d.items||[]:[],isMine=i=>i.mine===true||i.mine==null&&i.author===profile.name,mine=revealed?items.filter(isMine):d.mine||[];
  const others=revealed?[]:(d.submitters||[]).filter(s=>s.name!==profile.name&&s.count>0);
  const canWrite=!Array.isArray(d.participants)||d.participants.includes(profile.name);
- const list=revealed?items:mine;
+ const list=d.items||mine;
  return <div className="insight-row" data-insight-card={node.id}>
   {revealed&&<div className="insight-nexus"><strong>Nexus 综合</strong>{d.nexus?.text?<p className="insight-text"><Rich text={d.nexus.text}/></p>:<p className="review-none">{d.nexus?.error?'这次没综合成，会再试一次。':'正在读全部洞察，综合好后会出现在这里。'}</p>}</div>}
-  {list.length>0&&<ul className="insight-list">{list.map(i=><InsightLine key={i.id} item={i} mine={isMine(i)||!revealed} me={profile.name} onEdit={edit} onDelete={remove}/>)}</ul>}
+  {list.length>0&&<ul className="insight-list">{list.map(i=><InsightLine key={i.id} item={i} mine={isMine(i)&&!i.source} me={profile.name} onEdit={edit} onDelete={remove}/>)}</ul>}
   {others.length>0&&<ul className="insight-list insight-hidden">{others.map(o=><li key={o.name} className="insight-item"><span className="insight-text"><strong className="insight-who">{o.name}：</strong><span className="insight-sealed">已写 {o.count} 条，公开后可见</span></span></li>)}</ul>}
   {canWrite&&(open||text?<div className="insight-compose"><textarea className="inline-field-input insight-input" rows={2} value={text} autoFocus onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Escape'&&!text.trim())setOpen(false);else enterSubmit(e,submit,!busy);}} placeholder="一个问题，加一条建议" aria-label="写洞察" title="回车提交，Shift＋回车换行"/>
     <span className="insight-actions"><Button className="proposal-confirm" isDisabled={busy||!text.trim()} onPress={submit}>{busy?'提交中…':'提交'}</Button><Button className="plain" onPress={()=>{setText('');setOpen(false);}}>取消</Button>{error&&<span className="admin-line is-failed" role="alert">{error}</span>}</span></div>
@@ -137,7 +139,7 @@ export function InsightCard({node,data,profile,onInsight}){
  </div>;
 }
 function PersonSummary({name,cards,me,months,unitLabel,onOpen}){
- const mineToSign=name===me?cards.filter(n=>n.status!=='已确认').length:0,done=cards.filter(n=>n.status==='已确认').length;
+ const mineToSign=cards.filter(n=>ownerNames(n).includes(me)&&n.status!=='已确认').length,done=cards.filter(n=>n.status==='已确认').length;
  const state=mineToSign?`待你确认 ${mineToSign} 份`:done===cards.length?'已确认':`已确认 ${done}/${cards.length}`;
  return <article role="button" tabIndex={0} aria-label={`打开 ${name}的个人复盘`} onClick={onOpen} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen();}}} className="plan-doc-node doc-summary review-summary person-summary doc-mission tone-mission">
   <div className="card-head"><span className="level-tag">个人复盘</span><span className="card-meta"><span className="person">{name}</span><span>{cards.length} Mission{cards.length>1?'s':''}</span></span><span className="card-head-end"><span className={`state${mineToSign?' is-mine':''}`} data-confirmed={done===cards.length}>{state}</span></span></div>
@@ -152,7 +154,7 @@ export function ReviewSummary({node,onOpen,unitLabel,comments=[],tone='domain',s
   <h2>{node.title}</h2><p className="doc-description"><Rich text={node.verdictReason}/></p>
  </article>;
 }
-export default function ReviewCanvas({insights={},onInsight,ceoName='CEO',onRevise,tree,active,profile,comments,toneOf=()=>'domain',handoff=null,onShowHandoff,months={from:'',to:''},onOpen,onAction,onDetail,onAnswer,annotation,me,onDeleteComment,evidence,unitLabel,signerNames,review}){
+export default function ReviewCanvas({transferFor,insights={},onInsight,ceoName='CEO',onRevise,tree,active,profile,comments,toneOf=()=>'domain',handoff=null,onShowHandoff,months={from:'',to:''},onOpen,onAction,onDetail,onAnswer,annotation,me,onDeleteComment,evidence,unitLabel,signerNames,review}){
  if(!tree.nodes.length)return <div className="plan-doc-canvas document-catalog"><div className="review-empty"><h3>还没有载入复盘</h3><p>本月复盘生成后会出现在这里。</p></div></div>;
  const stateOf=n=>{const po=tree.nodes.find(x=>x.level==='po'&&x.unit===n.unit),left=n.level==='company'&&n.status!=='已确认'?tree.nodes.filter(x=>x.level!=='company'&&x.status!=='已确认').length:0;if(left)return {text:`还有 ${left} 份复盘未确认`,mine:false};return confirmState({status:n.status,version:n.version,signatures:n.signatures,slots:reviewSlots(n),holder:s=>s==='ceo'?ceoName:s==='unitDri'?po?.owner:n.owner,mine:s=>maySign(n,s,profile)});};
  if(!active){
@@ -168,9 +170,7 @@ export default function ReviewCanvas({insights={},onInsight,ceoName='CEO',onRevi
   const missing=review?.skipped||[],problems=(review?.problems||[]).filter(p=>p.kind==='missing'),refName=ref=>{const [unit,m]=String(ref).split('-m'),po=tree.nodes.find(n=>n.level==='po'&&(n.unit===unit||n.ref===unit));return `${po?unitLabel(po):unit}${m?` M${m.padStart(2,'0')}`:''}`;};
   return <div className="plan-doc-canvas document-catalog review-catalog" aria-label="复盘目录">
    {(missing.length>0||problems.length>0)&&<div className="review-problems" role="status"><p>本体里缺少材料，以下没有复盘：</p>{missing.map((t,i)=><p key={'s'+i}>{t}</p>)}{problems.map(p=><p key={p.ref}><strong>{refName(p.ref)}</strong>{p.reason}</p>)}</div>}
-   <section className="catalog-group">{mine.filter(n=>n.level!=='mission').map(n=><ReviewSummary key={n.id} node={n} stateOf={stateOf} tone={toneOf(n)} onOpen={onOpen} unitLabel={unitLabel} comments={comments[n.id]}/>)}
-    {people.map(name=><PersonSummary key={name} name={name} cards={personCards(mine,name)} me={profile.name} months={months} unitLabel={unitLabel} onOpen={()=>onOpen({id:personId(name),level:'person',person:name,title:`${name}的个人复盘`})}/>)}</section>
-   {others.length>0&&<section className="catalog-group">{others.map(n=><ReviewSummary key={n.id} node={n} stateOf={stateOf} tone={toneOf(n)} onOpen={onOpen} unitLabel={unitLabel} comments={comments[n.id]}/>)}</section>}
+   {Object.entries(reviewHomeGroups(tree.nodes,profile)).map(([kind,entries])=>entries.length>0&&<section key={kind} className="catalog-group"><h3 className="review-home-heading">{kind==='confirm'?'需要我确认':'需要我关注'}</h3>{entries.map(e=>e.person?<PersonSummary key={e.key} name={e.person} cards={e.cards} me={profile.name} months={months} unitLabel={unitLabel} onOpen={()=>onOpen({id:e.key,level:'person',person:e.person,title:`${e.person}的个人复盘`})}/>:<ReviewSummary key={e.key} node={e.node} stateOf={stateOf} tone={toneOf(e.node)} onOpen={onOpen} unitLabel={unitLabel} comments={comments[e.key]}/>)}</section>)}
   </div>;
  }
  const fullCard=node=>{
@@ -182,7 +182,7 @@ export default function ReviewCanvas({insights={},onInsight,ceoName='CEO',onRevi
   const owesInsight=isFactsCard(node)&&(insights[node.id]?.missing||[]).includes(profile.name);
   const goWrite=()=>{const box=document.querySelector(`[data-insight-card="${CSS.escape(node.id)}"]`);box?.scrollIntoView({block:'center',behavior:'smooth'});box?.querySelector('.insight-add')?.click();};
   const handshake=<Handshake compact gate={owesInsight?{text:'确认前至少贴一条洞察',onPress:goWrite}:null} node={node} locked={open.length?{text:`还有 ${open.length} 份${node.level==='po'?'个人':''}复盘未确认`,title:open.map(n=>n.level==='mission'?`${unitLabel(n)} ${reviewLabel(n)}`:unitLabel(n)).join('、')}:null} profile={{...profile,missions:ownerNames(node).includes(profile.name)?[...(profile.missions||[]),node.id]:profile.missions||[]}} slots={reviewSlots(node)} summary={isFactsCard(node)?(node.level==='company'?`确认判定和事实证据后，${months.from}复盘全部定稿，Nexus 开始生成 ${months.to}拆解。分析洞察不用确认。`:'确认的是上面的判定和事实证据；下面的分析洞察不用确认。确认不等于结果达成。'):node.level==='company'?`CEO 确认后，${months.from}复盘全部定稿，Nexus 开始生成 ${months.to}拆解。`:'确认复盘，也就确认了下方的下月输入，它们会作为下月拆解的输入。确认不等于结果达成。'} signerNames={signerNames(node)} onAction={value=>onAction({...value,cardId:node.id,baseVersion:node.version})}/>;
-  return <ReviewCard key={node.id} node={node} tone={toneOf(node)} onRevise={onRevise} profile={profile} comments={comments[node.id]||[]} onDetail={readOnly?undefined:onDetail} onAnswer={onAnswer} evidence={evidence} unitLabel={unitLabel} dueAt={isFactsCard(node)?dueOf(node.dueAt?node:review):null} footer={handshake} insight={isFactsCard(node)?<InsightCard node={node} data={insights[node.id]} profile={profile} onInsight={onInsight}/>:null} insightState={isFactsCard(node)?(insights[node.id]?.revealed?'已公开':'未公开'):''}/>
+  return <ReviewCard key={node.id} transfer={transferFor?.(node)} node={node} tone={toneOf(node)} onRevise={onRevise} profile={profile} comments={comments[node.id]||[]} onDetail={readOnly?undefined:onDetail} onAnswer={onAnswer} evidence={evidence} unitLabel={unitLabel} dueAt={isFactsCard(node)?dueOf(node.dueAt?node:review):null} footer={handshake} insight={isFactsCard(node)?<InsightCard node={node} data={insights[node.id]} profile={profile} onInsight={onInsight}/>:null} insightState={isFactsCard(node)?(insights[node.id]?.revealed?'已公开':node.level==='mission'?'':'未公开'):''}/>
  };
  const page=(label,children)=><CommentScope me={me} onDeleteComment={onDeleteComment} annotation={annotation}>
   <div className="plan-doc-canvas document-page" aria-label={label}><div className="document-primary review-primary">{children}</div></div>

@@ -175,13 +175,12 @@ test('撮合：两人立场冲突才发言；回答不断在半句',()=>{
  assert.equal(wholeSentences('第一句话。第二句话很长很长。',8),'第一句话。');
 });
 import {applyOwnerAnnotations,queueProposals as queue} from './nexus-memory.mjs';
-test('负责人在自己卡上的批注：Nexus 直接修改并在群里通知；别人批注仍等负责人确认',()=>{
- const base=()=>createCollaborationState([{id:'bf01',level:'po',title:'灯塔',owner:'刘明华',checks:['**经济性：**核投入'],children:[]}]);
+test('负责人明确修改批注自动正文，别人意见仍待确认',()=>{
+ const base=()=>createCollaborationState([{id:'bf01',level:'po',title:'灯塔',owner:'刘明华',checks:['**经济性：**核投入','**范式：**多用例核验'],children:[]}]);
  const ceo={id:'member-01',ceo:true,unitDri:['bf01'],missionDri:[],visibleUnits:['bf01']};
- let s=act(base(),ceo,{type:'comment',cardId:'bf01',block:'checks',text:'灯塔不考虑经济性，删掉这条'});
- s=applyOwnerAnnotations(queue(s,'bf01',[{cardId:'bf01',baseVersion:1,sourceIds:[s.comments[0].id],patch:{checks:['**范式：**改为不考虑经济性']},reason:'r'}]),'bf01');
- assert.equal(s.proposals[0].status,'accepted');assert.equal(s.proposals[0].auto,true);
- assert.match(s.messages.filter(m=>m.kind==='notice').at(-1).text,/Nexus 已按 刘明华 的批注修改「灯塔」，已更新到 v2/);
+ let s=act(base(),ceo,{type:'comment',cardId:'bf01',block:'checks',text:'删掉经济性'});
+ s=applyOwnerAnnotations(queue(s,'bf01',[{cardId:'bf01',baseVersion:1,sourceIds:[s.comments[0].id],patch:{checks:['**范式：**多用例核验']},reason:'r'}]),'bf01');
+ assert.equal(s.proposals[0].status,'accepted');assert.equal(s.cards.bf01.versions.at(-1).number,2);assert.equal(s.cards.bf01.versions.at(-1).signatures.length,0);
  const other={id:'member-04',unitDri:[],missionDri:[],visibleUnits:['bf01']};
  let t=act(base(),other,{type:'comment',cardId:'bf01',block:'checks',text:'建议删掉经济性'});
  t=applyOwnerAnnotations(queue(t,'bf01',[{cardId:'bf01',baseVersion:1,sourceIds:[t.comments[0].id],patch:{checks:['x']},reason:'r'}]),'bf01');
