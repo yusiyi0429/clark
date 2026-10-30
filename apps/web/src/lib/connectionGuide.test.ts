@@ -12,6 +12,8 @@ describe("连接说明文件", () => {
     expect(text).not.toContain("TIANSHU_TOKEN");
     expect(connectCommands("codex", "https://t.example/mcp/me", "tsm_x")[0].value).toContain("http_headers");
     expect(text).toContain("list_my_items");
+    expect(text).toContain("只在用户明确要求时才往天枢里写");
+    expect(text).not.toContain("不用等用户开口");
     expect(text).toContain("第三步：设好每周五自动同步");
     expect(text).toContain("codex exec --skip-git-repo-check");
     expect(text).toContain("LaunchAgent");

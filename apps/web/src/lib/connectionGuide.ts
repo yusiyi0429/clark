@@ -44,7 +44,7 @@ export function connectCommands(client: AgentClient, endpoint: string, token: st
 export const GUIDE_FILE_NAME = "天枢连接说明.md";
 
 /** OAuth 步骤可直接分享：没有令牌，登录与权限由本人在浏览器确认。
- *  天枢工具设为免确认：Agent 按 MCP 说明主动建事项、写进展，每次都弹窗问就谈不上自动。 */
+ *  天枢工具设为免确认：用户叫 Agent 建事项、写进展时不用再点一次确认，定时同步无人值守时弹窗就办不成。 */
 export function oauthConnectionGuide(role: "ceo" | "member", client: AgentClient, endpoint: string): string {
   const setup = client === "codex" ? [
     `codex mcp add tianshu --url ${endpoint}`,
@@ -123,7 +123,7 @@ export function connectionGuide({ role, client, endpoint, token, expires, weekly
       "- 用户问「这周各战场进展怎样？」时，调用 `company_progress`；可以按周、战场或人筛选。",
       `- 这些工具只读。要拍板、签发、确认，把结果里的 \`href\` 拼成完整链接给用户（天枢网址是 \`${endpoint.replace(/\/mcp\/me$/, "")}\`，例如 \`${endpoint.replace(/\/mcp\/me$/, "")}/issues/<id>\`），让用户回天枢网页处理。`,
     ] : [
-      "- 不用等用户开口，主动把用户正在推进的工作同步进天枢：开始一件新工作时用 `list_my_items` 找到对应事项，没有、而且够一件执行事项（Mission 卡上一个带 ◆ 关口的 Activity，一般 1–2 周，一个 Task 下 2–5 件）才用 `create_item` 建一条（过程步骤、修小问题、配置、一次会、一次问答、跑完一个子任务都只写进展）；做出阶段成果（提交、PR、文档）或告一段落时用 `append_progress` 写一条进展（做了什么、证据链接、下一步或阻塞）；做出来的文档、设计稿、PR 用 `add_link` 放进这件事；做完用 `submit_for_acceptance` 提交验收（对照完成标准逐条写明是否达到和依据），由用户在天枢逐条确认完成。只写真实做过的事。",
+      "- 只在用户明确要求时才往天枢里写（比如「记一下」「建一件事」「提交验收」），用户没开口就只读：要建事项时先用 `list_my_items` 看有没有同一件，没有再用 `create_item` 建，用户叫建什么就建什么；要记进展时用 `append_progress` 写一条（做了什么、证据链接、下一步或阻塞）；做出来的文档、设计稿、PR 用 `add_link` 放进这件事；用户说做完了，用 `submit_for_acceptance` 提交验收（对照完成标准逐条写明是否达到和依据），由用户在天枢逐条确认完成。只写真实做过的事。",
       `- 用户说「同步本周进展」时，照这段做：${SYNC_INSTRUCTION}`,
       "- 月末天枢会请每人对照自己的 Mission Card 做个人复盘，Co-Agent 会先起草一版。用户说「改写我的月度复盘」时：调用 `get_my_review` 看状态、Mission、现有草稿和写作要求，结合用户手边的周复盘、文档和提交记录补充改写四部分，用 `save_review_draft` 保存；不能替用户提交，写完请用户回天枢确认提交。`list_pending` 里出现待提交的个人复盘时，主动提醒用户。",
       "- 可以问用户要不要把上面两条写进常用项目的 AGENTS.md 或 CLAUDE.md（不要写令牌）。",

@@ -10,7 +10,7 @@ export const TaskStatus = Type.Union([
   Type.Literal("returned"),
 ]);
 
-/** 执行事项从哪来：会后分派、自己点「+」新建、从本月计划拆出；agent 是外部工具（Codex、Claude Code 等）按用户正在做的事替用户建的。以后加 CEO 指派。 */
+/** 执行事项从哪来：会后分派（10/30 起不再新建，只剩旧数据）、自己点「+」新建、从本月计划拆出；agent 是用户明确要求时外部工具（Codex、Claude Code 等）替用户建的。以后加 CEO 指派。 */
 export const TaskSource = Type.Union([Type.Literal("meeting"), Type.Literal("self"), Type.Literal("plan"), Type.Literal("agent")]);
 
 export const DateOnly = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
