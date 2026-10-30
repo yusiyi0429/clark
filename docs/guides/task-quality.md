@@ -32,3 +32,5 @@ pnpm --filter @warmap/web gen:client
 `packages/contracts/src/vendor/chat-task-quality.json` 记录来源 commit 与 SHA-256；源码字节应与该版本一致。浏览器类型从公开 OpenAPI 生成。现有 OpenAPI 路径/字段语义没有变化。
 
 `apps/api/acceptance/task-quality.ts` 由 Runtime `acceptance/task_quality/test_services.py` 启动，使用隔离 PostgreSQL 55212、三个真实 HTTP 服务和个人 CLI；没有真实模型、会议或业务写入。真实三人试点仍等会议纪要就绪。本次 PR 不合入个人资料 #52，不代表部署、启用定时巡检或真实试点验收。
+
+个人 world 插件提交或按原 submission 恢复后，把返回的 `verification_command` 原样放进 `report_task_repair_receipt` 的 `receipt.verificationCommand`（`stage=change`）。无需把个人 token 或 submission 交给 Chat。服务仍用自己的只读凭据核对实际请求 hash、原候选的来源/基线/完整字段效果及当前来源状态。Source 新组件 ID 只允许原子保存的实际回执映射；同值成功回执不能替代。旧 CLI 的回执恢复入口继续可用。
