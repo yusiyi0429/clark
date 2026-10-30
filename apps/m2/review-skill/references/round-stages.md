@@ -23,13 +23,21 @@
 
 ### 直接子项输入
 
-PO 和 Mission 的输入 unit.childCommitments 提供本期有效直接子项的范围，不改变 review 输出字段：
+PO 和 Mission 的输入 unit.childCommitments 提供本次基线中的本期直接子项范围，不改变 review 输出字段。基线选择统一见 contracts.md“承诺基线”。当前试用的来源元信息如下：
+
+- input.basis：整轮的 mode 为 latest-source-candidate，另有 snapshotHash、period、cutoff。
+- unit.sourceBasis：这个对象的 basisMode、snapshotHash、objectId、sourceVersion、sourceRevision、sourceStatus、formal（原始 business.formal 或 null）、period、cutoff、effective。
+- unit.childCommitments：本对象的 basisMode、snapshotHash、complete、items、excluded，以及有缺口时的 missing。它与整轮基线、unit.sourceBasis 对应同一冻结输入，不能一处取最新、另一处仍指旧正式版。
 
 ```json
-{"complete":true,"items":[{"ref":"原始引用","kind":"Task|Mission","parentRef":"所属对象","period":"本期","effective":true,"source":"object|planItem","objectId":"对象来源时提供","version":1,"confirmedVersion":1,"status":"已有子项判定时提供"}],"excluded":[{"ref":"移出项原始引用","reason":"正式取消、替换或移出依据","authority":"有权确认的来源","effectiveAt":"生效时间"}]}
+{"basisMode":"latest-source-candidate","snapshotHash":"冻结输入散列","complete":true,"items":[{"ref":"原始引用","kind":"Task|Mission","parentRef":"所属对象","period":"本期","inBaseline":true,"effective":null,"source":"object|planItem","objectId":"对象来源时提供","version":1,"sourceRevision":"实际来源修订","formal":null,"componentRef":"计划来源时提供原始组件引用","confirmedVersion":null,"status":"来源已有状态"}],"excluded":[{"ref":"移出项原始引用","reason":"正式取消、替换或移出依据","authority":"有权确认的来源","effectiveAt":"生效时间"}]}
 ```
 
-complete 表示范围已读全且有效归属可确定；不完整时先报告具体输入缺口，不把它当作无子项来生成或接受判定。items 的来源资格与 excluded 的范围统一见 contracts.md“本期有效直接子项”。objectId、版本、确认版本和 status 按实际已有信息给，不编补。unit.tasks、expectedFacts 用于完整列事实行，不能取代 items；successCriteria 占位行不进入 items。首次整轮生成可用同轮下级复盘的候选判定，仍整体作为候选展示；讨论后已确认与未确认版本的引用按 revision-loop.md 区分。
+complete 只表示声明的基线范围已读全、来源与归属可确定且无匹配歧义，不表示正式生效。latest-source-candidate 中的 items 按 inBaseline 纳入范围；effective 为 false 或 null 本身不移除该项，也不使 complete 变 false。effective 只有明确正式依据时为 true；明确未生效时为 false，证据未知时为 null。formal、来源状态和实际确认版本照输入保留，不把候选身份改成正式确认。
+
+不完整时先报告具体 missing，不把缺正文、ref、版本、父级、重复或模糊匹配、读取未完成当作无子项来生成或接受判定。items 的来源资格与 excluded 范围统一见 contracts.md；objectId、版本、修订、组件引用、确认版本和 status 按实际已有信息给，不编补。unit.tasks、expectedFacts 用于完整列事实行，不能取代 items；successCriteria 占位行不进入 items。首次整轮生成可用同轮下级复盘的候选判定，仍整体作为候选展示；讨论后已确认与未确认版本的引用按 revision-loop.md 区分。
+
+sourceBasis 和 childCommitments 是程序保存与传递的来源元信息，不要求模型另造 review 字段或声明。生成、讨论、保存及后续引用沿用冻结元信息；恢复运行使用原输入与技能快照，源版本变化时不能把旧输出拼进新基线。程序负责取数和校验，判定仍由模型按 method.md 作出，不事后改写模型输出。
 
 ## 每一步怎么做
 

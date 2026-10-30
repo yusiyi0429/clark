@@ -15,7 +15,7 @@ export function handoffPackage(state){
  const reviews=Object.values(state.cards).filter(isReviewCard).map(c=>{const v=currentVersion(c).content;
   // The whole review goes to the decomposition (陈溪南 2026-10-26/27): verdict, fact lines and 下期输入 to act on; revealed insights and Nexus's synthesis as reference.
   const name=id=>memberProfiles[id]?.name||id,revealed=!!state.insightsRevealed,nexus=state.insightNexus?.[c.id]?.text;
-  return {id:c.id,ref:v.ref,unit:v.unit,level:c.level,title:v.title,owner:v.owner,version:currentVersion(c).number,verdict:v.verdict,verdictReason:v.verdictReason,
+  return {id:c.id,ref:v.ref,unit:v.unit,level:c.level,title:v.title,owner:v.owner,version:currentVersion(c).number,verdict:v.verdict,verdictReason:v.verdictReason,...(v.sourceBasis?{sourceBasis:structuredClone(v.sourceBasis)}:{}),...(v.childCommitments?{childCommitments:structuredClone(v.childCommitments)}:{}),
    // 下期输入 (2026-10-27) are what the decomposition must take up; an answer given in a comment and not yet folded into the row travels with it.
    ...(Array.isArray(v.facts)?{facts:v.facts,nextInputs:(v.nextInputs||[]).map((n,i)=>{const a=[...(state.comments||[])].reverse().find(m=>m.cardId===c.id&&m.answers?.block==='nextInputs'&&m.answers.index===i);return a?{...n,answer:{by:name(a.author),text:String(a.text||'').slice(0,300)}}:n;})}:{targets:v.targets||[],causes:(v.causes||[]).map(x=>typeof x==='string'?x:x.text),nextInputs:v.nextInputs||[],...(v.ltoReview?{ltoReview:v.ltoReview}:{})}),
    ...(revealed?{insights:(c.level==='mission'?publishedMissionInsights(state,c):state.insights?.[c.id]||[]).map(x=>({author:name(x.author),text:x.text})),...(nexus?{nexusInsight:nexus}:{})}:{})};});

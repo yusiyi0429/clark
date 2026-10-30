@@ -19,7 +19,7 @@ export function transferCards(state,actor,{stage,rootId,person,onlyRoot=false}){
 export function transferStamp(state,cards){return createHash('sha256').update(JSON.stringify([state.round?.id,state.reviewRound?.loadedAt,cards.map(c=>[c.id,currentVersion(c).number])])).digest('hex');}
 export function exportMarkdown(state,actor,selection,{blank=false}={}){
  const cards=transferCards(state,actor,selection);
- const blocks=cards.map(c=>{const v=currentVersion(c);return `## ${readableField('title',v.content.title||c.id).body}\n<!-- m2-object:${commentJSON({id:c.id,version:v.number,level:c.level})} -->\n\n`+transferFields(c).map(k=>{
+ const blocks=cards.map(c=>{const v=currentVersion(c);return `## ${readableField('title',v.content.title||c.id).body}\n<!-- m2-object:${commentJSON({id:c.id,version:v.number,level:c.level})} -->\n\n`+(v.content.sourceBasis?`> 取自本体最新来源计划，未确认内容不代表正式生效。来源版本：${v.content.sourceBasis.sourceVersion||'未提供'}。\n<!-- m2-source-basis:${commentJSON(v.content.sourceBasis)} -->\n\n`:'')+transferFields(c).map(k=>{
   const {meta,body}=readableField(k,v.content[k],{blank});
   return `### ${documentFieldLabel(c.level,k)}\n<!-- m2-field:${commentJSON(meta)} -->\n\n${body}\n\n<!-- /m2-field -->\n`;
  }).join('\n');});

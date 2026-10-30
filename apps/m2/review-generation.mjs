@@ -97,7 +97,8 @@ function blockLines(blocks){
  }
  return lines.join('\n');
 }
-const planItems=o=>(o?.business?.blocks||[]).filter(b=>b.id==='execution_plan'||b.kind==='plan').flatMap(b=>(b.components||b.value?.components||[]).filter(c=>c.type==='plan_item'&&String(c.text||'').trim()).map(c=>({title:String(c.text).trim(),responsible:c.attributes?.responsible||null,expected:c.attributes?.expected_output||'',quality:c.attributes?.quality_standard||'',finish:c.attributes?.finish_date||'',ref:c.ref?String(c.ref).replace(/@\d+#/,'#'):null})));
+const planItems=o=>(o?.business?.blocks||[]).filter(b=>b.id==='execution_plan'||b.kind==='plan').flatMap(b=>(b.components||b.value?.components||[]).filter(c=>c.type==='plan_item').map(c=>({title:String(c.text).trim(),responsible:c.attributes?.responsible||null,expected:c.attributes?.expected_output||'',quality:c.attributes?.quality_standard||'',finish:c.attributes?.finish_date||'',componentRef:c.ref||null,ref:c.ref?String(c.ref).replace(/@\d+#/,'#'):null})));
+const taskTerms=o=>{const components=(o?.business?.blocks||[]).flatMap(b=>b.components||b.value?.components||[]),term=type=>components.filter(c=>c.type===type).map(c=>String(c.text||'').trim()).filter(Boolean).join('；');return {expected:term('outcome'),quality:term('acceptance_criterion'),finish:term('time_boundary')};};
 const successCriteria=o=>(o?.business?.blocks||[]).flatMap(b=>(b.components||b.value?.components||[]).filter(c=>c.type==='acceptance_criterion'&&String(c.text||'').trim()).map(c=>String(c.text).trim()));
 // Stand-in accounts are not owners: 代录 entries and test accounts such as “于斯一（测试治理）” (added to two October PeriodGoals on 10/23).
 const ownerOf=o=>(o?.identity?.responsible?.principals||[]).map(p=>p.display_name).filter(n=>n&&!/（(代录|测试[^）]*)）/.test(n)).join('、')||'';
@@ -134,7 +135,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  for(const g of heads.goals){const unit=unitOfDomain.get(g.domain_id);if(unit&&!goals[unit])goals[unit]={id:g.object_id,unit,object:objects[g.object_id]};}
  const goalOfId=new Map(Object.values(goals).map(g=>[g.id,g]));
  const missions=[],excludedMissions=[];
- for(const m of [...heads.missions].sort((a,b)=>String(a.object_id).localeCompare(String(b.object_id)))){const o=objects[m.object_id],parent=relationTo(o,'goal_ref'),goal=parent?goalOfId.get(parent):goals[unitOfDomain.get(m.domain_id)];const exclusion=objectExclusion(o,m.object_id,cutoff);if(exclusion){excludedMissions.push({...exclusion,unit:goal?.unit||unitOfDomain.get(m.domain_id)});continue;}if(!goal){const old=goals[unitOfDomain.get(m.domain_id)];if(parent&&old)excludedMissions.push({ref:m.object_id,unit:old.unit,reason:'正式父级已移出本PO',authority:`${m.object_id}@${o?.business?.version??'?'}#goal_ref`,effectiveAt:null});continue;}missions.push({id:m.object_id,goal,object:o});}
+ for(const m of [...heads.missions].sort((a,b)=>String(a.object_id).localeCompare(String(b.object_id)))){const o=objects[m.object_id],parent=relationTo(o,'goal_ref'),goal=parent?goalOfId.get(parent):goals[unitOfDomain.get(m.domain_id)];const exclusion=objectExclusion(o,m.object_id,cutoff);if(exclusion){excludedMissions.push({...exclusion,unit:goal?.unit||unitOfDomain.get(m.domain_id)});continue;}if(!goal){const old=goals[unitOfDomain.get(m.domain_id)];if(parent&&old)excludedMissions.push({ref:m.object_id,unit:old.unit,reason:'最新来源父级已移出本PO',authority:`${m.object_id}@${o?.business?.version??'?'}#goal_ref`,effectiveAt:null});continue;}missions.push({id:m.object_id,goal,object:o});}
  const missionIds=new Set(missions.map(m=>m.id));
  const missionOfTask=new Map(heads.tasks.map(t=>[t.object_id,relationTo(objects[t.object_id],'mission_ref')||relationTo(objects[t.object_id],'parent_ref')]));
  const titleOf=id=>objects[id]?.business?.title||objects[id]?.title||heads.rus.find(r=>r.object_id===id)?.title||'';
@@ -201,16 +202,19 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  for(const id of [...goalOfId.keys(),...missionIds])for(const i of objects[id]?.records?.open_issues||[])place(id,null,{kind:'本月进展',source:'未处置的问题',asOf:String(i.raised_at||i.at||'').slice(0,10),text:[i.title||i.summary||i.text,i.status&&`状态：${i.status}`].filter(Boolean).join('；')||String(i.issue_ref||'问题'),by:''});
  const numbered=items=>[...items].sort((a,b)=>a.asOf.localeCompare(b.asOf)).map((x,i)=>({...x,id:`E${i+1}`}));
  const recordFacts=items=>{const days=items.filter(x=>x.kind==='本月进展'&&x.asOf).map(x=>x.asOf).sort();return {progressRecords:days.length,latestRecord:days.at(-1)||null};};
+ const basis={mode:'latest-source-candidate',snapshotHash:createHash('sha256').update(JSON.stringify({period,cutoff,heads,objects})).digest('hex'),period,cutoff};
+ const provenance=(o,id)=>{const formal=structuredClone(o?.business?.formal||null),revision=o?.business?.revision_id||null;return {basisMode:basis.mode,snapshotHash:basis.snapshotHash,objectId:id,sourceVersion:o?.business?.version||null,sourceRevision:revision,sourceStatus:formal?.lifecycle_status||statusOf(o)||'',formal,period,cutoff,effective:['draft','草稿','待确认','未确认'].includes(formal?.lifecycle_status||statusOf(o))?false:formal?.effective_revision_id?Boolean(revision&&formal.effective_revision_id===revision):null};};
  const base={period,cutoff,note:NOTE};
  const stage1=[],stage2=[],missing=[];
  const perGoal={};
  const bare=t=>String(t||'').replace(/^\s*[A-Z]?\d*[-–]?[A-Z0-9]*\s*[｜|]\s*/,'').split(/[：:]/)[0].trim();
  function taskLines(m){
   const items=planItems(m.object),objs=heads.tasks.filter(t=>missionOfTask.get(t.object_id)===m.id).map(t=>({id:t.object_id,o:objects[t.object_id]}));
-  const used=new Set(),lines=items.map((p,i)=>{const hit=objs.find(t=>!used.has(t.id)&&bare(t.o?.business?.title)&&(bare(p.title)===bare(t.o?.business?.title)||p.title.includes(bare(t.o?.business?.title))));if(hit)used.add(hit.id);
+  const used=new Set(),lines=items.map((p,i)=>{const matches=objs.filter(t=>bare(t.o?.business?.title)&&(bare(p.title)===bare(t.o?.business?.title)||p.title.includes(bare(t.o?.business?.title))));const hit=matches.length===1&&!used.has(matches[0].id)?matches[0]:null,ambiguous=matches.length>1||matches.length===1&&used.has(matches[0].id);if(hit)used.add(hit.id);
+   const terms=hit?taskTerms(hit.o):p;
    const owner=realName(ownerOf(hit?.o))||realName(principalName.get(p.responsible))||'未指派';
-   return {source:hit?'object':'planItem',objectId:hit?.id||null,version:hit?(hit.o?.business?.version||null):(m.object?.business?.version||null),parentRef:m.id,commitmentRef:p.ref||null,ref:hit?.id||p.ref||`plan-${i+1}`,title:p.title,owner,status:hit?statusOf(hit.o):'计划条目',...(p.expected?{expected:p.expected}:{}),...(p.quality?{quality:p.quality}:{}),...(p.finish?{finish:p.finish}:{}),...(hit?{definition:blockLines(hit.o?.business?.blocks).slice(0,1200)}:{})};});
-  for(const t of objs)if(!used.has(t.id))lines.push({source:'object',objectId:t.id,version:t.o?.business?.version||null,parentRef:m.id,ref:t.id,title:t.o?.business?.title||'',owner:realName(ownerOf(t.o))||'未指派',status:statusOf(t.o),definition:blockLines(t.o?.business?.blocks).slice(0,1200)});
+   return {source:hit?'object':'planItem',objectId:hit?.id||null,version:hit?(hit.o?.business?.version||null):(m.object?.business?.version||null),parentRef:m.id,componentRef:p.componentRef,commitmentRef:p.ref||null,...(ambiguous?{ambiguous:true}:{}),ref:hit?.id||p.ref||`plan-${i+1}`,title:hit?hit.o.business.title:p.title,...(hit?{planTitle:p.title,planSource:{componentRef:p.componentRef,sourceVersion:m.object?.business?.version||null,sourceRevision:m.object?.business?.revision_id||null,...p}}:{}),owner,status:hit?statusOf(hit.o):'计划条目',...(terms.expected?{expected:terms.expected}:{}),...(terms.quality?{quality:terms.quality}:{}),...(terms.finish?{finish:terms.finish}:{}),...(hit?{definition:blockLines(hit.o?.business?.blocks).slice(0,1200)}:{})};});
+  for(const t of objs)if(!used.has(t.id))lines.push({source:'object',objectId:t.id,version:t.o?.business?.version||null,parentRef:m.id,ref:t.id,title:t.o?.business?.title||'',owner:realName(ownerOf(t.o))||'未指派',status:statusOf(t.o),...taskTerms(t.o),definition:blockLines(t.o?.business?.blocks).slice(0,1200)});
   return lines.filter(t=>!t.objectId||!objectExclusion(objects[t.objectId],t.objectId,cutoff));
  }
  // Unit- and PO-level records that name a Mission (its title, its code such as 09-1, or one of its Task titles) belong to
@@ -238,19 +242,33 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
    // Neither plan items nor Tasks: the Mission's own success criteria are the lines to report on, one each.
    ...(taskLines(m).length?{}:{expectedFacts:successCriteria(m.object).map((text,i)=>({ref:`ref-${i+1}`,item:text}))}),objectId:m.id});
  }
- // Declare which lines are actual direct commitments. Missing provenance blocks the new rule rather than becoming zero children.
- for(const c of stage1){const m=missions.find(m=>m.id===c.objectId),items=(c.tasks||[]).map(t=>({ref:t.ref,kind:'Task',parentRef:m.id,period,effective:true,source:t.source,objectId:t.objectId,version:t.version,status:t.status})),excluded=heads.tasks.filter(t=>missionOfTask.get(t.object_id)===m.id).map(t=>objectExclusion(objects[t.object_id],t.object_id,cutoff)).filter(Boolean),gaps=[];
-  if(!m.object?.business?.version)gaps.push('Mission有效版本缺失');
+ // Latest source plans are a candidate baseline, not a claim that ontology commitments took effect.
+ for(const c of stage1){const m=missions.find(m=>m.id===c.objectId),gaps=[],excluded=heads.tasks.filter(t=>missionOfTask.get(t.object_id)===m.id).map(t=>objectExclusion(objects[t.object_id],t.object_id,cutoff)).filter(Boolean);
+  c.sourceBasis=provenance(m.object,m.id);
+  if(!m.object?.business?.version)gaps.push('Mission来源版本缺失');
+  if(!blockLines(m.object?.business?.blocks).trim())gaps.push('Mission来源正文缺失');
+  const goalRefs=(m.object?.business?.relations||[]).filter(r=>r.field==='goal_ref').map(r=>r.value?.object_id).filter(Boolean);
+  if(new Set(goalRefs).size!==1||goalRefs[0]!==m.goal.id)gaps.push('Mission父级引用缺失或有歧义');
   for(const t of heads.tasks)if((!objects[t.object_id]||!missionOfTask.get(t.object_id))&&(!t.domain_id||unitOfDomain.get(t.domain_id)===m.goal.unit))gaps.push('Task读取或父级关系不完整：'+t.object_id);
-  for(const t of c.tasks||[])if(t.source==='planItem'&&(!t.commitmentRef||!m.object?.business?.formal?.effective_revision_id||m.object.business.formal.effective_revision_id!==m.object.business.revision_id||!['已成立','进行中','已关闭','established','in_progress','closed'].includes(statusOf(m.object))))gaps.push('执行计划条目缺正式有效计划或稳定组件引用：'+t.ref);
-  c.childCommitments=childContract(items,excluded,gaps);
+  const items=(c.tasks||[]).map(t=>{
+   const object=t.objectId?objects[t.objectId]:m.object,source=provenance(object,t.objectId||m.id);
+   if(!t.title)gaps.push('Task或执行计划条目正文缺失：'+t.ref);
+   if(t.ambiguous)gaps.push('执行计划与Task对应有歧义：'+t.ref);
+   if(t.source==='planItem'&&!t.commitmentRef)gaps.push('执行计划条目缺稳定组件引用：'+t.ref);
+   if(t.objectId){if(!blockLines(object?.business?.blocks).trim())gaps.push('Task来源正文缺失：'+t.ref);const parents=(object?.business?.relations||[]).filter(r=>['mission_ref','parent_ref'].includes(r.field)).map(r=>r.value?.object_id).filter(Boolean);if(new Set(parents).size!==1||parents[0]!==m.id)gaps.push('Task父级引用缺失或有歧义：'+t.ref);}
+   return {ref:t.ref,kind:'Task',parentRef:m.id,period,inBaseline:true,effective:source.effective,source:t.source,objectId:t.objectId,version:t.version,status:t.status,sourceRevision:source.sourceRevision,formal:source.formal,...(t.componentRef?{componentRef:t.componentRef}:{})};
+  });
+  c.childCommitments={...childContract(items,excluded,gaps),basisMode:basis.mode,snapshotHash:basis.snapshotHash};
  }
  for(const [unit,g] of Object.entries(goals)){
   const ev=[...(bySubject[g.id]||[]),...(byUnit[unit]||[])];
   const children=stage1.filter(c=>c.level==='mission'&&c.unit===unit).map(c=>c.id);
   const c={...base,id:unit,level:'ru',unit,parent:'company',title:g.object?.business?.title||'',owner:ownerOf(g.object)||ownerOf(ruObject.get(unit)),commitment:blockLines(g.object?.business?.blocks),commitmentSource:`本体 ${month} 月 RU PO（${statusOf(g.object)}）`,evidence:numbered(ev),recordFacts:recordFacts(ev),objectId:g.id,...(children.length?{children}:{})};
   // A unit with no Mission reports on its PO's success criteria, one line each (评测 2026-10-26).
-  c.childCommitments=childContract(children.map(id=>{const m=stage1.find(x=>x.id===id),o=objects[m.objectId];return {ref:id,kind:'Mission',parentRef:g.id,period,effective:true,source:'object',objectId:m.objectId,version:o?.business?.version||null,status:statusOf(o)};}),excludedMissions.filter(x=>x.unit===unit).map(({unit,...x})=>x),children.filter(id=>relationTo(objects[stage1.find(x=>x.id===id).objectId],'goal_ref')!==g.id).map(id=>'Mission父级引用未明确：'+id));
+  c.sourceBasis=provenance(g.object,g.id);
+  c.childCommitments=childContract(children.map(id=>{const m=stage1.find(x=>x.id===id),o=objects[m.objectId];return {ref:id,kind:'Mission',parentRef:g.id,period,inBaseline:true,effective:provenance(o,m.objectId).effective,source:'object',objectId:m.objectId,version:o?.business?.version||null,status:statusOf(o),sourceRevision:o?.business?.revision_id||null,formal:structuredClone(o?.business?.formal||null)};}),excludedMissions.filter(x=>x.unit===unit).map(({unit,...x})=>x),children.filter(id=>relationTo(objects[stage1.find(x=>x.id===id).objectId],'goal_ref')!==g.id).map(id=>'Mission父级引用未明确：'+id));
+  c.childCommitments.basisMode=basis.mode;c.childCommitments.snapshotHash=basis.snapshotHash;
+  if(!c.sourceBasis.sourceVersion||!c.commitment){c.childCommitments.complete=false;(c.childCommitments.missing??=[]).push('PO来源版本或正文缺失');}
   if(!children.length){const crit=successCriteria(g.object);if(crit.length)c.expectedFacts=crit.map((text,i)=>({ref:`ref-${i+1}`,item:text}));}
   (children.length?stage2:stage1).push(c);
  }
@@ -259,6 +277,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  const stage3=[{...base,id:'company',level:'company',unit:'company',parent:null,title:companyObject?.business?.title||`公司 ${month} 月`,owner:ceoName||ownerOf(companyObject)||ceo,
   commitment:companyObject?blockLines(companyObject.business?.blocks):companyDirection,commitmentSource:companyObject?`本体 ${month} 月公司 PO（${statusOf(companyObject)}）`:companyDirection?`本体里没有公司 ${month} 月 PO，承诺取本体记的 ${month} 月公司方向`:`本体里没有公司 ${month} 月 PO`,
   children:[...stage1,...stage2].filter(c=>c.level==='ru').map(c=>c.id),evidence:numbered(forCompany),recordFacts:recordFacts(forCompany),missing:companyObject?[]:[`本体里没有公司 ${month} 月 PO`]}];
+ stage3[0].sourceBasis=companyObject?provenance(companyObject,companyGoal.object_id):{basisMode:basis.mode,snapshotHash:basis.snapshotHash,period,cutoff,sourceStatus:'未找到公司PO',formal:null,effective:null};
  // Sensitive personal details are hidden before anything reaches the model (sensitive-rules.json, shared by every flow).
  const redactions={};
  for(const c of [...stage1,...stage2,...stage3]){
@@ -269,7 +288,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  }
  // What this review was built from, kept with every run (于斯一 asked; the 10/23 run could not be traced, 读取盘点第 8 条).
  const readReceipt={readAt:sources.readAt,cutoff,objects:Object.entries(objects).filter(([,o])=>o).map(([id,o])=>`${id}@${o.business?.version??o.version??o.revision_id??'?'}`),snapshots:[...usedSnapshots],events:[...usedEvents]};
- return {period,cutoff,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
+ return {period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
 }
 
 // ---------- running the review skill ----------
@@ -334,13 +353,21 @@ export function rowFacts(c,r){
  return {expected:want.length,lines:(r?.facts||[]).length,missing:want.filter(w=>!lines.has(w.ref)&&!lines.has(w.item)).map(w=>w.item)};
 }
 function evidenceFacts(c,r){const ids=new Set((c.evidence||[]).map(e=>e.id));const used=[...new Set(JSON.stringify(r).match(/E\d+/g)||[])];return {missingIds:used.filter(id=>ids.size&&!ids.has(id)),usedCount:used.length};}
-const unitData=c=>({id:c.id,level:c.level,unit:c.unit,title:c.title,owner:c.owner,period:c.period,cutoff:c.cutoff,commitment:c.commitment,commitmentSource:c.commitmentSource,evidence:c.evidence,missing:c.missing,note:c.note,recordFacts:c.recordFacts,...(c.childCommitments?{childCommitments:c.childCommitments}:{}),...(c.tasks?.length?{tasks:c.tasks}:{}),...(c.expectedFacts?{expectedFacts:c.expectedFacts}:{})});
+const unitData=c=>({id:c.id,level:c.level,unit:c.unit,title:c.title,owner:c.owner,period:c.period,cutoff:c.cutoff,commitment:c.commitment,commitmentSource:c.commitmentSource,evidence:c.evidence,missing:c.missing,note:c.note,recordFacts:c.recordFacts,...(c.sourceBasis?{sourceBasis:c.sourceBasis}:{}),...(c.childCommitments?{childCommitments:c.childCommitments}:{}),...(c.tasks?.length?{tasks:c.tasks}:{}),...(c.expectedFacts?{expectedFacts:c.expectedFacts}:{})});
 const fieldsHint='返回 JSON：{"analysis":"不展示的分析，600 字内","review":{按 round-stages.md「字段」写全本层字段}}';
 
 // Runs the skill's stages on a built input. `run` holds what is done so far (raw answers by call), so a failed run
 // resumes where it stopped; save(run) is called after every answer.
 export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{},failed:[],dropped:[]},save=async()=>{},onProgress=async()=>{},concurrency=8}){
  if(skillAtLeast(skill.version,'2.1.10')){const incomplete=input.stages.flat().filter(c=>['mission','ru'].includes(c.level)&&!c.childCommitments?.complete);if(incomplete.length)throw Error('有效直接子项元信息不完整：'+incomplete.map(c=>c.id+' '+(c.childCommitments?.missing||[]).join('；')).join('；'));}
+ if(skillAtLeast(skill.version,'2.1.11')){
+  if(input.basis?.mode!=='latest-source-candidate'||!input.basis.snapshotHash)throw Error('最新来源候选基线缺失，请重新准备输入');
+  const mixed=input.stages.flat().filter(c=>['mission','ru'].includes(c.level)&&(c.sourceBasis?.basisMode!==input.basis.mode||c.sourceBasis?.snapshotHash!==input.basis.snapshotHash||c.childCommitments?.basisMode!==input.basis.mode||c.childCommitments?.snapshotHash!==input.basis.snapshotHash||(c.childCommitments.items||[]).some(t=>t.inBaseline!==true)));
+  if(mixed.length)throw Error('对象来源与整轮候选基线不一致：'+mixed.map(c=>c.id).join('、'));
+  const fingerprint=createHash('sha256').update(JSON.stringify({basis:input.basis,stages:input.stages})).digest('hex');
+  if(run.inputFingerprint&&run.inputFingerprint!==fingerprint||!run.inputFingerprint&&(Object.keys(run.raw||{}).length||Object.keys(run.reviews||{}).length))throw Error('续跑输入基线不一致，不能混用旧输出');
+  run.inputFingerprint=fingerprint;await save(run);
+ }
  const system=`你是 TKOS 的月度复盘助手。按下面的技能工作。仅返回有效 JSON 对象，不加代码围栏。\n${skill.rules}`;
  run.raw??={};run.reviews??={};run.failed??=[];run.dropped??=[];
  const ask=async(key,user)=>{
@@ -456,9 +483,9 @@ export function reviewProblems(run,input,{roster=[],rowMatch=false,askCaps=false
 // What installReviewRound reads: the run's reviews plus what was skipped or failed, so the page names them.
 export function reviewFile(run,input,{skill,model,label,startedAt=null}){
  const generatedAt=new Date().toISOString();
- return {name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,
+ return {name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,...(input.basis?{basis:structuredClone(input.basis)}:{}),
   // Facts the review cards need from the input: which object each review is about, and whether the Mission has an owner.
-  reviews:Object.fromEntries(Object.entries(run.reviews).map(([id,r])=>{const c=input.stages.flat().find(x=>x.id===id);return [id,{...r,...(c?.childCommitments?{childCommitments:structuredClone(c.childCommitments)}:{}),...(c?.objectId?{objectId:c.objectId}:{}),...(c?.ownerAssigned===false?{ownerAssigned:false}:{})}];})),
+  reviews:Object.fromEntries(Object.entries(run.reviews).map(([id,r])=>{const c=input.stages.flat().find(x=>x.id===id);return [id,{...r,...(c?.sourceBasis?{sourceBasis:structuredClone(c.sourceBasis)}:{}),...(c?.childCommitments?{childCommitments:structuredClone(c.childCommitments)}:{}),...(c?.objectId?{objectId:c.objectId}:{}),...(c?.ownerAssigned===false?{ownerAssigned:false}:{})}];})),
   failed:run.failed,dropped:run.dropped,skipped:input.skipped,readAt:input.readAt,redactions:input.redactions,readReceipt:input.readReceipt||null};
 }
 
