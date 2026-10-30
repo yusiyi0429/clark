@@ -11,9 +11,9 @@ test('四入口取消不重试，继续只携原身份/内容/服务端凭证重
  const oldFetch=globalThis.fetch,oldWindow=globalThis.window;
  globalThis.window={confirm:()=>{throw Error('禁止原生弹窗');}};
  try{for(const request of requests)for(const answer of [false,true]){
-  const sent=[],stop=subscribePageConfirmation(()=>{const current=getPageConfirmation();if(current){assert.match(current.message,/已确认.*重新确认.*继续/);queueMicrotask(()=>current.choose(answer));}});
+  const origin={name:'initiating-control'},sent=[],stop=subscribePageConfirmation(()=>{const current=getPageConfirmation();if(current){assert.equal(current.focusOrigin,origin);assert.match(current.message,/已确认.*重新确认.*继续/);queueMicrotask(()=>current.choose(answer));}});
   globalThis.fetch=async(url,options)=>{sent.push({url,body:JSON.parse(options.body),headers:new Headers(options.headers)});return sent.length===1?new Response(JSON.stringify({code:'RECONFIRM_REQUIRED',reconfirmToken:'bound-token'}),{status:409}):new Response(JSON.stringify({ok:true}),{status:200});};
-  try{const endpoint=request.token?'/api/markdown/apply':'/api/actions';const call=m2Fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','X-Custom':'preserved'},body:JSON.stringify(request)});
+  try{const endpoint=request.token?'/api/markdown/apply':'/api/actions';const call=m2Fetch(endpoint,{method:'POST',confirmationFocus:origin,headers:{'Content-Type':'application/json','X-Custom':'preserved'},body:JSON.stringify(request)});
    if(answer){assert.equal((await call).status,200);assert.equal(sent.length,2);assert.deepEqual(sent[1].body,{...request,ackToken:'bound-token'});assert.equal(sent[1].headers.get('X-M2-Expected-Member'),request.memberId);assert.equal(sent[1].headers.get('X-Custom'),'preserved');assert.equal(sent[1].url,'/m2'+endpoint);}
    else{await assert.rejects(call,e=>e.code==='CANCELLED');assert.equal(sent.length,1);}
   }finally{stop();}

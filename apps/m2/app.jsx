@@ -1,3 +1,4 @@
+import {capturePageFocus} from './confirmation-focus.mjs';
 import PageConfirmation from './PageConfirmation.jsx';
 import {confirmInPage,cancelPageConfirmation} from './page-confirmation.mjs';
 import MarkdownTransfer from './MarkdownTransfer.jsx';
@@ -140,6 +141,7 @@ function App(){
  async function refreshShared(){const r=await fetch('/api/collaboration?member='+encodeURIComponent(role));const value=await r.json();if(!r.ok)throw Error(value.error);syncShared(value);}
  useEffect(()=>{if(!role)return;sharedSequence.current=-1;setSharedMissions(null);setRecords({});setDrafts({});setComments({});setInsights({});let active=true;const poll=()=>document.hidden&&sharedSequence.current>=0?Promise.resolve():fetch('/api/collaboration?member='+encodeURIComponent(role)).then(r=>r.json()).then(value=>{if(active){setOffline(false);syncShared(value);}}).catch(()=>{if(active)setOffline(true);});poll();const timer=setInterval(poll,1500);return()=>{active=false;clearInterval(timer);};},[role]);
  async function action(value){
+  const confirmationFocus=capturePageFocus();
   // A 新增/撤掉/恢复 Mission card changes the tree, not a field: no field animation, the new tree arrives with the next sync.
   const accepting=value.type==='acceptProposal'&&!Object.values(recordsRef.current).flat().find(m=>m.id===value.proposalId)?.op;
   if(accepting&&revisionFlight.current)throw Error('上一处修订正在保存，请稍后');
@@ -153,7 +155,7 @@ function App(){
    const selector=canvasView==='gantt'?`[data-node="${CSS.escape(value.cardId)}"]`:`[data-block-id="${CSS.escape(value.cardId+':'+(animation.fields[0]||'title'))}"]`;
    scroll.current?.querySelector(selector)?.scrollIntoView({block:'center',inline:'center',behavior:'instant'});
   }
-  try{const r=await fetch('/api/actions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({memberId:role,roundId:data.roundId||null,action:value})});const result=await r.json();if(!r.ok)throw Error(result.error);syncShared(result);if(animation)finishRevision({...animation,version:result.drafts[value.cardId].version});return result;}
+  try{const r=await fetch('/api/actions',{method:'POST',confirmationFocus,headers:{'Content-Type':'application/json'},body:JSON.stringify({memberId:role,roundId:data.roundId||null,action:value})});const result=await r.json();if(!r.ok)throw Error(result.error);syncShared(result);if(animation)finishRevision({...animation,version:result.drafts[value.cardId].version});return result;}
   catch(e){if(animation){if(e.code==='CANCELLED'){clearTimeout(revisionTimer.current);setCanvasRevision(null);}else showRevision({...animation,phase:'failed'});}throw e;}
   finally{if(animation)revisionFlight.current=null;}
  }
