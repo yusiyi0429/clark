@@ -289,7 +289,7 @@ export function WelcomeFlow({ data: initial, nextPath }: { data: OnboardingData;
             {step === "tour-board" ? <><p className={`${s.description} ${s.desktopTourCopy}`}>{data.role === "ceo" ? <>各个战场和雷达都在这里。<br />底部是你的 Agent：问公司的事，它查了再答；要约会议，也直接跟它说。</> : <>最上面是这个月的日历、你的 Mission 和约会议、等回复这些常用操作。<br />选一个 Mission，下面是它的 Task 和执行事项，分已完成、本周、之后三栏；再往下是最近进展。<br />底部是你的 Agent：问这个月的事，它查了再答。</>}</p><p className={`${s.description} ${s.mobileTourCopy}`}>{data.role === "ceo" ? "各个战场和雷达都在通知下面，一个一行。点开任何一条，详情铺满屏幕，左上角返回；底部是你的 Agent，问公司的事、约会议都跟它说。" : "约会议、等回复在最上面；往下是这个月的日历、Mission，再往下是 Mission 里的执行事项，本周的排在最前。"}</p></> : null}
             {step === "mission-flow" ? <p className={s.description}>月初一起定方向，之后由你拆成每天的事。</p> : null}
             {step === "voiceprint" ? <p className={s.description}>录一段 15–30 秒的朗读，帮我在会后建议哪些发言可能来自你——最后仍由人核对。</p> : null}
-            {step === "connect" ? <p className={s.description}>Codex、Claude Code 这类工具连上天枢后，能读你的执行事项、帮你写进展。需要每周自动同步时，可以再设置定时任务。</p> : null}
+            {step === "connect" ? <p className={s.description}>Codex、Claude Code 这类工具连上天枢后，能读你的执行事项、帮你写进展。</p> : null}
             {step === "start" && !returnPath ? <p className={s.description}>{data.next.text}</p> : null}
           </div>
           <div className={s.details}>

@@ -6,20 +6,11 @@ export type TokenClient = AgentClient | "collector";
 
 export const clientName = (client: TokenClient) => client === "codex" ? "Codex" : client === "claude" ? "Claude Code" : client === "collector" ? "本机采集器" : "AI 工具";
 
-const syncInstruction = (span: "本周" | "今天") => `用天枢 MCP 同步我${span}的工作进展：先调用 tianshu 的 list_my_items（status=all）看我负责的执行事项；我已知的协作事项用 get_item 核对。再根据我${span === "本周" ? "这周" : "今天"}实际做过的事（当前目录及其下各仓库的提交、文档，以及我们的对话），为每件有进展的事项调用一次 append_progress，写清做了什么、证据链接和下一步；做出来的文档、设计稿、PR 这类有链接的东西，用 add_link 放进对应事项。实际推进了、但天枢里还没有对应事项的工作，够一件执行事项（Mission 卡上一个带 ◆ 关口的 Activity，一般 1–2 周）才用 create_item 建一条（必须挂到对应的 Mission，实在对不上就写清为什么，交给我处理）再写进展；过程步骤、修小问题、配置、一次会、一次问答、跑完一个子任务都只写进展，不新建。我推进的事项已经做完的，用 submit_for_acceptance 提交验收，对照完成标准逐条写明是否达到和依据，完成由我在天枢逐条确认。没有进展的事项不要写，不要编造。最后列出你写了哪几条、新建了哪几条。`;
-export const SYNC_INSTRUCTION = syncInstruction("本周");
-/** 每日补漏：会话里漏写的进展、漏建的事项，每天定时补一次。 */
-export const DAILY_SYNC_INSTRUCTION = syncInstruction("今天");
+/** 用户说「同步本周进展」时照这段做（本人明确要求的同步）。 */
+export const SYNC_INSTRUCTION = `用天枢 MCP 同步我本周的工作进展：先调用 tianshu 的 list_my_items（status=all）看我负责的执行事项；我已知的协作事项用 get_item 核对。再根据我这周实际做过的事（当前目录及其下各仓库的提交、文档，以及我们的对话），为每件有进展的事项调用一次 append_progress，写清做了什么、证据链接和下一步；做出来的文档、设计稿、PR 这类有链接的东西，用 add_link 放进对应事项。实际推进了、但天枢里还没有对应事项的工作，够一件执行事项（Mission 卡上一个带 ◆ 关口的 Activity，一般 1–2 周）才用 create_item 建一条（必须挂到对应的 Mission，实在对不上就写清为什么，交给我处理）再写进展；过程步骤、修小问题、配置、一次会、一次问答、跑完一个子任务都只写进展，不新建。我推进的事项已经做完的，用 submit_for_acceptance 提交验收，对照完成标准逐条写明是否达到和依据，完成由我在天枢逐条确认。没有进展的事项不要写，不要编造。最后列出你写了哪几条、新建了哪几条。`;
 
-const TOOLS = "mcp__tianshu__list_my_items,mcp__tianshu__create_item,mcp__tianshu__get_item,mcp__tianshu__append_progress,mcp__tianshu__add_link,mcp__tianshu__submit_for_acceptance";
-
-/** 手动运行或放进定时任务的同步命令；其他工具没有统一的命令行，用各自的非交互模式。Codex 默认只在 git 仓库里运行，工作目录常是装着多个仓库的上级目录。 */
-export const syncCommand = (client: "codex" | "claude", instruction = SYNC_INSTRUCTION) => client === "codex"
-  ? `codex exec --skip-git-repo-check "${instruction}"`
-  : `claude -p "${instruction}" --allowedTools "${TOOLS}"`;
-
-/** Codex 的天枢配置：令牌直接写请求头（桌面 App、IDE 插件、命令行、定时任务读同一份，不依赖环境变量）；
- *  放行天枢工具，否则无人值守的 codex exec 会拒绝调用 MCP 工具（2026-09-30 实测）。 */
+/** Codex 的天枢配置：令牌直接写请求头（桌面 App、IDE 插件、命令行读同一份，不依赖环境变量）；
+ *  放行天枢工具：本人叫 Agent 写的时候不用再点一次确认。 */
 export const codexConfig = (endpoint: string, token: string) => [
   "[mcp_servers.tianshu]",
   `url = "${endpoint}"`,
@@ -44,7 +35,7 @@ export function connectCommands(client: AgentClient, endpoint: string, token: st
 export const GUIDE_FILE_NAME = "天枢连接说明.md";
 
 /** OAuth 步骤可直接分享：没有令牌，登录与权限由本人在浏览器确认。
- *  天枢工具设为免确认：用户叫 Agent 建事项、写进展时不用再点一次确认，定时同步无人值守时弹窗就办不成。 */
+ *  天枢工具设为免确认：本人叫 Agent 写的时候不用再点一次确认。 */
 export function oauthConnectionGuide(role: "ceo" | "member", client: AgentClient, endpoint: string): string {
   const setup = client === "codex" ? [
     `codex mcp add tianshu --url ${endpoint}`,
@@ -60,12 +51,10 @@ export function oauthConnectionGuide(role: "ceo" | "member", client: AgentClient
     "已有同名配置时更新地址，移除旧的 Authorization 请求头，再登录；保留其他服务配置。",
     "请让我在浏览器里登录天枢并点“允许连接”，不要代替我确认授权。",
     `登录后按工具要求重新加载连接，用 ${role === "ceo" ? "list_pending" : "list_my_items"} 验证能读取。`,
-    "这里只设置连接；每天定时补漏需要单独配置。",
   ].join("\n");
 }
 
-/** weeklySync：用户在生成前打开了「每周五自动同步」，设定时任务就是必做的一步。 */
-export function connectionGuide({ role, client, endpoint, token, expires, weeklySync }: { role: "ceo" | "member"; client: AgentClient; endpoint: string; token: string; expires: string; weeklySync: boolean }): string {
+export function connectionGuide({ role, client, endpoint, token, expires }: { role: "ceo" | "member"; client: AgentClient; endpoint: string; token: string; expires: string }): string {
   const name = clientName(client);
   const steps = client === "other" ? [
     "天枢是一个远程 MCP 服务（Streamable HTTP，Bearer 令牌）。请按你所在工具自己的方式添加它，名称用 `tianshu`：",
@@ -81,7 +70,7 @@ export function connectionGuide({ role, client, endpoint, token, expires, weekly
     codexConfig(endpoint, token),
     "```",
     "",
-    "   令牌直接写在请求头里，Codex 的桌面 App、IDE 插件、命令行和定时任务都读这一份，不需要环境变量；`default_tools_approval_mode = \"approve\"` 只对天枢生效，让定时同步无人值守时也能调用天枢的工具。",
+    "   令牌直接写在请求头里，Codex 的桌面 App、IDE 插件和命令行都读这一份，不需要环境变量；`default_tools_approval_mode = \"approve\"` 只对天枢生效，用户叫你写天枢时不用再点一次确认。",
     "   这个文件在工作目录之外，写入被沙箱挡住时，申请在沙箱外执行，让用户在批准弹窗里点允许；不要让用户自己去改文件。",
     "2. 请用户完全退出并重新打开 Codex（桌面 App 要从菜单里退出，不只是关窗口）。",
   ] : [
@@ -129,27 +118,6 @@ export function connectionGuide({ role, client, endpoint, token, expires, weekly
       "- 可以问用户要不要把上面两条写进常用项目的 AGENTS.md 或 CLAUDE.md（不要写令牌）。",
     ]),
     "",
-    ...(role === "member" && weeklySync ? [
-      "## 第三步：设好每周五自动同步（用户已选择开启）",
-      "",
-      ...(client === "other" ? [
-        "帮用户在系统里建一个每周五 18:00 运行的定时任务，用你所在工具的非交互（命令行）方式，带着上面「同步本周进展」那段指令运行。你的工具不支持非交互运行的话，告诉用户改成每周五手动说一次「同步本周进展」。",
-      ] : [
-        "帮用户在系统里建一个每周五 18:00 运行的定时任务，运行：",
-        "",
-        "```",
-        syncCommand(client),
-        "```",
-      ]),
-      "",
-      "- 工作目录设成用户放项目的目录；可以是装着多个仓库的上级目录，它本身不必是 git 仓库。",
-      "- Windows 用任务计划程序（`schtasks`）；macOS 用 LaunchAgent（`~/Library/LaunchAgents` 里的 plist，`StartCalendarInterval`，电脑休眠错过的会在唤醒后补跑），不要用 crontab；Linux 用 crontab。",
-      "- 写 plist、`launchctl`、`schtasks`、`crontab` 这类命令多半会被你的沙箱拦住：直接申请在沙箱外执行，让用户在批准弹窗里点允许。用户多半不是技术人员，不要让用户自己去终端敲命令；确实无法申请时，才把要执行的那一条命令给用户，并说清怎么打开终端、粘贴、回车。",
-      "- 定时任务不会读用户的 shell 配置，终端里能找到的命令它可能找不到：用一个小脚本包起来，脚本开头先加载用户的 shell 配置（例如 macOS 上 `source ~/.zshrc`），输出写进日志文件。",
-      "- 建好后用调度器立即触发一次（macOS：`launchctl kickstart gui/$(id -u)/<Label>`；Windows：`schtasks /run /tn <任务名>`），看日志，再请用户打开天枢「账号菜单 → 连接到外部工具」，这条连接显示「最近同步」就说明写进了天枢。不要只在终端里直接跑命令，那样测不出定时环境缺了什么。",
-      "- 最后把任务名、下次运行时间和日志位置告诉用户。",
-      "",
-    ] : []),
     "## 最后",
     "",
     "提醒用户删掉这个文件。令牌丢了或不用了，可以在天枢的「账号菜单 → 连接到外部工具」里撤销再生成。",

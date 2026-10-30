@@ -17,5 +17,7 @@ describe("浏览器授权连接说明", () => {
     expect(oauthConnectionGuide("member", "codex", "https://t.example/mcp/me")).toContain('default_tools_approval_mode = "approve"');
     expect(oauthConnectionGuide("member", "claude", "https://t.example/mcp/me")).toContain('permissions.allow 里加 "mcp__tianshu"');
     expect(oauthConnectionGuide("member", "other", "https://t.example/mcp/me")).toContain("不用每次确认");
+    // 10/30 起没有定时同步，说明里不再提定时补漏。
+    expect(oauthConnectionGuide("member", "codex", "https://t.example/mcp/me")).not.toContain("定时");
   });
 });

@@ -37,7 +37,7 @@ export function watchFirstUse(id: string, onView: (view: TokenView) => void, int
   return () => { stopped = true; window.clearTimeout(timer); };
 }
 
-/** 连接一个外部工具：填名字、选工具与有效期（成员还有每周同步开关）→ 生成 → 下载说明文件发给自己的 Agent。
+/** 连接一个外部工具：填名字、选工具与有效期 → 生成 → 下载说明文件发给自己的 Agent。
  *  设置里的「连接到外部工具」和首次引导共用这一份。 */
 export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, revokedIds = [], actionsTarget, onCreated, onUpdated, onDownloaded }: {
   role: "ceo" | "member";
@@ -58,9 +58,6 @@ export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, rev
   const [name, setName] = useState(defaultName);
   const [client, setClient] = useState<TokenView["client"]>("codex");
   const [expiresInDays, setExpiresInDays] = useState<30 | 90 | null>(90);
-  /** 默认每周五自动同步：写进说明文件，由 Agent 连接时一并设好定时任务。 */
-  const [weeklySync, setWeeklySync] = useState(false);
-  const [createdWeekly, setCreatedWeekly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
@@ -79,7 +76,7 @@ export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, rev
     try {
       const { data, error: failure } = await browserApi.POST("/api/me/tokens", { body: { name: name.trim(), client, expiresInDays } });
       if (!data) throw new Error(failure?.message ?? "连接说明没生成，请重试");
-      setCreated(data); setCreatedWeekly(weeklySync); setName("");
+      setCreated(data); setName("");
       onCreated?.(data.view);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "连接说明没生成，请重试"); }
     finally { setBusy(false); }
@@ -92,7 +89,7 @@ export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, rev
   const endpoint = `${origin}/mcp/me`;
   const download = () => {
     if (!created) return;
-    const text = connectionGuide({ role, client: created.view.client as AgentClient, endpoint, token: created.token, expires: expiryText(created.view.expiresAt), weeklySync: createdWeekly });
+    const text = connectionGuide({ role, client: created.view.client as AgentClient, endpoint, token: created.token, expires: expiryText(created.view.expiresAt) });
     const url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url; link.download = GUIDE_FILE_NAME;
@@ -115,10 +112,6 @@ export function PersonalTokenForm({ role, defaultName = "", activeCount = 0, rev
         <ToggleButton id="30">30 天</ToggleButton><ToggleButton id="90">90 天</ToggleButton><ToggleButton id="never">不过期</ToggleButton>
       </ToggleButtonGroup>
     </div>
-    {role === "member" ? <button type="button" role="switch" aria-checked={weeklySync} className={s.switchRow} onClick={() => setWeeklySync(!weeklySync)}>
-      <span className={s.switchText}><strong>每周五 18:00 自动同步进展</strong></span>
-      <span className={f.switch} data-on={weeklySync} aria-hidden="true"><span /></span>
-    </button> : null}
     {actionsTarget === undefined ? <Button variant="primary" isDisabled={busy || !name.trim() || activeCount >= 5} onPress={() => void create()}>生成连接说明</Button> : null}
     {actionsTarget ? createPortal(created
       ? <button type="button" className={f.primary} onClick={download}>下载连接说明<Download size={18} aria-hidden="true" /></button>
