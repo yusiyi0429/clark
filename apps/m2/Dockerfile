@@ -2,6 +2,9 @@ FROM node:24-alpine AS build
 ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
 RUN npm install -g pnpm@11.20.0
 WORKDIR /repo
+ARG M2_BUILD_COMMIT
+ARG M2_BUILD_ENV
+ENV M2_BUILD_COMMIT=$M2_BUILD_COMMIT M2_BUILD_ENV=$M2_BUILD_ENV
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
 COPY apps/m2 apps/m2
 RUN pnpm_config_registry=$NPM_CONFIG_REGISTRY pnpm install --frozen-lockfile && pnpm --filter @warmap/m2 build
