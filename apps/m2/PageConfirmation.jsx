@@ -8,7 +8,7 @@ export default function PageConfirmation(){
   const element=dialog.current,previous=pending.focusOrigin||capturePageFocus();
   cancelFocusRestore();
   element.showModal();cancel.current?.focus();
-  return()=>{element.close();restoreConfirmationFocus(previous);};
+  return()=>{element.close();restoreConfirmationFocus(previous,{closingDialog:element});};
  },[pending]);
  // Do not settle via close events: an old close event must never decide a new request.
  return <dialog ref={dialog} className="page-confirmation" aria-labelledby={id+'-title'} aria-describedby={id+'-message'} onCancel={event=>{event.preventDefault();pending?.choose(false);}} onClick={event=>{if(event.target!==dialog.current)return;const r=dialog.current.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)pending?.choose(false);}}>
