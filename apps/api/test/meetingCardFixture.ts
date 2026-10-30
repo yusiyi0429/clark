@@ -24,10 +24,15 @@ const TURNS = [
   { id: "turn-003", speakerId: OWNER, text: "好，我月底前把渠道看板接到 v2。" },
 ];
 
-/** 一条决策（「接口统一改成 v2」，责任人测试丙），一处属于它的修改，一条行动项（测试丙）。 */
-export function cardAgent(objectChanges = [{ targetRef: "obj-po-1#target/acc-1", after: { text: "十月底前 4 家客户上线" }, basisSections: [1], decision: 1 }],
-  decisions = [{ text: "接口统一改成 v2", ownerPersonId: OWNER as string | null, basisSections: [1] }]): PostMeetingAgent {
+type CandidateChange = { targetRef: string; after: { text: string }; basisSections: number[] };
+/**
+ * 一条决策（「接口统一改成 v2」，责任人测试丙），一条行动项（测试丙）。objectChanges 是 10/28 之前的会议卡上的修改：
+ * 会后整理不再拟修改（候选里给空数组），setup 造老会议卡时放进草稿。
+ */
+export function cardAgent(objectChanges: CandidateChange[] = [{ targetRef: "obj-po-1#target/acc-1", after: { text: "十月底前 4 家客户上线" }, basisSections: [1] }],
+  decisions = [{ text: "接口统一改成 v2", ownerPersonId: OWNER as string | null, basisSections: [1] }]): PostMeetingAgent & { objectChanges: CandidateChange[] } {
   return {
+    objectChanges,
     async generate() {
       return { candidate: {
         summary: "接口统一切到 v2，渠道预算下周再定。",
@@ -36,7 +41,7 @@ export function cardAgent(objectChanges = [{ targetRef: "obj-po-1#target/acc-1",
           { heading: "渠道预算", body: "未定：渠道预算下周看数据再定。", turnIds: ["turn-001"] },
         ],
         decisions,
-        objectChanges,
+        objectChanges: [],
         actionItems: [{ text: "渠道看板接到 v2", ownerPersonId: OWNER, dueDate: "2026-06-30", basisSections: [1] }],
       } };
     },
@@ -44,9 +49,14 @@ export function cardAgent(objectChanges = [{ targetRef: "obj-po-1#target/acc-1",
 }
 const preflightAgent: PreflightAgent = { async generate(input: PreflightAgentInput) { return { candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)) }; } };
 
+/**
+ * 建会、导入逐字稿、生成会议卡。缺省造一张 10/28 之前的会议卡（整卡确认、带对象修改）：去掉逐条确认，主持人把 agent 的修改加到草稿上
+ * （目标不在候选里的当未定）；extra.v2 留着生成出来的逐条确认会议卡。
+ */
 export async function setup(agent: PostMeetingAgent = cardAgent(), env: Pick<AppEnv, "internalChatToken" | "feishu" | "meetingRecordText"> = {},
-  extra: { meetingFollowThroughAgents?: { minutesApi?: FeishuMinutesApi } } = {}) {
-  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, ...worldEnv, ...env }, undefined, { preflightAgent, outcomeAgent: agent, ...extra });
+  extra: { meetingFollowThroughAgents?: { minutesApi?: FeishuMinutesApi }; v2?: boolean } = {}) {
+  const { v2, ...agents } = extra;
+  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, ...worldEnv, ...env }, undefined, { preflightAgent, outcomeAgent: agent, ...agents });
   const ceo = await t.loginCookie();
   const issueCard = await t.createIssue();
   const create = ((issueCard as unknown as { actions: { actionType: string; actionId: string }[] }).actions).find((a) => a.actionType === "issue.create_meeting")!;
@@ -66,7 +76,29 @@ export async function setup(agent: PostMeetingAgent = cardAgent(), env: Pick<App
   const host = await t.memberCookie();
   const worker = createJobWorker({ pool: t.pool, handlers: t.app.meetingFollowThrough.jobs().handlers });
   const run = async () => { while (await worker.tick() > 0); };
+  if (!v2) await legacyCard(t, host, meetingId, (agent as { objectChanges?: CandidateChange[] }).objectChanges ?? []);
   return { t, ceo, host, owner, meetingId, run };
+}
+
+/**
+ * 生成好的会议卡改成 10/28 之前的样子：没有逐条确认（decisions、行动项的 review 去掉），修改像当时模型生成的一样在草稿里
+ * （经存草稿由服务填目标标题、原内容和版本，再把草稿版本拨回生成时的，当作没人存过）。
+ */
+async function legacyCard(t: TestApp, host: string, meetingId: string, changes: CandidateChange[]) {
+  const generated = (await t.pool.query(
+    `UPDATE meeting_cards SET decisions = NULL,
+            action_items = (SELECT coalesce(jsonb_agg(item - 'review' ORDER BY ord), '[]'::jsonb) FROM jsonb_array_elements(action_items) WITH ORDINALITY AS a(item, ord))
+      WHERE meeting_id = $1 AND draft IS NOT NULL RETURNING draft_version`, [meetingId])).rows[0] as { draft_version: number } | undefined;
+  if (!generated || !changes.length) return;
+  const view = await getCard(t, host, meetingId);
+  const options = new Set(view.targetOptions.map((option) => option.targetRef));
+  await edit(t, host, meetingId, (draft) => {
+    draft.objectChanges = changes.map((change, index) => ({
+      id: `chg-${index + 1}`, targetRef: options.has(change.targetRef) ? change.targetRef : null, targetTitle: null, expectedVersion: null, before: null,
+      after: change.after, basisSectionIds: change.basisSections.map((n) => `sec-${n}`), stale: false,
+    }));
+  });
+  await t.pool.query("UPDATE meeting_cards SET draft_version = $2 WHERE meeting_id = $1", [meetingId, generated.draft_version]);
 }
 
 export const getCard = async (t: TestApp, cookie: string, meetingId: string): Promise<TMeetingCardView> => {

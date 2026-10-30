@@ -3,6 +3,7 @@
 /**
  * 通知栏的会后两组（10/28 起记录正文不用确认，不进通知栏）：
  * - 「会后确认」：等我确认的决策和行动项（GET /api/me/meeting-cards 的 confirms），一次只出一条、左右翻；卡上当场确认或写原因说不对，不进二级页。
+ *   我主持的会里没有责任人的决策，点了去会议页交给一位参会人。
  *   成员和 CEO 用同一个组件、同一个接口，按人给。
  * - 「会议记录」：飞书里直接开的会待整理（GET /api/me/feishu-minutes，卡上整理、记到天枢里约好的会、忽略），
  *   和我主持或创建的会里写入本体失败的（卡上重试）。
@@ -33,16 +34,34 @@ export function meetingCardNotices(meetings: TMyMeetingCard[], meetingBase: stri
   }));
 }
 
-export type ConfirmActs = { review(item: TMyMeetingConfirm, verdict: "confirm" | "reject", reason?: string): Promise<NoticeOutcome> };
+export type ConfirmActs = {
+  review(item: TMyMeetingConfirm, verdict: "confirm" | "reject", reason?: string): Promise<NoticeOutcome>;
+  /** 去会议页（没有责任人的决策在那里交给一位参会人）。 */
+  open(item: TMyMeetingConfirm, from: Element | null): void;
+};
 const CONFIRM_WORDS = {
   decision: { label: "决策确认", confirm: "确认", confirmed: "已确认", reject: "不对", field: "哪里不对", submit: "提交", rejected: "已标为不对" },
   action: { label: "执行事项确认", confirm: "接下", confirmed: "已接下", reject: "退回", field: "退回的原因", submit: "退回", rejected: "已退回" },
 } as const;
 const receipt = (outcome: NoticeOutcome, text: string): NoticeOutcome => (outcome.ok ? { ok: true, settled: text } : outcome);
 
-/** 等我确认的一条：标签写类别，正文是决策或事项本身，小字是来自哪场会（行动项带截止）。 */
+/**
+ * 等我处理的一条：标签写类别，正文是决策或事项本身，小字是来自哪场会（行动项带截止）。
+ * 没有责任人的决策（我是主持人）：去会议页交给一位参会人，交出去之前一直留着。
+ */
 export function confirmNotices(confirms: TMyMeetingConfirm[], act: ConfirmActs): ActionNotice[] {
   return confirms.map((item) => {
+    if (item.needsOwner) {
+      return {
+        id: `${item.meetingId}:owner:${item.id}`,
+        label: "指定责任人",
+        title: item.text,
+        detail: `来自「${item.title}」`,
+        tone: "amber",
+        onOpen: (from) => act.open(item, from),
+        buttons: [{ label: "去指定", emphasis: true, run: async () => { act.open(item, null); return { ok: false, cancelled: true }; } }],
+      };
+    }
     const words = CONFIRM_WORDS[item.kind];
     return {
       id: `${item.meetingId}:${item.kind}:${item.id}`,
@@ -135,7 +154,8 @@ export function MeetingCardNoticeList({ meetings, confirms = NO_CONFIRMS, minute
     const result = await retryMeetingCardSync(meeting.meetingId);
     return result.ok ? { ok: true, settled: "已重新写入" } : { ok: false, error: result.status === 0 ? "网络不通，再试一次" : "没有办成" };
   };
-  const pending = confirmNotices(confirms, { review }).filter((notice) => !hidden.includes(notice.id));
+  const open: ConfirmActs["open"] = (item, from) => onNavigate(`${meetingBase}/${item.meetingId}`, from);
+  const pending = confirmNotices(confirms, { review, open }).filter((notice) => !hidden.includes(notice.id));
   const notices = [...minuteNotices(minutes, act), ...meetingCardNotices(meetings, meetingBase, onNavigate, retry)].filter((notice) => !hidden.includes(notice.id));
   return (
     <>

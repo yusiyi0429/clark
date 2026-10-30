@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { TMeetingActionItem, TMeetingCardDraft, TMeetingCardSection, TMeetingCardTargetOption, TMeetingCardView } from "@warmap/contracts";
 import {
-  assignMeetingCardSpeaker, confirmMeetingCard, getMeetingCard, retryMeetingCardSync, reviewMeetingCardItem, saveMeetingCardDraft, setMeetingCardWorldChoice,
-  type CardResult,
+  assignMeetingCardSpeaker, assignMeetingDecisionOwner, confirmMeetingCard, getMeetingCard, retryMeetingCardSync, reviewMeetingCardItem, saveMeetingCardDraft,
+  setMeetingCardWorldChoice, type CardResult, type ReviewResult,
 } from "./meetingCardApi";
 import {
   cardDiffers, draftFromConfirmed, draftReady, itemsDiffer, itemsWithoutSection, newItemId, newSectionId, restoreBlank, restoreBlankItems,
@@ -259,18 +259,23 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
   /** 服务端换了逐条状态、写入选择（草稿版本不变）：有没存的修改时只换视图，不动本地草稿。 */
   const refreshed = (next: TMeetingCardView) => adopt(next, !dirtyRef.current && !savingRef.current && !conflictRef.current);
 
-  /** 逐条确认一条决策（自己确认、说不对，或主持人代确认）；已经处理过、定版了的按返回的最新状态显示。 */
-  const review = async (id: string, verdict: "confirm" | "reject", reason?: string): Promise<boolean> => {
+  /** 一条决策的操作（确认、说不对、补归属）：已经处理过、定版了的按返回的最新状态显示。 */
+  const decisionAction = async (call: Promise<ReviewResult>, failed: ActionError): Promise<boolean> => {
     setBusy(true);
     setError(null);
-    const result = await reviewMeetingCardItem(meetingId, { kind: "decision", id, verdict, ...(reason ? { reason } : {}) });
+    const result = await call;
     if (!aliveRef.current) return false;
     setBusy(false);
     if (result.view) refreshed(result.view);
-    if (!result.ok && !result.view) setError(actionError(result, "确认失败"));
+    if (!result.ok && !result.view) setError(actionError(result, failed));
     if (result.ok) { setPollUntil(Date.now() + POLL_LIMIT_MS); announce(); }
     return result.ok;
   };
+  /** 逐条确认一条决策（本人确认或说不对）。 */
+  const review = (id: string, verdict: "confirm" | "reject", reason?: string) =>
+    decisionAction(reviewMeetingCardItem(meetingId, { kind: "decision", id, verdict, ...(reason ? { reason } : {}) }), "确认失败");
+  /** 主持人把没有责任人的决策交给一位参会人确认。 */
+  const assignOwner = (id: string, ownerPersonId: string) => decisionAction(assignMeetingDecisionOwner(meetingId, { id, ownerPersonId }), "指定失败");
 
   /** 定版前改「不写进本体」。 */
   const setWorldChoice = async (writeToWorld: boolean) => {
@@ -433,6 +438,6 @@ export function useMeetingCard(meetingId: string, initial: TMeetingCardView, onV
     view, draft, items, leftItems, pending, editing, timeInFooter, timeRejected, focus, conflict, unsaved, saveState, busy, error,
     edit: update, leave, setOccurredAt, setSection, moveSection, deleteSection, addSection, setPendingField, leavePending, setAfter, setTarget, deleteChange,
     addItem, setItem, deleteItem, leaveItem,
-    startEditing: () => { setSaveState("idle"); setFocus("title"); setEditing(true); }, reload, confirm, discard, retry, assignSpeaker, review, setWorldChoice,
+    startEditing: () => { setSaveState("idle"); setFocus("title"); setEditing(true); }, reload, confirm, discard, retry, assignSpeaker, review, assignOwner, setWorldChoice,
   };
 }

@@ -599,7 +599,9 @@ ${input}` : input;
               ...(anchorSelection ? { anchorSelection } : {}),
               ...(options.resumeRunId ? { resumeRunId: options.resumeRunId } : {}),
               ...(options.answers ? { answers: options.answers.input } : {}),
-              ...(options.scopeOverride ? { scopeOverride: options.scopeOverride } : {}) }),
+              ...(options.scopeOverride ? { scopeOverride: options.scopeOverride } : {}),
+              // 首页对话在每个二级页面都开着：带上本人此刻在哪个页面，Agent 才知道「这页」指什么。
+              ...(scope === "global" ? { pagePath: window.location.pathname } : {}) }),
             signal: controller.signal,
           });
           if (UNDELIVERED.has(`HTTP_${response.status}`)) undelivered = new TurnError(`HTTP_${response.status}`, "");

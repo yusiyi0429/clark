@@ -7,13 +7,13 @@ const meeting = (overrides: Partial<TMyMeetingCard> = {}): TMyMeetingCard => ({
   meetingId: "m1", title: "接口切换会", endedAt: "2026-10-20T06:00:00.000Z", status: "failed", ...overrides,
 });
 const confirm = (overrides: Partial<TMyMeetingConfirm> = {}): TMyMeetingConfirm => ({
-  meetingId: "m1", title: "AIDC 月中会", kind: "decision", id: "dec-1", text: "AIDC 11 月预算从 A 线挪 30 万到 B 线", dueDate: null, ...overrides,
+  meetingId: "m1", title: "AIDC 月中会", kind: "decision", id: "dec-1", text: "AIDC 11 月预算从 A 线挪 30 万到 B 线", dueDate: null, needsOwner: false, ...overrides,
 });
 
 describe("会后确认：只出要确认的决策和行动项，一次一条", () => {
   it("决策：标签「决策确认」、正文是决策本身、小字来自哪场会；当场确认，不对要写原因", async () => {
     const review = vi.fn<ConfirmActs["review"]>(async () => ({ ok: true }));
-    const [notice] = confirmNotices([confirm()], { review });
+    const [notice] = confirmNotices([confirm()], { review, open: vi.fn() });
     expect(notice).toMatchObject({ label: "决策确认", title: "AIDC 11 月预算从 A 线挪 30 万到 B 线", detail: "来自「AIDC 月中会」" });
     expect(notice.onOpen).toBeUndefined();
     expect(notice.buttons.map((button) => button.label)).toEqual(["确认"]);
@@ -26,12 +26,27 @@ describe("会后确认：只出要确认的决策和行动项，一次一条", (
 
   it("行动项：标签「执行事项确认」，带截止；接下 / 退回；失败照原因提示", async () => {
     const review = vi.fn<ConfirmActs["review"]>(async () => ({ ok: false, error: "已经处理过了" }));
-    const [notice] = confirmNotices([confirm({ kind: "action", id: "act-1", text: "交 TK 试用 scope 写入演练报告", dueDate: "2026-10-31" })], { review });
+    const [notice] = confirmNotices([confirm({ kind: "action", id: "act-1", text: "交 TK 试用 scope 写入演练报告", dueDate: "2026-10-31" })], { review, open: vi.fn() });
     expect(notice.label).toBe("执行事项确认");
     expect(notice.detail).toMatch(/^来自「AIDC 月中会」 · 截止 /);
     expect(notice.buttons.map((button) => button.label)).toEqual(["接下"]);
     expect(notice.reason?.label).toBe("退回");
     expect(await notice.buttons[0].run()).toEqual({ ok: false, error: "已经处理过了" });
+  });
+
+  it("没有责任人的决策（我是主持人）：标签「指定责任人」，点「去指定」或标题去会议页；不当场确认，交出去之前留着", async () => {
+    const review = vi.fn<ConfirmActs["review"]>();
+    const open = vi.fn<ConfirmActs["open"]>();
+    const item = confirm({ needsOwner: true });
+    const [notice] = confirmNotices([item], { review, open });
+    expect(notice).toMatchObject({ label: "指定责任人", title: "AIDC 11 月预算从 A 线挪 30 万到 B 线", detail: "来自「AIDC 月中会」" });
+    expect(notice.reason).toBeUndefined();
+    expect(notice.buttons.map((button) => button.label)).toEqual(["去指定"]);
+    expect(await notice.buttons[0].run()).toEqual({ ok: false, cancelled: true });
+    expect(open).toHaveBeenCalledWith(item, null);
+    notice.onOpen!(null);
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(review).not.toHaveBeenCalled();
   });
 
   it("多条时只出第一条，底下「第 1 条 / 共 2 条」和左右箭头；一条时不出翻页", () => {

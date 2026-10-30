@@ -5,6 +5,7 @@ import { turnFailureCopy } from "./conversationRecovery.js";
 import { segmentDateLabel, startsNewSegment } from "./conversationSegments.js";
 import type { HomeTurnVia } from "./homeTurn.js";
 import { logEvent } from "./observability.js";
+import type { PageGuide } from "./pageGuides.js";
 import { Value } from "@sinclair/typebox/value";
 import type { Static, TSchema } from "@sinclair/typebox";
 
@@ -30,7 +31,7 @@ export class ChatServiceError extends Error {
 }
 
 type ChatAttachment = { attachmentId: string; fileName: string; mime: string; size: number; status?: string };
-type ChatMessage = { position?: string; role: "user" | "assistant"; text: string; runId: string; attachments?: ChatAttachment[]; turnAt?: string; source?: HomeTurnVia | null };
+type ChatMessage = { position?: string; role: "user" | "assistant"; text: string; runId: string; attachments?: ChatAttachment[]; turnAt?: string; channel?: HomeTurnVia | null };
 type ChatRun = { runId: string; status: string };
 type ChatMessagePage = { messages: ChatMessage[]; nextCursor: string | null; runs: ChatRun[] };
 type ChatEvent = { type: string; [key: string]: unknown };
@@ -60,8 +61,15 @@ const STOPPED_NOTE = "（已停止，以上是停止前写出的部分。）";
 const BROKEN_NOTE = "（这次回答在这里中断了，以上是已经写出的部分。）";
 const EMPTY_NOTE = "（这次回答没有完成。）";
 
-/** Chat 每一轮都是边查边写（主模型加工具），实测首字 1–2 分钟：按天枢的深度档显示「预计 1–2 分钟」。 */
-const ROUTE_EVENT = { type: "route", tier: "deep", expectSeconds: 90 };
+/**
+ * Chat 不分快慢档（每一轮都是主模型边查边写），寒暄几秒就答完、要查的要 30 秒以上：
+ * 开头按检索问答档显示「正在思考 · N 秒」；deepenAfterMs 内还没写出正文，改成深度档，界面换成「正在深度思考 · 预计 1–2 分钟」。
+ */
+export const CHAT_ROUTE = {
+  start: { type: "route", tier: "grounded", expectSeconds: 30 },
+  deep: { type: "route", tier: "deep", expectSeconds: 90 },
+  deepenAfterMs: 20_000,
+};
 
 const attachmentInfo = (file: ChatAttachment) => ({ id: file.attachmentId, fileName: file.fileName, mimeType: file.mime, sizeBytes: file.size });
 
@@ -117,7 +125,7 @@ function segmentMessages(messages: ChatMessage[], runs: ChatRun[]) {
   const ordered: { role: "user" | "assistant"; content: string; runId: string; via?: HomeTurnVia; attachments?: ReturnType<typeof attachmentInfo>[] }[] = [];
   for (const message of messages) {
     const state = status.get(message.runId);
-    const via = message.source ? { via: message.source } : {};
+    const via = message.channel ? { via: message.channel } : {};
     if (message.role === "assistant") {
       const note = state === "aborted" ? STOPPED_NOTE : state === "failed" ? BROKEN_NOTE : undefined;
       ordered.push({ role: "assistant", content: note ? `${message.text.trimEnd()}\n\n${note}` : message.text, runId: message.runId, ...via });
@@ -141,6 +149,8 @@ export function createChatService(options: {
   rotation?: boolean;
   /** 发一句、传附件进了哪一段（纪要据此记下有新内容）；失败只记日志，不影响这一句。 */
   onSegment?: (viewer: ChatViewer, segment: ChatSegmentActivity) => Promise<void>;
+  /** 页面目录（CHAT_PAGE_CONTEXT=1 才给）：本人在二级页面问时，这一轮带上 page（这页的名字和说明）。Chat 不收多余字段，没接 page 之前别开。 */
+  pageGuide?: (path: string) => PageGuide | null;
 }) {
   if (!options.token) throw new Error("CHAT_SERVICE_URL 需要同时配置 INTERNAL_CHAT_TOKEN");
   const base = options.baseUrl.replace(/\/+$/, "");
@@ -281,13 +291,16 @@ export function createChatService(options: {
         current = resumed ? { conversation: resumed, started: false } : await segment(viewer, requestId, !body.attachments?.length);
         record(viewer, requestId, current.conversation);
         const id = current.conversation.conversationId;
+        const page = body.pagePath ? options.pageGuide?.(body.pagePath) ?? null : null;
         upstream = await call(viewer, requestId, `/conversations/${id}/turns`, {
           method: "POST", signal: abort.signal, headers: { "content-type": "application/json", accept: "text/event-stream" },
           body: JSON.stringify({ clientRequestId: randomUUID(), message: body.message, attachmentIds: (body.attachments ?? []).map((item) => item.id),
             ...(body.anchorSelection ? { anchorSelection: body.anchorSelection } : {}),
             ...(body.references?.length ? { references: body.references } : {}),
             ...(body.resumeRunId ? { resumeRunId: body.resumeRunId } : {}),
-            ...(via ? { source: via } : {}) }),
+            // 飞书、微信来的这一轮标上来源：Chat 的字段叫 channel，不认识的字段会整轮拒收。
+            ...(via ? { channel: via } : {}),
+            ...(page ? { page } : {}) }),
         });
       } catch (error) {
         if (!abort.signal.aborted) throw error;
@@ -307,6 +320,7 @@ export function createChatService(options: {
       let sequence = 0;
       let written = false;
       let outcome = "broken";
+      let deepen: ReturnType<typeof setTimeout> | undefined;
       const write = (event: ChatEvent) => {
         if (reply.raw.destroyed || reply.raw.writableEnded) return;
         reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify({ ...event, runId, scope: "global", sequence: ++sequence })}\n\n`);
@@ -316,9 +330,10 @@ export function createChatService(options: {
         switch (event.type) {
           case "turn_started":
             runId = String(event.runId);
-            return ROUTE_EVENT;
+            deepen = setTimeout(() => { if (!written) write(CHAT_ROUTE.deep); }, CHAT_ROUTE.deepenAfterMs);
+            return CHAT_ROUTE.start;
           case "message":
-            if (typeof event.delta === "string" && event.delta) written = true;
+            if (typeof event.delta === "string" && event.delta) { written = true; clearTimeout(deepen); }
             return rest;
           case "tool": {
             const label = event.phase === "started" ? TOOL_LABELS[String(event.name)] : undefined;
@@ -363,6 +378,7 @@ export function createChatService(options: {
         // 和 Chat 的连接断了（Chat 重启、网络）：不补事件，界面按回答途中断线处理，连上后自己接着写。
       } finally {
         ended = true;
+        clearTimeout(deepen);
         logEvent({ event: "chat_service.turn", requestId, runId, outcome: abort.signal.aborted ? "client_closed" : outcome,
           conversationId: current.conversation.conversationId, ...(current.started ? { newSegment: true } : {}) });
         // 这一轮写完的时刻记成这段最后一次发言（纪要闲置 15 分钟后才写）。

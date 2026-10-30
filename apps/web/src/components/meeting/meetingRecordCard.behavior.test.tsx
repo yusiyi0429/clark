@@ -93,11 +93,11 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("决策逐条确认的会议卡（10/28）", () => {
-  const PENDING = { status: "pending" as const, by: null, proxy: false, at: null, reason: null };
+  const PENDING = { status: "pending" as const, by: null, at: null, reason: null };
   const DECISION = { id: "dec-1", text: "二期预算定为 80 万", ownerPersonId: "p2", basisSectionIds: ["sec-1"], review: PENDING };
   const decided = (overrides: Partial<TMeetingCardView> = {}) => view({ decisions: [DECISION], hostId: "p1", viewerId: "p1", ...overrides });
 
-  it("记录不用确认：没有「确认这份记录」、不标待确认；决策写着由谁确认，主持人能代确认", async () => {
+  it("记录不用确认：没有「确认这份记录」、不标待确认；决策写着由谁确认，主持人不能替责任人点", () => {
     const tree = render(decided());
     expect(button(tree, "确认这份记录")).toBeUndefined();
     expect(hasText(tree, "待确认")).toBe(false);
@@ -105,19 +105,13 @@ describe("决策逐条确认的会议卡（10/28）", () => {
     expect(hasText(tree, "待周舟确认")).toBe(true);
     expect(hasText(tree, "依据：第 1 段")).toBe(true);
     expect(button(tree, "确认")).toBeUndefined();
-    api.post.mockResolvedValue({ data: { view: decided({ decisions: [{ ...DECISION, review: { ...PENDING, status: "confirmed", by: "p1", proxy: true, at: "2026-10-28T08:00:00.000Z" } }] }) },
-      response: { ok: true, status: 200 } });
-    click(button(tree, "代确认"));
-    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/card/reviews",
-      { params: { path: { id: "m1" } }, body: { kind: "decision", id: "dec-1", verdict: "confirm" } }));
-    await vi.waitFor(() => expect(hasText(render(decided()), "林晓代周舟确认")).toBe(true));
-    expect(button(render(decided()), "代确认")).toBeUndefined();
+    expect(button(tree, "不对")).toBeUndefined();
+    expect(button(tree, "代确认")).toBeUndefined();
   });
 
   it("责任人自己：确认，或写原因说不对", async () => {
     const tree = render(decided({ viewerId: "p2", canEdit: false }));
     expect(button(tree, "确认")).toBeDefined();
-    expect(button(tree, "代确认")).toBeUndefined();
     click(button(tree, "不对"));
     const input = render(decided({ viewerId: "p2", canEdit: false })).find((node) => node.type === "input" && node.props?.["aria-label"] === "哪里不对")!;
     (input.props!.onChange as (event: unknown) => void)({ target: { value: "会上定的是 70 万" } });
@@ -125,6 +119,23 @@ describe("决策逐条确认的会议卡（10/28）", () => {
     click(button(render(decided({ viewerId: "p2", canEdit: false })), "提交"));
     await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/card/reviews",
       { params: { path: { id: "m1" } }, body: { kind: "decision", id: "dec-1", verdict: "reject", reason: "会上定的是 70 万" } }));
+  });
+
+  it("没有责任人的决策：主持人从参会人里选一位交给他确认，自己不能点确认；别人只看「待林晓指定责任人」", async () => {
+    const unowned = { ...DECISION, ownerPersonId: null };
+    const tree = render(decided({ decisions: [unowned] }));
+    expect(button(tree, "确认")).toBeUndefined();
+    const picker = tree.find((node) => node.props?.["aria-label"] === "第 1 条决策交给谁确认" && "options" in node.props)!;
+    expect(picker.props!.options).toEqual([{ value: "p1", label: "林晓" }, { value: "p2", label: "周舟" }]);
+    api.post.mockResolvedValue({ data: { view: null }, response: { ok: true, status: 200 } });
+    (picker.props!.onChange as (value: string) => void)("p2");
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/meetings/{id}/card/owners",
+      { params: { path: { id: "m1" } }, body: { id: "dec-1", ownerPersonId: "p2" } }));
+    hooks.values = []; hooks.refs = [];
+    const other = render(decided({ decisions: [unowned], viewerId: "p2", canEdit: false }));
+    expect(hasText(other, "待林晓指定责任人")).toBe(true);
+    expect(other.some((node) => node.props?.["aria-label"] === "第 1 条决策交给谁确认")).toBe(false);
+    expect(button(other, "确认")).toBeUndefined();
   });
 
   it("定版前底部只有「不写进本体」，点了就存；定版后没确认的写「没有确认」", async () => {
@@ -137,7 +148,6 @@ describe("决策逐条确认的会议卡（10/28）", () => {
     hooks.values = []; hooks.refs = [];
     const frozen = render(decided({ confirmed: confirmedOf(draft()), sync: SYNCED }));
     expect(hasText(frozen, "周舟没有确认")).toBe(true);
-    expect(button(frozen, "代确认")).toBeUndefined();
   });
 });
 

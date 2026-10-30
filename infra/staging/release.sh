@@ -16,6 +16,7 @@
 #   BACKUP_ROOT     备份目录，默认 /srv/tokenhub/backups/tianshu
 #   ALLOW_MIGRATION 本次含新迁移时必须显式设为 1；含迁移时失败不自动回退（旧镜像不能跑新 schema）
 #   KEEP_RELEASES   保留最近几次发布（含当前）的镜像、源码目录和回退目录，默认 3，最少 2
+#   IMAGES_TAR      本机 build-images.sh 打好的镜像包：prepare 只 docker load、不在主机上构建（构建会占满现网 CPU）
 set -Eeuo pipefail
 umask 077
 
@@ -96,7 +97,12 @@ PY
   { cat "$files_list"; for f in "${extra_compose[@]}"; do echo "$release/$f"; done; echo "$release/release.pin.yml"; } \
     | grep -v '^infra/release.pin.yml$' > "$release/compose-files.build"
   compose_with "$release/compose-files.build" config --quiet
-  compose_with "$release/compose-files.build" build "${build_services[@]}"
+  if [ -n "${IMAGES_TAR:-}" ]; then
+    test -s "$IMAGES_TAR"
+    gunzip -c "$IMAGES_TAR" | docker load
+  else
+    compose_with "$release/compose-files.build" build "${build_services[@]}"
+  fi
   local service
   for service in "${build_services[@]}"; do
     test "$(docker image inspect "$(image_name "$service" "$short")" --format '{{index .Config.Labels "tianshu.revision"}}')" = "$revision"

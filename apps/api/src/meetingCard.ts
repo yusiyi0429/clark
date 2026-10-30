@@ -196,9 +196,9 @@ export function stripEmphasis(text: string): string {
 }
 
 /**
- * 模型候选 → 草稿、决策和行动项：段落编号 sec-N，turnId 换成出处（连着的发言并成一处）；决策编号 dec-N；修改编号 chg-N，目标不在候选里的当未定，
- * 所属决策序号指不到的当不属于任何决策（冻结时不提交）；行动项编号 act-N；决策和行动项的负责人不是这场会的人当没填（由主持人确认），
- * 日期不合法的当没填；依据段落序号换成段落 id，指不到的丢掉。决策和行动项都待确认。候选不合 schema 返回 null。
+ * 模型候选 → 草稿、决策和行动项：段落编号 sec-N，turnId 换成出处（连着的发言并成一处）；决策编号 dec-N；行动项编号 act-N；
+ * 决策和行动项的负责人不是这场会的人当没填（由主持人确认），日期不合法的当没填；依据段落序号换成段落 id，指不到的丢掉。决策和行动项都待确认。
+ * 对象修改不要（10/28 斯一第 7 条：确认决策不等于批准修改，修改另行逐项批准）：候选里给了也丢掉。候选不合 schema 返回 null。
  */
 export type BuiltCard = { draft: TMeetingCardDraft; decisions: TMeetingCardDecision[]; actionItems: TMeetingActionItem[] };
 export function buildCardDraft(pool: Pool, prepared: CardGeneration, candidate: unknown): BuiltCard | null {
@@ -228,15 +228,6 @@ export function buildCardDraft(pool: Pool, prepared: CardGeneration, candidate: 
   const decisions = value.decisions.map((decision, index) => ({
     id: `dec-${index + 1}`, text: decision.text, ownerPersonId: owner(decision.ownerPersonId), basisSectionIds: basis(decision.basisSections), review: PENDING_REVIEW,
   }));
-  const options = new Set(prepared.targetOptions.map((option) => option.targetRef));
-  const objectChanges = value.objectChanges.map((change, index) => ({
-    id: `chg-${index + 1}`,
-    ...resolveTarget(options.has(change.targetRef) ? change.targetRef : null, prepared.objects),
-    after: { text: change.after.text },
-    basisSectionIds: basis(change.basisSections),
-    decisionId: change.decision !== null ? decisions[change.decision - 1]?.id ?? null : null,
-    stale: false,
-  }));
   const actionItems = value.actionItems.map((item, index) => ({
     id: `act-${index + 1}`,
     text: item.text,
@@ -250,7 +241,7 @@ export function buildCardDraft(pool: Pool, prepared: CardGeneration, candidate: 
     draft: {
       schemaVersion: "meeting-card.v1", meetingId: meeting.id, title: meeting.title, occurredAt: recordedStart(meeting)?.toISOString() ?? null,
       participants: participantsOf(meeting, deps), relatedObjectRefs: prepared.relatedObjectRefs, summary: stripEmphasis(value.summary), sections,
-      sources: [sourceOf(meeting, deps.publicOrigin ?? "")], objectChanges,
+      sources: [sourceOf(meeting, deps.publicOrigin ?? "")], objectChanges: [],
     },
     decisions,
     actionItems,
@@ -485,9 +476,7 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
       }
       // 同一目标、对象版本这次读到的和草稿里的不同：差异已按新版本重读，标 stale 让主持人重看（保存不能悄悄把基准挪到新版本）。
       const stale = keep && !done && target.targetRef !== null ? before.stale || target.expectedVersion !== before.expectedVersion : false;
-      // 所属决策只由服务填：沿用这处修改原来的（新加的不属于任何决策）。
-      const decisionId = before?.decisionId === undefined ? {} : { decisionId: before.decisionId };
-      return { id: change.id, ...target, after: { text: change.after.text }, basisSectionIds: change.basisSectionIds, ...decisionId, stale };
+      return { id: change.id, ...target, after: { text: change.after.text }, basisSectionIds: change.basisSectionIds, stale };
     });
     const members = memberIds(found.meeting);
     const items = body.actionItems ?? row.action_items;
@@ -558,7 +547,8 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
   }
 
   /**
-   * 通知栏（10/28 只出要确认的条目）：confirms 是等我确认的决策（还没冻结的会）和行动项——我是责任人，或没有责任人、我是主持人；
+   * 通知栏（10/28 只出要确认的条目）：confirms 是等我处理的决策（还没冻结的会）和行动项——我是责任人，或没有责任人、我是主持人
+   * （没有责任人的决策由主持人补归属，needsOwner；10/29）；
    * 按会议结束从晚到早、会里按原顺序。meetings 是我主持或创建的会里写入失败的会议记录（一场会一条，卡上重试）。只读，不改任何状态。
    */
   async function pendingFor(personId: string): Promise<{ meetings: TMyMeetingCard[]; confirms: TMyMeetingConfirm[] }> {
@@ -576,8 +566,11 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     for (const row of rows) {
       const mine = (item: { ownerPersonId: string | null; review?: { status: string } }) => item.review?.status === "pending" && (item.ownerPersonId ?? row.lead_dri_id) === personId;
       const at = { meetingId: row.id, title: row.title };
-      if (!row.current_revision) for (const decision of (row.decisions ?? []).filter(mine)) confirms.push({ ...at, kind: "decision", id: decision.id, text: decision.text, dueDate: null });
-      for (const item of row.action_items.filter(mine)) confirms.push({ ...at, kind: "action", id: item.id, text: item.text, dueDate: item.dueDate });
+      // 决策：有责任人的给责任人确认；没有的给主持人补归属。
+      if (!row.current_revision) for (const decision of (row.decisions ?? []).filter(mine)) {
+        confirms.push({ ...at, kind: "decision", id: decision.id, text: decision.text, dueDate: null, needsOwner: !decision.ownerPersonId });
+      }
+      for (const item of row.action_items.filter(mine)) confirms.push({ ...at, kind: "action", id: item.id, text: item.text, dueDate: item.dueDate, needsOwner: false });
       if (!isHostOrCreator(row, personId) || !row.current_revision) continue;
       if ((await meetingRecordState(q, row.id, (id) => id)).status === "failed") meetings.push({ ...at, endedAt: new Date(row.ended_at).toISOString(), status: "failed" });
     }

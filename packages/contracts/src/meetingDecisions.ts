@@ -169,8 +169,8 @@ export const MyMeetingCard = Type.Object(
   { additionalProperties: false },
 );
 /**
- * 等我确认的一条（通知栏「会后确认」，一次只看一条）：我是责任人（没有责任人时我是主持人）的决策（还没冻结的会）和行动项。
- * text 是决策或事项本身；title 是来自的那场会。
+ * 等我处理的一条（通知栏「会后确认」，一次只看一条）：我是责任人的决策（还没冻结的会）、我是负责人（没有负责人时我是主持人）的行动项，
+ * 以及我主持的会里没有责任人、要我补归属的决策（needsOwner）。text 是决策或事项本身；title 是来自的那场会。
  */
 export const MyMeetingConfirm = Type.Object(
   {
@@ -180,6 +180,7 @@ export const MyMeetingConfirm = Type.Object(
     id: Type.String({ minLength: 1 }),
     text: Type.String({ minLength: 1 }),
     dueDate: Type.Union([Type.String(), Type.Null()]),
+    needsOwner: Type.Boolean(),
   },
   { additionalProperties: false },
 );

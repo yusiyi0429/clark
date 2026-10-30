@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import {
-  AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardReviewRequest, MeetingCardReviewResponse, MeetingCardView,
+  AttachFeishuMinuteRequest, FeishuCalendarEventsResponse, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, ImpactAskRequest, ImpactAskResponse, ImpactCardResponse, ImpactIrrelevantRequest, MeetingBookingRequest, MeetingCardConfirmRequest, MeetingCardOwnerRequest, MeetingCardReviewRequest, MeetingCardReviewResponse, MeetingCardView,
   MeetingCardWorldChoiceRequest, MeetingDraftStatusResponse,
   MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse, OrganizeFeishuMinuteRequest,
 } from "@warmap/contracts";
@@ -23,6 +23,10 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
   // 飞书里直接开的会待整理：只认本人（列表只有本人名下的，别人的妙记一律 404）。
   app.get("/api/me/feishu-minutes", { preHandler: ctx.requirePerson, schema: { response: { 200: FeishuMinuteInboxResponse } } },
     async (req) => ({ minutes: await followThrough.minuteInbox.listFor(req.person!.personId) }));
+
+  // 本人飞书日历里接下来 7 天的日程：只读，和「会议安排」排在一起（天枢约的会不重复列）。
+  app.get("/api/me/feishu-events", { preHandler: ctx.requirePerson, schema: { response: { 200: FeishuCalendarEventsResponse } } },
+    async (req) => ({ events: await followThrough.calendarFeed.listFor(req.person!.personId) }));
 
   // 整理：建一场已开完的会，后台用所有者本人的授权读妙记；不约飞书日程。
   app.post("/api/me/feishu-minutes/:token/organize", {
@@ -96,12 +100,23 @@ export function registerMeetingFollowThroughRoutes(app: AppInstance, ctx: RouteC
     return ctx.fail(reply, status, code, message, view ? { view } : undefined);
   });
 
-  // 逐条确认一条决策或行动项：责任人（没有就是主持人）自己点，主持人或创建人代点；别人 404。
+  // 逐条确认一条决策或行动项：责任人本人点（没有负责人的行动项由主持人点），别人 404；没有责任人的决策要先补归属。
   app.post("/api/meetings/:id/card/reviews", {
     preHandler: ctx.requirePerson, schema: { params: idParams, body: MeetingCardReviewRequest, response: { 200: MeetingCardReviewResponse } },
   }, async (req, reply) => {
     ctx.requestContext.set(req, { actionType: "meeting_card.review", objectRef: `meeting:${req.params.id}` });
     const result = await followThrough.cardConfirm.review(req.params.id, { personId: req.person!.personId, isCeo: req.person!.role === "ceo" }, req.body);
+    if ("view" in result) return result;
+    const { status, code, message, view } = result.error;
+    return ctx.fail(reply, status, code, message, view ? { view } : undefined);
+  });
+
+  // 冻结前主持人给没有责任人的决策补归属（只能选参会人），补上后由那个人确认；别人 404。
+  app.post("/api/meetings/:id/card/owners", {
+    preHandler: ctx.requirePerson, schema: { params: idParams, body: MeetingCardOwnerRequest, response: { 200: MeetingCardReviewResponse } },
+  }, async (req, reply) => {
+    ctx.requestContext.set(req, { actionType: "meeting_card.assign_owner", objectRef: `meeting:${req.params.id}` });
+    const result = await followThrough.cardConfirm.assignOwner(req.params.id, { personId: req.person!.personId, isCeo: req.person!.role === "ceo" }, req.body);
     if ("view" in result) return result;
     const { status, code, message, view } = result.error;
     return ctx.fail(reply, status, code, message, view ? { view } : undefined);

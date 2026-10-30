@@ -9,8 +9,8 @@ import { instance, projection, stubWorld, worldEnv } from "./worldFixture.js";
 // 对象修改（FR-5.3、5.4）：会议事件写成后，确认版里的每条修改按顺序各提交一次修订、读回核对，各有回执；本期不做失败项重试（拍板 5）。
 
 const TWO_CHANGES = [
-  { targetRef: "obj-po-1#target/acc-1", after: { text: "十月底前 4 家客户上线" }, basisSections: [1], decision: 1 },
-  { targetRef: "obj-po-1#target/acc-2", after: { text: "接口统一切到 v2" }, basisSections: [1], decision: 1 },
+  { targetRef: "obj-po-1#target/acc-1", after: { text: "十月底前 4 家客户上线" }, basisSections: [1] },
+  { targetRef: "obj-po-1#target/acc-2", after: { text: "接口统一切到 v2" }, basisSections: [1] },
 ];
 const error = (status: number, code: string) => Response.json({ error: { code, message: code } }, { status });
 
@@ -302,12 +302,13 @@ describe("对象修改逐个提交", () => {
   it("改后内容为空不提交；契约版本不对不允许", async () => {
     const world = ontology({ refuse: () => error(409, "PROTOCOL_BINDING_CONFLICT") });
     const { t, host, meetingId, run } = await setup(cardAgent([
-      { targetRef: "obj-po-1#target/acc-1", after: { text: " " }, basisSections: [1], decision: 1 },
-      { targetRef: "obj-po-1#target/acc-2", after: { text: "接口统一切到 v2" }, basisSections: [1], decision: 1 },
+      { targetRef: "obj-po-1#target/acc-1", after: { text: "十月底前 4 家客户上线" }, basisSections: [1] },
+      { targetRef: "obj-po-1#target/acc-2", after: { text: "接口统一切到 v2" }, basisSections: [1] },
     ]));
     try {
-      // 存草稿不收空内容，只有模型生成的能带进来；实际开始直接填进库。
-      await t.pool.query(`UPDATE meeting_cards SET draft = jsonb_set(draft, '{occurredAt}', $2::jsonb) WHERE meeting_id = $1`, [meetingId, JSON.stringify(OCCURRED)]);
+      // 存草稿不收空内容（以前只有模型生成的能带进来）：空的改后内容和实际开始直接填进库。
+      await t.pool.query(`UPDATE meeting_cards SET draft = jsonb_set(jsonb_set(draft, '{occurredAt}', $2::jsonb), '{objectChanges,0,after,text}', '" "'::jsonb) WHERE meeting_id = $1`,
+        [meetingId, JSON.stringify(OCCURRED)]);
       expect((await confirm(t, host, meetingId, { draftVersion: 1, writeToWorld: true })).statusCode).toBe(200);
       await run();
       expect(world.revisions().length).toBeGreaterThan(0);
@@ -323,7 +324,7 @@ describe("对象修改逐个提交", () => {
 
   it("目标未定的不提交", async () => {
     const world = ontology();
-    const { t, host, meetingId, run } = await setup(cardAgent([{ targetRef: "obj-po-1#target/nope", after: { text: "没有这个组件" }, basisSections: [1], decision: 1 }]));
+    const { t, host, meetingId, run } = await setup(cardAgent([{ targetRef: "obj-po-1#target/nope", after: { text: "没有这个组件" }, basisSections: [1] }]));
     try {
       const draftVersion = await ready(t, host, meetingId);
       expect((await getCard(t, host, meetingId)).draft!.objectChanges[0].targetRef).toBeNull();

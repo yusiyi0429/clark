@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createTestApp, preflightCandidate, TEST_CEO, TEST_MEMBER, type TestApp } from "./helpers.js";
 import type { PreflightAgent, PreflightAgentInput } from "../src/meetingPreflight.js";
-import { createFeishuCalendarApi, type FeishuCalendarApi, type FeishuCalendarEventInput } from "../src/feishu/calendar.js";
+import { createFeishuCalendarApi, type FeishuCalendarApi, type FeishuCalendarEventInput, type FeishuCalendarInstance } from "../src/feishu/calendar.js";
 import { FeishuApiError } from "../src/feishu/client.js";
 import { saveAuthorizedToken } from "../src/feishu/tokens.js";
 import { createJobWorker } from "../src/jobs.js";
@@ -20,10 +20,12 @@ const START = "2030-06-01T10:00:00.000+08:00";
 
 const preflightAgent: PreflightAgent = { async generate(input: PreflightAgentInput) { return { candidate: preflightCandidate(input.issues.map((issue) => `issue:${issue.id}`)) }; } };
 
-function fakeCalendar(): FeishuCalendarApi & { calls: unknown[][]; createError: Error | null } {
+function fakeCalendar(): FeishuCalendarApi & { calls: unknown[][]; createError: Error | null; instances: FeishuCalendarInstance[]; listError: Error | null } {
   const api = {
     calls: [] as unknown[][],
     createError: null as Error | null,
+    instances: [] as FeishuCalendarInstance[],
+    listError: null as Error | null,
     async primaryCalendarId(token: string) { api.calls.push(["primary", token]); return "cal_ceo"; },
     async createEvent(token: string, calendarId: string, input: FeishuCalendarEventInput, key: string) {
       api.calls.push(["create", token, calendarId, input, key]);
@@ -33,6 +35,11 @@ function fakeCalendar(): FeishuCalendarApi & { calls: unknown[][]; createError: 
     async addAttendees(token: string, calendarId: string, eventId: string, openIds: string[]) { api.calls.push(["attendees", token, calendarId, eventId, openIds]); },
     async updateEvent(token: string, calendarId: string, eventId: string, input: FeishuCalendarEventInput) { api.calls.push(["update", token, calendarId, eventId, input]); },
     async deleteEvent(token: string, calendarId: string, eventId: string) { api.calls.push(["delete", token, calendarId, eventId]); },
+    async listInstances(token: string, calendarId: string, from: Date, to: Date) {
+      api.calls.push(["list", token, calendarId, to.getTime() - from.getTime()]);
+      if (api.listError) throw api.listError;
+      return api.instances;
+    },
   };
   return api;
 }
@@ -121,6 +128,22 @@ describe("飞书日历接口的请求", () => {
     await expect(api.primaryCalendarId("u-1")).rejects.toMatchObject({ code: 99991679 });
     expect(await api.createEvent("u-1", "cal", { summary: "x", start: new Date(), end: new Date() }, "k"))
       .toEqual({ eventId: "evt_2_0", joinUrl: "https://applink.feishu.cn/client/calendar/event/detail?x=2" });
+  });
+
+  it("读日程视图：按秒传起止，取主题、起止、状态、本人回复和打开日程的链接", async () => {
+    const urls: string[] = [];
+    const api = createFeishuCalendarApi({ fetch: (async (url: string, init?: RequestInit) => {
+      urls.push(`${init?.method ?? "GET"} ${url}`);
+      return new Response(JSON.stringify({ code: 0, data: { items: [
+        { event_id: "evt_5_0", summary: "M2 本月复盘模拟", start_time: { timestamp: "1793237400", timezone: "Asia/Shanghai" }, end_time: { timestamp: "1793241000" },
+          status: "confirmed", self_rsvp_status: "accept", app_link: "https://applink.feishu.cn/client/calendar/event/detail?x=5", vchat: { meeting_url: "https://vc.feishu.cn/j/1" } },
+        { summary: "没有 id 的不要" },
+      ] } }));
+    }) as typeof fetch });
+    const items = await api.listInstances("u-1", "cal@x", new Date("2026-10-28T15:00:00Z"), new Date("2026-11-04T15:00:00Z"));
+    expect(urls).toEqual(["GET https://open.feishu.cn/open-apis/calendar/v4/calendars/cal%40x/events/instance_view?start_time=1793199600&end_time=1793804400"]);
+    expect(items).toEqual([{ eventId: "evt_5_0", summary: "M2 本月复盘模拟", start: { timestamp: "1793237400", timezone: "Asia/Shanghai" }, end: { timestamp: "1793241000" },
+      status: "confirmed", selfRsvpStatus: "accept", appLink: "https://applink.feishu.cn/client/calendar/event/detail?x=5" }]);
   });
 });
 
@@ -220,6 +243,65 @@ describe("建会后在飞书约上", () => {
       await runJobs(t);
       expect(calendar.calls.map((call) => call[0])).toEqual(["primary", "create"]);
       expect(await row(t, meetingId)).toMatchObject({ feishu_event_status: "booked", feishu_event_error: null, feishu_event_id: "evt_1" });
+    } finally {
+      await t.close();
+    }
+  });
+});
+
+describe("飞书日程只读显示在会议安排里", () => {
+  const seconds = (ms: number) => String(Math.floor(ms / 1000));
+  const instance = (eventId: string, summary: string, startMs: number, endMs: number, extra: Partial<FeishuCalendarInstance> = {}): FeishuCalendarInstance =>
+    ({ eventId, summary, start: { timestamp: seconds(startMs) }, end: { timestamp: seconds(endMs) }, status: "confirmed", selfRsvpStatus: "accept",
+      appLink: `https://applink.feishu.cn/client/calendar/event/detail?id=${eventId}`, ...extra });
+  const list = async (t: TestApp) => {
+    const response = await t.app.inject({ method: "GET", url: "/api/me/feishu-events", headers: { cookie: await t.loginCookie() } });
+    expect(response.statusCode).toBe(200);
+    return response.json().events as { eventId: string; title: string; startsAt: string; endsAt: string; allDay: boolean; url: string | null }[];
+  };
+
+  it("只列还没结束的、没取消没拒绝的，天枢约的会不重复列，全天日程按北京时间当天，按开始时间排；5 分钟内不再问飞书", async () => {
+    const calendar = fakeCalendar();
+    const t = await app(calendar);
+    try {
+      await authorize(t, CEO, "ou_ceo");
+      const meeting = await createMeeting(t);
+      await t.pool.query("UPDATE meetings SET feishu_event_id = 'evt_booked' WHERE id = $1", [meeting.objectRef.id]);
+      const hour = 3_600_000;
+      const now = Date.now();
+      calendar.instances = [
+        instance("evt_later_0", "下周的会", now + 30 * hour, now + 31 * hour),
+        instance("evt_soon_0", "  M2 本月复盘模拟 ", now + 2 * hour, now + 3 * hour),
+        instance("evt_booked_0", "天枢约的会", now + 4 * hour, now + 5 * hour),
+        instance("evt_cancel_0", "取消了", now + 5 * hour, now + 6 * hour, { status: "cancelled" }),
+        instance("evt_decline_0", "拒绝了", now + 6 * hour, now + 7 * hour, { selfRsvpStatus: "decline" }),
+        instance("evt_ended_0", "开完了", now - 3 * hour, now - 2 * hour),
+        { ...instance("evt_allday_0", "", 0, 0), start: { date: "2030-06-03" }, end: { date: "2030-06-04" }, appLink: null },
+      ];
+      const events = await list(t);
+      expect(events.map((event) => event.eventId)).toEqual(["evt_soon_0", "evt_later_0", "evt_allday_0"]);
+      expect(events[0]).toMatchObject({ title: "M2 本月复盘模拟", allDay: false, url: "https://applink.feishu.cn/client/calendar/event/detail?id=evt_soon_0" });
+      expect(events[2]).toEqual({ eventId: "evt_allday_0", title: "无主题日程", startsAt: "2030-06-02T16:00:00.000Z", endsAt: "2030-06-03T16:00:00.000Z", allDay: true, url: null });
+      expect(calendar.calls.filter((call) => call[0] === "list")).toEqual([["list", `u-${CEO}`, "cal_ceo", 7 * 24 * hour]]);
+
+      await list(t);
+      expect(calendar.calls.filter((call) => call[0] === "list" || call[0] === "primary")).toHaveLength(2);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("没连飞书是空的、不问飞书；飞书报错也是空的，不影响页面", async () => {
+    const calendar = fakeCalendar();
+    const t = await app(calendar);
+    try {
+      expect(await list(t)).toEqual([]);
+      expect(calendar.calls).toEqual([]);
+      await authorize(t, TEST_MEMBER.personId, "ou_member");
+      calendar.listError = new FeishuApiError(99991679, "Unauthorized");
+      const response = await t.app.inject({ method: "GET", url: "/api/me/feishu-events", headers: { cookie: await t.memberCookie() } });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ events: [] });
     } finally {
       await t.close();
     }
