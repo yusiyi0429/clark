@@ -18,7 +18,7 @@ vi.mock("react", async (importOriginal) => {
 });
 vi.mock("next/navigation", () => ({ usePathname: () => "/me", useSearchParams: () => null, useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("./useMemberHome", () => ({
-  useMemberHome: () => ({ tasks: [], notifications: [], meetings: [], unreadThreads: [], unreadMissionGroups: [], rounds: [], radar: null, weeklySync: null, homeError: null,
+  useMemberHome: () => ({ tasks: [], notifications: [], meetings: [], unreadThreads: [], unreadMissionGroups: [], rounds: [], radar: null, homeError: null,
     refresh: vi.fn(), returnTask: vi.fn(), markSeen: vi.fn(), readRadarNotice: vi.fn(), settle: vi.fn() }),
 }));
 vi.mock("@/components/requests/RequestNotices", () => ({

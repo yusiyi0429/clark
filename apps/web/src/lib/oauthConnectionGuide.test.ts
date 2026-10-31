@@ -13,9 +13,11 @@ describe("浏览器授权连接说明", () => {
     expect(claude).toContain("--scope user"); expect(claude).toContain("/mcp"); expect(claude).toContain("list_pending");
     expect(claude).not.toContain("list_my_items");
   });
-  it("天枢工具设为免确认，Agent 主动建事项、写进展时不弹窗", () => {
+  it("天枢工具设为免确认，Agent 按用户要求建事项、写进展时不弹窗", () => {
     expect(oauthConnectionGuide("member", "codex", "https://t.example/mcp/me")).toContain('default_tools_approval_mode = "approve"');
     expect(oauthConnectionGuide("member", "claude", "https://t.example/mcp/me")).toContain('permissions.allow 里加 "mcp__tianshu"');
     expect(oauthConnectionGuide("member", "other", "https://t.example/mcp/me")).toContain("不用每次确认");
+    // 10/30 起没有定时同步，说明里不再提定时补漏。
+    expect(oauthConnectionGuide("member", "codex", "https://t.example/mcp/me")).not.toContain("定时");
   });
 });

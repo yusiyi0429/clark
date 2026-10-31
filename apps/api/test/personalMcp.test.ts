@@ -27,6 +27,10 @@ describe("个人令牌与执行事项 MCP", () => {
       const initialized = await send(1, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } });
       expect(initialized.statusCode).toBe(200);
       expect(initialized.json().result.serverInfo.name).toBe("tianshu");
+      // 10/30 起只在本人明确要求时才写：不主动建事项、记进展，也不再规定事项粒度。
+      expect(initialized.json().result.instructions).toContain("只在本人明确要求时才往天枢里写");
+      expect(initialized.json().result.instructions).not.toContain("不用等用户开口");
+      expect(initialized.json().result.instructions).not.toContain("◆");
       const tools = await send(2, "tools/list");
       expect(tools.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_my_items", "create_item", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "update_item", "delete_item", "return_item", "accept_item", "get_mission_card", "edit_mission_card", "list_pending", "get_my_review", "save_review_draft"]);
       const invoke = async (id: number, name: string, args: Record<string, unknown>) => (await send(id, "tools/call", { name, arguments: args })).json().result;
@@ -59,7 +63,7 @@ describe("个人令牌与执行事项 MCP", () => {
     } finally { await f.t.close(); }
   });
 
-  it("Agent 按正在做的事建执行事项：直接生效、标为 Agent 建、重试不重复、能挂本人 Mission、不能挂别人的", async () => {
+  it("Agent 按本人要求建执行事项：直接生效、标为 Agent 建、重试不重复、能挂本人 Mission、不能挂别人的", async () => {
     const asked: { id: string; code: string }[][] = [];
     const f = await executionFixture("confirmed", "2026-10", { planTasks: async (missions) => {
       asked.push(missions);

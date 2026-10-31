@@ -146,7 +146,7 @@ export const MeetingCardFrozenPayload = Type.Object(
 );
 export const MeetingCardDraft = Type.Object({ ...payloadFields, objectChanges: Type.Array(MeetingObjectChange, { maxItems: 50 }) }, { additionalProperties: false });
 
-/** 天枢本地的行动项（拍板 4）：会上明确分给某人的待办；负责人本人「接下」才推成执行事项，taskId 回填（taskId、review 只由服务改）。 */
+/** 天枢本地的行动项（拍板 4）：会上明确分给某人的待办，负责人本人「接下」或「退回」（taskId、review 只由服务改）。taskId 是 10/30 之前推成的执行事项；之后不再建，新的一直为 null。 */
 export const MeetingActionItem = Type.Object(
   {
     id: CardItemId,
@@ -155,7 +155,7 @@ export const MeetingActionItem = Type.Object(
     dueDate: NullableString({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }),
     basisSectionIds: Type.Array(Type.String({ minLength: 1, maxLength: 64 }), { maxItems: 50 }),
     taskId: NullableString({ minLength: 1, maxLength: 200 }),
-    /** 10/28 之前生成的行动项没有（随整卡确认推出去）。 */
+    /** 10/28 之前生成的行动项没有（随整卡确认）。 */
     review: Type.Optional(MeetingItemReview),
   },
   { additionalProperties: false },
@@ -233,7 +233,7 @@ export const MeetingCardView = Type.Object(
     writeToWorld: Type.Boolean(),
     confirmed: Type.Union([
       Type.Object(
-        // actionItems：这次确认时的行动项快照（推成执行事项后带 taskId）。
+        // actionItems：这次确认时的行动项快照（10/30 之前推成执行事项的带 taskId）。
         { payload: MeetingCardFrozenPayload, confirmation: MeetingCardConfirmation, kind: MeetingCardKind, actionItems: Type.Array(MeetingActionItem) },
         { additionalProperties: false },
       ),
