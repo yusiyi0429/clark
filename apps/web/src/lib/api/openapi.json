@@ -22299,6 +22299,10 @@
                       {
                         "const": "panda",
                         "type": "string"
+                      },
+                      {
+                        "const": "miles",
+                        "type": "string"
                       }
                     ]
                   }
@@ -50550,6 +50554,10 @@
               {
                 "const": "panda",
                 "type": "string"
+              },
+              {
+                "const": "miles",
+                "type": "string"
               }
             ]
           }
@@ -50567,6 +50575,10 @@
           },
           {
             "const": "panda",
+            "type": "string"
+          },
+          {
+            "const": "miles",
             "type": "string"
           }
         ]

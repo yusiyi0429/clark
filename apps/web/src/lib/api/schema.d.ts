@@ -4939,7 +4939,7 @@ export interface components {
             admin?: boolean;
             buddy?: {
                 name: string;
-                form: "classic" | "alive" | "panda";
+                form: "classic" | "alive" | "panda" | "miles";
             } | null;
         };
         PeopleDirectoryResponse: {
@@ -9290,9 +9290,9 @@ export interface components {
         };
         Buddy: {
             name: string;
-            form: "classic" | "alive" | "panda";
+            form: "classic" | "alive" | "panda" | "miles";
         };
-        BuddyForm: "classic" | "alive" | "panda";
+        BuddyForm: "classic" | "alive" | "panda" | "miles";
         CreatePersonalTokenRequest: {
             name: string;
             client: "codex" | "claude" | "other" | "collector";

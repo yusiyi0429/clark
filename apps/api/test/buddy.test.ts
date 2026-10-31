@@ -19,6 +19,8 @@ describe("本人的伙伴", () => {
       const session = await t.app.inject({ method: "GET", url: "/api/auth/session", headers: { cookie } });
       expect(session.json()).toMatchObject({ buddy: { name: "团团", form: "panda" } });
       expect((await save({ name: "蓝蓝", form: "alive" })).json()).toEqual({ name: "蓝蓝", form: "alive" });
+      expect((await save({ name: "Miles", form: "miles" })).json()).toEqual({ name: "Miles", form: "miles" });
+      expect((await own()).json()).toEqual({ name: "Miles", form: "miles" });
       const other = await t.app.inject({ method: "GET", url: "/api/me/buddy", headers: { cookie: await t.loginCookie() } });
       expect(other.json()).toBeNull();
     } finally { await t.close(); }

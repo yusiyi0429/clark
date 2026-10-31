@@ -1,10 +1,14 @@
 import { Type, type Static } from "@sinclair/typebox";
 
-/** 伙伴的外形：就是原来的三种横放胶囊（用户 2026-10-29 定，先不做 2D 形象），值和浏览器里记的形象一致。 */
+/**
+ * 伙伴的外形：原来的三种横放胶囊（值和浏览器里记的形象一致），加上 Miles —— 一个从小胶囊上沿探出半身的 2D 男孩
+ * （用户 10/31 让接入，10/29「先不做 2D 形象」作废）。
+ */
 export const BuddyForm = Type.Union([
   Type.Literal("classic"),
   Type.Literal("alive"),
   Type.Literal("panda"),
+  Type.Literal("miles"),
 ]);
 
 /** 本人的伙伴：本人起的名字（去掉首尾空白后 1–12 个字）和选的外形。 */

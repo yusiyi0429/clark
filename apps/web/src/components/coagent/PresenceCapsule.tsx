@@ -12,10 +12,12 @@
  *   （下面就是它说的那段话）。换姿势时眨一下 —— 只在状态变的那一刻动，待着不眨（「动」只表示有事在发生）。
  * - 熊猫：白色的身子、黑眼圈、两只小耳朵（耳朵探出胶囊上沿，身子和页头胶囊照旧齐平）；底下一圈蓝光，
  *   不会被当成旁边那颗浅色的页头胶囊。
+ * - Miles：一颗写着名字的小胶囊，男孩从上沿探出半身（MilesCapsule），整块 70×66，比其他三种小。
  */
 
 import { useId, type CSSProperties } from "react";
 import { SiriWave } from "@/components/onboarding/SiriWave";
+import { MilesCapsule } from "./MilesCapsule";
 import { useListeningLevel } from "./presence";
 import type { CoAgentSkin } from "./skin";
 import s from "@/styles/coagent-capsule.module.css";
@@ -33,6 +35,8 @@ export function PresenceCapsule({ skin, pose, level: preview, leaving = false }:
   const live = useListeningLevel();
   const level = preview ?? live;
   const patchId = useId();
+  const status = preview === undefined ? <span className={s.sr} role="status">{`Co-Agent ${pose === "listening" ? "在录这场会" : "已在群内说明背景"}`}</span> : null;
+  if (skin === "miles") return <MilesCapsule pose={pose} level={level} leaving={leaving}>{status}</MilesCapsule>;
   return (
     <div className={s.capsule} data-skin={skin} data-pose={pose} data-leaving={leaving || undefined}>
       {skin === "panda" ? <><span className={s.ear} data-side="left" aria-hidden /><span className={s.ear} data-side="right" aria-hidden /></> : null}
@@ -63,7 +67,7 @@ export function PresenceCapsule({ skin, pose, level: preview, leaving = false }:
           </span>
         )}
       </div>
-      {preview === undefined ? <span className={s.sr} role="status">{`Co-Agent ${pose === "listening" ? "在录这场会" : "已在群内说明背景"}`}</span> : null}
+      {status}
     </div>
   );
 }

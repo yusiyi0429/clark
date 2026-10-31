@@ -1,0 +1,46 @@
+/*
+ * 伙伴形象 Miles（components/coagent/MilesCapsule、milesRig）：整块 70×66，上面是探出胶囊的半身，下面是写着名字的小胶囊。
+ * 出现、退场和其他形象一样（capsuleIn / capsuleOut，coagent-capsule.module.css），Miles 自己升上来、沉回去由 milesRig 播。
+ * 这里只放跟着姿势切换的几档：在听时头侧过来一点、目光朝向说话的人；在说时胶囊换深的那组。
+ */
+
+.miles {
+  position: relative;
+  width: 70px;
+  height: 66px;
+  animation: capsuleIn 460ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation-delay: var(--coagent-enter-delay, 0ms);
+}
+
+.miles[data-leaving] { animation: capsuleOut 320ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+
+.unit { display: block; width: 100%; height: 100%; overflow: visible; }
+
+.headPose { transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1); }
+.gaze { transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1); }
+.miles[data-pose='listening'] .headPose { transform: rotate(3.5deg); }
+.miles[data-pose='listening'] .gaze { transform: translate(var(--g), 0px); }
+
+.breathe { animation: breathe 3.8s ease-in-out infinite; }
+.breath { animation: breath 4.8s ease-in-out infinite; }
+
+.speakGlass { opacity: 0; transition: opacity 260ms ease; }
+.miles[data-pose='speaking'] .speakGlass { opacity: 1; }
+
+@keyframes capsuleIn {
+  from { opacity: 0; transform: scale(0.94); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+@keyframes capsuleOut {
+  from { opacity: 1; transform: none; filter: none; }
+  to { opacity: 0; transform: scale(0.94); filter: blur(6px); }
+}
+
+@keyframes breathe { 0%, 100% { transform: none; } 50% { transform: scale(1.012, 1.02); } }
+@keyframes breath { 0%, 100% { opacity: 0.82; } 50% { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .miles, .miles[data-leaving], .breathe, .breath { animation: none; }
+  .headPose, .gaze, .speakGlass { transition: none; }
+}

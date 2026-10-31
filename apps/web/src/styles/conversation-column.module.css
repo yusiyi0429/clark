@@ -149,11 +149,17 @@
   pointer-events: none;
 }
 
+/* 伙伴形象选了 Miles：整块 70×66（components/coagent/MilesCapsule），右列里按这个大小让位。只改右列里的，会议页计时那颗不跟着变。 */
+.root:has(.jelly [data-skin='miles']) { --coagent-capsule-width: 70px; --coagent-capsule-height: 66px; }
+
 /* 收起右列仍在录音：整排页头（含计时胶囊）止于 Co-Agent 左沿之前 12px，正文继续铺满。 */
 @media (min-width: 960px) {
   .root[data-mode='strip'][data-coagent='lasting'] .jelly { --coagent-enter-delay: 180ms; }
   .host:has(.root[data-mode='strip'][data-coagent='lasting']) :global(.ts-detail-header) {
     margin-right: calc(var(--conversation-open-width) / 2 + var(--coagent-capsule-width) / 2 + 12px - var(--reading-scrollbar, 0px));
+  }
+  .host:has(.root[data-mode='strip'][data-coagent='lasting'] .jelly [data-skin='miles']) :global(.ts-detail-header) {
+    margin-right: calc(var(--conversation-open-width) / 2 + 35px + 12px - var(--reading-scrollbar, 0px));
   }
 }
 
