@@ -13,7 +13,8 @@
  *
  * Co-Agent 胶囊（components/coagent）浮在右列顶部居中，和左侧页头胶囊同一条上沿；中线按右列展开时的宽度算，
  * 收起右列时它原地不动。两种出现法：`lasting`（会议在录音）一直在，右列页头挪到它下面；`brief`（新人第一次进群、
- * Co-Agent 讲来龙去脉）只出现几秒，这几秒里暂时盖住右列页头，不挪版面。
+ * Co-Agent 讲来龙去脉）只出现几秒，这几秒里暂时盖住右列页头，不挪版面。胶囊上已经写着伙伴名字时（Miles），
+ * 伙伴频道的页头不再画 logo 和名字。
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
@@ -88,6 +89,7 @@ export function ConversationColumn({
   headerAction,
   coagent,
   coagentBrief = false,
+  coagentNamed = false,
   deskWidth = null,
   onDesk,
 }: {
@@ -112,6 +114,8 @@ export function ConversationColumn({
   coagent?: ReactNode;
   /** 胶囊只出现几秒：不挪右列页头，暂时盖住它。 */
   coagentBrief?: boolean;
+  /** 胶囊上写着伙伴名字（Miles）：伙伴频道的页头不再写一遍。 */
+  coagentNamed?: boolean;
   /**
    * 深度讨论（并排）：给了就是展开态，值是对话列的宽度（宿主按断点算好：600 / 680）。右列原地加宽，左侧材料让位，
    * 不覆盖、不 inert；正文那一棵子树不重挂。窄屏一律当没给。
@@ -133,6 +137,7 @@ export function ConversationColumn({
   const root = useRef<HTMLDivElement>(null);
   const aside = useRef<HTMLElement>(null);
   const handle = useRef<HTMLButtonElement>(null);
+  const jelly = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const hasCoagent = Boolean(coagent);
   // 焦点跟着这一列自己发起的变化走：从收起后的频道钮展开时落到把手上（展开不等于要打字）；关浮层回到开关。
@@ -159,6 +164,18 @@ export function ConversationColumn({
     const observer = new ResizeObserver(measure);
     observer.observe(reader);
     return () => { observer.disconnect(); host.style.removeProperty("--reading-scrollbar"); };
+  }, [hasCoagent]);
+
+  // 胶囊实际多宽（Miles 跟着名字变宽）：收起右列时页头按它让位。
+  useLayoutEffect(() => {
+    const host = root.current?.closest<HTMLElement>(`.${c.host}`);
+    const capsule = jelly.current;
+    if (!host || !capsule) return;
+    const measure = () => host.style.setProperty("--coagent-jelly-width", `${capsule.offsetWidth}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(capsule);
+    return () => { observer.disconnect(); host.style.removeProperty("--coagent-jelly-width"); };
   }, [hasCoagent]);
 
   useLayoutEffect(() => {
@@ -304,7 +321,7 @@ export function ConversationColumn({
           {strip ? <PanelRightOpen size={18} strokeWidth={1.8} aria-hidden /> : <PanelRightClose size={18} strokeWidth={1.8} aria-hidden />}
         </Button>
       )}
-      {coagent ? <div className={c.jelly}>{coagent}</div> : null}
+      {coagent ? <div ref={jelly} className={c.jelly}>{coagent}</div> : null}
       {/* 右列是浅色阅读面：`data-tone=light` 让对话记录换成浅色那一套。 */}
       <aside
         ref={aside}
@@ -323,10 +340,12 @@ export function ConversationColumn({
         <div className={c.panel} inert={strip || undefined} aria-hidden={strip || undefined}>
           {current ? (
             <header className={c.header} data-kind={current.kind} data-has-desk-key={onDesk ? true : undefined}>
-              <h2 className={c.headerTitle}>
-                {current.kind === "agent" ? <TianshuMark className={c.headerMark} /> : <Users size={16} strokeWidth={1.8} aria-hidden />}
-                <span className={current.kind === "agent" ? c.wordmark : undefined}>{current.title ?? current.label}</span>
-              </h2>
+              {current.kind === "agent" && coagent && coagentNamed ? null : (
+                <h2 className={c.headerTitle}>
+                  {current.kind === "agent" ? <TianshuMark className={c.headerMark} /> : <Users size={16} strokeWidth={1.8} aria-hidden />}
+                  <span className={current.kind === "agent" ? c.wordmark : undefined}>{current.title ?? current.label}</span>
+                </h2>
+              )}
               {headerAction}
               {onDesk ? (
                 <HeroButton

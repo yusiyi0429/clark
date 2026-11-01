@@ -1,6 +1,6 @@
 import type { FastifyReply } from "fastify";
 import { Buddy, BuddyOrNull, PersonalProfileView, UpdatePersonalProfileRequest } from "@warmap/contracts";
-import { readBuddy, saveBuddy } from "../buddy.js";
+import { BUDDY_NAME_UNITS, buddyNameUnits, readBuddy, saveBuddy } from "../buddy.js";
 import { Type } from "@sinclair/typebox";
 import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, ReturnTaskAcceptanceRequest, StandaloneMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, BattlefieldProgressResponse, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
@@ -51,14 +51,16 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     return { personId: person.personId, displayName: names().get(person.personId) ?? person.personId, gender };
   });
 
-  // 伙伴也只有本人读写：名字全是空白时契约的长度挡不住，这里挡。
+  // 伙伴也只有本人读写：名字按宽度算（buddyNameUnits），全是空白或超宽契约的长度挡不住，这里挡。
   app.get("/api/me/buddy", { preHandler: requirePerson, schema: { response: { 200: BuddyOrNull } } }, async (req, reply) => {
     reply.header("Cache-Control", "no-store");
     return readBuddy(q, req.person!.personId);
   });
   app.put("/api/me/buddy", { preHandler: requirePerson, schema: { body: Buddy, response: { 200: Buddy } } }, async (req, reply) => {
     reply.header("Cache-Control", "no-store");
-    if (!req.body.name.trim()) return fail(reply, 400, "INVALID_INPUT", "伙伴要有名字");
+    const units = buddyNameUnits(req.body.name);
+    if (!units) return fail(reply, 400, "INVALID_INPUT", "伙伴要有名字");
+    if (units > BUDDY_NAME_UNITS) return fail(reply, 400, "INVALID_INPUT", "伙伴的名字太长");
     return saveBuddy(q, req.person!.personId, req.body);
   });
 

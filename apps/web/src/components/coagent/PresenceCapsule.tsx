@@ -12,7 +12,7 @@
  *   （下面就是它说的那段话）。换姿势时眨一下 —— 只在状态变的那一刻动，待着不眨（「动」只表示有事在发生）。
  * - 熊猫：白色的身子、黑眼圈、两只小耳朵（耳朵探出胶囊上沿，身子和页头胶囊照旧齐平）；底下一圈蓝光，
  *   不会被当成旁边那颗浅色的页头胶囊。
- * - Miles：一颗写着名字的小胶囊，男孩从上沿探出半身（MilesCapsule），整块 70×66，比其他三种小。
+ * - Miles：一颗写着伙伴名字的小胶囊，男孩从上沿探出半身（MilesCapsule），整块 70×66，名字长时胶囊跟着变宽，最宽 96。
  */
 
 import { useId, type CSSProperties } from "react";
@@ -24,9 +24,11 @@ import s from "@/styles/coagent-capsule.module.css";
 
 export type CapsulePose = "listening" | "speaking";
 
-export function PresenceCapsule({ skin, pose, level: preview, leaving = false }: {
+export function PresenceCapsule({ skin, pose, level: preview, leaving = false, name = "" }: {
   skin: CoAgentSkin;
   pose: CapsulePose;
+  /** 伙伴名字：只有 Miles 写在胶囊上；没起名字时写「Miles」。 */
+  name?: string;
   /** 0–1：只有选形象时的预览传（模拟的声音）；不传就读会议录音那条麦克风流。 */
   level?: number;
   /** 正在凝回去：播完退场就会被移走。 */
@@ -36,7 +38,7 @@ export function PresenceCapsule({ skin, pose, level: preview, leaving = false }:
   const level = preview ?? live;
   const patchId = useId();
   const status = preview === undefined ? <span className={s.sr} role="status">{`Co-Agent ${pose === "listening" ? "在录这场会" : "已在群内说明背景"}`}</span> : null;
-  if (skin === "miles") return <MilesCapsule pose={pose} level={level} leaving={leaving}>{status}</MilesCapsule>;
+  if (skin === "miles") return <MilesCapsule name={name} pose={pose} level={level} leaving={leaving}>{status}</MilesCapsule>;
   return (
     <div className={s.capsule} data-skin={skin} data-pose={pose} data-leaving={leaving || undefined}>
       {skin === "panda" ? <><span className={s.ear} data-side="left" aria-hidden /><span className={s.ear} data-side="right" aria-hidden /></> : null}

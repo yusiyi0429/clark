@@ -4,12 +4,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 const api = vi.hoisted(() => ({ GET: vi.fn(), PUT: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ browserApi: api }));
 vi.mock("@/components/coagent/PresenceCapsule", () => ({
-  PresenceCapsule: ({ skin }: { skin: string }) => <span data-capsule={skin} />,
+  PresenceCapsule: ({ skin, name }: { skin: string; name?: string }) => <span data-capsule={skin} data-name={name} />,
 }));
 
 import { BuddyPicker } from "./BuddyPicker";
 import { BuddySettings } from "./BuddySettings";
-import { buddyNameValid, initialBuddyDraft, saveBuddy } from "./useBuddy";
+import { BUDDY_NAME_UNITS, buddyNameUnits, buddyNameValid, clampBuddyName, initialBuddyDraft, saveBuddy } from "./useBuddy";
 
 function stubWindow(stored: string | null) {
   vi.stubGlobal("window", Object.assign(new EventTarget(), {
@@ -29,18 +29,29 @@ describe("选择你的伙伴", () => {
     expect(initialBuddyDraft({ name: "团团", form: "panda" })).toEqual({ name: "团团", form: "panda" });
   });
 
-  it("名字去掉首尾空白后 1–12 个字", () => {
+  it("名字按宽度算：去掉首尾空白后，汉字、大写字母、m、w 和别的符号算 2，其余窄字算 1，合计 1–12", () => {
+    expect(BUDDY_NAME_UNITS).toBe(12);
+    expect(buddyNameUnits("Tom 小明")).toBe(10);
+    expect(buddyNameUnits(" Miles ")).toBe(6);
     expect(buddyNameValid("   ")).toBe(false);
-    expect(buddyNameValid("一二三四五六七八九十甲乙丙")).toBe(false);
-    expect(buddyNameValid("一二三四五六七八九十甲乙")).toBe(true);
-    expect(buddyNameValid(" 团团 ")).toBe(true);
+    for (const ok of ["一二三四五六", "abcdefghijkl", "WWWWWW", "Anna 小明小", " 团团 "]) expect(buddyNameValid(ok)).toBe(true);
+    for (const tooWide of ["一二三四五六七", "abcdefghijklo", "WWWWWWW", "Annab 小明小", "一二三四五六a"]) expect(buddyNameValid(tooWide)).toBe(false);
+  });
+
+  it("输入框里超宽的部分打不进去：从头数到放不下为止，不截半个字", () => {
+    expect(clampBuddyName("一二三四五六七")).toBe("一二三四五六");
+    expect(clampBuddyName("WWWWWWWWWWWW")).toBe("WWWWWW");
+    expect(clampBuddyName("abcdefghijklmn")).toBe("abcdefghijkl");
+    expect(clampBuddyName("一二三四五a六")).toBe("一二三四五a");
+    expect(clampBuddyName("😀😀😀😀😀😀😀")).toBe("😀😀😀😀😀😀");
+    expect(clampBuddyName("Tom 小明")).toBe("Tom 小明");
   });
 
   it("上面是名字，下面是四种形象（三颗胶囊和 Miles），选中的那颗带标记", () => {
     const html = renderToStaticMarkup(<BuddyPicker value={{ name: "团团", form: "alive" }} onChange={() => undefined} />);
     expect(html).toContain("名字");
     expect(html).toMatch(/<input[^>]*value="团团"/);
-    expect(html).toMatch(/<input[^>]*maxLength="12"/);
+    expect(html).not.toContain("maxLength");
     expect(html.match(/name="coagent-skin"/g)).toHaveLength(4);
     expect(html.match(/data-capsule="(classic|alive|panda|miles)"/g)).toHaveLength(4);
     expect(html).toMatch(/data-selected="true"[^>]*><input[^>]*value="alive"/);
@@ -51,6 +62,7 @@ describe("选择你的伙伴", () => {
     const html = renderToStaticMarkup(<BuddyPicker value={{ name: "团团", form: "miles" }} onChange={() => undefined} />);
     expect(html).toMatch(/data-selected="true"[^>]*><input[^>]*value="miles"/);
     expect(html).toContain("<strong>Miles</strong>");
+    expect(html.match(/data-name="团团"/g)).toHaveLength(4);
   });
 
   it("保存时去掉首尾空白，存好后告诉同页的其他读者；存不上就报错", async () => {

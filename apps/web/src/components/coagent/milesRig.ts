@@ -4,6 +4,8 @@
  *
  * - 胶囊：品牌那颗的配方（#0011fd → #0600a6（46%）→ 底部透明，整体调淡），细亮边、顶上偏左一道高光，
  *   名字下面一道 Siri 流光（洋红、天青、蓝紫三道，跟着声音变高变快）；在说时换深的那组。
+ * - 名字：本人起的伙伴名字，没起时写「Miles」。最窄 70；字放不下时两侧各留 10 往外长，最宽 96
+ *   （名字的宽度上限 BUDDY_NAME_UNITS 按这个定；万一某台机器的字体更宽，就把字压进 96 里）。
  * - 出场：从胶囊里升上来约 0.5 秒，带 2px 回弹；退场沉回去约 0.26 秒。
  * - 平时：随机眨眼、偶尔转头看一眼；比耶的手举 9–16 秒就放进胶囊里歇 5–10 秒。
  * - 在听：头微微侧过来、目光朝向说话的人，耳机跟着声音亮；在说：嘴跟着音节开合。
@@ -15,10 +17,13 @@ import { MILES_ART, MILES_SVG } from "./milesArt";
 
 export type MilesPose = "listening" | "speaking";
 
-/** 胶囊上的字。 */
+/** 没起名字时胶囊上的字。 */
 const MILES_NAME = "Miles";
-/** 整块在页面上占的高度：上面是 Miles 的半身，下面是 70×22 的胶囊（宽就是胶囊宽）。 */
+/** 整块在页面上占的高度：上面是 Miles 的半身，下面是 22 高的胶囊（宽就是胶囊宽）。 */
 const BOX_HEIGHT = 66;
+/** 胶囊最宽多少，名字放不下时两侧各留多少。 */
+const MAX_WIDTH = 96;
+const NAME_PAD = 10;
 
 /** 样式表里给动画层的几个类（coagent-miles.module.css）。 */
 export interface MilesClasses {
@@ -30,6 +35,8 @@ export interface MilesClasses {
 }
 
 export interface MilesRig {
+  /** 换胶囊上的名字，返回胶囊此刻的宽。 */
+  setName(name: string): number;
   setPose(pose: MilesPose): void;
   /** 0–1：在听时对方说话的响度。 */
   setLevel(level: number): void;
@@ -62,6 +69,11 @@ const WAVE_FLOOR = 0.22;
 
 const attenuate = (x: number) => Math.pow(4 / (4 + x * x), 4);
 
+/** 名字的字形有多宽时胶囊多宽：最窄 70，放不下时两侧各留 NAME_PAD，最宽 96。 */
+export function milesCapsuleWidth(inkWidth: number): number {
+  return Math.min(MAX_WIDTH, Math.max(CAP.w, Math.ceil(inkWidth + 2 * NAME_PAD)));
+}
+
 interface Lobe { amp: number; target: number; offset: number; width: number; speed: number; phase: number; life: number; age: number }
 
 function el<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number>, parent?: Element): SVGElementTagNameMap[K] {
@@ -92,8 +104,9 @@ function pivotOf(node: Element): number[] {
   return (node.getAttribute("data-pivot") ?? "0 0").split(/[ ,]+/).map(Number);
 }
 
-export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, pose: initialPose, reduced }: {
+export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, name: initialName, pose: initialPose, reduced }: {
   idPrefix: string;
+  name: string;
   classes: MilesClasses;
   pose: MilesPose;
   reduced: boolean;
@@ -129,8 +142,8 @@ export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, pose: initia
     if (target && nodes.includes(target)) animation.cancel();
   });
 
-  // ── 画 ──
-  svg.setAttribute("viewBox", `${CX - CAP.w / 2} ${TOP} ${CAP.w} ${BOX_HEIGHT}`);
+  // ── 画 ──（跟着名字变的几样宽度在 setName 里摆）
+  let width = CAP.w;
   svg.style.setProperty("--g", `${MILES_ART.gazeUnit}px`);
   const defs = el("defs", {}, svg);
   defs.innerHTML = `
@@ -143,7 +156,7 @@ export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, pose: initia
     <radialGradient id="${id("shadow")}" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#0011fd" stop-opacity="0.16"/><stop offset="1" stop-color="#0011fd" stop-opacity="0"/></radialGradient>
     <radialGradient id="${id("air")}" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#3d63ff" stop-opacity="0.85"/><stop offset="1" stop-color="#001eff" stop-opacity="0"/></radialGradient>
     <linearGradient id="${id("lip")}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>`;
-  el("ellipse", { cx: CX, cy: CAP_CY + CAP.h * 0.42, rx: CAP.w * 0.46, ry: CAP.h * 0.38, fill: `url(#${id("shadow")})` }, svg);
+  const shadow = el("ellipse", { cx: CX, cy: CAP_CY + CAP.h * 0.42, ry: CAP.h * 0.38, fill: `url(#${id("shadow")})` }, svg);
   el("clipPath", { id: id("above") }, svg).appendChild(el("rect", { x: -40, y: -60, width: 2 * CX + 80, height: CAP_TOP + 60.5 }));
 
   // 胶囊上沿往上透的一团蓝光
@@ -152,7 +165,7 @@ export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, pose: initia
   bloom.style.transformOrigin = `${CX}px ${CAP_TOP}px`;
   const bloomLevel = el("g", {}, bloom);
   bloomLevel.style.transition = "opacity 160ms linear";
-  el("ellipse", { class: classes.breath, cx: CX, cy: CAP_TOP, rx: Math.max(CAP.w * 0.42, FIG_W * 0.62), ry: VIS_H * 0.78, fill: `url(#${id("bloom")})` }, bloomLevel);
+  const bloomGlow = el("ellipse", { class: classes.breath, cx: CX, cy: CAP_TOP, ry: VIS_H * 0.78, fill: `url(#${id("bloom")})` }, bloomLevel);
 
   // Miles：只露出胶囊上沿以上的部分
   const rise = el("g", {}, el("g", { "clip-path": `url(#${id("above")})` }, svg));
@@ -196,30 +209,19 @@ export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, pose: initia
   pod.parentNode?.insertBefore(airglow, pod);
 
   // 胶囊玻璃
-  const path = stadium(CX, CAP_CY, CAP.w, CAP.h);
-  el("clipPath", { id: id("cap") }, svg).appendChild(el("path", { d: path }));
-  el("path", { d: path, fill: `url(#${id("glass")})` }, svg);
+  const capShapes = [el("path", {}, el("clipPath", { id: id("cap") }, svg)), el("path", { fill: `url(#${id("glass")})` }, svg)];
   const speak = el("g", { class: classes.speakGlass }, svg);
-  el("path", { d: path, fill: `url(#${id("speak")})` }, speak);
-  el("path", { d: path, fill: `url(#${id("speak-glow")})` }, speak);
+  capShapes.push(el("path", { fill: `url(#${id("speak")})` }, speak), el("path", { fill: `url(#${id("speak-glow")})` }, speak));
   const glow = el("g", { style: "mix-blend-mode:screen; filter: blur(0.4px) drop-shadow(0 0 4px rgb(200 225 255 / 40%))" }, el("g", { "clip-path": `url(#${id("cap")})` }, svg));
   const wavePaths = WAVE_COLORS.map((color) => el("path", { fill: `rgba(${color}, 0.78)`, style: "mix-blend-mode:screen" }, glow));
-  el("path", { d: path, fill: `url(#${id("sheen")})` }, svg);
-  el("path", { d: stadium(CX, CAP_CY, CAP.w - 1, CAP.h - 1), fill: "none", stroke: `url(#${id("edge")})`, "stroke-width": 1 }, svg);
+  capShapes.push(el("path", { fill: `url(#${id("sheen")})` }, svg));
+  const edge = el("path", { fill: "none", stroke: `url(#${id("edge")})`, "stroke-width": 1 }, svg);
 
-  // 名字：按字形本身横竖都居中（不按字体行高）
   const name = el("text", { fill: "#fff", style: `font: ${NAME_FONT}` }, svg);
-  name.textContent = MILES_NAME;
-  const context = document.createElement("canvas").getContext("2d")!;
-  context.font = NAME_FONT;
-  const glyphs = context.measureText(MILES_NAME);
-  name.setAttribute("x", String(CX - (glyphs.actualBoundingBoxRight - glyphs.actualBoundingBoxLeft) / 2));
-  name.setAttribute("y", String(CAP_CY + (glyphs.actualBoundingBoxAscent - glyphs.actualBoundingBoxDescent) / 2));
 
   // 开口那道亮线
-  const half = CAP.w / 2 - CAP.h / 2;
   const lip = el("g", { opacity: 0.5 }, svg);
-  el("path", { d: `M${CX - half},${CAP_TOP + 0.9} H${CX + half}`, stroke: `url(#${id("lip")})`, "stroke-width": 1.5, fill: "none" }, lip);
+  const lipLine = el("path", { stroke: `url(#${id("lip")})`, "stroke-width": 1.5, fill: "none" }, lip);
 
   rise.style.transform = `translateY(${SINK}px)`;
 
@@ -244,12 +246,14 @@ export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, pose: initia
       const lobes = curves[c];
       const top: string[] = [];
       const bottom: string[] = [];
-      for (let px = 0; px <= CAP.w; px += 1) {
-        const i = (px / CAP.w) * 2 * WAVE_SPAN - WAVE_SPAN;
+      // 胶囊变宽时取样范围跟着放大，起伏的疏密不变
+      const span = WAVE_SPAN * width / CAP.w;
+      for (let px = 0; px <= width; px += 1) {
+        const i = (px / width) * 2 * span - span;
         let y = 0;
         for (const lobe of lobes) { const x = i / lobe.width - lobe.offset; y += Math.abs(lobe.amp * Math.sin(x - lobe.phase) * attenuate(x)); }
         const h = Math.min(waveReach, waveReach * waveLevel * (y / Math.sqrt(lobes.length)) * 1.5);
-        const x = (CX - CAP.w / 2 + px).toFixed(1);
+        const x = (CX - width / 2 + px).toFixed(1);
         top.push(`${x},${(waveMid - h).toFixed(2)}`);
         bottom.unshift(`${x},${(waveMid + h).toFixed(2)}`);
       }
@@ -267,7 +271,39 @@ export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, pose: initia
       if (lobe.target === 0 && lobe.amp < 0.02) spawn(lobe);
     }
   };
-  drawWave();
+
+  /** 写上名字，胶囊按它定宽；名字按字形本身横竖都居中（不按字体行高）。 */
+  const measure = document.createElement("canvas").getContext("2d")!;
+  measure.font = NAME_FONT;
+  const setName = (text: string) => {
+    const label = text.trim() || MILES_NAME;
+    name.textContent = label;
+    const glyphs = measure.measureText(label);
+    const ink = glyphs.actualBoundingBoxLeft + glyphs.actualBoundingBoxRight;
+    width = milesCapsuleWidth(ink);
+    const room = width - 2 * NAME_PAD;
+    if (ink > room) {
+      name.setAttribute("textLength", String(room));
+      name.setAttribute("lengthAdjust", "spacingAndGlyphs");
+      name.setAttribute("x", String(CX - room / 2));
+    } else {
+      name.removeAttribute("textLength");
+      name.removeAttribute("lengthAdjust");
+      name.setAttribute("x", String(CX - (glyphs.actualBoundingBoxRight - glyphs.actualBoundingBoxLeft) / 2));
+    }
+    name.setAttribute("y", String(CAP_CY + (glyphs.actualBoundingBoxAscent - glyphs.actualBoundingBoxDescent) / 2));
+    svg.setAttribute("viewBox", `${CX - width / 2} ${TOP} ${width} ${BOX_HEIGHT}`);
+    shadow.setAttribute("rx", String(width * 0.46));
+    bloomGlow.setAttribute("rx", String(Math.max(width * 0.42, FIG_W * 0.62)));
+    const path = stadium(CX, CAP_CY, width, CAP.h);
+    capShapes.forEach((node) => node.setAttribute("d", path));
+    edge.setAttribute("d", stadium(CX, CAP_CY, width - 1, CAP.h - 1));
+    const half = width / 2 - CAP.h / 2;
+    lipLine.setAttribute("d", `M${CX - half},${CAP_TOP + 0.9} H${CX + half}`);
+    drawWave();
+    return width;
+  };
+  setName(initialName);
   let frame = 0;
   let last = 0;
   const loop = (now: number) => {
@@ -372,6 +408,7 @@ export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, pose: initia
   startWave();
 
   return {
+    setName,
     setPose(next) {
       if (next === pose) return;
       pose = next;

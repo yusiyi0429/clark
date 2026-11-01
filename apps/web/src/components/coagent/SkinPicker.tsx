@@ -27,7 +27,12 @@ function useSimulatedLevel(active: boolean) {
   return level;
 }
 
-export function CoAgentSkinPicker({ value: skin, onChange: setSkin }: { value: CoAgentSkin; onChange: (skin: CoAgentSkin) => void }) {
+export function CoAgentSkinPicker({ value: skin, name, onChange: setSkin }: {
+  value: CoAgentSkin;
+  /** 正在起的伙伴名字：Miles 那颗胶囊上写的就是它，跟着变宽。 */
+  name: string;
+  onChange: (skin: CoAgentSkin) => void;
+}) {
   const [pose, setPose] = useState<CapsulePose>("listening");
   const level = useSimulatedLevel(pose === "listening");
   return (
@@ -45,7 +50,7 @@ export function CoAgentSkinPicker({ value: skin, onChange: setSkin }: { value: C
           <label key={item.id} className={s.option} data-selected={skin === item.id || undefined}>
             <input type="radio" name="coagent-skin" value={item.id} checked={skin === item.id} onChange={() => setSkin(item.id)} />
             <span className={s.stage}>
-              <PresenceCapsule skin={item.id} pose={pose} level={level} />
+              <PresenceCapsule skin={item.id} pose={pose} level={level} name={name} />
             </span>
             <span className={s.words}>
               <strong>{item.label}</strong>

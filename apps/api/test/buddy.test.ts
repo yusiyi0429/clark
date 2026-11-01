@@ -26,7 +26,7 @@ describe("本人的伙伴", () => {
     } finally { await t.close(); }
   });
 
-  it("只有登录的本人能读写；名字要 1–12 个字，外形要在清单里", async () => {
+  it("只有登录的本人能读写；名字按宽度算 1–12（汉字、大写字母算 2），外形要在清单里", async () => {
     const t = await createTestApp();
     try {
       expect((await t.app.inject({ method: "GET", url: "/api/me/buddy" })).statusCode).toBe(401);
@@ -36,13 +36,15 @@ describe("本人的伙伴", () => {
       const save = (payload: unknown) => t.app.inject({ method: "PUT", url: "/api/me/buddy",
         headers: { cookie, origin: t.publicOrigin }, payload });
       expect((await save({ name: "   ", form: "panda" })).statusCode).toBe(400);
-      const thirteen = "一二三四五六七八九十甲乙丙";
-      const twelve = "一二三四五六七八九十甲乙";
-      expect((await save({ name: thirteen, form: "panda" })).statusCode).toBe(400);
+      for (const tooWide of ["一二三四五六七", "abcdefghijklo", "WWWWWWW", "Annab 小明小", "一二三四五六a"]) {
+        expect((await save({ name: tooWide, form: "panda" })).statusCode).toBe(400);
+      }
       expect((await save({ name: "团团", form: "cat" })).statusCode).toBe(400);
       expect((await save({ name: "团团" })).statusCode).toBe(400);
       expect((await t.app.inject({ method: "GET", url: "/api/me/buddy", headers: { cookie } })).json()).toBeNull();
-      expect((await save({ name: twelve, form: "classic" })).json()).toEqual({ name: twelve, form: "classic" });
+      for (const widest of ["一二三四五六", "abcdefghijkl", "WWWWWW", "Anna 小明小", " 一二三四五a "]) {
+        expect((await save({ name: widest, form: "classic" })).json()).toEqual({ name: widest.trim(), form: "classic" });
+      }
     } finally { await t.close(); }
   });
 });

@@ -275,7 +275,7 @@ function RailConversation({
     return () => { window.clearTimeout(leave); window.clearTimeout(gone); };
   }, [thread.catchUp, groupVisible]);
   const capsule = listening || catchUp
-    ? <PresenceCapsule skin={buddy?.form ?? "classic"} pose={catchUp && (!catchUp.leaving || !listening) ? "speaking" : "listening"} leaving={!listening && !!catchUp?.leaving} />
+    ? <PresenceCapsule skin={buddy?.form ?? "classic"} name={buddy?.name} pose={catchUp && (!catchUp.leaving || !listening) ? "speaking" : "listening"} leaving={!listening && !!catchUp?.leaving} />
     : undefined;
   const members = threadGroup ? (thread.view?.members ?? threadGroup.members) : (group.view?.members ?? missionGroup?.members ?? []);
   const groupLabel = otherThread?.objectType === "issue" ? "议题群聊" : otherThread?.objectType === "meeting" ? "会议群聊" : "事项群组";
@@ -393,6 +393,7 @@ function RailConversation({
         composerHeight={composerHeight}
         coagent={capsule}
         coagentBrief={!listening}
+        coagentNamed={buddy?.form === "miles"}
         deskWidth={deskOpen ? deskColumn : null}
         onDesk={canDesk ? setDeskOpen : undefined}
         headerAction={channel === "group" && threadGroup && !thread.left ? <ThreadMembersMenu objectType={otherThread?.objectType ?? "task"} objectId={taskGroup?.taskId ?? otherThread!.objectId} viewerId={threadGroup.viewerId} members={(thread.view?.members ?? threadGroup.members.map((member) => ({ ...member, title: null })))} onChanged={() => void thread.refresh()} />
