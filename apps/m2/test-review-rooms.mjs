@@ -47,3 +47,9 @@ test('个人房间资格来自每张卡的实际roomOf，不能凭多负责人�
  const own={...view.drafts[card.id],id:card.id},context=reviewConversation(own,view.drafts,actor.id,actor.name,view.reviewRooms);assert.equal(context.personal,null);
  const stale=structuredClone(view.drafts),previous={...stale['rv:talent-owned'],id:'rv:talent-owned'};const capabilities={...view.reviewRooms,personalCards:[]};assert.equal(reviewConversation(previous,stale,actor.id,actor.name,capabilities).personal,null);
 });
+
+test('真实sharedProjection的draft不含id，正常已指派单卡仍使用原卡ID进入本人房间',()=>{
+ const state=fixture(true),actor=memberActor('member-08',state),view=sharedProjection(state,actor),id='rv:talent-owned';assert.equal(view.drafts[id].id,undefined);
+ const context=reviewConversation({...view.drafts[id],id},view.drafts,actor.id,actor.name,view.reviewRooms);assert.equal(context.personal,'person:member-08');assert.equal(groupRoomAvailable(context.personal,view.reviewRooms,'review',context),true);
+ const unassignedId='rv:talent-m1',unassigned=reviewConversation({...view.drafts[unassignedId],id:unassignedId},view.drafts,actor.id,actor.name,view.reviewRooms);assert.equal(unassigned.personal,null);
+});

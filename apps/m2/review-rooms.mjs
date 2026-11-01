@@ -5,7 +5,7 @@ export function reviewConversation(node,drafts,memberId,name,rooms){
  node=node?.id&&drafts?.[node.id]?{...node,...drafts[node.id]}:node;
  const unassigned=node?.level==='person'&&node.person==='未指派'||node?.level==='mission'&&node.ownerAssigned===false;
  const missing=node?.level==='mission'&&String(node.id||'').startsWith('rv:')&&!drafts?.[node.id];
- const selected=node?.level==='person'?missions.filter(n=>node.person==='未指派'?n.ownerAssigned===false:n.ownerAssigned!==false&&owners(n).includes(node.person)):node?.level==='mission'&&!missing?[drafts[node.id]||node]:[];
+ const selected=node?.level==='person'?missions.filter(n=>node.person==='未指派'?n.ownerAssigned===false:n.ownerAssigned!==false&&owners(n).includes(node.person)):node?.level==='mission'&&!missing?[node]:[];
  const own=selected.some(n=>n.ownerAssigned!==false&&owners(n).includes(name));
  const personal=!unassigned&&own&&selected.every(n=>rooms?.personalCards?.includes(n.id))&&rooms?.personal===`person:${memberId}`?rooms.personal:null;
  const units=[...new Set(selected.map(n=>n.unit).filter(unit=>rooms?.units?.includes(unit)&&rooms.unitTargets?.[unit]))];
