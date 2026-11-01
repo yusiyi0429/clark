@@ -63,7 +63,8 @@ describe("首页计划",()=>{
       await create(f,f.member,"execution-one",{title:"只有截止在下周没开始",dueDate:"2026-10-28"});
       const dueLater=await create(f,f.member,"execution-two",{title:"只有截止在下周进行中",dueDate:"2026-10-28"});
       await f.t.sql("UPDATE tasks SET status='in_progress' WHERE id=ANY($1::uuid[])",[[running.id,dueLater.id]]);
-      await f.t.sql("UPDATE tasks SET status='done' WHERE id=$1",[done.id]);
+      // updated_at 是数据库的真实时间，跟不上 setNow；完成时间写明在 10 月，换月后仍算本月完成。
+      await f.t.sql("UPDATE tasks SET status='done',updated_at='2026-10-21T02:00:00Z' WHERE id=$1",[done.id]);
       const plan=await read(f,f.member);
       expect(plan).toMatchObject({period:"2026-10",fallbackFrom:null,today:"2026-10-22",weekStart:"2026-10-19",weekEnd:"2026-10-25"});
       expect(plan.activities).toHaveLength(8);
@@ -139,7 +140,8 @@ describe("首页计划",()=>{
       const accepted=await create(f,f.member,"execution-one",{title:"九月截止十月验收",dueDate:"2026-09-20"});
       const lastMonth=await create(f,f.member,"execution-one",{title:"本月 Mission 九月就完成了"});
       const boundary=await create(f,f.member,null,{title:"九月三十号晚上完成",dueDate:"2026-10-01"});
-      await f.t.sql("UPDATE tasks SET status='done' WHERE id=ANY($1::uuid[])",[[loose.id,accepted.id,lastMonth.id,boundary.id]]);
+      // 完成时间先统一写在 10 月（数据库真实时间跟不上 setNow），下面几条再各自改。
+      await f.t.sql("UPDATE tasks SET status='done',updated_at='2026-10-21T02:00:00Z' WHERE id=ANY($1::uuid[])",[[loose.id,accepted.id,lastMonth.id,boundary.id]]);
       await f.t.sql(`UPDATE tasks SET updated_at='2026-09-01T02:00:00Z',acceptance=jsonb_build_object('at','2026-10-05T02:00:00Z','by',$2::text,'verdict',null,'standards','[]'::jsonb,'deliverableMaterialIds','[]'::jsonb) WHERE id=$1`,[accepted.id,TEST_MEMBER.personId]);
       await f.t.sql("UPDATE tasks SET updated_at='2026-09-30T02:00:00Z' WHERE id=$1",[lastMonth.id]);
       // 上海时间 9/30 23:30 = UTC 15:30，算九月。

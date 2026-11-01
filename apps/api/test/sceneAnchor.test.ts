@@ -237,7 +237,8 @@ async function taskPage(options: { fail?: () => boolean } = {}) {
       }
       return stream(message([{ type: "toolCall", id: `anchor-${contexts.length}`, name: "read_anchor", arguments: { handle: "A1" } }], "toolUse"));
     } });
-  t = await createTestApp({}, runtime);
+  // 业务时钟钉在事项所在的 10 月：没挂 Mission 的事项，anchor.range 的月份按当前时间算。
+  t = await createTestApp({}, runtime, { monthlyNow: () => new Date("2026-10-11T02:00:00.000Z") });
   const member = await t.memberCookie();
   const headers = { cookie: member, origin: t.publicOrigin };
   const created = await t.app.inject({ method: "POST", url: "/api/me/tasks", headers,
