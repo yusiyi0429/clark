@@ -40,3 +40,10 @@ test('单元群入口带服务端实际目标；仅有复盘、没有旧拆解�
  const sent=applyAction(state,actor,{type:'message',cardId:view.reviewRooms.unitTargets.talent,text:'合成单元反馈'});assert.equal(sent.messages.at(-1).scope,'talent');assert.deepEqual(sent.cards,state.cards);
  assert.equal(groupRoomAvailable('talent',{personal:null,units:['talent'],unitTargets:{}}),false);
 });
+
+test('个人房间资格来自每张卡的实际roomOf，不能凭多负责人显示或迟到旧draft借别卡的房间',()=>{
+ const state=fixture(true),card=state.cards['rv:talent-m1'];card.versions[0].content.ownerAssigned=true;card.versions[0].content.owner='孙铭泽、秦梦怡';
+ const actor=memberActor('member-08',state),view=sharedProjection(state,actor);assert.equal(view.reviewRooms.personal,'person:member-08');assert.equal(roomOf(card),'person:member-03');assert.ok(!view.reviewRooms.personalCards.includes(card.id));
+ const own={...view.drafts[card.id],id:card.id},context=reviewConversation(own,view.drafts,actor.id,actor.name,view.reviewRooms);assert.equal(context.personal,null);
+ const stale=structuredClone(view.drafts),previous={...stale['rv:talent-owned'],id:'rv:talent-owned'};const capabilities={...view.reviewRooms,personalCards:[]};assert.equal(reviewConversation(previous,stale,actor.id,actor.name,capabilities).personal,null);
+});

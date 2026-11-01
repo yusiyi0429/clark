@@ -7,7 +7,7 @@ export function reviewConversation(node,drafts,memberId,name,rooms){
  const missing=node?.level==='mission'&&String(node.id||'').startsWith('rv:')&&!drafts?.[node.id];
  const selected=node?.level==='person'?missions.filter(n=>node.person==='未指派'?n.ownerAssigned===false:n.ownerAssigned!==false&&owners(n).includes(node.person)):node?.level==='mission'&&!missing?[drafts[node.id]||node]:[];
  const own=selected.some(n=>n.ownerAssigned!==false&&owners(n).includes(name));
- const personal=!unassigned&&own&&rooms?.personal===`person:${memberId}`?rooms.personal:null;
+ const personal=!unassigned&&own&&selected.every(n=>rooms?.personalCards?.includes(n.id))&&rooms?.personal===`person:${memberId}`?rooms.personal:null;
  const units=[...new Set(selected.map(n=>n.unit).filter(unit=>rooms?.units?.includes(unit)&&rooms.unitTargets?.[unit]))];
  return {unassigned,personal,units,pending:!rooms};
 }
