@@ -76,15 +76,18 @@ test('product runner checks after both repairs, preserves complete E43/E49 sourc
  const basis={mode:'latest-source-candidate',snapshotHash:'snapshot'},meta={basisMode:basis.mode,snapshotHash:basis.snapshotHash};
  const c=(id,level,parent,children)=>({id,unit:id==='company'?'company':'u',title:id,owner:'陈溪南',level,parent,children,sourceBasis:meta,childCommitments:{...meta,complete:true,items:[]},evidence:id==='m'?[...sources.m.evidence,{id:'E50',text:'x'.repeat(500)+'快嘴'}]:[],...(id==='m'?{expectedFacts:[{ref:'t',item:'成果'}]}:{})});
  const input={basis,stages:[[c('m','mission','u',[])],[c('u','ru','company',['m'])],[c('company','company',null,['u'])]]};
- const actual={...skill,version:'2.1.13',rules:'原来源优先',groups:[{name:'关键事实',types:['critical']}]};
+ const actual={...skill,version:'2.1.13',rules:'原来源优先',groups:[1,2,3].map(()=>({name:'关键事实',types:['critical']}))};
  const calls=[],run={raw:{},reviews:{},failed:[],dropped:[]};
  const review=(id,reason='initial')=>({verdict:'未达成',verdictReason:reason,facts:[{ref:{m:'t',u:'m',company:'u'}[id],item:'成果',status:'未达成',evidence:'尚缺验证记录',gap:'尚缺验证记录'}],nextInputs:[{ref:{m:'t',u:'m',company:'u'}[id],type:'继续',text:'核对结果'}]});
  const gateway={complete:async messages=>{const p=JSON.parse(messages[1].content);calls.push(p);
-  if(!p.unit){assert.ok(p.sources.m.evidence[2].text.endsWith('快嘴'));assert.ok(p.sources.m.evidence[2].text.length>400);assert.equal(p.sources.m.evidence[0].text,'真实会议验证仍待实会');const m=p.reviews.find(r=>r.ref==='m');return {answer:JSON.stringify({issues:m.verdictReason==='fixed2'?[]:[issue()]})};}
+  if(!p.unit){assert.ok(p.sources.m.evidence[2].text.endsWith('快嘴'));assert.ok(p.sources.m.evidence[2].text.length>400);assert.equal(p.sources.m.evidence[0].text,'真实会议验证仍待实会');const m=p.reviews.find(r=>r.ref==='m');return {answer:JSON.stringify({checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[],issues:m.verdictReason==='fixed2'?[]:[issue('m',m.verdictReason==='fixed1'?{sourceRefs:['m','u']}:{})]})};}
+  if(p.revision&&p.unit.id==='m'){assert.deepEqual(Object.keys(p.sources),p.revision===1?['m']:['m','u']);assert.equal(p.issues[0].checkContextRefs.length,3);}
+  if(p.revision&&p.unit.id==='u'){assert.equal(p.childCandidates[0].ref,'m');assert.equal(p.childCandidates[0].candidate,true);assert.equal(p.childCandidates[0].confirmed,false);}
+  if(p.revision&&p.unit.id==='company')assert.equal(p.childCandidates[0].ref,'u');
   return {answer:JSON.stringify({review:review(p.unit.id,p.revision?'fixed'+p.revision:'initial')})};
  }};
  const args={gateway,skill:actual,input,run,programOptions:{childRule:false}};
- await runReviewSkill(args);assert.equal(run.quality.status,'passed');assert.equal(run.reviews.m.verdictReason,'fixed2');assert.deepEqual(run.quality.counts,{m:2,u:2,company:2});assert.equal(calls.filter(p=>!p.unit).length,3);
+ await runReviewSkill(args);assert.equal(run.quality.sourcePlans[0].packets.length,1);assert.equal(run.quality.sourcePlans[0].maxBodyBytes,2*1024*1024);assert.equal(run.quality.status,'passed');assert.equal(run.reviews.m.verdictReason,'fixed2');assert.deepEqual(run.quality.counts,{m:2,u:2,company:2});assert.equal(calls.filter(p=>!p.unit).length,9);
  const before=calls.length;await runReviewSkill(args);assert.equal(calls.length,before);assert.equal(run.reviews.m.verdictReason,'fixed2');
 });
 
@@ -116,4 +119,10 @@ test('pending before, completed after, check snapshots, diagnostics and reserved
   const run=structuredClone(broken);change(run);let calls=0;
   await assert.rejects(runReviewQuality({run,input,skill,sources,check:async()=>{calls++;return [];},revise:async()=>{calls++;return {};}}),/校验失败/);assert.equal(calls,0);
  }
+});
+
+test('quality answer caches remain separate for the two explicit test models',async()=>{
+ const quality={requests:{},sourceHash:'frozen',skillHash:'skill'},run={raw:{}},args={quality,run,pass:0,stage:'check',payload:{sources},system:'rules',save:async()=>{}};let calls=0;
+ for(const model of ['aliyun/deepseek-v4.1-flash','wangsu/claude-sonnet-5-5'])await qualityModelCall({...args,gateway:{status:{model},complete:async()=>{calls++;return {answer:'{"issues":[]}'};}}});
+ assert.equal(calls,2);assert.equal(Object.keys(quality.requests).length,2);
 });

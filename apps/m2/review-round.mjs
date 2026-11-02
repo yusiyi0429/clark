@@ -53,7 +53,7 @@ export function installReviewRound(state,file,{label,source,sample=false,now=new
  // Units left out because the ontology lacks their material (数据缺失) — the only gap members are told about.
  for(const warning of file.qualityWarnings||[])problems.push({ref:warning.ref,title:warning.title,kind:'unresolved',reason:[warning.problem,warning.impact].filter(Boolean).join('；')});
  const skipped=(file.skipped||[]).map(x=>typeof x==='string'?x:`${x.unit||''}${x.reason?`：${x.reason}`:''}`).filter(Boolean);
- next.reviewRound={...(file.basis?{basis:structuredClone(file.basis)}:{}),label:label||file.name||'复盘',...(problems.length?{problems}:{}),...(skipped.length?{skipped}:{}),skill:file.skill?.version||file.skillFormat||file.skill||null,period:file.period||null,cutoff:file.cutoff||null,evidence:file.evidence||null,source:source||null,sample,loadedAt:now,dueAt:dueFrom(now),
+ next.reviewRound={...(file.modelProvenance?{modelProvenance:structuredClone(file.modelProvenance)}:{}),...(file.basis?{basis:structuredClone(file.basis)}:{}),label:label||file.name||'复盘',...(problems.length?{problems}:{}),...(skipped.length?{skipped}:{}),skill:file.skill?.version||file.skillFormat||file.skill||null,period:file.period||null,cutoff:file.cutoff||null,evidence:file.evidence||null,source:source||null,sample,loadedAt:now,dueAt:dueFrom(now),
   // When the ontology was read and when the reviews were written (首页 shows both; 陈溪南 2026-10-23).
   readAt:file.readAt||null,generatedAt:file.generatedAt||null,startedAt:file.startedAt||null,durationMs:file.durationMs??null};
  // Every unit with reviews is told they are ready (and, on a re-run, that the old round's talk is archived).

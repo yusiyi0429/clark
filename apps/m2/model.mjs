@@ -30,38 +30,38 @@ const run=promisify(execFile);
 const streamBreakLog=process.env.DECODING_STREAM_LOG||new URL('.runtime/stream-breaks.jsonl',import.meta.url);
 async function logStreamBreak(entry){try{const {appendFile}=await import('node:fs/promises');const {dirname}=await import('node:path');const {fileURLToPath}=await import('node:url');const file=typeof streamBreakLog==='string'?streamBreakLog:fileURLToPath(streamBreakLog);await mkdir(dirname(file),{recursive:true});await appendFile(file,JSON.stringify({at:new Date().toISOString(),...entry})+'\n');}catch{}}
 async function messagesResponse(response,onDelta,trace={}){
- if(!response.headers?.get?.('content-type')?.includes('text/event-stream')){const r=await response.json();const answer=(r.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('');if(answer&&onDelta)await onDelta(answer);return {id:r.id,usage:r.usage,answer,stop:r.stop_reason};}
- const reader=response.body.getReader(),decoder=new TextDecoder(),opened=Date.now(),events=[];let pending='',answer='',usage={},id,stop,bytes=0,failure=null;
+ if(!response.headers?.get?.('content-type')?.includes('text/event-stream')){const r=await response.json();const answer=(r.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('');if(answer&&onDelta)await onDelta(answer);return {id:r.id,model:r.model||null,usage:r.usage,answer,stop:r.stop_reason};}
+ const reader=response.body.getReader(),decoder=new TextDecoder(),opened=Date.now(),events=[];let pending='',answer='',usage={},id,model=null,stop,bytes=0,failure=null;
  const requestId=response.headers?.get?.('request-id')||response.headers?.get?.('x-request-id')||null;
  const broke=reason=>logStreamBreak({model:trace.model,requestId,messageId:id||null,seconds:+((Date.now()-opened)/1000).toFixed(1),bytes,lastEvents:events.slice(-15),reason});
  const consume=async line=>{
   if(!line.startsWith('data:'))return;const text=line.slice(5).trim();if(!text)return;
-  const e=JSON.parse(text);events.push(e.type);if(e.type==='error'){failure=e.error?.type||'error';throw Error('模型流式响应失败，未应用内容');}
-  if(e.type==='message_start'){id=e.message?.id;usage={...usage,...e.message?.usage};}
+  const e=JSON.parse(text);events.push(e.type);if(e.type==='error'){failure=e.error?.type||'error';throw Object.assign(Error('模型流式响应失败，未应用内容'),{code:'MODEL_STREAM_FAILURE'});}
+  if(e.type==='message_start'){id=e.message?.id;model=e.message?.model||model;usage={...usage,...e.message?.usage};}
   if(e.type==='content_block_delta'&&e.delta?.type==='text_delta'){answer+=e.delta.text;if(onDelta)await onDelta(e.delta.text);}
   if(e.type==='message_delta'){stop=e.delta?.stop_reason||stop;usage={...usage,...e.usage};}
  };
  try{while(true){const {done,value}=await reader.read();bytes+=value?.byteLength||0;pending+=decoder.decode(value,{stream:!done});let index;while((index=pending.indexOf('\n'))>=0){await consume(pending.slice(0,index).trim());pending=pending.slice(index+1);}if(done)break;}
  if(pending)await consume(pending.trim());}catch(error){await broke(failure?`error event: ${failure}`:`read failed: ${error.message}`);throw error;}finally{await reader.cancel().catch(()=>{});}
- if(!stop){await broke('ended without message_stop');throw Error('模型响应提前结束，未应用内容');}
- return {id,usage,answer,stop};
+ if(!stop){await broke('ended without message_stop');throw Object.assign(Error('模型响应提前结束，未应用内容'),{code:'MODEL_STREAM_INCOMPLETE'});}
+ return {id,model,usage,answer,stop};
 }
 // Claude may wrap JSON in a code fence; callers parse the object itself.
 export function bareJson(text){const s=String(text||'').trim(),a=s.indexOf('{'),b=s.lastIndexOf('}');return a>=0&&b>a?s.slice(a,b+1):s;}
 async function completionResponse(response,onDelta){
  if(!response.headers?.get?.('content-type')?.includes('text/event-stream')){const result=await response.json();const content=result.choices?.[0]?.message?.content;if(content&&onDelta)await onDelta(content);return result;}
- const reader=response.body.getReader(),decoder=new TextDecoder();let pending='',answer='',usage,id,finish;
+ const reader=response.body.getReader(),decoder=new TextDecoder();let pending='',answer='',usage,id,model=null,finish;
  const consume=async line=>{
   if(!line.startsWith('data:'))return;
   const text=line.slice(5).trim();if(!text||text==='[DONE]')return;
-  const chunk=JSON.parse(text);if(chunk.error)throw Error('模型流式响应失败，未应用内容');
-  id=chunk.id||id;usage=chunk.usage||usage;
+  const chunk=JSON.parse(text);if(chunk.error)throw Object.assign(Error('模型流式响应失败，未应用内容'),{code:'MODEL_STREAM_FAILURE'});
+  id=chunk.id||id;model=chunk.model||model;usage=chunk.usage||usage;
   for(const choice of chunk.choices||[]){const delta=choice.delta?.content||'';answer+=delta;if(delta&&onDelta)await onDelta(delta);finish=choice.finish_reason||finish;}
  };
  try{while(true){const {done,value}=await reader.read();pending+=decoder.decode(value,{stream:!done});let index;while((index=pending.indexOf('\n'))>=0){await consume(pending.slice(0,index).trim());pending=pending.slice(index+1);}if(done)break;}
  if(pending)await consume(pending.trim());}finally{await reader.cancel().catch(()=>{});}
- if(!finish)throw Error('模型响应提前结束，未应用内容');
- return {id,usage,choices:[{message:{content:answer},finish_reason:finish}]};
+ if(!finish)throw Object.assign(Error('模型响应提前结束，未应用内容'),{code:'MODEL_STREAM_INCOMPLETE'});
+ return {id,model,usage,choices:[{message:{content:answer},finish_reason:finish}]};
 }
 async function readLocalKey(){
  if(process.platform!=='darwin')return undefined;
@@ -88,7 +88,7 @@ export function patientTransport(url,{method,headers,body,signal}){
 }
 // A refusal is its own failure (模型调用稳定性加固 2026-10-22): the same request retried gets refused again, so callers
 // handle it apart from a cut-off answer. diagnostics.finishReason stays 'refusal' for callers that already read it.
-function refusal(model,usage,id,extra={}){const e=Error('模型拒绝回答这次请求，未应用内容');e.status=502;e.code='MODEL_REFUSAL';e.diagnostics={model,finishReason:'refusal',usage,...extra};recordModelRun({channel:'model-failure',model,usage,providerRequestId:id,failure:e.diagnostics}).catch(()=>{});return e;}
+function refusal(model,usage,id,extra={},rawAnswer){const e=Error('模型拒绝回答这次请求，未应用内容');e.status=502;e.code='MODEL_REFUSAL';e.rawAnswer=rawAnswer;e.providerRequestId=id||null;e.diagnostics={model,finishReason:'refusal',usage,...extra};recordModelRun({channel:'model-failure',model,usage,providerRequestId:id,failure:e.diagnostics}).catch(()=>{});return e;}
 export async function createModelGateway({env=process.env,readSecretFile=readFile,readLocalSecret=readLocalKey,transport=fetch,redact=false,tracer=sharedTracer}={}){
  const base=env.DECODING_API_BASE||TOKENHUB_BASE;
  const model=env.DECODING_MODEL||TOKENHUB_MODEL;
@@ -110,9 +110,9 @@ export async function createModelGateway({env=process.env,readSecretFile=readFil
   const response=await transport(messagesEndpoint,{method:'POST',redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),headers:{Authorization:`Bearer ${key}`,'anthropic-version':'2023-06-01','Content-Type':'application/json'},body:JSON.stringify({model,max_tokens:limit,stream:true,...(system?{system}:{}),messages:turns,...(thinking?{thinking:{type:'adaptive',display:'summarized'},output_config:{effort:reasoningEffort||'high'}}:{})})});
   if(!response.ok){const e=Error(`模型接口返回 ${response.status}，未修改任何卡片。`);e.status=502;e.providerStatus=response.status;await recordModelRun({channel:'model-failure',model,failure:{httpStatus:response.status}}).catch(()=>{});throw e;}
   const r=await messagesResponse(response,onDelta,{model}),usage={prompt_tokens:r.usage?.input_tokens,completion_tokens:r.usage?.output_tokens,...r.usage};
-  if(r.stop==='refusal')throw refusal(model,usage,r.id,{reasoningEffort:thinking?reasoningEffort:'disabled'});
-  if(!r.answer||r.stop==='max_tokens'){const e=Error('模型输出不完整，未应用修改。');e.status=502;e.code='MODEL_OUTPUT_INCOMPLETE';e.partialAnswer=r.answer||'';e.diagnostics={model,finishReason:r.stop||'empty',usage,reasoningEffort:thinking?reasoningEffort:'disabled',maxTokens:limit};await recordModelRun({channel:'model-failure',model,usage,providerRequestId:r.id,failure:e.diagnostics});throw e;}
-  return {answer:json?bareJson(r.answer):r.answer,usage,providerRequestId:r.id,model,durationMs:Date.now()-startedAt};
+  if(r.stop==='refusal')throw refusal(model,usage,r.id,{reasoningEffort:thinking?reasoningEffort:'disabled',finishReasonSource:'provider.messages.stop_reason',requestedAlias:model,returnedModel:r.model||null},r.answer);
+  if(!r.answer||r.stop==='max_tokens'){const e=Error('模型输出不完整，未应用修改。');e.status=502;e.code='MODEL_OUTPUT_INCOMPLETE';e.partialAnswer=r.answer||'';e.providerRequestId=r.id||null;e.diagnostics={model,finishReason:r.stop||'empty',finishReasonSource:r.stop?'provider.messages.stop_reason':'adapter.missing_stop_reason',usage,reasoningEffort:thinking?reasoningEffort:'disabled',maxTokens:limit};await recordModelRun({channel:'model-failure',model,usage,providerRequestId:r.id,failure:e.diagnostics});throw e;}
+  return {answer:json?bareJson(r.answer):r.answer,rawAnswer:r.answer,finishReason:r.stop||null,finishReasonSource:r.stop?'provider.messages.stop_reason':null,usage,providerRequestId:r.id,model,requestedAlias:model,returnedModel:r.model||null,durationMs:Date.now()-startedAt};
  }
  const gateway={
   status:{ready:Boolean(key),provider:tokenhub?'TokenHub':ark?'Ark':'OpenAI-compatible',model},
@@ -140,13 +140,13 @@ export async function createModelGateway({env=process.env,readSecretFile=readFil
     await recordModelRun({channel:'model-failure',model,failure:{httpStatus:response.status,retryAfterMs:e.retryAfterMs??null}}).catch(()=>{});throw e;
    }
    const result=await completionResponse(response,onDelta),answer=result.choices?.[0]?.message?.content;
-   if(result.choices?.[0]?.finish_reason==='content_filter')throw refusal(model,result.usage,result.id);
+   if(result.choices?.[0]?.finish_reason==='content_filter')throw refusal(model,result.usage,result.id,{finishReasonSource:'provider.chat.finish_reason',providerFinishReason:'content_filter',requestedAlias:model,returnedModel:result.model||null},answer);
    if(!answer||result.choices?.[0]?.finish_reason==='length'){
-    const e=Error('模型输出不完整，未应用修改。');e.status=502;e.code='MODEL_OUTPUT_INCOMPLETE';e.partialAnswer=answer||'';
-    e.diagnostics={model,finishReason:result.choices?.[0]?.finish_reason||'empty',usage:result.usage,reasoningEffort:thinking?reasoningEffort:'disabled',maxTokens:maxTokens||(thinking?65536:json?4000:2400)};
+    const e=Error('模型输出不完整，未应用修改。');e.status=502;e.code='MODEL_OUTPUT_INCOMPLETE';e.partialAnswer=answer||'';e.providerRequestId=result.id||null;
+    e.diagnostics={model,finishReason:result.choices?.[0]?.finish_reason||'empty',finishReasonSource:result.choices?.[0]?.finish_reason?'provider.chat.finish_reason':'adapter.missing_finish_reason',usage:result.usage,reasoningEffort:thinking?reasoningEffort:'disabled',maxTokens:maxTokens||(thinking?65536:json?4000:2400)};
     await recordModelRun({channel:'model-failure',model,usage:result.usage,providerRequestId:result.id,failure:e.diagnostics});throw e;
    }
-   return {answer,usage:result.usage,providerRequestId:result.id,model,durationMs:Date.now()-startedAt};
+   return {answer,rawAnswer:answer,finishReason:result.choices?.[0]?.finish_reason||null,finishReasonSource:result.choices?.[0]?.finish_reason?'provider.chat.finish_reason':null,usage:result.usage,providerRequestId:result.id,model,requestedAlias:model,returnedModel:result.model||null,durationMs:Date.now()-startedAt};
   },
  };
  // LangSmith (陈溪南 2026-10-27): every call is one llm run under whatever the caller is running; a no-op without a key.

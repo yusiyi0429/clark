@@ -5,8 +5,9 @@ const sse=events=>new Response(new ReadableStream({start(c){for(const e of event
 const env={DECODING_MODEL:'wangsu/claude-sonnet-5-5',DECODING_API_KEY:'test-key'};
 test('Claude 走 Messages 接口：系统提示单列、流式拼出答案、思考用 adaptive',async()=>{
  let sent,url;const deltas=[];
- const g=await createModelGateway({env,transport:async(u,init)=>{url=String(u);sent=JSON.parse(init.body);return sse([{type:'message_start',message:{id:'msg_1',usage:{input_tokens:12}}},{type:'content_block_delta',delta:{type:'text_delta',text:'```json\n{"a":'}},{type:'content_block_delta',delta:{type:'text_delta',text:'1}\n```'}},{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:5}}]);}});
+ const g=await createModelGateway({env,transport:async(u,init)=>{url=String(u);sent=JSON.parse(init.body);return sse([{type:'message_start',message:{id:'msg_1',model:'claude-provider-canonical',usage:{input_tokens:12}}},{type:'content_block_delta',delta:{type:'text_delta',text:'```json\n{"a":'}},{type:'content_block_delta',delta:{type:'text_delta',text:'1}\n```'}},{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:5}}]);}});
  const r=await g.complete([{role:'system',content:'你是 Nexus'},{role:'user',content:'整理'}],{json:true,thinking:true,reasoningEffort:'high',onDelta:d=>deltas.push(d)});
+ assert.equal(r.requestedAlias,env.DECODING_MODEL);assert.equal(r.returnedModel,'claude-provider-canonical');
  assert.equal(url,'https://tokenhub.corp.tokenkingos.com/api/anthropic/v1/messages');
  assert.match(sent.system,/你是 Nexus/);assert.deepEqual(sent.messages,[{role:'user',content:'整理'}]);
  assert.deepEqual(sent.thinking,{type:'adaptive',display:'summarized'});assert.equal(sent.output_config.effort,'high');assert.equal(sent.stream,true);
