@@ -6873,6 +6873,143 @@
         }
       }
     },
+    "/api/conversations/{scope}/turns/{runId}/stream": {
+      "get": {
+        "operationId": "followConversationTurn",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "summary": "接上首页对话里还在写（或刚写完）的那一轮：先补发这一轮已有的事件，再跟着往下写到结束（切走、刷新、断线回来）",
+        "responses": {
+          "200": {
+            "description": "SSE 事件流（与发送消息的事件相同）；x-turn-started-at 是这一轮开始的时刻（毫秒）",
+            "headers": {
+              "x-turn-started-at": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSseEvent"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "这一轮不在这里（没有在写、服务重启过或不是首页 Chat 对话）"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{scope}/turns/{runId}/stop": {
+      "post": {
+        "operationId": "stopConversationTurn",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "summary": "本人点「停止」：请服务端停下这一轮（首页 Chat 对话；断开连接不再算停止）。天枢自己的对话由断开连接停下，这里不做事",
+        "responses": {
+          "200": {
+            "description": "停下后这一轮的状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationTurnStopResponse"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "不是首页 Chat 对话，由断开连接停下"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/issue-drafts/{id}": {
       "get": {
         "operationId": "getIssueDraft",
@@ -22473,6 +22610,9 @@
                     }
                   ]
                 },
+                "running": {
+                  "type": "boolean"
+                },
                 "meta": {
                   "additionalProperties": false,
                   "type": "object",
@@ -23392,6 +23532,22 @@
             }
           }
         ]
+      },
+      "ConversationTurnStopResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "runId",
+          "status"
+        ],
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
       },
       "IssueDraftResponse": {
         "additionalProperties": false,

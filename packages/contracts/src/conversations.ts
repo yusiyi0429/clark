@@ -288,6 +288,8 @@ export const ConversationMessage = Type.Object(
     kind: Type.Optional(Type.Union([Type.Literal("carried"), Type.Literal("trace")])),
     /** 这一轮是在飞书私聊机器人或微信 ClawBot 里说的（问与答都标）；网页里不标的就是在天枢里说的。 */
     via: Type.Optional(Type.Union([Type.Literal("feishu"), Type.Literal("wechat")])),
+    /** 只在本人的提问上：这一轮服务端还在回答（首页对话走独立 Chat 时）。切走、刷新回来据此接上这一轮。 */
+    running: Type.Optional(Type.Boolean()),
     meta: Type.Optional(Type.Object(
       { issueId: Type.Optional(Type.String()), title: Type.Optional(Type.String()), href: Type.Optional(Type.String()) },
       { additionalProperties: false },
@@ -301,6 +303,17 @@ export const ConversationHistory = Type.Object(
     scope: ConversationScope,
     messages: Type.Array(ConversationMessage),
   },
+  { additionalProperties: false },
+);
+
+/** 一轮回答：接上它的事件流、请服务端停下它。runId 是这一轮的标识（事件流每条都带）。 */
+export const ConversationTurnParams = Type.Object(
+  { scope: ConversationScope, runId: Type.String({ format: "uuid" }) },
+  { additionalProperties: false },
+);
+/** 停止之后这一轮的状态（Chat 的 turns 状态：aborted / completed / failed）。 */
+export const ConversationTurnStopResponse = Type.Object(
+  { runId: Type.String(), status: Type.String() },
   { additionalProperties: false },
 );
 

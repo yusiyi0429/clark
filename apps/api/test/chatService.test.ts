@@ -42,6 +42,8 @@ async function fakeChat(options: {
   segments?: Record<string, Record<string, Page>>;
   turn?: (res: ServerResponse, request: ChatRequest) => void;
   upload?: (request: ChatRequest) => unknown;
+  /** POST /turns/:id/cancel（本人点停止）；没给时 404。 */
+  cancel?: (res: ServerResponse, request: ChatRequest) => void;
 } = {}) {
   const requests: ChatRequest[] = [];
   const now = () => new Date().toISOString();
@@ -76,6 +78,7 @@ async function fakeChat(options: {
       return send(200, (options.segments?.[history[1]] ?? options.pages)?.[history[2]] ?? { messages: [], runs: [], nextCursor: null });
     }
     if (request.method === "POST" && request.url.endsWith("/attachments")) return send(200, options.upload?.(request));
+    if (request.method === "POST" && /^\/turns\/[^/]+\/cancel$/.test(request.url) && options.cancel) return options.cancel(res, request);
     if (request.method === "POST" && request.url.endsWith("/turns")) {
       // 和 Chat 的 TurnCommand 一样不收多余字段：字段名对不上时整轮 400。
       const command = JSON.parse(request.body) as Record<string, unknown>;
@@ -146,6 +149,7 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
   it("带内部凭据转发本人身份、发第一句时新建 Chat 会话、事件翻成天枢格式；天枢自己的运行时不跑、不建会话", async () => {
     const chat = await fakeChat({ turn: (res) => sse(res, [
       { type: "turn_started", userMessageId: randomUUID() },
+      { type: "thinking", delta: "状态：正在整理历史对话\n" },
       { type: "thinking" },
       { type: "tool", phase: "started", toolCallId: "t1", name: "read_world_object" },
       { type: "tool", phase: "completed", toolCallId: "t1", name: "read_world_object" },
@@ -174,7 +178,10 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
       expect(received.map((event) => event.type)).toEqual(["route", "thinking", "tool", "tool", "message", "message", "usage", "done"]);
       // 正文很快就来：一直是检索问答档，不说「预计 1–2 分钟」。
       expect(received[0]).toMatchObject({ tier: "grounded", expectSeconds: 30 });
-      expect(received[2]).toMatchObject({ phase: "started", name: "read_world_object", label: "读取本体对象" });
+      // Chat 的「状态：…」不是模型的思考，不给界面；工具只转 Chat 给的，不再配一句「在查什么」。
+      expect(received[1]).not.toHaveProperty("delta");
+      expect(received[2]).toMatchObject({ phase: "started", name: "read_world_object" });
+      expect(received.filter((event) => event.type === "tool").some((event) => "label" in event)).toBe(false);
       expect(received.every((event, index) => event.runId === RUN && event.scope === "global" && event.sequence === index + 1)).toBe(true);
       expect(received.some((event) => "conversationId" in event)).toBe(false);
 
@@ -421,27 +428,128 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
     });
   });
 
-  it("界面断开（点停止、关页面）就断开对 Chat 的请求", async () => {
-    let chatClosed!: () => void;
-    const closed = new Promise<void>((resolve) => { chatClosed = resolve; });
+  it("界面断开（切走、刷新）不算停止：照样读到 Chat 写完；回来接上这一轮，先补发已有的、再跟着写到结束", async () => {
+    let upstream!: ServerResponse;
+    let chatClosed = false;
     const chat = await fakeChat({ turn: (res) => {
-      res.on("close", () => chatClosed());
+      upstream = res;
+      res.on("close", () => { chatClosed = true; });
       sse(res, [{ type: "turn_started" }, { type: "message", delta: "正在写" }], false);
     } });
+    const chatEvent = (sequence: number, event: Record<string, unknown>) =>
+      `data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence, ...event })}\n\n`;
+    const readAll = async (reader: ReadableStreamDefaultReader<Uint8Array>, until?: string, text = "") => {
+      for (;;) {
+        if (until && text.includes(until)) return text;
+        const { done, value } = await reader.read();
+        if (done) return text;
+        text += new TextDecoder().decode(value);
+      }
+    };
     await withChat(chat, countingRuntime(), async (t) => {
       const cookie = await t.loginCookie();
       await t.app.listen({ port: 0, host: "127.0.0.1" });
+      const base = `http://127.0.0.1:${(t.app.server.address() as AddressInfo).port}`;
       const controller = new AbortController();
-      const response = await fetch(`http://127.0.0.1:${(t.app.server.address() as AddressInfo).port}/api/conversations/global/messages`, {
+      const response = await fetch(`${base}/api/conversations/global/messages`, {
         method: "POST", signal: controller.signal,
         headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream", "content-type": "application/json" },
         body: JSON.stringify({ message: "写长一点" }),
       });
+      await readAll(response.body!.getReader(), "正在写");
+      controller.abort();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(chatClosed).toBe(false);
+
+      // 别的轮次、别的视角接不上（204）。
+      expect((await t.app.inject({ method: "GET", url: `/api/conversations/global/turns/${randomUUID()}/stream`, headers: { cookie } })).statusCode).toBe(204);
+      expect((await t.app.inject({ method: "GET", url: `/api/conversations/global/turns/${RUN}/stream`, headers: { cookie: await t.memberCookie() } })).statusCode).toBe(204);
+
+      const follow = await fetch(`${base}/api/conversations/global/turns/${RUN}/stream`, { headers: { cookie, accept: "text/event-stream" } });
+      expect(follow.status).toBe(200);
+      expect(follow.headers.get("content-type")).toContain("text/event-stream");
+      expect(Date.now() - Number(follow.headers.get("x-turn-started-at"))).toBeLessThan(10_000);
+      const reader = follow.body!.getReader();
+      let followed = await readAll(reader, "正在写");
+      expect(events(followed).map((event) => event.type)).toEqual(["route", "message"]);
+      upstream.write(chatEvent(3, { type: "message", delta: "，写完了" }));
+      upstream.end(chatEvent(4, { type: "done", status: "completed" }));
+      followed = await readAll(reader, undefined, followed);
+      const received = events(followed);
+      expect(received.map((event) => event.type)).toEqual(["route", "message", "message", "done"]);
+      expect(received.map((event) => event.delta ?? "").join("")).toBe("正在写，写完了");
+      expect(received.every((event) => event.runId === RUN)).toBe(true);
+
+      // 写完以后再接：整轮重放到 done 就结束。
+      const again = await t.app.inject({ method: "GET", url: `/api/conversations/global/turns/${RUN}/stream`, headers: { cookie } });
+      expect(events(again.payload).map((event) => event.type)).toEqual(["route", "message", "message", "done"]);
+    });
+  });
+
+  it("和 Chat 的连接断了：接上来看的界面收到一条「没有完成」（能接着写），不会一直等", async () => {
+    const chat = await fakeChat({ turn: (res) => {
+      sse(res, [{ type: "turn_started" }, { type: "message", delta: "写了一半" }], false);
+      setTimeout(() => res.destroy(), 50);
+    } });
+    await withChat(chat, countingRuntime(), async (t) => {
+      const cookie = await t.loginCookie();
+      const sent = await t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "说说" } });
+      expect(events(sent.payload).map((event) => event.type)).toEqual(["route", "message"]);
+      const followed = events((await t.app.inject({ method: "GET", url: `/api/conversations/global/turns/${RUN}/stream`, headers: { cookie } })).payload);
+      expect(followed.at(-1)).toMatchObject({ type: "error", code: "RUNTIME_FAILED", partial: true, resume: "continue", runId: RUN });
+    });
+  });
+
+  it("本人点停止：转给 Chat 的 cancel；Chat 随后回的「已停止」原样给界面，不当成 Chat 停机", async () => {
+    let upstream!: ServerResponse;
+    const chat = await fakeChat({
+      turn: (res) => { upstream = res; sse(res, [{ type: "turn_started" }, { type: "message", delta: "写了一半" }], false); },
+      cancel: (res, request) => {
+        upstream.end(`data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: 3, type: "done", status: "aborted" })}\n\n`);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ runId: request.url.split("/")[2], status: "aborted" }));
+      },
+    });
+    await withChat(chat, countingRuntime(), async (t) => {
+      const cookie = await t.loginCookie();
+      await t.app.listen({ port: 0, host: "127.0.0.1" });
+      const response = await fetch(`http://127.0.0.1:${(t.app.server.address() as AddressInfo).port}/api/conversations/global/messages`, {
+        method: "POST", headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream", "content-type": "application/json" },
+        body: JSON.stringify({ message: "写长一点" }),
+      });
       const reader = response.body!.getReader();
       let text = "";
-      while (!text.includes("正在写")) text += new TextDecoder().decode((await reader.read()).value);
-      controller.abort();
-      await expect(Promise.race([closed.then(() => "closed"), new Promise((resolve) => setTimeout(() => resolve("still open"), 3000))])).resolves.toBe("closed");
+      while (!text.includes("写了一半")) text += new TextDecoder().decode((await reader.read()).value);
+
+      const stopped = await t.app.inject({ method: "POST", url: `/api/conversations/global/turns/${RUN}/stop`, headers: { cookie, origin: t.publicOrigin } });
+      expect([stopped.statusCode, stopped.json()]).toEqual([200, { runId: RUN, status: "aborted" }]);
+      const cancel = chat.requests.find((request) => request.url === `/turns/${RUN}/cancel`);
+      expect(cancel).toMatchObject({ method: "POST", headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_CEO.personId, "x-viewer-role": "ceo" } });
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        text += new TextDecoder().decode(value);
+      }
+      expect(events(text).at(-1)).toMatchObject({ type: "done", status: "aborted", runId: RUN });
+
+      // 对象页的对话由断开连接停下：这里不做事，也不找 Chat。
+      const requests = chat.requests.length;
+      expect((await t.app.inject({ method: "POST", url: `/api/conversations/task:demo/turns/${RUN}/stop`, headers: { cookie, origin: t.publicOrigin } })).statusCode).toBe(204);
+      expect(chat.requests).toHaveLength(requests);
+    });
+  });
+
+  it("历史里还在回答的那一句标上 running（界面据此接上这一轮），答完的不标", async () => {
+    const [r1, r2] = [randomUUID(), randomUUID()];
+    const said = (role: string, text: string, runId: string, position: number) => ({ id: randomUUID(), position: String(position), role, text, runId, attachmentIds: [], attachments: [] });
+    const chat = await fakeChat({ conversations: [randomUUID()], pages: { "0": { nextCursor: null,
+      messages: [said("user", "第一问", r1, 1), said("assistant", "第一答", r1, 2), said("user", "第二问", r2, 3)],
+      runs: [{ runId: r1, status: "completed" }, { runId: r2, status: "running" }] } } });
+    await withChat(chat, countingRuntime(), async (t) => {
+      const history = (await t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie: await t.loginCookie() } })).json();
+      expect(history.messages.map((item: { content: string; running?: boolean }) => [item.content, item.running ?? false]))
+        .toEqual([["第一问", false], ["第一答", false], ["第二问", true]]);
     });
   });
 });

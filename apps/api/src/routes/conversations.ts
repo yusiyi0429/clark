@@ -5,6 +5,7 @@ import {
   AcceptIssueDraftRequest,
   ConversationMessageRequest,
   ConversationScope,
+  ConversationTurnParams,
   IssueDraftResponse,
   type TAcceptIssueDraftRequest,
   type TAskAnswerRecord,
@@ -752,6 +753,19 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
     async (req: FastifyRequest<{ Params: { scope: TConversationScope }; Body: TConversationMessageRequest }>, reply) =>
       sendConversationTurn(req, reply),
   );
+
+  // 首页 Chat 对话：界面断开不再停下这一轮。切走、刷新回来接上它（先补发、再跟着写）；本人点「停止」才请 Chat 停下。
+  // 天枢自己的对话照旧由断开连接停下：接不上（204），停止这里不做事（204）。
+  app.get("/api/conversations/:scope/turns/:runId/stream", { preHandler: requirePerson, schema: { params: ConversationTurnParams } },
+    async (req, reply) => {
+      if (chat && req.params.scope === "global" && chat.follow(req.person!, req.params.runId, reply)) return;
+      return reply.code(204).send();
+    });
+  app.post("/api/conversations/:scope/turns/:runId/stop", { preHandler: requirePerson, schema: { params: ConversationTurnParams } },
+    async (req, reply) => {
+      if (!chat || req.params.scope !== "global") return reply.code(204).send();
+      return chat.cancel(req.person!, String(req.id), req.params.runId).catch((error) => chatFailed(reply, error));
+    });
 
   // 一号位深聊转议题（issueDrafts.ts）：建议卡读取、开议题 / 接到议题、不用。只有 CEO。
   const names = () => personDisplayNames(peopleDirectory);

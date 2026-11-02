@@ -1878,6 +1878,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{scope}/turns/{runId}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 接上首页对话里还在写（或刚写完）的那一轮：先补发这一轮已有的事件，再跟着往下写到结束（切走、刷新、断线回来） */
+        get: operations["followConversationTurn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{scope}/turns/{runId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人点「停止」：请服务端停下这一轮（首页 Chat 对话；断开连接不再算停止）。天枢自己的对话由断开连接停下，这里不做事 */
+        post: operations["stopConversationTurn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/issue-drafts/{id}": {
         parameters: {
             query?: never;
@@ -4960,6 +4994,7 @@ export interface components {
                 };
                 kind?: "carried" | "trace";
                 via?: "feishu" | "wechat";
+                running?: boolean;
                 meta?: {
                     issueId?: string;
                     title?: string;
@@ -5149,6 +5184,10 @@ export interface components {
                 text: string;
                 detail: string;
             };
+        };
+        ConversationTurnStopResponse: {
+            runId: string;
+            status: string;
         };
         IssueDraftResponse: {
             draft: {
@@ -18918,6 +18957,112 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    followConversationTurn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SSE 事件流（与发送消息的事件相同）；x-turn-started-at 是这一轮开始的时刻（毫秒） */
+            200: {
+                headers: {
+                    "x-turn-started-at"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ConversationSseEvent"];
+                };
+            };
+            /** @description 这一轮不在这里（没有在写、服务重启过或不是首页 Chat 对话） */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    stopConversationTurn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 停下后这一轮的状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationTurnStopResponse"];
+                };
+            };
+            /** @description 不是首页 Chat 对话，由断开连接停下 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
