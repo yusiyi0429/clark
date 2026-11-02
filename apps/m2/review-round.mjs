@@ -29,6 +29,8 @@ export const reviewDueAt=round=>round?.dueAt||null;
 // A round loaded before due times existed gets one only while it is still inside its 48 hours, so an old round does not open its insights the moment this ships.
 export const withDueAt=(round,now=Date.now())=>!round||round.dueAt||!round.loadedAt||now>=Date.parse(dueFrom(round.loadedAt))?round:{...round,dueAt:dueFrom(round.loadedAt)};
 export function installReviewRound(state,file,{label,source,sample=false,now=new Date().toISOString()}={}){
+ const version=String(file.skill?.version||file.skillFormat||'').split('.').map(Number),needsQuality=version[0]>2||version[0]===2&&(version[1]>1||version[1]===1&&version[2]>=13);
+ if((needsQuality||file.quality)&&file.quality?.status!=='passed')throw Object.assign(Error('复盘质量检查未通过，只能保留草稿，不能装入正式轮次'),{status:409});
  const next=structuredClone(state),old=Object.values(next.cards).filter(c=>c.kind==='review');
  if(old.length){const ids=new Set(old.map(c=>c.id));
   // Comments on the old reviews go with them: the new round reuses the same card ids (rv:eo …).

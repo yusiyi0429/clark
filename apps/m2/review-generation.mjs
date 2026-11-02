@@ -1,3 +1,4 @@
+import {runReviewQuality,qualityModelCall,qualityHash} from './review-quality.mjs';
 import {frozenAgreedOutcome} from './review-agreed-outcome.mjs';
 import {captureConfirmedFacts,verifyEvidenceBundle,addConfirmedFacts,evidenceHash} from './confirmed-review-evidence.mjs';
 import {reviewTarget,inReviewWindow,reviewDay} from './review-period.mjs';
@@ -9,7 +10,7 @@ import {childContract,childVerdictProblem,objectExclusion} from './review-child-
 // confirmations, open issues, and last month's reviews as the starting point. Corrected or withdrawn records are left out. A unit with no PO that month is not reviewed; incomplete information is reviewed as it
 // stands. The 公司 PO review is always written: it closes the month and its confirmation starts the next decomposition.
 // The review skill owns how a review is judged and written; this module only gathers, calls in the skill's order and checks.
-import {readFile,writeFile,mkdir,copyFile} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,copyFile,rename} from 'node:fs/promises';
 import {join,dirname} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
@@ -304,7 +305,9 @@ export async function loadReviewSkill(root){
  if(!files.length)throw Error('没有读到复盘技能');
  const stages=await readFile(new URL('references/round-stages.md',root),'utf8').catch(()=>'');
  const version=rules.match(/版本\s*([\d.]+)/)?.[1]||null;
- return {rules,version,hash:sha(rules),files,groups:[...stages.matchAll(/^- 第(.)组（([^）]+)）：(.+)$/gm)].map(m=>({name:m[2],types:m[3].split('、').map(s=>s.trim())})),mustFix:(stages.match(/必须修改的问题类型：(.+)/)?.[1]||'').replace(/。$/,'').split('、').filter(Boolean)};
+ const maxRevisionRounds=Number(stages.match(/^自动修订最多做 (\d+) 轮。$/m)?.[1]||0)||null;
+ if(skillAtLeast(version,'2.1.13')&&maxRevisionRounds!==2)throw Error('复盘技能缺少明确的两轮自动修订合同');
+ return {rules,version,hash:sha(rules),files,maxRevisionRounds,groups:[...stages.matchAll(/^- 第(.)组（([^）]+)）：(.+)$/gm)].map(m=>({name:m[2],types:m[3].split('、').map(s=>s.trim())})),mustFix:(stages.match(/必须修改的问题类型：(.+)/)?.[1]||'').replace(/。$/,'').split('、').filter(Boolean)};
 }
 const causeText=x=>typeof x==='string'?x:[x?.text,x?.ask].filter(Boolean).join(' ');
 const textOf=r=>[r.verdictReason,r.keyGap,...(r.facts||[]).flatMap(f=>[f.evidence,f.gap]),...(r.causes||[]).map(causeText),...['targets','results','questions','changes','practices','decisions','commonCauses'].flatMap(k=>r[k]||[]),...(r.nextInputs||[]).map(n=>n?.text),r.ltoProgress,r.ltoReview?.reason].filter(Boolean);
@@ -380,7 +383,9 @@ const fieldsHint='返回 JSON：{"analysis":"不展示的分析，600 字内","r
 
 // Runs the skill's stages on a built input. `run` holds what is done so far (raw answers by call), so a failed run
 // resumes where it stopped; save(run) is called after every answer.
-export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{},failed:[],dropped:[]},save=async()=>{},onProgress=async()=>{},concurrency=8}){
+export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{},failed:[],dropped:[]},save=async()=>{},onProgress=async()=>{},concurrency=8,programOptions=null,signal}){
+ const twoRound=skillAtLeast(skill.version,'2.1.13');
+ signal?.throwIfAborted();
  if(skillAtLeast(skill.version,'2.1.10')){const incomplete=input.stages.flat().filter(c=>['mission','ru'].includes(c.level)&&!c.childCommitments?.complete);if(incomplete.length)throw Error('有效直接子项元信息不完整：'+incomplete.map(c=>c.id+' '+(c.childCommitments?.missing||[]).join('；')).join('；'));}
  if(skillAtLeast(skill.version,'2.1.11')){
   if(input.basis?.mode!=='latest-source-candidate'||!input.basis.snapshotHash)throw Error('最新来源候选基线缺失，请重新准备输入');
@@ -397,9 +402,10 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
   // One chain per answer (LangSmith 2026-10-27); each attempt below is its llm child.
   return tracer.withRun(key,'chain',{stage:/^check-/.test(key)?'check':/^revise-/.test(key)?'revise':key==='company'?'company':'review',unit:/^check-/.test(key)?undefined:key.replace(/^revise-|#nobg$/g,'')},async()=>{
   for(let attempt=1;;attempt++){
-   try{const r=await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(user)}],{thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000});
+   signal?.throwIfAborted();
+   try{const r=await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(user)}],{thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000,signal});
     const parsed=JSON.parse(bareJson(r.answer));run.raw[key]=r.answer;await save(run);return parsed;}
-   catch(e){if(e.diagnostics?.finishReason==='refusal'||e.code==='MODEL_REFUSAL'||attempt>=3){e.refusal=e.refusal||e.diagnostics?.finishReason==='refusal'||e.code==='MODEL_REFUSAL';throw e;}}
+   catch(e){if(signal?.aborted)throw e;if(e.diagnostics?.finishReason==='refusal'||e.code==='MODEL_REFUSAL'||attempt>=3){e.refusal=e.refusal||e.diagnostics?.finishReason==='refusal'||e.code==='MODEL_REFUSAL';throw e;}}
   }
   });
  };
@@ -407,7 +413,8 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
  const stage=(name,fn)=>tracer.withRun(name,'chain',{stage:name},fn);
  // A refusal is retried once without the month-start background; a unit that still fails is named, the round goes on.
  const askUnit=async(c,user)=>{
-  try{return await ask(c.id,user);}catch(e){
+  try{const answer=await ask(c.id,user);if(twoRound&&(!answer?.review||typeof answer.review!=='object'||Array.isArray(answer.review))){(run.generationFailures??=[]).push({id:c.id,raw:run.raw[c.id],error:'初稿未返回有效复盘'});delete run.raw[c.id];throw Error('初稿未返回有效复盘');}return answer;}catch(e){
+   if(signal?.aborted)throw e;
    // Refusals come and go (10/23: finance-m2 passed in one run and was refused in the next), so the same request is tried once more first.
    if(e.refusal){try{return await ask(c.id,user);}catch(e1){e=e1;}}
    if(e.refusal&&user.unit?.evidence?.some(x=>x.kind==='月初起点')){run.dropped.push({id:c.id,reason:'model refusal; background evidence removed'});try{return await ask(c.id+'#nobg',{...user,unit:{...user.unit,evidence:user.unit.evidence.filter(x=>x.kind!=='月初起点'),missing:[...(user.unit.missing||[]),'月初背景资料这次没有读入（模型拒答）']}});}catch(e2){e=e2;}}
@@ -415,7 +422,7 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
   }
  };
  const put=(c,res)=>{if(res?.review)run.reviews[c.id]={...res.review,unit:c.unit,level:c.level,ref:c.id,title:c.title,owner:c.owner,...(c.parent?{parent:c.parent==='company'?'company':c.parent}:{})};};
- const pool=async(items,fn)=>{let i=0;await Promise.all(Array.from({length:Math.min(concurrency,items.length)},async()=>{while(i<items.length){const x=items[i++];await fn(x);}}));};
+ const pool=async(items,fn)=>{let i=0;const result=await Promise.allSettled(Array.from({length:Math.min(concurrency,items.length)},async()=>{while(i<items.length){signal?.throwIfAborted();const x=items[i++];await fn(x);}}));const failed=result.find(x=>x.status==='rejected');if(failed)throw failed.reason;};
  const [s1,s2,s3]=input.stages,total=s1.length+s2.length+s3.length;let done=0;
  // Resuming after failed units: ask them again, and rewrite their RU and the company review so those read the new answer.
  if(run.failed.length){
@@ -430,9 +437,9 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
  const step=async label=>{done++;await onProgress({stage:label,done,total});};
  const missionStep='按技能「产品生成整轮复盘候选·每一步怎么做·1. Mission 复盘」执行。'+fieldsHint,ruStep='按技能「产品生成整轮复盘候选·每一步怎么做·2. RU 复盘」执行。'+fieldsHint;
  await onProgress({stage:'Mission 复盘和没有 Mission 的 RU PO 复盘',done,total});
- await stage('mission-and-ru',()=>pool(s1,async c=>{put(c,await askUnit(c,{task:c.level==='mission'?missionStep:ruStep,unit:unitData(c)}));await step('Mission 复盘和没有 Mission 的 RU PO 复盘');}));
- await stage('ru',()=>pool(s2,async c=>{put(c,await askUnit(c,{task:ruStep,unit:unitData(c),missionReviews:c.children.map(id=>run.reviews[id]).filter(Boolean)}));await step('RU PO 复盘');}));
- if(skill.groups.length){
+ await stage('mission-and-ru',()=>pool(s1,async c=>{if(!twoRound||!run.quality)put(c,await askUnit(c,{task:c.level==='mission'?missionStep:ruStep,unit:unitData(c)}));await step('Mission 复盘和没有 Mission 的 RU PO 复盘');}));
+ await stage('ru',()=>pool(s2,async c=>{if(!twoRound||!run.quality)put(c,await askUnit(c,{task:ruStep,unit:unitData(c),missionReviews:c.children.map(id=>run.reviews[id]).filter(Boolean)}));await step('RU PO 复盘');}));
+ if(skill.groups.length&&!twoRound){
   await onProgress({stage:'检查与修改',done,total});
   const all=[...s1,...s2].filter(c=>run.reviews[c.id]);
   const facts=Object.fromEntries(all.map(c=>[c.id,{lengthFindings:lengthFindings(run.reviews[c.id]),evidenceFacts:evidenceFacts(c,run.reviews[c.id]),...(Array.isArray(run.reviews[c.id]?.facts)?{rowFacts:rowFacts(c,run.reviews[c.id])}:{})}]));
@@ -462,10 +469,47 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
   }));
  }
  const companyStep='按技能「产品生成整轮复盘候选·每一步怎么做·4. 公司复盘」执行。'+fieldsHint;
- await stage('company',()=>pool(s3,async c=>{put(c,await askUnit(c,{task:companyStep,unit:unitData(c),ruReviews:c.children.map(id=>run.reviews[id]).filter(Boolean),askedBelow:askedBelow(run)}));await step('公司 PO 复盘');}));
+ await stage('company',()=>pool(s3,async c=>{if(!twoRound||!run.quality)put(c,await askUnit(c,{task:companyStep,unit:unitData(c),ruReviews:c.children.map(id=>run.reviews[id]).filter(Boolean),askedBelow:askedBelow(run)}));await step('公司 PO 复盘');}));
+ if(twoRound){
+  if(run.failed.length)throw Error('部分初稿生成失败，先续跑初稿，未进入自动修订');
+  const persist=save;let tail=Promise.resolve();
+  const serializedSave=r=>{const next=tail.then(()=>persist(r));tail=next.catch(()=>{});return next;};
+  await twoRoundQuality({gateway,skill,input,run,save:serializedSave,onProgress,programOptions,signal,system});
+ }
  // The company review is the last answer; save once more so the job file holds every review (评测 2026-10-27).
  await save(run);
  return run;
+}
+
+// New skills check the complete candidate (including Company) after each edit.
+// Raw source facts are never replaced by an earlier checker's instructions.
+async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programOptions,signal,system}){
+ const items=input.stages.flat(),refs=items.map(c=>c.id);
+ const sources=Object.fromEntries(items.map(c=>[c.id,{...unitData(c),objectId:c.objectId}]));
+ const options=programOptions||{rowMatch:skillAtLeast(skill.version,'2.1.6'),askCaps:skillAtLeast(skill.version,'2.1.7'),childRule:skillAtLeast(skill.version,'2.1.10')};
+ const call=(q,pass,stage,ref,payload,validate)=>qualityModelCall({gateway,system,quality:q,run,pass,stage,ref,payload,validate,save,signal});
+ await runReviewQuality({run,input,skill,sources,save,onProgress,signal,
+  normalize:()=>{run.covered=[...(run.covered||[]),...applyCovers(run)];},
+  problems:candidate=>reviewProblems({...run,reviews:candidate.reviews},input,options).filter(p=>refs.includes(p.unit)),
+  check:async(reviews,pass,q)=>{
+   const facts=Object.fromEntries(items.map(c=>[c.id,{lengthFindings:reviews[c.id]?lengthFindings(reviews[c.id]):[],evidenceFacts:reviews[c.id]?evidenceFacts(c,reviews[c.id]):{missingIds:[],usedCount:0},rowFacts:rowFacts(c,reviews[c.id])}]));
+   const verdictFacts=items.filter(c=>c.children?.length).map(c=>({ref:c.id,verdict:reviews[c.id]?.verdict,children:c.children.map(ref=>({ref,verdict:reviews[ref]?.verdict||'生成失败'}))}));
+   const result=await Promise.allSettled(skill.groups.map((g,index)=>call(q,pass,'check',String(index+1),{
+    task:`按技能检查第${index+1}组（${g.name}）：${g.types.join('、')}。检查全部当前复盘及其上下级。对照 sources 中冻结原始来源逐项核对，不以照办上次checker当通过；检查意见不构成新事实。缺记录或待验证不等于没有发生。新引入问题与原问题同等检查。返回 {"issues":[{"ref":"复盘ref","type":"类型","problem":"具体问题","impact":"影响","mustFix":true,"fixable":true}]}。无问题返回 issues:[]，每条必须含两个布尔标记。`,
+    reviews:Object.values(reviews),programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(Object.values(reviews))},sources,sourceHash:q.sourceHash,candidateHash:qualityHash(reviews),
+   },value=>checkedReviewIssues(value,{skill,refs}))));
+   const failed=result.find(x=>x.status==='rejected');if(failed)throw failed.reason;
+   return result.flatMap(x=>x.value);
+  },
+  revise:async(c,action,pass,q)=>{
+   const reviews=action.before,children=(c.children||[]).map(id=>reviews[id]).filter(Boolean);
+   const result=await call(q,pass,action.refresh?'refresh':'revise',c.id,{
+    task:'按技能修改这份复盘。下面 issues 是待核检查意见，不是事实来源；必须重新对照冻结 unit 和 sources，不得凭checker添加事实或把未验证写成未发生。保留准确的时间、否定和来源边界。'+(action.refresh?'下级已更新，请按当前下级复盘同步核本层，不能复制旧结果。':'只改必改问题及直接受影响部分。')+fieldsHint,
+    unit:unitData(c),sources,sourceHash:q.sourceHash,review:reviews[c.id],issues:action.issues,missionReviews:children,ruReviews:children,askedBelow:askedBelow({reviews}),childrenHash:qualityHash(children),candidateHash:qualityHash(reviews),revision:action.revision,
+   },value=>{if(!value?.review||typeof value.review!=='object'||Array.isArray(value.review))throw Error('自动修订未返回有效复盘：'+c.id);return value;});
+   return {...result.review,unit:c.unit,level:c.level,ref:c.id,title:c.title,owner:c.owner,...(c.parent?{parent:c.parent}:{})};
+  },
+ });
 }
 
 // ---------- checks before install ----------
@@ -473,6 +517,7 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
 // 程序检查没过的那几份各重写一次再查 (2026-10-27: one review with six 下期输入 threw away all 23 after 9 minutes).
 // Only reviews that exist are asked; what is still wrong after one try blocks the round as before.
 export async function repairReviews({gateway,skill,input,run,problems,save=async()=>{}}){
+ if(skillAtLeast(skill.version,'2.1.13'))throw Error('新版结构修订必须使用统一的两轮质量流程，不能额外追加 repair 轮次');
  const system=`你是 TKOS 的月度复盘助手。按下面的技能工作。仅返回有效 JSON 对象，不加代码围栏。\n${skill.rules}`;
  const items=input.stages.flat(),byUnit=Object.groupBy(problems.filter(p=>run.reviews[p.unit]),p=>p.unit);
  run.repaired??=[];
@@ -524,7 +569,7 @@ export function reviewProblems(run,input,{roster=[],rowMatch=false,askCaps=false
 // What installReviewRound reads: the run's reviews plus what was skipped or failed, so the page names them.
 export function reviewFile(run,input,{skill,model,label,startedAt=null}){
  const generatedAt=new Date().toISOString();
- return {name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,...(input.basis?{basis:structuredClone(input.basis)}:{}),
+ return {name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,...(run.quality?{quality:{status:run.quality.status,maxRevisions:run.quality.maxRevisions,counts:run.quality.counts,remaining:run.quality.remaining||[],sourceHash:run.quality.sourceHash,skillHash:run.quality.skillHash}}:{}),...(input.basis?{basis:structuredClone(input.basis)}:{}),
   // Facts the review cards need from the input: which object each review is about, and whether the Mission has an owner.
   reviews:Object.fromEntries(Object.entries(run.reviews).map(([id,r])=>{const c=input.stages.flat().find(x=>x.id===id);return [id,{...r,...(c?.agreedOutcome?{agreedOutcome:structuredClone(c.agreedOutcome)}:{}),...(c?.sourceBasis?{sourceBasis:structuredClone(c.sourceBasis)}:{}),...(c?.childCommitments?{childCommitments:structuredClone(c.childCommitments)}:{}),...(c?.objectId?{objectId:c.objectId}:{}),...(c?.ownerAssigned===false?{ownerAssigned:false}:{})}];})),
   qualityWarnings:reviewQualityWarnings(run),failed:run.failed,dropped:run.dropped,skipped:input.skipped,readAt:input.readAt,redactions:input.redactions,readReceipt:input.readReceipt||null};
@@ -536,21 +581,24 @@ export function reviewFile(run,input,{skill,model,label,startedAt=null}){
 export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=()=>false,isOperator,roster=[],ceoName='',companyDirection=async()=>'',installReviewRound,archivesPath,model=gateway?.status?.model||null}){
  const dir=join(dirname(statePath),'review-jobs');
  const workFile=id=>join(dir,`${id}.json`);
- let flight=false;
+ let flight=false,activeAbort=null;
  const setJob=patch=>store.transact(s=>{s.reviewJob={...s.reviewJob,...patch,updatedAt:new Date().toISOString()};s.sequence++;return s;});
- const view=job=>job&&{id:job.id,status:job.status,stage:job.stage||null,done:job.done??null,total:job.total??null,error:job.error||null,checks:job.checks||[],warnings:job.warnings||[],inputCutoff:job.inputCutoff||null,period:job.period,cutoff:job.cutoff,createdAt:job.createdAt,finishedAt:job.finishedAt||null,skipped:job.skipped||[],skill:job.skill||null};
+ const view=job=>job&&{id:job.id,status:job.status,stage:job.stage||null,done:job.done??null,total:job.total??null,error:job.error||null,checks:job.checks||[],warnings:job.warnings||[],candidateAvailable:job.candidateAvailable===true,inputCutoff:job.inputCutoff||null,period:job.period,cutoff:job.cutoff,createdAt:job.createdAt,finishedAt:job.finishedAt||null,skipped:job.skipped||[],skill:job.skill||null};
  // One trace per attempt (root = this job; a resume is its own trace). Its id stays on the job and on the installed
  // review round, so verdict changes and signatures there become feedback on it, and a failure is feedback too.
  function run(id,{period,cutoff,resume}){
+  const controller=new AbortController();activeAbort=controller;
   const trace=tracer.startRun({name:'review-generation',metadata:{review_job_id:id,period,resume:Boolean(resume),model}});
-  return tracer.within(trace,()=>attempt(id,{period,cutoff,resume},trace));
+  return tracer.within(trace,()=>attempt(id,{period,cutoff,resume},trace,controller.signal));
  }
  const failed=(trace,why)=>{tracer.annotate({error:why},trace);if(trace)tracer.feedback({runId:trace.id,key:'review_generation_failed',score:0,value:'failed',comment:why});};
- async function attempt(id,{period,cutoff,resume},trace){
+ async function attempt(id,{period,cutoff,resume},trace,signal){
   flight=true;let work=resume?JSON.parse(await readFile(workFile(id),'utf8').catch(()=>'null')):null;
-  const save=async()=>{await mkdir(dir,{recursive:true,mode:0o700});await writeFile(workFile(id),JSON.stringify(work),{mode:0o600});};
+  let saveTail=Promise.resolve();
+  const save=()=>{const bytes=JSON.stringify(work);const next=saveTail.then(async()=>{await mkdir(dir,{recursive:true,mode:0o700});const temp=workFile(id)+'.'+randomUUID()+'.tmp';await writeFile(temp,bytes,{mode:0o600});await rename(temp,workFile(id));});saveTail=next.catch(()=>{});return next;};
   try{
    if(trace)await setJob(tracer.ref(trace));
+   signal?.throwIfAborted();
    const skill=await loadReviewSkill(skillRoot);
    tracer.annotate({metadata:{skill_version:skill.version,skill_hash:skill.hash.slice(0,12)}},trace);
    if(work&&work.skillSnapshot?.hash!==skill.hash&&skillAtLeast(skill.version,'2.1.10'))throw Error('复盘工作文件的技能版本不一致，请保留原任务并重新准备候选，不能混用旧输出');
@@ -572,12 +620,18 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
     work.inputHash=evidenceHash(work.input);await save();
    }
    await setJob({inputCutoff:work.input.readAt,skipped:work.input.skipped,skill:{version:skill.version,hash:skill.hash.slice(0,12)}});
-   await runReviewSkill({gateway,skill,input:work.input,run:work.run,save:async r=>{work.run=r;await save();},onProgress:p=>setJob(p)});
+   await runReviewSkill({gateway,skill,input:work.input,run:work.run,signal,programOptions:{roster,rowMatch:skillAtLeast(skill.version,'2.1.6'),askCaps:skillAtLeast(skill.version,'2.1.7'),childRule:skillAtLeast(skill.version,'2.1.10')},save:async r=>{work.run=r;await save();},onProgress:p=>setJob(p)});
+   if(work.run.quality&&work.run.quality.status!=='passed'){
+    const q=work.run.quality,checks=q.remaining||[];
+    work.candidate=reviewFile(work.run,work.input,{skill,model,label:'自动修订未通过的独立草稿'});await save();
+    await writeFile(join(dir,`${id}.candidate.json`),JSON.stringify(work.candidate),{mode:0o600});
+    await setJob({status:'draft',stage:'自动修订未通过，草稿未装入',error:q.blockReason||'仍有关键问题，保留草稿等待处理',checks,candidateAvailable:true,finishedAt:new Date().toISOString()});return;
+   }
    // 个人复盘最多 1 个问题 from 复盘技能 2.1.7 (陈溪南 2026-10-28: keep questions to what is really needed).
    const rowMatch=skillAtLeast(skill.version,'2.1.6'),askCaps=skillAtLeast(skill.version,'2.1.7'),childRule=skillAtLeast(skill.version,'2.1.10');
-   work.run.covered=[...(work.run.covered||[]),...applyCovers(work.run)];
+   if(!work.run.quality)work.run.covered=[...(work.run.covered||[]),...applyCovers(work.run)];
    let checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps,childRule});
-   if(checks.length&&checks.some(p=>work.run.reviews[p.unit])){await setJob({stage:`检查有 ${checks.length} 处问题，重写这几份`});
+   if(!work.run.quality&&checks.length&&checks.some(p=>work.run.reviews[p.unit])){await setJob({stage:`检查有 ${checks.length} 处问题，重写这几份`});
     await tracer.withRun('repair-reviews','chain',{stage:'repair',problems:checks.length},()=>repairReviews({gateway,skill,input:work.input,run:work.run,problems:checks,save:async r=>{work.run=r;await save();}}));checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps,childRule});}
    if(checks.length){failed(trace,`checks failed (${checks.length}): ${checks.slice(0,5).map(p=>`${p.unit} ${p.problem}`).join('; ')}`);await setJob({status:'failed',stage:'检查没过，没有装入',error:`有 ${checks.length} 处问题，现有复盘没动`,checks,finishedAt:new Date().toISOString()});return;}
    const label=`${Number(period.slice(5))} 月复盘 ${skill.version||''}（${cutoff.slice(5,10).replace('-','/')}）`.replace('  ',' ');
@@ -594,10 +648,11 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
     next.reviewJob={...s.reviewJob,status:'done',stage:'已装入',checks:[],warnings:reviewQualityWarnings(work.run),error:null,finishedAt:now,updatedAt:now};next.sequence++;return next;
    });
   }catch(e){failed(trace,String(e.message||e).slice(0,300));await setJob({status:'failed',error:`${String(e.message||e).replace(/[；;]?\s*旧轮未替换/,'').slice(0,240)}；现有复盘没动，可以续跑`,finishedAt:new Date().toISOString()}).catch(()=>{});}
-  finally{flight=false;}
+  finally{flight=false;activeAbort=null;}
  }
  return {
   view:()=>view(store.snapshot().reviewJob),
+  async cancel(actor){if(!isOperator(actor))throw Object.assign(Error('只有 CEO 和轮次操作人可以停止生成'),{status:403});if(!flight||!activeAbort)throw Object.assign(Error('当前没有运行中的复盘生成'),{status:409});activeAbort.abort(Object.assign(Error('用户已停止生成，可从保存的进度续跑'),{name:'AbortError'}));return view(store.snapshot().reviewJob);},
   // A server restart ends a running job; the page offers to resume it from the saved input.
   async recover(){if(store.snapshot().reviewJob?.status==='running')await setJob({status:'failed',error:'服务重启中断了生成，现有复盘没动，可以续跑'});},
   async start(actor,{regenerate=false,resume=false,period,cutoff}={},{now=new Date()}={}){

@@ -271,6 +271,7 @@ export const server=createServer(async(req,res)=>{
   // 公开洞察 (陈溪南 2026-10-26): 管理 opens every review's insights at once; Nexus then writes its synthesis under each.
   if(route.pathname==='/api/reviews/reveal-insights'&&req.method==='POST'){const b=await body(req),actor=actorFor(b.memberId);if(!(actor?.ceo===true||roundOperators.includes(actor?.id)))return json(res,403,{error:'只有管理员能公开洞察'});
    const missing=await revealInsights(actor);return json(res,200,{revealedAt:store.snapshot().insightsRevealed.at,missing});}
+  if(route.pathname==='/api/reviews/cancel'&&req.method==='POST'){const b=await body(req);return json(res,200,{job:await reviewJobs.cancel(actorFor(b.memberId))});}
   if(route.pathname==='/api/reviews'&&req.method==='GET')return json(res,200,{job:reviewJobs.view()});
   if(route.pathname==='/api/reviews'&&req.method==='POST'){const b=await body(req);try{return json(res,200,{job:await reviewJobs.start(actorFor(b.memberId),{regenerate:b.regenerate===true,resume:b.resume===true,period:b.period,cutoff:b.cutoff})});}catch(e){return json(res,e.status||500,{error:e.message,...(e.code?{code:e.code,total:e.total,confirmed:e.confirmed}:{})});}}
   if(route.pathname==='/api/reviews'&&req.method==='GET')return json(res,200,{job:reviewJobs.view()});
