@@ -46,7 +46,7 @@ import { loadAsk, readAnswers, type AskUser, type QuestionsCard } from "../askUs
 import type { RequestAgent } from "../delivery/requestAgent.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
 import { createCompanyMap, defaultFocus, scopeLabel } from "../companyMap.js";
-import { acceptIssueDraft, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, saveDraftMaterial, withChatIssueCards } from "../issueDrafts.js";
+import { acceptIssueDraft, afterIssueDraftCreated, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, withChatIssueCards } from "../issueDrafts.js";
 import { buildSceneAnchor } from "../sceneAnchor.js";
 import type { ConversationAnchor } from "../conversationAnchor.js";
 import { ChatServiceError } from "../chatService.js";
@@ -784,13 +784,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         return chatFailed(reply, error);
       }
       if ("error" in result) return fail(reply, result.error.status, result.error.code, result.error.message);
-      if (result.created) {
-        const { issueId, draft } = result.created;
-        // 与其他议题创建路径一致：立即启动预研；初稿存成议题的一份群材料。都不阻塞响应、失败不影响议题本身。
-        research.start(issueId).catch((error) => logEvent({ event: "issue_draft.research_failed", issueId, error: (error as Error)?.message }));
-        await saveDraftMaterial(pool, { personId: owner, role: "ceo", displayName: names().get(owner) ?? owner }, issueId, draft)
-          .catch((error) => logEvent({ event: "issue_draft.material_failed", issueId, error: (error as Error)?.message }));
-      }
+      if (result.created) await afterIssueDraftCreated(pool, research, { personId: owner, displayName: names().get(owner) ?? owner }, result.created);
       return { draft: result.view };
     });
   app.post("/api/issue-drafts/:id/decline", { preHandler: requireCEO, schema: { params: idParams, response: { 200: IssueDraftResponse } } }, async (req, reply) => {

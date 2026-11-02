@@ -7,7 +7,9 @@ import type { ChatService } from "./chatService.js";
 import { createCeoIssue, getIssueRow } from "./issues.js";
 import type { Query } from "./meetingStore.js";
 import { createObjectMaterial } from "./objectMaterials.js";
+import { logEvent } from "./observability.js";
 import { issueTitleSimilarity } from "./radarDedupe.js";
+import type { ResearchService } from "./research.js";
 
 /**
  * 一号位深聊转议题（已定设计第 2 节，只在 CEO 首页）：
@@ -417,6 +419,18 @@ export async function saveDraftMaterial(pool: Pool, viewer: { personId: string; 
   await createObjectMaterial(pool, { objectType: "issue", objectId: issueId }, viewer, "议题初稿", draftMarkdown(draft), "首页对话转议题时的初稿", null);
 }
 
+/**
+ * 接受建议新建了议题之后（卡上点和 Chat 里打字确认共用）：与其他议题创建路径一致，立即启动预研；初稿存成议题的一份群材料。
+ * 都不阻塞响应、失败不影响议题本身。
+ */
+export async function afterIssueDraftCreated(pool: Pool, research: Pick<ResearchService, "start">, viewer: { personId: string; displayName: string },
+  created: { issueId: string; draft: TIssueDraftContent }): Promise<void> {
+  const { issueId, draft } = created;
+  research.start(issueId).catch((error) => logEvent({ event: "issue_draft.research_failed", issueId, error: (error as Error)?.message }));
+  await saveDraftMaterial(pool, { personId: viewer.personId, role: "ceo", displayName: viewer.displayName }, issueId, draft)
+    .catch((error) => logEvent({ event: "issue_draft.material_failed", issueId, error: (error as Error)?.message }));
+}
+
 /** 「不用」：这个话题记进拒绝名单，之后不再提。重放返回原结果。 */
 export async function declineIssueDraft(pool: Pool, ownerId: string, id: string, now: Date): Promise<{ view: TIssueDraftView } | DraftError> {
   const client = await pool.connect();
@@ -440,4 +454,68 @@ export async function declineIssueDraft(pool: Pool, ownerId: string, id: string,
   } finally {
     client.release();
   }
+}
+
+// ---------- Chat 里打字确认、不用 ----------
+
+/** POST /internal/issue-drafts/decide 的请求体（与 Chat 的 decide_issue_draft 对齐的固定契约）。 */
+export const ChatDecideIssueBody = Type.Object({
+  conversationId: Type.String({ pattern: UUID_PATTERN }),
+  decision: Type.Union([Type.Literal("accept"), Type.Literal("decline")]),
+  title: Type.Optional(Type.String({ minLength: 1, maxLength: 25, pattern: "\\S" })),
+  level: Type.Optional(Type.Union([Type.Literal("company"), Type.Literal("battlefield")])),
+  battlefieldName: Type.Optional(Type.String({ maxLength: 40 })),
+  mode: Type.Optional(Type.Union([Type.Literal("new"), Type.Literal("existing")])),
+}, { additionalProperties: false });
+export type TChatDecideIssueBody = Static<typeof ChatDecideIssueBody>;
+
+type IssueLink = { id: string; title: string; href: string };
+export type ChatDecision =
+  | { decision: "accepted"; draftId: string; issue: IssueLink; note: string; created?: { issueId: string; draft: TIssueDraftContent } }
+  | { decision: "already_accepted"; draftId: string; issue: IssueLink; note: string }
+  | { decision: "declined"; draftId: string; note: string };
+
+const alreadyAccepted = (draftId: string, issue: IssueLink): ChatDecision => ({ decision: "already_accepted", draftId, issue,
+  note: `这个话题已经转到议题「${issue.title}」，不用再转；回答里一句话告诉一号位可以去议题里接着聊` });
+
+/**
+ * 一号位不点卡、打字或说话确认（11/02，Chat 的 decide_issue_draft）：处理这段 Chat 对话里最近的那条建议，和卡上点的是同一条路
+ * （acceptIssueDraft / declineIssueDraft）。接受时缺省按卡上原样新建：标题可改；挂在哪按 level / battlefieldName，没说就用建议里的，再没有就是全局。
+ * 接到已有议题（mode=existing）只在建议对上了已有议题时。created：这次新建的议题（路由层接着启动预研、存初稿材料）。
+ */
+export async function decideChatIssueDraft(pool: Pool, secret: string, ownerId: string, body: TChatDecideIssueBody, now: Date, chat?: ChatSegmentReader):
+  Promise<ChatDecision | DraftError> {
+  const q: Query = (sql, params) => pool.query(sql, params);
+  const row = (await q("SELECT * FROM issue_drafts WHERE owner_id = $1 AND chat_conversation_id = $2 ORDER BY created_at DESC, id DESC LIMIT 1",
+    [ownerId, body.conversationId])).rows[0] as DraftRow | undefined;
+  if (!row || (row.status === "declined" && body.decision === "accept")) return fail(404, "NO_PENDING_DRAFT", "这段对话里没有待处理的转议题建议");
+  if (row.status === "accepted") return alreadyAccepted(row.id, (await viewOf(q, row)).issue!);
+  if (body.decision === "decline") {
+    const result = await declineIssueDraft(pool, ownerId, row.id, now);
+    return "error" in result ? result : { decision: "declined", draftId: row.id, note: "这个话题记为不用转议题；一句话回应即可" };
+  }
+  let request: TAcceptIssueDraftRequest;
+  if (body.mode === "existing") {
+    if (!row.matched_issue_id) return fail(400, "NO_MATCHED_ISSUE", "这条建议没有对上的已有议题，只能新建议题");
+    request = { mode: "existing", issueId: row.matched_issue_id };
+  } else {
+    let location: TIssueDraftLocation | null = body.level === "company" ? { level: "company" } : null;
+    const name = body.battlefieldName?.trim();
+    if (!location && name) {
+      // 说了战场却对不上：不悄悄挂到别处，回去让一号位说清楚。
+      location = await battlefieldNamed(q, name);
+      if (!location) {
+        const names = (await q("SELECT name FROM battlefield_config ORDER BY sort_order, code, id")).rows.map((item) => (item as { name: string }).name).filter(Boolean);
+        return fail(400, "BATTLEFIELD_NOT_FOUND", `没有对得上「${name}」的战场；现有战场：${names.join("、") || "无"}`);
+      }
+    }
+    request = { mode: "new", draft: { ...row.draft, ...(body.title ? { title: body.title.trim() } : {}) }, location: location ?? row.suggested_location ?? { level: "company" } };
+  }
+  const result = await acceptIssueDraft(pool, secret, ownerId, row.id, request, now, chat);
+  if ("error" in result) return result;
+  const issue = result.view.issue!;
+  // 要新建却没新建：卡上同时点了接受（两边一前一后），这边拿到的是已接受的结果。
+  if (request.mode === "new" && !result.created) return alreadyAccepted(row.id, issue);
+  return { decision: "accepted", draftId: row.id, issue, ...(result.created ? { created: result.created } : {}),
+    note: "议题已建成；回答里一句话告诉一号位议题已经建好，可以去议题里接着聊" };
 }

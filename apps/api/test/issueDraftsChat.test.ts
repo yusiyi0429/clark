@@ -143,3 +143,79 @@ describe("首页走 Chat 时的转议题", () => {
     expect((await history(ceo, `issue:${issueId}`)).slice(6).map((message) => message.content)).toEqual(["问 4", "答 4", "问 5", "答 5"]);
   }, 120_000);
 });
+
+describe("一号位打字确认转议题（Chat 的 decide_issue_draft）", () => {
+  async function setupDecide() {
+    const base = await setup();
+    const decide = async (body: Record<string, unknown>, person: string = TEST_CEO.personId, role = "ceo") => {
+      const response = await base.t.app.inject({ method: "POST", url: "/internal/issue-drafts/decide", payload: { conversationId: CONVERSATION, ...body },
+        headers: { authorization: `Bearer ${TOKEN}`, "x-owner-id": person, "x-viewer-role": role } });
+      return { status: response.statusCode, body: response.json() as Record<string, unknown> };
+    };
+    const view = async (id: string) => ((await base.t.app.inject({ method: "GET", url: `/api/issue-drafts/${id}`, headers: { cookie: base.ceo } })).json() as { draft: TIssueDraftView }).draft;
+    return { ...base, decide, view };
+  }
+  const locationOf = async (t: TestApp, issue: unknown) => (await t.sql("SELECT location FROM issues WHERE id = $1", [(issue as { id: string }).id]))[0].location;
+
+  it("打字确认：和卡上点「开议题」一样建议题、带过去相关那几轮、存初稿材料；卡随之画成已转；再说确认或不用都拿回同一个议题", async () => {
+    const { t, propose, history, ceo, decide, view } = await setupDecide();
+    // 没有建议时 404；成员视角 403。
+    expect(await decide({ decision: "accept" })).toMatchObject({ status: 404, body: { code: "NO_PENDING_DRAFT" } });
+    expect((await decide({ decision: "accept" }, TEST_MEMBER.personId, "member")).status).toBe(403);
+
+    const { body } = await propose({ ...BODY, runId: RUNS[3] });
+    const draftId = body.draftId as string;
+    const accepted = await decide({ decision: "accept", title: "渠道预算六月前转不转华南" });
+    expect(accepted).toMatchObject({ status: 200, body: { decision: "accepted", draftId, issue: { title: "渠道预算六月前转不转华南" },
+      note: "议题已建成；回答里一句话告诉一号位议题已经建好，可以去议题里接着聊" } });
+    const issue = accepted.body.issue as { id: string; title: string; href: string };
+    expect(issue.href).toBe(`/issues/${issue.id}`);
+    expect(await locationOf(t, issue)).toMatchObject({ level: "company" });
+    expect((await t.sql("SELECT file_name FROM object_materials WHERE object_type = 'issue' AND object_id = $1", [issue.id]))[0].file_name).toBe("议题初稿.md");
+    expect((await history(ceo, `issue:${issue.id}`)).map((message) => [message.role, message.content, message.kind]))
+      .toEqual(MESSAGES.slice(2, 8).map((message) => [message.role, message.text, "carried"]));
+    // 首页那一轮的卡还在，按建议的状态画成「已转到议题」。
+    expect((await history(ceo)).find((message) => message.runId === RUNS[3] && message.role === "assistant")!.content).toContain(issueSuggestBlock(draftId));
+    expect(await view(draftId)).toMatchObject({ status: "accepted", issue: { id: issue.id, title: issue.title } });
+
+    for (const decision of ["accept", "decline"]) {
+      expect(await decide({ decision })).toMatchObject({ status: 200, body: { decision: "already_accepted", draftId, issue } });
+    }
+    expect((await t.sql("SELECT count(*)::int AS n FROM issues WHERE title = $1", [issue.title]))[0].n).toBe(1);
+  }, 120_000);
+
+  it("挂在哪：说了战场名按战场名找、说全局就挂全局、说的战场对不上 400；接到已有议题只在建议对上了已有议题时", async () => {
+    const { t, propose, decide } = await setupDecide();
+    const [battlefield] = await t.sql("SELECT id, name FROM battlefield_config ORDER BY sort_order, code, id LIMIT 1");
+
+    await propose({ ...BODY, runId: RUNS[0], topic: "定价策略", title: "定价策略要不要调", explicit: true, level: "company" });
+    expect(await decide({ decision: "accept", battlefieldName: "不存在的战场" })).toMatchObject({ status: 400, body: { code: "BATTLEFIELD_NOT_FOUND" } });
+    expect(await decide({ decision: "accept", mode: "existing" })).toMatchObject({ status: 400, body: { code: "NO_MATCHED_ISSUE" } });
+    const named = await decide({ decision: "accept", level: "battlefield", battlefieldName: battlefield.name });
+    expect(named).toMatchObject({ status: 200, body: { decision: "accepted", issue: { title: "定价策略要不要调" } } });
+    expect(await locationOf(t, named.body.issue)).toEqual({ level: "battlefield", battlefieldId: battlefield.id });
+
+    // 建议挂在战场，一号位说放全局。
+    await propose({ ...BODY, runId: RUNS[1], topic: "华东续约", title: "华东续约怎么保", explicit: true, level: "battlefield", battlefieldName: battlefield.name });
+    const company = await decide({ decision: "accept", level: "company" });
+    expect(company).toMatchObject({ status: 200, body: { decision: "accepted" } });
+    expect(await locationOf(t, company.body.issue)).toMatchObject({ level: "company" });
+
+    // 建议对上了已有议题：接到那个议题，不新建。
+    const namedIssue = (named.body.issue as { id: string }).id;
+    expect((await propose({ ...BODY, runId: RUNS[2], topic: "试点城市", title: "试点城市选哪几个", explicit: true, matchIssueId: namedIssue })).body).toMatchObject({ proposed: true });
+    expect(await decide({ decision: "accept", mode: "existing" })).toMatchObject({ status: 200, body: { decision: "accepted", issue: { id: namedIssue } } });
+  }, 120_000);
+
+  it("打字说不用：记进不用名单、同一话题不再提；之后再说确认是 404", async () => {
+    const { t, propose, decide, view } = await setupDecide();
+    const { body } = await propose({ ...BODY, runId: RUNS[3] });
+    const draftId = body.draftId as string;
+    expect(await decide({ decision: "decline" })).toEqual({ status: 200, body: { decision: "declined", draftId, note: "这个话题记为不用转议题；一句话回应即可" } });
+    expect(await view(draftId)).toMatchObject({ status: "declined", issue: null });
+    expect((await t.sql("SELECT topic FROM issue_suggestion_declines WHERE draft_id = $1", [draftId]))[0].topic).toBe(BODY.topic);
+    expect(await decide({ decision: "accept" })).toMatchObject({ status: 404, body: { code: "NO_PENDING_DRAFT" } });
+    expect((await decide({ decision: "decline" })).body).toMatchObject({ decision: "declined", draftId });
+    expect((await propose({ ...BODY, runId: RUNS[4] })).body).toMatchObject({ proposed: false, reason: "declined" });
+  }, 120_000);
+});
