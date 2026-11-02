@@ -514,19 +514,39 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
   },
   revise:async(c,action,pass,q)=>{
    const reviews=action.before,children=(c.children||[]).map(id=>reviews[id]).filter(Boolean);
-   const affectedChildren=(c.children||[]).filter(ref=>qualityHash(reviews[ref])!==qualityHash(q.passes[pass].reviews[ref]));
-   const sourceRefs=[...new Set([c.id,...affectedChildren,...action.issues.flatMap(issue=>issue.sourceRefs||[])])];
+   const sourceRefs=[...new Set([c.id,...action.issues.flatMap(issue=>issue.sourceRefs||[])])];
    if(sourceRefs.some(ref=>!Object.hasOwn(sources,ref)))throw Error('返修来源引用不属于冻结输入');
    const packed=packSourceText(Object.fromEntries(sourceRefs.map(ref=>[ref,sources[ref]])));
    const payload={
     task:'按技能修改这份复盘。下面 issues 是待核检查意见，不是事实来源；必须重新对照冻结 unit 和 sources，不得凭checker添加事实或把未验证写成未发生。保留准确的时间、否定和来源边界。'+(action.refresh?'下级已更新，请按当前下级复盘同步核本层，不能复制旧结果。':'只改必改问题及直接受影响部分。')+fieldsHint,
-    unit:{id:c.id,sourceRef:c.id},sources:packed.sources,sourceTexts:packed.texts,sourceBindings:packed.bindings,sourceHash:q.sourceHash,review:reviews[c.id],issues:action.issues,missionReviews:children,ruReviews:children,askedBelow:askedBelow({reviews}),childrenHash:qualityHash(children),candidateHash:qualityHash(reviews),revision:action.revision,
+    unit:{id:c.id,sourceRef:c.id},sources:packed.sources,sourceTexts:packed.texts,sourceBindings:packed.bindings,sourceHash:q.sourceHash,review:reviews[c.id],issues:action.issues,missionReviews:c.level==='ru'?children:[],ruReviews:c.level==='company'?children:[],childCandidates:children.map(review=>({ref:review.ref,candidate:true,confirmed:false,reviewHash:qualityHash(review),sourceRef:review.ref,sourceBasis:sources[review.ref]?.sourceBasis||null})),askedBelow:askedBelow({reviews}),childrenHash:qualityHash(children),candidateHash:qualityHash(reviews),revision:action.revision,
    };
-   payload.task+=' unit.sourceRef指向sources中这份复盘的完整冻结unit；必须以其完整原文为依据。sourceTexts/sourceBindings是相同正文的无损引用，按path还原对应来源字段，保留各自的出处、日期、版本及E命名空间。';
+   payload.task+=' unit.sourceRef指向sources中本层完整冻结unit。childCandidates为同轮当前候选而非正式确认或独立原始事实；仅候选状态同步/上下层一致性可按其汇总，不等于核验下级事实。若新增或否定具体业务事实而缺所需原文，必须返回sourceRequests:[{refs:[本层ref,所需冻结ref],relation,reason}]，先补原文，不能用候选冒充原始证据。无补源需求时返回review。sourceTexts/sourceBindings是相同正文的无损引用，按path还原对应来源字段，保留各自出处、日期、版本及E命名空间。';
+   payload.sourceScope={targetRef:c.id,sourceRefs,availableRefs:refs};
    const wireOptions=q.packetModel||{model:gateway.status?.model||'wangsu/claude-sonnet-5-5'};
-   const actual=Buffer.byteLength(JSON.stringify(reviewModelRequestBody(system,payload,wireOptions)));
-   if(actual>512*1024)throw Object.assign(Error('完整返修来源超过512KiB工程预算，未调用模型，保留草稿'),{code:'REVIEW_PACKET_OVERSIZE',actual,budget:512*1024});
-   const result=await call(q,pass,action.refresh?'refresh':'revise',c.id,payload,value=>{if(!value?.review||typeof value.review!=='object'||Array.isArray(value.review))throw Error('自动修订未返回有效复盘：'+c.id);return value;});
+   const assertBudget=value=>{const actual=Buffer.byteLength(JSON.stringify(reviewModelRequestBody(system,value,wireOptions)));if(actual>512*1024)throw Object.assign(Error('完整返修来源超过512KiB工程预算，未调用模型，保留草稿'),{code:'REVIEW_PACKET_OVERSIZE',actual,budget:512*1024});};
+   const validate=(value,provided)=>{
+    if(value?.sourceRequests?.length){
+     for(const request of value.sourceRequests)if(!Array.isArray(request.refs)||request.refs.length<2||!request.refs.includes(c.id)||new Set(request.refs).size!==request.refs.length||request.refs.some(ref=>!refs.includes(ref))||request.refs.every(ref=>provided.includes(ref))||typeof request.relation!=='string'||!request.relation.trim()||typeof request.reason!=='string'||!request.reason.trim())throw Object.assign(Error('返修补源必须明确具体未提供的冻结对象、关系和原因'),{code:'REVIEW_SOURCE_REQUEST_CONTRACT'});
+     return value;
+    }
+    if(value?.sourceRequests!==undefined&&!Array.isArray(value.sourceRequests)||!value?.review||typeof value.review!=='object'||Array.isArray(value.review))throw Error('自动修订未返回有效复盘：'+c.id);
+    return value;
+   };
+   assertBudget(payload);
+   const stage=action.refresh?'refresh':'revise';
+   let result=await call(q,pass,stage,c.id,payload,value=>validate(value,sourceRefs));
+   if(result.sourceRequests?.length){
+    const needed=[...new Set([...sourceRefs,...result.sourceRequests.flatMap(request=>request.refs)])];
+    const extra=packSourceText(Object.fromEntries(needed.map(ref=>[ref,sources[ref]])));
+    const supplement={...payload,sources:extra.sources,sourceTexts:extra.texts,sourceBindings:extra.bindings,sourceScope:{...payload.sourceScope,sourceRefs:needed},sourceRequests:result.sourceRequests,task:payload.task+' 本次已按你的具体sourceRequests补齐原文，必须据此完成原返修；仍缺则明确返回sourceRequests，不能猜。'};
+    assertBudget(supplement);
+    const sourceStage=stage+'-source',sourceRef=c.id+'-'+qualityHash(supplement),requests=Object.values(q.requests).filter(request=>request.pass===pass&&request.stage.endsWith('-source'));
+    const checkerExtras=q.sourcePasses[pass].requestCount-q.sourcePlans[pass].requestCount;
+    if(!requests.some(request=>request.stage===sourceStage&&request.ref===sourceRef)&&checkerExtras+requests.length>=6)throw Object.assign(Error('本遍检查与返修共用的6次补源预算已用完，保留草稿等待处理'),{code:'REVIEW_SOURCE_REQUEST_BUDGET'});
+    result=await call(q,pass,sourceStage,sourceRef,supplement,value=>validate(value,needed));
+    if(result.sourceRequests?.length)throw Object.assign(Error('返修补源后仍需其他原文，保留草稿等待处理'),{code:'REVIEW_SOURCE_CONTEXT_PENDING',checks:result.sourceRequests});
+   }
    return {...result.review,unit:c.unit,level:c.level,ref:c.id,title:c.title,owner:c.owner,...(c.parent?{parent:c.parent}:{})};
   },
  });
