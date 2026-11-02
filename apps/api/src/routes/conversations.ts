@@ -45,7 +45,7 @@ import { loadAsk, readAnswers, type AskUser, type QuestionsCard } from "../askUs
 import type { RequestAgent } from "../delivery/requestAgent.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
 import { createCompanyMap, defaultFocus, scopeLabel } from "../companyMap.js";
-import { acceptIssueDraft, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, saveDraftMaterial } from "../issueDrafts.js";
+import { acceptIssueDraft, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, saveDraftMaterial, withChatIssueCards } from "../issueDrafts.js";
 import { buildSceneAnchor } from "../sceneAnchor.js";
 import type { ConversationAnchor } from "../conversationAnchor.js";
 import { ChatServiceError } from "../chatService.js";
@@ -111,7 +111,12 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
     "/api/conversations/:scope/messages",
     { preHandler: requirePerson, schema: { params: conversationParams } },
     async (req, reply) => {
-      if (chat && req.params.scope === "global") return chat.history(req.person!, String(req.id)).catch((error) => chatFailed(reply, error));
+      // 一号位的首页历史里补上 Chat 那几轮的转议题建议卡（issueDrafts.ts withChatIssueCards）。
+      if (chat && req.params.scope === "global") {
+        return chat.history(req.person!, String(req.id))
+          .then(async (history) => (req.person!.role === "ceo" ? { ...history, messages: await withChatIssueCards(q, req.person!.personId, history.messages) } : history))
+          .catch((error) => chatFailed(reply, error));
+      }
       const object = await scopeObjectFor(req.person!, req.params.scope);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
       return getConversationHistory(q, req.person!.personId, req.params.scope);
@@ -757,7 +762,13 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   app.post("/api/issue-drafts/:id/accept", { preHandler: requireCEO, schema: { params: idParams, body: AcceptIssueDraftRequest, response: { 200: IssueDraftResponse } } },
     async (req: FastifyRequest<{ Params: { id: string }; Body: TAcceptIssueDraftRequest }>, reply) => {
       const owner = req.person!.personId;
-      const result = await acceptIssueDraft(pool, env.sessionSecret, owner, req.params.id, req.body, ctx.now());
+      // Chat 来的建议：相关那段从 Chat 现读（读不到时按 Chat 的错误回）。
+      let result: Awaited<ReturnType<typeof acceptIssueDraft>>;
+      try {
+        result = await acceptIssueDraft(pool, env.sessionSecret, owner, req.params.id, req.body, ctx.now(), chat);
+      } catch (error) {
+        return chatFailed(reply, error);
+      }
       if ("error" in result) return fail(reply, result.error.status, result.error.code, result.error.message);
       if (result.created) {
         const { issueId, draft } = result.created;
