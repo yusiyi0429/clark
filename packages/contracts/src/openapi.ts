@@ -191,6 +191,7 @@ import {
   VoiceprintStatus,
   PersonalMemoryItem,
   PersonalMemoryList,
+  PartnerMemoryList,
   CreateMemoryImportRequest,
   MemoryImport,
   MemoryImportDetail,
@@ -2251,6 +2252,12 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "本人个人记忆", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryList" } } } }, "400": errorResponse, "401": errorResponse, "503": errorResponse },
         },
       },
+      "/api/me/memory/partner": {
+        get: {
+          operationId: "listPartnerMemory", summary: "首页伙伴（独立 Chat 服务）记住的本人的事，只读；没接 Chat 时 available=false。Chat 连不上或拒绝时按天枢的错误格式回（如 503 CHAT_UNAVAILABLE）",
+          responses: { "200": { description: "伙伴记住的（现行的，最近更新的在前）", content: { "application/json": { schema: { $ref: "#/components/schemas/PartnerMemoryList" } } } }, "401": errorResponse, "500": errorResponse, "502": errorResponse, "503": errorResponse },
+        },
+      },
       "/api/me/memory/personal/items/{id}": {
         patch: {
           operationId: "updatePersonalMemoryItem", summary: "本人改一条个人记忆的标题或正文；已替代或已忘掉的 409",
@@ -3255,6 +3262,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MemoryImportList: MemoryImportList as JsonSchema,
         ConfirmMemoryImportRequest: ConfirmMemoryImportRequest as JsonSchema,
         PersonalMemoryList: PersonalMemoryList as JsonSchema,
+        PartnerMemoryList: PartnerMemoryList as JsonSchema,
         UpdatePersonalMemoryItemRequest: UpdatePersonalMemoryItemRequest as JsonSchema,
         DictationResult: DictationResult as JsonSchema,
         DictationSessionResponse: DictationSessionResponse as JsonSchema,

@@ -1,6 +1,8 @@
 import type { components } from "@/lib/api/schema";
 
 export type MemoryItem = components["schemas"]["PersonalMemoryItem"];
+export type PartnerMemoryList = components["schemas"]["PartnerMemoryList"];
+export type PartnerMemoryItem = PartnerMemoryList["items"][number];
 export type MemoryImport = components["schemas"]["MemoryImport"];
 export type MemoryImportDetail = components["schemas"]["MemoryImportDetail"];
 export type ImportCandidate = MemoryImportDetail["candidates"][number];
@@ -18,6 +20,11 @@ export function groupMemories(items: MemoryItem[]) {
   return MEMORY_GROUPS.map((group) => ({ ...group, items: items.filter((item) => (group.kinds as readonly string[]).includes(item.kind)) }))
     .filter((group) => group.items.length);
 }
+
+/** 首页伙伴（独立 Chat）记忆的类别。 */
+export const PARTNER_CATEGORY_LABEL: Record<PartnerMemoryItem["category"], string> = {
+  preference: "偏好", project_background: "项目背景", research_decision: "研究与决策", feedback_instruction: "反馈指令",
+};
 
 export const SOURCE_LABEL: Record<ImportSource, string> = { chatgpt: "ChatGPT", claude: "Claude", claude_code: "Claude Code", codex: "Codex" };
 

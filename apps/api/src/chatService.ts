@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyReply } from "fastify";
-import type { TConversationMessageRequest } from "@warmap/contracts";
+import type { TConversationMessageRequest, TPartnerMemoryItem } from "@warmap/contracts";
 import { turnFailureCopy } from "./conversationRecovery.js";
 import { segmentDateLabel, startsNewSegment } from "./conversationSegments.js";
 import type { HomeTurnVia } from "./homeTurn.js";
@@ -241,6 +241,12 @@ export function createChatService(options: {
   return {
     conversations,
     messagesPage,
+    /** 伙伴记住的本人的事（Chat 的长期记忆，「我的记忆」页只读显示）：现行的，最近更新的在前，最多 100 条。只取约定的字段。 */
+    async memories(viewer: ChatViewer, requestId: string): Promise<TPartnerMemoryItem[]> {
+      const { memories } = await json<{ memories: TPartnerMemoryItem[] }>(viewer, requestId, "/memories");
+      return memories.map((item) => ({ id: item.id, category: item.category, text: item.text, project: item.project ?? null,
+        tentative: item.tentative === true, updatedAt: item.updatedAt }));
+    },
     async quality<S extends TSchema>(viewer: ChatViewer, requestId: string, path: string, schema: S, body?: unknown, signal?: AbortSignal): Promise<Static<S>> {
       const value: unknown = await json(viewer, requestId, `/task-quality${path}`, {
         signal: AbortSignal.any([AbortSignal.timeout(180000), ...(signal ? [signal] : [])]), redirect: "error",
