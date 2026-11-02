@@ -621,6 +621,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
    }
    await setJob({inputCutoff:work.input.readAt,skipped:work.input.skipped,skill:{version:skill.version,hash:skill.hash.slice(0,12)}});
    await runReviewSkill({gateway,skill,input:work.input,run:work.run,signal,programOptions:{roster,rowMatch:skillAtLeast(skill.version,'2.1.6'),askCaps:skillAtLeast(skill.version,'2.1.7'),childRule:skillAtLeast(skill.version,'2.1.10')},save:async r=>{work.run=r;await save();},onProgress:p=>setJob(p)});
+   signal?.throwIfAborted();
    if(work.run.quality&&work.run.quality.status!=='passed'){
     const q=work.run.quality,checks=q.remaining||[];
     work.candidate=reviewFile(work.run,work.input,{skill,model,label:'自动修订未通过的独立草稿'});await save();
@@ -642,6 +643,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
    await writeFile(join(archive,`collaboration-before-review-${stamp}.json`),JSON.stringify(store.snapshot()),{mode:0o600});
    await copyFile(archivesPath(statePath),join(archive,`collaboration-before-review-${stamp}.archives.json`)).catch(e=>{if(e.code!=='ENOENT')throw e;});
    await store.transact(s=>{
+    signal?.throwIfAborted();
     if(s.roundJob?.status==='running'||s.planHandoff?.status==='generating')throw Object.assign(Error('拆解正在生成，复盘没有装入'),{status:409});
     delete s.planHandoff;delete s.unitsDone;s.roundAttempts=[];s.cascadeQueue=[];
     const next=installReviewRound(s,file,{label,source:`生成任务 ${id}`,now});if(trace&&next.reviewRound)next.reviewRound.traceRunId=trace.id;
@@ -652,7 +654,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
  }
  return {
   view:()=>view(store.snapshot().reviewJob),
-  async cancel(actor){if(!isOperator(actor))throw Object.assign(Error('只有 CEO 和轮次操作人可以停止生成'),{status:403});if(!flight||!activeAbort)throw Object.assign(Error('当前没有运行中的复盘生成'),{status:409});activeAbort.abort(Object.assign(Error('用户已停止生成，可从保存的进度续跑'),{name:'AbortError'}));return view(store.snapshot().reviewJob);},
+  async cancel(actor){if(!isOperator(actor))throw Object.assign(Error('只有 CEO 和轮次操作人可以停止生成'),{status:403});if(!flight||!activeAbort||store.snapshot().reviewJob?.status!=='running')throw Object.assign(Error('当前没有运行中的复盘生成'),{status:409});activeAbort.abort(Object.assign(Error('用户已停止生成，可从保存的进度续跑'),{name:'AbortError'}));return view(store.snapshot().reviewJob);},
   // A server restart ends a running job; the page offers to resume it from the saved input.
   async recover(){if(store.snapshot().reviewJob?.status==='running')await setJob({status:'failed',error:'服务重启中断了生成，现有复盘没动，可以续跑'});},
   async start(actor,{regenerate=false,resume=false,period,cutoff}={},{now=new Date()}={}){

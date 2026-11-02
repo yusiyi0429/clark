@@ -51,7 +51,7 @@ export async function runReviewQuality({run,input,skill,sources,check,revise,pro
   }
   if(pass.status==='checking'){
    await onProgress({stage:`质量复查 ${pass.index+1}`,qualityPass:pass.index});
-   const issues=await check(pass.reviews,pass.index,q);
+   const issues=await check(pass.reviews,pass.index,q);abort(signal);
    const structural=problems({reviews:pass.reviews});
    pass.issues=clone(issues);pass.structural=clone(structural);run.issues=clone(issues);
    const critical=issues.filter(required),fixable=critical.filter(x=>x.fixable!==false);
@@ -75,7 +75,7 @@ export async function runReviewQuality({run,input,skill,sources,check,revise,pro
    // Freeze the exact request before its first call. On resume, completed child
    // revisions cannot accidentally change the input of an unfinished request.
    if(!action.before){action.before=clone(run.reviews);action.beforeHash=qualityHash(action.before);await save(run);}
-   const review=await revise(byId.get(action.ref),action,pass.index,q);
+   const review=await revise(byId.get(action.ref),action,pass.index,q);abort(signal);
    run.reviews[action.ref]=review;action.status='done';action.afterHash=qualityHash(review);q.candidateHash=qualityHash(run.reviews);await save(run);
   }
   normalize();q.candidateHash=qualityHash(run.reviews);pass.status='done';q.status='checking';await save(run);

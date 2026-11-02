@@ -87,3 +87,9 @@ test('product runner checks after both repairs, preserves complete E43/E49 sourc
  await runReviewSkill(args);assert.equal(run.quality.status,'passed');assert.equal(run.reviews.m.verdictReason,'fixed2');assert.deepEqual(run.quality.counts,{m:2,u:2,company:2});assert.equal(calls.filter(p=>!p.unit).length,3);
  const before=calls.length;await runReviewSkill(args);assert.equal(calls.length,before);assert.equal(run.reviews.m.verdictReason,'fixed2');
 });
+
+test('cancellation at the last checker response cannot mark the candidate passed',async()=>{
+ const run=start(),controller=new AbortController();
+ await assert.rejects(runReviewQuality({run,input,skill,sources,signal:controller.signal,check:async()=>{controller.abort(Error('cancel at final response'));return [];},revise:repair(run)}),/cancel at final response/);
+ assert.equal(run.quality.status,'waiting');assert.notEqual(run.quality.status,'passed');
+});
