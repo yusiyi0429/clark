@@ -1,6 +1,8 @@
 import {REVIEW_BODY_LIMIT_BYTES,reviewGatewayForRun,reviewInitialConcurrency} from './review-model-fallback.mjs';
 import {reviewDependencyPool} from './review-dependencies.mjs';
 import {reviewQuestionRoutes,routeReviewQuestions,activeReviewAsk} from './review-question-routing.mjs';
+import {planTableItem} from './review-plan-table.mjs';
+import {stripVerifiedEvidence,citationFacts,referenceMapsForInput,validateIssueSources} from './review-evidence-addresses.mjs';
 import {buildReviewCheckPlan,refreshReviewCheckPlan,verifyReviewCheckPlan,executeReviewCheckPlan,packSourceText,reviewModelRequestBody,reviewModelBudgetBytes,validateScopedCheckResult,restoreSourceText} from './review-source-plan.mjs';
 import {initialReviewCall,createReviewCallJournal,outputContractError} from './review-call-journal.mjs';
 import {runReviewQuality,qualityModelCall,qualityHash,deferReviewAction} from './review-quality.mjs';
@@ -107,7 +109,7 @@ function blockLines(blocks){
  }
  return lines.join('\n');
 }
-const planItems=o=>(o?.business?.blocks||[]).filter(b=>b.id==='execution_plan'||b.kind==='plan').flatMap(b=>(b.components||b.value?.components||[]).filter(c=>c.type==='plan_item').map(c=>({title:String(c.text).trim(),responsible:c.attributes?.responsible||null,expected:c.attributes?.expected_output||'',quality:c.attributes?.quality_standard||'',finish:c.attributes?.finish_date||'',componentRef:c.ref||null,ref:c.ref?String(c.ref).replace(/@\d+#/,'#'):null})));
+const planItems=o=>{const blocks=o?.business?.blocks||[],documents=blocks.flatMap(b=>[b.text,b.value?.text]);return blocks.filter(b=>b.id==='execution_plan'||b.kind==='plan').flatMap(b=>(b.components||b.value?.components||[]).filter(c=>c.type==='plan_item').map(c=>({...planTableItem(c.text,documents),responsible:c.attributes?.responsible||null,expected:c.attributes?.expected_output||'',quality:c.attributes?.quality_standard||'',finish:c.attributes?.finish_date||'',componentRef:c.ref||null,ref:c.ref?String(c.ref).replace(/@\d+#/,'#'):null})));};
 const taskTerms=o=>{const components=(o?.business?.blocks||[]).flatMap(b=>b.components||b.value?.components||[]),term=type=>components.filter(c=>c.type===type).map(c=>String(c.text||'').trim()).filter(Boolean).join('；');return {expected:term('outcome'),quality:term('acceptance_criterion'),finish:term('time_boundary')};};
 const successCriteria=o=>(o?.business?.blocks||[]).flatMap(b=>(b.components||b.value?.components||[]).filter(c=>c.type==='acceptance_criterion'&&String(c.text||'').trim()).map(c=>String(c.text).trim()));
 // Stand-in accounts are not owners: 代录 entries and test accounts such as “于斯一（测试治理）” (added to two October PeriodGoals on 10/23).
@@ -223,7 +225,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
   const used=new Set(),lines=items.map((p,i)=>{const matches=objs.filter(t=>bare(t.o?.business?.title)&&(bare(p.title)===bare(t.o?.business?.title)||p.title.includes(bare(t.o?.business?.title))));const hit=matches.length===1&&!used.has(matches[0].id)?matches[0]:null,ambiguous=matches.length>1||matches.length===1&&used.has(matches[0].id);if(hit)used.add(hit.id);
    const terms=hit?taskTerms(hit.o):p;
    const owner=realName(ownerOf(hit?.o))||realName(principalName.get(p.responsible))||'未指派';
-   return {source:hit?'object':'planItem',objectId:hit?.id||null,version:hit?(hit.o?.business?.version||null):(m.object?.business?.version||null),parentRef:m.id,componentRef:p.componentRef,commitmentRef:p.ref||null,...(ambiguous?{ambiguous:true}:{}),ref:hit?.id||p.ref||`plan-${i+1}`,title:hit?hit.o.business.title:p.title,...(hit?{planTitle:p.title,planSource:{componentRef:p.componentRef,sourceVersion:m.object?.business?.version||null,sourceRevision:m.object?.business?.revision_id||null,...p}}:{}),owner,status:hit?statusOf(hit.o):'计划条目',...(terms.expected?{expected:terms.expected}:{}),...(terms.quality?{quality:terms.quality}:{}),...(terms.finish?{finish:terms.finish}:{}),...(hit?{definition:blockLines(hit.o?.business?.blocks).slice(0,1200)}:{})};});
+   return {source:hit?'object':'planItem',objectId:hit?.id||null,version:hit?(hit.o?.business?.version||null):(m.object?.business?.version||null),parentRef:m.id,componentRef:p.componentRef,commitmentRef:p.ref||null,...(ambiguous?{ambiguous:true}:{}),ref:hit?.id||p.ref||`plan-${i+1}`,title:hit?hit.o.business.title:p.title,...(p.planTable?{planTable:p.planTable}:{}),...(hit?{planTitle:p.title,planSource:{componentRef:p.componentRef,sourceVersion:m.object?.business?.version||null,sourceRevision:m.object?.business?.revision_id||null,...p}}:{}),owner,status:hit?statusOf(hit.o):'计划条目',...(terms.expected?{expected:terms.expected}:{}),...(terms.quality?{quality:terms.quality}:{}),...(terms.finish?{finish:terms.finish}:{}),...(hit?{definition:blockLines(hit.o?.business?.blocks).slice(0,1200)}:{})};});
   for(const t of objs)if(!used.has(t.id))lines.push({source:'object',objectId:t.id,version:t.o?.business?.version||null,parentRef:m.id,ref:t.id,title:t.o?.business?.title||'',owner:realName(ownerOf(t.o))||'未指派',status:statusOf(t.o),...taskTerms(t.o),definition:blockLines(t.o?.business?.blocks).slice(0,1200)});
   return lines.filter(t=>!t.objectId||!objectExclusion(objects[t.objectId],t.objectId,cutoff));
  }
@@ -295,12 +297,13 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
   const found={},add=h=>{for(const [k,n] of Object.entries(h))found[k]=(found[k]||0)+n;};
   const r=redactText(c.commitment);c.commitment=r.text;add(r.hits);
   for(const item of c.agreedOutcome?.items||[]){const x=redactText(item.text);item.text=x.text;add(x.hits);}
+  for(const task of c.tasks||[])if(task.planTable){const scrub=value=>{for(const [key,part] of Object.entries(value)){if(typeof part==='string'){const x=redactText(part);value[key]=x.text;add(x.hits);}else if(part&&typeof part==='object')scrub(part);}};scrub(task.planTable);}
   for(const e of c.evidence){const x=redactText(e.text);e.text=x.text;add(x.hits);}
   if(Object.keys(found).length){c.redactions=found;redactions[c.id]=found;}
  }
  // What this review was built from, kept with every run (于斯一 asked; the 10/23 run could not be traced, 读取盘点第 8 条).
  const readReceipt={readAt:sources.readAt,cutoff,objects:Object.entries(objects).filter(([,o])=>o).map(([id,o])=>`${id}@${o.business?.version??o.version??o.revision_id??'?'}`),snapshots:[...usedSnapshots],events:[...usedEvents]};
- return {period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
+ return {engineeringContracts:{evidenceAddresses:1,checkerSources:1,planTableColumns:1},period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
 }
 
 // ---------- running the review skill ----------
@@ -317,10 +320,10 @@ export async function loadReviewSkill(root){
 }
 const causeText=x=>typeof x==='string'?x:[x?.text,x?.ask].filter(Boolean).join(' ');
 const textOf=r=>[r.verdictReason,r.keyGap,...(r.facts||[]).flatMap(f=>[f.evidence,f.gap]),...(r.causes||[]).map(causeText),...['targets','results','questions','changes','practices','decisions','commonCauses'].flatMap(k=>r[k]||[]),...(r.nextInputs||[]).map(n=>n?.text),r.ltoProgress,r.ltoReview?.reason].filter(Boolean);
-const visible=s=>String(s).replace(/\*\*|\[E\d+\]|\s/g,'');
+const visible=(s,context)=>(context?stripVerifiedEvidence(s,context):String(s).replace(/\[E\d+\]/g,'')).replace(/\*\*|\s/g,'');
 const KNOWN_WORDS=new Set(['agent','agents','co-agent','coagent','nexus','tokenhub','token','ceo','dri','po','ru','mission','task','activity','mvp','ai','api','chat','inception','tkos','m2','e&o','eno','icp','vpn','aidc','gpu','gpt','claude','sonnet','pitch','demo','app','feishu','langsmith','ok','method','talent','finance','ontology','organization']);
-export function jargonOf(text){
- const t=String(text||'').replace(/\[E\d+\]/g,''),out=new Set();
+export function jargonOf(text,context){
+ const t=context?stripVerifiedEvidence(text,context):String(text||'').replace(/\[E\d+\]/g,''),out=new Set();
  const code=/rev\s*\d+|(?<![\d/.:-])0\d-\d+(?:\.\d+)?(?![\d/])|[父子]\s?(?:PO|Mission|Task)|(?<![A-Za-z])[MT]\d{2}(?!\d)/gi;
  for(const m of t.matchAll(code))out.add(m[0]);
  for(const m of t.replace(code,' ').matchAll(/[A-Za-z][A-Za-z&-]*(?:\s+[A-Za-z][A-Za-z&-]*)*/g)){const words=m[0].split(/\s+/);if(words.some(w=>w.length>=3&&!KNOWN_WORDS.has(w.toLowerCase())))out.add(m[0]);}
@@ -346,16 +349,16 @@ export function applyCovers(run){
  for(const r of Object.values(run.reviews||{}))for(const n of r?.nextInputs||[])if(n&&'covers'in n)delete n.covers;
  return moved;
 }
-export function lengthFindings(r){
- const f=[];for(const s of textOf(r)){for(const sent of String(s).split(/[。；！？]/)){const n=visible(sent.replace(/^\*\*[^*]+\*\*/,'')).length;if(n>30)f.push({type:'长句',chars:n,text:sent.slice(0,60)});}
+export function lengthFindings(r,context){
+ const f=[];for(const s of textOf(r)){for(const sent of String(s).split(/[。；！？]/)){const n=visible(sent.replace(/^\*\*[^*]+\*\*/,''),context).length;if(n>30)f.push({type:'长句',chars:n,text:sent.slice(0,60)});}
   for(const w of ['尚不能','仍需进一步','有待观察','闭环','赋能','打通','具备条件'])if(String(s).includes(w))f.push({type:'回避或空话',word:w,text:String(s).slice(0,60)});}
  // 疑似内部用词 (陈溪南 2026-10-27「不要造一些词了」, 复盘技能 2.1.5): version numbers, codes, internal terms and English words
  // a reader outside the unit would not know. Measured here and judged by the check; [E3] and ref fields are not text.
- for(const t of [...textOf(r),...(r.nextInputs||[]).map(n=>n?.ask?.question)].filter(Boolean))for(const w of jargonOf(t))f.push({type:'疑似内部用词',word:w,text:String(t).slice(0,60)});
+ for(const t of [...textOf(r),...(r.nextInputs||[]).map(n=>n?.ask?.question)].filter(Boolean))for(const w of jargonOf(t,context))f.push({type:'疑似内部用词',word:w,text:String(t).slice(0,60)});
  // 已达成的行带了下期输入: measured only (复盘技能 2.1.6), sometimes it really is 停止 or 继续看效果.
  if(Array.isArray(r.facts))for(const n of r.nextInputs||[]){const row=n?.ref&&r.facts.find(x=>x.ref===n.ref);if(row?.status==='达成')f.push({type:'已达成行带下期输入',ref:n.ref,nextType:n.type,text:String(n.text||'').slice(0,40)});}
  // 三段式 field limits (复盘技能 2.1.0): 判定理由 60, item 30, evidence 100, gap 60.
- const over=(field,text,limit)=>{const n=visible(String(text||'')).length;if(n>limit)f.push({type:'超字数',field,chars:n,limit,text:String(text).slice(0,40)});};
+ const over=(field,text,limit)=>{const n=visible(String(text||''),context).length;if(n>limit)f.push({type:'超字数',field,chars:n,limit,text:String(text).slice(0,40)});};
  if(Array.isArray(r.facts)){over('verdictReason',r.verdictReason,60);for(const x of r.facts){over('item',x.item,30);over('evidence',x.evidence,100);over('gap',x.gap,60);}
   for(const x of r.nextInputs||[]){over('nextInput',x?.text,60);if(x?.ask)over('ask',x.ask.question,60);}}
  return f;
@@ -366,7 +369,7 @@ export function rowFacts(c,r){
  const lines=new Set((r?.facts||[]).flatMap(f=>[f.ref,f.item]));
  return {expected:want.length,lines:(r?.facts||[]).length,missing:want.filter(w=>!lines.has(w.ref)&&!lines.has(w.item)).map(w=>w.item)};
 }
-function evidenceFacts(c,r){const ids=new Set((c.evidence||[]).map(e=>e.id));const used=[...new Set(JSON.stringify(r).match(/E\d+/g)||[])];return {missingIds:used.filter(id=>ids.size&&!ids.has(id)),usedCount:used.length};}
+export function evidenceFacts(c,r,sources){if(sources)return citationFacts(r,{sourceRef:c.id,sources});const ids=new Set((c.evidence||[]).map(e=>e.id));const used=[...new Set(JSON.stringify(r).match(/E\d+/g)||[])];return {missingIds:used.filter(id=>ids.size&&!ids.has(id)),usedCount:used.length};}
 const unitData=c=>({id:c.id,level:c.level,unit:c.unit,title:c.title,owner:c.owner,period:c.period,cutoff:c.cutoff,commitment:c.commitment,commitmentSource:c.commitmentSource,evidence:c.evidence,missing:c.missing,note:c.note,recordFacts:c.recordFacts,...(c.sourceBasis?{sourceBasis:c.sourceBasis}:{}),...(c.childCommitments?{childCommitments:c.childCommitments}:{}),...(c.tasks?.length?{tasks:c.tasks}:{}),...(c.expectedFacts?{expectedFacts:c.expectedFacts}:{}),...(c.m2EvidenceReceipt?{m2EvidenceReceipt:c.m2EvidenceReceipt}:{})});
 // Checkers must receive the same provenance as generation. Confirmed reports
 // retain their full quotation; the existing short World text budget is unchanged.
@@ -434,8 +437,9 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
   run.failed=[];await save(run);
  }
  const step=async label=>{done++;await onProgress({stage:label,done,total});};
- const missionStep='按技能「产品生成整轮复盘候选·每一步怎么做·1. Mission 复盘」执行。'+fieldsHint,ruStep='按技能「产品生成整轮复盘候选·每一步怎么做·2. RU 复盘」执行。'+fieldsHint;
- const companyStep='按技能「产品生成整轮复盘候选·每一步怎么做·4. 公司复盘」执行。'+fieldsHint;
+ const citationHint=input.engineeringContracts?.evidenceAddresses===1?' Machine citations: local evidence uses [E3]; cross-source evidence uses [sourceRef:E3], where sourceRef is its actual frozen source key. Never discard a source namespace or invent an evidence ID.':'';
+ const missionStep='按技能「产品生成整轮复盘候选·每一步怎么做·1. Mission 复盘」执行。'+fieldsHint+citationHint,ruStep='按技能「产品生成整轮复盘候选·每一步怎么做·2. RU 复盘」执行。'+fieldsHint+citationHint;
+ const companyStep='按技能「产品生成整轮复盘候选·每一步怎么做·4. 公司复盘」执行。'+fieldsHint+citationHint;
  await onProgress({stage:'Mission 复盘和没有 Mission 的 RU PO 复盘',done,total});
  if(twoRound)await stage('initial-dependencies',()=>reviewDependencyPool({items:[...s3,...s2,...s1],concurrency,signal,dependencies:c=>c.children||[],execute:async c=>{
   if(!run.quality){
@@ -491,7 +495,7 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
  return run;
 }
 
-export const reviewQualityTasks=skill=>skill.groups.map((g,index)=>`按技能检查第${index+1}组（${g.name}）：${g.types.join('、')}。对照冻结原始来源检查当前复盘，不以照办上次checker当通过；检查意见不构成新事实。缺记录或待验证不等于没有发生。新引入问题与原问题同等检查。返回JSON对象，每条issue必须含ref/type/problem/impact/mustFix/fixable；原必须修改类型恒为mustFix:true。`);
+export const reviewQualityTasks=(skill,{checkerSources=false}={})=>skill.groups.map((g,index)=>`按技能检查第${index+1}组（${g.name}）：${g.types.join('、')}。对照冻结原始来源检查当前复盘，不以照办上次checker当通过；检查意见不构成新事实。缺记录或待验证不等于没有发生。新引入问题与原问题同等检查。返回JSON对象，每条issue必须含ref/type/problem/impact/mustFix/fixable；原必须修改类型恒为mustFix:true。`+(checkerSources?' sourceRefs must explicitly include the target and every frozen source actually used. Do not infer evidence from checker prose. Optional evidenceRefs must be [{ref:sourceRef,id:E-number}] and refer to real evidence in those sourceRefs. Local citations use [E3]; cross-source citations use [sourceRef:E3]. These are machine addresses, not body words; only verified addresses are excluded from length/jargon.':''));
 
 // New skills check the complete candidate (including Company) after each edit.
 // Raw source facts are never replaced by an earlier checker's instructions.
@@ -508,9 +512,9 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
   normalize:()=>{run.questionRouting=reviewQuestionRoutes(run.reviews);},
   problems:candidate=>reviewProblems({...run,reviews:candidate.reviews},input,options).filter(p=>refs.includes(p.unit)),
   check:async(reviews,pass,q)=>{
-   const facts=Object.fromEntries(items.map(c=>[c.id,{lengthFindings:reviews[c.id]?lengthFindings(reviews[c.id]):[],evidenceFacts:reviews[c.id]?evidenceFacts(c,reviews[c.id]):{missingIds:[],usedCount:0},rowFacts:rowFacts(c,reviews[c.id])}]));
+   const facts=Object.fromEntries(items.map(c=>[c.id,{lengthFindings:reviews[c.id]?lengthFindings(reviews[c.id],input.engineeringContracts?.evidenceAddresses===1?{sourceRef:c.id,sources}:undefined):[],evidenceFacts:reviews[c.id]?evidenceFacts(c,reviews[c.id],input.engineeringContracts?.evidenceAddresses===1?sources:undefined):{missingIds:[],usedCount:0},rowFacts:rowFacts(c,reviews[c.id])}]));
    const verdictFacts=items.filter(c=>c.children?.length).map(c=>({ref:c.id,verdict:reviews[c.id]?.verdict,children:c.children.map(ref=>({ref,verdict:reviews[ref]?.verdict||'生成失败'}))}));
-   const tasks=reviewQualityTasks(skill);
+   const tasks=reviewQualityTasks(skill,{checkerSources:input.engineeringContracts?.checkerSources===1});
    if(q.packetModel&&qualityHash(q.packetModel)!==qualityHash(wireOptions))throw Error('质量检查模型已变化，必须使用独立检查记录');
    q.packetModel=wireOptions;
    const args={input,sources,reviews,programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(Object.values(reviews))},tasks,system,wireOptions};
@@ -519,7 +523,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
    else {const previous=q.sourcePlans[pass-1];plan=previous?refreshReviewCheckPlan(previous,args):buildReviewCheckPlan({...args,maxBodyBytes:REVIEW_BODY_LIMIT_BYTES,maxTargetRefs:refs.length,fixedLayout:[{kind:'object',units:[...refs].sort()}]});q.sourcePlans[pass]=plan;await save(run);}
    const outcome=await executeReviewCheckPlan({plan,args,maxAdditionalRequests:6,runPacket:async request=>{
     const value=await call(q,pass,'check',`${request.cacheStamp}-${request.index??'source'}-${request.group}`,request.payload,value=>{
-     checkedReviewIssues(value,{skill,refs});for(const issue of value.issues)if(issue.sourceRefs!==undefined&&(!Array.isArray(issue.sourceRefs)||new Set(issue.sourceRefs).size!==issue.sourceRefs.length||issue.sourceRefs.some(ref=>!request.packet.scope.sourceRefs.includes(ref))))throw Error('检查意见的显式来源引用不属于已提供完整原文');return validateScopedCheckResult(value,request.packet,refs,request.payload.sourceRequestContext);
+     checkedReviewIssues(value,{skill,refs});if(input.engineeringContracts?.checkerSources===1)for(const issue of value.issues)validateIssueSources(issue,{sources,providedRefs:request.packet.scope.sourceRefs});for(const issue of value.issues)if(issue.sourceRefs!==undefined&&(!Array.isArray(issue.sourceRefs)||new Set(issue.sourceRefs).size!==issue.sourceRefs.length||issue.sourceRefs.some(ref=>!request.packet.scope.sourceRefs.includes(ref))))throw Error('检查意见的显式来源引用不属于已提供完整原文');return validateScopedCheckResult(value,request.packet,refs,request.payload.sourceRequestContext);
     });
     return {...value,issues:value.issues.map(issue=>({...issue,checkContextRefs:[...request.packet.scope.sourceRefs],sourceRefs:issue.sourceRefs===undefined?[issue.ref]:[...issue.sourceRefs]}))};
    }});
@@ -540,6 +544,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
    };
    payload.task+=' unit.sourceRef指向sources中本层完整冻结unit。childCandidates为同轮当前候选而非正式确认或独立原始事实；仅候选状态同步/上下层一致性可按其汇总，不等于核验下级事实。若新增或否定具体业务事实而缺所需原文，必须返回sourceRequests:[{refs:[本层ref,所需冻结ref],relation,reason}]，先补原文，不能用候选冒充原始证据。无补源需求时返回review。sourceTexts/sourceBindings是相同正文的无损引用，按path还原对应来源字段，保留各自出处、日期、版本及E命名空间。';
    payload.sourceScope={targetRef:c.id,sourceRefs,availableRefs:refs};
+   if(input.engineeringContracts?.evidenceAddresses===1)payload.task+=' Machine citations: [E3] refers only to this target source. Use [sourceRef:E3] for other provided frozen sources; preserve namespaces and do not invent IDs.';
    const wireOptions=q.packetModel||{model:gateway.status?.model||'wangsu/claude-sonnet-5-5'};
    const assertBudget=value=>{const actual=reviewModelBudgetBytes(system,value,wireOptions);const budget=q.sourcePlans[pass].maxBodyBytes;if(actual>budget)throw Object.assign(Error('完整返修来源超过本次工程预算，未调用模型，保留草稿'),{code:'REVIEW_PACKET_OVERSIZE',actual,budget});};
    const validate=(value,provided)=>{
@@ -608,6 +613,7 @@ export function reviewProblems(run,input,{roster=[],rowMatch=false,askCaps=false
  const refused=id=>run.failed.some(f=>f.id===id&&f.finishReason==='refusal');
  for(const c of expected)if(!run.reviews[c.id]&&c.id!=='company'&&!refused(c.id))out.push({unit:c.id,problem:'没有生成出来'});
  for(const [id,r] of Object.entries(routeReviewQuestions(run.reviews))){
+  if(input.engineeringContracts?.evidenceAddresses===1){const bad=citationFacts(r,{sourceRef:id,sources:Object.fromEntries(expected.map(c=>[c.id,c]))}).missingIds;if(bad.length)out.push({unit:id,problem:'引用的冻结证据地址不存在：'+bad.join('、')});}
   if(childRule&&['mission','ru'].includes(r.level)){const c=expected.find(x=>x.id===id),bad=childVerdictProblem(r,c?.childCommitments,{childReviews:expected.filter(x=>x.parent===id).map(x=>run.reviews[x.id]).filter(Boolean)});if(bad)out.push({unit:id,problem:bad});}
   if(!tiers.includes(r.verdict))out.push({unit:id,problem:`判定写成“${r.verdict??'空'}”，只能是达成、部分达成、未达成`});
   if(Array.isArray(r.facts)){
@@ -635,7 +641,7 @@ export function reviewProblems(run,input,{roster=[],rowMatch=false,askCaps=false
 // What installReviewRound reads: the run's reviews plus what was skipped or failed, so the page names them.
 export function reviewFile(run,input,{skill,model,label,startedAt=null}){
  const generatedAt=new Date().toISOString();
- return {questionRouting:reviewQuestionRoutes(run.reviews),name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,modelProvenance:{requestedPrimary:model,initial:Object.fromEntries(input.stages.flat().filter(c=>run.raw?.[c.id]).map(c=>[c.id,run.initialCache?.[c.id]?{requestedAlias:run.initialCache[c.id].selectedAlias||null,returnedModel:run.initialCache[c.id].returnedModel??null,attemptId:run.initialCache[c.id].attemptId}:{requestedAlias:null,returnedModel:null,origin:'legacy-cache-unknown-model'}])),quality:Object.values(run.quality?.requests||{}).filter(r=>r.status==='done').map(r=>({ref:r.ref,pass:r.pass,stage:r.stage,maxTokens:r.callOptions?.maxTokens||r.attempts?.at(-1)?.options?.maxTokens||32000,selectedAlias:r.selectedAlias??r.model,returnedModel:r.returnedModel??null,api:r.actualApi??null}))},...(run.quality?{quality:{status:run.quality.status,maxRevisions:run.quality.maxRevisions,counts:run.quality.counts,remaining:run.quality.remaining||[],verificationPending:run.quality.verificationPending||[],sourceHash:run.quality.sourceHash,skillHash:run.quality.skillHash}}:{}),...(input.basis?{basis:structuredClone(input.basis)}:{}),
+ return {...(input.engineeringContracts?.evidenceAddresses===1?{evidenceReferences:referenceMapsForInput(input,run.reviews)}:{}),questionRouting:reviewQuestionRoutes(run.reviews),name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,modelProvenance:{requestedPrimary:model,initial:Object.fromEntries(input.stages.flat().filter(c=>run.raw?.[c.id]).map(c=>[c.id,run.initialCache?.[c.id]?{requestedAlias:run.initialCache[c.id].selectedAlias||null,returnedModel:run.initialCache[c.id].returnedModel??null,attemptId:run.initialCache[c.id].attemptId}:{requestedAlias:null,returnedModel:null,origin:'legacy-cache-unknown-model'}])),quality:Object.values(run.quality?.requests||{}).filter(r=>r.status==='done').map(r=>({ref:r.ref,pass:r.pass,stage:r.stage,maxTokens:r.callOptions?.maxTokens||r.attempts?.at(-1)?.options?.maxTokens||32000,selectedAlias:r.selectedAlias??r.model,returnedModel:r.returnedModel??null,api:r.actualApi??null}))},...(run.quality?{quality:{status:run.quality.status,maxRevisions:run.quality.maxRevisions,counts:run.quality.counts,remaining:run.quality.remaining||[],verificationPending:run.quality.verificationPending||[],sourceHash:run.quality.sourceHash,skillHash:run.quality.skillHash}}:{}),...(input.basis?{basis:structuredClone(input.basis)}:{}),
   // Facts the review cards need from the input: which object each review is about, and whether the Mission has an owner.
   reviews:Object.fromEntries(Object.entries(run.reviews).map(([id,r])=>{const c=input.stages.flat().find(x=>x.id===id);return [id,{...r,...(c?.agreedOutcome?{agreedOutcome:structuredClone(c.agreedOutcome)}:{}),...(c?.sourceBasis?{sourceBasis:structuredClone(c.sourceBasis)}:{}),...(c?.childCommitments?{childCommitments:structuredClone(c.childCommitments)}:{}),...(c?.objectId?{objectId:c.objectId}:{}),...(c?.ownerAssigned===false?{ownerAssigned:false}:{})}];})),
   qualityWarnings:reviewQualityWarnings(run),failed:run.failed,dropped:run.dropped,skipped:input.skipped,readAt:input.readAt,redactions:input.redactions,readReceipt:input.readReceipt||null};
@@ -728,7 +734,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
    if(!job?.id||!['failed','draft'].includes(job.status)||!/^[a-f0-9-]{36}$/.test(job.id))throw Object.assign(Error('当前没有可查看的生成草稿'),{status:404});
    const work=JSON.parse(await readFile(workFile(job.id),'utf8'));
    if(!work?.input||!work.run?.reviews)throw Object.assign(Error('尚无可查看的复盘内容'),{status:404});
-   const projected=reviewCards({reviews:work.run.reviews}),visible=Object.values(projected).filter(card=>canRead(actor,card)),refs=new Set(visible.map(card=>currentVersion(card).content.ref));
+   const projected=reviewCards({reviews:work.run.reviews,evidenceReferences:referenceMapsForInput(work.input,work.run.reviews)}),visible=Object.values(projected).filter(card=>canRead(actor,card)),refs=new Set(visible.map(card=>currentVersion(card).content.ref));
    return {jobId:job.id,readOnly:true,qualityStatus:work.run.quality?.status||'unverified',cards:visible.map(card=>({id:`candidate:${job.id}:${card.id}`,content:currentVersion(card).content,readOnly:true})),checks:(job.checks||[]).filter(check=>refs.has(check.unit||check.ref))};
   },
   async cancel(actor){if(!isOperator(actor))throw Object.assign(Error('只有 CEO 和轮次操作人可以停止生成'),{status:403});if(!flight||!activeAbort||store.snapshot().reviewJob?.status!=='running')throw Object.assign(Error('当前没有运行中的复盘生成'),{status:409});activeAbort.abort(Object.assign(Error('用户已停止生成，可从保存的进度续跑'),{name:'AbortError'}));return view(store.snapshot().reviewJob);},

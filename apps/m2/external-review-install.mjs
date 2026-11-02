@@ -2,6 +2,7 @@
 import {readFile,readdir,lstat} from 'node:fs/promises';
 import {join,dirname} from 'node:path';
 import {createHash} from 'node:crypto';
+import {referenceMapsForInput} from './review-evidence-addresses.mjs';
 const sha=value=>createHash('sha256').update(value).digest('hex'),hash=value=>sha(JSON.stringify(value));
 const uuid=value=>/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value||'');
 const hex=value=>/^[a-f0-9]{64}$/.test(value||'');
@@ -31,6 +32,8 @@ export async function verifyExternalReviewInstall({result,fileBytes,receipt,seed
  const byId=new Map(input.stages.flat().map(c=>[c.id,c]));
  const expected=Object.fromEntries(Object.entries(work.run.reviews).map(([id,review])=>{const c=byId.get(id);return [id,{...review,...(c?.agreedOutcome?{agreedOutcome:c.agreedOutcome}:{}),...(c?.sourceBasis?{sourceBasis:c.sourceBasis}:{}),...(c?.childCommitments?{childCommitments:c.childCommitments}:{}),...(c?.objectId?{objectId:c.objectId}:{}),...(c?.ownerAssigned===false?{ownerAssigned:false}:{})}];}));
  if(Object.keys(expected).length!==byId.size||hash(result.reviews)!==hash(expected))fail('正式文件正文与外部任务真实候选不一致');
+ const referenceMaps=referenceMapsForInput(input,work.run.reviews);
+ if(referenceMaps===undefined?result.evidenceReferences!==undefined:result.evidenceReferences===undefined||hash(result.evidenceReferences)!==hash(referenceMaps))fail('正式文件引用核验元信息与冻结来源不一致');
  const provenance={requestedPrimary:work.run.modelPolicy?.primary,initial:Object.fromEntries(input.stages.flat().filter(c=>work.run.raw?.[c.id]).map(c=>[c.id,work.run.initialCache?.[c.id]?{requestedAlias:work.run.initialCache[c.id].selectedAlias||null,returnedModel:work.run.initialCache[c.id].returnedModel??null,attemptId:work.run.initialCache[c.id].attemptId}:{requestedAlias:null,returnedModel:null,origin:'legacy-cache-unknown-model'}])),quality:Object.values(q.requests||{}).filter(r=>r.status==='done').map(r=>({ref:r.ref,pass:r.pass,stage:r.stage,maxTokens:r.callOptions?.maxTokens||r.attempts?.at(-1)?.options?.maxTokens||32000,selectedAlias:r.selectedAlias??r.model,returnedModel:r.returnedModel??null,api:r.actualApi??null}))};
  if(!provenance.requestedPrimary||result.model!==provenance.requestedPrimary||hash(result.modelProvenance)!==hash(provenance))fail('正式文件模型来源与外部任务实际记录不一致');
  const attemptsDir=join(jobDir,job.id+'.attempts'),directory=await lstat(attemptsDir);

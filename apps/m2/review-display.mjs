@@ -63,7 +63,13 @@ export const answerOf=(list=[],index,block='causes')=>[...list].reverse().find(c
 export function targetParts(t){const m=String(t).match(/^\*\*(.+?)（(达成|部分达成|未达成)）：\*\*\s*([\s\S]*)$/);return m?{name:m[1],verdict:m[2],text:m[3]}:{name:'',verdict:'',text:String(t)};}
 // Text pieces: **bold**, [E5] evidence marks, plain text.
 // Evidence marks ([E5]) are for checking the generation, not for readers: they are dropped from the page.
-export function richParts(text){return String(text||'').replace(/\s*\[E\d+\]/g,'').split(/(\*\*[^*]+\*\*|\[E\d+\])/g).filter(Boolean).map(s=>s.startsWith('**')&&s.endsWith('**')?{bold:s.slice(2,-2)}:/^\[E\d+\]$/.test(s)?{evidence:s.slice(1,-1)}:{text:s});}
+export function richParts(text,referenceMap){const body=referenceMap===undefined?String(text||'').replace(/\s*\[E\d+\]/g,''):String(text||'').replace(/\s*(\[[^\[\]\r\n]+\])/g,(raw,marker)=>Object.hasOwn(referenceMap,marker)?'':raw);return body.split(/(\*\*[^*]+\*\*)/g).filter(Boolean).map(s=>s.startsWith('**')&&s.endsWith('**')?{bold:s.slice(2,-2)}:{text:s});}
+export function reviewSentence(text,referenceMap){
+ const x=String(text||'').trim();let core=x;
+ if(referenceMap===undefined)core=x.replace(/(\s*\[E\d+\])+\s*$/,'');
+ else for(;;){const tail=/\s*(\[[^\[\]\r\n]+\])\s*$/.exec(core);if(!tail||!Object.hasOwn(referenceMap,tail[1]))break;core=core.slice(0,tail.index);}
+ return /[。！？.!?]$/.test(core)||/[。！？.!?][」）)]$/.test(core)?x:core+'。'+x.slice(core.length).trim();
+}
 export function recordLine(f,cutoff='2026-10-15'){if(!f||!f.latestRecord)return {text:'本月没有进展记录',warn:true};const d=f.latestRecord.slice(5).replace('-','/').replace(/^0/,'').replace('/0','/');return {text:`记录截至 ${d} · ${f.progressRecords} 条`,warn:f.latestRecord<cutoff};}
 export const reviewLabel=n=>n.level==='company'?'公司复盘':n.level==='po'?'PO 复盘':`Mission ${Number(String(n.ref).match(/-m(\d+)$/)?.[1])||''}`;
 // 2026-10 → 2026-11, and how a month reads on the page (10 月).

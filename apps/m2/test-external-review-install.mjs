@@ -12,9 +12,9 @@ import {openCollaborationStore} from './collaboration-store.mjs';
 const sha=v=>createHash('sha256').update(v).digest('hex'),hash=v=>sha(JSON.stringify(v));
 const oldId='3120849e-bc65-4793-8da3-9d76b5e6875a',jobId='b1eac8ab-05e5-4b76-8790-b22f2ac7e28b',attemptId='00000000-0000-4000-8000-000000000001';
 const primary='wangsu/claude-sonnet-5-5',backup='wangsu/gpt-6.1-sol',generationHead='340260ee9fb93e073aa629927ee2d9694b6b4efd',installationHead='a'.repeat(40),now='2026-11-02T18:00:00.000Z';
-async function fixture(){
+async function fixture(referenceContract=false){
  const dir=await mkdtemp(join(tmpdir(),'m2-external-install-')),seedDir=join(dir,'seed'),statePath=join(dir,'state/collaboration.json'),jobsDir=join(dir,'state/review-jobs');await mkdir(seedDir,{recursive:true});await mkdir(join(jobsDir,jobId+'.attempts'),{recursive:true});
- const skill={version:'2.1.13',hash:hash('skill')},input={period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00',stages:[[],[],[{id:'company',level:'company'}]]};
+ const skill={version:'2.1.13',hash:hash('skill')},input={...(referenceContract?{engineeringContracts:{evidenceAddresses:1}}:{}),period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00',stages:[[],[],[{id:'company',level:'company'}]]};
  const review={ref:'company',unit:'company',level:'company',title:'真实新复盘',owner:'刘明华',verdict:'达成',verdictReason:'完成',facts:[{ref:'x',item:'结果',status:'达成',evidence:'事实',gap:''}],nextInputs:[]},reviews={company:review},attempt={id:attemptId,key:'company',status:'accepted',request:{model:primary,options:{maxTokens:32000}},returnedModel:'provider-sonnet'};
  const run={modelPolicy:{primary,fallbackModels:[backup]},outputPolicy:{initialMaxTokens:32000,checkMaxTokens:64000,revisionMaxTokens:32000},raw:{company:JSON.stringify({review})},initialAttempts:[attempt],initialCache:{company:{selectedAlias:primary,returnedModel:'provider-sonnet',attemptId}},reviews,failed:[],dropped:[],issues:[],quality:{status:'passed',maxRevisions:2,counts:{},remaining:[],verificationPending:[],inputHash:hash(input),sourceHash:hash('sources'),skillHash:skill.hash,candidateHash:hash(reviews),requests:{},passes:[{status:'done',reviews:structuredClone(reviews),reviewHash:hash(reviews)}]}};
  const work={input,inputHash:hash(input),skillSnapshot:skill,run},file=reviewFile(run,input,{skill,model:primary,label:'新正式复盘',startedAt:'2026-11-02T16:40:10.514Z'});
@@ -41,8 +41,8 @@ test('external install archives the current locked state and old job, installs t
  }finally{await f.store.close();await rm(f.dir,{recursive:true,force:true});}
 });
 test('missing/wrong quality, altered artifacts, mismatched heads and running jobs cannot replace current state',async()=>{
- for(const kind of ['no-receipt','no-quality','bad-quality','body','input','source','model','work-bytes','head','journal','running']){
-  const f=await fixture();try{
+ for(const kind of ['no-receipt','no-quality','bad-quality','body','input','source','model','work-bytes','head','journal','running','proof','no-proof']){
+  const f=await fixture(['proof','no-proof'].includes(kind));try{
    if(kind==='no-receipt')delete f.args.receipt;
    if(kind==='no-quality'){delete f.file.quality;await f.persist();}
    if(kind==='bad-quality'){f.file.quality.status='blocked';await f.persist();}
@@ -50,6 +50,8 @@ test('missing/wrong quality, altered artifacts, mismatched heads and running job
    if(kind==='input'){f.work.input.period='2026-09';await f.persist();}
    if(kind==='source'){f.receipt.sourceHash=hash('wrong source');await f.persist();}
    if(kind==='model'){f.file.modelProvenance.requestedPrimary=backup;await f.persist();}
+   if(kind==='proof'){f.file.evidenceReferences.company={'[fake:E99]':{ref:'fake',id:'E99'}};await f.persist();}
+   if(kind==='no-proof'){delete f.file.evidenceReferences;await f.persist();}
    if(kind==='work-bytes')await writeFile(join(f.jobsDir,jobId+'.json'),'{}');
    if(kind==='head'){f.receipt.installationHead='b'.repeat(40);await f.persist();}
    if(kind==='journal')await writeFile(join(f.jobsDir,jobId+'.attempts',attemptId+'.json'),'{}');
