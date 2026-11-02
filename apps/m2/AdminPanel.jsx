@@ -1,3 +1,4 @@
+import {defaultReviewPeriod,monthEnd,beijingDay} from './review-period.mjs';
 import React,{useEffect,useState} from 'react';
 import {m2Fetch as fetch} from './deployment-client.mjs';
 import {Button} from '@heroui/react';
@@ -42,15 +43,17 @@ function RevealInsights({memberId}){
 }
 export function RoundControls({memberId,review,plan}){
  const [job,setJob]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [period,setPeriod]=useState(()=>review?.period||defaultReviewPeriod()),[cutoffDay,setCutoffDay]=useState(()=>monthEnd(review?.period||defaultReviewPeriod()));
  useEffect(()=>{let live=true,timer;const poll=async()=>{try{const r=await fetch('/api/reviews');if(!r.ok)return;const v=await r.json();if(!live)return;setJob(v.job||null);if(v.job?.status==='running')timer=setTimeout(poll,3000);}catch{}};poll();return()=>{live=false;clearTimeout(timer);};},[busy]);
  const running=job?.status==='running',has=!!review?.total;
  // Contract with the M2 session (2026-10-22): regenerate must be explicit; resume reuses the last input after a failure.
- async function start(extra={}){setBusy(true);setError('');try{const r=await fetch('/api/reviews',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({memberId,regenerate:has,...extra})});const v=await r.json().catch(()=>({}));if(!r.ok)throw Error(v.code==='review-exists'?`已有 ${v.confirmed} / ${v.total} 份复盘被确认，请确认后再重新生成`:v.error||'没能开始生成复盘');}catch(e){setError(e.message);}finally{setBusy(false);}}
+ async function start(extra={}){setBusy(true);setError('');try{const r=await fetch('/api/reviews',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({memberId,regenerate:has,period,cutoff:cutoffDay+'T23:59:59+08:00',...extra})});const v=await r.json().catch(()=>({}));if(!r.ok)throw Error(v.code==='review-exists'?`已有 ${v.confirmed} / ${v.total} 份复盘被确认，请确认后再重新生成`:v.error||'没能开始生成复盘');}catch(e){setError(e.message);}finally{setBusy(false);}}
  const pj=plan.job,planRunning=pj?.status==='running',unconfirmed=has&&review.confirmed<review.total;
  return <div className="round-controls">
-  <Stage title="复盘" skill={review?.skill} readAt={review?.readAt} generatedAt={review?.generatedAt||review?.loadedAt} model={review?.model||plan.currentModel} durationMs={review?.durationMs} button={has?'重新生成复盘':'生成复盘'} busy={busy} disabled={running} onConfirm={()=>start()}
-   confirmText={has?`${review.confirmed>0?`已有 ${review.confirmed} 份复盘被确认。`:''}重新读取本体、生成新的复盘：现有复盘和所有讨论归档保存，聊天框从新一轮开始，大家要重新确认。`:'读取本体、生成本月复盘，生成好后各单元群会收到通知。'}
-   status={<>{running&&<p className="admin-line is-running">正在生成复盘{job.total?`（${job.done||0}/${job.total}）`:''}</p>}{job?.status==='failed'&&<p className="admin-line is-failed">上次生成没完成：{job.error||'原因未记录'} <Button className="plain" isDisabled={busy} onPress={()=>start({resume:true})}>续跑</Button></p>}{/* Which review and what was wrong, not just “有 1 处问题” (陈溪南 2026-10-27). */}{job?.status==='failed'&&(job.checks||[]).length>0&&<ul className="admin-checks">{job.checks.map((c,i)=><li key={i}><strong>{c.title||c.unit||'全局'}</strong>{c.problem}</li>)}</ul>}{error&&<p className="admin-line is-failed" role="alert">{error}</p>}</>}
+  <div className="admin-actions"><label>复盘月份 <input aria-label="复盘月份" type="month" value={period} max={beijingDay().slice(0,7)} disabled={running||busy} onChange={e=>{const value=e.target.value;if(!value)return;setPeriod(value);setCutoffDay(monthEnd(value));}}/></label><label>证据截止 <input aria-label="复盘证据截止日期" type="date" value={cutoffDay} min={period+'-01'} max={monthEnd(period)} disabled={running||busy} onChange={e=>setCutoffDay(e.target.value)}/></label></div>
+  <Stage title={`${period} 复盘`} skill={review?.skill} readAt={review?.readAt} generatedAt={review?.generatedAt||review?.loadedAt} model={review?.model||plan.currentModel} durationMs={review?.durationMs} button={has?'重新生成复盘':'生成复盘'} busy={busy} disabled={running} onConfirm={()=>start()}
+   confirmText={has?`目标 ${period}，证据截止 ${cutoffDay}（北京时间）。${review.confirmed>0?`已有 ${review.confirmed} 份复盘被确认。`:''}重新读取本体、生成新的复盘：现有复盘和所有讨论归档保存，聊天框从新一轮开始，大家要重新确认。`:`读取本体、生成 ${period} 复盘，证据截止 ${cutoffDay}（北京时间）。生成好后各单元群会收到通知。`}
+   status={<>{running&&<p className="admin-line is-running">正在生成复盘{job.total?`（${job.done||0}/${job.total}）`:''}</p>}{job?.status==='failed'&&<p className="admin-line is-failed">上次 {job.period} 复盘生成没完成：{job.error||'原因未记录'} <Button className="plain" isDisabled={busy} onPress={()=>start({resume:true})}>续跑</Button></p>}{/* Which review and what was wrong, not just “有 1 处问题” (陈溪南 2026-10-27). */}{job?.status==='failed'&&(job.checks||[]).length>0&&<ul className="admin-checks">{job.checks.map((c,i)=><li key={i}><strong>{c.title||c.unit||'全局'}</strong>{c.problem}</li>)}</ul>}{error&&<p className="admin-line is-failed" role="alert">{error}</p>}</>}
    side={has&&<RevealInsights memberId={memberId}/>}/>
   <Stage title="拆解" skill={plan.skill} readAt={plan.readAt} generatedAt={plan.generatedAt} model={plan.model} durationMs={plan.durationMs} button="重新生成拆解" busy={plan.pending} disabled={planRunning} onConfirm={plan.onRestart}
    confirmText={`${unconfirmed?`复盘还有 ${review.total-review.confirmed} 份没确认，现在生成会用当前的复盘。`:''}重新读取本体、生成新的拆解，生成期间仍显示当前这一轮。`}

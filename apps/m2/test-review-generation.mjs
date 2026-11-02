@@ -156,8 +156,8 @@ test('复盘生成任务：只有 CEO 和轮次操作人能开始，跑完装入
  if(!skillThere)return t.skip('本机没有复盘技能目录');
  const {store,jobs,until}=await harness();
  await assert.rejects(jobs.start({id:'member-03'},{},{now}),/只有 CEO 和轮次操作人/);
- const job=await jobs.start({id:'member-04'},{},{now});assert.equal(job.status,'running');assert.equal(job.period,'2026-10');
- await assert.rejects(jobs.start({id:'member-04'},{},{now}),/正在生成/);
+ const job=await jobs.start({id:'member-04'},{period:'2026-10',cutoff:'2026-10-22T23:59:59+08:00'},{now});assert.equal(job.status,'running');assert.equal(job.period,'2026-10');
+ await assert.rejects(jobs.start({id:'member-04'},{period:'2026-10',cutoff:'2026-10-22T23:59:59+08:00'},{now}),/正在生成/);
  await until(s=>s.reviewJob?.status!=='running');
  const s=store.snapshot();assert.equal(s.reviewJob.status,'done',JSON.stringify(s.reviewJob));
  assert.deepEqual(Object.values(s.cards).filter(c=>c.kind==='review').map(c=>c.id).sort(),['rv:company','rv:eo','rv:eo-m1']);
@@ -170,7 +170,7 @@ test('复盘生成任务：检查没过不装入、已有复盘要明确重新�
  if(!skillThere)return t.skip('本机没有复盘技能目录');
  const {store,jobs,until}=await harness({gateway:fakeGateway({verdict:'基本达成'}),reviews:true});
  await assert.rejects(jobs.start({id:'member-04',ceo:false},{},{now}),e=>e.code==='review-exists'&&e.total===1);
- await jobs.start({id:'member-04'},{regenerate:true},{now});
+ await jobs.start({id:'member-04'},{regenerate:true,period:'2026-10',cutoff:'2026-10-22T23:59:59+08:00'},{now});
  await until(s=>s.reviewJob?.status!=='running');
  const s=store.snapshot();assert.equal(s.reviewJob.status,'failed');assert.ok(s.reviewJob.checks.some(c=>/基本达成/.test(c.problem)));
  assert.equal(s.cards['rv:eo'].title,'旧','检查没过时现有复盘不动');

@@ -1,3 +1,4 @@
+import {reviewTarget,inReviewWindow,reviewDay} from './review-period.mjs';
 import {childContract,childVerdictProblem,objectExclusion} from './review-child-contract.mjs';
 // 复盘生成 (陈溪南 2026-10-23): the month-end review is generated inside the product, started from 管理 on her account,
 // instead of on a laptop and imported. Three levels: Mission 复盘, RU PO 复盘, 公司 PO 复盘.
@@ -122,7 +123,7 @@ const NOTE='按月底最终标准判定：把事实截止当作月底，用三�
 export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  const {period,cutoff,heads,objects}=sources,month=Number(period.slice(5)),prev=month===1?12:month-1;
  const monthEvents=sources.monthEvents||[];
- const inMonth=at=>{const d=String(at||'');return d.slice(0,7)===period&&(!cutoff||d<=cutoff);};
+ const inMonth=at=>inReviewWindow(at,period,cutoff);
  // Plan items name people by principal id; every principal the read carries gives its name (读取盘点 2026-10-26 第 1 条).
  const principalName=new Map();(function scan(v){if(!v||typeof v!=='object')return;if(Array.isArray(v)){v.forEach(scan);return;}if(typeof v.principal_id==='string'&&v.display_name)principalName.set(v.principal_id,v.display_name);for(const x of Object.values(v))scan(x);})([objects,monthEvents]);
  const realName=n=>n&&!/（(代录|测试[^）]*)）/.test(n)?n:'';
@@ -173,7 +174,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
   if(!s||!inMonth(s.as_of)&&!entryTimes.some(inMonth)&&!startingPoint(String(s.title||'')))continue;
   const text=blockLines(s.blocks||s.snapshot?.blocks);if(!text)continue;
   const baseline=startingPoint(String(s.title||''));
-  const raw={kind:baseline?'月初起点':'本月进展',source:(baseline?'【月初起点，不算本月结果】':'')+s.title,asOf:String(s.as_of||'').slice(0,10),text,by:s.generator?.display_name||''};
+  const raw={kind:baseline?'月初起点':'本月进展',source:(baseline?'【月初起点，不算本月结果】':'')+s.title,asOf:reviewDay(s.as_of),snapshotAsOf:s.as_of,text,by:s.generator?.display_name||''};
   const routed=routeBusiness(raw,unitOfDomain.get(h.domain_id),h.object_id),item=routed.item&&once(s.subject_ref?.object_id,routed.item);
   if(item)place(s.subject_ref?.object_id,h.domain_id,item,s.title);
   if(item||routed.moved)usedSnapshots.add(h.object_id);
@@ -192,7 +193,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
    if(!STEP[e.kind])continue;
    label='过程记录';text=`${STEP[e.kind]}：${subjects.map(titleOf).filter(Boolean).join('、')||'对象'}${e.principal?.display_name?`（${e.principal.display_name}）`:''}`;
   }
-  const item={kind,source:label+(e.category==='meeting'||e.category==='delivery'?'':` · ${e.kind}`),asOf:eventAt(e).slice(0,10),text,by:e.principal?.display_name||''};
+  const item={kind,source:label+(e.category==='meeting'||e.category==='delivery'?'':` · ${e.kind}`),asOf:reviewDay(eventAt(e)),occurredAt:e.occurred_at,recordedAt:e.recorded_at||null,text,by:e.principal?.display_name||''};
   const subjectUnit=subjects.map(id=>goalOfId.get(id)?.unit||missions.find(m=>m.id===id)?.goal.unit||unitOfRu.get(id)||unitOfDomain.get(objects[id]?.business?.domain_id)).find(Boolean);
   const routed=routeBusiness(item,subjectUnit,e.event_id,2000);
   if(routed.moved)usedEvents.add(e.event_id);
@@ -497,7 +498,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
  const workFile=id=>join(dir,`${id}.json`);
  let flight=false;
  const setJob=patch=>store.transact(s=>{s.reviewJob={...s.reviewJob,...patch,updatedAt:new Date().toISOString()};s.sequence++;return s;});
- const view=job=>job&&{id:job.id,status:job.status,stage:job.stage||null,done:job.done??null,total:job.total??null,error:job.error||null,checks:job.checks||[],inputCutoff:job.inputCutoff||null,period:job.period,createdAt:job.createdAt,finishedAt:job.finishedAt||null,skipped:job.skipped||[],skill:job.skill||null};
+ const view=job=>job&&{id:job.id,status:job.status,stage:job.stage||null,done:job.done??null,total:job.total??null,error:job.error||null,checks:job.checks||[],inputCutoff:job.inputCutoff||null,period:job.period,cutoff:job.cutoff,createdAt:job.createdAt,finishedAt:job.finishedAt||null,skipped:job.skipped||[],skill:job.skill||null};
  // One trace per attempt (root = this job; a resume is its own trace). Its id stays on the job and on the installed
  // review round, so verdict changes and signatures there become feedback on it, and a failure is feedback too.
  function run(id,{period,cutoff,resume}){
@@ -513,6 +514,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
    const skill=await loadReviewSkill(skillRoot);
    tracer.annotate({metadata:{skill_version:skill.version,skill_hash:skill.hash.slice(0,12)}},trace);
    if(work?.input&&work.skillSnapshot?.hash!==skill.hash&&skillAtLeast(skill.version,'2.1.10'))throw Error('复盘工作文件的技能版本不一致，请保留原任务并重新准备候选，不能混用旧输出');
+   if(work?.input&&(work.input.period!==period||work.input.cutoff!==cutoff))throw Error('续跑输入的月份或截止时间与原任务不一致，请保留原任务重新准备');
    if(!work?.input){
     const sources=await tracer.withRun('read-ontology','tool',{stage:'read-ontology'},async()=>collectReviewSources({reader:await reader(),period,cutoff,onProgress:p=>setJob(p)}));
     work={skillSnapshot:{version:skill.version,hash:skill.hash},input:buildReviewInput(sources,{companyDirection:await companyDirection(period),ceoName}),run:{raw:{},reviews:{},failed:[],dropped:[]}};await save();
@@ -546,17 +548,16 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
   view:()=>view(store.snapshot().reviewJob),
   // A server restart ends a running job; the page offers to resume it from the saved input.
   async recover(){if(store.snapshot().reviewJob?.status==='running')await setJob({status:'failed',error:'服务重启中断了生成，现有复盘没动，可以续跑'});},
-  async start(actor,{regenerate=false,resume=false}={},{now=new Date()}={}){
+  async start(actor,{regenerate=false,resume=false,period,cutoff}={},{now=new Date()}={}){
    if(!isOperator(actor))throw Object.assign(Error('只有 CEO 和轮次操作人可以生成复盘'),{status:403});
    const s=store.snapshot();
    if(flight||s.reviewJob?.status==='running')throw Object.assign(Error('复盘正在生成'),{status:409});
    if(busy()||s.roundJob?.status==='running'||s.planHandoff?.status==='generating')throw Object.assign(Error('拆解正在生成，等它结束再生成复盘'),{status:409});
    const reviews=Object.values(s.cards).filter(c=>c.kind==='review');
    if(reviews.length&&!regenerate&&!resume)throw Object.assign(Error('已有复盘'),{status:409,code:'review-exists',total:reviews.length,confirmed:reviews.filter(c=>c.confirmedVersion).length});
-   if(resume){const old=s.reviewJob;if(old?.status!=='failed')throw Object.assign(Error('没有可续跑的复盘生成'),{status:409});await setJob({status:'running',error:null,checks:[],finishedAt:null});run(old.id,{period:old.period,cutoff:old.cutoff,resume:true});return view(store.snapshot().reviewJob);}
-   // The month being reviewed is the current month in Beijing time; facts count up to the end of today.
-   const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
-   const id=randomUUID(),period=day.slice(0,7),cutoff=`${day}T23:59:59+08:00`;
+   if(resume){const old=s.reviewJob;if(old?.status!=='failed')throw Object.assign(Error('没有可续跑的复盘生成'),{status:409});reviewTarget({period:old.period,cutoff:old.cutoff},now);await setJob({status:'running',error:null,checks:[],finishedAt:null});run(old.id,{period:old.period,cutoff:old.cutoff,resume:true});return view(store.snapshot().reviewJob);}
+   ({period,cutoff}=reviewTarget({period,cutoff},now));
+   const id=randomUUID();
    await store.transact(x=>{x.reviewJob={id,status:'running',stage:'准备读取本体',period,cutoff,startedBy:actor.id,createdAt:new Date().toISOString()};x.sequence++;return x;});
    run(id,{period,cutoff});
    return view(store.snapshot().reviewJob);
