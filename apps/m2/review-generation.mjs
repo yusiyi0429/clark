@@ -1,4 +1,4 @@
-import {REVIEW_BODY_LIMIT_BYTES} from './review-model-fallback.mjs';
+import {REVIEW_BODY_LIMIT_BYTES,reviewGatewayForRun} from './review-model-fallback.mjs';
 import {reviewDependencyPool} from './review-dependencies.mjs';
 import {reviewQuestionRoutes,routeReviewQuestions,activeReviewAsk} from './review-question-routing.mjs';
 import {buildReviewCheckPlan,refreshReviewCheckPlan,verifyReviewCheckPlan,executeReviewCheckPlan,packSourceText,reviewModelRequestBody,reviewModelBudgetBytes,validateScopedCheckResult,restoreSourceText} from './review-source-plan.mjs';
@@ -675,7 +675,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
     if(!m2ConfirmedSource)throw Error('任务缺已确认人工事实来源快照，请保留原任务并重新准备候选');
     verifyEvidenceBundle(m2ConfirmedSource);
     const sourceInputs={};for(const id of new Set(m2ConfirmedSource.entries.map(e=>e.sourceJobId).filter(Boolean))){try{const previous=JSON.parse(await readFile(workFile(id),'utf8'));if(previous.input)sourceInputs[id]=previous.input;}catch(e){if(e.code!=='ENOENT')throw Error('旧生成来源无法读取：'+id);}}
-    work={skillSnapshot:{version:skill.version,hash:skill.hash},m2ConfirmedSource,sourceInputs,sourceInputsHash:evidenceHash(sourceInputs),run:{raw:{},reviews:{},failed:[],dropped:[]}};await save();
+    work={skillSnapshot:{version:skill.version,hash:skill.hash},m2ConfirmedSource,sourceInputs,sourceInputsHash:evidenceHash(sourceInputs),run:{modelPolicy:{primary:gateway.status?.model||null,fallbackModels:gateway.reviewFallbacks?.map(g=>g.status.model)||[]},raw:{},reviews:{},failed:[],dropped:[]}};await save();
    }
    if(work.m2ConfirmedSource?.hash!==store.snapshot().reviewJob?.m2ConfirmedSource?.hash)throw Error('任务人工事实来源与冻结工作文件不一致');
    if(!work.input){
@@ -684,11 +684,13 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
     work.inputHash=evidenceHash(work.input);await save();
    }
    await setJob({inputCutoff:work.input.readAt,skipped:work.input.skipped,skill:{version:skill.version,hash:skill.hash.slice(0,12)}});
-   await runReviewSkill({gateway,skill,input:work.input,run:work.run,signal,recordAttempt:createReviewCallJournal(join(dir,id+'.attempts')),programOptions:{roster,rowMatch:skillAtLeast(skill.version,'2.1.6'),askCaps:skillAtLeast(skill.version,'2.1.7'),childRule:skillAtLeast(skill.version,'2.1.10')},save:async r=>{work.run=r;await save();},onProgress:p=>setJob(p)});
+   const runGateway=resume?reviewGatewayForRun(gateway,work.run):gateway,runModel=runGateway.status?.model||model;
+   tracer.annotate({metadata:{model:runModel,review_model_policy:{primary:runModel,fallbackModels:runGateway.reviewFallbacks?.map(g=>g.status.model)||[]}}},trace);
+   await runReviewSkill({gateway:runGateway,skill,input:work.input,run:work.run,signal,recordAttempt:createReviewCallJournal(join(dir,id+'.attempts')),programOptions:{roster,rowMatch:skillAtLeast(skill.version,'2.1.6'),askCaps:skillAtLeast(skill.version,'2.1.7'),childRule:skillAtLeast(skill.version,'2.1.10')},save:async r=>{work.run=r;await save();},onProgress:p=>setJob(p)});
    signal?.throwIfAborted();
    if(work.run.quality&&work.run.quality.status!=='passed'){
     const q=work.run.quality,checks=[...(q.remaining||[]),...(q.verificationPending||[]).map(x=>({...x,verificationPending:true}))];
-    work.candidate=reviewFile(work.run,work.input,{skill,model,label:'自动修订未通过的独立草稿'});await save();
+    work.candidate=reviewFile(work.run,work.input,{skill,model:runModel,label:'自动修订未通过的独立草稿'});await save();
     await writeFile(join(dir,`${id}.candidate.json`),JSON.stringify(work.candidate),{mode:0o600});
     await setJob({status:'draft',stage:'自动修订未通过，草稿未装入',error:q.blockReason||'仍有关键问题，保留草稿等待处理',checks,candidateAvailable:true,finishedAt:new Date().toISOString()});return;
    }
@@ -700,7 +702,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
     await tracer.withRun('repair-reviews','chain',{stage:'repair',problems:checks.length},()=>repairReviews({gateway,skill,input:work.input,run:work.run,problems:checks,save:async r=>{work.run=r;await save();}}));checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps,childRule});}
    if(checks.length){failed(trace,`checks failed (${checks.length}): ${checks.slice(0,5).map(p=>`${p.unit} ${p.problem}`).join('; ')}`);await setJob({status:'failed',stage:'检查没过，没有装入',error:`有 ${checks.length} 处问题，现有复盘没动`,checks,finishedAt:new Date().toISOString()});return;}
    const label=`${Number(period.slice(5))} 月复盘 ${skill.version||''}（${cutoff.slice(5,10).replace('-','/')}）`.replace('  ',' ');
-   const file=reviewFile(work.run,work.input,{skill,model,label,startedAt:store.snapshot().reviewJob?.createdAt||null});
+   const file=reviewFile(work.run,work.input,{skill,model:runModel,label,startedAt:store.snapshot().reviewJob?.createdAt||null});
    // The whole earlier collaboration state is kept before the new round opens on clean rooms (same as importReviewRound).
    const now=new Date().toISOString(),stamp=now.replace(/[:.]/g,'-'),archive=join(dirname(statePath),'archive');
    await mkdir(archive,{recursive:true,mode:0o700});
