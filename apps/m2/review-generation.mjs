@@ -231,18 +231,19 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
   for(const t of objs)if(!used.has(t.id))lines.push({source:'object',objectId:t.id,version:t.o?.business?.version||null,parentRef:m.id,ref:t.id,title:t.o?.business?.title||'',owner:realName(ownerOf(t.o))||'未指派',status:statusOf(t.o),...taskTerms(t.o),definition:blockLines(t.o?.business?.blocks).slice(0,1200)});
   return lines.filter(t=>!t.objectId||!objectExclusion(objects[t.objectId],t.objectId,cutoff));
  }
- // Unit- and PO-level records that name a Mission (its title, its code such as 09-1, or one of its Task titles) belong to
- // that Mission; the rest reach every Mission of the unit as 单元层面进展, not evidence for any one Task (读取盘点第 2 条).
+ // Literal matches select delivery context only, never business ownership or
+ // evidence sufficiency. Preserve the record before this matching stage.
  const codeOf=t=>String(t||'').match(/^\s*(\d{2}-\d+)/)?.[1];
  const namesOf=m=>[m.object?.business?.title,codeOf(m.object?.business?.title),...planItems(m.object).map(p=>p.title),...heads.tasks.filter(t=>missionOfTask.get(t.object_id)===m.id).map(t=>objects[t.object_id]?.business?.title)].filter(x=>x&&String(x).length>=4);
+ const withLiteralRouting=(it,m,sourceScope,matchedIdentifiers)=>({...it,literalRouting:{version:1,method:'literal-identifiers',sourceScope,targetObjectId:m.id,matchedIdentifiers:[...new Set(matchedIdentifiers)],businessAttribution:'not-determined',evidenceSufficiency:'not-determined'}});
  const shared={};
  for(const [unit,items] of Object.entries(byUnit)){const ms=missions.filter(m=>m.goal.unit===unit);
   for(const it of items){const hit=ms.filter(m=>namesOf(m).some(n=>it.text.includes(n)||it.source.includes(n)));
-   if(hit.length)for(const m of hit)put(bySubject,m.id,{...it,source:it.source+'（记在单元上，正文提到这个 Mission）'});else put(shared,unit,it);}}
- for(const m of missions)for(const it of bySubject[m.goal.id]||[])if(namesOf(m).some(n=>it.text.includes(n)))put(bySubject,m.id,{...it,source:it.source+'（记在 PO 上，正文提到这个 Mission）'});
+   if(hit.length)for(const m of hit)put(bySubject,m.id,withLiteralRouting(it,m,'unit',namesOf(m).filter(n=>it.text.includes(n)||it.source.includes(n))));else put(shared,unit,it);}}
+ for(const m of missions)for(const it of bySubject[m.goal.id]||[])if(namesOf(m).some(n=>it.text.includes(n)))put(bySubject,m.id,withLiteralRouting(it,m,'po',namesOf(m).filter(n=>it.text.includes(n))));
  for(const m of missions){
   const own=bySubject[m.id]||[],goalLevel=(bySubject[m.goal.id]||[]).filter(it=>!own.includes(it));
-  const unitLevel=(shared[m.goal.unit]||[]).slice(-40).map(it=>({...it,kind:it.kind==='本月进展'?'单元层面进展':it.kind,source:'【单元层面进展，没指明 Mission，不能单独作为某个 Task 达成的证据】'+it.source}));
+  const unitLevel=(shared[m.goal.unit]||[]).slice(-40).map(it=>withLiteralRouting(it,m,'unit',[]));
   const ev=[...own,...goalLevel,...unitLevel];
   const n=(perGoal[m.goal.id]=(perGoal[m.goal.id]||0)+1),owner=ownerOf(m.object),ruOwner=ownerOf(m.goal.object);
   // No owner in the ontology: shown under 未指派 (not under the unit DRI, 读取盘点第 7 条); the unit DRI still signs for it.
@@ -305,7 +306,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  }
  // What this review was built from, kept with every run (于斯一 asked; the 10/23 run could not be traced, 读取盘点第 8 条).
  const readReceipt={readAt:sources.readAt,cutoff,objects:Object.entries(objects).filter(([,o])=>o).map(([id,o])=>`${id}@${o.business?.version??o.version??o.revision_id??'?'}`),snapshots:[...usedSnapshots],events:[...usedEvents]};
- return {engineeringContracts:{evidenceAddresses:1,checkerSources:3,planTableColumns:1,initialContext:parentInitialContextContract(),initialEvidence:initialEvidenceContract(),fullContextCheck:fullContextCheckContract([...stage1,...stage2,...stage3].map(c=>c.id),{version:2})},period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
+ return {engineeringContracts:{evidenceAddresses:1,checkerSources:3,planTableColumns:1,evidenceRouting:1,initialContext:parentInitialContextContract(),initialEvidence:initialEvidenceContract(),fullContextCheck:fullContextCheckContract([...stage1,...stage2,...stage3].map(c=>c.id),{version:2})},period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
 }
 
 // ---------- running the review skill ----------

@@ -62,10 +62,10 @@ test('复盘生成：单元按名称认，缺 RU PO 的单元不复盘，公司 
  assert.ok(input.skipped.some(x=>/Token Ops：本体里没有 10 月 RU PO，不复盘/.test(x)));assert.ok(!input.stages.flat().some(c=>c.unit==='bf02'));
  const m=s1[0];assert.equal(m.owner,'于斯一');assert.match(m.commitment,/建模完成/);assert.match(m.commitmentSource,/本体 10 月 Mission/);
  // Mission evidence: its own snapshot and in-month event, plus the PO-level record; nothing after the cutoff or before the month.
- const own=m.evidence.filter(e=>e.kind!=='单元层面进展'&&!/单元层面/.test(e.source));
+ const own=m.evidence.filter(e=>!e.literalRouting||e.literalRouting.matchedIdentifiers.length);
  assert.deepEqual(own.map(e=>e.asOf),['2026-10-10','2026-10-12','2026-10-15','2026-10-16','2026-10-18','2026-10-19']);
- // Unit-level records reach the Mission too, marked as not evidence for any one Task (读取盘点 2026-10-26).
- assert.ok(m.evidence.filter(e=>/单元层面进展/.test(e.source)).length>=1);assert.deepEqual(m.evidence.map(e=>e.id),m.evidence.map((_,i)=>'E'+(i+1)));
+ // Shared context keeps its original fields; literal metadata does not decide sufficiency.
+ assert.ok(m.evidence.some(e=>e.literalRouting?.sourceScope==='unit'&&!e.literalRouting.matchedIdentifiers.length));assert.ok(m.evidence.every(e=>!e.source.includes('不能单独作为某个 Task')));assert.deepEqual(m.evidence.map(e=>e.id),m.evidence.map((_,i)=>'E'+(i+1)));
  const all=JSON.stringify(input);
  assert.ok(!all.includes('截止后的记录'));assert.ok(!all.includes('上月的事'));assert.ok(!all.includes('写错的进展'));assert.ok(all.includes('更正：模型只定了一半'));
  assert.ok(m.evidence.some(e=>e.source==='会议'&&/建模口径/.test(e.text)));
@@ -107,6 +107,13 @@ test('临时挂 Method 的灯塔段落按明确业务归属读取，保留未核
  // A marked section after a long original paragraph is routed before clipping.
  src.objects[id(40)].blocks[0].text='1. Method '+ '方法研究'.repeat(1200)+'\n2. 【临时归档；业务归属：灯塔项目战场】长文后的灯塔计划，待核实。';
  const long=buildReviewInput(src).stages.flat().find(c=>c.objectId===id(22));assert.ok(long.evidence.some(e=>e.text.includes('长文后的灯塔计划，待核实')));
+});
+
+test('字面有无Mission标签只改变工程匹配元数据，不改原kind/source/text或裁定证据充分性',()=>{
+ const body='已部署并完成真实链路验证；质量验收仍有缺口。';
+ const build=(scope,tagged)=>{const src=sources(),oid=id(32),raw=src.objects[oid];raw.title=tagged?'E&O · Context 建模 日进展':'E&O · 团队日进展';raw.as_of='2026-10-20T00:00:00Z';raw.subject_ref={object_id:scope==='po'?id(10):id(1)};raw.blocks=[{id:'p',display_name:'进展',text:body}];const before=structuredClone(src),input=buildReviewInput(src);assert.deepEqual(src,before);assert.equal(input.engineeringContracts.evidenceRouting,1);const e=input.stages[0][0].evidence.find(e=>e.source===raw.title);assert.ok(e);assert.equal(e.kind,'本月进展');assert.equal(e.text,'【进展】\n'+body);assert.equal(e.literalRouting.businessAttribution,'not-determined');assert.equal(e.literalRouting.evidenceSufficiency,'not-determined');assert.equal(Object.hasOwn(e,'status'),false);assert.equal(Object.hasOwn(e,'verdict'),false);return e;};
+ const absent=build('unit',false),present=build('unit',true);assert.equal(absent.text,present.text);assert.equal(absent.kind,present.kind);assert.deepEqual(absent.literalRouting.matchedIdentifiers,[]);assert.ok(present.literalRouting.matchedIdentifiers.includes('Context 建模'));
+ const src=sources();src.objects[id(31)].blocks=[{id:'p',display_name:'进展',text:'Context 建模：'+body}];const input=buildReviewInput(src),poEvidence=input.stages[0][0].evidence.find(e=>e.source===src.objects[id(31)].title);assert.equal(poEvidence.literalRouting.sourceScope,'po');assert.equal(poEvidence.kind,'本月进展');assert.equal(poEvidence.text,'【进展】\nContext 建模：'+body);
 });
 
 const answer=(level,verdict='未达成')=>JSON.stringify({analysis:'a',review:{verdict,verdictReason:'理由',targets:['**t：**x'],causes:[{text:'**c：**y',ask:''}],nextInputs:[{id:'x-1',type:'欠账',text:'**n：**z'}],...(level==='company'?{ltoReview:{choice:'建议维持',reason:'r'}}:{})}});
@@ -235,7 +242,7 @@ test('读取盘点 10/26：Task 行合并计划条目和 Task 对象；单元记
  assert.equal(m.tasks[0].planTitle,'T01｜对象模型定稿：模型和口径定下来');
  assert.deepEqual(m.tasks.map(t=>[t.title.slice(0,8),t.owner,t.ref.startsWith(id(40))||t.ref===id(41)?'task':'plan']),[['对象模型定稿','于斯一','task'],['T02｜读写联调','未指派','plan'],['额外的 Task','刘人豪','task']]);
  assert.equal(m.tasks[0].expected,'模型定稿');assert.ok(!('expectedFacts' in m));
- assert.ok(m.evidence.some(e=>/正文提到这个 Mission/.test(e.source)&&/定稿推进到评审/.test(e.text)),'单元上的记录提到 Task 标题，归到 Mission');
+ assert.ok(m.evidence.some(e=>e.literalRouting?.sourceScope==='unit'&&e.literalRouting.matchedIdentifiers.length>0&&/定稿推进到评审/.test(e.text)),'单元记录命中Task字面标题，保留投递与匹配元数据而不改source');
  const po=input.stages[1][0];assert.ok(po.evidence.some(e=>/重写范围决定/.test(e.text)&&e.kind!=='上月复盘'),'本月的 review 事件按本月记录');
  assert.ok(m.evidence.some(e=>/联调过一次/.test(e.text)),'11 月补记、条目时间在 10 月的快照照读');
  assert.ok(input.stages[2][0].evidence.some(e=>/长期目标/.test(e.text)),'挂在长期目标上的记录归到公司，不丢');
