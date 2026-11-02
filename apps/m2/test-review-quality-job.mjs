@@ -4,6 +4,7 @@ import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createReviewJobs} from './review-generation.mjs';
+import {withReviewFallbacks} from './review-model-fallback.mjs';
 import {createCollaborationState} from './governance.mjs';
 import {installReviewRound} from './review-round.mjs';
 
@@ -11,7 +12,8 @@ const actor={id:'member-04'};
 const skillRoot=new URL('./review-skill/',import.meta.url);
 const review={verdict:'未达成',verdictReason:'缺少结果',facts:[{ref:'x',item:'成果',status:'未达成',evidence:'尚缺记录',gap:'尚缺记录'}],nextInputs:[{ref:'x',type:'继续',text:'核对结果'}]};
 async function until(fn){for(let i=0;i<500;i++){if(fn())return;await new Promise(r=>setTimeout(r,2));}throw Error('job did not finish');}
-async function setup(gateway){
+async function setup(gateway,{formalFallbacks=true}={}){
+ if(formalFallbacks)gateway=withReviewFallbacks(gateway,[{...gateway,status:{model:'wangsu/gpt-6.1-sol'}}]);
  const dir=await mkdtemp(join(tmpdir(),'m2-quality-job-'));let state=createCollaborationState([]);const original=structuredClone(state.cards);
  const store={snapshot:()=>state,transact:async fn=>{state=fn(structuredClone(state));return state;}};
  const reader=async()=>({list:async f=>f.type==='Company'?[{object_id:'company-source'}]:[],get:async()=>({business:{title:'公司',version:1,blocks:[]}}),findEvents:async()=>[]});
@@ -51,7 +53,9 @@ test('resume after a checker outage keeps the edited draft and its budget, then 
   if(!p.unit){const current=p.reviews[0];if(current.verdictReason==='fixed'&&/第3组/.test(p.task)&&fail)throw Error('checker offline');return {answer:JSON.stringify({checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[],issues:current.verdictReason==='fixed'?[]:[{ref:'company',sourceRefs:['company'],type:'结构与表达',problem:'需要澄清',impact:'影响理解',mustFix:true,fixable:true}]})};}
   if(p.revision)revised++;else initial++;return {answer:JSON.stringify({review:{...review,verdictReason:p.revision?'fixed':'initial'}})};
  }};
- const {jobs,store,dir}=await setup(gateway);
+ // Preserve this pre-existing primary-only outage/resume case. No second-pass
+ // repair is needed; formal shared-attempt exhaustion is tested separately.
+ const {jobs,store,dir}=await setup(gateway,{formalFallbacks:false});
  try{
   const job=await jobs.start(actor,{period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00'},{now:new Date('2026-11-02T00:00:00Z')});await until(()=>jobs.view().status==='failed');
   assert.equal(store.snapshot().reviewRound,undefined);fail=false;await jobs.start(actor,{resume:true});await until(()=>jobs.view().status!=='running');

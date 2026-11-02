@@ -1,4 +1,4 @@
-import {REVIEW_BODY_LIMIT_BYTES,reviewGatewayForRun,reviewInitialConcurrency} from './review-model-fallback.mjs';
+import {REVIEW_BODY_LIMIT_BYTES,reviewGatewayForRun,reviewInitialConcurrency,reviewQualityFallbackContract,validateReviewQualityFallback,reviewGatewayForQualityAction} from './review-model-fallback.mjs';
 import {reviewDependencyPool} from './review-dependencies.mjs';
 import {parentInitialContextContract,validateInitialContext,parentInitialPayload} from './review-initial-context.mjs';
 import {initialEvidenceContract,validateInitialEvidence,initialEvidenceSetup} from './review-initial-evidence.mjs';
@@ -306,7 +306,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  }
  // What this review was built from, kept with every run (于斯一 asked; the 10/23 run could not be traced, 读取盘点第 8 条).
  const readReceipt={readAt:sources.readAt,cutoff,objects:Object.entries(objects).filter(([,o])=>o).map(([id,o])=>`${id}@${o.business?.version??o.version??o.revision_id??'?'}`),snapshots:[...usedSnapshots],events:[...usedEvents]};
- return {engineeringContracts:{evidenceAddresses:1,checkerSources:3,planTableColumns:1,evidenceRouting:1,initialContext:parentInitialContextContract(),initialEvidence:initialEvidenceContract(),fullContextCheck:fullContextCheckContract([...stage1,...stage2,...stage3].map(c=>c.id),{version:2})},period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
+ return {engineeringContracts:{evidenceAddresses:1,checkerSources:3,planTableColumns:1,evidenceRouting:1,qualityFallback:reviewQualityFallbackContract(),initialContext:parentInitialContextContract(),initialEvidence:initialEvidenceContract(),fullContextCheck:fullContextCheckContract([...stage1,...stage2,...stage3].map(c=>c.id),{version:2})},period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
 }
 
 // ---------- running the review skill ----------
@@ -400,13 +400,14 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
  const twoRound=skillAtLeast(skill.version,'2.1.13');
  const initialContext=validateInitialContext(input);
  const initialEvidence=validateInitialEvidence(input);
+ const qualityFallback=validateReviewQualityFallback(input);
  signal?.throwIfAborted();
  if(skillAtLeast(skill.version,'2.1.10')){const incomplete=input.stages.flat().filter(c=>['mission','ru'].includes(c.level)&&!c.childCommitments?.complete);if(incomplete.length)throw Error('有效直接子项元信息不完整：'+incomplete.map(c=>c.id+' '+(c.childCommitments?.missing||[]).join('；')).join('；'));}
  if(skillAtLeast(skill.version,'2.1.11')){
   if(input.basis?.mode!=='latest-source-candidate'||!input.basis.snapshotHash)throw Error('最新来源候选基线缺失，请重新准备输入');
   const mixed=input.stages.flat().filter(c=>['mission','ru'].includes(c.level)&&(c.sourceBasis?.basisMode!==input.basis.mode||c.sourceBasis?.snapshotHash!==input.basis.snapshotHash||c.childCommitments?.basisMode!==input.basis.mode||c.childCommitments?.snapshotHash!==input.basis.snapshotHash||(c.childCommitments.items||[]).some(t=>t.inBaseline!==true)));
   if(mixed.length)throw Error('对象来源与整轮候选基线不一致：'+mixed.map(c=>c.id).join('、'));
-  const fingerprint=createHash('sha256').update(JSON.stringify({basis:input.basis,stages:input.stages,...(initialContext?{initialContext}:{}),...(initialEvidence?{initialEvidence}:{})})).digest('hex');
+  const fingerprint=createHash('sha256').update(JSON.stringify({basis:input.basis,stages:input.stages,...(initialContext?{initialContext}:{}),...(initialEvidence?{initialEvidence}:{}),...(qualityFallback?{qualityFallback}:{})})).digest('hex');
   if(run.inputFingerprint&&run.inputFingerprint!==fingerprint||!run.inputFingerprint&&(Object.keys(run.raw||{}).length||Object.keys(run.reviews||{}).length))throw Error('续跑输入基线不一致，不能混用旧输出');
   run.inputFingerprint=fingerprint;await save(run);
  }
@@ -507,6 +508,7 @@ export const reviewQualityTasks=(skill,{checkerSources=false,sourceKeyContract=f
 // New skills check the complete candidate (including Company) after each edit.
 // Raw source facts are never replaced by an earlier checker's instructions.
 async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programOptions,signal,system}){
+ const qualityFallback=validateReviewQualityFallback(input);if(qualityFallback&&run.quality?.qualityFallback&&qualityHash(qualityFallback)!==qualityHash(run.quality.qualityFallback))throw Error('已保存的质量修订备用策略已变化');
  const items=input.stages.flat(),refs=items.map(c=>c.id);
  const sources=Object.fromEntries(items.map(c=>[c.id,{...unitData(c),objectId:c.objectId}]));
  const options=programOptions||{rowMatch:skillAtLeast(skill.version,'2.1.6'),askCaps:skillAtLeast(skill.version,'2.1.7'),childRule:skillAtLeast(skill.version,'2.1.10')};
@@ -514,11 +516,12 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
  const checkMaxTokens=run.quality?.packetModel?.maxTokens??run.outputPolicy?.checkMaxTokens??64000;
  const wireOptions={model,thinking:true,reasoningEffort:'high',maxTokens:checkMaxTokens,json:true,...(gateway.reviewFallbacks?.length?{fallbackModels:gateway.reviewFallbacks.map(g=>g.status.model)}:{})};
  if(run.quality?.packetModel&&qualityHash(run.quality.packetModel)!==qualityHash(wireOptions))throw Error('质量检查模型或备用策略已变化，不能复用其他策略的结论');
- const call=(q,pass,stage,ref,payload,validate)=>qualityModelCall({gateway,system,quality:q,run,pass,stage,ref,payload,validate,save,signal,maxTokens:stage==='check'?checkMaxTokens:32000,maxBodyBytes:q.sourcePlans?.[pass]?.maxBodyBytes||REVIEW_BODY_LIMIT_BYTES});
+ const call=(q,pass,stage,ref,payload,validate)=>qualityModelCall({gateway:reviewGatewayForQualityAction(gateway,input,pass,stage),system,quality:q,run,pass,stage,ref,payload,validate,save,signal,maxTokens:stage==='check'?checkMaxTokens:32000,maxBodyBytes:q.sourcePlans?.[pass]?.maxBodyBytes||REVIEW_BODY_LIMIT_BYTES});
  await runReviewQuality({run,input,skill,sources,save,onProgress,signal,
   normalize:()=>{run.questionRouting=reviewQuestionRoutes(run.reviews);},
   problems:candidate=>reviewProblems({...run,reviews:candidate.reviews},input,options).filter(p=>refs.includes(p.unit)),
   check:async(reviews,pass,q)=>{
+   const policy=validateReviewQualityFallback(input);if(policy){if(q.qualityFallback&&qualityHash(q.qualityFallback)!==qualityHash(policy))throw Error('已保存的质量修订备用策略已变化');q.qualityFallback=structuredClone(policy);}
    const facts=Object.fromEntries(items.map(c=>[c.id,{lengthFindings:reviews[c.id]?lengthFindings(reviews[c.id],input.engineeringContracts?.evidenceAddresses===1?{sourceRef:c.id,sources}:undefined):[],evidenceFacts:reviews[c.id]?evidenceFacts(c,reviews[c.id],input.engineeringContracts?.evidenceAddresses===1?sources:undefined):{missingIds:[],usedCount:0},rowFacts:rowFacts(c,reviews[c.id])}]));
    const verdictFacts=items.filter(c=>c.children?.length).map(c=>({ref:c.id,verdict:reviews[c.id]?.verdict,children:c.children.map(ref=>({ref,verdict:reviews[ref]?.verdict||'生成失败'}))}));
    const tasks=reviewQualityTasks(skill,{checkerSources:input.engineeringContracts?.checkerSources>=1,sourceKeyContract:input.engineeringContracts?.checkerSources>=2});

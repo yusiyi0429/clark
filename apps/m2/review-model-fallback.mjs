@@ -15,6 +15,14 @@ export function fallbackEligible(error){
 export const reviewModelApi=model=>model==='wangsu/claude-sonnet-5-5'?'anthropic-messages':'chat-completions';
 export const reviewInitialConcurrency=gateway=>Math.min(20,Number.isInteger(gateway?.roundConcurrency)&&gateway.roundConcurrency>0?gateway.roundConcurrency:8);
 
+export const reviewQualityFallbackContract=()=>({version:1,fromQualityPass:1,repairModel:'wangsu/gpt-6.1-sol',repairFallbackModels:[],scope:'all-actions-including-new-and-refresh',checks:'frozen-round-policy'});
+export function validateReviewQualityFallback(input){const policy=input.engineeringContracts?.qualityFallback;if(policy!==undefined&&JSON.stringify(policy)!==JSON.stringify(reviewQualityFallbackContract()))throw Error('质量修订备用合同不受支持');return policy;}
+export function reviewGatewayForQualityAction(gateway,input,pass,stage){
+ const policy=validateReviewQualityFallback(input);
+ if(!policy||pass<policy.fromQualityPass||!/^(?:revise|refresh)(?:-source)?$/.test(stage))return gateway;
+ return reviewGatewayForRun(gateway,{modelPolicy:{primary:policy.repairModel,fallbackModels:policy.repairFallbackModels}});
+}
+
 // Share provider cooldown across the review calls already bounded by the pool.
 // Waiting never adds a transport attempt or changes the frozen request body.
 export function withReviewRateLimit(gateway,{now=Date.now,wait=(ms,signal)=>pause(ms,undefined,{signal})}={}){
