@@ -59,6 +59,7 @@ test('复盘生成：单元按名称认，缺 RU PO 的单元不复盘，公司 
  assert.equal(input.engineeringContracts.initialEvidence.version,2);
  assert.equal(input.engineeringContracts.qualityFallback.repairModel,'wangsu/gpt-6.1-sol');
  assert.equal(input.engineeringContracts.initialContext.maxBodyBytes,512*1024);
+ assert.equal(input.engineeringContracts.initialContext.version,2);
  const [s1,s2,s3]=input.stages;
  assert.deepEqual(s1.map(c=>c.id),['eo-m1']);assert.deepEqual(s2.map(c=>c.id),['eo']);assert.deepEqual(s2[0].children,['eo-m1']);
  assert.ok(input.skipped.some(x=>/Token Ops：本体里没有 10 月 RU PO，不复盘/.test(x)));assert.ok(!input.stages.flat().some(c=>c.unit==='bf02'));

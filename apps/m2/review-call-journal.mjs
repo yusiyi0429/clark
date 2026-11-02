@@ -4,6 +4,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {mkdir,writeFile,rename} from 'node:fs/promises';
 import {join} from 'node:path';
 import {bareJson} from './model.mjs';
+import {restoreParentInitialContext} from './review-initial-context.mjs';
 
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const refusal=e=>e?.code==='MODEL_REFUSAL'||e?.diagnostics?.finishReason==='refusal';
@@ -19,6 +20,7 @@ export function createReviewCallJournal(dir){
 // A diagnostic record is persisted before parsing. It is not a successful raw
 // cache entry; only a parsed, validated answer can enter run.raw.
 export async function initialReviewCall({gateway,system,user,key,skill,run,save=async()=>{},recordAttempt=async()=>{},signal,evidenceFlow,validate=x=>x}){
+ restoreParentInitialContext(user);
  const options={thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000};
  const backups=gateway.reviewFallbacks||[],models=[gateway.status?.model||null,...backups.map(g=>g.status.model)];
  const inputHash=hash({system,user,skillHash:skill.hash,model:models[0],options,...(backups.length?{fallbackModels:models.slice(1)}:{})});
