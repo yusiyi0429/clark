@@ -44,3 +44,11 @@ test('extra checked parents are accepted only with complete supplied source and 
  assert.throws(()=>validateScopedCheckResult(value,{...packet,scope:{...packet.scope,sourceRefs:packet.scope.sourceRefs.filter(ref=>ref!=='p')}},plan.sourceRefs),/覆盖对象不正确/);
  assert.throws(()=>validateScopedCheckResult({...value,checkedRefs:[...value.checkedRefs,'p']},packet,plan.sourceRefs),/覆盖对象不正确/);
 });
+
+test('edge strings decode only to unique declared scope edges without changing the original reply',()=>{
+ const a=data(),plan=buildReviewCheckPlan(a),packet=plan.packets.find(p=>p.scope.targetRefs.includes('a')),value={...ok(packet),checkedEdges:packet.scope.edges.map(e=>e.parentRef+'->'+e.childRef)},before=JSON.stringify(value);
+ const accepted=validateScopedCheckResult(value,packet,plan.sourceRefs);assert.deepEqual(accepted.checkedEdges,packet.scope.edges);assert.equal(JSON.stringify(value),before);
+ for(const checkedEdges of [['unknown->a'],['a->p'],[...value.checkedEdges,...value.checkedEdges],[]])assert.throws(()=>validateScopedCheckResult({...value,checkedEdges},packet,plan.sourceRefs));
+ assert.throws(()=>validateScopedCheckResult(value,{...packet,scope:{...packet.scope,edges:[...packet.scope.edges,...packet.scope.edges]}},plan.sourceRefs),/唯一/);
+ assert.throws(()=>validateScopedCheckResult({...value,issues:[{ref:'b',type:'事实',problem:'越界',impact:'不能以未给来源判断',mustFix:true,fixable:true}]},packet,plan.sourceRefs),/来源范围/);
+});
