@@ -1,4 +1,4 @@
-import {REVIEW_BODY_LIMIT_BYTES,reviewGatewayForRun} from './review-model-fallback.mjs';
+import {REVIEW_BODY_LIMIT_BYTES,reviewGatewayForRun,reviewInitialConcurrency} from './review-model-fallback.mjs';
 import {reviewDependencyPool} from './review-dependencies.mjs';
 import {reviewQuestionRoutes,routeReviewQuestions,activeReviewAsk} from './review-question-routing.mjs';
 import {buildReviewCheckPlan,refreshReviewCheckPlan,verifyReviewCheckPlan,executeReviewCheckPlan,packSourceText,reviewModelRequestBody,reviewModelBudgetBytes,validateScopedCheckResult,restoreSourceText} from './review-source-plan.mjs';
@@ -389,7 +389,8 @@ const fieldsHint='返回 JSON：{"analysis":"不展示的分析，600 字内","r
 
 // Runs the skill's stages on a built input. `run` holds what is done so far (raw answers by call), so a failed run
 // resumes where it stopped; save(run) is called after every answer.
-export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{},failed:[],dropped:[]},save=async()=>{},onProgress=async()=>{},concurrency=8,programOptions=null,signal,recordAttempt=async()=>{}}){
+export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{},failed:[],dropped:[]},save=async()=>{},onProgress=async()=>{},concurrency=reviewInitialConcurrency(gateway),programOptions=null,signal,recordAttempt=async()=>{}}){
+ if(!Number.isInteger(concurrency)||concurrency<1||concurrency>20)throw Error('复盘初稿并发必须在1到20之间');
  const twoRound=skillAtLeast(skill.version,'2.1.13');
  signal?.throwIfAborted();
  if(skillAtLeast(skill.version,'2.1.10')){const incomplete=input.stages.flat().filter(c=>['mission','ru'].includes(c.level)&&!c.childCommitments?.complete);if(incomplete.length)throw Error('有效直接子项元信息不完整：'+incomplete.map(c=>c.id+' '+(c.childCommitments?.missing||[]).join('；')).join('；'));}

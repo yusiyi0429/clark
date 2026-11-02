@@ -1,4 +1,5 @@
 import {createModelGateway} from './model.mjs';
+import {setTimeout as pause} from 'node:timers/promises';
 // Review-only production policy. Chat/decoding keep their own model settings.
 export const REVIEW_BODY_LIMIT_BYTES=2*1024*1024;
 const formalModels=new Set(['wangsu/gpt-6.1-sol','wangsu/claude-sonnet-5-5']);
@@ -12,10 +13,24 @@ export function fallbackEligible(error){
  return error?.name==='TimeoutError'||error?.code==='MODEL_REFUSAL'||error?.diagnostics?.finishReason==='refusal'||error?.code==='MODEL_OUTPUT_INCOMPLETE'||error?.code==='MODEL_OUTPUT_CONTRACT'||error?.reviewOutputContract===true||error instanceof SyntaxError||[429,500,502,503,504].includes(error?.providerStatus)||['ECONNRESET','ETIMEDOUT','EPIPE','UND_ERR_CONNECT_TIMEOUT','UND_ERR_SOCKET','MODEL_STREAM_INCOMPLETE','MODEL_STREAM_FAILURE'].some(code=>code===error?.code||code===error?.cause?.code);
 }
 export const reviewModelApi=model=>model==='wangsu/claude-sonnet-5-5'?'anthropic-messages':'chat-completions';
+export const reviewInitialConcurrency=gateway=>Math.min(20,Number.isInteger(gateway?.roundConcurrency)&&gateway.roundConcurrency>0?gateway.roundConcurrency:8);
+
+// Share provider cooldown across the review calls already bounded by the pool.
+// Waiting never adds a transport attempt or changes the frozen request body.
+export function withReviewRateLimit(gateway,{now=Date.now,wait=(ms,signal)=>pause(ms,undefined,{signal})}={}){
+ let blockedUntil=0;
+ return {...gateway,async complete(messages,options={}){
+  while(blockedUntil>now()){options.signal?.throwIfAborted();await wait(Math.min(60000,blockedUntil-now()),options.signal);}
+  try{return await gateway.complete(messages,options);}catch(error){
+   if(error.providerStatus===429){const delay=Number.isFinite(error.retryAfterMs)&&error.retryAfterMs>0?error.retryAfterMs:1000;blockedUntil=Math.max(blockedUntil,now()+delay);}
+   throw error;
+  }
+ }};
+}
 
 // This review-only factory is used by the real server; chat/decoding keep their own gateway.
 export async function createReviewModelGateway({env=process.env,create=createModelGateway}={}){
- const [primary,backup]=await Promise.all(['wangsu/claude-sonnet-5-5','wangsu/gpt-6.1-sol'].map(model=>create({env:{...env,DECODING_MODEL:model}})));
+ const [primary,backup]=await Promise.all(['wangsu/claude-sonnet-5-5','wangsu/gpt-6.1-sol'].map(async model=>withReviewRateLimit(await create({env:{...env,DECODING_MODEL:model}}))));
  return withReviewFallbacks(primary,[backup]);
 }
 

@@ -2,7 +2,9 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {reviewDependencyPool} from './review-dependencies.mjs';
 import {runReviewQuality,qualityModelCall,deferReviewAction,qualityHash} from './review-quality.mjs';
-import {withReviewFallbacks} from './review-model-fallback.mjs';
+import {withReviewFallbacks,reviewInitialConcurrency,withReviewRateLimit} from './review-model-fallback.mjs';
+import {MODEL_PROFILES} from './model.mjs';
+import {runReviewSkill} from './review-generation.mjs';
 const latch=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
 test('a completed branch starts its parent while unrelated slow work is running',async()=>{
  const slow=latch(),parent=latch(),started=[];let active=0,peak=0;
@@ -52,4 +54,21 @@ test('cancellation and journal persistence errors remain explicit failures inste
  }
  const controller=new AbortController();let calls=0;const copy=structuredClone(run);
  await assert.rejects(runReviewQuality({run:copy,input,skill,sources:{},signal:controller.signal,check:async()=>[{ref:'a',type:'critical',mustFix:true,fixable:true}],revise:async()=>{calls++;controller.abort(new DOMException('user stopped','AbortError'));controller.signal.throwIfAborted();}}),e=>e.name==='AbortError');assert.equal(calls,1);assert.equal(copy.quality.status,'waiting');
+});
+
+test('review initial calls use the existing Sonnet capacity with a hard review cap of twenty',async()=>{
+ assert.equal(reviewInitialConcurrency({roundConcurrency:MODEL_PROFILES['wangsu/claude-sonnet-5-5'].roundConcurrency}),20);
+ assert.equal(reviewInitialConcurrency({roundConcurrency:MODEL_PROFILES['wangsu/gpt-6.1-sol'].roundConcurrency}),20);assert.equal(reviewInitialConcurrency({}),8);
+ const entered=latch(),release=latch();let active=0,peak=0,calls=0;
+ const gateway={roundConcurrency:20,complete:async()=>{peak=Math.max(peak,++active);if(++calls===20)entered.resolve();await release.promise;active--;return {answer:'{"review":{"verdict":"达成"}}'};}};
+ const flight=runReviewSkill({gateway,skill:{version:'2.1.0',hash:'fixture',rules:'JSON',groups:[]},input:{stages:[Array.from({length:20},(_,i)=>({id:'m'+i,level:'mission'})),[],[]]}});
+ await entered.promise;assert.equal(peak,20);release.resolve();await flight;assert.equal(calls,20);
+});
+
+test('review provider 429 cooldown honors retry-after and is abortable without another model attempt',async()=>{
+ let time=0,calls=0;const waits=[],channel={complete:async()=>{if(++calls===1)throw Object.assign(Error('429'),{providerStatus:429,retryAfterMs:1250});return {answer:'ok'};}};
+ const gateway=withReviewRateLimit(channel,{now:()=>time,wait:async ms=>{waits.push(ms);time+=ms;}});
+ await assert.rejects(gateway.complete([],{}),{providerStatus:429});assert.equal((await gateway.complete([],{})).answer,'ok');assert.deepEqual(waits,[1250]);assert.equal(calls,2);
+ let interrupted=0;const controller=new AbortController(),limited=withReviewRateLimit({complete:async()=>{interrupted++;throw Object.assign(Error('429'),{providerStatus:429});}},{now:()=>0,wait:async(_ms,signal)=>{controller.abort(new DOMException('stop','AbortError'));signal.throwIfAborted();}});
+ await assert.rejects(limited.complete([],{}),{providerStatus:429});await assert.rejects(limited.complete([],{signal:controller.signal}),e=>e.name==='AbortError');assert.equal(interrupted,1);
 });
