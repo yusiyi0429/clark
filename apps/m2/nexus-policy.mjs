@@ -51,6 +51,22 @@ export function ownerAnnotation(s,card){return !!s&&s.kind==='document-comment'&
 // Everyday ways to ask for a change (2026-10-19 drill): 「按这个改」「帮我按刚才说的改一下」「M02 提到 P0」「我来改 M01 验收」.
 const everydayRequest=/按(这个|这|刚才|上面|前面|他|她|你|大家)[^。！？?]{0,10}(改|写|调)|帮(我|忙)?[^。！？?]{0,16}改|(提到|调到|降到|挪到|推到|移到|改到|延到|提前到)\s*(P[0-2]|\d|下周|下月|月底|1[0-2]月)|(^|[。，,；;！!？?\s])(改成|改为|改到|换成|挪到)|(删|去|拿)(了|掉)(吧|它|这)|(加|补)(上|一条)|我来改|(重新|再)出[^。！？?]{0,6}卡|重出|再出一[遍版张次]|按原来的(再)?出/;
 export function revisionRequest(text){const s=String(text||'');if(disagrees(s)||declinesChange(s))return false;if(everydayRequest.test(s))return true;return /(?:请|建议|应该|希望|需要|应当|要).{0,30}(?:修改|改成|改为|修订|调整|补充|增加|删除|去掉|限定|限于|明确|缩小|扩大|改|包含|体现|写清楚|写清|写明|注明|标明)|^(?:修改|改成|改为|修订|调整|补充|增加|删除|去掉|写明|注明)|出(?:个|一张)?修订卡|给.{0,40}出修订/u.test(s);}
+// Scheduling urgency does not grant edit or confirmation authority.
+export const urgentNexusEvent=event=>directQuestion({...event,kind:event.kind==='comment'?'document-comment':event.kind})||revisionRequest(event.text)||!declinesChange(String(event.text||''))&&/(?:请|帮我|麻烦).{0,20}(?:改为|改成|修改|修订|修正|纠正)/.test(event.text);
+// Historical statements remain evidence. A new proposal must still be based on
+// the current card and cite a fresh request/report on the fields being changed.
+export function currentRevisionBasis(source,card,patch,historical=[]){
+ if(!source||/[?？]|假设|如果|比如|例如|转述|引用|仅供讨论|供参考|先别|不要改|暂不改|不是让/.test(String(source.text||'')))return false;
+ const owner=String(card.owner||'').split(/[、,，\s]+/).includes(source.author);
+ const asks=revisionRequest(source.text)||ownerReviewCorrection(source,card)||card.kind==='review'&&owner&&!disagrees(source.text)&&/达成|事实|证据|原因|实际|确实|已用|支持|可用|失败|没有/.test(source.text);
+ if(!asks)return false;
+ const selection=source.context?.selection,block=source.context?.block||source.block;
+ if(selection?.id)return selection.id===card.id&&selection.version===card.version&&(block==='card'||!block||Object.keys(patch).includes(block));
+ // Unanchored owner follow-ups are accepted only after the current version was
+ // saved, in their own review room, with an unambiguous link back to this card.
+ const after=Date.parse(source.createdAt),versionAt=Date.parse(card.versionCreatedAt);
+ return card.kind==='review'&&owner&&String(source.scope||'').startsWith('person:')&&Number.isFinite(after)&&Number.isFinite(versionAt)&&after>=versionAt&&(card.title&&String(source.text).includes(card.title)||historical.some(s=>s.context?.selection?.id===card.id));
+}
 // Objecting to the existing review and explicitly asking to correct it is not a veto on all revisions.
 // Keep objections to a proposed card, other people's objections, and requests to leave it unchanged intact.
 export function ownerReviewCorrection(source,card){
@@ -151,7 +167,8 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
   if(card.status==='已确认'&&!fresh.some(directQuestion)&&!ownerNote&&!ownRoom){drop(p,'这张卡已双方确认');continue;}
   const latest=new Map();for(const s of evidence)if(s.context?.selection?.id===card.id&&s.context.selection.version===card.version&&(Object.keys(p.patch).includes(s.context.block)||s.context.block==='card'))latest.set(s.author+':'+s.context.block,s);
   if([...latest.values()].some(s=>disagrees(s.text)&&!ownerReviewCorrection(s,card))){drop(p,'这张卡上还有人反对');continue;}
-  if(ids.some(id=>{const selection=sources.get(id).context?.selection;return selection?.id===card.id&&selection.version<card.version;})){drop(p,'依据针对的是旧版本');continue;}
+  const historical=ids.map(id=>sources.get(id)).filter(s=>s.context?.selection?.id===card.id&&s.context.selection.version<card.version);
+  if(historical.length&&!fresh.some(s=>ids.includes(s.id)&&currentRevisionBasis(sources.get(s.id),card,p.patch,historical))){drop(p,'缺少针对当前版本的新修改依据');continue;}
   if(!review&&Object.entries(p.patch).some(([k,v])=>!fields.includes(k)||(Array.isArray(v)?v.length>30||v.some(x=>typeof x!=='string'||x.length>8000):['checks','milestones'].includes(k)||typeof v!=='string'||v.length>16000))){drop(p,'有字段不能改或格式不对');continue;}
   if('title'in p.patch&&!p.patch.title.trim()){drop(p,'标题为空');continue;}
   if('owner'in p.patch&&!rosterNames(p.patch.owner)){drop(p,'负责人不在名单里');continue;}
@@ -178,7 +195,7 @@ export function validateNexusResult(value,{cards,evidence,fresh=evidence,manual=
   const agreed=topics.some(t=>t.status==='agreement'&&ids.every(id=>t.sourceIds.includes(id)))||follows||ownerAgreed;
   if(!requested&&!agreed){drop(p,'没找到明确的修改要求');continue;}
   const reason=readableAnswer(String(p.reason||'依据公开反馈修订候选'),cards).slice(0,500);
-  proposals.push({cardId:p.cardId,baseVersion:p.baseVersion,reason:/iid_JSON|JSON_SEQUENCE|unsolicitedId|<[|]|[|]>/.test(reason)?'依据本领域公开修订请求更新候选，来源保留在修订记录中。':reason,sourceIds:ids,patch:review?normalizeReviewPatch(p.patch):p.patch,...(p.displaySummary&&typeof p.displaySummary==='object'?{displaySummary:p.displaySummary}:{})});
+  proposals.push({cardId:p.cardId,baseVersion:p.baseVersion,reason:/iid_JSON|JSON_SEQUENCE|unsolicitedId|<[|]|[|]>/.test(reason)?'依据本领域公开修订请求更新候选，来源保留在修订记录中。':reason,sourceIds:ids,...(historical.length?{requiresConfirmation:true}:{}),patch:review?normalizeReviewPatch(p.patch):p.patch,...(p.displaySummary&&typeof p.displaySummary==='object'?{displaySummary:p.displaySummary}:{})});
  }
  // 新增/撤掉/恢复 Mission cards: one request each, on a PO shown here, grounded in a line that asked for it.
  const missionCards=[];

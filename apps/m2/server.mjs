@@ -7,7 +7,7 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {normalize,allNodes} from './domain.mjs';
 import {createModelGateway,recordModelRun,patientTransport} from './model.mjs';
-import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,ownerAnnotation,isChildCard,reconcileReply,quietReply,roomLine,cardName} from './nexus-policy.mjs';
+import {nexusSystemPrompt,nexusSystemPromptLegacy,publicEvidence,candidateCards,validateNexusResult,revisionRequest,urgentNexusEvent,ownerAnnotation,isChildCard,reconcileReply,quietReply,roomLine,cardName} from './nexus-policy.mjs';
 import {createCollaborationState,applyAction,currentVersion,canRead,cardStatus,confirmationSummary,insightView,publishedMissionInsights,roomMember,canReadRoom} from './governance.mjs';
 import {reviewCascadeRequest,reviewCascadeProposal,cascadeSkip} from './review-cascade.mjs';
 import {runRoundPool} from './round-pool.mjs';
@@ -184,7 +184,7 @@ async function scheduleNexus(scope,memberId,event){
  if(nexusClosing||!ready)return;
  if(event)await store.transact(s=>{s.nexus??={};const n=s.nexus[scope]??={};n.pendingSourceIds=[...new Set([...(n.pendingSourceIds||[]),event.id])];n.pendingMemberId=memberId;n.pendingSince??=Date.now();n.retryCount=0;n.nextRetryAt=null;s.sequence++;return s;});
  const pending=store.snapshot().nexus?.[scope];if(!pending?.pendingSourceIds?.length)return;
- const urgent=[...store.snapshot().comments,...store.snapshot().messages].some(e=>pending.pendingSourceIds.includes(e.id)&&directQuestion(e));
+ const urgent=[...store.snapshot().comments,...store.snapshot().messages].some(e=>pending.pendingSourceIds.includes(e.id)&&urgentNexusEvent(e));
  if(store.snapshot().pausedUnits?.includes(scope)&&!urgent)return;
  const delay=pending.nextRetryAt?Math.max(1,pending.nextRetryAt-Date.now()):!urgent&&pending.deferUntil?Math.max(1,pending.deferUntil-Date.now()):urgent?1:Math.max(1,Math.min(quietWindowMs,60000-(Date.now()-pending.pendingSince)));
  clearTimeout(nexusTimers.get(scope));
