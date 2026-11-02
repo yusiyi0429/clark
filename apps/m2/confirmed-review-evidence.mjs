@@ -64,6 +64,10 @@ function definitionTerms(text){
  return {expected:read('成果'),quality:read('成功标准'),finish:read('time_boundary')};
 }
 export function taskSourceCompatibility(before,after,oldCard,card,oldInput,input){
+ // Exact displayed fields do not override a changed definition or an explicit source-version conflict.
+ if((before.definition||after.definition)&&before.definition!==after.definition)return null;
+ const realTask=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(before.ref);
+ if(realTask){const versions=[before.version,after.version,recordedVersion(oldInput,before.ref),recordedVersion(input,after.ref)].filter(v=>v!=null);if(new Set(versions).size>1)return null;if(after.objectId&&after.objectId!==after.ref||before.parentRef&&after.parentRef&&before.parentRef!==after.parentRef)return null;}
  if(same(taskTerms(before),taskTerms(after)))return {mode:'exact-fields'};
  const id=before.ref,uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
  if(!uuid.test(id)||after.ref!==id||after.objectId!==id||after.parentRef!==card.objectId||before.owner!==after.owner)return null;

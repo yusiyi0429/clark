@@ -63,3 +63,7 @@ test('reader projection bridge requires matching UUID/version, parent and exact 
  for(const field of ['expected','finish','definition','planTitle'])assert.equal(taskSourceCompatibility(old,{...current,[field]:current[field]+'新增条件'}, {},card,input,input),null,field);
  assert.equal(taskSourceCompatibility(old,{...current,version:3},{},card,input,input),null);assert.equal(taskSourceCompatibility(old,current,{},card,{},input),null);
 });
+test('exact visible Task fields never override added definition conditions or an explicit version conflict',async()=>{
+ const {taskSourceCompatibility}=await import('./confirmed-review-evidence.mjs'),id='e48814fd-1c4a-4481-a121-1772e20350fc',before={ref:id,title:'入会体验',owner:'陈溪南',expected:'全部方式入会',definition:'【任务定义】\n- 成果：全部方式入会'},input={readReceipt:{objects:[id+'@2']}},after={...before,objectId:id,version:2};
+ assert.equal(taskSourceCompatibility(before,after,{},{},input,input).mode,'exact-fields');assert.equal(taskSourceCompatibility(before,{...after,definition:before.definition+'\n新增必要条件：腾讯会议'},{},{},input,input),null);assert.equal(taskSourceCompatibility(before,{...after,version:999},{},{},input,input),null);
+});
