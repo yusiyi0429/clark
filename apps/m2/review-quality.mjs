@@ -49,6 +49,7 @@ export async function qualityModelCall({gateway,system,quality,run,pass,stage,re
   let switched=false;
   if(!signal?.aborted&&attempt<3&&backups.length&&active===gateway&&fallbackEligible(error)){record.nextModel=backups[0].status.model;record.switchFrom=active.status.model;record.switchReason={code:error.code||null,message:String(error.message),providerStatus:error.providerStatus||null,outputContract:error.reviewOutputContract===true};active=backups[0];switched=true;}
   request.status='failed';await save(run);prior=record;
+  if(attempt===3&&!signal?.aborted&&fallbackEligible(error)&&error.code!=='REVIEW_JOURNAL_UNAVAILABLE')throw Object.assign(new Error('模型尝试已用完，原候选保留未核：'+String(error.message),{cause:error}),{code:'REVIEW_MODEL_ATTEMPT_LIMIT',attempts:attempt,lastFailure:{code:error.code||error.cause?.code||null,message:String(error.message),providerStatus:error.providerStatus||null}});
   if(signal?.aborted||error.code==='REVIEW_PACKET_OVERSIZE'||!switched&&(error.code==='MODEL_REFUSAL'||error.diagnostics?.finishReason==='refusal')||attempt===3)throw error;
  }
 }
@@ -92,7 +93,7 @@ export async function runReviewQuality({run,input,skill,sources,check,revise,pro
   verifyPass(pass);
   if(pass.status==='checking'){
    await onProgress({stage:`质量复查 ${pass.index+1}`,qualityPass:pass.index});
-   let issues;try{issues=await check(pass.reviews,pass.index,q);}catch(error){if(!signal?.aborted&&isReviewResourceLimit(error)){q.status='needs-review';q.blockReason='本轮复查未完成，保留原候选与未核事项';q.verificationPending=[{unit:'global',code:error.code||'CHECK_UNVERIFIED',problem:String(error.message),checks:error.checks||[]}];pass.status='needs-review';await save(run);return run;}throw error;}abort(signal);verifyPass(pass);
+   let issues;try{issues=await check(pass.reviews,pass.index,q);}catch(error){if(!signal?.aborted&&isReviewResourceLimit(error)){q.status='needs-review';q.blockReason='本轮复查未完成，保留原候选与未核事项';q.verificationPending=[{unit:'global',code:error.code||'CHECK_UNVERIFIED',problem:String(error.message),...(error.lastFailure?{lastFailure:clone(error.lastFailure)}:{}),checks:error.checks||[]}];pass.status='needs-review';await save(run);return run;}throw error;}abort(signal);verifyPass(pass);
    const structural=problems({reviews:pass.reviews});
    pass.issues=clone(issues);pass.structural=clone(structural);pass.issuesHash=qualityHash({issues:pass.issues,structural:pass.structural});run.issues=clone(issues);
    const critical=issues.filter(required),fixable=critical.filter(x=>x.fixable!==false);
@@ -129,7 +130,7 @@ export async function runReviewQuality({run,input,skill,sources,check,revise,pro
      if(review?.[DEFERRED]){await defer(action,review[DEFERRED]);return;}
      if(!review||typeof review!=='object'||Array.isArray(review))throw Object.assign(Error('修订未返回复盘对象，原候选保留'),{code:'MODEL_OUTPUT_CONTRACT'});
      run.reviews[action.ref]=review;action.status='done';action.afterHash=qualityHash(review);q.candidateHash=qualityHash(run.reviews);await save(run);
-    }catch(error){if(!signal?.aborted&&isReviewResourceLimit(error)){await defer(action,{code:error.code||'MODEL_UNVERIFIED',problem:String(error.message),checks:error.checks||[]});return;}throw error;}
+    }catch(error){if(!signal?.aborted&&isReviewResourceLimit(error)){await defer(action,{code:error.code||'MODEL_UNVERIFIED',problem:String(error.message),...(error.lastFailure?{lastFailure:clone(error.lastFailure)}:{}),checks:error.checks||[]});return;}throw error;}
    }});
   if(pass.actions.some(action=>action.status==='deferred')){
    q.verificationPending=pass.actions.filter(action=>action.status==='deferred').map(action=>({unit:action.ref,title:byId.get(action.ref)?.title,...clone(action.deferred)}));
