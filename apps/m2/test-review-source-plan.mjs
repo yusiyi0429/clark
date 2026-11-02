@@ -61,3 +61,11 @@ test('GPT budget body matches the actual gateway byte for byte, without an extra
  assert.equal(JSON.stringify(reviewModelRequestBody(system,payload,options)),wire);const body=JSON.parse(wire);assert.equal(body.stream,undefined);assert.equal(body.max_tokens,undefined);assert.equal(body.max_completion_tokens,32000);assert.equal(body.reasoning_effort,'high');
  const gpt=buildReviewCheckPlan({...data(),wireOptions:{model:options.model}}),claude=buildReviewCheckPlan({...data(),wireOptions:{model:'wangsu/claude-sonnet-5-5'}});assert.notEqual(gpt.stamp,claude.stamp);assert.throws(()=>refreshReviewCheckPlan(claude,{...data(),wireOptions:{model:options.model}}));
 });
+
+test('a fully supplied allowed endpoint may request missing context only for its direct target edge',()=>{
+ const a=data(),plan=buildReviewCheckPlan(a),packet=plan.packets.find(p=>p.scope.targetRefs.includes('a')),value={...ok(packet),sourceRequests:[{refs:['p','b'],relation:'核对本包a依赖的父级输入范围',reason:'b原文未给，不能拿其候选作证据'}]};
+ assert.equal(validateScopedCheckResult(value,packet,plan.sourceRefs).status,'needs-source-context');
+ const noEdge={...packet,scope:{...packet.scope,edges:[]}};assert.throws(()=>validateScopedCheckResult({...value,checkedEdges:[]},noEdge,plan.sourceRefs),e=>e.code==='REVIEW_SOURCE_REQUEST_CONTRACT');
+ for(const refs of [['c','b'],['p','unknown'],['p','a']])assert.throws(()=>validateScopedCheckResult({...value,sourceRequests:[{...value.sourceRequests[0],refs}]},packet,plan.sourceRefs),e=>e.code==='REVIEW_SOURCE_REQUEST_CONTRACT');
+ for(const field of ['sourceRefs','allowedIssueRefs'])assert.throws(()=>validateScopedCheckResult(value,{...packet,scope:{...packet.scope,[field]:packet.scope[field].filter(ref=>ref!=='p')}},plan.sourceRefs),e=>e.code==='REVIEW_SOURCE_REQUEST_CONTRACT');
+});
