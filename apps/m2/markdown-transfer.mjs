@@ -10,7 +10,7 @@ export function transferFields(card){return isReview(card)?reviewKeys.filter(k=>
 export function transferCards(state,actor,{stage,rootId,person,onlyRoot=false}){
  if(onlyRoot&&!rootId)fail('请从具体卡片导入或导出');
  if(!['review','plan'].includes(stage))fail('请选择复盘或拆解');
- const cards=Object.values(state.cards).filter(c=>isReview(c)===(stage==='review')&&canRead(actor,c));
+ const cards=Object.values(state.cards).filter(c=>isReview(c)===(stage==='review')&&canRead(actor,c,state));
  const selected=rootId?cards.filter(c=>{if(onlyRoot)return c.id===rootId;const visited=new Set();let n=c;while(n&&!visited.has(n.id)){if(n.id===rootId)return true;visited.add(n.id);n=state.cards[n.parentId];}return false;}):cards;
  if(person)selected.splice(0,selected.length,...selected.filter(c=>c.level==='mission'&&String(currentVersion(c).content.owner||'').split(/[、,，\s]+/).includes(person)));
  if(!selected.length)fail('没有可导出的可见对象',404);

@@ -1,6 +1,6 @@
 import {canRead} from './governance.mjs';
 export function visibleReaderViews(views,state,actor){
- return views?Object.fromEntries(Object.entries(views).filter(([id])=>state.cards[id]&&canRead(actor,state.cards[id]))):undefined;
+ return views?Object.fromEntries(Object.entries(views).filter(([id])=>state.cards[id]&&canRead(actor,state.cards[id],state))):undefined;
 }
 export function generationView(job,actor){
  if(!job)return null;

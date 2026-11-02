@@ -363,7 +363,7 @@ export const server=createServer(async(req,res)=>{
    const b=await body(req),actor=actorFor(b.memberId);
    if('roundId'in b&&b.roundId!==(store.snapshot().round?.id||null))return json(res,409,{error:'轮次已切换，请重新核对当前内容'});
    if(b.action?.type==='setListening'){
-    const scope=b.action.scope;if(!store.snapshot().cards[scope]||!canRead(actor,store.snapshot().cards[scope]))return json(res,403,{error:'请选择可见领域'});
+    const scope=b.action.scope;if(!store.snapshot().cards[scope]||!canRead(actor,store.snapshot().cards[scope],store.snapshot()))return json(res,403,{error:'请选择可见领域'});
     if(!actor.ceo&&!(actor.unitDri||[]).includes(scope))return json(res,403,{error:'只有领域 DRI 可以暂停或恢复 Nexus'});
     const paused=await store.transact(state=>{state.pausedUnits=(state.pausedUnits||[]).filter(x=>x!==scope);if(!b.action.enabled)state.pausedUnits.push(scope);state.sequence++;return state;});
     if(b.action.enabled)await scheduleNexus(scope,actor.id);
@@ -391,7 +391,7 @@ export const server=createServer(async(req,res)=>{
    if(!proposal)return json(res,404,{error:'找不到可见修订卡'});
    try{return json(res,200,await summarizeProposal(proposal,view.drafts[proposal.cardId],{actorId:actor.id,roundId:state.round?.id,reviewLoadedAt:state.reviewRound?.loadedAt,scope:proposal.scope}));}catch{return json(res,502,{error:'修改摘要未生成，请重试'});}
   }
-  if(req.url==='/api/data'){const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state);const metadata=await roundMetadata(state.round,input);metadata.readerViews=visibleReaderViews(metadata.readerViews,state,actor);if(!actor.ceo)delete metadata.roundAudit;return revalidated(req,res,etagged(JSON.stringify({session:req.m2Session,canRunRounds:mayRunRounds(actor),canDebugReviews:mayDebugReviews(req.m2Session.memberId),review:reviewSummary(state),units:liveUnitsFrom(state).filter(u=>canRead(actor,state.cards[u.id])),round:state.round?.number||6,roundId:state.round?.id||null,skill:state.round?.input?.skill?.version||'旧轮未记录实际技能快照',availableSkill:loadedSkill.version,modelReady:ready,modelStatus:gateway.status,reviewModelStatus:reviewGateway.status,tracing:tracer.state(),chatModelStatus:chatGateway===gateway?null:chatGateway.status,auditStatus:state.round?.audit?.status||null,auditIssueCount:state.round?.audit?.issues?.length||0,auditGapCount:state.round?.audit?.gaps?.length||0,sourceTime:state.round?.input.retrievedAt||input.retrievedAt,...metadata})));}
+  if(req.url==='/api/data'){const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state);const metadata=await roundMetadata(state.round,input);metadata.readerViews=visibleReaderViews(metadata.readerViews,state,actor);if(!actor.ceo)delete metadata.roundAudit;return revalidated(req,res,etagged(JSON.stringify({session:req.m2Session,canRunRounds:mayRunRounds(actor),canDebugReviews:mayDebugReviews(req.m2Session.memberId),review:reviewSummary(state),units:liveUnitsFrom(state).filter(u=>canRead(actor,state.cards[u.id],state)),round:state.round?.number||6,roundId:state.round?.id||null,skill:state.round?.input?.skill?.version||'旧轮未记录实际技能快照',availableSkill:loadedSkill.version,modelReady:ready,modelStatus:gateway.status,reviewModelStatus:reviewGateway.status,tracing:tracer.state(),chatModelStatus:chatGateway===gateway?null:chatGateway.status,auditStatus:state.round?.audit?.status||null,auditIssueCount:state.round?.audit?.issues?.length||0,auditGapCount:state.round?.audit?.gaps?.length||0,sourceTime:state.round?.input.retrievedAt||input.retrievedAt,...metadata})));}
   if(['/api/agent','/api/nexus'].includes(req.url)&&req.method==='POST'){
    const b=await body(req), n=liveNodes().find(n=>n.id===b.context?.selection?.id),roundAtStart=store.snapshot().round?.id;
    if(!ready)return json(res,503,{error:'模型服务尚未配置。需在服务器配置 DECODING_API_BASE、DECODING_MODEL、DECODING_API_KEY；密钥不进入浏览器。'});
@@ -401,7 +401,7 @@ export const server=createServer(async(req,res)=>{
    const scope=liveUnits().find(u=>u.id===b.context?.scope)||(b.context?.scope==='company'&&store.snapshot().cards['rv:company']?{id:'company',level:'company'}:undefined)||(roomMember(b.context?.scope)&&handoffProfiles[roomMember(b.context.scope)]?{id:b.context.scope,level:'person'}:undefined);
    const shared=req.url==='/api/nexus';
    const actor=actorFor(b.memberId);refusalTo={shared,scope:scope?.id,memberId:actor.id,called:b.trigger!=='automatic'};
-   if(n&&!canRead(actor,store.snapshot().cards[n.id])||scope&&(scope.level==='person'?!canReadRoom(actor,scope.id):!canRead(actor,store.snapshot().cards[scope.id]||store.snapshot().cards['rv:'+scope.id])))return json(res,403,{error:'不在当前成员的领域范围内'});
+   if(n&&!canRead(actor,store.snapshot().cards[n.id],store.snapshot())||scope&&(scope.level==='person'?!canReadRoom(actor,scope.id):!canRead(actor,store.snapshot().cards[scope.id]||store.snapshot().cards['rv:'+scope.id],store.snapshot())))return json(res,403,{error:'不在当前成员的领域范围内'});
    if(shared&&!scope)return json(res,400,{error:'请先进入战场或 Domain，Nexus 只分析该领域的公开讨论。'});
    // One trace per Nexus pass or Agent question: listen, act, repairs and answers are its model calls (2026-10-27).
    return await tracer.withRun(shared?'nexus':'private-agent','chain',{scope:scope?.id,card_id:n?.id,member:actor.id,trigger:b.trigger==='automatic'?'automatic':'explicit',round_id:roundAtStart,skill_version:loadedSkill.version},async()=>{
