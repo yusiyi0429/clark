@@ -9,7 +9,8 @@ const abort=signal=>signal?.throwIfAborted();
 export async function qualityModelCall({gateway,system,quality,run,pass,stage,ref='',payload,validate=x=>x,save,signal}){
  const inputHash=qualityHash({system,payload}),key=`quality-${pass}-${stage}-${ref}-${inputHash}`;
  let request=quality.requests[key];
- if(request?.inputHash&&request.inputHash!==inputHash)throw Error('质量检查缓存输入不一致');
+ const verifyRequest=()=>{if(request&&(request.inputHash!==inputHash||qualityHash({system,payload:request.payload})!==inputHash||request.sourceHash!==quality.sourceHash||request.skillHash!==quality.skillHash||request.pass!==pass||request.stage!==stage||request.ref!==ref))throw Error('质量检查缓存输入或保存的请求已变化');};
+ abort(signal);verifyRequest();
  if(request?.status==='done'){
   if(qualityHash(run.raw[key])!==request.outputHash)throw Error('质量检查缓存原答校验失败');
   return validate(JSON.parse(bareJson(run.raw[key])));
@@ -17,7 +18,8 @@ export async function qualityModelCall({gateway,system,quality,run,pass,stage,re
  request??=quality.requests[key]={inputHash,sourceHash:quality.sourceHash,skillHash:quality.skillHash,pass,stage,ref,payload:clone(payload),attempts:[]};
  request.status='running';await save(run);
  for(let attempt=1;attempt<=3;attempt++){
-  abort(signal);const record={attempt,at:new Date().toISOString()};request.attempts.push(record);await save(run);
+  abort(signal);verifyRequest();const record={attempt,at:new Date().toISOString()};request.attempts.push(record);await save(run);
+  verifyRequest();
   let answer,error,parsed;
   try{
    answer=await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(request.payload)}],{json:true,thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000,signal,trace:{name:key,stage,metadata:{ref,pass,inputHash,sourceHash:quality.sourceHash}}});
@@ -39,6 +41,19 @@ export async function runReviewQuality({run,input,skill,sources,check,revise,pro
  if(q&&(q.inputHash!==inputHash||q.sourceHash!==sourceHash||q.skillHash!==skillHash||q.maxRevisions!==max))throw Error('质量续跑来源、技能或修订上限已变化');
  if(!q){normalize();q=run.quality={schemaVersion:1,inputHash,sourceHash,skillHash,maxRevisions:max,counts:{},requests:{},passes:[],status:'checking',candidateHash:qualityHash(run.reviews)};await save(run);}
  if(q.candidateHash!==qualityHash(run.reviews))throw Error('质量续跑候选已变化，不能复用旧检查');
+ const verifyPass=pass=>{
+  if(pass.sourceHash!==sourceHash||pass.reviewHash!==qualityHash(pass.reviews))throw Error('质量检查前快照校验失败');
+  if(pass.issuesHash&&pass.issuesHash!==qualityHash({issues:pass.issues,structural:pass.structural}))throw Error('质量检查问题快照校验失败');
+  if(pass.actionsHash&&pass.actionsHash!==qualityHash(pass.actions.map(({ref,issues,refresh})=>({ref,issues,refresh}))))throw Error('质量修订动作快照校验失败');
+  for(const action of pass.actions||[]){
+   if((action.status==='done'||action.before)&&!action.reserved)throw Error('质量修订预算预占校验失败');
+   if(action.before&&(action.beforeHash!==qualityHash(action.before)||action.status!=='done'&&action.beforeHash!==qualityHash(run.reviews)))throw Error('质量修订前快照校验失败');
+   if(pass.status==='revising'&&action.status==='done'&&action.afterHash!==qualityHash(run.reviews[action.ref]))throw Error('质量修订后快照校验失败');
+  }
+ };
+ const counts={};for(const pass of q.passes){verifyPass(pass);for(const action of pass.actions||[])if(action.reserved){const n=(counts[action.ref]||0)+1;if(action.revision!==n||n>max)throw Error('质量修订次数校验失败');counts[action.ref]=n;}}
+ const entries=value=>Object.entries(value).sort(([a],[b])=>a.localeCompare(b));
+ if(qualityHash(entries(counts))!==qualityHash(entries(q.counts)))throw Error('质量修订累计次数校验失败');
  if(q.status==='passed'||q.status==='blocked')return run;
  const items=input.stages.flat(),byId=new Map(items.map(c=>[c.id,c]));
  const parents=new Map();for(const c of items){if(c.parent)parents.set(c.id,c.parent);for(const id of c.children||[])parents.set(id,c.id);}
@@ -49,11 +64,12 @@ export async function runReviewQuality({run,input,skill,sources,check,revise,pro
   if(!pass||pass.status==='done'){
    pass={index:q.passes.length,status:'checking',reviews:clone(run.reviews),reviewHash:qualityHash(run.reviews),sourceHash,at:new Date().toISOString()};q.passes.push(pass);q.status='checking';await save(run);
   }
+  verifyPass(pass);
   if(pass.status==='checking'){
    await onProgress({stage:`质量复查 ${pass.index+1}`,qualityPass:pass.index});
-   const issues=await check(pass.reviews,pass.index,q);abort(signal);
+   const issues=await check(pass.reviews,pass.index,q);abort(signal);verifyPass(pass);
    const structural=problems({reviews:pass.reviews});
-   pass.issues=clone(issues);pass.structural=clone(structural);run.issues=clone(issues);
+   pass.issues=clone(issues);pass.structural=clone(structural);pass.issuesHash=qualityHash({issues:pass.issues,structural:pass.structural});run.issues=clone(issues);
    const critical=issues.filter(required),fixable=critical.filter(x=>x.fixable!==false);
    q.remaining=[...critical.map(x=>({unit:x.ref,title:byId.get(x.ref)?.title,...x})),...structural.map(x=>({...x,title:byId.get(x.unit)?.title}))];
    if(!q.remaining.length){pass.status='done';q.status='passed';await save(run);return run;}
@@ -66,6 +82,7 @@ export async function runReviewQuality({run,input,skill,sources,check,revise,pro
    const unavailable=[...refs].filter(ref=>!byId.has(ref)||(q.counts[ref]||0)>=max);
    if(unavailable.length){q.status='blocked';q.blockReason='以下复盘已到两轮自动修订上限：'+unavailable.map(ref=>byId.get(ref)?.title||ref).join('、');q.remaining.push(...unavailable.map(unit=>({unit,title:byId.get(unit)?.title,problem:'已到两轮自动修订上限，保留草稿等待人工处理'})));await save(run);return run;}
    pass.actions=items.filter(c=>refs.has(c.id)).map(c=>({ref:c.id,issues:clone(perRef.get(c.id)||[]),refresh:refresh.has(c.id),status:'pending'}));
+   pass.actionsHash=qualityHash(pass.actions.map(({ref,issues,refresh})=>({ref,issues,refresh})));
    pass.status='revising';q.status='revising';await save(run);
   }
   for(const action of pass.actions){
@@ -75,6 +92,7 @@ export async function runReviewQuality({run,input,skill,sources,check,revise,pro
    // Freeze the exact request before its first call. On resume, completed child
    // revisions cannot accidentally change the input of an unfinished request.
    if(!action.before){action.before=clone(run.reviews);action.beforeHash=qualityHash(action.before);await save(run);}
+   verifyPass(pass);
    const review=await revise(byId.get(action.ref),action,pass.index,q);abort(signal);
    run.reviews[action.ref]=review;action.status='done';action.afterHash=qualityHash(review);q.candidateHash=qualityHash(run.reviews);await save(run);
   }

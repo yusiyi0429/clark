@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {runReviewQuality,qualityModelCall} from './review-quality.mjs';
+import {runReviewQuality,qualityModelCall,qualityHash} from './review-quality.mjs';
 import {reviewFile,loadReviewSkill,runReviewSkill} from './review-generation.mjs';
 import {installReviewRound} from './review-round.mjs';
 import {createCollaborationState} from './governance.mjs';
@@ -92,4 +92,28 @@ test('cancellation at the last checker response cannot mark the candidate passed
  const run=start(),controller=new AbortController();
  await assert.rejects(runReviewQuality({run,input,skill,sources,signal:controller.signal,check:async()=>{controller.abort(Error('cancel at final response'));return [];},revise:repair(run)}),/cancel at final response/);
  assert.equal(run.quality.status,'waiting');assert.notEqual(run.quality.status,'passed');
+});
+
+test('stored request payload is verified on failed resume and completed cache reuse before any gateway call',async()=>{
+ for(const done of [false,true]){
+  const quality={requests:{},sourceHash:'frozen',skillHash:'skill'},run={raw:{}},args={quality,run,pass:0,stage:'check',payload:{sources},system:'rules',save:async()=>{}};
+  if(done)await qualityModelCall({...args,gateway:{complete:async()=>({answer:'{"issues":[]}'})}});else await assert.rejects(qualityModelCall({...args,gateway:{complete:async()=>{throw Error('offline');}}}));
+  Object.values(quality.requests)[0].payload.sources.m.evidence[0].text='伪造：从未用过';let calls=0;
+  await assert.rejects(qualityModelCall({...args,gateway:{complete:async()=>{calls++;return {answer:'{"issues":[]}'};}}}),/请求已变化/);assert.equal(calls,0);
+ }
+});
+test('pending before, completed after, check snapshots, diagnostics and reserved counts are validated before reuse',async()=>{
+ const broken=start();await assert.rejects(runReviewQuality({run:broken,input,skill,sources,check:async()=>[issue()],revise:async(c,a)=>{if(c.id==='u')throw Error('pause');return repair(broken)(c,a);}}),/pause/);
+ for(const change of [
+  r=>{r.quality.passes[0].actions[1].before.m.rev=100;},
+  r=>{const a=r.quality.passes[0].actions[1];a.before.m.rev=100;a.beforeHash=qualityHash(a.before);},
+  r=>{r.quality.passes[0].actions[0].afterHash='wrong';},
+  r=>{r.quality.passes[0].reviews.m.rev=100;},
+  r=>{r.quality.passes[0].actions[1].issues.push(issue());},
+  r=>{r.quality.counts.m=0;},
+  r=>{r.quality.passes[0].actions[0].reserved=false;delete r.quality.counts.m;},
+ ]){
+  const run=structuredClone(broken);change(run);let calls=0;
+  await assert.rejects(runReviewQuality({run,input,skill,sources,check:async()=>{calls++;return [];},revise:async()=>{calls++;return {};}}),/校验失败/);assert.equal(calls,0);
+ }
 });
