@@ -104,7 +104,7 @@ export function validateScopedCheckResult(value,packet,allSourceRefs,sourceReque
  const scope=packet.scope,edgeId=e=>e.parentRef+'>'+e.childRef;
  const checkedEdges=value.checkedEdges.map(edge=>{
   if(typeof edge!=='string')return edge;
-  const matches=scope.edges.filter(expected=>edge===expected.parentRef+'->'+expected.childRef);
+  const matches=scope.edges.filter(expected=>['->','→'].some(arrow=>edge===expected.parentRef+arrow+expected.childRef));
   if(matches.length!==1)throw Error('检查边字符串没有唯一对应的已声明关系');
   return {...matches[0]};
  });
