@@ -42,6 +42,7 @@ export function reviewModelRequestBody(system,payload,{model='wangsu/claude-sonn
  if(json&&!messages.some(m=>/json/i.test(m.content)))messages=[{role:'system',content:'仅返回有效 JSON 对象，不加代码围栏。'},...messages];
  if(model==='wangsu/claude-sonnet-5-5')return {model,max_tokens:maxTokens,stream:true,system:messages.filter(m=>m.role==='system').map(m=>m.content).join('\n\n'),messages:messages.filter(m=>m.role!=='system'),...(thinking?{thinking:{type:'adaptive',display:'summarized'},output_config:{effort:reasoningEffort}}:{})};
  if(model==='aliyun/deepseek-v4.1-flash')return {model,stream:true,stream_options:{include_usage:true},enable_thinking:thinking,...(thinking?{reasoning_effort:reasoningEffort}:{}),max_tokens:maxTokens,...(json?{response_format:{type:'json_object'}}:{}),messages};
+ if(model==='wangsu/gpt-6.1-sol')return {model,...(thinking?{reasoning_effort:reasoningEffort}:{}),max_completion_tokens:maxTokens,...(json?{response_format:{type:'json_object'}}:{}),messages};
  throw Error('未定义该测试模型的实际请求适配器，不能套用其他模型预算');
 }
 export const anthropicReviewBody=(system,payload,options={})=>{if(options.model&&options.model!=='wangsu/claude-sonnet-5-5')throw Error('不能把非Messages模型套用Anthropic请求体');return reviewModelRequestBody(system,payload,options);};
