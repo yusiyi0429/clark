@@ -1,6 +1,7 @@
 import {appendFile} from 'node:fs/promises';
 import {memberProfiles} from './member-profiles.mjs';
 import {memberActor,sharedProjection} from './shared-projection.mjs';
+import {insightView} from './governance.mjs';
 
 const debugMembers=new Set(['member-01','member-04','member-08']);
 export const mayDebugReviews=id=>debugMembers.has(id);
@@ -15,7 +16,12 @@ export async function readDebugReviews({session,targetId,state,method='GET'},aud
  const cards=Object.entries(view.drafts).filter(([id])=>state.cards[id]?.kind==='review').map(([id,n])=>{
   // Hidden insights belong to the author, not to the debugger. Do not send
   // another user's unpublished insights or history via a nested object.
-  const {insights,history,...card}=n;return {...card,id};
+  const {insights,history,...card}=n;
+  // Use the public projection rather than target.mine: even after a reveal,
+  // an owner can have newer private edits beyond the published snapshot.
+  const visible=insightView(state,state.cards[id],{id:null});
+  const publicInsights={items:visible?.items||[],nexus:visible?.nexus?.text?{text:visible.nexus.text}:null};
+  return {...card,id,...(publicInsights.items.length||publicInsights.nexus?{publicInsights}:{})};
  });
  const publicScopes=new Set(view.reviewRooms.units);
  const groups=Object.entries(view.records).filter(([key])=>key.startsWith('group:')&&publicScopes.has(key.slice(6))).map(([key,rows])=>({

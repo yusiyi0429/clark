@@ -51,3 +51,19 @@ test('an unavailable audit sink blocks disclosure; audit file contains principal
  const dir=await mkdtemp(join(tmpdir(),'m2-debug-'));
  try{const path=join(dir,'access.jsonl');await readDebugReviews(request,debugReviewAudit(path));const log=await readFile(path,'utf8'),entry=JSON.parse(log);assert.equal(entry.actorId,'member-01');assert.equal(entry.targetId,'member-04');assert.doesNotMatch(log,/SECRET|公开反馈/);}finally{await rm(dir,{recursive:true,force:true});}
 });
+
+test('debug shows published insights and Nexus synthesis without exposing newer private edits by the target',async()=>{
+ const state=fixture(),id='rv:agents-m1';
+ state.cards[id].confirmedVersion=1;state.insightsRevealed={at:'2026-10-31T01:00:00Z'};
+ state.insightPublications={[id]:{version:1,items:[{id:'published',author:'member-04',text:'PUBLIC_INSIGHT',createdAt:'2026-10-30T01:00:00Z'}]}};
+ state.insights={[id]:[{id:'later-draft',author:'member-04',text:'LATER_PRIVATE_INSIGHT',createdAt:'2026-11-01T01:00:00Z'}]};
+ state.insightNexus={[id]:{text:'PUBLIC_SYNTHESIS'}};
+ const view=await readDebugReviews({session:{memberId:'member-08'},targetId:'member-04',state},()=>{});
+ assert.match(JSON.stringify(view),/PUBLIC_INSIGHT/);assert.match(JSON.stringify(view),/PUBLIC_SYNTHESIS/);
+ assert.doesNotMatch(JSON.stringify(view),/LATER_PRIVATE_INSIGHT/);
+ const mission=view.cards.find(c=>c.id===id);assert.equal(mission.publicInsights.items[0].text,'PUBLIC_INSIGHT');assert.equal(mission.publicInsights.nexus.text,'PUBLIC_SYNTHESIS');
+ delete state.insightsRevealed;
+ const closed=await readDebugReviews({session:{memberId:'member-08'},targetId:'member-04',state},()=>{});
+ assert.doesNotMatch(JSON.stringify(closed.cards.find(c=>c.id===id)),/PUBLIC_SYNTHESIS|LATER_PRIVATE_INSIGHT/);
+ assert.match(JSON.stringify(closed.cards.find(c=>c.id==='rv:agents')),/PUBLIC_INSIGHT/,'already published Mission insights remain visible in their PO rollup');
+});
