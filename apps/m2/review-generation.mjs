@@ -1,3 +1,4 @@
+import {REVIEW_BODY_LIMIT_BYTES} from './review-model-fallback.mjs';
 import {buildReviewCheckPlan,refreshReviewCheckPlan,verifyReviewCheckPlan,executeReviewCheckPlan,packSourceText,reviewModelRequestBody,reviewModelBudgetBytes,validateScopedCheckResult} from './review-source-plan.mjs';
 import {initialReviewCall,createReviewCallJournal,outputContractError} from './review-call-journal.mjs';
 import {runReviewQuality,qualityModelCall,qualityHash} from './review-quality.mjs';
@@ -486,7 +487,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
  const model=gateway.status?.model||'wangsu/claude-sonnet-5-5';
  const wireOptions={model,thinking:true,reasoningEffort:'high',maxTokens:32000,json:true,...(gateway.reviewFallbacks?.length?{fallbackModels:gateway.reviewFallbacks.map(g=>g.status.model)}:{})};
  if(run.quality?.packetModel&&qualityHash(run.quality.packetModel)!==qualityHash(wireOptions))throw Error('质量检查模型或备用策略已变化，不能复用其他策略的结论');
- const call=(q,pass,stage,ref,payload,validate)=>qualityModelCall({gateway,system,quality:q,run,pass,stage,ref,payload,validate,save,signal});
+ const call=(q,pass,stage,ref,payload,validate)=>qualityModelCall({gateway,system,quality:q,run,pass,stage,ref,payload,validate,save,signal,maxBodyBytes:q.sourcePlans?.[pass]?.maxBodyBytes||REVIEW_BODY_LIMIT_BYTES});
  await runReviewQuality({run,input,skill,sources,save,onProgress,signal,
   normalize:()=>{run.covered=[...(run.covered||[]),...applyCovers(run)];},
   problems:candidate=>reviewProblems({...run,reviews:candidate.reviews},input,options).filter(p=>refs.includes(p.unit)),
@@ -499,17 +500,17 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
    const args={input,sources,reviews,programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(Object.values(reviews))},tasks,system,wireOptions};
    q.sourcePlans??={};let plan=q.sourcePlans[pass];
    if(plan)verifyReviewCheckPlan(plan,args);
-   else {const previous=q.sourcePlans[pass-1];plan=previous?refreshReviewCheckPlan(previous,args):buildReviewCheckPlan(args);q.sourcePlans[pass]=plan;await save(run);}
+   else {const previous=q.sourcePlans[pass-1];plan=previous?refreshReviewCheckPlan(previous,args):buildReviewCheckPlan({...args,maxBodyBytes:REVIEW_BODY_LIMIT_BYTES,maxTargetRefs:refs.length,fixedLayout:[{kind:'object',units:[...refs].sort()}]});q.sourcePlans[pass]=plan;await save(run);}
    const outcome=await executeReviewCheckPlan({plan,args,maxAdditionalRequests:6,runPacket:async request=>{
     const value=await call(q,pass,'check',`${request.cacheStamp}-${request.index??'source'}-${request.group}`,request.payload,value=>{
-     checkedReviewIssues(value,{skill,refs});return validateScopedCheckResult(value,request.packet,refs,request.payload.sourceRequestContext);
+     checkedReviewIssues(value,{skill,refs});for(const issue of value.issues)if(issue.sourceRefs!==undefined&&(!Array.isArray(issue.sourceRefs)||new Set(issue.sourceRefs).size!==issue.sourceRefs.length||issue.sourceRefs.some(ref=>!request.packet.scope.sourceRefs.includes(ref))))throw Error('检查意见的显式来源引用不属于已提供完整原文');return validateScopedCheckResult(value,request.packet,refs,request.payload.sourceRequestContext);
     });
-    return {...value,issues:value.issues.map(issue=>({...issue,sourceRefs:[...request.packet.scope.sourceRefs]}))};
+    return {...value,issues:value.issues.map(issue=>({...issue,checkContextRefs:[...request.packet.scope.sourceRefs],sourceRefs:issue.sourceRefs===undefined?[issue.ref]:[...issue.sourceRefs]}))};
    }});
    (q.sourcePasses??={})[pass]={planStamp:plan.stamp,status:outcome.status,requestCount:outcome.requestCount,maxAdditionalRequests:6,providedKeys:outcome.providedKeys,sourceRequests:outcome.sourceRequests};await save(run);
    if(outcome.status!=='checked')throw Object.assign(Error('补源后仍有待核原文，保留草稿等待处理，未通过检查'),{code:'REVIEW_SOURCE_CONTEXT_PENDING',checks:outcome.sourceRequests});
    // Multiple packets may identify the same problem. Keep the full source union for its repair.
-   const unique=new Map();for(const issue of outcome.issues){const {sourceRefs,...business}=issue,key=qualityHash(business),old=unique.get(key);if(old)old.sourceRefs=[...new Set([...old.sourceRefs,...sourceRefs])];else unique.set(key,issue);}
+   const unique=new Map();for(const issue of outcome.issues){const {sourceRefs,checkContextRefs,...business}=issue,key=qualityHash(business),old=unique.get(key);if(old){old.sourceRefs=[...new Set([...old.sourceRefs,...sourceRefs])];old.checkContextRefs=[...new Set([...old.checkContextRefs,...checkContextRefs])];}else unique.set(key,issue);}
    return [...unique.values()];
   },
   revise:async(c,action,pass,q)=>{
@@ -524,7 +525,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
    payload.task+=' unit.sourceRef指向sources中本层完整冻结unit。childCandidates为同轮当前候选而非正式确认或独立原始事实；仅候选状态同步/上下层一致性可按其汇总，不等于核验下级事实。若新增或否定具体业务事实而缺所需原文，必须返回sourceRequests:[{refs:[本层ref,所需冻结ref],relation,reason}]，先补原文，不能用候选冒充原始证据。无补源需求时返回review。sourceTexts/sourceBindings是相同正文的无损引用，按path还原对应来源字段，保留各自出处、日期、版本及E命名空间。';
    payload.sourceScope={targetRef:c.id,sourceRefs,availableRefs:refs};
    const wireOptions=q.packetModel||{model:gateway.status?.model||'wangsu/claude-sonnet-5-5'};
-   const assertBudget=value=>{const actual=reviewModelBudgetBytes(system,value,wireOptions);if(actual>512*1024)throw Object.assign(Error('完整返修来源超过512KiB工程预算，未调用模型，保留草稿'),{code:'REVIEW_PACKET_OVERSIZE',actual,budget:512*1024});};
+   const assertBudget=value=>{const actual=reviewModelBudgetBytes(system,value,wireOptions);const budget=q.sourcePlans[pass].maxBodyBytes;if(actual>budget)throw Object.assign(Error('完整返修来源超过本次工程预算，未调用模型，保留草稿'),{code:'REVIEW_PACKET_OVERSIZE',actual,budget});};
    const validate=(value,provided)=>{
     if(value?.sourceRequests?.length){
      for(const request of value.sourceRequests)if(!Array.isArray(request.refs)||request.refs.length<2||!request.refs.includes(c.id)||new Set(request.refs).size!==request.refs.length||request.refs.some(ref=>!refs.includes(ref))||request.refs.every(ref=>provided.includes(ref))||typeof request.relation!=='string'||!request.relation.trim()||typeof request.reason!=='string'||!request.reason.trim())throw Object.assign(Error('返修补源必须明确具体未提供的冻结对象、关系和原因'),{code:'REVIEW_SOURCE_REQUEST_CONTRACT'});

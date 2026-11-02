@@ -1,4 +1,4 @@
-import {fallbackEligible,reviewModelApi} from './review-model-fallback.mjs';
+import {fallbackEligible,reviewModelApi,REVIEW_BODY_LIMIT_BYTES} from './review-model-fallback.mjs';
 import {reviewModelRequestBody} from './review-source-plan.mjs';
 import {createHash} from 'node:crypto';
 import {bareJson} from './model.mjs';
@@ -8,7 +8,7 @@ const clone=value=>structuredClone(value);
 const abort=signal=>signal?.throwIfAborted();
 // Cache only verified answers. Every attempt (including malformed output) is
 // retained, independently of the two-per-card semantic revision budget.
-export async function qualityModelCall({gateway,system,quality,run,pass,stage,ref='',payload,validate=x=>x,save,signal}){
+export async function qualityModelCall({gateway,system,quality,run,pass,stage,ref='',payload,validate=x=>x,save,signal,maxBodyBytes=REVIEW_BODY_LIMIT_BYTES}){
  const model=gateway.status?.model||null,backups=gateway.reviewFallbacks||[],fallbackModels=backups.map(g=>g.status.model),policy=backups.length?{fallbackModels}:{};
  const inputHash=qualityHash({system,payload,model,...policy}),key=`quality-${pass}-${stage}-${ref}-${inputHash}`;
  let request=quality.requests[key];
@@ -31,7 +31,7 @@ export async function qualityModelCall({gateway,system,quality,run,pass,stage,re
   verifyRequest();
   let answer,error,parsed;
   try{
-   if(backups.length){const actual=Buffer.byteLength(JSON.stringify(reviewModelRequestBody(system,request.payload,{model:active.status.model,...record.options})));if(actual>512*1024)throw Object.assign(Error('实际备用模型完整请求体超过512KiB预算，未调用'),{code:'REVIEW_PACKET_OVERSIZE',actual});record.bodyBytes=actual;}
+   if(backups.length){const actual=Buffer.byteLength(JSON.stringify(reviewModelRequestBody(system,request.payload,{model:active.status.model,...record.options})));if(actual>maxBodyBytes)throw Object.assign(Error('实际模型完整请求体超过本次工程预算，未调用'),{code:'REVIEW_PACKET_OVERSIZE',actual});record.bodyBytes=actual;record.bodyBudgetBytes=maxBodyBytes;}
    answer=await active.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(request.payload)}],{json:true,thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000,signal,trace:{name:key,stage,metadata:{ref,pass,inputHash,sourceHash:quality.sourceHash}}});
    record.raw=answer.rawAnswer??answer.answer;record.usage=answer.usage;record.gatewayModel=answer.model||null;record.returnedModel=answer.returnedModel??null;record.providerRequestId=answer.providerRequestId||null;record.finishReason=answer.finishReason||null;record.finishReasonSource=answer.finishReasonSource||null;
    try{parsed=validate(JSON.parse(bareJson(answer.answer)));}catch(error){error.reviewOutputContract=true;throw error;}

@@ -42,7 +42,7 @@ export async function initialReviewCall({gateway,system,user,key,skill,run,save=
   const record={id:randomUUID(),key,attempt,inputHash,inputFingerprint:run.inputFingerprint||null,skill:{version:skill.version,hash:skill.hash},request:{system,user:structuredClone(user),model:active.status?.model||null,api:reviewModelApi(active.status?.model),options},switchFrom,switchReason,startedAt:new Date().toISOString(),status:'started',raw:null,rawAvailable:false,providerRequestId:null,finishReason:null};
   run.initialAttempts.push(record);await persist(record);
   let result,error;
-  try{if(backups.length){record.bodyBytes=Buffer.byteLength(JSON.stringify(reviewModelRequestBody(system,user,{model:active.status.model,...options,json:false})));if(record.bodyBytes>512*1024)throw Object.assign(Error('初稿完整请求超过实际模型512KiB预算，未调用'),{code:'REVIEW_PACKET_OVERSIZE'});}result=await active.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(user)}],{...options,signal});}
+  try{if(backups.length){record.bodyBytes=Buffer.byteLength(JSON.stringify(reviewModelRequestBody(system,user,{model:active.status.model,...options,json:false})));if(record.bodyBytes>512*1024)throw Object.assign(Error('初稿完整请求超过本次工程预算，未调用'),{code:'REVIEW_PACKET_OVERSIZE'});}result=await active.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(user)}],{...options,signal});}
   catch(e){error=e;}
   if(!result&&!error)error=outputContractError();
   record.finishedAt=new Date().toISOString();

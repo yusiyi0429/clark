@@ -70,8 +70,3 @@ test('a fully supplied allowed endpoint may request missing context only for its
  for(const refs of [['c','b'],['p','unknown'],['p','a']])assert.throws(()=>validateScopedCheckResult({...value,sourceRequests:[{...value.sourceRequests[0],refs}]},packet,plan.sourceRefs),e=>e.code==='REVIEW_SOURCE_REQUEST_CONTRACT');
  for(const field of ['sourceRefs','allowedIssueRefs'])assert.throws(()=>validateScopedCheckResult(value,{...packet,scope:{...packet.scope,[field]:packet.scope[field].filter(ref=>ref!=='p')}},plan.sourceRefs),e=>e.code==='REVIEW_SOURCE_REQUEST_CONTRACT');
 });
-
-test('new plans pack up to five targets by the same body cap; existing three-target layouts remain frozen on refresh',()=>{
- const a=data();delete a.maxTargetRefs;const old=buildReviewCheckPlan({...a,maxTargetRefs:3}),fresh=buildReviewCheckPlan(a);assert.equal(fresh.maxTargetRefs,5);assert.equal(old.maxTargetRefs,3);assert.ok(fresh.requestCount<old.requestCount);assert.deepEqual(new Set(fresh.packets.flatMap(p=>p.scope.targetRefs)),new Set(old.sourceRefs));
- const changed=structuredClone(a);changed.reviews.a.verdict='达成';const resumed=refreshReviewCheckPlan(old,changed);assert.equal(resumed.maxTargetRefs,3);assert.deepEqual(resumed.layout,old.layout);assert.equal(resumed.requestCount,old.requestCount);for(const p of fresh.packets)assert.ok(p.maxBodyBytes<=512*1024);
-});

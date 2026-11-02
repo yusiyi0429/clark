@@ -50,7 +50,7 @@ export const reviewModelBudgetBytes=(system,payload,options={})=>Math.max(...[op
 
 
 const scopeRules='本包检查 scope.targetRefs 及 scope.edges，问题只能归属 scope.allowedIssueRefs。sources 为 scope.sourceRefs 的完整原始来源。每个对象保持自己的E编号/旧E命名空间，不得跨对象把同编号当同证据。sourceTexts 和 sourceBindings 是完全相同正文的无损引用：按 binding.path 把来源字段中的 @source-text 标记替换为对应完整正文；不同出处、日期、版本和负责人记录仍分别保留，不得合并证据强度。reviews 中非目标项仅为父子上下文，不把候选结论当原始事实，不以本包没有其他对象来源断言其没发生。关系包检查 scope.edges，覆盖其两端完整来源。kind=requested-context只是程序排序后的补查关联，不是本体父子关系；必须按sourceRequestContext逐条核对具体relation/reason，并返回sourceRequestAnswers:[{requestId,conclusion}]给出每条补查的具体结论（仍缺材料则明确说缺什么并返回sourceRequests），不能只列checkedRefs冒充答复。所有28份当前候选和全局测量均保留作一致性上下文。若检查需要本包未提供的其他对象原文，必须返回 sourceRequests:[{refs:[本包目标ref,需要核查的冻结对象ref],relation:需要核对的具体关系,reason:原因}]，不得猜关系、把未提供当没发生或强置fixable:false；有补源请求不能算检查完成。输出保留 issues 原有 ref/type/problem/impact/mustFix/fixable，另须 checkedRefs、checkedEdges 和 sourceRequests 数组；无问题/无补源也显式给空数组。';
-export function buildReviewCheckPlan({input,sources,reviews,programFacts,tasks,system,maxBodyBytes=512*1024,maxTargetRefs=5,wireOptions={},extraRelations=[],fixedLayout=null}){
+export function buildReviewCheckPlan({input,sources,reviews,programFacts,tasks,system,maxBodyBytes=512*1024,maxTargetRefs=3,wireOptions={},extraRelations=[],fixedLayout=null}){
  if(tasks?.length!==3||tasks.some(t=>typeof t!=='string'||!t)||!Number.isInteger(maxTargetRefs)||maxTargetRefs<1||!Number.isInteger(maxBodyBytes)||maxBodyBytes<1)throw Error('必须保留三组检查任务及有效预算');
  const items=input.stages.flat(),byId=new Map(items.map(c=>[c.id,c])),current=Array.isArray(reviews)?Object.fromEntries(reviews.map(r=>[r.ref,r])):reviews;
  for(const id of Object.keys(sources))if(!byId.has(id))throw Error('来源没有对应冻结对象：'+id);
