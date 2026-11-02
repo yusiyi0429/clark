@@ -303,7 +303,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  }
  // What this review was built from, kept with every run (于斯一 asked; the 10/23 run could not be traced, 读取盘点第 8 条).
  const readReceipt={readAt:sources.readAt,cutoff,objects:Object.entries(objects).filter(([,o])=>o).map(([id,o])=>`${id}@${o.business?.version??o.version??o.revision_id??'?'}`),snapshots:[...usedSnapshots],events:[...usedEvents]};
- return {engineeringContracts:{evidenceAddresses:1,checkerSources:1,planTableColumns:1},period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
+ return {engineeringContracts:{evidenceAddresses:1,checkerSources:2,planTableColumns:1},period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
 }
 
 // ---------- running the review skill ----------
@@ -495,7 +495,7 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
  return run;
 }
 
-export const reviewQualityTasks=(skill,{checkerSources=false}={})=>skill.groups.map((g,index)=>`按技能检查第${index+1}组（${g.name}）：${g.types.join('、')}。对照冻结原始来源检查当前复盘，不以照办上次checker当通过；检查意见不构成新事实。缺记录或待验证不等于没有发生。新引入问题与原问题同等检查。返回JSON对象，每条issue必须含ref/type/problem/impact/mustFix/fixable；原必须修改类型恒为mustFix:true。`+(checkerSources?' sourceRefs must explicitly include the target and every frozen source actually used. Do not infer evidence from checker prose. Optional evidenceRefs must be [{ref:sourceRef,id:E-number}] and refer to real evidence in those sourceRefs. Local citations use [E3]; cross-source citations use [sourceRef:E3]. These are machine addresses, not body words; only verified addresses are excluded from length/jargon.':''));
+export const reviewQualityTasks=(skill,{checkerSources=false,sourceKeyContract=false}={})=>skill.groups.map((g,index)=>`按技能检查第${index+1}组（${g.name}）：${g.types.join('、')}。对照冻结原始来源检查当前复盘，不以照办上次checker当通过；检查意见不构成新事实。缺记录或待验证不等于没有发生。新引入问题与原问题同等检查。返回JSON对象，每条issue必须含ref/type/problem/impact/mustFix/fixable；原必须修改类型恒为mustFix:true。`+(checkerSources?' sourceRefs must explicitly include the target and every frozen source actually used. Do not infer evidence from checker prose. Optional evidenceRefs must be [{ref:sourceRef,id:E-number}] and refer to real evidence in those sourceRefs. Local citations use [E3]; cross-source citations use [sourceRef:E3]. These are machine addresses, not body words; only verified addresses are excluded from length/jargon.':'')+(sourceKeyContract?' sourceRefs values MUST ONLY be literal top-level keys of the sources object in this request, exactly enumerated by scope.sourceRefs and repeated in allowedSourceRefs. Never put nested Task UUIDs, object_id values, versioned refs, componentRef values or plan-row refs into sourceRefs, even when those are real references. Keep such details in the original source fields or problem/impact text instead; do not delete them. evidenceRefs.ref MUST use the same scope.sourceRefs enumeration, and evidenceRefs.id MUST be an actual evidence[].id under that top-level source. Do not normalize, shorten or substitute one kind of identifier for another.':''));
 
 // New skills check the complete candidate (including Company) after each edit.
 // Raw source facts are never replaced by an earlier checker's instructions.
@@ -514,7 +514,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
   check:async(reviews,pass,q)=>{
    const facts=Object.fromEntries(items.map(c=>[c.id,{lengthFindings:reviews[c.id]?lengthFindings(reviews[c.id],input.engineeringContracts?.evidenceAddresses===1?{sourceRef:c.id,sources}:undefined):[],evidenceFacts:reviews[c.id]?evidenceFacts(c,reviews[c.id],input.engineeringContracts?.evidenceAddresses===1?sources:undefined):{missingIds:[],usedCount:0},rowFacts:rowFacts(c,reviews[c.id])}]));
    const verdictFacts=items.filter(c=>c.children?.length).map(c=>({ref:c.id,verdict:reviews[c.id]?.verdict,children:c.children.map(ref=>({ref,verdict:reviews[ref]?.verdict||'生成失败'}))}));
-   const tasks=reviewQualityTasks(skill,{checkerSources:input.engineeringContracts?.checkerSources===1});
+   const tasks=reviewQualityTasks(skill,{checkerSources:input.engineeringContracts?.checkerSources>=1,sourceKeyContract:input.engineeringContracts?.checkerSources>=2});
    if(q.packetModel&&qualityHash(q.packetModel)!==qualityHash(wireOptions))throw Error('质量检查模型已变化，必须使用独立检查记录');
    q.packetModel=wireOptions;
    const args={input,sources,reviews,programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(Object.values(reviews))},tasks,system,wireOptions};
@@ -523,7 +523,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
    else {const previous=q.sourcePlans[pass-1];plan=previous?refreshReviewCheckPlan(previous,args):buildReviewCheckPlan({...args,maxBodyBytes:REVIEW_BODY_LIMIT_BYTES,maxTargetRefs:refs.length,fixedLayout:[{kind:'object',units:[...refs].sort()}]});q.sourcePlans[pass]=plan;await save(run);}
    const outcome=await executeReviewCheckPlan({plan,args,maxAdditionalRequests:6,runPacket:async request=>{
     const value=await call(q,pass,'check',`${request.cacheStamp}-${request.index??'source'}-${request.group}`,request.payload,value=>{
-     checkedReviewIssues(value,{skill,refs});if(input.engineeringContracts?.checkerSources===1)for(const issue of value.issues)validateIssueSources(issue,{sources,providedRefs:request.packet.scope.sourceRefs});for(const issue of value.issues)if(issue.sourceRefs!==undefined&&(!Array.isArray(issue.sourceRefs)||new Set(issue.sourceRefs).size!==issue.sourceRefs.length||issue.sourceRefs.some(ref=>!request.packet.scope.sourceRefs.includes(ref))))throw Error('检查意见的显式来源引用不属于已提供完整原文');return validateScopedCheckResult(value,request.packet,refs,request.payload.sourceRequestContext);
+     checkedReviewIssues(value,{skill,refs});if(input.engineeringContracts?.checkerSources>=1)for(const issue of value.issues)validateIssueSources(issue,{sources,providedRefs:request.packet.scope.sourceRefs});for(const issue of value.issues)if(issue.sourceRefs!==undefined&&(!Array.isArray(issue.sourceRefs)||new Set(issue.sourceRefs).size!==issue.sourceRefs.length||issue.sourceRefs.some(ref=>!request.packet.scope.sourceRefs.includes(ref))))throw Error('检查意见的显式来源引用不属于已提供完整原文');return validateScopedCheckResult(value,request.packet,refs,request.payload.sourceRequestContext);
     });
     return {...value,issues:value.issues.map(issue=>({...issue,checkContextRefs:[...request.packet.scope.sourceRefs],sourceRefs:issue.sourceRefs===undefined?[issue.ref]:[...issue.sourceRefs]}))};
    }});

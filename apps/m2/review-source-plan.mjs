@@ -65,7 +65,7 @@ export function buildReviewCheckPlan({input,sources,reviews,programFacts,tasks,s
   const related=kind==='relation'?units:edges.filter(e=>targets.includes(e.childRef)&&sourceRefs.includes(e.parentRef));
   const scope={kind,targetRefs:targets,sourceRefs,allowedIssueRefs:[...new Set([...targets,...related.flatMap(e=>[e.parentRef,e.childRef])])],reviewRefs:Object.keys(current),edges:related};
   const perReview=programFacts?.perReview||{},facts={...programFacts,perReview:Object.fromEntries([...context].filter(id=>Object.hasOwn(perReview,id)).map(id=>[id,perReview[id]]))};
-  const payloads=tasks.map(task=>({task:task+'\n'+scopeRules,reviews:Object.values(current),programFacts:facts,sources:packed.sources,sourceTexts:packed.texts,sourceBindings:packed.bindings,scope,sourceHash:digest(original),candidateHash:digest(current)}));
+  const payloads=tasks.map(task=>({task:task+'\n'+scopeRules,reviews:Object.values(current),programFacts:facts,sources:packed.sources,sourceTexts:packed.texts,sourceBindings:packed.bindings,scope,...(input.engineeringContracts?.checkerSources>=2?{allowedSourceRefs:[...sourceRefs]}:{}),sourceHash:digest(original),candidateHash:digest(current)}));
   const bodies=payloads.map(payload=>reviewModelBudgetBytes(system,payload,wireOptions));
   return {kind,scope,originalHash:packed.originalHash,payloads,maxBodyBytes:Math.max(...bodies),sourceBytes:bytes(original),packedSourceBytes:bytes(packed),sourceEvidenceCount:sourceRefs.reduce((n,id)=>n+(sources[id].evidence?.length||0),0)};
  };
