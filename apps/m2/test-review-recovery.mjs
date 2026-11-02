@@ -72,3 +72,15 @@ test('review provider 429 cooldown honors retry-after and is abortable without a
  let interrupted=0;const controller=new AbortController(),limited=withReviewRateLimit({complete:async()=>{interrupted++;throw Object.assign(Error('429'),{providerStatus:429});}},{now:()=>0,wait:async(_ms,signal)=>{controller.abort(new DOMException('stop','AbortError'));signal.throwIfAborted();}});
  await assert.rejects(limited.complete([],{}),{providerStatus:429});await assert.rejects(limited.complete([],{signal:controller.signal}),e=>e.name==='AbortError');assert.equal(interrupted,1);
 });
+
+test('64k complete checks have distinct frozen cache and wire budgets without relabelling 32k records',async()=>{
+ const run={raw:{}},quality={requests:{},sourceHash:'s',skillHash:'h'},limits=[];
+ const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async(_messages,options)=>{limits.push(options.maxTokens);return {answer:'{"issues":[]}'};}},args={gateway,system:'JSON',quality,run,pass:0,stage:'check',ref:'all',payload:{unchanged:'all sources'},save:async()=>{}};
+ await qualityModelCall(args);const oldKey=Object.keys(quality.requests)[0],old=structuredClone(quality.requests[oldKey]);
+ await qualityModelCall({...args,maxTokens:64000});assert.deepEqual(limits,[32000,64000]);assert.equal(Object.keys(quality.requests).length,2);assert.deepEqual(quality.requests[oldKey],old);
+ const newKey=Object.keys(quality.requests).find(k=>k!==oldKey),request=quality.requests[newKey];assert.equal(request.callOptions.maxTokens,64000);assert.equal(request.attempts[0].options.maxTokens,64000);
+ await qualityModelCall({...args,maxTokens:64000});await qualityModelCall(args);assert.equal(limits.length,2);
+ request.callOptions.maxTokens=32000;await assert.rejects(qualityModelCall({...args,maxTokens:64000}),/缓存输入/);assert.equal(limits.length,2);
+ request.callOptions.maxTokens=64000;request.attempts[0].options.maxTokens=32000;await assert.rejects(qualityModelCall({...args,maxTokens:64000}),/缓存输入/);assert.equal(limits.length,2);
+ await assert.rejects(qualityModelCall({...args,stage:'revise',maxTokens:64000}),/仅完整检查/);
+});
