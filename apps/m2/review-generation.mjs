@@ -364,6 +364,18 @@ const unitData=c=>({id:c.id,level:c.level,unit:c.unit,title:c.title,owner:c.owne
 export function reviewCheckSources(cards){
  return Object.fromEntries(cards.map(c=>[c.id,{period:c.period,cutoff:c.cutoff,owner:c.owner,objectId:c.objectId,sourceBasis:structuredClone(c.sourceBasis),commitment:c.commitment,m2EvidenceReceipt:structuredClone(c.m2EvidenceReceipt),evidence:(c.evidence||[]).map(e=>e.m2Source?structuredClone(e):{...structuredClone(e),text:String(e.text||'').slice(0,400)})}]));
 }
+// Missing or malformed checker output is a failed check, never a clean result.
+export function checkedReviewIssues(value,{skill,refs}){
+ if(!Array.isArray(value?.issues))throw Error('复盘检查未返回 issues 数组，不能视为通过');
+ const strict=skillAtLeast(skill.version,'2.1.12');
+ for(const issue of value.issues){
+  if(!issue||typeof issue.ref!=='string'||!refs.includes(issue.ref)||typeof issue.type!=='string'||!issue.type.trim()||typeof issue.problem!=='string'||!issue.problem.trim())throw Error('复盘检查问题缺少有效对象、类型或说明，不能视为通过');
+  if(strict&&(typeof issue.mustFix!=='boolean'||typeof issue.fixable!=='boolean'||typeof issue.impact!=='string'||!issue.impact.trim()))throw Error('复盘检查问题缺少 mustFix、fixable 或影响说明，不能视为通过');
+ }
+ return value.issues;
+}
+export const requiredReviewIssue=(issue,skill)=>issue.fixable!==false&&(issue.mustFix===true||skill.mustFix.includes(issue.type));
+export const reviewQualityWarnings=run=>(run.issues||[]).filter(x=>x.fixable===false).map(x=>({ref:x.ref,title:run.reviews?.[x.ref]?.title||x.ref,type:x.type,problem:x.problem,impact:x.impact||'',mustFix:x.mustFix===true}));
 const fieldsHint='返回 JSON：{"analysis":"不展示的分析，600 字内","review":{按 round-stages.md「字段」写全本层字段}}';
 
 // Runs the skill's stages on a built input. `run` holds what is done so far (raw answers by call), so a failed run
@@ -430,11 +442,24 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
   if((run.checked||Object.keys(run.raw).some(key=>/^check-|^revise-/.test(key)))&&run.checkSourcesHash!==checkSourcesHash)throw Error('检查来源输入已变化，不能复用旧检查或返修结果，请保留原任务重新准备候选');
   run.checkSourcesHash=checkSourcesHash;await save(run);
   if(!run.checked){
-   const found=(await stage('checks',()=>Promise.all(skill.groups.map((g,i)=>ask('check-'+(i+1),{task:`按技能「产品生成整轮复盘候选·检查」执行第${i+1}组（${g.name}）检查，只查这些类型：${g.types.join('、')}。返回 JSON：{"issues":[{"ref":"复盘 ref","type":"问题类型","problem":"一句话","impact":"一句话","fixable":true}]}`,reviews,programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(reviews)},sources:brief}).catch(()=>({issues:[]})))))).flatMap(r=>r.issues||[]);
+   const checks=await stage('checks',()=>Promise.allSettled(skill.groups.map(async(g,i)=>{
+    const key='check-'+(i+1);
+    try{return checkedReviewIssues(await ask(key,{task:`按技能「产品生成整轮复盘候选·检查」执行第${i+1}组（${g.name}）检查，只查这些类型：${g.types.join('、')}。返回 JSON：{"issues":[{"ref":"复盘 ref","type":"问题类型","problem":"一句话","impact":"一句话","mustFix":true,"fixable":true}]}。每条必须给出 mustFix 和 fixable 两个布尔值。原必须修改类型恒为 mustFix:true；其他类型按是否影响事实理解、判断或行动标记；不可修时说明具体缺口，不可冒充已通过。`,reviews,programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(reviews)},sources:brief}),{skill,refs:[...s1,...s2].map(c=>c.id)});}
+    catch(error){if(run.raw[key]){(run.checkFailures??=[]).push({key,raw:run.raw[key],error:String(error.message),at:new Date().toISOString()});delete run.raw[key];await save(run);}throw error;}
+   })));
+   const failed=checks.find(x=>x.status==='rejected');if(failed)throw failed.reason;
+   const found=checks.flatMap(x=>x.value);
    run.issues=found;run.checked=true;await save(run);
   }
-  const byRef=Object.groupBy(run.issues.filter(x=>x.fixable!==false&&skill.mustFix.includes(x.type)),x=>x.ref);
-  await stage('revisions',()=>pool(Object.entries(byRef).filter(([ref])=>run.reviews[ref]),async([ref,list])=>{const c=all.find(x=>x.id===ref);put(c,await ask('revise-'+ref,{task:'按技能「产品生成整轮复盘候选·检查」中的「修改」规则，修改这份复盘。'+fieldsHint,unit:unitData(c),review:run.reviews[ref],issues:list,programFacts:facts[ref],missionReviews:c.children?.map(id=>run.reviews[id])}).catch(()=>null));}));
+  const byRef=Object.groupBy(run.issues.filter(x=>requiredReviewIssue(x,skill)),x=>x.ref);
+  await stage('revisions',()=>pool(Object.entries(byRef).filter(([ref])=>run.reviews[ref]),async([ref,list])=>{
+   const c=all.find(x=>x.id===ref),key='revise-'+ref;
+   const answer=await ask(key,{task:'按技能「产品生成整轮复盘候选·检查」中的「修改」规则，修改这份复盘。'+fieldsHint,unit:unitData(c),review:run.reviews[ref],issues:list,programFacts:facts[ref],missionReviews:c.children?.map(id=>run.reviews[id])});
+   if(!answer?.review||typeof answer.review!=='object'||Array.isArray(answer.review)){
+    (run.checkFailures??=[]).push({key,raw:run.raw[key],error:'必改问题返修未返回复盘',at:new Date().toISOString()});delete run.raw[key];await save(run);throw Error('必改问题返修未返回复盘：'+ref);
+   }
+   put(c,answer);
+  }));
  }
  const companyStep='按技能「产品生成整轮复盘候选·每一步怎么做·4. 公司复盘」执行。'+fieldsHint;
  await stage('company',()=>pool(s3,async c=>{put(c,await askUnit(c,{task:companyStep,unit:unitData(c),ruReviews:c.children.map(id=>run.reviews[id]).filter(Boolean),askedBelow:askedBelow(run)}));await step('公司 PO 复盘');}));
@@ -502,7 +527,7 @@ export function reviewFile(run,input,{skill,model,label,startedAt=null}){
  return {name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,...(input.basis?{basis:structuredClone(input.basis)}:{}),
   // Facts the review cards need from the input: which object each review is about, and whether the Mission has an owner.
   reviews:Object.fromEntries(Object.entries(run.reviews).map(([id,r])=>{const c=input.stages.flat().find(x=>x.id===id);return [id,{...r,...(c?.agreedOutcome?{agreedOutcome:structuredClone(c.agreedOutcome)}:{}),...(c?.sourceBasis?{sourceBasis:structuredClone(c.sourceBasis)}:{}),...(c?.childCommitments?{childCommitments:structuredClone(c.childCommitments)}:{}),...(c?.objectId?{objectId:c.objectId}:{}),...(c?.ownerAssigned===false?{ownerAssigned:false}:{})}];})),
-  failed:run.failed,dropped:run.dropped,skipped:input.skipped,readAt:input.readAt,redactions:input.redactions,readReceipt:input.readReceipt||null};
+  qualityWarnings:reviewQualityWarnings(run),failed:run.failed,dropped:run.dropped,skipped:input.skipped,readAt:input.readAt,redactions:input.redactions,readReceipt:input.readReceipt||null};
 }
 
 // ---------- the background job ----------
@@ -513,7 +538,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
  const workFile=id=>join(dir,`${id}.json`);
  let flight=false;
  const setJob=patch=>store.transact(s=>{s.reviewJob={...s.reviewJob,...patch,updatedAt:new Date().toISOString()};s.sequence++;return s;});
- const view=job=>job&&{id:job.id,status:job.status,stage:job.stage||null,done:job.done??null,total:job.total??null,error:job.error||null,checks:job.checks||[],inputCutoff:job.inputCutoff||null,period:job.period,cutoff:job.cutoff,createdAt:job.createdAt,finishedAt:job.finishedAt||null,skipped:job.skipped||[],skill:job.skill||null};
+ const view=job=>job&&{id:job.id,status:job.status,stage:job.stage||null,done:job.done??null,total:job.total??null,error:job.error||null,checks:job.checks||[],warnings:job.warnings||[],inputCutoff:job.inputCutoff||null,period:job.period,cutoff:job.cutoff,createdAt:job.createdAt,finishedAt:job.finishedAt||null,skipped:job.skipped||[],skill:job.skill||null};
  // One trace per attempt (root = this job; a resume is its own trace). Its id stays on the job and on the installed
  // review round, so verdict changes and signatures there become feedback on it, and a failure is feedback too.
  function run(id,{period,cutoff,resume}){
@@ -566,7 +591,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
     if(s.roundJob?.status==='running'||s.planHandoff?.status==='generating')throw Object.assign(Error('拆解正在生成，复盘没有装入'),{status:409});
     delete s.planHandoff;delete s.unitsDone;s.roundAttempts=[];s.cascadeQueue=[];
     const next=installReviewRound(s,file,{label,source:`生成任务 ${id}`,now});if(trace&&next.reviewRound)next.reviewRound.traceRunId=trace.id;
-    next.reviewJob={...s.reviewJob,status:'done',stage:'已装入',checks:[],error:null,finishedAt:now,updatedAt:now};next.sequence++;return next;
+    next.reviewJob={...s.reviewJob,status:'done',stage:'已装入',checks:[],warnings:reviewQualityWarnings(work.run),error:null,finishedAt:now,updatedAt:now};next.sequence++;return next;
    });
   }catch(e){failed(trace,String(e.message||e).slice(0,300));await setJob({status:'failed',error:`${String(e.message||e).replace(/[；;]?\s*旧轮未替换/,'').slice(0,240)}；现有复盘没动，可以续跑`,finishedAt:new Date().toISOString()}).catch(()=>{});}
   finally{flight=false;}

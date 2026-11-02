@@ -49,6 +49,7 @@ export function installReviewRound(state,file,{label,source,sample=false,now=new
  // 失败要看得见 (2026-10-22): reviews the run could not write, or wrote without their background, are named on the page.
  const problems=[...(file.failed||[]).map(f=>({ref:f.id,...(f.title?{title:f.title}:{}),kind:'failed',reason:f.finishReason==='refusal'?'生成失败：模型拒答':`生成失败：${String(f.error||'').slice(0,60)}`})),...(file.dropped||[]).map(d=>({ref:d.id,kind:'degraded',reason:'背景资料未读入（模型拒答后去掉背景资料重写）'}))];
  // Units left out because the ontology lacks their material (数据缺失) — the only gap members are told about.
+ for(const warning of file.qualityWarnings||[])problems.push({ref:warning.ref,title:warning.title,kind:'unresolved',reason:[warning.problem,warning.impact].filter(Boolean).join('；')});
  const skipped=(file.skipped||[]).map(x=>typeof x==='string'?x:`${x.unit||''}${x.reason?`：${x.reason}`:''}`).filter(Boolean);
  next.reviewRound={...(file.basis?{basis:structuredClone(file.basis)}:{}),label:label||file.name||'复盘',...(problems.length?{problems}:{}),...(skipped.length?{skipped}:{}),skill:file.skill?.version||file.skillFormat||file.skill||null,period:file.period||null,cutoff:file.cutoff||null,evidence:file.evidence||null,source:source||null,sample,loadedAt:now,dueAt:dueFrom(now),
   // When the ontology was read and when the reviews were written (首页 shows both; 陈溪南 2026-10-23).
