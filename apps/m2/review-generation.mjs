@@ -359,6 +359,11 @@ export function rowFacts(c,r){
 }
 function evidenceFacts(c,r){const ids=new Set((c.evidence||[]).map(e=>e.id));const used=[...new Set(JSON.stringify(r).match(/E\d+/g)||[])];return {missingIds:used.filter(id=>ids.size&&!ids.has(id)),usedCount:used.length};}
 const unitData=c=>({id:c.id,level:c.level,unit:c.unit,title:c.title,owner:c.owner,period:c.period,cutoff:c.cutoff,commitment:c.commitment,commitmentSource:c.commitmentSource,evidence:c.evidence,missing:c.missing,note:c.note,recordFacts:c.recordFacts,...(c.sourceBasis?{sourceBasis:c.sourceBasis}:{}),...(c.childCommitments?{childCommitments:c.childCommitments}:{}),...(c.tasks?.length?{tasks:c.tasks}:{}),...(c.expectedFacts?{expectedFacts:c.expectedFacts}:{}),...(c.m2EvidenceReceipt?{m2EvidenceReceipt:c.m2EvidenceReceipt}:{})});
+// Checkers must receive the same provenance as generation. Confirmed reports
+// retain their full quotation; the existing short World text budget is unchanged.
+export function reviewCheckSources(cards){
+ return Object.fromEntries(cards.map(c=>[c.id,{period:c.period,cutoff:c.cutoff,owner:c.owner,objectId:c.objectId,sourceBasis:structuredClone(c.sourceBasis),commitment:c.commitment,m2EvidenceReceipt:structuredClone(c.m2EvidenceReceipt),evidence:(c.evidence||[]).map(e=>e.m2Source?structuredClone(e):{...structuredClone(e),text:String(e.text||'').slice(0,400)})}]));
+}
 const fieldsHint='返回 JSON：{"analysis":"不展示的分析，600 字内","review":{按 round-stages.md「字段」写全本层字段}}';
 
 // Runs the skill's stages on a built input. `run` holds what is done so far (raw answers by call), so a failed run
@@ -405,6 +410,9 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
   const items=[...s1,...s2,...s3],stale=new Set();
   for(const f of run.failed){let c=items.find(x=>x.id===f.id);while(c?.parent){stale.add(c.parent);c=items.find(x=>x.id===c.parent);}}
   for(const id of stale){delete run.raw[id];delete run.raw[id+'#nobg'];delete run.raw['revise-'+id];delete run.reviews[id];}
+  // Successful recovery changes the material checked, so prior check/revision answers cannot be reused.
+  for(const key of Object.keys(run.raw))if(/^check-|^revise-/.test(key))delete run.raw[key];
+  run.checked=false;run.issues=[];delete run.checkSourcesHash;
   run.failed=[];await save(run);
  }
  const step=async label=>{done++;await onProgress({stage:label,done,total});};
@@ -417,7 +425,10 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
   const all=[...s1,...s2].filter(c=>run.reviews[c.id]);
   const facts=Object.fromEntries(all.map(c=>[c.id,{lengthFindings:lengthFindings(run.reviews[c.id]),evidenceFacts:evidenceFacts(c,run.reviews[c.id]),...(Array.isArray(run.reviews[c.id]?.facts)?{rowFacts:rowFacts(c,run.reviews[c.id])}:{})}]));
   const verdictFacts=s2.filter(c=>run.reviews[c.id]).map(c=>({ref:c.id,verdict:run.reviews[c.id].verdict,children:c.children.map(id=>({ref:id,verdict:run.reviews[id]?.verdict||'生成失败'}))}));
-  const reviews=all.map(c=>run.reviews[c.id]),brief=Object.fromEntries(all.map(c=>[c.id,{commitment:c.commitment,evidence:(c.evidence||[]).map(e=>({id:e.id,asOf:e.asOf,text:e.text.slice(0,400)}))}]));
+  const reviews=all.map(c=>run.reviews[c.id]),brief=reviewCheckSources(all);
+  const checkSourcesHash=sha(JSON.stringify(brief));
+  if((run.checked||Object.keys(run.raw).some(key=>/^check-|^revise-/.test(key)))&&run.checkSourcesHash!==checkSourcesHash)throw Error('检查来源输入已变化，不能复用旧检查或返修结果，请保留原任务重新准备候选');
+  run.checkSourcesHash=checkSourcesHash;await save(run);
   if(!run.checked){
    const found=(await stage('checks',()=>Promise.all(skill.groups.map((g,i)=>ask('check-'+(i+1),{task:`按技能「产品生成整轮复盘候选·检查」执行第${i+1}组（${g.name}）检查，只查这些类型：${g.types.join('、')}。返回 JSON：{"issues":[{"ref":"复盘 ref","type":"问题类型","problem":"一句话","impact":"一句话","fixable":true}]}`,reviews,programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(reviews)},sources:brief}).catch(()=>({issues:[]})))))).flatMap(r=>r.issues||[]);
    run.issues=found;run.checked=true;await save(run);
