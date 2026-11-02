@@ -303,7 +303,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  }
  // What this review was built from, kept with every run (于斯一 asked; the 10/23 run could not be traced, 读取盘点第 8 条).
  const readReceipt={readAt:sources.readAt,cutoff,objects:Object.entries(objects).filter(([,o])=>o).map(([id,o])=>`${id}@${o.business?.version??o.version??o.revision_id??'?'}`),snapshots:[...usedSnapshots],events:[...usedEvents]};
- return {engineeringContracts:{evidenceAddresses:1,checkerSources:2,planTableColumns:1,fullContextCheck:fullContextCheckContract([...stage1,...stage2,...stage3].map(c=>c.id))},period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
+ return {engineeringContracts:{evidenceAddresses:1,checkerSources:3,planTableColumns:1,fullContextCheck:fullContextCheckContract([...stage1,...stage2,...stage3].map(c=>c.id))},period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
 }
 
 // ---------- running the review skill ----------
@@ -524,7 +524,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
    const maxAdditionalRequests=input.engineeringContracts?.fullContextCheck?0:6;
    const outcome=await executeReviewCheckPlan({plan,args,maxAdditionalRequests,runPacket:async request=>{
     const value=await call(q,pass,'check',`${request.cacheStamp}-${request.index??'source'}-${request.group}`,request.payload,value=>{
-     checkedReviewIssues(value,{skill,refs});if(input.engineeringContracts?.checkerSources>=1)for(const issue of value.issues)validateIssueSources(issue,{sources,providedRefs:request.packet.scope.sourceRefs});for(const issue of value.issues)if(issue.sourceRefs!==undefined&&(!Array.isArray(issue.sourceRefs)||new Set(issue.sourceRefs).size!==issue.sourceRefs.length||issue.sourceRefs.some(ref=>!request.packet.scope.sourceRefs.includes(ref))))throw Error('检查意见的显式来源引用不属于已提供完整原文');return validateScopedCheckResult(value,request.packet,refs,request.payload.sourceRequestContext);
+     checkedReviewIssues(value,{skill,refs});if(input.engineeringContracts?.checkerSources>=1)for(const issue of value.issues)validateIssueSources(issue,{sources,providedRefs:request.packet.scope.sourceRefs,checkerSources:input.engineeringContracts.checkerSources});for(const issue of value.issues)if(issue.sourceRefs!==undefined&&(!Array.isArray(issue.sourceRefs)||new Set(issue.sourceRefs).size!==issue.sourceRefs.length||issue.sourceRefs.some(ref=>!request.packet.scope.sourceRefs.includes(ref))))throw Error('检查意见的显式来源引用不属于已提供完整原文');return validateScopedCheckResult(value,request.packet,refs,request.payload.sourceRequestContext);
     });
     return {...value,issues:value.issues.map(issue=>({...issue,checkContextRefs:[...request.packet.scope.sourceRefs],sourceRefs:issue.sourceRefs===undefined?[issue.ref]:[...issue.sourceRefs]}))};
    }});
