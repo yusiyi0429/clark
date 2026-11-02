@@ -2,7 +2,7 @@
  * 伙伴形象 Miles（components/coagent/MilesCapsule、milesRig）：整块 66 高，上面是探出胶囊的半身，下面是写着名字的小胶囊；
  * 宽跟着名字（70–96，MilesCapsule 写在元素上）。
  * 出现、退场和其他形象一样（capsuleIn / capsuleOut，coagent-capsule.module.css），Miles 自己升上来、沉回去由 milesRig 播。
- * 这里只放跟着姿势切换的几档：在听时头侧过来一点、目光朝向说话的人；在说时胶囊换深的那组。
+ * 这里只放跟着姿势切换的几档：在听时头侧过来一点、目光朝向说话的人；在说时胶囊染一层淡淡的蓝紫。
  */
 
 .miles {
@@ -22,7 +22,6 @@
 .miles[data-pose='listening'] .gaze { transform: translate(var(--g), 0px); }
 
 .breathe { animation: breathe 3.8s ease-in-out infinite; }
-.breath { animation: breath 4.8s ease-in-out infinite; }
 
 .speakGlass { opacity: 0; transition: opacity 260ms ease; }
 .miles[data-pose='speaking'] .speakGlass { opacity: 1; }
@@ -38,9 +37,8 @@
 }
 
 @keyframes breathe { 0%, 100% { transform: none; } 50% { transform: scale(1.012, 1.02); } }
-@keyframes breath { 0%, 100% { opacity: 0.82; } 50% { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .miles, .miles[data-leaving], .breathe, .breath { animation: none; }
+  .miles, .miles[data-leaving], .breathe { animation: none; }
   .headPose, .gaze, .speakGlass { transition: none; }
 }

@@ -1,10 +1,10 @@
 /**
  * Miles 那颗胶囊的画和动作（components/coagent/MilesCapsule 用）：胶囊原样不动，它平直的上沿就是开口，
- * 光从这里往上透，Miles 从这里探出上半身。照 2026-10-31 定稿的原型搬过来，只留产品里用得到的两种姿势。
+ * Miles 从这里探出上半身。照 2026-10-31 定稿的原型搬过来，材质按 11/02 的第 7 版，只留产品里用得到的两种姿势。
  *
- * - 胶囊：品牌那颗的配方（#0011fd → #0600a6（46%）→ 底部透明，整体调淡），细亮边、顶上偏左一道高光，
- *   名字下面一道 Siri 流光（洋红、天青、蓝紫三道，跟着声音变高变快）；在说时换深的那组。
- * - 名字：本人起的伙伴名字，没起时写「Miles」。最窄 70；字放不下时两侧各留 10 往外长，最宽 96
+ * - 胶囊：磨砂的乳白玻璃，里面一层很淡的五色渐变（粉、淡紫、天蓝、薄荷、杏），名字下面一道同样几种浅色的
+ *   柔开流光（跟着声音变高变快），顶上偏左一点高光，一圈细边；外面不带反光、阴影和发光。在说时整颗染一层淡淡的蓝紫。
+ * - 名字：深色细字，本人起的伙伴名字，没起时写「Miles」。最窄 70；字放不下时两侧各留 10 往外长，最宽 96
  *   （名字的宽度上限 BUDDY_NAME_UNITS 按这个定；万一某台机器的字体更宽，就把字压进 96 里）。
  * - 出场：从胶囊里升上来约 0.5 秒，带 2px 回弹；退场沉回去约 0.26 秒。
  * - 平时：随机眨眼、偶尔转头看一眼；比耶的手举 9–16 秒就放进胶囊里歇 5–10 秒。
@@ -30,7 +30,6 @@ export interface MilesClasses {
   headPose: string;
   gaze: string;
   breathe: string;
-  breath: string;
   speakGlass: string;
 }
 
@@ -45,6 +44,7 @@ export interface MilesRig {
 }
 
 const NS = "http://www.w3.org/2000/svg";
+const INK = "#1f2a3d";
 const NAME_FONT = '400 10px system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif';
 const CAP = { w: 70, h: 22 };
 const FIG_W = 48;
@@ -62,10 +62,10 @@ const GLANCES: [number, number, number][] = [[-1.6, 0, -1.5], [1.6, 0, 1.5], [-1
 /** 在听时目光的落点（一格 = MILES_ART.gazeUnit），和样式表里 data-pose='listening' 的那一档一致。 */
 const LISTEN_GAZE: [number, number] = [1, 0];
 
-const WAVE_COLORS = ["255, 104, 198", "98, 226, 255", "132, 108, 255"];
-/** 胶囊小，横向取样按宽度收窄（产品那颗是 ±11），平时的底光略高一点。 */
+const WAVE_COLORS = ["255, 170, 214", "196, 176, 255", "150, 205, 255", "150, 228, 204", "255, 206, 164"];
+/** 胶囊小，横向取样按宽度收窄（产品那颗是 ±11），平时的底子高一点。 */
 const WAVE_SPAN = 5;
-const WAVE_FLOOR = 0.22;
+const WAVE_FLOOR = 0.42;
 
 const attenuate = (x: number) => Math.pow(4 / (4 + x * x), 4);
 
@@ -147,25 +147,14 @@ export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, name: initia
   svg.style.setProperty("--g", `${MILES_ART.gazeUnit}px`);
   const defs = el("defs", {}, svg);
   defs.innerHTML = `
-    <linearGradient id="${id("glass")}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0011fd" stop-opacity="0.78"/><stop offset="0.46" stop-color="#0600a6" stop-opacity="0.72"/><stop offset="1" stop-color="#001eff" stop-opacity="0"/></linearGradient>
-    <linearGradient id="${id("speak")}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0011fd"/><stop offset="0.4" stop-color="#0600a6"/><stop offset="1" stop-color="#07058e"/></linearGradient>
-    <radialGradient id="${id("speak-glow")}" cx="50%" cy="100%" r="70%"><stop offset="0" stop-color="#001eff" stop-opacity="0.6"/><stop offset="1" stop-color="#001eff" stop-opacity="0"/></radialGradient>
-    <linearGradient id="${id("edge")}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.55"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.2"/><stop offset="1" stop-color="#fff" stop-opacity="0.75"/></linearGradient>
-    <radialGradient id="${id("sheen")}" cx="30%" cy="0%" r="60%"><stop offset="0" stop-color="#fff" stop-opacity="0.26"/><stop offset="0.72" stop-color="#fff" stop-opacity="0"/></radialGradient>
-    <radialGradient id="${id("bloom")}" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#001eff" stop-opacity="0.46"/><stop offset="0.72" stop-color="#001eff" stop-opacity="0"/></radialGradient>
-    <radialGradient id="${id("shadow")}" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#0011fd" stop-opacity="0.16"/><stop offset="1" stop-color="#0011fd" stop-opacity="0"/></radialGradient>
+    <linearGradient id="${id("glass")}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.86"/><stop offset="1" stop-color="#eef2fa" stop-opacity="0.72"/></linearGradient>
+    <linearGradient id="${id("tint")}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffd9ee"/><stop offset="0.28" stop-color="#e7ddff"/><stop offset="0.52" stop-color="#d6ecff"/><stop offset="0.76" stop-color="#d9f4ea"/><stop offset="1" stop-color="#ffead8"/></linearGradient>
+    <linearGradient id="${id("speak")}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dfe3ff" stop-opacity="0.8"/><stop offset="1" stop-color="#c3cdff" stop-opacity="0.95"/></linearGradient>
+    <linearGradient id="${id("edge")}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.95"/><stop offset="1" stop-color="#fff" stop-opacity="0.3"/></linearGradient>
+    <radialGradient id="${id("sheen")}" cx="30%" cy="0%" r="60%"><stop offset="0" stop-color="#fff" stop-opacity="0.6"/><stop offset="0.72" stop-color="#fff" stop-opacity="0"/></radialGradient>
     <radialGradient id="${id("air")}" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#3d63ff" stop-opacity="0.85"/><stop offset="1" stop-color="#001eff" stop-opacity="0"/></radialGradient>
     <linearGradient id="${id("lip")}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>`;
-  const shadow = el("ellipse", { cx: CX, cy: CAP_CY + CAP.h * 0.42, ry: CAP.h * 0.38, fill: `url(#${id("shadow")})` }, svg);
   el("clipPath", { id: id("above") }, svg).appendChild(el("rect", { x: -40, y: -60, width: 2 * CX + 80, height: CAP_TOP + 60.5 }));
-
-  // 胶囊上沿往上透的一团蓝光
-  const bloom = el("g", { opacity: 0, "clip-path": `url(#${id("above")})` }, svg);
-  bloom.style.transformBox = "view-box";
-  bloom.style.transformOrigin = `${CX}px ${CAP_TOP}px`;
-  const bloomLevel = el("g", {}, bloom);
-  bloomLevel.style.transition = "opacity 160ms linear";
-  const bloomGlow = el("ellipse", { class: classes.breath, cx: CX, cy: CAP_TOP, ry: VIS_H * 0.78, fill: `url(#${id("bloom")})` }, bloomLevel);
 
   // Miles：只露出胶囊上沿以上的部分
   const rise = el("g", {}, el("g", { "clip-path": `url(#${id("above")})` }, svg));
@@ -209,15 +198,19 @@ export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, name: initia
   pod.parentNode?.insertBefore(airglow, pod);
 
   // 胶囊玻璃
-  const capShapes = [el("path", {}, el("clipPath", { id: id("cap") }, svg)), el("path", { fill: `url(#${id("glass")})` }, svg)];
-  const speak = el("g", { class: classes.speakGlass }, svg);
-  capShapes.push(el("path", { fill: `url(#${id("speak")})` }, speak), el("path", { fill: `url(#${id("speak-glow")})` }, speak));
-  const glow = el("g", { style: "mix-blend-mode:screen; filter: blur(0.4px) drop-shadow(0 0 4px rgb(200 225 255 / 40%))" }, el("g", { "clip-path": `url(#${id("cap")})` }, svg));
-  const wavePaths = WAVE_COLORS.map((color) => el("path", { fill: `rgba(${color}, 0.78)`, style: "mix-blend-mode:screen" }, glow));
+  const capShapes = [
+    el("path", {}, el("clipPath", { id: id("cap") }, svg)),
+    el("path", { fill: `url(#${id("glass")})` }, svg),
+    el("path", { fill: `url(#${id("tint")})`, opacity: 0.5 }, svg),
+  ];
+  capShapes.push(el("path", { fill: `url(#${id("speak")})` }, el("g", { class: classes.speakGlass }, svg)));
+  const soft = el("g", { style: "filter: blur(1.6px)" }, el("g", { "clip-path": `url(#${id("cap")})` }, svg));
+  const wavePaths = WAVE_COLORS.map((color) => el("path", { fill: `rgba(${color}, 0.55)` }, soft));
   capShapes.push(el("path", { fill: `url(#${id("sheen")})` }, svg));
   const edge = el("path", { fill: "none", stroke: `url(#${id("edge")})`, "stroke-width": 1 }, svg);
+  const rim = el("path", { fill: "none", stroke: "rgb(31 42 61 / 13%)", "stroke-width": 0.75 }, svg);
 
-  const name = el("text", { fill: "#fff", style: `font: ${NAME_FONT}` }, svg);
+  const name = el("text", { fill: INK, style: `font: ${NAME_FONT}` }, svg);
 
   // 开口那道亮线
   const lip = el("g", { opacity: 0.5 }, svg);
@@ -293,11 +286,10 @@ export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, name: initia
     }
     name.setAttribute("y", String(CAP_CY + (glyphs.actualBoundingBoxAscent - glyphs.actualBoundingBoxDescent) / 2));
     svg.setAttribute("viewBox", `${CX - width / 2} ${TOP} ${width} ${BOX_HEIGHT}`);
-    shadow.setAttribute("rx", String(width * 0.46));
-    bloomGlow.setAttribute("rx", String(Math.max(width * 0.42, FIG_W * 0.62)));
     const path = stadium(CX, CAP_CY, width, CAP.h);
     capShapes.forEach((node) => node.setAttribute("d", path));
     edge.setAttribute("d", stadium(CX, CAP_CY, width - 1, CAP.h - 1));
+    rim.setAttribute("d", stadium(CX, CAP_CY, width + 0.75, CAP.h + 0.75));
     const half = width / 2 - CAP.h / 2;
     lipLine.setAttribute("d", `M${CX - half},${CAP_TOP + 0.9} H${CX + half}`);
     drawWave();
@@ -338,7 +330,6 @@ export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, name: initia
     } else target = inputLevel;
     level += (target - level) * (target > level ? 0.6 : 0.25);
     const k = Math.max(0, Math.min(1, level));
-    bloomLevel.style.opacity = String(Math.min(1, (pose === "speaking" ? 0.7 : 0.65) + k * 0.3));
     airglow.style.opacity = pose === "listening" && out ? String(0.2 + k * 0.7) : "0";
     talk(pose === "speaking" && out ? (reduced ? 0.6 : k) : 0);
   };
@@ -388,12 +379,10 @@ export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, name: initia
     out = true;
     if (reduced) {
       rise.style.transform = "translateY(0px)";
-      bloom.style.opacity = "1";
       lip.style.opacity = "1";
       return;
     }
     play(lip, [{ opacity: 0.5 }, { opacity: 1 }], { duration: 120, easing: "ease-out" });
-    play(bloom, [{ opacity: 0, transform: "scaleY(.5)" }, { opacity: 1, transform: "scaleY(1)" }], { duration: 360, delay: 60, easing: "cubic-bezier(.2,.8,.2,1)" });
     play(rise, [
       { transform: `translateY(${SINK}px)`, easing: "cubic-bezier(.2,.8,.3,1)" },
       { transform: "translateY(-2px)", offset: 0.75, easing: "ease-in-out" },
@@ -425,7 +414,6 @@ export function mountMiles(svg: SVGSVGElement, { idPrefix, classes, name: initia
       cancelOn(gaze, look, wiggle);
       if (reduced) { rise.style.transform = `translateY(${SINK}px)`; return; }
       play(rise, [{ transform: "translateY(0px)" }, { transform: `translateY(${SINK}px)` }], { duration: 260, easing: "cubic-bezier(.4,0,1,1)" });
-      play(bloom, [{ opacity: 1 }, { opacity: 0 }], { duration: 250, easing: "ease-in" });
       play(lip, [{ opacity: 1 }, { opacity: 0.5 }], { duration: 250 });
     },
     destroy() {

@@ -37,7 +37,7 @@ export function MilesCapsule({ name, pose, level, leaving, children }: {
       name: nameRef.current,
       pose: poseRef.current,
       reduced,
-      classes: { headPose: m.headPose, gaze: m.gaze, breathe: m.breathe, breath: m.breath, speakGlass: m.speakGlass },
+      classes: { headPose: m.headPose, gaze: m.gaze, breathe: m.breathe, speakGlass: m.speakGlass },
     });
     rig.current = mounted;
     return () => { mounted.destroy(); rig.current = null; };
