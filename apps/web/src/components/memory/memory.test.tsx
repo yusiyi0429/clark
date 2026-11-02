@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { anchorHref, anchorLabel, groupMemories, MEMORY_EXPORT_PROMPT, referenceSource, type MemoryItem } from "./memoryModel";
 import { MemoryImportPanel } from "./MemoryImportPanel";
+import { PartnerMemories } from "./PartnerMemories";
 
 const item = (kind: MemoryItem["kind"], id = kind): MemoryItem => ({ id, kind, title: id, text: id, status: "active", supersededBy: null, anchors: [], references: [],
   createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z" });
@@ -29,5 +30,23 @@ describe("我的记忆", () => {
     expect(html).not.toContain("placeholder");
     expect(html).not.toContain(MEMORY_EXPORT_PROMPT.slice(0, 20));
     expect(MEMORY_EXPORT_PROMPT).toContain("类别 | 内容 | 来源 | 时间 | 把握");
+  });
+
+  it("伙伴记住的：只读列出类别、正文、项目、「推测」和日期；没接 Chat、没有时整块不出现", () => {
+    const html = renderToStaticMarkup(<PartnerMemories memory={{ available: true, items: [
+      { id: "a", category: "project_background", text: "灯塔试点先跑华夏", project: "灯塔", tentative: true, updatedAt: "2026-11-02T08:00:00.000Z" },
+      { id: "b", category: "feedback_instruction", text: "汇报先给结论", project: null, tentative: false, updatedAt: "2026-10-30T08:00:00.000Z" },
+    ] }} />);
+    expect(html).toContain("伙伴记住的");
+    expect(html).toContain("项目背景");
+    expect(html).toContain("反馈指令");
+    expect(html).toContain("灯塔试点先跑华夏");
+    expect(html).toContain("灯塔</span>");
+    expect(html.match(/推测/g)).toHaveLength(1);
+    expect(html).toContain('dateTime="2026-11-02T08:00:00.000Z"');
+    expect(html).not.toMatch(/<button|<input|<textarea/);
+    expect(renderToStaticMarkup(<PartnerMemories memory={{ available: false, items: [] }} />)).toBe("");
+    expect(renderToStaticMarkup(<PartnerMemories memory={{ available: true, items: [] }} />)).toBe("");
+    expect(renderToStaticMarkup(<PartnerMemories memory={null} />)).toBe("");
   });
 });

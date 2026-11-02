@@ -3323,6 +3323,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/memory/partner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 首页伙伴（独立 Chat 服务）记住的本人的事，只读；没接 Chat 时 available=false。Chat 连不上或拒绝时按天枢的错误格式回（如 503 CHAT_UNAVAILABLE） */
+        get: operations["listPartnerMemory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/memory/personal/items/{id}": {
         parameters: {
             query?: never;
@@ -11450,6 +11467,22 @@ export interface components {
                 }[];
                 /** Format: date-time */
                 createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+            }[];
+        };
+        PartnerMemoryList: {
+            /** @description 首页对话走独立 Chat 时为 true；没接 Chat 时为 false、items 为空 */
+            available: boolean;
+            /** @description 现行的，最近更新的在前，最多 100 条 */
+            items: {
+                id: string;
+                /** @description 偏好、项目背景、研究与决策、反馈指令 */
+                category: "preference" | "project_background" | "research_decision" | "feedback_instruction";
+                text: string;
+                project: string | null;
+                /** @description 伙伴推测的，本人没有明说 */
+                tentative: boolean;
                 /** Format: date-time */
                 updatedAt: string;
             }[];
@@ -23814,6 +23847,62 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listPartnerMemory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 伙伴记住的（现行的，最近更新的在前） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerMemoryList"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

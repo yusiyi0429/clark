@@ -1,7 +1,8 @@
 import { Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
-import { DeletePersonalMemoryItemQuery, PersonalMemoryItem, PersonalMemoryList, PersonalMemoryListQuery, UpdatePersonalMemoryItemRequest } from '@warmap/contracts';
+import { DeletePersonalMemoryItemQuery, PartnerMemoryList, PersonalMemoryItem, PersonalMemoryList, PersonalMemoryListQuery, UpdatePersonalMemoryItemRequest } from '@warmap/contracts';
 import type { FastifyReply } from 'fastify';
+import { ChatServiceError } from '../chatService.js';
 import type { AppInstance, RouteContext } from './shared.js';
 
 /** 本人看、搜、改、忘掉、恢复、彻底删除自己的个人记忆（R7、「我的记忆」页）。只操作登录人自己的；别人的条目一律 404。 */
@@ -26,6 +27,17 @@ export function registerPersonalMemoryRoutes(app: AppInstance, ctx: RouteContext
         async (req, reply) => respond(reply, async () => ({
             items: await personalMemory.withAnchorTitles(await personalMemory.list(req.person!.personId, { status: req.query.status ?? 'active', q: req.query.q })),
         })));
+    // 首页伙伴（独立 Chat）记住的，只读：没接 Chat 时 available=false；Chat 连不上、拒绝时照 Chat 转来的码回（如 503 CHAT_UNAVAILABLE），界面不显示这一块。
+    app.get('/api/me/memory/partner', { preHandler: requirePerson, schema: { response: { 200: PartnerMemoryList } } }, async (req, reply) => {
+        reply.header('cache-control', 'no-store');
+        if (!ctx.chat) return { available: false, items: [] };
+        try {
+            return { available: true, items: await ctx.chat.memories(req.person!, String(req.id)) };
+        } catch (error) {
+            if (error instanceof ChatServiceError) return fail(reply, error.status, error.code, error.message);
+            throw error;
+        }
+    });
     // 多余字段（如 owner）直接 400，不静默丢掉。
     app.patch('/api/me/memory/personal/items/:id', { preValidation: async (req, reply) => {
         if (!Value.Check(UpdatePersonalMemoryItemRequest, req.body)) return ctx.invalidInput(reply, UpdatePersonalMemoryItemRequest, req.body);
