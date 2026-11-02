@@ -140,7 +140,7 @@ export async function createModelGateway({env=process.env,readSecretFile=readFil
     await recordModelRun({channel:'model-failure',model,failure:{httpStatus:response.status,retryAfterMs:e.retryAfterMs??null}}).catch(()=>{});throw e;
    }
    const result=await completionResponse(response,onDelta),answer=result.choices?.[0]?.message?.content;
-   if(result.choices?.[0]?.finish_reason==='content_filter')throw refusal(model,result.usage,result.id,{finishReasonSource:'provider.chat.finish_reason'},answer);
+   if(result.choices?.[0]?.finish_reason==='content_filter')throw refusal(model,result.usage,result.id,{finishReasonSource:'provider.chat.finish_reason',providerFinishReason:'content_filter'},answer);
    if(!answer||result.choices?.[0]?.finish_reason==='length'){
     const e=Error('模型输出不完整，未应用修改。');e.status=502;e.code='MODEL_OUTPUT_INCOMPLETE';e.partialAnswer=answer||'';e.providerRequestId=result.id||null;
     e.diagnostics={model,finishReason:result.choices?.[0]?.finish_reason||'empty',finishReasonSource:result.choices?.[0]?.finish_reason?'provider.chat.finish_reason':'adapter.missing_finish_reason',usage:result.usage,reasoningEffort:thinking?reasoningEffort:'disabled',maxTokens:maxTokens||(thinking?65536:json?4000:2400)};

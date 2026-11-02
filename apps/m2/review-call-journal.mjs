@@ -51,7 +51,7 @@ export async function initialReviewCall({gateway,system,user,key,skill,run,save=
   }else{
    const raw=typeof error.rawAnswer==='string'?error.rawAnswer:error.partialAnswer;
    record.raw=typeof raw==='string'?raw:null;record.rawAvailable=typeof raw==='string';record.rawCompleteness=error.rawAnswer!==undefined?'provider-final':record.rawAvailable?'partial':'unavailable';
-   record.model=error.diagnostics?.model||gateway.status?.model||null;record.usage=error.diagnostics?.usage||null;record.providerRequestId=error.providerRequestId||null;record.finishReason=error.diagnostics?.finishReason||null;record.finishReasonSource=error.diagnostics?.finishReasonSource||null;
+   record.model=error.diagnostics?.model||gateway.status?.model||null;record.usage=error.diagnostics?.usage||null;record.providerRequestId=error.providerRequestId||null;record.finishReasonSource=error.diagnostics?.finishReasonSource||null;record.finishReason=error.diagnostics?.providerFinishReason||(record.finishReasonSource?.startsWith('provider.')?error.diagnostics?.finishReason:null)||null;
   }
   record.status=error.code==='MODEL_OUTPUT_CONTRACT'?'output-contract-failed':refusal(error)?'provider-refusal':signal?.aborted?'cancelled':'call-failed';
   record.error={code:error.code||null,message:String(error.message),providerStatus:error.providerStatus??null};await persist(record);

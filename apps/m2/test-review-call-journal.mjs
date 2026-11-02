@@ -27,9 +27,9 @@ test('off-task plain text is a bounded output-contract failure, not a guessed po
 });
 test('reliable provider refusal keeps the returned text and metadata and does not get inferred from wording',async()=>{
  const state=run();let calls=0;
- const error=Object.assign(Error('provider refusal'),{code:'MODEL_REFUSAL',rawAnswer:'provider supplied refusal text',providerRequestId:'request-two',diagnostics:{finishReason:'refusal',finishReasonSource:'provider.messages.stop_reason'}});
+ const error=Object.assign(Error('provider refusal'),{code:'MODEL_REFUSAL',rawAnswer:'provider supplied refusal text',providerRequestId:'request-two',diagnostics:{finishReason:'refusal',finishReasonSource:'provider.chat.finish_reason',providerFinishReason:'content_filter'}});
  await assert.rejects(initialReviewCall({...args(state),gateway:{complete:async()=>{calls++;throw error;}}}),e=>e.code==='MODEL_REFUSAL');
- assert.equal(calls,1);assert.equal(state.initialAttempts[0].raw,error.rawAnswer);assert.equal(state.initialAttempts[0].providerRequestId,'request-two');assert.equal(state.initialAttempts[0].status,'provider-refusal');
+ assert.equal(calls,1);assert.equal(state.initialAttempts[0].raw,error.rawAnswer);assert.equal(state.initialAttempts[0].providerRequestId,'request-two');assert.equal(state.initialAttempts[0].status,'provider-refusal');assert.equal(state.initialAttempts[0].finishReason,'content_filter');
 });
 test('a journal failure stops before parsing or further paid retries',async()=>{
  const state=run();let calls=0;
