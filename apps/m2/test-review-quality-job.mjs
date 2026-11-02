@@ -29,7 +29,10 @@ test('a job at the two-edit limit writes an independent draft and never installs
   assert.deepEqual(store.snapshot().cards,original);assert.equal(store.snapshot().reviewRound,undefined);
   const work=JSON.parse(await readFile(join(dir,'review-jobs',job.id+'.json'),'utf8')),draft=JSON.parse(await readFile(join(dir,'review-jobs',job.id+'.candidate.json'),'utf8'));
   assert.equal(work.run.quality.counts.company,2);assert.equal(draft.quality.status,'blocked');assert.equal(work.run.quality.passes.length,3);
-  await assert.rejects(jobs.start(actor,{resume:true}),/没有可续跑/);
+  assert.equal((await jobs.start(actor,{resume:true})).status,'draft');assert.equal(revisions,2);assert.equal(checks,9,'terminal draft resume cannot restart exhausted calls');
+  await assert.rejects(jobs.candidate({id:'member-09'}),{status:403});
+  assert.deepEqual((await jobs.candidate(actor)).cards,[],'operator status alone grants no card visibility');
+  const preview=await jobs.candidate({...actor,ceo:true});assert.equal(preview.readOnly,true);assert.equal(preview.cards.length,1);assert.match(preview.cards[0].id,/^candidate:/);assert.equal(preview.cards[0].content.verdictReason,review.verdictReason);assert.equal(preview.raw,undefined);assert.equal(preview.analysis,undefined);assert.deepEqual(store.snapshot().cards,original);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 test('only an operator can cancel a running job; cancellation saves a resumable failure without installing',async()=>{

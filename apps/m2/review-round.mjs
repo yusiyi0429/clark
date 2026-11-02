@@ -1,3 +1,4 @@
+import {routeReviewQuestions} from './review-question-routing.mjs';
 // 复盘 (陈溪南 2026-10-20): a review result becomes review cards in the same units and groups as the plan.
 // Card ids are rv:<ref> (rv:company, rv:eo, rv:eo-m1) so they never collide with plan cards; the review skill owns
 // the content, the program only stores it, shows it and runs the same handshake.
@@ -7,7 +8,8 @@ export const reviewId=ref=>'rv:'+ref;
 // 2.0.2 wrote causes as strings with the question at the end; 2.0.3 writes {text, ask}.
 export const causeOf=c=>typeof c==='string'?{text:c,ask:''}:{text:String(c?.text||''),ask:String(c?.ask||'')};
 export function reviewCards(file,{now=new Date().toISOString()}={}){
- const reviews=Array.isArray(file.reviews)?file.reviews:Object.values(file.reviews||{});
+ const raw=Array.isArray(file.reviews)?Object.fromEntries(file.reviews.map(r=>[r.ref||r.unit,r])):file.reviews||{};
+ const reviews=Object.values(routeReviewQuestions(raw));
  const cards={};
  for(const r of reviews){
   const id=reviewId(r.ref||r.unit),level=levelOf(r.level),parent=r.parent?reviewId(r.parent):r.level==='mission'?reviewId(r.unit):r.level==='ru'&&reviews.some(x=>x.level==='company')?reviewId('company'):null;
@@ -15,7 +17,7 @@ export function reviewCards(file,{now=new Date().toISOString()}={}){
    // 三段式 (2026-10-26): facts replace targets and causes; older runs keep their fields and show as before.
    // 下期输入 back on 2026-10-27 as {ref, type, text, ask?:{to, question}}; runs from 10/26 have none.
    ...(Array.isArray(r.facts)?{facts:r.facts.map(f=>({ref:f.ref||'',item:String(f.item||''),owner:f.owner||'',status:f.status,evidence:String(f.evidence||''),gap:String(f.gap||'')})),
-    ...(Array.isArray(r.nextInputs)?{nextInputs:r.nextInputs.map(n=>({ref:n.ref||'',type:n.type,text:String(n.text||''),...(n.ask?.to?{ask:{to:String(n.ask.to),question:String(n.ask.question||'')}}:{})}))}:{})}:{targets:r.targets||[],causes:(r.causes||[]).map(causeOf),nextInputs:r.nextInputs||[],...(r.ltoReview?{ltoReview:r.ltoReview}:{})}),
+    ...(Array.isArray(r.nextInputs)?{nextInputs:r.nextInputs.map(n=>({ref:n.ref||'',type:n.type,text:String(n.text||''),...(n.questionRoute?{questionRoute:structuredClone(n.questionRoute)}:{}),...(n.ask?.to?{ask:{to:String(n.ask.to),question:String(n.ask.question||'')}}:{})}))}:{})}:{targets:r.targets||[],causes:(r.causes||[]).map(causeOf),nextInputs:r.nextInputs||[],...(r.ltoReview?{ltoReview:r.ltoReview}:{})}),
    evidenceRefs:r.evidenceRefs||[],recordFacts:r.recordFacts||null,...(r.agreedOutcome?{agreedOutcome:structuredClone(r.agreedOutcome)}:{}),...(r.sourceBasis?{sourceBasis:structuredClone(r.sourceBasis)}:{}),...(r.childCommitments?{childCommitments:structuredClone(r.childCommitments)}:{}),...(r.objectId?{objectId:r.objectId}:{}),...(r.ownerAssigned===false?{ownerAssigned:false}:{})};
   cards[id]={...content,id,kind:'review',parentId:parent,versions:[{number:1,content:structuredClone(content),author:'Review',signatures:[],createdAt:now}],confirmedVersion:null};
  }

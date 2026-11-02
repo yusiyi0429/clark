@@ -1,3 +1,4 @@
+import {activeReviewAsk} from './review-question-routing.mjs';
 import {reviewConversation,groupRoomAvailable,conversationDraftKey,restoreConversationDraft} from './review-rooms.mjs';
 import M2BuildVersion from './M2BuildVersion.jsx';
 import {capturePageFocus} from './confirmation-focus.mjs';
@@ -233,7 +234,7 @@ function App(){
     const missions=Object.entries(drafts).filter(([id,d])=>id.startsWith('rv:'+scope+'-m')&&d.level==='mission'&&d.ownerAssigned!==false);
     for(const [,d] of missions)add(d.owner,`${reviewLabel(d)} 负责人`);
     if(!missions.length)for(const n of allNodes(data.units).filter(n=>n.level==='mission'&&String(n.id).startsWith(scope+'-')))add(n.owner,`${n.referenceLabel||'Mission'} 负责人`);
-    for(const [id,d] of Object.entries(drafts).filter(([id])=>id===('rv:'+scope)||id.startsWith('rv:'+scope+'-m')))for(const x of d.nextInputs||[])if(x.ask?.to)add(x.ask.to,`被提问 · 只看 ${d.level==='mission'?reviewLabel(d):'PO'} 复盘`,true);}
+    for(const [id,d] of Object.entries(drafts).filter(([id])=>id===('rv:'+scope)||id.startsWith('rv:'+scope+'-m')))for(const x of d.nextInputs||[])if(activeReviewAsk(x)?.to)add(x.ask.to,`被提问 · 只看 ${d.level==='mission'?reviewLabel(d):'PO'} 复盘`,true);}
    const byNumber=(a,b)=>a.localeCompare(b,'zh',{numeric:true});
    const list=[...roles.values()].map(m=>({...m,roles:(m.limited?m.roles:m.roles.filter(r=>!r.startsWith('被提问'))).sort((a,b)=>(a==='CEO'?-1:b==='CEO'?1:byNumber(a,b)))}));
    return [...list.filter(m=>!m.limited),...list.filter(m=>m.limited),{name:'Nexus',roles:['Co-agent，整理讨论、出修订建议'],nexus:true}];})();

@@ -1,3 +1,4 @@
+import {routedQuestion} from './review-question-routing.mjs';
 import {capturePageFocus} from './confirmation-focus.mjs';
 import React,{useState} from 'react';
 import {Button} from '@heroui/react';
@@ -39,13 +40,13 @@ const personOf=n=>unassigned(n)?'未指派':n.owner;
 const cardTag=(node,unitLabel)=>node.level==='mission'?`${unitShort(unitLabel(node))} · ${reviewLabel(node)}`:node.level==='company'?'公司复盘':`${unitLabel(node)} · ${reviewLabel(node)}`;
 function NextInputs({node,comments,onDetail,evidence,profile,onAnswer}){return <ol className="review-list review-next-list">{node.nextInputs.map((n,i)=><li key={n.ref||n.id||i} className={`review-item review-next tone-${typeTone[n.type]||'limit'}`}>{onDetail&&<ItemBubble node={node} field="nextInputs" index={i} label="下期输入" comments={comments} onDetail={onDetail}/>}
  <span className="review-next-type">{n.type}</span><Rich text={sentence(n.text)} evidence={evidence}/>
- {n.ask?.question&&<Ask node={node} index={i} ask={n.ask.question} label={`问${n.ask.to?` ${n.ask.to}`:''}`} waitFor={n.ask.to||'负责人'} answer={answerOf(comments,i,'nextInputs')} canAnswer={!!onAnswer&&!!profile&&n.ask.to===profile.name&&node.status!=='已确认'} onAnswer={(nd,idx,q,t)=>onAnswer(nd,idx,q,t,'nextInputs')}/>}</li>)}</ol>;}
+ {n.ask?.question&&<Ask node={node} index={i} ask={n.ask.question} label={routedQuestion(n)?'已由上级复盘统一提问':`问${n.ask.to?` ${n.ask.to}`:''}`} suppressWait={routedQuestion(n)} waitFor={n.ask.to||'负责人'} answer={answerOf(comments,i,'nextInputs')} canAnswer={!routedQuestion(n)&&!!onAnswer&&!!profile&&n.ask.to===profile.name&&node.status!=='已确认'} onAnswer={(nd,idx,q,t)=>onAnswer(nd,idx,q,t,'nextInputs')}/>}</li>)}</ol>;}
 function ItemBubble({node,field,index,label,comments,onDetail}){return <span className="review-item-bubble" data-block-id={`${node.id}:${field}#${index}`}><CommentBubble node={node} field={`${field}#${index}`} label={`${label} · 第 ${index+1} 条`} comments={comments} onDetail={onDetail}/></span>;}
-function Ask({node,index,ask,answer,canAnswer,onAnswer,block='causes',label='追问',waitFor='负责人'}){
+function Ask({node,index,ask,answer,canAnswer,onAnswer,block='causes',label='追问',waitFor='负责人',suppressWait=false}){
  const [text,setText]=useState(null),[busy,setBusy]=useState(false);
  if(answer)return <div className="review-ask is-answered"><span className="review-ask-q">{label}：{ask}</span><span className="review-ask-a">{answer.author}：{String(answer.text).replace(/^回答「[^」]*」：/,'')}</span></div>;
  return <div className="review-ask"><span className="review-ask-q">{label}：{ask}</span>
-  {canAnswer?(text==null?<button className="review-ask-button" onClick={()=>setText('')}>回答</button>:null):<span className="review-ask-wait">待{waitFor}回答</span>}
+  {canAnswer?(text==null?<button className="review-ask-button" onClick={()=>setText('')}>回答</button>:null):suppressWait?null:<span className="review-ask-wait">待{waitFor}回答</span>}
   {text!=null&&<div className="review-ask-form"><textarea autoFocus rows={2} value={text} placeholder="回答会发到本单元群里，Nexus 会按你的回答核对复盘。" onChange={e=>setText(e.target.value)} title="回车发送，Shift＋回车换行" onKeyDown={e=>{if(e.key==='Escape'){setText(null);return;}enterSubmit(e,async()=>{setBusy(true);try{await onAnswer(node,index,ask,text.trim());setText(null);}finally{setBusy(false);}},!busy&&!!text.trim());}}/><div className="review-ask-actions"><Button className="proposal-confirm" isDisabled={busy||!text.trim()} onPress={async()=>{setBusy(true);try{await onAnswer(node,index,ask,text.trim());setText(null);}finally{setBusy(false);}}}>{busy?'发送中…':'发送'}</Button><Button className="proposal-reject" onPress={()=>setText(null)}>取消</Button></div></div>}
  </div>;
 }

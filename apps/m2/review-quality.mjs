@@ -1,3 +1,4 @@
+import {reviewDependencyPool} from './review-dependencies.mjs';
 import {fallbackEligible,reviewModelApi,REVIEW_BODY_LIMIT_BYTES} from './review-model-fallback.mjs';
 import {reviewModelRequestBody} from './review-source-plan.mjs';
 import {createHash} from 'node:crypto';
@@ -6,6 +7,9 @@ import {bareJson} from './model.mjs';
 export const qualityHash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const clone=value=>structuredClone(value);
 const abort=signal=>signal?.throwIfAborted();
+const DEFERRED=Symbol('review-action-deferred');
+export const deferReviewAction=detail=>({[DEFERRED]:detail});
+export const isReviewResourceLimit=error=>['REVIEW_PACKET_OVERSIZE','REVIEW_MODEL_ATTEMPT_LIMIT','REVIEW_SOURCE_REQUEST_BUDGET','REVIEW_SOURCE_CONTEXT_PENDING','REVIEW_SOURCE_REQUEST_REPEAT','REVIEW_SOURCE_REQUEST_CONTRACT','MODEL_REFUSAL','MODEL_OUTPUT_CONTRACT','MODEL_OUTPUT_INCOMPLETE'].includes(error?.code)||error?.reviewOutputContract===true||error?.name==='TimeoutError'||!!error?.providerStatus;
 // Cache only verified answers. Every attempt (including malformed output) is
 // retained, independently of the two-per-card semantic revision budget.
 export async function qualityModelCall({gateway,system,quality,run,pass,stage,ref='',payload,validate=x=>x,save,signal,maxBodyBytes=REVIEW_BODY_LIMIT_BYTES}){
@@ -21,13 +25,18 @@ export async function qualityModelCall({gateway,system,quality,run,pass,stage,re
  }
  request??=quality.requests[key]={inputHash,model,...policy,sourceHash:quality.sourceHash,skillHash:quality.skillHash,pass,stage,ref,payload:clone(payload),attempts:[]};
  const route=new Map([[model,gateway],...backups.map(g=>[g.status.model,g])]);
- let active=backups.length?route.get(request.attempts.at(-1)?.nextModel||request.attempts.at(-1)?.requestedModel||model):gateway;
+ const grouped=/^(?:revise|refresh)(?:-source)?$/.test(stage)&&payload.unit?.id&&Number.isInteger(payload.revision);
+ const sameAction=r=>r.pass===pass&&/^(?:revise|refresh)(?:-source)?$/.test(r.stage)&&r.payload?.unit?.id===payload.unit.id&&r.payload?.revision===payload.revision&&r.payload?.candidateHash===payload.candidateHash&&r.sourceHash===quality.sourceHash&&r.skillHash===quality.skillHash;
+ const history=grouped?Object.values(quality.requests).filter(sameAction).flatMap(r=>r.attempts).sort((a,b)=>String(a.at).localeCompare(String(b.at))):request.attempts;
+ const last=history.at(-1);let prior=last;
+ let active=backups.length||grouped?route.get(last?.nextModel||last?.requestedModel||model):gateway;
  if(!active)throw Error('备用模型续跑来源不属于已授权策略');
- const used=backups.length?request.attempts.length:0;
- if(used>=3)throw Object.assign(Error('同一逻辑请求三个模型尝试已用完，保留草稿'),{code:'REVIEW_MODEL_ATTEMPT_LIMIT'});
+ const used=backups.length||grouped?history.length:0;
+ if(used>=3)throw Object.assign(Error('同一修订的模型、补源及重试尝试已用完，保留未核候选'),{code:'REVIEW_MODEL_ATTEMPT_LIMIT'});
+ if(grouped)request.attemptGroup={pass,ref:payload.unit.id,revision:payload.revision,candidateHash:payload.candidateHash};
  request.status='running';await save(run);
  for(let attempt=used+1;attempt<=3;attempt++){
-  abort(signal);verifyRequest();const record={attempt,at:new Date().toISOString(),requestedModel:active.status?.model||null,requestedAlias:active.status?.model||null,api:reviewModelApi(active.status?.model),options:{json:true,thinking:true,reasoningEffort:'high',maxTokens:32000},switchFrom:request.attempts.at(-1)?.switchFrom||null,switchReason:request.attempts.at(-1)?.switchReason||null};request.attempts.push(record);await save(run);
+  abort(signal);verifyRequest();const record={attempt,at:new Date().toISOString(),requestedModel:active.status?.model||null,requestedAlias:active.status?.model||null,api:reviewModelApi(active.status?.model),options:{json:true,thinking:true,reasoningEffort:'high',maxTokens:32000},switchFrom:prior?.switchFrom||null,switchReason:prior?.switchReason||null};request.attempts.push(record);await save(run);
   verifyRequest();
   let answer,error,parsed;
   try{
@@ -39,35 +48,39 @@ export async function qualityModelCall({gateway,system,quality,run,pass,stage,re
   if(!error){run.raw[key]=answer.answer;request.outputHash=qualityHash(answer.answer);request.status='done';request.selectedAlias=record.requestedAlias;request.returnedModel=record.returnedModel;request.actualApi=record.api;record.finishedAt=new Date().toISOString();await save(run);return parsed;}
   let switched=false;
   if(!signal?.aborted&&attempt<3&&backups.length&&active===gateway&&fallbackEligible(error)){record.nextModel=backups[0].status.model;record.switchFrom=active.status.model;record.switchReason={code:error.code||null,message:String(error.message),providerStatus:error.providerStatus||null,outputContract:error.reviewOutputContract===true};active=backups[0];switched=true;}
-  request.status='failed';await save(run);
+  request.status='failed';await save(run);prior=record;
   if(signal?.aborted||error.code==='REVIEW_PACKET_OVERSIZE'||!switched&&(error.code==='MODEL_REFUSAL'||error.diagnostics?.finishReason==='refusal')||attempt===3)throw error;
  }
 }
 
 // Each card shares one budget for semantic edits, structural repairs and
 // dependency refreshes. A resume continues the same pass and the same counters.
-export async function runReviewQuality({run,input,skill,sources,check,revise,problems=()=>[],normalize=()=>{},save=async()=>{},onProgress=async()=>{},signal}){
+export async function runReviewQuality({run,input,skill,sources,check,revise,problems=()=>[],normalize=()=>{},save=async()=>{},onProgress=async()=>{},signal,revisionConcurrency=8}){
+ if(!Number.isInteger(revisionConcurrency)||revisionConcurrency<1||revisionConcurrency>20)throw Error('修订并发必须在1到20之间');
  const max=skill.maxRevisionRounds;if(max!==2)throw Error('自动修订合同必须明确最多 2 轮');
  const inputHash=qualityHash(input),sourceHash=qualityHash(sources),skillHash=skill.hash;
  let q=run.quality;
  if(q&&(q.inputHash!==inputHash||q.sourceHash!==sourceHash||q.skillHash!==skillHash||q.maxRevisions!==max))throw Error('质量续跑来源、技能或修订上限已变化');
  if(!q){normalize();q=run.quality={schemaVersion:1,inputHash,sourceHash,skillHash,maxRevisions:max,counts:{},requests:{},passes:[],status:'checking',candidateHash:qualityHash(run.reviews)};await save(run);}
  if(q.candidateHash!==qualityHash(run.reviews))throw Error('质量续跑候选已变化，不能复用旧检查');
+ const items=input.stages.flat(),byId=new Map(items.map(c=>[c.id,c]));
+ const childrenOf=ref=>[...new Set([...(byId.get(ref)?.children||[]),...items.filter(c=>c.parent===ref).map(c=>c.id)])];
+ const verifyAction=action=>{for(const ref of [action.ref,...childrenOf(action.ref)])if(qualityHash(action.before?.[ref])!==qualityHash(run.reviews[ref]))throw Error('质量修订相关对象或子项输入校验失败：'+ref);};
  const verifyPass=pass=>{
   if(pass.sourceHash!==sourceHash||pass.reviewHash!==qualityHash(pass.reviews))throw Error('质量检查前快照校验失败');
   if(pass.issuesHash&&pass.issuesHash!==qualityHash({issues:pass.issues,structural:pass.structural}))throw Error('质量检查问题快照校验失败');
   if(pass.actionsHash&&pass.actionsHash!==qualityHash(pass.actions.map(({ref,issues,refresh})=>({ref,issues,refresh}))))throw Error('质量修订动作快照校验失败');
   for(const action of pass.actions||[]){
    if((action.status==='done'||action.before)&&!action.reserved)throw Error('质量修订预算预占校验失败');
-   if(action.before&&(action.beforeHash!==qualityHash(action.before)||action.status!=='done'&&action.beforeHash!==qualityHash(run.reviews)))throw Error('质量修订前快照校验失败');
+   if(action.before&&action.beforeHash!==qualityHash(action.before))throw Error('质量修订前快照校验失败');
+   if(action.before&&!['done','deferred'].includes(action.status))verifyAction(action);
    if(pass.status==='revising'&&action.status==='done'&&action.afterHash!==qualityHash(run.reviews[action.ref]))throw Error('质量修订后快照校验失败');
   }
  };
  const counts={};for(const pass of q.passes){verifyPass(pass);for(const action of pass.actions||[])if(action.reserved){const n=(counts[action.ref]||0)+1;if(action.revision!==n||n>max)throw Error('质量修订次数校验失败');counts[action.ref]=n;}}
  const entries=value=>Object.entries(value).sort(([a],[b])=>a.localeCompare(b));
  if(qualityHash(entries(counts))!==qualityHash(entries(q.counts)))throw Error('质量修订累计次数校验失败');
- if(q.status==='passed'||q.status==='blocked')return run;
- const items=input.stages.flat(),byId=new Map(items.map(c=>[c.id,c]));
+ if(['passed','blocked','needs-review'].includes(q.status))return run;
  const parents=new Map();for(const c of items){if(c.parent)parents.set(c.id,c.parent);for(const id of c.children||[])parents.set(id,c.id);}
  const required=x=>x.mustFix===true||skill.mustFix.includes(x.type);
  try{for(;;){
@@ -79,7 +92,7 @@ export async function runReviewQuality({run,input,skill,sources,check,revise,pro
   verifyPass(pass);
   if(pass.status==='checking'){
    await onProgress({stage:`质量复查 ${pass.index+1}`,qualityPass:pass.index});
-   const issues=await check(pass.reviews,pass.index,q);abort(signal);verifyPass(pass);
+   let issues;try{issues=await check(pass.reviews,pass.index,q);}catch(error){if(!signal?.aborted&&isReviewResourceLimit(error)){q.status='needs-review';q.blockReason='本轮复查未完成，保留原候选与未核事项';q.verificationPending=[{unit:'global',code:error.code||'CHECK_UNVERIFIED',problem:String(error.message),checks:error.checks||[]}];pass.status='needs-review';await save(run);return run;}throw error;}abort(signal);verifyPass(pass);
    const structural=problems({reviews:pass.reviews});
    pass.issues=clone(issues);pass.structural=clone(structural);pass.issuesHash=qualityHash({issues:pass.issues,structural:pass.structural});run.issues=clone(issues);
    const critical=issues.filter(required),fixable=critical.filter(x=>x.fixable!==false);
@@ -97,16 +110,30 @@ export async function runReviewQuality({run,input,skill,sources,check,revise,pro
    pass.actionsHash=qualityHash(pass.actions.map(({ref,issues,refresh})=>({ref,issues,refresh})));
    pass.status='revising';q.status='revising';await save(run);
   }
-  for(const action of pass.actions){
-   abort(signal);if(action.status==='done')continue;
-   if(!action.reserved){q.counts[action.ref]=(q.counts[action.ref]||0)+1;action.reserved=true;action.revision=q.counts[action.ref];await save(run);}
-   await onProgress({stage:`自动修订第 ${action.revision} 轮`,qualityPass:pass.index});
-   // Freeze the exact request before its first call. On resume, completed child
-   // revisions cannot accidentally change the input of an unfinished request.
-   if(!action.before){action.before=clone(run.reviews);action.beforeHash=qualityHash(action.before);await save(run);}
-   verifyPass(pass);
-   const review=await revise(byId.get(action.ref),action,pass.index,q);abort(signal);
-   run.reviews[action.ref]=review;action.status='done';action.afterHash=qualityHash(review);q.candidateHash=qualityHash(run.reviews);await save(run);
+  // Resume each original request, and release a slot as soon as its own
+  // branch finishes. Parent inputs never wait for unrelated branches.
+  const actionByRef=new Map(pass.actions.map(action=>[action.ref,action]));
+  const defer=async(action,detail)=>{action.status='deferred';action.deferred=clone(detail);await save(run);};
+  const pending=pass.actions.filter(action=>!['done','deferred'].includes(action.status));
+  await reviewDependencyPool({items:pending.map(action=>({id:action.ref,action})).reverse(),concurrency:revisionConcurrency,signal,
+   dependencies:node=>childrenOf(node.id),execute:async({action})=>{
+    abort(signal);
+    const blocked=childrenOf(action.ref).filter(ref=>actionByRef.get(ref)?.status==='deferred');
+    if(blocked.length){await defer(action,{code:'DEPENDENCY_UNVERIFIED',problem:'下级尚未核验，本层候选保留原文，待同步',refs:blocked});return;}
+    if(!action.reserved){q.counts[action.ref]=(q.counts[action.ref]||0)+1;action.reserved=true;action.revision=q.counts[action.ref];}
+    if(!action.before){action.before=clone(run.reviews);action.beforeHash=qualityHash(action.before);}
+    verifyAction(action);action.status='running';await save(run);
+    await onProgress({stage:`自动修订第 ${action.revision} 轮`,qualityPass:pass.index});
+    try{
+     const review=await revise(byId.get(action.ref),action,pass.index,q);abort(signal);verifyAction(action);
+     if(review?.[DEFERRED]){await defer(action,review[DEFERRED]);return;}
+     if(!review||typeof review!=='object'||Array.isArray(review))throw Object.assign(Error('修订未返回复盘对象，原候选保留'),{code:'MODEL_OUTPUT_CONTRACT'});
+     run.reviews[action.ref]=review;action.status='done';action.afterHash=qualityHash(review);q.candidateHash=qualityHash(run.reviews);await save(run);
+    }catch(error){if(!signal?.aborted&&isReviewResourceLimit(error)){await defer(action,{code:error.code||'MODEL_UNVERIFIED',problem:String(error.message),checks:error.checks||[]});return;}throw error;}
+   }});
+  if(pass.actions.some(action=>action.status==='deferred')){
+   q.verificationPending=pass.actions.filter(action=>action.status==='deferred').map(action=>({unit:action.ref,title:byId.get(action.ref)?.title,...clone(action.deferred)}));
+   q.status='needs-review';q.blockReason='自动处理结束，仍有未核事项；修订后尚未完成最终复查，保留独立候选';pass.status='needs-review';q.candidateHash=qualityHash(run.reviews);await save(run);return run;
   }
   normalize();q.candidateHash=qualityHash(run.reviews);pass.status='done';q.status='checking';await save(run);
  }}catch(error){q.status='waiting';q.error=String(error.message);await save(run);throw error;}
