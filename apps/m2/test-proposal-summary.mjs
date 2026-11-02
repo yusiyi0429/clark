@@ -67,3 +67,12 @@ test('清空字段由程序显示清空，原空字段显示空白，不改变�
  assert.equal(add.changes[0].before,'空白');assert.equal(add.changes[0].after,'补充记录');
  }
 });
+test('full comparison renders structured source as labelled text after timeout, retaining every raw value and field',async()=>{
+ const {completeComparison}=await import('./proposal-summary-input.mjs');
+ const before={ref:'t1',item:'上线访问',owner:'孙铭泽',status:'未达成',evidence:'缺原始记录 [E5]',gap:'待核',custom:'原样保留'};
+ const after={...before,status:'达成',evidence:'负责人报告已上线，但未独立核验 [event-855]',gap:''};
+ const proposal={id:'readable-fallback',cardId:'rv:eo-m1',before:{facts:[before],nextInputs:[{ref:'t1',type:'继续',text:'继续核实',ask:{to:'孙铭泽',question:'哪天？'}}]},patch:{facts:[after],nextInputs:[]}};
+ const original=JSON.stringify(proposal),result=completeComparison(proposal,{});
+ assert.match(result.changes[0].before,/事项：上线访问/);assert.match(result.changes[0].after,/状态：达成/);assert.ok(result.changes[0].after.includes(after.evidence));assert.match(result.changes[0].before,/custom：原样保留/);assert.match(result.changes[1].before,/问谁：孙铭泽/);assert.equal(result.changes[1].after,'（无条目）');assert.doesNotMatch(result.changes[0].after,/"ref"\s*:/);assert.equal(JSON.stringify(proposal),original);
+ let calls=0;const summarize=createProposalSummarizer({complete:async()=>{calls++;throw Error('timeout');}});const fallback=await summarize(proposal,{});assert.equal(fallback.full,true);assert.ok(fallback.changes[0].after.includes(after.evidence));assert.equal(calls,1);assert.equal(JSON.stringify(proposal),original);
+});

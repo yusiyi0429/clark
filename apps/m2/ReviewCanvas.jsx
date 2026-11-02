@@ -5,6 +5,7 @@ import {MessageCircle,Pencil,X} from 'lucide-react';
 import Handshake from './Handshake.jsx';
 import TodoPanel from './TodoPanel.jsx';
 import {enterSubmit} from './enter-submit.mjs';
+import {startValues,reviewEditRequest} from './review-edit.mjs';
 import {CommentBubble,CommentScope} from './DocumentContent.jsx';
 import {verdictTone,targetParts,richParts,reviewLabel,reviewSlots,maySign,mineFirst,reviewTodos,reviewHomeGroups,answerOf,ownerNames,confirmState,unitShort,personId,personCards} from './review-display.mjs';
 // 复盘 pages (陈溪南 2026-10-20/21): the plan's layout, five rows per review, same groups, comments and handshake.
@@ -38,7 +39,7 @@ const personOf=n=>unassigned(n)?'未指派':n.owner;
 const cardTag=(node,unitLabel)=>node.level==='mission'?`${unitShort(unitLabel(node))} · ${reviewLabel(node)}`:node.level==='company'?'公司复盘':`${unitLabel(node)} · ${reviewLabel(node)}`;
 function NextInputs({node,comments,onDetail,evidence,profile,onAnswer}){return <ol className="review-list review-next-list">{node.nextInputs.map((n,i)=><li key={n.ref||n.id||i} className={`review-item review-next tone-${typeTone[n.type]||'limit'}`}>{onDetail&&<ItemBubble node={node} field="nextInputs" index={i} label="下期输入" comments={comments} onDetail={onDetail}/>}
  <span className="review-next-type">{n.type}</span><Rich text={sentence(n.text)} evidence={evidence}/>
- {n.ask?.question&&<Ask node={node} index={i} ask={n.ask.question} label={`问${n.ask.to?` ${n.ask.to}`:''}`} waitFor={n.ask.to||'负责人'} answer={answerOf(comments,i,'nextInputs')} canAnswer={!!profile&&n.ask.to===profile.name&&node.status!=='已确认'} onAnswer={(nd,idx,q,t)=>onAnswer(nd,idx,q,t,'nextInputs')}/>}</li>)}</ol>;}
+ {n.ask?.question&&<Ask node={node} index={i} ask={n.ask.question} label={`问${n.ask.to?` ${n.ask.to}`:''}`} waitFor={n.ask.to||'负责人'} answer={answerOf(comments,i,'nextInputs')} canAnswer={!!onAnswer&&!!profile&&n.ask.to===profile.name&&node.status!=='已确认'} onAnswer={(nd,idx,q,t)=>onAnswer(nd,idx,q,t,'nextInputs')}/>}</li>)}</ol>;}
 function ItemBubble({node,field,index,label,comments,onDetail}){return <span className="review-item-bubble" data-block-id={`${node.id}:${field}#${index}`}><CommentBubble node={node} field={`${field}#${index}`} label={`${label} · 第 ${index+1} 条`} comments={comments} onDetail={onDetail}/></span>;}
 function Ask({node,index,ask,answer,canAnswer,onAnswer,block='causes',label='追问',waitFor='负责人'}){
  const [text,setText]=useState(null),[busy,setBusy]=useState(false);
@@ -50,31 +51,21 @@ function Ask({node,index,ask,answer,canAnswer,onAnswer,block='causes',label='追
 }
 // The owner edits a review in place, like a plan card (陈溪南 2026-10-20: 复盘允许直接修订).
 const mayEdit=(n,p)=>n.level==='company'?p.ceo===true:n.level==='po'?(p.unitDri||[]).includes(n.unit):ownerNames(n).includes(p.name);
-const plain=t=>String(t||'');
-// Editing reads like the page (评测 2026-10-22): no ** and no [E#] in the box. A line left as it was keeps its original
-// text; a changed line gets its 短标题 bold again and keeps the evidence numbers it had.
-const evidenceOf=t=>(String(t||'').match(/\[E\d+\]/g)||[]).join('');
-const toEdit=t=>String(t||'').replace(/\*\*/g,'').replace(/\s*(\[E\d+\])+/g,'').trim();
-const fromEdit=(line,orig)=>{if(orig!=null&&line===toEdit(orig))return orig;const m=line.match(/^([^：:]{1,24})[：:]\s*(.*)$/),body=m?`**${m[1]}：**${m[2]}`:line,ev=evidenceOf(orig);return ev?`${body} ${ev}`:body;};
-function startValues(n){if(isFactsCard(n))return {verdict:n.verdict||'未达成',verdictReason:toEdit(plain(n.verdictReason)),facts:n.facts.map(f=>({status:f.status||'未达成',evidence:toEdit(f.evidence),gap:toEdit(f.gap)})),next:(n.nextInputs||[]).map(x=>({type:x.type||'继续',text:toEdit(x.text)}))};return {verdict:n.verdict||'未达成',verdictReason:toEdit(plain(n.verdictReason)),targets:(n.targets||[]).map(toEdit).join('\n'),causes:(n.causes||[]).map(c=>toEdit(c.text)).join('\n'),nextInputs:(n.nextInputs||[]).map(x=>toEdit(x.text)).join('\n'),...(n.ltoReview?{ltoChoice:String(n.ltoReview.choice).startsWith('建议')?n.ltoReview.choice:'建议'+n.ltoReview.choice,ltoReason:plain(n.ltoReview.reason)}:{})};}
-function patchFrom(n,v){const lines=t=>String(t).split('\n').map(x=>x.trim()).filter(Boolean),out={};
- if(v.verdict!==n.verdict)out.verdict=v.verdict;if(v.verdictReason.trim()!==toEdit(plain(n.verdictReason)))out.verdictReason=fromEdit(v.verdictReason.trim(),n.verdictReason);
- if(isFactsCard(n)){const facts=n.facts.map((f,i)=>{const e=v.facts[i];return {...f,status:e.status,evidence:e.evidence.trim()===toEdit(f.evidence)?f.evidence:e.evidence.trim(),gap:e.gap.trim()===toEdit(f.gap)?f.gap||'':e.gap.trim()};});if(JSON.stringify(facts)!==JSON.stringify(n.facts))out.facts=facts;
-  const next=(n.nextInputs||[]).map((x,i)=>({...x,type:v.next[i].type,text:v.next[i].text.trim()===toEdit(x.text)?x.text:v.next[i].text.trim()}));if(JSON.stringify(next)!==JSON.stringify(n.nextInputs||[]))out.nextInputs=next;return out;}
- const targets=lines(v.targets).map((t,i)=>fromEdit(t,(n.targets||[])[i]));if(JSON.stringify(targets)!==JSON.stringify(n.targets||[]))out.targets=targets;
- const causes=lines(v.causes).map((text,i)=>({text:fromEdit(text,(n.causes||[])[i]?.text),ask:(n.causes||[])[i]?.ask||''}));if(JSON.stringify(causes)!==JSON.stringify(n.causes||[]))out.causes=causes;
- const next=lines(v.nextInputs).map((text,i)=>({id:(n.nextInputs||[])[i]?.id||`${n.ref}-${i+1}`,type:(n.nextInputs||[])[i]?.type||'欠账',text:fromEdit(text,(n.nextInputs||[])[i]?.text)}));if(JSON.stringify(next)!==JSON.stringify(n.nextInputs||[]))out.nextInputs=next;
- if(n.ltoReview&&(v.ltoChoice!==n.ltoReview.choice||v.ltoReason.trim()!==plain(n.ltoReview.reason)))out.ltoReview={choice:v.ltoChoice,reason:v.ltoReason.trim()};
- return out;}
+function AgreedOutcomeRow({node}){
+ if(!['po','mission'].includes(node.level))return null;
+ return <tr><th scope="row">原定成果</th><td>{node.agreedOutcome?.items?.length?node.agreedOutcome.items.map((item,i)=><p key={i} style={{whiteSpace:'pre-wrap'}}>{item.text}</p>):<p>本次复盘基线未记录成果描述。</p>}</td></tr>;
+}
 function EditRow({label,children}){return <tr><th scope="row">{label}</th><td>{children}</td></tr>;}
-function ReviewEdit({node,onSave,onCancel}){
- const [v,setV]=useState(()=>startValues(node)),[busy,setBusy]=useState(false),set=k=>e=>setV(o=>({...o,[k]:e.target.value}));
- const save=async event=>{const confirmationFocus=capturePageFocus(event);const patch=patchFrom(node,v);if(!Object.keys(patch).length)return onCancel();setBusy(true);try{await onSave(patch,{confirmationFocus});}catch(e){if(e.code!=='CANCELLED')throw e;}finally{setBusy(false);}};
- const keys=e=>{if(e.key==='Escape')onCancel();else enterSubmit(e,()=>save(e),!busy);};
+function ReviewEdit({node:current,onSave,onCancel}){
+ const [baseline]=useState(()=>structuredClone(current)),[v,setV]=useState(()=>startValues(current)),[busy,setBusy]=useState(false),[error,setError]=useState(''),set=k=>e=>setV(o=>({...o,[k]:e.target.value}));
+ const node=baseline,stale=baseline.version!==current.version;
+ const save=async event=>{if(busy||stale)return;const confirmationFocus=capturePageFocus(event);const {patch}=reviewEditRequest(baseline,current,v);if(!Object.keys(patch).length)return onCancel();setError('');setBusy(true);try{await onSave(patch,{confirmationFocus,baseVersion:baseline.version});}catch(e){if(e.code!=='CANCELLED')setError(e.message||'保存失败，输入已保留，请重试。');}finally{setBusy(false);}};
+ const keys=e=>{if(e.key==='Escape'){if(!busy)onCancel();}else enterSubmit(e,()=>save(e),!busy&&!stale);};
  const setFact=(i,k)=>e=>setV(o=>({...o,facts:o.facts.map((f,j)=>j===i?{...f,[k]:e.target.value}:f)}));
  const factArea=(i,k,rows,hint)=><textarea className="inline-field-input" rows={Math.max(rows,String(v.facts[i][k]).split('\n').length)} value={v.facts[i][k]} placeholder={hint} onChange={setFact(i,k)} onKeyDown={keys} title="回车保存，Shift＋回车换行，Esc 取消"/>;
  const area=(k,rows)=><textarea className="inline-field-input" rows={Math.max(rows,String(v[k]).split('\n').length+1)} value={v[k]} onChange={set(k)} onKeyDown={keys} title="回车保存，Shift＋回车换行，Esc 取消"/>;
- return <div className="template-content card-simple review-edit"><table className="review-table"><tbody>
+ return <div className="template-content card-simple review-edit">{stale&&<p role="alert">内容已更新，你的输入仍保留。请复制修改内容，取消后重新打开编辑，核对最新版本。</p>}{error&&<p role="alert">{error}</p>}<table className="review-table"><tbody>
+  <AgreedOutcomeRow node={node}/>
   <EditRow label="结果判定"><select value={v.verdict} onChange={set('verdict')}>{['达成','部分达成','未达成'].map(x=><option key={x}>{x}</option>)}</select>{area('verdictReason',2)}</EditRow>
   {isFactsCard(node)?<><EditRow label="事实证据"><ol className="review-list review-facts-edit">{node.facts.map((f,i)=><li key={f.ref||i}><div className="review-fact-head"><strong>{f.item}</strong>{f.owner&&<span className="review-fact-owner">{f.owner}</span>}<select value={v.facts[i].status} onChange={setFact(i,'status')}>{['达成','部分达成','未达成','未开始'].map(x=><option key={x}>{x}</option>)}</select></div>{factArea(i,'evidence',2,'现状和证据')}{factArea(i,'gap',1,'没做到的原因（可空）')}</li>)}</ol></EditRow>
   {(node.nextInputs||[]).length>0&&<EditRow label="下期输入"><ol className="review-list review-facts-edit">{node.nextInputs.map((x,i)=><li key={x.ref||i}><div className="review-fact-head"><select value={v.next[i].type} onChange={e=>setV(o=>({...o,next:o.next.map((y,j)=>j===i?{...y,type:e.target.value}:y)}))}>{['继续','调整','停止','待决策'].map(t=><option key={t}>{t}</option>)}</select></div><textarea className="inline-field-input" rows={Math.max(1,String(v.next[i].text).split('\n').length)} value={v.next[i].text} onChange={e=>setV(o=>({...o,next:o.next.map((y,j)=>j===i?{...y,text:e.target.value}:y)}))} onKeyDown={keys} title="回车保存，Shift＋回车换行，Esc 取消"/>{x.ask?.question&&<small className="proposal-same">问 {x.ask.to}：{x.ask.question}</small>}</li>)}</ol></EditRow>}</>:<>
@@ -83,7 +74,7 @@ function ReviewEdit({node,onSave,onCancel}){
   <EditRow label="下月输入">{area('nextInputs',3)}<small className="proposal-same">每行一条，类型按原来的顺序保留</small></EditRow>
   </>}
   {node.ltoReview&&<EditRow label="长期目标审视"><select value={v.ltoChoice} onChange={set('ltoChoice')}>{['建议维持','建议修改','建议重开'].map(x=><option key={x}>{x}</option>)}</select>{area('ltoReason',2)}</EditRow>}
- </tbody></table><div className="proposal-actions"><Button className="proposal-confirm" isDisabled={busy} onPress={save}>{busy?'保存中…':'保存新版本'}</Button><Button className="proposal-reject" onPress={onCancel}>取消</Button></div></div>;
+ </tbody></table><div className="proposal-actions"><Button className="proposal-confirm" isDisabled={busy||stale} onPress={save}>{busy?'保存中…':'保存新版本'}</Button><Button className="proposal-reject" isDisabled={busy} onPress={onCancel}>取消</Button></div></div>;
 }
 export function ReviewCard({node,profile,comments=[],onDetail,onAnswer,evidence,unitLabel,tone='domain',onRevise,footer=null,insight=null,insightState='',dueAt=null,transfer=null}){
  const mineToAnswer=ownerNames(node).includes(profile.name),[editing,setEditing]=useState(false),canEdit=!!onRevise&&!node.locked&&mayEdit(node,profile);
@@ -93,12 +84,13 @@ export function ReviewCard({node,profile,comments=[],onDetail,onAnswer,evidence,
   {node.sourceBasis?.basisMode==='latest-source-candidate'&&(node.sourceBasis.effective!==true||node.childCommitments?.items?.some(t=>t.effective!==true))&&<p className="review-locked">取自本体最新计划；未确认内容不代表正式生效。</p>}
   {/* Locked after the unit or company review is confirmed (陈溪南 2026-10-28): read and comment only. */}
   {node.locked&&<p className="review-locked">{node.lockedReason||'这份复盘已锁定，只能看和批注'}</p>}
-  {editing?<ReviewEdit node={node} onCancel={()=>setEditing(false)} onSave={async(patch,options)=>{await onRevise(node,patch,options);setEditing(false);}}/>:<div className="template-content card-simple"><table className="review-table"><tbody>
-   <Row node={node} field="verdict" label="结果判定" comments={comments} onDetail={onDetail}><p className="review-verdict-line">{node.verdictChange&&<span className="verdict-changed">由「{node.verdictChange.from}」改为「{node.verdictChange.to}」· {node.verdictChange.by} · v{node.verdictChange.version}</span>}{/* 结果判定 opens with the verdict itself, then the reasoning (陈溪南 2026-10-26). */}<span className="review-verdict-reason">{node.verdict&&<span className={`review-verdict-word tone-${verdictTone(node.verdict)}`}>{node.verdict}，</span>}<Rich text={reasonAfter(node.verdict,node.verdictReason)} evidence={evidence}/></span></p></Row>
+  {editing?<ReviewEdit node={node} onCancel={()=>setEditing(false)} onSave={async(patch,options)=>{await onRevise({...node,version:options.baseVersion},patch,options);setEditing(false);}}/>:<div className="template-content card-simple"><table className="review-table"><tbody>
+   <AgreedOutcomeRow node={node}/>
+   <Row node={node} field="verdict" label="结果判定" comments={comments} onDetail={onDetail}><p className="review-verdict-line">{/* 结果判定 opens with the verdict itself, then the reasoning (陈溪南 2026-10-26). */}<span className="review-verdict-reason">{node.verdict&&<span className={`review-verdict-word tone-${verdictTone(node.verdict)}`}>{node.verdict}，</span>}<Rich text={reasonAfter(node.verdict,node.verdictReason)} evidence={evidence}/></span></p></Row>
    {isFactsCard(node)?<><Row node={node} field="facts" label="事实证据" comments={comments} onDetail={onDetail}>{node.facts.length?<Facts node={node} comments={comments} onDetail={onDetail} evidence={evidence}/>:<p className="review-none">这份复盘没有列出事实。</p>}</Row>
     {Array.isArray(node.nextInputs)&&node.nextInputs.length>0&&<Row node={node} field="nextInputs" label="下期输入" comments={comments} onDetail={onDetail}><NextInputs node={node} comments={comments} onDetail={onDetail} evidence={evidence} profile={profile} onAnswer={onAnswer}/></Row>}</>:<>
    <Row node={node} field="targets" label="目标对照" comments={comments} onDetail={onDetail}><ol className="review-list">{(node.targets||[]).map((t,i)=>{if(/^\*\*Mission 结果（无）/.test(String(t)))return null;const p=targetParts(t),tone=verdictTone(p.verdict);return <li key={i} className={`review-target tone-${tone} review-item`}>{onDetail&&<ItemBubble node={node} field="targets" index={i} label="目标对照" comments={comments} onDetail={onDetail}/>}{p.name&&<strong className="review-target-name">{p.name}：</strong>}{p.verdict&&<span className="review-target-verdict">{p.verdict}，</span>}<Rich text={p.text} evidence={evidence}/></li>;})}</ol></Row>
-   <Row node={node} field="causes" label="原因" comments={comments} onDetail={onDetail}><ol className="review-list">{(node.causes||[]).map((c,i)=><li key={i} className="review-item">{onDetail&&<ItemBubble node={node} field="causes" index={i} label="原因" comments={comments} onDetail={onDetail}/>}<Rich text={c.text} evidence={evidence}/>{c.ask&&<Ask node={node} index={i} ask={c.ask} answer={answerOf(comments,i)} canAnswer={mineToAnswer} onAnswer={onAnswer}/>}</li>)}</ol></Row>
+   <Row node={node} field="causes" label="原因" comments={comments} onDetail={onDetail}><ol className="review-list">{(node.causes||[]).map((c,i)=><li key={i} className="review-item">{onDetail&&<ItemBubble node={node} field="causes" index={i} label="原因" comments={comments} onDetail={onDetail}/>}<Rich text={c.text} evidence={evidence}/>{c.ask&&<Ask node={node} index={i} ask={c.ask} answer={answerOf(comments,i)} canAnswer={!!onAnswer&&mineToAnswer} onAnswer={onAnswer}/>}</li>)}</ol></Row>
    <Row node={node} field="nextInputs" label="下月输入" comments={comments} onDetail={onDetail}><ol className="review-list">{(node.nextInputs||[]).map((n,i)=>{const m=String(n.text).match(/^\*\*(.+?)：?\*\*\s*([\s\S]*)$/);return <li key={n.id||i} className={`review-next-input tone-${typeTone[n.type]||'limit'} review-item`}>{onDetail&&<ItemBubble node={node} field="nextInputs" index={i} label="下月输入" comments={comments} onDetail={onDetail}/>}{m&&<strong>{m[1].replace(/：$/,'')}：</strong>}<span className="review-type-word">{n.type}，</span><Rich text={m?m[2]:n.text} evidence={evidence}/></li>;})}</ol></Row>
    </>}
    {node.ltoReview&&<Row node={node} field="ltoReview" label="长期目标审视" comments={comments} onDetail={onDetail}><p><strong>{ltoChoice(node.ltoReview.choice)}：</strong>{node.ltoReview.reason}</p></Row>}

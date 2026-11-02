@@ -5,11 +5,17 @@ const mutation=new RegExp(replace+'|'+operation);
 const prefix='(?:(?:请你?|麻烦你?|帮我|我建议|建议)\\s*)?';
 const assign=new RegExp('^'+prefix+'(?:把|将)(.+?)(?:'+replace+')\\s*(.+)$');
 const direct=new RegExp('^'+prefix+'('+replace+'|'+operation+')\\s*(.+)$');
+// Quoted replacement text may contain commas and sentence punctuation.
+function commandClauses(text){
+ const pairs={'“':'”','「':'」','‘':'’','"':'"'},stack=[],parts=[];let part='';
+ for(const ch of text){if(stack.length&&ch===stack.at(-1)){stack.pop();part+=ch;continue;}if(pairs[ch]){stack.push(pairs[ch]);part+=ch;continue;}if(!stack.length&&/[，,。；;！!\n]/.test(ch)){parts.push(part);part='';}else part+=ch;}
+ if(stack.length)return [];parts.push(part);return parts;
+}
 // Only an actual imperative grants automatic editing. Quoted/rejected/conditional edits remain discussion.
 export function ownerEditCommands(text){
  text=String(text||'').trim();if(/举例|比如|例如|假设|如果|转述|引用|供参考|仅供讨论|只是讨论|不是.{0,6}(?:指令|要求)|尚未决定|还没决定|还在考虑/.test(text))return [];if(!text||/[?？]|是否|要不要|能不能|可不可以|(?:吗|呢|么)[。！!\s]*$/.test(text))return [];
  const commands=[];
- for(let clause of text.split(/[，,。；;！!\n]+/).map(x=>x.trim()).filter(Boolean)){
+ for(let clause of commandClauses(text).map(x=>x.trim()).filter(Boolean)){
   clause=clause.replace(/^(?:@Nexus|Nexus)[\s，,:：]*/,'');if(!clause)continue;
   const a=clause.match(assign),d=clause.match(direct);
   if(a){if(/不同意|反对|不认可|原话|这句话|这段话|引用|转述|(?:把|将)/.test(a[1]))return [];commands.push({target:a[1],value:a[2],kind:'replace'});continue;}
