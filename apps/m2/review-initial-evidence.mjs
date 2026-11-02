@@ -2,15 +2,17 @@ import {createHash} from 'node:crypto';
 import {reviewModelBudgetBytes} from './review-source-plan.mjs';
 import {citationFacts} from './review-evidence-addresses.mjs';
 const hash=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
-export const initialEvidenceContract=()=>({version:1,mode:'frozen-explicit-evidence',maxRetrievals:1,maxPhysicalAttempts:3,maxRecords:64,maxEvidenceBytes:256*1024,maxBodyBytes:512*1024,responseReserveBytes:4096,maxQueryChars:128});
-export function validateInitialEvidence(input){const c=input.engineeringContracts?.initialEvidence;if(c!==undefined&&hash(c)!==hash(initialEvidenceContract()))throw Error('初稿显式取证合同不受支持');return c;}
+export const initialEvidenceContract=({version=2}={})=>{if(![1,2].includes(version))throw Error('不支持的初稿取证版本');return {version,mode:'frozen-explicit-evidence',maxRetrievals:1,maxPhysicalAttempts:3,maxRecords:64,maxEvidenceBytes:256*1024,maxBodyBytes:512*1024,responseReserveBytes:4096,maxQueryChars:128};};
+export function validateInitialEvidence(input){const c=input.engineeringContracts?.initialEvidence;if(c!==undefined&&hash(c)!==hash(initialEvidenceContract({version:c?.version})))throw Error('初稿显式取证合同不受支持');return c;}
 export function initialEvidenceSetup({input,card,user}){
  const contract=validateInitialEvidence(input);
  if(!contract||card.level!=='mission')return {user};
  const items=input.stages.flat(),byRef=new Map(items.map(c=>[c.id,c])),labels=[],labelIndex=new Map(),label=s=>{if(!labelIndex.has(s)){labelIndex.set(s,labels.length);labels.push(s);}return labelIndex.get(s);};
  const sourceCatalog=items.map(c=>({sourceRef:c.id,objectId:c.objectId,sourceBasis:c.sourceBasis||null,title:c.title,owner:c.owner,parent:c.parent,evidenceCount:c.evidence.length}));
  const evidenceDirectory={fields:['id','asOf','sourceLabelIndex'],sourceLabels:labels,sources:items.map(c=>({sourceRef:c.id,records:c.evidence.map(e=>[e.id,e.asOf??null,label(e.source??null)])}))};
+ if(contract.version>=2)evidenceDirectory.originalIdentities=items.map(c=>({sourceRef:c.id,records:c.evidence.filter(e=>['factItem','factRef'].some(k=>typeof e[k]==='string')||typeof e.m2Source?.objectId==='string').map(e=>({id:e.id,...Object.fromEntries(['factItem','factRef'].filter(k=>typeof e[k]==='string').map(k=>[k,e[k]])),...(typeof e.m2Source?.objectId==='string'?{m2Source:{objectId:e.m2Source.objectId}}:{})}))})).filter(s=>s.records.length);
  const base={...user,sourceCatalog,evidenceDirectory,evidenceRetrieval:structuredClone(contract),task:user.task+' 目录仅用于发现同轮冻结来源，不是事实证据，不代表已读原文。若需跨源核实，可返回 requestEvidence:{addresses:[{sourceRef,id}],query:可选字面查询,sourceRefs:可选查询范围,from:可选YYYY-MM-DD,to:可选YYYY-MM-DD}，最多一次取证往返。日期仅按原asOf真实字段含首尾筛选，缺日期明确列出，不猜发生时间。程序按冻结顺序返回完整E记录、实际已给地址/未给地址及命中数；不是语义归属。同词或他人/单元级记录不自动成为本Mission成果。仅已给unit原文和取回完整记录能作依据，跨源引用保留[sourceRef:EID]。最终必须基于已拿资料返回review，如实保留资料缺口，不能把未读写成未发生。'};
+ if(contract.version>=2)base.task+=' query在本轮冻结证据的完整text和source中做字面匹配，不只查目录标签；不填sourceRefs时默认查全部已提供的冻结来源集合，sourceRefs仅用于主动缩小范围。可使用当前Task原文中的产品名、交付名等词进行全局query。目录没显示正文不代表记录不存在。sourceLabel中的历史卡号/旧namespace不等于当前sourceRef；来源身份以sourceCatalog的objectId为准，目录originalIdentities只逐字列已有原factItem/factRef/m2Source.objectId用于辨认，仍不是原文证据。';
  const finalize=user=>user.evidenceRetrieval.finalizeOnly?user:({...user,evidenceRetrieval:{...user.evidenceRetrieval,finalizeOnly:true},task:user.task+' 本次为最终初稿：不再请求取证；只根据已经实际提供的原文返回review，未拿到的资料如实保留缺口。'});
  const supplied=new Set((card.evidence||[]).map(e=>card.id+':'+e.id));
  const flow={contract,finalize,validateReview(review,requestUser){

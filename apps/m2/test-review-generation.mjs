@@ -56,6 +56,7 @@ test('复盘生成：单元按名称认，缺 RU PO 的单元不复盘，公司 
  assert.equal(input.engineeringContracts.fullContextCheck.version,2);
  assert.equal(input.engineeringContracts.fullContextCheck.maxConcurrency,3);
  assert.equal(input.engineeringContracts.initialEvidence.maxPhysicalAttempts,3);
+ assert.equal(input.engineeringContracts.initialEvidence.version,2);
  assert.equal(input.engineeringContracts.initialContext.maxBodyBytes,512*1024);
  const [s1,s2,s3]=input.stages;
  assert.deepEqual(s1.map(c=>c.id),['eo-m1']);assert.deepEqual(s2.map(c=>c.id),['eo']);assert.deepEqual(s2[0].children,['eo-m1']);
