@@ -420,3 +420,82 @@ describe("首页切走、刷新回来：这一轮在服务端照常写，回来�
     expect(render()).toMatchObject({ status: "aborted", error: "已停止本次回答。" });
   });
 });
+
+describe("议题、Mission、战场页的对话：切走回来同样接上这一轮", () => {
+  const RUN = "0b7c3f1e-2d4a-4c8b-9a51-7e6d5c4b3a21";
+  const ISSUE = "issue:3f2b8c1d-6e4a-4b7f-8c9d-1a2b3c4d5e6f";
+  const askedAt = "2026-11-02T12:00:00.000Z";
+  const asked: Message = { sequence: 1, role: "user", content: "这个议题卡在哪？", runId: RUN, createdAt: askedAt };
+  const turnUrl = (action: "stream" | "stop") => `/api/conversations/${encodeURIComponent(ISSUE)}/turns/${RUN}/${action}`;
+  const requestTo = (url: string) => requests.filter((request) => request.url === url).at(-1);
+  const noStream = { ok: true, status: 204, body: null, headers: new Headers() };
+  function page() {
+    vi.stubGlobal("document", { visibilityState: "visible", addEventListener: () => undefined, removeEventListener: () => undefined });
+  }
+
+  it("回来时最后一句还在回答：同样的进行中一行（用时从提问时算、停止可用），每 3 秒读一次历史，答完换成回答", async () => {
+    vi.useFakeTimers();
+    scope = ISSUE;
+    page();
+    render();
+    historyRequest().resolve(ok([{ ...asked, running: true }]));
+    await flush();
+    // 对象页的对话服务端没有事件流可接（204）：改读历史。
+    requestTo(turnUrl("stream"))!.resolve(noStream);
+    await flush();
+    expect(render()).toMatchObject({ status: "streaming", streaming: true, stage: "thinking", startedAt: Date.parse(askedAt) });
+    expect(render().messages).toEqual([{ ...asked, running: true }]);
+    await vi.advanceTimersByTimeAsync(3_000);
+    historyRequest().resolve(ok([{ ...asked, running: true }]));
+    await flush();
+    expect(render().status).toBe("streaming");
+    await vi.advanceTimersByTimeAsync(3_000);
+    historyRequest().resolve(ok([asked, { sequence: 2, role: "assistant", content: "卡在报价确认。", runId: RUN }]));
+    await flush();
+    expect(render()).toMatchObject({ status: "complete", streaming: false });
+    expect(render().messages.map((message) => message.content)).toEqual(["这个议题卡在哪？", "卡在报价确认。"]);
+    expect(requestTo(turnUrl("stop"))).toBeUndefined();
+  });
+
+  it("停止：先请服务端停下这一轮（断开连接不会停），回来后再断开本地连接", async () => {
+    scope = ISSUE;
+    page();
+    render();
+    historyRequest().resolve(ok([]));
+    await flush();
+    const turn = stream([`data: {"type":"route","tier":"grounded","expectSeconds":30,"runId":"${RUN}"}\n\n`, `data: {"type":"message","delta":"写了一段","runId":"${RUN}"}\n\n`]);
+    const sending = render().send("写长一点", []);
+    const post = requests.find((request) => request.init?.method === "POST" && request.url.endsWith("/messages"))!;
+    post.resolve(turn.response);
+    await flush();
+    render().stop();
+    const stopRequest = requestTo(turnUrl("stop"))!;
+    expect(stopRequest.init?.method).toBe("POST");
+    expect(post.init?.signal?.aborted).toBe(false);
+    stopRequest.resolve({ ok: true, status: 200, json: async () => ({ runId: RUN, status: "aborted" }) });
+    await flush();
+    expect(post.init?.signal?.aborted).toBe(true);
+    turn.release();
+    await flush();
+    historyRequest().resolve(ok([user(1, "写长一点")]));
+    await sending;
+    expect(render().status).toBe("aborted");
+  });
+
+  it("接着读历史时切走（卸载）：不请服务端停，也不再读历史", async () => {
+    vi.useFakeTimers();
+    scope = ISSUE;
+    page();
+    render();
+    historyRequest().resolve(ok([{ ...asked, running: true }]));
+    await flush();
+    requestTo(turnUrl("stream"))!.resolve(noStream);
+    await flush();
+    expect(render().status).toBe("streaming");
+    const reads = requests.filter((request) => !request.init?.method).length;
+    unmount();
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(requests.filter((request) => !request.init?.method)).toHaveLength(reads);
+    expect(requests.filter((request) => request.init?.method === "POST")).toHaveLength(0);
+  });
+});

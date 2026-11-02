@@ -122,6 +122,26 @@ describe("一轮没完成时，已经写出的内容留在界面上", () => {
     expect(view.messages.map((message) => message.content)).toEqual(["问题", "第一段，第二段"]);
   });
 
+  it("回答途中连接断了，连上时服务端已写完、没有事件流可接（对象页的对话）：显示读回的回答，不发「继续」", async () => {
+    vi.useFakeTimers();
+    const answered = history([{ sequence: 1, role: "user", content: "问题", runId: RUN }, { sequence: 2, role: "assistant", content: "第一段，写完了", runId: RUN }]);
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "第一段" })], new TypeError("network error")))
+      .mockResolvedValueOnce(answered)
+      .mockResolvedValueOnce(answered)
+      .mockResolvedValueOnce(notFollowing);
+    vi.stubGlobal("fetch", fetchMock);
+    let settled = false;
+    const sending = snapshot().send("问题", []).finally(() => { settled = true; });
+    for (let step = 0; step < 10 && !settled; step += 1) await vi.advanceTimersByTimeAsync(1_000);
+    expect(await sending).toBe(true);
+    expect(fetchMock.mock.calls[3][0]).toBe(followUrl);
+    expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST")).toHaveLength(1);
+    const view = snapshot();
+    expect(view).toMatchObject({ status: "complete", error: null, recovery: null });
+    expect(view.messages.map((message) => message.content)).toEqual(["问题", "第一段，写完了"]);
+  });
+
   it("服务停机前先存了档（SERVER_RESTARTING）：连上新实例后自动接着写", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn()

@@ -39,7 +39,7 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   kind?: "carried" | "trace";
   /** 这一句是在飞书私聊天枢机器人或微信 ClawBot 里说的（问与答都标）。 */
   via?: "feishu" | "wechat";
-  /** 只在本人的提问上：这一轮服务端还在回答（首页走独立 Chat 时）。 */
+  /** 只在本人的提问上：这一轮服务端还在回答。 */
   running?: boolean;
   meta?: { issueId?: string; title?: string; href?: string } };
 export type Attachment = { id: string; fileName: string; mimeType: string };
@@ -130,24 +130,32 @@ export function messagesEndpoint(scope: string): string {
   return `/api/conversations/${encodeURIComponent(scope)}/messages`;
 }
 
-/** 一轮回答：接上它的事件流（stream）/ 请服务端停下它（stop）。只有首页走独立 Chat 时有用，其余回 204。 */
+/** 一轮回答：接上它的事件流（stream，只有首页走独立 Chat 时有，其余回 204）/ 请服务端停下它（stop）。 */
 function turnEndpoint(scope: string, runId: string, action: "stream" | "stop"): string {
   return `/api/conversations/${encodeURIComponent(scope)}/turns/${encodeURIComponent(runId)}/${action}`;
 }
 
-/** 首页：最后一句是本人在网页里问的、服务端说这一轮还在写：它的 runId（飞书、微信来的照旧由「正在回答飞书里的提问」接住）。 */
-function runningTurn(list: Message[]): string | undefined {
+/** 最后一句是本人在网页里问的、服务端说这一轮还在写：那一句（飞书、微信来的照旧由「正在回答飞书里的提问」接住）。 */
+function runningQuestion(list: Message[]): Message | undefined {
   const last = list.at(-1);
-  return last?.role === "user" && last.running && !last.via ? last.runId : undefined;
+  return last?.role === "user" && last.running && !last.via ? last : undefined;
+}
+function runningTurn(list: Message[]): string | undefined {
+  return runningQuestion(list)?.runId;
+}
+/** 接上这一轮要的：runId，和提问的时刻（服务端不给开始时刻时用时从它算）。 */
+function attachOf(question: Message): { runId: string; running: true; since?: number } {
+  const since = question.createdAt ? Date.parse(question.createdAt) : NaN;
+  return { runId: question.runId!, running: true, ...(since > 0 ? { since } : {}) };
 }
 
-/** 接上的那一轮服务端这里没有了（服务重启过）、历史里它还在写：多久读一次历史。 */
+/** 接上的那一轮服务端这里没有事件流（对象页的对话、服务重启过）、历史里它还在写：多久读一次历史。 */
 const RUN_POLL_MS = 3_000;
 
 /** 点停止后最多等服务端这么久：迟迟不回也断开本地连接，停止键不会没反应。 */
 const STOP_WAIT_MS = 3_000;
 
-/** 请服务端停下这一轮，回来后（成功与否）再断开本地连接：首页 Chat 里断开连接不会停下这一轮。 */
+/** 请服务端停下这一轮，回来后（成功与否）再断开本地连接：断开连接不会停下这一轮。 */
 function stopTurn(scope: string, runId: string, target: AbortController | null) {
   const settle = () => target?.abort();
   setTimeout(settle, STOP_WAIT_MS);
@@ -429,12 +437,12 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
     setAttachmentError(null);
     const started = generation.current;
     void loadHistory("show").then((loaded) => {
-      // 首页：刷新、切回来时最后一句还在回答：接上这一轮（同样的进行中一行、停止可用），写完换成回答。
-      const run = scope === "global" && loaded ? runningTurn(loaded) : undefined;
+      // 刷新、切回来时最后一句还在回答：接上这一轮（同样的进行中一行、停止可用），写完换成回答。
+      const run = loaded ? runningQuestion(loaded) : undefined;
       if (run && generation.current === started) followRef.current(run);
     });
     return () => {
-      // 换 scope 或卸载：作废进行中的历史读取；上一轮回答照常在服务端完成（首页 Chat 也不因断开而停下），只是不再写进这里，停止键也不再指向它。
+      // 换 scope 或卸载：作废进行中的历史读取；不请服务端停，上一轮回答照常在服务端完成，只是不再写进这里，停止键也不再指向它。
       generation.current += 1;
       pendingTurn.current = null;
       if (partialFrame.current !== null && typeof cancelAnimationFrame === "function") cancelAnimationFrame(partialFrame.current);
@@ -446,14 +454,14 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
     };
   }, [loadHistory, scope]);
 
-  // 首页回到前台（切走、锁屏回来）：没有在写、也没有在重连时安静地重读一次；最后一句还在回答就接上这一轮。
+  // 回到前台（切走、锁屏回来）：没有在写、也没有在重连时安静地重读一次；最后一句还在回答就接上这一轮。
   useEffect(() => {
-    if (scope !== "global" || typeof document === "undefined" || typeof document.addEventListener !== "function") return;
+    if (typeof document === "undefined" || typeof document.addEventListener !== "function") return;
     const onVisible = async () => {
       if (document.visibilityState !== "visible" || abortRef.current) return;
       const started = generation.current;
       const loaded = await loadHistory("quiet");
-      const run = loaded ? runningTurn(loaded) : undefined;
+      const run = loaded ? runningQuestion(loaded) : undefined;
       if (run && generation.current === started && !abortRef.current) followRef.current(run);
     };
     document.addEventListener("visibilitychange", onVisible);
@@ -582,13 +590,14 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
    * 没来得及存就在本地补一条；能接着来的给出「继续」/「重新回答」（resume）。
    * options.resumeRunId：接着那一轮没完成的回答（「继续」按钮），这一句不带页面前缀。
    * options.answers：回答 Agent 的提问（AskPanel）；record 只用来先画出问答记录，原文由服务端按提问卡重写。
-   * 连接类失败自己恢复（RECONNECT_MS 内）：没送到就留着这句、显示「正在连接」并重发；回答途中断了就等连上后先接上这一轮（首页 Chat），
-   * 接不上再自动「继续」一次（options.auto：这一句就是自动接上的那次，再断就交给本人）。
+   * 连接类失败自己恢复（RECONNECT_MS 内）：没送到就留着这句、显示「正在连接」并重发；回答途中断了就等连上后先接上这一轮，
+   * 接不上（已写完就到此为止）再自动「继续」一次（options.auto：这一句就是自动接上的那次，再断就交给本人）。
    * options.attach：不发新句，接上服务端还在写（或刚写完）的那一轮（切走、刷新、断线回来）：先补发已有的事件、再跟着写到结束；
-   * running 是读回的历史里它还在写。服务端这里没有这一轮（204）时：还在写就每 3 秒读一次历史直到写完，否则返回 false 交还调用方。
+   * running 是读回的历史里它还在写，since 是提问的时刻。服务端这里没有这一轮的事件流（204）时：还在写就每 3 秒读一次历史直到写完
+   * （用时从 since 算），否则返回 false 交还调用方。
    */
   async function send(message: string, references: SentCardRef[], options: { resumeRunId?: string; scopeOverride?: TReadScopeParams;
-    answers?: { input: TAskAnswerInput; record: TAskAnswerRecord }; auto?: boolean; attach?: { runId: string; running: boolean } } = {}): Promise<boolean> {
+    answers?: { input: TAskAnswerInput; record: TAskAnswerRecord }; auto?: boolean; attach?: { runId: string; running: boolean; since?: number } } = {}): Promise<boolean> {
     const input = message.trim();
     const attach = options.attach;
     if ((!input && !attach) || status === "streaming") return false;
@@ -692,13 +701,17 @@ ${input}` : input;
       }
       if (attempt > 0 && live()) setStage(attach ? "thinking" : "understanding");
       if (attach && response.status === 204) {
-        // 服务端这里没有这一轮（服务重启过，或不是首页 Chat 对话）：不在写了交还调用方；
-        // 还在写就每 3 秒读一次历史（页面在前台时），写完换成读回的回答。停止照样可用。
+        // 服务端这里没有这一轮的事件流（对象页的对话、服务重启过）：不在写了交还调用方；
+        // 还在写就每 3 秒读一次历史（页面在前台时），写完换成读回的回答。停止照样可用，用时从提问时算。
         if (!attach.running) {
           if (live()) setStatus("idle");
           return false;
         }
         accepted = true;
+        if (attach.since) {
+          began = attach.since;
+          if (live()) setStartedAt(attach.since);
+        }
         for (;;) {
           await pause(RUN_POLL_MS, controller.signal);
           if (controller.signal.aborted) throw new TurnError("ABORTED", "aborted");
@@ -889,8 +902,15 @@ ${input}` : input;
         const back = await reconnected(live);
         if (!live()) return true;
         if (back !== false && back !== "stopped") {
-          // 首页：断的只是这条连接，这一轮在服务端照常写（或已写完）：先接上它；接不上（天枢自己的对话、服务重启过）再「继续」。
-          if (scope === "global" && await send("", [], { attach: { runId, running: runningTurn(back) === runId } })) return true;
+          // 断的只是这条连接，这一轮在服务端照常写（或已写完）：先接上它；接不上时服务端没说出了事、历史里已有回答就到此为止，否则「继续」。
+          const asked = runningQuestion(back);
+          if (await send("", [], { attach: asked?.runId === runId ? { ...attachOf(asked), since: began } : { runId, running: false } })) return true;
+          if (!serverError && back.some((item) => item.role === "assistant" && item.runId === runId)) {
+            // 接的时候撤掉了这一轮的回答：放回读到的。
+            setMessages(back);
+            setStatus("complete");
+            return true;
+          }
           await send(RESUME_TEXT[mode], [], { resumeRunId: runId, auto: true });
           return true;
         }
@@ -933,20 +953,20 @@ ${input}` : input;
   }
 
   /**
-   * 停止。首页：知道这一轮的 runId 就先请服务端停下，回来后再断开本地连接（Chat 回的「已停止」通常先到）；
-   * 还不知道、请求已发出就等它带来 runId 再停；还没送到（在等重发）直接断开。对象页照旧断开连接即停。
+   * 停止。知道这一轮的 runId 就先请服务端停下，回来后再断开本地连接（首页 Chat 回的「已停止」通常先到）；
+   * 还不知道、请求已发出就等它带来 runId 再停；还没送到（在等重发）直接断开。断开连接本身不会停下这一轮。
    */
   const stop = useCallback(() => {
     const turn = turnRef.current;
-    if (!turn || turn.scope !== "global") return void abortRef.current?.abort();
+    if (!turn) return void abortRef.current?.abort();
     turn.stopWanted = true;
     if (turn.runId) stopTurn(turn.scope, turn.runId, abortRef.current);
     else if (!turn.sent) abortRef.current?.abort();
   }, []);
   /** 接上服务端还在写的那一轮（刷新、切回来时历史里最后一句还在回答）；正在写或在重连时不接。 */
-  const followRef = useRef<(runId: string) => void>(() => undefined);
-  followRef.current = (runId) => {
-    if (!abortRef.current) void send("", [], { attach: { runId, running: true } });
+  const followRef = useRef<(question: Message) => void>(() => undefined);
+  followRef.current = (question) => {
+    if (!abortRef.current) void send("", [], { attach: attachOf(question) });
   };
   // 交给输入条（memo）的回调身份不变：流式中整棵对话树每帧重画，输入条不跟着重画。
   const stableSend = useStableCallback(send);
