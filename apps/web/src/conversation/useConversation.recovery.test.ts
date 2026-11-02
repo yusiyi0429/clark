@@ -49,6 +49,9 @@ function streamResponse(chunks: Uint8Array[], tail: "end" | Error | "hang" = "en
   }) } };
 }
 const history = (messages: unknown[]) => ({ ok: true, json: async () => ({ messages }) });
+/** 接上那一轮时服务端这里没有它（天枢自己的对话、服务重启过）：204，照旧自动「继续」。 */
+const notFollowing = { ok: true, status: 204, body: null, headers: new Headers() };
+const followUrl = `/api/conversations/global/turns/${RUN}/stream`;
 
 describe("一轮没完成时，已经写出的内容留在界面上", () => {
   it("服务端报错（网络中断、已存档）：读回的历史里有那条半截回答，说明是服务端的中文，给「继续」，按钮接上那一轮", async () => {
@@ -81,6 +84,7 @@ describe("一轮没完成时，已经写出的内容留在界面上", () => {
       .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "第一段" })], new TypeError("network error")))
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }]))
+      .mockResolvedValueOnce(notFollowing)
       .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "接着写完。" }), sse({ type: "done", status: "completed" })]))
       .mockResolvedValueOnce(history([]));
     vi.stubGlobal("fetch", fetchMock);
@@ -90,8 +94,52 @@ describe("一轮没完成时，已经写出的内容留在界面上", () => {
     expect(snapshot()).toMatchObject({ status: "streaming", stage: "connecting", error: null, recovery: null });
     for (let step = 0; step < 10 && !settled; step += 1) await vi.advanceTimersByTimeAsync(1_000);
     expect(await sending).toBe(true);
-    expect(JSON.parse((fetchMock.mock.calls[3][1] as { body: string }).body)).toMatchObject({ message: "继续", resumeRunId: RUN });
+    expect(fetchMock.mock.calls[3][0]).toBe(followUrl);
+    expect(JSON.parse((fetchMock.mock.calls[4][1] as { body: string }).body)).toMatchObject({ message: "继续", resumeRunId: RUN });
     expect(snapshot()).toMatchObject({ status: "complete", error: null });
+  });
+
+  it("首页 Chat：回答途中连接断了，这一轮在服务端照常写：连上后接上它、补发的正文写到完，不发「继续」", async () => {
+    vi.useFakeTimers();
+    const asked = { sequence: 1, role: "user", content: "问题", runId: RUN, running: true };
+    const followed = { ...streamResponse([sse({ type: "route", tier: "grounded", expectSeconds: 30 }), sse({ type: "message", delta: "第一段" }),
+      sse({ type: "message", delta: "，第二段" }), sse({ type: "done", status: "completed" })]), headers: new Headers({ "x-turn-started-at": String(Date.now()) }) };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "第一段" })], new TypeError("network error")))
+      .mockResolvedValueOnce(history([asked]))
+      .mockResolvedValueOnce(history([asked]))
+      .mockResolvedValueOnce(followed)
+      .mockResolvedValueOnce(history([{ ...asked, running: undefined }, { sequence: 2, role: "assistant", content: "第一段，第二段", runId: RUN }]));
+    vi.stubGlobal("fetch", fetchMock);
+    let settled = false;
+    const sending = snapshot().send("问题", []).finally(() => { settled = true; });
+    for (let step = 0; step < 10 && !settled; step += 1) await vi.advanceTimersByTimeAsync(1_000);
+    expect(await sending).toBe(true);
+    expect(fetchMock.mock.calls[3][0]).toBe(followUrl);
+    expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST")).toHaveLength(1);
+    const view = snapshot();
+    expect(view).toMatchObject({ status: "complete", error: null, recovery: null, partial: "" });
+    expect(view.messages.map((message) => message.content)).toEqual(["问题", "第一段，第二段"]);
+  });
+
+  it("回答途中连接断了，连上时服务端已写完、没有事件流可接（对象页的对话）：显示读回的回答，不发「继续」", async () => {
+    vi.useFakeTimers();
+    const answered = history([{ sequence: 1, role: "user", content: "问题", runId: RUN }, { sequence: 2, role: "assistant", content: "第一段，写完了", runId: RUN }]);
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "第一段" })], new TypeError("network error")))
+      .mockResolvedValueOnce(answered)
+      .mockResolvedValueOnce(answered)
+      .mockResolvedValueOnce(notFollowing);
+    vi.stubGlobal("fetch", fetchMock);
+    let settled = false;
+    const sending = snapshot().send("问题", []).finally(() => { settled = true; });
+    for (let step = 0; step < 10 && !settled; step += 1) await vi.advanceTimersByTimeAsync(1_000);
+    expect(await sending).toBe(true);
+    expect(fetchMock.mock.calls[3][0]).toBe(followUrl);
+    expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST")).toHaveLength(1);
+    const view = snapshot();
+    expect(view).toMatchObject({ status: "complete", error: null, recovery: null });
+    expect(view.messages.map((message) => message.content)).toEqual(["问题", "第一段，写完了"]);
   });
 
   it("服务停机前先存了档（SERVER_RESTARTING）：连上新实例后自动接着写", async () => {
@@ -101,13 +149,15 @@ describe("一轮没完成时，已经写出的内容留在界面上", () => {
         sse({ type: "error", code: "SERVER_RESTARTING", message: "天枢服务在更新。已写出的部分保留在上方，点「继续」从断点接着写。", resume: "continue", partial: true })]))
       .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }, { sequence: 2, role: "assistant", content: "写到一半\n\n（这次回答在这里中断了，以上是已经写出的部分。）", runId: RUN }]))
       .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }, { sequence: 2, role: "assistant", content: "写到一半", runId: RUN }]))
+      .mockResolvedValueOnce(notFollowing)
       .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "写完。" }), sse({ type: "done", status: "completed" })]))
       .mockResolvedValueOnce(history([]));
     vi.stubGlobal("fetch", fetchMock);
     const sending = snapshot().send("问题", []);
     await vi.advanceTimersByTimeAsync(2_000);
     expect(await sending).toBe(true);
-    expect(JSON.parse((fetchMock.mock.calls[3][1] as { body: string }).body)).toMatchObject({ message: "继续", resumeRunId: RUN });
+    expect(fetchMock.mock.calls[3][0]).toBe(followUrl);
+    expect(JSON.parse((fetchMock.mock.calls[4][1] as { body: string }).body)).toMatchObject({ message: "继续", resumeRunId: RUN });
     expect(snapshot().status).toBe("complete");
   });
 
@@ -231,6 +281,7 @@ describe("一轮没完成时，已经写出的内容留在界面上", () => {
       .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }]))
       .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }]))
       .mockResolvedValueOnce(history([{ sequence: 1, role: "user", content: "问题", runId: RUN }]))
+      .mockResolvedValueOnce(notFollowing)
       .mockResolvedValueOnce(streamResponse([sse({ type: "message", delta: "回答" }), sse({ type: "done", status: "completed" })]))
       .mockResolvedValueOnce(history([]));
     vi.stubGlobal("fetch", fetchMock);
@@ -248,20 +299,22 @@ describe("一轮没完成时，已经写出的内容留在界面上", () => {
     expect(window.location.assign).toHaveBeenCalledWith("/access");
   });
 
-  it("停止：已写出的部分留着，可以「继续」", async () => {
+  it("停止：先请服务端停下这一轮，再断开；已写出的部分留着，可以「继续」", async () => {
     let reject!: (cause: unknown) => void;
     let reads = 0;
-    vi.stubGlobal("fetch", vi.fn().mockImplementationOnce(async (_url: string, init: RequestInit) => ({ ok: true, status: 200, body: { getReader: () => ({
+    const fetchMock = vi.fn().mockImplementationOnce(async (_url: string, init: RequestInit) => ({ ok: true, status: 200, body: { getReader: () => ({
       read: () => {
         reads += 1;
         if (reads === 1) return Promise.resolve({ done: false, value: sse({ type: "message", delta: "写了一段" }) });
         return new Promise((_resolve, fail) => { reject = fail; init.signal?.addEventListener("abort", () => fail(Object.assign(new Error("aborted"), { name: "AbortError" }))); });
       },
-    }) } })).mockResolvedValueOnce(history([])));
+    }) } })).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ runId: RUN, status: "aborted" }) }).mockResolvedValueOnce(history([]));
+    vi.stubGlobal("fetch", fetchMock);
     const sending = snapshot().send("问题", []);
     await vi.waitFor(() => expect(reads).toBe(2));
     snapshot().stop();
     await sending;
+    expect(fetchMock.mock.calls[1]).toEqual([`/api/conversations/global/turns/${RUN}/stop`, { method: "POST" }]);
     const view = snapshot();
     expect(view.status).toBe("aborted");
     expect(view.error).toBe("已停止。已写出的部分保留在上方，点「继续」可以接着写。");

@@ -39,6 +39,8 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   kind?: "carried" | "trace";
   /** 这一句是在飞书私聊天枢机器人或微信 ClawBot 里说的（问与答都标）。 */
   via?: "feishu" | "wechat";
+  /** 只在本人的提问上：这一轮服务端还在回答。 */
+  running?: boolean;
   meta?: { issueId?: string; title?: string; href?: string } };
 export type Attachment = { id: string; fileName: string; mimeType: string };
 export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | "aborted";
@@ -126,6 +128,38 @@ export function feishuWaiting(list: Message[]): boolean {
 
 export function messagesEndpoint(scope: string): string {
   return `/api/conversations/${encodeURIComponent(scope)}/messages`;
+}
+
+/** 一轮回答：接上它的事件流（stream，只有首页走独立 Chat 时有，其余回 204）/ 请服务端停下它（stop）。 */
+function turnEndpoint(scope: string, runId: string, action: "stream" | "stop"): string {
+  return `/api/conversations/${encodeURIComponent(scope)}/turns/${encodeURIComponent(runId)}/${action}`;
+}
+
+/** 最后一句是本人在网页里问的、服务端说这一轮还在写：那一句（飞书、微信来的照旧由「正在回答飞书里的提问」接住）。 */
+function runningQuestion(list: Message[]): Message | undefined {
+  const last = list.at(-1);
+  return last?.role === "user" && last.running && !last.via ? last : undefined;
+}
+function runningTurn(list: Message[]): string | undefined {
+  return runningQuestion(list)?.runId;
+}
+/** 接上这一轮要的：runId，和提问的时刻（服务端不给开始时刻时用时从它算）。 */
+function attachOf(question: Message): { runId: string; running: true; since?: number } {
+  const since = question.createdAt ? Date.parse(question.createdAt) : NaN;
+  return { runId: question.runId!, running: true, ...(since > 0 ? { since } : {}) };
+}
+
+/** 接上的那一轮服务端这里没有事件流（对象页的对话、服务重启过）、历史里它还在写：多久读一次历史。 */
+const RUN_POLL_MS = 3_000;
+
+/** 点停止后最多等服务端这么久：迟迟不回也断开本地连接，停止键不会没反应。 */
+const STOP_WAIT_MS = 3_000;
+
+/** 请服务端停下这一轮，回来后（成功与否）再断开本地连接：断开连接不会停下这一轮。 */
+function stopTurn(scope: string, runId: string, target: AbortController | null) {
+  const settle = () => target?.abort();
+  setTimeout(settle, STOP_WAIT_MS);
+  void fetch(turnEndpoint(scope, runId, "stop"), { method: "POST" }).catch(() => undefined).finally(settle);
 }
 
 export function isAttachable(file: { name: string }): boolean {
@@ -260,6 +294,11 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   /** 这一轮没完成时能不能接着来（「继续」/「重新回答」）：哪一轮、怎么接；发下一句、换 scope 时清空。 */
   const [recoveryState, setRecoveryState] = useState<{ mode: TurnRecoveryMode; runId: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  /**
+   * 进行中的这一轮：停止要它的 runId（服务端第一条事件带来）。sent：请求已发出、在等回应；
+   * 这时点停止先记下（stopWanted），拿到 runId 再请服务端停（首页 Chat 里断开连接不会停下这一轮）。
+   */
+  const turnRef = useRef<{ scope: string; runId?: string; sent: boolean; stopWanted: boolean } | null>(null);
   /** 进行中的那次历史读取：新的读取、换 scope、卸载都会作废它，作废后的结果不写进来。 */
   const historyRun = useRef<AbortController | null>(null);
   /** 本轮刚发出、可能还没写进历史的那句：回答进行中读回历史时补在最后。 */
@@ -396,18 +435,38 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
     setAttachments((current) => (current.length ? [] : current));
     setUploading(false);
     setAttachmentError(null);
-    void loadHistory("show");
+    const started = generation.current;
+    void loadHistory("show").then((loaded) => {
+      // 刷新、切回来时最后一句还在回答：接上这一轮（同样的进行中一行、停止可用），写完换成回答。
+      const run = loaded ? runningQuestion(loaded) : undefined;
+      if (run && generation.current === started) followRef.current(run);
+    });
     return () => {
-      // 换 scope 或卸载：作废进行中的历史读取；上一轮回答照常在服务端完成，只是不再写进这里，停止键也不再指向它。
+      // 换 scope 或卸载：作废进行中的历史读取；不请服务端停，上一轮回答照常在服务端完成，只是不再写进这里，停止键也不再指向它。
       generation.current += 1;
       pendingTurn.current = null;
       if (partialFrame.current !== null && typeof cancelAnimationFrame === "function") cancelAnimationFrame(partialFrame.current);
       partialFrame.current = null;
       abortRef.current = null;
+      turnRef.current = null;
       historyRun.current?.abort();
       historyRun.current = null;
     };
-  }, [loadHistory]);
+  }, [loadHistory, scope]);
+
+  // 回到前台（切走、锁屏回来）：没有在写、也没有在重连时安静地重读一次；最后一句还在回答就接上这一轮。
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof document.addEventListener !== "function") return;
+    const onVisible = async () => {
+      if (document.visibilityState !== "visible" || abortRef.current) return;
+      const started = generation.current;
+      const loaded = await loadHistory("quiet");
+      const run = loaded ? runningQuestion(loaded) : undefined;
+      if (run && generation.current === started && !abortRef.current) followRef.current(run);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [loadHistory, scope]);
 
   // 别处改了这条对话的记录（转议题后首页多了留痕行）：安静地重读。
   useEffect(() => {
@@ -496,9 +555,9 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
 
   /**
    * 回答断线后等连上：进度行显示「正在连接 / 等待网络 · N 秒」，「停止」可以取消；读得回对话记录就算连上了。
-   * 返回 true 连上了、false 到时限仍没连上（或已换 scope）、"stopped" 本人点了停止。
+   * 返回读回的对话记录（连上了）、false 到时限仍没连上（或已换 scope）、"stopped" 本人点了停止。
    */
-  async function reconnected(live: () => boolean): Promise<boolean | "stopped"> {
+  async function reconnected(live: () => boolean): Promise<Message[] | false | "stopped"> {
     const waiting = new AbortController();
     abortRef.current = waiting;
     const since = Date.now();
@@ -514,7 +573,8 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
         await pause(backoff(attempt), waiting.signal);
         if (waiting.signal.aborted) return "stopped";
         if (!live()) return false;
-        if (await loadHistory("probe")) return true;
+        const loaded = await loadHistory("probe");
+        if (loaded) return loaded;
         if (live()) setStage(offline() ? "offline" : "connecting");
       }
       return false;
@@ -530,27 +590,33 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
    * 没来得及存就在本地补一条；能接着来的给出「继续」/「重新回答」（resume）。
    * options.resumeRunId：接着那一轮没完成的回答（「继续」按钮），这一句不带页面前缀。
    * options.answers：回答 Agent 的提问（AskPanel）；record 只用来先画出问答记录，原文由服务端按提问卡重写。
-   * 连接类失败自己恢复（RECONNECT_MS 内）：没送到就留着这句、显示「正在连接」并重发；回答途中断了就等连上后自动「继续」一次
-   * （options.auto：这一句就是自动接上的那次，再断就交给本人）。
+   * 连接类失败自己恢复（RECONNECT_MS 内）：没送到就留着这句、显示「正在连接」并重发；回答途中断了就等连上后先接上这一轮，
+   * 接不上（已写完就到此为止）再自动「继续」一次（options.auto：这一句就是自动接上的那次，再断就交给本人）。
+   * options.attach：不发新句，接上服务端还在写（或刚写完）的那一轮（切走、刷新、断线回来）：先补发已有的事件、再跟着写到结束；
+   * running 是读回的历史里它还在写，since 是提问的时刻。服务端这里没有这一轮的事件流（204）时：还在写就每 3 秒读一次历史直到写完
+   * （用时从 since 算），否则返回 false 交还调用方。
    */
   async function send(message: string, references: SentCardRef[], options: { resumeRunId?: string; scopeOverride?: TReadScopeParams;
-    answers?: { input: TAskAnswerInput; record: TAskAnswerRecord }; auto?: boolean } = {}): Promise<boolean> {
+    answers?: { input: TAskAnswerInput; record: TAskAnswerRecord }; auto?: boolean; attach?: { runId: string; running: boolean; since?: number } } = {}): Promise<boolean> {
     const input = message.trim();
-    if (!input || status === "streaming") return false;
-    const text = messageContext && !options.resumeRunId && !options.answers ? `${messageContext}
+    const attach = options.attach;
+    if ((!input && !attach) || status === "streaming") return false;
+    const text = attach ? "" : messageContext && !options.resumeRunId && !options.answers ? `${messageContext}
 
 ${input}` : input;
     const controller = new AbortController();
     abortRef.current = controller;
+    const handle: { scope: string; runId?: string; sent: boolean; stopWanted: boolean } = { scope, runId: attach?.runId, sent: false, stopWanted: false };
+    turnRef.current = handle;
     const started = generation.current;
     /** 这一轮发出后没换 scope、也没卸载：只有这时才改本页的状态（事件照常发，带的是本轮的 scope）。 */
     const live = () => generation.current === started;
-    const began = Date.now();
+    let began = Date.now();
     frameUpdate.current = emptyFrame();
     setPartial("");
     setError(null);
     setRecoveryState(null);
-    setStage("understanding");
+    setStage(attach ? "thinking" : "understanding");
     setBodyDone(false);
     setStartedAt(began);
     setRoute(null);
@@ -564,10 +630,15 @@ ${input}` : input;
     const turn = { ...pendingUserMessage(0, text, references, attachments), ...(options.answers ? { answers: options.answers.record } : {}) };
     /** 发出前已有的最后一条：没连上之后读回历史，若这句已经排在它后面，就是其实送到了，不再重发。 */
     const lastSequence = messages.reduce((max, item) => Math.max(max, item.sequence), 0);
-    pendingTurn.current = turn;
-    setMessages((current) => [...current, { ...turn, sequence: current.length + 1 }]);
-    // 页面上跟着这条对话走的部分（月度计划逐段意见）：发出与这一轮结束时各通知一次，各自重读。
-    window.dispatchEvent(new CustomEvent(CONVERSATION_TURN_SENT, { detail: { scope, content: text } }));
+    if (attach) {
+      // 提问已在记录里；本地补过的那条半截回答先撤掉，补发的事件会从头写出来。
+      setMessages((current) => current.filter((item) => !(item.role === "assistant" && item.runId === attach.runId)));
+    } else {
+      pendingTurn.current = turn;
+      setMessages((current) => [...current, { ...turn, sequence: current.length + 1 }]);
+      // 页面上跟着这条对话走的部分（月度计划逐段意见）：发出与这一轮结束时各通知一次，各自重读。
+      window.dispatchEvent(new CustomEvent(CONVERSATION_TURN_SENT, { detail: { scope, content: text } }));
+    }
 
     let accepted = false;
     let reply = "";
@@ -575,7 +646,7 @@ ${input}` : input;
     /** 这一轮走过恢复时服务端在 done 里给的那行说明（读不回历史时本地补的那条回答也带上）。 */
     let recoveryNote: RecoveryNote | undefined;
     /** 这一轮的标识（服务端事件带着）：失败后「继续」按它接上。 */
-    let runId: string | undefined;
+    let runId: string | undefined = attach?.runId;
     /** 服务端在 error 事件里说的：能不能接着来（没带 resume = 不建议直接再试）。 */
     let serverError: { resume?: TurnRecoveryMode } | undefined;
     /** 还没结束的工具步骤：都结束了就回到「正在思考」（模型拿到结果在想下一步），不停在「查证」上。 */
@@ -590,8 +661,10 @@ ${input}` : input;
       let attempt = 0;
       for (; ; attempt++) {
         let undelivered: TurnError | null = null;
+        handle.sent = true;
         try {
-          response = await fetch(historyUrl, {
+          response = attach ? await fetch(turnEndpoint(scope, attach.runId, "stream"), { headers: { accept: "text/event-stream" }, signal: controller.signal })
+            : await fetch(historyUrl, {
             method: "POST",
             headers: { accept: "text/event-stream", "content-type": "application/json" },
             body: JSON.stringify({ message: text, references: references.map(({ cardId, version }) => ({ cardId, version })), attachments: attachmentRefs,
@@ -610,11 +683,13 @@ ${input}` : input;
           undelivered = new TurnError("UNREACHABLE", (cause as Error)?.message ?? "fetch failed");
         }
         if (!undelivered) break;
+        // 没送到：这时点停止直接断开（服务端没有这一轮）。
+        handle.sent = false;
         if (Date.now() - began >= RECONNECT_MS) throw undelivered;
         if (live()) setStage(offline() ? "offline" : "connecting");
         await pause(backoff(attempt), controller.signal);
         if (controller.signal.aborted) throw undelivered;
-        if (undelivered.code === "UNREACHABLE") {
+        if (undelivered.code === "UNREACHABLE" && !attach) {
           // 请求可能已经送到、只是回应没回来：读回历史里有这句就不再重发，按回答中途断了接着处理。
           const seen = (await loadHistory("probe"))?.find((item) => item.role === "user" && item.content === text && item.sequence > lastSequence);
           if (seen) {
@@ -624,7 +699,40 @@ ${input}` : input;
           }
         }
       }
-      if (attempt > 0 && live()) setStage("understanding");
+      if (attempt > 0 && live()) setStage(attach ? "thinking" : "understanding");
+      if (attach && response.status === 204) {
+        // 服务端这里没有这一轮的事件流（对象页的对话、服务重启过）：不在写了交还调用方；
+        // 还在写就每 3 秒读一次历史（页面在前台时），写完换成读回的回答。停止照样可用，用时从提问时算。
+        if (!attach.running) {
+          if (live()) setStatus("idle");
+          return false;
+        }
+        accepted = true;
+        if (attach.since) {
+          began = attach.since;
+          if (live()) setStartedAt(attach.since);
+        }
+        for (;;) {
+          await pause(RUN_POLL_MS, controller.signal);
+          if (controller.signal.aborted) throw new TurnError("ABORTED", "aborted");
+          if (!live()) return true;
+          if (typeof document !== "undefined" && document.visibilityState !== "visible") continue;
+          const loaded = await loadHistory("probe");
+          if (!live()) return true;
+          if (loaded && runningTurn(loaded) !== attach.runId) {
+            setStatus("complete");
+            return true;
+          }
+        }
+      }
+      if (attach) {
+        // 接上的这一轮：用时从它开始时算（服务端给的时刻）。
+        const at = Number(response.headers.get("x-turn-started-at"));
+        if (at > 0) {
+          began = at;
+          if (live()) setStartedAt(at);
+        }
+      }
       if (response.status === 401) {
         // 按没接下返回：调用方把原文放回输入框（存成草稿），重新登录回来还在。
         window.location.assign("/access");
@@ -659,6 +767,11 @@ ${input}` : input;
           const event: ConversationEvent | null = parseSseBlock(block);
           if (!event) continue;
           if (event.runId) runId = event.runId;
+          if (event.runId && !handle.runId) {
+            handle.runId = event.runId;
+            // 点停止时还不知道这一轮的 runId：拿到了就请服务端停下。
+            if (handle.stopWanted) stopTurn(handle.scope, event.runId, controller);
+          }
           if (event.type === "route" && event.tier) {
             notice = event.notice || undefined;
             if (live()) {
@@ -753,7 +866,8 @@ ${input}` : input;
       if (!reloaded && reply) setMessages((current) => [...current, { sequence: (current.at(-1)?.sequence ?? 0) + 1, role: "assistant", content: withNotice(notice, reply),
         ...(recoveryNote ? { recoveryNote } : {}) }]);
       setPartial("");
-      setAttachments([]);
+      // 接上的那一轮不是这次发的：输入条里待发的附件不动。
+      if (!attach) setAttachments([]);
       setLastReply({ text: withNotice(notice, reply), ms: Date.now() - began });
       setStatus("complete");
       return true;
@@ -787,7 +901,16 @@ ${input}` : input;
       if (!stopped && !options.auto && mode && runId && CONNECTION_LOST.has(code ?? "")) {
         const back = await reconnected(live);
         if (!live()) return true;
-        if (back === true) {
+        if (back !== false && back !== "stopped") {
+          // 断的只是这条连接，这一轮在服务端照常写（或已写完）：先接上它；接不上时服务端没说出了事、历史里已有回答就到此为止，否则「继续」。
+          const asked = runningQuestion(back);
+          if (await send("", [], { attach: asked?.runId === runId ? { ...attachOf(asked), since: began } : { runId, running: false } })) return true;
+          if (!serverError && back.some((item) => item.role === "assistant" && item.runId === runId)) {
+            // 接的时候撤掉了这一轮的回答：放回读到的。
+            setMessages(back);
+            setStatus("complete");
+            return true;
+          }
           await send(RESUME_TEXT[mode], [], { resumeRunId: runId, auto: true });
           return true;
         }
@@ -813,6 +936,7 @@ ${input}` : input;
     } finally {
       if (silenceTimer) clearTimeout(silenceTimer);
       if (abortRef.current === controller) abortRef.current = null;
+      if (turnRef.current === handle) turnRef.current = null;
       window.dispatchEvent(new CustomEvent(CONVERSATION_TURN_SETTLED, { detail: { scope } }));
     }
   }
@@ -828,7 +952,22 @@ ${input}` : input;
     return send(`按「${label}」重新读`, [], { scopeOverride: params });
   }
 
-  const stop = useCallback(() => abortRef.current?.abort(), []);
+  /**
+   * 停止。知道这一轮的 runId 就先请服务端停下，回来后再断开本地连接（首页 Chat 回的「已停止」通常先到）；
+   * 还不知道、请求已发出就等它带来 runId 再停；还没送到（在等重发）直接断开。断开连接本身不会停下这一轮。
+   */
+  const stop = useCallback(() => {
+    const turn = turnRef.current;
+    if (!turn) return void abortRef.current?.abort();
+    turn.stopWanted = true;
+    if (turn.runId) stopTurn(turn.scope, turn.runId, abortRef.current);
+    else if (!turn.sent) abortRef.current?.abort();
+  }, []);
+  /** 接上服务端还在写的那一轮（刷新、切回来时历史里最后一句还在回答）；正在写或在重连时不接。 */
+  const followRef = useRef<(question: Message) => void>(() => undefined);
+  followRef.current = (question) => {
+    if (!abortRef.current) void send("", [], { attach: attachOf(question) });
+  };
   // 交给输入条（memo）的回调身份不变：流式中整棵对话树每帧重画，输入条不跟着重画。
   const stableSend = useStableCallback(send);
   const stableUpload = useStableCallback(uploadFiles);

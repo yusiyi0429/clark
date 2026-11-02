@@ -26,6 +26,7 @@ import {
   ConversationHistory,
   ConversationMessageRequest,
   ConversationSseEvent,
+  ConversationTurnStopResponse,
   ConversationAttachment,
   ConversationAttachmentInfo,
   ConversationAttachmentUploadResponse,
@@ -191,6 +192,7 @@ import {
   VoiceprintStatus,
   PersonalMemoryItem,
   PersonalMemoryList,
+  PartnerMemoryList,
   CreateMemoryImportRequest,
   MemoryImport,
   MemoryImportDetail,
@@ -1158,6 +1160,37 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "401": errorResponse,
             "404": errorResponse,
             "409": errorResponse,
+          },
+        },
+      },
+      "/api/conversations/{scope}/turns/{runId}/stream": {
+        get: {
+          operationId: "followConversationTurn",
+          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }, { name: "runId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          summary: "接上首页对话里还在写（或刚写完）的那一轮：先补发这一轮已有的事件，再跟着往下写到结束（切走、刷新、断线回来）",
+          responses: {
+            "200": {
+              description: "SSE 事件流（与发送消息的事件相同）；x-turn-started-at 是这一轮开始的时刻（毫秒）",
+              headers: { "x-turn-started-at": { schema: { type: "string" } } },
+              content: { "text/event-stream": { schema: { $ref: "#/components/schemas/ConversationSseEvent" } } },
+            },
+            "204": { description: "这一轮不在这里（没有在写、服务重启过或不是首页 Chat 对话）" },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/api/conversations/{scope}/turns/{runId}/stop": {
+        post: {
+          operationId: "stopConversationTurn",
+          parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }, { name: "runId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          summary: "本人点「停止」：请服务端停下这一轮（首页 Chat 对话；断开连接不再算停止）。天枢自己的对话由断开连接停下，这里不做事",
+          responses: {
+            "200": { description: "停下后这一轮的状态", content: { "application/json": { schema: { $ref: "#/components/schemas/ConversationTurnStopResponse" } } } },
+            "204": { description: "不是首页 Chat 对话，由断开连接停下" },
+            "401": errorResponse,
+            "404": errorResponse,
+            "502": errorResponse,
+            "503": errorResponse,
           },
         },
       },
@@ -2251,6 +2284,12 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "本人个人记忆", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonalMemoryList" } } } }, "400": errorResponse, "401": errorResponse, "503": errorResponse },
         },
       },
+      "/api/me/memory/partner": {
+        get: {
+          operationId: "listPartnerMemory", summary: "首页伙伴（独立 Chat 服务）记住的本人的事，只读；没接 Chat 时 available=false。Chat 连不上或拒绝时按天枢的错误格式回（如 503 CHAT_UNAVAILABLE）",
+          responses: { "200": { description: "伙伴记住的（现行的，最近更新的在前）", content: { "application/json": { schema: { $ref: "#/components/schemas/PartnerMemoryList" } } } }, "401": errorResponse, "500": errorResponse, "502": errorResponse, "503": errorResponse },
+        },
+      },
       "/api/me/memory/personal/items/{id}": {
         patch: {
           operationId: "updatePersonalMemoryItem", summary: "本人改一条个人记忆的标题或正文；已替代或已忘掉的 409",
@@ -3003,6 +3042,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ConversationHistory: ConversationHistory as JsonSchema,
         ConversationMessageRequest: ConversationMessageRequest as JsonSchema,
         ConversationSseEvent: ConversationSseEvent as JsonSchema,
+        ConversationTurnStopResponse: ConversationTurnStopResponse as JsonSchema,
         IssueDraftResponse: IssueDraftResponse as JsonSchema,
         AcceptIssueDraftRequest: AcceptIssueDraftRequest as JsonSchema,
         CreateBattlefieldRequest: CreateBattlefieldRequest as JsonSchema,
@@ -3255,6 +3295,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         MemoryImportList: MemoryImportList as JsonSchema,
         ConfirmMemoryImportRequest: ConfirmMemoryImportRequest as JsonSchema,
         PersonalMemoryList: PersonalMemoryList as JsonSchema,
+        PartnerMemoryList: PartnerMemoryList as JsonSchema,
         UpdatePersonalMemoryItemRequest: UpdatePersonalMemoryItemRequest as JsonSchema,
         DictationResult: DictationResult as JsonSchema,
         DictationSessionResponse: DictationSessionResponse as JsonSchema,

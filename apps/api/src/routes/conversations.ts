@@ -5,6 +5,7 @@ import {
   AcceptIssueDraftRequest,
   ConversationMessageRequest,
   ConversationScope,
+  ConversationTurnParams,
   IssueDraftResponse,
   type TAcceptIssueDraftRequest,
   type TAskAnswerRecord,
@@ -45,7 +46,7 @@ import { loadAsk, readAnswers, type AskUser, type QuestionsCard } from "../askUs
 import type { RequestAgent } from "../delivery/requestAgent.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
 import { createCompanyMap, defaultFocus, scopeLabel } from "../companyMap.js";
-import { acceptIssueDraft, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, saveDraftMaterial } from "../issueDrafts.js";
+import { acceptIssueDraft, afterIssueDraftCreated, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, withChatIssueCards } from "../issueDrafts.js";
 import { buildSceneAnchor } from "../sceneAnchor.js";
 import type { ConversationAnchor } from "../conversationAnchor.js";
 import { ChatServiceError } from "../chatService.js";
@@ -61,15 +62,18 @@ const OBJECT_SCENES: Record<string, string> = {
   "monthly-plan": "月度计划详情", "monthly-review-item": "复盘项详情", "personal-review": "个人复盘", signal: "信号详情",
 };
 
-/** 正在写的一号位对话轮次（每轮的 abort）：停机时由 settleActiveTurns 收尾。 */
-const activeTurns = new Set<AbortController>();
+/**
+ * 正在写的对话轮次（runId → 本人与这一轮的 abort）：停机时由 settleActiveTurns 收尾，本人点「停止」时按 runId 停下。
+ * 每个环境只跑一个 api 进程，进程内登记就够。
+ */
+const activeTurns = new Map<string, { ownerId: string; abort: AbortController }>();
 
 /**
  * 停机前（部署换版本）：正在写的每一轮都以「服务更新」收尾，已写出的部分存下并标成可继续，
  * 界面连上新实例后自动接着写；最多等 waitMs 让它们存完档。
  */
 export async function settleActiveTurns(waitMs = 5_000): Promise<void> {
-  for (const turn of activeTurns) turn.abort(Object.assign(new Error("Server restarting"), { code: "SERVER_RESTARTING" }));
+  for (const { abort: turn } of activeTurns.values()) turn.abort(Object.assign(new Error("Server restarting"), { code: "SERVER_RESTARTING" }));
   const deadline = Date.now() + waitMs;
   while (activeTurns.size && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
 }
@@ -111,10 +115,15 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
     "/api/conversations/:scope/messages",
     { preHandler: requirePerson, schema: { params: conversationParams } },
     async (req, reply) => {
-      if (chat && req.params.scope === "global") return chat.history(req.person!, String(req.id)).catch((error) => chatFailed(reply, error));
+      // 一号位的首页历史里补上 Chat 那几轮的转议题建议卡（issueDrafts.ts withChatIssueCards）。
+      if (chat && req.params.scope === "global") {
+        return chat.history(req.person!, String(req.id))
+          .then(async (history) => (req.person!.role === "ceo" ? { ...history, messages: await withChatIssueCards(q, req.person!.personId, history.messages) } : history))
+          .catch((error) => chatFailed(reply, error));
+      }
       const object = await scopeObjectFor(req.person!, req.params.scope);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      return getConversationHistory(q, req.person!.personId, req.params.scope);
+      return getConversationHistory(q, req.person!.personId, req.params.scope, conversationTurnTimeoutMs);
     },
   );
 
@@ -198,8 +207,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       requestContext.set(req, { runId, scope: req.params.scope });
       const runStartedAt = Date.now();
       const abort = new AbortController();
-      activeTurns.add(abort);
-      let streamFinished = false;
+      activeTurns.set(runId, { ownerId: owner, abort });
       let eventSequence = 0;
       let runStatus = "aborted";
       let runError: string | undefined;
@@ -402,9 +410,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           connection: "keep-alive",
           "x-accel-buffering": "no",
         });
-        reply.raw.on("close", () => {
-          if (!streamFinished) abort.abort(Object.assign(new Error("Conversation client disconnected"), { code: "CLIENT_DISCONNECTED" }));
-        });
+        // 界面断开（刷新、切走、关页面）不停下这一轮：照常写完、存下，回来时历史里这一问标着 running；停下只走「停止」。
         // 心跳：长时间思考、查证、压缩时也每隔一会儿写一行注释，代理和浏览器不会把连接当成断了。
         heartbeat = setInterval(() => {
           if (!reply.raw.destroyed && !reply.raw.writableEnded) reply.raw.write(": ping\n\n");
@@ -712,7 +718,6 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         if (recoverySummary) logEvent({ event: "conversation.fallback", requestId: String(req.id), runId, scope: req.params.scope, status: runStatus,
           originalModel: recoverySummary.originalModel, fallbackModel: recoverySummary.fallbackModel, reasons: recoverySummary.reasons,
           actions: recoverySummary.actions, retries: recoverySummary.retries });
-        streamFinished = true;
         // Fastify inject/browser may observe SSE end before this function's finally runs.
         // Release first so an immediate next turn/delete cannot spuriously see TURN_IN_PROGRESS.
         await client.query("SELECT pg_advisory_unlock(hashtext($1))", [lockKey]).catch(() => undefined);
@@ -730,11 +735,10 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         logEvent({ event: "agent.run", requestId: String(req.id), runId, agentKind: "conversation", scope: req.params.scope, status: "failed", errorCode: "ROUTE_FAILED", error: (error as Error)?.message });
       } finally {
         if (heartbeat) clearInterval(heartbeat);
-        streamFinished = true;
         if (hijacked && !reply.raw.writableEnded) reply.raw.end();
         if (scopeLockHeld) await client.query("SELECT pg_advisory_unlock(hashtext($1))", [lockKey]).catch(() => undefined);
         client.release();
-        activeTurns.delete(abort);
+        activeTurns.delete(runId);
       }
     };
 
@@ -748,6 +752,23 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       sendConversationTurn(req, reply),
   );
 
+  // 界面断开不再停下这一轮。首页 Chat 对话：切走、刷新回来接上它（先补发、再跟着写）；本人点「停止」才请 Chat 停下。
+  // 天枢自己的对话（对象页）：接不上（204），回来读历史等它写完；本人点「停止」按 runId 停下自己那一轮（和以前断开一样收尾），别人的、已结束的都是 204。
+  app.get("/api/conversations/:scope/turns/:runId/stream", { preHandler: requirePerson, schema: { params: ConversationTurnParams } },
+    async (req, reply) => {
+      if (chat && req.params.scope === "global" && chat.follow(req.person!, req.params.runId, reply)) return;
+      return reply.code(204).send();
+    });
+  app.post("/api/conversations/:scope/turns/:runId/stop", { preHandler: requirePerson, schema: { params: ConversationTurnParams } },
+    async (req, reply) => {
+      if (!chat || req.params.scope !== "global") {
+        const turn = activeTurns.get(req.params.runId);
+        if (turn?.ownerId === req.person!.personId) turn.abort.abort(Object.assign(new Error("Conversation stopped by user"), { code: "USER_STOPPED" }));
+        return reply.code(204).send();
+      }
+      return chat.cancel(req.person!, String(req.id), req.params.runId).catch((error) => chatFailed(reply, error));
+    });
+
   // 一号位深聊转议题（issueDrafts.ts）：建议卡读取、开议题 / 接到议题、不用。只有 CEO。
   const names = () => personDisplayNames(peopleDirectory);
   app.get("/api/issue-drafts/:id", { preHandler: requireCEO, schema: { params: idParams, response: { 200: IssueDraftResponse } } }, async (req, reply) => {
@@ -757,15 +778,15 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   app.post("/api/issue-drafts/:id/accept", { preHandler: requireCEO, schema: { params: idParams, body: AcceptIssueDraftRequest, response: { 200: IssueDraftResponse } } },
     async (req: FastifyRequest<{ Params: { id: string }; Body: TAcceptIssueDraftRequest }>, reply) => {
       const owner = req.person!.personId;
-      const result = await acceptIssueDraft(pool, env.sessionSecret, owner, req.params.id, req.body, ctx.now());
-      if ("error" in result) return fail(reply, result.error.status, result.error.code, result.error.message);
-      if (result.created) {
-        const { issueId, draft } = result.created;
-        // 与其他议题创建路径一致：立即启动预研；初稿存成议题的一份群材料。都不阻塞响应、失败不影响议题本身。
-        research.start(issueId).catch((error) => logEvent({ event: "issue_draft.research_failed", issueId, error: (error as Error)?.message }));
-        await saveDraftMaterial(pool, { personId: owner, role: "ceo", displayName: names().get(owner) ?? owner }, issueId, draft)
-          .catch((error) => logEvent({ event: "issue_draft.material_failed", issueId, error: (error as Error)?.message }));
+      // Chat 来的建议：相关那段从 Chat 现读（读不到时按 Chat 的错误回）。
+      let result: Awaited<ReturnType<typeof acceptIssueDraft>>;
+      try {
+        result = await acceptIssueDraft(pool, env.sessionSecret, owner, req.params.id, req.body, ctx.now(), chat);
+      } catch (error) {
+        return chatFailed(reply, error);
       }
+      if ("error" in result) return fail(reply, result.error.status, result.error.code, result.error.message);
+      if (result.created) await afterIssueDraftCreated(pool, research, { personId: owner, displayName: names().get(owner) ?? owner }, result.created);
       return { draft: result.view };
     });
   app.post("/api/issue-drafts/:id/decline", { preHandler: requireCEO, schema: { params: idParams, response: { 200: IssueDraftResponse } } }, async (req, reply) => {

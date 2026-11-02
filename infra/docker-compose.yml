@@ -151,6 +151,8 @@ services:
       BOCHA_API_KEY: ${BOCHA_API_KEY:-}
       WECHAT_MCP_URL: ${WECHAT_MCP_URL:-http://wechat:5000/mcp}
       WECHAT_MCP_TOKEN: ${WECHAT_MCP_TOKEN:-}
+      # 微信 ClawBot：值为 1 才开（还要接了飞书）。
+      WECHAT_ENABLED: ${WECHAT_ENABLED:-}
       TOS_ACCESS_KEY: ${TOS_ACCESS_KEY:-}
       TOS_SECRET_KEY: ${TOS_SECRET_KEY:-}
       TOS_ENDPOINT: ${TOS_ENDPOINT:-}

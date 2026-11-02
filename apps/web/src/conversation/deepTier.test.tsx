@@ -18,10 +18,10 @@ describe("深度档的开场说明与进度", () => {
     expect(saved.match(/<p>/g)?.length).toBe(2);
   });
 
-  it("深度档的进度行：深入查证、在查什么、已查几项、预计用时", () => {
+  it("深度档的进度行：查资料、在查什么、已查几项、预计用时", () => {
     const html = renderToStaticMarkup(<ConversationThinking stage="researching" startedAt={Date.now()} onStop={noop}
       route={{ tier: "deep", expectSeconds: 90 }} progress={{ label: "检索公开来源「无问芯穹 递表」", checked: 3 }} />);
-    expect(html).toContain("正在深入查证");
+    expect(html).toContain("正在查资料");
     expect(html).toContain("检索公开来源「无问芯穹 递表」 · 已查 3 项");
     expect(html).toContain("预计 1–2 分钟");
     expect(html).toContain('data-tier="deep"');
@@ -29,16 +29,17 @@ describe("深度档的开场说明与进度", () => {
 
   it("其他档不显示预计用时；没有进度时与原来一样", () => {
     const html = renderToStaticMarkup(<ConversationThinking stage="researching" startedAt={Date.now()} onStop={noop} route={{ tier: "grounded", expectSeconds: 30 }} />);
-    expect(html).toContain("正在快速查证");
+    expect(html).toContain("正在查资料");
     expect(html).not.toContain("预计");
     expect(html).not.toContain("conversation-progress");
   });
 
-  it("正文开始后不再显示在查什么，只留已查几项", () => {
+  it("正文开始后不再显示在查什么，只留已查几项；不知道在查什么时不单独报数", () => {
     expect(progressDetail("answering", { label: "阅读企业知识原文", checked: 2 })).toBe("已查 2 项");
     expect(progressDetail("answering", { label: "阅读企业知识原文", checked: 0 })).toBeNull();
     expect(progressDetail("researching", { label: null, checked: 0 })).toBeNull();
-    expect(progressDetail("thinking", { label: null, checked: 2 })).toBe("已查 2 项");
+    expect(progressDetail("thinking", { label: null, checked: 2 })).toBeNull();
+    expect(progressDetail("answering", { label: null, checked: 2 })).toBeNull();
   });
 
   it("整轮超过绝对上限：用服务端给的中文说明（已写出的部分保留、点「继续」），英文原文不上屏", () => {
@@ -72,7 +73,7 @@ describe("分段进度行：理解问题、思考要点、中途升级、正文�
       route={{ tier: "grounded", expectSeconds: 30 }} progress={{ label: null, checked: 2, escalation }} />);
     expect(answering).not.toContain("conversation-escalation");
     expect(answering).toContain('data-stage="answering"');
-    expect(answering).toContain("已查 2 项");
+    expect(answering).not.toContain("已查");
   });
 
   it("措辞不出现称呼和运行环境字眼", () => {

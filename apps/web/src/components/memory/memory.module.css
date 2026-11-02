@@ -55,6 +55,9 @@ a.anchor:hover { text-decoration: underline; text-underline-offset: 3px; }
 .source { flex: none; white-space: nowrap; }
 .quote q { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-muted); quotes: "「" "」"; }
 .stateTag { padding: 0 7px; border-radius: var(--onboarding-pill-radius); background: color-mix(in oklab, var(--ink) 6%, var(--surface)); color: var(--ink-muted); font-weight: 500; }
+/* 伙伴记住的（PartnerMemories，只读）：同一套行样式，没有标题，正文用正文色、不截断。 */
+.partner .body { cursor: default; }
+.partner .text { margin: 0; display: block; overflow: visible; color: var(--ink); }
 .actions { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: flex-start; gap: 2px; opacity: 0; transition: opacity .14s ease; }
 .row:hover .actions, .row:focus-within .actions, .actions:has([aria-expanded='true']) { opacity: 1; }
 .row[data-status='forgotten'] .actions { opacity: 1; }
