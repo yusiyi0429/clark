@@ -238,3 +238,15 @@ test('读取盘点 10/26：Task 行合并计划条目和 Task 对象；单元记
  // No owner: shown as unassigned, the unit DRI still signs.
  const o=buildReviewInput(sources({withMissionOwner:false}),{ceoName:'刘明华'}).stages[0][0];assert.equal(o.ownerAssigned,false);assert.match(o.missing[0],/未指派/);
 });
+
+test('cross-month snapshots excluded from input cannot hide the October events they cite',()=>{
+ const s=sources();s.cutoff='2026-10-31T23:59:59+08:00';s.heads.snapshots=[{object_id:id(30),domain_id:'d-eo'}];
+ const event={event_id:id(901),kind:'event.recorded',category:'other',occurred_at:'2026-10-30T09:00:00Z',recorded_at:'2026-11-01T14:00:00Z',subject_refs:[{object_id:id(20)}],content:{text:'10/30 上线记录，11/1 补录。'}};
+ s.monthEvents=[event,{...event,event_id:id(902),occurred_at:'2026-11-01T09:00:00Z',content:{text:'11/1 新增成果，不能记作十月完成。'}}];
+ s.objects[id(30)]={title:'Context 建模 · 十月补充',period:'2026-10',as_of:'2026-11-01T14:00:00Z',subject_ref:{object_id:id(20)},source_event_refs:[{event_id:id(901)},{event_id:id(902)}],blocks:[{id:'progress',components:[{text:'11/1 新增成果',attributes:{entries:[{at:'2026-11-01T09:00:00Z',text:'11/1 新增成果'}]}}]}]};
+ const original=JSON.stringify(s),input=buildReviewInput(s),card=input.stages[0][0];
+ assert.ok(card.evidence.some(e=>e.text.includes('10/30 上线记录')));assert.ok(!card.evidence.some(e=>e.text.includes('11/1 新增成果')));assert.ok(input.readReceipt.events.includes(id(901)));assert.ok(!input.readReceipt.snapshots.includes(id(30)));assert.equal(JSON.stringify(s),original);
+});
+test('only a retained nonempty snapshot deduplicates its cited event',()=>{
+ for(const empty of [false,true]){const s=sources();s.cutoff='2026-10-31T23:59:59+08:00';s.heads.snapshots=[{object_id:id(30),domain_id:'d-eo'}];s.monthEvents=[{event_id:id(903),kind:'event.recorded',category:'other',occurred_at:'2026-10-30T09:00:00Z',subject_refs:[{object_id:id(20)}],content:{text:'原始上线事件'}}];s.objects[id(30)]={title:'Context 建模 · 进展',as_of:'2026-10-30T14:00:00Z',subject_ref:{object_id:id(20)},source_event_refs:[{event_id:id(903)}],blocks:empty?[]:[{text:'快照已记录上线'}]};const input=buildReviewInput(s),card=input.stages[0][0];assert.equal(card.evidence.some(e=>e.text.includes('原始上线事件')),empty);assert.equal(card.evidence.some(e=>e.text.includes('快照已记录上线')),!empty);}
+});

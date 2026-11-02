@@ -157,7 +157,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  // Only a review that says it is last month's is last month's; a decision filed as review this month is this month's record.
  const lastMonthReview=(e,text)=>e.category==='review'&&new RegExp(`${prev}\\s*月复盘`).test(text.slice(0,80));
  // A daily record is often written twice: the event, then a progress snapshot citing it. The snapshot stands for both.
- const cited=new Set(heads.snapshots.flatMap(h=>(objects[h.object_id]?.source_event_refs||[]).map(r=>r.event_id||String(r.ref||'').replace(/^event:/,''))));
+ const cited=new Set();
  const usedSnapshots=new Set(),usedEvents=new Set();
  const seen=new Set(),once=(key,item)=>{const k=key+'|'+item.asOf+'|'+item.text.slice(0,300);if(seen.has(k))return null;seen.add(k);return item;};
  // Route only explicit business ownership, not names or keywords. Preserve the
@@ -177,7 +177,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
   const raw={kind:baseline?'月初起点':'本月进展',source:(baseline?'【月初起点，不算本月结果】':'')+s.title,asOf:reviewDay(s.as_of),snapshotAsOf:s.as_of,text,by:s.generator?.display_name||''};
   const routed=routeBusiness(raw,unitOfDomain.get(h.domain_id),h.object_id),item=routed.item&&once(s.subject_ref?.object_id,routed.item);
   if(item)place(s.subject_ref?.object_id,h.domain_id,item,s.title);
-  if(item||routed.moved)usedSnapshots.add(h.object_id);
+  if(item||routed.moved){usedSnapshots.add(h.object_id);for(const ref of s.source_event_refs||[])cited.add(ref.event_id||String(ref.ref||'').replace(/^event:/,''));}
  }
  for(const e of monthEvents){
   if((e.corrected_by||[]).length||(e.withdrawn_by||[]).length||cited.has(e.event_id))continue;
