@@ -34,3 +34,13 @@ test('missing context is explicit, coalesced per group, bounded, and cannot pass
  const pending=await executeReviewCheckPlan({plan:p,args:a,runPacket:async r=>r.index===index&&r.group===0?value:ok(r.packet)});assert.equal(pending.status,'needs-source-context');
  const complete=await executeReviewCheckPlan({plan:p,args:a,maxAdditionalRequests:1,runPacket:async r=>{active++;max=Math.max(max,active);await new Promise(resolve=>setTimeout(resolve,1));active--;return r.index===index&&r.group===0?value:{...ok(r.packet),sourceRequestAnswers:r.payload.sourceRequestContext?.requests.map(x=>({requestId:x.requestId,conclusion:'两端原文已核对，关系结论以冻结原文为准'}))};}});assert.equal(complete.status,'checked');assert.equal(complete.requestCount,p.requestCount+1);assert.ok(max<=3);
 });
+
+test('extra checked parents are accepted only with complete supplied source and issue scope; every target is still required',()=>{
+ const a=data(),plan=buildReviewCheckPlan(a),packet=plan.packets.find(p=>p.scope.targetRefs.includes('a')),value={...ok(packet),checkedRefs:[...packet.scope.targetRefs,'p']};
+ const accepted=validateScopedCheckResult(value,packet,plan.sourceRefs);assert.deepEqual(accepted.checkedRefs,value.checkedRefs);assert.equal(accepted.status,'checked');
+ assert.throws(()=>validateScopedCheckResult({...value,checkedRefs:['p']},packet,plan.sourceRefs),/覆盖未完成/);
+ assert.throws(()=>validateScopedCheckResult({...value,checkedRefs:[...value.checkedRefs,'b']},packet,plan.sourceRefs),/覆盖对象不正确/);
+ assert.throws(()=>validateScopedCheckResult(value,{...packet,scope:{...packet.scope,allowedIssueRefs:packet.scope.allowedIssueRefs.filter(ref=>ref!=='p')}},plan.sourceRefs),/覆盖对象不正确/);
+ assert.throws(()=>validateScopedCheckResult(value,{...packet,scope:{...packet.scope,sourceRefs:packet.scope.sourceRefs.filter(ref=>ref!=='p')}},plan.sourceRefs),/覆盖对象不正确/);
+ assert.throws(()=>validateScopedCheckResult({...value,checkedRefs:[...value.checkedRefs,'p']},packet,plan.sourceRefs),/覆盖对象不正确/);
+});

@@ -103,10 +103,11 @@ export function validateScopedCheckResult(value,packet,allSourceRefs,sourceReque
  if(!value||!Array.isArray(value.issues)||!Array.isArray(value.checkedRefs)||!Array.isArray(value.checkedEdges)||!Array.isArray(value.sourceRequests))throw Error('分组检查缺少覆盖或补源合同，不能当无问题');
  const scope=packet.scope,edgeId=e=>e.parentRef+'>'+e.childRef;
  const subset=(given,expected)=>new Set(given).size===given.length&&given.every(x=>expected.includes(x));
- if(!subset(value.checkedRefs,scope.targetRefs)||!subset(value.checkedEdges.map(edgeId),scope.edges.map(edgeId)))throw Error('分组检查覆盖对象不正确');
+ const checkableRefs=scope.sourceRefs.filter(ref=>scope.allowedIssueRefs.includes(ref));
+ if(!subset(value.checkedRefs,checkableRefs)||!subset(value.checkedEdges.map(edgeId),scope.edges.map(edgeId)))throw Error('分组检查覆盖对象不正确');
  for(const issue of value.issues)if(!scope.allowedIssueRefs.includes(issue.ref)||typeof issue.mustFix!=='boolean'||typeof issue.fixable!=='boolean'||!issue.type||!issue.problem||!issue.impact)throw Error('分组检查问题缺少来源范围或原有合同字段');
  for(const need of value.sourceRequests)if(!Array.isArray(need.refs)||need.refs.length<2||new Set(need.refs).size!==need.refs.length||!need.refs.every(ref=>allSourceRefs.includes(ref))||!need.refs.some(ref=>scope.targetRefs.includes(ref))||need.refs.every(ref=>scope.sourceRefs.includes(ref))||typeof need.relation!=='string'||!need.relation.trim()||typeof need.reason!=='string'||!need.reason.trim())throw Object.assign(Error('补源必须指向本包相关的具体冻结对象集合/关系/理由，不能重复索要已提供原文'),{code:'REVIEW_SOURCE_REQUEST_CONTRACT'});
- if(!value.sourceRequests.length&&(value.checkedRefs.length!==scope.targetRefs.length||value.checkedEdges.length!==scope.edges.length))throw Error('覆盖未完成，不能以空问题当通过');
+ if(!value.sourceRequests.length&&(scope.targetRefs.some(ref=>!value.checkedRefs.includes(ref))||value.checkedEdges.length!==scope.edges.length))throw Error('覆盖未完成，不能以空问题当通过');
  if(sourceRequestContext){const expected=sourceRequestContext.requests.map(r=>r.requestId),answers=value.sourceRequestAnswers;if(!Array.isArray(answers)||answers.length!==expected.length||new Set(answers.map(a=>a.requestId)).size!==expected.length||answers.some(a=>!expected.includes(a.requestId)||typeof a.conclusion!=='string'||!a.conclusion.trim()))throw Object.assign(Error('补查未逐项回答原具体关系问题，不能通过'),{code:'REVIEW_SOURCE_REQUEST_UNANSWERED'});}
  return {...value,status:value.sourceRequests.length?'needs-source-context':'checked'};
 }
