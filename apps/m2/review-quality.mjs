@@ -1,3 +1,5 @@
+import {fallbackEligible,reviewModelApi} from './review-model-fallback.mjs';
+import {reviewModelRequestBody} from './review-source-plan.mjs';
 import {createHash} from 'node:crypto';
 import {bareJson} from './model.mjs';
 
@@ -7,29 +9,38 @@ const abort=signal=>signal?.throwIfAborted();
 // Cache only verified answers. Every attempt (including malformed output) is
 // retained, independently of the two-per-card semantic revision budget.
 export async function qualityModelCall({gateway,system,quality,run,pass,stage,ref='',payload,validate=x=>x,save,signal}){
- const model=gateway.status?.model||null;
- const inputHash=qualityHash({system,payload,model}),key=`quality-${pass}-${stage}-${ref}-${inputHash}`;
+ const model=gateway.status?.model||null,backups=gateway.reviewFallbacks||[],fallbackModels=backups.map(g=>g.status.model),policy=backups.length?{fallbackModels}:{};
+ const inputHash=qualityHash({system,payload,model,...policy}),key=`quality-${pass}-${stage}-${ref}-${inputHash}`;
  let request=quality.requests[key];
- const verifyRequest=()=>{if(request&&(request.inputHash!==inputHash||request.model!==model||qualityHash({system,payload:request.payload,model})!==inputHash||request.sourceHash!==quality.sourceHash||request.skillHash!==quality.skillHash||request.pass!==pass||request.stage!==stage||request.ref!==ref))throw Error('质量检查缓存输入或保存的请求已变化');};
+ const verifyRequest=()=>{if(request&&(request.inputHash!==inputHash||request.model!==model||qualityHash(request.fallbackModels||[])!==qualityHash(fallbackModels)||qualityHash({system,payload:request.payload,model,...policy})!==inputHash||request.sourceHash!==quality.sourceHash||request.skillHash!==quality.skillHash||request.pass!==pass||request.stage!==stage||request.ref!==ref))throw Error('质量检查缓存输入或保存的请求已变化');};
  abort(signal);verifyRequest();
  if(request?.status==='done'){
+  if(backups.length&&(![model,...fallbackModels].includes(request.selectedAlias)||request.attempts.at(-1)?.requestedAlias!==request.selectedAlias||request.returnedModel!==request.attempts.at(-1)?.returnedModel||request.actualApi!==reviewModelApi(request.selectedAlias)))throw Error('备用模型缓存来源与真实调用记录不一致');
   if(qualityHash(run.raw[key])!==request.outputHash)throw Error('质量检查缓存原答校验失败');
   return validate(JSON.parse(bareJson(run.raw[key])));
  }
- request??=quality.requests[key]={inputHash,model,sourceHash:quality.sourceHash,skillHash:quality.skillHash,pass,stage,ref,payload:clone(payload),attempts:[]};
+ request??=quality.requests[key]={inputHash,model,...policy,sourceHash:quality.sourceHash,skillHash:quality.skillHash,pass,stage,ref,payload:clone(payload),attempts:[]};
+ const route=new Map([[model,gateway],...backups.map(g=>[g.status.model,g])]);
+ let active=backups.length?route.get(request.attempts.at(-1)?.nextModel||request.attempts.at(-1)?.requestedModel||model):gateway;
+ if(!active)throw Error('备用模型续跑来源不属于已授权策略');
+ const used=backups.length?request.attempts.length:0;
+ if(used>=3)throw Object.assign(Error('同一逻辑请求三个模型尝试已用完，保留草稿'),{code:'REVIEW_MODEL_ATTEMPT_LIMIT'});
  request.status='running';await save(run);
- for(let attempt=1;attempt<=3;attempt++){
-  abort(signal);verifyRequest();const record={attempt,at:new Date().toISOString()};request.attempts.push(record);await save(run);
+ for(let attempt=used+1;attempt<=3;attempt++){
+  abort(signal);verifyRequest();const record={attempt,at:new Date().toISOString(),requestedModel:active.status?.model||null,requestedAlias:active.status?.model||null,api:reviewModelApi(active.status?.model),options:{json:true,thinking:true,reasoningEffort:'high',maxTokens:32000},switchFrom:request.attempts.at(-1)?.switchFrom||null,switchReason:request.attempts.at(-1)?.switchReason||null};request.attempts.push(record);await save(run);
   verifyRequest();
   let answer,error,parsed;
   try{
-   answer=await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(request.payload)}],{json:true,thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000,signal,trace:{name:key,stage,metadata:{ref,pass,inputHash,sourceHash:quality.sourceHash}}});
-   record.raw=answer.answer;record.usage=answer.usage;
-   parsed=validate(JSON.parse(bareJson(answer.answer)));
-  }catch(e){error=e;record.error=String(e.message);record.finishedAt=new Date().toISOString();}
-  if(!error){run.raw[key]=answer.answer;request.outputHash=qualityHash(answer.answer);request.status='done';record.finishedAt=new Date().toISOString();await save(run);return parsed;}
+   if(backups.length){const actual=Buffer.byteLength(JSON.stringify(reviewModelRequestBody(system,request.payload,{model:active.status.model,...record.options})));if(actual>512*1024)throw Object.assign(Error('实际备用模型完整请求体超过512KiB预算，未调用'),{code:'REVIEW_PACKET_OVERSIZE',actual});record.bodyBytes=actual;}
+   answer=await active.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(request.payload)}],{json:true,thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000,signal,trace:{name:key,stage,metadata:{ref,pass,inputHash,sourceHash:quality.sourceHash}}});
+   record.raw=answer.rawAnswer??answer.answer;record.usage=answer.usage;record.gatewayModel=answer.model||null;record.returnedModel=answer.returnedModel??null;record.providerRequestId=answer.providerRequestId||null;record.finishReason=answer.finishReason||null;record.finishReasonSource=answer.finishReasonSource||null;
+   try{parsed=validate(JSON.parse(bareJson(answer.answer)));}catch(error){error.reviewOutputContract=true;throw error;}
+  }catch(e){error=e;record.error=String(e.message);record.errorCode=e.code||null;record.raw??=e.rawAnswer??e.partialAnswer??null;record.providerRequestId??=e.providerRequestId||null;record.returnedModel??=e.diagnostics?.returnedModel??null;record.finishReason??=e.diagnostics?.providerFinishReason||e.diagnostics?.finishReason||null;record.finishReasonSource??=e.diagnostics?.finishReasonSource||null;record.finishedAt=new Date().toISOString();}
+  if(!error){run.raw[key]=answer.answer;request.outputHash=qualityHash(answer.answer);request.status='done';request.selectedAlias=record.requestedAlias;request.returnedModel=record.returnedModel;request.actualApi=record.api;record.finishedAt=new Date().toISOString();await save(run);return parsed;}
+  let switched=false;
+  if(!signal?.aborted&&attempt<3&&backups.length&&active===gateway&&fallbackEligible(error)){record.nextModel=backups[0].status.model;record.switchFrom=active.status.model;record.switchReason={code:error.code||null,message:String(error.message),providerStatus:error.providerStatus||null,outputContract:error.reviewOutputContract===true};active=backups[0];switched=true;}
   request.status='failed';await save(run);
-  if(signal?.aborted||error.code==='MODEL_REFUSAL'||error.diagnostics?.finishReason==='refusal'||attempt===3)throw error;
+  if(signal?.aborted||error.code==='REVIEW_PACKET_OVERSIZE'||!switched&&(error.code==='MODEL_REFUSAL'||error.diagnostics?.finishReason==='refusal')||attempt===3)throw error;
  }
 }
 

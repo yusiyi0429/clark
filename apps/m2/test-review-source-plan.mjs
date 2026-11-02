@@ -56,8 +56,9 @@ test('edge strings decode only to unique declared scope edges without changing t
 
 test('GPT budget body matches the actual gateway byte for byte, without an extra stream field',async()=>{
  const {createModelGateway}=await import('./model.mjs');const system='仅返回JSON',payload={scope:'完整冻结数据'},options={model:'wangsu/gpt-6.1-sol',json:true,thinking:true,reasoningEffort:'high',maxTokens:32000};let wire;
- const gateway=await createModelGateway({env:{DECODING_MODEL:options.model,DECODING_API_KEY:'fixture'},transport:async(_url,init)=>{wire=init.body;return new Response(JSON.stringify({id:'mock-gpt',choices:[{message:{content:'{}'},finish_reason:'stop'}],usage:{prompt_tokens:3,completion_tokens:2}}),{status:200,headers:{'content-type':'application/json'}});}});
- await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(payload)}],options);
+ const gateway=await createModelGateway({env:{DECODING_MODEL:options.model,DECODING_API_KEY:'fixture'},transport:async(_url,init)=>{wire=init.body;return new Response(JSON.stringify({id:'mock-gpt',model:'gpt-provider-canonical',choices:[{message:{content:'{}'},finish_reason:'stop'}],usage:{prompt_tokens:3,completion_tokens:2}}),{status:200,headers:{'content-type':'application/json'}});}});
+ const result=await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(payload)}],options);
+ assert.equal(result.requestedAlias,options.model);assert.equal(result.returnedModel,'gpt-provider-canonical');
  assert.equal(JSON.stringify(reviewModelRequestBody(system,payload,options)),wire);const body=JSON.parse(wire);assert.equal(body.stream,undefined);assert.equal(body.max_tokens,undefined);assert.equal(body.max_completion_tokens,32000);assert.equal(body.reasoning_effort,'high');
  const gpt=buildReviewCheckPlan({...data(),wireOptions:{model:options.model}}),claude=buildReviewCheckPlan({...data(),wireOptions:{model:'wangsu/claude-sonnet-5-5'}});assert.notEqual(gpt.stamp,claude.stamp);assert.throws(()=>refreshReviewCheckPlan(claude,{...data(),wireOptions:{model:options.model}}));
 });

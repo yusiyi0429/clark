@@ -1,4 +1,4 @@
-import {buildReviewCheckPlan,refreshReviewCheckPlan,verifyReviewCheckPlan,executeReviewCheckPlan,packSourceText,reviewModelRequestBody,validateScopedCheckResult} from './review-source-plan.mjs';
+import {buildReviewCheckPlan,refreshReviewCheckPlan,verifyReviewCheckPlan,executeReviewCheckPlan,packSourceText,reviewModelRequestBody,reviewModelBudgetBytes,validateScopedCheckResult} from './review-source-plan.mjs';
 import {initialReviewCall,createReviewCallJournal,outputContractError} from './review-call-journal.mjs';
 import {runReviewQuality,qualityModelCall,qualityHash} from './review-quality.mjs';
 import {frozenAgreedOutcome} from './review-agreed-outcome.mjs';
@@ -484,7 +484,8 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
  const sources=Object.fromEntries(items.map(c=>[c.id,{...unitData(c),objectId:c.objectId}]));
  const options=programOptions||{rowMatch:skillAtLeast(skill.version,'2.1.6'),askCaps:skillAtLeast(skill.version,'2.1.7'),childRule:skillAtLeast(skill.version,'2.1.10')};
  const model=gateway.status?.model||'wangsu/claude-sonnet-5-5';
- if(run.quality?.packetModel&&run.quality.packetModel.model!==model)throw Error('质量检查模型已变化，不能复用其他模型的结论');
+ const wireOptions={model,thinking:true,reasoningEffort:'high',maxTokens:32000,json:true,...(gateway.reviewFallbacks?.length?{fallbackModels:gateway.reviewFallbacks.map(g=>g.status.model)}:{})};
+ if(run.quality?.packetModel&&qualityHash(run.quality.packetModel)!==qualityHash(wireOptions))throw Error('质量检查模型或备用策略已变化，不能复用其他策略的结论');
  const call=(q,pass,stage,ref,payload,validate)=>qualityModelCall({gateway,system,quality:q,run,pass,stage,ref,payload,validate,save,signal});
  await runReviewQuality({run,input,skill,sources,save,onProgress,signal,
   normalize:()=>{run.covered=[...(run.covered||[]),...applyCovers(run)];},
@@ -493,7 +494,6 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
    const facts=Object.fromEntries(items.map(c=>[c.id,{lengthFindings:reviews[c.id]?lengthFindings(reviews[c.id]):[],evidenceFacts:reviews[c.id]?evidenceFacts(c,reviews[c.id]):{missingIds:[],usedCount:0},rowFacts:rowFacts(c,reviews[c.id])}]));
    const verdictFacts=items.filter(c=>c.children?.length).map(c=>({ref:c.id,verdict:reviews[c.id]?.verdict,children:c.children.map(ref=>({ref,verdict:reviews[ref]?.verdict||'生成失败'}))}));
    const tasks=reviewQualityTasks(skill);
-   const wireOptions={model:gateway.status?.model||'wangsu/claude-sonnet-5-5',thinking:true,reasoningEffort:'high',maxTokens:32000,json:true};
    if(q.packetModel&&qualityHash(q.packetModel)!==qualityHash(wireOptions))throw Error('质量检查模型已变化，必须使用独立检查记录');
    q.packetModel=wireOptions;
    const args={input,sources,reviews,programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(Object.values(reviews))},tasks,system,wireOptions};
@@ -524,7 +524,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
    payload.task+=' unit.sourceRef指向sources中本层完整冻结unit。childCandidates为同轮当前候选而非正式确认或独立原始事实；仅候选状态同步/上下层一致性可按其汇总，不等于核验下级事实。若新增或否定具体业务事实而缺所需原文，必须返回sourceRequests:[{refs:[本层ref,所需冻结ref],relation,reason}]，先补原文，不能用候选冒充原始证据。无补源需求时返回review。sourceTexts/sourceBindings是相同正文的无损引用，按path还原对应来源字段，保留各自出处、日期、版本及E命名空间。';
    payload.sourceScope={targetRef:c.id,sourceRefs,availableRefs:refs};
    const wireOptions=q.packetModel||{model:gateway.status?.model||'wangsu/claude-sonnet-5-5'};
-   const assertBudget=value=>{const actual=Buffer.byteLength(JSON.stringify(reviewModelRequestBody(system,value,wireOptions)));if(actual>512*1024)throw Object.assign(Error('完整返修来源超过512KiB工程预算，未调用模型，保留草稿'),{code:'REVIEW_PACKET_OVERSIZE',actual,budget:512*1024});};
+   const assertBudget=value=>{const actual=reviewModelBudgetBytes(system,value,wireOptions);if(actual>512*1024)throw Object.assign(Error('完整返修来源超过512KiB工程预算，未调用模型，保留草稿'),{code:'REVIEW_PACKET_OVERSIZE',actual,budget:512*1024});};
    const validate=(value,provided)=>{
     if(value?.sourceRequests?.length){
      for(const request of value.sourceRequests)if(!Array.isArray(request.refs)||request.refs.length<2||!request.refs.includes(c.id)||new Set(request.refs).size!==request.refs.length||request.refs.some(ref=>!refs.includes(ref))||request.refs.every(ref=>provided.includes(ref))||typeof request.relation!=='string'||!request.relation.trim()||typeof request.reason!=='string'||!request.reason.trim())throw Object.assign(Error('返修补源必须明确具体未提供的冻结对象、关系和原因'),{code:'REVIEW_SOURCE_REQUEST_CONTRACT'});
@@ -609,7 +609,7 @@ export function reviewProblems(run,input,{roster=[],rowMatch=false,askCaps=false
 // What installReviewRound reads: the run's reviews plus what was skipped or failed, so the page names them.
 export function reviewFile(run,input,{skill,model,label,startedAt=null}){
  const generatedAt=new Date().toISOString();
- return {name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,...(run.quality?{quality:{status:run.quality.status,maxRevisions:run.quality.maxRevisions,counts:run.quality.counts,remaining:run.quality.remaining||[],sourceHash:run.quality.sourceHash,skillHash:run.quality.skillHash}}:{}),...(input.basis?{basis:structuredClone(input.basis)}:{}),
+ return {name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,modelProvenance:{requestedPrimary:model,initial:Object.fromEntries(input.stages.flat().filter(c=>run.raw?.[c.id]).map(c=>[c.id,run.initialCache?.[c.id]?{requestedAlias:run.initialCache[c.id].selectedAlias||null,returnedModel:run.initialCache[c.id].returnedModel??null,attemptId:run.initialCache[c.id].attemptId}:{requestedAlias:null,returnedModel:null,origin:'legacy-cache-unknown-model'}])),quality:Object.values(run.quality?.requests||{}).filter(r=>r.status==='done').map(r=>({ref:r.ref,pass:r.pass,stage:r.stage,selectedAlias:r.selectedAlias??r.model,returnedModel:r.returnedModel??null,api:r.actualApi??null}))},...(run.quality?{quality:{status:run.quality.status,maxRevisions:run.quality.maxRevisions,counts:run.quality.counts,remaining:run.quality.remaining||[],sourceHash:run.quality.sourceHash,skillHash:run.quality.skillHash}}:{}),...(input.basis?{basis:structuredClone(input.basis)}:{}),
   // Facts the review cards need from the input: which object each review is about, and whether the Mission has an owner.
   reviews:Object.fromEntries(Object.entries(run.reviews).map(([id,r])=>{const c=input.stages.flat().find(x=>x.id===id);return [id,{...r,...(c?.agreedOutcome?{agreedOutcome:structuredClone(c.agreedOutcome)}:{}),...(c?.sourceBasis?{sourceBasis:structuredClone(c.sourceBasis)}:{}),...(c?.childCommitments?{childCommitments:structuredClone(c.childCommitments)}:{}),...(c?.objectId?{objectId:c.objectId}:{}),...(c?.ownerAssigned===false?{ownerAssigned:false}:{})}];})),
   qualityWarnings:reviewQualityWarnings(run),failed:run.failed,dropped:run.dropped,skipped:input.skipped,readAt:input.readAt,redactions:input.redactions,readReceipt:input.readReceipt||null};

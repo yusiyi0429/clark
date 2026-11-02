@@ -1,3 +1,4 @@
+import {createReviewModelGateway} from './review-model-fallback.mjs';
 import {proposalDelivery,deliveryNotice,withoutUnsentCardClaims} from './proposal-delivery.mjs';
 import {createRevisionAcknowledgements} from './revision-ack.mjs';
 import {exportMarkdown,parseStandardMarkdown,prepareTransfer,applyTransfer,transferCards,transferStamp,nonstandardRequest,markdownImportPrompt,assertImportGrounded} from './markdown-transfer.mjs';
@@ -70,6 +71,7 @@ const loadedSkill=await loadSkillSnapshot(skillRoot),rules=loadedSkill.rules;
 // uploads is one line in model-runs, never content. Off, nothing is loaded or sent.
 await configureTracing({onPause:info=>recordModelRun({channel:'tracing-failure',failure:info}).catch(()=>{})});
 const gateway=await createModelGateway();
+const reviewGateway=await createReviewModelGateway();
 // DECODING_CHAT_MODEL moves Nexus and the private Agents to another model (e.g. when the generation model's channel is down); round generation keeps DECODING_MODEL.
 // Chat (Nexus, private Agent) hides sensitive personal details before the model sees them (模型调用稳定性加固 2026-10-22).
 const chatGateway=await createModelGateway({...(process.env.DECODING_CHAT_MODEL?{env:{...process.env,DECODING_MODEL:process.env.DECODING_CHAT_MODEL}}:{}),redact:true});
@@ -122,7 +124,7 @@ async function cascadeFailed(job,e){await store.transact(s=>{const card=s.cards[
 const reviewSkillRoot=reviewSkillLocation();
 // 生成复盘 (陈溪南 2026-10-23): started from 管理 by the CEO or a round operator; reads the month's POs, Missions and progress
 // from the ontology with the deployment's read-only credential and installs only if it passes the checks (review-generation.mjs).
-const reviewJobs=createReviewJobs({store,gateway,skillRoot:reviewSkillRoot,statePath:process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)),
+const reviewJobs=createReviewJobs({store,gateway:reviewGateway,skillRoot:reviewSkillRoot,statePath:process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)),
  reader:async()=>httpReviewReader({token:process.env.TKOS_WORLD_PRODUCT_TOKEN}),busy:()=>roundFlight||auditFlight,
  isOperator:actor=>Boolean(actor)&&mayRunRounds(actor),roster:Object.values(handoffProfiles).map(p=>p.name),ceoName:Object.values(handoffProfiles).find(p=>p.ceo)?.name||'',
  // Without a company PO in the ontology, the company review is held against the month's company direction the manifest records.

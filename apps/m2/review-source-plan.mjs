@@ -46,6 +46,7 @@ export function reviewModelRequestBody(system,payload,{model='wangsu/claude-sonn
  throw Error('未定义该测试模型的实际请求适配器，不能套用其他模型预算');
 }
 export const anthropicReviewBody=(system,payload,options={})=>{if(options.model&&options.model!=='wangsu/claude-sonnet-5-5')throw Error('不能把非Messages模型套用Anthropic请求体');return reviewModelRequestBody(system,payload,options);};
+export const reviewModelBudgetBytes=(system,payload,options={})=>Math.max(...[options.model||'wangsu/claude-sonnet-5-5',...(options.fallbackModels||[])].map(model=>bytes(reviewModelRequestBody(system,payload,{...options,model}))));
 
 
 const scopeRules='本包检查 scope.targetRefs 及 scope.edges，问题只能归属 scope.allowedIssueRefs。sources 为 scope.sourceRefs 的完整原始来源。每个对象保持自己的E编号/旧E命名空间，不得跨对象把同编号当同证据。sourceTexts 和 sourceBindings 是完全相同正文的无损引用：按 binding.path 把来源字段中的 @source-text 标记替换为对应完整正文；不同出处、日期、版本和负责人记录仍分别保留，不得合并证据强度。reviews 中非目标项仅为父子上下文，不把候选结论当原始事实，不以本包没有其他对象来源断言其没发生。关系包检查 scope.edges，覆盖其两端完整来源。kind=requested-context只是程序排序后的补查关联，不是本体父子关系；必须按sourceRequestContext逐条核对具体relation/reason，并返回sourceRequestAnswers:[{requestId,conclusion}]给出每条补查的具体结论（仍缺材料则明确说缺什么并返回sourceRequests），不能只列checkedRefs冒充答复。所有28份当前候选和全局测量均保留作一致性上下文。若检查需要本包未提供的其他对象原文，必须返回 sourceRequests:[{refs:[本包目标ref,需要核查的冻结对象ref],relation:需要核对的具体关系,reason:原因}]，不得猜关系、把未提供当没发生或强置fixable:false；有补源请求不能算检查完成。输出保留 issues 原有 ref/type/problem/impact/mustFix/fixable，另须 checkedRefs、checkedEdges 和 sourceRequests 数组；无问题/无补源也显式给空数组。';
@@ -65,7 +66,7 @@ export function buildReviewCheckPlan({input,sources,reviews,programFacts,tasks,s
   const scope={kind,targetRefs:targets,sourceRefs,allowedIssueRefs:[...new Set([...targets,...related.flatMap(e=>[e.parentRef,e.childRef])])],reviewRefs:Object.keys(current),edges:related};
   const perReview=programFacts?.perReview||{},facts={...programFacts,perReview:Object.fromEntries([...context].filter(id=>Object.hasOwn(perReview,id)).map(id=>[id,perReview[id]]))};
   const payloads=tasks.map(task=>({task:task+'\n'+scopeRules,reviews:Object.values(current),programFacts:facts,sources:packed.sources,sourceTexts:packed.texts,sourceBindings:packed.bindings,scope,sourceHash:digest(original),candidateHash:digest(current)}));
-  const bodies=payloads.map(payload=>bytes(reviewModelRequestBody(system,payload,wireOptions)));
+  const bodies=payloads.map(payload=>reviewModelBudgetBytes(system,payload,wireOptions));
   return {kind,scope,originalHash:packed.originalHash,payloads,maxBodyBytes:Math.max(...bodies),sourceBytes:bytes(original),packedSourceBytes:bytes(packed),sourceEvidenceCount:sourceRefs.reduce((n,id)=>n+(sources[id].evidence?.length||0),0)};
  };
  const packets=[];
@@ -142,7 +143,7 @@ export function planSourceFollowups({plan,args,responses,providedKeys=[],maxAddi
   const related=buildReviewCheckPlan({...args,maxBodyBytes:plan.maxBodyBytes,maxTargetRefs:Math.max(plan.maxTargetRefs,new Set(edges.flatMap(e=>[e.parentRef,e.childRef])).size),wireOptions:plan.wireOptions,fixedLayout:[{kind:'relation',units:edges}]}),packet=related.packets[0];
   const payload=packet.payloads[request.group];
   payload.sourceRequestContext={group:request.group,requests:request.reasons.map((reason,index)=>({requestId:request.key+':'+index,refs:request.refs,relation:reason.relation,reason:reason.reason,originalScope:plan.packets[reason.packetIndex].scope}))};
-  const bodyBytes=bytes(reviewModelRequestBody(args.system,payload,plan.wireOptions));
+  const bodyBytes=reviewModelBudgetBytes(args.system,payload,plan.wireOptions);
   if(bodyBytes>plan.maxBodyBytes)throw Object.assign(Error('完整补查问题及来源超过预算，未发请求'),{code:'REVIEW_PACKET_OVERSIZE',actual:bodyBytes,budget:plan.maxBodyBytes});
   return {...request,packet,payload,cacheStamp:digest({base:plan.stamp,key:request.key,payload}),bodyBytes};
  });
