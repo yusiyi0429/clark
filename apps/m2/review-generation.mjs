@@ -502,7 +502,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
    else {const previous=q.sourcePlans[pass-1];plan=previous?refreshReviewCheckPlan(previous,args):buildReviewCheckPlan(args);q.sourcePlans[pass]=plan;await save(run);}
    const outcome=await executeReviewCheckPlan({plan,args,maxAdditionalRequests:6,runPacket:async request=>{
     const value=await call(q,pass,'check',`${request.cacheStamp}-${request.index??'source'}-${request.group}`,request.payload,value=>{
-     checkedReviewIssues(value,{skill,refs});return validateScopedCheckResult(value,request.packet,refs);
+     checkedReviewIssues(value,{skill,refs});return validateScopedCheckResult(value,request.packet,refs,request.payload.sourceRequestContext);
     });
     return {...value,issues:value.issues.map(issue=>({...issue,sourceRefs:[...request.packet.scope.sourceRefs]}))};
    }});
@@ -514,7 +514,8 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
   },
   revise:async(c,action,pass,q)=>{
    const reviews=action.before,children=(c.children||[]).map(id=>reviews[id]).filter(Boolean);
-   const sourceRefs=[...new Set([c.id,...action.issues.flatMap(issue=>issue.sourceRefs||[])])];
+   const affectedChildren=(c.children||[]).filter(ref=>qualityHash(reviews[ref])!==qualityHash(q.passes[pass].reviews[ref]));
+   const sourceRefs=[...new Set([c.id,...affectedChildren,...action.issues.flatMap(issue=>issue.sourceRefs||[])])];
    if(sourceRefs.some(ref=>!Object.hasOwn(sources,ref)))throw Error('返修来源引用不属于冻结输入');
    const packed=packSourceText(Object.fromEntries(sourceRefs.map(ref=>[ref,sources[ref]])));
    const payload={

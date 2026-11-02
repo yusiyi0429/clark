@@ -81,6 +81,8 @@ test('product runner checks after both repairs, preserves complete E43/E49 sourc
  const review=(id,reason='initial')=>({verdict:'未达成',verdictReason:reason,facts:[{ref:{m:'t',u:'m',company:'u'}[id],item:'成果',status:'未达成',evidence:'尚缺验证记录',gap:'尚缺验证记录'}],nextInputs:[{ref:{m:'t',u:'m',company:'u'}[id],type:'继续',text:'核对结果'}]});
  const gateway={complete:async messages=>{const p=JSON.parse(messages[1].content);calls.push(p);
   if(!p.unit){assert.ok(p.sources.m.evidence[2].text.endsWith('快嘴'));assert.ok(p.sources.m.evidence[2].text.length>400);assert.equal(p.sources.m.evidence[0].text,'真实会议验证仍待实会');const m=p.reviews.find(r=>r.ref==='m');return {answer:JSON.stringify({checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[],issues:m.verdictReason==='fixed2'?[]:[issue()]})};}
+  if(p.revision&&p.unit.id==='u')assert.ok(p.sources.m,'changed child original source must accompany parent refresh');
+  if(p.revision&&p.unit.id==='company')assert.ok(p.sources.u,'changed RU original source must accompany Company refresh');
   return {answer:JSON.stringify({review:review(p.unit.id,p.revision?'fixed'+p.revision:'initial')})};
  }};
  const args={gateway,skill:actual,input,run,programOptions:{childRule:false}};

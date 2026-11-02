@@ -29,7 +29,7 @@ for(const model of ['wangsu/claude-sonnet-5-5','aliyun/deepseek-v4.1-flash']){
   active++;maxConcurrency=Math.max(maxConcurrency,active);await new Promise(resolve=>setTimeout(resolve,1));active--;
   maxRuntimeBody=Math.max(maxRuntimeBody,Buffer.byteLength(JSON.stringify(reviewModelRequestBody(messages[0].content,payload,args.wireOptions))));
   const sourceRequests=[];for(const pair of [['agents','tokenhub'],['method','bf01']])if(payload.scope.kind==='object'&&payload.scope.targetRefs.includes(pair[0])&&!payload.scope.sourceRefs.includes(pair[1]))sourceRequests.push({refs:pair,relation:'指定原文跨单元归属核对',reason:'只按冻结原文核对，不预判结论'});
-  return {answer:JSON.stringify({issues:[],checkedRefs:payload.scope.targetRefs,checkedEdges:payload.scope.edges,sourceRequests})};
+  return {answer:JSON.stringify({issues:[],checkedRefs:payload.scope.targetRefs,checkedEdges:payload.scope.edges,sourceRequests,sourceRequestAnswers:payload.sourceRequestContext?.requests.map(r=>({requestId:r.requestId,conclusion:'确定性接线fixture，不构成真实内容判断'}))})};
  }};
  await runReviewSkill({gateway,skill,input:work.input,run,save:async()=>{}});assert.equal(run.quality.status,'passed');assert.equal(calls,36);assert.equal(initial,0);assert.equal(maxConcurrency,3);assert.ok(maxRuntimeBody<=512*1024);
  for(const [key,raw]of Object.entries(work.run.raw))assert.equal(run.raw[key],raw);
