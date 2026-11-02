@@ -62,15 +62,18 @@ const OBJECT_SCENES: Record<string, string> = {
   "monthly-plan": "月度计划详情", "monthly-review-item": "复盘项详情", "personal-review": "个人复盘", signal: "信号详情",
 };
 
-/** 正在写的一号位对话轮次（每轮的 abort）：停机时由 settleActiveTurns 收尾。 */
-const activeTurns = new Set<AbortController>();
+/**
+ * 正在写的对话轮次（runId → 本人与这一轮的 abort）：停机时由 settleActiveTurns 收尾，本人点「停止」时按 runId 停下。
+ * 每个环境只跑一个 api 进程，进程内登记就够。
+ */
+const activeTurns = new Map<string, { ownerId: string; abort: AbortController }>();
 
 /**
  * 停机前（部署换版本）：正在写的每一轮都以「服务更新」收尾，已写出的部分存下并标成可继续，
  * 界面连上新实例后自动接着写；最多等 waitMs 让它们存完档。
  */
 export async function settleActiveTurns(waitMs = 5_000): Promise<void> {
-  for (const turn of activeTurns) turn.abort(Object.assign(new Error("Server restarting"), { code: "SERVER_RESTARTING" }));
+  for (const { abort: turn } of activeTurns.values()) turn.abort(Object.assign(new Error("Server restarting"), { code: "SERVER_RESTARTING" }));
   const deadline = Date.now() + waitMs;
   while (activeTurns.size && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
 }
@@ -120,7 +123,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       }
       const object = await scopeObjectFor(req.person!, req.params.scope);
       if (!object.visible) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
-      return getConversationHistory(q, req.person!.personId, req.params.scope);
+      return getConversationHistory(q, req.person!.personId, req.params.scope, conversationTurnTimeoutMs);
     },
   );
 
@@ -204,8 +207,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       requestContext.set(req, { runId, scope: req.params.scope });
       const runStartedAt = Date.now();
       const abort = new AbortController();
-      activeTurns.add(abort);
-      let streamFinished = false;
+      activeTurns.set(runId, { ownerId: owner, abort });
       let eventSequence = 0;
       let runStatus = "aborted";
       let runError: string | undefined;
@@ -408,9 +410,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           connection: "keep-alive",
           "x-accel-buffering": "no",
         });
-        reply.raw.on("close", () => {
-          if (!streamFinished) abort.abort(Object.assign(new Error("Conversation client disconnected"), { code: "CLIENT_DISCONNECTED" }));
-        });
+        // 界面断开（刷新、切走、关页面）不停下这一轮：照常写完、存下，回来时历史里这一问标着 running；停下只走「停止」。
         // 心跳：长时间思考、查证、压缩时也每隔一会儿写一行注释，代理和浏览器不会把连接当成断了。
         heartbeat = setInterval(() => {
           if (!reply.raw.destroyed && !reply.raw.writableEnded) reply.raw.write(": ping\n\n");
@@ -718,7 +718,6 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         if (recoverySummary) logEvent({ event: "conversation.fallback", requestId: String(req.id), runId, scope: req.params.scope, status: runStatus,
           originalModel: recoverySummary.originalModel, fallbackModel: recoverySummary.fallbackModel, reasons: recoverySummary.reasons,
           actions: recoverySummary.actions, retries: recoverySummary.retries });
-        streamFinished = true;
         // Fastify inject/browser may observe SSE end before this function's finally runs.
         // Release first so an immediate next turn/delete cannot spuriously see TURN_IN_PROGRESS.
         await client.query("SELECT pg_advisory_unlock(hashtext($1))", [lockKey]).catch(() => undefined);
@@ -736,11 +735,10 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         logEvent({ event: "agent.run", requestId: String(req.id), runId, agentKind: "conversation", scope: req.params.scope, status: "failed", errorCode: "ROUTE_FAILED", error: (error as Error)?.message });
       } finally {
         if (heartbeat) clearInterval(heartbeat);
-        streamFinished = true;
         if (hijacked && !reply.raw.writableEnded) reply.raw.end();
         if (scopeLockHeld) await client.query("SELECT pg_advisory_unlock(hashtext($1))", [lockKey]).catch(() => undefined);
         client.release();
-        activeTurns.delete(abort);
+        activeTurns.delete(runId);
       }
     };
 
@@ -754,8 +752,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       sendConversationTurn(req, reply),
   );
 
-  // 首页 Chat 对话：界面断开不再停下这一轮。切走、刷新回来接上它（先补发、再跟着写）；本人点「停止」才请 Chat 停下。
-  // 天枢自己的对话照旧由断开连接停下：接不上（204），停止这里不做事（204）。
+  // 界面断开不再停下这一轮。首页 Chat 对话：切走、刷新回来接上它（先补发、再跟着写）；本人点「停止」才请 Chat 停下。
+  // 天枢自己的对话（对象页）：接不上（204），回来读历史等它写完；本人点「停止」按 runId 停下自己那一轮（和以前断开一样收尾），别人的、已结束的都是 204。
   app.get("/api/conversations/:scope/turns/:runId/stream", { preHandler: requirePerson, schema: { params: ConversationTurnParams } },
     async (req, reply) => {
       if (chat && req.params.scope === "global" && chat.follow(req.person!, req.params.runId, reply)) return;
@@ -763,7 +761,11 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
     });
   app.post("/api/conversations/:scope/turns/:runId/stop", { preHandler: requirePerson, schema: { params: ConversationTurnParams } },
     async (req, reply) => {
-      if (!chat || req.params.scope !== "global") return reply.code(204).send();
+      if (!chat || req.params.scope !== "global") {
+        const turn = activeTurns.get(req.params.runId);
+        if (turn?.ownerId === req.person!.personId) turn.abort.abort(Object.assign(new Error("Conversation stopped by user"), { code: "USER_STOPPED" }));
+        return reply.code(204).send();
+      }
       return chat.cancel(req.person!, String(req.id), req.params.runId).catch((error) => chatFailed(reply, error));
     });
 

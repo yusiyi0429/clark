@@ -454,45 +454,132 @@ describe("Conversation HTTP/SSE public seam", () => {
     }
   });
 
-  it("when the SSE client disconnects (stop button or closed page) aborts Pi but keeps what was written", async () => {
+  /** 真起服务、用 fetch 发一轮（inject 要等整轮结束才返回）：读到第一个带 runId 的事件就交回，连接留给调用方断开或读完。 */
+  async function openTurn(t: Awaited<ReturnType<typeof createTestApp>>, cookie: string, scope: string, message: string) {
+    if (!t.app.server.listening) await t.app.listen({ port: 0, host: "127.0.0.1" });
+    const address = t.app.server.address();
+    if (!address || typeof address === "string") throw new Error("server not listening");
+    const base = `http://127.0.0.1:${address.port}`;
+    const controller = new AbortController();
+    const response = await fetch(`${base}/api/conversations/${scope}/messages`, {
+      method: "POST", signal: controller.signal,
+      headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream", "content-type": "application/json" },
+      body: JSON.stringify({ message }),
+    });
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    while (!/"runId":"([^"]+)"/.test(text)) {
+      const chunk = await reader.read();
+      if (chunk.done) throw new Error(`stream ended before any event: ${text}`);
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+    const runId = /"runId":"([^"]+)"/.exec(text)![1];
+    const rest = async () => {
+      for (;;) {
+        const chunk = await reader.read();
+        if (chunk.done) return text;
+        text += decoder.decode(chunk.value, { stream: true });
+      }
+    };
+    return { base, runId, disconnect: () => controller.abort(), rest };
+  }
+  async function waitForRun(t: Awaited<ReturnType<typeof createTestApp>>, status: string) {
+    let runs: Record<string, unknown>[] = [];
+    for (let i = 0; i < 200 && runs[0]?.status !== status; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      runs = await t.agentRuns();
+    }
+    return runs;
+  }
+  const historyOf = async (t: Awaited<ReturnType<typeof createTestApp>>, cookie: string, scope: string) =>
+    (await t.app.inject({ method: "GET", url: `/api/conversations/${scope}/messages`, headers: { cookie } })).json().messages as Record<string, unknown>[];
+
+  it("keeps writing an object-page turn after the browser disconnects, saves the answer and flags the question running meanwhile", async () => {
     let aborted = false;
+    let finish!: () => void;
+    const finished = new Promise<void>((resolve) => { finish = resolve; });
+    const runtime: ConversationRuntime = {
+      async run(input) {
+        input.signal.addEventListener("abort", () => { aborted = true; }, { once: true });
+        input.emit({ type: "message", delta: "partial" });
+        await finished;
+        input.emit({ type: "message", delta: "，写完了" });
+        return { assistantMessage: "partial，写完了", runtimeEntries: [{ kept: true }] };
+      },
+    };
+    const t = await createTestApp({}, runtime);
+    try {
+      const cookie = await t.loginCookie();
+      const scope = `issue:${(await t.createIssue()).objectRef.id}`;
+      const turn = await openTurn(t, cookie, scope, "断开也要写完");
+      turn.disconnect();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // 刷新回来：这一轮还在写，历史里最后一问标 running，回答还没有。
+      expect(await historyOf(t, cookie, scope)).toEqual([expect.objectContaining({ role: "user", content: "断开也要写完", runId: turn.runId, running: true })]);
+      finish();
+      const runs = await waitForRun(t, "succeeded");
+      expect(aborted).toBe(false);
+      expect(runs).toEqual([expect.objectContaining({ id: turn.runId, status: "succeeded" })]);
+      const state = await t.conversationState(scope);
+      expect(state.messages.map((m) => m.content)).toEqual(["断开也要写完", "partial，写完了"]);
+      expect(state.runtimeEntries).toEqual([{ kept: true }]);
+      // 写完以后不再标 running。
+      expect((await historyOf(t, cookie, scope)).some((m) => "running" in m)).toBe(false);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("stops a running native turn only for its owner, with the same outcome as the old stop", async () => {
     const runtime: ConversationRuntime = {
       async run(input) {
         input.emit({ type: "message", delta: "partial" });
-        await new Promise<void>((resolve) => input.signal.addEventListener("abort", () => {
-          aborted = true;
-          resolve();
-        }, { once: true }));
+        await new Promise<void>((resolve) => input.signal.addEventListener("abort", () => resolve(), { once: true }));
         return { assistantMessage: "must not persist", runtimeEntries: [{ bad: true }] };
       },
     };
     const t = await createTestApp({}, runtime);
     try {
       const cookie = await t.loginCookie();
-      await t.app.listen({ port: 0, host: "127.0.0.1" });
-      const address = t.app.server.address();
-      if (!address || typeof address === "string") throw new Error("server not listening");
-      const controller = new AbortController();
-      const response = await fetch(`http://127.0.0.1:${address.port}/api/conversations/global/messages`, {
-        method: "POST",
-        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream", "content-type": "application/json" },
-        body: JSON.stringify({ message: "disconnect" }),
-        signal: controller.signal,
-      });
-      await response.body!.getReader().read();
-      controller.abort();
-      let runs: Record<string, unknown>[] = [];
-      for (let i = 0; i < 50; i += 1) {
-        runs = await t.agentRuns();
-        if (aborted && runs[0]?.status === "aborted") break;
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
-      expect(aborted).toBe(true);
-      expect(runs).toEqual([expect.objectContaining({ status: "aborted" })]);
-      const state = await t.conversationState("global");
-      expect(state.messages.map((m) => m.content)).toEqual(["disconnect", "partial\n\n（已停止，以上是停止前写出的部分。）"]);
-      // 运行时没有给出这一轮的模型历史（不是它自己报的失败）：不采信它返回的东西。
+      const scope = `issue:${(await t.createIssue()).objectRef.id}`;
+      const turn = await openTurn(t, cookie, scope, "停一下");
+      const stop = (as: string, runId = turn.runId) => fetch(`${turn.base}/api/conversations/${scope}/turns/${runId}/stop`,
+        { method: "POST", headers: { cookie: as, origin: t.publicOrigin } });
+      // 别人停不了，也看不出有没有这一轮；不认识的 runId 也是 204。
+      expect((await stop(await t.memberCookie())).status).toBe(204);
+      expect((await stop(cookie, "00000000-0000-4000-8000-000000000000")).status).toBe(204);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect((await t.agentRuns())[0]).toMatchObject({ status: "running" });
+      expect((await stop(cookie)).status).toBe(204);
+      const events = parseSse(await turn.rest());
+      expect(events.at(-1)).toMatchObject({ type: "done", status: "aborted", runId: turn.runId });
+      expect(await waitForRun(t, "aborted")).toEqual([expect.objectContaining({ status: "aborted", error: "Conversation stopped by user" })]);
+      const state = await t.conversationState(scope);
+      expect(state.messages.map((m) => m.content)).toEqual(["停一下", "partial\n\n（已停止，以上是停止前写出的部分。）"]);
       expect(state.runtimeEntries).toEqual([]);
+      // 已结束的一轮再点停止：204，不改任何东西。
+      expect((await stop(cookie)).status).toBe(204);
+      expect((await historyOf(t, cookie, scope)).some((m) => "running" in m)).toBe(false);
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("flags only the latest question whose run is still running and started within the turn cap", async () => {
+    const t = await createTestApp();
+    try {
+      const cookie = await t.loginCookie();
+      const scope = `issue:${(await t.createIssue()).objectRef.id}`;
+      await t.app.inject({ method: "POST", url: `/api/conversations/${scope}/messages`,
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "第一问" } });
+      const [run] = await t.agentRuns();
+      // 模拟 api 崩掉留下的 running 行：开始于 11 分钟前，超过绝对上限，不算还在写。
+      await t.sql("UPDATE agent_runs SET status = 'running', completed_at = NULL, started_at = now() - interval '11 minutes' WHERE id = $1", [run.id]);
+      await t.sql("DELETE FROM conversation_messages WHERE run_id = $1 AND role = 'assistant'", [run.id]);
+      expect((await historyOf(t, cookie, scope)).some((m) => "running" in m)).toBe(false);
+      await t.sql("UPDATE agent_runs SET started_at = now() - interval '1 minute' WHERE id = $1", [run.id]);
+      expect(await historyOf(t, cookie, scope)).toEqual([expect.objectContaining({ role: "user", running: true })]);
     } finally {
       await t.close();
     }
