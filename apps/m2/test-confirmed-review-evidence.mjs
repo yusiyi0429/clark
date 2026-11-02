@@ -44,3 +44,7 @@ test('ambiguous old refs and missing ontology identity are reported instead of g
  const x=fixture();x.card.versions[1].content.facts.push(structuredClone(x.fact));const duplicate=captureConfirmedFacts(x.state,{period:'2026-10'});assert.equal(duplicate.entries.length,0);assert.ok(duplicate.excluded.some(e=>e.reason.includes('ref重复')));
  delete x.card.versions[1].content.objectId;const missing=captureConfirmedFacts(x.state,{period:'2026-10'});assert.equal(missing.entries.length,0);assert.ok(missing.excluded.some(e=>e.reason.includes('objectId')));
 });
+test('original signed quotation stays frozen privately; recursive model view redacts new fact, gap and old reference text',()=>{
+ const x=fixture(),secret='候选人期望年薪40万';x.card.versions[1].content.facts[0].evidence=secret+'，正式上线已有进展 [E5]';x.card.versions[1].content.facts[0].gap=secret+'，后续待核';x.sourceInputs[job].stages[0][0].evidence[0].text=secret+'。';const bundle=captureConfirmedFacts(x.state,{period:'2026-10'}),original=JSON.stringify(bundle),result=addConfirmedFacts(x.input,bundle,x.sourceInputs),evidence=result.stages[0][0].evidence[1];
+ assert.ok(bundle.entries[0].fact.evidence.includes(secret));assert.equal(JSON.stringify(bundle),original);assert.ok(!JSON.stringify(evidence).includes(secret));assert.match(evidence.text,/正式上线已有进展/);assert.ok(Object.keys(evidence.redactions).length);assert.ok(Object.keys(result.redactions['eo-m1']).length);assert.ok(!JSON.stringify(evidence.m2Source).includes(secret));
+});

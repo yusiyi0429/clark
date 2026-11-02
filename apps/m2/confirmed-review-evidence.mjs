@@ -1,3 +1,4 @@
+import {redactText} from './redact.mjs';
 import {createHash} from 'node:crypto';
 import {memberProfiles} from './member-profiles.mjs';
 import {roomOf} from './governance.mjs';
@@ -39,6 +40,12 @@ export function captureConfirmedFacts(state,{period,now=new Date().toISOString()
  const bundle={schemaVersion:1,period,capturedAt:now,entries:[...newest.values()],excluded};return {...bundle,hash:evidenceHash(bundle)};
 }
 export function verifyEvidenceBundle(bundle){const {hash,...value}=bundle||{};if(!hash||evidenceHash(value)!==hash)throw Error('已确认人工事实冻结校验失败，不能混入变化后的来源');}
+function modelValue(value,hits){
+ if(typeof value==='string'){const redacted=redactText(value);for(const [name,count]of Object.entries(redacted.hits))hits[name]=(hits[name]||0)+count;return redacted.text;}
+ if(Array.isArray(value))return value.map(v=>modelValue(v,hits));
+ if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,modelValue(v,hits)]));
+ return value;
+}
 const taskTerms=t=>Object.fromEntries(['ref','title','expected','quality','finish','owner'].map(k=>[k,t?.[k]||'']));
 export function addConfirmedFacts(input,bundle,sourceInputs){
  verifyEvidenceBundle(bundle);if(bundle.period!==input.period)throw Error('人工事实冻结周期不一致');
@@ -57,7 +64,9 @@ export function addConfirmedFacts(input,bundle,sourceInputs){
   const id='E'+(Math.max(0,...card.evidence.map(x=>Number(String(x.id).match(/^E(\d+)$/)?.[1])||0))+1);
   // The original quotation remains byte-for-byte intact. Legacy E numbers are
   // namespaced separately and never resolved against this round's evidence list.
-  card.evidence.push({id,kind:'负责人报告',source:`旧M2署名人确认的事实报告 · ${e.cardId} v${e.reviewVersion} · 原文E编号仅指旧来源 ${e.namespace}`,asOf:String(e.confirmedAt||'').slice(0,10),text:e.fact.evidence,reportedGap:e.fact.gap,factRef:e.fact.ref,factItem:e.fact.item,m2Source:{...clone(e),legacyEvidence,independentVerification:false,sourceOwnerAssigned:e.ownerAssigned,currentOwnerAssigned:card.ownerAssigned!==false,worldAssignmentVerified:false}});
+  const redactions={},evidence=modelValue({id,kind:'负责人报告',source:`旧M2署名人确认的事实报告 · ${e.cardId} v${e.reviewVersion} · 原文E编号仅指旧来源 ${e.namespace}`,asOf:String(e.confirmedAt||'').slice(0,10),text:e.fact.evidence,reportedGap:e.fact.gap,factRef:e.fact.ref,factItem:e.fact.item,m2Source:{...clone(e),legacyEvidence,independentVerification:false,sourceOwnerAssigned:e.ownerAssigned,currentOwnerAssigned:card.ownerAssigned!==false,worldAssignmentVerified:false,originalQuoteHash:evidenceHash(e.fact)}},redactions);
+  if(Object.keys(redactions).length){evidence.redactions=redactions;card.redactions??={};for(const [name,count]of Object.entries(redactions))card.redactions[name]=(card.redactions[name]||0)+count;(out.redactions??={})[card.id]=clone(card.redactions);}
+  card.evidence.push(evidence);
   const accepted={objectId:e.objectId,cardId:card.id,ref:e.fact.ref,evidenceId:id,namespace:e.namespace,sourceIds:e.sourceIds};receipt.accepted.push(accepted);(card.m2EvidenceReceipt??={accepted:[],excluded:[]}).accepted.push(accepted);
  }
  out.m2ConfirmedEvidence={...receipt,sourceInputsHash:evidenceHash(sourceInputs)};return out;

@@ -1,3 +1,4 @@
+import {frozenAgreedOutcome} from './review-agreed-outcome.mjs';
 import {captureConfirmedFacts,verifyEvidenceBundle,addConfirmedFacts,evidenceHash} from './confirmed-review-evidence.mjs';
 import {reviewTarget,inReviewWindow,reviewDay} from './review-period.mjs';
 import {childContract,childVerdictProblem,objectExclusion} from './review-child-contract.mjs';
@@ -280,11 +281,13 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
   commitment:companyObject?blockLines(companyObject.business?.blocks):companyDirection,commitmentSource:companyObject?`本体 ${month} 月公司 PO（${statusOf(companyObject)}）`:companyDirection?`本体里没有公司 ${month} 月 PO，承诺取本体记的 ${month} 月公司方向`:`本体里没有公司 ${month} 月 PO`,
   children:[...stage1,...stage2].filter(c=>c.level==='ru').map(c=>c.id),evidence:numbered(forCompany),recordFacts:recordFacts(forCompany),missing:companyObject?[]:[`本体里没有公司 ${month} 月 PO`]}];
  stage3[0].sourceBasis=companyObject?provenance(companyObject,companyGoal.object_id):{basisMode:basis.mode,snapshotHash:basis.snapshotHash,period,cutoff,sourceStatus:'未找到公司PO',formal:null,effective:null};
+ for(const card of [...stage1,...stage2])card.agreedOutcome=frozenAgreedOutcome(objects[card.objectId],card.sourceBasis);
  // Sensitive personal details are hidden before anything reaches the model (sensitive-rules.json, shared by every flow).
  const redactions={};
  for(const c of [...stage1,...stage2,...stage3]){
   const found={},add=h=>{for(const [k,n] of Object.entries(h))found[k]=(found[k]||0)+n;};
   const r=redactText(c.commitment);c.commitment=r.text;add(r.hits);
+  for(const item of c.agreedOutcome?.items||[]){const x=redactText(item.text);item.text=x.text;add(x.hits);}
   for(const e of c.evidence){const x=redactText(e.text);e.text=x.text;add(x.hits);}
   if(Object.keys(found).length){c.redactions=found;redactions[c.id]=found;}
  }
@@ -487,7 +490,7 @@ export function reviewFile(run,input,{skill,model,label,startedAt=null}){
  const generatedAt=new Date().toISOString();
  return {name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,...(input.basis?{basis:structuredClone(input.basis)}:{}),
   // Facts the review cards need from the input: which object each review is about, and whether the Mission has an owner.
-  reviews:Object.fromEntries(Object.entries(run.reviews).map(([id,r])=>{const c=input.stages.flat().find(x=>x.id===id);return [id,{...r,...(c?.sourceBasis?{sourceBasis:structuredClone(c.sourceBasis)}:{}),...(c?.childCommitments?{childCommitments:structuredClone(c.childCommitments)}:{}),...(c?.objectId?{objectId:c.objectId}:{}),...(c?.ownerAssigned===false?{ownerAssigned:false}:{})}];})),
+  reviews:Object.fromEntries(Object.entries(run.reviews).map(([id,r])=>{const c=input.stages.flat().find(x=>x.id===id);return [id,{...r,...(c?.agreedOutcome?{agreedOutcome:structuredClone(c.agreedOutcome)}:{}),...(c?.sourceBasis?{sourceBasis:structuredClone(c.sourceBasis)}:{}),...(c?.childCommitments?{childCommitments:structuredClone(c.childCommitments)}:{}),...(c?.objectId?{objectId:c.objectId}:{}),...(c?.ownerAssigned===false?{ownerAssigned:false}:{})}];})),
   failed:run.failed,dropped:run.dropped,skipped:input.skipped,readAt:input.readAt,redactions:input.redactions,readReceipt:input.readReceipt||null};
 }
 

@@ -51,6 +51,10 @@ function Ask({node,index,ask,answer,canAnswer,onAnswer,block='causes',label='追
 }
 // The owner edits a review in place, like a plan card (陈溪南 2026-10-20: 复盘允许直接修订).
 const mayEdit=(n,p)=>n.level==='company'?p.ceo===true:n.level==='po'?(p.unitDri||[]).includes(n.unit):ownerNames(n).includes(p.name);
+function AgreedOutcomeRow({node}){
+ if(!['po','mission'].includes(node.level))return null;
+ return <tr><th scope="row">约定成果</th><td>{node.agreedOutcome?.items?.length?node.agreedOutcome.items.map((item,i)=><p key={i} style={{whiteSpace:'pre-wrap'}}>{item.text}</p>):<p>本次复盘基线未记录成果描述。</p>}</td></tr>;
+}
 function EditRow({label,children}){return <tr><th scope="row">{label}</th><td>{children}</td></tr>;}
 function ReviewEdit({node:current,onSave,onCancel}){
  const [baseline]=useState(()=>structuredClone(current)),[v,setV]=useState(()=>startValues(current)),[busy,setBusy]=useState(false),[error,setError]=useState(''),set=k=>e=>setV(o=>({...o,[k]:e.target.value}));
@@ -61,6 +65,7 @@ function ReviewEdit({node:current,onSave,onCancel}){
  const factArea=(i,k,rows,hint)=><textarea className="inline-field-input" rows={Math.max(rows,String(v.facts[i][k]).split('\n').length)} value={v.facts[i][k]} placeholder={hint} onChange={setFact(i,k)} onKeyDown={keys} title="回车保存，Shift＋回车换行，Esc 取消"/>;
  const area=(k,rows)=><textarea className="inline-field-input" rows={Math.max(rows,String(v[k]).split('\n').length+1)} value={v[k]} onChange={set(k)} onKeyDown={keys} title="回车保存，Shift＋回车换行，Esc 取消"/>;
  return <div className="template-content card-simple review-edit">{stale&&<p role="alert">内容已更新，你的输入仍保留。请复制修改内容，取消后重新打开编辑，核对最新版本。</p>}{error&&<p role="alert">{error}</p>}<table className="review-table"><tbody>
+  <AgreedOutcomeRow node={node}/>
   <EditRow label="结果判定"><select value={v.verdict} onChange={set('verdict')}>{['达成','部分达成','未达成'].map(x=><option key={x}>{x}</option>)}</select>{area('verdictReason',2)}</EditRow>
   {isFactsCard(node)?<><EditRow label="事实证据"><ol className="review-list review-facts-edit">{node.facts.map((f,i)=><li key={f.ref||i}><div className="review-fact-head"><strong>{f.item}</strong>{f.owner&&<span className="review-fact-owner">{f.owner}</span>}<select value={v.facts[i].status} onChange={setFact(i,'status')}>{['达成','部分达成','未达成','未开始'].map(x=><option key={x}>{x}</option>)}</select></div>{factArea(i,'evidence',2,'现状和证据')}{factArea(i,'gap',1,'没做到的原因（可空）')}</li>)}</ol></EditRow>
   {(node.nextInputs||[]).length>0&&<EditRow label="下期输入"><ol className="review-list review-facts-edit">{node.nextInputs.map((x,i)=><li key={x.ref||i}><div className="review-fact-head"><select value={v.next[i].type} onChange={e=>setV(o=>({...o,next:o.next.map((y,j)=>j===i?{...y,type:e.target.value}:y)}))}>{['继续','调整','停止','待决策'].map(t=><option key={t}>{t}</option>)}</select></div><textarea className="inline-field-input" rows={Math.max(1,String(v.next[i].text).split('\n').length)} value={v.next[i].text} onChange={e=>setV(o=>({...o,next:o.next.map((y,j)=>j===i?{...y,text:e.target.value}:y)}))} onKeyDown={keys} title="回车保存，Shift＋回车换行，Esc 取消"/>{x.ask?.question&&<small className="proposal-same">问 {x.ask.to}：{x.ask.question}</small>}</li>)}</ol></EditRow>}</>:<>
@@ -80,6 +85,7 @@ export function ReviewCard({node,profile,comments=[],onDetail,onAnswer,evidence,
   {/* Locked after the unit or company review is confirmed (陈溪南 2026-10-28): read and comment only. */}
   {node.locked&&<p className="review-locked">{node.lockedReason||'这份复盘已锁定，只能看和批注'}</p>}
   {editing?<ReviewEdit node={node} onCancel={()=>setEditing(false)} onSave={async(patch,options)=>{await onRevise({...node,version:options.baseVersion},patch,options);setEditing(false);}}/>:<div className="template-content card-simple"><table className="review-table"><tbody>
+   <AgreedOutcomeRow node={node}/>
    <Row node={node} field="verdict" label="结果判定" comments={comments} onDetail={onDetail}><p className="review-verdict-line">{node.verdictChange&&<span className="verdict-changed">由「{node.verdictChange.from}」改为「{node.verdictChange.to}」· {node.verdictChange.by} · v{node.verdictChange.version}</span>}{/* 结果判定 opens with the verdict itself, then the reasoning (陈溪南 2026-10-26). */}<span className="review-verdict-reason">{node.verdict&&<span className={`review-verdict-word tone-${verdictTone(node.verdict)}`}>{node.verdict}，</span>}<Rich text={reasonAfter(node.verdict,node.verdictReason)} evidence={evidence}/></span></p></Row>
    {isFactsCard(node)?<><Row node={node} field="facts" label="事实证据" comments={comments} onDetail={onDetail}>{node.facts.length?<Facts node={node} comments={comments} onDetail={onDetail} evidence={evidence}/>:<p className="review-none">这份复盘没有列出事实。</p>}</Row>
     {Array.isArray(node.nextInputs)&&node.nextInputs.length>0&&<Row node={node} field="nextInputs" label="下期输入" comments={comments} onDetail={onDetail}><NextInputs node={node} comments={comments} onDetail={onDetail} evidence={evidence} profile={profile} onAnswer={onAnswer}/></Row>}</>:<>
