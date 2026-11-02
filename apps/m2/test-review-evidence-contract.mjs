@@ -74,3 +74,18 @@ for(const fullContext of [false,true])test('checker cross-source repair and raw 
  const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{const p=JSON.parse(messages[1].content);if(!p.unit){const changed=p.reviews.find(r=>r.ref==='a').verdictReason==='fixed';return {answer:JSON.stringify({checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[],issues:changed||!p.scope.targetRefs.includes('a')?[]:[{ref:'a',type:'critical',problem:fullContext?'需要依据其他来源[b:E2]核对':'需要依据其他来源核对',impact:'事实',mustFix:true,fixable:true,sourceRefs:['a','b'],evidenceRefs:fullContext?[]:[{ref:'b',id:'E2'}]}]})};}const id=p.unit.id;if(fullContext&&id==='a'&&!p.revision&&!p.evidenceResponse)return {answer:JSON.stringify({requestEvidence:{addresses:[{sourceRef:'b',id:'E2'}]}})};if(fullContext&&!p.revision&&['u','company'].includes(id)){assert.equal(p.initialContext.maxBodyBytes,512*1024);assert.ok(p.childCandidates.every(c=>c.candidate&&!c.confirmed));assert.ok(p.childEvidence);assert.equal(p.unit.id,id);}if(p.revision&&id==='a'){cross++;assert.equal(p.sources.b.evidence[0].text,sources.b.evidence[0].text);assert.ok(p.sourceScope.sourceRefs.includes('b'));}return {answer:JSON.stringify({review:{...reviews[id],...(p.revision?{verdictReason:'fixed'}:{}),...(p.revision&&id==='a'?{facts:[{ref:'t',item:'t',owner:'陈溪南',status:'达成',evidence:'结果[b:E2]',gap:''}]}:{})}})};}};
  await runReviewSkill({gateway,skill,input,run});assert.equal(run.quality.status,'passed');assert.equal(cross,1);assert.deepEqual(run.quality.counts,{a:1,u:1,company:1});const raw=JSON.stringify(run.reviews);const file=reviewFile(run,input,{skill,model:gateway.status.model});assert.equal(JSON.stringify(run.reviews),raw);assert.ok(file.evidenceReferences.a['[b:E2]']);if(fullContext){assert.equal(run.initialAttempts.filter(a=>a.key==='a').length,2);assert.equal(run.initialAttempts.find(a=>a.key==='a').status,'context-provided');for(const plan of Object.values(run.quality.sourcePlans)){assert.equal(plan.maxConcurrency,3);assert.equal(plan.requestCount,3);assert.deepEqual(plan.layout,input.engineeringContracts.fullContextCheck.layout);for(const packet of plan.packets){assert.equal(packet.scope.sourceRefs.length,4);assert.equal(Object.keys(packet.payloads[0].programFacts.perReview).length,4);}}for(const pass of Object.values(run.quality.sourcePasses))assert.equal(pass.maxAdditionalRequests,0);}
 });
+
+test('only the exact frozen fact title on a taskless mission skips item length measurement',()=>{
+ const item='Co-Agent V1 原始目标名称'.repeat(5);
+ const source={level:'mission',expectedFacts:[{ref:'ref-1',item}]};
+ const facts=[
+  {ref:'ref-1',item,evidence:'实际证据内容'.repeat(20)},
+  {ref:'ref-2',item},
+  {ref:'ref-1',item:item+'改写'},
+ ];
+ const over=(review,card)=>lengthFindings(review,undefined,card).filter(f=>f.type==='超字数').map(f=>f.field);
+ assert.deepEqual(over({facts},source),['evidence','item','item']);
+ assert.deepEqual(over({facts:[facts[0]]},{...source,tasks:[{ref:'task'}]}),['item','evidence']);
+ assert.deepEqual(over({facts:[facts[0]]},{...source,level:'ru'}),['item','evidence']);
+ assert.deepEqual(over({facts:[facts[0]]}),['item','evidence']);
+});

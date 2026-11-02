@@ -12,13 +12,14 @@ export const deferReviewAction=detail=>({[DEFERRED]:detail});
 export const isReviewResourceLimit=error=>['REVIEW_PACKET_OVERSIZE','REVIEW_MODEL_ATTEMPT_LIMIT','REVIEW_SOURCE_REQUEST_BUDGET','REVIEW_SOURCE_CONTEXT_PENDING','REVIEW_SOURCE_REQUEST_REPEAT','REVIEW_SOURCE_REQUEST_CONTRACT','MODEL_REFUSAL','MODEL_OUTPUT_CONTRACT','MODEL_OUTPUT_INCOMPLETE'].includes(error?.code)||error?.reviewOutputContract===true||error?.name==='TimeoutError'||!!error?.providerStatus;
 // Cache only verified answers. Every attempt (including malformed output) is
 // retained, independently of the two-per-card semantic revision budget.
-export async function qualityModelCall({gateway,system,quality,run,pass,stage,ref='',payload,validate=x=>x,save,signal,maxBodyBytes=REVIEW_BODY_LIMIT_BYTES,maxTokens=32000}){
+export async function qualityModelCall({gateway,system,quality,run,pass,stage,ref='',payload,validate=x=>x,save,signal,maxBodyBytes=REVIEW_BODY_LIMIT_BYTES,maxTokens=32000,reasoningEffort='high'}){
  if(maxTokens!==32000&&!(stage==='check'&&maxTokens===64000))throw Error('仅完整检查允许64k输出预算，初稿与修订保持32k');
- const callOptions={json:true,thinking:true,reasoningEffort:'high',maxTokens},optionIdentity=maxTokens===32000?{}:{callOptions};
+ if(reasoningEffort!=='high'&&!(stage==='check'&&reasoningEffort==='medium'))throw Error('仅完整检查允许medium推理');
+ const callOptions={json:true,thinking:true,reasoningEffort,maxTokens},optionIdentity=maxTokens===32000&&reasoningEffort==='high'?{}:{callOptions};
  const model=gateway.status?.model||null,backups=gateway.reviewFallbacks||[],fallbackModels=backups.map(g=>g.status.model),policy=backups.length?{fallbackModels}:{};
  const inputHash=qualityHash({system,payload,model,...policy,...optionIdentity}),key=`quality-${pass}-${stage}-${ref}-${inputHash}`;
  let request=quality.requests[key];
- const verifyRequest=()=>{if(request&&(request.inputHash!==inputHash||request.model!==model||qualityHash(request.fallbackModels||[])!==qualityHash(fallbackModels)||qualityHash({system,payload:request.payload,model,...policy,...(request.callOptions?{callOptions:request.callOptions}:{})})!==inputHash||request.sourceHash!==quality.sourceHash||request.skillHash!==quality.skillHash||request.pass!==pass||request.stage!==stage||request.ref!==ref||request.attempts.some(a=>a.options?.maxTokens!==maxTokens||a.options?.thinking!==true||a.options?.reasoningEffort!=='high'||a.options?.json!==true)))throw Error('质量检查缓存输入或保存的请求已变化');};
+ const verifyRequest=()=>{if(request&&(request.inputHash!==inputHash||request.model!==model||qualityHash(request.fallbackModels||[])!==qualityHash(fallbackModels)||qualityHash({system,payload:request.payload,model,...policy,...(request.callOptions?{callOptions:request.callOptions}:{})})!==inputHash||request.sourceHash!==quality.sourceHash||request.skillHash!==quality.skillHash||request.pass!==pass||request.stage!==stage||request.ref!==ref||request.attempts.some(a=>a.options?.maxTokens!==maxTokens||a.options?.thinking!==true||a.options?.reasoningEffort!==reasoningEffort||a.options?.json!==true)))throw Error('质量检查缓存输入或保存的请求已变化');};
  abort(signal);verifyRequest();
  if(request?.status==='done'){
   if(backups.length&&(![model,...fallbackModels].includes(request.selectedAlias)||request.attempts.at(-1)?.requestedAlias!==request.selectedAlias||request.returnedModel!==request.attempts.at(-1)?.returnedModel||request.actualApi!==reviewModelApi(request.selectedAlias)))throw Error('备用模型缓存来源与真实调用记录不一致');

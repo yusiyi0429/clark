@@ -352,7 +352,8 @@ export function applyCovers(run){
  for(const r of Object.values(run.reviews||{}))for(const n of r?.nextInputs||[])if(n&&'covers'in n)delete n.covers;
  return moved;
 }
-export function lengthFindings(r,context){
+export function lengthFindings(r,context,source){
+ const originalItems=source?.level==='mission'&&!source.tasks?.length?source.expectedFacts||[]:[];
  const f=[];for(const s of textOf(r)){for(const sent of String(s).split(/[。；！？]/)){const n=visible(sent.replace(/^\*\*[^*]+\*\*/,''),context).length;if(n>30)f.push({type:'长句',chars:n,text:sent.slice(0,60)});}
   for(const w of ['尚不能','仍需进一步','有待观察','闭环','赋能','打通','具备条件'])if(String(s).includes(w))f.push({type:'回避或空话',word:w,text:String(s).slice(0,60)});}
  // 疑似内部用词 (陈溪南 2026-10-27「不要造一些词了」, 复盘技能 2.1.5): version numbers, codes, internal terms and English words
@@ -362,7 +363,7 @@ export function lengthFindings(r,context){
  if(Array.isArray(r.facts))for(const n of r.nextInputs||[]){const row=n?.ref&&r.facts.find(x=>x.ref===n.ref);if(row?.status==='达成')f.push({type:'已达成行带下期输入',ref:n.ref,nextType:n.type,text:String(n.text||'').slice(0,40)});}
  // 三段式 field limits (复盘技能 2.1.0): 判定理由 60, item 30, evidence 100, gap 60.
  const over=(field,text,limit)=>{const n=visible(String(text||''),context).length;if(n>limit)f.push({type:'超字数',field,chars:n,limit,text:String(text).slice(0,40)});};
- if(Array.isArray(r.facts)){over('verdictReason',r.verdictReason,60);for(const x of r.facts){over('item',x.item,30);over('evidence',x.evidence,100);over('gap',x.gap,60);}
+ if(Array.isArray(r.facts)){over('verdictReason',r.verdictReason,60);for(const x of r.facts){if(!originalItems.some(item=>item.ref===x.ref&&item.item===x.item))over('item',x.item,30);over('evidence',x.evidence,100);over('gap',x.gap,60);}
   for(const x of r.nextInputs||[]){over('nextInput',x?.text,60);if(x?.ask)over('ask',x.ask.question,60);}}
  return f;
 }
@@ -465,7 +466,7 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
  if(skill.groups.length&&!twoRound){
   await onProgress({stage:'检查与修改',done,total});
   const all=[...s1,...s2].filter(c=>run.reviews[c.id]);
-  const facts=Object.fromEntries(all.map(c=>[c.id,{lengthFindings:lengthFindings(run.reviews[c.id]),evidenceFacts:evidenceFacts(c,run.reviews[c.id]),...(Array.isArray(run.reviews[c.id]?.facts)?{rowFacts:rowFacts(c,run.reviews[c.id])}:{})}]));
+  const facts=Object.fromEntries(all.map(c=>[c.id,{lengthFindings:lengthFindings(run.reviews[c.id],undefined,skillAtLeast(skill.version,'2.1.14')?c:undefined),evidenceFacts:evidenceFacts(c,run.reviews[c.id]),...(Array.isArray(run.reviews[c.id]?.facts)?{rowFacts:rowFacts(c,run.reviews[c.id])}:{})}]));
   const verdictFacts=s2.filter(c=>run.reviews[c.id]).map(c=>({ref:c.id,verdict:run.reviews[c.id].verdict,children:c.children.map(id=>({ref:id,verdict:run.reviews[id]?.verdict||'生成失败'}))}));
   const reviews=all.map(c=>run.reviews[c.id]),brief=reviewCheckSources(all);
   const checkSourcesHash=sha(JSON.stringify(brief));
@@ -514,15 +515,17 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
  const options=programOptions||{rowMatch:skillAtLeast(skill.version,'2.1.6'),askCaps:skillAtLeast(skill.version,'2.1.7'),childRule:skillAtLeast(skill.version,'2.1.10')};
  const model=gateway.status?.model||'wangsu/claude-sonnet-5-5';
  const checkMaxTokens=run.quality?.packetModel?.maxTokens??run.outputPolicy?.checkMaxTokens??64000;
- const wireOptions={model,thinking:true,reasoningEffort:'high',maxTokens:checkMaxTokens,json:true,...(gateway.reviewFallbacks?.length?{fallbackModels:gateway.reviewFallbacks.map(g=>g.status.model)}:{})};
+ const checkReasoningEffort=run.outputPolicy?.checkReasoningEffort??run.quality?.packetModel?.reasoningEffort??'high';
+ if(!['high','medium'].includes(checkReasoningEffort))throw Error('完整检查推理配置不受支持');
+ const wireOptions={model,thinking:true,reasoningEffort:checkReasoningEffort,maxTokens:checkMaxTokens,json:true,...(gateway.reviewFallbacks?.length?{fallbackModels:gateway.reviewFallbacks.map(g=>g.status.model)}:{})};
  if(run.quality?.packetModel&&qualityHash(run.quality.packetModel)!==qualityHash(wireOptions))throw Error('质量检查模型或备用策略已变化，不能复用其他策略的结论');
- const call=(q,pass,stage,ref,payload,validate)=>qualityModelCall({gateway:reviewGatewayForQualityAction(gateway,input,pass,stage),system,quality:q,run,pass,stage,ref,payload,validate,save,signal,maxTokens:stage==='check'?checkMaxTokens:32000,maxBodyBytes:q.sourcePlans?.[pass]?.maxBodyBytes||REVIEW_BODY_LIMIT_BYTES});
+ const call=(q,pass,stage,ref,payload,validate)=>qualityModelCall({gateway:reviewGatewayForQualityAction(gateway,input,pass,stage),system,quality:q,run,pass,stage,ref,payload,validate,save,signal,maxTokens:stage==='check'?checkMaxTokens:32000,reasoningEffort:stage==='check'?checkReasoningEffort:'high',maxBodyBytes:q.sourcePlans?.[pass]?.maxBodyBytes||REVIEW_BODY_LIMIT_BYTES});
  await runReviewQuality({run,input,skill,sources,save,onProgress,signal,
   normalize:()=>{run.questionRouting=reviewQuestionRoutes(run.reviews);},
   problems:candidate=>reviewProblems({...run,reviews:candidate.reviews},input,options).filter(p=>refs.includes(p.unit)),
   check:async(reviews,pass,q)=>{
    const policy=validateReviewQualityFallback(input);if(policy){if(q.qualityFallback&&qualityHash(q.qualityFallback)!==qualityHash(policy))throw Error('已保存的质量修订备用策略已变化');q.qualityFallback=structuredClone(policy);}
-   const facts=Object.fromEntries(items.map(c=>[c.id,{lengthFindings:reviews[c.id]?lengthFindings(reviews[c.id],input.engineeringContracts?.evidenceAddresses===1?{sourceRef:c.id,sources}:undefined):[],evidenceFacts:reviews[c.id]?evidenceFacts(c,reviews[c.id],input.engineeringContracts?.evidenceAddresses===1?sources:undefined):{missingIds:[],usedCount:0},rowFacts:rowFacts(c,reviews[c.id])}]));
+   const facts=Object.fromEntries(items.map(c=>[c.id,{lengthFindings:reviews[c.id]?lengthFindings(reviews[c.id],input.engineeringContracts?.evidenceAddresses===1?{sourceRef:c.id,sources}:undefined,skillAtLeast(skill.version,'2.1.14')?c:undefined):[],evidenceFacts:reviews[c.id]?evidenceFacts(c,reviews[c.id],input.engineeringContracts?.evidenceAddresses===1?sources:undefined):{missingIds:[],usedCount:0},rowFacts:rowFacts(c,reviews[c.id])}]));
    const verdictFacts=items.filter(c=>c.children?.length).map(c=>({ref:c.id,verdict:reviews[c.id]?.verdict,children:c.children.map(ref=>({ref,verdict:reviews[ref]?.verdict||'生成失败'}))}));
    const tasks=reviewQualityTasks(skill,{checkerSources:input.engineeringContracts?.checkerSources>=1,sourceKeyContract:input.engineeringContracts?.checkerSources>=2});
    if(q.packetModel&&qualityHash(q.packetModel)!==qualityHash(wireOptions))throw Error('质量检查模型已变化，必须使用独立检查记录');
@@ -556,7 +559,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
    payload.task+=' unit.sourceRef指向sources中本层完整冻结unit。childCandidates为同轮当前候选而非正式确认或独立原始事实；仅候选状态同步/上下层一致性可按其汇总，不等于核验下级事实。若新增或否定具体业务事实而缺所需原文，必须返回sourceRequests:[{refs:[本层ref,所需冻结ref],relation,reason}]，先补原文，不能用候选冒充原始证据。无补源需求时返回review。sourceTexts/sourceBindings是相同正文的无损引用，按path还原对应来源字段，保留各自出处、日期、版本及E命名空间。';
    payload.sourceScope={targetRef:c.id,sourceRefs,availableRefs:refs};
    if(input.engineeringContracts?.evidenceAddresses===1)payload.task+=' Machine citations: [E3] refers only to this target source. Use [sourceRef:E3] for other provided frozen sources; preserve namespaces and do not invent IDs.';
-   const wireOptions=q.packetModel||{model:gateway.status?.model||'wangsu/claude-sonnet-5-5'};
+   const wireOptions={...(q.packetModel||{model:gateway.status?.model||'wangsu/claude-sonnet-5-5'}),reasoningEffort:'high'};
    const assertBudget=value=>{const actual=reviewModelBudgetBytes(system,value,wireOptions);const budget=q.sourcePlans[pass].maxBodyBytes;if(actual>budget)throw Object.assign(Error('完整返修来源超过本次工程预算，未调用模型，保留草稿'),{code:'REVIEW_PACKET_OVERSIZE',actual,budget});};
    const validate=(value,provided)=>{
     if(value?.sourceRequests?.length){
@@ -694,7 +697,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
     if(!m2ConfirmedSource)throw Error('任务缺已确认人工事实来源快照，请保留原任务并重新准备候选');
     verifyEvidenceBundle(m2ConfirmedSource);
     const sourceInputs={};for(const id of new Set(m2ConfirmedSource.entries.map(e=>e.sourceJobId).filter(Boolean))){try{const previous=JSON.parse(await readFile(workFile(id),'utf8'));if(previous.input)sourceInputs[id]=previous.input;}catch(e){if(e.code!=='ENOENT')throw Error('旧生成来源无法读取：'+id);}}
-    work={skillSnapshot:{version:skill.version,hash:skill.hash},m2ConfirmedSource,sourceInputs,sourceInputsHash:evidenceHash(sourceInputs),run:{modelPolicy:{primary:gateway.status?.model||null,fallbackModels:gateway.reviewFallbacks?.map(g=>g.status.model)||[]},outputPolicy:{initialMaxTokens:32000,checkMaxTokens:64000,revisionMaxTokens:32000},raw:{},reviews:{},failed:[],dropped:[]}};await save();
+    work={skillSnapshot:{version:skill.version,hash:skill.hash},m2ConfirmedSource,sourceInputs,sourceInputsHash:evidenceHash(sourceInputs),run:{modelPolicy:{primary:gateway.status?.model||null,fallbackModels:gateway.reviewFallbacks?.map(g=>g.status.model)||[]},outputPolicy:{initialMaxTokens:32000,checkMaxTokens:64000,revisionMaxTokens:32000,checkReasoningEffort:'medium'},raw:{},reviews:{},failed:[],dropped:[]}};await save();
    }
    if(work.m2ConfirmedSource?.hash!==store.snapshot().reviewJob?.m2ConfirmedSource?.hash)throw Error('任务人工事实来源与冻结工作文件不一致');
    if(!work.input){
