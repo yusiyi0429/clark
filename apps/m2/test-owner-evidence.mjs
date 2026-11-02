@@ -32,7 +32,7 @@ test('采信负责人证据的候选仍等本人接受；接受后保留来源�
 
 test('生成和协作读取同一产品复盘版本，原字段检查分组保持兼容',async()=>{
  const root=new URL('./review-skill/',import.meta.url),generation=await loadReviewSkill(root),chat=await loadReviewRules(root);
- assert.equal(generation.version,'2.1.13');assert.equal(chat.version,generation.version);assert.match(chat.rules,/--- references\/contracts.md ---/);
+ assert.equal(generation.version,'2.1.14');assert.equal(chat.version,generation.version);assert.match(chat.rules,/--- references\/contracts.md ---/);
  assert.equal(generation.groups.length,3);assert.ok(generation.mustFix.includes('判定偏严'));assert.ok(generation.mustFix.includes('证据不符'));
 });
 
