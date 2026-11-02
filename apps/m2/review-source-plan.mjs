@@ -4,11 +4,12 @@ const clone=x=>structuredClone(x),bytes=x=>Buffer.byteLength(JSON.stringify(x));
 const digest=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 
 // Frozen only for new inputs. Older inputs must keep their original layout and hashes.
-export function fullContextCheckContract(refs){
+export function fullContextCheckContract(refs,{version=1}={}){
  if(!refs.length||new Set(refs).size!==refs.length||refs.some(ref=>typeof ref!=='string'||!ref))throw Error('完整检查需要唯一冻结对象');
- const groups=Array.from({length:Math.min(2,refs.length)},()=>[]);
+ if(![1,2].includes(version))throw Error('不支持的完整检查布局版本');
+ const groups=Array.from({length:version===2?1:Math.min(2,refs.length)},()=>[]);
  [...refs].sort().forEach((ref,index)=>groups[index%groups.length].push(ref));
- return {version:1,sourceMode:'all-frozen',checkGroups:3,maxConcurrency:groups.length*3,layout:groups.map(units=>({kind:'object',units}))};
+ return {version,sourceMode:'all-frozen',checkGroups:3,maxConcurrency:groups.length*3,layout:groups.map(units=>({kind:'object',units}))};
 }
 
 export function packSourceText(sources){
@@ -63,8 +64,8 @@ export function buildReviewCheckPlan({input,sources,reviews,programFacts,tasks,s
  const items=input.stages.flat(),byId=new Map(items.map(c=>[c.id,c])),current=Array.isArray(reviews)?Object.fromEntries(reviews.map(r=>[r.ref,r])):reviews;
  const fullContext=input.engineeringContracts?.fullContextCheck;
  if(fullContext!==undefined){
-  if(digest(fullContext)!==digest(fullContextCheckContract(items.map(c=>c.id))))throw Error('完整检查布局、来源模式或并发合同已变化');
-  if(extraRelations.length||fixedLayout&&digest(fixedLayout)!==digest(fullContext.layout))throw Error('完整检查只能使用冻结两包布局，禁止额外分包');
+  if(digest(fullContext)!==digest(fullContextCheckContract(items.map(c=>c.id),{version:fullContext?.version})))throw Error('完整检查布局、来源模式或并发合同已变化');
+  if(extraRelations.length||fixedLayout&&digest(fixedLayout)!==digest(fullContext.layout))throw Error('完整检查只能使用冻结布局，禁止额外分包');
   fixedLayout=fullContext.layout;
  }
  for(const id of Object.keys(sources))if(!byId.has(id))throw Error('来源没有对应冻结对象：'+id);

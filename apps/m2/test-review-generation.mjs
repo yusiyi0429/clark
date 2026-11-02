@@ -53,6 +53,10 @@ test('复盘生成：单元按名称认，缺 RU PO 的单元不复盘，公司 
  assert.equal(unitKeyOfTitle('维信诺（002客户）'),'bf03');assert.equal(unitKeyOfTitle('E&O'),'eo');assert.equal(unitKeyOfTitle('别的'),null);
  const input=buildReviewInput(sources(),{companyDirection:'10 月公司方向：三个战场做成',ceoName:'刘明华'});
  assert.equal(input.engineeringContracts.checkerSources,3);
+ assert.equal(input.engineeringContracts.fullContextCheck.version,2);
+ assert.equal(input.engineeringContracts.fullContextCheck.maxConcurrency,3);
+ assert.equal(input.engineeringContracts.initialEvidence.maxPhysicalAttempts,3);
+ assert.equal(input.engineeringContracts.initialContext.maxBodyBytes,512*1024);
  const [s1,s2,s3]=input.stages;
  assert.deepEqual(s1.map(c=>c.id),['eo-m1']);assert.deepEqual(s2.map(c=>c.id),['eo']);assert.deepEqual(s2[0].children,['eo-m1']);
  assert.ok(input.skipped.some(x=>/Token Ops：本体里没有 10 月 RU PO，不复盘/.test(x)));assert.ok(!input.stages.flat().some(c=>c.unit==='bf02'));

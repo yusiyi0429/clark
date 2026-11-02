@@ -46,3 +46,8 @@ test('unmarked old inputs retain original layout, concurrency, payload and cache
  const old=buildReviewCheckPlan({...args,fixedLayout:[{kind:'object',units:Object.keys(args.sources).sort()}]});assert.equal(old.maxConcurrency,3);assert.equal(old.requestCount,3);assert.equal(old.fullContextCheck,undefined);assert.deepEqual(refreshReviewCheckPlan(old,args),old);assert.ok(!old.packets[0].payloads[0].task.includes('sourceMode=all-frozen'));
  }
 });
+test('v2 freezes one full-source packet and three groups without changing the v1 two-packet layout',()=>{
+ const args=fixture(),v1=buildReviewCheckPlan(args);args.input.engineeringContracts.fullContextCheck=fullContextCheckContract(Object.keys(args.sources),{version:2});
+ const v2=buildReviewCheckPlan(args);assert.equal(v2.maxConcurrency,3);assert.equal(v2.requestCount,3);assert.equal(v2.packets.length,1);assert.equal(v2.packets[0].scope.targetRefs.length,28);assert.equal(v2.packets[0].scope.edges.length,27);for(const p of v2.packets[0].payloads){assert.deepEqual(p.programFacts,args.programFacts);assert.equal(p.reviews.length,28);assert.equal(p.scope.sourceRefs.length,28);}assert.equal(refreshReviewCheckPlan(v2,args).stamp,v2.stamp);
+ args.input.engineeringContracts.fullContextCheck=fullContextCheckContract(Object.keys(args.sources),{version:1});assert.deepEqual(buildReviewCheckPlan(args),v1);
+});

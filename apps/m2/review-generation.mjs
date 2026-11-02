@@ -1,5 +1,7 @@
 import {REVIEW_BODY_LIMIT_BYTES,reviewGatewayForRun,reviewInitialConcurrency} from './review-model-fallback.mjs';
 import {reviewDependencyPool} from './review-dependencies.mjs';
+import {parentInitialContextContract,validateInitialContext,parentInitialPayload} from './review-initial-context.mjs';
+import {initialEvidenceContract,validateInitialEvidence,initialEvidenceSetup} from './review-initial-evidence.mjs';
 import {reviewQuestionRoutes,routeReviewQuestions,activeReviewAsk} from './review-question-routing.mjs';
 import {planTableItem} from './review-plan-table.mjs';
 import {stripVerifiedEvidence,citationFacts,referenceMapsForInput,validateIssueSources} from './review-evidence-addresses.mjs';
@@ -303,7 +305,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  }
  // What this review was built from, kept with every run (于斯一 asked; the 10/23 run could not be traced, 读取盘点第 8 条).
  const readReceipt={readAt:sources.readAt,cutoff,objects:Object.entries(objects).filter(([,o])=>o).map(([id,o])=>`${id}@${o.business?.version??o.version??o.revision_id??'?'}`),snapshots:[...usedSnapshots],events:[...usedEvents]};
- return {engineeringContracts:{evidenceAddresses:1,checkerSources:3,planTableColumns:1,fullContextCheck:fullContextCheckContract([...stage1,...stage2,...stage3].map(c=>c.id))},period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
+ return {engineeringContracts:{evidenceAddresses:1,checkerSources:3,planTableColumns:1,initialContext:parentInitialContextContract(),initialEvidence:initialEvidenceContract(),fullContextCheck:fullContextCheckContract([...stage1,...stage2,...stage3].map(c=>c.id),{version:2})},period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
 }
 
 // ---------- running the review skill ----------
@@ -395,27 +397,31 @@ const fieldsHint='返回 JSON：{"analysis":"不展示的分析，600 字内","r
 export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{},failed:[],dropped:[]},save=async()=>{},onProgress=async()=>{},concurrency=reviewInitialConcurrency(gateway),programOptions=null,signal,recordAttempt=async()=>{}}){
  if(!Number.isInteger(concurrency)||concurrency<1||concurrency>20)throw Error('复盘初稿并发必须在1到20之间');
  const twoRound=skillAtLeast(skill.version,'2.1.13');
+ const initialContext=validateInitialContext(input);
+ const initialEvidence=validateInitialEvidence(input);
  signal?.throwIfAborted();
  if(skillAtLeast(skill.version,'2.1.10')){const incomplete=input.stages.flat().filter(c=>['mission','ru'].includes(c.level)&&!c.childCommitments?.complete);if(incomplete.length)throw Error('有效直接子项元信息不完整：'+incomplete.map(c=>c.id+' '+(c.childCommitments?.missing||[]).join('；')).join('；'));}
  if(skillAtLeast(skill.version,'2.1.11')){
   if(input.basis?.mode!=='latest-source-candidate'||!input.basis.snapshotHash)throw Error('最新来源候选基线缺失，请重新准备输入');
   const mixed=input.stages.flat().filter(c=>['mission','ru'].includes(c.level)&&(c.sourceBasis?.basisMode!==input.basis.mode||c.sourceBasis?.snapshotHash!==input.basis.snapshotHash||c.childCommitments?.basisMode!==input.basis.mode||c.childCommitments?.snapshotHash!==input.basis.snapshotHash||(c.childCommitments.items||[]).some(t=>t.inBaseline!==true)));
   if(mixed.length)throw Error('对象来源与整轮候选基线不一致：'+mixed.map(c=>c.id).join('、'));
-  const fingerprint=createHash('sha256').update(JSON.stringify({basis:input.basis,stages:input.stages})).digest('hex');
+  const fingerprint=createHash('sha256').update(JSON.stringify({basis:input.basis,stages:input.stages,...(initialContext?{initialContext}:{}),...(initialEvidence?{initialEvidence}:{})})).digest('hex');
   if(run.inputFingerprint&&run.inputFingerprint!==fingerprint||!run.inputFingerprint&&(Object.keys(run.raw||{}).length||Object.keys(run.reviews||{}).length))throw Error('续跑输入基线不一致，不能混用旧输出');
   run.inputFingerprint=fingerprint;await save(run);
  }
  const system=`你是 TKOS 的月度复盘助手。按下面的技能工作。仅返回有效 JSON 对象，不加代码围栏。\n${skill.rules}`;
  run.raw??={};run.reviews??={};run.failed??=[];run.dropped??=[];
- const ask=async(key,user)=>tracer.withRun(key,'chain',{stage:/^check-/.test(key)?'check':/^revise-/.test(key)?'revise':key==='company'?'company':'review',unit:/^check-/.test(key)?undefined:key.replace(/^revise-|#nobg$/g,'')},()=>initialReviewCall({gateway,system,user,key,skill,run,save,recordAttempt,signal,validate:value=>{
-  if(twoRound&&(!value.review||typeof value.review!=='object'||Array.isArray(value.review)))throw outputContractError();
+ const ask=async(key,user,evidenceFlow)=>tracer.withRun(key,'chain',{stage:/^check-/.test(key)?'check':/^revise-/.test(key)?'revise':key==='company'?'company':'review',unit:/^check-/.test(key)?undefined:key.replace(/^revise-|#nobg$/g,'')},()=>initialReviewCall({gateway,system,user,key,skill,run,save,recordAttempt,signal,evidenceFlow,validate:value=>{
+  if(twoRound&&(value.review!==undefined?(!value.review||typeof value.review!=='object'||Array.isArray(value.review)):!(evidenceFlow&&value.requestEvidence)))throw outputContractError();
   return value;
  }}));
  // The skill's steps as chains in the trace: Mission and RU reviews, checks, revisions, the company review.
  const stage=(name,fn)=>tracer.withRun(name,'chain',{stage:name},fn);
  // A refusal is retried once without the month-start background; a unit that still fails is named, the round goes on.
  const askUnit=async(c,user)=>{
-  try{const answer=await ask(c.id,user);if(twoRound&&(!answer?.review||typeof answer.review!=='object'||Array.isArray(answer.review))){(run.generationFailures??=[]).push({id:c.id,raw:run.raw[c.id],error:'初稿未返回有效复盘'});delete run.raw[c.id];throw Error('初稿未返回有效复盘');}return answer;}catch(e){
+  const parentPayload=twoRound?parentInitialPayload({input,card:c,user,reviews:run.reviews,sourceFor:card=>({...unitData(card),objectId:card.objectId})}):{user};
+  const prepared=twoRound?initialEvidenceSetup({input,card:c,user:parentPayload.user}):parentPayload;user=prepared.user;
+  try{const answer=await ask(c.id,user,prepared.evidenceFlow);if(twoRound&&(!answer?.review||typeof answer.review!=='object'||Array.isArray(answer.review))){(run.generationFailures??=[]).push({id:c.id,raw:run.raw[c.id],error:'初稿未返回有效复盘'});delete run.raw[c.id];throw Error('初稿未返回有效复盘');}return answer;}catch(e){
    if(signal?.aborted||e.code==='REVIEW_JOURNAL_UNAVAILABLE')throw e;
    // Refusals come and go (10/23: finance-m2 passed in one run and was refused in the next), so the same request is tried once more first.
    if(!twoRound&&e.refusal){try{return await ask(c.id,user);}catch(e1){e=e1;}}
