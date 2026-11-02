@@ -328,3 +328,95 @@ describe("发送后的重读失败", () => {
     expect(view.messages).toEqual([user(1, "早先的问题")]);
   });
 });
+
+describe("首页切走、刷新回来：这一轮在服务端照常写，回来接上", () => {
+  const RUN = "6f1c1a52-6a60-4f5e-9d36-0d9c3b2d6a11";
+  const asked: Message = { sequence: 1, role: "user", content: "王总那边的进展？", runId: RUN };
+  const followUrl = `/api/conversations/global/turns/${RUN}/stream`;
+  const requestTo = (url: string) => requests.filter((request) => request.url === url).at(-1);
+  /** 页面前后台：visibilitychange 由测试触发。 */
+  function page(visibility: "visible" | "hidden" = "visible") {
+    const listeners = new Set<() => void>();
+    const doc = { visibilityState: visibility, addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener) };
+    vi.stubGlobal("document", doc);
+    return { show: () => { doc.visibilityState = "visible"; listeners.forEach((listener) => listener()); } };
+  }
+
+  it("刷新回来最后一句还在回答：接上这一轮，进行中一行的用时从这一轮开始算，补发的正文接着写，写完换成读回的回答", async () => {
+    scope = "global";
+    page();
+    render();
+    historyRequest().resolve(ok([{ ...asked, running: true }]));
+    await flush();
+    const follow = requestTo(followUrl)!;
+    expect(follow.init?.method).toBeUndefined();
+    const startedAt = Date.now() - 40_000;
+    const turn = stream([`data: {"type":"route","tier":"grounded","expectSeconds":30,"runId":"${RUN}"}\n\ndata: {"type":"message","delta":"前半段","runId":"${RUN}"}\n\n`,
+      `data: {"type":"message","delta":"，后半段","runId":"${RUN}"}\n\ndata: {"type":"done","status":"completed","runId":"${RUN}"}\n\n`]);
+    follow.resolve({ ...turn.response, headers: new Headers({ "x-turn-started-at": String(startedAt) }) });
+    await flush();
+    // 不是一句光秃秃的提问：同样的进行中一行，停止可用。
+    expect(render()).toMatchObject({ status: "streaming", streaming: true, startedAt, partial: "前半段" });
+    expect(render().messages).toEqual([{ ...asked, running: true }]);
+    turn.release();
+    await flush();
+    historyRequest().resolve(ok([asked, { sequence: 2, role: "assistant", content: "前半段，后半段", runId: RUN }]));
+    await flush();
+    expect(render()).toMatchObject({ status: "complete", partial: "" });
+    expect(render().messages.map((message) => message.content)).toEqual(["王总那边的进展？", "前半段，后半段"]);
+  });
+
+  it("回到前台时还在回答、服务端这里没有这一轮（服务重启过）：每 3 秒读一次历史，答完换成回答；最后一句不是在回答的不接", async () => {
+    vi.useFakeTimers();
+    scope = "global";
+    const shown = page("hidden");
+    render();
+    historyRequest().resolve(ok([asked]));
+    await flush();
+    expect(requestTo(followUrl)).toBeUndefined();
+    shown.show();
+    historyRequest().resolve(ok([{ ...asked, running: true }]));
+    await flush();
+    requestTo(followUrl)!.resolve({ ok: true, status: 204, body: null, headers: new Headers() });
+    await flush();
+    expect(render()).toMatchObject({ status: "streaming", stage: "thinking" });
+    await vi.advanceTimersByTimeAsync(3_000);
+    historyRequest().resolve(ok([{ ...asked, running: true }]));
+    await flush();
+    expect(render().status).toBe("streaming");
+    await vi.advanceTimersByTimeAsync(3_000);
+    historyRequest().resolve(ok([asked, { sequence: 2, role: "assistant", content: "答完了", runId: RUN }]));
+    await flush();
+    expect(render()).toMatchObject({ status: "complete" });
+    expect(render().messages.map((message) => message.content)).toEqual(["王总那边的进展？", "答完了"]);
+  });
+
+  it("停止：请服务端停下这一轮（首页 Chat 里断开连接不会停）；还不知道 runId 时等第一条事件带来再停，不先断开", async () => {
+    scope = "global";
+    page();
+    render();
+    historyRequest().resolve(ok([]));
+    await flush();
+    const turn = stream([`data: {"type":"route","tier":"grounded","expectSeconds":30,"runId":"${RUN}"}\n\n`,
+      `data: {"type":"done","status":"aborted","runId":"${RUN}"}\n\n`]);
+    const sending = render().send("写长一点", []);
+    const post = requests.find((request) => request.init?.method === "POST")!;
+    // 回应还没回来就点停止：先记下，不断开（断开了这一轮会在服务端接着写）。
+    render().stop();
+    expect(post.init?.signal?.aborted).toBe(false);
+    post.resolve(turn.response);
+    await flush();
+    const stopUrl = `/api/conversations/global/turns/${RUN}/stop`;
+    const stopRequest = requestTo(stopUrl)!;
+    expect(stopRequest.init?.method).toBe("POST");
+    expect(post.init?.signal?.aborted).toBe(false);
+    // Chat 停下后回「已停止」，界面照旧显示已停止。
+    turn.release();
+    stopRequest.resolve({ ok: true, status: 200, json: async () => ({ runId: RUN, status: "aborted" }) });
+    await flush();
+    historyRequest().resolve(ok([user(1, "写长一点")]));
+    await sending;
+    expect(render()).toMatchObject({ status: "aborted", error: "已停止本次回答。" });
+  });
+});
