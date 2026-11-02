@@ -20,7 +20,7 @@ async function setup(gateway){
 }
 test('a job at the two-edit limit writes an independent draft and never installs it in current business state',async()=>{
  let revisions=0,checks=0;
- const gateway={status:{model:'fixture'},complete:async messages=>{const p=JSON.parse(messages[1].content);if(!p.unit){checks++;return {answer:JSON.stringify({issues:[{ref:'company',type:'结构与表达',problem:'未验证被写成未发生',impact:'事实过强',mustFix:true,fixable:true}]})};}if(p.revision)revisions++;return {answer:JSON.stringify({review})};}};
+ const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{const p=JSON.parse(messages[1].content);if(!p.unit){checks++;return {answer:JSON.stringify({checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[],issues:[{ref:'company',type:'结构与表达',problem:'未验证被写成未发生',impact:'事实过强',mustFix:true,fixable:true}]})};}if(p.revision)revisions++;return {answer:JSON.stringify({review})};}};
  const {jobs,store,dir,original}=await setup(gateway);
  try{
   const job=await jobs.start(actor,{period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00'},{now:new Date('2026-11-02T00:00:00Z')});
@@ -34,7 +34,7 @@ test('a job at the two-edit limit writes an independent draft and never installs
 });
 test('only an operator can cancel a running job; cancellation saves a resumable failure without installing',async()=>{
  let entered=false;
- const gateway={status:{model:'fixture'},complete:async(_messages,{signal})=>{entered=true;return new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));}};
+ const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async(_messages,{signal})=>{entered=true;return new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));}};
  const {jobs,store,dir,original}=await setup(gateway);
  try{
   await jobs.start(actor,{period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00'},{now:new Date('2026-11-02T00:00:00Z')});await until(()=>entered);
@@ -44,8 +44,8 @@ test('only an operator can cancel a running job; cancellation saves a resumable 
 });
 test('resume after a checker outage keeps the edited draft and its budget, then installs only the rechecked candidate',async()=>{
  let fail=true,initial=0,revised=0;
- const gateway={status:{model:'fixture'},complete:async messages=>{const p=JSON.parse(messages[1].content);
-  if(!p.unit){const current=p.reviews[0];if(current.verdictReason==='fixed'&&/第3组/.test(p.task)&&fail)throw Error('checker offline');return {answer:JSON.stringify({issues:current.verdictReason==='fixed'?[]:[{ref:'company',type:'结构与表达',problem:'需要澄清',impact:'影响理解',mustFix:true,fixable:true}]})};}
+ const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{const p=JSON.parse(messages[1].content);
+  if(!p.unit){const current=p.reviews[0];if(current.verdictReason==='fixed'&&/第3组/.test(p.task)&&fail)throw Error('checker offline');return {answer:JSON.stringify({checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[],issues:current.verdictReason==='fixed'?[]:[{ref:'company',type:'结构与表达',problem:'需要澄清',impact:'影响理解',mustFix:true,fixable:true}]})};}
   if(p.revision)revised++;else initial++;return {answer:JSON.stringify({review:{...review,verdictReason:p.revision?'fixed':'initial'}})};
  }};
  const {jobs,store,dir}=await setup(gateway);

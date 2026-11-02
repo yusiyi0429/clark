@@ -1,0 +1,36 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {packSourceText,restoreSourceText,buildReviewCheckPlan,refreshReviewCheckPlan,verifyReviewCheckPlan,validateScopedCheckResult,planSourceFollowups,executeReviewCheckPlan,reviewModelRequestBody} from './review-source-plan.mjs';
+const data=()=>{
+ const input={stages:[['a','b','c'].map(id=>({id,unit:id,level:'mission',parent:'p'})),[{id:'p',unit:'p',level:'ru',children:['a','b','c']}],[]]};
+ const text='月初起点不算本月结果，完整保留日期、否定及旧E1命名空间。'.repeat(80);
+ const sources=Object.fromEntries(input.stages.flat().map(c=>[c.id,{id:c.id,version:2,evidence:[{id:'E1',namespace:c.id,kind:'月初起点',text},{id:'E2',namespace:c.id,text}]}]));
+ return {input,sources,reviews:Object.fromEntries(Object.keys(sources).map(ref=>[ref,{ref,verdict:'部分达成'}])),programFacts:{perReview:{},verdictFacts:[],askLoad:[]},tasks:['JSON组1','JSON组2','JSON组3'],system:'完整规则JSON',maxTargetRefs:1};
+};
+const ok=p=>({issues:[],checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[]});
+test('text sharing is lossless and never merges distinct evidence identities or namespaces',()=>{
+ const a=data(),packet=packSourceText(a.sources);assert.deepEqual(restoreSourceText(packet),a.sources);assert.ok(Object.keys(packet.texts).length);assert.equal(packet.sources.a.evidence[0].namespace,'a');assert.equal(packet.sources.b.evidence[0].namespace,'b');packet.texts[Object.keys(packet.texts)[0]]+='伪造';assert.throws(()=>restoreSourceText(packet));
+});
+test('three groups cover every target and edge with full original source and bounded actual model bodies',()=>{
+ for(const model of ['wangsu/claude-sonnet-5-5','aliyun/deepseek-v4.1-flash']){
+ const a={...data(),wireOptions:{model}},p=buildReviewCheckPlan(a);assert.equal(p.maxConcurrency,3);assert.equal(p.requestCount,p.packets.length*3);
+ assert.deepEqual(new Set(p.packets.flatMap(x=>x.scope.targetRefs)),new Set(p.sourceRefs));
+ assert.deepEqual(new Set(p.packets.flatMap(x=>x.scope.edges.map(e=>JSON.stringify(e)))),new Set(p.edges.map(e=>JSON.stringify(e))));
+ for(const packet of p.packets){assert.deepEqual(restoreSourceText({sources:packet.payloads[0].sources,texts:packet.payloads[0].sourceTexts,bindings:packet.payloads[0].sourceBindings,originalHash:packet.originalHash}),Object.fromEntries(packet.scope.sourceRefs.map(ref=>[ref,a.sources[ref]])));for(const payload of packet.payloads)assert.ok(Buffer.byteLength(JSON.stringify(reviewModelRequestBody(a.system,payload,a.wireOptions)))<=p.maxBodyBytes);}
+ }
+});
+test('oversize, altered source, payload and model fail before calling a model',()=>{
+ const a=data(),p=buildReviewCheckPlan(a);assert.throws(()=>buildReviewCheckPlan({...a,maxBodyBytes:100}),e=>e.code==='REVIEW_PACKET_OVERSIZE');
+ assert.throws(()=>refreshReviewCheckPlan(p,{...a,wireOptions:{model:'aliyun/deepseek-v4.1-flash'}}));const bad=structuredClone(p);bad.packets[0].payloads[0].sources.a.version=999;assert.throws(()=>verifyReviewCheckPlan(bad,a));
+ const r=structuredClone(a.reviews);r.a.verdict='达成';const refreshed=refreshReviewCheckPlan(p,{...a,reviews:r});assert.deepEqual(refreshed.layout,p.layout);assert.notEqual(refreshed.stamp,p.stamp);
+});
+test('missing context is explicit, coalesced per group, bounded, and cannot pass or repeat provided sources',async()=>{
+ const a=data(),p=buildReviewCheckPlan(a),packet=p.packets.find(x=>x.scope.targetRefs.includes('a')),index=p.packets.indexOf(packet),value={...ok(packet),sourceRequests:[{refs:['a','b'],relation:'跨单元交付',reason:'需要核对同一交付'}]};
+ assert.equal(validateScopedCheckResult(value,packet,p.sourceRefs).status,'needs-source-context');
+ const responses=[{packetIndex:index,group:0,value},{packetIndex:index,group:0,value}],extra=planSourceFollowups({plan:p,args:a,responses,maxAdditionalRequests:1});assert.equal(extra.length,1);assert.ok(extra[0].packet.scope.sourceRefs.includes('b'));assert.ok(extra[0].packet.scope.edges.some(e=>e.childRef==='a'));
+ assert.throws(()=>planSourceFollowups({plan:p,args:a,responses,maxAdditionalRequests:0}),e=>e.code==='REVIEW_SOURCE_REQUEST_BUDGET');assert.throws(()=>planSourceFollowups({plan:p,args:a,responses,maxAdditionalRequests:1,providedKeys:[extra[0].key]}),e=>e.code==='REVIEW_SOURCE_REQUEST_REPEAT');
+ assert.throws(()=>validateScopedCheckResult({...value,sourceRequests:[{refs:['a','unknown'],relation:'x',reason:'x'}]},packet,p.sourceRefs));assert.throws(()=>validateScopedCheckResult({...ok(packet),checkedRefs:[]},packet,p.sourceRefs));
+ let active=0,max=0;
+ const pending=await executeReviewCheckPlan({plan:p,args:a,runPacket:async r=>r.index===index&&r.group===0?value:ok(r.packet)});assert.equal(pending.status,'needs-source-context');
+ const complete=await executeReviewCheckPlan({plan:p,args:a,maxAdditionalRequests:1,runPacket:async r=>{active++;max=Math.max(max,active);await new Promise(resolve=>setTimeout(resolve,1));active--;return r.index===index&&r.group===0?value:ok(r.packet);}});assert.equal(complete.status,'checked');assert.equal(complete.requestCount,p.requestCount+1);assert.ok(max<=3);
+});

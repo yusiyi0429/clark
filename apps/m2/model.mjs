@@ -88,7 +88,7 @@ export function patientTransport(url,{method,headers,body,signal}){
 }
 // A refusal is its own failure (模型调用稳定性加固 2026-10-22): the same request retried gets refused again, so callers
 // handle it apart from a cut-off answer. diagnostics.finishReason stays 'refusal' for callers that already read it.
-function refusal(model,usage,id,extra={}){const e=Error('模型拒绝回答这次请求，未应用内容');e.status=502;e.code='MODEL_REFUSAL';e.diagnostics={model,finishReason:'refusal',usage,...extra};recordModelRun({channel:'model-failure',model,usage,providerRequestId:id,failure:e.diagnostics}).catch(()=>{});return e;}
+function refusal(model,usage,id,extra={},rawAnswer){const e=Error('模型拒绝回答这次请求，未应用内容');e.status=502;e.code='MODEL_REFUSAL';e.rawAnswer=rawAnswer;e.providerRequestId=id||null;e.diagnostics={model,finishReason:'refusal',usage,...extra};recordModelRun({channel:'model-failure',model,usage,providerRequestId:id,failure:e.diagnostics}).catch(()=>{});return e;}
 export async function createModelGateway({env=process.env,readSecretFile=readFile,readLocalSecret=readLocalKey,transport=fetch,redact=false,tracer=sharedTracer}={}){
  const base=env.DECODING_API_BASE||TOKENHUB_BASE;
  const model=env.DECODING_MODEL||TOKENHUB_MODEL;
@@ -110,9 +110,9 @@ export async function createModelGateway({env=process.env,readSecretFile=readFil
   const response=await transport(messagesEndpoint,{method:'POST',redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),headers:{Authorization:`Bearer ${key}`,'anthropic-version':'2023-06-01','Content-Type':'application/json'},body:JSON.stringify({model,max_tokens:limit,stream:true,...(system?{system}:{}),messages:turns,...(thinking?{thinking:{type:'adaptive',display:'summarized'},output_config:{effort:reasoningEffort||'high'}}:{})})});
   if(!response.ok){const e=Error(`模型接口返回 ${response.status}，未修改任何卡片。`);e.status=502;e.providerStatus=response.status;await recordModelRun({channel:'model-failure',model,failure:{httpStatus:response.status}}).catch(()=>{});throw e;}
   const r=await messagesResponse(response,onDelta,{model}),usage={prompt_tokens:r.usage?.input_tokens,completion_tokens:r.usage?.output_tokens,...r.usage};
-  if(r.stop==='refusal')throw refusal(model,usage,r.id,{reasoningEffort:thinking?reasoningEffort:'disabled'});
-  if(!r.answer||r.stop==='max_tokens'){const e=Error('模型输出不完整，未应用修改。');e.status=502;e.code='MODEL_OUTPUT_INCOMPLETE';e.partialAnswer=r.answer||'';e.diagnostics={model,finishReason:r.stop||'empty',usage,reasoningEffort:thinking?reasoningEffort:'disabled',maxTokens:limit};await recordModelRun({channel:'model-failure',model,usage,providerRequestId:r.id,failure:e.diagnostics});throw e;}
-  return {answer:json?bareJson(r.answer):r.answer,usage,providerRequestId:r.id,model,durationMs:Date.now()-startedAt};
+  if(r.stop==='refusal')throw refusal(model,usage,r.id,{reasoningEffort:thinking?reasoningEffort:'disabled',finishReasonSource:'provider.messages.stop_reason'},r.answer);
+  if(!r.answer||r.stop==='max_tokens'){const e=Error('模型输出不完整，未应用修改。');e.status=502;e.code='MODEL_OUTPUT_INCOMPLETE';e.partialAnswer=r.answer||'';e.providerRequestId=r.id||null;e.diagnostics={model,finishReason:r.stop||'empty',finishReasonSource:r.stop?'provider.messages.stop_reason':'adapter.missing_stop_reason',usage,reasoningEffort:thinking?reasoningEffort:'disabled',maxTokens:limit};await recordModelRun({channel:'model-failure',model,usage,providerRequestId:r.id,failure:e.diagnostics});throw e;}
+  return {answer:json?bareJson(r.answer):r.answer,rawAnswer:r.answer,finishReason:r.stop||null,finishReasonSource:r.stop?'provider.messages.stop_reason':null,usage,providerRequestId:r.id,model,durationMs:Date.now()-startedAt};
  }
  const gateway={
   status:{ready:Boolean(key),provider:tokenhub?'TokenHub':ark?'Ark':'OpenAI-compatible',model},
@@ -140,13 +140,13 @@ export async function createModelGateway({env=process.env,readSecretFile=readFil
     await recordModelRun({channel:'model-failure',model,failure:{httpStatus:response.status,retryAfterMs:e.retryAfterMs??null}}).catch(()=>{});throw e;
    }
    const result=await completionResponse(response,onDelta),answer=result.choices?.[0]?.message?.content;
-   if(result.choices?.[0]?.finish_reason==='content_filter')throw refusal(model,result.usage,result.id);
+   if(result.choices?.[0]?.finish_reason==='content_filter')throw refusal(model,result.usage,result.id,{finishReasonSource:'provider.chat.finish_reason'},answer);
    if(!answer||result.choices?.[0]?.finish_reason==='length'){
-    const e=Error('模型输出不完整，未应用修改。');e.status=502;e.code='MODEL_OUTPUT_INCOMPLETE';e.partialAnswer=answer||'';
-    e.diagnostics={model,finishReason:result.choices?.[0]?.finish_reason||'empty',usage:result.usage,reasoningEffort:thinking?reasoningEffort:'disabled',maxTokens:maxTokens||(thinking?65536:json?4000:2400)};
+    const e=Error('模型输出不完整，未应用修改。');e.status=502;e.code='MODEL_OUTPUT_INCOMPLETE';e.partialAnswer=answer||'';e.providerRequestId=result.id||null;
+    e.diagnostics={model,finishReason:result.choices?.[0]?.finish_reason||'empty',finishReasonSource:result.choices?.[0]?.finish_reason?'provider.chat.finish_reason':'adapter.missing_finish_reason',usage:result.usage,reasoningEffort:thinking?reasoningEffort:'disabled',maxTokens:maxTokens||(thinking?65536:json?4000:2400)};
     await recordModelRun({channel:'model-failure',model,usage:result.usage,providerRequestId:result.id,failure:e.diagnostics});throw e;
    }
-   return {answer,usage:result.usage,providerRequestId:result.id,model,durationMs:Date.now()-startedAt};
+   return {answer,rawAnswer:answer,finishReason:result.choices?.[0]?.finish_reason||null,finishReasonSource:result.choices?.[0]?.finish_reason?'provider.chat.finish_reason':null,usage:result.usage,providerRequestId:result.id,model,durationMs:Date.now()-startedAt};
   },
  };
  // LangSmith (陈溪南 2026-10-27): every call is one llm run under whatever the caller is running; a no-op without a key.

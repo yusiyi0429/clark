@@ -7,15 +7,16 @@ const abort=signal=>signal?.throwIfAborted();
 // Cache only verified answers. Every attempt (including malformed output) is
 // retained, independently of the two-per-card semantic revision budget.
 export async function qualityModelCall({gateway,system,quality,run,pass,stage,ref='',payload,validate=x=>x,save,signal}){
- const inputHash=qualityHash({system,payload}),key=`quality-${pass}-${stage}-${ref}-${inputHash}`;
+ const model=gateway.status?.model||null;
+ const inputHash=qualityHash({system,payload,model}),key=`quality-${pass}-${stage}-${ref}-${inputHash}`;
  let request=quality.requests[key];
- const verifyRequest=()=>{if(request&&(request.inputHash!==inputHash||qualityHash({system,payload:request.payload})!==inputHash||request.sourceHash!==quality.sourceHash||request.skillHash!==quality.skillHash||request.pass!==pass||request.stage!==stage||request.ref!==ref))throw Error('质量检查缓存输入或保存的请求已变化');};
+ const verifyRequest=()=>{if(request&&(request.inputHash!==inputHash||request.model!==model||qualityHash({system,payload:request.payload,model})!==inputHash||request.sourceHash!==quality.sourceHash||request.skillHash!==quality.skillHash||request.pass!==pass||request.stage!==stage||request.ref!==ref))throw Error('质量检查缓存输入或保存的请求已变化');};
  abort(signal);verifyRequest();
  if(request?.status==='done'){
   if(qualityHash(run.raw[key])!==request.outputHash)throw Error('质量检查缓存原答校验失败');
   return validate(JSON.parse(bareJson(run.raw[key])));
  }
- request??=quality.requests[key]={inputHash,sourceHash:quality.sourceHash,skillHash:quality.skillHash,pass,stage,ref,payload:clone(payload),attempts:[]};
+ request??=quality.requests[key]={inputHash,model,sourceHash:quality.sourceHash,skillHash:quality.skillHash,pass,stage,ref,payload:clone(payload),attempts:[]};
  request.status='running';await save(run);
  for(let attempt=1;attempt<=3;attempt++){
   abort(signal);verifyRequest();const record={attempt,at:new Date().toISOString()};request.attempts.push(record);await save(run);
