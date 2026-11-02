@@ -58,11 +58,11 @@ test('model call cache is keyed by current candidate and pass; all attempts reta
  await qualityModelCall({...args,validate});await qualityModelCall({...args,validate});assert.equal(calls.length,1);
  await qualityModelCall({...args,pass:1,payload:{...payload,candidateHash:'after'},validate});assert.equal(calls.length,2);assert.equal(calls[1].sources.m.evidence[0].text,'真实会议验证仍待实会');assert.equal(Object.keys(quality.requests).length,2);
 });
-test('failed checkers are not zero issues; malformed raw is retained and a resume can fetch a valid answer',async()=>{
+test('failed checkers are not zero issues; malformed raw is retained and resume cannot reset three used attempts',async()=>{
  const quality={requests:{},sourceHash:'s',skillHash:'h'},run={raw:{}},args={quality,run,pass:0,stage:'check',payload:{sources},system:'rules',save:async()=>{},validate:x=>{if(!Array.isArray(x.issues))throw Error('no issues');return x;}};
  let calls=0,bad=true;const gateway={complete:async()=>{calls++;return {answer:bad?'{}':'{"issues":[]}'};}};
  await assert.rejects(qualityModelCall({...args,gateway}),/no issues/);assert.equal(calls,3);assert.equal(Object.values(quality.requests)[0].attempts[0].raw,'{}');assert.equal(Object.keys(run.raw).length,0);
- bad=false;await qualityModelCall({...args,gateway});assert.equal(calls,4);assert.equal(Object.values(quality.requests)[0].attempts.length,4);
+ const failed=structuredClone(quality.requests);bad=false;await assert.rejects(qualityModelCall({...args,gateway}),e=>e.code==='REVIEW_MODEL_ATTEMPT_LIMIT');assert.equal(calls,3);assert.deepEqual(quality.requests,failed);assert.equal(Object.keys(run.raw).length,0);
 });
 test('cancellation interrupts a call without adding transport retries',async()=>{
  const controller=new AbortController();let calls=0;

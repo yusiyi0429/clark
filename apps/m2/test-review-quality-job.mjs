@@ -47,19 +47,18 @@ test('only an operator can cancel a running job; cancellation saves a resumable 
   assert.match(jobs.view().error,/停止/);assert.deepEqual(store.snapshot().cards,original);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
-test('resume after a checker outage keeps the edited draft and its budget, then installs only the rechecked candidate',async()=>{
- let fail=true,initial=0,revised=0;
+test('exhausted single-model checker resume preserves the edited draft and cannot reset its attempts or install',async()=>{
+ let fail=true,initial=0,revised=0,failedChecks=0;
  const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{const p=JSON.parse(messages[1].content);
-  if(!p.unit){const current=p.reviews[0];if(current.verdictReason==='fixed'&&/第3组/.test(p.task)&&fail)throw Error('checker offline');return {answer:JSON.stringify({checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[],issues:current.verdictReason==='fixed'?[]:[{ref:'company',sourceRefs:['company'],type:'结构与表达',problem:'需要澄清',impact:'影响理解',mustFix:true,fixable:true}]})};}
+  if(!p.unit){const current=p.reviews[0];if(current.verdictReason==='fixed'&&/第3组/.test(p.task)&&fail){failedChecks++;throw Error('checker offline');}return {answer:JSON.stringify({checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[],issues:current.verdictReason==='fixed'?[]:[{ref:'company',sourceRefs:['company'],type:'结构与表达',problem:'需要澄清',impact:'影响理解',mustFix:true,fixable:true}]})};}
   if(p.revision)revised++;else initial++;return {answer:JSON.stringify({review:{...review,verdictReason:p.revision?'fixed':'initial'}})};
  }};
- // Preserve this pre-existing primary-only outage/resume case. No second-pass
- // repair is needed; formal shared-attempt exhaustion is tested separately.
+ // A primary-only checker still has one cumulative three-attempt budget.
  const {jobs,store,dir}=await setup(gateway,{formalFallbacks:false});
  try{
   const job=await jobs.start(actor,{period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00'},{now:new Date('2026-11-02T00:00:00Z')});await until(()=>jobs.view().status==='failed');
   assert.equal(store.snapshot().reviewRound,undefined);fail=false;await jobs.start(actor,{resume:true});await until(()=>jobs.view().status!=='running');
-  assert.equal(jobs.view().status,'done');assert.equal(initial,1);assert.equal(revised,1);assert.ok(store.snapshot().cards['rv:company']);
-  const work=JSON.parse(await readFile(join(dir,'review-jobs',job.id+'.json'),'utf8'));assert.equal(work.run.reviews.company.verdictReason,'fixed');assert.equal(work.run.quality.counts.company,1);assert.equal(work.run.quality.status,'passed');
+  assert.equal(jobs.view().status,'draft');assert.equal(initial,1);assert.equal(revised,1);assert.equal(failedChecks,3);assert.equal(store.snapshot().reviewRound,undefined);
+  const work=JSON.parse(await readFile(join(dir,'review-jobs',job.id+'.json'),'utf8'));assert.equal(work.run.reviews.company.verdictReason,'fixed');assert.equal(work.run.quality.counts.company,1);assert.equal(work.run.quality.status,'needs-review');
  }finally{await rm(dir,{recursive:true,force:true});}
 });

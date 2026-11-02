@@ -38,8 +38,14 @@ export function withReviewRateLimit(gateway,{now=Date.now,wait=(ms,signal)=>paus
 
 // This review-only factory is used by the real server; chat/decoding keep their own gateway.
 export async function createReviewModelGateway({env=process.env,create=createModelGateway}={}){
- const [primary,backup]=await Promise.all(['wangsu/claude-sonnet-5-5','wangsu/gpt-6.1-sol'].map(async model=>withReviewRateLimit(await create({env:{...env,DECODING_MODEL:model}}))));
- return withReviewFallbacks(primary,[backup]);
+ const requested=env.M2_REVIEW_PRIMARY_MODEL||'wangsu/claude-sonnet-5-5';
+ if(!formalModels.has(requested))throw Error('M2_REVIEW_PRIMARY_MODEL仅支持正式Sonnet5.5或GPT6.1-sol');
+ const available=await Promise.all(['wangsu/claude-sonnet-5-5','wangsu/gpt-6.1-sol'].map(async model=>{const gateway=withReviewRateLimit(await create({env:{...env,DECODING_MODEL:model}}));if(gateway.status?.model!==model)throw Error('正式复盘模型配置与实际网关不一致');return gateway;}));
+ const [claude,gpt]=available;
+ const selected=requested===claude.status.model?withReviewFallbacks(claude,[gpt]):{...gpt,status:{...gpt.status,reviewFallbackModels:[]},reviewFallbacks:[]};
+ // Availability is not a fallback policy. Keep old frozen jobs resumable even
+ // after changing the default, without routing any new GPT-only call to Claude.
+ return {...selected,reviewResumeGateways:available};
 }
 
 // A default-policy change applies to new work only. Resume uses the frozen
@@ -48,9 +54,9 @@ export function reviewGatewayForRun(gateway,run){
  const frozen=run?.modelPolicy||run?.quality?.packetModel;
  if(!frozen){if(run?.initialAttempts?.length)throw Error('旧任务尚未保存完整模型策略，不能用新策略改写其缓存');return gateway;}
  const primary=frozen.primary||frozen.model,backups=frozen.fallbackModels||[];
- const available=[gateway,...(gateway.reviewFallbacks||[])],byModel=new Map(available.map(g=>[g.status?.model,g]));
+ const available=[gateway,...(gateway.reviewFallbacks||[]),...(gateway.reviewResumeGateways||[])],byModel=new Map(available.map(g=>[g.status?.model,g]));
  if(!byModel.has(primary)||backups.some(model=>!byModel.has(model)))throw Error('冻结任务的模型策略当前不可用，未改写历史策略');
  if(primary===gateway.status?.model&&JSON.stringify(backups)===JSON.stringify(gateway.reviewFallbacks?.map(g=>g.status.model)||[]))return gateway;
- if(!backups.length){const selected=byModel.get(primary);return {...selected,status:{...selected.status,reviewFallbackModels:[]},reviewFallbacks:[]};}
- return withReviewFallbacks(byModel.get(primary),backups.map(model=>byModel.get(model)));
+ if(!backups.length){const selected=byModel.get(primary);return {...selected,status:{...selected.status,reviewFallbackModels:[]},reviewFallbacks:[],...(gateway.reviewResumeGateways?{reviewResumeGateways:gateway.reviewResumeGateways}:{})};}
+ return {...withReviewFallbacks(byModel.get(primary),backups.map(model=>byModel.get(model))),...(gateway.reviewResumeGateways?{reviewResumeGateways:gateway.reviewResumeGateways}:{})};
 }

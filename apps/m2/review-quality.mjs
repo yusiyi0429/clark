@@ -33,7 +33,7 @@ export async function qualityModelCall({gateway,system,quality,run,pass,stage,re
  const last=history.at(-1);let prior=last;
  let active=backups.length||grouped?route.get(last?.nextModel||last?.requestedModel||model):gateway;
  if(!active)throw Error('备用模型续跑来源不属于已授权策略');
- const used=backups.length||grouped?history.length:0;
+ const used=history.length;
  if(used>=3)throw Object.assign(Error('同一修订的模型、补源及重试尝试已用完，保留未核候选'),{code:'REVIEW_MODEL_ATTEMPT_LIMIT'});
  if(grouped)request.attemptGroup={pass,ref:payload.unit.id,revision:payload.revision,candidateHash:payload.candidateHash};
  request.status='running';await save(run);

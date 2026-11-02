@@ -58,7 +58,7 @@ export async function initialReviewCall({gateway,system,user,key,skill,run,save=
  let active=backups.length||evidenceFlow?route.get(previous.at(-1)?.nextModel||previous.at(-1)?.request.model||models[0]):gateway;
  if(!active)throw Error('初稿备用来源不属于已授权策略');
  let switchFrom=previous.at(-1)?.switchFrom||null,switchReason=previous.at(-1)?.switchReason||null;
- const used=backups.length||evidenceFlow?previous.length:0;
+ const used=previous.length;
  if(used>=3)throw Object.assign(Error('初稿同一逻辑请求三个模型尝试已用完'),{code:'REVIEW_MODEL_ATTEMPT_LIMIT'});
  for(let attempt=used+1;attempt<=3;attempt++){
   signal?.throwIfAborted();
