@@ -3,7 +3,7 @@ import {reviewDependencyPool} from './review-dependencies.mjs';
 import {reviewQuestionRoutes,routeReviewQuestions,activeReviewAsk} from './review-question-routing.mjs';
 import {planTableItem} from './review-plan-table.mjs';
 import {stripVerifiedEvidence,citationFacts,referenceMapsForInput,validateIssueSources} from './review-evidence-addresses.mjs';
-import {buildReviewCheckPlan,refreshReviewCheckPlan,verifyReviewCheckPlan,executeReviewCheckPlan,packSourceText,reviewModelRequestBody,reviewModelBudgetBytes,validateScopedCheckResult,restoreSourceText} from './review-source-plan.mjs';
+import {fullContextCheckContract,buildReviewCheckPlan,refreshReviewCheckPlan,verifyReviewCheckPlan,executeReviewCheckPlan,packSourceText,reviewModelRequestBody,reviewModelBudgetBytes,validateScopedCheckResult,restoreSourceText} from './review-source-plan.mjs';
 import {initialReviewCall,createReviewCallJournal,outputContractError} from './review-call-journal.mjs';
 import {runReviewQuality,qualityModelCall,qualityHash,deferReviewAction} from './review-quality.mjs';
 import {frozenAgreedOutcome} from './review-agreed-outcome.mjs';
@@ -303,7 +303,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  }
  // What this review was built from, kept with every run (于斯一 asked; the 10/23 run could not be traced, 读取盘点第 8 条).
  const readReceipt={readAt:sources.readAt,cutoff,objects:Object.entries(objects).filter(([,o])=>o).map(([id,o])=>`${id}@${o.business?.version??o.version??o.revision_id??'?'}`),snapshots:[...usedSnapshots],events:[...usedEvents]};
- return {engineeringContracts:{evidenceAddresses:1,checkerSources:2,planTableColumns:1},period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
+ return {engineeringContracts:{evidenceAddresses:1,checkerSources:2,planTableColumns:1,fullContextCheck:fullContextCheckContract([...stage1,...stage2,...stage3].map(c=>c.id))},period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
 }
 
 // ---------- running the review skill ----------
@@ -520,14 +520,15 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
    const args={input,sources,reviews,programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(Object.values(reviews))},tasks,system,wireOptions};
    q.sourcePlans??={};let plan=q.sourcePlans[pass];
    if(plan)verifyReviewCheckPlan(plan,args);
-   else {const previous=q.sourcePlans[pass-1];plan=previous?refreshReviewCheckPlan(previous,args):buildReviewCheckPlan({...args,maxBodyBytes:REVIEW_BODY_LIMIT_BYTES,maxTargetRefs:refs.length,fixedLayout:[{kind:'object',units:[...refs].sort()}]});q.sourcePlans[pass]=plan;await save(run);}
-   const outcome=await executeReviewCheckPlan({plan,args,maxAdditionalRequests:6,runPacket:async request=>{
+   else {const previous=q.sourcePlans[pass-1];plan=previous?refreshReviewCheckPlan(previous,args):buildReviewCheckPlan({...args,maxBodyBytes:REVIEW_BODY_LIMIT_BYTES,maxTargetRefs:refs.length,fixedLayout:input.engineeringContracts?.fullContextCheck?.layout??[{kind:'object',units:[...refs].sort()}]});q.sourcePlans[pass]=plan;await save(run);}
+   const maxAdditionalRequests=input.engineeringContracts?.fullContextCheck?0:6;
+   const outcome=await executeReviewCheckPlan({plan,args,maxAdditionalRequests,runPacket:async request=>{
     const value=await call(q,pass,'check',`${request.cacheStamp}-${request.index??'source'}-${request.group}`,request.payload,value=>{
      checkedReviewIssues(value,{skill,refs});if(input.engineeringContracts?.checkerSources>=1)for(const issue of value.issues)validateIssueSources(issue,{sources,providedRefs:request.packet.scope.sourceRefs});for(const issue of value.issues)if(issue.sourceRefs!==undefined&&(!Array.isArray(issue.sourceRefs)||new Set(issue.sourceRefs).size!==issue.sourceRefs.length||issue.sourceRefs.some(ref=>!request.packet.scope.sourceRefs.includes(ref))))throw Error('检查意见的显式来源引用不属于已提供完整原文');return validateScopedCheckResult(value,request.packet,refs,request.payload.sourceRequestContext);
     });
     return {...value,issues:value.issues.map(issue=>({...issue,checkContextRefs:[...request.packet.scope.sourceRefs],sourceRefs:issue.sourceRefs===undefined?[issue.ref]:[...issue.sourceRefs]}))};
    }});
-   (q.sourcePasses??={})[pass]={planStamp:plan.stamp,status:outcome.status,requestCount:outcome.requestCount,maxAdditionalRequests:6,providedKeys:outcome.providedKeys,sourceRequests:outcome.sourceRequests};await save(run);
+   (q.sourcePasses??={})[pass]={planStamp:plan.stamp,status:outcome.status,requestCount:outcome.requestCount,maxAdditionalRequests,providedKeys:outcome.providedKeys,sourceRequests:outcome.sourceRequests};await save(run);
    if(outcome.status!=='checked')throw Object.assign(Error('补源后仍有待核原文，保留草稿等待处理，未通过检查'),{code:'REVIEW_SOURCE_CONTEXT_PENDING',checks:outcome.sourceRequests});
    // Multiple packets may identify the same problem. Keep the full source union for its repair.
    const unique=new Map();for(const issue of outcome.issues){const {sourceRefs,checkContextRefs,...business}=issue,key=qualityHash(business),old=unique.get(key);if(old){old.sourceRefs=[...new Set([...old.sourceRefs,...sourceRefs])];old.checkContextRefs=[...new Set([...old.checkContextRefs,...checkContextRefs])];}else unique.set(key,issue);}
