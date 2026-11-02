@@ -11,7 +11,7 @@ const skill=await loadReviewSkill(new URL('../apps/m2/review-skill/',import.meta
 const rules=`你是 TKOS 的月度复盘助手。按下面的技能工作。仅返回有效 JSON 对象，不加代码围栏。\n${skill.rules}`;
 const tasks=reviewQualityTasks(skill),summaries=[];
 for(const model of ['wangsu/claude-sonnet-5-5','aliyun/deepseek-v4.1-flash']){
- const args={input:work.input,sources:original.sources,reviews:work.run.reviews,programFacts:original.programFacts,tasks,system:system||rules,wireOptions:{model,thinking:true,reasoningEffort:'high',maxTokens:32000,json:true}},plan=buildReviewCheckPlan(args);
+ const args={maxTargetRefs:3,input:work.input,sources:original.sources,reviews:work.run.reviews,programFacts:original.programFacts,tasks,system:system||rules,wireOptions:{model,thinking:true,reasoningEffort:'high',maxTokens:32000,json:true}},plan=buildReviewCheckPlan(args);
  const refs=new Set(plan.packets.flatMap(p=>p.scope.targetRefs)),edges=new Set(plan.packets.flatMap(p=>p.scope.edges.map(e=>e.parentRef+'>'+e.childRef)));
  assert.equal(refs.size,28);assert.equal(edges.size,27);
  for(const packet of plan.packets){const payload=packet.payloads[0];assert.deepEqual(restoreSourceText({sources:payload.sources,texts:payload.sourceTexts,bindings:payload.sourceBindings,originalHash:packet.originalHash}),Object.fromEntries(packet.scope.sourceRefs.map(ref=>[ref,args.sources[ref]])));assert.equal(payload.reviews.length,28);assert.ok(packet.maxBodyBytes<=512*1024);}
