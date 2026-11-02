@@ -89,7 +89,7 @@ sourceBasis 和 childCommitments 是程序保存与传递的来源元信息，�
  "nextInputs":[{"ref":"对应 facts 的 ref","type":"继续|调整|停止|待决策","text":"一句话","ask":{"to":"名字","question":"要回答的问题"},"covers":[{"ref":"下层复盘的 ref","index":0}]}]}
 ```
 
-facts 的 ref：个人复盘用输入 unit.tasks 里每个 Task 的 ref，每个 Task 都要有一行；没有 Task 的 Mission，输入里会给 expectedFacts（每条成功标准一项），一项一行，ref 和 item 照抄。单元复盘用 missionReviews 里每个 Mission 的 ref，没有 Mission 的用 expectedFacts 的 ref；公司复盘用 ruReviews 里每个单元的 key。
+facts 的 ref：个人复盘用输入 unit.tasks 里每个 Task 的 ref，每个 Task 都要有一行；没有 Task 的 Mission，输入里会给 expectedFacts（每条成功标准一项），一项一行，ref 和 item 照抄。原标题按 reader-format.md 的“保留原始目标名称”检查。单元复盘用 missionReviews 里每个 Mission 的 ref，没有 Mission 的用 expectedFacts 的 ref；公司复盘用 ruReviews 里每个单元的 key。
 
 nextInputs：有几条写几条，不凑数，最多 5 条（公司复盘最多 8 条）。每一行事实最多对应 1 条下期输入，同一行的几件事合成一句；对不上具体哪一行、说整份复盘的（ref 为空字符串），每份最多 1 条；已达成的行一般不写。多了就合并同一件事、去掉次要的；判定为达成、也没有未了事项的，可以是空数组。type 只用继续、调整、停止、待决策。ref 写对应 facts 的 ref；说的是整份复盘、对不上某一行时写空字符串。text 一句话，不超过 60 字。ask 要少，个人复盘最多 1 个、单元复盘最多 2 个、公司复盘最多 3 个，只在不回答下月就没法拆、复盘自己又判断不了时写：to 写人员名单里的真实名字（一般是这一项的 DRI 或 CEO），question 一句话、不超过 60 字、以问号结尾；不需要时不写 ask。covers 只在接过下层的问题时写：公司复盘可以接单元和个人复盘的，单元复盘可以接本单元个人复盘的；ref 是下层那份复盘的 ref，index 是那一问在它 nextInputs 里的序号（从 0 起）；可以接几问。写了 covers 的这一条要带 ask。
 
