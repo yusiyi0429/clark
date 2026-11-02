@@ -296,17 +296,17 @@ export function ConversationTurns({ messages, partial = "", footer, after, trail
   );
 }
 
-export const STAGE_COPY: Record<ThinkingStage, string> = { understanding: "正在理解问题", thinking: "正在思考", researching: "正在快速查证", answering: "正在整理回答",
+export const STAGE_COPY: Record<ThinkingStage, string> = { understanding: "正在理解问题", thinking: "正在思考", researching: "正在查资料", answering: "正在整理回答",
   connecting: "正在连接", offline: "等待网络" };
 /** 深度档（重要的战略问题），以及中途升级后的非深度档：进度行用同一口径。 */
-export const DEEP_STAGE_COPY: Record<ThinkingStage, string> = { ...STAGE_COPY, thinking: "正在深入思考", researching: "正在深入查证" };
+export const DEEP_STAGE_COPY: Record<ThinkingStage, string> = { ...STAGE_COPY, thinking: "正在深入思考" };
 
 /**
  * 进度行的细节（系统生成）：查证时是最近一步在查什么 / 读到了什么；思考时是推理摘要里的中文要点，没有就沿用最近读到的内容；
- * 后面跟已查几项。正文开始后只留「已查几项」。
+ * 后面跟已查几项。正文开始后只留「已查几项」。不知道在查什么（首页走 Chat 时工具不带说明）就不单独报数，进度行只留阶段和用时。
  */
 export function progressDetail(stage: ThinkingStage, progress?: TurnProgress): string | null {
-  if (!progress) return null;
+  if (!progress || (!progress.label && !progress.thought)) return null;
   const counted = progress.checked ? `已查 ${progress.checked} 项` : null;
   if (stage === "answering") return counted;
   const head = stage === "thinking" ? (progress.thought || progress.label) : stage === "researching" ? progress.label : null;

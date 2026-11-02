@@ -175,7 +175,7 @@ describe("对话记录", () => {
 
   it("思考中显示阶段文案与停止入口", () => {
     const html = renderToStaticMarkup(<ConversationThinking stage="researching" startedAt={Date.now()} onStop={noop} />);
-    expect(html).toContain("正在快速查证");
+    expect(html).toContain("正在查资料");
   });
 
   it("历史层：空对话不写欢迎语，全局空态只留历史入口", () => {
