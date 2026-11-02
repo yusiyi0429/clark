@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
 import type { TMeetingParticipant } from "@warmap/contracts";
+import { ChatProposeIssueBody, proposeChatIssueDraft } from "../issueDrafts.js";
 import { listPendingIssueSummaries } from "../issues.js";
 import { logEvent } from "../observability.js";
 import type { Viewer } from "../meetingCard.js";
@@ -115,6 +116,15 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
     if (!view) return reply;
     const issues = await listPendingIssueSummaries(q, view.role === "ceo" ? undefined : view.personId);
     return { viewerRole: view.role, issues: issues.map(({ id, ...issue }) => ({ issueId: id, label: "待决", ...issue, href: hrefOf(view, `/issues/${id}`) })) };
+  });
+
+  // 首页对话转议题（11/02，Chat 的 propose_issue 调这里）：拦法和天枢自己的首页对话一样（issueDrafts.ts），explicit=本人明说要转，不看轮数。
+  // 只有 CEO 视角；建议卡不写进 Chat，天枢读首页历史时补在这一轮回答末尾。
+  app.post("/internal/issue-drafts", { onRequest, schema: { body: ChatProposeIssueBody } }, async (req, reply) => {
+    const view = viewOf(req, reply);
+    if (!view) return reply;
+    if (view.role !== "ceo") return fail(reply, 403, "VIEW_NOT_ALLOWED", "只有一号位视角能转议题");
+    return proposeChatIssueDraft(q, view.personId, req.body, ctx.now());
   });
 
   // 预约会议：本人在会里、还没整卡确认的会（整卡确认过的走 /internal/confirmed-meetings）；按预约开始时间落在窗口里，默认前 7 天到后 30 天，最多 90 天。
