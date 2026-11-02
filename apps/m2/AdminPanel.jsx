@@ -3,6 +3,7 @@ import React,{useEffect,useState} from 'react';
 import {m2Fetch as fetch} from './deployment-client.mjs';
 import {Button} from '@heroui/react';
 import {X} from 'lucide-react';
+import DebugReviewView from './DebugReviewView.jsx';
 import {formatGenerationDuration} from './EntryMetadata.jsx';
 // 管理 and the entry page show the same controls (陈溪南 2026-10-27): two lines, two buttons. Each stage says which skill made it and from which ontology read, then one
 // button to generate it again. Confirming the company review starts the plan by itself, so the plan button is for redoing it.
@@ -50,7 +51,7 @@ export function RoundControls({memberId,review,plan}){
  async function start(extra={}){setBusy(true);setError('');try{const r=await fetch('/api/reviews',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({memberId,regenerate:has,period,cutoff:cutoffDay+'T23:59:59+08:00',...extra})});const v=await r.json().catch(()=>({}));if(!r.ok)throw Error(v.code==='review-exists'?`已有 ${v.confirmed} / ${v.total} 份复盘被确认，请确认后再重新生成`:v.error||'没能开始生成复盘');}catch(e){setError(e.message);}finally{setBusy(false);}}
  const pj=plan.job,planRunning=pj?.status==='running',unconfirmed=has&&review.confirmed<review.total;
  return <div className="round-controls">
-  <div className="admin-actions"><label>复盘月份 <input aria-label="复盘月份" type="month" value={period} max={beijingDay().slice(0,7)} disabled={running||busy} onChange={e=>{const value=e.target.value;if(!value)return;setPeriod(value);setCutoffDay(monthEnd(value));}}/></label><label>证据截止 <input aria-label="复盘证据截止日期" type="date" value={cutoffDay} min={period+'-01'} max={monthEnd(period)} disabled={running||busy} onChange={e=>setCutoffDay(e.target.value)}/></label></div>
+  <div className="admin-target-controls"><label>复盘月份 <input aria-label="复盘月份" type="month" value={period} max={beijingDay().slice(0,7)} disabled={running||busy} onChange={e=>{const value=e.target.value;if(!value)return;setPeriod(value);setCutoffDay(monthEnd(value));}}/></label><label>证据截止 <input aria-label="复盘证据截止日期" type="date" value={cutoffDay} min={period+'-01'} max={monthEnd(period)} disabled={running||busy} onChange={e=>setCutoffDay(e.target.value)}/></label></div>
   <Stage title={`${period} 复盘`} skill={review?.skill} readAt={review?.readAt} generatedAt={review?.generatedAt||review?.loadedAt} model={review?.model||plan.currentModel} durationMs={review?.durationMs} button={has?'重新生成复盘':'生成复盘'} busy={busy} disabled={running} onConfirm={()=>start()}
    confirmText={has?`目标 ${period}，证据截止 ${cutoffDay}（北京时间）。${review.confirmed>0?`已有 ${review.confirmed} 份复盘被确认。`:''}重新读取本体、生成新的复盘：现有复盘和所有讨论归档保存，聊天框从新一轮开始，大家要重新确认。`:`读取本体、生成 ${period} 复盘，证据截止 ${cutoffDay}（北京时间）。生成好后各单元群会收到通知。`}
    status={<>{running&&<p className="admin-line is-running">正在生成复盘{job.total?`（${job.done||0}/${job.total}）`:''}</p>}{job?.status==='failed'&&<p className="admin-line is-failed">上次 {job.period} 复盘生成没完成：{job.error||'原因未记录'} <Button className="plain" isDisabled={busy} onPress={()=>start({resume:true})}>续跑</Button></p>}{/* Which review and what was wrong, not just “有 1 处问题” (陈溪南 2026-10-27). */}{job?.status==='failed'&&(job.checks||[]).length>0&&<ul className="admin-checks">{job.checks.map((c,i)=><li key={i}><strong>{c.title||c.unit||'全局'}</strong>{c.problem}</li>)}</ul>}{error&&<p className="admin-line is-failed" role="alert">{error}</p>}</>}
@@ -60,9 +61,10 @@ export function RoundControls({memberId,review,plan}){
    extra={plan.checks} status={<>{planRunning&&<p className="admin-line is-running">正在生成拆解{pj.total?`（${pj.done||0}/${pj.total}）`:''}</p>}{pj?.status==='failed'&&<p className="admin-line is-failed">上次生成没完成：{pj.error||'原因未记录'}</p>}</>}/>
  </div>;
 }
-export default function AdminPanel({onClose,...props}){
+export default function AdminPanel({onClose,canRunRounds=true,canDebugReviews=false,...props}){
  return <div className="overlay" onClick={onClose}><section className="document admin-panel" role="dialog" aria-modal="true" aria-label="管理" onClick={e=>e.stopPropagation()}>
   <div className="admin-head"><h2>管理</h2><Button className="icon" aria-label="关闭" onPress={onClose}><X size={18}/></Button></div>
-  <RoundControls {...props}/>
+  {canRunRounds&&<RoundControls {...props}/>}
+  {canDebugReviews&&<DebugReviewView/>}
  </section></div>;
 }

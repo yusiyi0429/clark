@@ -19,6 +19,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {generateRound,validateRound} from './round-runner.mjs';
 import {loadPublishedRound08,loadPublishedRound09,loadOntologyCandidate,loadBootstrap,skillLocation,reviewSkillLocation,seedRoot} from './deployment-data.mjs';
 import {createLegacyAuth} from './legacy-auth.mjs';
+import {mayDebugReviews,readDebugReviews,debugReviewAudit} from './debug-review.mjs';
 import {generationView,visibleReaderViews} from './deployment-projection.mjs';
 import {generateRoundV3} from './round-runner-v3.mjs';
 // Skill 3.x has its own flow (battlefields first, then domains); 2.x keeps the layered flow.
@@ -214,6 +215,7 @@ const readCache=new WeakMap();
 function cachedRead(state,key,build){let bodies=readCache.get(state);if(!bodies)readCache.set(state,bodies=new Map());if(!bodies.has(key))bodies.set(key,etagged(JSON.stringify(build())));return bodies.get(key);}
 async function body(req,limit=100000){let s='';for await(const b of req){s+=b;if(s.length>limit)throw new Error('请求太大');}const value=JSON.parse(s);if(req.m2Session?.memberId)value.memberId=req.m2Session.memberId;return value;}
 const markdownPreviews=new Map();
+const auditDebugReview=debugReviewAudit((process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)))+'.debug-access.jsonl');
 export const server=createServer(async(req,res)=>{
  let analyzedScope,analyzedRound,streamReply=false,streamTimer,refusalTo;
  try {
@@ -225,6 +227,7 @@ export const server=createServer(async(req,res)=>{
   const route=new URL(req.url,'http://localhost');
   try{req.m2Session=await authenticate(req,route.pathname);}catch(e){if(e.status===401&&req.method==='GET'&&route.pathname==='/'){res.writeHead(302,{Location:'/access','Cache-Control':'no-store'});return res.end();}throw e;}
   if(req.m2Session.memberId){route.searchParams.set('member',req.m2Session.memberId);}
+  if(route.pathname==='/api/debug-reviews')return json(res,200,await readDebugReviews({session:req.m2Session,targetId:route.searchParams.get('target'),state:store.snapshot(),method:req.method},auditDebugReview));
   // Installing a review run from the private seed folder: internal only (import-review.mjs inside the container).
   if(route.pathname==='/api/review-import'&&req.method==='POST'){if(!req.m2Session.internal)return json(res,403,{error:'只能在服务器内部导入复盘'});const b=await body(req);return json(res,200,await importReviewRound(store,b,{seedDir:seedRoot(),statePath:process.env.DECODING_STATE_PATH||fileURLToPath(new URL('.runtime/collaboration.json',root)),busy:roundFlight||auditFlight}));}
   if(route.pathname==='/api/markdown/export'&&req.method==='GET'){
@@ -381,7 +384,7 @@ export const server=createServer(async(req,res)=>{
    if(!proposal)return json(res,404,{error:'找不到可见修订卡'});
    try{return json(res,200,await summarizeProposal(proposal,view.drafts[proposal.cardId],{actorId:actor.id,roundId:state.round?.id,reviewLoadedAt:state.reviewRound?.loadedAt,scope:proposal.scope}));}catch{return json(res,502,{error:'修改摘要未生成，请重试'});}
   }
-  if(req.url==='/api/data'){const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state);const metadata=await roundMetadata(state.round,input);metadata.readerViews=visibleReaderViews(metadata.readerViews,state,actor);if(!actor.ceo)delete metadata.roundAudit;return revalidated(req,res,etagged(JSON.stringify({session:req.m2Session,canRunRounds:mayRunRounds(actor),review:reviewSummary(state),units:liveUnitsFrom(state).filter(u=>canRead(actor,state.cards[u.id])),round:state.round?.number||6,roundId:state.round?.id||null,skill:state.round?.input?.skill?.version||'旧轮未记录实际技能快照',availableSkill:loadedSkill.version,modelReady:ready,modelStatus:gateway.status,tracing:tracer.state(),chatModelStatus:chatGateway===gateway?null:chatGateway.status,auditStatus:state.round?.audit?.status||null,auditIssueCount:state.round?.audit?.issues?.length||0,auditGapCount:state.round?.audit?.gaps?.length||0,sourceTime:state.round?.input.retrievedAt||input.retrievedAt,...metadata})));}
+  if(req.url==='/api/data'){const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state);const metadata=await roundMetadata(state.round,input);metadata.readerViews=visibleReaderViews(metadata.readerViews,state,actor);if(!actor.ceo)delete metadata.roundAudit;return revalidated(req,res,etagged(JSON.stringify({session:req.m2Session,canRunRounds:mayRunRounds(actor),canDebugReviews:mayDebugReviews(req.m2Session.memberId),review:reviewSummary(state),units:liveUnitsFrom(state).filter(u=>canRead(actor,state.cards[u.id])),round:state.round?.number||6,roundId:state.round?.id||null,skill:state.round?.input?.skill?.version||'旧轮未记录实际技能快照',availableSkill:loadedSkill.version,modelReady:ready,modelStatus:gateway.status,tracing:tracer.state(),chatModelStatus:chatGateway===gateway?null:chatGateway.status,auditStatus:state.round?.audit?.status||null,auditIssueCount:state.round?.audit?.issues?.length||0,auditGapCount:state.round?.audit?.gaps?.length||0,sourceTime:state.round?.input.retrievedAt||input.retrievedAt,...metadata})));}
   if(['/api/agent','/api/nexus'].includes(req.url)&&req.method==='POST'){
    const b=await body(req), n=liveNodes().find(n=>n.id===b.context?.selection?.id),roundAtStart=store.snapshot().round?.id;
    if(!ready)return json(res,503,{error:'模型服务尚未配置。需在服务器配置 DECODING_API_BASE、DECODING_MODEL、DECODING_API_KEY；密钥不进入浏览器。'});
