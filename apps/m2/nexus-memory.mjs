@@ -1,3 +1,4 @@
+import {ownerReviewCorrectionPatch} from './owner-review-correction.mjs';
 import {ownerEditCommands,requestedEditPaths,automaticChangePaths,allChangesRequested,automaticValuesRequested} from './owner-edit-intent.mjs';
 import {splitProposal,patchPaths,pathsOverlap,remainingPatch} from './proposal-units.mjs';
 import {createHash,randomUUID} from 'node:crypto';
@@ -110,10 +111,13 @@ export function applyOwnerAnnotations(state,scope){
   if(p.requiresConfirmation||p.op||p.basis==='cascade'||p.fromParent||p.fromMission)continue;
   const card=next.cards[p.cardId],sources=[...next.comments,...next.messages].filter(e=>p.sourceIds.includes(e.id));
   const authors=new Set(sources.map(e=>e.author));
-  if(!card||roomOf(card)!==scope||authors.size!==1||!sources.length||!sources.every(e=>e.channel==='group'&&e.scope===scope&&explicitOwnerEdit(e,card,next)))continue;
+  if(!card||roomOf(card)!==scope||authors.size!==1||!sources.length||!sources.every(e=>e.channel==='group'&&e.scope===scope))continue;
+  const correction=sources.length===1&&ownerReviewCorrectionPatch(sources[0],card,p);
+  if(!correction&&!sources.every(e=>explicitOwnerEdit(e,card,next)))continue;
+  if(correction){const latest=new Map();for(const e of [...next.comments,...next.messages].filter(e=>e.channel==='group'&&e.scope===scope&&e.author!=='Nexus'&&(e.context?.selection?.id||(!e.general&&e.cardId))===card.id))latest.set(e.author,e);if([...latest.values()].some(e=>!authors.has(e.author)&&disagrees(e.text)))continue;}
   const requested=sources.flatMap(event=>requestedEditPaths(event,card.versions.find(v=>v.number===sourceBaseVersion(event,card,p))?.content||currentVersion(card).content));
-  if(!allChangesRequested(automaticChangePaths(p.before,p.patch),requested))continue;
-  if(!automaticChangePaths(p.before,p.patch).every(path=>sources.some(event=>automaticValuesRequested(event,card.versions.find(v=>v.number===sourceBaseVersion(event,card,p))?.content||currentVersion(card).content,p.before,p.patch,[path]))))continue;
+  if(!correction&&!allChangesRequested(automaticChangePaths(p.before,p.patch),requested))continue;
+  if(!correction&&!automaticChangePaths(p.before,p.patch).every(path=>sources.some(event=>automaticValuesRequested(event,card.versions.find(v=>v.number===sourceBaseVersion(event,card,p))?.content||currentVersion(card).content,p.before,p.patch,[path]))))continue;
   let actor;try{actor=memberActor([...authors][0],next);}catch{continue;}const v=currentVersion(card);
   if(!mayRevise(actor,card)||!String(v.content.owner||'').split(/[、,，\s]+/).includes(actor.name)||v.signatures?.length||card.confirmedVersion===v.number)continue;
   if(sources.some(e=>!sourceVersionCurrent(next,card,e,p,actor)))continue;
