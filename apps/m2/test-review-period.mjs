@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {mkdtemp} from 'node:fs/promises';import {join} from 'node:path';import {tmpdir} from 'node:os';
+import {mkdtemp,readFile,writeFile} from 'node:fs/promises';import {join} from 'node:path';import {tmpdir} from 'node:os';
 import {reviewTarget,monthEnd,defaultReviewPeriod} from './review-period.mjs';
 import {createReviewJobs} from './review-generation.mjs';
 import {openCollaborationStore,archivesPath} from './collaboration-store.mjs';
@@ -18,6 +18,7 @@ test('job and resume use frozen target rather than current month or replacement 
   const job=await jobs.start({id:'operator'},target,{now});assert.equal(job.period,target.period);assert.equal(job.cutoff,target.cutoff);
   const wait=async()=>{for(let i=0;i<100&&store.snapshot().reviewJob?.status==='running';i++)await new Promise(r=>setTimeout(r,10));};await wait();assert.equal(store.snapshot().reviewJob.status,'failed');assert.ok(requested[0].filter(k=>k.period).every(k=>k.period==='2026-10'));
   const resumed=await jobs.start({id:'operator'},{resume:true,period:'2026-11',cutoff:'2026-11-01T23:59:59+08:00'},{now:new Date('2026-12-02T03:00:00Z')});assert.equal(resumed.id,job.id);assert.equal(resumed.period,'2026-10');assert.equal(resumed.cutoff,target.cutoff);await wait();assert.ok(requested[1].filter(k=>k.period).every(k=>k.period==='2026-10'));
+  const workPath=join(dir,'review-jobs',job.id+'.json'),work=JSON.parse(await readFile(workPath,'utf8'));work.input={period:target.period,cutoff:target.cutoff,stages:[]};work.inputHash='tampered';await writeFile(workPath,JSON.stringify(work));await jobs.start({id:'operator'},{resume:true},{now});await wait();assert.match(store.snapshot().reviewJob.error,/冻结输入校验失败/);assert.equal(requested.length,2,'invalid frozen input must not reread World or call model');
  }finally{await store.close();}
 });
 test('month and cutoff use Beijing occurrence time even when events use UTC',async()=>{

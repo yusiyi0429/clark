@@ -1,3 +1,4 @@
+import {captureConfirmedFacts,verifyEvidenceBundle,addConfirmedFacts,evidenceHash} from './confirmed-review-evidence.mjs';
 import {reviewTarget,inReviewWindow,reviewDay} from './review-period.mjs';
 import {childContract,childVerdictProblem,objectExclusion} from './review-child-contract.mjs';
 // 复盘生成 (陈溪南 2026-10-23): the month-end review is generated inside the product, started from 管理 on her account,
@@ -354,7 +355,7 @@ export function rowFacts(c,r){
  return {expected:want.length,lines:(r?.facts||[]).length,missing:want.filter(w=>!lines.has(w.ref)&&!lines.has(w.item)).map(w=>w.item)};
 }
 function evidenceFacts(c,r){const ids=new Set((c.evidence||[]).map(e=>e.id));const used=[...new Set(JSON.stringify(r).match(/E\d+/g)||[])];return {missingIds:used.filter(id=>ids.size&&!ids.has(id)),usedCount:used.length};}
-const unitData=c=>({id:c.id,level:c.level,unit:c.unit,title:c.title,owner:c.owner,period:c.period,cutoff:c.cutoff,commitment:c.commitment,commitmentSource:c.commitmentSource,evidence:c.evidence,missing:c.missing,note:c.note,recordFacts:c.recordFacts,...(c.sourceBasis?{sourceBasis:c.sourceBasis}:{}),...(c.childCommitments?{childCommitments:c.childCommitments}:{}),...(c.tasks?.length?{tasks:c.tasks}:{}),...(c.expectedFacts?{expectedFacts:c.expectedFacts}:{})});
+const unitData=c=>({id:c.id,level:c.level,unit:c.unit,title:c.title,owner:c.owner,period:c.period,cutoff:c.cutoff,commitment:c.commitment,commitmentSource:c.commitmentSource,evidence:c.evidence,missing:c.missing,note:c.note,recordFacts:c.recordFacts,...(c.sourceBasis?{sourceBasis:c.sourceBasis}:{}),...(c.childCommitments?{childCommitments:c.childCommitments}:{}),...(c.tasks?.length?{tasks:c.tasks}:{}),...(c.expectedFacts?{expectedFacts:c.expectedFacts}:{}),...(c.m2EvidenceReceipt?{m2EvidenceReceipt:c.m2EvidenceReceipt}:{})});
 const fieldsHint='返回 JSON：{"analysis":"不展示的分析，600 字内","review":{按 round-stages.md「字段」写全本层字段}}';
 
 // Runs the skill's stages on a built input. `run` holds what is done so far (raw answers by call), so a failed run
@@ -513,11 +514,23 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
    if(trace)await setJob(tracer.ref(trace));
    const skill=await loadReviewSkill(skillRoot);
    tracer.annotate({metadata:{skill_version:skill.version,skill_hash:skill.hash.slice(0,12)}},trace);
-   if(work?.input&&work.skillSnapshot?.hash!==skill.hash&&skillAtLeast(skill.version,'2.1.10'))throw Error('复盘工作文件的技能版本不一致，请保留原任务并重新准备候选，不能混用旧输出');
+   if(work&&work.skillSnapshot?.hash!==skill.hash&&skillAtLeast(skill.version,'2.1.10'))throw Error('复盘工作文件的技能版本不一致，请保留原任务并重新准备候选，不能混用旧输出');
+   if(resume&&work&&(!work.m2ConfirmedSource||work.input&&!work.inputHash))throw Error('旧任务未冻结人工事实来源，请保留原任务并重新准备候选');
+   if(work?.input&&work.inputHash!==evidenceHash(work.input))throw Error('冻结输入校验失败，不能续跑变化后的输入');
+   if(work?.m2ConfirmedSource){verifyEvidenceBundle(work.m2ConfirmedSource);if(work.sourceInputsHash!==evidenceHash(work.sourceInputs||{}))throw Error('旧任务来源映射冻结校验失败');}
    if(work?.input&&(work.input.period!==period||work.input.cutoff!==cutoff))throw Error('续跑输入的月份或截止时间与原任务不一致，请保留原任务重新准备');
-   if(!work?.input){
+   if(!work){
+    const m2ConfirmedSource=store.snapshot().reviewJob?.m2ConfirmedSource;
+    if(!m2ConfirmedSource)throw Error('任务缺已确认人工事实来源快照，请保留原任务并重新准备候选');
+    verifyEvidenceBundle(m2ConfirmedSource);
+    const sourceInputs={};for(const id of new Set(m2ConfirmedSource.entries.map(e=>e.sourceJobId).filter(Boolean))){try{const previous=JSON.parse(await readFile(workFile(id),'utf8'));if(previous.input)sourceInputs[id]=previous.input;}catch(e){if(e.code!=='ENOENT')throw Error('旧生成来源无法读取：'+id);}}
+    work={skillSnapshot:{version:skill.version,hash:skill.hash},m2ConfirmedSource,sourceInputs,sourceInputsHash:evidenceHash(sourceInputs),run:{raw:{},reviews:{},failed:[],dropped:[]}};await save();
+   }
+   if(work.m2ConfirmedSource?.hash!==store.snapshot().reviewJob?.m2ConfirmedSource?.hash)throw Error('任务人工事实来源与冻结工作文件不一致');
+   if(!work.input){
     const sources=await tracer.withRun('read-ontology','tool',{stage:'read-ontology'},async()=>collectReviewSources({reader:await reader(),period,cutoff,onProgress:p=>setJob(p)}));
-    work={skillSnapshot:{version:skill.version,hash:skill.hash},input:buildReviewInput(sources,{companyDirection:await companyDirection(period),ceoName}),run:{raw:{},reviews:{},failed:[],dropped:[]}};await save();
+    work.input=addConfirmedFacts(buildReviewInput(sources,{companyDirection:await companyDirection(period),ceoName}),work.m2ConfirmedSource,work.sourceInputs);
+    work.inputHash=evidenceHash(work.input);await save();
    }
    await setJob({inputCutoff:work.input.readAt,skipped:work.input.skipped,skill:{version:skill.version,hash:skill.hash.slice(0,12)}});
    await runReviewSkill({gateway,skill,input:work.input,run:work.run,save:async r=>{work.run=r;await save();},onProgress:p=>setJob(p)});
@@ -558,7 +571,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
    if(resume){const old=s.reviewJob;if(old?.status!=='failed')throw Object.assign(Error('没有可续跑的复盘生成'),{status:409});reviewTarget({period:old.period,cutoff:old.cutoff},now);await setJob({status:'running',error:null,checks:[],finishedAt:null});run(old.id,{period:old.period,cutoff:old.cutoff,resume:true});return view(store.snapshot().reviewJob);}
    ({period,cutoff}=reviewTarget({period,cutoff},now));
    const id=randomUUID();
-   await store.transact(x=>{x.reviewJob={id,status:'running',stage:'准备读取本体',period,cutoff,startedBy:actor.id,createdAt:new Date().toISOString()};x.sequence++;return x;});
+   await store.transact(x=>{x.reviewJob={id,status:'running',stage:'准备读取本体',period,cutoff,m2ConfirmedSource:captureConfirmedFacts(x,{period,now:now.toISOString()}),startedBy:actor.id,createdAt:new Date().toISOString()};x.sequence++;return x;});
    run(id,{period,cutoff});
    return view(store.snapshot().reviewJob);
   },
