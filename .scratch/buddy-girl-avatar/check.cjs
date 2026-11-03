@@ -19,13 +19,16 @@ for (const [name, pivot] of [["head", "444 806"], ["body", "388 1182"], ["arm-pe
 }
 ok(/<\w+ data-part="mouth"(?! display="none")[^>]*>/.test(svg) && /data-part="mouth-open" display="none"/.test(svg), "平时的嘴露着、说话张嘴的变体默认藏着");
 ok(/data-part="eye-l-closed" display="none"/.test(svg) && /data-part="eye-r-closed" display="none"/.test(svg), "闭眼变体默认藏着");
+const grab = (s, part) => { const i = s.indexOf(`data-part="${part}"`); const open = s.lastIndexOf("<", i); const tag = s.slice(open + 1).match(/^\w+/)[0]; if (tag !== "g") return s.slice(open, s.indexOf(">", i) + 1); let depth = 0, j = open; const re = /<(\/?)g\b[^>]*>/g; re.lastIndex = open; let mm; while ((mm = re.exec(s))) { depth += mm[1] ? -1 : 1; if (depth === 0) { j = re.lastIndex; break; } } return s.slice(open, j); };
+for (const side of ["l", "r"]) {
+  ok(new RegExp(`<g clip-path="url\\(#\\{id\\}-[^"]+\\)"><g data-part="iris-${side}">`).test(grab(svg, `eye-${side}`)), `眼珠 iris-${side} 在 eye-${side} 里、套着眼眶的裁切：转眼只移眼珠，眨眼整只合上`);
+}
 const milesArtPath = process.argv[2];
 if (milesArtPath && fs.existsSync(milesArtPath)) {
   const m = fs.readFileSync(milesArtPath, "utf8");
   const milesArt = m.match(/export const MILES_ART = (\{.*?\}) as const;/)[1];
   ok(milesArt.replace(/\s/g, "") === art.replace(/\s/g, ""), `摆位常量和 MILES_ART 一致：${art}`);
   const milesSvg = readSvg(m, "MILES_SVG");
-  const grab = (s, part) => { const i = s.indexOf(`data-part="${part}"`); const open = s.lastIndexOf("<", i); const tag = s.slice(open + 1).match(/^\w+/)[0]; if (tag !== "g") return s.slice(open, s.indexOf(">", i) + 1); let depth = 0, j = open; const re = /<(\/?)g\b[^>]*>/g; re.lastIndex = open; let mm; while ((mm = re.exec(s))) { depth += mm[1] ? -1 : 1; if (depth === 0) { j = re.lastIndex; break; } } return s.slice(open, j); };
   // 复用的 Miles 部件换了肤色、描边颜色和粗细：只比形状（路径和椭圆的几何量）
   const geometry = (s) => (s.match(/\s(?:d|cx|cy|rx|ry|r|transform)="[^"]*"/g) || []).join("");
   for (const part of ["face", "ear-r", "ear-l", "airpod-r", "airpod-l", "nose", "arm-peace", "neck", "arm-r"]) {
