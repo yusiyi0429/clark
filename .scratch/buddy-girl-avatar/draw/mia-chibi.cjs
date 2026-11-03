@@ -224,4 +224,8 @@ function drawGirl() {
     + DEFS.join("") + handMask;
   return `<defs>${defs}</defs><g data-part="miles">${hairLong}${body}${head}<g mask="url(#{id}-hand)">${hand}</g></g>`;
 }
-module.exports = { drawGirl };
+/** 写进 girlArt.ts 文件头的说明（每行一句，gen.cjs 会补上和 rig 的约定）。 */
+const DOC = `
+女伙伴形象 Mia 的画（起点：第六版的画法，待重画）。
+`;
+module.exports = { drawGirl, DOC };
