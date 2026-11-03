@@ -15,7 +15,7 @@ import {runRoundPool} from './round-pool.mjs';
 import {redactMessages} from './redact.mjs';
 import {disagrees} from './stance.mjs';
 import {openCollaborationStore,archivesPath} from './collaboration-store.mjs';
-import {memberActor,sharedProjection} from './shared-projection.mjs';
+import {memberActor,sharedProjection,reviewJobProjection} from './shared-projection.mjs';
 import {randomUUID,createHash} from 'node:crypto';
 import {generateRound,validateRound} from './round-runner.mjs';
 import {loadPublishedRound08,loadPublishedRound09,loadOntologyCandidate,loadBootstrap,skillLocation,reviewSkillLocation,seedRoot} from './deployment-data.mjs';
@@ -131,6 +131,7 @@ const reviewJobs=createReviewJobs({store,gateway:reviewGateway,skillRoot:reviewS
  companyDirection:async period=>{try{const m=await loadOntologyManifest();return m.selections.filter(x=>x.unit==='company'&&(x.kind==='intent'||x.kind==='history'&&x.historyPeriod===period)).map(x=>x.text).join('\n\n');}catch{return '';}},
  installReviewRound,archivesPath});
 await reviewJobs.recover();
+const reviewJobFor=(state,actor)=>reviewJobProjection(state,actor,reviewJobs.view(),mayRunRounds(actor));
 // Nexus's synthesis under each review once insights are revealed; a failure is kept on the card, not hidden (2026-10-26).
 // 公开洞察: by the admin in 管理, or by itself at the review's due time (陈溪南 2026-10-27). Returns who had not written one.
 async function revealInsights(actor,{auto=false}={}){
@@ -266,9 +267,9 @@ export const server=createServer(async(req,res)=>{
     const bundle=privateAgentContext(snap,actor,{scope:q.get('scope')||undefined,...(q.get('card')?{selection:{id:q.get('card')}}:{}),canvasView:q.get('view')||undefined},snap.round?.input?.sources||[]);
     const stage=snap.reviewRound&&!snap.planHandoff?.generatedAt?'review':'plan';
     return json(res,200,{...bundle,stage,review:snap.reviewRound?{period:snap.reviewRound.period,dueAt:snap.reviewRound.dueAt||null,loadedAt:snap.reviewRound.loadedAt}:null,plan:snap.round?{period:snap.round.input?.period||null}:null,
-     notifications:notificationsFor(snap,actor.id,{reads:await readMarks.of(actor.id),jobs:{review:reviewJobs.view()}})});}
+     notifications:notificationsFor(snap,actor.id,{reads:await readMarks.of(actor.id),jobs:{review:reviewJobFor(snap,actor)}})});}
    catch(e){return json(res,e.status||400,{error:String(e.message||e)});}}
-  if(route.pathname==='/api/notifications'&&req.method==='GET'){const member=route.searchParams.get('member');try{const items=notificationsFor(store.snapshot(),member,{reads:await readMarks.of(member),jobs:{review:reviewJobs.view()}});const body=JSON.stringify({items,at:new Date().toISOString()}),etag='"'+createHash('sha256').update(JSON.stringify(items)).digest('hex').slice(0,20)+'"';if(req.headers['if-none-match']===etag){res.writeHead(304,{ETag:etag,'Cache-Control':'private, no-cache'});return res.end();}res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, no-cache',ETag:etag,'X-Content-Type-Options':'nosniff'});return res.end(body);}catch(e){return json(res,200,{items:[],error:'通知暂时取不到'});}}
+  if(route.pathname==='/api/notifications'&&req.method==='GET'){const member=route.searchParams.get('member');try{const state=store.snapshot(),actor=memberActor(member,state);const items=notificationsFor(state,member,{reads:await readMarks.of(member),jobs:{review:reviewJobFor(state,actor)}});const body=JSON.stringify({items,at:new Date().toISOString()}),etag='"'+createHash('sha256').update(JSON.stringify(items)).digest('hex').slice(0,20)+'"';if(req.headers['if-none-match']===etag){res.writeHead(304,{ETag:etag,'Cache-Control':'private, no-cache'});return res.end();}res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, no-cache',ETag:etag,'X-Content-Type-Options':'nosniff'});return res.end(body);}catch(e){return json(res,200,{items:[],error:'通知暂时取不到'});}}
   if(route.pathname==='/api/notifications/read'&&req.method==='POST'){const b=await body(req);if(!handoffProfiles[b.memberId])return json(res,400,{error:'请选择名单中的试用成员'});const ids=Array.isArray(b.ids)?b.ids.slice(0,20):[b.id];await readMarks.mark(b.memberId,ids.filter(Boolean));return json(res,200,{ok:true});}
   // 公开洞察 (陈溪南 2026-10-26): 管理 opens every review's insights at once; Nexus then writes its synthesis under each.
   if(route.pathname==='/api/reviews/reveal-insights'&&req.method==='POST'){const b=await body(req),actor=actorFor(b.memberId);if(!(actor?.ceo===true||roundOperators.includes(actor?.id)))return json(res,403,{error:'只有管理员能公开洞察'});
@@ -278,9 +279,7 @@ export const server=createServer(async(req,res)=>{
    if(req.method!=='GET')return json(res,405,{error:'草稿只支持只读查看'});
    return json(res,200,await reviewJobs.candidate(actorFor(req.m2Session.memberId)));
   }
-  if(route.pathname==='/api/reviews'&&req.method==='GET')return json(res,200,{job:reviewJobs.view()});
-  if(route.pathname==='/api/reviews'&&req.method==='POST'){const b=await body(req);try{return json(res,200,{job:await reviewJobs.start(actorFor(b.memberId),{regenerate:b.regenerate===true,resume:b.resume===true,period:b.period,cutoff:b.cutoff})});}catch(e){return json(res,e.status||500,{error:e.message,...(e.code?{code:e.code,total:e.total,confirmed:e.confirmed}:{})});}}
-  if(route.pathname==='/api/reviews'&&req.method==='GET')return json(res,200,{job:reviewJobs.view()});
+  if(route.pathname==='/api/reviews'&&req.method==='GET'){const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state);return json(res,200,{job:reviewJobFor(state,actor)});}
   if(route.pathname==='/api/reviews'&&req.method==='POST'){const b=await body(req);try{return json(res,200,{job:await reviewJobs.start(actorFor(b.memberId),{regenerate:b.regenerate===true,resume:b.resume===true,period:b.period,cutoff:b.cutoff})});}catch(e){return json(res,e.status||500,{error:e.message,...(e.code?{code:e.code,total:e.total,confirmed:e.confirmed}:{})});}}
   if(route.pathname==='/api/collaboration'&&req.method==='GET'){const state=store.snapshot(),member=route.searchParams.get('member');return revalidated(req,res,cachedRead(state,'collaboration:'+member,()=>sharedProjection(state,memberActor(member,state))));}
   if(req.url==='/api/rounds/import-published'&&req.method==='POST'){
