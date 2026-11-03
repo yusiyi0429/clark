@@ -196,6 +196,7 @@ describe("migration", () => {
         "218_issue_drafts_chat_origin.sql",
         "220_person_buddies.sql",
         "221_task_deliverables.sql",
+        "222_person_rail_backgrounds.sql",
       ]);
 
       // 幂等：重复执行不再变更

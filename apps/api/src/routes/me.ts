@@ -1,6 +1,7 @@
 import type { FastifyReply } from "fastify";
-import { Buddy, BuddyOrNull, PersonalProfileView, UpdatePersonalProfileRequest } from "@warmap/contracts";
+import { Buddy, BuddyOrNull, MAX_RAIL_IMAGE_BYTES, PersonalProfileView, RailBackground, SaveRailBackgroundRequest, UpdatePersonalProfileRequest } from "@warmap/contracts";
 import { BUDDY_NAME_UNITS, buddyNameUnits, readBuddy, saveBuddy } from "../buddy.js";
+import { RailBackgroundError, readRailBackground, readRailImage, saveRailBackground } from "../railBackground.js";
 import { Type } from "@sinclair/typebox";
 import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, ReturnTaskAcceptanceRequest, StandaloneMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, PlanCalendarResponse, Period, BattlefieldProgressResponse, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
@@ -61,6 +62,28 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     if (!units) return fail(reply, 400, "INVALID_INPUT", "伙伴要有名字");
     if (units > BUDDY_NAME_UNITS) return fail(reply, 400, "INVALID_INPUT", "伙伴的名字太长");
     return saveBuddy(q, req.person!.personId, req.body);
+  });
+
+  // 通知栏背景也只有本人读写。图片地址带 ?v=imageVersion，换图地址就变，所以图片本身可以长期缓存。
+  app.get("/api/me/rail-background", { preHandler: requirePerson, schema: { response: { 200: RailBackground } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return readRailBackground(q, req.person!.personId);
+  });
+  app.put("/api/me/rail-background", { preHandler: requirePerson, bodyLimit: Math.ceil(MAX_RAIL_IMAGE_BYTES / 3) * 4 + 64 * 1024,
+    schema: { body: SaveRailBackgroundRequest, response: { 200: RailBackground } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    try {
+      return await saveRailBackground(q, req.person!.personId, req.body);
+    } catch (error) {
+      if (error instanceof RailBackgroundError) return fail(reply, error.status, error.code, error.message);
+      throw error;
+    }
+  });
+  app.get("/api/me/rail-background/image", { preHandler: requirePerson }, async (req, reply) => {
+    const found = await readRailImage(q, req.person!.personId);
+    if (!found) return fail(reply, 404, "NOT_FOUND", "还没有上传过图片");
+    return reply.type(found.type).header("Cache-Control", "private, max-age=31536000, immutable")
+      .header("X-Content-Type-Options", "nosniff").send(found.image);
   });
 
   const names = () => personDisplayNames(peopleDirectory);

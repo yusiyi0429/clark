@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Modal, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, CalendarClock, ChevronRight, KeyRound, Link2, LogOut, Laptop, MessageCircle, Mic, PlugZap, Radar, RotateCcw, Settings, Settings2, Smile, X } from "lucide-react";
+import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, CalendarClock, ChevronRight, Image as ImageIcon, KeyRound, Link2, LogOut, Laptop, MessageCircle, Mic, PlugZap, Radar, RotateCcw, Settings, Settings2, Smile, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { feishuConnectHref, readFeishuConnection } from "@/lib/feishuLogin";
 import { logout } from "@/lib/logout";
@@ -20,6 +20,7 @@ import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import m from "@/styles/account-menu.module.css";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { BuddySettings } from "@/components/buddy/BuddySettings";
+import { RailBackgroundSettings } from "@/components/railBackground/RailBackgroundSettings";
 import { VoiceKeysDialog } from "@/conversation/VoiceKeysDialog";
 import { CollectorInstallPanel, useCollectorStatus } from "@/components/onboarding/CollectorSetup";
 import { CollectorReview } from "@/components/onboarding/ReviewLists";
@@ -48,7 +49,7 @@ export function accountSubtitle(account: Account, demo: boolean): string {
   return [account.loginId, account.role === "ceo" ? "CEO" : "成员"].filter(Boolean).join(" · ");
 }
 
-type Dialog = "voiceprint" | "radar" | "connection" | "collector" | "coagent" | "passcode" | "voice" | "profile" | "wechat" | null;
+type Dialog = "voiceprint" | "radar" | "connection" | "collector" | "coagent" | "railBackground" | "passcode" | "voice" | "profile" | "wechat" | null;
 
 export function AccountMenu({ account, compact = false, onNavigate }: { account: Account; compact?: boolean; onNavigate?: (href: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -200,6 +201,10 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                         <Smile size={16} aria-hidden="true" />
                         伙伴形象
                       </Button>
+                      <Button variant="ghost" className={m.item} onPress={() => pick("railBackground")}>
+                        <ImageIcon size={16} aria-hidden="true" />
+                        通知栏背景
+                      </Button>
                       <Button variant="ghost" className={m.item} onPress={() => pick("passcode")}>
                         <KeyRound size={16} aria-hidden="true" />
                         修改口令
@@ -286,6 +291,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
         </MenuDialog>
       ) : null}
       {dialog === "coagent" ? <MenuDialog title="伙伴形象" wide onClose={() => setDialog(null)}><BuddySettings onDone={() => setDialog(null)} /></MenuDialog> : null}
+      {dialog === "railBackground" ? <MenuDialog title="通知栏背景" wide onClose={() => setDialog(null)}><RailBackgroundSettings /></MenuDialog> : null}
       {dialog === "voice" ? <VoiceKeysDialog onClose={() => setDialog(null)} /> : null}
       {dialog === "connection" ? <MenuDialog title="连接到外部工具" wide onClose={() => setDialog(null)}><ConnectionDialog role={account.role} /></MenuDialog> : null}
       {dialog === "wechat" ? <MenuDialog title="连接微信" onClose={() => setDialog(null)}><WechatConnectPanel onChange={setWechat} /></MenuDialog> : null}

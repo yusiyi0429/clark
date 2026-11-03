@@ -15,6 +15,7 @@ import { RequestNotices, type RequestCounts } from "@/components/requests/Reques
 import { RequestListPanel } from "@/components/requests/RequestListScreen";
 import { MeetingCardNoticeList, useMeetingRecords } from "@/components/meeting/MeetingCardNotices";
 import { useFeishuEvents } from "@/components/meeting/useFeishuEvents";
+import { railBackgroundProps, useRailBackground } from "@/components/railBackground/useRailBackground";
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { logout } from "@/lib/logout";
@@ -26,6 +27,7 @@ import { MemberMeetingSchedule } from "./MemberMeetingSchedule";
 import { memberNoticeGroups, quietNoticeCount } from "./memberNotices";
 import { useMemberHome } from "./useMemberHome";
 import n from "@/styles/notifications.module.css";
+import rb from "@/styles/rail-background.module.css";
 import m from "@/styles/member-home.module.css";
 
 const NO_REQUESTS: RequestCounts = { items: 0, waitingReplies: 0 };
@@ -38,6 +40,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
   const home = useMemberHome();
   // 首页计划和通知栏的「待归位」用同一份。
   const plan = useHomePlan();
+  const railBackground = useRailBackground();
   const records = useMeetingRecords();
   const feishuEvents = useFeishuEvents();
   const radarSignals = noteworthySignals(home.radar);
@@ -46,7 +49,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
     <WorkspaceFrame homeHref="/me" viewerId={viewerId} account={account} agentTitle="我的对话"
       home={<MemberHomeBody displayName={displayName} home={home} plan={plan} account={account} waitingReplies={requests.waitingReplies} />}
       notifications={(api, currentHref) => (
-        <aside className={n.rail} aria-label="通知">
+        <aside className={`${n.rail} ${rb.bg}`} {...railBackgroundProps(railBackground)} aria-label="通知">
           <RailClock
             homeActive={!api.detailOpen}
             onHome={() => api.navigate("/me")}

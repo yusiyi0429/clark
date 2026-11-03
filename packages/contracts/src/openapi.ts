@@ -13,6 +13,7 @@ import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse
 import { UsageResponse, OnboardingStepUsageRequest } from "./usage.js";
 import { PersonalProfileView, UpdatePersonalProfileRequest } from "./personalProfile.js";
 import { Buddy, BuddyForm } from "./buddy.js";
+import { RailBackground, RailBackgroundChoice, SaveRailBackgroundRequest } from "./railBackground.js";
 import { DeliverableDissentRequest, DeliverableItem, DeliverableNote, DeliverableNotePatch, DeliverableReview, DeliverableVersion, ReviewCriterion, TaskDeliverableResponse, TaskDeliverableStatus } from "./deliverables.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
@@ -1951,6 +1952,24 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "保存后的伙伴", content: { "application/json": { schema: { $ref: "#/components/schemas/Buddy" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse },
         },
       },
+      "/api/me/rail-background": {
+        get: {
+          operationId: "getRailBackground", summary: "读取本人给左边通知栏选的背景；没选过是雾蓝（mist）",
+          responses: { "200": { description: "本人的通知栏背景", content: { "application/json": { schema: { $ref: "#/components/schemas/RailBackground" } } } }, "401": errorResponse },
+        },
+        put: {
+          operationId: "saveRailBackground", summary: "本人换通知栏背景：选一张预设，或上传自己的图",
+          requestBody: jsonBody({ $ref: "#/components/schemas/SaveRailBackgroundRequest" }),
+          responses: { "200": { description: "保存后的通知栏背景", content: { "application/json": { schema: { $ref: "#/components/schemas/RailBackground" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "413": errorResponse },
+        },
+      },
+      "/api/me/rail-background/image": {
+        get: {
+          operationId: "getRailBackgroundImage", summary: "本人上传的那张通知栏背景图（地址带 ?v=imageVersion，可长期缓存）",
+          parameters: [{ name: "v", in: "query", required: false, schema: { type: "string" } }],
+          responses: { "200": { description: "图片", content: { "image/jpeg": { schema: { type: "string", format: "binary" } }, "image/png": { schema: { type: "string", format: "binary" } }, "image/webp": { schema: { type: "string", format: "binary" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
       "/api/me/tokens": {
         get: {
           operationId: "listPersonalTokens", summary: "列出本人未撤销的个人 MCP 令牌",
@@ -3323,6 +3342,9 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         UpdatePersonalProfileRequest: UpdatePersonalProfileRequest as JsonSchema,
         Buddy: Buddy as JsonSchema,
         BuddyForm: BuddyForm as JsonSchema,
+        RailBackground: RailBackground as JsonSchema,
+        RailBackgroundChoice: RailBackgroundChoice as JsonSchema,
+        SaveRailBackgroundRequest: SaveRailBackgroundRequest as JsonSchema,
         CreatePersonalTokenRequest: CreatePersonalTokenRequest as JsonSchema,
         CreatePersonalTokenResponse: CreatePersonalTokenResponse as JsonSchema,
         CollectorHeartbeatRequest: CollectorHeartbeatRequest as JsonSchema,

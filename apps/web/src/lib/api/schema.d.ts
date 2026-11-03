@@ -2824,6 +2824,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/rail-background": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取本人给左边通知栏选的背景；没选过是雾蓝（mist） */
+        get: operations["getRailBackground"];
+        /** 本人换通知栏背景：选一张预设，或上传自己的图 */
+        put: operations["saveRailBackground"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/rail-background/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人上传的那张通知栏背景图（地址带 ?v=imageVersion，可长期缓存） */
+        get: operations["getRailBackgroundImage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/tokens": {
         parameters: {
             query?: never;
@@ -9380,6 +9415,15 @@ export interface components {
             form: "classic" | "alive" | "panda" | "miles";
         };
         BuddyForm: "classic" | "alive" | "panda" | "miles";
+        RailBackground: {
+            choice: "mist" | "dusk" | "pine" | "night" | "sand" | "custom";
+            imageVersion: string | null;
+        };
+        RailBackgroundChoice: "mist" | "dusk" | "pine" | "night" | "sand" | "custom";
+        SaveRailBackgroundRequest: {
+            choice: "mist" | "dusk" | "pine" | "night" | "sand" | "custom";
+            image?: string;
+        };
         CreatePersonalTokenRequest: {
             name: string;
             client: "codex" | "claude" | "other" | "collector";
@@ -22715,6 +22759,137 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getRailBackground: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本人的通知栏背景 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RailBackground"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    saveRailBackground: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveRailBackgroundRequest"];
+            };
+        };
+        responses: {
+            /** @description 保存后的通知栏背景 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RailBackground"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getRailBackgroundImage: {
+        parameters: {
+            query?: {
+                v?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 图片 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
