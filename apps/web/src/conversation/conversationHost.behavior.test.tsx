@@ -403,13 +403,13 @@ describe("伙伴露脸（spec 5.5）", () => {
     expect(rail().coagent?.props.skin).toBe("panda");
   });
 
-  it("首页输入条收起时的主按钮也用伙伴的名字；没有伙伴时不传", () => {
+  it("首页输入条收起时的主按钮也用本人的伙伴（名字和形象）；没有伙伴时传 null", () => {
     const { props, render } = setup();
     props.rail = false;
     render();
-    expect((harness.dock as unknown as { agentName?: string }).agentName).toBeUndefined();
+    expect((harness.dock as unknown as { buddy?: unknown }).buddy).toBeNull();
     harness.buddy = { name: "团团", form: "classic" };
     render();
-    expect((harness.dock as unknown as { agentName?: string }).agentName).toBe("团团");
+    expect((harness.dock as unknown as { buddy?: unknown }).buddy).toEqual({ name: "团团", form: "classic" });
   });
 });

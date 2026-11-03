@@ -114,10 +114,15 @@ describe("全局输入条（clark workspace 614–640）", () => {
     expect(html).not.toContain("对话记录");
   });
 
-  it("选了伙伴：主按钮写伙伴的名字「对话团团」", () => {
-    const html = dock({ agentName: "团团" });
+  it("选了伙伴：主按钮前面是伙伴的小号形象、写「对话团团」；没选时是默认胶囊；Miles 也写名字", () => {
+    const html = dock({ buddy: { name: "团团", form: "alive" } });
     expect(html).toContain("对话团团");
     expect(html).not.toContain("对话天枢");
+    expect(html).toMatch(/data-place="entry" data-skin="alive"/);
+    expect(dock()).toMatch(/data-place="entry" data-skin="classic"/);
+    const miles = dock({ buddy: { name: "miles", form: "miles" } });
+    expect(miles).toMatch(/data-place="entry" data-skin="miles"/);
+    expect(miles).toContain("对话miles");
   });
 
   it("键盘面：首页占位「问点什么，或者说要约的会…」，二级页「继续讨论…」，批注后改为围绕批注", () => {

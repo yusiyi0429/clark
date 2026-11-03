@@ -3,7 +3,8 @@
 import { useCallback, useLayoutEffect, useRef, type RefObject } from "react";
 import { ChevronDown, Maximize2, Minimize2 } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
-import { TianshuMark } from "@/components/TianshuMark";
+import { BuddyMark } from "@/components/buddy/BuddyMark";
+import type { Buddy } from "@/components/buddy/useBuddy";
 import { SelectionToolbar, useSelectionQuote } from "@/components/SelectionQuote";
 import { AttachmentStatus } from "./ConversationAttachments";
 import { ConversationHistoryState, conversationOwner } from "./ConversationHistoryState";
@@ -20,7 +21,7 @@ import t from "@/styles/conversation-transcript.module.css";
 
 /**
  * 对话记录（clark `ConversationHistorySheet`）：从输入条升起的浅色阅读面，非模态。
- * 没有页头横条（D1）：正文从顶部开始；左上一颗圆形液态玻璃的星标（只是标识），右上一颗同样的「收起 ⌄」。
+ * 没有页头横条（D1）：正文从顶部开始；顶上正中是本人的伙伴（回答进行中在说话），左上是放大 ⤢（有时才有），右上一颗圆形液态玻璃的「收起 ⌄」（11/03 用户定：去掉左上的天枢标识、⤢ 挪到左边）。
  * 点对话层外的空白处、Esc 也收起（宿主在对话层外放一层透明的点击区，不盖遮罩）。附件键在输入条上（D2）。记录归谁写在 data-conversation-owner 上。
  * 输入条上方没有气泡（D6）：听写出错（notice）、发送失败（data.error）都作为轻提示写在这里。
  * 载入中、没读到、真的没有记录分开画。提案卡插在触发它的那轮回答之后（ConversationTimeline，B5）。
@@ -34,7 +35,7 @@ import t from "@/styles/conversation-transcript.module.css";
  * 滚动区一开始就是终态尺寸、贴着外框左上角，正文只在第一帧按终值排一次；流式上屏、思考追加、各处 ResizeObserver
  * 都等过渡结束再一次补齐（resizeGate）。
  */
-export function ConversationHistorySheet({ data, label, global, onClose, anchor = "end", onQuote, composerRef, notice, leaving = false, wide = false, onWide }: {
+export function ConversationHistorySheet({ data, label, global, onClose, anchor = "end", onQuote, composerRef, notice, leaving = false, wide = false, onWide, buddy = null }: {
   data: ConversationData; label: string; global: boolean; onClose: () => void;
   /** 打开时停在哪：底部（默认），或最后一条回答的开头（从首页气泡点开）。 */
   anchor?: ScrollAnchor;
@@ -50,6 +51,8 @@ export function ConversationHistorySheet({ data, label, global, onClose, anchor 
   wide?: boolean;
   /** 给了才画 ⤢ / ⤡。 */
   onWide?: (wide: boolean) => void;
+  /** 本人的伙伴：页头正中画它，没选时是默认胶囊。 */
+  buddy?: Buddy | null;
 }) {
   const empty = data.historyStatus !== "loading" && data.historyStatus !== "error" && data.messages.length === 0 && !data.streaming;
   const owner = conversationOwner(global ? "global" : data.scope, label);
@@ -75,9 +78,7 @@ export function ConversationHistorySheet({ data, label, global, onClose, anchor 
       data-wide={wide || undefined}>
       {/* 顶部不放拖拽条也不放页头：一道磨砂渐隐，正文滚上来在这里淡出，不撞两颗圆键。 */}
       <div className={w.sheetFade} aria-hidden data-testid="conversation-sheet-fade" />
-      <span className={`${w.glassButton} ${w.sheetMark}`} aria-hidden data-testid="conversation-sheet-mark">
-        <TianshuMark className={w.chatBrandMark} />
-      </span>
+      <span className={w.sheetBuddy} data-testid="conversation-sheet-buddy"><BuddyMark buddy={buddy} place="sheet" active={data.streaming} /></span>
       {onWide ? (
         <HeroButton variant="ghost" size="sm" isIconOnly className={`${w.glassButton} ${w.sheetWideKey}`} onPress={() => onWide(!wide)}
           data-desk-key title={wide ? "收起" : "深度讨论"} aria-label={wide ? "收起" : "深度讨论"} aria-expanded={wide}>

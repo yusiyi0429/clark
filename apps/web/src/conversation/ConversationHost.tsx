@@ -184,14 +184,14 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, buddy, ui }:
           <button type="button" className={w.historyBackdrop} data-testid="conversation-backdrop" aria-label="关闭对话记录" onClick={closeHistory}
             data-leaving={sheet.leaving || undefined} tabIndex={sheet.leaving ? -1 : undefined} />
           <ConversationHistorySheet data={data} label={target.label} global={global} onClose={closeHistory} composerRef={dockRef} leaving={sheet.leaving}
-            wide={canWide && sheetWide} onWide={canWide ? setSheetWide : undefined}
+            wide={canWide && sheetWide} onWide={canWide ? setSheetWide : undefined} buddy={buddy}
             notice={dictationError} onQuote={(text) => ui.quoteInConversation(text, { scope: target.scope, intent: MESSAGE_REPLY })} />
         </>
       ) : null}
       <ConversationDock
         data={data}
         label={target.label}
-        agentName={buddy?.name}
+        buddy={buddy}
         attention={attention}
         global={global}
         detail={detailOpen}

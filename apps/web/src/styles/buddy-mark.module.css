@@ -1,0 +1,30 @@
+/*
+ * 伙伴形象的小号（components/buddy/BuddyMark）。横放胶囊按 --coagent-capsule-* 缩，眼睛、耳朵这些按原尺寸画，
+ * 所以先画成两倍大、再整体缩一半，比例和大号一样。Miles 的画在 SVG 里，整体缩放即可。
+ * 缩放放在 .scale 这一层：形象自己出场的动画（capsuleIn）会改写它根元素上的 transform。
+ */
+
+.mark { display: block; flex: none; pointer-events: none; }
+.scale { display: block; transform-origin: 0 0; }
+
+/* 页头正中：和两颗圆键同高的一条里居中。 */
+.mark[data-place="sheet"] { --coagent-capsule-width: 208px; --coagent-capsule-height: 64px; width: 104px; height: 32px; }
+.mark[data-place="sheet"] .scale { transform: scale(.5); }
+.mark[data-place="sheet"][data-skin="miles"] { width: 56px; height: 53px; }
+.mark[data-place="sheet"][data-skin="miles"] .scale { transform: translateX(-50%) scale(.8); transform-origin: 50% 0; margin-left: 50%; width: max-content; }
+
+/* 入口胶囊里，替掉原来的聊天图标。 */
+.mark[data-place="entry"] { --coagent-capsule-width: 68px; --coagent-capsule-height: 44px; width: 34px; height: 22px; }
+.mark[data-place="entry"] .scale { transform: scale(.5); }
+
+/*
+ * Miles：只露出胶囊上沿以上的半身（整块 66 高，写名字的小胶囊在下面 22，上沿在 44 处），缩到 0.8 后露出约 35，
+ * 贴着入口胶囊的上沿居中站着，看起来是从入口胶囊里探出来；名字已经写在入口胶囊上。
+ */
+.mark[data-place="entry"][data-skin="miles"] {
+  position: absolute; left: 50%; bottom: calc(100% - 1px); width: 56px; height: 35px; overflow: hidden;
+  transform: translateX(-50%);
+}
+.mark[data-place="entry"][data-skin="miles"] .scale { transform: translateX(-50%) scale(.8); transform-origin: 50% 0; margin-left: 50%; width: max-content; }
+/* 探出来的半身也算入口：点它和点胶囊一样打开对话。 */
+.mark[data-place="entry"][data-skin="miles"] { pointer-events: auto; cursor: pointer; }

@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { TextArea as HeroTextArea } from "@heroui/react";
-import { ArrowUp, ArrowUpRight, Keyboard, MessageCircle, Mic, Square, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Keyboard, Mic, Square, X } from "lucide-react";
 import clsx from "clsx";
 import type { Card } from "@/lib/api/client";
 import { HeroButton } from "@/components/HeroButton";
@@ -17,13 +17,15 @@ import { useAnswerOptionFill } from "./answerOptions";
 import { VoiceKeysDialog, voiceIntroDue } from "./VoiceKeysDialog";
 import { quotedMessage, storedDraft, type QuotePrefill, type TextQuote } from "./quotes";
 import { useExitPresence } from "@/lib/motion";
+import { BuddyMark } from "@/components/buddy/BuddyMark";
+import type { Buddy } from "@/components/buddy/useBuddy";
 import d from "@/styles/conversation-dock.module.css";
 
 /** 收起打字面时附件键收窄淡出的时长：与输入条宽度过渡（conversation-dock.module.css .dock width 340ms）一致。 */
 const ATTACH_EXIT_MS = 340;
 
 /**
- * 全局输入条（clark `workspace.tsx` 614–640）：收起时只有一颗白色胶囊「对话天枢」（没有外面那层灰底），展开后是附件、小麦克风、输入框、发送。
+ * 全局输入条（clark `workspace.tsx` 614–640）：收起时只有一颗白色胶囊「对话天枢」（没有外面那层灰底；前面是本人伙伴的小号形象，Miles 从胶囊上沿探出半身；回答进行中、收着来了新话时它在说话），展开后是附件、小麦克风、输入框、发送。
  * 没有历史键、没有输入条上方的气泡（D2 / D6）：点「对话天枢」（或按唤醒键，见 wakeKey.ts）就是展开输入框、打开对话层，
  * 所有消息、出错说明都在对话层里；宿主把 keyboard 与对话层开合绑在一起。
  * 语音主要交给微信输入法；小麦克风是天枢自己的听写（useDictation），和附件键一样不起眼：文字边说边进输入框（带下划线，
@@ -37,7 +39,7 @@ const ATTACH_EXIT_MS = 340;
 export const ConversationDock = memo(function ConversationDock({
   data,
   label,
-  agentName,
+  buddy = null,
   attention = false,
   global,
   detail,
@@ -308,8 +310,8 @@ export const ConversationDock = memo(function ConversationDock({
               onKeyboardChange(true);
               if (voiceIntroDue()) setVoiceKeys(true);
             }} aria-expanded={false}>
-              <MessageCircle size={18} strokeWidth={1.8} aria-hidden />
-              <span>对话{agentName ?? "天枢"}</span>
+              <BuddyMark buddy={buddy} place="entry" active={attention || busy} />
+              <span>对话{buddy?.name ?? "天枢"}</span>
             </button>
           </div>
           <div className={d.textLayer} aria-hidden={!keyboard} inert={!keyboard}>
@@ -397,8 +399,8 @@ export const ConversationDock = memo(function ConversationDock({
 type DockProps = {
   data: ConversationData;
   label: string;
-  /** 本人给伙伴起的名字：收起时的主按钮写「对话<名字>」，没选伙伴时写「对话天枢」。 */
-  agentName?: string;
+  /** 本人的伙伴：收起时的主按钮前面画它的形象、写「对话<名字>」；没选伙伴时是默认胶囊、写「对话天枢」。 */
+  buddy?: Buddy | null;
   /** 收着时伙伴有没看过的新话（unseenReply）：主按钮外缘带一圈淡淡的流光。 */
   attention?: boolean;
   /** 全局对话：引用只属于它（clark：引用为全局对话准备草稿）。 */

@@ -43,7 +43,6 @@
 .chatWelcome p{font-size:21px;margin-bottom:25px}
 .chatWelcome button{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:15px 0;width:100%;border:0;border-bottom:1px solid #ffffff1a;background:none;font-size:14px}
 .sheetHeader .chatBrand{display:flex;align-items:center;gap:11px}
-.chatBrandMark{width:30px;height:30px;flex:none;--brand-deep:#72a7ed;--brand-bright:#c1e3ff}
 .historySheet{left:calc(var(--main-start) + var(--chat-inset));right:calc(var(--shell-edge) + var(--chat-inset));height:calc(100dvh - clamp(72px,10vh,136px) - 16px);max-height:none;background:#252527;border-color:#ffffff24;border-radius:28px;box-shadow:0 24px 80px #10101826,inset 0 1px 0 #ffffff0b;animation:historyRise 340ms cubic-bezier(.22,1,.36,1) both}
 /* 没有页头横条（D1）：正文从顶部开始，上留白只让开两角那两颗圆键。 */
 .historySheet .sheetScroll{position:relative;padding:44px 36px 130px;flex:1;scroll-padding-bottom:130px}
@@ -55,16 +54,13 @@
 .historySheet[data-material=meeting]{--sheet-fade:#eef3f5e6}
 @media(prefers-reduced-transparency:reduce){.historySheet .sheetFade{-webkit-backdrop-filter:none;backdrop-filter:none}}
 .historySheet .glassButton{position:absolute;z-index:4;top:10px;display:grid;place-items:center;width:38px;height:38px;min-width:38px;min-height:38px;padding:0;border:1px solid #ffffffb3;border-radius:50%;background:#ffffff8c;-webkit-backdrop-filter:blur(14px) saturate(170%);backdrop-filter:blur(14px) saturate(170%);box-shadow:0 2px 10px #1d29351a,inset 0 1px #fff;color:#5c626d}
-.historySheet .sheetMark{left:12px;pointer-events:none}
-.historySheet .sheetMark .chatBrandMark{width:18px;height:18px}
+/* 页头正中的伙伴（BuddyMark）：和两颗圆键（top 10、高 38）同一条中线。 */
+.historySheet .sheetBuddy{position:absolute;z-index:4;top:29px;left:50%;transform:translate(-50%,-50%);pointer-events:none}
 .historySheet .sheetCollapse{right:12px;cursor:pointer;transition:background 150ms ease,color 150ms ease,transform 150ms ease}
 .historySheet .sheetCollapse::after{content:'';position:absolute;inset:-3px;border-radius:50%}
 .historySheet .sheetCollapse:hover{background:#ffffffc7;color:#3f4754}
 .historySheet .sheetCollapse:active{transform:scale(.94)}
 .historySheet .sheetCollapse:focus-visible{outline:2px solid #3A83F788;outline-offset:2px}
-.historySheet[data-tone=light] .chatBrandMark{--brand-deep:#566e8a;--brand-bright:#8ea6c4}
-.historySheet[data-material=monthly] .chatBrandMark{--brand-deep:#927642;--brand-bright:#c9a45a}
-.historySheet[data-material=meeting] .chatBrandMark{--brand-deep:#536b91;--brand-bright:#8fa7a0}
 @media(prefers-reduced-transparency:reduce){.historySheet .glassButton{background:#f8f9fb;-webkit-backdrop-filter:none;backdrop-filter:none}}
 /* ↓ 回到最新（D3）：按对话层定位、水平居中，底边贴在输入条上沿之上 12px；--jump-bottom 由 useComposerClearance 按实际位置写入。 */
 .historySheet .historyJump{position:absolute;left:0;right:0;bottom:var(--jump-bottom,84px)}
@@ -97,7 +93,7 @@
 .historySheet[data-resizing] .sheetFade{-webkit-backdrop-filter:none;backdrop-filter:none;-webkit-mask-image:none;mask-image:none}
 .historySheet[data-resizing] .glassButton{background:#f8f9fb;-webkit-backdrop-filter:none;backdrop-filter:none}}
 @media(min-width:1800px){.historySheet[data-resizing]:not([data-wide]) .sheetScroll{width:calc(min(652px,calc(100vw - var(--main-start) - var(--shell-edge))) - 2px)}}
-.historySheet .sheetWideKey{right:58px;cursor:pointer;transition:background 150ms ease,color 150ms ease,transform 150ms ease}
+.historySheet .sheetWideKey{left:12px;cursor:pointer;transition:background 150ms ease,color 150ms ease,transform 150ms ease}
 .historySheet .sheetWideKey:hover{background:#ffffffc7;color:#3f4754}
 .historySheet .sheetWideKey:active{transform:scale(.94)}
 .historySheet .sheetWideKey:focus-visible{outline:2px solid #3A83F788;outline-offset:2px}
