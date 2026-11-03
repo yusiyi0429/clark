@@ -25,15 +25,24 @@ export function reviewCards(file,{now=new Date().toISOString()}={}){
 }
 const object=value=>value&&typeof value==='object'&&!Array.isArray(value);
 const textFields=(row,fields)=>object(row)&&fields.every(field=>row[field]==null||typeof row[field]==='string');
-export const completeReviewCard=review=>object(review)&&typeof review.verdict==='string'&&typeof review.verdictReason==='string'&&
- Array.isArray(review.facts)&&review.facts.every(row=>textFields(row,['ref','item','owner','status','evidence','gap']))&&
+// 漏行 measured, not judged: which Tasks / Missions / units the input has and the fact lines do not.
+export function rowFacts(c,r){
+ const want=c.level==='mission'?(c.tasks?.length?c.tasks.map(t=>({ref:t.ref,item:t.title})):(c.expectedFacts||[])):c.children?.length?c.children.map(id=>({ref:id,item:id})):(c.expectedFacts||[]);
+ const lines=new Set((r?.facts||[]).flatMap(f=>[f.ref,f.item]));
+ return {expected:want.length,lines:(r?.facts||[]).length,missing:want.filter(w=>!lines.has(w.ref)&&!lines.has(w.item)).map(w=>w.item)};
+}
+export const REVIEW_VERDICTS=Object.freeze(['达成','部分达成','未达成']);
+export const completeReviewCard=(review,card)=>object(review)&&REVIEW_VERDICTS.includes(review.verdict)&&typeof review.verdictReason==='string'&&review.verdictReason.trim()!==''&&
+ Array.isArray(review.facts)&&review.facts.length>0&&review.facts.every(row=>textFields(row,['ref','item','owner','status','evidence','gap'])&&
+  typeof row.item==='string'&&row.item.trim()!==''&&(REVIEW_VERDICTS.includes(row.status)||row.status==='未开始'))&&
+ (!card||rowFacts(card,review).missing.length===0)&&
  Array.isArray(review.nextInputs)&&review.nextInputs.every(row=>textFields(row,['ref','type','text'])&&
   (row.ask==null||textFields(row.ask,['to','question']))&&
   (row.covers==null||Array.isArray(row.covers)&&row.covers.every(object))&&
   (row.questionCoverBindings==null||object(row.questionCoverBindings)&&Array.isArray(row.questionCoverBindings.rows)&&row.questionCoverBindings.rows.every(object)));
 export function completeReviewSet(input,reviews){
  const items=input.stages.flat();
- return items.some(item=>item.id==='company')&&Object.keys(reviews).length===items.length&&items.every(item=>completeReviewCard(reviews[item.id])&&reviews[item.id].ref===item.id&&reviews[item.id].level===item.level);
+ return items.some(item=>item.id==='company')&&Object.keys(reviews).length===items.length&&items.every(item=>completeReviewCard(reviews[item.id],item)&&reviews[item.id].ref===item.id&&reviews[item.id].level===item.level);
 }
 export const reviewableQuality=quality=>quality?.delivery==='reviewable'&&['passed','needs-review','check-incomplete'].includes(quality.status);
 export const reviewQualityChecks=quality=>[...(quality?.remaining||[]),...(quality?.verificationPending||[]).flatMap(issue=>[issue,...(issue.checks||[]).filter(check=>check&&typeof check==='object')])];

@@ -198,10 +198,10 @@ test('one repair batch and scoped recheck install a complete round with remainin
 });
 
 test('failed first check delivers a complete draft as check-incomplete, but damaged initial output cannot install',async()=>{
- for(const broken of [false,true]){
+ for(const broken of [null,{verdict:'未达成'},{verdict:' ',verdictReason:' ',facts:[],nextInputs:[]}]){
   const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{
    const p=JSON.parse(messages[1].content);
-   if(p.unit)return {answer:JSON.stringify({review:broken?{verdict:'未达成'}:review})};
+   if(p.unit)return {answer:JSON.stringify({review:broken||{...review,facts:review.facts.map(row=>({...row,evidence:''}))}})};
    throw Object.assign(Error('checker unavailable'),{providerStatus:503});
   }};
   const {jobs,store,dir,original}=await setup(gateway,{root:latestSkill});

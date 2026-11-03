@@ -1,4 +1,4 @@
-import {completeReviewCard,completeReviewSet,reviewableQuality,reviewQualityChecks} from './review-round.mjs';
+import {completeReviewCard,completeReviewSet,reviewableQuality,reviewQualityChecks,rowFacts,REVIEW_VERDICTS} from './review-round.mjs';
 import {planReviewImpact,reviewImpactPayload,scopedReviewSources,validateReviewImpact} from './review-impact.mjs';
 import {REVIEW_BODY_LIMIT_BYTES,reviewGatewayForRun,reviewInitialConcurrency,reviewQualityFallbackContract,validateReviewQualityFallback,reviewGatewayForQualityAction} from './review-model-fallback.mjs';
 import {reviewDependencyPool} from './review-dependencies.mjs';
@@ -369,12 +369,7 @@ export function lengthFindings(r,context,source){
   for(const x of r.nextInputs||[]){over('nextInput',x?.text,60);if(x?.ask)over('ask',x.ask.question,60);}}
  return f;
 }
-// 漏行 measured, not judged: which Tasks / Missions / units the input has and the fact lines do not.
-export function rowFacts(c,r){
- const want=c.level==='mission'?(c.tasks?.length?c.tasks.map(t=>({ref:t.ref,item:t.title})):(c.expectedFacts||[])):c.children?.length?c.children.map(id=>({ref:id,item:id})):(c.expectedFacts||[]);
- const lines=new Set((r?.facts||[]).flatMap(f=>[f.ref,f.item]));
- return {expected:want.length,lines:(r?.facts||[]).length,missing:want.filter(w=>!lines.has(w.ref)&&!lines.has(w.item)).map(w=>w.item)};
-}
+export {rowFacts};
 export function evidenceFacts(c,r,sources){if(sources)return citationFacts(r,{sourceRef:c.id,sources});const ids=new Set((c.evidence||[]).map(e=>e.id));const used=[...new Set(JSON.stringify(r).match(/E\d+/g)||[])];return {missingIds:used.filter(id=>ids.size&&!ids.has(id)),usedCount:used.length};}
 const unitData=c=>({id:c.id,level:c.level,unit:c.unit,title:c.title,owner:c.owner,period:c.period,cutoff:c.cutoff,commitment:c.commitment,commitmentSource:c.commitmentSource,evidence:c.evidence,missing:c.missing,note:c.note,recordFacts:c.recordFacts,...(c.sourceBasis?{sourceBasis:c.sourceBasis}:{}),...(c.childCommitments?{childCommitments:c.childCommitments}:{}),...(c.tasks?.length?{tasks:c.tasks}:{}),...(c.expectedFacts?{expectedFacts:c.expectedFacts}:{}),...(c.m2EvidenceReceipt?{m2EvidenceReceipt:c.m2EvidenceReceipt}:{})});
 // Checkers must receive the same provenance as generation. Confirmed reports
@@ -635,7 +630,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
      return value;
     }
     if(value?.sourceRequests!==undefined&&!Array.isArray(value.sourceRequests)||!value?.review||typeof value.review!=='object'||Array.isArray(value.review))throw Error('自动修订未返回有效复盘：'+c.id);
-    if(q.delivery==='reviewable'&&!completeReviewCard(value.review))throw Object.assign(Error('修订卡片结构不完整，保留最近有效稿'),{code:'MODEL_OUTPUT_CONTRACT'});
+    if(q.delivery==='reviewable'&&!completeReviewCard(value.review,c))throw Object.assign(Error('修订卡片结构不完整，保留最近有效稿'),{code:'MODEL_OUTPUT_CONTRACT'});
     return value;
    };
    const stage=action.refresh?'refresh':'revise';
@@ -685,7 +680,7 @@ export async function repairReviews({gateway,skill,input,run,problems,save=async
  }));
  return run;
 }
-const tiers=['达成','部分达成','未达成'],nextTypes=new Set(['欠账','继续验证','停止','约束','待决策']),ltoChoices=new Set(['建议维持','建议修改','建议重开']);
+const nextTypes=new Set(['欠账','继续验证','停止','约束','待决策']),ltoChoices=new Set(['建议维持','建议修改','建议重开']);
 // rowMatch (复盘技能 2.1.6 起): each 下期输入 sits on one fact row, one per row, at most one for the whole card.
 export const skillAtLeast=(version,min)=>{const a=String(version||'').split('.').map(Number),b=min.split('.').map(Number);for(let i=0;i<b.length;i++){if((a[i]||0)!==b[i])return (a[i]||0)>b[i];}return true;};
 export function reviewProblems(run,input,{roster=[],rowMatch=false,askCaps=false,childRule=false}={}){
@@ -698,7 +693,7 @@ export function reviewProblems(run,input,{roster=[],rowMatch=false,askCaps=false
  for(const [id,r] of Object.entries(routeReviewQuestions(run.reviews))){
   if(input.engineeringContracts?.evidenceAddresses===1){const bad=citationFacts(r,{sourceRef:id,sources:Object.fromEntries(expected.map(c=>[c.id,c]))}).missingIds;if(bad.length)out.push({unit:id,problem:'引用的冻结证据地址不存在：'+bad.join('、')});}
   if(childRule&&['mission','ru'].includes(r.level)){const c=expected.find(x=>x.id===id),bad=childVerdictProblem(r,c?.childCommitments,{childReviews:expected.filter(x=>x.parent===id).map(x=>run.reviews[x.id]).filter(Boolean)});if(bad)out.push({unit:id,problem:bad});}
-  if(!tiers.includes(r.verdict))out.push({unit:id,problem:`判定写成“${r.verdict??'空'}”，只能是达成、部分达成、未达成`});
+  if(!REVIEW_VERDICTS.includes(r.verdict))out.push({unit:id,problem:`判定写成“${r.verdict??'空'}”，只能是达成、部分达成、未达成`});
   if(Array.isArray(r.facts)){
    // 三段式 (2026-10-26): a verdict with one line of reason, then fact lines; insights are written by people, not generated.
    if(!filled(r.verdictReason))out.push({unit:id,problem:'缺判定理由'});

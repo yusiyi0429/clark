@@ -208,7 +208,7 @@ export async function runReviewQuality({run,input,skill,sources,check,revise,pro
     try{
      const review=await revise(byId.get(action.ref),action,pass.index,q);abort(signal);verifyAction(action);
      if(review?.[DEFERRED]){await defer(action,review[DEFERRED]);return;}
-     if(!review||typeof review!=='object'||Array.isArray(review)||reviewable&&!validReview(review))throw Object.assign(Error('修订未返回复盘对象，原候选保留'),{code:'MODEL_OUTPUT_CONTRACT'});
+     if(!review||typeof review!=='object'||Array.isArray(review)||reviewable&&!validReview(review,byId.get(action.ref)))throw Object.assign(Error('修订未返回复盘对象，原候选保留'),{code:'MODEL_OUTPUT_CONTRACT'});
      run.reviews[action.ref]=review;action.status='done';action.afterHash=qualityHash(review);q.candidateHash=qualityHash(run.reviews);await save(run);
     }catch(error){if(!signal?.aborted&&(isReviewResourceLimit(error)||reviewable&&error.reviewModelFailure)){await defer(action,{code:error.code||'MODEL_UNVERIFIED',problem:String(error.message),...(error.lastFailure?{lastFailure:clone(error.lastFailure)}:{}),checks:error.checks||[]});return;}throw error;}
    }});

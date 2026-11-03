@@ -69,6 +69,22 @@ test('external install accepts an audited complete check-incomplete round and pr
   q.delivery='reviewable';q.maxRevisions=1;q.status='check-incomplete';q.passes[0].status='check-incomplete';
   q.verificationPending=[{unit:'company',problem:'证据待核'}];
   f.file.quality={delivery:q.delivery,...f.file.quality,status:q.status,maxRevisions:1,verificationPending:q.verificationPending};
+  f.work.input.stages[2][0].expectedFacts=[{ref:'x',item:'结果'}];
+  f.work.inputHash=f.receipt.inputHash=q.inputHash=hash(f.work.input);
+  const originalReview=structuredClone(run.reviews.company);
+  for(const damaged of [
+   {...originalReview,verdict:' ',verdictReason:' ',facts:[]},
+   {...originalReview,facts:[{ref:'other',item:'其他结果',status:'未达成',evidence:''}]},
+  ]){
+   run.reviews.company=damaged;f.file.reviews.company=damaged;q.candidateHash=hash(run.reviews);
+   q.passes[0].reviews=structuredClone(run.reviews);q.passes[0].reviewHash=q.candidateHash;
+   await f.persist();
+   const before=hash(f.store.snapshot());
+   await assert.rejects(importReviewRound(f.store,f.args,f.options),/完整候选/);
+   assert.equal(hash(f.store.snapshot()),before);
+  }
+  run.reviews.company=f.file.reviews.company={...originalReview,verdict:'未达成',facts:originalReview.facts.map(row=>({...row,status:'未达成',evidence:''}))};
+  q.candidateHash=hash(run.reviews);q.passes[0].reviews=structuredClone(run.reviews);q.passes[0].reviewHash=q.candidateHash;
   await f.persist();
   const imported=await importReviewRound(f.store,f.args,f.options),state=f.store.snapshot();
   assert.equal(imported.reviews,1);
