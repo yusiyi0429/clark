@@ -22,7 +22,7 @@ async function setup(gateway,{formalFallbacks=true}={}){
 }
 test('a job at the two-edit limit writes an independent draft and never installs it in current business state',async()=>{
  let revisions=0,checks=0;
- const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{const p=JSON.parse(messages[1].content);if(!p.unit){checks++;return {answer:JSON.stringify({...checkCoverage(p),issues:[{ref:'company',sourceRefs:['company'],type:'结构与表达',problem:'未验证被写成未发生',impact:'事实过强',mustFix:true,fixable:true}]})};}if(p.revision)revisions++;return {answer:JSON.stringify({review})};}};
+ const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{const p=JSON.parse(messages[1].content);if(!p.unit){checks++;return {answer:JSON.stringify({...checkCoverage(p),issues:[{ref:'company',...candidateBasis(p,'company'),type:'结构与表达',problem:'未验证被写成未发生',impact:'事实过强',mustFix:true,fixable:true}]})};}if(p.revision)revisions++;return {answer:JSON.stringify({review})};}};
  const {jobs,store,dir,original}=await setup(gateway);
  try{
   const job=await jobs.start(actor,{period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00'},{now:new Date('2026-11-02T00:00:00Z')});
@@ -50,7 +50,7 @@ test('only an operator can cancel a running job; cancellation saves a resumable 
 test('exhausted single-model checker resume preserves the edited draft and cannot reset its attempts or install',async()=>{
  let fail=true,initial=0,revised=0,failedChecks=0;
  const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{const p=JSON.parse(messages[1].content);
-  if(!p.unit){const current=p.reviews[0];if(current.verdictReason==='fixed'&&p.phase==='impact'&&fail){failedChecks++;throw Error('checker offline');}return {answer:JSON.stringify({...checkCoverage(p),issues:current.verdictReason==='fixed'?[]:[{ref:'company',sourceRefs:['company'],type:'结构与表达',problem:'需要澄清',impact:'影响理解',mustFix:true,fixable:true}]})};}
+  if(!p.unit){const current=p.reviews[0];if(current.verdictReason==='fixed'&&p.phase==='impact'&&fail){failedChecks++;throw Error('checker offline');}return {answer:JSON.stringify({...checkCoverage(p),issues:current.verdictReason==='fixed'?[]:[{ref:'company',...candidateBasis(p,'company'),type:'结构与表达',problem:'需要澄清',impact:'影响理解',mustFix:true,fixable:true}]})};}
   if(p.revision)revised++;else initial++;return {answer:JSON.stringify({review:{...review,verdictReason:p.revision?'fixed':'initial'}})};
  }};
  // A primary-only checker still has one cumulative three-attempt budget.
@@ -63,7 +63,7 @@ test('exhausted single-model checker resume preserves the edited draft and canno
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 
-function checkCoverage(p){return {phase:p.phase,candidateHash:p.candidateHash,checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[],issueResults:p.priorIssues?.map(issue=>({id:issue.id,status:'resolved',reason:'已按当前候选核对'}))};}
+function checkCoverage(p){return {phase:p.phase,candidateHash:p.candidateHash,checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[],issueResults:p.priorIssues?.map(issue=>({id:issue.id,status:'resolved',reason:'已按当前候选核对',basis:{kind:'candidate',refs:[{ref:issue.ref,field:'verdictReason'}]}}))};}
 
 test('final findings route repairs by revision batch rather than check index',async()=>{
  const phases=[],repairs=[];
@@ -76,7 +76,7 @@ test('final findings route repairs by revision batch rather than check index',as
   }
   phases.push({phase:p.phase,model});
   const issues=p.phase==='final'&&p.reviews[0].verdictReason!=='第二处已修'?[{
-   ref:'company',sourceRefs:[],type:'结构与表达',problem:p.reviews[0].verdictReason==='初稿'?'需要澄清':'另一处不一致',impact:'影响理解',mustFix:true,fixable:true,
+   ref:'company',...candidateBasis(p,'company'),type:'漏行',problem:p.reviews[0].verdictReason==='初稿'?'需要澄清':'另一处不一致',impact:'影响理解',mustFix:true,fixable:true,
   }]:[];
   return {answer:JSON.stringify({...checkCoverage(p),issues})};
  }});
@@ -159,3 +159,5 @@ test('a third-attempt source request retains the raw answer and the specific pen
   assert.deepEqual(run.quality.verificationPending[0].checks.map(check=>check.unit),['company']);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
+
+function candidateBasis(p,ref){return p.checkBasis?{sourceRefs:[],basis:{kind:'candidate',refs:[{ref,field:'verdictReason'}]}}:{sourceRefs:[ref]};}
