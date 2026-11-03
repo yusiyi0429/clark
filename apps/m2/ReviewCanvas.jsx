@@ -149,6 +149,7 @@ export function ReviewSummary({node,onOpen,unitLabel,comments=[],tone='domain',s
 }
 export default function ReviewCanvas({transferFor,insights={},onInsight,ceoName='CEO',onRevise,tree,active,profile,comments,toneOf=()=>'domain',handoff=null,onShowHandoff,months={from:'',to:''},onOpen,onAction,onDetail,onAnswer,annotation,me,onDeleteComment,evidence,unitLabel,signerNames,review}){
  if(!tree.nodes.length)return <div className="plan-doc-canvas document-catalog"><div className="review-empty"><h3>还没有载入复盘</h3><p>本月复盘生成后会出现在这里。</p></div></div>;
+ const checkStatus=review?.qualityStatus==='check-incomplete'?<p className="review-problems" role="status">检查未完成</p>:null;
  const stateOf=n=>{const po=tree.nodes.find(x=>x.level==='po'&&x.unit===n.unit),left=n.level==='company'&&n.status!=='已确认'?tree.nodes.filter(x=>x.level!=='company'&&x.status!=='已确认').length:0;if(left)return {text:`还有 ${left} 份复盘未确认`,mine:false};return confirmState({status:n.status,version:n.version,signatures:n.signatures,slots:reviewSlots(n),holder:s=>s==='ceo'?ceoName:s==='unitDri'?po?.owner:n.owner,mine:s=>maySign(n,s,profile)});};
  if(!active){
   // What waits for me comes first, then what I am part of, then the other units I can see (陈溪南 2026-10-23).
@@ -162,6 +163,7 @@ export default function ReviewCanvas({transferFor,insights={},onInsight,ceoName=
   // Members see only what the data left out (陈溪南 2026-10-23); program-side issues (拒答、降级) are for 管理, not this page.
   const missing=review?.skipped||[],problems=(review?.problems||[]).filter(p=>p.kind==='missing'),refName=ref=>{const [unit,m]=String(ref).split('-m'),po=tree.nodes.find(n=>n.level==='po'&&(n.unit===unit||n.ref===unit));return `${po?unitLabel(po):unit}${m?` M${m.padStart(2,'0')}`:''}`;};
   return <div className="plan-doc-canvas document-catalog review-catalog" aria-label="复盘目录">
+   {checkStatus}
    {(missing.length>0||problems.length>0)&&<div className="review-problems" role="status"><p>本体里缺少材料，以下没有复盘：</p>{missing.map((t,i)=><p key={'s'+i}>{t}</p>)}{problems.map(p=><p key={p.ref}><strong>{refName(p.ref)}</strong>{p.reason}</p>)}</div>}
    {Object.entries(reviewHomeGroups(tree.nodes,profile)).map(([kind,entries])=>entries.length>0&&<section key={kind} className="catalog-group"><h3 className="review-home-heading">{kind==='confirm'?'需要我确认':'需要我关注'}</h3>{entries.map(e=>e.person?<PersonSummary key={e.key} name={e.person} cards={e.cards} me={profile.name} months={months} unitLabel={unitLabel} onOpen={()=>onOpen({id:e.key,level:'person',person:e.person,title:`${e.person}的个人复盘`})}/>:<ReviewSummary key={e.key} node={e.node} stateOf={stateOf} tone={toneOf(e.node)} onOpen={onOpen} unitLabel={unitLabel} comments={comments[e.key]}/>)}</section>)}
   </div>;
@@ -178,7 +180,7 @@ export default function ReviewCanvas({transferFor,insights={},onInsight,ceoName=
   return <ReviewCard key={node.id} qualityChecks={(review?.problems||[]).filter(issue=>issue.kind==='unresolved'&&issue.ref===node.ref)} transfer={transferFor?.(node)} node={node} tone={toneOf(node)} onRevise={onRevise} profile={profile} comments={comments[node.id]||[]} onDetail={readOnly?undefined:onDetail} onAnswer={onAnswer} evidence={evidence} unitLabel={unitLabel} dueAt={isFactsCard(node)?dueOf(node.dueAt?node:review):null} footer={handshake} insight={isFactsCard(node)?<InsightCard node={node} data={insights[node.id]} profile={profile} onInsight={onInsight}/>:null} insightState={isFactsCard(node)?(insights[node.id]?.revealed?'已公开':node.level==='mission'?'':'未公开'):''}/>
  };
  const page=(label,children)=><CommentScope me={me} onDeleteComment={onDeleteComment} annotation={annotation}>
-  <div className="plan-doc-canvas document-page" aria-label={label}><div className="document-primary review-primary">{children}</div></div>
+  <div className="plan-doc-canvas document-page" aria-label={label}><div className="document-primary review-primary">{checkStatus}{children}</div></div>
  </CommentScope>;
  // 个人复盘 page: every Mission this person owns that I can see, one full card each, each confirmed by its owner.
  // 未指派: only the unassigned Missions this viewer signs for (their own units), as on the home card.
