@@ -52,6 +52,9 @@
 .switch[data-on="true"] > span { transform: translateX(20px); }
 
 .capsule { display: flex; flex-shrink: 0; justify-content: center; height: 64px; animation: condense 460ms var(--onboarding-ease) both; }
+/* 选形象那一页顶上选中的那颗：形象胶囊放大到和上面这颗差不多大，换一颗就重新凝一次。 */
+.buddyHero { display: flex; flex-shrink: 0; align-items: center; justify-content: center; height: 64px; animation: condense 460ms var(--onboarding-ease) both; }
+.buddyHero > * { transform: scale(1.3); }
 .capsuleGlass { position: relative; width: 224px; height: 64px; }
 .capsuleGlass::before { content: ""; position: absolute; inset: -9px -13px; border-radius: 99px; background: linear-gradient(90deg, #4ee6ffaa, #9b7dffaa, #ff86d2aa); filter: blur(12px); opacity: 0; pointer-events: none; }
 .capsuleGlass[data-acknowledge="true"]::before { animation: capsuleHalo 1.45s ease-out both; }

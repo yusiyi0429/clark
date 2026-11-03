@@ -11,8 +11,10 @@ import { monthDayTime } from "@/lib/companyTime";
 import { useRoundNow } from "@/components/missionCards/useRoundNow";
 import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import { ConnectAgentForm } from "@/components/ConnectAgentForm";
-import { BuddyPicker } from "@/components/buddy/BuddyPicker";
+import { BuddyNameInput } from "@/components/buddy/BuddyPicker";
 import { buddyNameValid, saveBuddy, type Buddy } from "@/components/buddy/useBuddy";
+import { PresenceCapsule } from "@/components/coagent/PresenceCapsule";
+import { CoAgentSkinPicker, useSimulatedLevel } from "@/components/coagent/SkinPicker";
 import { readStoredSkin } from "@/components/coagent/skin";
 import { CollectorInstallPanel, ScanProgress, scanSteps, useCollectorStatus } from "./CollectorSetup";
 import { loadReviewLists, reviewEmpty, ReviewSummary, submitReview, type ReviewLists, type ReviewPicks } from "./ReviewLists";
@@ -135,6 +137,9 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
   const [buddyDraft, setBuddyDraft] = useState<Buddy>({ name: "", form: "classic" });
   const [buddySaving, setBuddySaving] = useState(false);
   const [buddyError, setBuddyError] = useState<string | null>(null);
+  /** 选伙伴分两页：先单独一页起名字，再选形象；两页算同一步，进度点只占一个。 */
+  const [buddyPage, setBuddyPage] = useState<"name" | "form">("name");
+  const buddyName = useRef<HTMLInputElement>(null);
   // 确认清单在扫描之后：跳不跳过，采集器、扫描两步的位置都一样。
   const unskipped = onboardingSteps(data, false, buddyStep)[index];
   const collector = useCollectorStatus(unskipped === "collector" || unskipped === "scan");
@@ -154,12 +159,17 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
   const outgoingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const primary = useRef<HTMLButtonElement>(null);
   const recordResult = useRef<HTMLDivElement>(null);
+  const naming = step === "buddy" && buddyPage === "name";
+  /** 选形象那一页，顶上换成选中的那颗（默认那颗还是原来的大胶囊）。 */
+  const heroSkin = step === "buddy" && buddyPage === "form" && buddyDraft.form !== "classic" ? buddyDraft.form : null;
+  const heroLevel = useSimulatedLevel(heroSkin !== null);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
     content.current?.parentElement?.scrollTo({ top: 0, behavior: "instant" });
-    title.current?.focus({ preventScroll: true });
-  }, [index]);
+    // 起名字那一页直接落在名字框上，其余页落在标题上。
+    (naming ? buddyName.current : title.current)?.focus({ preventScroll: true });
+  }, [index, naming]);
   // 使用周报的上手漏斗：打开哪一步报一次，报不上不影响上手。
   useEffect(() => {
     void browserApi.POST("/api/me/usage/onboarding-step", { body: { step } }).catch(() => undefined);
@@ -192,28 +202,44 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
     return () => { alive = false; window.clearTimeout(timer); };
   }, [step, scanFinished, reviewLists]);
 
+  /** 当前这一页滑出去：复制一份留在原处播退场，新的一页按 direction 进来。clone 为 false 时只收掉上一份退场。 */
+  function slideOut(delta: number, clone = true) {
+    outgoing.current?.remove();
+    if (outgoingTimer.current) clearTimeout(outgoingTimer.current);
+    const old = clone ? content.current?.cloneNode(true) as HTMLElement | undefined : undefined;
+    if (!old || !content.current?.parentElement) return;
+    old.inert = true;
+    old.setAttribute("aria-hidden", "true");
+    old.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
+    old.classList.add(s.outgoing);
+    old.style.setProperty("--direction", String(delta));
+    content.current.parentElement.appendChild(old);
+    outgoing.current = old;
+    outgoingTimer.current = setTimeout(() => { old.remove(); if (outgoing.current === old) outgoing.current = null; }, 200);
+  }
+
   function move(delta: number) {
     const next = Math.max(0, Math.min(steps.length - 1, current.current + delta));
     if (next === current.current || completing.current || voice.phase === "saving") return;
     voice.cancel();
-    outgoing.current?.remove();
-    if (outgoingTimer.current) clearTimeout(outgoingTimer.current);
-    const old = steps[next].startsWith("tour-") && steps[current.current].startsWith("tour-") ? undefined : content.current?.cloneNode(true) as HTMLElement | undefined;
-    if (old && content.current?.parentElement) {
-      old.inert = true;
-      old.setAttribute("aria-hidden", "true");
-      old.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
-      old.classList.add(s.outgoing);
-      old.style.setProperty("--direction", String(delta));
-      content.current.parentElement.appendChild(old);
-      outgoing.current = old;
-      outgoingTimer.current = setTimeout(() => { old.remove(); if (outgoing.current === old) outgoing.current = null; }, 200);
-    }
+    slideOut(delta, !(steps[next].startsWith("tour-") && steps[current.current].startsWith("tour-")));
+    // 从后面退回选伙伴，落在它的最后一页（选形象）。
+    if (delta < 0 && steps[next] === "buddy") setBuddyPage("form");
     current.current = next;
     setDirection(delta);
     setIndex(next);
     setAcknowledge((value) => value + 1);
     setError(null);
+  }
+
+  /** 选伙伴的两页之间翻：和换一步一样滑动，胶囊也应一声。 */
+  function turnBuddyPage(page: "name" | "form") {
+    const delta = page === "form" ? 1 : -1;
+    slideOut(delta);
+    setDirection(delta);
+    setBuddyPage(page);
+    setAcknowledge((value) => value + 1);
+    setBuddyError(null);
   }
 
   async function finish() {
@@ -249,7 +275,12 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
   }
 
   async function forward() {
-    if (step === "buddy") return saveBuddyStep();
+    if (step === "buddy") {
+      if (!naming) return saveBuddyStep();
+      // 名字页回车也走这里，名字不合格不翻页。
+      if (buddyNameValid(buddyDraft.name)) turnBuddyPage("form");
+      return;
+    }
     if (last || error) return finish();
     if (step === "review" && reviewLists) {
       setReviewSaving(true);
@@ -288,7 +319,7 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
       : step === "connect" && !connectDownloaded ? connectPrimary?.querySelector<HTMLButtonElement>("button") : primary.current)?.click();
   }
 
-  const heading = step === "buddy" ? "选择你的伙伴" : step === "collector" ? "安装本机采集器" : step === "scan" ? scanReady ? "扫描完成" : "正在扫描" : step === "review" ? "确认清单" : step === "delegation" ? "授权天枢替你记进本体" : step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "work" ? "你这个月的工作" : step === "radar" ? "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : step === "connect" ? "连上你自己的 AI 工具" : "可以开始了";
+  const heading = step === "buddy" ? naming ? "给你的伙伴起个名字" : `选择${buddyDraft.name.trim()}的形象` : step === "collector" ? "安装本机采集器" : step === "scan" ? scanReady ? "扫描完成" : "正在扫描" : step === "review" ? "确认清单" : step === "delegation" ? "授权天枢替你记进本体" : step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "work" ? "你这个月的工作" : step === "radar" ? "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : step === "connect" ? "连上你自己的 AI 工具" : "可以开始了";
   // 手机首页是一条滚动：最上面是通知，往下 CEO 是公司全局、成员是自己的工作。
   const noticeCopy = data.role === "ceo" ? "会后要你确认的会议卡、月末的复盘与拆解，到时候会出现在这里。" : "任务卡的讨论、分给你的事和别人的回复，按轻重排在这里。";
   const phoneHeading = step === "tour-notifications" ? "最上面是通知" : step === "tour-board" ? data.role === "ceo" ? "往下是公司全局" : "往下是你的工作" : null;
@@ -308,9 +339,11 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
       {!last && step !== "buddy" ? <button type="button" className={f.textButton} onClick={() => void finish()} disabled={busy}>先进入工作台</button> : null}
     </header>
     <div className={s.flow} data-step={step} data-role={data.role}>
-      <CoAgentCapsule acknowledge={acknowledge} state={voice.recording ? "listening" : "idle"} level={voice.level} />
+      {heroSkin ? <div key={heroSkin} className={f.buddyHero} aria-hidden="true">
+        <PresenceCapsule skin={heroSkin} pose="listening" level={heroLevel} name={buddyDraft.name} />
+      </div> : <CoAgentCapsule acknowledge={acknowledge} state={voice.recording ? "listening" : "idle"} level={voice.level} />}
       <div className={s.stage}>
-        <div className={s.content} key={step.startsWith("tour-") ? "tour" : step} ref={content} data-step={step}>
+        <div className={s.content} key={step === "buddy" ? `buddy-${buddyPage}` : step.startsWith("tour-") ? "tour" : step} ref={content} data-step={step}>
           <div className={s.intro}>
             <h1 ref={title} tabIndex={-1}>{phoneHeading ? <><span className={s.desktopTourCopy}>{heading}</span><span className={s.mobileTourCopy}>{phoneHeading}</span></> : heading}</h1>
             {step === "hello" ? <><p className={s.subtitle}>欢迎使用天枢。</p><p className={s.description}>{data.role === "ceo" ? "先花一分钟看看工作台。" : <>先花一分钟看看工作台，再看看每个月的 Mission 怎么定下来。<br />{data.voiceprint.configured ? "雷达、声纹和外部工具" : "雷达和外部工具"}，可以现在设，也可以以后再说。</>}</p></> : null}
@@ -322,8 +355,12 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
             {step === "start" && !returnPath ? <p className={s.description}>{data.next.text}</p> : null}
           </div>
           <div className={s.details}>
-            {step === "buddy" ? <div className={`${f.glass} ${s.connectPanel}`}>
-              <BuddyPicker value={buddyDraft} onChange={setBuddyDraft} disabled={buddySaving} />
+            {naming ? <div className={s.buddyName}>
+              <BuddyNameInput inputRef={buddyName} className={s.buddyNameInput} label="伙伴的名字" value={buddyDraft.name}
+                onChange={(name) => setBuddyDraft((draft) => ({ ...draft, name }))} onEnter={() => void forward()} />
+            </div> : null}
+            {step === "buddy" && !naming ? <div className={`${f.glass} ${s.connectPanel}`}>
+              <CoAgentSkinPicker value={buddyDraft.form} name={buddyDraft.name} onChange={(form) => setBuddyDraft((draft) => ({ ...draft, form }))} />
               {buddyError ? <p className={s.error} role="alert">{buddyError}</p> : null}
             </div> : null}
             {(step === "tour-notifications" || step === "tour-board") ? <WorkspaceSchematic role={data.role} focus={step === "tour-notifications" ? "notifications" : "board"} /> : null}
@@ -385,7 +422,7 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
         {step === "radar" && !error ? <div key={step} ref={setRadarPrimary} className={s.radarActions} />
           : step === "connect" && !connectDownloaded && !error ? <div key={step} ref={setConnectPrimary} className={s.radarActions} /> : <button key={step} ref={primary} className={f.primary} type="button" onClick={() => void forward()} disabled={primaryDisabled} aria-describedby={disabledHint ? "welcome-action-hint" : undefined}>{error ? "重试" : primaryLabel}{!busy ? <ArrowRight size={18} aria-hidden="true" /> : null}</button>}
         <div className={s.secondary}>
-          {index > 0 ? <button className={f.textButton} type="button" onClick={() => move(-1)} disabled={busy}>上一步</button> : null}
+          {index > 0 || (step === "buddy" && !naming) ? <button className={f.textButton} type="button" onClick={() => step === "buddy" && !naming ? turnBuddyPage("name") : move(-1)} disabled={busy}>上一步</button> : null}
           {step === "voiceprint" || step === "connect" || step === "collector" || step === "delegation" ? <button className={f.textButton} type="button" onClick={() => move(1)} disabled={busy}>稍后</button> : null}
           {step === "radar" ? <span ref={setRadarLater} className={s.radarSlot} /> : null}
         </div>

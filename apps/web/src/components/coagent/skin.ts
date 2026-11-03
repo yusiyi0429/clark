@@ -10,11 +10,12 @@
 
 export type CoAgentSkin = "classic" | "alive" | "panda" | "miles";
 
-export const COAGENT_SKINS: { id: CoAgentSkin; label: string; hint: string }[] = [
-  { id: "classic", label: "默认", hint: "一道流动的色光" },
-  { id: "alive", label: "生命感", hint: "蓝色胶囊，多了一双眼睛" },
-  { id: "panda", label: "熊猫", hint: "黑眼圈，两只小耳朵" },
-  { id: "miles", label: "Miles", hint: "戴棒球帽的男孩，从胶囊里探出来" },
+/** label 只给读屏用：选的时候只看胶囊，不写名字。 */
+export const COAGENT_SKINS: { id: CoAgentSkin; label: string }[] = [
+  { id: "classic", label: "默认" },
+  { id: "alive", label: "生命感" },
+  { id: "panda", label: "熊猫" },
+  { id: "miles", label: "Miles" },
 ];
 
 export function readStoredSkin(): CoAgentSkin {

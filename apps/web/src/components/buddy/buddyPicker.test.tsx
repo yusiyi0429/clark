@@ -58,10 +58,11 @@ describe("选择你的伙伴", () => {
     expect(html).not.toMatch(/data-selected="true"[^>]*><input[^>]*value="classic"/);
   });
 
-  it("选了 Miles 的伙伴，Miles 那一行带标记", () => {
+  it("选了 Miles 的伙伴，Miles 那一格带标记；格子里只有胶囊，名字只给读屏", () => {
     const html = renderToStaticMarkup(<BuddyPicker value={{ name: "团团", form: "miles" }} onChange={() => undefined} />);
     expect(html).toMatch(/data-selected="true"[^>]*><input[^>]*value="miles"/);
-    expect(html).toContain("<strong>Miles</strong>");
+    expect(html).toMatch(/<input[^>]*aria-label="Miles"[^>]*value="miles"/);
+    expect(html).not.toContain("<strong>");
     expect(html.match(/data-name="团团"/g)).toHaveLength(4);
   });
 

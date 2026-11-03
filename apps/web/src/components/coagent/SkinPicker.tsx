@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 选伙伴时的三颗胶囊（引导第一步和个人菜单「伙伴形象」共用，外面包一层 BuddyPicker）：三种形象各一行，左边一颗活的胶囊预览。
+ * 选伙伴的样子（引导「选择…的形象」那一页和个人菜单「伙伴形象」共用）：四种形象两列排，每格一颗活的胶囊，不写名字和介绍。
  * 上面一个小开关看两种姿势（在听 / 在说），预览的声音是模拟的。
  */
 
@@ -10,8 +10,8 @@ import { PresenceCapsule, type CapsulePose } from "./PresenceCapsule";
 import { COAGENT_SKINS, type CoAgentSkin } from "./skin";
 import s from "@/styles/coagent-skin-picker.module.css";
 
-/** 模拟一个人在说话：几条不同快慢的正弦叠起来，偶尔停顿。 */
-function useSimulatedLevel(active: boolean) {
+/** 模拟一个人在说话：几条不同快慢的正弦叠起来，偶尔停顿。引导顶上那颗选中的胶囊也用它。 */
+export function useSimulatedLevel(active: boolean) {
   const [level, setLevel] = useState(0.3);
   useEffect(() => {
     if (!active || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -48,13 +48,9 @@ export function CoAgentSkinPicker({ value: skin, name, onChange: setSkin }: {
       <div className={s.options} role="radiogroup" aria-label="伙伴形象">
         {COAGENT_SKINS.map((item) => (
           <label key={item.id} className={s.option} data-selected={skin === item.id || undefined}>
-            <input type="radio" name="coagent-skin" value={item.id} checked={skin === item.id} onChange={() => setSkin(item.id)} />
+            <input type="radio" name="coagent-skin" value={item.id} checked={skin === item.id} aria-label={item.label} onChange={() => setSkin(item.id)} />
             <span className={s.stage}>
               <PresenceCapsule skin={item.id} pose={pose} level={level} name={name} />
-            </span>
-            <span className={s.words}>
-              <strong>{item.label}</strong>
-              <small>{item.hint}</small>
             </span>
           </label>
         ))}
