@@ -1,9 +1,10 @@
 "use client";
 
-/** 伙伴形象（个人菜单）：上面改名字，下面选样子，保存交给外面。引导里起名字、选样子分成两页，共用这里的名字框。 */
+/** 伙伴形象（个人菜单）：上面改名字，中间选样子，下面选性格，保存交给外面。引导里起名字、选样子、选性格分成三页，共用这里的名字框和性格格子。 */
 
 import type { RefObject } from "react";
 import { CoAgentSkinPicker } from "@/components/coagent/SkinPicker";
+import { PersonalityPicker } from "./PersonalityPicker";
 import { clampBuddyName, type Buddy } from "./useBuddy";
 import s from "@/styles/buddy-picker.module.css";
 
@@ -41,6 +42,10 @@ export function BuddyPicker({ value, onChange, disabled = false }: { value: Budd
         <BuddyNameInput value={value.name} disabled={disabled} onChange={(name) => onChange({ ...value, name })} />
       </label>
       <CoAgentSkinPicker value={value.form} name={value.name} onChange={(form) => onChange({ ...value, form })} />
+      <div className={s.name}>
+        性格
+        <PersonalityPicker value={value.personality ?? "steady"} disabled={disabled} onChange={(personality) => onChange({ ...value, personality })} />
+      </div>
     </div>
   );
 }

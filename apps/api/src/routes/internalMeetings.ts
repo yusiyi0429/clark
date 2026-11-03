@@ -1,6 +1,8 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
 import type { TMeetingParticipant } from "@warmap/contracts";
+import { readBuddy } from "../buddy.js";
+import { buddyPersona } from "../buddyPersona.js";
 import { ChatServiceError } from "../chatService.js";
 import { afterIssueDraftCreated, ChatDecideIssueBody, ChatProposeIssueBody, decideChatIssueDraft, proposeChatIssueDraft } from "../issueDrafts.js";
 import { listPendingIssueSummaries } from "../issues.js";
@@ -181,6 +183,17 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
         issueIds: row.issue_ids, href: hrefOf(view, `/meetings/${row.id}`),
       })),
     };
+  });
+
+  // 伙伴：名字、性格和接在角色提示后面的人设（和天枢本地对话同一段，buddyPersona.ts）；没选伙伴时是 null。
+  app.get("/internal/buddy", { onRequest }, async (req, reply) => {
+    const view = viewOf(req, reply);
+    if (!view) return reply;
+    reply.header("Cache-Control", "no-store");
+    const buddy = await readBuddy(q, view.personId);
+    if (!buddy) return null;
+    const owner = view.role === "ceo" ? null : personDisplayNames(peopleDirectory).get(view.personId) ?? view.personId;
+    return { name: buddy.name, personality: buddy.personality, persona: buddyPersona(buddy, owner) };
   });
 
   // 首页卡片：和对话 read_anchor 的首页同一份（CEO 公司首页的 Card；成员我的工作台上本人的东西），不带 Action。

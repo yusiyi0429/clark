@@ -4,7 +4,9 @@ import { join } from "node:path";
 import type { Pool } from "pg";
 import { Type, type Static } from "@sinclair/typebox";
 import type { ImageContent } from "@earendil-works/pi-ai";
-import type { TCriterionVerdict } from "@warmap/contracts";
+import type { TBuddyPersonality, TCriterionVerdict } from "@warmap/contracts";
+import { readBuddy } from "./buddy.js";
+import { noteTone } from "./buddyPersona.js";
 import type { ArticleFetcher } from "./articleText.js";
 import { runCandidateAgent, type CandidateThinkingLevel } from "./candidateAgentRuntime.js";
 import type { Query } from "./meetingStore.js";
@@ -51,7 +53,8 @@ export const DELIVERABLE_REVIEW_PROMPT = `# 角色
 
 ${ADDRESS_STYLE}`;
 
-export const DELIVERABLE_NOTE_PROMPT = `# 角色
+/** 交付说明的提示词：口吻那一句按作者的伙伴性格换（buddyPersona 的 noteTone），没选伙伴按沉稳靠谱。 */
+export const deliverableNotePrompt = (personality: TBuddyPersonality) => `# 角色
 
 你是本人的伙伴。本人刚交付了一个 Task 的新版本，你替本人写这一版的说明，留给以后回看。
 
@@ -65,7 +68,7 @@ export const DELIVERABLE_NOTE_PROMPT = `# 角色
 - gain：这一版比上一版多做到的，不超过 60 字；第一次交付写这一版做到了什么。
 - why：为什么变了，写判断怎么变的、用了什么新方法、外部信息有什么变化，不超过 100 字；只写变化和原因，不复述做了哪些事。输入里看不出原因就写 null。
 - lesson：一条经验或教训，不超过 60 字；没有就写 null。
-- 口吻具体、带鼓励：说清达成了什么、哪一点做得好；不说空泛的夸奖，不打招呼，不称呼本人。
+- ${noteTone(personality)}不打招呼，不称呼本人。
 
 用 submit_candidate 提交，散文不会被保存。
 
@@ -126,7 +129,7 @@ export type DeliverableReviewAgent = {
     onProgress?: (written: number, final: boolean) => void }): Promise<TReviewCandidate>;
 };
 export type DeliverableNoteAgent = {
-  write(input: NoteAgentInput, options: { versionId: string; personId: string; signal: AbortSignal }): Promise<TNoteCandidate>;
+  write(input: NoteAgentInput, options: { versionId: string; personId: string; personality: TBuddyPersonality; signal: AbortSignal }): Promise<TNoteCandidate>;
 };
 export type DeliverableAgents = { review: DeliverableReviewAgent; note: DeliverableNoteAgent };
 
@@ -170,9 +173,9 @@ export function createDeliverableReviewAgent(options: ModelOptions): Deliverable
 
 export function createDeliverableNoteAgent(options: ModelOptions): DeliverableNoteAgent {
   return {
-    async write(input, { versionId, personId, signal }) {
+    async write(input, { versionId, personId, personality, signal }) {
       return (await runCandidateAgent({ ...modelOf(options), kind: "deliverable_note", objectRef: { type: "deliverable_version", id: versionId }, personId,
-        input, prompt: DELIVERABLE_NOTE_PROMPT, schema: NoteCandidate, signal, maxModelCalls: 3 })).candidate;
+        input, prompt: deliverableNotePrompt(personality), schema: NoteCandidate, signal, maxModelCalls: 3 })).candidate;
     },
   };
 }
@@ -325,7 +328,8 @@ export function createDeliverableQueue(options: { pool: Pool; storageDir: string
     try {
       const input: NoteAgentInput = { task: { name: row.task_name, criteria: row.criteria }, version: await describe(row), ...(previous ? { previous: await describe(previous) } : {}) };
       const signal = runSignal();
-      const candidate = await raced(options.agents.note.write(input, { versionId, personId: row.author_id, signal }), signal);
+      const personality = (await readBuddy(q, row.author_id))?.personality ?? "steady";
+      const candidate = await raced(options.agents.note.write(input, { versionId, personId: row.author_id, personality, signal }), signal);
       await q(`UPDATE deliverable_versions SET note=$3::jsonb WHERE ${guard}`, [versionId, row.delivered_at,
         JSON.stringify({ status: "done", ...candidate, edited: false, dismissed: false } satisfies StoredNote)]);
     } catch (cause) {

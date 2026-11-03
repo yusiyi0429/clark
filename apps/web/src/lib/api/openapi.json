@@ -11061,7 +11061,7 @@
       },
       "put": {
         "operationId": "saveBuddy",
-        "summary": "本人给伙伴起名字、选外形",
+        "summary": "本人给伙伴起名字、选外形和性格",
         "requestBody": {
           "required": true,
           "content": {
@@ -22750,6 +22750,26 @@
                       },
                       {
                         "const": "miles",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "personality": {
+                    "anyOf": [
+                      {
+                        "const": "steady",
+                        "type": "string"
+                      },
+                      {
+                        "const": "cheerful",
+                        "type": "string"
+                      },
+                      {
+                        "const": "calm",
+                        "type": "string"
+                      },
+                      {
+                        "const": "critical",
                         "type": "string"
                       }
                     ]
@@ -51027,6 +51047,26 @@
                 "type": "string"
               }
             ]
+          },
+          "personality": {
+            "anyOf": [
+              {
+                "const": "steady",
+                "type": "string"
+              },
+              {
+                "const": "cheerful",
+                "type": "string"
+              },
+              {
+                "const": "calm",
+                "type": "string"
+              },
+              {
+                "const": "critical",
+                "type": "string"
+              }
+            ]
           }
         }
       },
@@ -51046,6 +51086,26 @@
           },
           {
             "const": "miles",
+            "type": "string"
+          }
+        ]
+      },
+      "BuddyPersonality": {
+        "anyOf": [
+          {
+            "const": "steady",
+            "type": "string"
+          },
+          {
+            "const": "cheerful",
+            "type": "string"
+          },
+          {
+            "const": "calm",
+            "type": "string"
+          },
+          {
+            "const": "critical",
             "type": "string"
           }
         ]

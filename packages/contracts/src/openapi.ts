@@ -12,7 +12,7 @@ import { AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeeti
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import { UsageResponse, OnboardingStepUsageRequest } from "./usage.js";
 import { PersonalProfileView, UpdatePersonalProfileRequest } from "./personalProfile.js";
-import { Buddy, BuddyForm } from "./buddy.js";
+import { Buddy, BuddyForm, BuddyPersonality } from "./buddy.js";
 import { RailBackground, RailBackgroundChoice, SaveRailBackgroundRequest } from "./railBackground.js";
 import { DeliverableDissentRequest, DeliverableItem, DeliverableNote, DeliverableNotePatch, DeliverableReview, DeliverableVersion, ReviewCriterion, TaskDeliverableResponse, TaskDeliverableStatus } from "./deliverables.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
@@ -1947,7 +1947,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "本人的伙伴", content: { "application/json": { schema: { anyOf: [{ $ref: "#/components/schemas/Buddy" }, { type: "null" }] } } } }, "401": errorResponse },
         },
         put: {
-          operationId: "saveBuddy", summary: "本人给伙伴起名字、选外形",
+          operationId: "saveBuddy", summary: "本人给伙伴起名字、选外形和性格",
           requestBody: jsonBody({ $ref: "#/components/schemas/Buddy" }),
           responses: { "200": { description: "保存后的伙伴", content: { "application/json": { schema: { $ref: "#/components/schemas/Buddy" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse },
         },
@@ -3342,6 +3342,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         UpdatePersonalProfileRequest: UpdatePersonalProfileRequest as JsonSchema,
         Buddy: Buddy as JsonSchema,
         BuddyForm: BuddyForm as JsonSchema,
+        BuddyPersonality: BuddyPersonality as JsonSchema,
         RailBackground: RailBackground as JsonSchema,
         RailBackgroundChoice: RailBackgroundChoice as JsonSchema,
         SaveRailBackgroundRequest: SaveRailBackgroundRequest as JsonSchema,

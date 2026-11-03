@@ -22,11 +22,12 @@ beforeEach(() => { vi.clearAllMocks(); stubWindow(null); });
 afterEach(() => vi.unstubAllGlobals());
 
 describe("选择你的伙伴", () => {
-  it("新人名字是空的，样子停在这台电脑上原来选过的那颗胶囊；有伙伴就用伙伴的", () => {
-    expect(initialBuddyDraft(null)).toEqual({ name: "", form: "classic" });
+  it("新人名字是空的，样子停在这台电脑上原来选过的那颗胶囊，性格是沉稳靠谱；有伙伴就用伙伴的", () => {
+    expect(initialBuddyDraft(null)).toEqual({ name: "", form: "classic", personality: "steady" });
     stubWindow("alive");
-    expect(initialBuddyDraft(null)).toEqual({ name: "", form: "alive" });
-    expect(initialBuddyDraft({ name: "团团", form: "panda" })).toEqual({ name: "团团", form: "panda" });
+    expect(initialBuddyDraft(null)).toEqual({ name: "", form: "alive", personality: "steady" });
+    expect(initialBuddyDraft({ name: "团团", form: "panda", personality: "critical" })).toEqual({ name: "团团", form: "panda", personality: "critical" });
+    expect(initialBuddyDraft({ name: "团团", form: "panda" })).toEqual({ name: "团团", form: "panda", personality: "steady" });
   });
 
   it("名字按宽度算：去掉首尾空白后，汉字、大写字母、m、w 和别的符号算 2，其余窄字算 1，合计 1–12", () => {
@@ -47,8 +48,12 @@ describe("选择你的伙伴", () => {
     expect(clampBuddyName("Tom 小明")).toBe("Tom 小明");
   });
 
-  it("上面是名字，下面是四种形象（三颗胶囊和 Miles），选中的那颗带标记", () => {
-    const html = renderToStaticMarkup(<BuddyPicker value={{ name: "团团", form: "alive" }} onChange={() => undefined} />);
+  it("上面是名字，中间是四种形象（三颗胶囊和 Miles），下面是四种性格，选中的带标记", () => {
+    const html = renderToStaticMarkup(<BuddyPicker value={{ name: "团团", form: "alive", personality: "cheerful" }} onChange={() => undefined} />);
+    expect(html).toContain("性格");
+    expect(html.match(/name="buddy-personality"/g)).toHaveLength(4);
+    expect(html).toMatch(/data-selected="true"[^>]*><input[^>]*value="cheerful"/);
+    for (const label of ["沉稳靠谱", "乐观开朗", "理性冷静", "较真犀利"]) expect(html).toContain(label);
     expect(html).toContain("名字");
     expect(html).toMatch(/<input[^>]*value="团团"/);
     expect(html).not.toContain("maxLength");
@@ -69,9 +74,9 @@ describe("选择你的伙伴", () => {
   it("保存时去掉首尾空白，存好后告诉同页的其他读者；存不上就报错", async () => {
     const changed = vi.fn();
     window.addEventListener("buddy-changed", changed);
-    api.PUT.mockResolvedValueOnce({ data: { name: "团团", form: "panda" }, response: { ok: true } });
-    await expect(saveBuddy({ name: " 团团 ", form: "panda" })).resolves.toEqual({ name: "团团", form: "panda" });
-    expect(api.PUT).toHaveBeenCalledWith("/api/me/buddy", { body: { name: "团团", form: "panda" } });
+    api.PUT.mockResolvedValueOnce({ data: { name: "团团", form: "panda", personality: "calm" }, response: { ok: true } });
+    await expect(saveBuddy({ name: " 团团 ", form: "panda", personality: "calm" })).resolves.toEqual({ name: "团团", form: "panda", personality: "calm" });
+    expect(api.PUT).toHaveBeenCalledWith("/api/me/buddy", { body: { name: "团团", form: "panda", personality: "calm" } });
     expect(changed).toHaveBeenCalledTimes(1);
     api.PUT.mockResolvedValueOnce({ data: undefined, error: { message: "伙伴要有名字" }, response: { ok: false } });
     await expect(saveBuddy({ name: "团团", form: "panda" })).rejects.toThrow("伙伴要有名字");

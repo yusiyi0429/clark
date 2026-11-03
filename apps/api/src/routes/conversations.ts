@@ -575,7 +575,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           else emit({ type: "error", code: (cause as { code?: string })?.code === "CONTENT_FILTER" ? "CONTENT_FILTER" : copy.code, message: copy.message,
             ...(copy.resume ? { resume: copy.resume } : {}), partial: saved && partial });
         };
-        // 伙伴的名字只是给人设加一句，读不到就照旧答。
+        // 伙伴的名字和性格接在人设后面，读不到就照旧答。
         const buddy = await readBuddy(q, owner).catch(() => null);
         try {
           // LangSmith：一轮对话 = 一个 Turn（conv-<会话>-t<用户消息序号>），Thread = 这个人在这个页面的主对话。
@@ -594,7 +594,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
           }, () => runtime.run({
             scope: req.params.scope,
             runId,
-            viewer: { personId: owner, displayName: names.get(owner) ?? owner, role: person.role, ...(buddy ? { buddyName: buddy.name } : {}) },
+            viewer: { personId: owner, displayName: names.get(owner) ?? owner, role: person.role, ...(buddy ? { buddy: { name: buddy.name, personality: buddy.personality } } : {}) },
             message: runtimeMessage,
             currentObject: object.snapshot,
             referencesSnapshot: references.snapshots,

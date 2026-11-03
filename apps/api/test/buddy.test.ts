@@ -1,7 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { createTestApp } from "./helpers.js";
+import { createTestApp, TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
 describe("本人的伙伴", () => {
+  it("独立 Chat 经 /internal/buddy 取伙伴的人设：和本地对话同一段，按性格换；没选伙伴是 null；要内部令牌", async () => {
+    const token = "internal-chat-test";
+    const t = await createTestApp({ internalChatToken: token });
+    try {
+      const read = (personId: string, role: string, auth = `Bearer ${token}`) => t.app.inject({ method: "GET", url: "/internal/buddy",
+        headers: { authorization: auth, "x-owner-id": personId, "x-viewer-role": role } });
+      expect((await read(TEST_MEMBER.personId, "member", "Bearer wrong")).statusCode).toBe(401);
+      expect((await read(TEST_MEMBER.personId, "member")).json()).toBeNull();
+      const cookie = await t.memberCookie();
+      expect((await t.app.inject({ method: "PUT", url: "/api/me/buddy", headers: { cookie, origin: t.publicOrigin },
+        payload: { name: "团团", form: "panda", personality: "cheerful" } })).statusCode).toBe(200);
+      const member = (await read(TEST_MEMBER.personId, "member")).json();
+      expect(member).toMatchObject({ name: "团团", personality: "cheerful" });
+      expect(member.persona).toContain("你叫团团，是测试乙的伙伴");
+      expect(member.persona).toContain("# 说话的样子：乐观开朗");
+      expect(member.persona).toContain("坏消息一定说");
+      expect((await t.app.inject({ method: "PUT", url: "/api/me/buddy", headers: { cookie: await t.loginCookie(), origin: t.publicOrigin },
+        payload: { name: "圆圆", form: "classic", personality: "calm" } })).statusCode).toBe(200);
+      const ceo = (await read(TEST_CEO.personId, "ceo")).json();
+      expect(ceo.persona).toContain("你叫圆圆，是本人的伙伴");
+      expect(ceo.persona).toContain("# 说话的样子：理性冷静");
+    } finally { await t.close(); }
+  });
+
   it("新人没有伙伴；本人保存后读回一致，会话里也带上；别人看不到", async () => {
     const t = await createTestApp();
     try {
@@ -14,13 +38,14 @@ describe("本人的伙伴", () => {
       expect(before.json()).toBeNull();
       const saved = await save({ name: "  团团 ", form: "panda" });
       expect(saved.statusCode).toBe(200);
-      expect(saved.json()).toEqual({ name: "团团", form: "panda" });
-      expect((await own()).json()).toEqual({ name: "团团", form: "panda" });
+      expect(saved.json()).toEqual({ name: "团团", form: "panda", personality: "steady" });
+      expect((await own()).json()).toEqual({ name: "团团", form: "panda", personality: "steady" });
       const session = await t.app.inject({ method: "GET", url: "/api/auth/session", headers: { cookie } });
-      expect(session.json()).toMatchObject({ buddy: { name: "团团", form: "panda" } });
-      expect((await save({ name: "蓝蓝", form: "alive" })).json()).toEqual({ name: "蓝蓝", form: "alive" });
-      expect((await save({ name: "Miles", form: "miles" })).json()).toEqual({ name: "Miles", form: "miles" });
-      expect((await own()).json()).toEqual({ name: "Miles", form: "miles" });
+      expect(session.json()).toMatchObject({ buddy: { name: "团团", form: "panda", personality: "steady" } });
+      expect((await save({ name: "蓝蓝", form: "alive", personality: "critical" })).json()).toEqual({ name: "蓝蓝", form: "alive", personality: "critical" });
+      // 不带性格（旧页面）时沿用原来的。
+      expect((await save({ name: "Miles", form: "miles" })).json()).toEqual({ name: "Miles", form: "miles", personality: "critical" });
+      expect((await own()).json()).toEqual({ name: "Miles", form: "miles", personality: "critical" });
       const other = await t.app.inject({ method: "GET", url: "/api/me/buddy", headers: { cookie: await t.loginCookie() } });
       expect(other.json()).toBeNull();
     } finally { await t.close(); }
@@ -40,10 +65,11 @@ describe("本人的伙伴", () => {
         expect((await save({ name: tooWide, form: "panda" })).statusCode).toBe(400);
       }
       expect((await save({ name: "团团", form: "cat" })).statusCode).toBe(400);
+      expect((await save({ name: "团团", form: "panda", personality: "snarky" })).statusCode).toBe(400);
       expect((await save({ name: "团团" })).statusCode).toBe(400);
       expect((await t.app.inject({ method: "GET", url: "/api/me/buddy", headers: { cookie } })).json()).toBeNull();
       for (const widest of ["一二三四五六", "abcdefghijkl", "WWWWWW", "Anna 小明小", " 一二三四五a "]) {
-        expect((await save({ name: widest, form: "classic" })).json()).toEqual({ name: widest.trim(), form: "classic" });
+        expect((await save({ name: widest, form: "classic" })).json()).toEqual({ name: widest.trim(), form: "classic", personality: "steady" });
       }
     } finally { await t.close(); }
   });

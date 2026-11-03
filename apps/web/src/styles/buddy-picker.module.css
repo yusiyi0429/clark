@@ -1,4 +1,4 @@
-/* 选择你的伙伴（components/buddy/BuddyPicker）：名字一行，下面接三颗胶囊（coagent-skin-picker.module.css）。 */
+/* 选择你的伙伴（components/buddy/BuddyPicker）：名字一行，下面接四颗胶囊（coagent-skin-picker.module.css），再下面四种性格（buddy-personality.module.css）。 */
 
 .picker { display: grid; gap: 16px; }
 

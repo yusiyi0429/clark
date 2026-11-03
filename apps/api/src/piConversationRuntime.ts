@@ -29,6 +29,7 @@ import type { PeopleDirectory } from "./peopleDirectory.js";
 import { formalTermsDeep } from "./formalTerms.js";
 import type { ConversationRuntime } from "./conversations.js";
 import { CONVERSATION_WRITING_STYLE } from "./promptStyle.js";
+import { buddyPersona } from "./buddyPersona.js";
 import {
   TIER_GUIDANCE, TIER_SETTINGS, cleanThought, createEscalationWatch, hasWriteIntent, latestSummaryHeading, routeTurn, thinkingHeadline, toolProgressLabel, toolResultDetail, withNotice,
   type ConversationTier, type ThinkingTranslator, type ThoughtTranslator, type TierThinkingLevel, type TriageFn, type TurnRoute,
@@ -139,11 +140,6 @@ ${RICH_BLOCK_RULES}
 ${ANSWER_OPTIONS_RULES}
 
 ${SOURCE_CITATION_RULES}`;
-
-/** 本人给伙伴起了名字时，接在角色提示后面（spec 5.5）。CEO 的提示词本来就不带本人名字，写「CEO 的伙伴」。 */
-export function buddyIdentity(buddyName: string, ownerName: string | null): string {
-  return `# 名字\n\n你叫${buddyName}，是${ownerName ?? " CEO "}的伙伴。`;
-}
 
 export function driSystemPrompt(displayName: string, personalCard = false): string {
   return `# 角色
@@ -1260,8 +1256,9 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
       const rolePromptBase = personalCard ? `${isCeo ? SYSTEM_PROMPT : driSystemPrompt(input.viewer.displayName, true)}\n\n${MISSION_CARD_EDITING_PROMPT}`
         : isCeo ? CEO_SYSTEM_PROMPT
         : driSystemPrompt(input.viewer.displayName);
-      const basePrompt = input.viewer.buddyName
-        ? `${rolePromptBase}\n\n${buddyIdentity(input.viewer.buddyName, isCeo ? null : input.viewer.displayName)}`
+      // 本人选了伙伴：接上伙伴的人设（名字、性格、寒暄怎么接、底线），CEO 的提示词本来就不带本人名字。
+      const basePrompt = input.viewer.buddy
+        ? `${rolePromptBase}\n\n${buddyPersona(input.viewer.buddy, isCeo ? null : input.viewer.displayName)}`
         : rolePromptBase;
       // 三层取用、深聊转议题的说明只在有这些工具时拼上（在表达要求之后，快答档裁剪检索条款时不受影响）。
       // 分段时以前的对话靠会话目录和两个回看工具：系统提示里那一句换成指向它们（只随开关变，不随轮次变）。

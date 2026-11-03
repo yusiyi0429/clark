@@ -171,7 +171,7 @@ describe("伙伴的名字跟着本人进对话", () => {
       expect((await send(member)).statusCode).toBe(200);
       expect((await send(ceo)).statusCode).toBe(200);
       expect(runtime.viewers).toEqual([
-        { personId: TEST_MEMBER.personId, displayName: "测试乙", role: "member", buddyName: "团团" },
+        { personId: TEST_MEMBER.personId, displayName: "测试乙", role: "member", buddy: { name: "团团", personality: "steady" } },
         { personId: TEST_CEO.personId, displayName: "测试甲", role: "ceo" },
       ]);
     } finally {

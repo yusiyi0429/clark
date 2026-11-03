@@ -50,6 +50,7 @@ import { CollectorConsentSwitch } from "./CollectorConsentSwitch";
 import { browserApi } from "@/lib/api/client";
 import { BuddyNameInput } from "@/components/buddy/BuddyPicker";
 import { CoAgentSkinPicker } from "@/components/coagent/SkinPicker";
+import { PersonalityPicker } from "@/components/buddy/PersonalityPicker";
 import { PresenceCapsule } from "@/components/coagent/PresenceCapsule";
 import { CoAgentCapsule } from "./CoAgentCapsule";
 
@@ -446,6 +447,11 @@ describe("选择你的伙伴（spec 5.5）", () => {
     expect(match, "选形象这一页应嵌入四种形象").toBeDefined();
     return match!.props as unknown as { value: string; name: string; onChange: (form: string) => void };
   };
+  const personalityPicker = (tree: ReactNode) => {
+    const match = elements(tree).find((element) => element.type === PersonalityPicker);
+    expect(match, "选性格这一页应嵌入四种性格").toBeDefined();
+    return match!.props as unknown as { value: string; onChange: (personality: string) => void };
+  };
   const press = (tree: ReactNode, label: string) => (button(tree, label).props.onClick as () => void)();
 
   it("还没有伙伴时排在最前面，CEO 和成员都走；已经引导过的只走这一步；有伙伴的不走", () => {
@@ -457,7 +463,7 @@ describe("选择你的伙伴（spec 5.5）", () => {
     expect(text(WelcomeFlow({ data: ceo, buddy: { name: "团团", form: "panda" } }))).not.toContain("给你的伙伴起个名字");
   });
 
-  it("先单独一页起名字，名字空着不能继续；再选形象，存下再往下走；这一步没有「先进入工作台」", async () => {
+  it("先单独一页起名字，名字空着不能继续；再选形象，再选性格（默认沉稳靠谱），存下再往下走；这一步没有「先进入工作台」", async () => {
     vi.stubGlobal("window", new EventTarget());
     const put = vi.spyOn(browserApi, "PUT").mockResolvedValue({ data: { name: "团团", form: "panda" }, response: new Response(null, { status: 200 }) } as never);
     let tree = flow(ceo);
@@ -477,11 +483,17 @@ describe("选择你的伙伴（spec 5.5）", () => {
     expect(put).not.toHaveBeenCalled();
     skinPicker(tree).onChange("panda");
     press(flow(ceo), "继续");
+    tree = flow(ceo);
+    expect(text(tree)).toContain("选择团团的性格");
+    expect(personalityPicker(tree).value).toBe("steady");
+    expect(put).not.toHaveBeenCalled();
+    personalityPicker(tree).onChange("calm");
+    press(flow(ceo), "继续");
     await vi.waitFor(() => expect(text(flow(ceo))).toContain("你好，测试"));
-    expect(put).toHaveBeenCalledExactlyOnceWith("/api/me/buddy", { body: { name: "团团", form: "panda" } });
+    expect(put).toHaveBeenCalledExactlyOnceWith("/api/me/buddy", { body: { name: "团团", form: "panda", personality: "calm" } });
   });
 
-  it("名字页回车也往下，名字不合格不翻页；选中哪颗，顶上的胶囊就换成哪颗，选默认还是原来的大胶囊；「上一步」回到起名字", () => {
+  it("名字页回车也往下，名字不合格不翻页；选中哪颗，顶上的胶囊就换成哪颗，选默认还是原来的大胶囊；选性格那页顶上是选好的那颗在说话；「上一步」一页页退回起名字", () => {
     nameInput(flow(ceo)).onEnter();
     expect(text(flow(ceo))).toContain("给你的伙伴起个名字");
     nameInput(flow(ceo)).onChange("团团");
@@ -494,20 +506,28 @@ describe("选择你的伙伴（spec 5.5）", () => {
     tree = flow(ceo);
     expect(elements(tree).find((element) => element.type === PresenceCapsule)?.props).toMatchObject({ skin: "miles", name: "团团" });
     expect(elements(tree).some((element) => element.type === CoAgentCapsule)).toBe(false);
+    press(tree, "继续");
+    tree = flow(ceo);
+    expect(text(tree)).toContain("选择团团的性格");
+    expect(elements(tree).find((element) => element.type === PresenceCapsule)?.props).toMatchObject({ skin: "miles", pose: "speaking" });
+    press(tree, "上一步");
+    tree = flow(ceo);
+    expect(text(tree)).toContain("选择团团的形象");
     press(tree, "上一步");
     tree = flow(ceo);
     expect(nameInput(tree).value).toBe("团团");
     expect(elements(tree).some((element) => element.type === CoAgentCapsule)).toBe(true);
   });
 
-  it("存不上就留在选形象这一页并说明，不往下走", async () => {
+  it("存不上就留在选性格这一页并说明，不往下走", async () => {
     vi.stubGlobal("window", new EventTarget());
     vi.spyOn(browserApi, "PUT").mockResolvedValue({ data: undefined, error: { message: "伙伴要有名字" }, response: new Response(null, { status: 400 }) } as never);
     nameInput(flow(ceo)).onChange("团团");
     press(flow(ceo), "继续");
     press(flow(ceo), "继续");
+    press(flow(ceo), "继续");
     await vi.waitFor(() => expect(text(flow(ceo))).toContain("伙伴要有名字"));
-    expect(text(flow(ceo))).toContain("选择团团的形象");
+    expect(text(flow(ceo))).toContain("选择团团的性格");
   });
 
   it("已经引导过、只差伙伴的人：存好就回原来要去的页面，不再记一次引导完成", async () => {
@@ -519,6 +539,7 @@ describe("选择你的伙伴（spec 5.5）", () => {
     nameInput(flow(ceo, options)).onChange("团团");
     press(flow(ceo, options), "继续");
     skinPicker(flow(ceo, options)).onChange("alive");
+    press(flow(ceo, options), "继续");
     const tree = flow(ceo, options);
     expect(elements(tree).find((element) => element.type === OnboardingProgress)?.props).toMatchObject({ current: 1, total: 1 });
     (button(tree, "继续").props.onClick as () => void)();

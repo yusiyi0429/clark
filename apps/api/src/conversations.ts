@@ -24,6 +24,7 @@ import type { IssueSuggest, IssueSuggestContext } from "./issueDrafts.js";
 import type { TurnRecoverySummary } from "./conversationRecovery.js";
 import type { ParsedMaterial } from "./materialParser.js";
 import { roleOf, type SessionRole } from "./memberAccess.js";
+import type { TBuddyPersonality } from "@warmap/contracts";
 import { getIssueRow, projectIssueCard } from "./issues.js";
 import { moveStagedFile } from "./meetingMaterials.js";
 import { cardWithMeetingFacts } from "./meetingCardRead.js";
@@ -76,8 +77,8 @@ export type ConversationRuntime = {
   modelId?: string;
   run(input: {
     scope: TConversationScope;
-    /** 这一轮是谁在问：CEO 用 CEO Agent；成员用 DRI Agent（不带 CEO 决策面工具与首页全局上下文）。buddyName：本人给伙伴起的名字，没选伙伴时没有。 */
-    viewer: { personId: string; displayName: string; role: SessionRole; buddyName?: string };
+    /** 这一轮是谁在问：CEO 用 CEO Agent；成员用 DRI Agent（不带 CEO 决策面工具与首页全局上下文）。buddy：本人的伙伴（名字和性格），没选伙伴时没有。 */
+    viewer: { personId: string; displayName: string; role: SessionRole; buddy?: { name: string; personality: TBuddyPersonality } };
     message: string;
     currentObject: TReferenceSnapshot | null;
     runId?: string;

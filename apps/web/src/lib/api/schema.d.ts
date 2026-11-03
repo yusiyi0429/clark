@@ -2815,7 +2815,7 @@ export interface paths {
         };
         /** 读取本人的伙伴；还没选过时是 null */
         get: operations["getBuddy"];
-        /** 本人给伙伴起名字、选外形 */
+        /** 本人给伙伴起名字、选外形和性格 */
         put: operations["saveBuddy"];
         post?: never;
         delete?: never;
@@ -5057,6 +5057,7 @@ export interface components {
             buddy?: {
                 name: string;
                 form: "classic" | "alive" | "panda" | "miles";
+                personality?: "steady" | "cheerful" | "calm" | "critical";
             } | null;
         };
         PeopleDirectoryResponse: {
@@ -9413,8 +9414,10 @@ export interface components {
         Buddy: {
             name: string;
             form: "classic" | "alive" | "panda" | "miles";
+            personality?: "steady" | "cheerful" | "calm" | "critical";
         };
         BuddyForm: "classic" | "alive" | "panda" | "miles";
+        BuddyPersonality: "steady" | "cheerful" | "calm" | "critical";
         RailBackground: {
             choice: "mist" | "dusk" | "pine" | "night" | "sand" | "custom";
             imageVersion: string | null;
