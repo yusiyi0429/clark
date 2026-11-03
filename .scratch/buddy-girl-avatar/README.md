@@ -2,8 +2,8 @@
 
 状态：设计稿第五版，2026-11-03，等孙铭泽定稿；还没接进产品。
 
-在线预览（两颗胶囊都是活的，可放大、切姿势、改名字）：https://claude.ai/artifact/Lzyo5LFWRoF33m4SD3LaBF
-本地打开 `preview.html` 是同一页，不用联网。
+在线预览（11/03 起 Miles、Mia、C妹 三颗胶囊同屏，可放大、切姿势、改名字）：https://claude.ai/artifact/Lzyo5LFWRoF33m4SD3LaBF
+本地打开 `preview.html` 是 Miles 和 Mia 两人的版本，不用联网；三人同屏的本地版在 `../buddy-cmei/preview.html`。
 
 ![整张画](renders/full-art.png)
 
