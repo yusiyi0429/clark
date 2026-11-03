@@ -275,6 +275,7 @@ export const server=createServer(async(req,res)=>{
   if(route.pathname==='/api/reviews/reveal-insights'&&req.method==='POST'){const b=await body(req),actor=actorFor(b.memberId);if(!(actor?.ceo===true||roundOperators.includes(actor?.id)))return json(res,403,{error:'只有管理员能公开洞察'});
    const missing=await revealInsights(actor);return json(res,200,{revealedAt:store.snapshot().insightsRevealed.at,missing});}
   if(route.pathname==='/api/reviews/cancel'&&req.method==='POST'){const b=await body(req);return json(res,200,{job:await reviewJobs.cancel(actorFor(b.memberId))});}
+  if(route.pathname==='/api/reviews/recheck'&&req.method==='POST')return json(res,202,await reviewJobs.recheck(actorFor(req.m2Session.memberId)));
   if(route.pathname==='/api/reviews/candidate'){
    if(req.method!=='GET')return json(res,405,{error:'草稿只支持只读查看'});
    return json(res,200,await reviewJobs.candidate(actorFor(req.m2Session.memberId)));

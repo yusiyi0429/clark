@@ -1,3 +1,4 @@
+import {sharedProjection,memberActor} from './shared-projection.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
@@ -236,5 +237,63 @@ test('a damaged repair keeps the complete previous card and never runs a second 
   assert.equal(run.quality.counts.company,1);
   assert.equal(run.quality.passes.length,1);
   assert.equal(attempted,3);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('rechecks current reviews without writing cards, and discards a stale result after a concurrent edit',async()=>{
+ let release,entered=false,block=false;
+ const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{
+  const p=JSON.parse(messages[1].content);
+  if(p.unit)return {answer:JSON.stringify({review})};
+  if(p.phase==='impact'&&block){entered=true;await new Promise(resolve=>{release=resolve;});}
+  return {answer:JSON.stringify({...checkCoverage(p),issues:[]})};
+ }};
+ const {jobs,store,dir}=await setup(gateway,{root:latestSkill});
+ try{
+  await jobs.start(actor,{period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00'},{now:new Date('2026-11-02T00:00:00Z')});
+  await until(()=>jobs.view().status!=='running');
+  assert.equal(jobs.view().status,'done',jobs.view().error);
+  await assert.rejects(jobs.recheck({id:'member-09'}),{status:403});
+  const before=structuredClone(store.snapshot().cards);
+  await jobs.recheck(actor);
+  await until(()=>jobs.view().recheck?.status!=='running');
+  assert.equal(jobs.view().recheck.status,'done',jobs.view().recheck.error);
+  assert.deepEqual(store.snapshot().cards,before);
+  block=true;
+  await jobs.recheck(actor);await until(()=>entered);
+  await store.transact(state=>{
+   const card=state.cards['rv:company'],previous=card.versions.at(-1);
+   card.versions.push({...previous,number:previous.number+1,content:{...previous.content,verdictReason:'人工改稿'}});return state;
+  });
+  release();
+  await until(()=>jobs.view().recheck?.status!=='running');
+  assert.equal(jobs.view().recheck.status,'failed');
+  assert.match(jobs.view().recheck.error,/版本已变化/);
+  assert.equal(jobs.view().qualityStatus,'check-incomplete');
+  const ordinary=sharedProjection(store.snapshot(),memberActor('member-03',store.snapshot()));
+  assert.equal(ordinary.review.qualityStatus,'check-incomplete');
+  assert.equal(ordinary.review.problems.some(issue=>issue.kind==='unresolved'),false);
+  assert.equal(store.snapshot().cards['rv:company'].versions.at(-1).content.verdictReason,'人工改稿');
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('restart records an interrupted recheck without calling a model or changing cards',async()=>{
+ const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async()=>assert.fail('recovery must not call a model')};
+ const {jobs,store,dir}=await setup(gateway,{root:latestSkill});
+ try{
+  await store.transact(state=>installReviewRound(state,{reviews:[{...review,ref:'company',unit:'company',level:'company',title:'已装入',owner:'刘明华'}]}));
+  await store.transact(state=>{
+   state.reviewJob={id:'prior-job',status:'done',qualityStatus:'needs-review',recheck:{id:'prior-recheck',status:'running',startedAt:'2026-11-03T00:00:00Z'}};
+   return state;
+  });
+  const before=structuredClone(store.snapshot().cards);
+  await jobs.recover();
+  assert.equal(jobs.view().status,'done');
+  assert.equal(jobs.view().qualityStatus,'check-incomplete');
+  assert.equal(jobs.view().recheck.status,'interrupted');
+  assert.equal(jobs.view().recheck.id,'prior-recheck');
+  assert.ok(jobs.view().recheck.finishedAt);
+  assert.deepEqual(store.snapshot().cards,before);
+  assert.equal(sharedProjection(store.snapshot(),memberActor('member-03',store.snapshot())).review.qualityStatus,'check-incomplete');
  }finally{await rm(dir,{recursive:true,force:true});}
 });
