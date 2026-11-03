@@ -21,7 +21,7 @@ let DEFS = [], K = 0;
 const P = (d, fill, more = "") => `<path d="${d}" fill="${fill}"${more}/>`;
 const B = (pts, fill, opts = {}, more = "") => `<path d="${brush(pts, opts)}" fill="${fill}"${more}/>`;
 const R = (pts, fill, opts = {}, more = "") => `<path d="${ring(pts, opts)}" fill="${fill}" fill-rule="evenodd"${more}/>`;
-const thin = (pts, color, w, more = "") => B(pts, color, { w, taper: [0.4, 0.4], ends: [0, 0] }, more);
+const thin = (pts, color, w, more = "") => B(pts, color, { w, taper: [0.4, 0.4], ends: [0, 0], step: 28 }, more);
 /** 把内容裁在某个形状里（阴影、高光只落在底色上）。 */
 const clipped = (d, content) => { const id = `{id}-k${++K}`; DEFS.push(`<clipPath id="${id}"><path d="${d}"/></clipPath>`); return `<g clip-path="url(#${id})">${content}</g>`; };
 const soft = (content, level = 1) => `<g filter="url(#{id}-soft${level})">${content}</g>`;
