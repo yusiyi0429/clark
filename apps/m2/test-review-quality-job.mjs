@@ -65,24 +65,34 @@ test('exhausted single-model checker resume preserves the edited draft and canno
 
 function checkCoverage(p){return {phase:p.phase,candidateHash:p.candidateHash,checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[],issueResults:p.priorIssues?.map(issue=>({id:issue.id,status:'resolved',reason:'已按当前候选核对'}))};}
 
-test('a clean first check still requires final; a new final finding is repaired then checked against the saved candidate',async()=>{
- const phases=[];
- const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{
+test('final findings route repairs by revision batch rather than check index',async()=>{
+ const phases=[],repairs=[];
+ const claude='wangsu/claude-sonnet-5-5',gpt='wangsu/gpt-6.1-sol';
+ const makeGateway=model=>({status:{model},complete:async messages=>{
   const p=JSON.parse(messages[1].content);
-  if(p.unit)return {answer:JSON.stringify({review:{...review,verdictReason:p.revision?'已核对':'初稿'}})};
-  phases.push(p.phase);
-  const issues=p.phase==='final'&&p.reviews[0].verdictReason==='初稿'?[{ref:'company',sourceRefs:[],type:'结构与表达',problem:'需要澄清',impact:'影响理解',mustFix:true,fixable:true}]:[];
+  if(p.unit){
+   if(p.revision)repairs.push({batch:p.revision,model});
+   return {answer:JSON.stringify({review:{...review,verdictReason:['初稿','第一处已修','第二处已修'][p.revision||0]}})};
+  }
+  phases.push({phase:p.phase,model});
+  const issues=p.phase==='final'&&p.reviews[0].verdictReason!=='第二处已修'?[{
+   ref:'company',sourceRefs:[],type:'结构与表达',problem:p.reviews[0].verdictReason==='初稿'?'需要澄清':'另一处不一致',impact:'影响理解',mustFix:true,fixable:true,
+  }]:[];
   return {answer:JSON.stringify({...checkCoverage(p),issues})};
- }};
- const {jobs,store,dir}=await setup(gateway);
+ }});
+ const gateway=withReviewFallbacks(makeGateway(claude),[makeGateway(gpt)]);
+ const {jobs,dir}=await setup(gateway,{formalFallbacks:false});
  try{
   const job=await jobs.start(actor,{period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00'},{now:new Date('2026-11-02T00:00:00Z')});
   await until(()=>jobs.view().status!=='running');
   assert.equal(jobs.view().status,'done',jobs.view().error);
-  assert.deepEqual(phases,['initial','initial','initial','final','impact','final']);
+  assert.deepEqual(phases.map(x=>x.phase),['initial','initial','initial','final','impact','final','impact','final']);
+  assert.ok(phases.every(x=>x.model===claude));
+  assert.deepEqual(repairs,[{batch:1,model:claude},{batch:2,model:gpt}]);
   const {run}=JSON.parse(await readFile(join(dir,'review-jobs',job.id+'.json'),'utf8'));
+  assert.deepEqual(run.quality.passes.filter(pass=>pass.actions?.length).map(pass=>pass.index),[1,3]);
   assert.equal(run.quality.passes.at(-1).coverage.candidateHash,run.quality.candidateHash);
-  assert.equal(run.quality.counts.company,1);
+  assert.equal(run.quality.counts.company,2);
   assert.equal(run.quality.status,'passed');
  }finally{await rm(dir,{recursive:true,force:true});}
 });
