@@ -55,7 +55,7 @@ type VersionRow = { id: string; task_id: string; number: number; statement: stri
 type ItemRow = { id: string; version_id: string; kind: TDeliverableItem["kind"]; name: string; mime_type: string | null; size_bytes: number | null;
   page_count: number | null; storage_key: string | null; url: string | null; extracted_text: string | null; read: TDeliverableItem["read"]; read_note: string | null };
 
-/** 达标度：达到 100、部分 50、未达到 0 的平均；可以交付 = 有标准且每一条都达到。 */
+/** 达标度：达到 100、部分 50、未达到 0 的平均；ready = 有标准且每一条都达到（只作参考，不卡交付）。 */
 function scoreOf(review: StoredReview | null) {
   const criteria = review?.criteria ?? [];
   const met = criteria.filter((item) => item.verdict === "met").length;

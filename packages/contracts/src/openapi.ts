@@ -1523,7 +1523,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       "/api/plan-tasks/{taskId}/deliverable/versions/{versionId}/deliver": {
         post: {
           operationId: "deliverDeliverableVersion",
-          summary: "交付这一版：最新一版、评审完、每一条都达到时才能交付；交付后伙伴写版本说明",
+          summary: "交付这一版：最新一版、参考评审跑完就能交付，不看达没达到；没有可对照标准的 Task 不收交付；交付后伙伴写版本说明",
           parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }, { name: "versionId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
           responses: { "200": { description: "这一版", content: { "application/json": { schema: { $ref: "#/components/schemas/DeliverableVersion" } } } }, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
         },

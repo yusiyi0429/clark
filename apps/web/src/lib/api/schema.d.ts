@@ -2366,7 +2366,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 交付这一版：最新一版、评审完、每一条都达到时才能交付；交付后伙伴写版本说明 */
+        /** 交付这一版：最新一版、参考评审跑完就能交付，不看达没达到；没有可对照标准的 Task 不收交付；交付后伙伴写版本说明 */
         post: operations["deliverDeliverableVersion"];
         delete?: never;
         options?: never;
