@@ -27,7 +27,7 @@ export async function importReviewRound(store,{file,label,period,cutoff,receipt}
   if(external&&(s.reviewJobArchives||[]).some(j=>j.job?.id===external.job.id))throw Object.assign(Error('历史任务不能重新覆盖当前轮次'),{status:409});
   // Validate before creating a backup; the queued store lock includes all human
   // edits committed before this import, and no local collaboration state is loaded.
-  const installed=installReviewRound(s,{...result,period,cutoff:cutoff||result.cutoff||null},{label:label||`${Number(period.slice(5))} 月复盘`,source:basename(file),now});
+  const installed=installReviewRound(s,{...result,period,cutoff:cutoff||result.cutoff||null},{label:label||`${Number(period.slice(5))} 月复盘`,source:basename(file),now,allowReviewable:external?.allowReviewable===true});
   await writeFile(saved,JSON.stringify(s),{mode:0o600,flag:'wx'});
   await copyFile(archivesPath(statePath),join(dir,`collaboration-before-review-${stamp}.archives.json`)).catch(e=>{if(e.code!=='ENOENT')throw e;});
   // A fresh month-end round: no handoff, done-marks or earlier attempts carried over from testing.

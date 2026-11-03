@@ -60,3 +60,22 @@ test('missing/wrong quality, altered artifacts, mismatched heads and running job
   }finally{await f.store.close();await rm(f.dir,{recursive:true,force:true});}
  }
 });
+
+test('external install accepts an audited complete check-incomplete round and preserves pending issues',async()=>{
+ const f=await fixture();try{
+  const {run}=f.work,q=run.quality;
+  run.outputPolicy.reviewDelivery=1;
+  f.work.skillSnapshot.version=f.receipt.skill.version=f.file.skill.version=f.file.skillFormat='2.1.16';
+  q.delivery='reviewable';q.maxRevisions=1;q.status='check-incomplete';q.passes[0].status='check-incomplete';
+  q.verificationPending=[{unit:'company',problem:'证据待核'}];
+  f.file.quality={delivery:q.delivery,...f.file.quality,status:q.status,maxRevisions:1,verificationPending:q.verificationPending};
+  await f.persist();
+  const imported=await importReviewRound(f.store,f.args,f.options),state=f.store.snapshot();
+  assert.equal(imported.reviews,1);
+  assert.equal(state.reviewJob.status,'done');
+  assert.equal(state.reviewJob.qualityStatus,'check-incomplete');
+  assert.ok(state.reviewRound.problems.some(x=>x.reason==='证据待核'));
+  assert.deepEqual(state.cards['rv:company'].versions[0].signatures,[]);
+  assert.ok(state.reviewArchives[0].cards[0].versions[0].signatures.length);
+ }finally{await f.store.close();await rm(f.dir,{recursive:true,force:true});}
+});

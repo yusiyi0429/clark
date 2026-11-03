@@ -9,15 +9,15 @@ import {createCollaborationState} from './governance.mjs';
 import {installReviewRound} from './review-round.mjs';
 
 const actor={id:'member-04'};
-const skillRoot=new URL('./review-skill/',import.meta.url);
+const skillRoot=new URL('./review-skill-history/2.1.15/',import.meta.url);
 const review={verdict:'未达成',verdictReason:'缺少结果',facts:[{ref:'x',item:'成果',status:'未达成',evidence:'尚缺记录',gap:'尚缺记录'}],nextInputs:[{ref:'x',type:'继续',text:'核对结果'}]};
 async function until(fn){for(let i=0;i<500;i++){if(fn())return;await new Promise(r=>setTimeout(r,2));}throw Error('job did not finish');}
-async function setup(gateway,{formalFallbacks=true}={}){
+async function setup(gateway,{formalFallbacks=true,root=skillRoot}={}){
  if(formalFallbacks)gateway=withReviewFallbacks(gateway,[{...gateway,status:{model:'wangsu/gpt-6.1-sol'}}]);
  const dir=await mkdtemp(join(tmpdir(),'m2-quality-job-'));let state=createCollaborationState([]);const original=structuredClone(state.cards);
  const store={snapshot:()=>state,transact:async fn=>{state=fn(structuredClone(state));return state;}};
  const reader=async()=>({list:async f=>f.type==='Company'?[{object_id:'company-source'}]:[],get:async()=>({business:{title:'公司',version:1,blocks:[]}}),findEvents:async()=>[]});
- const jobs=createReviewJobs({store,gateway,skillRoot,statePath:join(dir,'state.json'),reader,isOperator:a=>a.id==='member-04',installReviewRound,archivesPath:path=>path+'.archives.json',ceoName:'刘明华'});
+ const jobs=createReviewJobs({store,gateway,skillRoot:root,statePath:join(dir,'state.json'),reader,isOperator:a=>a.id==='member-04',installReviewRound,archivesPath:path=>path+'.archives.json',ceoName:'刘明华'});
  return {jobs,store,dir,original};
 }
 test('a job at the two-edit limit writes an independent draft and never installs it in current business state',async()=>{
@@ -161,3 +161,80 @@ test('a third-attempt source request retains the raw answer and the specific pen
 });
 
 function candidateBasis(p,ref){return p.checkBasis?{sourceRefs:[],basis:{kind:'candidate',refs:[{ref,field:'verdictReason'}]}}:{sourceRefs:[ref]};}
+
+const latestSkill=new URL('./review-skill/',import.meta.url);
+
+test('one repair batch and scoped recheck install a complete round with remaining issues and fresh signatures',async()=>{
+ const phases=[],repairs=[];
+ const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{
+  const p=JSON.parse(messages[1].content);
+  if(p.unit){
+   if(p.revision)repairs.push(p.revision);
+   return {answer:JSON.stringify({review:{...review,verdictReason:p.revision?'新修订':'初稿'}})};
+  }
+  phases.push(p.phase);
+  const issues=[{ref:'company',...candidateBasis(p,'company'),type:'结构与表达',problem:p.phase==='impact'?'仍待核对':'需要澄清',impact:'影响理解',mustFix:true,fixable:true}];
+  const coverage=checkCoverage(p);
+  return {answer:JSON.stringify({...coverage,issues})};
+ }};
+ const {jobs,store,dir}=await setup(gateway,{root:latestSkill});
+ const old=installReviewRound(store.snapshot(),{reviews:[{...review,ref:'company',unit:'company',level:'company',title:'上一轮',owner:'刘明华'}]});
+ old.cards['rv:company'].versions[0].signatures=[{by:'刘明华'}];old.cards['rv:company'].confirmedVersion=1;
+ await store.transact(()=>old);
+ try{
+  await jobs.start(actor,{regenerate:true,period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00'},{now:new Date('2026-11-02T00:00:00Z')});
+  await until(()=>jobs.view().status!=='running');
+  assert.equal(jobs.view().status,'done',jobs.view().error);
+  assert.equal(jobs.view().qualityStatus,'needs-review');
+  assert.deepEqual(phases,['initial','initial','initial','impact']);
+  assert.deepEqual(repairs,[1]);
+  const state=store.snapshot();
+  assert.equal(state.cards['rv:company'].verdictReason,'新修订');
+  assert.deepEqual(state.cards['rv:company'].versions[0].signatures,[]);
+  assert.equal(state.cards['rv:company'].confirmedVersion,null);
+  assert.deepEqual(state.reviewArchives[0].cards[0].versions[0].signatures,[{by:'刘明华'}]);
+  assert.ok(state.reviewRound.problems.some(x=>x.ref==='company'&&x.reason==='仍待核对'));
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('failed first check delivers a complete draft as check-incomplete, but damaged initial output cannot install',async()=>{
+ for(const broken of [false,true]){
+  const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{
+   const p=JSON.parse(messages[1].content);
+   if(p.unit)return {answer:JSON.stringify({review:broken?{verdict:'未达成'}:review})};
+   throw Object.assign(Error('checker unavailable'),{providerStatus:503});
+  }};
+  const {jobs,store,dir,original}=await setup(gateway,{root:latestSkill});
+  try{
+   await jobs.start(actor,{period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00'},{now:new Date('2026-11-02T00:00:00Z')});
+   await until(()=>jobs.view().status!=='running');
+   assert.equal(jobs.view().status,broken?'failed':'done',jobs.view().error);
+   if(broken){assert.deepEqual(store.snapshot().cards,original);assert.equal(jobs.view().errorCode,'REVIEW_INITIAL_INCOMPLETE');}
+   else{assert.equal(jobs.view().qualityStatus,'check-incomplete');assert.equal(store.snapshot().cards['rv:company'].verdictReason,review.verdictReason);assert.ok(jobs.view().checks.length);}
+  }finally{await rm(dir,{recursive:true,force:true});}
+ }
+});
+
+test('a damaged repair keeps the complete previous card and never runs a second repair batch',async()=>{
+ let attempted=0;
+ const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{
+  const p=JSON.parse(messages[1].content);
+  if(p.unit){
+   if(p.revision){attempted++;return {answer:'{"review":{"verdict":"达成"}}'};}
+   return {answer:JSON.stringify({review})};
+  }
+  return {answer:JSON.stringify({...checkCoverage(p),issues:[{ref:'company',sourceRefs:['company'],type:'结构与表达',problem:'需要澄清',impact:'影响理解',mustFix:true,fixable:true}]})};
+ }};
+ const {jobs,store,dir}=await setup(gateway,{root:latestSkill});
+ try{
+  const job=await jobs.start(actor,{period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00'},{now:new Date('2026-11-02T00:00:00Z')});
+  await until(()=>jobs.view().status!=='running');
+  assert.equal(jobs.view().status,'done',jobs.view().error);
+  assert.equal(jobs.view().qualityStatus,'needs-review');
+  assert.equal(store.snapshot().cards['rv:company'].verdict,review.verdict);
+  const {run}=JSON.parse(await readFile(join(dir,'review-jobs',job.id+'.json'),'utf8'));
+  assert.equal(run.quality.counts.company,1);
+  assert.equal(run.quality.passes.length,1);
+  assert.equal(attempted,3);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});

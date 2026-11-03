@@ -69,8 +69,8 @@ test('cancellation interrupts a call without adding transport retries',async()=>
  const gateway={complete:async(_messages,{signal})=>{calls++;controller.abort(Error('cancelled'));signal.throwIfAborted();}};
  await assert.rejects(qualityModelCall({gateway,quality:{requests:{}},run:{raw:{}},pass:0,stage:'check',payload:{},system:'rules',save:async()=>{},signal:controller.signal}),/cancelled/);assert.equal(calls,1);
 });
-test('product skill exposes an exact two-round contract',async()=>{
- const actual=await loadReviewSkill(new URL('./review-skill/',import.meta.url));assert.equal(actual.version,'2.1.15');assert.equal(actual.maxRevisionRounds,2);assert.equal(actual.groups.length,3);
+test('product skill exposes an exact one-batch contract',async()=>{
+ const actual=await loadReviewSkill(new URL('./review-skill/',import.meta.url));assert.equal(actual.version,'2.1.16');assert.equal(actual.maxRevisionRounds,1);assert.equal(actual.groups.length,3);
 });
 test('product runner checks after both repairs, preserves complete E43/E49 sources and never restores initial cached drafts on resume',async()=>{
  const basis={mode:'latest-source-candidate',snapshotHash:'snapshot'},meta={basisMode:basis.mode,snapshotHash:basis.snapshotHash};
