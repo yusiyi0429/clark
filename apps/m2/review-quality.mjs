@@ -56,12 +56,14 @@ export async function qualityModelCall({gateway,system,quality,run,pass,stage,re
   let answer,error,parsed,started;
   try{
    const correction=payload.checkBasis===2&&request.attempts.at(-2)?.outputContract?request.attempts.at(-2).error:null;
-   const attemptSystem=correction?system+'\n上一次响应未通过结构校验：'+correction+'。按当前请求合同重新核验并返回完整 JSON。不要补造来源或改变证据。':system;
+   const exactFeedback=correction&&payload.requiredReceipt;
+   const attemptPayload=exactFeedback?{...request.payload,validationFeedback:correction.slice(0,2400)}:request.payload;
+   const attemptSystem=exactFeedback?system+'\n读取请求中的 validationFeedback 作为结构校验诊断数据，按既有合同重新核验并返回完整 JSON。':correction?system+'\n上一次响应未通过结构校验：'+correction+'。按当前请求合同重新核验并返回完整 JSON。不要补造来源或改变证据。':system;
    if(correction)record.validationFeedback=correction;
-   if(backups.length||grouped&&quality.qualityFallback||correction){const actual=Buffer.byteLength(JSON.stringify(reviewModelRequestBody(attemptSystem,request.payload,{model:active.status.model,...record.options})));if(actual>maxBodyBytes)throw Object.assign(Error('实际模型完整请求体超过本次工程预算，未调用'),{code:'REVIEW_PACKET_OVERSIZE',actual});record.bodyBytes=actual;record.bodyBudgetBytes=maxBodyBytes;}
+   if(backups.length||grouped&&quality.qualityFallback||correction){const actual=Buffer.byteLength(JSON.stringify(reviewModelRequestBody(attemptSystem,attemptPayload,{model:active.status.model,...record.options})));if(actual>maxBodyBytes)throw Object.assign(Error('实际模型完整请求体超过本次工程预算，未调用'),{code:'REVIEW_PACKET_OVERSIZE',actual});record.bodyBytes=actual;record.bodyBudgetBytes=maxBodyBytes;}
    const attemptSignal=timed?AbortSignal.any([...(signal?[signal]:[]),AbortSignal.timeout(timeoutMs)]):signal;
    if(timed)started=now();
-   answer=await active.complete([{role:'system',content:attemptSystem},{role:'user',content:JSON.stringify(request.payload)}],{...callOptions,timeoutMs,signal:attemptSignal,...(timed?{onTransportTiming:timing=>{record.transportTiming=timing;}}:{}),trace:{name:key,stage,metadata:{ref,pass,inputHash,sourceHash:quality.sourceHash,maxTokens}}});
+   answer=await active.complete([{role:'system',content:attemptSystem},{role:'user',content:JSON.stringify(attemptPayload)}],{...callOptions,timeoutMs,signal:attemptSignal,...(timed?{onTransportTiming:timing=>{record.transportTiming=timing;}}:{}),trace:{name:key,stage,metadata:{ref,pass,inputHash,sourceHash:quality.sourceHash,maxTokens}}});
    record.raw=answer.rawAnswer??answer.answer;record.usage=answer.usage;record.gatewayModel=answer.model||null;record.returnedModel=answer.returnedModel??null;record.providerRequestId=answer.providerRequestId||null;record.finishReason=answer.finishReason||null;record.finishReasonSource=answer.finishReasonSource||null;
    if(timed)attemptSignal.throwIfAborted();
    try{parsed=validate(JSON.parse(bareJson(answer.answer)));}catch(error){error.reviewOutputContract=true;throw error;}

@@ -86,3 +86,18 @@ test('business facts and resolutions require supplied originals; candidate relat
  supplemented.response.issues[0].basis={...original,refs:[...original.refs.slice(0,1),{...original.refs[1],id:'E57'}]};
  assert.throws(supplemented.validate,/本次已提供/);
 });
+
+test('exact receipts distinguish missing coverage from extra relationship endpoints',()=>{
+ const reviews={...before,m:{verdict:'达成'}};
+ const scope=impact(reviews),priorIssues=[{id:'old'}];
+ const payload=reviewImpactPayload({phase:'impact',scope,reviews,sources,priorIssues,coverage:[],exactReceipt:true});
+ const receipt={phase:'impact',candidateHash:payload.candidateHash,checkedRefs:['m'],checkedEdges:scope.edges,issues:[],issueResults:[{id:'old',status:'open',reason:'待核'}],sourceRequests:[]};
+ const validate=value=>validateReviewImpact(value,payload,Object.keys(sources));
+ assert.deepEqual(payload.requiredReceipt,{checkedRefs:['m'],checkedEdges:scope.edges,issueResultIds:['old']});
+ assert.match(payload.task,/不能增删或重复/);
+ assert.doesNotThrow(()=>validate(receipt));
+ assert.throws(()=>validate({...receipt,checkedRefs:['m','a']}),/缺少 \[\]，多报 \["a"\]/);
+ assert.throws(()=>validate({...receipt,checkedRefs:[]}),/缺少 \["m"\]，多报 \[\]/);
+ assert.throws(()=>validate({...receipt,checkedEdges:[]}),/checkedEdges 集合不符，缺少/);
+ assert.throws(()=>validate({...receipt,issueResults:[]}),/issueResults.id 集合不符，缺少 \["old"\]/);
+});
