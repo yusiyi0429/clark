@@ -31,6 +31,7 @@ import { useListening } from "@/components/coagent/presence";
 import { useBuddy, type Buddy } from "@/components/buddy/useBuddy";
 import type { DetailGroup } from "./missionCardGroup";
 import { MESSAGE_REPLY, type QuotePrefill, type QuoteSource, type TextQuote } from "./quotes";
+import { useUnseenReply } from "./unseenReply";
 import groupStyles from "@/styles/mission-group.module.css";
 import w from "@/styles/app-shell.module.css";
 
@@ -170,6 +171,7 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, buddy, ui }:
   const restoreReferences = useStableCallback((cards: Card[]) => references?.add(cards));
   const wideExit = useStableCallback(() => setSheetWide?.(false));
   const scopeQuotes = useMemo(() => ui.quotes.filter((item) => item.source?.scope === target.scope), [ui.quotes, target.scope]);
+  const attention = useUnseenReply(data, ui.historyOpen);
 
   if (rail && !ui.historyOpen) {
     return <RailConversation data={data} target={target} agentTitle={agentTitle} buddy={buddy} ui={ui} references={global ? [] : items} onDiscussGlobal={discussGlobal} />;
@@ -190,6 +192,7 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, buddy, ui }:
         data={data}
         label={target.label}
         agentName={buddy?.name}
+        attention={attention}
         global={global}
         detail={detailOpen}
         keyboard={ui.historyOpen}

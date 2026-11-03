@@ -38,6 +38,7 @@ export const ConversationDock = memo(function ConversationDock({
   data,
   label,
   agentName,
+  attention = false,
   global,
   detail,
   keyboard,
@@ -303,7 +304,7 @@ export const ConversationDock = memo(function ConversationDock({
         ) : null}
         <div className={d.content} style={{ height: keyboard ? (composerExpanded ? composerHeight : 36) : 48 }}>
           <div className={d.entryLayer} aria-hidden={keyboard} inert={keyboard}>
-            <button type="button" ref={entryButton} className={d.entryButton} onClick={() => {
+            <button type="button" ref={entryButton} className={d.entryButton} data-attention={attention || undefined} onClick={() => {
               onKeyboardChange(true);
               if (voiceIntroDue()) setVoiceKeys(true);
             }} aria-expanded={false}>
@@ -398,6 +399,8 @@ type DockProps = {
   label: string;
   /** 本人给伙伴起的名字：收起时的主按钮写「对话<名字>」，没选伙伴时写「对话天枢」。 */
   agentName?: string;
+  /** 收着时伙伴有没看过的新话（unseenReply）：主按钮外缘带一圈淡淡的流光。 */
+  attention?: boolean;
   /** 全局对话：引用只属于它（clark：引用为全局对话准备草稿）。 */
   global: boolean;
   /** 在二级页里（外壳把输入条移进右侧对话列）。 */

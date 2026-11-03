@@ -256,6 +256,26 @@
 @media(prefers-contrast:more){.dock .entryButton{box-shadow:inset 0 0 0 1px #8e8e93}}
 
 /*
+ * 收着时伙伴有没看过的新话（data-attention）：白胶囊外缘一圈胶囊同色（青、紫、粉，同引导胶囊的光晕）的细光慢慢转，
+ * 外面一层很淡的光跟着换色、轻轻呼吸。只描外缘、不染里面；打开对话层就消。减少动效时停在一圈静止的淡光。
+ */
+@property --attention-turn { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.dock .entryButton[data-attention] { position: relative; animation: attentionGlow 7.2s ease-in-out infinite; }
+.dock .entryButton[data-attention]::before {
+  content: ""; position: absolute; inset: -1.5px; padding: 1.5px; border-radius: 999px; pointer-events: none;
+  background: conic-gradient(from var(--attention-turn), #4ee6ff, #9b7dff, #ff86d2, #4ee6ff);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: .72; animation: attentionTurn 6s linear infinite;
+}
+@keyframes attentionTurn { to { --attention-turn: 360deg; } }
+@keyframes attentionGlow {
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 0 0 1px #1d243310, 0 8px 22px #1d24331a, 0 0 16px 1px #4ee6ff30; }
+  33% { box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 0 0 1px #1d243310, 0 8px 22px #1d24331a, 0 0 22px 3px #9b7dff3a; }
+  66% { box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 0 0 1px #1d243310, 0 8px 22px #1d24331a, 0 0 16px 1px #ff86d230; }
+}
+@media(prefers-reduced-motion:reduce){.dock .entryButton[data-attention],.dock .entryButton[data-attention]::before{animation:none}}
+
+/*
  * 宽屏的对话记录是贴右边的一栏（app-shell .historySheet，输入条宽 + 左右各 16）：打开时输入条停在原位，
  * 展开成这一栏底部居中的整宽 —— 右边缘和收起时同一条线，只变宽，不跳位置。
  */
