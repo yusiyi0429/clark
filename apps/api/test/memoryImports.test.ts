@@ -246,7 +246,7 @@ describe('记忆导入：接口', { timeout: 120_000 }, () => {
             expect((await post('tsm_bad')).statusCode).toBe(401);
             expect((await post(mcp)).statusCode).toBe(401);
             expect((await post(bearer)).statusCode).toBe(403);
-            await call(f, f.member, 'PUT', '/api/me/collector/consent', { granted: true });
+            await f.t.sql(`INSERT INTO collector_consents (person_id, granted, updated_at) VALUES ('person-fixture-002', true, now())`);
             const accepted = await post(bearer);
             expect(accepted.statusCode).toBe(202);
             const [row] = await f.t.sql(`SELECT person_id, via, source FROM memory_imports WHERE id = $1`, [accepted.json().id]);

@@ -11,7 +11,6 @@
 | `apps/m2` | 独立目标拆解试用：Node.js 服务、React/Vite 页面、文件存储 |
 | `packages/contracts` | TypeBox schema 与 OpenAPI 生成入口；不依赖 React、Fastify 运行实例、Pi 或数据库实现 |
 | `infra` | Compose、代理、备份恢复、发布脚本与本地准生产环境 |
-| `tools/collector` | 成员本机采集器（Python 标准库脚本） |
 | `seed` | 示例与受控导入文件；真实名单不提交 |
 | `docs` | 指南、架构、契约、ADR 与历史方案 |
 | `.scratch` | 本地事项与历史证据，不作为运行配置 |
@@ -36,7 +35,7 @@
 
 ## Python
 
-`tools/collector` 与 `apps/m2/skill/scripts/validate_schedule.py` 是仓库里仅有的 Python。参考 [PEP 8](https://peps.python.org/pep-0008/)：函数、变量、模块用 snake_case，类型与异常用 PascalCase，四空格缩进，引号沿用所在文件。只用标准库，测试用 `python -m unittest discover -s tools/collector -p "test_*.py"`，不另建 pytest 或打包入口。
+`apps/m2/skill/scripts/validate_schedule.py` 是仓库里仅有的 Python。参考 [PEP 8](https://peps.python.org/pep-0008/)：函数、变量、模块用 snake_case，类型与异常用 PascalCase，四空格缩进，引号沿用所在文件。只用标准库，测试用 `python -m unittest`，不另建 pytest 或打包入口。
 
 ## LangSmith 观测
 

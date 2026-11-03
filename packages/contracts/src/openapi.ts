@@ -147,9 +147,8 @@ import {
   ListPersonalTokensResponse,
   CreatePersonalTokenRequest,
   CreatePersonalTokenResponse,
-  CollectorHeartbeatRequest, CollectorHeartbeatResponse, CollectorReportRequest, CollectorReportResponse,
   AdminOverviewResponse, AdminActionRequest,
-  CollectorConsentResponse, UpdateCollectorConsentRequest, CollectorStatusResponse,
+  CollectorStatusResponse,
   WorkBasisResponse, UpdateWorkBasisRequest, ScheduleMigrationResponse, UpdateScheduleMigrationRequest,
   WeeklyReviewBoardResponse, WeeklyReviewResponse, ExecuteWeeklyReviewActionRequest, ExecuteWeeklyReviewActionResponse, WeeklyReviewUpdateInput,
   ProgressOverviewResponse,
@@ -1983,27 +1982,14 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       "/api/collector/heartbeat": {
         post: {
-          operationId: "collectorHeartbeat", summary: "本机采集器心跳：设备、版本、各来源状态（collector 个人令牌）",
-          requestBody: jsonBody({ $ref: "#/components/schemas/CollectorHeartbeatRequest" }),
-          responses: { "200": { description: "已记下", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorHeartbeatResponse" } } } }, "400": errorResponse, "401": errorResponse },
+          operationId: "collectorHeartbeat", summary: "本机采集器已下线：旧版采集器的心跳一律 410，不鉴权、不记录",
+          responses: { "410": errorResponse },
         },
       },
       "/api/collector/reports": {
         post: {
-          operationId: "collectorReport", summary: "本机采集器上报一段工作与本机清单，按 clientEventId 幂等（collector 个人令牌）",
-          requestBody: jsonBody({ $ref: "#/components/schemas/CollectorReportRequest" }),
-          responses: { "200": { description: "新记下与重放的条数", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorReportResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse },
-        },
-      },
-      "/api/me/collector/consent": {
-        get: {
-          operationId: "getCollectorConsent", summary: "本人是否同意本机采集（上手流程里的开关读这里）",
-          responses: { "200": { description: "同意状态", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorConsentResponse" } } } }, "401": errorResponse },
-        },
-        put: {
-          operationId: "updateCollectorConsent", summary: "本人同意或撤回本机采集；撤回时清空本人的原文片段，整理结果保留",
-          requestBody: jsonBody({ $ref: "#/components/schemas/UpdateCollectorConsentRequest" }),
-          responses: { "200": { description: "同意状态", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorConsentResponse" } } } }, "400": errorResponse, "401": errorResponse },
+          operationId: "collectorReport", summary: "本机采集器已下线：旧版采集器的上报一律 410，不鉴权、不记录",
+          responses: { "410": errorResponse },
         },
       },
       "/api/admin/overview": {
@@ -2044,25 +2030,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         get: {
           operationId: "getCollectorStatus", summary: "本人的采集器：连上的设备、最近一次完整盘点、盘点到的条数（上手流程轮询）",
           responses: { "200": { description: "采集器状态", content: { "application/json": { schema: { $ref: "#/components/schemas/CollectorStatusResponse" } } } }, "401": errorResponse },
-        },
-      },
-      "/api/collector/install.ps1": {
-        get: {
-          operationId: "getCollectorInstallWindows", summary: "Windows 一行安装命令拉取的安装脚本（不含令牌，令牌由命令参数带入）",
-          responses: { "200": { description: "PowerShell 脚本", content: { "text/plain": { schema: { type: "string" } } } } },
-        },
-      },
-      "/api/collector/install.sh": {
-        get: {
-          operationId: "getCollectorInstallMacos", summary: "macOS 一行安装命令拉取的安装脚本（不含令牌，令牌由命令参数带入）",
-          responses: { "200": { description: "shell 脚本", content: { "text/plain": { schema: { type: "string" } } } } },
-        },
-      },
-      "/api/collector/files/{name}": {
-        get: {
-          operationId: "getCollectorFile", summary: "安装脚本下载的采集器文件（tkos_collector.py、collect_sessions.py、sanitize.py）",
-          parameters: [{ name: "name", in: "path", required: true, schema: { type: "string" } }],
-          responses: { "200": { description: "Python 源文件", content: { "text/plain": { schema: { type: "string" } } } }, "404": errorResponse },
         },
       },
       "/api/me/work-basis": {
@@ -3348,12 +3315,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         SaveRailBackgroundRequest: SaveRailBackgroundRequest as JsonSchema,
         CreatePersonalTokenRequest: CreatePersonalTokenRequest as JsonSchema,
         CreatePersonalTokenResponse: CreatePersonalTokenResponse as JsonSchema,
-        CollectorHeartbeatRequest: CollectorHeartbeatRequest as JsonSchema,
-        CollectorHeartbeatResponse: CollectorHeartbeatResponse as JsonSchema,
-        CollectorReportRequest: CollectorReportRequest as JsonSchema,
-        CollectorReportResponse: CollectorReportResponse as JsonSchema,
-        CollectorConsentResponse: CollectorConsentResponse as JsonSchema,
-        UpdateCollectorConsentRequest: UpdateCollectorConsentRequest as JsonSchema,
         AdminOverviewResponse: AdminOverviewResponse as JsonSchema,
         AdminActionRequest: AdminActionRequest as JsonSchema,
         UsageResponse: UsageResponse as JsonSchema,

@@ -30,8 +30,7 @@ import { createPersonalReviewDraftAgent } from "./personalReviewAgent.js";
 import { createMonthlyReviewAssessAgent, createMonthlyReviewDraftAgent, createMonthlyReviewSummaryAgent } from "./monthlyReviewAgents.js";
 import { createMonthlyReviewScheduler } from "./monthlyReviewScheduler.js";
 import { createMissionRoundScheduler } from "./missionRoundScheduler.js";
-import { createCollectorHealthScheduler } from "./collector.js";
-import { createCollectorDistillAgent, createCollectorDistillScheduler } from "./collectorDistill.js";
+import { createCollectorRawPurgeScheduler } from "./collectorDistill.js";
 import { createWeeklyReviewDraftAgent } from "./weeklyReviewAgent.js";
 import { createWeeklyReviewService } from "./weeklyReviewService.js";
 import { canUseMemberView, ensureLocalDevLogin } from "./memberAccess.js";
@@ -243,11 +242,10 @@ const monthlyReviewScheduler = createMonthlyReviewScheduler(monthlyReviewService
 // 周复盘（D-01）：只在本人要时起草（对话、周复盘页），每周五的自动起草 11/03 停了；与个人复盘同一个 heavy 模型槽位。
 const weeklyReviewService = createWeeklyReviewService({ pool, agent: createWeeklyReviewDraftAgent(reviewAgentOptions),
   people: () => peopleDirectory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId) });
-// 采集器原文整理（D-02）：同一个 heavy 模型，每 5 分钟整理一次，原文 14 天后清空。TODO(jobs)：jobs 合入后迁成周期任务。
-const collectorDistillScheduler = createCollectorDistillScheduler(pool, createCollectorDistillAgent(reviewAgentOptions));
+// 本机采集器已下线：不再整理原文，已收到的原文照 14 天清空，每 5 分钟清一次。
+const collectorRawPurgeScheduler = createCollectorRawPurgeScheduler(pool);
 const now = () => new Date();
 const missionRoundScheduler = createMissionRoundScheduler(pool, now);
-const collectorHealthScheduler = createCollectorHealthScheduler(pool, now);
 await recoverStaleMissionDrafts(pool, now());
 // 启动补偿：崩溃中断的 running 扫描标为 failed（不自动重跑）
 await radarService.recoverStaleRuns();
@@ -316,18 +314,16 @@ app.addHook("onClose", async () => {
   monthlyReviewScheduler.close();
   await monthlyReviewService.idle();
   missionRoundScheduler.close();
-  collectorHealthScheduler.close();
   await jobWorker.close();
   await weeklyReviewService.idle();
-  await collectorDistillScheduler.close();
+  await collectorRawPurgeScheduler.close();
 });
 scheduler.start();
 monthlyScheduler.start();
 monthlyReviewScheduler.start();
 missionRoundScheduler.start();
-collectorHealthScheduler.start();
 jobWorker.start();
-collectorDistillScheduler.start();
+collectorRawPurgeScheduler.start();
 await app.listen({ port, host: "0.0.0.0" });
 // 飞书长连接：收到事件只落库并排 jobs，3 秒内 ack；单聊消息落库后直接交给 worker 跑那一条，不等下一轮。
 feishuEvents = env.feishu ? startFeishuEventStream(pool, env.feishu, jobWorker.runNow) : undefined;

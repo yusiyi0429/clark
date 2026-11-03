@@ -16,7 +16,6 @@
 | 部署、备份或回滚 | [部署指南](guides/deployment.md)，细节在 [`infra/staging`](../infra/staging/release.md) |
 | 本地准生产环境 | [`infra/local`](../infra/local/README.md) |
 | 运行独立 M2 | [M2 试用](guides/m2-trial.md) |
-| 本机采集器 | [`tools/collector`](../tools/collector/README.md) |
 | 查询架构取舍 | [ADR 索引](adr/README.md) |
 
 ## 契约

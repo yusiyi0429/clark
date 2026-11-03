@@ -3,7 +3,7 @@
 /**
  * 个人菜单：通知栏左下角点自己的名字（收起成窄条时是头像）弹出。一级只放每天会点的和身份相关的（样稿 voice-keys-v3）——
  * 雷达、我的记忆（成员 /me/memory、CEO /memory）、定时任务（成员 /me/schedules、CEO /schedules）、「设置 ›」、CEO 的组织配置、双身份者切换工作台，最后是退出登录。
- * 配一次就不太动的收进「设置 ›」，在菜单右边弹出二级：语音输入、声纹（已配置时）、连接飞书（接了飞书时）、连接微信（接了微信时）、连接到外部工具、本机采集器、伙伴形象、修改口令、
+ * 配一次就不太动的收进「设置 ›」，在菜单右边弹出二级：语音输入、声纹（已配置时）、连接飞书（接了飞书时）、连接微信（接了微信时）、连接到外部工具、卸载本机采集器（装过的人才有）、伙伴形象、通知栏背景、修改口令、
  * 重看首次引导、管理员视图（管理员）。
  * 声纹、雷达、口令、语音输入各开一个小弹窗，不离开当前页面。
  */
@@ -22,8 +22,7 @@ import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { BuddySettings } from "@/components/buddy/BuddySettings";
 import { RailBackgroundSettings } from "@/components/railBackground/RailBackgroundSettings";
 import { VoiceKeysDialog } from "@/conversation/VoiceKeysDialog";
-import { CollectorInstallPanel, useCollectorStatus } from "@/components/onboarding/CollectorSetup";
-import { CollectorReview } from "@/components/onboarding/ReviewLists";
+import { CollectorUninstallPanel, useCollectorInstalled } from "@/components/CollectorUninstall";
 import { readTaskQualityEnabled } from "@/components/task-quality/taskQualityStatus";
 import { PersonalProfileForm } from "@/components/PersonalProfileForm";
 import { WechatConnectPanel, readWechatConnection, type WechatConnection } from "@/components/WechatConnect";
@@ -55,6 +54,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const collectorInstalled = useCollectorInstalled();
   const [leaving, setLeaving] = useState(false);
   const [leaveArmed, setLeaveArmed] = useState(false);
   const [canSwitchView, setCanSwitchView] = useState(false);
@@ -194,9 +194,9 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                       <Button variant="ghost" className={m.item} onPress={() => pick("connection")}>
                         <PlugZap size={16} aria-hidden="true" />连接到外部工具
                       </Button>
-                      <Button variant="ghost" className={m.item} onPress={() => pick("collector")}>
-                        <Laptop size={16} aria-hidden="true" />本机采集器
-                      </Button>
+                      {collectorInstalled ? <Button variant="ghost" className={m.item} onPress={() => pick("collector")}>
+                        <Laptop size={16} aria-hidden="true" />卸载本机采集器
+                      </Button> : null}
                       <Button variant="ghost" className={m.item} onPress={() => pick("coagent")}>
                         <Smile size={16} aria-hidden="true" />
                         伙伴形象
@@ -295,20 +295,9 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
       {dialog === "voice" ? <VoiceKeysDialog onClose={() => setDialog(null)} /> : null}
       {dialog === "connection" ? <MenuDialog title="连接到外部工具" wide onClose={() => setDialog(null)}><ConnectionDialog role={account.role} /></MenuDialog> : null}
       {dialog === "wechat" ? <MenuDialog title="连接微信" onClose={() => setDialog(null)}><WechatConnectPanel onChange={setWechat} /></MenuDialog> : null}
-      {dialog === "collector" ? <MenuDialog title="本机采集器" wide onClose={() => setDialog(null)}><CollectorDialog /></MenuDialog> : null}
+      {dialog === "collector" ? <MenuDialog title="卸载本机采集器" wide onClose={() => setDialog(null)}><CollectorUninstallPanel /></MenuDialog> : null}
     </>
   );
-}
-
-/** 个人菜单里的本机采集器：和首次引导同一块安装面板，开着时读状态，令牌只在这次打开里留着；盘点到了，下面确认清单。 */
-function CollectorDialog() {
-  const [token, setToken] = useState<string | null>(null);
-  const status = useCollectorStatus(true);
-  const memoryFiles = status?.devices.length && status.consent ? status.inventory.memoryFiles : null;
-  return <>
-    <CollectorInstallPanel token={token} onToken={setToken} status={status} />
-    <CollectorReview scannedAt={status?.scannedAt ?? null} memoryFiles={memoryFiles} />
-  </>;
 }
 
 /** 个人菜单里的飞书：没连好时「连接飞书」，整页去飞书授权、授权完回到这一页；连好了只显示状态。 */

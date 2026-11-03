@@ -11,7 +11,6 @@
 | `apps/m2` | 独立的目标拆解与协作试用服务（同站点 `/m2/`） |
 | `packages/contracts` | TypeBox schema 与 OpenAPI 生成入口 |
 | `infra` | Compose、Caddy、宿主机 Nginx 模板、备份恢复、发布脚本（`infra/staging`）和本地准生产环境（`infra/local`） |
-| `tools/collector` | 成员本机采集器（Python），向 API 上报本机清单与心跳 |
 | `seed` | 人员目录示例、导入文件与占位草稿（旧企业知识只作目录参考，不再加载）；真实名单不进 Git |
 | `docs` | 文档导航、指南、架构、契约、ADR 与历史方案 |
 

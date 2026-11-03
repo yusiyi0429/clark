@@ -15,8 +15,6 @@ import { buddyNameValid, saveBuddy, type Buddy } from "@/components/buddy/useBud
 import { PresenceCapsule } from "@/components/coagent/PresenceCapsule";
 import { CoAgentSkinPicker, useSimulatedLevel } from "@/components/coagent/SkinPicker";
 import { readStoredSkin } from "@/components/coagent/skin";
-import { CollectorInstallPanel, ScanProgress, scanSteps, useCollectorStatus } from "./CollectorSetup";
-import { loadReviewLists, reviewEmpty, ReviewSummary, submitReview, type ReviewLists, type ReviewPicks } from "./ReviewLists";
 import { DelegationPanel } from "./DelegationPanel";
 import { MorningCanvas } from "./MorningCanvas";
 import { CoAgentCapsule } from "./CoAgentCapsule";
@@ -31,26 +29,22 @@ export type OnboardingData = components["schemas"]["OnboardingResponse"];
 /** 选伙伴这一步的三页，按先后排。 */
 const BUDDY_PAGES = ["name", "form", "personality"] as const;
 type BuddyPage = (typeof BUDDY_PAGES)[number];
-type Step = "buddy" | "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "radar" | "voiceprint" | "connect" | "collector" | "scan" | "review" | "delegation" | "start";
+type Step = "buddy" | "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "radar" | "voiceprint" | "connect" | "delegation" | "start";
 
 /**
- * CEO 只看工作台三页（你好 → 通知栏 → 公司全局和对话），最后一页直接进工作台；雷达、外部工具、采集器都在个人菜单里。
- * 成员看完工作台，接着看每月 Mission 的形成与执行；连上 AI 工具之后：安装本机采集器 → 后台扫描 → 确认清单
- * （10a 第 2–4 步；扫完三项都没有可确认的就跳过）；委托授权（第 7 步）由配置打开。
+ * CEO 只看工作台三页（你好 → 通知栏 → 公司全局和对话），最后一页直接进工作台；雷达、外部工具都在个人菜单里。
+ * 成员看完工作台，接着看每月 Mission 的形成与执行，再连上 AI 工具；委托授权（第 7 步）由配置打开。
+ * 天枢不再在本机收东西（spec 5.1：本机采集器整体下线），安装采集器、本机盘点、确认清单这三步拿掉了。
  * 还没有伙伴的人，最前面先「选择你的伙伴」（spec 5.5）；已经引导过、只差伙伴的人只走这一步。
  */
-export function onboardingSteps(data: OnboardingData, skipReview = false, buddyStep: "none" | "first" | "only" = "none"): Step[] {
+export function onboardingSteps(data: OnboardingData, buddyStep: "none" | "first" | "only" = "none"): Step[] {
   if (buddyStep === "only") return ["buddy"];
   const first: Step[] = buddyStep === "first" ? ["buddy"] : [];
   if (data.role === "ceo") return [...first, "hello", "tour-notifications", "tour-board"];
   return [...first, "hello", "tour-notifications", "tour-board", "mission-flow", "radar", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "connect",
-    "collector", "scan", ...(skipReview ? [] : ["review" as const]), ...(data.delegationStep ? ["delegation" as const] : []), "start"];
+    ...(data.delegationStep ? ["delegation" as const] : []), "start"];
 }
 
-/** 扫描等第一次盘点最多这么久；超时就停在那一步，用已有的数据整理清单，不让人卡在这一页。 */
-export const SCAN_TIMEOUT_MS = 120_000;
-/** 扫描超过这么久还没完，主按钮变成「后台继续」：跳过确认清单，盘点到了在 设置 › 本机采集器 里确认。 */
-export const SCAN_SKIP_MS = 10_000;
 
 /** 结束页设置摘要里的雷达一行（只有成员走到结束页）：写开没开。 */
 export function radarSummaryLine(radar: { enabled: boolean }): string {
@@ -77,19 +71,6 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
   /** 雷达这一步由编辑器负责前进：它的主按钮与「稍后」放进下面的底栏，位置和其他步骤一样。 */
   const [radarPrimary, setRadarPrimary] = useState<HTMLDivElement | null>(null);
   const [radarLater, setRadarLater] = useState<HTMLSpanElement | null>(null);
-  /** 本次上手生成的采集器令牌：前后翻页不丢，也不重复生成。 */
-  const [collectorToken, setCollectorToken] = useState<string | null>(null);
-  const [scanTimedOut, setScanTimedOut] = useState(false);
-  /** 扫描等了 SCAN_SKIP_MS 还没完，可以后台继续；本人选了后台继续，这次上手就跳过确认清单。 */
-  const [scanSkippable, setScanSkippable] = useState(false);
-  const [scanDeferred, setScanDeferred] = useState(false);
-  /** 扫描页结束时读好的两份清单；确认清单提交后换成服务端返回的最新一份。 */
-  const [reviewLists, setReviewLists] = useState<ReviewLists | null>(null);
-  /** 确认清单提交过（之后默认勾选按入库的来）、明细里改过的勾选、提交中、提交失败。 */
-  const [reviewed, setReviewed] = useState(false);
-  const [reviewPicks, setReviewPicks] = useState<ReviewPicks>({});
-  const [reviewSaving, setReviewSaving] = useState(false);
-  const [reviewError, setReviewError] = useState<string | null>(null);
   /** 选伙伴这一步的草稿：名字空着等本人起；样子在浏览器里再换成这台电脑原来选过的那颗；性格默认沉稳靠谱。 */
   const [buddyDraft, setBuddyDraft] = useState<Buddy>({ name: "", form: "classic", personality: "steady" });
   const [buddySaving, setBuddySaving] = useState(false);
@@ -97,16 +78,9 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
   /** 选伙伴分三页：先单独一页起名字，再选形象，最后选性格；三页算同一步，进度点只占一个。 */
   const [buddyPage, setBuddyPage] = useState<BuddyPage>("name");
   const buddyName = useRef<HTMLInputElement>(null);
-  // 确认清单在扫描之后：跳不跳过，采集器、扫描两步的位置都一样。
-  const unskipped = onboardingSteps(data, false, buddyStep)[index];
-  const collector = useCollectorStatus(unskipped === "collector" || unskipped === "scan");
-  const collectorConnected = Boolean(collector?.devices.length);
-  const memoryFiles = collectorConnected && collector!.consent ? collector!.inventory.memoryFiles : null;
-  const steps = onboardingSteps(data, scanDeferred || (!reviewed && reviewLists !== null && reviewEmpty(reviewLists, memoryFiles)), buddyStep);
+  const steps = onboardingSteps(data, buddyStep);
   const step = steps[index];
   const last = index === steps.length - 1;
-  const scanFinished = Boolean(collector) && (!collectorConnected || !collector?.consent || Boolean(collector?.scannedAt) || scanTimedOut);
-  const scanReady = scanFinished && reviewLists !== null;
   const voice = useVoiceprintEnrollment({ initialStatus: data.voiceprint });
   const current = useRef(0);
   const completing = useRef(false);
@@ -138,26 +112,6 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
   }, [step, voice.phase]);
   useEffect(() => () => { outgoing.current?.remove(); if (outgoingTimer.current) clearTimeout(outgoingTimer.current); }, []);
   useEffect(() => { setBuddyDraft((draft) => ({ ...draft, form: readStoredSkin() })); }, []);
-  useEffect(() => {
-    if (step !== "scan" || !collectorConnected || !collector?.consent || collector?.scannedAt || scanTimedOut) return;
-    const timer = window.setTimeout(() => setScanTimedOut(true), SCAN_TIMEOUT_MS);
-    return () => window.clearTimeout(timer);
-  }, [step, collectorConnected, collector?.scannedAt, scanTimedOut]);
-  useEffect(() => {
-    if (step !== "scan" || scanReady || scanSkippable) return;
-    const timer = window.setTimeout(() => setScanSkippable(true), SCAN_SKIP_MS);
-    return () => window.clearTimeout(timer);
-  }, [step, scanReady, scanSkippable]);
-  useEffect(() => {
-    if (step !== "scan" || !scanFinished || reviewLists) return;
-    // 扫完才整理清单：读不到就隔几秒再读，步骤停在「整理清单」。
-    let alive = true;
-    let timer: number | undefined;
-    const load = () => void loadReviewLists().then((lists) => { if (alive) setReviewLists(lists); })
-      .catch(() => { if (alive) timer = window.setTimeout(load, 3_000); });
-    load();
-    return () => { alive = false; window.clearTimeout(timer); };
-  }, [step, scanFinished, reviewLists]);
 
   /** 当前这一页滑出去：复制一份留在原处播退场，新的一页按 direction 进来。clone 为 false 时只收掉上一份退场。 */
   function slideOut(delta: number, clone = true) {
@@ -240,26 +194,6 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
       return;
     }
     if (last || error) return finish();
-    if (step === "review" && reviewLists) {
-      setReviewSaving(true);
-      setReviewError(null);
-      try {
-        setReviewLists(await submitReview(reviewLists, reviewed, reviewPicks));
-        setReviewPicks({});
-        setReviewed(true);
-        move(1);
-      } catch (cause) {
-        setReviewError(cause instanceof Error ? cause.message : "没有存上，请重试");
-      } finally {
-        setReviewSaving(false);
-      }
-      return;
-    }
-    if (step === "scan" && !scanReady && scanSkippable) {
-      setScanDeferred(true);
-      move(1);
-      return;
-    }
     if (step === "voiceprint" && voice.phase === "recorded") {
       const saved = await voice.save();
       if (saved) { setRerecord(false); move(1); }
@@ -277,18 +211,17 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
       : step === "connect" && !connectDownloaded ? connectPrimary?.querySelector<HTMLButtonElement>("button") : primary.current)?.click();
   }
 
-  const heading = step === "buddy" ? naming ? "给你的伙伴起个名字" : `选择${buddyDraft.name.trim()}的${buddyPage === "form" ? "形象" : "性格"}` : step === "collector" ? "安装本机采集器" : step === "scan" ? scanReady ? "扫描完成" : "正在扫描" : step === "review" ? "确认清单" : step === "delegation" ? "授权天枢替你记进本体" : step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "radar" ? "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : step === "connect" ? "连上你自己的 AI 工具" : "可以开始了";
+  const heading = step === "buddy" ? naming ? "给你的伙伴起个名字" : `选择${buddyDraft.name.trim()}的${buddyPage === "form" ? "形象" : "性格"}` : step === "delegation" ? "授权天枢替你记进本体" : step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "radar" ? "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : step === "connect" ? "连上你自己的 AI 工具" : "可以开始了";
   // 手机首页是一条滚动：最上面是通知，往下 CEO 是公司全局、成员是自己的工作。
   const noticeCopy = data.role === "ceo" ? "会后要你确认的会议卡、月末的复盘与拆解，到时候会出现在这里。" : "任务卡的讨论、分给你的事和别人的回复，按轻重排在这里。";
   const phoneHeading = step === "tour-notifications" ? "最上面是通知" : step === "tour-board" ? data.role === "ceo" ? "往下是公司全局" : "往下是你的工作" : null;
-  const busy = finishing || voice.phase === "saving" || reviewSaving || buddySaving;
+  const busy = finishing || voice.phase === "saving" || buddySaving;
   const voiceReady = voice.status?.enrolled && !rerecord && voice.phase === "idle";
-  const primaryDisabled = busy || (step === "buddy" && !buddyNameValid(buddyDraft.name)) || (!error && ((step === "voiceprint" && !voiceReady && (voice.phase !== "recorded" || voice.tooShort))
-    || (step === "collector" && !collectorConnected) || (step === "scan" && !scanReady && !scanSkippable)));
+  const primaryDisabled = busy || (step === "buddy" && !buddyNameValid(buddyDraft.name)) || (!error && ((step === "voiceprint" && !voiceReady && (voice.phase !== "recorded" || voice.tooShort))));
   const disabledHint = step === "voiceprint" && primaryDisabled && !busy
     ? voice.recording ? "录好后再继续，也可以选「稍后」" : voice.tooShort ? "请重新录满 15 秒，或者选「稍后」" : voice.consent ? "录好一段 15–30 秒的朗读，或者选「稍后」" : "先勾选同意并录好，或者选「稍后」"
     : null;
-  const primaryLabel = finishing ? "正在进入…" : step === "buddy" ? buddySaving ? "正在保存…" : "继续" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : last ? returnPath ? "继续刚才的页面" : "进入工作台" : step === "review" ? reviewSaving ? "正在保存…" : "完成" : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : step === "scan" && !scanReady && scanSkippable ? "后台继续" : "下一步";
+  const primaryLabel = finishing ? "正在进入…" : step === "buddy" ? buddySaving ? "正在保存…" : "继续" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : last ? returnPath ? "继续刚才的页面" : "进入工作台" : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : "下一步";
 
   return <main className={s.page} onKeyDown={onKeyDown} style={{ "--direction": direction } as CSSProperties}>
     <MorningCanvas progress={index} />
@@ -358,16 +291,11 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
             {step === "connect" ? <div className={`${f.glass} ${s.connectPanel}`}>
               <ConnectAgentForm role={data.role} defaultName="我的电脑" actionsTarget={connectDownloaded ? undefined : connectPrimary} onDownloaded={() => setConnectDownloaded(true)} />
             </div> : null}
-            {step === "collector" ? <CollectorInstallPanel token={collectorToken} onToken={setCollectorToken} status={collector} /> : null}
-            {step === "scan" ? <ScanProgress steps={scanSteps(collector, reviewLists && { basis: reviewLists.basis.length, schedules: reviewLists.schedules.length }, scanTimedOut)} /> : null}
-            {step === "review" && reviewLists ? <ReviewSummary lists={reviewLists} reviewed={reviewed} picks={reviewPicks} memoryFiles={memoryFiles}
-              onPick={(key, checked) => setReviewPicks((current) => ({ ...current, [key]: checked }))} saving={reviewSaving} error={reviewError} /> : null}
             {step === "delegation" ? <DelegationPanel /> : null}
             {step === "start" ? <p className={s.summary}>
               <span className={s.summaryItem}>{radarSummaryLine(radarSaved ?? data.radar)}</span>
               {data.voiceprint.configured ? <span className={s.summaryItem}>声纹 · {voice.status?.enrolled ? "已录好" : "稍后在个人菜单里录"}</span> : null}
               <span className={s.summaryItem}>外部工具 · {connectDownloaded ? "连接步骤已准备" : "稍后在个人菜单里连"}</span>
-              <span className={s.summaryItem}>本机采集器 · {collectorConnected ? "已连接" : "未连接"}</span>
               <span>都可以在个人菜单里改</span>
             </p> : null}
           </div>
@@ -383,7 +311,7 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
           : step === "connect" && !connectDownloaded && !error ? <div key={step} ref={setConnectPrimary} className={s.radarActions} /> : <button key={step} ref={primary} className={f.primary} type="button" onClick={() => void forward()} disabled={primaryDisabled} aria-describedby={disabledHint ? "welcome-action-hint" : undefined}>{error ? "重试" : primaryLabel}{!busy ? <ArrowRight size={18} aria-hidden="true" /> : null}</button>}
         <div className={s.secondary}>
           {index > 0 || (step === "buddy" && !naming) ? <button className={f.textButton} type="button" onClick={() => step === "buddy" && !naming ? turnBuddyPage(buddyPage === "personality" ? "form" : "name") : move(-1)} disabled={busy}>上一步</button> : null}
-          {step === "voiceprint" || step === "connect" || step === "collector" || step === "delegation" ? <button className={f.textButton} type="button" onClick={() => move(1)} disabled={busy}>稍后</button> : null}
+          {step === "voiceprint" || step === "connect" || step === "delegation" ? <button className={f.textButton} type="button" onClick={() => move(1)} disabled={busy}>稍后</button> : null}
           {step === "radar" ? <span ref={setRadarLater} className={s.radarSlot} /> : null}
         </div>
       </footer>

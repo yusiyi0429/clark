@@ -2886,7 +2886,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 本机采集器心跳：设备、版本、各来源状态（collector 个人令牌） */
+        /** 本机采集器已下线：旧版采集器的心跳一律 410，不鉴权、不记录 */
         post: operations["collectorHeartbeat"];
         delete?: never;
         options?: never;
@@ -2903,26 +2903,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 本机采集器上报一段工作与本机清单，按 clientEventId 幂等（collector 个人令牌） */
+        /** 本机采集器已下线：旧版采集器的上报一律 410，不鉴权、不记录 */
         post: operations["collectorReport"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/me/collector/consent": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 本人是否同意本机采集（上手流程里的开关读这里） */
-        get: operations["getCollectorConsent"];
-        /** 本人同意或撤回本机采集；撤回时清空本人的原文片段，整理结果保留 */
-        put: operations["updateCollectorConsent"];
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3023,57 +3005,6 @@ export interface paths {
         };
         /** 本人的采集器：连上的设备、最近一次完整盘点、盘点到的条数（上手流程轮询） */
         get: operations["getCollectorStatus"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/collector/install.ps1": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Windows 一行安装命令拉取的安装脚本（不含令牌，令牌由命令参数带入） */
-        get: operations["getCollectorInstallWindows"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/collector/install.sh": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** macOS 一行安装命令拉取的安装脚本（不含令牌，令牌由命令参数带入） */
-        get: operations["getCollectorInstallMacos"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/collector/files/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 安装脚本下载的采集器文件（tkos_collector.py、collect_sessions.py、sanitize.py） */
-        get: operations["getCollectorFile"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9445,116 +9376,6 @@ export interface components {
                 lastUsedAt: string | null;
                 lastProgressAt: string | null;
             };
-        };
-        CollectorHeartbeatRequest: {
-            device: {
-                id: string;
-                name: string;
-                platform: "windows" | "macos" | "linux";
-            };
-            version: string;
-            sources: {
-                source: string;
-                status: "ok" | "not_found" | "error";
-                coverageUntil: string | null;
-                lastNewEvidenceAt: string | null;
-                errorCode: string | null;
-            }[];
-            inventory?: {
-                scheduledTasks: {
-                    name: string;
-                    schedule: string | null;
-                    command: string | null;
-                }[];
-                feishuDocs: {
-                    url: string;
-                    title: string | null;
-                    /** Format: date-time */
-                    readAt: string;
-                }[];
-                memoryFiles?: {
-                    source: string;
-                    path: string;
-                    bytes: number;
-                    /** Format: date-time */
-                    modifiedAt: string;
-                }[];
-            };
-        };
-        CollectorHeartbeatResponse: {
-            /** Format: date-time */
-            receivedAt: string;
-            consent: boolean;
-        };
-        CollectorReportRequest: {
-            device: {
-                id: string;
-                name: string;
-                platform: "windows" | "macos" | "linux";
-            };
-            version: string;
-            kind: "digest" | "eod" | "catchup";
-            /** Format: date-time */
-            windowStart: string;
-            /** Format: date-time */
-            windowEnd: string;
-            sources: {
-                source: string;
-                status: "ok" | "not_found" | "error";
-                coverageUntil: string | null;
-                lastNewEvidenceAt: string | null;
-                errorCode: string | null;
-            }[];
-            items: {
-                /** Format: uuid */
-                clientEventId: string;
-                source: string;
-                /** Format: date-time */
-                startedAt: string;
-                /** Format: date-time */
-                endedAt: string;
-                summary: string;
-                links: {
-                    url: string;
-                    title?: string;
-                }[];
-                taskHint: string | null;
-            }[];
-            inventory?: {
-                scheduledTasks: {
-                    name: string;
-                    schedule: string | null;
-                    command: string | null;
-                }[];
-                feishuDocs: {
-                    url: string;
-                    title: string | null;
-                    /** Format: date-time */
-                    readAt: string;
-                }[];
-                memoryFiles?: {
-                    source: string;
-                    path: string;
-                    bytes: number;
-                    /** Format: date-time */
-                    modifiedAt: string;
-                }[];
-            };
-        };
-        CollectorReportResponse: {
-            accepted: number;
-            duplicates: number;
-            /** Format: date-time */
-            receivedAt: string;
-        };
-        CollectorConsentResponse: {
-            consent: {
-                granted: boolean;
-                updatedAt: string | null;
-            };
-        };
-        UpdateCollectorConsentRequest: {
-            granted: boolean;
         };
         AdminOverviewResponse: {
             /** Format: date-time */
@@ -22998,32 +22819,10 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CollectorHeartbeatRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description 已记下 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CollectorHeartbeatResponse"];
-                };
-            };
             /** @description ApiError 统一错误 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -23040,112 +22839,10 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CollectorReportRequest"];
-            };
-        };
-        responses: {
-            /** @description 新记下与重放的条数 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CollectorReportResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    getCollectorConsent: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
         requestBody?: never;
         responses: {
-            /** @description 同意状态 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CollectorConsentResponse"];
-                };
-            };
             /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    updateCollectorConsent: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateCollectorConsentRequest"];
-            };
-        };
-        responses: {
-            /** @description 同意状态 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CollectorConsentResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -23386,77 +23083,6 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    getCollectorInstallWindows: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description PowerShell 脚本 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/plain": string;
-                };
-            };
-        };
-    };
-    getCollectorInstallMacos: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description shell 脚本 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/plain": string;
-                };
-            };
-        };
-    };
-    getCollectorFile: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Python 源文件 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/plain": string;
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
                 headers: {
                     [name: string]: unknown;
                 };

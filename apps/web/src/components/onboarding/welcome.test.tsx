@@ -42,11 +42,7 @@ import { MissionFlow } from "./MissionFlow";
 import { OnboardingProgress } from "./OnboardingProgress";
 import { RadarSettingsEditor, type RadarSavedSummary } from "@/components/radar/RadarSettingsEditor";
 import { ConnectAgentForm } from "@/components/ConnectAgentForm";
-import { CollectorInstallPanel, collectorCommand, scanSteps, type CollectorStatus } from "./CollectorSetup";
 import { DelegationPanel } from "./DelegationPanel";
-import { revisedLabel, reviewEmpty, ReviewSummary, submitReview, type ReviewLists, type ReviewPicks } from "./ReviewLists";
-import { MemoryImportPanel } from "./MemoryImportSlot";
-import { CollectorConsentSwitch } from "./CollectorConsentSwitch";
 import { browserApi } from "@/lib/api/client";
 import { BuddyNameInput } from "@/components/buddy/BuddyPicker";
 import { CoAgentSkinPicker } from "@/components/coagent/SkinPicker";
@@ -97,11 +93,8 @@ function reachFinish(data: OnboardingData, nextPath?: string, summary?: RadarSav
   const editor = radarEditor(reachRadar(data, nextPath));
   if (summary) editor.onSaved!(summary);
   else editor.onLater!();
-  // 雷达之后是「连接外部工具」「安装本机采集器」：都选「稍后」；扫描页和最后一页直接往下走，进入结束页。
+  // 雷达之后是「连接外部工具」：选「稍后」，进入结束页。
   (button(renderFlow(data, nextPath), "稍后").props.onClick as () => void)();
-  (button(renderFlow(data, nextPath), "稍后").props.onClick as () => void)();
-  (button(renderFlow(data, nextPath), "下一步").props.onClick as () => void)();
-  (button(renderFlow(data, nextPath), "完成").props.onClick as () => void)();
   return renderFlow(data, nextPath);
 }
 
@@ -154,15 +147,13 @@ describe("收尾按钮文案与实际落点一致", () => {
 
 describe("真实数据的首次引导", () => {
   it("成员先导览、再看 Mission 怎么定下来；CEO 只看工作台三页", () => {
-    const tail = ["connect", "collector", "scan", "review", "start"];
+    const tail = ["connect", "start"];
     expect(onboardingSteps(member)).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "radar", ...tail]);
     expect(onboardingSteps({ ...member, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "radar", "voiceprint", ...tail]);
     expect(onboardingSteps(ceo)).toEqual(["hello", "tour-notifications", "tour-board"]);
     expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true }, delegationStep: true })).toEqual(["hello", "tour-notifications", "tour-board"]);
     // 委托授权这一步由配置打开，放在结束页之前。
-    expect(onboardingSteps({ ...member, delegationStep: true }).slice(-3)).toEqual(["review", "delegation", "start"]);
-    // 扫完三项都没有可确认的：跳过确认清单。
-    expect(onboardingSteps(member, true).slice(-3)).toEqual(["collector", "scan", "start"]);
+    expect(onboardingSteps({ ...member, delegationStep: true }).slice(-3)).toEqual(["connect", "delegation", "start"]);
   });
   it("成员导览复用同一示意图，高亮通知后转向工作", () => {
     let tree = renderFlow(member);
@@ -289,146 +280,21 @@ describe("雷达步骤", () => {
     expect(elements(tree).find((element) => element.type === "button" && text(element.props.children as ReactNode) === "下一步")).toBeUndefined();
     expect(button(tree, "稍后")).toBeDefined();
   });
-  it("同意上传会话的开关从「连上 AI 工具」挪到「安装本机采集器」；没连上之前「下一步」不能点、可以「稍后」", () => {
+  it("连上 AI 工具之后直接到最后一页（本机采集器已下线，没有安装、扫描和确认清单），结束页也不再提采集器", () => {
     radarEditor(reachRadar(member)).onLater!();
-    const connect = renderFlow(member);
-    expect(elements(connect).some((element) => element.type === CollectorConsentSwitch)).toBe(false);
-    (button(connect, "稍后").props.onClick as () => void)();
-    const tree = renderFlow(member);
-    expect(text(tree)).toContain("安装本机采集器");
-    const panel = elements(tree).find((element) => element.type === CollectorInstallPanel);
-    expect(panel?.props).toMatchObject({ token: null, status: null });
-    expect(button(tree, "下一步").props.disabled).toBe(true);
-    expect(button(tree, "稍后")).toBeDefined();
+    (button(renderFlow(member), "稍后").props.onClick as () => void)();
+    const end = renderFlow(member);
+    expect(text(end)).toContain("可以开始了");
+    expect(text(end)).not.toContain("采集器");
   });
-  it("确认清单不用逐项确认，「完成」直接可点；委托授权一步只在配置打开时出现", () => {
-    radarEditor(reachRadar(member)).onLater!();
-    for (const label of ["稍后", "稍后", "下一步"]) (button(renderFlow(member), label).props.onClick as () => void)();
-    const review = renderFlow(member);
-    expect(text(review)).toContain("确认清单");
-    expect(button(review, "完成").props.disabled).toBe(false);
-    expect(elements(review).some((element) => element.props.role === "tablist")).toBe(false);
-    hooks.reset();
+  it("委托授权一步只在配置打开时出现，排在连上 AI 工具之后", () => {
     const flagged = { ...member, delegationStep: true };
     radarEditor(reachRadar(flagged)).onLater!();
-    for (const label of ["稍后", "稍后", "下一步", "完成"]) (button(renderFlow(flagged), label).props.onClick as () => void)();
+    (button(renderFlow(flagged), "稍后").props.onClick as () => void)();
     const delegation = renderFlow(flagged);
     expect(text(delegation)).toContain("授权天枢替你记进本体");
     expect(elements(delegation).some((element) => element.type === DelegationPanel)).toBe(true);
     expect(button(delegation, "稍后")).toBeDefined();
-  });
-});
-
-describe("安装采集器与扫描", () => {
-  it("一行安装命令按系统给出，带着天枢地址和令牌", () => {
-    expect(collectorCommand("windows", "https://ts.example/", "tsm_x")).toBe(
-      "& ([scriptblock]::Create((irm 'https://ts.example/api/collector/install.ps1'))) -Server 'https://ts.example' -Token 'tsm_x'");
-    expect(collectorCommand("macos", "https://ts.example", "tsm_x")).toBe(
-      "curl -fsSL 'https://ts.example/api/collector/install.sh' | sh -s -- --server 'https://ts.example' --token 'tsm_x'");
-  });
-  const status = (patch: Partial<CollectorStatus> = {}): CollectorStatus => ({
-    consent: true,
-    devices: [{ id: "d", name: "工作机", platform: "windows", lastSeenAt: "2026-10-18T02:00:00.000Z" }],
-    scannedAt: null, inventory: { scheduledTasks: 3, feishuDocs: 5, memoryFiles: 12 }, ...patch,
-  });
-  const view = (steps: ReturnType<typeof scanSteps>) => steps.map((step) => [step.label, step.status, step.result ?? ""]);
-  it("扫描步骤：等盘点时当前一步高亮；盘点到了三类一起打勾带数字，再整理清单；没连上就停住", () => {
-    expect(view(scanSteps(status(), null))).toEqual([
-      ["连接采集器", "done", "工作机"], ["本机定时任务", "active", ""], ["飞书文档", "pending", ""], ["记忆文件", "pending", ""], ["整理清单", "pending", ""]]);
-    expect(view(scanSteps(status({ scannedAt: "2026-10-18T02:01:00.000Z" }), null))).toEqual([
-      ["连接采集器", "done", "工作机"], ["本机定时任务", "done", "3 项"], ["飞书文档", "done", "5 份"], ["记忆文件", "done", "12 个"], ["整理清单", "active", ""]]);
-    expect(view(scanSteps(status({ scannedAt: "2026-10-18T02:01:00.000Z" }), { basis: 4, schedules: 2 })).at(-1)).toEqual(["整理清单", "done", "依据 4 · 定时任务 2"]);
-    expect(view(scanSteps(status({ devices: [] }), null))).toEqual([
-      ["连接采集器", "stopped", "未连接"], ["本机定时任务", "stopped", "未连接"], ["飞书文档", "stopped", "未连接"], ["记忆文件", "stopped", "未连接"], ["整理清单", "active", ""]]);
-    expect(view(scanSteps(status(), null, true)).slice(1, 2)).toEqual([["本机定时任务", "stopped", "超时"]]);
-    // 没同意采集：本机清单的三步停在「未同意」，直接整理天枢里已有的。
-    expect(view(scanSteps(status({ consent: false }), null)).slice(1)).toEqual([
-      ["本机定时任务", "stopped", "未同意"], ["飞书文档", "stopped", "未同意"], ["记忆文件", "stopped", "未同意"], ["整理清单", "active", ""]]);
-  });
-  it("飞书文档的修订写成「月/日 修订 · 修订人」", () => {
-    expect(revisedLabel("2026-10-16T08:00:00.000Z", "编辑人")).toBe("10/16 修订 · 编辑人");
-    expect(revisedLabel("2026-10-16T08:00:00.000Z", null)).toBe("10/16 修订");
-  });
-});
-
-describe("确认清单：一屏摘要", () => {
-  const doc = (key: string, patch: Partial<ReviewLists["basis"][number]> = {}): ReviewLists["basis"][number] => ({
-    key, kind: "feishu_doc", title: `文档 ${key}`, url: null, revision: null, origin: "session", revisedAt: null, revisedBy: null,
-    confirmed: false, supersededBy: null, keepUntil: null, ...patch });
-  const weekly: ReviewLists["schedules"][number] = { key: "dev:TianshuWeeklySync", name: "TianshuWeeklySync", cadence: "Weekly",
-    command: "powershell.exe -File tianshu-weekly-sync.ps1", deviceName: "工作机", imported: false };
-  const lists: ReviewLists = { basis: [doc("material:m1", { kind: "material", origin: "task", title: "M2 战略解码.md" }), doc("feishu_doc:w1")], schedules: [weekly] };
-  type SummaryProps = Parameters<typeof ReviewSummary>[0];
-  const summary = (patch: Partial<SummaryProps> = {}) => {
-    hooks.begin();
-    return ReviewSummary({ lists, reviewed: false, picks: {}, onPick: () => undefined, memoryFiles: 12, saving: false, error: null, ...patch });
-  };
-  const rows = (tree: ReactNode) => elements(tree).filter((element) => element.type === "button").map((element) => text(element.props.children as ReactNode));
-  const row = (tree: ReactNode, label: string) => {
-    const match = elements(tree).find((element) => element.type === "button" && text(element.props.children as ReactNode).startsWith(label));
-    expect(match, `应有「${label}」一行`).toBeDefined();
-    return match!;
-  };
-  const checklist = (tree: ReactNode, label: string) => elements(tree).find((element) => element.props.label === label && typeof element.props.onToggle === "function");
-
-  it("一项一行写帮本人选好的数：还没提交过时文档、定时任务全勾；默认全部收起", () => {
-    const tree = summary();
-    expect(rows(tree)).toEqual(["记忆文件12个", "文档2份", "定时任务1个"]);
-    expect(elements(tree).filter((element) => element.props["aria-expanded"] === true)).toEqual([]);
-    expect(checklist(tree, "文档")).toBeUndefined();
-    expect(text(tree)).not.toContain("飞书知识库 ·");
-  });
-
-  it("数量为 0 的那一项不显示；三项都没有时这一步跳过", () => {
-    expect(rows(summary({ lists: { basis: [], schedules: [weekly] }, memoryFiles: 0 }))).toEqual(["定时任务1个"]);
-    hooks.reset();
-    expect(rows(summary({ lists: { basis: [doc("feishu_doc:w1")], schedules: [] }, memoryFiles: null }))).toEqual(["文档1份"]);
-    expect(reviewEmpty({ basis: [], schedules: [] }, 0)).toBe(true);
-    expect(reviewEmpty({ basis: [], schedules: [] }, null)).toBe(true);
-    expect(reviewEmpty({ basis: [], schedules: [] }, 3)).toBe(false);
-    expect(reviewEmpty({ basis: [], schedules: [weekly] }, null)).toBe(false);
-  });
-
-  it("点开一行展开勾选明细，改了勾选摘要跟着变；提交过之后按入库的勾", () => {
-    let picks: ReviewPicks = {};
-    const onPick = vi.fn((key: string, checked: boolean) => { picks = { ...picks, [key]: checked }; });
-    (row(summary({ onPick }), "文档").props.onClick as () => void)();
-    let tree = summary({ onPick, picks });
-    expect(row(tree, "文档").props["aria-expanded"]).toBe(true);
-    const list = checklist(tree, "文档")!;
-    expect(list.props).toMatchObject({ items: lists.basis, selected: ["material:m1", "feishu_doc:w1"] });
-    (list.props.onToggle as (key: string, checked: boolean) => void)("feishu_doc:w1", false);
-    expect(onPick).toHaveBeenCalledWith("feishu_doc:w1", false);
-    tree = summary({ onPick, picks });
-    expect(rows(tree)).toContain("文档1份");
-    expect(checklist(tree, "文档")!.props.selected).toEqual(["material:m1"]);
-    // 再点一次收起；记忆文件那一行展开的是导入插槽。
-    (row(tree, "文档").props.onClick as () => void)();
-    expect(checklist(summary({ onPick, picks }), "文档")).toBeUndefined();
-    (row(summary({ onPick, picks }), "记忆文件").props.onClick as () => void)();
-    expect(elements(summary({ onPick, picks })).find((element) => element.type === MemoryImportPanel)?.props).toEqual({ localMemoryFiles: 12 });
-    hooks.reset();
-    const saved: ReviewLists = { basis: [{ ...lists.basis[0], confirmed: true }, lists.basis[1]], schedules: [{ ...weekly, imported: false }] };
-    expect(rows(summary({ lists: saved, reviewed: true }))).toEqual(["记忆文件12个", "文档1份", "定时任务0个"]);
-  });
-
-  it("点完成把两份清单按当前勾选分别提交；任一份没存上就抛错留在这一步", async () => {
-    const put = vi.spyOn(browserApi, "PUT").mockImplementation((async (path: string) => ({ data: { candidates: [`saved ${path}`] }, response: new Response(null, { status: 200 }) })) as never);
-    const saved = await submitReview(lists, false, { "feishu_doc:w1": false });
-    expect(put).toHaveBeenCalledTimes(2);
-    expect(put).toHaveBeenCalledWith("/api/me/work-basis", { body: { keys: ["material:m1"] } });
-    expect(put).toHaveBeenCalledWith("/api/me/schedule-migration", { body: { keys: ["dev:TianshuWeeklySync"] } });
-    expect(saved).toEqual({ basis: ["saved /api/me/work-basis"], schedules: ["saved /api/me/schedule-migration"] });
-    // 空的清单不提交。
-    put.mockClear();
-    await submitReview({ basis: [], schedules: [weekly] }, false, {});
-    expect(put).toHaveBeenCalledExactlyOnceWith("/api/me/schedule-migration", { body: { keys: ["dev:TianshuWeeklySync"] } });
-    put.mockImplementation((async () => ({ data: undefined, error: { message: "清单已经变了，请刷新后再确认" }, response: new Response(null, { status: 400 }) })) as never);
-    await expect(submitReview(lists, false, {})).rejects.toThrow("清单已经变了，请刷新后再确认");
-  });
-
-  it("提交失败在摘要里原位显示", () => {
-    expect(elements(summary({ error: "没有存上，请重试" })).find((element) => element.props.role === "alert")).toBeDefined();
   });
 });
 
@@ -455,9 +321,9 @@ describe("选择你的伙伴（spec 5.5）", () => {
   const press = (tree: ReactNode, label: string) => (button(tree, label).props.onClick as () => void)();
 
   it("还没有伙伴时排在最前面，CEO 和成员都走；已经引导过的只走这一步；有伙伴的不走", () => {
-    expect(onboardingSteps(ceo, false, "first")).toEqual(["buddy", "hello", "tour-notifications", "tour-board"]);
-    expect(onboardingSteps(member, false, "first").slice(0, 2)).toEqual(["buddy", "hello"]);
-    expect(onboardingSteps(member, false, "only")).toEqual(["buddy"]);
+    expect(onboardingSteps(ceo, "first")).toEqual(["buddy", "hello", "tour-notifications", "tour-board"]);
+    expect(onboardingSteps(member, "first").slice(0, 2)).toEqual(["buddy", "hello"]);
+    expect(onboardingSteps(member, "only")).toEqual(["buddy"]);
     expect(onboardingSteps(member)[0]).toBe("hello");
     hooks.begin();
     expect(text(WelcomeFlow({ data: ceo, buddy: { name: "团团", form: "panda" } }))).not.toContain("给你的伙伴起个名字");

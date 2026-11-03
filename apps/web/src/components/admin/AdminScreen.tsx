@@ -7,7 +7,7 @@
  */
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Button, ToggleButton, ToggleButtonGroup } from "ts-design/primitives";
-import { Bell, Check, ChevronDown, Database, KeyRound, Laptop, RefreshCw, RotateCcw, type LucideIcon } from "lucide-react";
+import { Bell, Check, ChevronDown, Database, KeyRound, RefreshCw, RotateCcw, type LucideIcon } from "lucide-react";
 import type {
   TAdminActionRequest, TAdminCounterKey, TAdminIssue, TAdminMark, TAdminOverviewResponse, TAdminPersonRow, TAdminQualitySignal, TAdminStatus, TAdminSubject,
 } from "@warmap/contracts";
@@ -17,12 +17,12 @@ import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceCon
 import { browserApi, type Card } from "@/lib/api/client";
 import { monthDayTime, publishedDate } from "@/lib/companyTime";
 import { UsagePanel } from "./UsagePanel";
-import { COUNTER_ISSUE, COUNTER_LABELS, COUNTER_SOURCE, SOURCES, age, isProblem, issueName, reminderDraft, runKindLabel, signalLabel, type Source } from "./adminText";
+import { COUNTER_ISSUE, COUNTER_LABELS, COUNTER_SOURCE, RETIRED_COUNTERS, SOURCES, age, isProblem, issueName, reminderDraft, runKindLabel, signalLabel, type Source } from "./adminText";
 import s from "./admin.module.css";
 
 const NO_CARDS: Card[] = [];
 const POLL_MS = 30_000;
-const SOURCE_ICONS: Record<Source, LucideIcon> = { collector: Laptop, feishu: KeyRound, world: Database };
+const SOURCE_ICONS: Record<Source, LucideIcon> = { feishu: KeyRound, world: Database };
 const STATUS_NAMES: Record<TAdminStatus, string> = { red: "红", yellow: "黄", green: "绿", none: "未接入" };
 type Act = (input: DistributiveOmit<TAdminActionRequest, "clientId">) => Promise<boolean>;
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -83,7 +83,7 @@ export function AdminScreen({ initial }: { initial: TAdminOverviewResponse }) {
           <div className={s.stack} hidden={tab !== "runtime"}>
             {failed ? <p className={s.error} role="alert">没有取到最新数据</p> : null}
             <section className={s.counters} aria-label="计数">
-              {view.counters.map((counter) => {
+              {view.counters.filter((counter) => !RETIRED_COUNTERS.has(counter.key)).map((counter) => {
                 const target = COUNTER_SOURCE[counter.key] ?? COUNTER_ISSUE[counter.key];
                 return (
                   <button key={counter.key} type="button" className={s.tile} data-status={counter.status} aria-pressed={filter === counter.key}
@@ -216,26 +216,6 @@ function Facts({ items }: { items: [string, string | null][] }) {
 }
 
 function SourceFacts({ row, source }: { row: TAdminPersonRow; source: Source }) {
-  if (source === "collector") {
-    if (!row.collector.devices.length) return null;
-    return (
-      <div className={s.devices}>
-        {row.collector.devices.map((device) => (
-          <div key={`${device.deviceName}:${device.source}:${device.firstSeenAt}`} className={s.device}>
-            <p className={s.deviceName}>{device.deviceName}<span>{device.platform} · {device.source} · {device.version}</span></p>
-            <Facts items={[
-              ["状态", device.sourceStatus === "ok" ? null : `${device.sourceStatus}${device.errorCode ? ` · ${device.errorCode}` : ""}`],
-              ["成功", monthDayTime(device.lastSuccessAt) || "—"],
-              ["尝试", monthDayTime(device.lastAttemptAt)],
-              ["覆盖到", monthDayTime(device.coverageUntil) || "—"],
-              ["新证据", monthDayTime(device.lastNewEvidenceAt) || "—"],
-              ["首次", monthDayTime(device.firstSeenAt)],
-            ]} />
-          </div>
-        ))}
-      </div>
-    );
-  }
   if (source === "feishu") {
     const cell = row.feishu;
     return <Facts items={[

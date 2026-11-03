@@ -7,8 +7,6 @@ node_modules
 .scratch
 docs
 tools
-# 采集器的安装脚本和 Python 文件由 API 发给一行安装命令（/api/collector/install.*）
-!tools/collector
 # 运行期靠只读 volume 提供；不让企业资料与真实人员名单进入构建上下文
 seed
 backend
