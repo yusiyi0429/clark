@@ -10,7 +10,7 @@ const fs = require("fs");
 const path = require("path");
 
 const C = {
-  hairLine: "url(#{id}-hair-line)", hairLineIn: "#7b4f9f", strand: "#9a6cc4", sheenSparkle: "#ffffff",
+  hairLine: "url(#{id}-hair-line)", hairLineIn: "#7b4f9f", bangLine: "#9b72c6", strand: "#9a6cc4", sheenSparkle: "#ffffff",
   skin: "#ffece4", skinShade: "#f8cdc4", skinShade2: "#fcdad2", skinLine: "#c77d75", nose: "#e2a39b",
   lash: "#2e2747", irisLine: "#22266b", pupil: "#141640", irisGlow: "#c8f0ff",
   mouthLine: "#8f3550", mouthIn: "#c9465f", tongue: "#f28aa0",
@@ -48,13 +48,13 @@ function sparkle(x, y, r) {
   const k = r * 0.14;
   return P(`M${x} ${y - r}C${x + k} ${y - k} ${x + k} ${y - k} ${x + r} ${y}C${x + k} ${y + k} ${x + k} ${y + k} ${x} ${y + r}C${x - k} ${y + k} ${x - k} ${y + k} ${x - r} ${y}C${x - k} ${y - k} ${x - k} ${y - k} ${x} ${y - r}Z`, C.sheenSparkle);
 }
-/** 刘海的一片发束：[发根, 发梢, 宽, 弯]。弧边叶形，中线是一条二次曲线。 */
+/** 刘海的一片发束：[发根, 发梢, 宽, 弯]。弧边叶形，中线是一条二次曲线；发梢留一点圆钝，不收成针尖。 */
 function leafPts([[rx, ry], [tx, ty], w, b]) {
   const len = Math.hypot(tx - rx, ty - ry), ux = (tx - rx) / len, uy = (ty - ry) / len, nx = -uy, ny = ux;
   const mid = (t) => { const cx = (rx + tx) / 2 + nx * b, cy = (ry + ty) / 2 + ny * b, u = 1 - t; return [u * u * rx + 2 * u * t * cx + t * t * tx, u * u * ry + 2 * u * t * cy + t * t * ty]; };
-  const side = (sg) => [[0, 1], [0.18, 0.98], [0.4, 0.9], [0.64, 0.7], [0.86, 0.36]].map(([t, k]) => { const [mx, my] = mid(t); return [mx + sg * nx * (w / 2) * k, my + sg * ny * (w / 2) * k]; });
+  const side = (sg) => [[0, 1], [0.2, 0.98], [0.42, 0.9], [0.64, 0.7], [0.84, 0.42], [0.95, 0.17]].map(([t, k]) => { const [mx, my] = mid(t); return [mx + sg * nx * (w / 2) * k, my + sg * ny * (w / 2) * k]; });
   const left = side(1), right = side(-1);
-  return { left, right, tip: [tx, ty], mid, shape: [...left, [tx, ty, "c"], ...right.slice().reverse()] };
+  return { left, right, tip: [tx, ty], mid, shape: [...left, [tx, ty], ...right.slice().reverse()] };
 }
 
 // ── 脸 ──（额头那截藏在刘海下面，填色要连上去）
@@ -75,11 +75,10 @@ const LOCK_L_OUT = [[240, 990], [228, 930], [212, 876], [192, 820], [176, 760], 
 const FRONT = [...CROWN, ...EAR_TOP, ...LOCK_R_OUT, ...LOCK_R_IN, ...FRINGE, ...LOCK_L_IN, ...LOCK_L_OUT];
 // 空气感的刘海：九片发束，以中间那缕为中心像「ハ」一样往两边散开；长短宽窄都不一样，一片压一片，缝里透出一点额头
 const LEAVES = [
-  [[524, 476], [648, 600], 38, 18], [[344, 478], [230, 618], 40, -18],
-  [[494, 468], [608, 590], 48, 20], [[372, 468], [262, 590], 46, -20],
-  [[470, 460], [552, 586], 54, 16], [[394, 460], [318, 596], 56, -16],
-  [[450, 454], [494, 610], 48, 10], [[414, 454], [376, 602], 50, -10],
-  [[432, 448], [434, 638], 44, 0],
+  [[610, 484], [636, 598], 56, 10], [[256, 486], [230, 602], 56, -10],
+  [[552, 470], [572, 606], 64, 8], [[312, 470], [292, 604], 64, -8],
+  [[492, 462], [504, 620], 62, 5], [[372, 462], [360, 618], 62, -5],
+  [[432, 456], [434, 638], 60, 0],
 ];
 // 背后的长发（不跟着头转，在身子后面）：从头四周那层两侧竖直的外沿接下去，往下散开成钟形，发梢一缕缕收尖
 const LONG = [[108, 740, "c"], [96, 800], [78, 866], [66, 940], [62, 1010], [50, 1080], [36, 1140], [28, 1170, "c"], [70, 1150], [102, 1186, "c"], [138, 1144], [176, 1184, "c"], [214, 1142], [260, 1152], [432, 1154], [604, 1152], [650, 1142], [690, 1184, "c"], [730, 1144], [770, 1186, "c"], [806, 1150], [852, 1172, "c"], [846, 1140], [834, 1080], [826, 1010], [824, 940], [814, 866], [808, 800], [812, 740, "c"], [740, 730], [600, 744], [432, 760], [264, 744], [150, 732]];
@@ -184,12 +183,12 @@ function drawGirl() {
     [[184, 640], [190, 760], [214, 880], [240, 980]], [[664, 640], [658, 760], [642, 880], [620, 980]],
   ].map((d) => thin(d, C.strand, 2.6, ` opacity="0.6"`)).join("");
   const leaves = LEAVES.map((L) => {
-    const { left, right, tip, mid, shape } = leafPts(L);
+    const { left, right, tip, shape } = leafPts(L);
     return P(spline(shape), "url(#{id}-hair)")
-      + P(spline([...right, [...tip, "c"], ...right.map(([x, y], i) => { const [mx, my] = mid([0, 0.18, 0.4, 0.64, 0.86][i]); return [(x + mx) / 2, (y + my) / 2]; }).reverse()]), "url(#{id}-hair-shade)", ` opacity="0.35"`)
-      + B([...left.slice(2), tip], C.hairLineIn, { w: 3, taper: [0.6, 0.12], ends: [0, 0.3] }) + B([...right.slice(2), tip], C.hairLineIn, { w: 3.4, taper: [0.6, 0.12], ends: [0, 0.3] })
-      + thin([mid(0.16), mid(0.4), mid(0.6)], "#ffe6f4", 4, ` opacity="0.35"`);
-  }).join("");
+      + B([...left.slice(2), tip, ...right.slice(2).reverse()], C.bangLine, { w: 2.3, taper: [0.3, 0.3], ends: [0, 0] });
+  }).join("")
+    + [[[404, 486], [398, 540], [392, 590]], [[470, 488], [478, 546], [486, 598]], [[330, 494], [318, 548], [306, 590]]]
+      .map((d) => thin(d, "#ffe6f4", 3, ` opacity="0.5"`)).join("");
   const outer = B([[262, 1018], ...LOCK_L_OUT, ...CROWN].map((q) => q.slice(0, 2)), C.hairLine, { w: 7, heavy: 1.6, side: 1, taper: [0.06, 0.04], ends: [0.15, 0.5] })
     + B([[804, 496], ...EAR_TOP, ...LOCK_R_OUT].map((q) => q.slice(0, 2)), C.hairLine, { w: 5, heavy: 1.4, side: 1, taper: [0.12, 0.08], ends: [0.4, 0.15] });
   const inner = B([[604, 1006], ...LOCK_R_IN].map((q) => q.slice(0, 2)), C.hairLineIn, { w: 4, taper: [0.15, 0.2], ends: [0.2, 0.3] })
