@@ -6,7 +6,6 @@ import {
 } from "@warmap/contracts";
 import { verifyActionId } from "../actionToken.js";
 import { draftCollection, executeCollectionAction, listSchedules, readCollection, readCollectionRound, syncCollection, type CollectionError } from "../collections.js";
-import { canUseMemberView } from "../memberAccess.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
@@ -18,9 +17,7 @@ const OBJECT_TYPES = new Set(["collection", "collection-round"]);
 export function registerCollectionRoutes(app: AppInstance, ctx: RouteContext): void {
   const secret = ctx.env.sessionSecret;
   app.get("/api/me/schedules", { preHandler: ctx.requirePerson, schema: { response: { 200: ScheduleListResponse } } }, async (req) => {
-    const person = ctx.peopleDirectory.searchPeople(undefined).find((item) => item.personId === req.person!.personId);
-    const items = await listSchedules(ctx.q, { personId: req.person!.personId, isCeo: req.person!.role === "ceo", weeklyReviews: person ? canUseMemberView(person) : false },
-      secret, ctx.now());
+    const items = await listSchedules(ctx.q, { personId: req.person!.personId, isCeo: req.person!.role === "ceo" }, secret);
     return { items: ctx.collections ? items : items.filter((item) => item.category !== "collect") };
   });
   // 收集关着时（D-56）下面的接口都不注册，一律 404。

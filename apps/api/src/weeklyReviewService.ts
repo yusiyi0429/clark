@@ -13,8 +13,7 @@ import {
 /**
  * 周复盘生成服务（D-01）。
  *
- * 定时：每周五 15:00（上海时间）起，给每个在成员工作台里的人生成本周周复盘草稿；周五晚上、周末进程才起来的照样补上（同一周只建一次）。
- * 与其他后台任务一样是进程内 setInterval（createWeeklyReviewScheduler，每分钟一次）。
+ * 定时：runScheduled 在每周五 15:00（上海时间）之后给每个在成员工作台里的人补本周草稿（同一周只建一次）；11/03 起 server 不再定时调它。
  *
  * 生成：读 Mission 卡 → 读 Mission 与 Task 进展 → 读会议结论 → 读采集记录 → 读上周复盘 → 起草，每步写进 generation_steps（页面轮询可见），
  * 同时回调 onStep。起草结果逐行核对出处（与个人复盘同一套 citationProblem）和模板格式（templateProblem），不合格重试，三次都不合格记失败；写回时保留本人改过的段落。
@@ -143,15 +142,3 @@ export function createWeeklyReviewService({ pool, agent, people, now = () => new
   };
 }
 export type WeeklyReviewService = ReturnType<typeof createWeeklyReviewService>;
-
-/** tick 失败只记录，不抛出（定时器里的未处理拒绝会终止 API 进程）。 */
-export function createWeeklyReviewScheduler(service: Pick<WeeklyReviewService, "runScheduled">, intervalMs = 60_000) {
-  let timer: NodeJS.Timeout | undefined;
-  const tick = () => Promise.resolve(service.runScheduled()).then(() => undefined,
-    (cause: unknown) => void console.warn(`weekly review scheduled run failed: ${(cause as Error).message || String(cause)}`));
-  return {
-    tick,
-    start() { if (timer) return; void tick(); timer = setInterval(() => { void tick(); }, intervalMs); timer.unref(); },
-    close() { if (timer) clearInterval(timer); timer = undefined; },
-  };
-}
