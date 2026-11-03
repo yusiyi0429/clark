@@ -255,12 +255,30 @@ describe("HomePlan：月历", () => {
     expect(h.calendar!.focus).toBe("m1");
   });
 
-  it("回退显示上个月：月历 current=false（不画本周、不写还剩几个工作日），Mission 标题旁写「9 月」", () => {
-    const html = mount(plan({ period: "2026-09", fallbackFrom: "2026-09", days: [{ date: "2026-09-30", workday: true }] })).html;
-    expect(h.calendar!.current).toBe(false);
-    expect(html).toMatch(/<h2>Mission<span class="[^"]*_month_[^"]*">9 月<\/span><\/h2>/);
+  it("Mission 回退显示上个月：标题旁写「9 月」，月历照样画本月；这个月的日子上不出「＋ 加节点」", () => {
+    const view = mount(plan({ period: "2026-09", fallbackFrom: "2026-09" }));
+    expect(h.calendar).toMatchObject({ period: "2026-10", current: true });
+    expect(view.html).toMatch(/<h2>Mission<span class="[^"]*_month_[^"]*">9 月<\/span><\/h2>/);
+    view.calendar("onPickDay", "2026-10-24");
+    expect(view.html).toContain('data-mark-pop="day"');
+    expect(view.find((props) => props["data-day-add"] !== undefined)).toBeUndefined();
     expect(mount().html).not.toMatch(/\d+ 月<\/span>/);
-    expect(h.calendar!.current).toBe(true);
+  });
+
+  it("月历翻月：下个月读 /api/me/plan-calendar，读到了再换；翻回本月直接用首页计划，不再读", async () => {
+    const november = { month: "2026-11", days: [{ date: "2026-11-02", workday: true }], gates: [{ missionId: "m1", date: "2026-11-05", label: "交付" }] };
+    h.api.GET.mockResolvedValue(ok(november));
+    const view = mount();
+    const turn = (step: number) => { (h.calendar!.onMonth as (value: number) => void)(step); return view.render(); };
+    turn(1);
+    expect(h.calendar).toMatchObject({ period: "2026-10", current: true });
+    await settle();
+    view.render();
+    expect(h.api.GET).toHaveBeenCalledWith("/api/me/plan-calendar", { params: { query: { month: "2026-11" } } });
+    expect(h.calendar).toMatchObject({ period: "2026-11", current: false, days: november.days, gates: november.gates });
+    turn(-1);
+    expect(h.calendar).toMatchObject({ period: "2026-10", current: true });
+    expect(h.api.GET.mock.calls.filter(([path]) => path === "/api/me/plan-calendar")).toHaveLength(1);
   });
 });
 

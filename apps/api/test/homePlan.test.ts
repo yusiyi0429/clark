@@ -167,9 +167,10 @@ describe("首页计划",()=>{
       const plan=await read(f,f.member);
       expect(plan).toMatchObject({period:"2026-09",fallbackFrom:"2026-09",today:"2026-10-22",weekStart:"2026-10-19",weekEnd:"2026-10-25"});
       expect(plan.missions.map((m:{missionId:string})=>m.missionId)).toEqual(["execution-one","execution-two"]);
-      expect(plan.days).toHaveLength(30);
-      expect(plan.days[0]).toEqual({date:"2026-09-01",workday:true});
-      // 显示的是 9 月：9 月 Mission 下的照常分栏，更早（8 月）Mission 下没做完的放本周算逾期。
+      // 月历照样是真实的本月（10 月），不跟着 Mission 回退。
+      expect(plan.days).toHaveLength(31);
+      expect(plan.days[0]).toEqual({date:"2026-10-01",workday:false});
+      // Mission 显示的是 9 月：9 月 Mission 下的照常分栏，更早（8 月）Mission 下没做完的放本周算逾期。
       expect(byTitle(plan.activities)).toEqual({
         "本周到期的独立事项":{missionId:null,column:"week",overdue:false},
         "八月 Mission 没做完":{missionId:"august-one",column:"week",overdue:true},
@@ -204,6 +205,12 @@ describe("首页计划",()=>{
         {missionId:"execution-two",code:"execution-two",title:"验证",cardId:f.card,color:"#2f8a7a",world:null},
       ]);
       expect(plan.marks).toEqual([mark]);
+      // 月历翻到下个月：同样这几个 Mission，只留落在 11 月的关口；月份写错 400。
+      const november=(await call(f,f.member,"GET","/api/me/plan-calendar?month=2026-11")).json();
+      expect(november).toMatchObject({month:"2026-11",gates:[{missionId:"execution-one",date:"2026-11-03",label:"下月"}]});
+      expect(november.days).toHaveLength(30);
+      expect(november.days[0]).toEqual({date:"2026-11-01",workday:false});
+      expect((await call(f,f.member,"GET","/api/me/plan-calendar?month=2026-13")).statusCode).toBe(400);
       expect(plan.tasks).toEqual([task]);
       expect(calls).toEqual([[{id:"execution-one",code:"execution-one",world:null},{id:"execution-two",code:"execution-two",world:null}]]);
     } finally { await f.t.close(); }

@@ -85,6 +85,7 @@ export const HomePlanActivity = Type.Object(
 /**
  * 成员首页的 Mission 计划视图：一次读全。
  * 本月没有 Mission 时回退显示最近一个有 Mission 的月份，这时 fallbackFrom 等于 period；不回退为 null。
+ * days、gates 总是真实的本月（月历默认按今天画，不跟着回退）；翻到别的月份读 PlanCalendarResponse。
  * today / weekStart / weekEnd 按公司时区；本周是今天所在的周一到周日，可能跨月。
  */
 export const HomePlanResponse = Type.Object(
@@ -103,6 +104,12 @@ export const HomePlanResponse = Type.Object(
     /** 待归位的事项（TaskView.unplaced 不为空的）：不进 activities，首页单独一组、通知栏单独一张卡。 */
     unplaced: Type.Array(TaskView),
   },
+  { additionalProperties: false },
+);
+
+/** 月历翻到别的月份：那个月的每一天和落在那个月的签定关口（关口来自首页显示的那几个 Mission）。 */
+export const PlanCalendarResponse = Type.Object(
+  { month: Period, days: Type.Array(HomePlanDay), gates: Type.Array(HomePlanGate) },
   { additionalProperties: false },
 );
 
@@ -126,5 +133,6 @@ export type THomePlanMission = Static<typeof HomePlanMission>;
 export type THomePlanMissionWorld = Static<typeof HomePlanMissionWorld>;
 export type THomePlanActivity = Static<typeof HomePlanActivity>;
 export type THomePlanResponse = Static<typeof HomePlanResponse>;
+export type TPlanCalendarResponse = Static<typeof PlanCalendarResponse>;
 export type TCreatePlanMarkRequest = Static<typeof CreatePlanMarkRequest>;
 export type TPatchPlanMarkRequest = Static<typeof PatchPlanMarkRequest>;
