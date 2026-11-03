@@ -1,152 +1,227 @@
-// 女伙伴形象的画法（2026-11-03 第五版）：Q 版萌系（参考网上流行的 Q 版 DeepSeek 拟人的画风和发型）+ 萨拉芬尼式的粉紫蓝配色，不穿女仆装。
-// 不画鲸鱼鳍、鲸鱼尾巴和鲸鱼图案：那是 DeepSeek 的品牌形象，放进天枢会让人以为两家有关系。
-// 和 Miles 同一坐标系、同一缩放、同一套 data-part；脸型、鼻子、耳朵和两只 AirPods、比耶的手、脖子和手臂的形状取自 Miles
-// （肤色整套换浅、描边换成深紫蓝并略细），新画的是头发、眼睛、嘴、腮红、两个蝴蝶结和天枢 logo 发夹。输出内层 SVG，由 gen.cjs 写成 girl.svg 和 girlArt.ts。
-const { spline, splineSegs, subPath, cont, milesPart, milesDefs } = require("./lib.cjs");
-const { wobble } = require("./wobble.cjs");
+// 女伙伴形象 Mia 的画法（2026-11-03 第六版）：Q 版比例，借孙铭泽给的参考图的气质——细软的线、克制的颜色、安静好看。
+// 黑发从发根渐变到发尾的深蓝紫，空气刘海透出眉毛，右边头发别在耳后露出 AirPods；只留一个天枢 logo 发夹点睛；白上衣。
+// 不再沿用 Miles 的贴纸画法和部件：线条用 ink.cjs 的笔刷画，有粗细、两头收尖、带颜色，光从左上来，背光一侧线粗、带赛璐璐阴影。
+// 和 milesRig 的约定照旧：同一坐标系和摆位常量、同样的 data-part 和三个转轴；眼珠 iris-l/r 裁在眼眶里；比耶的手被上衣剪影遮住。
+// 输出内层 SVG，由 gen.cjs 写成 girl.svg 和 girlArt.ts。
+const { spline } = require("./lib.cjs");
+const { brush, ring } = require("./ink.cjs");
 const fs = require("fs");
 const path = require("path");
 
 const C = {
-  ink: "#2e2747", line: "#8a5fb0", hi: "#ffd9ee", sparkle: "#ffffff", shade: "#f2b4b0",
-  bow: "#8fd0ff", bowShade: "#5aa5e6",
-  tie: "#6c78e0", tieShade: "#4f5bc4", gem: "#8ff0ff",
-  pupil: "#141640", lid: "#2e2747", irisLine: "#22266b",
-  mouthLine: "#8f3550", mouthIn: "#c9465f", tongue: "#f28aa0",
+  hairLine: "#100e19", sheen: "#93a6dc", strand: "#40508f",
+  skin: "#fff5f1", skinShade: "#f7dad4", skinShade2: "#fbe8e3", skinLine: "#b9847c", nose: "#d6a198",
+  lash: "#231c36", brow: "#2b2540", irisTop: "#0d0f24", pupil: "#0a0c20", irisGlow: "#a9c3ee", irisRim: "#11142c", socketRim: "#3a3150",
+  mouthLine: "#a8626b", lip: "#e9a0a8", mouthIn: "#c95c6e", tongue: "#f29aa8",
+  shirt: "#ffffff", shirtShade: "#e7e4f0", shirtLine: "#9a95b3",
+  pod: "#ffffff", podShade: "#dfe3ec", podLine: "#8c94a8",
 };
-const W = 10.5; // 主描边：深紫蓝，比 Miles 的 12.5 黑线细一点，产品尺寸下仍然清楚
-const SKIN = {
-  "#f5c1b4": "#fde3d8", "#dc9592": "#f3b8b0", "#bd6b6b": "#eaa39f", "#e98e84": "#f59aa0", "#d77a73": "#ee8c93", "#d7766d": "#ef9097",
-  "#64201a": "#cf8488", "#3a0b0d": "#ad5d68", "#86302f": "#b0485a", "#d8706f": "#f08a96", "#e4a596": "#f2b8ad", "#7d2e27": "#c26a6d",
-  "#c27c7c": "#eda7a8", "#80353a": "#c4727c", "#a86b6c": "#e2a6a6", "#84414c": "#cf8e95",
-};
-const TEE = { "#f8e8ef": "#fdfbff", "#927882": "#d6d0ee", "#7a5f68": "#a49bcd", "#7a7176": "#aaa3cc", "#a0868f": "#cfc7ec", "#6f5461": "#9389c2" };
-const recolor = (map) => (s) => Object.entries(map).reduce((acc, [a, b]) => acc.replaceAll(a, b), s);
-// 复用的 Miles 部件：肤色换浅，描边换成深紫蓝、略细。
-const soften = (s) => recolor({ ...SKIN, "#0b090d": C.ink })(s).replaceAll('stroke-width="12.5"', `stroke-width="${W}"`).replaceAll('stroke="#c26a6d" stroke-width="13"', 'stroke="#c26a6d" stroke-width="10"');
-const tee = (s) => soften(recolor(TEE)(s));
 
-const fill = (d, color, extra = "") => `<path d="${d}" fill="${color}"${extra}/>`;
-const line = (d, w = W, color = C.ink) => `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"/>`;
-const outlined = (d, color, w = W) => `<path d="${d}" fill="${color}" stroke="${C.ink}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"/>`;
-const ink = (d, seed) => line(wobble(d, { seed }));
-const strand = (d, w = 6) => line(d, w, C.line);
-const gradient = (id, stops, y1 = 250, y2 = 870) => `<linearGradient id="{id}-${id}" gradientUnits="userSpaceOnUse" x1="0" y1="${y1}" x2="0" y2="${y2}">${stops.map(([o, c]) => `<stop offset="${o}" stop-color="${c}"/>`).join("")}</linearGradient>`;
-function sparkle(x, y, r, color = C.sparkle) {
-  const k = r * 0.12;
-  return fill(`M${x} ${y - r}C${x + k} ${y - k} ${x + k} ${y - k} ${x + r} ${y}C${x + k} ${y + k} ${x + k} ${y + k} ${x} ${y + r}C${x - k} ${y + k} ${x - k} ${y + k} ${x - r} ${y}C${x - k} ${y - k} ${x - k} ${y - k} ${x} ${y - r}Z`, color);
+// ── 小工具 ──
+let DEFS = [], K = 0;
+const P = (d, fill, more = "") => `<path d="${d}" fill="${fill}"${more}/>`;
+const B = (pts, fill, opts = {}, more = "") => `<path d="${brush(pts, opts)}" fill="${fill}"${more}/>`;
+const R = (pts, fill, opts = {}, more = "") => `<path d="${ring(pts, opts)}" fill="${fill}" fill-rule="evenodd"${more}/>`;
+/** 把内容裁在某个形状里（阴影、高光只落在底色上）。 */
+const clipped = (d, content) => { const id = `{id}-k${++K}`; DEFS.push(`<clipPath id="${id}"><path d="${d}"/></clipPath>`); return `<g clip-path="url(#${id})">${content}</g>`; };
+const stops = (list) => list.map(([o, c, a]) => `<stop offset="${o}" stop-color="${c}"${a === undefined ? "" : ` stop-opacity="${a}"`}/>`).join("");
+const lin = (id, list, y1, y2) => `<linearGradient id="{id}-${id}" gradientUnits="userSpaceOnUse" x1="0" y1="${y1}" x2="0" y2="${y2}">${stops(list)}</linearGradient>`;
+/** 闭合轮廓在尖角处断开，一段一段画线：发梢处两头收尖。side 1 = 顺时针。 */
+function contour(pts, color, { w = 6, heavy = 1.7, side = 1, ends = 0.25, taper = 0.14 } = {}) {
+  const corners = pts.map((p, i) => (p[2] === "c" ? i : -1)).filter((i) => i >= 0);
+  let out = "";
+  corners.forEach((a, k) => {
+    const b = corners[(k + 1) % corners.length];
+    const seg = [];
+    for (let i = a; ; i = (i + 1) % pts.length) { seg.push(pts[i].slice(0, 2)); if (i === b) break; }
+    if (seg.length > 1) out += B(seg, color, { w, heavy, side, taper: [taper, taper], ends: [ends, ends] });
+  });
+  return out;
 }
-const HAIR = "url(#{id}-hair)", HAIR_BACK = "url(#{id}-hair-back)";
 
-const HEAD = [ // 头四周的头发：贴着头，头顶放平一点（头不显大）；两侧垂到肩膀高度，和背后那层长发在竖直的外沿上衔接
-  [112, 790], [104, 730], [104, 660], [108, 590], [116, 520], [132, 450], [162, 386], [218, 330], [300, 292], [400, 270],
-  [500, 266], [592, 278], [670, 308], [734, 354], [780, 420], [804, 496], [812, 574], [814, 650], [812, 720], [808, 790],
-  [770, 806], [720, 796], [690, 776], [668, 756], [600, 750], [450, 740], [300, 725], [236, 744], [200, 790], [150, 806],
-];
-// 背后的长发：在身体后面，从后脑勺一路垂到腰下，脖子和肩膀周围、手臂两边都露出来。不跟着头转，所以和上面那层的接缝放在两侧竖直的外沿上。
-const LONG = [ // 两道大的 S 形波浪往下散开成钟形，发梢是一缕缕的尖、最外面两缕往外翘；不是一排小波纹（那样像海带）
-  [106, 740], [92, 800], [70, 860], [60, 930], [78, 992], [58, 1060], [40, 1120], [30, 1168, "c"], [74, 1146], [104, 1184, "c"],
-  [140, 1140], [176, 1182, "c"], [214, 1138], [260, 1150], [420, 1150], [560, 1150], [700, 1138], [740, 1182, "c"], [776, 1140], [812, 1184, "c"],
-  [846, 1146], [890, 1168, "c"], [880, 1120], [862, 1060], [842, 992], [860, 930], [850, 860], [830, 800], [816, 740],
-  [760, 728], [650, 740], [450, 770], [250, 740], [150, 728],
-];
-// 长发里两缕前后错开的大卷（尖梢），让发量有层次。
-const LONG_LOCKS = [
-  [[120, 820], [104, 900], [118, 980], [98, 1060], [92, 1120], [118, 1196, "c"], [136, 1120], [150, 1050], [140, 970], [156, 890], [164, 820]],
-  [[756, 820], [770, 900], [756, 980], [776, 1060], [784, 1120], [758, 1196, "c"], [742, 1120], [730, 1050], [742, 970], [726, 890], [716, 820]],
-];
-const head = splineSegs(HEAD);
-const BACK_WAVES = ["M130 470C116 560 118 650 114 740", "M790 480C804 570 806 660 802 750"];
-const LONG_WAVES = ["M86 820C68 900 72 980 66 1060C62 1100 54 1130 46 1156", "M196 860C186 940 192 1030 182 1124", "M690 860C700 940 694 1030 704 1124", "M832 820C850 900 846 980 854 1060C858 1100 866 1130 874 1156"];
-// 头顶 + 刘海 + 两侧垂在脸边的前发（一整块）。EAR_TOP 绕过右耳上方，耳朵和 AirPods 露在外面。
-const EAR_TOP = [[804, 496], [792, 556], [756, 580], [716, 558], [676, 566], [650, 552]];
-const LOCK_R = [[650, 552], [646, 590], [638, 636], [632, 690], [630, 744], [634, 800], [630, 860], [612, 910], [604, 970], [580, 1004, "c"], [574, 944], [584, 884], [600, 832], [610, 772], [608, 714], [606, 662], [606, 620, "c"]];
-const FRINGE = [ // 从右往左：几缕从中间那缕长发往两边散开（长斜边朝外、短陡边朝里），像「ハ」
-  [606, 620, "c"], [592, 594], [580, 572], [568, 558], [562, 556], [560, 568], [558, 582, "c"], [546, 570], [530, 562], [516, 554],
-  [510, 554], [508, 566], [504, 582, "c"], [490, 568], [474, 558], [460, 554], [452, 572], [442, 600], [430, 630, "c"], [420, 600],
-  [410, 572], [402, 554], [388, 560], [372, 570], [362, 586, "c"], [358, 568], [354, 554], [340, 556], [322, 564], [306, 574],
-  [296, 574, "c"], [294, 564], [292, 554], [280, 562], [264, 580], [250, 602], [238, 622, "c"],
-];
-const LOCK_L = [[238, 622, "c"], [232, 660], [228, 706], [236, 756], [252, 806], [270, 850], [284, 900], [290, 962], [280, 1022, "c"], [254, 990], [246, 930], [232, 880], [214, 840], [200, 790], [190, 730], [180, 670], [166, 610], [150, 550], [136, 490], [130, 462]];
-const FRONT_SPLITS = ["M562 556C568 536 576 520 588 508", "M510 554C514 532 520 516 530 502", "M460 554C462 530 466 512 472 496", "M402 554C400 530 400 512 404 496", "M354 554C348 530 346 512 348 496", "M292 556C284 534 280 516 280 500"];
-const STRANDS = ["M300 474C360 408 450 360 560 342", "M226 520C264 436 332 372 430 334", "M620 520C660 456 700 410 740 392", "M200 640C214 700 222 760 236 820", "M618 640C622 700 624 760 622 800"];
-const SHINE = [[206, 426], [252, 378], [318, 342], [398, 320], [480, 316], [560, 326], [624, 350], [608, 368, "c"], [578, 358], [552, 374, "c"], [520, 362], [490, 378, "c"], [456, 364], [424, 382, "c"], [392, 366], [360, 386, "c"], [326, 374], [298, 400, "c"], [270, 394], [238, 428, "c"]];
-const SHADE = [[200, 520], [238, 634], [256, 590], [292, 568], [296, 592], [354, 566], [362, 598], [402, 566], [430, 642], [460, 566], [504, 594], [510, 566], [558, 600], [562, 568], [606, 632], [630, 640], [640, 520], [420, 440]];
-const AHOGE = [[372, 276], [340, 238], [330, 204], [344, 182], [374, 176], [400, 190, "c"], [374, 192], [358, 210], [362, 240], [384, 266], [404, 272]];
-const BOW = { l: [[716, 494], [692, 470], [670, 470], [664, 492], [672, 516], [694, 518], [716, 506]], r: [[736, 494], [760, 468], [782, 468], [790, 488], [784, 514], [760, 518], [736, 506]], knot: [[714, 484], [738, 484], [740, 510], [712, 510]], tails: [[[720, 508], [704, 548, "c"], [718, 546], [728, 520]], [[732, 508], [752, 546, "c"], [738, 546], [726, 520]]] };
+// ── 脸 ──（额头那截藏在刘海下面，填色要连上去，免得刘海缝里露底）
+const FACE = [[196, 478], [300, 436], [433, 424], [566, 436], [670, 478], [700, 556], [706, 630], [698, 690], [676, 738], [640, 776], [594, 804], [540, 822], [486, 834], [433, 840], [380, 834], [326, 822], [272, 804], [226, 776], [190, 738], [168, 690], [160, 630], [166, 556]];
+const JAW = [[164, 600], [160, 630], [168, 690], [190, 738], [226, 776], [272, 804], [326, 822], [380, 834], [433, 840], [486, 834], [540, 822], [594, 804], [640, 776], [676, 738], [698, 690], [706, 630], [704, 600]];
 
-// 萌系大眼睛，照 Q 版 DeepSeek 拟人的「呆萌」：圆眼睛、分得开一点，瞳孔大而居中，大颗的圆高光，上眼线平缓、外角两根小睫毛（不上挑）。
-// 眼眶（眼白、眶线、上眼线、睫毛）钉在脸上，眼珠（iris-l/r）裁在眼眶里：rig 转眼时只移眼珠，眨眼时整只眼睛一起合上。
-// 平时眼珠正好填满眼眶，看不到眼白；往旁边看时眼珠靠向眼角，另一侧露出眼白。
-const EYES = {
-  l: { cx: 296, cy: 662, w: 48, h: 54, outer: -1 },
-  r: { cx: 536, cy: 666, w: 48, h: 54, outer: 1 },
-};
+// ── 头发 ──
+// 前面这层（跟着头动）：顺时针，从左边那缕的发梢起，沿外沿上去、过头顶、下到右边那缕的发梢，再沿内沿上来、走刘海下沿、回到左边。
+// 右边那缕别在耳后：内沿贴着脸，耳朵画在头发上面。
+const LOCK_L_OUT = [[170, 908, "c"], [148, 846], [130, 768], [120, 690], [114, 610], [114, 540], [122, 474]];
+const CROWN = [[146, 398], [198, 336], [282, 292], [376, 268], [433, 262], [490, 268], [584, 292], [668, 336], [720, 398], [746, 474]];
+const LOCK_R_OUT = [[754, 540], [756, 610], [752, 690], [746, 768], [740, 846], [732, 906, "c"]];
+const LOCK_R_IN = [[716, 840], [710, 770], [710, 700], [708, 630], [700, 560]];
+// 刘海底下那层的下沿（比发束的尖短一截，大部分被发束盖住）
+const FRINGE = [[694, 544, "c"], [672, 562], [630, 568], [572, 572], [510, 574], [450, 576], [390, 574], [330, 568], [272, 562], [232, 556], [214, 550, "c"]];
+// 空气刘海的发束：[发根, 发梢, 宽, 弯]，从两边往中间一片压一片，朝两边散开；中间偏右那片最长，落在两眼之间
+const LEAVES = [[[620, 476], [648, 604], 46, 10], [[244, 482], [224, 598], 42, -8], [[298, 474], [280, 622], 54, -12], [[568, 470], [592, 632], 54, 9], [[352, 470], [342, 640], 52, -6], [[514, 466], [522, 648], 50, 3], [[404, 466], [396, 634], 48, -3], [[458, 464], [462, 666], 52, 1]];
+const LOCK_L_IN = [[204, 620], [200, 700], [196, 780], [186, 856]];
+const FRONT = [...LOCK_L_OUT, ...CROWN, ...LOCK_R_OUT, ...LOCK_R_IN, ...FRINGE, ...LOCK_L_IN];
+// 头后面那层（跟着头动，在脸后面）：脸和两侧那缕之间的缝里看得到，比前面暗
+const BACK = [[120, 640], [118, 560], [126, 476], ...CROWN, [748, 560], [750, 640], [744, 740, "c"], [700, 790], [433, 806], [166, 790], [126, 740, "c"]];
+// 背后的长发（不跟着头转，在身子后面）：脖子两边看得到，一直垂到腰下
+const LONG = [[124, 700, "c"], [116, 780], [100, 860], [86, 960], [78, 1060], [72, 1140, "c"], [100, 1120], [126, 1176, "c"], [150, 1136], [190, 1184, "c"], [216, 1146], [244, 1170, "c"], [270, 1150], [433, 1156], [596, 1150], [622, 1172, "c"], [652, 1144], [684, 1186, "c"], [716, 1138], [748, 1178, "c"], [770, 1124], [794, 1142, "c"], [788, 1060], [780, 960], [766, 860], [750, 780], [742, 700, "c"], [433, 688]];
+
+// ── 眼睛 ──（眼眶钉在脸上，眼珠 iris-l/r 裁在眼眶里：rig 转眼时只移眼珠，眨眼时整只合上）
+const EYES = { l: { cx: 318, cy: 676, o: -1 }, r: { cx: 548, cy: 676, o: 1 } };
+const ERX = 55, ERY = 61;
 function eye(side) {
-  const { cx, cy, w, h, outer: o } = EYES[side];
-  const lid = spline([[cx - o * w * 0.96, cy - h * 0.4], [cx - o * w * 0.56, cy - h - 4], [cx, cy - h - 9], [cx + o * w * 0.58, cy - h - 5], [cx + o * w * 1.02, cy - h * 0.46], [cx + o * (w + 8), cy - h * 0.34, "c"], [cx + o * w * 0.94, cy - h * 0.3], [cx + o * w * 0.6, cy - h + 9], [cx, cy - h + 5], [cx - o * w * 0.56, cy - h + 9]]);
-  const socket = `<ellipse cx="${cx}" cy="${cy}" rx="${w}" ry="${h}"`;
+  const { cx, cy, o } = EYES[side];
+  const X = (dx) => cx + o * dx;
+  const socket = `<ellipse cx="${cx}" cy="${cy}" rx="${ERX}" ry="${ERY}"`;
+  const iris = `<g data-part="iris-${side}">`
+    + `${socket} fill="url(#{id}-iris)"/>`
+    + `<ellipse cx="${cx}" cy="${cy - 50}" rx="66" ry="36" fill="${C.irisTop}" opacity="0.55"/>`
+    + `<ellipse cx="${cx}" cy="${cy - 2}" rx="20" ry="28" fill="${C.pupil}" opacity="0.9"/>`
+    + `<path d="M${cx - 38} ${cy + 28}Q${cx} ${cy + 74} ${cx + 38} ${cy + 28}Q${cx} ${cy + 48} ${cx - 38} ${cy + 28}Z" fill="${C.irisGlow}" opacity="0.55"/>`
+    + `${socket} fill="none" stroke="${C.irisRim}" stroke-width="3.5"/>`
+    + `<ellipse cx="${cx - 17}" cy="${cy - 26}" rx="15" ry="19" fill="#fff" opacity="0.95"/>`
+    + `<circle cx="${cx + 22}" cy="${cy + 22}" r="7" fill="#fff" opacity="0.9"/>`
+    + `<circle cx="${cx + 26}" cy="${cy - 37}" r="4" fill="#fff" opacity="0.85"/>`
+    + `</g>`;
+  const lash = [[X(-44), cy - 44], [X(-20), cy - 62], [X(8), cy - 68], [X(34), cy - 62], [X(52), cy - 46], [X(62), cy - 28], [X(68), cy - 14]];
   return `<g data-part="eye-${side}">`
     + `${socket} fill="#fff"/>`
-    + `<g clip-path="url(#{id}-socket-${side})"><g data-part="iris-${side}">`
-    + `${socket} fill="url(#{id}-iris)" stroke="${C.irisLine}" stroke-width="4"/>`
-    + `<ellipse cx="${cx}" cy="${cy - 3}" rx="${w * 0.52}" ry="${h * 0.54}" fill="${C.pupil}" opacity="0.9"/>`
-    + `<path d="M${cx - w * 0.72} ${cy + h * 0.42}Q${cx} ${cy + h * 1.0} ${cx + w * 0.72} ${cy + h * 0.42}Q${cx} ${cy + h * 0.7} ${cx - w * 0.72} ${cy + h * 0.42}Z" fill="#c8f0ff" opacity="0.8"/>`
-    + `<circle cx="${cx - w * 0.3}" cy="${cy - h * 0.34}" r="${w * 0.3}" fill="#fff"/>`
-    + `<circle cx="${cx + w * 0.36}" cy="${cy + h * 0.32}" r="${w * 0.15}" fill="#fff"/>`
-    + `<circle cx="${cx + w * 0.22}" cy="${cy - h * 0.58}" r="${w * 0.08}" fill="#fff"/>`
-    + `</g></g>`
-    + `${socket} fill="none" stroke="${C.irisLine}" stroke-width="4"/>`
-    + fill(lid, C.lid)
-    + line(`M${cx + o * w * 0.98} ${cy - h * 0.5}Q${cx + o * (w + 8)} ${cy - h * 0.62} ${cx + o * (w + 14)} ${cy - h * 0.7}`, 4, C.lid)
-    + line(`M${cx + o * w * 0.8} ${cy + h * 0.64}Q${cx + o * w * 0.96} ${cy + h * 0.5} ${cx + o * w * 1.0} ${cy + h * 0.34}`, 4, C.lid)
+    + clipped(`M${cx - ERX} ${cy}a${ERX} ${ERY} 0 1 0 ${2 * ERX} 0a${ERX} ${ERY} 0 1 0 ${-2 * ERX} 0Z`, iris)
+    + `${socket} fill="none" stroke="${C.socketRim}" stroke-width="2.2" opacity="0.6"/>`
+    + B([[X(-16), cy - 86], [X(16), cy - 90], [X(46), cy - 78]], C.skinLine, { w: 2.4, taper: [0.5, 0.5], ends: [0, 0] }, ` opacity="0.5"`)
+    + B(lash, C.lash, { w: 11, taper: [0.6, 0.3], ends: [0.08, 0.1], profile: (s) => 0.7 + 0.45 * s })
+    + B([[X(54), cy - 42], [X(68), cy - 46], [X(80), cy - 42]], C.lash, { w: 4.2, taper: [0.2, 0.8], ends: [0.5, 0] })
+    + B([[X(61), cy - 26], [X(73), cy - 22], [X(81), cy - 13]], C.lash, { w: 3.6, taper: [0.2, 0.8], ends: [0.5, 0] })
+    + B([[X(52), cy + 28], [X(40), cy + 48], [X(22), cy + 59]], C.lash, { w: 3, taper: [0.4, 0.6], ends: [0.3, 0] }, ` opacity="0.7"`)
     + `</g>`;
 }
-const closedEye = (side) => { const { cx, cy, w, h } = EYES[side]; return `<g data-part="eye-${side}-closed" display="none">${line(`M${cx - w} ${cy}Q${cx} ${cy - h * 0.6} ${cx + w} ${cy}`, 11)}</g>`; };
-// 平时是张着的小嘴笑；在说话时 rig 换成大一点的张嘴，并跟着音节缩放。
-const MOUTH = `<g data-part="mouth"><path d="M400 712Q418 718 436 712Q434 734 418 736Q402 734 400 712Z" fill="${C.mouthIn}" stroke="${C.mouthLine}" stroke-width="5" stroke-linejoin="round"/><path d="M408 728Q418 722 428 728Q424 734 418 735Q412 734 408 728Z" fill="${C.tongue}"/></g>`;
-const MOUTH_OPEN = `<g data-part="mouth-open" display="none"><path d="M396 708Q418 716 440 708Q438 748 418 752Q398 748 396 708Z" fill="${C.mouthIn}" stroke="${C.mouthLine}" stroke-width="5" stroke-linejoin="round"/><path d="M404 738Q418 728 432 738Q428 750 418 751Q408 750 404 738Z" fill="${C.tongue}"/></g>`;
-// 天枢 logo 形状的发夹：直接读 apps/web/src/app/icon.svg 里的六片花瓣，品牌蓝，描深紫蓝边；和品牌图标保持一模一样。
+const closedEye = (side) => {
+  const { cx, cy, o } = EYES[side];
+  const X = (dx) => cx + o * dx;
+  return `<g data-part="eye-${side}-closed" display="none">${B([[X(-44), cy - 4], [X(-14), cy + 10], [X(20), cy + 10], [X(50), cy - 2], [X(64), cy - 12]], C.lash, { w: 9, taper: [0.5, 0.3], ends: [0.1, 0.1] })}${B([[X(56), cy - 6], [X(70), cy - 4], [X(80), cy + 4]], C.lash, { w: 3.6, taper: [0.2, 0.8], ends: [0.5, 0] })}</g>`;
+};
+// 眉毛透过空气刘海露出来：画在头发上面，半透明
+const brow = (side) => { const { cx, cy, o } = EYES[side]; const X = (dx) => cx + o * dx; return B([[X(-34), cy - 108], [X(0), cy - 120], [X(38), cy - 114]], C.brow, { w: 5, taper: [0.35, 0.6], ends: [0.2, 0] }); };
+
+// ── 嘴 ──：平时是安静的浅笑；在说话时 rig 换成小小的张嘴，并跟着音节缩放
+const MOUTH = `<g data-part="mouth">${B([[414, 768], [424, 774], [433, 775], [442, 774], [452, 768]], C.mouthLine, { w: 4, taper: [0.35, 0.35], ends: [0.15, 0.15] })}<path d="M424 778Q433 782 442 778" fill="none" stroke="${C.lip}" stroke-width="2.2" stroke-linecap="round" opacity="0.55"/></g>`;
+const OPEN = [[414, 766, "c"], [433, 770], [452, 766, "c"], [446, 784], [433, 790], [420, 784]];
+const MOUTH_OPEN = () => `<g data-part="mouth-open" display="none">${P(spline(OPEN), C.mouthIn)}${clipped(spline(OPEN), `<ellipse cx="433" cy="791" rx="14" ry="8" fill="${C.tongue}"/>`)}${R(OPEN, C.mouthLine, { w: 2.8, heavy: 1.4 })}</g>`;
+
+// ── 天枢 logo 发夹 ──：直接读 apps/web/src/app/icon.svg 里的六片花瓣，品牌蓝；和品牌图标一模一样
 const LOGO = fs.readFileSync(path.join(__dirname, "../../../apps/web/src/app/icon.svg"), "utf8").match(/<g transform="[^"]+">(.*?)<\/g>/s)[1]
   .replace(/fill="url\(#tk-p\d\)"/g, 'fill="url(#{id}-logo)"');
 const LOGO_CENTER = [632.4, 615.4], LOGO_SIZE = 735.2; // 花瓣在原图坐标里的中心和外框
 function logoClip(cx, cy, size) {
   const k = size / LOGO_SIZE;
-  return `<g data-part="logo-clip" transform="translate(${cx} ${cy}) scale(${k.toFixed(4)}) translate(${-LOGO_CENTER[0]} ${-LOGO_CENTER[1]})" stroke="#1d3a8f" stroke-width="${(3.5 / k).toFixed(1)}" stroke-linejoin="round">${LOGO}</g>`;
+  return `<g data-part="logo-clip" transform="translate(${cx} ${cy}) scale(${k.toFixed(4)}) translate(${-LOGO_CENTER[0]} ${-LOGO_CENTER[1]})" stroke="#1d3a8f" stroke-width="${(2.5 / k).toFixed(1)}" stroke-linejoin="round">${LOGO}</g>`;
 }
-const blush = (side, cx, cy, rx, ry) => `<g data-part="blush-${side}"><ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="url(#{id}-blush-${side}-g)"/></g>`;
+
+// ── 耳朵和 AirPods ──（右边头发别在耳后，耳朵画在头发上面）
+const EAR = [[702, 628], [716, 618], [732, 626], [740, 650], [736, 680], [720, 702], [704, 698]];
+const AIRPOD = `<g data-part="airpod-r"><rect x="716" y="662" width="12" height="50" rx="6" fill="${C.pod}" stroke="${C.podLine}" stroke-width="2.2"/><path d="M723.5 668V706" stroke="${C.podShade}" stroke-width="3" stroke-linecap="round"/><ellipse cx="721" cy="658" rx="14" ry="12" fill="${C.pod}" stroke="${C.podLine}" stroke-width="2.2"/><ellipse cx="716" cy="655" rx="4.5" ry="3.5" fill="#9aa3b5"/></g>`;
+
+// ── 身子 ──
+const NECK = [[412, 790], [410, 840], [406, 894], [460, 894], [456, 840], [454, 790]];
+const SHIRT = [[382, 872], [344, 882], [306, 900], [284, 926], [270, 968], [264, 1040], [260, 1220], [606, 1220], [602, 1040], [596, 968], [582, 926], [560, 900], [522, 882], [484, 872], [464, 890], [433, 898], [402, 890]];
+const SLEEVE_L = [[284, 924], [252, 940], [232, 978], [234, 1024], [264, 1038], [278, 1020], [282, 976]];
+const SLEEVE_R = [[582, 924], [614, 940], [634, 978], [632, 1024], [602, 1038], [588, 1020], [584, 976]];
+const ARM_R = [[594, 1028], [626, 1028], [632, 1120], [636, 1220], [596, 1220], [592, 1120]];
+
+// ── 比耶的手 ──（在头发前面、上衣后面；rig 放手时整只滑进胶囊）
+const FOREARM = [[184, 840], [218, 840], [242, 920], [258, 1000], [220, 1008], [200, 930]];
+const HAND = [[184, 850, "c"], [174, 828], [170, 800], [175, 778], [164, 746], [157, 716], [159, 698], [168, 689], [180, 692], [188, 724], [201, 764, "c"], [207, 728], [213, 702], [220, 690], [232, 686], [241, 695], [240, 730], [235, 766], [242, 786], [244, 812], [236, 836], [216, 850]];
 
 function drawGirl() {
-  const collarBow = outlined(spline([[436, 838], [408, 820], [382, 818], [372, 838], [380, 860], [404, 864], [434, 852]]), C.tie)
-    + outlined(spline([[452, 838], [480, 818], [506, 816], [516, 836], [508, 858], [484, 864], [454, 852]]), C.tie)
-    + outlined(spline([[432, 832], [456, 832], [458, 858], [430, 858]]), C.tieShade)
-    + `<path d="M444 834L452 845L444 856L436 845Z" fill="${C.gem}" stroke="${C.ink}" stroke-width="4" stroke-linejoin="round"/>`;
-  const body = `<g data-part="body" data-pivot="388 1182">${soften(milesPart("arm-r"))}${soften(milesPart("neck"))}${tee(milesPart("shirt"))}${tee(milesPart("collar"))}<g data-part="bow">${collarBow}</g></g>`;
-  const hairBack = `<g data-part="hair-back">${fill(spline(HEAD), HAIR_BACK)}${BACK_WAVES.map((d) => strand(d)).join("")}${ink(subPath(head, 0, 19), 7)}</g>`;
-  const front = subPath(head, 6, 15) + cont(EAR_TOP) + cont(LOCK_R) + cont(FRINGE) + cont(LOCK_L) + cont([[130, 462], [140, 420], [162, 386]]) + "Z";
-  const hairFront = `<g data-part="hair-front">${fill(front, HAIR)}${fill(spline(SHINE), C.hi)}${sparkle(306, 356, 24)}${sparkle(560, 342, 14)}`
-    + STRANDS.map((d) => strand(d)).join("") + FRONT_SPLITS.map((d) => strand(d)).join("")
-    + ink(subPath(head, 5, 15), 3) + ink(spline([...LOCK_R, ...FRINGE.slice(1), ...LOCK_L.slice(1)], { closed: false }), 11)
-    + outlined(spline(AHOGE), HAIR) + strand("M366 258C348 234 344 212 358 194")
-    + BOW.tails.map((t) => outlined(spline(t), C.bowShade, 8)).join("") + outlined(spline(BOW.l), C.bow, 8) + outlined(spline(BOW.r), C.bow, 8) + outlined(spline(BOW.knot), C.bowShade, 8)
-    + logoClip(206, 436, 92)
+  DEFS = []; K = 0;
+  const skinPart = (pts, shade, { w = 4, heavy = 1.6 } = {}) => P(spline(pts), C.skin) + (shade ? clipped(spline(pts), shade) : "") + R(pts, C.skinLine, { w, heavy });
+  const thin = (pts, color, w, more = "") => B(pts, color, { w, taper: [0.4, 0.4], ends: [0, 0] }, more);
+
+  // ── 头发 ──
+  // 背后的长发：外沿一笔（两头藏在前面那层后面），发梢一段段收尖
+  const longEdge = LONG.slice(0, 27);
+  const hairLong = `<g data-part="hair-long">${P(spline(LONG), "url(#{id}-hair-long)")}`
+    + [[[150, 860], [136, 1000], [126, 1170]], [[120, 900], [104, 1020], [100, 1118]], [[200, 900], [194, 1040], [190, 1178]], [[716, 860], [714, 1000], [716, 1132]], [[690, 900], [686, 1040], [684, 1180]], [[760, 900], [764, 1030], [770, 1120]]].map((d) => thin(d, C.strand, 2.4, ` opacity="0.6"`)).join("")
+    + contour(longEdge, C.hairLine, { w: 5.5, side: -1 }).replace(/<path(?:(?!<path).)*$/, "")
     + `</g>`;
-  const hairLong = `<g data-part="hair-long">${fill(spline(LONG), HAIR_BACK)}${LONG_WAVES.map((d) => strand(d)).join("")}${ink(spline(LONG.slice(0, 29), { closed: false }), 61)}`
-    + LONG_LOCKS.map((p, i) => fill(spline(p), HAIR) + ink(spline(p.slice(1, -1), { closed: false }), 71 + i)).join("") + `</g>`;
-  const headGroup = `<g data-part="head" data-pivot="444 806">${hairBack}`
-    + soften(milesPart("ear-l")) + soften(milesPart("airpod-l")) + soften(milesPart("ear-r")) + soften(milesPart("airpod-r")) + soften(milesPart("face"))
-    + `<g data-part="face-shade">${fill(spline(SHADE), C.shade)}</g>`
-    + blush("l", 256, 728, 42, 28) + blush("r", 572, 732, 44, 28)
-    + soften(milesPart("nose")) + eye("l") + eye("r") + closedEye("l") + closedEye("r") + MOUTH + MOUTH_OPEN
-    + hairFront + `</g>`;
-  const shirt = milesPart("shirt").match(/<path d="([^"]+)"/)[1];
-  const handMask = `<mask id="{id}-hand" maskUnits="userSpaceOnUse" x="20" y="140" width="960" height="1080"><rect x="20" y="140" width="960" height="1080" fill="#fff"/><path d="${shirt}" fill="#000" stroke="#000" stroke-width="${W}"/></mask>`;
-  const iris = `<linearGradient id="{id}-iris" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#23286b"/><stop offset="0.45" stop-color="#3c6fe0"/><stop offset="1" stop-color="#93d4ff"/></linearGradient>`;
-  const logo = `<linearGradient id="{id}-logo" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#2459C5"/><stop offset="0.45" stop-color="#2E6BDE"/><stop offset="1" stop-color="#3980F8"/></linearGradient>`;
-  const blushG = (side) => `<radialGradient id="{id}-blush-${side}-g"><stop offset="0" stop-color="#f79aaa" stop-opacity="0.75"/><stop offset="0.7" stop-color="#f79aaa" stop-opacity="0.35"/><stop offset="1" stop-color="#f79aaa" stop-opacity="0"/></radialGradient>`;
-  const jaw = milesDefs().match(/<linearGradient id="\{id\}-jaw-l-g".*?<\/linearGradient>/)[0];
-  const sockets = ["l", "r"].map((side) => { const { cx, cy, w, h } = EYES[side]; return `<clipPath id="{id}-socket-${side}"><ellipse cx="${cx}" cy="${cy}" rx="${w}" ry="${h}"/></clipPath>`; }).join("");
-  const defs = soften(jaw) + iris + sockets + logo + blushG("l") + blushG("r") + gradient("hair", [[0, "#f29ac6"], [0.5, "#b9a3f2"], [1, "#93cdf6"]]) + gradient("hair-back", [[0, "#d87fb2"], [0.5, "#9a86e3"], [1, "#7fb6f0"]], 250, 900) + handMask;
-  return `<defs>${defs}</defs><g data-part="miles">${hairLong}${body}${headGroup}<g mask="url(#{id}-hand)">${soften(milesPart("arm-peace"))}</g></g>`;
+  const hairBack = `<g data-part="hair-back">${P(spline(BACK), "url(#{id}-hair-shade)")}</g>`;
+  // 光泽：头顶一圈柔和的光带，下沿顺着发丝不规则地断开；再加几笔顺着发流的细高光
+  const sheenBand = (top, bottom) => P(spline([...top, ...bottom]), "url(#{id}-sheen)");
+  const sheen = clipped(spline(FRONT),
+    sheenBand([[190, 440, "c"], [212, 398], [248, 364], [292, 340], [338, 334, "c"]], [[324, 360, "c"], [312, 344, "c"], [296, 388, "c"], [280, 360, "c"], [262, 396, "c"], [246, 382, "c"], [230, 424, "c"], [214, 412, "c"]])
+    + sheenBand([[364, 334, "c"], [398, 322], [433, 318], [468, 322], [502, 334, "c"]], [[490, 352, "c"], [476, 342, "c"], [460, 384, "c"], [446, 346, "c"], [428, 378, "c"], [412, 344, "c"], [394, 364, "c"], [380, 346, "c"]])
+    + `<g opacity="0.55">${sheenBand([[530, 340, "c"], [572, 346], [612, 366], [646, 392], [668, 428, "c"]], [[654, 424, "c"], [642, 446, "c"], [626, 404, "c"], [610, 424, "c"], [592, 378, "c"], [576, 396, "c"], [558, 358, "c"], [544, 362, "c"]])}</g>`
+    + [[[300, 352], [282, 398], [270, 446]], [[392, 334], [386, 380], [384, 420]], [[512, 336], [522, 376], [530, 420]], [[124, 560], [120, 660], [128, 760]], [[748, 600], [750, 680], [744, 760]]]
+      .map((d, k) => thin(d, C.sheen, k < 3 ? 5 : 4, ` opacity="${k < 3 ? 0.4 : 0.3}"`)).join(""));
+  const shade = clipped(spline(FRONT),
+    P(spline([[566, 286], [668, 336], [720, 398], [746, 474], [754, 540], [756, 610], [752, 690], [746, 768], [740, 846], [732, 906], [716, 840], [710, 770], [710, 700], [708, 630], [700, 560], [694, 544], [690, 470], [660, 404], [604, 336]]), "url(#{id}-hair-shade)", ` opacity="0.7"`)
+    + P(spline([[214, 550], [204, 620], [200, 700], [194, 780], [184, 856], [170, 908], [168, 830], [170, 720], [176, 620], [188, 540]]), "url(#{id}-hair-shade)", ` opacity="0.65"`));
+  const strands = [
+    [[433, 300], [396, 380], [372, 450]], [[433, 300], [446, 380], [456, 450]], [[433, 300], [480, 380], [508, 450]],
+    [[300, 330], [262, 400], [250, 460]], [[566, 330], [604, 400], [616, 460]],
+    [[150, 520], [140, 660], [150, 790], [166, 890]], [[742, 520], [746, 660], [744, 790], [744, 890]],
+  ].map((d) => thin(d, C.strand, 2.4, ` opacity="0.55"`)).join("");
+  // 透过空气刘海飘下来的几根细发
+  // 刘海的发束：弧边的叶形，两侧下半截描线、收到发梢的尖；中线上一笔淡淡的光
+  const leafPts = ([[rx, ry], [tx, ty], w, b]) => {
+    const len = Math.hypot(tx - rx, ty - ry), ux = (tx - rx) / len, uy = (ty - ry) / len, nx = -uy, ny = ux;
+    const mid = (t) => { const cx = (rx + tx) / 2 + nx * b, cy = (ry + ty) / 2 + ny * b, u = 1 - t; return [u * u * rx + 2 * u * t * cx + t * t * tx, u * u * ry + 2 * u * t * cy + t * t * ty]; };
+    const side = (sg) => [[0, 1], [0.16, 0.98], [0.36, 0.92], [0.62, 0.72], [0.86, 0.38]].map(([t, k]) => { const [mx, my] = mid(t); return [mx + sg * nx * (w / 2) * k, my + sg * ny * (w / 2) * k]; });
+    return { left: side(1), right: side(-1), tip: [tx, ty], mid };
+  };
+  const leaves = LEAVES.map((L) => {
+    const { left, right, tip, mid } = leafPts(L);
+    const shape = [...left, [...tip, "c"], ...right.slice().reverse()];
+    return P(spline(shape), "url(#{id}-hair)")
+      + B([...left.slice(1), tip], "#1b1930", { w: 3, taper: [0.7, 0.12], ends: [0, 0.3] }) + B([...right.slice(1), tip], "#1b1930", { w: 3.4, taper: [0.7, 0.12], ends: [0, 0.3] })
+      + thin([mid(0.18), mid(0.42), mid(0.62)], C.sheen, 4, ` opacity="0.25"`);
+  }).join("");
+  const ahoge = B([[442, 266], [436, 236], [446, 212], [470, 200], [490, 206]], "url(#{id}-hair)", { w: 12, taper: [0.1, 0.85], ends: [1, 0] })
+    + B([[424, 266], [416, 248], [404, 238]], "url(#{id}-hair)", { w: 6, taper: [0.1, 0.9], ends: [1, 0] });
+  const outer = B([...LOCK_L_OUT, ...CROWN, ...LOCK_R_OUT].map((p) => p.slice(0, 2)), C.hairLine, { w: 6, heavy: 1.7, side: 1, taper: [0.06, 0.06], ends: [0.2, 0.2] });
+  const inner = B([[732, 906], ...LOCK_R_IN, [694, 544]], "#1b1930", { w: 3.4, taper: [0.15, 0.2], ends: [0.3, 0.2] })
+    + B(FRINGE.map((q) => q.slice(0, 2)), "#1b1930", { w: 2.2, taper: [0.2, 0.2], ends: [0.2, 0.2] })
+    + B([[214, 550], ...LOCK_L_IN, [170, 908]], "#1b1930", { w: 3.4, taper: [0.2, 0.15], ends: [0.2, 0.3] });
+  const hairFront = `<g data-part="hair-front">${ahoge}${P(spline(FRONT), "url(#{id}-hair)")}${shade}${sheen}${strands}${outer}${inner}${leaves}`
+    + logoClip(214, 432, 88)
+    + `</g>`;
+
+  // ── 脸 ──
+  const leafShadow = LEAVES.map((L) => { const { left, right, tip } = leafPts(L); return P(spline([...left, [...tip, "c"], ...right.slice().reverse()].map(([x, y, c]) => (c ? [x + 3, y + 13, c] : [x + 3, y + 13]))), C.skinShade); }).join("");
+  const faceShade = clipped(spline(FACE),
+    `<g opacity="0.75">${P(spline([[160, 420], ...FRINGE.map(([x, y]) => [x + 3, y + 13]).reverse(), [712, 420]]), C.skinShade)}${leafShadow}</g>`
+    + P(spline([[706, 560], [710, 640], [702, 698], [680, 744], [640, 782], [596, 808], [610, 788], [648, 754], [672, 712], [682, 650], [680, 580]]), C.skinShade2));
+  const face = `<g data-part="face">${P(spline(FACE), C.skin)}${faceShade}${B(JAW, C.skinLine, { w: 4.2, taper: [0.18, 0.18], ends: [0.2, 0.2], side: -1, heavy: 1.9 })}</g>`;
+  const blush = `<g data-part="blush"><ellipse cx="258" cy="748" rx="46" ry="22" fill="url(#{id}-blush)"/><ellipse cx="608" cy="748" rx="46" ry="22" fill="url(#{id}-blush)"/></g>`;
+  const nose = `<g data-part="nose">${B([[428, 730], [433, 735], [438, 734]], C.nose, { w: 2.8, taper: [0.5, 0.5], ends: [0.3, 0.3] })}</g>`;
+  const ear = `<g data-part="ear-r">${P(spline(EAR), C.skin)}${clipped(spline(EAR), P(spline([[724, 626], [742, 650], [738, 684], [720, 704], [728, 680], [732, 652]]), C.skinShade))}${R(EAR, C.skinLine, { w: 3.2, heavy: 1.5 })}${thin([[714, 638], [726, 640], [729, 660], [722, 680]], C.skinLine, 2.4, ` opacity="0.8"`)}</g>`;
+  const head = `<g data-part="head" data-pivot="444 806">${hairBack}${face}${blush}${nose}${eye("l")}${eye("r")}${closedEye("l")}${closedEye("r")}${MOUTH}${MOUTH_OPEN()}`
+    + `${hairFront}<g data-part="brows" opacity="0.6">${brow("l")}${brow("r")}</g>${ear}${AIRPOD}</g>`;
+
+  // ── 身子 ──
+  const neck = `<g data-part="neck">${P(spline(NECK), C.skin)}${clipped(spline(NECK), P(spline([[400, 790], [433, 846], [466, 790], [466, 858], [433, 874], [400, 858]]), C.skinShade))}`
+    + B([[411, 806], [409, 850], [406, 890]], C.skinLine, { w: 3, taper: [0.3, 0.3], ends: [0.2, 0.2] }) + B([[455, 806], [457, 850], [460, 890]], C.skinLine, { w: 3.4, taper: [0.3, 0.3], ends: [0.2, 0.2] }) + `</g>`;
+  const cloth = (pts, shadeD) => P(spline(pts), C.shirt) + (shadeD ? clipped(spline(pts), P(shadeD, C.shirtShade)) : "") + R(pts, C.shirtLine, { w: 4, heavy: 1.7 });
+  const shirt = `<g data-part="shirt">${cloth(SHIRT, spline([[540, 900], [582, 926], [596, 968], [602, 1040], [606, 1220], [550, 1220], [560, 1100], [562, 1000], [556, 940]]) + spline([[382, 872], [433, 898], [484, 872], [488, 886], [433, 914], [378, 886]]))}`
+    + B([[388, 878], [410, 892], [433, 902], [456, 892], [478, 878]], C.shirtLine, { w: 2.2, taper: [0.3, 0.3], ends: [0, 0] }, ` opacity="0.6"`) + `</g>`;
+  const sleeves = `<g data-part="sleeves">${cloth(SLEEVE_L, spline([[264, 1038], [278, 1020], [282, 976], [284, 924], [270, 960], [266, 1006]]))}${cloth(SLEEVE_R, spline([[602, 1038], [632, 1024], [634, 978], [614, 940], [620, 990], [612, 1022]]))}</g>`;
+  const armR = `<g data-part="arm-r">${skinPart(ARM_R, P(spline([[612, 1028], [626, 1028], [632, 1120], [636, 1220], [618, 1220], [616, 1120]]), C.skinShade))}</g>`;
+  const body = `<g data-part="body" data-pivot="388 1182">${armR}${neck}${shirt}${sleeves}</g>`;
+
+  // ── 比耶的手 ──：手心朝外，食指和中指比 V，拇指压住弯下去的两根手指
+  const hand = `<g data-part="arm-peace" data-pivot="268 912">`
+    + skinPart(FOREARM, P(spline([[204, 840], [216, 840], [238, 920], [254, 1000], [236, 1004], [222, 924]]), C.skinShade), { w: 3.6 })
+    + P(spline(HAND), C.skin)
+    + clipped(spline(HAND), P(spline([[233, 766], [240, 786], [242, 812], [234, 836], [216, 850], [222, 828], [228, 800], [226, 776]]), C.skinShade) + P(spline([[180, 694], [186, 726], [201, 766], [192, 760], [182, 728]]), C.skinShade) + P(spline([[239, 698], [237, 732], [233, 766], [226, 756], [230, 724]]), C.skinShade))
+    + contour(HAND, C.skinLine, { w: 3.6, heavy: 1.5, ends: 0.35, taper: 0.1 })
+    + thin([[241, 798], [224, 808], [202, 812], [186, 806]], C.skinLine, 3) + thin([[178, 788], [190, 782], [200, 786]], C.skinLine, 2.4, ` opacity="0.85"`)
+    + `</g>`;
+
+  const handMask = `<mask id="{id}-hand" maskUnits="userSpaceOnUse" x="20" y="140" width="960" height="1080"><rect x="20" y="140" width="960" height="1080" fill="#fff"/>`
+    + [SHIRT, SLEEVE_L, SLEEVE_R].map((d) => `<path d="${spline(d)}" fill="#000" stroke="#000" stroke-width="4"/>`).join("") + `</mask>`;
+  const defs = lin("hair", [[0, "#2a2534"], [0.35, "#262a45"], [0.7, "#2b3666"], [1, "#3a4a94"]], 260, 900)
+    + lin("hair-shade", [[0, "#15131e"], [0.4, "#171b31"], [0.75, "#1c2550"], [1, "#25336f"]], 260, 900)
+    + lin("hair-long", [[0, "#1d1b29"], [0.45, "#212849"], [1, "#34428c"]], 650, 1180)
+    + lin("sheen", [[0, "#aebde8", 0.1], [0.3, "#aebde8", 0.42], [1, "#aebde8", 0.03]], 318, 446)
+    + `<linearGradient id="{id}-iris" x1="0" y1="0" x2="0" y2="1">${stops([[0, "#161a33"], [0.45, "#28346c"], [0.8, "#4f6fb2"], [1, "#89a8de"]])}</linearGradient>`
+    + `<radialGradient id="{id}-blush">${stops([[0, "#ffadb9", 0.55], [0.6, "#ffadb9", 0.25], [1, "#ffadb9", 0]])}</radialGradient>`
+    + `<linearGradient id="{id}-logo" x1="0" y1="1" x2="0" y2="0">${stops([[0, "#2459C5"], [0.45, "#2E6BDE"], [1, "#3980F8"]])}</linearGradient>`
+    + DEFS.join("") + handMask;
+  return `<defs>${defs}</defs><g data-part="miles">${hairLong}${body}${head}<g mask="url(#{id}-hand)">${hand}</g></g>`;
 }
 module.exports = { drawGirl };

@@ -1,5 +1,5 @@
-// 自查：girlArt.ts 能不能原样挂进 milesRig（和 milesCapsule.test.tsx 对 Miles 的检查同一套），以及和 Miles 的摆位常量一致。
-// 用法：node .scratch/buddy-girl-avatar/check.cjs [path/to/milesArt.ts]（给了 milesArt.ts 就顺带比对常量和复用部件）
+// 自查：girlArt.ts 能不能原样挂进 milesRig（和 milesCapsule.test.tsx 对 Miles 的检查同一套），眼珠是不是裁在眼眶里，以及摆位常量和 Miles 是否一致。
+// 用法：node .scratch/buddy-girl-avatar/check.cjs [path/to/milesArt.ts]（给了 milesArt.ts 就顺带比对摆位常量）
 const fs = require("fs");
 const path = require("path");
 const src = fs.readFileSync(path.join(__dirname, "girlArt.ts"), "utf8");
@@ -28,14 +28,8 @@ if (milesArtPath && fs.existsSync(milesArtPath)) {
   const m = fs.readFileSync(milesArtPath, "utf8");
   const milesArt = m.match(/export const MILES_ART = (\{.*?\}) as const;/)[1];
   ok(milesArt.replace(/\s/g, "") === art.replace(/\s/g, ""), `摆位常量和 MILES_ART 一致：${art}`);
-  const milesSvg = readSvg(m, "MILES_SVG");
-  // 复用的 Miles 部件换了肤色、描边颜色和粗细：只比形状（路径和椭圆的几何量）
-  const geometry = (s) => (s.match(/\s(?:d|cx|cy|rx|ry|r|transform)="[^"]*"/g) || []).join("");
-  for (const part of ["face", "ear-r", "ear-l", "airpod-r", "airpod-l", "nose", "arm-peace", "neck", "arm-r"]) {
-    ok(geometry(grab(svg, part)) === geometry(grab(milesSvg, part)), `${part} 的形状和 Miles 逐字相同（换了颜色和描边）`);
-  }
 } else {
-  console.log("（没给 milesArt.ts，跳过和 Miles 的逐字比对）");
+  console.log("（没给 milesArt.ts，跳过和 Miles 的摆位常量比对）");
 }
 console.log(failed ? `\n${failed} 项没过` : "\n全部通过");
 process.exit(failed ? 1 : 0);
