@@ -162,6 +162,7 @@ import {
   HomePlanMission,
   HomePlanActivity,
   HomePlanResponse,
+  PlanCalendarResponse,
   BattlefieldProgressResponse,
   CreatePlanMarkRequest,
   PatchPlanMarkRequest,
@@ -1457,6 +1458,19 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           summary: "成员首页的 Mission 计划：本月 Mission、签定关口、计划点、Task 与分好三栏的执行事项；本月没有 Mission 时回退到最近一个有的月份",
           responses: {
             "200": { description: "首页计划", content: { "application/json": { schema: { $ref: "#/components/schemas/HomePlanResponse" } } } },
+            "401": errorResponse,
+            "403": errorResponse,
+          },
+        },
+      },
+      "/api/me/plan-calendar": {
+        get: {
+          operationId: "getMyPlanCalendar",
+          summary: "成员首页月历翻到别的月份：那个月的每一天（工作日按节假日日历）和落在那个月的签定关口",
+          parameters: [{ name: "month", in: "query", required: true, schema: { type: "string", pattern: "^\\d{4}-(0[1-9]|1[0-2])$" } }],
+          responses: {
+            "200": { description: "那个月的月历", content: { "application/json": { schema: { $ref: "#/components/schemas/PlanCalendarResponse" } } } },
+            "400": errorResponse,
             "401": errorResponse,
             "403": errorResponse,
           },
@@ -3256,6 +3270,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         HomePlanMission: HomePlanMission as JsonSchema,
         HomePlanActivity: HomePlanActivity as JsonSchema,
         HomePlanResponse: HomePlanResponse as JsonSchema,
+        PlanCalendarResponse: PlanCalendarResponse as JsonSchema,
         BattlefieldProgressResponse: BattlefieldProgressResponse as JsonSchema,
         CreatePlanMarkRequest: CreatePlanMarkRequest as JsonSchema,
         PatchPlanMarkRequest: PatchPlanMarkRequest as JsonSchema,

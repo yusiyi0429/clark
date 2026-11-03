@@ -7,11 +7,12 @@
  * - 选中的 Task 默认是：有本周事项的第一个 Task，没有就第一个 Task，没有 Task 就「未归入 Task」；重取后选中的不在了也回到默认。
  * - 同一时间最多一个浮层（ⓘ、月历上的「这一天」），开合与 Esc 由 ts-design Popover 管；它对着的 Task、Mission、节点重取后不在了，浮层就关掉或回到「看」。
  * - 点一天先看这一天（DayPopover）：关口、我的节点、这天截止；在里面加节点、改名、删，存了回到「看」。点月历上的节点直接开那一天并进入改名。
+ * - 月历默认画本月；左右箭头翻到别的月份，那个月读 /api/me/plan-calendar，读到了再换（连点只认最后一次）；节点只能加在 Mission 所在的月份里。
  * - 版式按主区宽度（容器查询，见样式）：宽时顶行三张并排；窄一些时快捷变成一排小方块放最上面；再窄就一列。
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CircleAlert } from "lucide-react";
-import type { THomePlanActivity, THomePlanMark, THomePlanResponse } from "@warmap/contracts";
+import type { THomePlanActivity, THomePlanMark, THomePlanResponse, TPlanCalendarResponse } from "@warmap/contracts";
 import { DayPopover, type DayMode } from "./DayPopover";
 import { MissionDetail } from "./MissionDetail";
 import { MissionList, UNPLACED } from "./MissionList";
@@ -19,17 +20,23 @@ import { MonthCalendar } from "./MonthCalendar";
 import { LOOSE, TaskList, hasInfo } from "./TaskList";
 import { UnplacedDetail } from "./UnplacedDetail";
 import { isPending, usePlanMarks } from "./usePlanMarks";
+import { readPlanCalendar } from "./useHomePlan";
 import type { Navigate } from "./planFormat";
 import s from "@/styles/home-plan.module.css";
 
 type Popover = { kind: "info" } | { kind: "day"; date: string; mode: DayMode };
 
 const NO_MARKS: THomePlanMark[] = [];
+/** YYYY-MM 往前或往后挪几个月。 */
+const shiftMonth = (month: string, step: number) => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1 + step, 1)).toISOString().slice(0, 7);
 
 export function HomePlan({ plan, actions, onNavigate }: { plan: THomePlanResponse | null; actions: ReactNode; onNavigate: Navigate }) {
   const [picked, setPicked] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [popover, setPopover] = useState<Popover | null>(null);
+  /** 月历翻到的别的月份；null 是本月（用 plan 里的那份）。 */
+  const [otherMonth, setOtherMonth] = useState<TPlanCalendarResponse | null>(null);
+  const wanted = useRef<string | null>(null);
   const calendarRef = useRef<HTMLElement | null>(null);
   /** 「这一天」浮层挂在那一天的格子下面。 */
   const dayRef = useRef<Element | null>(null);
@@ -65,6 +72,22 @@ export function HomePlan({ plan, actions, onNavigate }: { plan: THomePlanRespons
   }, [popover, open, day, modeGone]);
 
   const close = () => setPopover(null);
+  /** 翻月：回到本月直接用 plan 里的；别的月份读到了再换，连点只认最后一次，没读到就留在原来那个月。 */
+  const turnMonth = (step: -1 | 1) => {
+    if (!plan) return;
+    const target = shiftMonth(wanted.current ?? otherMonth?.month ?? plan.today.slice(0, 7), step);
+    wanted.current = target;
+    close();
+    if (target === plan.today.slice(0, 7)) {
+      setOtherMonth(null);
+      return;
+    }
+    void readPlanCalendar(target).then((next) => {
+      if (wanted.current !== target) return;
+      if (next) setOtherMonth(next);
+      else wanted.current = null;
+    });
+  };
   const choose = (missionId: string | null) => {
     setPicked(missionId);
     setTaskId(null);
@@ -99,16 +122,17 @@ export function HomePlan({ plan, actions, onNavigate }: { plan: THomePlanRespons
       {plan && <>
         <section ref={calendarRef} className={`${s.card} ${s.calendar}`} aria-label="月历">
           <MonthCalendar
-            period={plan.period}
-            days={plan.days}
+            period={otherMonth?.month ?? plan.today.slice(0, 7)}
+            days={otherMonth?.days ?? plan.days}
             today={plan.today}
             weekStart={plan.weekStart}
             weekEnd={plan.weekEnd}
-            current={!plan.fallbackFrom}
-            gates={plan.gates}
+            current={!otherMonth}
+            gates={otherMonth?.gates ?? plan.gates}
             marks={planMarks.marks}
             colorOf={(missionId) => missions.find((item) => item.missionId === missionId)?.color ?? "var(--ink-faint)"}
             focus={focus}
+            onMonth={turnMonth}
             onPickDay={(date) => openDay(date, { kind: "view" })}
             onEditMark={(id) => {
               const mark = planMarks.marks.find((item) => item.id === id);
@@ -117,11 +141,11 @@ export function HomePlan({ plan, actions, onNavigate }: { plan: THomePlanRespons
           />
           {planMarks.error && <p className={s.markError} role="alert"><CircleAlert size={14} aria-hidden />{planMarks.error}</p>}
           {day && (
-            <DayPopover date={day.date} mode={day.mode} today={plan.today} days={plan.days} anchor={dayRef}
-              gates={plan.gates.filter((gate) => gate.date === day.date)}
+            <DayPopover date={day.date} mode={day.mode} today={plan.today} days={otherMonth?.days ?? plan.days} anchor={dayRef}
+              gates={(otherMonth?.gates ?? plan.gates).filter((gate) => gate.date === day.date)}
               marks={planMarks.marks.filter((mark) => mark.date === day.date)}
               deadlines={plan.activities.filter(({ item }) => item.dueDate === day.date && item.status !== "done")}
-              missions={missions} defaultMissionId={focus ?? missions[0]?.missionId ?? ""}
+              missions={missions} canAdd={day.date.startsWith(`${plan.period}-`)} defaultMissionId={focus ?? missions[0]?.missionId ?? ""}
               onMode={(next) => { if (next.kind !== "edit" || !isPending(next.id)) setPopover({ ...day, mode: next }); }} onSubmitAdd={submitAdd} onSubmitEdit={submitEdit}
               onDelete={(id) => {
                 toView();

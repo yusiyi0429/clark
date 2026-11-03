@@ -2272,6 +2272,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/plan-calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 成员首页月历翻到别的月份：那个月的每一天（工作日按节假日日历）和落在那个月的签定关口 */
+        get: operations["getMyPlanCalendar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/battlefield-progress": {
         parameters: {
             query?: never;
@@ -10654,6 +10671,18 @@ export interface components {
                 };
                 createdAt: string;
                 updatedAt: string;
+            }[];
+        };
+        PlanCalendarResponse: {
+            month: string;
+            days: {
+                date: string;
+                workday: boolean;
+            }[];
+            gates: {
+                missionId: string;
+                date: string;
+                label: string;
             }[];
         };
         BattlefieldProgressResponse: {
@@ -20131,6 +20160,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HomePlanResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyPlanCalendar: {
+        parameters: {
+            query: {
+                month: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 那个月的月历 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanCalendarResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
             /** @description ApiError 统一错误 */

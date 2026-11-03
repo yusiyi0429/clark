@@ -520,15 +520,9 @@ export function collectionJobs(deps: CollectionDeps): { handlers: Record<string,
 
 // ---------- 设置里的定时任务区 ----------
 
-/** 下一个周五 15:00（上海时间）：周复盘起草的时间（weeklyReviewService.weeklyGenerationDue）。 */
-function nextWeeklyReviewRun(now: Date): Date {
-  const d = local(now);
-  const friday = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + ((5 - d.getUTCDay() + 7) % 7), 15) - OFFSET;
-  return new Date(friday <= now.getTime() ? friday + WEEK_MS : friday);
-}
 const cadenceOf = (deadline: Date) => { const d = local(deadline); return `每周${WEEKDAYS[d.getUTCDay()]} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} 截止`; };
 
-export async function listSchedules(q: Query, viewer: { personId: string; isCeo: boolean; weeklyReviews: boolean }, secret: string, now: Date): Promise<TScheduleItem[]> {
+export async function listSchedules(q: Query, viewer: { personId: string; isCeo: boolean }, secret: string): Promise<TScheduleItem[]> {
   const collections = (await q(`SELECT c.*, last.request_id AS last_request_id, last.opens_at AS last_opens_at, last.deadline_at AS last_deadline_at FROM collections c
     LEFT JOIN LATERAL (SELECT request_id, opens_at, deadline_at FROM collection_rounds r WHERE r.collection_id = c.id ORDER BY seq DESC LIMIT 1) last ON TRUE
     WHERE c.initiator_id = $1 AND c.weekly AND c.status <> 'draft' ORDER BY c.status = 'stopped', c.sent_at DESC`, [viewer.personId])).rows as
@@ -539,8 +533,6 @@ export async function listSchedules(q: Query, viewer: { personId: string; isCeo:
     active: row.status === "active", href: row.last_request_id ? `${viewer.isCeo ? "" : "/me"}/requests/${row.last_request_id}` : null, deviceName: null,
     actions: row.status === "active" ? [sign(secret, { actionType: "collection.stop", objectType: "collection", objectId: row.id, objectVersion: row.version }, "停用")] : [],
   }));
-  if (viewer.weeklyReviews) items.push({ id: "weekly-review", category: "other", origin: "weekly_review", name: "起草周复盘", cadence: "每周五 15:00",
-    nextRunAt: nextWeeklyReviewRun(now).toISOString(), active: true, href: null, deviceName: null, actions: [] });
   const moved = (await q(`SELECT s.id, s.name, s.cadence, COALESCE(d.device_name, s.source_device_id) AS device_name FROM schedules s
     LEFT JOIN (SELECT device_id, max(device_name) AS device_name FROM collector_health WHERE person_id = $1 GROUP BY device_id) d ON d.device_id = s.source_device_id
     WHERE s.person_id = $1 ORDER BY s.created_at`, [viewer.personId])).rows as { id: string; name: string; cadence: string | null; device_name: string }[];

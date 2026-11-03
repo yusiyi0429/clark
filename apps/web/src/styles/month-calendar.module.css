@@ -7,7 +7,12 @@
  */
 .head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 8px; }
 .head h2 { margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; line-height: 1.4; }
-.head small { color: var(--ink-faint); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.head small { margin-left: auto; color: var(--ink-faint); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* 翻月的左右箭头：跟在「还剩 N 个工作日」后面，没有那行字时自己靠右。 */
+.nav { display: inline-flex; align-self: center; gap: 2px; margin-left: auto; }
+.head small + .nav { margin-left: 4px; }
+.nav button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--ink-faint); cursor: pointer; }
+.nav button:hover { background: rgb(38 61 92 / 9%); color: var(--ink); }
 
 .weekdays, .days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .weekdays { margin-bottom: 2px; color: color-mix(in oklab, var(--ink-faint) 55%, transparent); font-size: 11px; line-height: 16px; text-align: center; }

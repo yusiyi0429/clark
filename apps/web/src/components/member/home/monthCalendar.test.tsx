@@ -123,10 +123,21 @@ describe("MonthCalendar：月历", () => {
     expect(dayTag(html, "2026-10-31")).toContain('data-week="last"');
   });
 
-  it("回退显示上个月（current=false）：不标本周、不写还剩几个工作日", () => {
+  it("翻到别的月份（current=false）：不标本周、不写还剩几个工作日", () => {
     const html = render({ current: false });
     expect(html).not.toContain("data-week");
     expect(text(html)).not.toContain("还剩");
+  });
+
+  it("翻月：标题右边一对箭头，点了交出 -1 / 1；不是今年的标题写年；不传 onMonth 不出箭头", () => {
+    const onMonth = vi.fn();
+    render({ onMonth });
+    (find((props) => props["aria-label"] === "上个月")!.onClick as () => void)();
+    (find((props) => props["aria-label"] === "下个月")!.onClick as () => void)();
+    expect(onMonth.mock.calls).toEqual([[-1], [1]]);
+    expect(text(render({ period: "2027-01", current: false }))).toContain("2027 年 1 月");
+    expect(text(render())).toMatch(/^10 月 还剩/);
+    expect(find((props) => props["aria-label"] === "下个月")).toBeUndefined();
   });
 
   it("关口是小菱形（只读、不是按钮），节点是空心圆按钮；颜色是 Mission 色，名字在 title 和读屏文字里", () => {

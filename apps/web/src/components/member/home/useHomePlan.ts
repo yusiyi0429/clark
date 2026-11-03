@@ -5,7 +5,7 @@
  * 计划点存好（HOME_PLAN_CHANGED）、执行事项或任务卡变了，等手上这次读完再取一次，免得旧结果盖掉刚存的。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { THomePlanResponse } from "@warmap/contracts";
+import type { THomePlanResponse, TPlanCalendarResponse } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
 /** 首页计划点存好之后发出（usePlanMarks）。 */
@@ -60,4 +60,14 @@ export function useHomePlan() {
   }, [load]);
 
   return { plan, error, refresh: load };
+}
+
+/** 月历翻到别的月份时读那个月（GET /api/me/plan-calendar）；没读到返回 null，月历留在原来那个月。 */
+export async function readPlanCalendar(month: string): Promise<TPlanCalendarResponse | null> {
+  try {
+    const { data } = await browserApi.GET("/api/me/plan-calendar", { params: { query: { month } } });
+    return data ?? null;
+  } catch {
+    return null;
+  }
 }

@@ -33,7 +33,7 @@ import { createMissionRoundScheduler } from "./missionRoundScheduler.js";
 import { createCollectorHealthScheduler } from "./collector.js";
 import { createCollectorDistillAgent, createCollectorDistillScheduler } from "./collectorDistill.js";
 import { createWeeklyReviewDraftAgent } from "./weeklyReviewAgent.js";
-import { createWeeklyReviewScheduler, createWeeklyReviewService } from "./weeklyReviewService.js";
+import { createWeeklyReviewService } from "./weeklyReviewService.js";
 import { canUseMemberView, ensureLocalDevLogin } from "./memberAccess.js";
 import { isLoopbackHttpOrigin } from "./routes/shared.js";
 import { recoverStaleMissionDrafts } from "./missionRounds.js";
@@ -237,10 +237,9 @@ const monthlyReviewService = createMonthlyReviewService({
   },
 });
 const monthlyReviewScheduler = createMonthlyReviewScheduler(monthlyReviewService);
-// 周复盘（D-01）：每周五 15:00（上海时间）给成员工作台里的每个人生成本周草稿；与个人复盘同一个 heavy 模型槽位。
+// 周复盘（D-01）：只在本人要时起草（对话、周复盘页），每周五的自动起草 11/03 停了；与个人复盘同一个 heavy 模型槽位。
 const weeklyReviewService = createWeeklyReviewService({ pool, agent: createWeeklyReviewDraftAgent(reviewAgentOptions),
   people: () => peopleDirectory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId) });
-const weeklyReviewScheduler = createWeeklyReviewScheduler(weeklyReviewService);
 // 采集器原文整理（D-02）：同一个 heavy 模型，每 5 分钟整理一次，原文 14 天后清空。TODO(jobs)：jobs 合入后迁成周期任务。
 const collectorDistillScheduler = createCollectorDistillScheduler(pool, createCollectorDistillAgent(reviewAgentOptions));
 const now = () => new Date();
@@ -316,7 +315,6 @@ app.addHook("onClose", async () => {
   missionRoundScheduler.close();
   collectorHealthScheduler.close();
   await jobWorker.close();
-  weeklyReviewScheduler.close();
   await weeklyReviewService.idle();
   await collectorDistillScheduler.close();
 });
@@ -326,7 +324,6 @@ monthlyReviewScheduler.start();
 missionRoundScheduler.start();
 collectorHealthScheduler.start();
 jobWorker.start();
-weeklyReviewScheduler.start();
 collectorDistillScheduler.start();
 await app.listen({ port, host: "0.0.0.0" });
 // 飞书长连接：收到事件只落库并排 jobs，3 秒内 ack；单聊消息落库后直接交给 worker 跑那一条，不等下一轮。

@@ -247,13 +247,12 @@ describe("③ 信息收集", () => {
     expect((await schedules()).find((entry) => entry.origin === "collection")).toMatchObject({ active: false, nextRunAt: null, actions: [] });
   });
 
-  it("定时任务区：成员看得到周五起草周复盘和上手时搬过来的本机任务", async () => {
+  it("定时任务区：成员看得到上手时搬过来的本机任务，没有周五起草周复盘", async () => {
     const { call, sql } = await setup();
     await sql(`INSERT INTO schedules (id, person_id, name, cadence, command, source, source_device_id, source_key, created_at)
       VALUES ($1, $2, '每周发周报', '0 18 * * 5', 'codex run', 'local', 'dev-1', 'weekly-report', now())`, [randomUUID(), TEST_MEMBER.personId]);
     const items = ((await call("b", "GET", "/api/me/schedules")).json() as { items: TScheduleItem[] }).items;
-    expect(items.map((item) => [item.origin, item.name, item.cadence])).toEqual([["weekly_review", "起草周复盘", "每周五 15:00"], ["local", "每周发周报", "0 18 * * 5"]]);
-    expect(items[0].nextRunAt).toBe(new Date("2026-10-23T07:00:00Z").toISOString());
+    expect(items.map((item) => [item.origin, item.name, item.cadence])).toEqual([["local", "每周发周报", "0 18 * * 5"]]);
   });
 
   it("收集关闭时定时任务里没有收集项", async () => {

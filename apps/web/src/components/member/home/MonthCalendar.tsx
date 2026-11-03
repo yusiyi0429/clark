@@ -3,12 +3,13 @@
 /**
  * 成员首页的月历卡：只管画和把点击交出去，不取数。
  *
- * - 标题「M 月」，右边小字「还剩 N 个工作日」（本月从今天数到月末）；current=false（回退显示上个月）时不写，也不画本周。
+ * - 标题「M 月」（不是今年的写「YYYY 年 M 月」），右边小字「还剩 N 个工作日」（本月从今天数到月末）和翻月的左右箭头；current=false（翻到别的月份）时不写，也不画本周。
  * - 7 列，周一起；工作日按 days 上的节假日日历（调休上班日照常），休息日字更浅；过去的日子淡灰；今天一圈细框；本周那一行垫浅底。
  * - 日期下面：签定关口是小菱形，我的节点是小空心圆，颜色是所属 Mission 的颜色；聚焦某个 Mission 时其他 Mission 的淡掉。
  * - 点日期看这一天（加节点在那里面）；点节点改名或删；关口只读、不接点击。哪个回调没传，对应的操作就关掉。
  */
 import type { CSSProperties } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { THomePlanDay, THomePlanGate, THomePlanMark } from "@warmap/contracts";
 import { shortDate, tone } from "./planFormat";
 import c from "@/styles/month-calendar.module.css";
@@ -21,7 +22,7 @@ type MonthCalendarProps = {
   today: string;
   weekStart: string;
   weekEnd: string;
-  /** 显示的是本月；false（回退显示上个月）时不画本周、不写「还剩 N 个工作日」。默认 true。 */
+  /** 显示的是本月；false（翻到别的月份）时不画本周、不写「还剩 N 个工作日」。默认 true。 */
   current?: boolean;
   gates: THomePlanGate[];
   marks: THomePlanMark[];
@@ -30,6 +31,8 @@ type MonthCalendarProps = {
   focus: string | null;
   onPickDay?: (date: string) => void;
   onEditMark?: (id: string) => void;
+  /** 翻月：-1 上个月，1 下个月；不传就不出箭头。 */
+  onMonth?: (step: -1 | 1) => void;
 };
 
 /**
@@ -43,14 +46,21 @@ export function workdaysLeftThisMonth(days: THomePlanDay[], today: string): numb
 /** 周一 = 0 … 周日 = 6。 */
 const weekdayOf = (date: string) => (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7;
 
-export function MonthCalendar({ period, days, today, weekStart, weekEnd, current = true, gates, marks, colorOf, focus, onPickDay, onEditMark }: MonthCalendarProps) {
+export function MonthCalendar({ period, days, today, weekStart, weekEnd, current = true, gates, marks, colorOf, focus, onPickDay, onEditMark, onMonth }: MonthCalendarProps) {
+  const title = `${period.slice(0, 4) === today.slice(0, 4) ? "" : `${period.slice(0, 4)} 年 `}${Number(period.slice(5, 7))} 月`;
   const dimmed = (missionId: string) => (focus !== null && missionId !== focus) || undefined;
   const week = current ? days.filter((day) => day.date >= weekStart && day.date <= weekEnd).map((day) => day.date) : [];
   return (
     <>
       <header className={c.head}>
-        <h2>{Number(period.slice(5, 7))} 月</h2>
+        <h2>{title}</h2>
         {current && <small>还剩 {workdaysLeftThisMonth(days, today)} 个工作日</small>}
+        {onMonth && (
+          <span className={c.nav}>
+            <button type="button" aria-label="上个月" onClick={() => onMonth(-1)}><ChevronLeft size={14} aria-hidden="true" /></button>
+            <button type="button" aria-label="下个月" onClick={() => onMonth(1)}><ChevronRight size={14} aria-hidden="true" /></button>
+          </span>
+        )}
       </header>
       <div className={c.weekdays} aria-hidden="true">{WEEKDAYS.map((name) => <span key={name}>{name}</span>)}</div>
       <ol className={c.days} aria-label="本月">

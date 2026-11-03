@@ -2,7 +2,7 @@
 
 /**
  * 月历上点一天弹出的「这一天」浮层（样稿 calendar-day-v1），挂在那一天的格子下面（anchor）；外观、开合、Esc 和点外面关同会议页的编辑浮层（ts-design Popover）。
- * - 看：「10 月 26 日 周一」，右边小字「今天」或「还有 N 个工作日」；下面按 关口 / 我的节点 / 这天截止 三组列出，空的组不出；最下面「＋ 加节点」。
+ * - 看：「10 月 26 日 周一」，右边小字「今天」或「还有 N 个工作日」（翻到别的月份不写）；下面按 关口 / 我的节点 / 这天截止 三组列出，空的组不出；最下面「＋ 加节点」（只在 Mission 所在的月份里出）。
  *   关口和节点分两行：上面节点名，下面灰色小字 Mission 名，都折行全显示。
  *   我的节点点一下原地改名或删；这天截止的执行事项点进去是详情。
  * - 加节点：Mission 按名字列出（带色点，只有一个 Mission 时不列），默认选聚焦的那个；再填节点名称。
@@ -28,6 +28,8 @@ const dayTitle = (date: string) =>
 function untilText(date: string, today: string, days: THomePlanDay[]): string | null {
   if (date === today) return "今天";
   if (date < today) return null;
+  // 翻到别的月份时 days 里没有今天，数不出来就不写。
+  if (!days.some((day) => day.date === today)) return null;
   const left = days.filter((day) => day.workday && day.date > today && day.date <= date).length;
   return left > 0 ? `还有 ${left} 个工作日` : null;
 }
@@ -56,7 +58,7 @@ function Group({ name, children }: { name: string; children: ReactNode }) {
   );
 }
 
-export function DayPopover({ date, mode, today, days, gates, marks, deadlines, missions, defaultMissionId, anchor, onMode, onSubmitAdd, onSubmitEdit, onDelete, onOpenItem, onClose }: {
+export function DayPopover({ date, mode, today, days, gates, marks, deadlines, missions, canAdd = true, defaultMissionId, anchor, onMode, onSubmitAdd, onSubmitEdit, onDelete, onOpenItem, onClose }: {
   date: string;
   mode: DayMode;
   today: string;
@@ -67,6 +69,8 @@ export function DayPopover({ date, mode, today, days, gates, marks, deadlines, m
   deadlines: THomePlanActivity[];
   /** 本月 Mission；没有时不出「＋ 加节点」。 */
   missions: THomePlanMission[];
+  /** 这一天能不能加节点：节点只能加在 Mission 所在的月份里（后端同一条规则）。默认 true。 */
+  canAdd?: boolean;
   /** 「＋ 加节点」默认选的 Mission：聚焦的那个，「全部」时第一个。 */
   defaultMissionId: string;
   anchor: RefObject<Element | null>;
@@ -137,7 +141,7 @@ export function DayPopover({ date, mode, today, days, gates, marks, deadlines, m
                   ))}
                 </Group>
               )}
-              {mode.kind === "view" && missions.length > 0 && (
+              {mode.kind === "view" && canAdd && missions.length > 0 && (
                 <button type="button" className={s.dayAdd} data-day-add onClick={() => onMode({ kind: "add", missionId: defaultMissionId, label: "" })}>＋ 加节点</button>
               )}
             </>}
