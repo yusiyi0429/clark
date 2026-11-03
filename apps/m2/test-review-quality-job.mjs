@@ -1,3 +1,4 @@
+import {sharedProjection,memberActor} from './shared-projection.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
@@ -269,6 +270,30 @@ test('rechecks current reviews without writing cards, and discards a stale resul
   assert.equal(jobs.view().recheck.status,'failed');
   assert.match(jobs.view().recheck.error,/版本已变化/);
   assert.equal(jobs.view().qualityStatus,'check-incomplete');
+  const ordinary=sharedProjection(store.snapshot(),memberActor('member-03',store.snapshot()));
+  assert.equal(ordinary.review.qualityStatus,'check-incomplete');
+  assert.equal(ordinary.review.problems.some(issue=>issue.kind==='unresolved'),false);
   assert.equal(store.snapshot().cards['rv:company'].versions.at(-1).content.verdictReason,'人工改稿');
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('restart records an interrupted recheck without calling a model or changing cards',async()=>{
+ const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async()=>assert.fail('recovery must not call a model')};
+ const {jobs,store,dir}=await setup(gateway,{root:latestSkill});
+ try{
+  await store.transact(state=>installReviewRound(state,{reviews:[{...review,ref:'company',unit:'company',level:'company',title:'已装入',owner:'刘明华'}]}));
+  await store.transact(state=>{
+   state.reviewJob={id:'prior-job',status:'done',qualityStatus:'needs-review',recheck:{id:'prior-recheck',status:'running',startedAt:'2026-11-03T00:00:00Z'}};
+   return state;
+  });
+  const before=structuredClone(store.snapshot().cards);
+  await jobs.recover();
+  assert.equal(jobs.view().status,'done');
+  assert.equal(jobs.view().qualityStatus,'check-incomplete');
+  assert.equal(jobs.view().recheck.status,'interrupted');
+  assert.equal(jobs.view().recheck.id,'prior-recheck');
+  assert.ok(jobs.view().recheck.finishedAt);
+  assert.deepEqual(store.snapshot().cards,before);
+  assert.equal(sharedProjection(store.snapshot(),memberActor('member-03',store.snapshot())).review.qualityStatus,'check-incomplete');
  }finally{await rm(dir,{recursive:true,force:true});}
 });

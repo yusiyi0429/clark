@@ -884,24 +884,29 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
   await save();
   if(!(await readFile(workFile(job.id))).equals(bytes))throw Error('冻结工作文件已变化，本次复查结果未应用');
   await store.transact(state=>{
-   if(reviewVersionStamp(state)!==stamp)throw Object.assign(Error('复盘版本已变化，本次复查结果未应用'),{code:'REVIEW_RECHECK_STALE'});
+   if(state.reviewJob?.recheck?.id!==recheckId||state.reviewJob.recheck.status!=='running'||reviewVersionStamp(state)!==stamp)throw Object.assign(Error('复盘版本已变化，本次复查结果未应用'),{code:'REVIEW_RECHECK_STALE'});
    const problems=checks.map(issue=>({ref:issue.unit||issue.ref,kind:'unresolved',title:issue.title,reason:issue.problem}));
    state.reviewRound={...state.reviewRound,qualityStatus,qualityStamp:stamp,problems:[...(state.reviewRound.problems||[]).filter(issue=>issue.kind!=='unresolved'),...problems]};
-   state.reviewJob={...state.reviewJob,qualityStatus,qualityStamp:stamp,checks,warnings:[],recheck:{id:recheckId,status:'done'}};
+   state.reviewJob={...state.reviewJob,qualityStatus,qualityStamp:stamp,checks,warnings:[],recheck:{...state.reviewJob.recheck,status:'done',finishedAt:new Date().toISOString()}};
    state.sequence++;return state;
   });
  }
  return {
-  view:()=>{const state=store.snapshot(),job=view(state.reviewJob);if(!job)return job;return {...job,...(recheckFlight?{recheck:{id:recheckFlight,status:'running'}}:state.reviewJob.recheck?{recheck:state.reviewJob.recheck}:{}),...(state.reviewJob.qualityStamp&&state.reviewJob.qualityStamp!==reviewVersionStamp(state)?{qualityStatus:'check-incomplete',checks:[],warnings:[]}: {})};},
+  view:()=>{const state=store.snapshot(),job=view(state.reviewJob);if(!job)return job;return {...job,...(state.reviewJob.recheck?{recheck:state.reviewJob.recheck}:{}),...(state.reviewJob.qualityStamp&&state.reviewJob.qualityStamp!==reviewVersionStamp(state)?{qualityStatus:'check-incomplete',checks:[],warnings:[]}: {})};},
  async recheck(actor){
   if(!isOperator(actor))throw Object.assign(Error('只有轮次操作人可以复查'),{status:403});
   const state=store.snapshot(),job=state.reviewJob;
   if(recheckFlight||flight||busy()||job?.status!=='done'||!state.reviewRound||!/^[a-f0-9-]{36}$/.test(job.id))throw Object.assign(Error('当前不能复查现有轮次'),{status:409});
   const id=randomUUID(),stamp=reviewVersionStamp(state);recheckFlight=id;
+  try{await store.transact(next=>{
+   if(reviewVersionStamp(next)!==stamp||next.reviewJob.recheck?.status==='running')throw Object.assign(Error('复盘已变化或正在复查'),{status:409});
+   next.reviewJob={...next.reviewJob,recheck:{id,status:'running',startedAt:new Date().toISOString()}};
+   next.sequence++;return next;
+  });}catch(error){recheckFlight=null;throw error;}
   void recheckCurrent(state,stamp,id).catch(async error=>{
    await store.transact(next=>{
-    if(next.reviewJob?.id!==job.id)return next;
-    next.reviewJob={...next.reviewJob,recheck:{id,status:'failed',error:String(error.message)}};
+    if(next.reviewJob?.id!==job.id||next.reviewJob.recheck?.id!==id||next.reviewJob.recheck.status!=='running')return next;
+    next.reviewJob={...next.reviewJob,recheck:{...next.reviewJob.recheck,status:'failed',error:String(error.message),finishedAt:new Date().toISOString()}};
     next.sequence++;return next;
    }).catch(()=>{});
   }).finally(()=>{recheckFlight=null;});
@@ -918,7 +923,17 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
   },
   async cancel(actor){if(!isOperator(actor))throw Object.assign(Error('只有 CEO 和轮次操作人可以停止生成'),{status:403});if(!flight||!activeAbort||store.snapshot().reviewJob?.status!=='running')throw Object.assign(Error('当前没有运行中的复盘生成'),{status:409});activeAbort.abort(Object.assign(Error('用户已停止生成，可从保存的进度续跑'),{name:'AbortError'}));return view(store.snapshot().reviewJob);},
   // A server restart ends a running job; the page offers to resume it from the saved input.
-  async recover(){if(store.snapshot().reviewJob?.status==='running')await setJob({status:'failed',error:'服务重启中断了生成，现有复盘没动，可以续跑'});},
+  async recover(){
+   const job=store.snapshot().reviewJob;
+   if(job?.status==='running')await setJob({status:'failed',error:'服务重启中断了生成，现有复盘没动，可以续跑'});
+   if(job?.recheck?.status==='running')await store.transact(state=>{
+    if(state.reviewJob?.recheck?.status!=='running')return state;
+    const now=new Date().toISOString();
+    state.reviewJob={...state.reviewJob,qualityStatus:'check-incomplete',recheck:{...state.reviewJob.recheck,status:'interrupted',finishedAt:now,error:'服务重启中断了复查'}};
+    if(state.reviewRound)state.reviewRound={...state.reviewRound,qualityStatus:'check-incomplete'};
+    state.sequence++;return state;
+   });
+  },
   async start(actor,{regenerate=false,resume=false,period,cutoff}={},{now=new Date()}={}){
    if(!isOperator(actor))throw Object.assign(Error('只有 CEO 和轮次操作人可以生成复盘'),{status:403});
    const s=store.snapshot();
