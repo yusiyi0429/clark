@@ -23,7 +23,7 @@ ok(/data-part="eye-l-closed" display="none"/.test(svg) && /data-part="eye-r-clos
 for (const side of ["l", "r"]) {
   ok(new RegExp(`<g data-part="eye-${side}">.*?<g clip-path="url\\(#\\{id\\}-[^"]+\\)"><g data-part="iris-${side}">`).test(svg), `眼珠 iris-${side} 在 eye-${side} 里、套着眼眶的裁切`);
 }
-ok(/"gazeUnit":\s*7|gazeUnit: 7/.test(art), `gazeUnit 是 7：${art}`);
+ok(/"gazeUnit":\s*8|gazeUnit: 8/.test(art), `gazeUnit 是 8：${art}`);
 const milesArtPath = process.argv[2];
 if (milesArtPath && fs.existsSync(milesArtPath)) {
   const m = fs.readFileSync(milesArtPath, "utf8").match(/export const MILES_ART = (\{.*?\}) as const;/)[1];

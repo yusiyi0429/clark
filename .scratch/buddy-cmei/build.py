@@ -18,8 +18,10 @@ SHEET = Image.open(os.path.join(HERE, "source", "c-mei-sheet.webp")).convert("RG
 # 第 1 格在整张图里的范围：到边沿那条线（y 475）之上两行为止（那两行混着边沿线的灰），胶囊上沿取代它
 P1 = (10, 26, 440, 473)
 W, H = P1[2] - P1[0], P1[3] - P1[1]
-# 放进 rig 坐标：每个像素 1.6 个单位；原图的边沿落在胶囊玻璃的上沿（约 868，两只手正好搭在上面），脸的中线落在 torsoCx 447
-S = 1.6
+# 放进 rig 坐标：每个像素 1.84 个单位（11/03 按孙铭泽的意见在 1.6 的基础上放大 15%，头和 Miles 差不多大）；
+# 原图的边沿落在胶囊玻璃的上沿（约 868，两只手正好搭在上面、整只露出来），脸的中线落在 torsoCx 447。
+# 放大后头顶的呆毛比摆位的 topY（167）高出约 100 个单位，也就是在 66 高的框上面多出约 6 像素。
+S = 1.84
 OX, OY = 447 - 215 * S, 868 - H * S
 EXT = 40  # 底图和手往边沿下面多补的像素：侧头、举手回弹时不露切口
 
@@ -240,26 +242,29 @@ hands = f'<g data-part="arm-peace" data-pivot="447 860">{layer(hrgb, ha, (HB[0],
 
 # 右耳戴一只 AirPods（原图没有；产品里在听时它会亮）。耳垂在第 1 格约 (334, 292)
 ax, ay = OX + 333 * S, OY + 287 * S
-airpod = (f'<g data-part="airpod-r"><rect x="{ax - 4:.1f}" y="{ay + 4:.1f}" width="8.5" height="26" rx="4.2" fill="#fff" stroke="#a7aebd" stroke-width="1.6"/>'
-          f'<ellipse cx="{ax:.1f}" cy="{ay:.1f}" rx="8.5" ry="7.5" fill="#fff" stroke="#a7aebd" stroke-width="1.6"/>'
-          f'<ellipse cx="{ax - 2.5:.1f}" cy="{ay - 1.5:.1f}" rx="2.6" ry="2" fill="#a1a9b8"/></g>')
+k = S / 1.6   # AirPods 跟着人一起放大
+airpod = (f'<g data-part="airpod-r"><rect x="{ax - 4 * k:.1f}" y="{ay + 4 * k:.1f}" width="{8.5 * k:.1f}" height="{26 * k:.1f}" rx="{4.2 * k:.1f}" fill="#fff" stroke="#a7aebd" stroke-width="1.6"/>'
+          f'<ellipse cx="{ax:.1f}" cy="{ay:.1f}" rx="{8.5 * k:.1f}" ry="{7.5 * k:.1f}" fill="#fff" stroke="#a7aebd" stroke-width="1.6"/>'
+          f'<ellipse cx="{ax - 2.5 * k:.1f}" cy="{ay - 1.5 * k:.1f}" rx="{2.6 * k:.1f}" ry="{2 * k:.1f}" fill="#a1a9b8"/></g>')
 
-clips.append('<clipPath id="{id}-lip"><rect x="0" y="100" width="900" height="776"/></clipPath>')   # 和胶囊上沿一样高
+clips.append('<clipPath id="{id}-lip"><rect x="0" y="0" width="900" height="876"/></clipPath>')   # 下沿和胶囊上沿一样高
 inner = (f'<defs>{"".join(clips)}</defs><g data-part="miles" clip-path="url(#{{id}}-lip)"><g data-part="body" data-pivot="388 1182"><g data-part="head" data-pivot="444 806">'
          f'{bust}{eye_svg["l"]}{eye_svg["r"]}{closed_svg}{mouth_svg}{open_svg}{airpod}</g></g>{hands}</g>')
-ART = {"viewBox": "20 140 860 1080", "torsoCx": 447, "lipY": 900, "figureWidth": 773, "topY": 167, "gazeUnit": 7}
+ART = {"viewBox": "20 140 860 1080", "torsoCx": 447, "lipY": 900, "figureWidth": 773, "topY": 167, "gazeUnit": 8}
 art_ts = "{ " + ", ".join(f'{k}: {json.dumps(v)}' for k, v in ART.items()) + " }"
 doc = """/**
  * C妹 的伙伴形象（2026-11-03 设计稿，待定稿）：一比一取自孙铭泽提供并确认有授权的原图 source/c-mei-sheet.webp。
  * 平时取第 1 格，说话的嘴取第 2 格，闭眼取第 4 格；两只手扒在胶囊沿上。只多画了一只右耳的 AirPods，产品里「在听」时它会亮。
  * 和 milesRig 的约定：同一坐标系和摆位，同一套 data-part；body 里套着 head，所以侧头和呼吸带着整个上半身。
  * 眼珠（data-part="iris-l/r"）裁在眼眶里：milesRig 打上同目录的 milesRig-iris-gaze.patch 后，转眼时只移眼珠。
- * gazeUnit 是 7（Miles 是 15）：她的眼珠小，转眼幅度跟着收小。手的转轴在两只手中间（447 860）。
+ * gazeUnit 是 8（Miles 是 15）：她的眼珠小，转眼幅度跟着收小。手的转轴在两只手中间（447 860）。
+ * 她比 Miles 高：头顶的呆毛在 topY 上面约 100 个单位（66 高的框上面多出约 6 像素），框外不裁就能看到。
  * 裁切的 id 写成 `{id}-…`，挂的时候换成每一颗自己的前缀。
  *
  * 由 .scratch/buddy-cmei/build.py 生成，别手改。
  */""".replace("`", "\\`")
 out_dir = HERE
 open(os.path.join(out_dir, "cmeiArt.ts"), "w").write(f"{doc}\n\n/** 摆位用的几个量：除了 gazeUnit，和 MILES_ART 相同。 */\nexport const CMEI_ART = {art_ts} as const;\n\nexport const CMEI_SVG = `{inner}`;\n")
-open(os.path.join(out_dir, "cmei.svg"), "w").write(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{ART["viewBox"]}" width="860" height="1080">{inner.replace("{id}", "cmei")}</svg>\n')
+# 整张图的画布比摆位用的 viewBox 往上多留 100：放大后呆毛高出 topY
+open(os.path.join(out_dir, "cmei.svg"), "w").write(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 40 860 1080" width="860" height="1080">{inner.replace("{id}", "cmei")}</svg>\n')
 print("cmeiArt.ts", os.path.getsize(os.path.join(out_dir, "cmeiArt.ts")), "bytes")
