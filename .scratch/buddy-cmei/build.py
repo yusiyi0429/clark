@@ -253,7 +253,7 @@ doc = """/**
  * C妹 的伙伴形象（2026-11-03 设计稿，待定稿）：一比一取自孙铭泽提供并确认有授权的原图 source/c-mei-sheet.webp。
  * 平时取第 1 格，说话的嘴取第 2 格，闭眼取第 4 格；两只手扒在胶囊沿上。只多画了一只右耳的 AirPods，产品里「在听」时它会亮。
  * 和 milesRig 的约定：同一坐标系和摆位，同一套 data-part；body 里套着 head，所以侧头和呼吸带着整个上半身。
- * 眼珠（data-part="iris-l/r"）裁在眼眶里：milesRig 打上 .scratch/buddy-girl-avatar/milesRig-iris-gaze.patch 后，转眼时只移眼珠。
+ * 眼珠（data-part="iris-l/r"）裁在眼眶里：milesRig 打上同目录的 milesRig-iris-gaze.patch 后，转眼时只移眼珠。
  * gazeUnit 是 7（Miles 是 15）：她的眼珠小，转眼幅度跟着收小。手的转轴在两只手中间（447 860）。
  * 裁切的 id 写成 `{id}-…`，挂的时候换成每一颗自己的前缀。
  *
