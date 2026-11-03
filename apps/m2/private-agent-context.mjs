@@ -7,7 +7,7 @@ const fields=['id','level','name','unit','owner','title','result','time','why','
  // Review cards (评测 2026-10-26: the Agent on a review page could not see the review itself).
  'kind','ref','verdict','verdictReason','facts','targets','causes','nextInputs','ltoReview'];
 export function privateAgentContext(state,actor,requested={},sourceFallback=[],now=Date.now()){
- const readable=Object.values(state.cards).filter(c=>canRead(actor,c)),byId=new Map(readable.map(c=>[c.id,c]));
+ const readable=Object.values(state.cards).filter(c=>canRead(actor,c,state)),byId=new Map(readable.map(c=>[c.id,c]));
  const selected=requested.selection?.id?byId.get(requested.selection.id):null;
  if(requested.selection?.id&&!selected)fail('当前页面不在成员可见范围内');
  // On a 个人复盘 the room is the person's own (2026-10-27), so the Agent reads that talk, never someone else's.
