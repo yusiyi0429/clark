@@ -55,14 +55,17 @@ export async function qualityModelCall({gateway,system,quality,run,pass,stage,re
   verifyRequest();
   let answer,error,parsed,started;
   try{
-   if(backups.length||grouped&&quality.qualityFallback){const actual=Buffer.byteLength(JSON.stringify(reviewModelRequestBody(system,request.payload,{model:active.status.model,...record.options})));if(actual>maxBodyBytes)throw Object.assign(Error('实际模型完整请求体超过本次工程预算，未调用'),{code:'REVIEW_PACKET_OVERSIZE',actual});record.bodyBytes=actual;record.bodyBudgetBytes=maxBodyBytes;}
+   const correction=payload.checkBasis===2&&request.attempts.at(-2)?.outputContract?request.attempts.at(-2).error:null;
+   const attemptSystem=correction?system+'\n上一次响应未通过结构校验：'+correction+'。按当前请求合同重新核验并返回完整 JSON。不要补造来源或改变证据。':system;
+   if(correction)record.validationFeedback=correction;
+   if(backups.length||grouped&&quality.qualityFallback||correction){const actual=Buffer.byteLength(JSON.stringify(reviewModelRequestBody(attemptSystem,request.payload,{model:active.status.model,...record.options})));if(actual>maxBodyBytes)throw Object.assign(Error('实际模型完整请求体超过本次工程预算，未调用'),{code:'REVIEW_PACKET_OVERSIZE',actual});record.bodyBytes=actual;record.bodyBudgetBytes=maxBodyBytes;}
    const attemptSignal=timed?AbortSignal.any([...(signal?[signal]:[]),AbortSignal.timeout(timeoutMs)]):signal;
    if(timed)started=now();
-   answer=await active.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(request.payload)}],{...callOptions,timeoutMs,signal:attemptSignal,...(timed?{onTransportTiming:timing=>{record.transportTiming=timing;}}:{}),trace:{name:key,stage,metadata:{ref,pass,inputHash,sourceHash:quality.sourceHash,maxTokens}}});
+   answer=await active.complete([{role:'system',content:attemptSystem},{role:'user',content:JSON.stringify(request.payload)}],{...callOptions,timeoutMs,signal:attemptSignal,...(timed?{onTransportTiming:timing=>{record.transportTiming=timing;}}:{}),trace:{name:key,stage,metadata:{ref,pass,inputHash,sourceHash:quality.sourceHash,maxTokens}}});
    record.raw=answer.rawAnswer??answer.answer;record.usage=answer.usage;record.gatewayModel=answer.model||null;record.returnedModel=answer.returnedModel??null;record.providerRequestId=answer.providerRequestId||null;record.finishReason=answer.finishReason||null;record.finishReasonSource=answer.finishReasonSource||null;
    if(timed)attemptSignal.throwIfAborted();
    try{parsed=validate(JSON.parse(bareJson(answer.answer)));}catch(error){error.reviewOutputContract=true;throw error;}
-  }catch(e){error=e;record.error=String(e.message);record.errorCode=e.code||null;record.raw??=e.rawAnswer??e.partialAnswer??null;record.providerRequestId??=e.providerRequestId||null;record.returnedModel??=e.diagnostics?.returnedModel??null;record.finishReason??=e.diagnostics?.providerFinishReason||e.diagnostics?.finishReason||null;record.finishReasonSource??=e.diagnostics?.finishReasonSource||null;record.finishedAt=new Date().toISOString();}
+  }catch(e){error=e;if(payload.checkBasis===2&&e.reviewOutputContract)record.outputContract=true;record.error=String(e.message);record.errorCode=e.code||null;record.raw??=e.rawAnswer??e.partialAnswer??null;record.providerRequestId??=e.providerRequestId||null;record.returnedModel??=e.diagnostics?.returnedModel??null;record.finishReason??=e.diagnostics?.providerFinishReason||e.diagnostics?.finishReason||null;record.finishReasonSource??=e.diagnostics?.finishReasonSource||null;record.finishedAt=new Date().toISOString();}
   if(timed)record.timeBudget.elapsedMs=started===undefined?0:Math.max(0,Math.ceil(now()-started));
   if(!error){run.raw[key]=answer.answer;request.outputHash=qualityHash(answer.answer);request.status='done';request.selectedAlias=record.requestedAlias;request.returnedModel=record.returnedModel;request.actualApi=record.api;record.finishedAt=new Date().toISOString();await save(run);return parsed;}
   let switched=false;

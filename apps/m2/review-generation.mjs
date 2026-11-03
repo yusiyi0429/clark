@@ -536,7 +536,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
     ].map(({checkContextRefs,...issue},index)=>({...issue,id:previous.index+':'+index})):[];
     const scope=planReviewImpact({items,sources,before:phase==='impact'?previous.reviews:null,reviews,issues:priorIssues,phase});
     const coverage=q.passes.slice(0,pass).map(p=>({phase:p.phase,candidateHash:p.reviewHash,issuesHash:p.issuesHash,receiptHash:p.coverageHash}));
-    const payloadFor=extraSourceRefs=>reviewImpactPayload({phase,scope,reviews,sources,priorIssues,coverage,extraSourceRefs,boundedSource:run.outputPolicy?.scopedCheckSourceBudget===1,checkBasis:run.outputPolicy?.scopedCheckBasis===1});
+    const payloadFor=extraSourceRefs=>reviewImpactPayload({phase,scope,reviews,sources,priorIssues,coverage,extraSourceRefs,boundedSource:run.outputPolicy?.scopedCheckSourceBudget===1,checkBasis:run.outputPolicy?.scopedCheckBasis});
     const check=async extraSourceRefs=>{
      const payload=payloadFor(extraSourceRefs);
      const actual=reviewModelBudgetBytes(system,payload,wireOptions);
@@ -546,7 +546,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
       validateReviewImpact(value,payload,refs);
       checkedReviewIssues(value,{skill,refs});
       if(!value.sourceRequests.length&&!(payload.sourceRound&&value.missingEvidence?.length))for(const issue of value.issues){
-       if(issue.sourceRefs.length||issue.evidenceRefs!==undefined||citationFacts([issue.problem,issue.impact],{sourceRef:issue.ref,sources}).addresses.length)validateIssueSources(issue,{sources:selected,providedRefs:payload.scope.sourceRefs,checkerSources:input.engineeringContracts?.checkerSources});
+       if(issue.sourceRefs.length||issue.evidenceRefs!==undefined||citationFacts([issue.problem,issue.impact],{sourceRef:issue.ref,sources}).addresses.length)validateIssueSources(issue,{sources:selected,providedRefs:payload.scope.sourceRefs,checkerSources:input.engineeringContracts?.checkerSources,requireTarget:payload.checkBasis!==2});
       }
       return value;
      });
@@ -756,7 +756,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
     if(!m2ConfirmedSource)throw Error('任务缺已确认人工事实来源快照，请保留原任务并重新准备候选');
     verifyEvidenceBundle(m2ConfirmedSource);
     const sourceInputs={};for(const id of new Set(m2ConfirmedSource.entries.map(e=>e.sourceJobId).filter(Boolean))){try{const previous=JSON.parse(await readFile(workFile(id),'utf8'));if(previous.input)sourceInputs[id]=previous.input;}catch(e){if(e.code!=='ENOENT')throw Error('旧生成来源无法读取：'+id);}}
-    work={skillSnapshot:{version:skill.version,hash:skill.hash},m2ConfirmedSource,sourceInputs,sourceInputsHash:evidenceHash(sourceInputs),run:{modelPolicy:{primary:gateway.status?.model||null,fallbackModels:gateway.reviewFallbacks?.map(g=>g.status.model)||[]},outputPolicy:{initialMaxTokens:32000,checkMaxTokens:64000,revisionMaxTokens:32000,...(skillAtLeast(skill.version,'2.1.15')?{checkFlow:1,scopedCheckSourceBudget:1,scopedCheckBasis:1,gptRepairTimeBudget:GPT_REPAIR_TIME_BUDGET}:{}),checkReasoningEffort:'medium'},raw:{},reviews:{},failed:[],dropped:[]}};await save();
+    work={skillSnapshot:{version:skill.version,hash:skill.hash},m2ConfirmedSource,sourceInputs,sourceInputsHash:evidenceHash(sourceInputs),run:{modelPolicy:{primary:gateway.status?.model||null,fallbackModels:gateway.reviewFallbacks?.map(g=>g.status.model)||[]},outputPolicy:{initialMaxTokens:32000,checkMaxTokens:64000,revisionMaxTokens:32000,...(skillAtLeast(skill.version,'2.1.15')?{checkFlow:1,scopedCheckSourceBudget:1,scopedCheckBasis:2,gptRepairTimeBudget:GPT_REPAIR_TIME_BUDGET}:{}),checkReasoningEffort:'medium'},raw:{},reviews:{},failed:[],dropped:[]}};await save();
    }
    if(work.m2ConfirmedSource?.hash!==store.snapshot().reviewJob?.m2ConfirmedSource?.hash)throw Error('任务人工事实来源与冻结工作文件不一致');
    if(!work.input){

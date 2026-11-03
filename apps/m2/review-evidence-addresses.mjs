@@ -19,8 +19,8 @@ export function referenceMapsForInput(input,reviews){
  const sources=Object.fromEntries(input.stages.flat().map(c=>[c.id,c]));
  return Object.fromEntries(Object.entries(reviews).map(([ref,review])=>[ref,verifiedReferenceMap(review,{sourceRef:ref,sources})]));
 }
-export function validateIssueSources(issue,{sources,providedRefs,checkerSources=2}){
- if(!Array.isArray(issue.sourceRefs)||!issue.sourceRefs.length||!issue.sourceRefs.includes(issue.ref)||new Set(issue.sourceRefs).size!==issue.sourceRefs.length||issue.sourceRefs.some(ref=>!providedRefs.includes(ref)||!Object.hasOwn(sources,ref)))throw Error('检查意见必须显式列出目标与实际所用的完整来源sourceRefs');
+export function validateIssueSources(issue,{sources,providedRefs,checkerSources=2,requireTarget=true}){
+ if(!Array.isArray(issue.sourceRefs)||!issue.sourceRefs.length||requireTarget&&!issue.sourceRefs.includes(issue.ref)||new Set(issue.sourceRefs).size!==issue.sourceRefs.length||issue.sourceRefs.some(ref=>!providedRefs.includes(ref)||!Object.hasOwn(sources,ref)))throw Error(requireTarget?'检查意见必须显式列出目标与实际所用的完整来源sourceRefs':'检查意见的 sourceRefs 必须列出本次实际提供并使用的原文');
  if(issue.evidenceRefs!==undefined){if(!Array.isArray(issue.evidenceRefs))throw Error('检查证据地址必须是ref/id对象列表');for(const a of issue.evidenceRefs){if(!a||typeof a.ref!=='string'||!/^E\d+$/.test(a.id||'')||!issue.sourceRefs.includes(a.ref)||(sources[a.ref]?.evidence||[]).every(e=>e.id!==a.id))throw Error('检查意见的证据地址不属于声明的冻结原文');}}
  // Only explicit machine addresses are compared. Plain-language mentions never
  // create dependencies, and missing declarations are rejected rather than guessed.

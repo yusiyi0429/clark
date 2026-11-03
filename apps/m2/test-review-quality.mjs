@@ -232,3 +232,20 @@ test('cancelled GPT repair persists elapsed time and does not retry',async()=>{
  assert.equal(calls,1);
  assert.deepEqual(Object.values(quality.requests)[0].attempts[0].timeBudget,{reservedMs:150000,elapsedMs:44000});
 });
+
+test('scoped check contract retry sends validation feedback without changing candidate, source or raw answers',async()=>{
+ const quality={requests:{},sourceHash:'source',skillHash:'skill'},run={raw:{}},messages=[];
+ const gateway={status:{model:'wangsu/gpt-6.1-sol'},complete:async turns=>{
+  messages.push(turns);return {answer:messages.length===1?'{"bad":true}':'{"ok":true}'};
+ }};
+ const payload={phase:'impact',candidateHash:'candidate',checkBasis:2,sourceRound:'first',sources:{finance:{evidence:[{id:'E1',text:'原文'}]}}};
+ await qualityModelCall({gateway,system:'JSON',quality,run,pass:1,stage:'check',ref:'impact',payload,save:async()=>{},validate:value=>{
+  if(value.bad)throw Error('来源地址未提供');return value;
+ }});
+ assert.equal(messages[0][1].content,messages[1][1].content);
+ assert.match(messages[1][0].content,/上一次响应未通过结构校验：来源地址未提供/);
+ const [first,second]=Object.values(quality.requests)[0].attempts;
+ assert.equal(first.raw,'{"bad":true}');
+ assert.equal(second.validationFeedback,'来源地址未提供');
+ assert.equal(second.raw,'{"ok":true}');
+});
