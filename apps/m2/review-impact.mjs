@@ -8,6 +8,18 @@ const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const unique=values=>[...new Set(values)];
 const edgeKey=edge=>JSON.stringify([edge.parentRef,edge.childRef,edge.kind]);
 
+function hasCandidateField(review,path){
+ if(typeof path!=='string'||!/^[A-Za-z_$][\w$]*(?:(?:\.[A-Za-z_$][\w$]*)|(?:\[(?:0|[1-9]\d*)\]))*$/.test(path))return false;
+ let value=review;
+ for(const [token,index] of path.matchAll(/\[(\d+)\]|[A-Za-z_$][\w$]*/g)){
+  const key=index??token;
+  if(!value||typeof value!=='object'||Array.isArray(value)!==(index!==undefined)||
+   ['__proto__','constructor','prototype'].includes(key)||!Object.hasOwn(value,key))return false;
+  value=value[key];
+ }
+ return true;
+}
+
 export function planReviewImpact({items,sources,before,reviews,issues,phase}){
  const byId=new Map(items.map(c=>[c.id,c])),refs=[...byId.keys()];
  const known=new Set(refs);
@@ -141,7 +153,7 @@ export function validateReviewImpact(value,payload,allRefs){
    if(basis.kind!=='candidate'||requireOriginal(issue)||phase==='final'&&!closing&&!finalCandidateTypes.has(issue.type)||!closing&&issue.sourceRefs?.length)fail('外部事实问题必须依据本次已提供的冻结原文');
    if(!basis.refs.some(locator=>locator?.ref===issue.ref)||issue.type==='上下不一致'&&new Set(basis.refs.map(locator=>locator?.ref)).size<2||basis.refs.some(locator=>{
     const ref=locator?.ref,field=locator?.field,review=reviews.get(ref);
-    return !review||typeof field!=='string'||!Object.hasOwn(review,field)||ref!==issue.ref&&!scope.edges.some(edge=>edge.kind!=='citation'&&((edge.parentRef===ref&&edge.childRef===issue.ref)||(edge.childRef===ref&&edge.parentRef===issue.ref)));
+    return !hasCandidateField(review,field)||ref!==issue.ref&&!scope.edges.some(edge=>edge.kind!=='citation'&&((edge.parentRef===ref&&edge.childRef===issue.ref)||(edge.childRef===ref&&edge.parentRef===issue.ref)));
    }))fail('候选依据没有指向本次覆盖的字段或关系');
   };
   for(const issue of value.issues)validateBasis(issue,issue.basis);

@@ -65,6 +65,14 @@ test('business facts and resolutions require supplied originals; candidate relat
  assert.throws(final.validate,/必须依据/);
  final.response.issues=[{...fact,type:'上下不一致',basis:{kind:'candidate',refs:[{ref:'mission',field:'verdict'},{ref:'ru',field:'facts'}]}}];
  assert.doesNotThrow(final.validate);
+ const field=final.response.issues[0].basis.refs[1];
+ field.field='facts[0].status';
+ assert.doesNotThrow(final.validate);
+ for(const invalid of ['facts[1].status','facts[0].missing','facts.0.status','facts[00].status','facts[-1]','facts.length','facts[0].constructor','facts[0].__proto__','facts[0].prototype','facts[0].status.length']){
+  field.field=invalid;
+  assert.throws(final.validate,/候选依据/,invalid);
+ }
+
  const impact=check('impact',[{...fact,id:'old',sourceRefs:['mission','service']}]);
  impact.response.issueResults=[{id:'old',status:'resolved',reason:'候选已改成10/30部署',basis:candidate}];
  assert.throws(impact.validate,/必须依据/);
