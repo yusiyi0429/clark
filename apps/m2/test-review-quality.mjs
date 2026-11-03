@@ -160,3 +160,23 @@ test('a changed Mission verdict repairs only stale RU and company references in 
  assert.equal(run.quality.passes.at(-1).coverage.candidateHash,qualityHash(run.reviews));
  assert.equal(run.quality.status,'passed');
 });
+
+test('scoped check and its source request share three model attempts across cache reuse and resume',async()=>{
+ const quality={requests:{},sourceHash:'source',skillHash:'skill'},run={raw:{}};
+ const calls=[];
+ const gateway={status:{model:'wangsu/gpt-6.1-sol'},complete:async messages=>{
+  const {sourceRound}=JSON.parse(messages[1].content);calls.push(sourceRound);
+  if(sourceRound==='last'||calls.length===1)throw Object.assign(Error('offline'),{providerStatus:503});
+  return {answer:'{"sourceRequests":["m"]}'};
+ }};
+ const args={gateway,system:'JSON',quality,run,pass:1,stage:'check',save:async()=>{}};
+ const payload={phase:'final',candidateHash:'candidate',sourceRound:'first'};
+ const first={...args,ref:'final',payload},last={...args,ref:'final-source',payload:{...payload,sourceRound:'last'}};
+ await qualityModelCall(first);
+ await assert.rejects(qualityModelCall(last),{code:'REVIEW_MODEL_ATTEMPT_LIMIT'});
+ const resumed=structuredClone({quality,run});
+ await qualityModelCall({...first,...resumed});
+ await assert.rejects(qualityModelCall({...last,...resumed}),{code:'REVIEW_MODEL_ATTEMPT_LIMIT'});
+ assert.deepEqual(calls,['first','first','last']);
+ assert.deepEqual(Object.values(resumed.quality.requests).map(r=>r.attempts.map(a=>a.attempt)),[[1,2],[3]]);
+});

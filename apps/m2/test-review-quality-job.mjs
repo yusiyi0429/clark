@@ -96,3 +96,35 @@ test('final findings route repairs by revision batch rather than check index',as
   assert.equal(run.quality.status,'passed');
  }finally{await rm(dir,{recursive:true,force:true});}
 });
+
+test('final check supplies originals once and preserves specific unresolved evidence as a draft',async()=>{
+ const rounds=[];
+ const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{
+  const p=JSON.parse(messages[1].content);
+  if(p.unit)return {answer:JSON.stringify({review})};
+  const answer={...checkCoverage(p),issues:[]};
+  if(p.phase==='final'){
+   rounds.push(p.sourceRound);
+   if(p.sourceRound==='first'){
+    assert.match(p.task,/一次在 sourceRequests 列齐/);
+    answer.sourceRequests=['company'];
+   }else{
+    assert.match(p.task,/sourceRequests 必须为空/);
+    assert.deepEqual(p.scope.completeSourceRefs,['company']);
+    answer.missingEvidence=[{ref:'company',reason:'缺少原始交接记录，不能确认交接是否发生'}];
+   }
+  }
+  return {answer:JSON.stringify(answer)};
+ }};
+ const {jobs,store,dir,original}=await setup(gateway);
+ try{
+  const job=await jobs.start(actor,{period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00'},{now:new Date('2026-11-02T00:00:00Z')});
+  await until(()=>jobs.view().status!=='running');
+  assert.deepEqual(rounds,['first','last']);
+  assert.equal(jobs.view().status,'draft');
+  assert.deepEqual(store.snapshot().cards,original);
+  const {run}=JSON.parse(await readFile(join(dir,'review-jobs',job.id+'.json'),'utf8'));
+  assert.equal(run.quality.status,'needs-review');
+  assert.deepEqual(run.quality.verificationPending[0].checks,[{unit:'company',problem:'缺少原始交接记录，不能确认交接是否发生'}]);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});

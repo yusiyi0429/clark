@@ -28,15 +28,19 @@ export async function qualityModelCall({gateway,system,quality,run,pass,stage,re
  }
  request??=quality.requests[key]={inputHash,model,...policy,...optionIdentity,sourceHash:quality.sourceHash,skillHash:quality.skillHash,pass,stage,ref,payload:clone(payload),attempts:[]};
  const route=new Map([[model,gateway],...backups.map(g=>[g.status.model,g])]);
- const grouped=/^(?:revise|refresh)(?:-source)?$/.test(stage)&&payload.unit?.id&&Number.isInteger(payload.revision);
- const sameAction=r=>r.pass===pass&&/^(?:revise|refresh)(?:-source)?$/.test(r.stage)&&r.payload?.unit?.id===payload.unit.id&&r.payload?.revision===payload.revision&&r.payload?.candidateHash===payload.candidateHash&&r.sourceHash===quality.sourceHash&&r.skillHash===quality.skillHash;
- const history=grouped?Object.values(quality.requests).filter(sameAction).flatMap(r=>r.attempts).sort((a,b)=>String(a.at).localeCompare(String(b.at))):request.attempts;
+ const groupedRepair=/^(?:revise|refresh)(?:-source)?$/.test(stage)&&payload.unit?.id&&Number.isInteger(payload.revision);
+ const groupedCheck=stage==='check'&&['impact','final'].includes(payload.phase)&&['first','last'].includes(payload.sourceRound)&&typeof payload.candidateHash==='string';
+ const grouped=groupedRepair||groupedCheck;
+ const sameAction=r=>r.pass===pass&&r.payload?.candidateHash===payload.candidateHash&&r.sourceHash===quality.sourceHash&&r.skillHash===quality.skillHash&&
+  (groupedCheck?r.stage==='check'&&r.payload.phase===payload.phase&&['first','last'].includes(r.payload.sourceRound):
+   /^(?:revise|refresh)(?:-source)?$/.test(r.stage)&&r.payload?.unit?.id===payload.unit.id&&r.payload?.revision===payload.revision);
+ const history=grouped?Object.values(quality.requests).filter(sameAction).flatMap(r=>r.attempts).sort(groupedCheck?(a,b)=>a.attempt-b.attempt:(a,b)=>String(a.at).localeCompare(String(b.at))):request.attempts;
  const last=history.at(-1);let prior=last;
  let active=backups.length||grouped?route.get(last?.nextModel||last?.requestedModel||model):gateway;
  if(!active)throw Error('备用模型续跑来源不属于已授权策略');
  const used=history.length;
- if(used>=3)throw Object.assign(Error('同一修订的模型、补源及重试尝试已用完，保留未核候选'),{code:'REVIEW_MODEL_ATTEMPT_LIMIT'});
- if(grouped)request.attemptGroup={pass,ref:payload.unit.id,revision:payload.revision,candidateHash:payload.candidateHash};
+ if(used>=3)throw Object.assign(Error(groupedCheck?'同一检查的模型、补源及重试尝试已用完，保留未核候选':'同一修订的模型、补源及重试尝试已用完，保留未核候选'),{code:'REVIEW_MODEL_ATTEMPT_LIMIT'});
+ if(grouped)request.attemptGroup={pass,...(groupedCheck?{phase:payload.phase}:{ref:payload.unit.id,revision:payload.revision}),candidateHash:payload.candidateHash};
  request.status='running';await save(run);
  for(let attempt=used+1;attempt<=3;attempt++){
   abort(signal);verifyRequest();const record={attempt,at:new Date().toISOString(),requestedModel:active.status?.model||null,requestedAlias:active.status?.model||null,api:reviewModelApi(active.status?.model),options:clone(callOptions),switchFrom:prior?.switchFrom||null,switchReason:prior?.switchReason||null};request.attempts.push(record);await save(run);
