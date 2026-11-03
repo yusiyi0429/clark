@@ -2272,6 +2272,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/plan-calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 成员首页月历翻到别的月份：那个月的每一天（工作日按节假日日历）和落在那个月的签定关口 */
+        get: operations["getMyPlanCalendar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/plan-tasks/{taskId}/deliverable": {
         parameters: {
             query?: never;
@@ -2406,23 +2423,6 @@ export interface paths {
         head?: never;
         /** 改版本说明里的几句，或者不要这段 */
         patch: operations["patchDeliverableNote"];
-        trace?: never;
-    };
-    "/api/me/plan-calendar": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 成员首页月历翻到别的月份：那个月的每一天（工作日按节假日日历）和落在那个月的签定关口 */
-        get: operations["getMyPlanCalendar"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/me/battlefield-progress": {
@@ -20572,6 +20572,55 @@ export interface operations {
             };
         };
     };
+    getMyPlanCalendar: {
+        parameters: {
+            query: {
+                month: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 那个月的月历 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanCalendarResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getTaskDeliverable: {
         parameters: {
             query?: never;
@@ -21058,55 +21107,6 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    getMyPlanCalendar: {
-        parameters: {
-            query: {
-                month: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 那个月的月历 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanCalendarResponse"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };

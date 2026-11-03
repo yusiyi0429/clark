@@ -8302,6 +8302,65 @@
         }
       }
     },
+    "/api/me/plan-calendar": {
+      "get": {
+        "operationId": "getMyPlanCalendar",
+        "summary": "成员首页月历翻到别的月份：那个月的每一天（工作日按节假日日历）和落在那个月的签定关口",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "那个月的月历",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanCalendarResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/plan-tasks/{taskId}/deliverable": {
       "get": {
         "operationId": "getTaskDeliverable",
@@ -8948,65 +9007,6 @@
             }
           },
           "409": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/me/plan-calendar": {
-      "get": {
-        "operationId": "getMyPlanCalendar",
-        "summary": "成员首页月历翻到别的月份：那个月的每一天（工作日按节假日日历）和落在那个月的签定关口",
-        "parameters": [
-          {
-            "name": "month",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "那个月的月历",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlanCalendarResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {

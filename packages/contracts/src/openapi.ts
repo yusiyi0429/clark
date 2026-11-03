@@ -1465,6 +1465,19 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/me/plan-calendar": {
+        get: {
+          operationId: "getMyPlanCalendar",
+          summary: "成员首页月历翻到别的月份：那个月的每一天（工作日按节假日日历）和落在那个月的签定关口",
+          parameters: [{ name: "month", in: "query", required: true, schema: { type: "string", pattern: "^\\d{4}-(0[1-9]|1[0-2])$" } }],
+          responses: {
+            "200": { description: "那个月的月历", content: { "application/json": { schema: { $ref: "#/components/schemas/PlanCalendarResponse" } } } },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
+          },
+        },
+      },
       "/api/plan-tasks/{taskId}/deliverable": {
         get: {
           operationId: "getTaskDeliverable",
@@ -1543,19 +1556,6 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }, { name: "versionId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/DeliverableNotePatch" }),
           responses: { "200": { description: "这一版", content: { "application/json": { schema: { $ref: "#/components/schemas/DeliverableVersion" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
-        },
-      },
-      "/api/me/plan-calendar": {
-        get: {
-          operationId: "getMyPlanCalendar",
-          summary: "成员首页月历翻到别的月份：那个月的每一天（工作日按节假日日历）和落在那个月的签定关口",
-          parameters: [{ name: "month", in: "query", required: true, schema: { type: "string", pattern: "^\\d{4}-(0[1-9]|1[0-2])$" } }],
-          responses: {
-            "200": { description: "那个月的月历", content: { "application/json": { schema: { $ref: "#/components/schemas/PlanCalendarResponse" } } } },
-            "400": errorResponse,
-            "401": errorResponse,
-            "403": errorResponse,
-          },
         },
       },
       "/api/me/battlefield-progress": {
