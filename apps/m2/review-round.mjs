@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import {routeReviewQuestions} from './review-question-routing.mjs';
 // 复盘 (陈溪南 2026-10-20): a review result becomes review cards in the same units and groups as the plan.
 // Card ids are rv:<ref> (rv:company, rv:eo, rv:eo-m1) so they never collide with plan cards; the review skill owns
@@ -43,6 +44,12 @@ export const completeReviewCard=(review,card)=>object(review)&&REVIEW_VERDICTS.i
 export function completeReviewSet(input,reviews){
  const items=input.stages.flat();
  return items.some(item=>item.id==='company')&&Object.keys(reviews).length===items.length&&items.every(item=>completeReviewCard(reviews[item.id],item)&&reviews[item.id].ref===item.id&&reviews[item.id].level===item.level);
+}
+export function reviewVersionStamp(state){
+ const cards=Object.values(state.cards||{}).filter(card=>card.kind==='review').sort((a,b)=>a.id.localeCompare(b.id));
+ return createHash('sha256').update(JSON.stringify([state.reviewJob?.id,state.reviewRound?.loadedAt,cards.map(card=>{
+  const version=card.versions.at(-1);return [card.id,version.number,version.content];
+ })])).digest('hex');
 }
 export const reviewableQuality=quality=>quality?.delivery==='reviewable'&&['passed','needs-review','check-incomplete'].includes(quality.status);
 export const reviewQualityChecks=quality=>[...(quality?.remaining||[]),...(quality?.verificationPending||[]).flatMap(issue=>[issue,...(issue.checks||[]).filter(check=>check&&typeof check==='object')])];

@@ -1,4 +1,4 @@
-import {completeReviewCard,completeReviewSet,reviewableQuality,reviewQualityChecks,rowFacts,REVIEW_VERDICTS} from './review-round.mjs';
+import {completeReviewCard,completeReviewSet,reviewableQuality,reviewQualityChecks,rowFacts,REVIEW_VERDICTS,reviewVersionStamp} from './review-round.mjs';
 import {planReviewImpact,reviewImpactPayload,scopedReviewSources,validateReviewImpact} from './review-impact.mjs';
 import {REVIEW_BODY_LIMIT_BYTES,reviewGatewayForRun,reviewInitialConcurrency,reviewQualityFallbackContract,validateReviewQualityFallback,reviewGatewayForQualityAction} from './review-model-fallback.mjs';
 import {reviewDependencyPool} from './review-dependencies.mjs';
@@ -538,15 +538,15 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
     const carried=related?earlierIssues.filter(issue=>!related.has(issue.ref)).map(({id,...issue})=>issue):[];
     const scope=planReviewImpact({...scopeArgs,issues:priorIssues});
     const coverage=q.passes.slice(0,pass).map(p=>({phase:p.phase,candidateHash:p.reviewHash,issuesHash:p.issuesHash,receiptHash:p.coverageHash}));
-    const payloadFor=extraSourceRefs=>reviewImpactPayload({phase,scope,reviews,sources,priorIssues,coverage,extraSourceRefs,boundedSource:run.outputPolicy?.scopedCheckSourceBudget===1,checkBasis:run.outputPolicy?.scopedCheckBasis,exactReceipt:run.outputPolicy?.scopedCheckExactReceipt===1});
+    const payloadFor=extraSourceRefs=>reviewImpactPayload({phase,scope,reviews,sources,priorIssues,coverage,extraSourceRefs,boundedSource:run.outputPolicy?.scopedCheckSourceBudget===1,checkBasis:run.outputPolicy?.scopedCheckBasis,exactReceipt:run.outputPolicy?.scopedCheckExactReceipt===1,sourcePaths:run.outputPolicy?.scopedCheckSourcePaths===1});
     const check=async extraSourceRefs=>{
      const payload=payloadFor(extraSourceRefs);
      const actual=reviewModelBudgetBytes(system,payload,wireOptions);
      if(actual>REVIEW_BODY_LIMIT_BYTES)throw Object.assign(Error('完整复查材料超过请求预算，保留草稿'),{code:'REVIEW_PACKET_OVERSIZE',actual});
      const selected=scopedReviewSources(sources,scope,extraSourceRefs).selected;
      const value=await call(q,pass,'check',phase+(extraSourceRefs.length?'-source':''),payload,value=>{
-      validateReviewImpact(value,payload,refs);
       checkedReviewIssues(value,{skill,refs});
+      value=validateReviewImpact(value,payload,refs);
       if(!value.sourceRequests.length&&!(payload.sourceRound&&value.missingEvidence?.length))for(const issue of value.issues){
        if(issue.sourceRefs.length||issue.evidenceRefs!==undefined||citationFacts([issue.problem,issue.impact],{sourceRef:issue.ref,sources}).addresses.length)validateIssueSources(issue,{sources:selected,providedRefs:payload.scope.sourceRefs,checkerSources:input.engineeringContracts?.checkerSources,requireTarget:payload.checkBasis!==2});
       }
@@ -568,6 +568,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
      const checks=payload.sourceRound&&value.missingEvidence?.length?value.missingEvidence.map(item=>({unit:item.ref,problem:item.reason})):value.sourceRequests;
      throw Object.assign(Error('复查仍缺关键依据，保留草稿'),{code:'REVIEW_SOURCE_CONTEXT_PENDING',checks});
     }
+    if(value.basisPending?.length)(q.verificationPending??=[]).push(...value.basisPending);
     current.coverage={candidateHash:payload.candidateHash,scope:payload.scope,issueResults:value.issueResults,checkedRefs:value.checkedRefs,checkedEdges:value.checkedEdges};
     current.coverageHash=qualityHash(current.coverage);
     const unresolved=value.issueResults.filter(x=>x.status==='open').map(result=>{
@@ -731,7 +732,7 @@ export function reviewFile(run,input,{skill,model,label,startedAt=null}){
 export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=()=>false,isOperator,roster=[],ceoName='',companyDirection=async()=>'',installReviewRound,archivesPath,model=gateway?.status?.model||null}){
  const dir=join(dirname(statePath),'review-jobs');
  const workFile=id=>join(dir,`${id}.json`);
- let flight=false,activeAbort=null;
+ let flight=false,activeAbort=null,recheckFlight=null;
  const setJob=patch=>store.transact(s=>{s.reviewJob={...s.reviewJob,...patch,updatedAt:new Date().toISOString()};s.sequence++;return s;});
  const view=job=>job&&{id:job.id,status:job.status,qualityStatus:job.qualityStatus,stage:job.stage||null,done:job.done??null,total:job.total??null,error:job.error||null,errorCode:job.errorCode||null,checks:job.checks||[],warnings:job.warnings||[],candidateAvailable:job.candidateAvailable===true,inputCutoff:job.inputCutoff||null,period:job.period,cutoff:job.cutoff,createdAt:job.createdAt,finishedAt:job.finishedAt||null,skipped:job.skipped||[],skill:job.skill||null};
  // One trace per attempt (root = this job; a resume is its own trace). Its id stays on the job and on the installed
@@ -762,7 +763,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
     if(!m2ConfirmedSource)throw Error('任务缺已确认人工事实来源快照，请保留原任务并重新准备候选');
     verifyEvidenceBundle(m2ConfirmedSource);
     const sourceInputs={};for(const id of new Set(m2ConfirmedSource.entries.map(e=>e.sourceJobId).filter(Boolean))){try{const previous=JSON.parse(await readFile(workFile(id),'utf8'));if(previous.input)sourceInputs[id]=previous.input;}catch(e){if(e.code!=='ENOENT')throw Error('旧生成来源无法读取：'+id);}}
-    work={skillSnapshot:{version:skill.version,hash:skill.hash},m2ConfirmedSource,sourceInputs,sourceInputsHash:evidenceHash(sourceInputs),run:{modelPolicy:{primary:gateway.status?.model||null,fallbackModels:gateway.reviewFallbacks?.map(g=>g.status.model)||[]},outputPolicy:{initialMaxTokens:32000,checkMaxTokens:64000,revisionMaxTokens:32000,...(skillAtLeast(skill.version,'2.1.15')?{checkFlow:1,scopedCheckSourceBudget:1,scopedCheckBasis:2,gptRepairTimeBudget:GPT_REPAIR_TIME_BUDGET}:{}),...(skillAtLeast(skill.version,'2.1.16')?{reviewDelivery:1,scopedCheckExactReceipt:1}:{}),checkReasoningEffort:'medium'},raw:{},reviews:{},failed:[],dropped:[]}};await save();
+    work={skillSnapshot:{version:skill.version,hash:skill.hash},m2ConfirmedSource,sourceInputs,sourceInputsHash:evidenceHash(sourceInputs),run:{modelPolicy:{primary:gateway.status?.model||null,fallbackModels:gateway.reviewFallbacks?.map(g=>g.status.model)||[]},outputPolicy:{initialMaxTokens:32000,checkMaxTokens:64000,revisionMaxTokens:32000,...(skillAtLeast(skill.version,'2.1.15')?{checkFlow:1,scopedCheckSourceBudget:1,scopedCheckBasis:2,gptRepairTimeBudget:GPT_REPAIR_TIME_BUDGET}:{}),...(skillAtLeast(skill.version,'2.1.16')?{reviewDelivery:1,scopedCheckExactReceipt:1,scopedCheckSourcePaths:1}:{}),checkReasoningEffort:'medium'},raw:{},reviews:{},failed:[],dropped:[]}};await save();
    }
    if(work.m2ConfirmedSource?.hash!==store.snapshot().reviewJob?.m2ConfirmedSource?.hash)throw Error('任务人工事实来源与冻结工作文件不一致');
    if(!work.input){
@@ -812,8 +813,100 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
   }catch(e){failed(trace,String(e.message||e).slice(0,300));await setJob({status:'failed',candidateAvailable:!!work?.input&&!!Object.keys(work.run?.reviews||{}).length,errorCode:e.code||null,...(e.checks?{checks:e.checks}:{}),error:`${String(e.message||e).replace(/[；;]?\s*旧轮未替换/,'').slice(0,240)}；现有复盘没动，可以续跑`,finishedAt:new Date().toISOString()}).catch(()=>{});}
   finally{flight=false;activeAbort=null;}
  }
+ async function recheckCurrent(snapshot,stamp,recheckId){
+  const job=snapshot.reviewJob,bytes=await readFile(workFile(job.id)),work=JSON.parse(bytes);
+  const externalHash=snapshot.reviewRound.externalGeneration?.workSha256;
+  if(externalHash&&createHash('sha256').update(bytes).digest('hex')!==externalHash)throw Error('现有复盘的外部工作文件与安装回执不一致');
+  if(work.input?.period!==snapshot.reviewRound.period||Date.parse(work.input?.cutoff)!==Date.parse(snapshot.reviewRound.cutoff)||
+   work.run.quality?.candidateHash!==qualityHash(work.run.reviews))throw Error('现有复盘的安装候选无法验证');
+  if(work.inputHash!==evidenceHash(work.input)||work.run.quality?.inputHash!==work.inputHash)throw Error('现有复盘的冻结输入无法验证');
+  const items=work.input.stages.flat(),sources=Object.fromEntries(items.map(card=>[card.id,{...unitData(card),objectId:card.objectId}]));
+  if(qualityHash(sources)!==work.run.quality.sourceHash)throw Error('现有复盘的冻结原文无法验证');
+  const skill=await loadReviewSkill(skillRoot);
+  if(skill.hash!==work.skillSnapshot?.hash)throw Error('现有复盘的技能快照不一致');
+  const prior=Object.values(work.run.quality.requests||{}).find(request=>request.payload.phase==='impact');
+  const baseline=work.run.quality.passes?.[0]?.reviews;
+  if(!baseline)throw Error('缺少当前轮的首检快照');
+  const baselineCards=reviewCards({reviews:baseline});
+  const fields=['title','owner','verdict','verdictReason','facts','nextInputs'];
+  const project=review=>Object.fromEntries(fields.map(key=>[key,review[key]]));
+  const reviews={},before={};
+  for(const card of items){
+   const live=snapshot.cards['rv:'+card.id],old=baselineCards['rv:'+card.id];
+   if(!live||!old)throw Error('当前复盘或首检快照缺卡');
+   reviews[card.id]={...work.run.reviews[card.id],...project(currentVersion(live).content)};
+   before[card.id]={...work.run.reviews[card.id],...project(old)};
+  }
+  if(Object.values(snapshot.cards).filter(card=>card.kind==='review').length!==items.length||!completeReviewSet(work.input,reviews))throw Error('当前复盘与冻结对象清单不一致');
+  const issues=prior?.payload.priorIssues||work.run.quality.passes[0].issues?.map((issue,index)=>({...issue,id:'0:'+index}))||[];
+  const scope=planReviewImpact({items,sources,before,reviews,issues,phase:'impact'});
+  const refs=items.map(card=>card.id),run={raw:{}},quality={requests:{},sourceHash:qualityHash(sources),skillHash:skill.hash};
+  const auditFile=join(dir,job.id+'.recheck-'+recheckId+'.json');
+  const save=async()=>{const temp=auditFile+'.tmp';await writeFile(temp,JSON.stringify({stamp,jobId:job.id,recheckId,run,quality}),{mode:0o600});await rename(temp,auditFile);};
+  const recheckGateway=reviewGatewayForRun(gateway,work.run);
+  const system=`你是 TKOS 的月度复盘助手。只核验当前复盘，不修改卡片。仅返回有效 JSON 对象，不加代码围栏。\n${skill.rules}`;
+  const wireOptions={model:recheckGateway.status.model,fallbackModels:recheckGateway.reviewFallbacks?.map(g=>g.status.model)||[],thinking:true,json:true,reasoningEffort:'medium',maxTokens:64000};
+  const check=async extraSourceRefs=>{
+   const payload=reviewImpactPayload({phase:'impact',scope,reviews,sources,priorIssues:issues,coverage:[],extraSourceRefs,boundedSource:true,checkBasis:2,exactReceipt:true,sourcePaths:true});
+   if(reviewModelBudgetBytes(system,payload,wireOptions)>REVIEW_BODY_LIMIT_BYTES)throw Object.assign(Error('复查原文超过单次请求预算'),{code:'REVIEW_PACKET_OVERSIZE'});
+   const selected=scopedReviewSources(sources,scope,extraSourceRefs).selected;
+   return qualityModelCall({gateway:recheckGateway,system,quality,run,pass:0,stage:'check',ref:extraSourceRefs.length?'impact-source':'impact',payload,save,maxTokens:64000,reasoningEffort:'medium',validate:value=>{
+    checkedReviewIssues(value,{skill,refs});value=validateReviewImpact(value,payload,refs);
+    if(!value.sourceRequests.length&&!value.missingEvidence?.length)value.issues=value.issues.filter(issue=>{
+     try{
+      if(issue.sourceRefs.length||issue.evidenceRefs!==undefined||citationFacts([issue.problem,issue.impact],{sourceRef:issue.ref,sources}).addresses.length)validateIssueSources(issue,{sources:selected,providedRefs:payload.scope.sourceRefs,checkerSources:work.input.engineeringContracts?.checkerSources,requireTarget:false});
+      return true;
+     }catch(error){(value.basisPending??=[]).push({unit:issue.ref,problem:issue.problem,sourceRefs:issue.sourceRefs,reviewFinding:error.message});return false;}
+    });
+    return value;
+   }});
+  };
+  let checks,qualityStatus;
+  const oldChecks=(job.checks||[]).filter(issue=>(issue.unit||issue.ref)!=='global');
+  try{
+   let value=await check([]);
+   if(value.sourceRequests.length&&!value.missingEvidence?.length)value=await check(value.sourceRequests);
+   if(value.sourceRequests.length||value.missingEvidence?.length){
+    checks=[...oldChecks,...(value.missingEvidence||[]).map(issue=>({unit:issue.ref,problem:issue.reason})),{unit:'global',problem:'部分冻结原文仍不足，复查未完成'}];
+    qualityStatus='check-incomplete';
+   }else{
+    const results=new Map(value.issueResults.map(result=>[result.id,result]));
+    const checkedIssues=issues.map(issue=>issue.ref+'\n'+issue.problem);
+    checks=[...oldChecks.filter(issue=>!checkedIssues.includes((issue.unit||issue.ref)+'\n'+issue.problem)),
+     ...issues.filter(issue=>results.get(issue.id)?.status==='open').map(issue=>({unit:issue.ref,...issue,reviewFinding:results.get(issue.id)?.reason})),
+     ...value.issues.map(issue=>({unit:issue.ref,...issue})),...(value.basisPending||[])];
+    qualityStatus=checks.length?'needs-review':'passed';
+   }
+  }catch(error){
+   if(!isReviewResourceLimit(error)&&!error.reviewModelFailure)throw error;
+   checks=[...oldChecks,{unit:'global',code:error.code,problem:String(error.message)}];qualityStatus='check-incomplete';
+  }
+  await save();
+  if(!(await readFile(workFile(job.id))).equals(bytes))throw Error('冻结工作文件已变化，本次复查结果未应用');
+  await store.transact(state=>{
+   if(reviewVersionStamp(state)!==stamp)throw Object.assign(Error('复盘版本已变化，本次复查结果未应用'),{code:'REVIEW_RECHECK_STALE'});
+   const problems=checks.map(issue=>({ref:issue.unit||issue.ref,kind:'unresolved',title:issue.title,reason:issue.problem}));
+   state.reviewRound={...state.reviewRound,qualityStatus,qualityStamp:stamp,problems:[...(state.reviewRound.problems||[]).filter(issue=>issue.kind!=='unresolved'),...problems]};
+   state.reviewJob={...state.reviewJob,qualityStatus,qualityStamp:stamp,checks,warnings:[],recheck:{id:recheckId,status:'done'}};
+   state.sequence++;return state;
+  });
+ }
  return {
-  view:()=>view(store.snapshot().reviewJob),
+  view:()=>{const state=store.snapshot(),job=view(state.reviewJob);if(!job)return job;return {...job,...(recheckFlight?{recheck:{id:recheckFlight,status:'running'}}:state.reviewJob.recheck?{recheck:state.reviewJob.recheck}:{}),...(state.reviewJob.qualityStamp&&state.reviewJob.qualityStamp!==reviewVersionStamp(state)?{qualityStatus:'check-incomplete',checks:[],warnings:[]}: {})};},
+ async recheck(actor){
+  if(!isOperator(actor))throw Object.assign(Error('只有轮次操作人可以复查'),{status:403});
+  const state=store.snapshot(),job=state.reviewJob;
+  if(recheckFlight||flight||busy()||job?.status!=='done'||!state.reviewRound||!/^[a-f0-9-]{36}$/.test(job.id))throw Object.assign(Error('当前不能复查现有轮次'),{status:409});
+  const id=randomUUID(),stamp=reviewVersionStamp(state);recheckFlight=id;
+  void recheckCurrent(state,stamp,id).catch(async error=>{
+   await store.transact(next=>{
+    if(next.reviewJob?.id!==job.id)return next;
+    next.reviewJob={...next.reviewJob,recheck:{id,status:'failed',error:String(error.message)}};
+    next.sequence++;return next;
+   }).catch(()=>{});
+  }).finally(()=>{recheckFlight=null;});
+  return {id,status:'running'};
+ },
   async candidate(actor){
    if(!isOperator(actor))throw Object.assign(Error('只有现有轮次操作人可以查看生成草稿'),{status:403});
    const job=store.snapshot().reviewJob;
@@ -829,7 +922,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
   async start(actor,{regenerate=false,resume=false,period,cutoff}={},{now=new Date()}={}){
    if(!isOperator(actor))throw Object.assign(Error('只有 CEO 和轮次操作人可以生成复盘'),{status:403});
    const s=store.snapshot();
-   if(flight||s.reviewJob?.status==='running')throw Object.assign(Error('复盘正在生成'),{status:409});
+   if(recheckFlight||flight||s.reviewJob?.status==='running')throw Object.assign(Error('复盘正在生成'),{status:409});
    if(busy()||s.roundJob?.status==='running'||s.planHandoff?.status==='generating')throw Object.assign(Error('拆解正在生成，等它结束再生成复盘'),{status:409});
    const reviews=Object.values(s.cards).filter(c=>c.kind==='review');
    if(reviews.length&&!regenerate&&!resume)throw Object.assign(Error('已有复盘'),{status:409,code:'review-exists',total:reviews.length,confirmed:reviews.filter(c=>c.confirmedVersion).length});

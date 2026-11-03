@@ -101,3 +101,26 @@ test('exact receipts distinguish missing coverage from extra relationship endpoi
  assert.throws(()=>validate({...receipt,checkedEdges:[]}),/checkedEdges 集合不符，缺少/);
  assert.throws(()=>validate({...receipt,issueResults:[]}),/issueResults.id 集合不符，缺少 \["old"\]/);
 });
+
+test('precise original paths are accepted and individual invalid bases remain pending',()=>{
+ const scopedSources={...sources,m:{...sources.m,tasks:[{quality:'已冻结的验收标准'}]}};
+ const reviews={...before,m:{verdict:'达成'}};
+ const priorIssues=[{id:'old',ref:'m',type:'证据不符',sourceRefs:['m'],problem:'原问题'}];
+ const scope=planReviewImpact({items,sources:scopedSources,before,reviews,issues:priorIssues,phase:'impact'});
+ const payload=reviewImpactPayload({phase:'impact',scope,reviews,sources:scopedSources,priorIssues,coverage:[],checkBasis:2,exactReceipt:true,sourcePaths:true});
+ const issue={ref:'m',type:'证据不符',sourceRefs:['m'],problem:'新问题'};
+ const basis=(field,id)=>({kind:'source',refs:[{ref:'m',field,id}]});
+ const receipt={phase:'impact',candidateHash:payload.candidateHash,checkedRefs:scope.targetRefs,checkedEdges:scope.edges,sourceRequests:[],issues:[{...issue,basis:basis('tasks[0].quality')}],
+  issueResults:[{id:'old',status:'resolved',reason:'原文已核',basis:basis('evidence','E999')}]};
+ assert.equal(payload.priorIssues[0].requiredBasis,'source');
+ const valid=validateReviewImpact(receipt,payload,Object.keys(sources));
+ assert.equal(valid.issues.length,1);
+ assert.equal(valid.issueResults[0].status,'open');
+ assert.equal(receipt.issueResults[0].status,'resolved');
+ for(const invalid of [basis('tasks[1].quality'),basis('evidence','E999'),{kind:'source',refs:[{ref:'a',field:'commitment'}]}]){
+  const result=validateReviewImpact({...receipt,issues:[{...issue,basis:invalid}]},payload,Object.keys(sources));
+  assert.equal(result.issues.length,0);
+  assert.equal(result.basisPending.length,2);
+ }
+ assert.throws(()=>validateReviewImpact({...receipt,checkedRefs:[]},payload,Object.keys(sources)),/checkedRefs/);
+});

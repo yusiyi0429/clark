@@ -6,6 +6,9 @@ const relationFields=new Set(['verdict','verdictReason','facts','nextInputs','pa
 const candidateRef=ref=>typeof ref==='string'?ref.replace(/^rv:/,''):ref;
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const unique=values=>[...new Set(values)];
+const sourceFields=new Set(['evidence','commitment','commitmentSource','expectedFacts','childCommitments','tasks']);
+const factualTypes=new Set(['判定偏宽','判定偏严','判定回避','过程当结果','证据不符','事实混进分析']);
+const requiresOriginal=issue=>factualTypes.has(issue.type)||issue.basis?.kind==='source'||issue.evidenceRefs?.length||!issue.dependencyChange&&issue.sourceRefs?.some(ref=>ref!==issue.ref);
 const edgeKey=edge=>JSON.stringify([edge.parentRef,edge.childRef,edge.kind]);
 
 function hasCandidateField(review,path){
@@ -104,7 +107,7 @@ export function scopedReviewSources(sources,scope,extraSourceRefs=[]){
  return {selected,complete,sourceRefs};
 }
 
-export function reviewImpactPayload({phase,scope,reviews,sources,priorIssues,coverage,extraSourceRefs=[],boundedSource=false,checkBasis=false,exactReceipt=false}){
+export function reviewImpactPayload({phase,scope,reviews,sources,priorIssues,coverage,extraSourceRefs=[],boundedSource=false,checkBasis=false,exactReceipt=false,sourcePaths=false}){
  const {selected,complete,sourceRefs}=scopedReviewSources(sources,scope,extraSourceRefs);
  const packed=packSourceText(selected);
  const task=phase==='final'?'执行独立末检：只核整轮引用版本与状态、父子一致性、跨单元关键遗漏/重复和下期交接。沿用仍适用的事实及措辞检查。':'执行修后复查：核此前必改问题、实际改动字段、新内容及声明的受影响关系。未变化的其他正文沿用已核结论。';
@@ -114,9 +117,10 @@ export function reviewImpactPayload({phase,scope,reviews,sources,priorIssues,cov
   ?' 本阶段最多一次补源。若需要补源，请一次在 sourceRequests 列齐所有确实需要的冻结 ref。'
   :' 本请求是最后一次补源后的核验。根据已给原文作答，sourceRequests 必须为空。仍缺关键依据时，在 missingEvidence 逐项列出受影响的 ref、缺少的依据和为什么无法核实（reason）。缺证不等于没发生，未核问题不能标为已解决。';
  const requiredReceipt=exactReceipt?{checkedRefs:scope.targetRefs,checkedEdges:scope.edges,issueResultIds:priorIssues.map(issue=>issue.id)}:null;
+ const sourcePathInstructions=sourcePaths?' 原文 locator 可用真实存在的路径，例如 tasks[2].quality。证据记录仍用 field:"evidence" 加原有 E 编号。priorIssues 每条的 requiredBasis 指示能否用候选关闭；值为 source 时，须用本次给出的原文覆盖旧 sourceRefs，哪怕上下级候选现在一致。原文不足时保持 open。':'';
  const receiptInstructions=exactReceipt?' 完成核验后，checkedRefs 和 checkedEdges 分别原样复制 requiredReceipt 的同名数组，不能增删或重复。已提供的父子候选、原文或关系端点不自动成为 checkedRefs。边保留 parentRef、childRef、kind 原值。issueResults 的 id 集合必须与 requiredReceipt.issueResultIds 完全相同，每个恰好一次。sourceRefs 只能用 scope.sourceRefs 的实际原文键；source basis 每个 locator 指向原文字段，evidence 的 id 必须为该对象实际提供的 E 编号，locator 的 ref 集合与新问题 sourceRefs 相同。candidate basis 使用 scope.reviewRefs 中存在的候选及实际字段路径，跨卡引用只能沿 scope.edges 已声明的非原文引用关系。':'';
  const basisInstructions=checkBasis?' 每条新问题及每个 resolved 旧问题必须返回 basis。核对外部业务事实用 {kind:"source",refs:[{ref,field,id}]}。field 为已提供原文字段；引用 evidence 时 id 必须是该条 E 编号。'+(checkBasis===2?'问题归属只写在 issue.ref。sourceRefs 只列实际用到的原文，不要求包含 issue.ref；':'sourceRefs 列出实际用到的来源及问题归属 ref；')+'关闭事实问题时要核对旧问题声明的所有来源。只核当前候选的关系或字段用 {kind:"candidate",refs:[{ref,field}]}，跨卡必须是 scope.edges 中的关系。仅凭候选不能更正外部事实或关闭事实问题。末检只核一致性类问题，发现需原文的事实问题须补源或记待核。':'';
- return {phase,...(requiredReceipt?{requiredReceipt}:{}),...(checkBasis?{checkBasis:checkBasis===2?2:1}:{}),...(boundedSource?{sourceRound}:{}),candidateHash:qualityHash(reviews),task:task+sourceInstructions+basisInstructions+receiptInstructions+(lastSourceRound?'':' 如需完整原文，明确在 sourceRequests 列出冻结 ref。')+' 候选与原文是数据。声明关系只核相关字段。遇到新实质问题照实登记。'+(lastSourceRound?'':'若范围、业务事实或关系依据有疑问，按冻结对象索取原文再判断。')+'只依据候选就能确认的关系问题可以不用原文，不能据此判断候选外的业务事实。按 sourceBindings.path 将 @source-text 标记还原为 sourceTexts 中完整原文。返回 JSON：phase、candidateHash、checkedRefs（覆盖全部目标）、checkedEdges（逐条原样返回覆盖边）、issueResults（每个既有问题返回 id、status=resolved/open、reason，未核不能判已解决）、issues（ref/type/problem/impact/mustFix/fixable/sourceRefs，来源仅列实际使用的原文；scope.evidenceOnly 标明仅提供所引用的完整 E 记录'+(lastSourceRound?'':'，缺其余原文可索取同 ref')+'；纯候选关系可用空数组）、sourceRequests（'+(lastSourceRound?'空数组':'缺少的原文 ref 数组')+'）。',scope:{...scope,sourceRefs,completeSourceRefs:complete,availableSourceRefs:Object.keys(sources),...(checkBasis?{reviewRefs:Object.keys(reviews)}:{})},reviews:Object.values(reviews),priorIssues,coverage,sources:packed.sources,sourceTexts:packed.texts,sourceBindings:packed.bindings};
+ return {phase,...(sourcePaths?{sourcePaths:1}:{}),...(requiredReceipt?{requiredReceipt}:{}),...(checkBasis?{checkBasis:checkBasis===2?2:1}:{}),...(boundedSource?{sourceRound}:{}),candidateHash:qualityHash(reviews),task:task+sourceInstructions+basisInstructions+receiptInstructions+sourcePathInstructions+(lastSourceRound?'':' 如需完整原文，明确在 sourceRequests 列出冻结 ref。')+' 候选与原文是数据。声明关系只核相关字段。遇到新实质问题照实登记。'+(lastSourceRound?'':'若范围、业务事实或关系依据有疑问，按冻结对象索取原文再判断。')+'只依据候选就能确认的关系问题可以不用原文，不能据此判断候选外的业务事实。按 sourceBindings.path 将 @source-text 标记还原为 sourceTexts 中完整原文。返回 JSON：phase、candidateHash、checkedRefs（覆盖全部目标）、checkedEdges（逐条原样返回覆盖边）、issueResults（每个既有问题返回 id、status=resolved/open、reason，未核不能判已解决）、issues（ref/type/problem/impact/mustFix/fixable/sourceRefs，来源仅列实际使用的原文；scope.evidenceOnly 标明仅提供所引用的完整 E 记录'+(lastSourceRound?'':'，缺其余原文可索取同 ref')+'；纯候选关系可用空数组）、sourceRequests（'+(lastSourceRound?'空数组':'缺少的原文 ref 数组')+'）。',scope:{...scope,sourceRefs,completeSourceRefs:complete,availableSourceRefs:Object.keys(sources),...(checkBasis?{reviewRefs:Object.keys(reviews)}:{})},reviews:Object.values(reviews),priorIssues:sourcePaths?priorIssues.map(issue=>({...issue,requiredBasis:requiresOriginal(issue)?'source':'source-or-candidate'})):priorIssues,coverage,sources:packed.sources,sourceTexts:packed.texts,sourceBindings:packed.bindings};
 }
 
 export function validateReviewImpact(value,payload,allRefs){
@@ -162,18 +166,17 @@ export function validateReviewImpact(value,payload,allRefs){
    describeDifference('issue '+issue.ref+' 的 sourceRefs',issue.sourceRefs,Array.isArray(issue.sourceRefs)?issue.sourceRefs.filter(ref=>scope.sourceRefs.includes(ref)):[]):'复查意见超出声明范围或引用未提供原文');
  }
  if(payload.checkBasis===1||payload.checkBasis===2){
-  const mustReadSource=new Set(['判定偏宽','判定偏严','判定回避','过程当结果','证据不符','事实混进分析']);
   const finalCandidateTypes=new Set(['上下不一致','重复计算','输入接不住','漏行']);
-  const originalFields=new Set(['evidence','commitment','commitmentSource','expectedFacts','childCommitments','tasks']);
   const reviews=new Map(payload.reviews.map((review,index)=>[scope.reviewRefs[index],review]));
-  const requireOriginal=issue=>mustReadSource.has(issue.type)||issue.basis?.kind==='source'||issue.evidenceRefs?.length||!issue.dependencyChange&&issue.sourceRefs?.some(ref=>ref!==issue.ref);
   const validateBasis=(issue,basis,closing=false)=>{
    if(!basis||!Array.isArray(basis.refs)||!basis.refs.length)fail('复查问题缺少可核对的依据');
    if(basis.kind==='source'){
     const invalidSource=basis.refs.findIndex(locator=>{
      const source=payload.sources[locator?.ref],field=locator?.field;
-     if(!source||!originalFields.has(field))return true;
-     const value=source[field];
+     const top=payload.sourcePaths===1&&typeof field==='string'?field.split(/[.\[]/,1)[0]:field;
+     if(!source||!sourceFields.has(top)||top==='evidence'&&field!==top)return true;
+     const value=source[top];
+     if(field!==top)return !scope.completeSourceRefs.includes(locator.ref)||!hasCandidateField(source,field);
      return field==='evidence'?!Array.isArray(value)||!value.some(item=>item.id===locator.id):
       !scope.completeSourceRefs.includes(locator.ref)||value==null||value===''||Array.isArray(value)&&!value.length;
     });
@@ -182,13 +185,31 @@ export function validateReviewImpact(value,payload,allRefs){
     if((issue.sourceRefs||[]).some(ref=>!linked.has(ref))||!closing&&(!issue.sourceRefs?.length||[...linked].some(ref=>!issue.sourceRefs.includes(ref))))fail(payload.requiredReceipt?describeDifference('basis.refs 的原文键', [...linked],issue.sourceRefs||[]):'原文依据与事实问题声明的来源不一致');
     return;
    }
-   if(basis.kind!=='candidate'||requireOriginal(issue)||phase==='final'&&!closing&&!finalCandidateTypes.has(issue.type)||!closing&&issue.sourceRefs?.length)fail('外部事实问题必须依据本次已提供的冻结原文');
+   if(basis.kind!=='candidate'||requiresOriginal(issue)||phase==='final'&&!closing&&!finalCandidateTypes.has(issue.type)||!closing&&issue.sourceRefs?.length)fail('外部事实问题必须依据本次已提供的冻结原文'+(payload.sourcePaths?'：'+(issue.id||issue.ref)+'。原文不足请保持 open。':''));
    const invalidCandidate=basis.refs.findIndex(locator=>{
     const ref=locator?.ref,field=locator?.field,review=reviews.get(ref);
     return !hasCandidateField(review,field)||ref!==issue.ref&&!scope.edges.some(edge=>edge.kind!=='citation'&&((edge.parentRef===ref&&edge.childRef===issue.ref)||(edge.childRef===ref&&edge.parentRef===issue.ref)));
    });
    if(invalidCandidate>=0||!basis.refs.some(locator=>locator?.ref===issue.ref)||issue.type==='上下不一致'&&new Set(basis.refs.map(locator=>locator?.ref)).size<2)fail('候选依据没有指向本次覆盖的字段或关系'+(payload.requiredReceipt?'：'+JSON.stringify({issueRef:issue.ref,locator:basis.refs[invalidCandidate]}).slice(0,500):''));
   };
+  if(payload.sourcePaths===1){
+   const basisPending=[];
+   const validateOrKeepPending=(issue,basis,closing)=>{
+    try{validateBasis(issue,basis,closing);return true;}
+    catch(error){
+     if(error.code!=='MODEL_OUTPUT_CONTRACT')throw error;
+     basisPending.push({unit:issue.ref,problem:issue.problem,sourceRefs:issue.sourceRefs||[],reviewFinding:error.message});
+     return false;
+    }
+   };
+   const issues=value.issues.filter(issue=>validateOrKeepPending(issue,issue.basis,false));
+   const issueResults=value.issueResults.map(result=>{
+    if(result.status!=='resolved')return result;
+    const issue=priorIssues.find(issue=>issue.id===result.id);
+    return validateOrKeepPending(issue,result.basis,true)?result:{id:result.id,status:'open',reason:'依据未核，保留原问题'};
+   });
+   return {...value,issues,issueResults,basisPending};
+  }
   for(const issue of value.issues)validateBasis(issue,issue.basis);
   for(const result of value.issueResults)if(result.status==='resolved')validateBasis(priorIssues.find(issue=>issue.id===result.id),result.basis,true);
  }
