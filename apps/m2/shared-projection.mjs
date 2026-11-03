@@ -11,6 +11,30 @@ import {reviewDueAt} from './review-round.mjs';
 export function memberActor(id,state){const p=memberProfiles[id];if(!p)throw Object.assign(Error('请选择名单中的试用成员'),{status:400});const missions=state?.round?Object.values(state.cards).filter(c=>c.level==='mission'&&c.kind!=='review'&&ownerName(currentVersion(c).content.owner)===p.name).map(c=>c.id):p.missions;// Whoever owns a 个人复盘 is in that unit's group (2026-10-27): they read the unit review and the unit's other 个人复盘, read-only.
  const reviewUnits=state?Object.values(state.cards).filter(c=>c.kind==='review'&&c.level==='mission'&&String(currentVersion(c).content.owner||'').split(/[、,，\s]+/).includes(p.name)).map(c=>c.unit):[];
  return {id,name:p.name,ceo:p.ceo,visibleUnits:[...new Set([...(p.units||[]),...missions.map(id=>state?.cards[id]?.unit).filter(Boolean),...reviewUnits])],unitDri:p.unitDri,missionDri:missions};}
+const reviewRef=ref=>typeof ref==='string'?ref.replace(/^rv:/,''):null;
+function visibleReviewIssues(issues,cards,diagnostics=[]){
+ const refs=new Set(cards.filter(card=>card.kind==='review').map(card=>reviewRef(card.id)));
+ const visible=ref=>refs.has(reviewRef(ref));
+ const listVisible=(list,allowed)=>list==null||Array.isArray(list)&&list.every(allowed);
+ const canSee=issue=>{
+  const targets=[issue?.ref,issue?.unit,issue?.cardId].filter(Boolean);
+  return targets.length>0&&targets.every(visible)&&
+   listVisible(issue.sourceRefs,visible)&&
+   listVisible(issue.basis?.refs,locator=>visible(locator?.ref))&&
+   listVisible(issue.evidenceRefs,locator=>visible(locator?.ref));
+ };
+ return (issues||[]).filter(issue=>canSee(issue)&&!diagnostics.some(check=>
+  (check?.unit||check?.ref)===issue.ref&&check.problem===issue.reason&&!canSee(check))).map(issue=>Object.fromEntries(['ref','unit','cardId','kind','title','reason','problem','type','impact','verificationPending']
+  .filter(key=>typeof issue[key]==='string'||typeof issue[key]==='boolean').map(key=>[key,issue[key]])));
+}
+export function reviewJobProjection(state,actor,job,operator=false){
+ if(!job||operator)return job;
+ const cards=Object.values(state.cards).filter(card=>canRead(actor,card,state));
+ const {id,status,qualityStatus,done,total,period,cutoff,createdAt,finishedAt,skill}=job;
+ return {id,status,qualityStatus,done,total,period,cutoff,createdAt,finishedAt,skill,
+  checks:status==='done'?visibleReviewIssues(job.checks,cards):[],
+  warnings:status==='done'?visibleReviewIssues(job.warnings,cards):[]};
+}
 export function sharedProjection(state,actor){
  const cards=Object.values(state.cards).filter(c=>canRead(actor,c,state));
  // A review whose verdict was changed says from what, to what and by whom (评测 2026-10-22), so a signer sees it at once.
@@ -31,5 +55,5 @@ export function sharedProjection(state,actor){
  const nexus=Object.fromEntries([...scopes].filter(id=>drafts[id]||roomMember(id)===actor.id).map(id=>[id,{...state.nexus?.[id],topics:materializeTopics(state.nexus?.[id]?.topics,(records['group:'+id]||[]).filter(r=>r.kind!=='revision-proposal'))}]));
  // 管理 is for the CEO and the round operators (DECODING_ROUND_OPERATORS / M2_ROUND_OPERATORS; 陈溪南 by default).
  const operators=(process.env.DECODING_ROUND_OPERATORS??process.env.M2_ROUND_OPERATORS??'member-04').split(',').map(s=>s.trim()).filter(Boolean);
- return {reviewRooms,operator:actor.ceo===true||operators.includes(actor.id),memberId:actor.id,sequence:state.sequence,drafts,comments,records,nexus,pausedUnits:state.pausedUnits||[],planHandoff:state.planHandoff?{status:state.planHandoff.status,requestedAt:state.planHandoff.requestedAt,preparedAt:state.planHandoff.preparedAt,dryRun:state.planHandoff.dryRun,fromPeriod:state.planHandoff.package?.fromPeriod,forPeriod:state.planHandoff.package?.forPeriod,units:state.planHandoff.package?.units?.length||0,inputs:(state.planHandoff.package?.units||[]).reduce((n,u)=>n+(u.po?.nextInputs?.length||0)+u.missions.reduce((m,x)=>m+(x.nextInputs?.length||0),0),0)+(state.planHandoff.package?.company?.nextInputs?.length||0),...(actor.ceo?{package:state.planHandoff.package}:{})}:null,review:state.reviewRound?{qualityStatus:state.reviewRound.qualityStatus,label:state.reviewRound.label,skill:state.reviewRound.skill,period:state.reviewRound.period,cutoff:state.reviewRound.cutoff,loadedAt:state.reviewRound.loadedAt,dueAt:reviewDueAt(state.reviewRound),sample:state.reviewRound.sample===true,problems:state.reviewRound.problems||[],skipped:state.reviewRound.skipped||[]}:null,round:state.round?{id:state.round.id,number:state.round.number,generatedAt:state.round.input?.generationTiming?.finishedAt||null,units:state.round.units.filter(u=>canRead(actor,state.cards[u.id],state)),readerViews:visibleReaderViews(state.round.readerViews||state.round.input?.readerViews,state,actor),sourceTime:state.round.input.retrievedAt}:null,missions:actor.missionDri,visibleUnits:actor.ceo?null:actor.visibleUnits};
+ return {reviewRooms,operator:actor.ceo===true||operators.includes(actor.id),memberId:actor.id,sequence:state.sequence,drafts,comments,records,nexus,pausedUnits:state.pausedUnits||[],planHandoff:state.planHandoff?{status:state.planHandoff.status,requestedAt:state.planHandoff.requestedAt,preparedAt:state.planHandoff.preparedAt,dryRun:state.planHandoff.dryRun,fromPeriod:state.planHandoff.package?.fromPeriod,forPeriod:state.planHandoff.package?.forPeriod,units:state.planHandoff.package?.units?.length||0,inputs:(state.planHandoff.package?.units||[]).reduce((n,u)=>n+(u.po?.nextInputs?.length||0)+u.missions.reduce((m,x)=>m+(x.nextInputs?.length||0),0),0)+(state.planHandoff.package?.company?.nextInputs?.length||0),...(actor.ceo?{package:state.planHandoff.package}:{})}:null,review:state.reviewRound?{qualityStatus:state.reviewRound.qualityStatus,label:state.reviewRound.label,skill:state.reviewRound.skill,period:state.reviewRound.period,cutoff:state.reviewRound.cutoff,loadedAt:state.reviewRound.loadedAt,dueAt:reviewDueAt(state.reviewRound),sample:state.reviewRound.sample===true,problems:visibleReviewIssues(state.reviewRound.problems,cards,state.reviewJob?.checks||[]),skipped:state.reviewRound.skipped||[]}:null,round:state.round?{id:state.round.id,number:state.round.number,generatedAt:state.round.input?.generationTiming?.finishedAt||null,units:state.round.units.filter(u=>canRead(actor,state.cards[u.id],state)),readerViews:visibleReaderViews(state.round.readerViews||state.round.input?.readerViews,state,actor),sourceTime:state.round.input.retrievedAt}:null,missions:actor.missionDri,visibleUnits:actor.ceo?null:actor.visibleUnits};
 }

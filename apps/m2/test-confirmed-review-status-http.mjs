@@ -6,6 +6,19 @@ function seed(status='未达成'){return installReviewRound(createCollaborationS
 
 const dir=await mkdtemp(join(tmpdir(),'m2-confirmed-http-')),state=seed();
 state.round={id:'confirmed-http',number:1,units:[{id:'method',level:'po',children:[]}],input:{sources:[]}};
+state.reviewRound.qualityStatus='check-incomplete';
+state.reviewRound.problems=[
+ {ref:'method-m1',kind:'unresolved',reason:'VISIBLE_REVIEW_DIAGNOSTIC'},
+ {ref:'company',kind:'unresolved',reason:'PRIVATE_COMPANY_DIAGNOSTIC'},
+ {ref:'method-m1',kind:'unresolved',reason:'PRIVATE_CROSS_SOURCE'},
+ {ref:'global',kind:'unresolved',reason:'PRIVATE_GLOBAL_DIAGNOSTIC'},
+];
+state.reviewJob={id:'review-test',status:'done',qualityStatus:'check-incomplete',error:'PRIVATE_GLOBAL_DIAGNOSTIC',checks:[
+ {unit:'method-m1',problem:'VISIBLE_REVIEW_DIAGNOSTIC',checks:[{unit:'company',problem:'PRIVATE_NESTED_DIAGNOSTIC'}],lastFailure:{message:'PRIVATE_FAILURE_DIAGNOSTIC'}},
+ {unit:'method-m1',problem:'PRIVATE_CROSS_SOURCE',sourceRefs:['company']},
+ {unit:'company',problem:'PRIVATE_COMPANY_DIAGNOSTIC'},
+ {unit:'global',problem:'PRIVATE_GLOBAL_DIAGNOSTIC',checks:[{unit:'company',problem:'PRIVATE_NESTED_DIAGNOSTIC'}]},
+],warnings:[{ref:'company',problem:'PRIVATE_WARNING'}]};
 await writeFile(join(dir,'bootstrap.json'),JSON.stringify({schemaVersion:1,state}));await writeFile(join(dir,'accounts.json'),JSON.stringify({schemaVersion:1,bindings:[{personId:'owner',memberId:'member-03'},{personId:'dri',memberId:'member-02'},{personId:'ceo',memberId:'member-01'}]}));
 const auth=createServer((req,res)=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify({authenticated:true,personId:req.headers.cookie?.replace('warmap_session=',''),role:'member'}));});await new Promise(r=>auth.listen(0,'127.0.0.1',r));
 Object.assign(process.env,{NODE_ENV:'test',LANGSMITH_TRACING:'false',DECODING_DISABLE_LOCAL_KEY:'1',PUBLIC_ORIGIN:'http://trial.example',M2_AUTH_API_URL:`http://127.0.0.1:${auth.address().port}/api/auth/session`,M2_ACCOUNT_MAP_FILE:join(dir,'accounts.json'),M2_INTERNAL_TOKEN:'synthetic-internal-token-at-least-32-characters',M2_SEED_DIR:dir,DECODING_STATE_PATH:join(dir,'state.json')});delete process.env.DECODING_API_KEY;delete process.env.TOKENHUB_API_KEY;delete process.env.DECODING_API_KEY_FILE;delete process.env.TKOS_WORLD_PRODUCT_TOKEN;
@@ -27,4 +40,18 @@ test('真实HTTP：无模型也在确认事务出单行卡，PO DRI接受；修�
  assert.equal((await action('owner',{type:'confirm',cardId:id,baseVersion:3,slot:'missionDri'})).status,200);
  s=await saved();p=s.proposals.find(p=>p.confirmedMission&&p.status==='pending');assert.ok(p);const accept={type:'acceptProposal',cardId:po,proposalId:p.id},before=await readFile(join(dir,'state.json'),'utf8'),challenge=await action('dri',accept);assert.equal(challenge.status,409);assert.equal(challenge.data.code,'RECONFIRM_REQUIRED');assert.equal(await readFile(join(dir,'state.json'),'utf8'),before,'取消即不重发，原state字节不动');assert.equal((await action('ceo',accept,challenge.data.reconfirmToken)).status,409);assert.equal((await action('dri',accept,challenge.data.reconfirmToken)).status,200);
  s=await saved();assert.equal(s.cards[po].versions.at(-1).content.facts[0].status,'部分达成');assert.equal(s.cards[po].versions.at(-1).content.verdict,'未达成');assert.equal(s.cards[po].versions.at(-1).signatures.length,0);assert.equal(s.cards[po].versions.at(-2).signatures.length,1);
+});
+
+test('真实HTTP：普通成员只读可见复盘的待核详情，CEO 保有管理诊断',async()=>{
+ for(const path of ['/api/collaboration?member=member-01','/api/reviews?member=member-01']){
+  const ordinary=await call('owner',path);
+  assert.equal(ordinary.status,200);
+  assert.match(JSON.stringify(ordinary.data),/VISIBLE_REVIEW_DIAGNOSTIC/);
+  assert.doesNotMatch(JSON.stringify(ordinary.data),/PRIVATE_(COMPANY|CROSS|GLOBAL|NESTED|FAILURE|WARNING)/);
+  assert.equal((ordinary.data.job||ordinary.data.review).qualityStatus,'check-incomplete');
+ }
+ const admin=await call('ceo','/api/reviews');
+ assert.equal(admin.status,200);
+ assert.match(JSON.stringify(admin.data),/PRIVATE_COMPANY_DIAGNOSTIC/);
+ assert.match(JSON.stringify(admin.data),/PRIVATE_NESTED_DIAGNOSTIC/);
 });
