@@ -180,3 +180,55 @@ test('scoped check and its source request share three model attempts across cach
  assert.deepEqual(calls,['first','first','last']);
  assert.deepEqual(Object.values(resumed.quality.requests).map(r=>r.attempts.map(a=>a.attempt)),[[1,2],[3]]);
 });
+
+test('GPT repair time carries across source requests and a restored journal, without affecting other cards',async()=>{
+ let clock=0;
+ const calls=[],quality={requests:{},sourceHash:'source',skillHash:'skill'};
+ const run={raw:{},outputPolicy:{gptRepairTimeBudget:{attemptMs:150000,totalMs:330000}}};
+ const gateway={status:{model:'wangsu/gpt-6.1-sol'},complete:async(_messages,{timeoutMs,signal,onTransportTiming})=>{
+  assert.ok(signal instanceof AbortSignal);
+  calls.push(timeoutMs);
+  onTransportTiming({headersMs:12,firstByteMs:18});
+  clock+=calls.length===1?97000:timeoutMs;
+  if(calls.length===2)throw new DOMException('timeout','TimeoutError');
+  return {answer:'{"review":{}}'};
+ }};
+ const args={gateway,system:'JSON',quality,run,pass:0,ref:'m',payload:{unit:{id:'m'},revision:1,candidateHash:'candidate'},now:()=>clock,save:async()=>{}};
+ await qualityModelCall({...args,stage:'revise'});
+ const restored=structuredClone({run,quality});
+ await qualityModelCall({...args,...restored,stage:'revise-source',payload:{...args.payload,sourceScope:{sourceRefs:['m','source']}}});
+ await qualityModelCall({...args,...restored,stage:'revise',ref:'peer',payload:{...args.payload,unit:{id:'peer'}}});
+ assert.deepEqual(calls,[150000,150000,83000,150000]);
+ assert.deepEqual(Object.values(restored.quality.requests)[1].attempts.map(a=>a.timeBudget),[
+  {reservedMs:150000,elapsedMs:150000},{reservedMs:83000,elapsedMs:83000},
+ ]);
+ assert.deepEqual(Object.values(restored.quality.requests)[1].attempts[1].transportTiming,{headersMs:12,firstByteMs:18});
+});
+
+test('exhausted repair time stops before another call, and frozen old repairs keep their original timeout',async()=>{
+ let clock=0;
+ const calls=[],quality={requests:{},sourceHash:'source',skillHash:'skill'};
+ const gateway={status:{model:'wangsu/gpt-6.1-sol'},complete:async(_messages,{timeoutMs})=>{
+  calls.push(timeoutMs);clock+=165000;
+  throw Object.assign(Error('offline'),{providerStatus:503});
+ }};
+ const args={gateway,system:'JSON',quality,run:{raw:{},outputPolicy:{gptRepairTimeBudget:{attemptMs:150000,totalMs:330000}}},pass:0,stage:'revise',ref:'m',payload:{unit:{id:'m'},revision:1,candidateHash:'candidate'},now:()=>clock,save:async()=>{}};
+ await assert.rejects(qualityModelCall(args),{code:'REVIEW_REPAIR_TIME_BUDGET'});
+ await assert.rejects(qualityModelCall({...args,...structuredClone({quality,run:args.run})}),{code:'REVIEW_REPAIR_TIME_BUDGET'});
+ assert.deepEqual(calls,[150000,150000]);
+ let oldTimeout;
+ await qualityModelCall({...args,quality:{...quality,requests:{}},run:{raw:{}},gateway:{...gateway,complete:async(_messages,{timeoutMs})=>{oldTimeout=timeoutMs;return {answer:'{}'};}}});
+ assert.equal(oldTimeout,900000);
+});
+
+test('cancelled GPT repair persists elapsed time and does not retry',async()=>{
+ const controller=new AbortController(),quality={requests:{},sourceHash:'source',skillHash:'skill'};
+ const run={raw:{},outputPolicy:{gptRepairTimeBudget:{attemptMs:150000,totalMs:330000}}};
+ let clock=0,calls=0;
+ const gateway={status:{model:'wangsu/gpt-6.1-sol'},complete:async(_messages,{signal})=>{
+  calls++;clock=44000;controller.abort(new DOMException('stopped','AbortError'));signal.throwIfAborted();
+ }};
+ await assert.rejects(qualityModelCall({gateway,system:'JSON',quality,run,pass:0,stage:'revise',ref:'m',payload:{unit:{id:'m'},revision:1,candidateHash:'candidate'},signal:controller.signal,now:()=>clock,save:async()=>{}}),{name:'AbortError'});
+ assert.equal(calls,1);
+ assert.deepEqual(Object.values(quality.requests)[0].attempts[0].timeBudget,{reservedMs:150000,elapsedMs:44000});
+});

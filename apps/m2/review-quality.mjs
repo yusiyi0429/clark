@@ -9,10 +9,11 @@ const clone=value=>structuredClone(value);
 const abort=signal=>signal?.throwIfAborted();
 const DEFERRED=Symbol('review-action-deferred');
 export const deferReviewAction=detail=>({[DEFERRED]:detail});
-export const isReviewResourceLimit=error=>['REVIEW_PACKET_OVERSIZE','REVIEW_MODEL_ATTEMPT_LIMIT','REVIEW_SOURCE_REQUEST_BUDGET','REVIEW_SOURCE_CONTEXT_PENDING','REVIEW_SOURCE_REQUEST_REPEAT','REVIEW_SOURCE_REQUEST_CONTRACT','MODEL_REFUSAL','MODEL_OUTPUT_CONTRACT','MODEL_OUTPUT_INCOMPLETE'].includes(error?.code)||error?.reviewOutputContract===true||error?.name==='TimeoutError'||!!error?.providerStatus;
+export const GPT_REPAIR_TIME_BUDGET=Object.freeze({attemptMs:150000,totalMs:330000});
+export const isReviewResourceLimit=error=>['REVIEW_REPAIR_TIME_BUDGET','REVIEW_PACKET_OVERSIZE','REVIEW_MODEL_ATTEMPT_LIMIT','REVIEW_SOURCE_REQUEST_BUDGET','REVIEW_SOURCE_CONTEXT_PENDING','REVIEW_SOURCE_REQUEST_REPEAT','REVIEW_SOURCE_REQUEST_CONTRACT','MODEL_REFUSAL','MODEL_OUTPUT_CONTRACT','MODEL_OUTPUT_INCOMPLETE'].includes(error?.code)||error?.reviewOutputContract===true||error?.name==='TimeoutError'||!!error?.providerStatus;
 // Cache only verified answers. Every attempt (including malformed output) is
 // retained, independently of the two-per-card semantic revision budget.
-export async function qualityModelCall({gateway,system,quality,run,pass,stage,ref='',payload,validate=x=>x,save,signal,maxBodyBytes=REVIEW_BODY_LIMIT_BYTES,maxTokens=32000,reasoningEffort='high'}){
+export async function qualityModelCall({gateway,system,quality,run,pass,stage,ref='',payload,validate=x=>x,save,signal,maxBodyBytes=REVIEW_BODY_LIMIT_BYTES,maxTokens=32000,reasoningEffort='high',now=()=>performance.now()}){
  if(maxTokens!==32000&&!(stage==='check'&&maxTokens===64000))throw Error('仅完整检查允许64k输出预算，初稿与修订保持32k');
  if(reasoningEffort!=='high'&&!(stage==='check'&&reasoningEffort==='medium'))throw Error('仅完整检查允许medium推理');
  const callOptions={json:true,thinking:true,reasoningEffort,maxTokens},optionIdentity=maxTokens===32000&&reasoningEffort==='high'?{}:{callOptions};
@@ -29,6 +30,8 @@ export async function qualityModelCall({gateway,system,quality,run,pass,stage,re
  request??=quality.requests[key]={inputHash,model,...policy,...optionIdentity,sourceHash:quality.sourceHash,skillHash:quality.skillHash,pass,stage,ref,payload:clone(payload),attempts:[]};
  const route=new Map([[model,gateway],...backups.map(g=>[g.status.model,g])]);
  const groupedRepair=/^(?:revise|refresh)(?:-source)?$/.test(stage)&&payload.unit?.id&&Number.isInteger(payload.revision);
+ const timeBudget=groupedRepair?run.outputPolicy?.gptRepairTimeBudget:undefined;
+ if(timeBudget&&qualityHash(timeBudget)!==qualityHash(GPT_REPAIR_TIME_BUDGET))throw Error('GPT 修订时限合同不受支持');
  const groupedCheck=stage==='check'&&['impact','final'].includes(payload.phase)&&['first','last'].includes(payload.sourceRound)&&typeof payload.candidateHash==='string';
  const grouped=groupedRepair||groupedCheck;
  const sameAction=r=>r.pass===pass&&r.payload?.candidateHash===payload.candidateHash&&r.sourceHash===quality.sourceHash&&r.skillHash===quality.skillHash&&
@@ -43,15 +46,24 @@ export async function qualityModelCall({gateway,system,quality,run,pass,stage,re
  if(grouped)request.attemptGroup={pass,...(groupedCheck?{phase:payload.phase}:{ref:payload.unit.id,revision:payload.revision}),candidateHash:payload.candidateHash};
  request.status='running';await save(run);
  for(let attempt=used+1;attempt<=3;attempt++){
-  abort(signal);verifyRequest();const record={attempt,at:new Date().toISOString(),requestedModel:active.status?.model||null,requestedAlias:active.status?.model||null,api:reviewModelApi(active.status?.model),options:clone(callOptions),switchFrom:prior?.switchFrom||null,switchReason:prior?.switchReason||null};request.attempts.push(record);await save(run);
+  abort(signal);verifyRequest();
+  const timed=timeBudget&&active.status?.model==='wangsu/gpt-6.1-sol';
+  const spent=timed?history.reduce((sum,entry)=>sum+(entry.timeBudget?.elapsedMs??entry.timeBudget?.reservedMs??0),0):0;
+  const timeoutMs=timed?Math.min(timeBudget.attemptMs,timeBudget.totalMs-spent):900000;
+  if(timeoutMs<=0)throw Object.assign(Error('本卡 GPT 修订及补源时间已用完，保留待核候选'),{code:'REVIEW_REPAIR_TIME_BUDGET'});
+  const record={attempt,at:new Date().toISOString(),requestedModel:active.status?.model||null,requestedAlias:active.status?.model||null,api:reviewModelApi(active.status?.model),options:clone(callOptions),switchFrom:prior?.switchFrom||null,switchReason:prior?.switchReason||null};if(timed)record.timeBudget={reservedMs:timeoutMs};request.attempts.push(record);if(grouped)history.push(record);await save(run);
   verifyRequest();
-  let answer,error,parsed;
+  let answer,error,parsed,started;
   try{
    if(backups.length||grouped&&quality.qualityFallback){const actual=Buffer.byteLength(JSON.stringify(reviewModelRequestBody(system,request.payload,{model:active.status.model,...record.options})));if(actual>maxBodyBytes)throw Object.assign(Error('实际模型完整请求体超过本次工程预算，未调用'),{code:'REVIEW_PACKET_OVERSIZE',actual});record.bodyBytes=actual;record.bodyBudgetBytes=maxBodyBytes;}
-   answer=await active.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(request.payload)}],{...callOptions,timeoutMs:900000,signal,trace:{name:key,stage,metadata:{ref,pass,inputHash,sourceHash:quality.sourceHash,maxTokens}}});
+   const attemptSignal=timed?AbortSignal.any([...(signal?[signal]:[]),AbortSignal.timeout(timeoutMs)]):signal;
+   if(timed)started=now();
+   answer=await active.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(request.payload)}],{...callOptions,timeoutMs,signal:attemptSignal,...(timed?{onTransportTiming:timing=>{record.transportTiming=timing;}}:{}),trace:{name:key,stage,metadata:{ref,pass,inputHash,sourceHash:quality.sourceHash,maxTokens}}});
    record.raw=answer.rawAnswer??answer.answer;record.usage=answer.usage;record.gatewayModel=answer.model||null;record.returnedModel=answer.returnedModel??null;record.providerRequestId=answer.providerRequestId||null;record.finishReason=answer.finishReason||null;record.finishReasonSource=answer.finishReasonSource||null;
+   if(timed)attemptSignal.throwIfAborted();
    try{parsed=validate(JSON.parse(bareJson(answer.answer)));}catch(error){error.reviewOutputContract=true;throw error;}
   }catch(e){error=e;record.error=String(e.message);record.errorCode=e.code||null;record.raw??=e.rawAnswer??e.partialAnswer??null;record.providerRequestId??=e.providerRequestId||null;record.returnedModel??=e.diagnostics?.returnedModel??null;record.finishReason??=e.diagnostics?.providerFinishReason||e.diagnostics?.finishReason||null;record.finishReasonSource??=e.diagnostics?.finishReasonSource||null;record.finishedAt=new Date().toISOString();}
+  if(timed)record.timeBudget.elapsedMs=started===undefined?0:Math.max(0,Math.ceil(now()-started));
   if(!error){run.raw[key]=answer.answer;request.outputHash=qualityHash(answer.answer);request.status='done';request.selectedAlias=record.requestedAlias;request.returnedModel=record.returnedModel;request.actualApi=record.api;record.finishedAt=new Date().toISOString();await save(run);return parsed;}
   let switched=false;
   if(!signal?.aborted&&attempt<3&&backups.length&&active===gateway&&fallbackEligible(error)){record.nextModel=backups[0].status.model;record.switchFrom=active.status.model;record.switchReason={code:error.code||null,message:String(error.message),providerStatus:error.providerStatus||null,outputContract:error.reviewOutputContract===true};active=backups[0];switched=true;}

@@ -73,11 +73,16 @@ async function readLocalKey(){
 // The documented HTTP exception is restricted to the team's exact TokenHub endpoint.
 // A non-streamed answer can take many minutes before its first byte; fetch gives up on headers after five,
 // so these calls use node:http with keep-alive and rely on the caller's overall timeout instead.
-export function patientTransport(url,{method,headers,body,signal}){
+export function patientTransport(url,{method,headers,body,signal,onTransportTiming}){
  return new Promise((resolve,reject)=>{
-  const target=new URL(url);
+  const target=new URL(url),startedAt=performance.now();
   const req=(target.protocol==='https:'?httpsRequest:httpRequest)(target,{method,headers},res=>{
-   const chunks=[];res.on('data',c=>chunks.push(c));res.on('error',reject);
+   const headersMs=Math.round(performance.now()-startedAt);
+   onTransportTiming?.({headersMs,firstByteMs:null});
+   const chunks=[];res.on('data',c=>{
+    if(!chunks.length)onTransportTiming?.({headersMs,firstByteMs:Math.round(performance.now()-startedAt)});
+    chunks.push(c);
+   });res.on('error',reject);
    res.on('end',()=>{const text=Buffer.concat(chunks).toString('utf8');resolve({ok:res.statusCode>=200&&res.statusCode<300,status:res.statusCode,headers:{get:name=>res.headers[name.toLowerCase()]??null},json:async()=>JSON.parse(text),text:async()=>text});});
   });
   req.on('socket',socket=>socket.setKeepAlive(true,30000));
@@ -117,7 +122,7 @@ export async function createModelGateway({env=process.env,readSecretFile=readFil
  const gateway={
   status:{ready:Boolean(key),provider:tokenhub?'TokenHub':ark?'Ark':'OpenAI-compatible',model},
   roundConcurrency:MODEL_PROFILES[model]?.roundConcurrency,
-  async complete(messages,{json=false,maxTokens,timeoutMs=900000,thinking=Boolean(MODEL_PROFILES[model]),reasoningEffort='high',onDelta,signal}={}){
+  async complete(messages,{json=false,maxTokens,timeoutMs=900000,thinking=Boolean(MODEL_PROFILES[model]),reasoningEffort='high',onDelta,signal,onTransportTiming}={}){
    // Chat gateways (Nexus, private Agent) hide sensitive personal details before anything leaves the server.
    if(redact)messages=redactMessages(messages).messages;
    if(!key){const e=Error('服务端未配置模型密钥');e.status=503;throw e;}
@@ -132,7 +137,7 @@ export async function createModelGateway({env=process.env,readSecretFile=readFil
    if(profile?.api==='anthropic')return messagesComplete(requestMessages,{json,maxTokens,timeoutMs,thinking,reasoningEffort,onDelta,signal,startedAt});
    // Personal Agent, Nexus and decoding default to the highest verified DeepSeek effort.
    const send=profile?.stream===false&&transport===fetch?patientTransport:transport;
-   const response=await send(endpoint,{method:'POST',redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model,...(tokenhub&&profile?.stream!==false?{stream:true,stream_options:{include_usage:true}}:{}),...(ark?{thinking:{type:'disabled'}}:{}),...(profile?profile.thinking(thinking,reasoningEffort):{}),[profile?.maxTokensField||'max_tokens']:maxTokens||(thinking?65536:json?4000:2400),...(json?{response_format:{type:'json_object'}}:{}),messages:requestMessages})});
+   const response=await send(endpoint,{method:'POST',redirect:'error',...(send===patientTransport&&onTransportTiming?{onTransportTiming}:{}),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model,...(tokenhub&&profile?.stream!==false?{stream:true,stream_options:{include_usage:true}}:{}),...(ark?{thinking:{type:'disabled'}}:{}),...(profile?profile.thinking(thinking,reasoningEffort):{}),[profile?.maxTokensField||'max_tokens']:maxTokens||(thinking?65536:json?4000:2400),...(json?{response_format:{type:'json_object'}}:{}),messages:requestMessages})});
    if(!response.ok){
     const e=Error(`模型接口返回 ${response.status}，未修改任何卡片。`);e.status=502;e.providerStatus=response.status;
     const retryAfter=Number(response.headers?.get?.('retry-after'));if(Number.isFinite(retryAfter)&&retryAfter>=0)e.retryAfterMs=retryAfter*1000;

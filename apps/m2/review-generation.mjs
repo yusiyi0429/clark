@@ -8,7 +8,7 @@ import {planTableItem} from './review-plan-table.mjs';
 import {stripVerifiedEvidence,citationFacts,referenceMapsForInput,validateIssueSources} from './review-evidence-addresses.mjs';
 import {fullContextCheckContract,buildReviewCheckPlan,refreshReviewCheckPlan,verifyReviewCheckPlan,executeReviewCheckPlan,packSourceText,reviewModelRequestBody,reviewModelBudgetBytes,validateScopedCheckResult,restoreSourceText} from './review-source-plan.mjs';
 import {initialReviewCall,createReviewCallJournal,outputContractError} from './review-call-journal.mjs';
-import {runReviewQuality,qualityModelCall,qualityHash,deferReviewAction} from './review-quality.mjs';
+import {runReviewQuality,qualityModelCall,qualityHash,deferReviewAction,GPT_REPAIR_TIME_BUDGET} from './review-quality.mjs';
 import {frozenAgreedOutcome} from './review-agreed-outcome.mjs';
 import {captureConfirmedFacts,verifyEvidenceBundle,addConfirmedFacts,evidenceHash} from './confirmed-review-evidence.mjs';
 import {reviewTarget,inReviewWindow,reviewDay} from './review-period.mjs';
@@ -756,7 +756,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
     if(!m2ConfirmedSource)throw Error('任务缺已确认人工事实来源快照，请保留原任务并重新准备候选');
     verifyEvidenceBundle(m2ConfirmedSource);
     const sourceInputs={};for(const id of new Set(m2ConfirmedSource.entries.map(e=>e.sourceJobId).filter(Boolean))){try{const previous=JSON.parse(await readFile(workFile(id),'utf8'));if(previous.input)sourceInputs[id]=previous.input;}catch(e){if(e.code!=='ENOENT')throw Error('旧生成来源无法读取：'+id);}}
-    work={skillSnapshot:{version:skill.version,hash:skill.hash},m2ConfirmedSource,sourceInputs,sourceInputsHash:evidenceHash(sourceInputs),run:{modelPolicy:{primary:gateway.status?.model||null,fallbackModels:gateway.reviewFallbacks?.map(g=>g.status.model)||[]},outputPolicy:{initialMaxTokens:32000,checkMaxTokens:64000,revisionMaxTokens:32000,...(skillAtLeast(skill.version,'2.1.15')?{checkFlow:1,scopedCheckSourceBudget:1,scopedCheckBasis:1}:{}),checkReasoningEffort:'medium'},raw:{},reviews:{},failed:[],dropped:[]}};await save();
+    work={skillSnapshot:{version:skill.version,hash:skill.hash},m2ConfirmedSource,sourceInputs,sourceInputsHash:evidenceHash(sourceInputs),run:{modelPolicy:{primary:gateway.status?.model||null,fallbackModels:gateway.reviewFallbacks?.map(g=>g.status.model)||[]},outputPolicy:{initialMaxTokens:32000,checkMaxTokens:64000,revisionMaxTokens:32000,...(skillAtLeast(skill.version,'2.1.15')?{checkFlow:1,scopedCheckSourceBudget:1,scopedCheckBasis:1,gptRepairTimeBudget:GPT_REPAIR_TIME_BUDGET}:{}),checkReasoningEffort:'medium'},raw:{},reviews:{},failed:[],dropped:[]}};await save();
    }
    if(work.m2ConfirmedSource?.hash!==store.snapshot().reviewJob?.m2ConfirmedSource?.hash)throw Error('任务人工事实来源与冻结工作文件不一致');
    if(!work.input){
