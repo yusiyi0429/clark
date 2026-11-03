@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import type { TAcceptMyTaskRequest, TAddTaskCollaboratorsRequest, TCreateMyTaskRequest, TMeetingOutcomeItem, TPatchMyTaskRequest, TReturnMyTaskRequest, TStandaloneMyTaskRequest,
+import type { TAcceptMyTaskRequest, TAddTaskCollaboratorsRequest, TCreateMyTaskRequest, TPatchMyTaskRequest, TReturnMyTaskRequest, TStandaloneMyTaskRequest,
   TTaskAcceptance, TTaskDetailResponse, TTaskProgressSource, TTaskStandardCheck, TTaskSubmission, TTaskView } from "@warmap/contracts";
-import { enqueueJob } from "./jobs.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { insertNotification } from "./notifications.js";
@@ -57,7 +56,7 @@ const TASK_SELECT = `SELECT t.id::text,t.version,t.title,t.status,t.created_by,t
 export const UNPLACED = "t.mission_id IS NULL AND t.created_by IN ('meeting','agent') AND t.standalone_at IS NULL AND t.status NOT IN ('done','returned')";
 const unplacedRow = (row: TaskRow) => row.mission_id === null && (row.created_by === "meeting" || row.created_by === "agent")
   && row.standalone_at === null && row.status !== "done" && row.status !== "returned";
-/** 会后分派没挂上时排一次归位（taskPlacement.ts）：快模型按事项原文在负责人能挂的 Mission 里挑。 */
+/** 会后分派没挂上时排的归位（taskPlacement.ts）：快模型按事项原文在负责人能挂的 Mission 里挑。10/30 起不再会后分派，不再有新的入队，handler 留给已入队的。 */
 export const TASK_PLACE_JOB = "task.place";
 
 const queryOf = (client: PoolClient): Query => (sql, params) => client.query(sql, params);
@@ -142,7 +141,6 @@ export type TaskResult = { task: TTaskView } | { notFound: true } | { conflict: 
 const error = (status: number, code: string, message: string): TaskResult => ({ error: { status, code, message } });
 /** Task 挂在 Mission 下，独立事项没有 Task 可挂。planTaskId 不回本体核对，原样存。 */
 const independentWithTask = error(400, "INVALID_INPUT", "独立事项不能挂 Task");
-const title = (text: string) => Array.from(text).slice(0, 120).join("");
 export const validDate = (value:string):boolean => {
   const parsed=new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0,10)===value;
@@ -496,34 +494,6 @@ export async function addTaskCollaborators(pool: Pool, ownerId: string, taskId: 
   } catch(e) { await client.query("ROLLBACK").catch(()=>undefined); throw e; } finally { client.release(); }
 }
 
-/** 会后推送保持原有幂等和通知规则，同时建立可访问的事项群组。会议卡的行动项没有逐字引用，quote 为 null。 */
-export async function dispatchMeetingTodo(client: PoolClient, meeting: { id:string; leadDriId:string; ceoId:string; ownerName?:string; title?:string; now?:Date }, item:Pick<TMeetingOutcomeItem,"id"|"text"|"ownerPersonId"|"dueDate"> & { quote: string | null }): Promise<string | null> {
-  const ownerId = item.ownerPersonId ?? meeting.leadDriId;
-  if (ownerId === meeting.ceoId) return null;
-  const existing = await client.query<{id:string}>("SELECT id::text FROM tasks WHERE origin_meeting_id=$1 AND origin_item_id=$2",[meeting.id,item.id]);
-  if (existing.rowCount) return existing.rows[0].id;
-  // 会挂在负责人自己能挂的 Mission 上就直接挂；对不上的排一次归位（快模型挑），还挑不出就是待归位。
-  const anchored = (await client.query<{ id: string }>(`SELECT a->>'id' AS id FROM meetings mt, jsonb_array_elements(COALESCE(mt.world_anchors,'[]'::jsonb)) a
-    WHERE mt.id=$1 AND a->>'kind'='mission'`,[meeting.id])).rows;
-  let missionId: string | null = null;
-  for (const anchor of anchored) if (await missionAvailable(queryOf(client),ownerId,anchor.id,meeting.now ?? new Date())) { missionId = anchor.id; break; }
-  const step = await appendStep(client,missionId);
-  const inserted = await client.query<{id:string}>(`INSERT INTO tasks(id,title,due_date,status,owner_id,created_by,origin_meeting_id,origin_item_id,source_quote,mission_id,step_order)
-    VALUES($1,$2,$3,'not_started',$4,'meeting',$5,$6,$7,$8,$9)
-    ON CONFLICT(origin_meeting_id,origin_item_id) WHERE origin_meeting_id IS NOT NULL DO NOTHING RETURNING id::text`,
-  [randomUUID(),title(item.text),item.dueDate ?? null,ownerId,meeting.id,item.id,item.quote,missionId,step]);
-  if (!inserted.rowCount) return (await client.query<{id:string}>("SELECT id::text FROM tasks WHERE origin_meeting_id=$1 AND origin_item_id=$2",[meeting.id,item.id])).rows[0].id;
-  const taskId = inserted.rows[0].id;
-  await client.query("INSERT INTO task_members(task_id,person_id,role,added_by) VALUES($1,$2,'owner','meeting')",[taskId,ownerId]);
-  await client.query("INSERT INTO thread_members(object_type,object_id,person_id,added_by) VALUES('task',$1,$2,'meeting')",[taskId,ownerId]);
-  const mission = missionId ? (await client.query<{ title: string }>("SELECT title FROM missions WHERE id=$1",[missionId])).rows[0]?.title : null;
-  const belonging = mission ? `所属个人任务「${mission}」` : "还没有所属 Mission";
-  const id = await threadMessage(client,taskId,`这个群讨论${meeting.ownerName ?? ownerId}推进的执行事项「${title(item.text)}」（${belonging}${meeting.title ? `，来自会议「${meeting.title}」` : ""}），截止 ${item.dueDate ?? "待定"}。`);
-  await readThrough(client,taskId,ownerId,id);
-  await insertNotification(client,{personId:ownerId,kind:"meeting_action_assigned",objectType:"task",objectId:taskId});
-  if (!missionId) await enqueueJob(queryOf(client),{ kind: TASK_PLACE_JOB, dedupeKey: `${TASK_PLACE_JOB}:${taskId}`, payload: { taskId } });
-  return taskId;
-}
 export async function deleteDispatchedTask(client:PoolClient, taskId:string): Promise<{ok:true}|{ok:false;code:string;message:string}> {
   const locked=await client.query<{status:string}>("SELECT status FROM tasks WHERE id=$1 FOR UPDATE",[taskId]);
   if (locked.rowCount!==1) return {ok:false,code:"TASK_NOT_FOUND",message:"执行事项不存在"};

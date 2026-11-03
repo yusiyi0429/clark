@@ -10,7 +10,7 @@ export const TaskStatus = Type.Union([
   Type.Literal("returned"),
 ]);
 
-/** 执行事项从哪来：会后分派、自己点「+」新建、从本月计划拆出；agent 是外部工具（Codex、Claude Code 等）按用户正在做的事替用户建的。以后加 CEO 指派。 */
+/** 执行事项从哪来：会后分派（10/30 起不再新建，只剩旧数据）、自己点「+」新建、从本月计划拆出；agent 是用户明确要求时外部工具（Codex、Claude Code 等）替用户建的。以后加 CEO 指派。 */
 export const TaskSource = Type.Union([Type.Literal("meeting"), Type.Literal("self"), Type.Literal("plan"), Type.Literal("agent")]);
 
 export const DateOnly = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
@@ -221,14 +221,8 @@ export const MissionCardItemsResponse = Type.Object({
 }, { additionalProperties: false });
 
 /** 成员工作台：参与的本月工作、我负责的执行事项（全部状态，新到旧），以及开着时的个人雷达小组件。 */
-/** 周五 18:00 到周日结束，本周没有外部 Agent 写入的进展时提醒；no_connection 没有有效连接，not_synced 连了但没同步。 */
-export const WeeklySyncReminder = Type.Object(
-  { reason: Type.Union([Type.Literal("no_connection"), Type.Literal("not_synced")]) },
-  { additionalProperties: false },
-);
-
 export const MeHomeResponse = Type.Object(
-  { myTasks: Type.Array(TaskView), work: MemberWork, radar: Type.Union([MemberRadarBrief, Type.Null()]), weeklySync: Type.Union([WeeklySyncReminder, Type.Null()]) },
+  { myTasks: Type.Array(TaskView), work: MemberWork, radar: Type.Union([MemberRadarBrief, Type.Null()]) },
   { additionalProperties: false },
 );
 
@@ -473,7 +467,6 @@ export type TReopenMyTaskRequest = Static<typeof ReopenMyTaskRequest>;
 export type TReturnTaskAcceptanceRequest = Static<typeof ReturnTaskAcceptanceRequest>;
 export type TTaskAcceptanceDraft = Static<typeof TaskAcceptanceDraft>;
 export type TMeHomeResponse = Static<typeof MeHomeResponse>;
-export type TWeeklySyncReminder = Static<typeof WeeklySyncReminder>;
 export type TPatchMyTaskRequest = Static<typeof PatchMyTaskRequest>;
 export type TReturnMyTaskRequest = Static<typeof ReturnMyTaskRequest>;
 export type TNotificationKind = Static<typeof NotificationKind>;

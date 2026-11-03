@@ -7,9 +7,9 @@ import {recordTopic} from './topic-lifecycle.mjs';
 const cards=[{id:'talent',level:'po',version:1,title:'人才 PO',owner:'刘人豪',result:'r'},{id:'talent-m02',level:'mission',version:1,title:'招聘渠道',owner:'于斯一',tier:'P1',result:'r'},{id:'talent-m03',level:'mission',version:1,title:'面试流程',owner:'王创峰',tier:'P2',result:'r'},{id:'talent-m04',level:'mission',version:1,title:'入职',owner:'秦梦怡',result:'r'},{id:'talent-m05',level:'mission',version:1,title:'培训',owner:'唐巨杰',result:'r'}].map(c=>({...c,aliases:cardAliases(c.id)}));
 const po={id:'c1',channel:'group',kind:'document-comment',author:'刘明华',text:'请把成果改成本月招满 5 人，下面的 Mission 跟着改',context:{selection:{id:'talent',version:1},block:'result'}};
 const run=(proposals,evidence=[po])=>validateNexusResult({topics:[],proposals},{cards,evidence,fresh:evidence});
-test('上级批注可以带出下级修订卡，一次最多 4 张',()=>{
+test('上级多项批注可保留超过4张独立修订卡',()=>{
  const r=run([{cardId:'talent-m02',baseVersion:1,basis:'request',sourceIds:['c1'],patch:{result:'渠道支撑招满 5 人'}},{cardId:'talent',baseVersion:1,basis:'request',sourceIds:['c1'],patch:{result:'本月招满 5 人'}},{cardId:'talent-m03',baseVersion:1,basis:'request',sourceIds:['c1'],patch:{result:'面试流程支撑 5 人'}},{cardId:'talent-m04',baseVersion:1,basis:'request',sourceIds:['c1'],patch:{result:'入职 5 人'}},{cardId:'talent-m05',baseVersion:1,basis:'request',sourceIds:['c1'],patch:{result:'培训 5 人'}}]);
- assert.deepEqual(r.proposals.map(p=>p.cardId).sort(),['talent','talent-m02','talent-m03','talent-m04']);
+ assert.deepEqual(r.proposals.map(p=>p.cardId).sort(),['talent','talent-m02','talent-m03','talent-m04','talent-m05']);
 });
 test('Mission 档位可以出卡，只能 P0/P1/P2，PO 不设档位；被拦都写明原因',()=>{
  const ask={...po,id:'c2',text:'请把 M03 改成 P0',context:{selection:{id:'talent-m03',version:1},block:'result'}};

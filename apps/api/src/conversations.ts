@@ -403,7 +403,7 @@ export const CONVERSATION_IDLE_RESTART_MS = 12 * 60 * 60 * 1000;
 
 type MessageRow = { sequence: number; role: string; content: string; references_snapshot: unknown; attachments: TConversationAttachment[];
   run_id: string; created_at: Date; recovery_note: { text?: unknown; detail?: unknown } | null; memory_used: unknown; cards?: unknown;
-  read_scope?: unknown; kind?: string; meta?: { issueId?: unknown; title?: unknown; href?: unknown; answers?: unknown; via?: unknown } | null };
+  read_scope?: unknown; running?: boolean; kind?: string; meta?: { issueId?: unknown; title?: unknown; href?: unknown; answers?: unknown; via?: unknown } | null };
 
 function historyMessage(row: MessageRow): TConversationHistory["messages"][number] {
   const note = row.recovery_note;
@@ -429,25 +429,30 @@ function historyMessage(row: MessageRow): TConversationHistory["messages"][numbe
   };
 }
 
-async function conversationMessages(q: Query, conversationId: string): Promise<TConversationHistory["messages"]> {
+async function conversationMessages(q: Query, conversationId: string, turnTimeoutMs: number): Promise<TConversationHistory["messages"]> {
   const result = await q(
     // 这一轮工具生成的卡记在运行记录里（routes/conversations.ts），随回答一起读回。
+    // running：这一问的那一轮还在写；只认绝对上限之内开始的，api 崩掉时留下的 running 行不算。
     `SELECT m.sequence, m.role, m.content, m.references_snapshot, m.attachments, m.run_id, m.created_at, m.recovery_note, m.memory_used, m.kind, m.meta,
             CASE WHEN m.role = 'assistant' AND m.kind = 'message' THEN r.input_snapshot -> 'cards' END AS cards,
-            CASE WHEN m.role = 'assistant' AND m.kind = 'message' THEN r.input_snapshot -> 'readScope' END AS read_scope
+            CASE WHEN m.role = 'assistant' AND m.kind = 'message' THEN r.input_snapshot -> 'readScope' END AS read_scope,
+            (m.role = 'user' AND r.status = 'running' AND r.started_at > now() - $2::double precision * interval '1 millisecond') AS running
        FROM conversation_messages m
        LEFT JOIN agent_runs r ON r.id = m.run_id
       WHERE m.conversation_id = $1
       ORDER BY m.sequence`,
-    [conversationId],
+    [conversationId, turnTimeoutMs],
   );
-  return (result.rows as MessageRow[]).map(historyMessage);
+  const rows = result.rows as MessageRow[];
+  const lastQuestion = [...rows].reverse().find((row) => row.role === "user");
+  return rows.map((row) => ({ ...historyMessage(row), ...(row === lastQuestion && row.running ? { running: true } : {}) }));
 }
 
-export async function getConversationHistory(q: Query, owner: string, scope: TConversationScope): Promise<TConversationHistory> {
+/** turnTimeoutMs：对话一轮的绝对上限，最后一问的那一轮在这之内开始且还在写时标 running（界面回来据此等它写完）。 */
+export async function getConversationHistory(q: Query, owner: string, scope: TConversationScope, turnTimeoutMs: number): Promise<TConversationHistory> {
   const conversation = await q(MAIN_CONVERSATION_SQL, [owner, scope]);
   const conversationId = conversation.rows[0]?.id as string | undefined;
-  return { scope, messages: conversationId ? await conversationMessages(q, conversationId) : [] };
+  return { scope, messages: conversationId ? await conversationMessages(q, conversationId, turnTimeoutMs) : [] };
 }
 
 /**

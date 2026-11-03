@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TMeetingCardView } from "@warmap/contracts";
-import { confirm, edit, getCard, OWNER, putDraft, ready, setup } from "./meetingCardFixture.js";
+import { CEO, confirm, edit, getCard, HOST, OWNER, putDraft, ready, setup } from "./meetingCardFixture.js";
+import { seedMeetingTodo } from "./helpers.js";
 import { projection, stubWorld } from "./worldFixture.js";
 
-// 行动项（拍板 4）：天枢本地，随整卡确认；确认后没推过的推成执行事项、taskId 回填到草稿和这次的确认快照；不重复推、推完再改不回改；不进本体。
+// 行动项（拍板 4）：天枢本地，随整卡确认存进这次的确认快照；不进本体。10/30 起不再推成执行事项（会后分派关掉），之前推出的 taskId 照旧留着、不回改那件事项。
 
 /** 假本体：挂点 PO（版本 5），记事件照收。 */
 function ontology() {
@@ -35,6 +36,18 @@ function ontology() {
 type Task = { id: string; title: string; owner_id: string; due_date: string | null; origin_item_id: string };
 const tasksOf = async (t: Awaited<ReturnType<typeof setup>>["t"], meetingId: string) =>
   await t.sql("SELECT id::text, title, owner_id, due_date::text, origin_item_id FROM tasks WHERE origin_meeting_id = $1 ORDER BY created_at", [meetingId]) as Task[];
+/** 10/30 之前推出的执行事项（只剩旧数据）：taskId 回填到草稿的这条行动项。 */
+async function legacyTask(t: Awaited<ReturnType<typeof setup>>["t"], meetingId: string): Promise<string> {
+  const client = await t.pool.connect();
+  try {
+    const taskId = (await seedMeetingTodo(client, { id: meetingId, leadDriId: HOST, ceoId: CEO },
+      { id: "act-1", text: "渠道看板接到 v2", ownerPersonId: OWNER, dueDate: "2026-06-30", quote: null }))!;
+    await client.query("UPDATE meeting_cards SET action_items = jsonb_set(action_items, '{0,taskId}', to_jsonb($2::text)) WHERE meeting_id = $1", [meetingId, taskId]);
+    return taskId;
+  } finally {
+    client.release();
+  }
+}
 const stored = async (t: Awaited<ReturnType<typeof setup>>["t"], meetingId: string) => ({
   draft: (await t.sql("SELECT action_items FROM meeting_cards WHERE meeting_id = $1", [meetingId]))[0].action_items as TMeetingCardView["actionItems"],
   snapshots: (await t.sql("SELECT action_items FROM meeting_card_confirmations WHERE meeting_id = $1 ORDER BY revision", [meetingId]))
@@ -43,48 +56,34 @@ const stored = async (t: Awaited<ReturnType<typeof setup>>["t"], meetingId: stri
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("行动项推成执行事项", () => {
-  it("确认后推成执行事项", async () => {
+describe("行动项随整卡确认（10/28 之前的会议卡）", () => {
+  it("确认后行动项进确认快照，不建执行事项、不发「分给你的事」", async () => {
     ontology();
     const { t, host, meetingId } = await setup();
     try {
       const draftVersion = await ready(t, host, meetingId);
       const res = await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
       expect(res.statusCode).toBe(200);
-      const tasks = await tasksOf(t, meetingId);
-      expect(tasks).toHaveLength(1);
-      expect(tasks[0]).toMatchObject({ title: "渠道看板接到 v2", owner_id: OWNER, due_date: "2026-06-30", origin_item_id: "act-1" });
+      expect(await tasksOf(t, meetingId)).toEqual([]);
+      const item = { id: "act-1", text: "渠道看板接到 v2", ownerPersonId: OWNER, dueDate: "2026-06-30", taskId: null };
       const { draft, snapshots } = await stored(t, meetingId);
-      expect(draft[0].taskId).toBe(tasks[0].id);
-      expect(snapshots[0][0].taskId).toBe(tasks[0].id);
+      expect(draft[0]).toMatchObject(item);
+      expect(snapshots).toEqual([[expect.objectContaining(item)]]);
       const view: TMeetingCardView = res.json();
-      expect(view.actionItems[0].taskId).toBe(tasks[0].id);
-      expect(view.confirmed!.actionItems[0].taskId).toBe(tasks[0].id);
-      // 负责人收到派活提醒（沿用会后推送）。
-      expect((await t.sql("SELECT person_id FROM notifications WHERE kind = 'meeting_action_assigned' AND object_id = $1", [tasks[0].id]))).toEqual([{ person_id: OWNER }]);
+      expect(view.confirmed!.actionItems).toEqual([expect.objectContaining(item)]);
+      expect(await t.sql("SELECT 1 FROM notifications WHERE kind = 'meeting_action_assigned'")).toEqual([]);
+      expect(await t.sql("SELECT 1 FROM jobs WHERE kind = 'task.place'")).toEqual([]);
     } finally {
       await t.close();
     }
   });
 
-  it("推出的执行事项没有逐字引用：负责人首页照常打开", async () => {
-    ontology();
-    const { t, host, owner, meetingId } = await setup();
-    try {
-      expect((await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true })).statusCode).toBe(200);
-      const home = await t.app.inject({ method: "GET", url: "/api/me/home", headers: { cookie: owner } });
-      expect(home.statusCode).toBe(200);
-      expect((await t.sql("SELECT source_quote FROM tasks WHERE origin_meeting_id = $1", [meetingId]))[0].source_quote).toBeNull();
-    } finally {
-      await t.close();
-    }
-  });
-
-  it("修改后再确认不重复推；推完再改不回改执行事项", async () => {
+  it("10/30 之前推出的执行事项：修改后再确认，快照照旧带它的 taskId，不回改、不再建", async () => {
     ontology();
     const { t, host, meetingId } = await setup();
     try {
       await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: true });
+      const taskId = await legacyTask(t, meetingId);
       const view = await getCard(t, host, meetingId);
       const draft = structuredClone(view.draft!);
       draft.summary = "改过的摘要。";
@@ -93,19 +92,17 @@ describe("行动项推成执行事项", () => {
       expect(saved.statusCode).toBe(200);
       const res = await confirm(t, host, meetingId, { draftVersion: saved.json().draftVersion, writeToWorld: true, kind: "followup" });
       expect(res.statusCode).toBe(200);
-      const tasks = await tasksOf(t, meetingId);
-      expect(tasks).toHaveLength(1);
-      expect(tasks[0]).toMatchObject({ title: "渠道看板接到 v2", due_date: "2026-06-30" });
+      expect(await tasksOf(t, meetingId)).toEqual([expect.objectContaining({ id: taskId, title: "渠道看板接到 v2", due_date: "2026-06-30" })]);
       const { draft: items, snapshots } = await stored(t, meetingId);
       expect(snapshots).toHaveLength(2);
-      expect(snapshots[1][0]).toMatchObject({ text: "渠道看板接到 v3", taskId: tasks[0].id });
-      expect(items[0].taskId).toBe(tasks[0].id);
+      expect(snapshots[1][0]).toMatchObject({ text: "渠道看板接到 v3", taskId });
+      expect(items[0].taskId).toBe(taskId);
     } finally {
       await t.close();
     }
   });
 
-  it("确认后只改了行动项：不出新版本、不写本体、不用选原因，新的一条照推；再点一次不动", async () => {
+  it("确认后只改了行动项：不出新版本、不写本体、不用选原因，新的一条进快照、不建执行事项；再点一次不动", async () => {
     const world = ontology();
     const { t, host, meetingId, run } = await setup();
     try {
@@ -119,20 +116,19 @@ describe("行动项推成执行事项", () => {
       const res = await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
       expect(res.statusCode).toBe(200);
       await run();
-      const tasks = await tasksOf(t, meetingId);
-      expect(tasks.map((task) => task.origin_item_id)).toEqual(["act-1", "act-new"]);
+      expect(await tasksOf(t, meetingId)).toEqual([]);
       const { draft, snapshots } = await stored(t, meetingId);
       expect(snapshots).toHaveLength(1);
-      expect(snapshots[0].map((item) => item.taskId)).toEqual([tasks[0].id, tasks[1].id]);
-      expect(draft[1].taskId).toBe(tasks[1].id);
+      expect(snapshots[0].map((item) => [item.id, item.taskId])).toEqual([["act-1", null], ["act-new", null]]);
+      expect(draft[1]).toMatchObject({ id: "act-new", taskId: null });
       expect(world.events()).toHaveLength(1);
       const after: TMeetingCardView = res.json();
-      expect(after.confirmed).toMatchObject({ confirmation: { revision: 1 }, actionItems: [{ id: "act-1" }, { id: "act-new", taskId: tasks[1].id }] });
+      expect(after.confirmed).toMatchObject({ confirmation: { revision: 1 }, actionItems: [{ id: "act-1" }, { id: "act-new", text: "约客户演示", taskId: null }] });
 
       const again = await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
       expect(again.statusCode).toBe(200);
       await run();
-      expect(await tasksOf(t, meetingId)).toHaveLength(2);
+      expect(await tasksOf(t, meetingId)).toEqual([]);
       expect((await stored(t, meetingId)).snapshots).toHaveLength(1);
       expect(world.events()).toHaveLength(1);
     } finally {
@@ -207,14 +203,15 @@ describe("行动项推成执行事项", () => {
     }
   });
 
-  it("不写本体也照推", async () => {
+  it("不写本体也一样：行动项进快照，不建执行事项", async () => {
     const world = ontology();
     const { t, host, meetingId, run } = await setup();
     try {
       const res = await confirm(t, host, meetingId, { draftVersion: await ready(t, host, meetingId), writeToWorld: false });
       expect(res.statusCode).toBe(200);
       await run();
-      expect(await tasksOf(t, meetingId)).toHaveLength(1);
+      expect((await stored(t, meetingId)).snapshots).toEqual([[expect.objectContaining({ id: "act-1", text: "渠道看板接到 v2" })]]);
+      expect(await tasksOf(t, meetingId)).toEqual([]);
       expect(world.writes()).toEqual([]);
     } finally {
       await t.close();

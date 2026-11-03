@@ -2,11 +2,13 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {summaryInput,validateSummary,createProposalSummarizer} from './proposal-summary.mjs';
 const p={id:'p',cardId:'rv:a',baseVersion:1,before:{verdict:'未达成'},patch:{verdict:'部分达成'},reason:'负责人补充事实'};
+const complex={...p,before:{verdictReason:'原文缺少真实会议验收记录。'.repeat(8)},patch:{verdictReason:'负责人报告已测试但仍缺真实会议验收记录。'.repeat(8)}};
 test('摘要使用提案基线，短判定值不用模型重写',()=>{const input=summaryInput(p,{verdict:'达成'});assert.equal(input.changes[0].before,'未达成');const summary=validateSummary({changes:[{index:0,before:'别的判断',after:'达成'}],reason:'补充事实'},input);assert.equal(summary.changes[0].after,'部分达成');assert.equal(summary.changes[0].before,'未达成');});
 test('摘要缺项不能通过；没有原原因时保持空值',()=>{const input=summaryInput(p,{});assert.throws(()=>validateSummary({changes:[],reason:'x'},input));const empty=summaryInput({...p,reason:''},{});assert.equal(validateSummary({changes:[{index:0,before:'旧',after:'新'}],reason:'编造因果'},empty).reason,'');});
 test('已编辑采纳提案使用acceptedPatch',()=>{const input=summaryInput({...p,edited:true,acceptedPatch:{verdict:'达成'}},{});assert.equal(input.changes[0].after,'达成');});
-test('同范围并发请求只压缩一次，换人、换轮或内容改变则重新生成',async()=>{let calls=0;const summarize=createProposalSummarizer({complete:async()=>{calls++;return {answer:JSON.stringify({changes:[{index:0,before:'旧',after:'新'}],reason:'补充事实'})};}});await Promise.all([summarize(p,{}, {actorId:'a',roundId:'r'}),summarize(p,{}, {actorId:'a',roundId:'r'})]);assert.equal(calls,1);await summarize(p,{}, {actorId:'b',roundId:'r'});await summarize(p,{}, {actorId:'a',roundId:'r2'});await summarize({...p,reason:'新原因'}, {},{actorId:'a',roundId:'r'});assert.equal(calls,4);});
-test('摘要失败不永久缓存，重试可恢复',async()=>{let n=0;const summarize=createProposalSummarizer({complete:async()=>{if(++n===1)throw Error('temporary');return {answer:JSON.stringify({changes:[{index:0,before:'旧',after:'新'}],reason:'补充事实'})};}});await assert.rejects(summarize(p,{}));await summarize(p,{});assert.equal(n,2);});
+test('同范围并发请求只压缩一次，换人、换轮或内容改变则重新生成',async()=>{let calls=0;const summarize=createProposalSummarizer({complete:async()=>{calls++;return {answer:JSON.stringify({changes:[{index:0,before:'缺记录',after:'负责人报告测试，仍缺验收记录'}]})};}});await Promise.all([summarize(complex,{}, {actorId:'a',roundId:'r'}),summarize(complex,{}, {actorId:'a',roundId:'r'})]);assert.equal(calls,1);await summarize(complex,{}, {actorId:'b',roundId:'r'});await summarize(complex,{}, {actorId:'a',roundId:'r2'});await summarize({...complex,patch:{verdictReason:'新的原文'.repeat(20)}}, {},{actorId:'a',roundId:'r'});assert.equal(calls,4);});
+
+test('摘要失败缓存完整原文对照，内容版本变化后重新整理',async()=>{let n=0;const summarize=createProposalSummarizer({complete:async()=>{n++;throw Error('temporary');}});assert.equal((await summarize(complex,{})).full,true);assert.equal((await summarize(complex,{})).changes[0].after,complex.patch.verdictReason);assert.equal(n,1);await summarize({...complex,baseVersion:2},{});assert.equal(n,2);});
 
 test('隐藏原因由程序保留，不依赖模型生成',()=>{const input=summaryInput(p,{});assert.equal(validateSummary({changes:[{index:0,before:'旧',after:'新'}]},input).reason,p.reason);});
 test('拒绝把仍缺验收升级成连续采用和真实验收通过',()=>{const input={changes:[{where:'证据',before:'尚未有正式验收及真实会议的连续采用记录',after:'负责人报告入会可用，5秒延迟仍缺真实会议验收'}],reason:'负责人补充事实'};assert.throws(()=>validateSummary({changes:[{index:0,before:'缺记录',after:'已连续采用三周并通过真实验收'}],reason:'负责人补充事实'},input));});
@@ -47,28 +49,11 @@ test('长原原因逐字保留，模型缺失或新增5秒均不影响隐藏原�
  for(const reason of [undefined,'补入打断和5秒延迟验证答复','已通过验收',null]){
  const result=validateSummary({changes:[{index:0,before:'打断、5秒延迟缺实会验收',after:'负责人称打断、5秒延迟会议验证过，缺场次日期'}],reason},input);assert.equal(result.reason,input.reason);}
 });
-test('模型输入不再请求隐藏原因，空改动不调用模型',async()=>{
- let calls=0;const summarizer=createProposalSummarizer({complete:async messages=>{calls++;assert.equal(JSON.parse(messages[1].content).reason,undefined);return {answer:JSON.stringify({changes:[{index:0,before:'旧',after:'新'}]})};}});
- assert.equal((await summarizer(p,{})).reason,p.reason);assert.equal(calls,1);
- assert.deepEqual(await summarizer({...p,patch:{},before:{}},{}),{changes:[],reason:p.reason});assert.equal(calls,1);
-});
+test('模型输入不再请求隐藏原因，简单和空改动均不调用模型',async()=>{let calls=0;const summarizer=createProposalSummarizer({complete:async messages=>{calls++;assert.equal(JSON.parse(messages[1].content).reason,undefined);return {answer:JSON.stringify({changes:[{index:0,before:'缺记录',after:'仍缺验收'}]})};}});assert.equal((await summarizer(p,{})).reason,p.reason);assert.equal(calls,0);assert.deepEqual(await summarizer({...p,patch:{},before:{}},{}),{changes:[],reason:p.reason});assert.equal((await summarizer(complex,{})).reason,p.reason);assert.equal(calls,1);});
 
+test('无效JSON或超长摘要只尝试一次，完整原文兜底可读且缓存',async()=>{for(const answer of ['{broken',JSON.stringify({changes:[{index:0,before:'缺记录',after:'超长'.repeat(30)}]})]){let calls=0;const summarize=createProposalSummarizer({complete:async(_,opts)=>{calls++;assert.ok(opts.timeoutMs<=15000);return {answer};}});const result=await summarize(complex,{});assert.equal(result.full,true);assert.equal(result.changes[0].after,complex.patch.verdictReason);await summarize(complex,{});assert.equal(calls,1);}});
 
-test('无效JSON和超长摘要分别反馈，完整修正后通过；所有调用共享时限',async()=>{
- const long={id:'repair',cardId:'rv:agents-m4',before:{verdictReason:'原先缺少真实会议中的验收记录，材料仍然不完整'},patch:{verdictReason:'负责人报告会议验证过，但仍缺场次日期，暂无法核对'},reason:'原原因'};
- let calls=0;const timeouts=[];
- const summarize=createProposalSummarizer({complete:async(messages,opts)=>{timeouts.push(opts.timeoutMs);calls++;
- if(calls===1)return {answer:'{"changes":[broken'};
- if(calls===2){assert.match(messages.at(-1).content,/JSON语法错误/);return {answer:JSON.stringify({changes:[{index:0,before:'仍缺实会验收记录',after:'负责人报告会议验证过但仍然缺少具体场次及日期无法核对'.repeat(3)}]})};}
- assert.match(messages.at(-1).content,/after共/);return {answer:JSON.stringify({changes:[{index:0,before:'仍缺实会验收记录',after:'负责人称会议验证过，缺场次日期，暂无法核对'}]})};}});
- const result=await summarize(long,{});assert.equal(calls,3);assert.equal(result.reason,'原原因');assert.ok(timeouts.every(t=>t>0&&t<=120000));assert.ok(timeouts.at(-1)<=timeouts[0]);assert.equal((await summarize(long,{})).changes[0].after,result.changes[0].after);assert.equal(calls,3);
-});
-test('连续事实守卫失败最多三次且失败缓存清除，重试仍全量校验',async()=>{
- const proposal={id:'unsafe',cardId:'rv:a',before:{verdictReason:'本体中没有这次持续采用行为的任何进展记录'},patch:{verdictReason:'负责人报告入会和键盘麦可用，5秒延迟仍无真实会议验收'}};
- let calls=0;const summarize=createProposalSummarizer({complete:async()=>{calls++;return {answer:JSON.stringify({changes:[{index:0,before:'没有发生',after:'已持续采用三周，已通过验收'}]})};}});
- await assert.rejects(summarize(proposal,{}));assert.equal(calls,3);await assert.rejects(summarize(proposal,{}));assert.equal(calls,6);
-});
-
+test('事实守卫失败不能展示坏摘要，完整原文不改patch',async()=>{const proposal={...complex,patch:{verdictReason:'负责人报告入会和键盘麦可用，5秒延迟仍无真实会议验收。'.repeat(5)}};let calls=0;const raw=JSON.stringify(proposal);const summarize=createProposalSummarizer({complete:async()=>{calls++;return {answer:JSON.stringify({changes:[{index:0,before:'没有发生',after:'已持续采用三周，已通过验收'}]})};}});const result=await summarize(proposal,{});assert.equal(result.full,true);assert.equal(result.changes[0].after,proposal.patch.verdictReason);await summarize(proposal,{});assert.equal(calls,1);assert.equal(JSON.stringify(proposal),raw);});
 
 test('清空字段由程序显示清空，原空字段显示空白，不改变输入或patch',()=>{
  for(const status of ['pending','accepted'])for(const empty of ['','  ']){
@@ -81,4 +66,13 @@ test('清空字段由程序显示清空，原空字段显示空白，不改变�
  const add=validateSummary({changes:[{index:0,before:'模型旧',after:'模型新'}]},addInput);
  assert.equal(add.changes[0].before,'空白');assert.equal(add.changes[0].after,'补充记录');
  }
+});
+test('full comparison renders structured source as labelled text after timeout, retaining every raw value and field',async()=>{
+ const {completeComparison}=await import('./proposal-summary-input.mjs');
+ const before={ref:'t1',item:'上线访问',owner:'孙铭泽',status:'未达成',evidence:'缺原始记录 [E5]',gap:'待核',custom:'原样保留'};
+ const after={...before,status:'达成',evidence:'负责人报告已上线，但未独立核验 [event-855]',gap:''};
+ const proposal={id:'readable-fallback',cardId:'rv:eo-m1',before:{facts:[before],nextInputs:[{ref:'t1',type:'继续',text:'继续核实',ask:{to:'孙铭泽',question:'哪天？'}}]},patch:{facts:[after],nextInputs:[]}};
+ const original=JSON.stringify(proposal),result=completeComparison(proposal,{});
+ assert.match(result.changes[0].before,/事项：上线访问/);assert.match(result.changes[0].after,/状态：达成/);assert.ok(result.changes[0].after.includes(after.evidence));assert.match(result.changes[0].before,/custom：原样保留/);assert.match(result.changes[1].before,/问谁：孙铭泽/);assert.equal(result.changes[1].after,'（无条目）');assert.doesNotMatch(result.changes[0].after,/"ref"\s*:/);assert.equal(JSON.stringify(proposal),original);
+ let calls=0;const summarize=createProposalSummarizer({complete:async()=>{calls++;throw Error('timeout');}});const fallback=await summarize(proposal,{});assert.equal(fallback.full,true);assert.ok(fallback.changes[0].after.includes(after.evidence));assert.equal(calls,1);assert.equal(JSON.stringify(proposal),original);
 });

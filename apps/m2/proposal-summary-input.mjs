@@ -51,3 +51,21 @@ export function summaryInput(proposal,node){
  if(proposal.op==='restore-mission')add('恢复 Mission',{mission:proposal.missionSummary,missionId:proposal.missionId,status:'已撤掉'},{mission:proposal.missionSummary,missionId:proposal.missionId,status:'恢复到原 PO',impact:'恢复1个 Mission 及其全部 Task，确认状态与撤掉前相同。'});
  return {cardId:proposal.cardId,baseVersion:proposal.baseVersion,changes,reason:proposal.reason||'',verdictChange:proposal.verdictChange||null,ambiguous};
 }
+
+const sourceLabels={ref:'条目',id:'条目',item:'事项',owner:'负责人',status:'状态',evidence:'证据',gap:'没做到的原因',type:'类型',text:'内容',ask:'提问',to:'问谁',question:'问题',title:'标题',mission:'Mission',missionId:'Mission 条目',tasks:'Task',impact:'影响',choice:'选择',reason:'原因'};
+// Rendering only: every original field and string is retained, including unknown
+// fields and source references. No compression or model call is involved.
+export function readableSourceValue(value){
+ if(typeof value==='string')return value;
+ if(value==null)return '（空白）';
+ if(Array.isArray(value))return value.length?value.map((row,i)=>`${i+1}. ${readableSourceValue(row)}`).join('\n\n'):'（无条目）';
+ if(typeof value==='object')return Object.entries(value).map(([key,part])=>`${sourceLabels[key]||documentFieldLabel(undefined,key)||key}：${readableSourceValue(part)}`).join('\n');
+ return String(value);
+}
+// Full source values remain available even when alignment or model compression fails.
+export function completeComparison(proposal,node){
+ const patch=proposal.edited&&proposal.acceptedPatch?proposal.acceptedPatch:proposal.patch||{},plain=readableSourceValue;
+ if(proposal.op){const input=summaryInput(proposal,node);return {changes:input.changes.map(c=>({...c,before:plain(c.before),after:plain(c.after)})),full:true,reason:proposal.reason||''};}
+ return {changes:Object.entries(patch).map(([field,after])=>({where:documentFieldLabel(node?.level,field),...proposalTarget(proposal,node),before:plain(proposal.before?.[field]),after:plain(after)})),full:true,reason:proposal.reason||''};
+}
+export function simpleComparison(proposal,node){const input=summaryInput(proposal,node);if(input.ambiguous||input.changes.some(c=>typeof c.before!=='string'||typeof c.after!=='string'||c.before.length>32||c.after.length>38))return null;return {changes:input.changes.map(c=>({...c,before:c.before||'空白',after:c.after||'清空'})),reason:proposal.reason||''};}

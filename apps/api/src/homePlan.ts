@@ -1,4 +1,4 @@
-import type { THomePlanActivity, THomePlanResponse } from "@warmap/contracts";
+import type { THomePlanActivity, THomePlanGate, THomePlanResponse, TPlanCalendarResponse } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
 import { listPlanItems, milestoneDate, type PlanItem } from "./monthPlan.js";
 import { companyPeriod } from "./monthlyPlans.js";
@@ -39,6 +39,14 @@ export async function ownMissions(q: Query, ownerId: string, current: string): P
 export const planTaskMissions = (rows: MissionRow[]): PlanTaskMission[] => rows.map((m) => ({ id: m.id, code: m.code,
   world: m.world_scope_id && m.world_object_id && m.world_domain_id ? { scopeId: m.world_scope_id, objectId: m.world_object_id, domainId: m.world_domain_id } : null }));
 
+/** 落在 month 里的签定关口；「M/D」按 Mission 所在月份（period）的年份解析。 */
+function gatesIn(rows: MissionRow[], period: string, month: string): THomePlanGate[] {
+  return rows.flatMap((m) => m.milestones.flatMap((text) => {
+    const date = milestoneDate(text, period);
+    return date?.startsWith(`${month}-`) ? [{ missionId: m.id, date, label: text.replace(LEADING_DATE, "").trim() }] : [];
+  }));
+}
+
 /** 进行中的事项最近一次动静之后过了几个工作日算停滞（只看有没有动静，和战场进展红线的「核实过的进展」是两回事）。 */
 const IDLE_WORKDAYS = 3;
 const DAY_MS = 86_400_000;
@@ -69,7 +77,7 @@ function placeActivity({ item, missionId }: PlanItem, weekStart: string, weekEnd
 }
 
 /**
- * 成员首页的 Mission 计划视图：今天和本周按公司时区；回退到过去月份时 today 与本周仍是真实的今天。
+ * 成员首页的 Mission 计划视图：今天和本周按公司时区；回退到过去月份时 today、本周和月历（days、gates）仍是真实的本月。
  * 挂 Mission 的事项跟着显示的 Mission 走；独立事项按真实的本月加本周取，和这段有交集就列出。
  * 之前没做完的也列出（首页是唯一的事项清单）：截止早于这段的独立事项，和挂在显示月份之前 Mission 下的；后者 missionId 照留，Mission 行上只归「全部」。
  */
@@ -79,19 +87,16 @@ export async function readHomePlan(q: Query, person: { personId: string }, now: 
   const { weekStart, weekEnd } = weekOf(today);
   const current = companyPeriod(now);
   const { period, fallbackFrom, rows } = await ownMissions(q, person.personId, current);
-  const days = monthDays(period);
-  const monthEnd = monthDays(current).at(-1)!.date;
+  const days = monthDays(current);
+  const monthEnd = days.at(-1)!.date;
   const windowStart = weekStart < `${current}-01` ? weekStart : `${current}-01`;
   const windowEnd = weekEnd > monthEnd ? weekEnd : monthEnd;
   const missions = rows.map((m, index) => ({ missionId: m.id, code: m.code, title: m.title, cardId: m.card_id, color: MISSION_COLORS[index % MISSION_COLORS.length],
     world: m.world_object_id && m.world_status && m.world_read_at
       ? { status: m.world_status, label: m.world_status_label ?? m.world_status, version: m.source_revision, readAt: m.world_read_at.toISOString(), gaps: m.world_gaps }
       : null }));
-  // 关口只留落在显示月份里的。
-  const gates = rows.flatMap((m) => m.milestones.flatMap((text) => {
-    const date = milestoneDate(text, period);
-    return date?.startsWith(`${period}-`) ? [{ missionId: m.id, date, label: text.replace(LEADING_DATE, "").trim() }] : [];
-  }));
+  // 月历按真实的本月画，关口只留落在本月里的；Mission 回退时也一样。
+  const gates = gatesIn(rows, period, current);
   const [tasks, items, marks, unplaced] = await Promise.all([
     readPlanTasks(deps.planTasks, planTaskMissions(rows)),
     listPlanItems(q, person.personId, rows.map((m) => m.id), windowStart, windowEnd, deps.names, { period, doneFrom: `${current}-01`, doneTo: monthEnd }),
@@ -104,4 +109,10 @@ export async function readHomePlan(q: Query, person: { personId: string }, now: 
     tasks: tasks.map((task) => ({ ...task, responsibleId: task.responsibleId ?? null, deliverable: deliverables.get(task.taskId) ?? { status: "none", score: null, version: null } })),
     activities: items.map((entry) => ({ ...placeActivity(entry, weekStart, weekEnd, entry.missionId !== null && !shown.has(entry.missionId)),
       ...activitySignal(entry.item, today) })), unplaced };
+}
+
+/** 月历翻到别的月份：和首页同样的那几个 Mission（含回退），只换月份。 */
+export async function readPlanCalendar(q: Query, person: { personId: string }, month: string, now: Date): Promise<TPlanCalendarResponse> {
+  const { period, rows } = await ownMissions(q, person.personId, companyPeriod(now));
+  return { month, days: monthDays(month), gates: gatesIn(rows, period, month) };
 }

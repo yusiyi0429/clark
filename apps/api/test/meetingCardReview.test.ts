@@ -74,11 +74,12 @@ describe("会议决策逐条确认", { timeout: 30_000 }, () => {
       const confirmed = await review(s, s.owner, { kind: "decision", id: "dec-1", verdict: "confirm" });
       expect(confirmed.statusCode).toBe(200);
       expect((confirmed.json().view as TMeetingCardView).decisions![0].review).toEqual({ status: "confirmed", by: OWNER, at: expect.any(String), reason: null });
-      // 接下就推成执行事项；自己接下的不再出「分给你的事」那一条。
-      expect((await review(s, s.owner, { kind: "action", id: "act-1", verdict: "confirm" })).statusCode).toBe(200);
-      const tasks = await s.t.sql("SELECT id::text, owner_id FROM tasks WHERE origin_meeting_id = $1", [s.meetingId]);
-      expect(tasks).toEqual([{ id: expect.any(String), owner_id: OWNER }]);
-      expect(await s.t.sql("SELECT read_at IS NOT NULL AS read FROM notifications WHERE kind = 'meeting_action_assigned' AND object_id = $1", [tasks[0].id])).toEqual([{ read: true }]);
+      // 接下只记在会议卡上，不建执行事项（10/30 起会后分派关掉），也没有「分给你的事」。
+      const accepted = await review(s, s.owner, { kind: "action", id: "act-1", verdict: "confirm" });
+      expect(accepted.statusCode).toBe(200);
+      expect((accepted.json().view as TMeetingCardView).actionItems[0]).toMatchObject({ taskId: null, review: { status: "confirmed", by: OWNER } });
+      expect(await s.t.sql("SELECT 1 FROM tasks WHERE origin_meeting_id = $1", [s.meetingId])).toEqual([]);
+      expect(await s.t.sql("SELECT 1 FROM notifications WHERE kind = 'meeting_action_assigned'")).toEqual([]);
       expect(await confirmsOf(s, s.owner)).toEqual([]);
 
       // 主持人补归属给测试丙；不对要写原因。
@@ -104,6 +105,8 @@ describe("会议决策逐条确认", { timeout: 30_000 }, () => {
       expect(payload).not.toHaveProperty("sections");
       expect(payload.decisions.map((decision: { id: string }) => decision.id)).toEqual(["dec-1"]);
       expect(payload.decisions[0].sourceRefs).toEqual([{ sourceId: "src-1", locator: "turn-002..turn-003" }]);
+      // 接下的行动项照样进会议事件，带确认人。
+      expect(payload.actionItems).toEqual([expect.objectContaining({ id: "act-1", text: "渠道看板接到 v2", ownerPersonId: OWNER, dueDate: "2026-06-30", confirmedBy: OWNER })]);
       // 确认决策不等于批准修改：一条对象修改都不提交。
       expect(world.revisions()).toEqual([]);
 

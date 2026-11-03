@@ -62,6 +62,33 @@ describe("jobs", () => {
     });
   });
 
+  it("runNow 只领还在待处理的那一条；与轮询同时抢同一条时只有一方执行", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      const q = pool.query.bind(pool);
+      const ran: string[] = [];
+      const handlers = { "test.slow": async (_payload: unknown, job: { dedupe_key: string }) => {
+        ran.push(job.dedupe_key);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      } };
+      const direct = createJobWorker({ pool, handlers, now: () => T0 });
+      const polling = createJobWorker({ pool, handlers, now: () => T0 });
+      for (let i = 0; i < 5; i += 1) await enqueueJob(q, { kind: "test.slow", dedupeKey: `test.slow:${i}`, runAt: T0 });
+      const ids = (await db.query("SELECT id::text FROM jobs ORDER BY id")).rows.map((row) => row.id as string);
+      const results = await Promise.all([...ids.map((id) => direct.runNow(id)), polling.tick()]);
+      const ranDirect = results.slice(0, -1).filter(Boolean).length;
+      expect(ranDirect + (results.at(-1) as number)).toBe(5);
+      expect([...ran].sort()).toEqual(ids.map((_, i) => `test.slow:${i}`));
+      expect((await db.query("SELECT count(*)::int AS n FROM jobs WHERE status = 'done' AND attempts = 1")).rows[0].n).toBe(5);
+      // 已经跑完的、没注册的 kind 都不领
+      expect(await direct.runNow(ids[0])).toBe(false);
+      await enqueueJob(q, { kind: "test.other", dedupeKey: "test.other:1", runAt: T0 });
+      const otherId = (await db.query("SELECT id::text FROM jobs WHERE kind = 'test.other'")).rows[0].id as string;
+      expect(await direct.runNow(otherId)).toBe(false);
+      expect((await db.query("SELECT status FROM jobs WHERE id = $1", [otherId])).rows[0].status).toBe("pending");
+    });
+  });
+
   it("租约过期的 running 任务会被重新领取；周期任务每个时间窗只入队一次", async () => {
     await createTestDb(async ({ db, pool }) => {
       await migrate(db);

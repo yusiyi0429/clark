@@ -63,4 +63,67 @@ describe("飞书长连接事件", () => {
       expect((await db.query("SELECT processed_at FROM feishu_events")).rows[0].processed_at).not.toBeNull();
     });
   });
+
+  it("私聊消息落库后直接派，不等任务轮询；重复投递只处理一次，兜底任务不再处理", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      const seen: unknown[] = [];
+      const handlers = { "im.message.receive_v1": async (payload: Record<string, unknown>) => { seen.push((payload.message as { message_id: string }).message_id); } };
+      // worker 没启动、也不 tick：处理只可能来自直派
+      const worker = createJobWorker({ pool, handlers: feishuEventJobs(pool, handlers) });
+      expect(await recordFeishuEvent(pool, "im.message.receive_v1", messageEvent("ev1", "om_1"), worker.runNow)).toBe("recorded");
+      expect(await Promise.all([
+        recordFeishuEvent(pool, "im.message.receive_v1", messageEvent("ev1-retry", "om_1"), worker.runNow),
+        recordFeishuEvent(pool, "im.message.receive_v1", messageEvent("ev1", "om_1"), worker.runNow),
+      ])).toEqual(["duplicate", "duplicate"]);
+      await worker.close();
+
+      expect(seen).toEqual(["om_1"]);
+      expect((await db.query("SELECT status, attempts FROM jobs")).rows).toEqual([{ status: "done", attempts: 1 }]);
+      expect((await db.query("SELECT processed_at FROM feishu_events")).rows[0].processed_at).not.toBeNull();
+      expect(await worker.tick()).toBe(0);
+      expect(seen).toEqual(["om_1"]);
+    });
+  });
+
+  it("直派时处理失败：照旧标退避、不标已处理，到点由任务重试", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      let calls = 0;
+      const handlers = { "im.message.receive_v1": async () => { calls += 1; if (calls === 1) throw new Error("db hiccup"); } };
+      let at = new Date();
+      const worker = createJobWorker({ pool, handlers: feishuEventJobs(pool, handlers), now: () => at });
+      await recordFeishuEvent(pool, "im.message.receive_v1", messageEvent("ev1", "om_1"), worker.runNow);
+      await worker.close();
+      expect((await db.query("SELECT status, attempts, last_error FROM jobs")).rows).toEqual([{ status: "pending", attempts: 1, last_error: "db hiccup" }]);
+      expect((await db.query("SELECT processed_at FROM feishu_events")).rows[0].processed_at).toBeNull();
+
+      at = new Date(at.getTime() + 2 * 60_000);
+      expect(await worker.tick()).toBe(1);
+      expect(calls).toBe(2);
+      expect((await db.query("SELECT status, attempts FROM jobs")).rows).toEqual([{ status: "done", attempts: 2 }]);
+      expect((await db.query("SELECT processed_at FROM feishu_events")).rows[0].processed_at).not.toBeNull();
+    });
+  });
+
+  it("群消息、妙记等非私聊事件照旧排队，等任务轮询处理", async () => {
+    await createTestDb(async ({ db, pool }) => {
+      await migrate(db);
+      const seen: string[] = [];
+      const handlers = {
+        "im.message.receive_v1": async (payload: Record<string, unknown>) => { seen.push((payload.message as { chat_type: string }).chat_type); },
+        "minutes.minute.generated_v1": async () => { seen.push("minute"); },
+      };
+      const worker = createJobWorker({ pool, handlers: feishuEventJobs(pool, handlers) });
+      const groupMessage = { ...messageEvent("ev-group", "om_group"), message: { message_id: "om_group", chat_type: "group", message_type: "text", content: "{}" } };
+      await recordFeishuEvent(pool, "im.message.receive_v1", groupMessage, worker.runNow);
+      await recordFeishuEvent(pool, "minutes.minute.generated_v1", { schema: "2.0", event_id: "ev-minute", minute_token: "obcn1" }, worker.runNow);
+      await worker.close();
+      expect(seen).toEqual([]);
+      expect((await db.query("SELECT status, attempts FROM jobs ORDER BY id")).rows).toEqual([{ status: "pending", attempts: 0 }, { status: "pending", attempts: 0 }]);
+
+      expect(await worker.tick()).toBe(2);
+      expect(seen).toEqual(["group", "minute"]);
+    });
+  });
 });

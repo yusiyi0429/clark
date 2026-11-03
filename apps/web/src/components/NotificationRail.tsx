@@ -19,7 +19,6 @@ import { roundStatusText } from "./missionCards/roundStatusText";
 import { MonthlyReviewNotices } from "./monthlyReview/MonthlyReviewNotices";
 import { M2EntryNotice } from "./monthlyReview/M2EntryNotice";
 import { PersonalReviewBoard } from "./monthlyReview/PersonalReviewBoard";
-import { inWeeklyReviewWindow, useWeeklyReviewBoard, WeeklyReviewBoard } from "./weeklyReview/WeeklyReviewBoard";
 import { RequestNotices } from "./requests/RequestNotices";
 import { MeetingCardNotices } from "./meeting/MeetingCardNotices";
 import { MeetingRecordDrop } from "./meeting/MeetingRecordDrop";
@@ -285,7 +284,6 @@ export function NotificationRail({
   const groups = railGroups(cards, now, viewerId, feishuEvents).filter((group) => !(m2Available && group.kind === "decisions"));
   const rail = useRef<HTMLElement>(null);
   const positions = useRef(new Map<string, number>());
-  const weeklyReviews = useWeeklyReviewBoard();
   const layoutKey = groups.map((group) => `${group.kind}:${group.items.length}`).join("|");
 
   // 同成员工作台同步其他拍板人的变更；倒计时本身由分组与卡页共享分钟时钟。会前预审在跑时 5 秒一次，预审一出结果左栏就换上结论。
@@ -328,7 +326,6 @@ export function NotificationRail({
       />
       <div className={n.noticeList}>
         <MeetingCardNotices meetingBase="/meetings" onNavigate={onNavigate} />
-        {inWeeklyReviewWindow(now) ? <WeeklyReviewBoard onNavigate={onNavigate} state={weeklyReviews} /> : null}
         {m2Available ? null : <PersonalReviewBoard onNavigate={onNavigate} />}
         <RequestNotices base="/requests" header={false} currentHref={currentHref} onNavigate={onNavigate} />
         <M2EntryNotice available={m2Available} now={now} />

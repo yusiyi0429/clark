@@ -84,7 +84,25 @@ test('Proposal summaries authenticate and filter visible rooms before model read
  assert.equal((await call('/api/proposal-summary?id='+publicSummaryId)).status,401);
  assert.equal((await call('/api/proposal-summary?id=missing','owner')).status,404);
  assert.equal((await call('/api/proposal-summary?id='+privateSummaryId,'ceo')).status,404);
- assert.equal((await call('/api/proposal-summary?id='+publicSummaryId,'owner')).status,503);
- assert.equal((await call('/api/proposal-summary?id='+privateSummaryId,'owner')).status,503);
+ assert.equal((await call('/api/proposal-summary?id='+publicSummaryId,'owner')).status,200);
+ assert.equal((await call('/api/proposal-summary?id='+privateSummaryId,'owner')).status,200);
  assert.equal(await readFile(join(dir,'collaboration.json'),'utf8'),before);
+});
+
+test('Confirmed plan API requires acknowledgement; cancel no write, identity/patch/version bound and MD cannot bypass',async()=>{
+ const getState=async()=>JSON.parse(await readFile(join(dir,'collaboration.json'),'utf8'));
+ let s=await getState(),id='bf01-m1',version=s.cards[id].versions.at(-1).number;
+ assert.equal((await call('/api/actions','owner',{action:{type:'confirm',cardId:id,baseVersion:version,slot:'missionDri'}})).status,200);
+ const action={type:'revise',cardId:id,baseVersion:version,patch:{result:'确认后修改成果'}};
+ const before=await readFile(join(dir,'collaboration.json'),'utf8');
+ const first=await call('/api/actions','owner',{action:{...action,reconfirmVersion:version,auto:true}});assert.equal(first.status,409);const challenge=await first.json();assert.equal(challenge.code,'RECONFIRM_REQUIRED');assert.ok(challenge.reconfirmToken);assert.equal(await readFile(join(dir,'collaboration.json'),'utf8'),before);
+ assert.equal((await call('/api/actions','ceo',{action,ackToken:challenge.reconfirmToken})).status,409);
+ assert.equal((await call('/api/actions','owner',{action:{...action,patch:{result:'不同内容'}},ackToken:challenge.reconfirmToken})).status,409);
+ assert.equal((await call('/api/actions','owner',{action,ackToken:challenge.reconfirmToken})).status,200);
+ s=await getState();assert.equal(s.cards[id].versions.at(-1).number,version+1);assert.equal(s.cards[id].versions.at(-1).signatures.length,0);assert.ok(s.cards[id].versions.at(-2).signatures.length);assert.equal((await call('/api/actions','owner',{action,ackToken:challenge.reconfirmToken})).status,409);
+ version++;assert.equal((await call('/api/actions','owner',{action:{type:'confirm',cardId:id,baseVersion:version,slot:'missionDri'}})).status,200);
+ const exported=await(await call('/api/markdown/export?stage=plan&rootId='+id,'owner')).json();
+ const preview=await call('/api/markdown/preview','owner',{stage:'plan',rootId:id,text:exported.markdown.replace('确认后修改成果','MD待确认的新成果')});assert.equal(preview.status,200);const p=await preview.json();
+ const raw=await readFile(join(dir,'collaboration.json'),'utf8'),pending=await call('/api/markdown/apply','owner',{token:p.token,reconfirmVersion:version});assert.equal(pending.status,409);const ack=await pending.json();assert.equal(ack.code,'RECONFIRM_REQUIRED');assert.equal(await readFile(join(dir,'collaboration.json'),'utf8'),raw);
+ assert.equal((await call('/api/markdown/apply','owner',{token:p.token,ackToken:ack.reconfirmToken})).status,200);s=await getState();assert.equal(s.cards[id].versions.at(-1).content.result,'MD待确认的新成果');assert.equal(s.cards[id].versions.at(-1).signatures.length,0);
 });

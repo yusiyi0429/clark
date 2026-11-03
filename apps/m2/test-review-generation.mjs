@@ -156,8 +156,8 @@ test('复盘生成任务：只有 CEO 和轮次操作人能开始，跑完装入
  if(!skillThere)return t.skip('本机没有复盘技能目录');
  const {store,jobs,until}=await harness();
  await assert.rejects(jobs.start({id:'member-03'},{},{now}),/只有 CEO 和轮次操作人/);
- const job=await jobs.start({id:'member-04'},{},{now});assert.equal(job.status,'running');assert.equal(job.period,'2026-10');
- await assert.rejects(jobs.start({id:'member-04'},{},{now}),/正在生成/);
+ const job=await jobs.start({id:'member-04'},{period:'2026-10',cutoff:'2026-10-22T23:59:59+08:00'},{now});assert.equal(job.status,'running');assert.equal(job.period,'2026-10');
+ await assert.rejects(jobs.start({id:'member-04'},{period:'2026-10',cutoff:'2026-10-22T23:59:59+08:00'},{now}),/正在生成/);
  await until(s=>s.reviewJob?.status!=='running');
  const s=store.snapshot();assert.equal(s.reviewJob.status,'done',JSON.stringify(s.reviewJob));
  assert.deepEqual(Object.values(s.cards).filter(c=>c.kind==='review').map(c=>c.id).sort(),['rv:company','rv:eo','rv:eo-m1']);
@@ -170,7 +170,7 @@ test('复盘生成任务：检查没过不装入、已有复盘要明确重新�
  if(!skillThere)return t.skip('本机没有复盘技能目录');
  const {store,jobs,until}=await harness({gateway:fakeGateway({verdict:'基本达成'}),reviews:true});
  await assert.rejects(jobs.start({id:'member-04',ceo:false},{},{now}),e=>e.code==='review-exists'&&e.total===1);
- await jobs.start({id:'member-04'},{regenerate:true},{now});
+ await jobs.start({id:'member-04'},{regenerate:true,period:'2026-10',cutoff:'2026-10-22T23:59:59+08:00'},{now});
  await until(s=>s.reviewJob?.status!=='running');
  const s=store.snapshot();assert.equal(s.reviewJob.status,'failed');assert.ok(s.reviewJob.checks.some(c=>/基本达成/.test(c.problem)));
  assert.equal(s.cards['rv:eo'].title,'旧','检查没过时现有复盘不动');
@@ -227,7 +227,8 @@ test('读取盘点 10/26：Task 行合并计划条目和 Task 对象；单元记
  s.heads.snapshots.push({object_id:id(34),domain_id:'d-eo'});
  s.objects[id(34)]={title:'E&O · 11/02 补记 10 月进展',as_of:'2026-11-02T10:00:00+08:00',subject_ref:{object_id:id(20)},blocks:[{id:'p',display_name:'进展',components:[{type:'progress',text:'10/21 联调过一次',attributes:{entries:[{at:'2026-10-21T10:00:00+08:00',text:'联调过一次'}]}}]}]};
  const input=buildReviewInput(s,{ceoName:'刘明华'}),m=input.stages[0][0];
- assert.deepEqual(m.tasks.map(t=>[t.title.slice(0,8),t.owner,t.ref.startsWith(id(40))||t.ref===id(41)?'task':'plan']),[['T01｜对象模型','于斯一','task'],['T02｜读写联调','未指派','plan'],['额外的 Task','刘人豪','task']]);
+ assert.equal(m.tasks[0].planTitle,'T01｜对象模型定稿：模型和口径定下来');
+ assert.deepEqual(m.tasks.map(t=>[t.title.slice(0,8),t.owner,t.ref.startsWith(id(40))||t.ref===id(41)?'task':'plan']),[['对象模型定稿','于斯一','task'],['T02｜读写联调','未指派','plan'],['额外的 Task','刘人豪','task']]);
  assert.equal(m.tasks[0].expected,'模型定稿');assert.ok(!('expectedFacts' in m));
  assert.ok(m.evidence.some(e=>/正文提到这个 Mission/.test(e.source)&&/定稿推进到评审/.test(e.text)),'单元上的记录提到 Task 标题，归到 Mission');
  const po=input.stages[1][0];assert.ok(po.evidence.some(e=>/重写范围决定/.test(e.text)&&e.kind!=='上月复盘'),'本月的 review 事件按本月记录');
@@ -236,4 +237,24 @@ test('读取盘点 10/26：Task 行合并计划条目和 Task 对象；单元记
  assert.ok(input.readReceipt.objects.length&&input.readReceipt.events.includes('pn')&&input.readReceipt.snapshots.includes(id(34)));
  // No owner: shown as unassigned, the unit DRI still signs.
  const o=buildReviewInput(sources({withMissionOwner:false}),{ceoName:'刘明华'}).stages[0][0];assert.equal(o.ownerAssigned,false);assert.match(o.missing[0],/未指派/);
+});
+
+test('cross-month snapshots excluded from input cannot hide the October events they cite',()=>{
+ const s=sources();s.cutoff='2026-10-31T23:59:59+08:00';s.heads.snapshots=[{object_id:id(30),domain_id:'d-eo'}];
+ const event={event_id:id(901),kind:'event.recorded',category:'other',occurred_at:'2026-10-30T09:00:00Z',recorded_at:'2026-11-01T14:00:00Z',subject_refs:[{object_id:id(20)}],content:{text:'10/30 上线记录，11/1 补录。'}};
+ s.monthEvents=[event,{...event,event_id:id(902),occurred_at:'2026-11-01T09:00:00Z',content:{text:'11/1 新增成果，不能记作十月完成。'}}];
+ s.objects[id(30)]={title:'Context 建模 · 十月补充',period:'2026-10',as_of:'2026-11-01T14:00:00Z',subject_ref:{object_id:id(20)},source_event_refs:[{event_id:id(901)},{event_id:id(902)}],blocks:[{id:'progress',components:[{text:'11/1 新增成果',attributes:{entries:[{at:'2026-11-01T09:00:00Z',text:'11/1 新增成果'}]}}]}]};
+ const original=JSON.stringify(s),input=buildReviewInput(s),card=input.stages[0][0];
+ assert.ok(card.evidence.some(e=>e.text.includes('10/30 上线记录')));assert.ok(!card.evidence.some(e=>e.text.includes('11/1 新增成果')));assert.ok(input.readReceipt.events.includes(id(901)));assert.ok(!input.readReceipt.snapshots.includes(id(30)));assert.equal(JSON.stringify(s),original);
+});
+test('only a retained nonempty snapshot deduplicates its cited event',()=>{
+ for(const empty of [false,true]){const s=sources();s.cutoff='2026-10-31T23:59:59+08:00';s.heads.snapshots=[{object_id:id(30),domain_id:'d-eo'}];s.monthEvents=[{event_id:id(903),kind:'event.recorded',category:'other',occurred_at:'2026-10-30T09:00:00Z',subject_refs:[{object_id:id(20)}],content:{text:'原始上线事件'}}];s.objects[id(30)]={title:'Context 建模 · 进展',as_of:'2026-10-30T14:00:00Z',subject_ref:{object_id:id(20)},source_event_refs:[{event_id:id(903)}],blocks:empty?[]:[{text:'快照已记录上线'}]};const input=buildReviewInput(s),card=input.stages[0][0];assert.equal(card.evidence.some(e=>e.text.includes('原始上线事件')),empty);assert.equal(card.evidence.some(e=>e.text.includes('快照已记录上线')),!empty);}
+});
+
+test('all checker groups retain the confirmed reporter, exact quotation, legacy namespace and time provenance',async()=>{
+ const input=buildReviewInput(sources()),card=input.stages[0][0],report={id:'E99',kind:'负责人报告',by:'秦梦怡',source:'旧M2署名人确认的事实报告 · 旧E编号仅指m2:old-job',asOf:'2026-11-01',text:'原始事实正文'.repeat(120),reportedGap:'仍未独立核验',factRef:'t1',m2Source:{owner:'秦梦怡',confirmedBy:'member-08',confirmedAt:'2026-11-01T01:00:00Z',namespace:'m2:2026-10:old-job:rv:talent-m2:v3',revisionRecordedAt:'2026-10-30T01:00:00Z',legacyEvidence:[{id:'E5',namespace:'m2:old-job',source:{text:'旧任务E5原文',asOf:'2026-10-12'}}],independentVerification:false}};
+ card.evidence.push(report);const before=JSON.stringify(input),gateway=fakeGateway(),checks=[];
+ const complete=gateway.complete.bind(gateway);gateway.complete=async messages=>{const request=JSON.parse(messages[1].content);if(request.sources){checks.push(request);assert.deepEqual(request.sources[card.id].evidence.find(e=>e.id==='E99'),report);assert.equal(request.sources[card.id].period,card.period);assert.equal(request.sources[card.id].cutoff,card.cutoff);assert.deepEqual(request.sources[card.id].sourceBasis,card.sourceBasis);}return complete(messages);};
+ const checkerSkill={...skill,groups:[...skill.groups,{name:'第三组',types:['其他']}]},run=await runReviewSkill({gateway,skill:checkerSkill,input});assert.equal(checks.length,3);assert.equal(JSON.stringify(input),before);assert.ok(run.checkSourcesHash);
+ run.checkSourcesHash='old-source-projection';await assert.rejects(runReviewSkill({gateway,skill:checkerSkill,input,run}),/不能复用旧检查/);
 });

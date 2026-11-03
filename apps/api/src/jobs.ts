@@ -5,6 +5,7 @@ import type { Query } from "./meetingStore.js";
  * 公共后台任务（079_jobs.sql）：入队按 dedupe_key 去重；worker 每 5 秒用 FOR UPDATE SKIP LOCKED 领一批，
  * 多个进程同时跑也不会领到同一条。领取时 attempts + 1 并写租约，进程中途退出的任务等租约过期后被重新领取。
  * 失败按 1m / 5m / 30m / 2h 退避，第 5 次仍失败标 dead（管理员视图计数，不再自动重跑）。
+ * 有人在等的任务（飞书私聊消息）入队后可以用 runNow 立即跑那一条，不等下一轮；领取规则相同，与轮询之间只有一方领得到。
  */
 export const JOB_BACKOFF_MS = [60_000, 5 * 60_000, 30 * 60_000, 2 * 60 * 60_000];
 export const JOB_MAX_ATTEMPTS = JOB_BACKOFF_MS.length + 1;
@@ -55,6 +56,7 @@ export function createJobWorker({
   const kinds = Object.keys(handlers);
   let timer: NodeJS.Timeout | undefined;
   let running: Promise<void> | undefined;
+  const direct = new Set<Promise<boolean>>();
 
   async function claim(at: Date): Promise<JobRow[]> {
     const result = await q(
@@ -87,6 +89,16 @@ export function createJobWorker({
     await q("UPDATE jobs SET status = 'pending', run_at = $2, lease_until = NULL, last_error = $3, updated_at = now() WHERE id = $1", [job.id, retryAt, message]);
   }
 
+  async function execute(job: JobRow): Promise<void> {
+    let error: unknown;
+    try {
+      await handlers[job.kind](job.payload, job);
+    } catch (cause) {
+      error = cause ?? new Error("job failed");
+    }
+    await finish(job, error);
+  }
+
   /** 入队到期的周期任务，领一批并逐条执行；返回本轮执行的条数。 */
   async function tick(): Promise<number> {
     const at = now();
@@ -94,16 +106,25 @@ export function createJobWorker({
       await enqueueJob(q, { kind: job.kind, dedupeKey: `${job.kind}:${Math.floor(at.getTime() / job.everyMs)}`, runAt: at });
     }
     const jobs = await claim(at);
-    for (const job of jobs) {
-      let error: unknown;
-      try {
-        await handlers[job.kind](job.payload, job);
-      } catch (cause) {
-        error = cause ?? new Error("job failed");
-      }
-      await finish(job, error);
-    }
+    for (const job of jobs) await execute(job);
     return jobs.length;
+  }
+
+  /**
+   * 只在这条还是 pending 时领取（attempts 与租约照 claim 写），然后执行；已被轮询或别的进程领走、已跑完、kind 没注册都返回 false。
+   * 轮询的 claim 先锁住这行时，这里的 UPDATE 等它提交后重新判断 status，领不到；这里先锁住时，claim 的 SKIP LOCKED 跳过它。
+   */
+  async function runOne(id: string): Promise<boolean> {
+    const result = await q(
+      `UPDATE jobs SET status = 'running', attempts = attempts + 1, lease_until = $3::timestamptz + make_interval(secs => $4::double precision / 1000), updated_at = now()
+       WHERE id = $1 AND kind = ANY($2::text[]) AND status = 'pending'
+       RETURNING id::text, kind, dedupe_key, attempts, payload`,
+      [id, kinds, now(), leaseMs],
+    );
+    const job = result.rows[0] as JobRow | undefined;
+    if (!job) return false;
+    await execute(job);
+    return true;
   }
 
   const safeTick = () => {
@@ -116,6 +137,14 @@ export function createJobWorker({
 
   return {
     tick,
+    /** 不等下一轮，立即跑这一条（见 runOne）；停机时 close 等它跑完。 */
+    runNow(id: string): Promise<boolean> {
+      const work = runOne(id);
+      direct.add(work);
+      const settle = () => { direct.delete(work); };
+      work.then(settle, settle);
+      return work;
+    },
     start() {
       if (timer) return;
       safeTick();
@@ -126,6 +155,7 @@ export function createJobWorker({
       if (timer) clearInterval(timer);
       timer = undefined;
       await running;
+      await Promise.allSettled([...direct]);
     },
   };
 }

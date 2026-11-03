@@ -1,0 +1,19 @@
+import {capturePageFocus} from './confirmation-focus.mjs';
+import React,{useState} from 'react';
+import {createPortal} from 'react-dom';
+import {X} from 'lucide-react';
+import {m2Fetch} from './deployment-client.mjs';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import {readableValue} from './readable-markdown.mjs';
+import {documentFieldLabel} from './document-template.mjs';
+export default function MarkdownTransfer({stage,rootId,title,memberId,onApplied}){
+ const [open,setOpen]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[preview,setPreview]=useState(null),[text,setText]=useState('');
+ const selection={stage,rootId};
+ const show=(key,value)=><ReactMarkdown remarkPlugins={[remarkGfm]}>{readableValue(key,value)}</ReactMarkdown>;
+ const read=async r=>{const v=await r.json();if(!r.ok)throw Error(v.error||'操作失败');return v;};
+ async function download(){setError('');try{const q=new URLSearchParams(selection),value=await read(await m2Fetch('/api/markdown/export?'+q));const a=document.createElement('a'),url=URL.createObjectURL(new Blob([value.markdown],{type:'text/markdown;charset=utf-8'}));a.href=url;a.download=String(title||'卡片').replace(/[\\/:*?"<>|]/g,'_')+'.md';a.click();URL.revokeObjectURL(url);}catch(e){if(e.code!=='CANCELLED')setError(e.message);}}
+ async function inspect(){if(!text.trim()||busy)return;setBusy(true);setError('');setPreview(null);try{if(new TextEncoder().encode(text).length>512000)throw Error('内容过长，最多500 KB');const value=await read(await m2Fetch('/api/markdown/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...selection,memberId,text})}));setPreview(value);}catch(e){if(e.code!=='CANCELLED')setError(e.message);}finally{setBusy(false);}}
+ async function apply(event){const confirmationFocus=capturePageFocus(event);setBusy(true);setError('');try{const value=await read(await m2Fetch('/api/markdown/apply',{method:'POST',confirmationFocus,headers:{'Content-Type':'application/json'},body:JSON.stringify({memberId,token:preview.token})}));onApplied(value);setOpen(false);setPreview(null);setText('');}catch(e){if(e.code!=='CANCELLED')setError(e.message);}finally{setBusy(false);}}
+ return <><span className="card-md-actions"><button type="button" aria-label={`导出：${title}`} onClick={download}>导出</button><button type="button" aria-label={`导入：${title}`} onClick={()=>{setOpen(true);setError('');setPreview(null);}}>导入</button></span>{!open&&error&&<span className="card-md-error" role="alert">{error}</span>}{open&&createPortal(<div className="md-transfer-backdrop"><section role="dialog" aria-modal="true" aria-label={`${preview?'导入预览':'导入'}：${title}`} className="md-transfer"><header><div><strong>{preview?'导入预览':'导入'}</strong><p className="md-target">{title}</p></div><button type="button" aria-label="关闭" disabled={busy} onClick={()=>setOpen(false)}><X size={18}/></button></header>{preview?<><div className="md-transfer-diff">{preview.changes.map(c=><section key={c.cardId}><h3>{c.title}{c.outcome==='proposal'&&<small> · 生成修订卡</small>}</h3>{Object.entries(c.patch).map(([k,value])=><div key={k}><b>{documentFieldLabel(c.level,k)}</b><div className="md-before"><small>原来</small>{show(k,c.before[k])}</div><div><small>改为</small>{show(k,value)}</div></div>)}</section>)}</div><footer><button type="button" disabled={busy} onClick={apply}>{busy?'保存中…':'确认导入'}</button><button type="button" disabled={busy} onClick={()=>setPreview(null)}>返回编辑</button></footer></>:<><textarea className="md-paste-input" aria-label="粘贴内容" placeholder="粘贴内容" value={text} disabled={busy} onChange={e=>setText(e.target.value)}/><footer><button type="button" disabled={busy||!text.trim()} onClick={inspect}>{busy?'整理中…':'预览修改'}</button><button type="button" disabled={busy} onClick={()=>setOpen(false)}>取消</button></footer></>}{error&&<p role="alert">{error}</p>}</section></div>,document.body)}</>;
+}

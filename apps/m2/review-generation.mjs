@@ -1,3 +1,11 @@
+import {REVIEW_BODY_LIMIT_BYTES} from './review-model-fallback.mjs';
+import {buildReviewCheckPlan,refreshReviewCheckPlan,verifyReviewCheckPlan,executeReviewCheckPlan,packSourceText,reviewModelRequestBody,reviewModelBudgetBytes,validateScopedCheckResult} from './review-source-plan.mjs';
+import {initialReviewCall,createReviewCallJournal,outputContractError} from './review-call-journal.mjs';
+import {runReviewQuality,qualityModelCall,qualityHash} from './review-quality.mjs';
+import {frozenAgreedOutcome} from './review-agreed-outcome.mjs';
+import {captureConfirmedFacts,verifyEvidenceBundle,addConfirmedFacts,evidenceHash} from './confirmed-review-evidence.mjs';
+import {reviewTarget,inReviewWindow,reviewDay} from './review-period.mjs';
+import {childContract,childVerdictProblem,objectExclusion} from './review-child-contract.mjs';
 // 复盘生成 (陈溪南 2026-10-23): the month-end review is generated inside the product, started from 管理 on her account,
 // instead of on a laptop and imported. Three levels: Mission 复盘, RU PO 复盘, 公司 PO 复盘.
 // Targets are that month's RU POs and Missions in the ontology; evidence is everything the ontology recorded that month about
@@ -5,7 +13,7 @@
 // confirmations, open issues, and last month's reviews as the starting point. Corrected or withdrawn records are left out. A unit with no PO that month is not reviewed; incomplete information is reviewed as it
 // stands. The 公司 PO review is always written: it closes the month and its confirmation starts the next decomposition.
 // The review skill owns how a review is judged and written; this module only gathers, calls in the skill's order and checks.
-import {readFile,writeFile,mkdir,copyFile} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,copyFile,rename} from 'node:fs/promises';
 import {join,dirname} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
@@ -96,7 +104,8 @@ function blockLines(blocks){
  }
  return lines.join('\n');
 }
-const planItems=o=>(o?.business?.blocks||[]).filter(b=>b.id==='execution_plan'||b.kind==='plan').flatMap(b=>(b.components||b.value?.components||[]).filter(c=>c.type==='plan_item'&&String(c.text||'').trim()).map(c=>({title:String(c.text).trim(),responsible:c.attributes?.responsible||null,expected:c.attributes?.expected_output||'',quality:c.attributes?.quality_standard||'',finish:c.attributes?.finish_date||'',ref:c.ref?String(c.ref).replace(/@\d+#/,'#'):null})));
+const planItems=o=>(o?.business?.blocks||[]).filter(b=>b.id==='execution_plan'||b.kind==='plan').flatMap(b=>(b.components||b.value?.components||[]).filter(c=>c.type==='plan_item').map(c=>({title:String(c.text).trim(),responsible:c.attributes?.responsible||null,expected:c.attributes?.expected_output||'',quality:c.attributes?.quality_standard||'',finish:c.attributes?.finish_date||'',componentRef:c.ref||null,ref:c.ref?String(c.ref).replace(/@\d+#/,'#'):null})));
+const taskTerms=o=>{const components=(o?.business?.blocks||[]).flatMap(b=>b.components||b.value?.components||[]),term=type=>components.filter(c=>c.type===type).map(c=>String(c.text||'').trim()).filter(Boolean).join('；');return {expected:term('outcome'),quality:term('acceptance_criterion'),finish:term('time_boundary')};};
 const successCriteria=o=>(o?.business?.blocks||[]).flatMap(b=>(b.components||b.value?.components||[]).filter(c=>c.type==='acceptance_criterion'&&String(c.text||'').trim()).map(c=>String(c.text).trim()));
 // Stand-in accounts are not owners: 代录 entries and test accounts such as “于斯一（测试治理）” (added to two October PeriodGoals on 10/23).
 const ownerOf=o=>(o?.identity?.responsible?.principals||[]).map(p=>p.display_name).filter(n=>n&&!/（(代录|测试[^）]*)）/.test(n)).join('、')||'';
@@ -120,7 +129,7 @@ const NOTE='按月底最终标准判定：把事实截止当作月底，用三�
 export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  const {period,cutoff,heads,objects}=sources,month=Number(period.slice(5)),prev=month===1?12:month-1;
  const monthEvents=sources.monthEvents||[];
- const inMonth=at=>{const d=String(at||'');return d.slice(0,7)===period&&(!cutoff||d<=cutoff);};
+ const inMonth=at=>inReviewWindow(at,period,cutoff);
  // Plan items name people by principal id; every principal the read carries gives its name (读取盘点 2026-10-26 第 1 条).
  const principalName=new Map();(function scan(v){if(!v||typeof v!=='object')return;if(Array.isArray(v)){v.forEach(scan);return;}if(typeof v.principal_id==='string'&&v.display_name)principalName.set(v.principal_id,v.display_name);for(const x of Object.values(v))scan(x);})([objects,monthEvents]);
  const realName=n=>n&&!/（(代录|测试[^）]*)）/.test(n)?n:'';
@@ -132,8 +141,8 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  const goals={},companyGoal=heads.goals.find(g=>companyDomain.has(g.domain_id));
  for(const g of heads.goals){const unit=unitOfDomain.get(g.domain_id);if(unit&&!goals[unit])goals[unit]={id:g.object_id,unit,object:objects[g.object_id]};}
  const goalOfId=new Map(Object.values(goals).map(g=>[g.id,g]));
- const missions=[];
- for(const m of [...heads.missions].sort((a,b)=>String(a.object_id).localeCompare(String(b.object_id)))){const o=objects[m.object_id],goal=goalOfId.get(relationTo(o,'goal_ref'))||goals[unitOfDomain.get(m.domain_id)];if(!goal)continue;missions.push({id:m.object_id,goal,object:o});}
+ const missions=[],excludedMissions=[];
+ for(const m of [...heads.missions].sort((a,b)=>String(a.object_id).localeCompare(String(b.object_id)))){const o=objects[m.object_id],parent=relationTo(o,'goal_ref'),goal=parent?goalOfId.get(parent):goals[unitOfDomain.get(m.domain_id)];const exclusion=objectExclusion(o,m.object_id,cutoff);if(exclusion){excludedMissions.push({...exclusion,unit:goal?.unit||unitOfDomain.get(m.domain_id)});continue;}if(!goal){const old=goals[unitOfDomain.get(m.domain_id)];if(parent&&old)excludedMissions.push({ref:m.object_id,unit:old.unit,reason:'最新来源父级已移出本PO',authority:`${m.object_id}@${o?.business?.version??'?'}#goal_ref`,effectiveAt:null});continue;}missions.push({id:m.object_id,goal,object:o});}
  const missionIds=new Set(missions.map(m=>m.id));
  const missionOfTask=new Map(heads.tasks.map(t=>[t.object_id,relationTo(objects[t.object_id],'mission_ref')||relationTo(objects[t.object_id],'parent_ref')]));
  const titleOf=id=>objects[id]?.business?.title||objects[id]?.title||heads.rus.find(r=>r.object_id===id)?.title||'';
@@ -154,7 +163,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  // Only a review that says it is last month's is last month's; a decision filed as review this month is this month's record.
  const lastMonthReview=(e,text)=>e.category==='review'&&new RegExp(`${prev}\\s*月复盘`).test(text.slice(0,80));
  // A daily record is often written twice: the event, then a progress snapshot citing it. The snapshot stands for both.
- const cited=new Set(heads.snapshots.flatMap(h=>(objects[h.object_id]?.source_event_refs||[]).map(r=>r.event_id||String(r.ref||'').replace(/^event:/,''))));
+ const cited=new Set();
  const usedSnapshots=new Set(),usedEvents=new Set();
  const seen=new Set(),once=(key,item)=>{const k=key+'|'+item.asOf+'|'+item.text.slice(0,300);if(seen.has(k))return null;seen.add(k);return item;};
  // Route only explicit business ownership, not names or keywords. Preserve the
@@ -171,10 +180,10 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
   if(!s||!inMonth(s.as_of)&&!entryTimes.some(inMonth)&&!startingPoint(String(s.title||'')))continue;
   const text=blockLines(s.blocks||s.snapshot?.blocks);if(!text)continue;
   const baseline=startingPoint(String(s.title||''));
-  const raw={kind:baseline?'月初起点':'本月进展',source:(baseline?'【月初起点，不算本月结果】':'')+s.title,asOf:String(s.as_of||'').slice(0,10),text,by:s.generator?.display_name||''};
+  const raw={kind:baseline?'月初起点':'本月进展',source:(baseline?'【月初起点，不算本月结果】':'')+s.title,asOf:reviewDay(s.as_of),snapshotAsOf:s.as_of,text,by:s.generator?.display_name||''};
   const routed=routeBusiness(raw,unitOfDomain.get(h.domain_id),h.object_id),item=routed.item&&once(s.subject_ref?.object_id,routed.item);
   if(item)place(s.subject_ref?.object_id,h.domain_id,item,s.title);
-  if(item||routed.moved)usedSnapshots.add(h.object_id);
+  if(item||routed.moved){usedSnapshots.add(h.object_id);for(const ref of s.source_event_refs||[])cited.add(ref.event_id||String(ref.ref||'').replace(/^event:/,''));}
  }
  for(const e of monthEvents){
   if((e.corrected_by||[]).length||(e.withdrawn_by||[]).length||cited.has(e.event_id))continue;
@@ -190,7 +199,7 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
    if(!STEP[e.kind])continue;
    label='过程记录';text=`${STEP[e.kind]}：${subjects.map(titleOf).filter(Boolean).join('、')||'对象'}${e.principal?.display_name?`（${e.principal.display_name}）`:''}`;
   }
-  const item={kind,source:label+(e.category==='meeting'||e.category==='delivery'?'':` · ${e.kind}`),asOf:eventAt(e).slice(0,10),text,by:e.principal?.display_name||''};
+  const item={kind,source:label+(e.category==='meeting'||e.category==='delivery'?'':` · ${e.kind}`),asOf:reviewDay(eventAt(e)),occurredAt:e.occurred_at,recordedAt:e.recorded_at||null,text,by:e.principal?.display_name||''};
   const subjectUnit=subjects.map(id=>goalOfId.get(id)?.unit||missions.find(m=>m.id===id)?.goal.unit||unitOfRu.get(id)||unitOfDomain.get(objects[id]?.business?.domain_id)).find(Boolean);
   const routed=routeBusiness(item,subjectUnit,e.event_id,2000);
   if(routed.moved)usedEvents.add(e.event_id);
@@ -200,17 +209,20 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  for(const id of [...goalOfId.keys(),...missionIds])for(const i of objects[id]?.records?.open_issues||[])place(id,null,{kind:'本月进展',source:'未处置的问题',asOf:String(i.raised_at||i.at||'').slice(0,10),text:[i.title||i.summary||i.text,i.status&&`状态：${i.status}`].filter(Boolean).join('；')||String(i.issue_ref||'问题'),by:''});
  const numbered=items=>[...items].sort((a,b)=>a.asOf.localeCompare(b.asOf)).map((x,i)=>({...x,id:`E${i+1}`}));
  const recordFacts=items=>{const days=items.filter(x=>x.kind==='本月进展'&&x.asOf).map(x=>x.asOf).sort();return {progressRecords:days.length,latestRecord:days.at(-1)||null};};
+ const basis={mode:'latest-source-candidate',snapshotHash:createHash('sha256').update(JSON.stringify({period,cutoff,heads,objects})).digest('hex'),period,cutoff};
+ const provenance=(o,id)=>{const formal=structuredClone(o?.business?.formal||null),revision=o?.business?.revision_id||null;return {basisMode:basis.mode,snapshotHash:basis.snapshotHash,objectId:id,sourceVersion:o?.business?.version||null,sourceRevision:revision,sourceStatus:formal?.lifecycle_status||statusOf(o)||'',formal,period,cutoff,effective:['draft','草稿','待确认','未确认'].includes(formal?.lifecycle_status||statusOf(o))?false:formal?.effective_revision_id?Boolean(revision&&formal.effective_revision_id===revision):null};};
  const base={period,cutoff,note:NOTE};
  const stage1=[],stage2=[],missing=[];
  const perGoal={};
  const bare=t=>String(t||'').replace(/^\s*[A-Z]?\d*[-–]?[A-Z0-9]*\s*[｜|]\s*/,'').split(/[：:]/)[0].trim();
  function taskLines(m){
   const items=planItems(m.object),objs=heads.tasks.filter(t=>missionOfTask.get(t.object_id)===m.id).map(t=>({id:t.object_id,o:objects[t.object_id]}));
-  const used=new Set(),lines=items.map((p,i)=>{const hit=objs.find(t=>!used.has(t.id)&&bare(t.o?.business?.title)&&(bare(p.title)===bare(t.o?.business?.title)||p.title.includes(bare(t.o?.business?.title))));if(hit)used.add(hit.id);
+  const used=new Set(),lines=items.map((p,i)=>{const matches=objs.filter(t=>bare(t.o?.business?.title)&&(bare(p.title)===bare(t.o?.business?.title)||p.title.includes(bare(t.o?.business?.title))));const hit=matches.length===1&&!used.has(matches[0].id)?matches[0]:null,ambiguous=matches.length>1||matches.length===1&&used.has(matches[0].id);if(hit)used.add(hit.id);
+   const terms=hit?taskTerms(hit.o):p;
    const owner=realName(ownerOf(hit?.o))||realName(principalName.get(p.responsible))||'未指派';
-   return {ref:hit?.id||p.ref||`plan-${i+1}`,title:p.title,owner,status:hit?statusOf(hit.o):'计划条目',...(p.expected?{expected:p.expected}:{}),...(p.quality?{quality:p.quality}:{}),...(p.finish?{finish:p.finish}:{}),...(hit?{definition:blockLines(hit.o?.business?.blocks).slice(0,1200)}:{})};});
-  for(const t of objs)if(!used.has(t.id))lines.push({ref:t.id,title:t.o?.business?.title||'',owner:realName(ownerOf(t.o))||'未指派',status:statusOf(t.o),definition:blockLines(t.o?.business?.blocks).slice(0,1200)});
-  return lines;
+   return {source:hit?'object':'planItem',objectId:hit?.id||null,version:hit?(hit.o?.business?.version||null):(m.object?.business?.version||null),parentRef:m.id,componentRef:p.componentRef,commitmentRef:p.ref||null,...(ambiguous?{ambiguous:true}:{}),ref:hit?.id||p.ref||`plan-${i+1}`,title:hit?hit.o.business.title:p.title,...(hit?{planTitle:p.title,planSource:{componentRef:p.componentRef,sourceVersion:m.object?.business?.version||null,sourceRevision:m.object?.business?.revision_id||null,...p}}:{}),owner,status:hit?statusOf(hit.o):'计划条目',...(terms.expected?{expected:terms.expected}:{}),...(terms.quality?{quality:terms.quality}:{}),...(terms.finish?{finish:terms.finish}:{}),...(hit?{definition:blockLines(hit.o?.business?.blocks).slice(0,1200)}:{})};});
+  for(const t of objs)if(!used.has(t.id))lines.push({source:'object',objectId:t.id,version:t.o?.business?.version||null,parentRef:m.id,ref:t.id,title:t.o?.business?.title||'',owner:realName(ownerOf(t.o))||'未指派',status:statusOf(t.o),...taskTerms(t.o),definition:blockLines(t.o?.business?.blocks).slice(0,1200)});
+  return lines.filter(t=>!t.objectId||!objectExclusion(objects[t.objectId],t.objectId,cutoff));
  }
  // Unit- and PO-level records that name a Mission (its title, its code such as 09-1, or one of its Task titles) belong to
  // that Mission; the rest reach every Mission of the unit as 单元层面进展, not evidence for any one Task (读取盘点第 2 条).
@@ -237,11 +249,33 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
    // Neither plan items nor Tasks: the Mission's own success criteria are the lines to report on, one each.
    ...(taskLines(m).length?{}:{expectedFacts:successCriteria(m.object).map((text,i)=>({ref:`ref-${i+1}`,item:text}))}),objectId:m.id});
  }
+ // Latest source plans are a candidate baseline, not a claim that ontology commitments took effect.
+ for(const c of stage1){const m=missions.find(m=>m.id===c.objectId),gaps=[],excluded=heads.tasks.filter(t=>missionOfTask.get(t.object_id)===m.id).map(t=>objectExclusion(objects[t.object_id],t.object_id,cutoff)).filter(Boolean);
+  c.sourceBasis=provenance(m.object,m.id);
+  if(!m.object?.business?.version)gaps.push('Mission来源版本缺失');
+  if(!blockLines(m.object?.business?.blocks).trim())gaps.push('Mission来源正文缺失');
+  const goalRefs=(m.object?.business?.relations||[]).filter(r=>r.field==='goal_ref').map(r=>r.value?.object_id).filter(Boolean);
+  if(new Set(goalRefs).size!==1||goalRefs[0]!==m.goal.id)gaps.push('Mission父级引用缺失或有歧义');
+  for(const t of heads.tasks)if((!objects[t.object_id]||!missionOfTask.get(t.object_id))&&(!t.domain_id||unitOfDomain.get(t.domain_id)===m.goal.unit))gaps.push('Task读取或父级关系不完整：'+t.object_id);
+  const items=(c.tasks||[]).map(t=>{
+   const object=t.objectId?objects[t.objectId]:m.object,source=provenance(object,t.objectId||m.id);
+   if(!t.title)gaps.push('Task或执行计划条目正文缺失：'+t.ref);
+   if(t.ambiguous)gaps.push('执行计划与Task对应有歧义：'+t.ref);
+   if(t.source==='planItem'&&!t.commitmentRef)gaps.push('执行计划条目缺稳定组件引用：'+t.ref);
+   if(t.objectId){if(!blockLines(object?.business?.blocks).trim())gaps.push('Task来源正文缺失：'+t.ref);const parents=(object?.business?.relations||[]).filter(r=>['mission_ref','parent_ref'].includes(r.field)).map(r=>r.value?.object_id).filter(Boolean);if(new Set(parents).size!==1||parents[0]!==m.id)gaps.push('Task父级引用缺失或有歧义：'+t.ref);}
+   return {ref:t.ref,kind:'Task',parentRef:m.id,period,inBaseline:true,effective:source.effective,source:t.source,objectId:t.objectId,version:t.version,status:t.status,sourceRevision:source.sourceRevision,formal:source.formal,...(t.componentRef?{componentRef:t.componentRef}:{})};
+  });
+  c.childCommitments={...childContract(items,excluded,gaps),basisMode:basis.mode,snapshotHash:basis.snapshotHash};
+ }
  for(const [unit,g] of Object.entries(goals)){
   const ev=[...(bySubject[g.id]||[]),...(byUnit[unit]||[])];
   const children=stage1.filter(c=>c.level==='mission'&&c.unit===unit).map(c=>c.id);
   const c={...base,id:unit,level:'ru',unit,parent:'company',title:g.object?.business?.title||'',owner:ownerOf(g.object)||ownerOf(ruObject.get(unit)),commitment:blockLines(g.object?.business?.blocks),commitmentSource:`本体 ${month} 月 RU PO（${statusOf(g.object)}）`,evidence:numbered(ev),recordFacts:recordFacts(ev),objectId:g.id,...(children.length?{children}:{})};
   // A unit with no Mission reports on its PO's success criteria, one line each (评测 2026-10-26).
+  c.sourceBasis=provenance(g.object,g.id);
+  c.childCommitments=childContract(children.map(id=>{const m=stage1.find(x=>x.id===id),o=objects[m.objectId];return {ref:id,kind:'Mission',parentRef:g.id,period,inBaseline:true,effective:provenance(o,m.objectId).effective,source:'object',objectId:m.objectId,version:o?.business?.version||null,status:statusOf(o),sourceRevision:o?.business?.revision_id||null,formal:structuredClone(o?.business?.formal||null)};}),excludedMissions.filter(x=>x.unit===unit).map(({unit,...x})=>x),children.filter(id=>relationTo(objects[stage1.find(x=>x.id===id).objectId],'goal_ref')!==g.id).map(id=>'Mission父级引用未明确：'+id));
+  c.childCommitments.basisMode=basis.mode;c.childCommitments.snapshotHash=basis.snapshotHash;
+  if(!c.sourceBasis.sourceVersion||!c.commitment){c.childCommitments.complete=false;(c.childCommitments.missing??=[]).push('PO来源版本或正文缺失');}
   if(!children.length){const crit=successCriteria(g.object);if(crit.length)c.expectedFacts=crit.map((text,i)=>({ref:`ref-${i+1}`,item:text}));}
   (children.length?stage2:stage1).push(c);
  }
@@ -250,17 +284,20 @@ export function buildReviewInput(sources,{companyDirection='',ceoName=''}={}){
  const stage3=[{...base,id:'company',level:'company',unit:'company',parent:null,title:companyObject?.business?.title||`公司 ${month} 月`,owner:ceoName||ownerOf(companyObject)||ceo,
   commitment:companyObject?blockLines(companyObject.business?.blocks):companyDirection,commitmentSource:companyObject?`本体 ${month} 月公司 PO（${statusOf(companyObject)}）`:companyDirection?`本体里没有公司 ${month} 月 PO，承诺取本体记的 ${month} 月公司方向`:`本体里没有公司 ${month} 月 PO`,
   children:[...stage1,...stage2].filter(c=>c.level==='ru').map(c=>c.id),evidence:numbered(forCompany),recordFacts:recordFacts(forCompany),missing:companyObject?[]:[`本体里没有公司 ${month} 月 PO`]}];
+ stage3[0].sourceBasis=companyObject?provenance(companyObject,companyGoal.object_id):{basisMode:basis.mode,snapshotHash:basis.snapshotHash,period,cutoff,sourceStatus:'未找到公司PO',formal:null,effective:null};
+ for(const card of [...stage1,...stage2])card.agreedOutcome=frozenAgreedOutcome(objects[card.objectId],card.sourceBasis);
  // Sensitive personal details are hidden before anything reaches the model (sensitive-rules.json, shared by every flow).
  const redactions={};
  for(const c of [...stage1,...stage2,...stage3]){
   const found={},add=h=>{for(const [k,n] of Object.entries(h))found[k]=(found[k]||0)+n;};
   const r=redactText(c.commitment);c.commitment=r.text;add(r.hits);
+  for(const item of c.agreedOutcome?.items||[]){const x=redactText(item.text);item.text=x.text;add(x.hits);}
   for(const e of c.evidence){const x=redactText(e.text);e.text=x.text;add(x.hits);}
   if(Object.keys(found).length){c.redactions=found;redactions[c.id]=found;}
  }
  // What this review was built from, kept with every run (于斯一 asked; the 10/23 run could not be traced, 读取盘点第 8 条).
  const readReceipt={readAt:sources.readAt,cutoff,objects:Object.entries(objects).filter(([,o])=>o).map(([id,o])=>`${id}@${o.business?.version??o.version??o.revision_id??'?'}`),snapshots:[...usedSnapshots],events:[...usedEvents]};
- return {period,cutoff,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
+ return {period,cutoff,basis,readAt:sources.readAt,stages:[stage1,stage2,stage3],redactions,rules:sensitiveRulesVersion,skipped:missing,notes:[NOTE,...missing],readReceipt};
 }
 
 // ---------- running the review skill ----------
@@ -271,7 +308,9 @@ export async function loadReviewSkill(root){
  if(!files.length)throw Error('没有读到复盘技能');
  const stages=await readFile(new URL('references/round-stages.md',root),'utf8').catch(()=>'');
  const version=rules.match(/版本\s*([\d.]+)/)?.[1]||null;
- return {rules,version,hash:sha(rules),files,groups:[...stages.matchAll(/^- 第(.)组（([^）]+)）：(.+)$/gm)].map(m=>({name:m[2],types:m[3].split('、').map(s=>s.trim())})),mustFix:(stages.match(/必须修改的问题类型：(.+)/)?.[1]||'').replace(/。$/,'').split('、').filter(Boolean)};
+ const maxRevisionRounds=Number(stages.match(/^自动修订最多做 (\d+) 轮。$/m)?.[1]||0)||null;
+ if(skillAtLeast(version,'2.1.13')&&maxRevisionRounds!==2)throw Error('复盘技能缺少明确的两轮自动修订合同');
+ return {rules,version,hash:sha(rules),files,maxRevisionRounds,groups:[...stages.matchAll(/^- 第(.)组（([^）]+)）：(.+)$/gm)].map(m=>({name:m[2],types:m[3].split('、').map(s=>s.trim())})),mustFix:(stages.match(/必须修改的问题类型：(.+)/)?.[1]||'').replace(/。$/,'').split('、').filter(Boolean)};
 }
 const causeText=x=>typeof x==='string'?x:[x?.text,x?.ask].filter(Boolean).join(' ');
 const textOf=r=>[r.verdictReason,r.keyGap,...(r.facts||[]).flatMap(f=>[f.evidence,f.gap]),...(r.causes||[]).map(causeText),...['targets','results','questions','changes','practices','decisions','commonCauses'].flatMap(k=>r[k]||[]),...(r.nextInputs||[]).map(n=>n?.text),r.ltoProgress,r.ltoReview?.reason].filter(Boolean);
@@ -325,69 +364,193 @@ export function rowFacts(c,r){
  return {expected:want.length,lines:(r?.facts||[]).length,missing:want.filter(w=>!lines.has(w.ref)&&!lines.has(w.item)).map(w=>w.item)};
 }
 function evidenceFacts(c,r){const ids=new Set((c.evidence||[]).map(e=>e.id));const used=[...new Set(JSON.stringify(r).match(/E\d+/g)||[])];return {missingIds:used.filter(id=>ids.size&&!ids.has(id)),usedCount:used.length};}
-const unitData=c=>({id:c.id,level:c.level,unit:c.unit,title:c.title,owner:c.owner,period:c.period,cutoff:c.cutoff,commitment:c.commitment,commitmentSource:c.commitmentSource,evidence:c.evidence,missing:c.missing,note:c.note,recordFacts:c.recordFacts,...(c.tasks?.length?{tasks:c.tasks}:{}),...(c.expectedFacts?{expectedFacts:c.expectedFacts}:{})});
+const unitData=c=>({id:c.id,level:c.level,unit:c.unit,title:c.title,owner:c.owner,period:c.period,cutoff:c.cutoff,commitment:c.commitment,commitmentSource:c.commitmentSource,evidence:c.evidence,missing:c.missing,note:c.note,recordFacts:c.recordFacts,...(c.sourceBasis?{sourceBasis:c.sourceBasis}:{}),...(c.childCommitments?{childCommitments:c.childCommitments}:{}),...(c.tasks?.length?{tasks:c.tasks}:{}),...(c.expectedFacts?{expectedFacts:c.expectedFacts}:{}),...(c.m2EvidenceReceipt?{m2EvidenceReceipt:c.m2EvidenceReceipt}:{})});
+// Checkers must receive the same provenance as generation. Confirmed reports
+// retain their full quotation; the existing short World text budget is unchanged.
+export function reviewCheckSources(cards){
+ return Object.fromEntries(cards.map(c=>[c.id,{period:c.period,cutoff:c.cutoff,owner:c.owner,objectId:c.objectId,sourceBasis:structuredClone(c.sourceBasis),commitment:c.commitment,m2EvidenceReceipt:structuredClone(c.m2EvidenceReceipt),evidence:(c.evidence||[]).map(e=>e.m2Source?structuredClone(e):{...structuredClone(e),text:String(e.text||'').slice(0,400)})}]));
+}
+// Missing or malformed checker output is a failed check, never a clean result.
+export function checkedReviewIssues(value,{skill,refs}){
+ if(!Array.isArray(value?.issues))throw Error('复盘检查未返回 issues 数组，不能视为通过');
+ const strict=skillAtLeast(skill.version,'2.1.12');
+ for(const issue of value.issues){
+  if(!issue||typeof issue.ref!=='string'||!refs.includes(issue.ref)||typeof issue.type!=='string'||!issue.type.trim()||typeof issue.problem!=='string'||!issue.problem.trim())throw Error('复盘检查问题缺少有效对象、类型或说明，不能视为通过');
+  if(strict&&(typeof issue.mustFix!=='boolean'||typeof issue.fixable!=='boolean'||typeof issue.impact!=='string'||!issue.impact.trim()))throw Error('复盘检查问题缺少 mustFix、fixable 或影响说明，不能视为通过');
+ }
+ return value.issues;
+}
+export const requiredReviewIssue=(issue,skill)=>issue.fixable!==false&&(issue.mustFix===true||skill.mustFix.includes(issue.type));
+export const reviewQualityWarnings=run=>(run.issues||[]).filter(x=>x.fixable===false).map(x=>({ref:x.ref,title:run.reviews?.[x.ref]?.title||x.ref,type:x.type,problem:x.problem,impact:x.impact||'',mustFix:x.mustFix===true}));
 const fieldsHint='返回 JSON：{"analysis":"不展示的分析，600 字内","review":{按 round-stages.md「字段」写全本层字段}}';
 
 // Runs the skill's stages on a built input. `run` holds what is done so far (raw answers by call), so a failed run
 // resumes where it stopped; save(run) is called after every answer.
-export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{},failed:[],dropped:[]},save=async()=>{},onProgress=async()=>{},concurrency=8}){
+export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{},failed:[],dropped:[]},save=async()=>{},onProgress=async()=>{},concurrency=8,programOptions=null,signal,recordAttempt=async()=>{}}){
+ const twoRound=skillAtLeast(skill.version,'2.1.13');
+ signal?.throwIfAborted();
+ if(skillAtLeast(skill.version,'2.1.10')){const incomplete=input.stages.flat().filter(c=>['mission','ru'].includes(c.level)&&!c.childCommitments?.complete);if(incomplete.length)throw Error('有效直接子项元信息不完整：'+incomplete.map(c=>c.id+' '+(c.childCommitments?.missing||[]).join('；')).join('；'));}
+ if(skillAtLeast(skill.version,'2.1.11')){
+  if(input.basis?.mode!=='latest-source-candidate'||!input.basis.snapshotHash)throw Error('最新来源候选基线缺失，请重新准备输入');
+  const mixed=input.stages.flat().filter(c=>['mission','ru'].includes(c.level)&&(c.sourceBasis?.basisMode!==input.basis.mode||c.sourceBasis?.snapshotHash!==input.basis.snapshotHash||c.childCommitments?.basisMode!==input.basis.mode||c.childCommitments?.snapshotHash!==input.basis.snapshotHash||(c.childCommitments.items||[]).some(t=>t.inBaseline!==true)));
+  if(mixed.length)throw Error('对象来源与整轮候选基线不一致：'+mixed.map(c=>c.id).join('、'));
+  const fingerprint=createHash('sha256').update(JSON.stringify({basis:input.basis,stages:input.stages})).digest('hex');
+  if(run.inputFingerprint&&run.inputFingerprint!==fingerprint||!run.inputFingerprint&&(Object.keys(run.raw||{}).length||Object.keys(run.reviews||{}).length))throw Error('续跑输入基线不一致，不能混用旧输出');
+  run.inputFingerprint=fingerprint;await save(run);
+ }
  const system=`你是 TKOS 的月度复盘助手。按下面的技能工作。仅返回有效 JSON 对象，不加代码围栏。\n${skill.rules}`;
  run.raw??={};run.reviews??={};run.failed??=[];run.dropped??=[];
- const ask=async(key,user)=>{
-  if(run.raw[key])return JSON.parse(bareJson(run.raw[key]));
-  // One chain per answer (LangSmith 2026-10-27); each attempt below is its llm child.
-  return tracer.withRun(key,'chain',{stage:/^check-/.test(key)?'check':/^revise-/.test(key)?'revise':key==='company'?'company':'review',unit:/^check-/.test(key)?undefined:key.replace(/^revise-|#nobg$/g,'')},async()=>{
-  for(let attempt=1;;attempt++){
-   try{const r=await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify(user)}],{thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000});
-    const parsed=JSON.parse(bareJson(r.answer));run.raw[key]=r.answer;await save(run);return parsed;}
-   catch(e){if(e.diagnostics?.finishReason==='refusal'||e.code==='MODEL_REFUSAL'||attempt>=3){e.refusal=e.refusal||e.diagnostics?.finishReason==='refusal'||e.code==='MODEL_REFUSAL';throw e;}}
-  }
-  });
- };
+ const ask=async(key,user)=>tracer.withRun(key,'chain',{stage:/^check-/.test(key)?'check':/^revise-/.test(key)?'revise':key==='company'?'company':'review',unit:/^check-/.test(key)?undefined:key.replace(/^revise-|#nobg$/g,'')},()=>initialReviewCall({gateway,system,user,key,skill,run,save,recordAttempt,signal,validate:value=>{
+  if(twoRound&&(!value.review||typeof value.review!=='object'||Array.isArray(value.review)))throw outputContractError();
+  return value;
+ }}));
  // The skill's steps as chains in the trace: Mission and RU reviews, checks, revisions, the company review.
  const stage=(name,fn)=>tracer.withRun(name,'chain',{stage:name},fn);
  // A refusal is retried once without the month-start background; a unit that still fails is named, the round goes on.
  const askUnit=async(c,user)=>{
-  try{return await ask(c.id,user);}catch(e){
+  try{const answer=await ask(c.id,user);if(twoRound&&(!answer?.review||typeof answer.review!=='object'||Array.isArray(answer.review))){(run.generationFailures??=[]).push({id:c.id,raw:run.raw[c.id],error:'初稿未返回有效复盘'});delete run.raw[c.id];throw Error('初稿未返回有效复盘');}return answer;}catch(e){
+   if(signal?.aborted||e.code==='REVIEW_JOURNAL_UNAVAILABLE')throw e;
    // Refusals come and go (10/23: finance-m2 passed in one run and was refused in the next), so the same request is tried once more first.
-   if(e.refusal){try{return await ask(c.id,user);}catch(e1){e=e1;}}
-   if(e.refusal&&user.unit?.evidence?.some(x=>x.kind==='月初起点')){run.dropped.push({id:c.id,reason:'model refusal; background evidence removed'});try{return await ask(c.id+'#nobg',{...user,unit:{...user.unit,evidence:user.unit.evidence.filter(x=>x.kind!=='月初起点'),missing:[...(user.unit.missing||[]),'月初背景资料这次没有读入（模型拒答）']}});}catch(e2){e=e2;}}
-   run.failed.push({id:c.id,title:c.title,error:String(e.message).slice(0,200),finishReason:e.diagnostics?.finishReason||null});await save(run);return null;
+   if(!twoRound&&e.refusal){try{return await ask(c.id,user);}catch(e1){e=e1;}}
+   if(!twoRound&&e.refusal&&user.unit?.evidence?.some(x=>x.kind==='月初起点')){run.dropped.push({id:c.id,reason:'model refusal; background evidence removed'});try{return await ask(c.id+'#nobg',{...user,unit:{...user.unit,evidence:user.unit.evidence.filter(x=>x.kind!=='月初起点'),missing:[...(user.unit.missing||[]),'月初背景资料这次没有读入（模型拒答）']}});}catch(e2){e=e2;}}
+   run.failed.push({id:c.id,title:c.title,error:String(e.message).slice(0,200),code:e.code||null,finishReason:e.diagnostics?.finishReason||null,finishReasonSource:e.diagnostics?.finishReasonSource||null});await save(run);return null;
   }
  };
  const put=(c,res)=>{if(res?.review)run.reviews[c.id]={...res.review,unit:c.unit,level:c.level,ref:c.id,title:c.title,owner:c.owner,...(c.parent?{parent:c.parent==='company'?'company':c.parent}:{})};};
- const pool=async(items,fn)=>{let i=0;await Promise.all(Array.from({length:Math.min(concurrency,items.length)},async()=>{while(i<items.length){const x=items[i++];await fn(x);}}));};
+ const pool=async(items,fn)=>{let i=0;const result=await Promise.allSettled(Array.from({length:Math.min(concurrency,items.length)},async()=>{while(i<items.length){signal?.throwIfAborted();const x=items[i++];await fn(x);}}));const failed=result.find(x=>x.status==='rejected');if(failed)throw failed.reason;};
  const [s1,s2,s3]=input.stages,total=s1.length+s2.length+s3.length;let done=0;
  // Resuming after failed units: ask them again, and rewrite their RU and the company review so those read the new answer.
  if(run.failed.length){
   const items=[...s1,...s2,...s3],stale=new Set();
   for(const f of run.failed){let c=items.find(x=>x.id===f.id);while(c?.parent){stale.add(c.parent);c=items.find(x=>x.id===c.parent);}}
   for(const id of stale){delete run.raw[id];delete run.raw[id+'#nobg'];delete run.raw['revise-'+id];delete run.reviews[id];}
+  // Successful recovery changes the material checked, so prior check/revision answers cannot be reused.
+  for(const key of Object.keys(run.raw))if(/^check-|^revise-/.test(key))delete run.raw[key];
+  run.checked=false;run.issues=[];delete run.checkSourcesHash;
   run.failed=[];await save(run);
  }
  const step=async label=>{done++;await onProgress({stage:label,done,total});};
  const missionStep='按技能「产品生成整轮复盘候选·每一步怎么做·1. Mission 复盘」执行。'+fieldsHint,ruStep='按技能「产品生成整轮复盘候选·每一步怎么做·2. RU 复盘」执行。'+fieldsHint;
  await onProgress({stage:'Mission 复盘和没有 Mission 的 RU PO 复盘',done,total});
- await stage('mission-and-ru',()=>pool(s1,async c=>{put(c,await askUnit(c,{task:c.level==='mission'?missionStep:ruStep,unit:unitData(c)}));await step('Mission 复盘和没有 Mission 的 RU PO 复盘');}));
- await stage('ru',()=>pool(s2,async c=>{put(c,await askUnit(c,{task:ruStep,unit:unitData(c),missionReviews:c.children.map(id=>run.reviews[id]).filter(Boolean)}));await step('RU PO 复盘');}));
- if(skill.groups.length){
+ await stage('mission-and-ru',()=>pool(s1,async c=>{if(!twoRound||!run.quality)put(c,await askUnit(c,{task:c.level==='mission'?missionStep:ruStep,unit:unitData(c)}));await step('Mission 复盘和没有 Mission 的 RU PO 复盘');}));
+ await stage('ru',()=>pool(s2,async c=>{if(!twoRound||!run.quality)put(c,await askUnit(c,{task:ruStep,unit:unitData(c),missionReviews:c.children.map(id=>run.reviews[id]).filter(Boolean)}));await step('RU PO 复盘');}));
+ if(skill.groups.length&&!twoRound){
   await onProgress({stage:'检查与修改',done,total});
   const all=[...s1,...s2].filter(c=>run.reviews[c.id]);
   const facts=Object.fromEntries(all.map(c=>[c.id,{lengthFindings:lengthFindings(run.reviews[c.id]),evidenceFacts:evidenceFacts(c,run.reviews[c.id]),...(Array.isArray(run.reviews[c.id]?.facts)?{rowFacts:rowFacts(c,run.reviews[c.id])}:{})}]));
   const verdictFacts=s2.filter(c=>run.reviews[c.id]).map(c=>({ref:c.id,verdict:run.reviews[c.id].verdict,children:c.children.map(id=>({ref:id,verdict:run.reviews[id]?.verdict||'生成失败'}))}));
-  const reviews=all.map(c=>run.reviews[c.id]),brief=Object.fromEntries(all.map(c=>[c.id,{commitment:c.commitment,evidence:(c.evidence||[]).map(e=>({id:e.id,asOf:e.asOf,text:e.text.slice(0,400)}))}]));
+  const reviews=all.map(c=>run.reviews[c.id]),brief=reviewCheckSources(all);
+  const checkSourcesHash=sha(JSON.stringify(brief));
+  if((run.checked||Object.keys(run.raw).some(key=>/^check-|^revise-/.test(key)))&&run.checkSourcesHash!==checkSourcesHash)throw Error('检查来源输入已变化，不能复用旧检查或返修结果，请保留原任务重新准备候选');
+  run.checkSourcesHash=checkSourcesHash;await save(run);
   if(!run.checked){
-   const found=(await stage('checks',()=>Promise.all(skill.groups.map((g,i)=>ask('check-'+(i+1),{task:`按技能「产品生成整轮复盘候选·检查」执行第${i+1}组（${g.name}）检查，只查这些类型：${g.types.join('、')}。返回 JSON：{"issues":[{"ref":"复盘 ref","type":"问题类型","problem":"一句话","impact":"一句话","fixable":true}]}`,reviews,programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(reviews)},sources:brief}).catch(()=>({issues:[]})))))).flatMap(r=>r.issues||[]);
+   const checks=await stage('checks',()=>Promise.allSettled(skill.groups.map(async(g,i)=>{
+    const key='check-'+(i+1);
+    try{return checkedReviewIssues(await ask(key,{task:`按技能「产品生成整轮复盘候选·检查」执行第${i+1}组（${g.name}）检查，只查这些类型：${g.types.join('、')}。返回 JSON：{"issues":[{"ref":"复盘 ref","type":"问题类型","problem":"一句话","impact":"一句话","mustFix":true,"fixable":true}]}。每条必须给出 mustFix 和 fixable 两个布尔值。原必须修改类型恒为 mustFix:true；其他类型按是否影响事实理解、判断或行动标记；不可修时说明具体缺口，不可冒充已通过。`,reviews,programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(reviews)},sources:brief}),{skill,refs:[...s1,...s2].map(c=>c.id)});}
+    catch(error){if(run.raw[key]){(run.checkFailures??=[]).push({key,raw:run.raw[key],error:String(error.message),at:new Date().toISOString()});delete run.raw[key];await save(run);}throw error;}
+   })));
+   const failed=checks.find(x=>x.status==='rejected');if(failed)throw failed.reason;
+   const found=checks.flatMap(x=>x.value);
    run.issues=found;run.checked=true;await save(run);
   }
-  const byRef=Object.groupBy(run.issues.filter(x=>x.fixable!==false&&skill.mustFix.includes(x.type)),x=>x.ref);
-  await stage('revisions',()=>pool(Object.entries(byRef).filter(([ref])=>run.reviews[ref]),async([ref,list])=>{const c=all.find(x=>x.id===ref);put(c,await ask('revise-'+ref,{task:'按技能「产品生成整轮复盘候选·检查」中的「修改」规则，修改这份复盘。'+fieldsHint,unit:unitData(c),review:run.reviews[ref],issues:list,programFacts:facts[ref],missionReviews:c.children?.map(id=>run.reviews[id])}).catch(()=>null));}));
+  const byRef=Object.groupBy(run.issues.filter(x=>requiredReviewIssue(x,skill)),x=>x.ref);
+  await stage('revisions',()=>pool(Object.entries(byRef).filter(([ref])=>run.reviews[ref]),async([ref,list])=>{
+   const c=all.find(x=>x.id===ref),key='revise-'+ref;
+   const answer=await ask(key,{task:'按技能「产品生成整轮复盘候选·检查」中的「修改」规则，修改这份复盘。'+fieldsHint,unit:unitData(c),review:run.reviews[ref],issues:list,programFacts:facts[ref],missionReviews:c.children?.map(id=>run.reviews[id])});
+   if(!answer?.review||typeof answer.review!=='object'||Array.isArray(answer.review)){
+    (run.checkFailures??=[]).push({key,raw:run.raw[key],error:'必改问题返修未返回复盘',at:new Date().toISOString()});delete run.raw[key];await save(run);throw Error('必改问题返修未返回复盘：'+ref);
+   }
+   put(c,answer);
+  }));
  }
  const companyStep='按技能「产品生成整轮复盘候选·每一步怎么做·4. 公司复盘」执行。'+fieldsHint;
- await stage('company',()=>pool(s3,async c=>{put(c,await askUnit(c,{task:companyStep,unit:unitData(c),ruReviews:c.children.map(id=>run.reviews[id]).filter(Boolean),askedBelow:askedBelow(run)}));await step('公司 PO 复盘');}));
+ await stage('company',()=>pool(s3,async c=>{if(!twoRound||!run.quality)put(c,await askUnit(c,{task:companyStep,unit:unitData(c),ruReviews:c.children.map(id=>run.reviews[id]).filter(Boolean),askedBelow:askedBelow(run)}));await step('公司 PO 复盘');}));
+ if(twoRound){
+  if(run.failed.length){const error=Object.assign(Error('部分初稿输出未通过，未进入自动修订：'+run.failed.map(f=>f.title||f.id).join('、')),{code:'REVIEW_INITIAL_FAILED',checks:run.failed.map(f=>({unit:f.id,title:f.title,problem:f.error,code:f.code,finishReason:f.finishReason}))});throw error;}
+  const persist=save;let tail=Promise.resolve();
+  const serializedSave=r=>{const next=tail.then(()=>persist(r));tail=next.catch(()=>{});return next;};
+  await twoRoundQuality({gateway,skill,input,run,save:serializedSave,onProgress,programOptions,signal,system});
+ }
  // The company review is the last answer; save once more so the job file holds every review (评测 2026-10-27).
  await save(run);
  return run;
+}
+
+export const reviewQualityTasks=skill=>skill.groups.map((g,index)=>`按技能检查第${index+1}组（${g.name}）：${g.types.join('、')}。对照冻结原始来源检查当前复盘，不以照办上次checker当通过；检查意见不构成新事实。缺记录或待验证不等于没有发生。新引入问题与原问题同等检查。返回JSON对象，每条issue必须含ref/type/problem/impact/mustFix/fixable；原必须修改类型恒为mustFix:true。`);
+
+// New skills check the complete candidate (including Company) after each edit.
+// Raw source facts are never replaced by an earlier checker's instructions.
+async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programOptions,signal,system}){
+ const items=input.stages.flat(),refs=items.map(c=>c.id);
+ const sources=Object.fromEntries(items.map(c=>[c.id,{...unitData(c),objectId:c.objectId}]));
+ const options=programOptions||{rowMatch:skillAtLeast(skill.version,'2.1.6'),askCaps:skillAtLeast(skill.version,'2.1.7'),childRule:skillAtLeast(skill.version,'2.1.10')};
+ const model=gateway.status?.model||'wangsu/claude-sonnet-5-5';
+ const wireOptions={model,thinking:true,reasoningEffort:'high',maxTokens:32000,json:true,...(gateway.reviewFallbacks?.length?{fallbackModels:gateway.reviewFallbacks.map(g=>g.status.model)}:{})};
+ if(run.quality?.packetModel&&qualityHash(run.quality.packetModel)!==qualityHash(wireOptions))throw Error('质量检查模型或备用策略已变化，不能复用其他策略的结论');
+ const call=(q,pass,stage,ref,payload,validate)=>qualityModelCall({gateway,system,quality:q,run,pass,stage,ref,payload,validate,save,signal,maxBodyBytes:q.sourcePlans?.[pass]?.maxBodyBytes||REVIEW_BODY_LIMIT_BYTES});
+ await runReviewQuality({run,input,skill,sources,save,onProgress,signal,
+  normalize:()=>{run.covered=[...(run.covered||[]),...applyCovers(run)];},
+  problems:candidate=>reviewProblems({...run,reviews:candidate.reviews},input,options).filter(p=>refs.includes(p.unit)),
+  check:async(reviews,pass,q)=>{
+   const facts=Object.fromEntries(items.map(c=>[c.id,{lengthFindings:reviews[c.id]?lengthFindings(reviews[c.id]):[],evidenceFacts:reviews[c.id]?evidenceFacts(c,reviews[c.id]):{missingIds:[],usedCount:0},rowFacts:rowFacts(c,reviews[c.id])}]));
+   const verdictFacts=items.filter(c=>c.children?.length).map(c=>({ref:c.id,verdict:reviews[c.id]?.verdict,children:c.children.map(ref=>({ref,verdict:reviews[ref]?.verdict||'生成失败'}))}));
+   const tasks=reviewQualityTasks(skill);
+   if(q.packetModel&&qualityHash(q.packetModel)!==qualityHash(wireOptions))throw Error('质量检查模型已变化，必须使用独立检查记录');
+   q.packetModel=wireOptions;
+   const args={input,sources,reviews,programFacts:{verdictFacts,perReview:facts,askLoad:askLoad(Object.values(reviews))},tasks,system,wireOptions};
+   q.sourcePlans??={};let plan=q.sourcePlans[pass];
+   if(plan)verifyReviewCheckPlan(plan,args);
+   else {const previous=q.sourcePlans[pass-1];plan=previous?refreshReviewCheckPlan(previous,args):buildReviewCheckPlan({...args,maxBodyBytes:REVIEW_BODY_LIMIT_BYTES,maxTargetRefs:refs.length,fixedLayout:[{kind:'object',units:[...refs].sort()}]});q.sourcePlans[pass]=plan;await save(run);}
+   const outcome=await executeReviewCheckPlan({plan,args,maxAdditionalRequests:6,runPacket:async request=>{
+    const value=await call(q,pass,'check',`${request.cacheStamp}-${request.index??'source'}-${request.group}`,request.payload,value=>{
+     checkedReviewIssues(value,{skill,refs});for(const issue of value.issues)if(issue.sourceRefs!==undefined&&(!Array.isArray(issue.sourceRefs)||new Set(issue.sourceRefs).size!==issue.sourceRefs.length||issue.sourceRefs.some(ref=>!request.packet.scope.sourceRefs.includes(ref))))throw Error('检查意见的显式来源引用不属于已提供完整原文');return validateScopedCheckResult(value,request.packet,refs,request.payload.sourceRequestContext);
+    });
+    return {...value,issues:value.issues.map(issue=>({...issue,checkContextRefs:[...request.packet.scope.sourceRefs],sourceRefs:issue.sourceRefs===undefined?[issue.ref]:[...issue.sourceRefs]}))};
+   }});
+   (q.sourcePasses??={})[pass]={planStamp:plan.stamp,status:outcome.status,requestCount:outcome.requestCount,maxAdditionalRequests:6,providedKeys:outcome.providedKeys,sourceRequests:outcome.sourceRequests};await save(run);
+   if(outcome.status!=='checked')throw Object.assign(Error('补源后仍有待核原文，保留草稿等待处理，未通过检查'),{code:'REVIEW_SOURCE_CONTEXT_PENDING',checks:outcome.sourceRequests});
+   // Multiple packets may identify the same problem. Keep the full source union for its repair.
+   const unique=new Map();for(const issue of outcome.issues){const {sourceRefs,checkContextRefs,...business}=issue,key=qualityHash(business),old=unique.get(key);if(old){old.sourceRefs=[...new Set([...old.sourceRefs,...sourceRefs])];old.checkContextRefs=[...new Set([...old.checkContextRefs,...checkContextRefs])];}else unique.set(key,issue);}
+   return [...unique.values()];
+  },
+  revise:async(c,action,pass,q)=>{
+   const reviews=action.before,children=(c.children||[]).map(id=>reviews[id]).filter(Boolean);
+   const sourceRefs=[...new Set([c.id,...action.issues.flatMap(issue=>issue.sourceRefs||[])])];
+   if(sourceRefs.some(ref=>!Object.hasOwn(sources,ref)))throw Error('返修来源引用不属于冻结输入');
+   const packed=packSourceText(Object.fromEntries(sourceRefs.map(ref=>[ref,sources[ref]])));
+   const payload={
+    task:'按技能修改这份复盘。下面 issues 是待核检查意见，不是事实来源；必须重新对照冻结 unit 和 sources，不得凭checker添加事实或把未验证写成未发生。保留准确的时间、否定和来源边界。'+(action.refresh?'下级已更新，请按当前下级复盘同步核本层，不能复制旧结果。':'只改必改问题及直接受影响部分。')+fieldsHint,
+    unit:{id:c.id,sourceRef:c.id},sources:packed.sources,sourceTexts:packed.texts,sourceBindings:packed.bindings,sourceHash:q.sourceHash,review:reviews[c.id],issues:action.issues,missionReviews:c.level==='ru'?children:[],ruReviews:c.level==='company'?children:[],childCandidates:children.map(review=>({ref:review.ref,candidate:true,confirmed:false,reviewHash:qualityHash(review),sourceRef:review.ref,sourceBasis:sources[review.ref]?.sourceBasis||null})),askedBelow:askedBelow({reviews}),childrenHash:qualityHash(children),candidateHash:qualityHash(reviews),revision:action.revision,
+   };
+   payload.task+=' unit.sourceRef指向sources中本层完整冻结unit。childCandidates为同轮当前候选而非正式确认或独立原始事实；仅候选状态同步/上下层一致性可按其汇总，不等于核验下级事实。若新增或否定具体业务事实而缺所需原文，必须返回sourceRequests:[{refs:[本层ref,所需冻结ref],relation,reason}]，先补原文，不能用候选冒充原始证据。无补源需求时返回review。sourceTexts/sourceBindings是相同正文的无损引用，按path还原对应来源字段，保留各自出处、日期、版本及E命名空间。';
+   payload.sourceScope={targetRef:c.id,sourceRefs,availableRefs:refs};
+   const wireOptions=q.packetModel||{model:gateway.status?.model||'wangsu/claude-sonnet-5-5'};
+   const assertBudget=value=>{const actual=reviewModelBudgetBytes(system,value,wireOptions);const budget=q.sourcePlans[pass].maxBodyBytes;if(actual>budget)throw Object.assign(Error('完整返修来源超过本次工程预算，未调用模型，保留草稿'),{code:'REVIEW_PACKET_OVERSIZE',actual,budget});};
+   const validate=(value,provided)=>{
+    if(value?.sourceRequests?.length){
+     for(const request of value.sourceRequests)if(!Array.isArray(request.refs)||request.refs.length<2||!request.refs.includes(c.id)||new Set(request.refs).size!==request.refs.length||request.refs.some(ref=>!refs.includes(ref))||request.refs.every(ref=>provided.includes(ref))||typeof request.relation!=='string'||!request.relation.trim()||typeof request.reason!=='string'||!request.reason.trim())throw Object.assign(Error('返修补源必须明确具体未提供的冻结对象、关系和原因'),{code:'REVIEW_SOURCE_REQUEST_CONTRACT'});
+     return value;
+    }
+    if(value?.sourceRequests!==undefined&&!Array.isArray(value.sourceRequests)||!value?.review||typeof value.review!=='object'||Array.isArray(value.review))throw Error('自动修订未返回有效复盘：'+c.id);
+    return value;
+   };
+   assertBudget(payload);
+   const stage=action.refresh?'refresh':'revise';
+   let result=await call(q,pass,stage,c.id,payload,value=>validate(value,sourceRefs));
+   if(result.sourceRequests?.length){
+    const needed=[...new Set([...sourceRefs,...result.sourceRequests.flatMap(request=>request.refs)])];
+    const extra=packSourceText(Object.fromEntries(needed.map(ref=>[ref,sources[ref]])));
+    const supplement={...payload,sources:extra.sources,sourceTexts:extra.texts,sourceBindings:extra.bindings,sourceScope:{...payload.sourceScope,sourceRefs:needed},sourceRequests:result.sourceRequests,task:payload.task+' 本次已按你的具体sourceRequests补齐原文，必须据此完成原返修；仍缺则明确返回sourceRequests，不能猜。'};
+    assertBudget(supplement);
+    const sourceStage=stage+'-source',sourceRef=c.id+'-'+qualityHash(supplement),requests=Object.values(q.requests).filter(request=>request.pass===pass&&request.stage.endsWith('-source'));
+    const checkerExtras=q.sourcePasses[pass].requestCount-q.sourcePlans[pass].requestCount;
+    if(!requests.some(request=>request.stage===sourceStage&&request.ref===sourceRef)&&checkerExtras+requests.length>=6)throw Object.assign(Error('本遍检查与返修共用的6次补源预算已用完，保留草稿等待处理'),{code:'REVIEW_SOURCE_REQUEST_BUDGET'});
+    result=await call(q,pass,sourceStage,sourceRef,supplement,value=>validate(value,needed));
+    if(result.sourceRequests?.length)throw Object.assign(Error('返修补源后仍需其他原文，保留草稿等待处理'),{code:'REVIEW_SOURCE_CONTEXT_PENDING',checks:result.sourceRequests});
+   }
+   return {...result.review,unit:c.unit,level:c.level,ref:c.id,title:c.title,owner:c.owner,...(c.parent?{parent:c.parent}:{})};
+  },
+ });
 }
 
 // ---------- checks before install ----------
@@ -395,12 +558,13 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
 // 程序检查没过的那几份各重写一次再查 (2026-10-27: one review with six 下期输入 threw away all 23 after 9 minutes).
 // Only reviews that exist are asked; what is still wrong after one try blocks the round as before.
 export async function repairReviews({gateway,skill,input,run,problems,save=async()=>{}}){
+ if(skillAtLeast(skill.version,'2.1.13'))throw Error('新版结构修订必须使用统一的两轮质量流程，不能额外追加 repair 轮次');
  const system=`你是 TKOS 的月度复盘助手。按下面的技能工作。仅返回有效 JSON 对象，不加代码围栏。\n${skill.rules}`;
  const items=input.stages.flat(),byUnit=Object.groupBy(problems.filter(p=>run.reviews[p.unit]),p=>p.unit);
  run.repaired??=[];
  await Promise.all(Object.entries(byUnit).map(async([id,list])=>{
   const c=items.find(x=>x.id===id),key='repair-'+id+'-'+run.repaired.filter(x=>x===id).length;if(!c)return;
-  try{const answer=run.raw[key]||(await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify({task:'按技能「产品生成整轮复盘候选·检查」中的「修改」规则修改这份复盘：只改下面程序检查出的问题，其余照原样保留。'+fieldsHint,unit:unitData(c),review:run.reviews[id],issues:list.map(p=>({type:'程序检查',problem:p.problem}))})}],{thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000,trace:{name:key,stage:'repair',metadata:{unit:id}}})).answer;
+  try{const answer=run.raw[key]||(await gateway.complete([{role:'system',content:system},{role:'user',content:JSON.stringify({task:'按技能「产品生成整轮复盘候选·检查」中的「修改」规则修改这份复盘：只改下面程序检查出的问题，其余照原样保留。'+fieldsHint,unit:unitData(c),missionReviews:c.children?.map(id=>run.reviews[id]).filter(Boolean),review:run.reviews[id],issues:list.map(p=>({type:'程序检查',problem:p.problem}))})}],{thinking:true,reasoningEffort:'high',maxTokens:32000,timeoutMs:900000,trace:{name:key,stage:'repair',metadata:{unit:id}}})).answer;
    run.raw[key]=answer;const res=JSON.parse(bareJson(answer));
    if(res?.review)run.reviews[id]={...res.review,unit:c.unit,level:c.level,ref:c.id,title:c.title,owner:c.owner,...(c.parent?{parent:c.parent==='company'?'company':c.parent}:{})};
   }catch{}
@@ -411,7 +575,7 @@ export async function repairReviews({gateway,skill,input,run,problems,save=async
 const tiers=['达成','部分达成','未达成'],nextTypes=new Set(['欠账','继续验证','停止','约束','待决策']),ltoChoices=new Set(['建议维持','建议修改','建议重开']);
 // rowMatch (复盘技能 2.1.6 起): each 下期输入 sits on one fact row, one per row, at most one for the whole card.
 export const skillAtLeast=(version,min)=>{const a=String(version||'').split('.').map(Number),b=min.split('.').map(Number);for(let i=0;i<b.length;i++){if((a[i]||0)!==b[i])return (a[i]||0)>b[i];}return true;};
-export function reviewProblems(run,input,{roster=[],rowMatch=false,askCaps=false}={}){
+export function reviewProblems(run,input,{roster=[],rowMatch=false,askCaps=false,childRule=false}={}){
  const out=[],filled=v=>v!=null&&(Array.isArray(v)?v.length>0:String(v).trim()!=='');
  const expected=input.stages.flat();
  if(!run.reviews.company)out.push({unit:'company',problem:'公司 PO 复盘没有生成出来，CEO 确认后才会开始拆解，必须有'});
@@ -419,6 +583,7 @@ export function reviewProblems(run,input,{roster=[],rowMatch=false,askCaps=false
  const refused=id=>run.failed.some(f=>f.id===id&&f.finishReason==='refusal');
  for(const c of expected)if(!run.reviews[c.id]&&c.id!=='company'&&!refused(c.id))out.push({unit:c.id,problem:'没有生成出来'});
  for(const [id,r] of Object.entries(run.reviews)){
+  if(childRule&&['mission','ru'].includes(r.level)){const c=expected.find(x=>x.id===id),bad=childVerdictProblem(r,c?.childCommitments,{childReviews:expected.filter(x=>x.parent===id).map(x=>run.reviews[x.id]).filter(Boolean)});if(bad)out.push({unit:id,problem:bad});}
   if(!tiers.includes(r.verdict))out.push({unit:id,problem:`判定写成“${r.verdict??'空'}”，只能是达成、部分达成、未达成`});
   if(Array.isArray(r.facts)){
    // 三段式 (2026-10-26): a verdict with one line of reason, then fact lines; insights are written by people, not generated.
@@ -445,10 +610,10 @@ export function reviewProblems(run,input,{roster=[],rowMatch=false,askCaps=false
 // What installReviewRound reads: the run's reviews plus what was skipped or failed, so the page names them.
 export function reviewFile(run,input,{skill,model,label,startedAt=null}){
  const generatedAt=new Date().toISOString();
- return {name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,
+ return {name:label,period:input.period,cutoff:input.cutoff,generatedAt,startedAt,durationMs:startedAt?Date.parse(generatedAt)-Date.parse(startedAt):null,skill:{version:skill.version,hash:skill.hash},skillFormat:skill.version,model,modelProvenance:{requestedPrimary:model,initial:Object.fromEntries(input.stages.flat().filter(c=>run.raw?.[c.id]).map(c=>[c.id,run.initialCache?.[c.id]?{requestedAlias:run.initialCache[c.id].selectedAlias||null,returnedModel:run.initialCache[c.id].returnedModel??null,attemptId:run.initialCache[c.id].attemptId}:{requestedAlias:null,returnedModel:null,origin:'legacy-cache-unknown-model'}])),quality:Object.values(run.quality?.requests||{}).filter(r=>r.status==='done').map(r=>({ref:r.ref,pass:r.pass,stage:r.stage,selectedAlias:r.selectedAlias??r.model,returnedModel:r.returnedModel??null,api:r.actualApi??null}))},...(run.quality?{quality:{status:run.quality.status,maxRevisions:run.quality.maxRevisions,counts:run.quality.counts,remaining:run.quality.remaining||[],sourceHash:run.quality.sourceHash,skillHash:run.quality.skillHash}}:{}),...(input.basis?{basis:structuredClone(input.basis)}:{}),
   // Facts the review cards need from the input: which object each review is about, and whether the Mission has an owner.
-  reviews:Object.fromEntries(Object.entries(run.reviews).map(([id,r])=>{const c=input.stages.flat().find(x=>x.id===id);return [id,{...r,...(c?.objectId?{objectId:c.objectId}:{}),...(c?.ownerAssigned===false?{ownerAssigned:false}:{})}];})),
-  failed:run.failed,dropped:run.dropped,skipped:input.skipped,readAt:input.readAt,redactions:input.redactions,readReceipt:input.readReceipt||null};
+  reviews:Object.fromEntries(Object.entries(run.reviews).map(([id,r])=>{const c=input.stages.flat().find(x=>x.id===id);return [id,{...r,...(c?.agreedOutcome?{agreedOutcome:structuredClone(c.agreedOutcome)}:{}),...(c?.sourceBasis?{sourceBasis:structuredClone(c.sourceBasis)}:{}),...(c?.childCommitments?{childCommitments:structuredClone(c.childCommitments)}:{}),...(c?.objectId?{objectId:c.objectId}:{}),...(c?.ownerAssigned===false?{ownerAssigned:false}:{})}];})),
+  qualityWarnings:reviewQualityWarnings(run),failed:run.failed,dropped:run.dropped,skipped:input.skipped,readAt:input.readAt,redactions:input.redactions,readReceipt:input.readReceipt||null};
 }
 
 // ---------- the background job ----------
@@ -457,35 +622,59 @@ export function reviewFile(run,input,{skill,model,label,startedAt=null}){
 export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=()=>false,isOperator,roster=[],ceoName='',companyDirection=async()=>'',installReviewRound,archivesPath,model=gateway?.status?.model||null}){
  const dir=join(dirname(statePath),'review-jobs');
  const workFile=id=>join(dir,`${id}.json`);
- let flight=false;
+ let flight=false,activeAbort=null;
  const setJob=patch=>store.transact(s=>{s.reviewJob={...s.reviewJob,...patch,updatedAt:new Date().toISOString()};s.sequence++;return s;});
- const view=job=>job&&{id:job.id,status:job.status,stage:job.stage||null,done:job.done??null,total:job.total??null,error:job.error||null,checks:job.checks||[],inputCutoff:job.inputCutoff||null,period:job.period,createdAt:job.createdAt,finishedAt:job.finishedAt||null,skipped:job.skipped||[],skill:job.skill||null};
+ const view=job=>job&&{id:job.id,status:job.status,stage:job.stage||null,done:job.done??null,total:job.total??null,error:job.error||null,errorCode:job.errorCode||null,checks:job.checks||[],warnings:job.warnings||[],candidateAvailable:job.candidateAvailable===true,inputCutoff:job.inputCutoff||null,period:job.period,cutoff:job.cutoff,createdAt:job.createdAt,finishedAt:job.finishedAt||null,skipped:job.skipped||[],skill:job.skill||null};
  // One trace per attempt (root = this job; a resume is its own trace). Its id stays on the job and on the installed
  // review round, so verdict changes and signatures there become feedback on it, and a failure is feedback too.
  function run(id,{period,cutoff,resume}){
+  const controller=new AbortController();activeAbort=controller;
   const trace=tracer.startRun({name:'review-generation',metadata:{review_job_id:id,period,resume:Boolean(resume),model}});
-  return tracer.within(trace,()=>attempt(id,{period,cutoff,resume},trace));
+  return tracer.within(trace,()=>attempt(id,{period,cutoff,resume},trace,controller.signal));
  }
  const failed=(trace,why)=>{tracer.annotate({error:why},trace);if(trace)tracer.feedback({runId:trace.id,key:'review_generation_failed',score:0,value:'failed',comment:why});};
- async function attempt(id,{period,cutoff,resume},trace){
+ async function attempt(id,{period,cutoff,resume},trace,signal){
   flight=true;let work=resume?JSON.parse(await readFile(workFile(id),'utf8').catch(()=>'null')):null;
-  const save=async()=>{await mkdir(dir,{recursive:true,mode:0o700});await writeFile(workFile(id),JSON.stringify(work),{mode:0o600});};
+  let saveTail=Promise.resolve();
+  const save=()=>{const bytes=JSON.stringify(work);const next=saveTail.then(async()=>{await mkdir(dir,{recursive:true,mode:0o700});const temp=workFile(id)+'.'+randomUUID()+'.tmp';await writeFile(temp,bytes,{mode:0o600});await rename(temp,workFile(id));});saveTail=next.catch(()=>{});return next;};
   try{
    if(trace)await setJob(tracer.ref(trace));
+   signal?.throwIfAborted();
    const skill=await loadReviewSkill(skillRoot);
    tracer.annotate({metadata:{skill_version:skill.version,skill_hash:skill.hash.slice(0,12)}},trace);
-   if(!work?.input){
+   if(work&&work.skillSnapshot?.hash!==skill.hash&&skillAtLeast(skill.version,'2.1.10'))throw Error('复盘工作文件的技能版本不一致，请保留原任务并重新准备候选，不能混用旧输出');
+   if(resume&&work&&(!work.m2ConfirmedSource||work.input&&!work.inputHash))throw Error('旧任务未冻结人工事实来源，请保留原任务并重新准备候选');
+   if(work?.input&&work.inputHash!==evidenceHash(work.input))throw Error('冻结输入校验失败，不能续跑变化后的输入');
+   if(work?.m2ConfirmedSource){verifyEvidenceBundle(work.m2ConfirmedSource);if(work.sourceInputsHash!==evidenceHash(work.sourceInputs||{}))throw Error('旧任务来源映射冻结校验失败');}
+   if(work?.input&&(work.input.period!==period||work.input.cutoff!==cutoff))throw Error('续跑输入的月份或截止时间与原任务不一致，请保留原任务重新准备');
+   if(!work){
+    const m2ConfirmedSource=store.snapshot().reviewJob?.m2ConfirmedSource;
+    if(!m2ConfirmedSource)throw Error('任务缺已确认人工事实来源快照，请保留原任务并重新准备候选');
+    verifyEvidenceBundle(m2ConfirmedSource);
+    const sourceInputs={};for(const id of new Set(m2ConfirmedSource.entries.map(e=>e.sourceJobId).filter(Boolean))){try{const previous=JSON.parse(await readFile(workFile(id),'utf8'));if(previous.input)sourceInputs[id]=previous.input;}catch(e){if(e.code!=='ENOENT')throw Error('旧生成来源无法读取：'+id);}}
+    work={skillSnapshot:{version:skill.version,hash:skill.hash},m2ConfirmedSource,sourceInputs,sourceInputsHash:evidenceHash(sourceInputs),run:{raw:{},reviews:{},failed:[],dropped:[]}};await save();
+   }
+   if(work.m2ConfirmedSource?.hash!==store.snapshot().reviewJob?.m2ConfirmedSource?.hash)throw Error('任务人工事实来源与冻结工作文件不一致');
+   if(!work.input){
     const sources=await tracer.withRun('read-ontology','tool',{stage:'read-ontology'},async()=>collectReviewSources({reader:await reader(),period,cutoff,onProgress:p=>setJob(p)}));
-    work={input:buildReviewInput(sources,{companyDirection:await companyDirection(period),ceoName}),run:{raw:{},reviews:{},failed:[],dropped:[]}};await save();
+    work.input=addConfirmedFacts(buildReviewInput(sources,{companyDirection:await companyDirection(period),ceoName}),work.m2ConfirmedSource,work.sourceInputs);
+    work.inputHash=evidenceHash(work.input);await save();
    }
    await setJob({inputCutoff:work.input.readAt,skipped:work.input.skipped,skill:{version:skill.version,hash:skill.hash.slice(0,12)}});
-   await runReviewSkill({gateway,skill,input:work.input,run:work.run,save:async r=>{work.run=r;await save();},onProgress:p=>setJob(p)});
+   await runReviewSkill({gateway,skill,input:work.input,run:work.run,signal,recordAttempt:createReviewCallJournal(join(dir,id+'.attempts')),programOptions:{roster,rowMatch:skillAtLeast(skill.version,'2.1.6'),askCaps:skillAtLeast(skill.version,'2.1.7'),childRule:skillAtLeast(skill.version,'2.1.10')},save:async r=>{work.run=r;await save();},onProgress:p=>setJob(p)});
+   signal?.throwIfAborted();
+   if(work.run.quality&&work.run.quality.status!=='passed'){
+    const q=work.run.quality,checks=q.remaining||[];
+    work.candidate=reviewFile(work.run,work.input,{skill,model,label:'自动修订未通过的独立草稿'});await save();
+    await writeFile(join(dir,`${id}.candidate.json`),JSON.stringify(work.candidate),{mode:0o600});
+    await setJob({status:'draft',stage:'自动修订未通过，草稿未装入',error:q.blockReason||'仍有关键问题，保留草稿等待处理',checks,candidateAvailable:true,finishedAt:new Date().toISOString()});return;
+   }
    // 个人复盘最多 1 个问题 from 复盘技能 2.1.7 (陈溪南 2026-10-28: keep questions to what is really needed).
-   const rowMatch=skillAtLeast(skill.version,'2.1.6'),askCaps=skillAtLeast(skill.version,'2.1.7');
-   work.run.covered=[...(work.run.covered||[]),...applyCovers(work.run)];
-   let checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps});
-   if(checks.length&&checks.some(p=>work.run.reviews[p.unit])){await setJob({stage:`检查有 ${checks.length} 处问题，重写这几份`});
-    await tracer.withRun('repair-reviews','chain',{stage:'repair',problems:checks.length},()=>repairReviews({gateway,skill,input:work.input,run:work.run,problems:checks,save:async r=>{work.run=r;await save();}}));checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps});}
+   const rowMatch=skillAtLeast(skill.version,'2.1.6'),askCaps=skillAtLeast(skill.version,'2.1.7'),childRule=skillAtLeast(skill.version,'2.1.10');
+   if(!work.run.quality)work.run.covered=[...(work.run.covered||[]),...applyCovers(work.run)];
+   let checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps,childRule});
+   if(!work.run.quality&&checks.length&&checks.some(p=>work.run.reviews[p.unit])){await setJob({stage:`检查有 ${checks.length} 处问题，重写这几份`});
+    await tracer.withRun('repair-reviews','chain',{stage:'repair',problems:checks.length},()=>repairReviews({gateway,skill,input:work.input,run:work.run,problems:checks,save:async r=>{work.run=r;await save();}}));checks=reviewProblems(work.run,work.input,{roster,rowMatch,askCaps,childRule});}
    if(checks.length){failed(trace,`checks failed (${checks.length}): ${checks.slice(0,5).map(p=>`${p.unit} ${p.problem}`).join('; ')}`);await setJob({status:'failed',stage:'检查没过，没有装入',error:`有 ${checks.length} 处问题，现有复盘没动`,checks,finishedAt:new Date().toISOString()});return;}
    const label=`${Number(period.slice(5))} 月复盘 ${skill.version||''}（${cutoff.slice(5,10).replace('-','/')}）`.replace('  ',' ');
    const file=reviewFile(work.run,work.input,{skill,model,label,startedAt:store.snapshot().reviewJob?.createdAt||null});
@@ -495,30 +684,31 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
    await writeFile(join(archive,`collaboration-before-review-${stamp}.json`),JSON.stringify(store.snapshot()),{mode:0o600});
    await copyFile(archivesPath(statePath),join(archive,`collaboration-before-review-${stamp}.archives.json`)).catch(e=>{if(e.code!=='ENOENT')throw e;});
    await store.transact(s=>{
+    signal?.throwIfAborted();
     if(s.roundJob?.status==='running'||s.planHandoff?.status==='generating')throw Object.assign(Error('拆解正在生成，复盘没有装入'),{status:409});
     delete s.planHandoff;delete s.unitsDone;s.roundAttempts=[];s.cascadeQueue=[];
     const next=installReviewRound(s,file,{label,source:`生成任务 ${id}`,now});if(trace&&next.reviewRound)next.reviewRound.traceRunId=trace.id;
-    next.reviewJob={...s.reviewJob,status:'done',stage:'已装入',checks:[],error:null,finishedAt:now,updatedAt:now};next.sequence++;return next;
+    next.reviewJob={...s.reviewJob,status:'done',stage:'已装入',checks:[],warnings:reviewQualityWarnings(work.run),error:null,finishedAt:now,updatedAt:now};next.sequence++;return next;
    });
-  }catch(e){failed(trace,String(e.message||e).slice(0,300));await setJob({status:'failed',error:`${String(e.message||e).replace(/[；;]?\s*旧轮未替换/,'').slice(0,240)}；现有复盘没动，可以续跑`,finishedAt:new Date().toISOString()}).catch(()=>{});}
-  finally{flight=false;}
+  }catch(e){failed(trace,String(e.message||e).slice(0,300));await setJob({status:'failed',errorCode:e.code||null,...(e.checks?{checks:e.checks}:{}),error:`${String(e.message||e).replace(/[；;]?\s*旧轮未替换/,'').slice(0,240)}；现有复盘没动，可以续跑`,finishedAt:new Date().toISOString()}).catch(()=>{});}
+  finally{flight=false;activeAbort=null;}
  }
  return {
   view:()=>view(store.snapshot().reviewJob),
+  async cancel(actor){if(!isOperator(actor))throw Object.assign(Error('只有 CEO 和轮次操作人可以停止生成'),{status:403});if(!flight||!activeAbort||store.snapshot().reviewJob?.status!=='running')throw Object.assign(Error('当前没有运行中的复盘生成'),{status:409});activeAbort.abort(Object.assign(Error('用户已停止生成，可从保存的进度续跑'),{name:'AbortError'}));return view(store.snapshot().reviewJob);},
   // A server restart ends a running job; the page offers to resume it from the saved input.
   async recover(){if(store.snapshot().reviewJob?.status==='running')await setJob({status:'failed',error:'服务重启中断了生成，现有复盘没动，可以续跑'});},
-  async start(actor,{regenerate=false,resume=false}={},{now=new Date()}={}){
+  async start(actor,{regenerate=false,resume=false,period,cutoff}={},{now=new Date()}={}){
    if(!isOperator(actor))throw Object.assign(Error('只有 CEO 和轮次操作人可以生成复盘'),{status:403});
    const s=store.snapshot();
    if(flight||s.reviewJob?.status==='running')throw Object.assign(Error('复盘正在生成'),{status:409});
    if(busy()||s.roundJob?.status==='running'||s.planHandoff?.status==='generating')throw Object.assign(Error('拆解正在生成，等它结束再生成复盘'),{status:409});
    const reviews=Object.values(s.cards).filter(c=>c.kind==='review');
    if(reviews.length&&!regenerate&&!resume)throw Object.assign(Error('已有复盘'),{status:409,code:'review-exists',total:reviews.length,confirmed:reviews.filter(c=>c.confirmedVersion).length});
-   if(resume){const old=s.reviewJob;if(old?.status!=='failed')throw Object.assign(Error('没有可续跑的复盘生成'),{status:409});await setJob({status:'running',error:null,checks:[],finishedAt:null});run(old.id,{period:old.period,cutoff:old.cutoff,resume:true});return view(store.snapshot().reviewJob);}
-   // The month being reviewed is the current month in Beijing time; facts count up to the end of today.
-   const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
-   const id=randomUUID(),period=day.slice(0,7),cutoff=`${day}T23:59:59+08:00`;
-   await store.transact(x=>{x.reviewJob={id,status:'running',stage:'准备读取本体',period,cutoff,startedBy:actor.id,createdAt:new Date().toISOString()};x.sequence++;return x;});
+   if(resume){const old=s.reviewJob;if(old?.status!=='failed')throw Object.assign(Error('没有可续跑的复盘生成'),{status:409});reviewTarget({period:old.period,cutoff:old.cutoff},now);await setJob({status:'running',error:null,checks:[],finishedAt:null});run(old.id,{period:old.period,cutoff:old.cutoff,resume:true});return view(store.snapshot().reviewJob);}
+   ({period,cutoff}=reviewTarget({period,cutoff},now));
+   const id=randomUUID();
+   await store.transact(x=>{x.reviewJob={id,status:'running',stage:'准备读取本体',period,cutoff,m2ConfirmedSource:captureConfirmedFacts(x,{period,now:now.toISOString()}),startedBy:actor.id,createdAt:new Date().toISOString()};x.sequence++;return x;});
    run(id,{period,cutoff});
    return view(store.snapshot().reviewJob);
   },

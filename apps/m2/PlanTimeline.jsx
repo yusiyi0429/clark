@@ -1,3 +1,4 @@
+import {confirmInPage} from './page-confirmation.mjs';
 import React,{useState,useRef,useEffect,useLayoutEffect} from 'react';
 import {createPortal} from 'react-dom';
 import {ChevronRight,ChevronDown,Check,MessageCircle} from 'lucide-react';
@@ -50,7 +51,7 @@ function RowCommentBox({node,list=[],me,onAdd,onDelete,onClose}){
  async function add(){if(!text.trim()||busy)return;setBusy(true);try{await onAdd(node,text.trim());setText('');}finally{setBusy(false);}}
  if(!pos)return null;
  return createPortal(<div className="row-comment-box is-floating" role="dialog" aria-label="批注" style={pos}>
-  {list.map(c=><div className="comment-preview" key={c.id}><small>{c.author}{me===c.author&&onDelete&&<button className="comment-delete" onClick={()=>{if(window.confirm('删除这条批注？'))onDelete(node,c.id);}}>删除</button>}</small><p>{c.text}</p></div>)}
+  {list.map(c=><div className="comment-preview" key={c.id}><small>{c.author}{me===c.author&&onDelete&&<button className="comment-delete" onClick={async()=>{if(await confirmInPage('删除这条批注？'))onDelete(node,c.id);}}>删除</button>}</small><p>{c.text}</p></div>)}
   <textarea rows={2} autoFocus value={text} placeholder="对这一项提出意见…" onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();add();}}}/>
   <div className="row-comment-actions"><button className="plain" onClick={onClose}>收起</button><button className="primary" disabled={!text.trim()||busy} onClick={add}>{busy?'发送中…':'添加批注'}</button></div>
  </div>,document.body);

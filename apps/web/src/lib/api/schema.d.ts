@@ -1878,6 +1878,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{scope}/turns/{runId}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 接上首页对话里还在写（或刚写完）的那一轮：先补发这一轮已有的事件，再跟着往下写到结束（切走、刷新、断线回来） */
+        get: operations["followConversationTurn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{scope}/turns/{runId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人点「停止」：请服务端停下这一轮（首页 Chat 对话；断开连接不再算停止）。天枢自己的对话由断开连接停下，这里不做事 */
+        post: operations["stopConversationTurn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/issue-drafts/{id}": {
         parameters: {
             query?: never;
@@ -2372,6 +2406,23 @@ export interface paths {
         head?: never;
         /** 改版本说明里的几句，或者不要这段 */
         patch: operations["patchDeliverableNote"];
+        trace?: never;
+    };
+    "/api/me/plan-calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 成员首页月历翻到别的月份：那个月的每一天（工作日按节假日日历）和落在那个月的签定关口 */
+        get: operations["getMyPlanCalendar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/me/battlefield-progress": {
@@ -3443,6 +3494,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/memory/partner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 首页伙伴（独立 Chat 服务）记住的本人的事，只读；没接 Chat 时 available=false。Chat 连不上或拒绝时按天枢的错误格式回（如 503 CHAT_UNAVAILABLE） */
+        get: operations["listPartnerMemory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/memory/personal/items/{id}": {
         parameters: {
             query?: never;
@@ -4448,6 +4516,20 @@ export interface components {
             /** @constant */
             stage: "change";
             receiptId?: string;
+            verificationCommand?: {
+                /** @constant */
+                interface_version: "tkos.task-writeback/0.1";
+                approval_digest: string;
+                action: {
+                    [key: string]: unknown;
+                };
+                baseline: {
+                    [key: string]: unknown;
+                };
+                source: {
+                    [key: string]: unknown;
+                };
+            };
         };
         TaskMeetingInput: {
             taskIds: string[];
@@ -5104,6 +5186,7 @@ export interface components {
                 };
                 kind?: "carried" | "trace";
                 via?: "feishu" | "wechat";
+                running?: boolean;
                 meta?: {
                     issueId?: string;
                     title?: string;
@@ -5293,6 +5376,10 @@ export interface components {
                 text: string;
                 detail: string;
             };
+        };
+        ConversationTurnStopResponse: {
+            runId: string;
+            status: string;
         };
         IssueDraftResponse: {
             draft: {
@@ -10464,9 +10551,6 @@ export interface components {
                     collectedAt: string;
                 }[];
             } | null;
-            weeklySync: {
-                reason: "no_connection" | "not_synced";
-            } | null;
         };
         HomePlanDay: {
             date: string;
@@ -10979,6 +11063,18 @@ export interface components {
                 updatedAt: string;
             }[];
         };
+        PlanCalendarResponse: {
+            month: string;
+            days: {
+                date: string;
+                workday: boolean;
+            }[];
+            gates: {
+                missionId: string;
+                date: string;
+                label: string;
+            }[];
+        };
         BattlefieldProgressResponse: {
             today: string;
             groups: {
@@ -11048,9 +11144,6 @@ export interface components {
         PatchPlanMarkRequest: {
             date?: string;
             label?: string;
-        };
-        WeeklySyncReminder: {
-            reason: "no_connection" | "not_synced";
         };
         MemberWork: {
             period: string;
@@ -11793,6 +11886,22 @@ export interface components {
                 }[];
                 /** Format: date-time */
                 createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+            }[];
+        };
+        PartnerMemoryList: {
+            /** @description 首页对话走独立 Chat 时为 true；没接 Chat 时为 false、items 为空 */
+            available: boolean;
+            /** @description 现行的，最近更新的在前，最多 100 条 */
+            items: {
+                id: string;
+                /** @description 偏好、项目背景、研究与决策、反馈指令 */
+                category: "preference" | "project_background" | "research_decision" | "feedback_instruction";
+                text: string;
+                project: string | null;
+                /** @description 伙伴推测的，本人没有明说 */
+                tentative: boolean;
                 /** Format: date-time */
                 updatedAt: string;
             }[];
@@ -19309,6 +19418,112 @@ export interface operations {
             };
         };
     };
+    followConversationTurn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SSE 事件流（与发送消息的事件相同）；x-turn-started-at 是这一轮开始的时刻（毫秒） */
+            200: {
+                headers: {
+                    "x-turn-started-at"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ConversationSseEvent"];
+                };
+            };
+            /** @description 这一轮不在这里（没有在写、服务重启过或不是首页 Chat 对话） */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    stopConversationTurn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scope: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 停下后这一轮的状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationTurnStopResponse"];
+                };
+            };
+            /** @description 不是首页 Chat 对话，由断开连接停下 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getIssueDraft: {
         parameters: {
             query?: never;
@@ -20843,6 +21058,55 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMyPlanCalendar: {
+        parameters: {
+            query: {
+                month: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 那个月的月历 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanCalendarResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -24626,6 +24890,62 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listPartnerMemory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 伙伴记住的（现行的，最近更新的在前） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerMemoryList"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

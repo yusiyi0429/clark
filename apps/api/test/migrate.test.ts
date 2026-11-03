@@ -193,8 +193,9 @@ describe("migration", () => {
         "215_wechat_bindings.sql",
         "216_meeting_card_decisions.sql",
         "217_conversation_digests.sql",
-        "218_person_buddies.sql",
-        "219_task_deliverables.sql",
+        "218_issue_drafts_chat_origin.sql",
+        "220_person_buddies.sql",
+        "221_task_deliverables.sql",
       ]);
 
       // 幂等：重复执行不再变更

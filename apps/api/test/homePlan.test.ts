@@ -63,7 +63,8 @@ describe("首页计划",()=>{
       await create(f,f.member,"execution-one",{title:"只有截止在下周没开始",dueDate:"2026-10-28"});
       const dueLater=await create(f,f.member,"execution-two",{title:"只有截止在下周进行中",dueDate:"2026-10-28"});
       await f.t.sql("UPDATE tasks SET status='in_progress' WHERE id=ANY($1::uuid[])",[[running.id,dueLater.id]]);
-      await f.t.sql("UPDATE tasks SET status='done' WHERE id=$1",[done.id]);
+      // updated_at 是数据库的真实时间，跟不上 setNow；完成时间写明在 10 月，换月后仍算本月完成。
+      await f.t.sql("UPDATE tasks SET status='done',updated_at='2026-10-21T02:00:00Z' WHERE id=$1",[done.id]);
       const plan=await read(f,f.member);
       expect(plan).toMatchObject({period:"2026-10",fallbackFrom:null,today:"2026-10-22",weekStart:"2026-10-19",weekEnd:"2026-10-25"});
       expect(plan.activities).toHaveLength(8);
@@ -139,7 +140,8 @@ describe("首页计划",()=>{
       const accepted=await create(f,f.member,"execution-one",{title:"九月截止十月验收",dueDate:"2026-09-20"});
       const lastMonth=await create(f,f.member,"execution-one",{title:"本月 Mission 九月就完成了"});
       const boundary=await create(f,f.member,null,{title:"九月三十号晚上完成",dueDate:"2026-10-01"});
-      await f.t.sql("UPDATE tasks SET status='done' WHERE id=ANY($1::uuid[])",[[loose.id,accepted.id,lastMonth.id,boundary.id]]);
+      // 完成时间先统一写在 10 月（数据库真实时间跟不上 setNow），下面几条再各自改。
+      await f.t.sql("UPDATE tasks SET status='done',updated_at='2026-10-21T02:00:00Z' WHERE id=ANY($1::uuid[])",[[loose.id,accepted.id,lastMonth.id,boundary.id]]);
       await f.t.sql(`UPDATE tasks SET updated_at='2026-09-01T02:00:00Z',acceptance=jsonb_build_object('at','2026-10-05T02:00:00Z','by',$2::text,'verdict',null,'standards','[]'::jsonb,'deliverableMaterialIds','[]'::jsonb) WHERE id=$1`,[accepted.id,TEST_MEMBER.personId]);
       await f.t.sql("UPDATE tasks SET updated_at='2026-09-30T02:00:00Z' WHERE id=$1",[lastMonth.id]);
       // 上海时间 9/30 23:30 = UTC 15:30，算九月。
@@ -165,9 +167,10 @@ describe("首页计划",()=>{
       const plan=await read(f,f.member);
       expect(plan).toMatchObject({period:"2026-09",fallbackFrom:"2026-09",today:"2026-10-22",weekStart:"2026-10-19",weekEnd:"2026-10-25"});
       expect(plan.missions.map((m:{missionId:string})=>m.missionId)).toEqual(["execution-one","execution-two"]);
-      expect(plan.days).toHaveLength(30);
-      expect(plan.days[0]).toEqual({date:"2026-09-01",workday:true});
-      // 显示的是 9 月：9 月 Mission 下的照常分栏，更早（8 月）Mission 下没做完的放本周算逾期。
+      // 月历照样是真实的本月（10 月），不跟着 Mission 回退。
+      expect(plan.days).toHaveLength(31);
+      expect(plan.days[0]).toEqual({date:"2026-10-01",workday:false});
+      // Mission 显示的是 9 月：9 月 Mission 下的照常分栏，更早（8 月）Mission 下没做完的放本周算逾期。
       expect(byTitle(plan.activities)).toEqual({
         "本周到期的独立事项":{missionId:null,column:"week",overdue:false},
         "八月 Mission 没做完":{missionId:"august-one",column:"week",overdue:true},
@@ -202,6 +205,12 @@ describe("首页计划",()=>{
         {missionId:"execution-two",code:"execution-two",title:"验证",cardId:f.card,color:"#2f8a7a",world:null},
       ]);
       expect(plan.marks).toEqual([mark]);
+      // 月历翻到下个月：同样这几个 Mission，只留落在 11 月的关口；月份写错 400。
+      const november=(await call(f,f.member,"GET","/api/me/plan-calendar?month=2026-11")).json();
+      expect(november).toMatchObject({month:"2026-11",gates:[{missionId:"execution-one",date:"2026-11-03",label:"下月"}]});
+      expect(november.days).toHaveLength(30);
+      expect(november.days[0]).toEqual({date:"2026-11-01",workday:false});
+      expect((await call(f,f.member,"GET","/api/me/plan-calendar?month=2026-13")).statusCode).toBe(400);
       // 首页计划一定带负责人和交付物状态：本体没登记负责人是 null，还没传过版本是 none。
       expect(plan.tasks).toEqual([{...task,responsibleId:null,deliverable:{status:"none",score:null,version:null}}]);
       expect(calls).toEqual([[{id:"execution-one",code:"execution-one",world:null},{id:"execution-two",code:"execution-two",world:null}]]);

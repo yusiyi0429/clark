@@ -82,3 +82,13 @@ export function confirmState({status,version,signatures=[],slots,holder,mine}){
 
 // One tag for a Mission: its unit's short name and its number, e.g. “Agents · Mission 3” (陈溪南 2026-10-23).
 export const unitShort=label=>String(label||'').replace(/^(Battlefield|Domain)\s*\d+\s*/,'').trim()||String(label||'');
+
+// One home entry per object, grouped by actual signing responsibility.
+export function reviewHomeGroups(nodes,profile){
+ const visible=mineFirst(nodes,profile),entries=visible.filter(n=>n.level!=='mission').map(n=>({node:n,cards:[n],key:n.id}));
+ for(const person of [...new Set(visible.filter(n=>n.level==='mission').map(n=>n.ownerAssigned===false?'未指派':ownerNames(n)[0]))]){
+  const cards=personCards(visible,person);entries.push({person,cards,key:personId(person)});
+ }
+ const signs=e=>e.cards.some(n=>reviewSlots(n).some(slot=>maySign(n,slot,profile)));
+ return {confirm:entries.filter(signs),watch:entries.filter(e=>!signs(e))};
+}

@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { emptyDraft, emptyPreflight } from "../src/meetingStore.js";
-import { dispatchMeetingTodo, TASK_PLACE_JOB } from "../src/tasks.js";
+import { TASK_PLACE_JOB } from "../src/tasks.js";
 import { taskPlacementJobs, type TaskPlacementAgent } from "../src/taskPlacement.js";
 import { call, executionFixture, type Fixture } from "./executionFixture.js";
-import { TEST_CEO, TEST_MEMBER } from "./helpers.js";
+import { seedMeetingTodo, TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
 const NOW = new Date("2026-10-10T02:00:00.000Z");
 
@@ -17,10 +17,11 @@ async function meeting(f: Fixture, anchors: unknown[]): Promise<string> {
   return id;
 }
 
+/** 10/30 之前会后分派建出的事项（现在不再建，只剩旧数据）。 */
 async function dispatch(f: Fixture, meetingId: string, text: string): Promise<string> {
   const client = await f.t.pool.connect();
   try {
-    return (await dispatchMeetingTodo(client, { id: meetingId, leadDriId: TEST_MEMBER.personId, ceoId: TEST_CEO.personId, title: "inception review", now: NOW },
+    return (await seedMeetingTodo(client, { id: meetingId, leadDriId: TEST_MEMBER.personId, ceoId: TEST_CEO.personId, title: "inception review" },
       { id: randomUUID(), text, ownerPersonId: TEST_MEMBER.personId, dueDate: undefined, quote: null }))!;
   } finally { client.release(); }
 }
@@ -34,22 +35,11 @@ const runPlacement = (f: Fixture, agent: TaskPlacementAgent, taskId: string) =>
 const task = async (f: Fixture, id: string) => (await call(f, f.member, "GET", `/api/me/tasks/${id}`)).json().task;
 
 describe("待归位：会后分派和外部 Agent 建的事项必须挂到 Mission", () => {
-  it("会挂在负责人自己的 Mission 上：分派时直接挂上，不排归位", async () => {
-    const f = await executionFixture();
-    try {
-      const id = await dispatch(f, await meeting(f, [{ kind: "mission", id: "execution-two" }]), "把会议纪要导入验证一遍");
-      expect(await task(f, id)).toMatchObject({ mission: { missionId: "execution-two" } });
-      expect((await task(f, id)).unplaced).toBeUndefined();
-      expect(await f.t.sql("SELECT 1 FROM jobs WHERE kind=$1", [TASK_PLACE_JOB])).toHaveLength(0);
-    } finally { await f.t.close(); }
-  });
-
-  it("会挂点对不上：先进待归位、排一次归位；Agent 挑中本人能挂的 Mission 就挂上，群里记一句", async () => {
+  it("已入队的归位：会挂点对不上、还在待归位的会后分派事项，Agent 挑中本人能挂的 Mission 就挂上，群里记一句", async () => {
     const f = await executionFixture();
     try {
       const id = await dispatch(f, await meeting(f, [{ kind: "po", id: "<po>", title: "本期目标" }]), "联调一键唤醒对话");
       expect((await task(f, id)).unplaced).toEqual({ reason: null });
-      expect(await f.t.sql("SELECT payload FROM jobs WHERE kind=$1", [TASK_PLACE_JOB])).toEqual([{ payload: { taskId: id } }]);
       const agent = fakeAgent({ missionId: "execution-one", reason: "在交付上线这个 Mission" });
       await runPlacement(f, agent, id);
       expect(agent.inputs[0]).toMatchObject({ item: { title: "联调一键唤醒对话" }, meeting: { title: "inception review", anchors: ["本期目标"] },

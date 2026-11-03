@@ -44,7 +44,7 @@ test('装入后卡上有下期输入并参与握手；改成不合法的类型�
  const sun=memberActor('member-03',s);
  s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:1,patch:{nextInputs:[...c.nextInputs,{ref:'',type:'停止',text:'不再做演示版'}]}});
  assert.equal(currentVersion(s.cards['rv:bf01-m1']).content.nextInputs.length,3);
- assert.ok(s.reviewCascadeQueue?.some(j=>j.childId==='rv:bf01-m1'&&j.fields.includes('nextInputs')),'交给 Nexus 判断对单元复盘的影响');
+ assert.equal(s.reviewCascadeQueue?.length||0,0,'未被单元引用的下期输入不传播');
  assert.throws(()=>applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:2,patch:{nextInputs:[{type:'欠账',text:'x'}]}}),/类型只能是/);
  assert.match(reviewPatchProblem(s.cards['rv:bf01-m1'],{nextInputs:[{type:'欠账',text:'x'}]}),/下期输入格式不对/);
 });
@@ -76,6 +76,7 @@ test('截止时间：复盘装入后 48 小时，投影和通知卡片都带着'
 
 test('公司复盘的 Nexus 综合读所有复盘下的洞察，按复盘分组；其他复盘只读自己的',()=>{
  const s=fresh();s.insights={'rv:bf01-m1':[{id:'i1',author:'member-03',text:'客户窗口靠单点联系'}],'rv:company':[{id:'i2',author:'member-01',text:'目标定得太满'}]};
+ s.cards['rv:bf01-m1'].confirmedVersion=1;s.cards['rv:bf01-m1'].versions[0].signatures=[{slot:'missionDri',createdAt:'2026-10-29T03:00:00Z'}];s.insights['rv:bf01-m1'][0].createdAt='2026-10-28T01:00:00Z';
  const name=id=>({'member-01':'刘明华','member-03':'孙铭泽'})[id]||id;
  const company=JSON.parse(insightSynthesisRequest(s,s.cards['rv:company'],'',name)[1].content);
  assert.deepEqual(company.insights,[{author:'刘明华',text:'目标定得太满'}]);
@@ -92,12 +93,11 @@ test('确认前至少贴一条洞察：应交洞察的人没交，从任何入�
  assert.ok(currentVersion(s.cards['rv:bf01-m1']).signatures.some(x=>x.slot==='missionDri'));
 });
 
-test('公开后还能补交洞察：补交的进群里，这份复盘和公司复盘的 Nexus 综合作废重写',()=>{
- let s=fresh();const sun=memberActor('member-03',s);
- s.insightsRevealed={at:'2026-10-29T02:33:00.000Z',by:'auto'};s.insightNexus={'rv:bf01-m1':{text:'旧综合'},'rv:company':{text:'公司旧综合'},'rv:bf01':{text:'单元综合'}};
- s=applyAction(s,sun,{type:'insight',cardId:'rv:bf01-m1',text:'演示和真用要分开验收'});
- assert.match(s.messages.at(-1).text,/孙铭泽在「首用」下的分析洞察：演示和真用要分开验收/);assert.equal(s.messages.at(-1).scope,'bf01','公开后的洞察进单元群');
- assert.equal(s.insightNexus['rv:bf01-m1'],undefined);assert.equal(s.insightNexus['rv:company'],undefined);assert.equal(s.insightNexus['rv:bf01'],undefined,'单元复盘的综合也读 Mission 洞察，一起重写');
+test('公开后个人洞察补交仍私密，确认后再刷新公开综合',()=>{
+ let s=fresh();const actor=memberActor('member-03',s);s.insightsRevealed={at:'2026-10-29T02:33:00.000Z'};s.insightNexus={'rv:bf01-m1':{text:'旧综合'},'rv:company':{text:'旧公司综合'}};
+ s=applyAction(s,actor,{type:'insight',cardId:'rv:bf01-m1',text:'演示和真用要分开验收'});
+ assert.ok(!s.messages.some(m=>m.text.includes('演示和真用要分开验收')));assert.equal(s.insightNexus['rv:company'].text,'旧公司综合');
+ s=applyAction(s,actor,{type:'confirm',cardId:'rv:bf01-m1',baseVersion:1,slot:'missionDri'});assert.equal(s.insightNexus['rv:company'],undefined);
 });
 
 test('程序检查没过的那份单独重写一次再查，不整轮作废；重写还不对的照样挡住',async()=>{
@@ -112,11 +112,11 @@ test('程序检查没过的那份单独重写一次再查，不整轮作废；�
 });
 
 test('稳定的环节卡：复盘进行中一直在、带截止时间；CEO 确认公司复盘后复盘卡消失，换成拆解卡（生成中）',()=>{
- const s=fresh();let card=notificationsFor(s,'member-03').find(i=>i.id==='stage:review');
+ const s=fresh(),clock={now:Date.parse('2026-10-28T00:00:00Z')};let card=notificationsFor(s,'member-03',clock).find(i=>i.id==='stage:review');
  assert.deepEqual([card.status,card.title,card.dueAt],['open','10 月复盘进行中','2026-10-29T02:33:00.000Z']);assert.match(card.text,/10\/29 10:33 前确认/);assert.match(card.link,/stage=review/);
- const late={...s,reviewRound:{...s.reviewRound,dueAt:'2026-10-01T00:00:00.000Z'}};assert.match(notificationsFor(late,'member-03').find(i=>i.id==='stage:review').text,/已过截止时间（10\/01 08:00）/);
+ const late={...s,reviewRound:{...s.reviewRound,dueAt:'2026-10-01T00:00:00.000Z'}};assert.match(notificationsFor(late,'member-03',clock).find(i=>i.id==='stage:review').text,/已过截止时间（10\/01 08:00）/);
  const company=s.cards['rv:company'],v=currentVersion(company);v.signatures.push({slot:'ceo',actorId:'member-01',version:v.number,createdAt:'2026-10-29T01:00:00.000Z'});company.confirmedVersion=v.number;
- const items=notificationsFor(s,'member-03');
+ const items=notificationsFor(s,'member-03',clock);
  assert.ok(!items.some(i=>i.id==='stage:review'),'复盘卡消失');
  const plan=items.find(i=>i.id==='stage:plan');assert.deepEqual([plan.status,plan.title,plan.updatedAt],['generating','11 月拆解生成中','2026-10-29T01:00:00.000Z']);assert.match(plan.link,/stage=plan/);
  assert.ok(!items.some(i=>i.id==='comments'),'新批注不再单独成卡');
@@ -180,13 +180,13 @@ test('下级有调整（单元复盘改了，公司复盘标出来）：签字�
  s=applyAction(s,ceo,{type:'acknowledgeImpact',cardId:'rv:company',baseVersion:1});assert.equal(s.cards['rv:company'].downstreamChange,undefined);
 });
 
-test('群里少说：两份个人复盘改了不在单元群里发提醒，只排给 Nexus 判断；没出成的卡不进群',async()=>{
+test('群里少说：两份个人复盘无上级实际引用的修改不通知单元群；没出成的卡不进群',async()=>{
  const two={...run,reviews:[...run.reviews,{unit:'bf01',level:'mission',ref:'bf01-m2',title:'复用',owner:'孙铭泽',verdict:'未达成',verdictReason:'没做',facts:[{ref:'t1',item:'复用',owner:'孙铭泽',status:'未达成',evidence:'无'}],nextInputs:[{ref:'t1',type:'继续',text:'接着做'}],parent:'bf01'}]};
  let s=installReviewRound(createCollaborationState([{id:'bf01',level:'po',title:'灯塔',owner:'刘明华',version:1,children:[]}]),two,{label:'10 月复盘',now:'2026-10-27T02:33:00.000Z'});
  const sun=memberActor('member-03',s),before=s.messages.length;
  for(const id of ['rv:bf01-m1','rv:bf01-m2']){const c=currentVersion(s.cards[id]).content;s=applyAction(s,sun,{type:'revise',cardId:id,baseVersion:1,patch:{nextInputs:[{...c.nextInputs[0],text:c.nextInputs[0].text+'（改）'}]}});}
- assert.equal(s.messages.slice(before).filter(m=>m.scope==='bf01').length,0,'单元群里不发');
- assert.deepEqual(s.reviewCascadeQueue.map(j=>j.childId),['rv:bf01-m1','rv:bf01-m2']);
+ assert.equal(s.messages.slice(before).filter(m=>m.scope==='bf01').length,0,'无真实上级引用的草稿不广播');
+ assert.equal(s.reviewCascadeQueue?.length||0,0);
  const {quietReply}=await import('./nexus-policy.mjs');
  assert.equal(quietReply('已出修订卡，请确认。',[],[{cardId:'talent-m03',why:'这张卡上还有人反对'}]),'');
  assert.equal(quietReply('M02 改好了，请看。另外周五前给数。',[{cardId:'talent-m02'}],[{cardId:'talent-m03',why:'x'}]),'M02 改好了，请看。另外周五前给数。');
@@ -207,10 +207,12 @@ test('个人复盘的房间：只有本人能说，话进 person:<id>，别人�
  assert.equal(sharedProjection(s,sun).records['group:person:member-03'].length,3);
 });
 
-test('洞察公开后，个人复盘的洞察汇进单元复盘，带“来自 Mission N”；公开前不汇；个人复盘截止 24 小时、其余 48 小时',()=>{
+test('个人复盘确认后立即汇入洞察，带来源；未确认仍私密，截止时间保留',()=>{
  let s=fresh();const sun=memberActor('member-03',s),ceo=memberActor('member-01',s);
  s=applyAction(s,sun,{type:'insight',cardId:'rv:bf01-m1',text:'客户窗口只靠一个人'});
- assert.equal(sharedProjection(s,ceo).drafts['rv:bf01'].insights.items,undefined);
+ assert.deepEqual(sharedProjection(s,ceo).drafts['rv:bf01'].insights.items,[]);
+ s=applyAction(s,sun,{type:'confirm',cardId:'rv:bf01-m1',baseVersion:1,slot:'missionDri'});
+ assert.equal(sharedProjection(s,ceo).drafts['rv:bf01'].insights.items.length,1);
  s.insightsRevealed={at:'2026-10-29T02:33:00.000Z',by:'auto'};
  const items=sharedProjection(s,ceo).drafts['rv:bf01'].insights.items;
  assert.deepEqual(items.map(i=>[i.text,i.source?.label,i.source?.cardId]),[['客户窗口只靠一个人','Mission 1','rv:bf01-m1']]);
@@ -226,6 +228,7 @@ test('私人 Agent 在个人复盘里读本人房间的话，读不到别人房�
  assert.throws(()=>privateAgentContext(s,ceo,{scope:'person:member-03'}),/不在成员可见范围/);
  assert.ok(!privateAgentContext(s,ceo,{selection:{id:'rv:bf01-m1'}}).annotations.some(a=>/10\/25/.test(a.text)),'CEO 只读卡，不读房间里的话');
  const c=currentVersion(s.cards['rv:bf01-m1']).content;
+ c.facts[1].evidence='10/20 演示记录尚未完成客户试用';currentVersion(s.cards['rv:bf01']).content.facts[0].evidence=c.facts[1].evidence;
  s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:1,patch:{facts:[c.facts[0],{...c.facts[1],status:'部分达成',evidence:'10/25 客户试用一次'}]}});
  const job=s.reviewCascadeQueue.at(-1),req=JSON.parse(reviewCascadeRequest(s,job,'规则')[1].content);
  assert.equal(req.mission.before.facts[1].status,'未达成');assert.equal(req.mission.after.facts[1].status,'部分达成');assert.equal(req.unitReview.id,'rv:bf01');
@@ -233,7 +236,7 @@ test('私人 Agent 在个人复盘里读本人房间的话，读不到别人房�
  const pf=currentVersion(s.cards['rv:bf01']).content.facts;
  const out=reviewCascadeProposal(s,job,{impact:true,reason:'首用那一行要改成部分达成',patch:{facts:[{...pf[0],status:'部分达成',evidence:'10/20 演示，10/25 客户试用一次'}]}});
  assert.equal(out.scope,'bf01');assert.equal(out.proposal.cardId,'rv:bf01');assert.match(out.proposal.reason,/「首用」的个人复盘改了/);
- assert.match(reviewCascadeProposal(s,job,{impact:true,patch:{facts:[{item:'x',status:'差不多'}]}}).reason,/事实证据格式不对/);
+ assert.match(reviewCascadeProposal(s,job,{impact:true,patch:{facts:[{item:'x',status:'差不多'}]}}).reason,/事实证据格式不对|事实回查不能修改/);
 });
 
 test('个人复盘的负责人进这个单元：能只读看本单元别人的个人复盘和单元复盘，看不到别人房间里的话',()=>{
@@ -295,14 +298,15 @@ test('给人看的话里不露内部写法：ref-3 写成第 3 项，复盘卡�
  assert.equal(readableAnswer('bf01-m10 不认识就不动',cards),'bf01-m10 不认识就不动');
 });
 
-test('锁定：单元复盘确认后个人复盘不能再改、不再联动；公司复盘确认后整轮只能看和批注；投影带 locked 和原因',async()=>{
+test('锁定：单元复盘确认后个人复盘不能再改，上级本身仍可收到待确认候选；公司复盘确认后整轮只能看和批注；投影带 locked 和原因',async()=>{
  const {cascadeSkip}=await import('./review-cascade.mjs');const {validateNexusResult}=await import('./nexus-policy.mjs');const {reviewCardsFor}=await import('./nexus-review.mjs');
  let s=fresh();const sun=memberActor('member-03',s),ceo=memberActor('member-01',s);
  const c=currentVersion(s.cards['rv:bf01-m1']).content;
+ c.verdictReason='演示了但是客户没有真实使用';currentVersion(s.cards['rv:bf01']).content.verdictReason=c.verdictReason;
  s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:1,patch:{verdictReason:'演示了，客户没真用'}});const job=s.reviewCascadeQueue.at(-1);
  for(const [id,slot,who] of [['rv:bf01-m1','missionDri',sun],['rv:bf01','ceo',ceo],['rv:bf01','unitDri',ceo]]){s=applyAction(s,who,{type:'insight',cardId:id,text:'x'});s=applyAction(s,who,{type:'confirm',cardId:id,slot,baseVersion:currentVersion(s.cards[id]).number});}
  assert.throws(()=>applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:2,patch:{verdictReason:'再改'}}),/单元复盘已确认，个人复盘不能再改/);
- assert.equal(cascadeSkip(s,job),'单元复盘已确认，不再联动');
+ assert.equal(cascadeSkip(s,job),null,'上级自身确认不吞掉在途候选，应用时另需显式继续');
  const d=sharedProjection(s,sun).drafts;assert.deepEqual([d['rv:bf01-m1'].locked,d['rv:bf01-m1'].lockedReason],[true,'单元复盘已确认，个人复盘不能再改']);assert.equal(d['rv:bf01'].locked,undefined);
  const cards=reviewCardsFor(s,'person:member-03');assert.equal(cards[0].locked,true);
  assert.equal(validateNexusResult({topics:[],proposals:[{cardId:'rv:bf01-m1',baseVersion:2,basis:'request',sourceIds:['x'],patch:{verdictReason:'y'}}]},{cards,evidence:[{id:'x',author:'孙铭泽',text:'改一下',kind:'chat',scope:'person:member-03',context:null}],fresh:[],ownRoom:true}).rejected[0].why,'这份复盘已定稿，不再修订');
@@ -348,4 +352,13 @@ test('定稿的个人复盘：本人在房间里要求改，Nexus 不出卡、�
  const c=currentVersion(s.cards['rv:bf01-m1']).content;
  const out=validateNexusResult({topics:[],reply:'双人实测记录我已补进这一行，补上后可以改成达成',proposals:[{cardId:'rv:bf01-m1',baseVersion:1,basis:'request',sourceIds:[ev[0].id],patch:{facts:[c.facts[0],{...c.facts[1],status:'达成',evidence:'纪要'}]}}]},{cards,evidence:ev,fresh:ev,ownRoom:true});
  assert.equal(out.proposals.length,0);assert.match(out.reply,/^单元复盘已确认，个人复盘不能再改，这次不改。有新情况请在单元群里提/);assert.doesNotMatch(out.reply,/补进|可以改成/);
+});
+
+test('环节卡截止提示使用传入时刻：截止前、截止时、截止后与默认真实时钟',t=>{
+ const s=fresh(),due=Date.parse(s.reviewRound.dueAt),card=now=>notificationsFor(s,'member-03',{now}).find(i=>i.id==='stage:review');
+ assert.equal(card(due-1).text,'点这里去复盘，10/29 10:33 前确认');
+ assert.equal(card(due).text,'点这里去复盘，10/29 10:33 前确认');
+ assert.equal(card(due+1).text,'已过截止时间（10/29 10:33），还没确认的请尽快确认');
+ t.mock.timers.enable({apis:['Date'],now:due+1});
+ assert.equal(notificationsFor(s,'member-03').find(i=>i.id==='stage:review').text,card(due+1).text,'不传now仍使用当前时间');
 });

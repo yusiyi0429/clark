@@ -2,12 +2,12 @@ import type { FastifyReply } from "fastify";
 import { Buddy, BuddyOrNull, PersonalProfileView, UpdatePersonalProfileRequest } from "@warmap/contracts";
 import { BUDDY_NAME_UNITS, buddyNameUnits, readBuddy, saveBuddy } from "../buddy.js";
 import { Type } from "@sinclair/typebox";
-import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, ReturnTaskAcceptanceRequest, StandaloneMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, BattlefieldProgressResponse, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
+import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, ReturnTaskAcceptanceRequest, StandaloneMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, PlanCalendarResponse, Period, BattlefieldProgressResponse, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
 import { acceptMyTask, addTaskCollaborators, returnMyTaskAcceptance, createMyTask, deleteMyTask, getTaskDetail, listMyTasks, putMyTaskNote, reopenMyTask, returnMyTask, standaloneMyTask, updateMyTaskStatus, type TaskResult } from "../tasks.js";
 import { draftTaskAcceptance } from "../taskAcceptanceDraft.js";
 import { readMonthPlan, saveMonthPlan } from "../monthPlan.js";
-import { readHomePlan } from "../homePlan.js";
+import { readHomePlan, readPlanCalendar } from "../homePlan.js";
 import { readBattlefieldProgress } from "../battlefieldProgress.js";
 import { createPlanMark, deletePlanMark, patchPlanMark, type PlanMarkError } from "../planMarks.js";
 import { companyPeriod } from "../monthlyPlans.js";
@@ -21,7 +21,6 @@ import { idParams, type AppInstance, type Guard, type RouteContext } from "./sha
 import { readMemberWork } from "../memberWork.js";
 import { readMemberBattlefield } from "../memberBattlefields.js";
 import { readMemberRadarBrief } from "../personalSignals.js";
-import { readWeeklySyncReminder } from "../weeklySyncReminder.js";
 import { appendTaskProgress } from "../taskProgress.js";
 import { createPersonalToken, listPersonalTokens, revokePersonalToken } from "../personalTokens.js";
 import { getIssueRow } from "../issues.js";
@@ -79,16 +78,18 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   };
 
   app.get("/api/me/home", { preHandler: requireMember, schema: { response: { 200: MeHomeResponse } } }, async (req) => {
-    const [myTasks, { work }, radar, weeklySync] = await Promise.all([
+    const [myTasks, { work }, radar] = await Promise.all([
       listMyTasks(q, req.person!.personId, names()),
       readMemberWork(q, peopleDirectory.searchPeople(undefined), ctx.env.sessionSecret, req.person!, ctx.now()),
       readMemberRadarBrief(q, req.person!, ctx.now()),
-      readWeeklySyncReminder(q, req.person!.personId, ctx.now()),
     ]);
-    return { myTasks, work, radar, weeklySync };
+    return { myTasks, work, radar };
   });
   app.get("/api/me/home-plan", { preHandler: requireMember, schema: { response: { 200: HomePlanResponse } } }, async (req) =>
     readHomePlan(q, req.person!, ctx.now(), { planTasks: ctx.planTasks, names: names() }));
+  // 月历翻到别的月份：同首页那几个 Mission，只换月份。
+  app.get("/api/me/plan-calendar", { preHandler: requireMember, schema: { querystring: Type.Object({ month: Period }), response: { 200: PlanCalendarResponse } } }, async (req) =>
+    readPlanCalendar(q, req.person!, req.query.month, ctx.now()));
   // 战场进展：可见范围在 battlefieldProgress.ts 判（同战场；没有战场时同业务域，只这一页）。
   app.get("/api/me/battlefield-progress", { preHandler: requireMember, schema: { response: { 200: BattlefieldProgressResponse } } }, async (req) =>
     readBattlefieldProgress(q, req.person!.personId, peopleDirectory.searchPeople(undefined), ctx.now()));

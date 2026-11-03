@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { Client, Pool } from "pg";
+import { Client, Pool, type PoolClient } from "pg";
 import { createAssistantMessageEventStream, type AssistantMessage } from "@earendil-works/pi-ai";
 import type { TPreflightCandidate, TWebSearchInput, TWebSearchResponse, TWebSearchResult } from "@warmap/contracts";
 import { migrate } from "../src/migrate.js";
@@ -20,7 +20,8 @@ import { createMonthlyReviewService, type MonthlyReviewAgents, type MonthlyRevie
 import { assessOutcomeCandidate, type PostMeetingAgent } from "../src/outcome.js";
 import { deriveMeetingStatus, meetingEffectRef } from "../src/effects.js";
 import { decisionIssueId, getMeetingRow } from "../src/meetingStore.js";
-import { dispatchMeetingTodo } from "../src/tasks.js";
+import { insertNotification } from "../src/notifications.js";
+import { postCoAgentMessage } from "../src/threads.js";
 import type { WebSearchAdapter } from "../src/webSearch.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService, type RecordingDeps } from "../src/meetingRecordings.js";
 import type { VoiceprintDeps } from "../src/voiceprints.js";
@@ -159,6 +160,25 @@ export const TEST_MEMBER = { personId: "person-fixture-002", loginId: "ceshiy", 
 export const TEST_LOGIN = { loginId: TEST_CEO.loginId, passcode: TEST_CEO.passcode };
 
 /**
+ * 10/30 之前会后分派建出的执行事项（旧会后条目的 todo、会议卡的行动项）：生产代码已不再建，测旧数据时用它造出同样的行。
+ * 负责人缺省主持人，是 CEO 的不建（返回 null）；没有所属 Mission（待归位，要挂的用例自己改）；建事项群、发「分给你的事」通知。
+ */
+export async function seedMeetingTodo(client: PoolClient, meeting: { id: string; leadDriId: string; ceoId: string; ownerName?: string; title?: string },
+  item: { id: string; text: string; ownerPersonId: string | null; dueDate?: string | null; quote: string | null }): Promise<string | null> {
+  const ownerId = item.ownerPersonId ?? meeting.leadDriId;
+  if (ownerId === meeting.ceoId) return null;
+  const taskId = randomUUID();
+  await client.query(`INSERT INTO tasks(id,title,due_date,status,owner_id,created_by,origin_meeting_id,origin_item_id,source_quote)
+    VALUES($1,$2,$3,'not_started',$4,'meeting',$5,$6,$7)`, [taskId, item.text, item.dueDate ?? null, ownerId, meeting.id, item.id, item.quote]);
+  await client.query("INSERT INTO task_members(task_id,person_id,role,added_by) VALUES($1,$2,'owner','meeting')", [taskId, ownerId]);
+  await client.query("INSERT INTO thread_members(object_type,object_id,person_id,added_by) VALUES('task',$1,$2,'meeting')", [taskId, ownerId]);
+  await postCoAgentMessage(client.query.bind(client), { objectType: "task", objectId: taskId },
+    `这个群讨论${meeting.ownerName ?? ownerId}推进的执行事项「${item.text}」（还没有所属 Mission${meeting.title ? `，来自会议「${meeting.title}」` : ""}），截止 ${item.dueDate ?? "待定"}。`, [ownerId]);
+  await insertNotification(client, { personId: ownerId, kind: "meeting_action_assigned", objectType: "task", objectId: taskId });
+  return taskId;
+}
+
+/**
  * 旧格式会议（会议卡之前，会后逐条条目）：现在的会后整理只生成会议卡，逐条确认也已停。测旧会议数据的用例在逐字稿导入之后用它把会议写成旧会议的样子，
  * 和原来的会后抽取一样：校验候选、todo 推成执行事项、按条目算会议状态；没有会议卡。
  * confirmDecisions：写成当时已经逐条确认过决定的样子（关联议题的写一条 meeting.confirm_item 回执、议题记为 decided）。
@@ -174,7 +194,7 @@ export async function seedLegacyOutcome(pool: Pool, meetingId: string, candidate
     for (const item of assessed.items) {
       if (item.kind !== "todo") continue;
       const ownerId = item.ownerPersonId ?? meeting.lead_dri_id;
-      const taskId = await dispatchMeetingTodo(client, { id: meetingId, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id,
+      const taskId = await seedMeetingTodo(client, { id: meetingId, leadDriId: meeting.lead_dri_id, ceoId: meeting.ceo_participant_id,
         ownerName: meeting.participants.find((person) => person.personId === ownerId)?.displayName, title: meeting.title }, item);
       if (taskId) item.review = { status: "confirmed", effectRef: `task:${taskId}` };
     }

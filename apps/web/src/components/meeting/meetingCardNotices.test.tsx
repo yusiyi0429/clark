@@ -24,10 +24,10 @@ describe("会后确认：只出要确认的决策和行动项，一次一条", (
     expect(review).toHaveBeenLastCalledWith(confirm(), "reject", "会上没定数");
   });
 
-  it("行动项：标签「执行事项确认」，带截止；接下 / 退回；失败照原因提示", async () => {
+  it("行动项：标签「行动项确认」，带截止；接下 / 退回；失败照原因提示", async () => {
     const review = vi.fn<ConfirmActs["review"]>(async () => ({ ok: false, error: "已经处理过了" }));
     const [notice] = confirmNotices([confirm({ kind: "action", id: "act-1", text: "交 TK 试用 scope 写入演练报告", dueDate: "2026-10-31" })], { review, open: vi.fn() });
-    expect(notice.label).toBe("执行事项确认");
+    expect(notice.label).toBe("行动项确认");
     expect(notice.detail).toMatch(/^来自「AIDC 月中会」 · 截止 /);
     expect(notice.buttons.map((button) => button.label)).toEqual(["接下"]);
     expect(notice.reason?.label).toBe("退回");

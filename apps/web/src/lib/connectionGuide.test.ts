@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { connectCommands, connectionGuide, syncCommand } from "./connectionGuide";
+import { connectCommands, connectionGuide, SYNC_INSTRUCTION } from "./connectionGuide";
 
 describe("连接说明文件", () => {
-  it("Codex：令牌与工具放行写进 config.toml，不靠环境变量；含验证、用法、每周同步和删文件提醒", () => {
-    const text = connectionGuide({ role: "member", client: "codex", endpoint: "https://t.example/mcp/me", token: "tsm_x", expires: "不过期", weeklySync: true });
+  it("Codex：令牌与工具放行写进 config.toml，不靠环境变量；含验证、用法、「同步本周进展」和删文件提醒，不再设定时同步", () => {
+    const text = connectionGuide({ role: "member", client: "codex", endpoint: "https://t.example/mcp/me", token: "tsm_x", expires: "不过期" });
     expect(text).toContain("# 把 Codex 连到天枢");
     expect(text).toContain("[mcp_servers.tianshu]");
     expect(text).toContain('url = "https://t.example/mcp/me"');
@@ -12,29 +12,43 @@ describe("连接说明文件", () => {
     expect(text).not.toContain("TIANSHU_TOKEN");
     expect(connectCommands("codex", "https://t.example/mcp/me", "tsm_x")[0].value).toContain("http_headers");
     expect(text).toContain("list_my_items");
-    expect(text).toContain("第三步：设好每周五自动同步");
-    expect(text).toContain("codex exec --skip-git-repo-check");
-    expect(text).toContain("LaunchAgent");
+    expect(text).toContain("只在用户明确要求时才往天枢里写");
+    expect(text).not.toContain("不用等用户开口");
+    // 「同步本周进展」是本人开口要的，照旧；10/30 起不再让 Agent 建每周五的定时同步。
+    expect(text).toContain(`用户说「同步本周进展」时，照这段做：${SYNC_INSTRUCTION}`);
+    // 同步只写进展：天枢里还没有的工作列给本人，不替他建事项，也没有 ◆ 粒度规定。
+    expect(SYNC_INSTRUCTION).toContain("不要新建事项");
+    expect(SYNC_INSTRUCTION).not.toContain("create_item");
+    expect(SYNC_INSTRUCTION).not.toContain("◆");
+    expect(text).not.toContain("第三步");
+    expect(text).not.toContain("每周五");
+    expect(text).not.toContain("定时");
+    expect(text).not.toContain("无人值守");
+    expect(text).not.toContain("codex exec");
+    expect(text).not.toContain("LaunchAgent");
     expect(text).toContain("申请在沙箱外执行");
     expect(text).toContain("提醒用户删掉这个文件");
   });
   it("Claude Code：user 作用域，换目录也能用", () => {
-    const text = connectionGuide({ role: "member", client: "claude", endpoint: "https://t.example/mcp/me", token: "tsm_y", expires: "10/28 10:00", weeklySync: false });
+    const text = connectionGuide({ role: "member", client: "claude", endpoint: "https://t.example/mcp/me", token: "tsm_y", expires: "10/28 10:00" });
     expect(text).toContain('claude mcp add --transport http --scope user tianshu https://t.example/mcp/me --header "Authorization: Bearer tsm_y"');
     expect(text).not.toContain("第三步");
     expect(connectCommands("claude", "e", "k")[0].value).toContain("--scope user");
-    expect(syncCommand("claude")).toContain("--allowedTools");
+    expect(text).toContain("同步本周进展");
+    expect(text).not.toContain("claude -p");
   });
   it("其他工具：通用的远程 MCP 步骤，配置写在用户级，不给 Codex/Claude 专用命令", () => {
-    const text = connectionGuide({ role: "member", client: "other", endpoint: "https://t.example/mcp/me", token: "tsm_z", expires: "不过期", weeklySync: true });
+    const text = connectionGuide({ role: "member", client: "other", endpoint: "https://t.example/mcp/me", token: "tsm_z", expires: "不过期" });
     expect(text).toContain("# 把 AI 工具 连到天枢");
     expect(text).toContain("`Authorization: Bearer tsm_z`");
     expect(text).toContain("OpenCode");
     expect(text).not.toContain("codex mcp add");
+    expect(text).toContain("同步本周进展");
+    expect(text).not.toContain("定时");
     expect(connectCommands("other", "https://t.example/mcp/me", "tsm_z").map((row) => row.value)).toEqual(["tianshu", "https://t.example/mcp/me", "Authorization: Bearer tsm_z"]);
   });
   it("CEO：验证待办、常用只读问法和回天枢处理动作，没有同步说明", () => {
-    const text = connectionGuide({ role: "ceo", client: "codex", endpoint: "https://t.example/mcp/me", token: "tsm_ceo", expires: "不过期", weeklySync: true });
+    const text = connectionGuide({ role: "ceo", client: "codex", endpoint: "https://t.example/mcp/me", token: "tsm_ceo", expires: "不过期" });
     expect(text).toContain("[mcp_servers.tianshu]");
     expect(text).toContain("`list_pending`");
     expect(text).toContain("`get_issue`");

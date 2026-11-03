@@ -72,20 +72,22 @@ describe("个人连接对话框", () => {
     expect(guide).toContain("本说明使用的 CEO 工具只读");
     expect(guide).not.toContain("每周五自动同步");
   });
-  it("没有令牌也显示同步进展，指令和每日定时命令收在折叠里，可复制；漏建的事项由 Agent 补建", async () => {
+  it("没有令牌也显示同步进展：「同步本周进展」指令收在折叠里可复制，不再给定时运行的命令", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { clipboard: { writeText } });
     const tree = render();
     const content = JSON.stringify(tree);
     expect(content).toContain("同步进展");
     expect(content).not.toContain("连接授权本身不会创建任务");
-    expect(content).toContain("codex exec");
-    expect(content).toContain("同步我今天的工作进展");
-    expect(content).toContain("mcp__tianshu__create_item");
-    expect(content).toContain("mcp__tianshu__append_progress");
+    expect(content).toContain("同步我本周的工作进展");
+    expect(content).not.toContain("定时运行");
+    expect(content).not.toContain("codex exec");
+    expect(content).not.toContain("claude -p");
+    expect(content).not.toContain("同步我今天的工作进展");
     const copyInstruction = tree.find((node) => node.props.children === "复制指令")!;
     await (copyInstruction.props.onClick as () => Promise<void>)();
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("没有进展的事项不要写，不要编造"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("同步我本周的工作进展"));
   });
 
   it("生成后主动作是下载连接说明；令牌只在这次出现，文件里是给 Agent 的步骤", async () => {
@@ -116,15 +118,12 @@ describe("个人连接对话框", () => {
     expect(JSON.stringify(render())).not.toContain(secret);
   });
 
-  it("个人令牌默认 90 天；切换每周同步不会改动有效期", () => {
+  it("个人令牌默认 90 天；成员版也不再有每周五自动同步的开关", () => {
     const selected = (tree: Node[]) => tree.find((node) => node.props["aria-labelledby"] === "connection-expiry")!.props.selectedKeys;
-    let tree = render();
+    const tree = render();
     expect(selected(tree)).toEqual(["90"]);
-    (tree.find((node) => node.props.role === "switch")!.props.onClick as () => void)();
-    tree = render();
-    expect(selected(tree)).toEqual(["90"]);
-    (tree.find((node) => node.props.role === "switch")!.props.onClick as () => void)();
-    expect(selected(render())).toEqual(["90"]);
+    expect(tree.some((node) => node.props.role === "switch")).toBe(false);
+    expect(JSON.stringify(tree)).not.toContain("自动同步");
     ui.values = [];
     expect(selected(render("ceo"))).toEqual(["90"]);
   });

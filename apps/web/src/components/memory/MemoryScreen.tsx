@@ -5,7 +5,8 @@
  * - 顶上一个搜索框，右边按状态切换：现行 / 已被替代 / 已忘掉（后两个有才出现，带数字）；
  * - 按四组列：偏好与表达方式、做法、想法与立场、没定的问题；每条是标题、正文，下面一行时间、关于什么、原话出处；
  * - 点正文就地修改（⌘↵ 保存、Esc 取消）；「⋯」里忘掉（提示条可撤销，之后在「已忘掉」里恢复）、彻底删除（要确认）；
- * - 页头「导入」打开导入弹窗：有没确认完的导入先显示确认组件，否则新建。
+ * - 页头「导入」打开导入弹窗：有没确认完的导入先显示确认组件，否则新建；
+ * - 首页走独立 Chat 时，最上面一块只读列出伙伴（Chat）记住的（PartnerMemories），搜索和状态只管下面天枢自己的。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -21,7 +22,8 @@ import { MenuDialog } from "@/components/AccountMenu";
 import { showWorkspaceToast } from "@/lib/toast";
 import { MemoryImportPanel } from "./MemoryImportPanel";
 import { MemoryImportReview } from "./MemoryImportReview";
-import { anchorHref, anchorLabel, groupMemories, referenceSource, shortDate, SOURCE_LABEL, type MemoryImport, type MemoryItem } from "./memoryModel";
+import { PartnerMemories } from "./PartnerMemories";
+import { anchorHref, anchorLabel, groupMemories, referenceSource, shortDate, SOURCE_LABEL, type MemoryImport, type MemoryItem, type PartnerMemoryList } from "./memoryModel";
 import t from "@/styles/material-tabs.module.css";
 import c from "@/styles/confirm-dialog.module.css";
 import s from "./memory.module.css";
@@ -41,6 +43,7 @@ export function MemoryScreen({ role }: { role: "ceo" | "member" }) {
   const [importing, setImporting] = useState(false);
   const [imports, setImports] = useState<MemoryImport[]>([]);
   const [purging, setPurging] = useState<MemoryItem | null>(null);
+  const [partner, setPartner] = useState<PartnerMemoryList | null>(null);
 
   const load = useCallback(async (q: string) => {
     try {
@@ -59,6 +62,8 @@ export function MemoryScreen({ role }: { role: "ceo" | "member" }) {
     return () => clearTimeout(timer);
   }, [load, query]);
   useEffect(() => { void loadImports(); }, [loadImports]);
+  // 伙伴记住的：读不到（Chat 连不上、没接）就不显示那一块，不报错。
+  useEffect(() => { void browserApi.GET("/api/me/memory/partner").then(({ data }) => setPartner(data ?? null), () => undefined); }, []);
 
   const counts = useMemo(() => Object.fromEntries(STATUS_TABS.map((tab) => [tab.id, items?.filter((item) => item.status === tab.id).length ?? 0])) as Record<Status, number>, [items]);
   // 当前状态没有条目了（比如最后一条恢复了），回到现行。
@@ -96,6 +101,7 @@ export function MemoryScreen({ role }: { role: "ceo" | "member" }) {
         </Button>}>
         <div className={s.content}>
           <div className={s.stack}>
+            <PartnerMemories memory={partner} />
             <div className={s.toolbar}>
               <label className={s.search}>
                 <Search size={16} aria-hidden />
@@ -115,7 +121,8 @@ export function MemoryScreen({ role }: { role: "ceo" | "member" }) {
             {items === null && !failed ? <div className={s.skeleton} aria-busy="true"><i /><i /><i /><i /></div> : null}
             {items && !shown.length ? (
               <div className={s.empty}>
-                <p>{query ? "没有找到" : status === "active" ? "还没有记忆" : "没有"}</p>
+                {/* 上面已经列出伙伴记住的，就不再写「还没有记忆」，只留导入。 */}
+                {query || status !== "active" || !partner?.items.length ? <p>{query ? "没有找到" : status === "active" ? "还没有记忆" : "没有"}</p> : null}
                 {!query && status === "active" ? <Button variant="ghost" className={s.ghost} onPress={() => setImporting(true)}><Plus size={15} aria-hidden />导入</Button> : null}
               </div>
             ) : null}

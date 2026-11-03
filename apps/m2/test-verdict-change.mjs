@@ -56,8 +56,8 @@ test('个人复盘判定或事实证据改了：不再给单元复盘标“下�
  s=applyAction(s,sun,{type:'revise',cardId:'rv:bf01-m1',baseVersion:2,patch:{facts},reason:'10/20 有一次真实使用'});
  assert.equal(currentVersion(s.cards['rv:bf01-m1']).content.facts[0].status,'部分达成','事实证据直接改成新版本');
  assert.equal(s.cards['rv:bf01'].downstreamChange,undefined);
- assert.deepEqual(s.reviewCascadeQueue.map(j=>[j.childId,j.parentId,j.fromVersion,j.toVersion,j.fields.join()]),[['rv:bf01-m1','rv:bf01',1,2,'verdict'],['rv:bf01-m1','rv:bf01',2,3,'facts']]);
- assert.ok(!s.messages.some(m=>m.scope==='bf01'&&/改了/.test(m.text)),'单元群里没有提醒');
+ assert.equal(s.reviewCascadeQueue?.length||0,0,'未确认判定和未被引用Task事实不传播');
+ assert.ok(!s.messages.some(m=>m.scope==='bf01'&&/修改了/.test(m.text)),'个人草稿不广播单元群');
 });
 test('修订卡不重复、不过期：卡在上级改动后已被改过，下级对齐的卡不再发；理由引用的日期卡上已没有，不发；上级再改或确认后，旧的对齐卡归档',async()=>{
  const {queueProposals,staleDates}=await import('./nexus-memory.mjs');
