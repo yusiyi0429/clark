@@ -7,8 +7,6 @@ import { useVoiceprintEnrollment, VOICEPRINT_SCRIPT, VOICEPRINT_CONSENT } from "
 import { browserApi } from "@/lib/api/client";
 import type { components } from "@/lib/api/schema";
 import { landingPath, onboardingDestination, onboardingReturnPath } from "@/lib/access-paths";
-import { monthDayTime } from "@/lib/companyTime";
-import { useRoundNow } from "@/components/missionCards/useRoundNow";
 import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import { ConnectAgentForm } from "@/components/ConnectAgentForm";
 import { BuddyNameInput } from "@/components/buddy/BuddyPicker";
@@ -29,7 +27,7 @@ import f from "./foundation.module.css";
 import s from "./welcome.module.css";
 
 export type OnboardingData = components["schemas"]["OnboardingResponse"];
-type Step = "buddy" | "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "work" | "radar" | "voiceprint" | "connect" | "collector" | "scan" | "review" | "delegation" | "start";
+type Step = "buddy" | "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "radar" | "voiceprint" | "connect" | "collector" | "scan" | "review" | "delegation" | "start";
 
 /**
  * CEO 只看工作台三页（你好 → 通知栏 → 公司全局和对话），最后一页直接进工作台；雷达、外部工具、采集器都在个人菜单里。
@@ -41,7 +39,7 @@ export function onboardingSteps(data: OnboardingData, skipReview = false, buddyS
   if (buddyStep === "only") return ["buddy"];
   const first: Step[] = buddyStep === "first" ? ["buddy"] : [];
   if (data.role === "ceo") return [...first, "hello", "tour-notifications", "tour-board"];
-  return [...first, "hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "connect",
+  return [...first, "hello", "tour-notifications", "tour-board", "mission-flow", "radar", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "connect",
     "collector", "scan", ...(skipReview ? [] : ["review" as const]), ...(data.delegationStep ? ["delegation" as const] : []), "start"];
 }
 
@@ -55,54 +53,9 @@ export function radarSummaryLine(radar: { enabled: boolean }): string {
   return radar.enabled ? "雷达 · 已开启" : "雷达 · 未开启";
 }
 
-export function monthTargetCopy(status: "none" | "draft" | "negotiating" | "confirmed", target: string | null): string {
-  if (status === "none") return "本月目标还没出来";
-  if (status !== "confirmed") return "本月目标还在协商";
-  return target || "这个战场的本月目标还没有登记";
-}
-
-type WorkMissionCard = Extract<OnboardingData, { role: "member" }>["work"]["missionCards"][number];
-
-function WorkMissionCard({ card, onRefresh }: { card: WorkMissionCard; onRefresh?: () => void }) {
-  useRoundNow(card.closesAt, card.serverNow, card.phase === "open" ? onRefresh : undefined);
-  return <li className={s.personalCard}>
-    <div className={s.personalCardHeading}><strong>{Number(card.period.slice(5))} 月 Mission Card</strong>{card.placeholder ? <span className={s.placeholder}>占位</span> : null}</div>
-    <p>{card.battlefieldName} · {card.missionCount} 项个人任务</p>
-    <p className={s.cardStatus}>{card.status}</p>
-    {card.closesAt ? <p className={s.cardDeadline}><time dateTime={card.closesAt}>{card.phase === "open" ? `${monthDayTime(card.closesAt)} 截止` : `讨论截止于 ${monthDayTime(card.closesAt)}`}</time></p> : <p className={s.cardDeadline}>本轮未开放</p>}
-  </li>;
-}
-
-export function WorkSnapshot({ data, onRefresh }: { data: Extract<OnboardingData, { role: "member" }>; onRefresh?: () => void }) {
-  const { work } = data;
-  const unassigned = work.missions.filter((mission) => !mission.battlefieldIds.some((id) => work.battlefields.some((battlefield) => battlefield.id === id)));
-  const groupedMissions = work.battlefields.map((battlefield) => ({ ...battlefield, missions: work.missions.filter((mission) => mission.battlefieldIds.includes(battlefield.id)) })).filter((group) => group.missions.length);
-  const missionList = (missions: typeof work.missions) => <><ul className={s.missions}>{missions.slice(0, 3).map((mission) => <li key={mission.id}>{mission.title}</li>)}</ul>{missions.length > 3 ? <p className={s.more}>另 {missions.length - 3} 条</p> : null}</>;
-  return <div className={`${f.glass} ${s.snapshot} ${s.workSnapshot}`}>
-    <p className={s.period}>{Number(work.period.slice(5))} 月 · 与你有关的工作</p>
-    {work.battlefields.length ? work.battlefields.map((battlefield) => <section className={s.workSection} key={battlefield.id}>
-        <h2>{battlefield.name}</h2>
-        <p className={s.targetLabel}>本月目标</p>
-        <p className={s.clampThree}>{monthTargetCopy(work.planStatus, battlefield.monthTarget)}</p>
-      </section>) : <p className={s.empty}>这个月还没有登记你参与的战场。</p>}
-    <section className={`${s.workSection} ${s.myCards}`} aria-label="我的本月卡">
-      <h2>我的本月卡</h2>
-      {work.missionCards.length ? <ul className={s.personalCards}>{work.missionCards.map((card) => <WorkMissionCard key={card.cardId} card={card} onRefresh={onRefresh} />)}</ul> : <p>这个月还没有你的卡；定下来之后，会出现在首页。</p>}
-    </section>
-    {work.missions.length ? <section className={`${s.workSection} ${s.workMissions}`}>
-      <h2>我的 Mission</h2>
-      {groupedMissions.map((group) => <div key={group.id} className={s.missionGroup}>
-        {groupedMissions.length > 1 || unassigned.length ? <p className={s.targetLabel}>{group.name}</p> : null}
-        {missionList(group.missions)}
-      </div>)}
-      {unassigned.length ? <div className={s.missionGroup}>{groupedMissions.length ? <p className={s.targetLabel}>未关联战场</p> : null}{missionList(unassigned)}</div> : null}
-    </section> : <p className={s.emptyMission}>这个月还没有登记你的 Mission</p>}
-  </div>;
-}
-
 /** buddy：本人的伙伴，null 是还没选（undefined 当作已经有了）；buddyOnly：已经引导过、只差伙伴。 */
 export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false }: { data: OnboardingData; nextPath?: string; buddy?: Buddy | null; buddyOnly?: boolean }) {
-  const { data, refresh, refreshError } = useOnboardingData(initial);
+  const { data, refreshError } = useOnboardingData(initial);
   const buddyStep = buddy !== null ? "none" : buddyOnly ? "only" : "first";
   const returnPath = onboardingReturnPath(data.role, nextPath);
   const [index, setIndex] = useState(0);
@@ -319,7 +272,7 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
       : step === "connect" && !connectDownloaded ? connectPrimary?.querySelector<HTMLButtonElement>("button") : primary.current)?.click();
   }
 
-  const heading = step === "buddy" ? naming ? "给你的伙伴起个名字" : `选择${buddyDraft.name.trim()}的形象` : step === "collector" ? "安装本机采集器" : step === "scan" ? scanReady ? "扫描完成" : "正在扫描" : step === "review" ? "确认清单" : step === "delegation" ? "授权天枢替你记进本体" : step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "work" ? "你这个月的工作" : step === "radar" ? "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : step === "connect" ? "连上你自己的 AI 工具" : "可以开始了";
+  const heading = step === "buddy" ? naming ? "给你的伙伴起个名字" : `选择${buddyDraft.name.trim()}的形象` : step === "collector" ? "安装本机采集器" : step === "scan" ? scanReady ? "扫描完成" : "正在扫描" : step === "review" ? "确认清单" : step === "delegation" ? "授权天枢替你记进本体" : step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "radar" ? "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : step === "connect" ? "连上你自己的 AI 工具" : "可以开始了";
   // 手机首页是一条滚动：最上面是通知，往下 CEO 是公司全局、成员是自己的工作。
   const noticeCopy = data.role === "ceo" ? "会后要你确认的会议卡、月末的复盘与拆解，到时候会出现在这里。" : "任务卡的讨论、分给你的事和别人的回复，按轻重排在这里。";
   const phoneHeading = step === "tour-notifications" ? "最上面是通知" : step === "tour-board" ? data.role === "ceo" ? "往下是公司全局" : "往下是你的工作" : null;
@@ -365,7 +318,6 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
             </div> : null}
             {(step === "tour-notifications" || step === "tour-board") ? <WorkspaceSchematic role={data.role} focus={step === "tour-notifications" ? "notifications" : "board"} /> : null}
             {step === "mission-flow" && data.role === "member" ? <MissionFlow /> : null}
-            {step === "work" && data.role === "member" ? <WorkSnapshot data={data} onRefresh={refresh} /> : null}
             {step === "radar" ? <RadarSettingsEditor
               mode="person"
               submitLabel="保存并继续"

@@ -36,7 +36,7 @@ vi.mock("react", async (original) => {
   };
 });
 
-import { WorkSnapshot, WelcomeFlow, monthTargetCopy, onboardingSteps, radarSummaryLine, type OnboardingData } from "./WelcomeFlow";
+import { WelcomeFlow, onboardingSteps, radarSummaryLine, type OnboardingData } from "./WelcomeFlow";
 import { WorkspaceSchematic } from "./WorkspaceSchematic";
 import { MissionFlow } from "./MissionFlow";
 import { OnboardingProgress } from "./OnboardingProgress";
@@ -57,11 +57,6 @@ const base = { displayName: "测试", companyName: null, delegationStep: false, 
 const member: Extract<OnboardingData, { role: "member" }> = { ...base, role: "member", radar: { configured: false, enabled: false, directions: 0 }, work: { period: "2026-10", planStatus: "none", battlefields: [], missions: [], missionCards: [] } };
 // CEO 的雷达就是公司雷达，不能关闭（enabled 恒为 true）。
 const ceo: Extract<OnboardingData, { role: "ceo" }> = { ...base, role: "ceo", radar: { configured: false, enabled: true, directions: 0 }, company: { sixMonthGoal: "", battlefields: [], capabilities: [], people: [] } };
-const missionCard = {
-  cardId: "my-card", roundId: "my-round", period: "2026-10", battlefieldId: "bf", battlefieldName: "灯塔项目",
-  phase: "open" as const, status: "草稿 · 讨论中", closesAt: "2026-10-03T10:00:00.000Z", serverNow: "2026-10-01T10:00:00.000Z",
-  missionCount: 2, placeholder: true, href: "/me/mission-cards/my-card",
-};
 
 type Element = ReactElement<Record<string, unknown>>;
 function elements(node: ReactNode): Element[] {
@@ -157,10 +152,10 @@ describe("收尾按钮文案与实际落点一致", () => {
 });
 
 describe("真实数据的首次引导", () => {
-  it("成员先导览、再看 Mission 和本月工作；CEO 只看工作台三页", () => {
+  it("成员先导览、再看 Mission 怎么定下来；CEO 只看工作台三页", () => {
     const tail = ["connect", "collector", "scan", "review", "start"];
-    expect(onboardingSteps(member)).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", ...tail]);
-    expect(onboardingSteps({ ...member, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "work", "radar", "voiceprint", ...tail]);
+    expect(onboardingSteps(member)).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "radar", ...tail]);
+    expect(onboardingSteps({ ...member, voiceprint: { ...base.voiceprint, configured: true } })).toEqual(["hello", "tour-notifications", "tour-board", "mission-flow", "radar", "voiceprint", ...tail]);
     expect(onboardingSteps(ceo)).toEqual(["hello", "tour-notifications", "tour-board"]);
     expect(onboardingSteps({ ...ceo, voiceprint: { ...base.voiceprint, configured: true }, delegationStep: true })).toEqual(["hello", "tour-notifications", "tour-board"]);
     // 委托授权这一步由配置打开，放在结束页之前。
@@ -213,15 +208,9 @@ describe("真实数据的首次引导", () => {
     expect(diagram.slice(diagram.indexOf("之后 · 你来推进"))).toContain("拆成执行事项");
     (button(tree, "下一步").props.onClick as () => void)();
     tree = renderFlow(member);
-    expect(text(tree)).toContain("你这个月的工作");
+    expect(text(tree)).toContain("你想关注哪些变化？");
     (button(tree, "上一步").props.onClick as () => void)();
     expect(text(renderFlow(member))).toContain("每个月的 Mission，这样定下来");
-  });
-  it("空态只说没有登记，不推断没有工作", () => {
-    const html = renderToStaticMarkup(<WorkSnapshot data={member} />);
-    expect(html).toContain("这个月还没有登记你参与的战场");
-    expect(html).toContain("这个月还没有登记你的 Mission");
-    expect(html).not.toContain("没有工作");
   });
   it("CEO 两页导览各高亮对应区域，文案说明打开、返回和 Agent", () => {
     let tree = renderFlow(ceo);
@@ -248,62 +237,6 @@ describe("真实数据的首次引导", () => {
     expect(diagram).toContain('data-region="board"');
     expect(diagram).toContain("战略决策更新");
     expect(diagram).toContain("公司战略议题");
-  });
-  it("目标的三种状态有独立文案，已签发但无对应目标仍说明缺失", () => {
-    expect(monthTargetCopy("none", null)).toBe("本月目标还没出来");
-    expect(monthTargetCopy("draft", null)).toBe("本月目标还在协商");
-    expect(monthTargetCopy("negotiating", null)).toBe("本月目标还在协商");
-    expect(monthTargetCopy("confirmed", "客户验证")).toBe("客户验证");
-    expect(monthTargetCopy("confirmed", null)).toContain("还没有登记");
-  });
-  it("本人的 Mission 按战场列出三条并注明余数；未关联的也能看见", () => {
-    const data = { ...member, work: { ...member.work, battlefields: [{ id: "bf", name: "灯塔", monthTarget: null }], missions: Array.from({ length: 5 }, (_, i) => ({ id: String(i), code: String(i), title: `结果${i}`, battlefieldIds: i === 4 ? [] : ["bf"] })) } };
-    const html = renderToStaticMarkup(<WorkSnapshot data={data} />);
-    expect(html).toContain("灯塔");
-    expect(html).toContain("另 1 条");
-    expect(html).not.toContain("结果3");
-    expect(html).toContain("结果4");
-  });
-  it("先读目标和本月卡状态，再展开具体 Mission；多个战场的归属仍可辨认", () => {
-    const data = { ...member, work: { ...member.work, planStatus: "confirmed" as const,
-      battlefields: [{ id: "bf", name: "灯塔项目", monthTarget: "完成客户验证" }, { id: "bf2", name: "另一战场", monthTarget: "第二项月度目标" }],
-      missionCards: [missionCard],
-      missions: [{ id: "m1", code: "m1", title: "首项具体工作", battlefieldIds: ["bf"] }, { id: "m2", code: "m2", title: "另一项具体工作", battlefieldIds: ["bf2"] }, { id: "m3", code: "m3", title: "未关联具体工作", battlefieldIds: [] }],
-    } };
-    const html = renderToStaticMarkup(<WorkSnapshot data={data} />);
-    expect(html.indexOf("第二项月度目标")).toBeLessThan(html.indexOf("我的本月卡"));
-    expect(html.indexOf("10/3 18:00 截止")).toBeLessThan(html.indexOf("首项具体工作"));
-    expect(html).toContain("另一项具体工作");
-    expect(html).toContain("未关联具体工作");
-    const details = html.slice(html.indexOf("我的 Mission"));
-    expect(details).toContain("灯塔项目");
-    expect(details).toContain("另一战场");
-  });
-  it.each([
-    { phase: "draft", status: "草稿", closesAt: null, deadline: "本轮未开放" },
-    { phase: "open", status: "草稿 · 讨论中", closesAt: missionCard.closesAt, deadline: "10/3 18:00 截止" },
-    { phase: "closed", status: "草稿 · 已截止，待汇总", closesAt: missionCard.closesAt, deadline: "讨论截止于 10/3 18:00" },
-    { phase: "reviewing", status: "候选版本 · 等刘明华拍板", closesAt: missionCard.closesAt, deadline: "讨论截止于 10/3 18:00" },
-    { phase: "confirmed", status: "已确定 · 刘明华 10/4 18:00", closesAt: missionCard.closesAt, deadline: "讨论截止于 10/3 18:00" },
-  ] as const)("我的本月卡在 $phase 阶段保留服务端状态与公司时区的截止", ({ phase, status, closesAt, deadline }) => {
-    const data = { ...member, work: { ...member.work, missionCards: [{ ...missionCard, phase, status, closesAt }] } };
-    const html = renderToStaticMarkup(<WorkSnapshot data={data} />);
-    expect(html).toContain("我的本月卡");
-    expect(html).toContain("10 月 Mission Card");
-    expect(html).toContain(status);
-    expect(html).toContain(deadline);
-    expect(html).toContain("灯塔项目 · 2 项个人任务");
-    expect(html).toContain("占位");
-    expect(html).not.toContain("这个月还没有你的卡");
-  });
-  it("没有本月卡时清楚说明入口稍后出现；有多战场卡时逐张展示", () => {
-    const empty = renderToStaticMarkup(<WorkSnapshot data={{ ...member, work: { ...member.work, missionCards: [] } }} />);
-    expect(empty).toContain("这个月还没有你的卡；定下来之后，会出现在首页。");
-    const data = { ...member, work: { ...member.work, missionCards: [missionCard, { ...missionCard, cardId: "other-card", battlefieldName: "另一战场", placeholder: false }] } };
-    const html = renderToStaticMarkup(<WorkSnapshot data={data} />);
-    expect(html).toContain("灯塔项目 · 2 项个人任务");
-    expect(html).toContain("另一战场 · 2 项个人任务");
-    expect(html.match(/>占位</g)).toHaveLength(1);
   });
   it("服务端首屏包含问候与晨光，胶囊不可操作；读屏进度有文本", () => {
     const html = renderToStaticMarkup(<WelcomeFlow data={member} />);
