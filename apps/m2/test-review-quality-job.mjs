@@ -128,3 +128,34 @@ test('final check supplies originals once and preserves specific unresolved evid
   assert.deepEqual(run.quality.verificationPending[0].checks,[{unit:'company',problem:'缺少原始交接记录，不能确认交接是否发生'}]);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
+
+test('a third-attempt source request retains the raw answer and the specific pending refs without a fourth call',async()=>{
+ const rounds=[];
+ const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{
+  const p=JSON.parse(messages[1].content);
+  if(p.unit)return {answer:JSON.stringify({review})};
+  const answer={...checkCoverage(p),issues:[]};
+  if(p.phase==='final'){
+   rounds.push(p.sourceRound);
+   assert.equal(p.sourceRound,'first');
+   if(rounds.length<3)throw Object.assign(Error('temporary provider failure'),{providerStatus:503});
+   answer.sourceRequests=['company'];
+  }
+  return {answer:JSON.stringify(answer)};
+ }};
+ const {jobs,store,dir,original}=await setup(gateway,{formalFallbacks:false});
+ try{
+  const job=await jobs.start(actor,{period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00'},{now:new Date('2026-11-02T00:00:00Z')});
+  await until(()=>jobs.view().status!=='running');
+  assert.equal(jobs.view().status,'draft');
+  assert.equal((await jobs.start(actor,{resume:true})).status,'draft');
+  assert.deepEqual(rounds,['first','first','first']);
+  assert.deepEqual(store.snapshot().cards,original);
+  const {run}=JSON.parse(await readFile(join(dir,'review-jobs',job.id+'.json'),'utf8'));
+  const requests=Object.entries(run.quality.requests).filter(([,request])=>request.payload.phase==='final');
+  assert.deepEqual(requests.flatMap(([,request])=>request.attempts.map(attempt=>attempt.attempt)),[1,2,3]);
+  assert.deepEqual(JSON.parse(run.raw[requests[0][0]]).sourceRequests,['company']);
+  assert.equal(run.quality.verificationPending[0].code,'REVIEW_MODEL_ATTEMPT_LIMIT');
+  assert.deepEqual(run.quality.verificationPending[0].checks.map(check=>check.unit),['company']);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});

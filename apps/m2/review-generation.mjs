@@ -553,7 +553,15 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
      return {payload,value};
     };
     let {payload,value}=await check([]);
-    if(value.sourceRequests.length&&!(payload.sourceRound&&value.missingEvidence?.length))({payload,value}=await check(value.sourceRequests));
+    if(value.sourceRequests.length&&!(payload.sourceRound&&value.missingEvidence?.length)){
+     const requested=value.sourceRequests;
+     try{({payload,value}=await check(requested));}
+     catch(error){
+      if(!payload.sourceRound||error.code!=='REVIEW_MODEL_ATTEMPT_LIMIT')throw error;
+      error.checks=requested.map(unit=>({unit,problem:'已请求该对象的冻结原文，但检查尝试已用完，相关事项待核'}));
+      throw error;
+     }
+    }
     if(value.sourceRequests.length||payload.sourceRound&&value.missingEvidence?.length){
      const checks=payload.sourceRound&&value.missingEvidence?.length?value.missingEvidence.map(item=>({unit:item.ref,problem:item.reason})):value.sourceRequests;
      throw Object.assign(Error('复查仍缺关键依据，保留草稿'),{code:'REVIEW_SOURCE_CONTEXT_PENDING',checks});
