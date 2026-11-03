@@ -101,7 +101,7 @@ export async function readHomePlan(q: Query, person: { personId: string }, now: 
   const shown = new Set(rows.map((m) => m.id));
   const deliverables = await deliverableStatuses(q, tasks.map((task) => task.taskId));
   return { period, fallbackFrom, today, weekStart, weekEnd, days, missions, gates, marks,
-    tasks: tasks.map((task) => ({ ...task, responsibleId: task.responsibleId ?? null, deliverable: deliverables.get(task.taskId) ?? { status: "none", score: null } })),
+    tasks: tasks.map((task) => ({ ...task, responsibleId: task.responsibleId ?? null, deliverable: deliverables.get(task.taskId) ?? { status: "none", score: null, version: null } })),
     activities: items.map((entry) => ({ ...placeActivity(entry, weekStart, weekEnd, entry.missionId !== null && !shown.has(entry.missionId)),
       ...activitySignal(entry.item, today) })), unplaced };
 }

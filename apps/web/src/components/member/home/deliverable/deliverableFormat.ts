@@ -50,22 +50,13 @@ export function itemState(item: TDeliverableItem): string {
   return item.pageCount ? `已读 · ${item.pageCount} 页` : "已读";
 }
 
-/** 版本切换上的小字：v2 · 78、v3 · 评审中、v1 · 没评完、v2 · 已交付。 */
+/** 版本切换上的小字：v2、v2 · 已交付。评审只作参考（11/03 定），不在版本上写分数。 */
 export function versionLabel(version: TDeliverableVersion): string {
-  const { review } = version;
-  if (version.deliveredAt) return `v${version.number} · 已交付`;
-  if (review.status === "queued" || review.status === "running") return `v${version.number} · 评审中`;
-  if (review.status === "failed") return `v${version.number} · 没评完`;
-  return review.total ? `v${version.number} · ${review.score ?? 0}` : `v${version.number}`;
+  return version.deliveredAt ? `v${version.number} · 已交付` : `v${version.number}`;
 }
 
-/** 左边 Task 卡上的状态小标。 */
-export function statusChip(status: TTaskDeliverableStatus | undefined): { label: string; tone: "plain" | "judgment" | "ready" | "confirmed" } {
-  switch (status?.status) {
-    case "reviewing": return { label: "评审中", tone: "plain" };
-    case "iterating": return { label: status.score === null ? "迭代中" : `迭代中 · ${status.score}`, tone: "judgment" };
-    case "ready": return { label: "可以交付", tone: "ready" };
-    case "delivered": return { label: "已交付", tone: "confirmed" };
-    default: return { label: "未开始", tone: "plain" };
-  }
+/** 左边 Task 卡上的状态小标：未开始、已传 vN、已交付。不写评审分数，也不当进展。 */
+export function statusChip(status: TTaskDeliverableStatus | undefined): { label: string; tone: "plain" | "confirmed" } {
+  if (!status || status.status === "none" || status.version === null) return { label: "未开始", tone: "plain" };
+  return status.status === "delivered" ? { label: "已交付", tone: "confirmed" } : { label: `已传 v${status.version}`, tone: "plain" };
 }

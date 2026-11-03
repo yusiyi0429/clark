@@ -133,8 +133,8 @@ const plan = (overrides: Partial<THomePlanResponse> = {}): THomePlanResponse => 
   marks: [{ id: "k1", missionId: "m1", date: "2026-10-23", label: "联调" }],
   tasks: [
     { taskId: "t1", missionId: "m1", name: "会议写进本体", doneDefinition: "会后自动出会议卡，整卡确认后写进本体。", criteria: ["真实工作会走完全链路，读回一致", "飞书里直接开的会也接得住"],
-      responsibleId: "p1", deliverable: { status: "iterating", score: 50 } },
-    { taskId: "t2", missionId: "m1", name: "对话质量达标", doneDefinition: null, criteria: [], responsibleId: null, deliverable: { status: "none", score: null } },
+      responsibleId: "p1", deliverable: { status: "iterating", score: 50, version: 2 } },
+    { taskId: "t2", missionId: "m1", name: "对话质量达标", doneDefinition: null, criteria: [], responsibleId: null, deliverable: { status: "none", score: null, version: null } },
     { taskId: "t3", missionId: "m2", name: "Chat 客户版", doneDefinition: null, criteria: [] },
   ],
   unplaced: [],
@@ -377,8 +377,8 @@ describe("HomePlan：选某个 Mission 时的详情", () => {
   it("Task 小卡：名字、最近的未完成截止日、交付物状态小标；没有「全部 Task」、没有完成件数和进度线", () => {
     const view = mount();
     view.mission("m1");
-    expect(text(taskCard(view.html, "t1")).trim()).toBe("会议写进本体 10/24 迭代中 · 50");
-    expect(taskCard(view.html, "t1")).toMatch(/data-tone="judgment"/);
+    expect(text(taskCard(view.html, "t1")).trim()).toBe("会议写进本体 10/24 已传 v2");
+    expect(taskCard(view.html, "t1")).toMatch(/data-tone="plain"/);
     expect(text(taskCard(view.html, "t2")).trim()).toBe("对话质量达标 10/16 未开始");
     expect(view.html).not.toContain("全部 Task");
     expect(view.html).not.toContain("已完成 1 / 2");

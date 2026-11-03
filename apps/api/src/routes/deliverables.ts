@@ -8,7 +8,7 @@ import { createDeliverableNoteAgent, createDeliverableQueue, createDeliverableRe
 import { MAX_MATERIAL_FILE_BYTES } from "../materialParser.js";
 import { personDisplayNames } from "../people.js";
 import { DeliverableError, MAX_DELIVERABLE_FILES, createDeliverableVersion, deliverVersion, deliverableItemFile, dissentCriterion, findOwnTask,
-  parseDeliverableFields, patchVersionNote, readTaskDeliverable, retryReview, withdrawVersion, type DeliverableFile, type OwnTask } from "../taskDeliverables.js";
+  ownTaskNames, parseDeliverableFields, patchVersionNote, readTaskDeliverable, retryReview, withdrawVersion, type DeliverableFile, type OwnTask } from "../taskDeliverables.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
 
 const taskParams = Type.Object({ taskId: Type.String({ minLength: 1 }) });
@@ -25,6 +25,7 @@ export function registerDeliverableRoutes(app: AppInstance, ctx: RouteContext, d
     modelId: env.review?.model ?? env.heavyModel, thinking: env.review?.thinking };
   const queue = createDeliverableQueue({ pool, storageDir: ctx.materialStorageDir, now: ctx.now, onError: () => app.log.error("deliverable review failed"),
     fetchArticle: deps.fetchArticle ?? createArticleFetcher(),
+    otherTasks: async (personId, taskId) => (await ownTaskNames(q, ctx.planTasks, personId, ctx.now())).filter((item) => item.taskId !== taskId).map((item) => item.name),
     agents: { review: deps.agents?.review ?? createDeliverableReviewAgent(model), note: deps.agents?.note ?? createDeliverableNoteAgent(model) } });
   app.decorate("deliverables", queue);
   let recovery: ReturnType<typeof setInterval> | undefined;

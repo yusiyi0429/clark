@@ -131,6 +131,15 @@ a.itemName:hover { text-decoration: underline; text-decoration-color: var(--hair
 
 /* 我的事项：默认折叠，点开是原来的执行事项三栏。 */
 .fold { padding-top: 14px; border-top: 1px solid var(--hairline); }
+/* 「我的事项 N」一行：左边展开键，右边新建。 */
+.foldHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* 参考评审（11/03 定只作参考）：收起时一行小字，点开才有圆环、结论和逐条判定。 */
+.referenceToggle { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: 12.5px; cursor: pointer; }
+.referenceToggle:hover { color: var(--ink); }
+.referenceToggle svg { transition: transform var(--dur-base, 200ms) var(--ease-swift, ease); }
+.referenceToggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+/* 材料和这个 Task 对不上：一句淡色提醒，不挡操作。 */
+.mismatch { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--judgment-wash); color: var(--judgment); font-size: 13px; line-height: 1.5; }
 .foldToggle { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: 12.5px; cursor: pointer; }
 .foldToggle:hover { color: var(--ink); }
 .foldToggle svg { transition: transform var(--dur-base, 200ms) var(--ease-swift, ease); }
@@ -139,7 +148,7 @@ a.itemName:hover { text-decoration: underline; text-decoration-color: var(--hair
 
 /* 手持：字号下限、热区 44。 */
 @media (max-width: 959px) {
-  .facts, .label, .meta, .elapsed, .itemState, .hint, .dropHint, .foldToggle, .delivered { font-size: 13px; }
+  .facts, .label, .meta, .elapsed, .itemState, .hint, .dropHint, .foldToggle, .referenceToggle, .delivered { font-size: 13px; }
   .panel { font-size: 14px; }
   .plain, .primary { height: 40px; }
   .quiet { height: 36px; }
@@ -154,5 +163,5 @@ a.itemName:hover { text-decoration: underline; text-decoration-color: var(--hair
 }
 @media (prefers-reduced-motion: reduce) {
   .loading, .steps li[data-state="now"] i, .note[data-writing] .capsule::after { animation: none; }
-  .ringValue, .toggle svg, .foldToggle svg, .drop, .plain, .primary, .quiet { transition: none; }
+  .ringValue, .toggle svg, .foldToggle svg, .referenceToggle svg, .drop, .plain, .primary, .quiet { transition: none; }
 }

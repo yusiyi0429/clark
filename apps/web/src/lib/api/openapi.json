@@ -58640,7 +58640,8 @@
             "type": "object",
             "required": [
               "status",
-              "score"
+              "score",
+              "version"
             ],
             "properties": {
               "status": {
@@ -58678,6 +58679,17 @@
                     "type": "null"
                   }
                 ]
+              },
+              "version": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             }
           }
@@ -58688,7 +58700,8 @@
         "type": "object",
         "required": [
           "status",
-          "score"
+          "score",
+          "version"
         ],
         "properties": {
           "status": {
@@ -58720,6 +58733,17 @@
               {
                 "minimum": 0,
                 "maximum": 100,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "anyOf": [
+              {
+                "minimum": 1,
                 "type": "integer"
               },
               {
@@ -58954,6 +58978,7 @@
                     "headline",
                     "summary",
                     "gain",
+                    "mismatch",
                     "score",
                     "met",
                     "total",
@@ -59074,6 +59099,16 @@
                       ]
                     },
                     "gain": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "mismatch": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -59476,6 +59511,7 @@
               "headline",
               "summary",
               "gain",
+              "mismatch",
               "score",
               "met",
               "total",
@@ -59596,6 +59632,16 @@
                 ]
               },
               "gain": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "mismatch": {
                 "anyOf": [
                   {
                     "type": "string"
@@ -59956,6 +60002,7 @@
           "headline",
           "summary",
           "gain",
+          "mismatch",
           "score",
           "met",
           "total",
@@ -60076,6 +60123,16 @@
             ]
           },
           "gain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mismatch": {
             "anyOf": [
               {
                 "type": "string"
@@ -61285,7 +61342,8 @@
                   "type": "object",
                   "required": [
                     "status",
-                    "score"
+                    "score",
+                    "version"
                   ],
                   "properties": {
                     "status": {
@@ -61317,6 +61375,17 @@
                         {
                           "minimum": 0,
                           "maximum": 100,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "version": {
+                      "anyOf": [
+                        {
+                          "minimum": 1,
                           "type": "integer"
                         },
                         {

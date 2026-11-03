@@ -203,7 +203,7 @@ describe("首页计划",()=>{
       ]);
       expect(plan.marks).toEqual([mark]);
       // 首页计划一定带负责人和交付物状态：本体没登记负责人是 null，还没传过版本是 none。
-      expect(plan.tasks).toEqual([{...task,responsibleId:null,deliverable:{status:"none",score:null}}]);
+      expect(plan.tasks).toEqual([{...task,responsibleId:null,deliverable:{status:"none",score:null,version:null}}]);
       expect(calls).toEqual([[{id:"execution-one",code:"execution-one",world:null},{id:"execution-two",code:"execution-two",world:null}]]);
     } finally { await f.t.close(); }
   });
@@ -268,7 +268,7 @@ describe("首页计划",()=>{
     const runtime={ async run(){ return { assistantMessage:"test", runtimeEntries:[] }; } };
     const world={worldApiUrl:"https://world.test",worldAgentToken:"fake-world-token-for-tests"};
     try {
-      for (const [worldInstance,expected] of [["demo",[{taskId:"task-a",missionId:"execution-one",name:"回流方案定稿",doneDefinition:"会议结论写进本体",criteria:["纪要能读回"],responsibleId:null,deliverable:{status:"none",score:null}}]],["mvp",[]]] as const) {
+      for (const [worldInstance,expected] of [["demo",[{taskId:"task-a",missionId:"execution-one",name:"回流方案定稿",doneDefinition:"会议结论写进本体",criteria:["纪要能读回"],responsibleId:null,deliverable:{status:"none",score:null,version:null}}]],["mvp",[]]] as const) {
         clearWorldReadCache();
         const app=await buildApp({pool:f.t.pool,env:{...f.t.env,...world,worldInstance},conversationRuntime:runtime,now:()=>OCT_22});
         try {

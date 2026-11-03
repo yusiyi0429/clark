@@ -21,7 +21,13 @@ export const DELIVERABLE_REVIEW_PROMPT = `# 角色
 
 # 输入
 
-一个 JSON：task 是 Task 的名字和完成定义；basis 说明按哪套标准评（acceptance 是本体验收标准，definition 是没有验收标准时用的完成定义）；criteria 是要逐条对照的标准，编号从 1 起；version 是这一版：statement 是本人附的一句话或现状说明，items 是能读到的材料（名字、类型、文字），图片随消息附上；unreadable 是读不到的材料和原因；previous 是上一版每一条的判定和理由，第一版没有；dissent 有时出现，是本人对某一条的异议，这时 current 是这一版原来的报告。
+一个 JSON：task 是 Task 的名字和完成定义；basis 说明按哪套标准评（acceptance 是本体验收标准，definition 是没有验收标准时用的完成定义）；criteria 是要逐条对照的标准，编号从 1 起；version 是这一版：statement 是本人附的一句话或现状说明，items 是能读到的材料（名字、类型、文字），图片随消息附上；unreadable 是读不到的材料和原因；previous 是上一版每一条的判定和理由，第一版没有；otherTasks 是本人这个月别的 Task 的名字，有时没有；dissent 有时出现，是本人对某一条的异议，这时 current 是这一版原来的报告。
+
+# 先看对不对得上
+
+- 先看这一版的材料是不是在做这个 Task。材料明显讲的是另一件事（别的 Task、别的项目）时，mismatch 写一句话：otherTasks 里有对得上的，就写「这份材料像是『X』的交付物」；没有就写它讲的是什么，例如「这份材料讲的是招聘流程，和这个 Task 对不上」。不超过 60 字。
+- 对得上、只是不完整，或者读不到材料、判断不了，都写 null。
+- 对不上时各条照常判。
 
 # 怎么判
 
@@ -51,11 +57,11 @@ export const DELIVERABLE_NOTE_PROMPT = `# 角色
 
 # 输入
 
-一个 JSON：task 是 Task 的名字和验收标准；version 是这一版（附的一句话、材料名字、评审报告）；previous 是上一次交付的版本（同样三样），第一次交付没有。
+一个 JSON：task 是 Task 的名字和验收标准；version 是这一版（附的一句话、材料名字、评审报告）；previous 是上一次交付的版本（同样三样），第一次交付没有。评审报告只作参考，没评完时是空的。
 
 # 写什么
 
-- achieved：先说达成了什么，一句话，不超过 30 字，例如「v2 达成了：对话质量过了 75 分线」。
+- achieved：先说达成了什么，一句话，不超过 30 字，例如「v2 达成了：对话质量过了 75 分线」。只写材料和报告里看得到的；报告里有没达到的标准时，只说做到的那部分，不说全部达成。
 - gain：这一版比上一版多做到的，不超过 60 字；第一次交付写这一版做到了什么。
 - why：为什么变了，写判断怎么变的、用了什么新方法、外部信息有什么变化，不超过 100 字；只写变化和原因，不复述做了哪些事。输入里看不出原因就写 null。
 - lesson：一条经验或教训，不超过 60 字；没有就写 null。
@@ -70,6 +76,7 @@ const ReviewCandidate = Type.Object({
   headline: Type.String({ minLength: 1, maxLength: 60 }),
   summary: Type.String({ minLength: 1, maxLength: 160 }),
   gain: Nullable(Type.String({ maxLength: 160 })),
+  mismatch: Type.Optional(Nullable(Type.String({ maxLength: 120 }))),
   criteria: Type.Array(Type.Object({
     index: Type.Integer({ minimum: 1 }),
     verdict: Type.Union([Type.Literal("met"), Type.Literal("partial"), Type.Literal("unmet")]),
@@ -90,7 +97,8 @@ export type TNoteCandidate = Static<typeof NoteCandidate>;
 
 /** 报告里存的一条（标准文字在版本的 criteria 快照里）。 */
 export type StoredCriterion = TReviewCandidate["criteria"][number] & { dissent: { reason: string; upheld: boolean | null } | null };
-export type StoredReview = { headline: string | null; summary: string | null; gain: string | null; criteria: StoredCriterion[] };
+/** mismatch：材料和这个 Task 对不上时的一句话；11/03 以前的报告没有这一项。 */
+export type StoredReview = { headline: string | null; summary: string | null; gain: string | null; mismatch?: string | null; criteria: StoredCriterion[] };
 export type StoredNote = { status: "writing" | "done" | "failed"; achieved: string | null; gain: string | null; why: string | null; lesson: string | null; edited: boolean; dismissed: boolean };
 
 export type ReviewAgentInput = {
@@ -100,6 +108,8 @@ export type ReviewAgentInput = {
   version: { statement: string | null; items: { name: string; kind: string; text: string | null }[] };
   unreadable: { name: string; note: string }[];
   previous?: { index: number; text: string; verdict: TCriterionVerdict; reason: string }[];
+  /** 本人这个月别的 Task 的名字：材料传错了 Task 时用来点名。 */
+  otherTasks?: string[];
   dissent?: { index: number; reason: string };
   current?: Omit<StoredCriterion, "dissent">[];
 };
@@ -205,7 +215,9 @@ function readableItems(items: ItemRow[]): ReviewAgentInput["version"]["items"] {
   });
 }
 
-export function createDeliverableQueue(options: { pool: Pool; storageDir: string; agents: DeliverableAgents; fetchArticle: ArticleFetcher; now: () => Date; onError: (error: unknown) => void }) {
+/** otherTasks：本人这个月别的 Task 的名字（不含这个），读不到时评审照常进行、不点名。 */
+export function createDeliverableQueue(options: { pool: Pool; storageDir: string; agents: DeliverableAgents; fetchArticle: ArticleFetcher; now: () => Date; onError: (error: unknown) => void;
+  otherTasks?: (personId: string, taskId: string) => Promise<string[]> }) {
   const running = new Map<string, Promise<void>>(), abort = new AbortController();
   const q: Query = options.pool.query.bind(options.pool);
   const stale = () => new Date(options.now().getTime() - STALE_MS);
@@ -230,7 +242,7 @@ export function createDeliverableQueue(options: { pool: Pool; storageDir: string
     try {
       if (!n || row.basis === "none") {
         await q(`UPDATE deliverable_versions SET review_status='done',review=$3::jsonb,review_phase=NULL,review_finished_at=$4 WHERE ${guard}`,
-          [versionId, token, JSON.stringify({ headline: null, summary: null, gain: null, criteria: [] } satisfies StoredReview), options.now()]);
+          [versionId, token, JSON.stringify({ headline: null, summary: null, gain: null, mismatch: null, criteria: [] } satisfies StoredReview), options.now()]);
         return;
       }
       const signal = runSignal();
@@ -256,6 +268,7 @@ export function createDeliverableQueue(options: { pool: Pool; storageDir: string
       }
       const previous = dissent ? null : (await q(`SELECT criteria,review FROM deliverable_versions WHERE task_id=$1 AND number<$2 AND review_status='done' AND review IS NOT NULL
         ORDER BY number DESC LIMIT 1`, [row.task_id, row.number])).rows[0] as { criteria: string[]; review: StoredReview } | undefined;
+      const otherTasks = dissent || !options.otherTasks ? [] : await options.otherTasks(row.author_id, row.task_id).catch(() => []);
       const input: ReviewAgentInput = {
         task: { name: row.task_name, doneDefinition: row.done_definition }, basis: row.basis,
         criteria: row.criteria.map((text, index) => ({ index: index + 1, text })),
@@ -263,6 +276,7 @@ export function createDeliverableQueue(options: { pool: Pool; storageDir: string
         unreadable: items.filter((item) => item.read === "unreadable").map((item) => ({ name: item.name, note: item.read_note ?? "读不到" })),
         ...(previous?.review.criteria.length ? { previous: previous.review.criteria.map((item) => ({ index: item.index, text: previous.criteria[item.index - 1] ?? "",
           verdict: item.verdict, reason: item.reason })) } : {}),
+        ...(otherTasks.length ? { otherTasks } : {}),
         ...(dissent ? { dissent: { index: dissent.index, reason: dissent.dissent!.reason }, current: row.review!.criteria.map(({ dissent: _dissent, ...item }) => item) } : {}),
       };
       let shown = 1;
@@ -283,7 +297,7 @@ export function createDeliverableQueue(options: { pool: Pool; storageDir: string
           const next = candidate.criteria.find((entry) => entry.index === dissent.index)!;
           return { ...next, dissent: { reason: dissent.dissent!.reason, upheld: next.verdict === "met" } };
         }) }
-        : { headline: candidate.headline, summary: candidate.summary, gain: previous ? candidate.gain : null,
+        : { headline: candidate.headline, summary: candidate.summary, gain: previous ? candidate.gain : null, mismatch: candidate.mismatch ?? null,
           criteria: [...candidate.criteria].sort((a, b) => a.index - b.index).map((item) => ({ ...item, dissent: null })) };
       const saved = await q(`UPDATE deliverable_versions SET review_status='done',review=$3::jsonb,review_phase=NULL,review_finished_at=$4 WHERE ${guard}`,
         [versionId, token, JSON.stringify(report), options.now()]);

@@ -64,8 +64,8 @@ describe("一个 Task 的交付物", () => {
     render();
     hooks.effects.forEach((effect) => effect());
     await vi.waitFor(() => expect(render().data?.versions).toHaveLength(1));
-    fetchMock.mockResolvedValueOnce(json(409, { message: "还有没达到的标准" }));
-    expect(await render().deliver("v1")).toEqual({ ok: false, message: "还有没达到的标准" });
+    fetchMock.mockResolvedValueOnce(json(409, { message: "参考评审还在跑，稍等几秒" }));
+    expect(await render().deliver("v1")).toEqual({ ok: false, message: "参考评审还在跑，稍等几秒" });
     expect((fetchMock.mock.calls[1] as [string, RequestInit])[0]).toBe("/api/plan-tasks/task%201/deliverable/versions/v1/deliver");
     expect(render().data?.versions.map((item) => item.id)).toEqual(["v1"]);
     expect(events).not.toContain("home-plan-changed");

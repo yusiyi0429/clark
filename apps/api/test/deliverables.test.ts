@@ -102,7 +102,7 @@ describe("Task 交付物", () => {
       expect(f.links).toEqual(["https://example.com/a"]);
       expect(f.reviews[0].input).toMatchObject({ task: { name: "对话质量达标", doneDefinition: "对话质量过 75 分" }, version: { statement: "先交一版" }, unreadable: [] });
       expect(f.reviews[0].input.version.items.map((item) => item.kind)).toEqual(["file", "link"]);
-      expect(await f.status("task-open")).toMatchObject({ responsibleId: null, deliverable: { status: "iterating", score: 75 } });
+      expect(await f.status("task-open")).toMatchObject({ responsibleId: null, deliverable: { status: "iterating", score: 75, version: 1 } });
       const file = await f.call("GET", `/api/plan-tasks/task-open/deliverable/items/${body.versions[0].items[0].id}`);
       expect(file.statusCode).toBe(200);
       expect(file.body).toContain("有题库打分结果");
@@ -153,29 +153,29 @@ describe("Task 交付物", () => {
       expect((await f.upload("task-theirs", { statement: "我来交" })).statusCode).toBe(403);
       expect((await f.call("POST", "/api/plan-tasks/task-theirs/deliverable/versions/00000000-0000-4000-8000-000000000000/deliver")).statusCode).toBe(403);
       expect((await f.read("task-mine")).canEdit).toBe(true);
-      expect(await f.status("task-theirs")).toMatchObject({ responsibleId: THIRD.personId, deliverable: { status: "none", score: null } });
+      expect(await f.status("task-theirs")).toMatchObject({ responsibleId: THIRD.personId, deliverable: { status: "none", score: null, version: null } });
       expect((await f.call("GET", "/api/plan-tasks/task-other/deliverable")).statusCode).toBe(404);
       expect((await f.upload("task-other", { statement: "x" })).statusCode).toBe(404);
       expect((await f.call("GET", "/api/plan-tasks/task-other/deliverable", undefined, await f.third())).statusCode).toBe(200);
     } finally { await f.close(); }
   });
 
-  it("交付：没达标 409；只能交最新一版；交付后写版本说明，可以改、可以不要，撤回清掉说明；首页状态跟着走", async () => {
+  it("交付：参考评审在跑 409；只能交最新一版；交付后写版本说明，可以改、可以不要，撤回清掉说明；首页状态跟着走", async () => {
     const f = await fixture();
     try {
-      expect(await f.status("task-open")).toMatchObject({ deliverable: { status: "none", score: null } });
+      expect(await f.status("task-open")).toMatchObject({ deliverable: { status: "none", score: null, version: null } });
       let release!: () => void;
       f.setReview(async (input) => { await new Promise<void>((resolve) => { release = resolve; }); return judge(input); });
       const first = (await f.upload("task-open", { statement: "只有一句话" })).json();
       await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(await f.status("task-open")).toMatchObject({ deliverable: { status: "reviewing", score: null } });
+      expect(await f.status("task-open")).toMatchObject({ deliverable: { status: "reviewing", score: null, version: 1 } });
       expect((await f.call("GET", "/api/plan-tasks/task-open/deliverable")).json().versions[0].review).toMatchObject({ status: "running", phase: { step: 2, total: 4, label: "对照第 1 条" } });
+      const reviewing = await f.call("POST", `/api/plan-tasks/task-open/deliverable/versions/${first.id}/deliver`);
+      expect(reviewing.statusCode).toBe(409);
+      expect(reviewing.json()).toMatchObject({ code: "REVIEWING", message: "参考评审还在跑，稍等几秒" });
       release();
       await f.read("task-open");
-      expect(await f.status("task-open")).toMatchObject({ deliverable: { status: "iterating", score: 50 } });
-      const notReady = await f.call("POST", `/api/plan-tasks/task-open/deliverable/versions/${first.id}/deliver`);
-      expect(notReady.statusCode).toBe(409);
-      expect(notReady.json()).toMatchObject({ code: "NOT_READY", message: "还有没达到的标准" });
+      expect(await f.status("task-open")).toMatchObject({ deliverable: { status: "iterating", score: 50, version: 1 } });
 
       f.setReview(async (input) => judge(input));
       const second = (await passing(f)).json();
@@ -183,7 +183,7 @@ describe("Task 交付物", () => {
       expect(ready).toMatchObject({ number: 2, review: { status: "done", score: 100, ready: true, headline: "2 条都达到了", gain: "多达到了一条" } });
       expect(f.reviews.at(-1)!.input.previous).toEqual([
         { index: 1, text: "有题库打分结果", verdict: "partial", reason: "只有陈述" }, { index: 2, text: "有新人上手录屏", verdict: "partial", reason: "只有陈述" }]);
-      expect(await f.status("task-open")).toMatchObject({ deliverable: { status: "ready", score: 100 } });
+      expect(await f.status("task-open")).toMatchObject({ deliverable: { status: "ready", score: 100, version: 2 } });
       const older = await f.call("POST", `/api/plan-tasks/task-open/deliverable/versions/${first.id}/deliver`);
       expect(older.statusCode).toBe(409);
       expect(older.json()).toMatchObject({ code: "NOT_LATEST", message: "只能交付最新的一版" });
@@ -207,6 +207,34 @@ describe("Task 交付物", () => {
       expect(await f.status("task-open")).toMatchObject({ deliverable: { status: "ready", score: 100 } });
       expect((await f.call("PATCH", `/api/plan-tasks/task-open/deliverable/versions/${second.id}/note`, { dismissed: true })).statusCode).toBe(409);
       expect((await f.call("POST", `/api/plan-tasks/task-open/deliverable/versions/${second.id}/withdraw`)).statusCode).toBe(409);
+    } finally { await f.close(); }
+  });
+
+  it("评审只作参考：没都达到、评审没评完，都能交付；首页写已交付", async () => {
+    const f = await fixture();
+    try {
+      const partial = (await f.upload("task-open", { statement: "只有一句话" })).json();
+      expect((await f.read("task-open")).versions[0].review).toMatchObject({ status: "done", met: 0, total: 2, ready: false });
+      const delivered = await f.call("POST", `/api/plan-tasks/task-open/deliverable/versions/${partial.id}/deliver`);
+      expect(delivered.statusCode).toBe(200);
+      expect(delivered.json()).toMatchObject({ deliveredAt: NOW.toISOString(), note: { status: "writing" } });
+      expect(await f.status("task-open")).toMatchObject({ deliverable: { status: "delivered", version: 1 } });
+
+      f.setReview(async () => { throw new Error("模型挂了"); });
+      const failed = (await f.upload("task-mine", { statement: "方案在这" })).json();
+      expect((await f.read("task-mine")).versions[0].review).toMatchObject({ status: "failed" });
+      expect((await f.call("POST", `/api/plan-tasks/task-mine/deliverable/versions/${failed.id}/deliver`)).statusCode).toBe(200);
+      expect((await f.read("task-mine")).versions[0].note).toMatchObject({ status: "done" });
+    } finally { await f.close(); }
+  });
+
+  it("材料像是别的 Task 的：评审拿到本人这个月别的 Task 名字，对不上的那句话存进报告", async () => {
+    const f = await fixture();
+    try {
+      f.setReview(async (input) => ({ ...judge(input), mismatch: "这份材料像是「我负责的」的交付物" }));
+      await f.upload("task-open", { statement: "招聘流程初稿" });
+      expect((await f.read("task-open")).versions[0].review).toMatchObject({ status: "done", mismatch: "这份材料像是「我负责的」的交付物" });
+      expect(f.reviews[0].input.otherTasks).toEqual(["我负责的", "别人负责的", "只有完成定义", "什么都没写"]);
     } finally { await f.close(); }
   });
 
@@ -256,7 +284,7 @@ describe("Task 交付物", () => {
     } finally { await f.close(); }
   });
 
-  it("没有验收标准时按完成定义评一条；两样都没有不评，评审直接完成、不能交付", async () => {
+  it("没有验收标准时按完成定义评一条；两样都没有不评，评审直接完成、不收交付", async () => {
     const f = await fixture();
     try {
       expect((await f.read("task-definition"))).toMatchObject({ basis: "definition", criteria: ["方案定稿"] });
@@ -264,9 +292,9 @@ describe("Task 交付物", () => {
       expect(bare.statusCode).toBe(201);
       const body = await f.read("task-bare");
       expect(body).toMatchObject({ basis: "none", criteria: [] });
-      expect(body.versions[0].review).toMatchObject({ status: "done", basis: "none", headline: null, score: null, met: 0, total: 0, ready: false });
+      expect(body.versions[0].review).toMatchObject({ status: "done", basis: "none", headline: null, mismatch: null, score: null, met: 0, total: 0, ready: false });
       expect(f.reviews).toHaveLength(0);
-      expect((await f.call("POST", `/api/plan-tasks/task-bare/deliverable/versions/${body.versions[0].id}/deliver`)).json()).toMatchObject({ code: "NOT_READY" });
+      expect((await f.call("POST", `/api/plan-tasks/task-bare/deliverable/versions/${body.versions[0].id}/deliver`)).json()).toMatchObject({ code: "NO_CRITERIA" });
     } finally { await f.close(); }
   });
 });

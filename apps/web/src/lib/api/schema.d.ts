@@ -10494,11 +10494,13 @@ export interface components {
             deliverable?: {
                 status: "none" | "reviewing" | "iterating" | "ready" | "delivered";
                 score: number | null;
+                version: number | null;
             };
         };
         TaskDeliverableStatus: {
             status: "none" | "reviewing" | "iterating" | "ready" | "delivered";
             score: number | null;
+            version: number | null;
         };
         TaskDeliverableResponse: {
             taskId: string;
@@ -10540,6 +10542,7 @@ export interface components {
                     headline: string | null;
                     summary: string | null;
                     gain: string | null;
+                    mismatch: string | null;
                     score: number | null;
                     met: number;
                     total: number;
@@ -10603,6 +10606,7 @@ export interface components {
                 headline: string | null;
                 summary: string | null;
                 gain: string | null;
+                mismatch: string | null;
                 score: number | null;
                 met: number;
                 total: number;
@@ -10658,6 +10662,7 @@ export interface components {
             headline: string | null;
             summary: string | null;
             gain: string | null;
+            mismatch: string | null;
             score: number | null;
             met: number;
             total: number;
@@ -10837,6 +10842,7 @@ export interface components {
                 deliverable?: {
                     status: "none" | "reviewing" | "iterating" | "ready" | "delivered";
                     score: number | null;
+                    version: number | null;
                 };
             }[];
             activities: {

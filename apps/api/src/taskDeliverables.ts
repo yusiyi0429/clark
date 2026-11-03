@@ -14,7 +14,7 @@ import type { StoredNote, StoredReview } from "./deliverableReview.js";
 
 /**
  * Task 的交付物（spec 5.2–5.4）：只认本人 Mission 下的 Task；本体登记了负责人时只有负责人能传版本、交付，没登记时 Mission 的负责人（就是看的人）能。
- * 一个版本 = 一次评审；只有最新一版、评审完、每一条都达到才能交付。交付和版本说明这一版只记在天枢。
+ * 一个版本 = 一次评审。评审只作参考（11/03 定）：最新一版评审跑完（评完或没评完）就能交付，不看达没达到。交付和版本说明这一版只记在天枢。
  */
 
 export class DeliverableError extends Error {
@@ -38,6 +38,12 @@ export async function findOwnTask(q: Query, planTasks: PlanTaskSource, viewerId:
   const [basis, criteria]: [TReviewBasis, string[]] = task.criteria.length ? ["acceptance", task.criteria]
     : task.doneDefinition ? ["definition", [task.doneDefinition]] : ["none", []];
   return { task, viewerId, responsibleId, canEdit: responsibleId ? responsibleId === viewerId : true, basis, criteria };
+}
+
+/** 本人 Mission 下这个月的 Task（评审认材料是不是传错了 Task 时，拿来点名）。 */
+export async function ownTaskNames(q: Query, planTasks: PlanTaskSource, viewerId: string, now: Date): Promise<{ taskId: string; name: string }[]> {
+  const { rows } = await ownMissions(q, viewerId, companyPeriod(now));
+  return (await readPlanTasks(planTasks, planTaskMissions(rows))).map(({ taskId, name }) => ({ taskId, name }));
 }
 const requireEdit = (own: OwnTask) => {
   if (!own.canEdit) throw new DeliverableError(403, "FORBIDDEN", "这个 Task 由负责人交付");
@@ -75,7 +81,7 @@ function versionView(row: VersionRow, items: ItemRow[], expected: number): TDeli
       url: item.url, read: item.read, readNote: item.read_note })),
     review: { status: row.review_status, phase: row.review_phase, startedAt: row.review_started_at?.toISOString() ?? null,
       finishedAt: row.review_finished_at?.toISOString() ?? null, expectedSeconds: expected, basis: row.basis,
-      headline: review?.headline ?? null, summary: review?.summary ?? null, gain: review?.gain ?? null, ...scoreOf(review),
+      headline: review?.headline ?? null, summary: review?.summary ?? null, gain: review?.gain ?? null, mismatch: review?.mismatch ?? null, ...scoreOf(review),
       criteria: (review?.criteria ?? []).map((item) => ({ index: item.index, text: row.criteria[item.index - 1] ?? "", verdict: item.verdict, reason: item.reason,
         evidence: item.evidence, fix: item.fix, dissent: item.dissent })),
       error: row.review_status === "failed" ? row.review_error : null },
@@ -108,13 +114,13 @@ export async function readTaskDeliverable(q: Query, own: OwnTask, names: Map<str
 /** 首页 Task 的状态：按每个 Task 的最新一版。 */
 export async function deliverableStatuses(q: Query, taskIds: string[]): Promise<Map<string, TTaskDeliverableStatus>> {
   if (!taskIds.length) return new Map();
-  const rows = (await q(`SELECT DISTINCT ON (task_id) task_id,review_status,review,delivered_at FROM deliverable_versions
-    WHERE task_id=ANY($1::text[]) ORDER BY task_id, number DESC`, [taskIds])).rows as Pick<VersionRow, "task_id" | "review_status" | "review" | "delivered_at">[];
+  const rows = (await q(`SELECT DISTINCT ON (task_id) task_id,number,review_status,review,delivered_at FROM deliverable_versions
+    WHERE task_id=ANY($1::text[]) ORDER BY task_id, number DESC`, [taskIds])).rows as Pick<VersionRow, "task_id" | "number" | "review_status" | "review" | "delivered_at">[];
   return new Map(rows.map((row) => {
     const { score, ready } = scoreOf(row.review);
     const status: TTaskDeliverableStatus["status"] = row.delivered_at ? "delivered" : row.review_status === "queued" || row.review_status === "running" ? "reviewing"
       : row.review_status === "done" && ready ? "ready" : "iterating";
-    return [row.task_id, { status, score: status === "reviewing" ? null : score }];
+    return [row.task_id, { status, score: status === "reviewing" ? null : score, version: row.number }];
   }));
 }
 
@@ -239,14 +245,16 @@ async function versionRow(q: Query, own: OwnTask, versionId: string): Promise<Ve
   return row;
 }
 
-/** 交付：只交最新一版，评审完且每一条都达到；交付后版本说明排队（调用方开始写）。已交付的原样返回。 */
+/** 交付：只交最新一版；参考评审跑完（评完或没评完）就能交，不看达没达到；没有可对照标准的 Task 不收交付。交付后版本说明排队（调用方开始写）。已交付的原样返回。 */
 export async function deliverVersion(q: Query, own: OwnTask, versionId: string, now: Date): Promise<TDeliverableVersion> {
   requireEdit(own);
   const row = await versionRow(q, own, versionId);
   if (!row.delivered_at) {
     const latest = (await q("SELECT max(number) AS number FROM deliverable_versions WHERE task_id=$1", [own.task.taskId])).rows[0].number as number;
     if (row.number !== latest) throw new DeliverableError(409, "NOT_LATEST", "只能交付最新的一版");
-    if (row.review_status !== "done" || !scoreOf(row.review).ready) throw new DeliverableError(409, "NOT_READY", "还有没达到的标准");
+    if (own.basis === "none") throw new DeliverableError(409, "NO_CRITERIA", "这个 Task 没有可对照的标准");
+    // 版本说明要用评审报告，等它跑完；跑完了评成什么样都能交。
+    if (row.review_status === "queued" || row.review_status === "running") throw new DeliverableError(409, "REVIEWING", "参考评审还在跑，稍等几秒");
     const note: StoredNote = { status: "writing", achieved: null, gain: null, why: null, lesson: null, edited: false, dismissed: false };
     await q("UPDATE deliverable_versions SET delivered_at=$2,note=$3::jsonb WHERE id=$1 AND delivered_at IS NULL", [versionId, now, JSON.stringify(note)]);
   }

@@ -42,8 +42,8 @@ export const ReviewCriterion = Type.Object({
 export const ReviewBasis = Type.Union([Type.Literal("acceptance"), Type.Literal("definition"), Type.Literal("none")]);
 
 /**
- * 一个版本的评审。phase 是评审中走到哪一步（step / total，label 如「对照第 2 条」）；expectedSeconds 是预计用时。
- * score 是达标度（达到 100、部分 50、未达到 0 的平均），met / total 是几条达到；ready 是每一条都达到、可以交付。
+ * 一个版本的评审，只作参考（11/03 定）：不卡交付，也不用来算进展。phase 是评审中走到哪一步（step / total，label 如「对照第 2 条」）；
+ * expectedSeconds 是预计用时。score 是达标度（达到 100、部分 50、未达到 0 的平均），met / total 是几条达到；ready 是每一条都达到。
  */
 export const DeliverableReview = Type.Object({
   status: Type.Union([Type.Literal("queued"), Type.Literal("running"), Type.Literal("done"), Type.Literal("failed")]),
@@ -56,6 +56,8 @@ export const DeliverableReview = Type.Object({
   summary: Type.Union([Type.String(), Type.Null()]),
   /** 这一版比上一版多达到了什么；第一版为 null。 */
   gain: Type.Union([Type.String(), Type.Null()]),
+  /** 这一版的材料和这个 Task 对不上时的一句话（像是哪个 Task 的就点名）；对得上为 null。 */
+  mismatch: Type.Union([Type.String(), Type.Null()]),
   score: Type.Union([Type.Integer({ minimum: 0, maximum: 100 }), Type.Null()]),
   met: Type.Integer({ minimum: 0 }),
   total: Type.Integer({ minimum: 0 }),
@@ -102,10 +104,11 @@ export const TaskDeliverableResponse = Type.Object({
   versions: Type.Array(DeliverableVersion),
 }, { additionalProperties: false });
 
-/** 首页 Task 列表上的状态：未开始、评审中、迭代中（带达标度）、可以交付、已交付。 */
+/** 首页 Task 列表上的状态：未开始、评审中、迭代中（带达标度）、可以交付、已交付；version 是最新一版的编号，没有版本时为 null。 */
 export const TaskDeliverableStatus = Type.Object({
   status: Type.Union([Type.Literal("none"), Type.Literal("reviewing"), Type.Literal("iterating"), Type.Literal("ready"), Type.Literal("delivered")]),
   score: Type.Union([Type.Integer({ minimum: 0, maximum: 100 }), Type.Null()]),
+  version: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
 }, { additionalProperties: false });
 
 export const DeliverableDissentRequest = Type.Object({ reason: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false });
