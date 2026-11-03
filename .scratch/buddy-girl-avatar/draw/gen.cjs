@@ -10,13 +10,16 @@ const ART = { viewBox: "20 140 860 1080", torsoCx: 447, lipY: 900, figureWidth: 
 const inner = drawGirl();
 if (/[`\\]|\$\{/.test(inner)) throw new Error("画里出现了模板字符串要转义的字符");
 const out = path.join(__dirname, "..");
+// 整张图的画布比摆位用的 viewBox 宽一点：马尾往右甩出 Miles 的范围（胶囊里放得下，rig 里的画本来就不裁边）。
 fs.writeFileSync(path.join(out, "girl.svg"),
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${ART.viewBox}" width="860" height="1080">${inner.replaceAll("{id}", "girl")}</svg>\n`);
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 140 960 1080" width="960" height="1080">${inner.replaceAll("{id}", "girl")}</svg>\n`);
 fs.writeFileSync(path.join(out, "girlArt.ts"), `/**
- * 女伙伴形象的画：八字刘海 + 齐肩外翻、奶茶棕（2026-11-03 设计稿，待定稿）。
+ * 女伙伴形象的画：Q 版萌系 + 萨拉芬尼式的粉紫蓝配色（2026-11-03 设计稿，待定稿）。长卷发从头顶垂过肩膀、披在背后，前发搭在肩上；大眼睛、张嘴笑；
+ * 头顶一撮呆毛、一颗星星发夹、右边一个浅蓝蝴蝶结；白上衣，领口一个带小宝石的蝴蝶结。
  * 和 Miles 同一坐标系、同一套 data-part（头、身子、比耶的手、眼睛、嘴，闭眼和张嘴是默认藏着的变体），milesRig 的动作原样能用。
- * 脸、眼睛、腮红、右耳和耳机、手、身子取自 Miles；新画的是头发、睫毛、泪痣，T 恤换浅蓝。
- * 比耶的手放在最上层、用 T 恤的剪影遮住（id 为 {id}-hand 的遮罩），所以在头发前面、衣服后面，放下时照样滑到衣服后面。
+ * 脸型、鼻子、耳朵和两只 AirPods、手、身子的形状取自 Miles（肤色换浅、描边换成深紫蓝）；新画的是头发、眼睛、嘴、腮红和蝴蝶结。
+ * 背后的长发（data-part="hair-long"）在身体后面，不跟着头转；它和头四周那层头发的接缝放在两侧竖直的外沿上，侧头时看不出来。
+ * 比耶的手放在最上层、用上衣的剪影遮住（id 为 {id}-hand 的遮罩），所以在头发前面、衣服后面，放下时照样滑到衣服后面。
  * 渐变和遮罩的 id 写成 \`{id}-…\`，挂的时候换成每一颗自己的前缀，同一页上两颗不会互相借。
  *
  * 由 .scratch/buddy-girl-avatar/draw/gen.cjs 生成；改画时改 draw/draw.cjs 再重新生成，别在这里手改路径。

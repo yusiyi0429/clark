@@ -17,7 +17,8 @@ ok(!/url\(#(?!\{id\}-)/.test(svg), "所有 url(#…) 都指向 {id}- 前缀");
 for (const [name, pivot] of [["head", "444 806"], ["body", "388 1182"], ["arm-peace", "268 912"]]) {
   ok(new RegExp(`data-part="${name}" data-pivot="${pivot}"`).test(svg) || new RegExp(`data-pivot="${pivot}"[^>]*data-part="${name}"`).test(svg) || svg.includes(`data-part="${name}" data-pivot="${pivot}"`), `${name} 的转轴和 Miles 相同（${pivot}）`);
 }
-ok(/<path data-part="mouth"[^>]*>/.test(svg) && /data-part="mouth-open" display="none"/.test(svg), "平时闭嘴、张嘴变体默认藏着");
+ok(/<\w+ data-part="mouth"(?! display="none")[^>]*>/.test(svg) && /data-part="mouth-open" display="none"/.test(svg), "平时的嘴露着、说话张嘴的变体默认藏着");
+ok(/data-part="eye-l-closed" display="none"/.test(svg) && /data-part="eye-r-closed" display="none"/.test(svg), "闭眼变体默认藏着");
 const milesArtPath = process.argv[2];
 if (milesArtPath && fs.existsSync(milesArtPath)) {
   const m = fs.readFileSync(milesArtPath, "utf8");
@@ -25,8 +26,10 @@ if (milesArtPath && fs.existsSync(milesArtPath)) {
   ok(milesArt.replace(/\s/g, "") === art.replace(/\s/g, ""), `摆位常量和 MILES_ART 一致：${art}`);
   const milesSvg = readSvg(m, "MILES_SVG");
   const grab = (s, part) => { const i = s.indexOf(`data-part="${part}"`); const open = s.lastIndexOf("<", i); const tag = s.slice(open + 1).match(/^\w+/)[0]; if (tag !== "g") return s.slice(open, s.indexOf(">", i) + 1); let depth = 0, j = open; const re = /<(\/?)g\b[^>]*>/g; re.lastIndex = open; let mm; while ((mm = re.exec(s))) { depth += mm[1] ? -1 : 1; if (depth === 0) { j = re.lastIndex; break; } } return s.slice(open, j); };
-  for (const part of ["face", "ear-r", "airpod-r", "blush-l", "blush-r", "nose", "mouth", "mouth-open", "arm-peace", "neck", "arm-r"]) {
-    ok(grab(svg, part) === grab(milesSvg, part), `${part} 和 Miles 逐字相同`);
+  // 复用的 Miles 部件换了肤色、描边颜色和粗细：只比形状（路径和椭圆的几何量）
+  const geometry = (s) => (s.match(/\s(?:d|cx|cy|rx|ry|r|transform)="[^"]*"/g) || []).join("");
+  for (const part of ["face", "ear-r", "ear-l", "airpod-r", "airpod-l", "nose", "arm-peace", "neck", "arm-r"]) {
+    ok(geometry(grab(svg, part)) === geometry(grab(milesSvg, part)), `${part} 的形状和 Miles 逐字相同（换了颜色和描边）`);
   }
 } else {
   console.log("（没给 milesArt.ts，跳过和 Miles 的逐字比对）");
