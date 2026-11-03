@@ -70,7 +70,7 @@ test('cancellation interrupts a call without adding transport retries',async()=>
  await assert.rejects(qualityModelCall({gateway,quality:{requests:{}},run:{raw:{}},pass:0,stage:'check',payload:{},system:'rules',save:async()=>{},signal:controller.signal}),/cancelled/);assert.equal(calls,1);
 });
 test('product skill exposes an exact two-round contract',async()=>{
- const actual=await loadReviewSkill(new URL('./review-skill/',import.meta.url));assert.equal(actual.version,'2.1.14');assert.equal(actual.maxRevisionRounds,2);assert.equal(actual.groups.length,3);
+ const actual=await loadReviewSkill(new URL('./review-skill/',import.meta.url));assert.equal(actual.version,'2.1.15');assert.equal(actual.maxRevisionRounds,2);assert.equal(actual.groups.length,3);
 });
 test('product runner checks after both repairs, preserves complete E43/E49 sources and never restores initial cached drafts on resume',async()=>{
  const basis={mode:'latest-source-candidate',snapshotHash:'snapshot'},meta={basisMode:basis.mode,snapshotHash:basis.snapshotHash};
@@ -125,4 +125,38 @@ test('quality answer caches remain separate for the two explicit test models',as
  const quality={requests:{},sourceHash:'frozen',skillHash:'skill'},run={raw:{}},args={quality,run,pass:0,stage:'check',payload:{sources},system:'rules',save:async()=>{}};let calls=0;
  for(const model of ['aliyun/deepseek-v4.1-flash','wangsu/claude-sonnet-5-5'])await qualityModelCall({...args,gateway:{status:{model},complete:async()=>{calls++;return {answer:'{"issues":[]}'};}}});
  assert.equal(calls,2);assert.equal(Object.keys(quality.requests).length,2);
+});
+
+test('a changed Mission verdict repairs only stale RU and company references in the same batch',async()=>{
+ const related={stages:[[{id:'m',parent:'u'},{id:'peer',parent:'u'}],[{id:'u',parent:'company',children:['m','peer']}],[{id:'company',children:['u']}]]};
+ const old='未达成',updated='达成';
+ const run={raw:{},reviews:{
+  m:{verdict:old},peer:{verdict:old,facts:[{evidence:'[m:E43]'}]},
+  u:{verdict:old,facts:[{ref:'m',status:old},{ref:'peer',status:old}]},
+  company:{verdict:old,facts:[{ref:'u',status:old}]},
+ }};
+ const sequence=[],requests=[];
+ await runReviewQuality({run,input:related,skill,sources,phased:true,
+  check:async(reviews,index,q)=>{
+   const pass=q.passes[index];sequence.push(pass.phase);
+   pass.coverage={candidateHash:qualityHash(reviews)};pass.coverageHash=qualityHash(pass.coverage);
+   if(pass.phase==='initial')return [issue()];
+   assert.equal(reviews.u.facts[0].status,updated);
+   assert.equal(reviews.company.facts[0].status,updated);
+   return [];
+  },
+  revise:async(card,action)=>{
+   requests.push(card.id);
+   if(card.id!=='m')assert.equal(action.issues[0].dependencyChange.newVerdict,updated);
+   const oldReview=action.before[card.id];
+   return {...oldReview,verdict:updated,...(oldReview.facts?{facts:oldReview.facts.map(row=>({...row,status:action.before[row.ref].verdict}))}:{})};
+  },
+ });
+ assert.deepEqual(requests,['m','u','company']);
+ assert.deepEqual(sequence,['initial','impact','final']);
+ assert.deepEqual(run.quality.counts,{m:1,u:1,company:1});
+ assert.equal(run.reviews.peer.verdict,old);
+ assert.equal(run.quality.passes.filter(pass=>pass.actions?.length).length,1);
+ assert.equal(run.quality.passes.at(-1).coverage.candidateHash,qualityHash(run.reviews));
+ assert.equal(run.quality.status,'passed');
 });

@@ -1,3 +1,4 @@
+import {planReviewImpact,reviewImpactPayload,scopedReviewSources,validateReviewImpact} from './review-impact.mjs';
 import {REVIEW_BODY_LIMIT_BYTES,reviewGatewayForRun,reviewInitialConcurrency,reviewQualityFallbackContract,validateReviewQualityFallback,reviewGatewayForQualityAction} from './review-model-fallback.mjs';
 import {reviewDependencyPool} from './review-dependencies.mjs';
 import {parentInitialContextContract,validateInitialContext,parentInitialPayload} from './review-initial-context.mjs';
@@ -448,7 +449,7 @@ export async function runReviewSkill({gateway,skill,input,run={raw:{},reviews:{}
  const step=async label=>{done++;await onProgress({stage:label,done,total});};
  const citationHint=input.engineeringContracts?.evidenceAddresses===1?' Machine citations: local evidence uses [E3]; cross-source evidence uses [sourceRef:E3], where sourceRef is its actual frozen source key. Never discard a source namespace or invent an evidence ID.':'';
  const missionStep='按技能「产品生成整轮复盘候选·每一步怎么做·1. Mission 复盘」执行。'+fieldsHint+citationHint,ruStep='按技能「产品生成整轮复盘候选·每一步怎么做·2. RU 复盘」执行。'+fieldsHint+citationHint;
- const companyStep='按技能「产品生成整轮复盘候选·每一步怎么做·4. 公司复盘」执行。'+fieldsHint+citationHint;
+ const companyStep=(skillAtLeast(skill.version,'2.1.15')?'按技能「公司复盘」步骤执行。':'按技能「产品生成整轮复盘候选·每一步怎么做·4. 公司复盘」执行。')+fieldsHint+citationHint;
  await onProgress({stage:'Mission 复盘和没有 Mission 的 RU PO 复盘',done,total});
  if(twoRound)await stage('initial-dependencies',()=>reviewDependencyPool({items:[...s3,...s2,...s1],concurrency,signal,dependencies:c=>c.children||[],execute:async c=>{
   if(!run.quality){
@@ -519,12 +520,49 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
  if(!['high','medium'].includes(checkReasoningEffort))throw Error('完整检查推理配置不受支持');
  const wireOptions={model,thinking:true,reasoningEffort:checkReasoningEffort,maxTokens:checkMaxTokens,json:true,...(gateway.reviewFallbacks?.length?{fallbackModels:gateway.reviewFallbacks.map(g=>g.status.model)}:{})};
  if(run.quality?.packetModel&&qualityHash(run.quality.packetModel)!==qualityHash(wireOptions))throw Error('质量检查模型或备用策略已变化，不能复用其他策略的结论');
- const call=(q,pass,stage,ref,payload,validate)=>qualityModelCall({gateway:reviewGatewayForQualityAction(gateway,input,pass,stage),system,quality:q,run,pass,stage,ref,payload,validate,save,signal,maxTokens:stage==='check'?checkMaxTokens:32000,reasoningEffort:stage==='check'?checkReasoningEffort:'high',maxBodyBytes:q.sourcePlans?.[pass]?.maxBodyBytes||REVIEW_BODY_LIMIT_BYTES});
- await runReviewQuality({run,input,skill,sources,save,onProgress,signal,
+ const call=(q,pass,stage,ref,payload,validate)=>qualityModelCall({gateway:reviewGatewayForQualityAction(gateway,input,q.checkFlow===1?q.passes.slice(0,pass).filter(p=>p.actions?.length).length:pass,stage),system,quality:q,run,pass,stage,ref,payload,validate,save,signal,maxTokens:stage==='check'?checkMaxTokens:32000,reasoningEffort:stage==='check'?checkReasoningEffort:'high',maxBodyBytes:q.sourcePlans?.[pass]?.maxBodyBytes||REVIEW_BODY_LIMIT_BYTES});
+ await runReviewQuality({run,input,skill,sources,save,onProgress,signal,phased:run.outputPolicy?.checkFlow===1,
   normalize:()=>{run.questionRouting=reviewQuestionRoutes(run.reviews);},
   problems:candidate=>reviewProblems({...run,reviews:candidate.reviews},input,options).filter(p=>refs.includes(p.unit)),
   check:async(reviews,pass,q)=>{
    const policy=validateReviewQualityFallback(input);if(policy){if(q.qualityFallback&&qualityHash(q.qualityFallback)!==qualityHash(policy))throw Error('已保存的质量修订备用策略已变化');q.qualityFallback=structuredClone(policy);}
+   const current=q.passes[pass];
+   if(current.phase&&current.phase!=='initial'){
+    const previous=q.passes[pass-1],phase=current.phase;
+    const priorIssues=phase==='impact'?[
+     ...previous.issues.filter(issue=>issue.mustFix||skill.mustFix.includes(issue.type)),
+     ...previous.actions.flatMap(action=>action.issues.filter(issue=>issue.dependencyChange)),
+     ...previous.structural.map(issue=>({...issue,ref:issue.unit,type:'程序检查',mustFix:true,fixable:true})),
+    ].map(({checkContextRefs,...issue},index)=>({...issue,id:previous.index+':'+index})):[];
+    const scope=planReviewImpact({items,sources,before:phase==='impact'?previous.reviews:null,reviews,issues:priorIssues,phase});
+    const coverage=q.passes.slice(0,pass).map(p=>({phase:p.phase,candidateHash:p.reviewHash,issuesHash:p.issuesHash,receiptHash:p.coverageHash}));
+    const payloadFor=extraSourceRefs=>reviewImpactPayload({phase,scope,reviews,sources,priorIssues,coverage,extraSourceRefs});
+    const check=async extraSourceRefs=>{
+     const payload=payloadFor(extraSourceRefs);
+     const actual=reviewModelBudgetBytes(system,payload,wireOptions);
+     if(actual>REVIEW_BODY_LIMIT_BYTES)throw Object.assign(Error('完整复查材料超过请求预算，保留草稿'),{code:'REVIEW_PACKET_OVERSIZE',actual});
+     const selected=scopedReviewSources(sources,scope,extraSourceRefs).selected;
+     const value=await call(q,pass,'check',phase+(extraSourceRefs.length?'-source':''),payload,value=>{
+      validateReviewImpact(value,payload,refs);
+      checkedReviewIssues(value,{skill,refs});
+      if(!value.sourceRequests.length)for(const issue of value.issues){
+       if(issue.sourceRefs.length||issue.evidenceRefs!==undefined||citationFacts([issue.problem,issue.impact],{sourceRef:issue.ref,sources}).addresses.length)validateIssueSources(issue,{sources:selected,providedRefs:payload.scope.sourceRefs,checkerSources:input.engineeringContracts?.checkerSources});
+      }
+      return value;
+     });
+     return {payload,value};
+    };
+    let {payload,value}=await check([]);
+    if(value.sourceRequests.length)({payload,value}=await check(value.sourceRequests));
+    if(value.sourceRequests.length)throw Object.assign(Error('复查补源后仍缺原文，保留草稿'),{code:'REVIEW_SOURCE_CONTEXT_PENDING',checks:value.sourceRequests});
+    current.coverage={candidateHash:payload.candidateHash,scope:payload.scope,issueResults:value.issueResults,checkedRefs:value.checkedRefs,checkedEdges:value.checkedEdges};
+    current.coverageHash=qualityHash(current.coverage);
+    const unresolved=value.issueResults.filter(x=>x.status==='open').map(result=>{
+     const {id,...issue}=priorIssues.find(x=>x.id===result.id);
+     return {...issue,reviewFinding:result.reason};
+    });
+    return [...value.issues,...unresolved];
+   }
    const facts=Object.fromEntries(items.map(c=>[c.id,{lengthFindings:reviews[c.id]?lengthFindings(reviews[c.id],input.engineeringContracts?.evidenceAddresses===1?{sourceRef:c.id,sources}:undefined,skillAtLeast(skill.version,'2.1.14')?c:undefined):[],evidenceFacts:reviews[c.id]?evidenceFacts(c,reviews[c.id],input.engineeringContracts?.evidenceAddresses===1?sources:undefined):{missingIds:[],usedCount:0},rowFacts:rowFacts(c,reviews[c.id])}]));
    const verdictFacts=items.filter(c=>c.children?.length).map(c=>({ref:c.id,verdict:reviews[c.id]?.verdict,children:c.children.map(ref=>({ref,verdict:reviews[ref]?.verdict||'生成失败'}))}));
    const tasks=reviewQualityTasks(skill,{checkerSources:input.engineeringContracts?.checkerSources>=1,sourceKeyContract:input.engineeringContracts?.checkerSources>=2});
@@ -536,13 +574,23 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
    else {const previous=q.sourcePlans[pass-1];plan=previous?refreshReviewCheckPlan(previous,args):buildReviewCheckPlan({...args,maxBodyBytes:REVIEW_BODY_LIMIT_BYTES,maxTargetRefs:refs.length,fixedLayout:input.engineeringContracts?.fullContextCheck?.layout??[{kind:'object',units:[...refs].sort()}]});q.sourcePlans[pass]=plan;await save(run);}
    const maxAdditionalRequests=input.engineeringContracts?.fullContextCheck?0:6;
    const outcome=await executeReviewCheckPlan({plan,args,maxAdditionalRequests,runPacket:async request=>{
-    const value=await call(q,pass,'check',`${request.cacheStamp}-${request.index??'source'}-${request.group}`,request.payload,value=>{
+    const payload=current.phase==='initial'?{...request.payload,phase:'initial',candidateHash:current.reviewHash}:request.payload;
+    if(current.phase==='initial'){
+     payload.task+='\n回执原样返回 phase 和 candidateHash。';
+     if(reviewModelBudgetBytes(system,payload,wireOptions)>REVIEW_BODY_LIMIT_BYTES)throw Object.assign(Error('完整首检材料超过请求预算，保留草稿'),{code:'REVIEW_PACKET_OVERSIZE'});
+    }
+    const value=await call(q,pass,'check',`${request.cacheStamp}-${request.index??'source'}-${request.group}`,payload,value=>{
+     if(current.phase==='initial'&&(value?.phase!==current.phase||value?.candidateHash!==current.reviewHash))throw Object.assign(Error('首检回执没有对应当前候选'),{code:'MODEL_OUTPUT_CONTRACT'});
      checkedReviewIssues(value,{skill,refs});if(input.engineeringContracts?.checkerSources>=1)for(const issue of value.issues)validateIssueSources(issue,{sources,providedRefs:request.packet.scope.sourceRefs,checkerSources:input.engineeringContracts.checkerSources});for(const issue of value.issues)if(issue.sourceRefs!==undefined&&(!Array.isArray(issue.sourceRefs)||new Set(issue.sourceRefs).size!==issue.sourceRefs.length||issue.sourceRefs.some(ref=>!request.packet.scope.sourceRefs.includes(ref))))throw Error('检查意见的显式来源引用不属于已提供完整原文');return validateScopedCheckResult(value,request.packet,refs,request.payload.sourceRequestContext);
     });
     return {...value,issues:value.issues.map(issue=>({...issue,checkContextRefs:[...request.packet.scope.sourceRefs],sourceRefs:issue.sourceRefs===undefined?[issue.ref]:[...issue.sourceRefs]}))};
    }});
    (q.sourcePasses??={})[pass]={planStamp:plan.stamp,status:outcome.status,requestCount:outcome.requestCount,maxAdditionalRequests,providedKeys:outcome.providedKeys,sourceRequests:outcome.sourceRequests};await save(run);
    if(outcome.status!=='checked')throw Object.assign(Error('补源后仍有待核原文，保留草稿等待处理，未通过检查'),{code:'REVIEW_SOURCE_CONTEXT_PENDING',checks:outcome.sourceRequests});
+   if(current.phase==='initial'){
+    current.coverage={candidateHash:current.reviewHash,planStamp:plan.stamp,groups:outcome.results.map(result=>({checkedRefs:result.checkedRefs,checkedEdges:result.checkedEdges}))};
+    current.coverageHash=qualityHash(current.coverage);
+   }
    // Multiple packets may identify the same problem. Keep the full source union for its repair.
    const unique=new Map();for(const issue of outcome.issues){const {sourceRefs,checkContextRefs,...business}=issue,key=qualityHash(business),old=unique.get(key);if(old){old.sourceRefs=[...new Set([...old.sourceRefs,...sourceRefs])];old.checkContextRefs=[...new Set([...old.checkContextRefs,...checkContextRefs])];}else unique.set(key,issue);}
    return [...unique.values()];
@@ -560,7 +608,7 @@ async function twoRoundQuality({gateway,skill,input,run,save,onProgress,programO
    payload.sourceScope={targetRef:c.id,sourceRefs,availableRefs:refs};
    if(input.engineeringContracts?.evidenceAddresses===1)payload.task+=' Machine citations: [E3] refers only to this target source. Use [sourceRef:E3] for other provided frozen sources; preserve namespaces and do not invent IDs.';
    const wireOptions={...(q.packetModel||{model:gateway.status?.model||'wangsu/claude-sonnet-5-5'}),reasoningEffort:'high'};
-   const assertBudget=value=>{const actual=reviewModelBudgetBytes(system,value,wireOptions);const budget=q.sourcePlans[pass].maxBodyBytes;if(actual>budget)throw Object.assign(Error('完整返修来源超过本次工程预算，未调用模型，保留草稿'),{code:'REVIEW_PACKET_OVERSIZE',actual,budget});};
+   const assertBudget=value=>{const actual=reviewModelBudgetBytes(system,value,wireOptions);const budget=q.sourcePlans?.[pass]?.maxBodyBytes||REVIEW_BODY_LIMIT_BYTES;if(actual>budget)throw Object.assign(Error('完整返修来源超过本次工程预算，未调用模型，保留草稿'),{code:'REVIEW_PACKET_OVERSIZE',actual,budget});};
    const validate=(value,provided)=>{
     if(value?.sourceRequests?.length){
      for(const request of value.sourceRequests)if(!Array.isArray(request.refs)||request.refs.length<2||!request.refs.includes(c.id)||new Set(request.refs).size!==request.refs.length||typeof request.relation!=='string'||!request.relation.trim()||typeof request.reason!=='string'||!request.reason.trim())throw Object.assign(Error('返修补源必须明确具体未提供的冻结对象、关系和原因'),{code:'REVIEW_SOURCE_REQUEST_CONTRACT'});
@@ -697,7 +745,7 @@ export function createReviewJobs({store,gateway,skillRoot,statePath,reader,busy=
     if(!m2ConfirmedSource)throw Error('任务缺已确认人工事实来源快照，请保留原任务并重新准备候选');
     verifyEvidenceBundle(m2ConfirmedSource);
     const sourceInputs={};for(const id of new Set(m2ConfirmedSource.entries.map(e=>e.sourceJobId).filter(Boolean))){try{const previous=JSON.parse(await readFile(workFile(id),'utf8'));if(previous.input)sourceInputs[id]=previous.input;}catch(e){if(e.code!=='ENOENT')throw Error('旧生成来源无法读取：'+id);}}
-    work={skillSnapshot:{version:skill.version,hash:skill.hash},m2ConfirmedSource,sourceInputs,sourceInputsHash:evidenceHash(sourceInputs),run:{modelPolicy:{primary:gateway.status?.model||null,fallbackModels:gateway.reviewFallbacks?.map(g=>g.status.model)||[]},outputPolicy:{initialMaxTokens:32000,checkMaxTokens:64000,revisionMaxTokens:32000,checkReasoningEffort:'medium'},raw:{},reviews:{},failed:[],dropped:[]}};await save();
+    work={skillSnapshot:{version:skill.version,hash:skill.hash},m2ConfirmedSource,sourceInputs,sourceInputsHash:evidenceHash(sourceInputs),run:{modelPolicy:{primary:gateway.status?.model||null,fallbackModels:gateway.reviewFallbacks?.map(g=>g.status.model)||[]},outputPolicy:{initialMaxTokens:32000,checkMaxTokens:64000,revisionMaxTokens:32000,...(skillAtLeast(skill.version,'2.1.15')?{checkFlow:1}:{}),checkReasoningEffort:'medium'},raw:{},reviews:{},failed:[],dropped:[]}};await save();
    }
    if(work.m2ConfirmedSource?.hash!==store.snapshot().reviewJob?.m2ConfirmedSource?.hash)throw Error('任务人工事实来源与冻结工作文件不一致');
    if(!work.input){

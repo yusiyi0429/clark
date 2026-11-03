@@ -22,16 +22,16 @@ async function setup(gateway,{formalFallbacks=true}={}){
 }
 test('a job at the two-edit limit writes an independent draft and never installs it in current business state',async()=>{
  let revisions=0,checks=0;
- const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{const p=JSON.parse(messages[1].content);if(!p.unit){checks++;return {answer:JSON.stringify({checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[],issues:[{ref:'company',sourceRefs:['company'],type:'结构与表达',problem:'未验证被写成未发生',impact:'事实过强',mustFix:true,fixable:true}]})};}if(p.revision)revisions++;return {answer:JSON.stringify({review})};}};
+ const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{const p=JSON.parse(messages[1].content);if(!p.unit){checks++;return {answer:JSON.stringify({...checkCoverage(p),issues:[{ref:'company',sourceRefs:['company'],type:'结构与表达',problem:'未验证被写成未发生',impact:'事实过强',mustFix:true,fixable:true}]})};}if(p.revision)revisions++;return {answer:JSON.stringify({review})};}};
  const {jobs,store,dir,original}=await setup(gateway);
  try{
   const job=await jobs.start(actor,{period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00'},{now:new Date('2026-11-02T00:00:00Z')});
   await until(()=>jobs.view().status!=='running');const final=jobs.view();
-  assert.equal(final.status,'draft');assert.equal(final.candidateAvailable,true);assert.equal(revisions,2);assert.equal(checks,9,'all three groups run after each of the two edits');assert.ok(final.checks.length);
+  assert.equal(final.status,'draft',final.error);assert.equal(final.candidateAvailable,true);assert.equal(revisions,2);assert.equal(checks,5,'three initial checks and one per repair');assert.ok(final.checks.length);
   assert.deepEqual(store.snapshot().cards,original);assert.equal(store.snapshot().reviewRound,undefined);
   const work=JSON.parse(await readFile(join(dir,'review-jobs',job.id+'.json'),'utf8')),draft=JSON.parse(await readFile(join(dir,'review-jobs',job.id+'.candidate.json'),'utf8'));
   assert.equal(work.run.quality.counts.company,2);assert.equal(draft.quality.status,'blocked');assert.equal(work.run.quality.passes.length,3);
-  assert.equal((await jobs.start(actor,{resume:true})).status,'draft');assert.equal(revisions,2);assert.equal(checks,9,'terminal draft resume cannot restart exhausted calls');
+  assert.equal((await jobs.start(actor,{resume:true})).status,'draft');assert.equal(revisions,2);assert.equal(checks,5,'terminal draft resume cannot restart exhausted calls');
   await assert.rejects(jobs.candidate({id:'member-09'}),{status:403});
   assert.deepEqual((await jobs.candidate(actor)).cards,[],'operator status alone grants no card visibility');
   const preview=await jobs.candidate({...actor,ceo:true});assert.equal(preview.readOnly,true);assert.equal(preview.cards.length,1);assert.match(preview.cards[0].id,/^candidate:/);assert.equal(preview.cards[0].content.verdictReason,review.verdictReason);assert.equal(preview.raw,undefined);assert.equal(preview.analysis,undefined);assert.deepEqual(store.snapshot().cards,original);
@@ -50,7 +50,7 @@ test('only an operator can cancel a running job; cancellation saves a resumable 
 test('exhausted single-model checker resume preserves the edited draft and cannot reset its attempts or install',async()=>{
  let fail=true,initial=0,revised=0,failedChecks=0;
  const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{const p=JSON.parse(messages[1].content);
-  if(!p.unit){const current=p.reviews[0];if(current.verdictReason==='fixed'&&/第3组/.test(p.task)&&fail){failedChecks++;throw Error('checker offline');}return {answer:JSON.stringify({checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[],issues:current.verdictReason==='fixed'?[]:[{ref:'company',sourceRefs:['company'],type:'结构与表达',problem:'需要澄清',impact:'影响理解',mustFix:true,fixable:true}]})};}
+  if(!p.unit){const current=p.reviews[0];if(current.verdictReason==='fixed'&&p.phase==='impact'&&fail){failedChecks++;throw Error('checker offline');}return {answer:JSON.stringify({...checkCoverage(p),issues:current.verdictReason==='fixed'?[]:[{ref:'company',sourceRefs:['company'],type:'结构与表达',problem:'需要澄清',impact:'影响理解',mustFix:true,fixable:true}]})};}
   if(p.revision)revised++;else initial++;return {answer:JSON.stringify({review:{...review,verdictReason:p.revision?'fixed':'initial'}})};
  }};
  // A primary-only checker still has one cumulative three-attempt budget.
@@ -60,5 +60,29 @@ test('exhausted single-model checker resume preserves the edited draft and canno
   assert.equal(store.snapshot().reviewRound,undefined);fail=false;await jobs.start(actor,{resume:true});await until(()=>jobs.view().status!=='running');
   assert.equal(jobs.view().status,'draft');assert.equal(initial,1);assert.equal(revised,1);assert.equal(failedChecks,3);assert.equal(store.snapshot().reviewRound,undefined);
   const work=JSON.parse(await readFile(join(dir,'review-jobs',job.id+'.json'),'utf8'));assert.equal(work.run.reviews.company.verdictReason,'fixed');assert.equal(work.run.quality.counts.company,1);assert.equal(work.run.quality.status,'needs-review');
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+function checkCoverage(p){return {phase:p.phase,candidateHash:p.candidateHash,checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[],issueResults:p.priorIssues?.map(issue=>({id:issue.id,status:'resolved',reason:'已按当前候选核对'}))};}
+
+test('a clean first check still requires final; a new final finding is repaired then checked against the saved candidate',async()=>{
+ const phases=[];
+ const gateway={status:{model:'wangsu/claude-sonnet-5-5'},complete:async messages=>{
+  const p=JSON.parse(messages[1].content);
+  if(p.unit)return {answer:JSON.stringify({review:{...review,verdictReason:p.revision?'已核对':'初稿'}})};
+  phases.push(p.phase);
+  const issues=p.phase==='final'&&p.reviews[0].verdictReason==='初稿'?[{ref:'company',sourceRefs:[],type:'结构与表达',problem:'需要澄清',impact:'影响理解',mustFix:true,fixable:true}]:[];
+  return {answer:JSON.stringify({...checkCoverage(p),issues})};
+ }};
+ const {jobs,store,dir}=await setup(gateway);
+ try{
+  const job=await jobs.start(actor,{period:'2026-10',cutoff:'2026-10-31T23:59:59+08:00'},{now:new Date('2026-11-02T00:00:00Z')});
+  await until(()=>jobs.view().status!=='running');
+  assert.equal(jobs.view().status,'done',jobs.view().error);
+  assert.deepEqual(phases,['initial','initial','initial','final','impact','final']);
+  const {run}=JSON.parse(await readFile(join(dir,'review-jobs',job.id+'.json'),'utf8'));
+  assert.equal(run.quality.passes.at(-1).coverage.candidateHash,run.quality.candidateHash);
+  assert.equal(run.quality.counts.company,1);
+  assert.equal(run.quality.status,'passed');
  }finally{await rm(dir,{recursive:true,force:true});}
 });

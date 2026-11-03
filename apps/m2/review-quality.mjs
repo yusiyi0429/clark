@@ -57,21 +57,39 @@ export async function qualityModelCall({gateway,system,quality,run,pass,stage,re
  }
 }
 
+const reviewRef=ref=>String(ref||'').replace(/^rv:/,'');
+function changedChildVerdicts(ref,children,before,after){
+ const rows=after[ref]?.facts||[];
+ return children.flatMap(child=>{
+  const oldVerdict=before[child]?.verdict,newVerdict=after[child]?.verdict;
+  if(!oldVerdict||!newVerdict||oldVerdict===newVerdict)return [];
+  const matches=rows.filter(row=>reviewRef(row.ref)===reviewRef(child));
+  if(matches.length!==1||matches[0].status!==oldVerdict)return [];
+  return [{ref,type:'程序检查',problem:`直接引用的子复盘 ${child} 判定已由「${oldVerdict}」改为「${newVerdict}」，本层事实行仍引用旧判定`,impact:'本轮上下级状态不一致',mustFix:true,fixable:true,sourceRefs:[ref,child],dependencyChange:{ref:child,oldVerdict,newVerdict}}];
+ });
+}
+
 // Each card shares one budget for semantic edits, structural repairs and
 // dependency refreshes. A resume continues the same pass and the same counters.
-export async function runReviewQuality({run,input,skill,sources,check,revise,problems=()=>[],normalize=()=>{},save=async()=>{},onProgress=async()=>{},signal,revisionConcurrency=8}){
+export async function runReviewQuality({run,input,skill,sources,check,revise,problems=()=>[],normalize=()=>{},save=async()=>{},onProgress=async()=>{},signal,revisionConcurrency=8,phased=false}){
  if(!Number.isInteger(revisionConcurrency)||revisionConcurrency<1||revisionConcurrency>20)throw Error('修订并发必须在1到20之间');
  const max=skill.maxRevisionRounds;if(max!==2)throw Error('自动修订合同必须明确最多 2 轮');
  const inputHash=qualityHash(input),sourceHash=qualityHash(sources),skillHash=skill.hash;
  let q=run.quality;
  if(q&&(q.inputHash!==inputHash||q.sourceHash!==sourceHash||q.skillHash!==skillHash||q.maxRevisions!==max))throw Error('质量续跑来源、技能或修订上限已变化');
- if(!q){normalize();q=run.quality={schemaVersion:1,inputHash,sourceHash,skillHash,maxRevisions:max,counts:{},requests:{},passes:[],status:'checking',candidateHash:qualityHash(run.reviews)};await save(run);}
+ if(!q){normalize();q=run.quality={schemaVersion:1,inputHash,sourceHash,skillHash,maxRevisions:max,counts:{},requests:{},passes:[],status:'checking',candidateHash:qualityHash(run.reviews),...(phased?{checkFlow:1}:{})};await save(run);}
+ if((q.checkFlow===1)!==phased)throw Error('复查阶段合同已变化');
  if(q.candidateHash!==qualityHash(run.reviews))throw Error('质量续跑候选已变化，不能复用旧检查');
  const items=input.stages.flat(),byId=new Map(items.map(c=>[c.id,c]));
  const childrenOf=ref=>[...new Set([...(byId.get(ref)?.children||[]),...items.filter(c=>c.parent===ref).map(c=>c.id)])];
  const verifyAction=action=>{for(const ref of [action.ref,...childrenOf(action.ref)])if(qualityHash(action.before?.[ref])!==qualityHash(run.reviews[ref]))throw Error('质量修订相关对象或子项输入校验失败：'+ref);};
  const verifyPass=pass=>{
   if(pass.sourceHash!==sourceHash||pass.reviewHash!==qualityHash(pass.reviews))throw Error('质量检查前快照校验失败');
+  if(phased){
+   const previous=q.passes[pass.index-1],phase=!previous?'initial':previous.actions?.length?'impact':'final';
+   if(q.passes[pass.index]!==pass||pass.phase!==phase)throw Error('质量检查阶段顺序校验失败');
+   if(pass.coverageHash&&(pass.coverageHash!==qualityHash(pass.coverage)||pass.coverage.candidateHash!==pass.reviewHash))throw Error('质量检查覆盖回执已变化');
+  }
   if(pass.issuesHash&&pass.issuesHash!==qualityHash({issues:pass.issues,structural:pass.structural}))throw Error('质量检查问题快照校验失败');
   if(pass.actionsHash&&pass.actionsHash!==qualityHash(pass.actions.map(({ref,issues,refresh})=>({ref,issues,refresh}))))throw Error('质量修订动作快照校验失败');
   for(const action of pass.actions||[]){
@@ -84,6 +102,11 @@ export async function runReviewQuality({run,input,skill,sources,check,revise,pro
  const counts={};for(const pass of q.passes){verifyPass(pass);for(const action of pass.actions||[])if(action.reserved){const n=(counts[action.ref]||0)+1;if(action.revision!==n||n>max)throw Error('质量修订次数校验失败');counts[action.ref]=n;}}
  const entries=value=>Object.entries(value).sort(([a],[b])=>a.localeCompare(b));
  if(qualityHash(entries(counts))!==qualityHash(entries(q.counts)))throw Error('质量修订累计次数校验失败');
+ if(phased&&q.passes.filter(pass=>pass.actions?.length).length>max)throw Error('整轮修订批次校验失败');
+ if(phased&&q.status==='passed'){
+  const final=q.passes.at(-1);
+  if(final?.phase!=='final'||final.status!=='done'||final.reviewHash!==q.candidateHash||!final.coverageHash)throw Error('缺少当前候选的末检覆盖回执');
+ }
  if(['passed','blocked','needs-review'].includes(q.status))return run;
  const parents=new Map();for(const c of items){if(c.parent)parents.set(c.id,c.parent);for(const id of c.children||[])parents.set(id,c.id);}
  const required=x=>x.mustFix===true||skill.mustFix.includes(x.type);
@@ -91,24 +114,28 @@ export async function runReviewQuality({run,input,skill,sources,check,revise,pro
   abort(signal);
   let pass=q.passes.at(-1);
   if(!pass||pass.status==='done'){
-   pass={index:q.passes.length,status:'checking',reviews:clone(run.reviews),reviewHash:qualityHash(run.reviews),sourceHash,at:new Date().toISOString()};q.passes.push(pass);q.status='checking';await save(run);
+   const phase=!pass?'initial':pass.actions?.length?'impact':'final';
+   pass={index:q.passes.length,...(phased?{phase}:{}),status:'checking',reviews:clone(run.reviews),reviewHash:qualityHash(run.reviews),sourceHash,at:new Date().toISOString()};q.passes.push(pass);q.status='checking';await save(run);
   }
   verifyPass(pass);
   if(pass.status==='checking'){
-   await onProgress({stage:`质量复查 ${pass.index+1}`,qualityPass:pass.index});
+   await onProgress({stage:phased?{initial:'完整质量首检',impact:'修订影响复查',final:'整轮一致性末检'}[pass.phase]:`质量复查 ${pass.index+1}`,qualityPass:pass.index});
    let issues;try{issues=await check(pass.reviews,pass.index,q);}catch(error){if(!signal?.aborted&&isReviewResourceLimit(error)){q.status='needs-review';q.blockReason='本轮复查未完成，保留原候选与未核事项';q.verificationPending=[{unit:'global',code:error.code||'CHECK_UNVERIFIED',problem:String(error.message),...(error.lastFailure?{lastFailure:clone(error.lastFailure)}:{}),checks:error.checks||[]}];pass.status='needs-review';await save(run);return run;}throw error;}abort(signal);verifyPass(pass);
+   if(phased&&pass.reviewHash!==qualityHash(run.reviews))throw Error('检查期间候选已变化，不能使用旧结论');
    const structural=problems({reviews:pass.reviews});
    pass.issues=clone(issues);pass.structural=clone(structural);pass.issuesHash=qualityHash({issues:pass.issues,structural:pass.structural});run.issues=clone(issues);
    const critical=issues.filter(required),fixable=critical.filter(x=>x.fixable!==false);
    q.remaining=[...critical.map(x=>({unit:x.ref,title:byId.get(x.ref)?.title,...x})),...structural.map(x=>({...x,title:byId.get(x.unit)?.title}))];
-   if(!q.remaining.length){pass.status='done';q.status='passed';await save(run);return run;}
+   if(phased&&!pass.coverageHash)throw Error('缺少当前候选的检查覆盖回执');
+   if(!q.remaining.length){pass.status='done';if(phased&&pass.phase!=='final'){await save(run);continue;}q.status='passed';await save(run);return run;}
    const perRef=new Map();
    for(const issue of fixable){const list=perRef.get(issue.ref)||[];list.push(issue);perRef.set(issue.ref,list);}
    for(const issue of structural){const list=perRef.get(issue.unit)||[];list.push({...issue,type:'程序检查',mustFix:true,fixable:true});perRef.set(issue.unit,list);}
    if(!perRef.size){q.status='blocked';q.blockReason='仍有无法据现有来源修复的关键问题';await save(run);return run;}
-   const refresh=new Set();for(const ref of perRef.keys()){let parent=parents.get(ref);const seen=new Set();while(parent&&!seen.has(parent)){seen.add(parent);if(byId.has(parent)){refresh.add(parent);parent=parents.get(parent);}else break;}}
+   const refresh=new Set();if(!phased)for(const ref of perRef.keys()){let parent=parents.get(ref);const seen=new Set();while(parent&&!seen.has(parent)){seen.add(parent);if(byId.has(parent)){refresh.add(parent);parent=parents.get(parent);}else break;}}
    const refs=new Set([...perRef.keys(),...refresh]);
    const unavailable=[...refs].filter(ref=>!byId.has(ref)||(q.counts[ref]||0)>=max);
+   if(phased&&q.passes.filter(p=>p.actions?.length).length>=max)unavailable.push(...[...refs].filter(ref=>!unavailable.includes(ref)));
    if(unavailable.length){q.status='blocked';q.blockReason='以下复盘已到两轮自动修订上限：'+unavailable.map(ref=>byId.get(ref)?.title||ref).join('、');q.remaining.push(...unavailable.map(unit=>({unit,title:byId.get(unit)?.title,problem:'已到两轮自动修订上限，保留草稿等待人工处理'})));await save(run);return run;}
    pass.actions=items.filter(c=>refs.has(c.id)).map(c=>({ref:c.id,issues:clone(perRef.get(c.id)||[]),refresh:refresh.has(c.id),status:'pending'}));
    pass.actionsHash=qualityHash(pass.actions.map(({ref,issues,refresh})=>({ref,issues,refresh})));
@@ -118,9 +145,21 @@ export async function runReviewQuality({run,input,skill,sources,check,revise,pro
   // branch finishes. Parent inputs never wait for unrelated branches.
   const actionByRef=new Map(pass.actions.map(action=>[action.ref,action]));
   const defer=async(action,detail)=>{action.status='deferred';action.deferred=clone(detail);await save(run);};
-  const pending=pass.actions.filter(action=>!['done','deferred'].includes(action.status));
-  await reviewDependencyPool({items:pending.map(action=>({id:action.ref,action})).reverse(),concurrency:revisionConcurrency,signal,
-   dependencies:node=>childrenOf(node.id),execute:async({action})=>{
+  const pending=phased?items.map(card=>({id:card.id})):pass.actions.filter(action=>!['done','deferred'].includes(action.status)).map(action=>({id:action.ref})).reverse();
+  await reviewDependencyPool({items:pending,concurrency:revisionConcurrency,signal,
+   dependencies:node=>childrenOf(node.id),execute:async({id})=>{
+    let action=actionByRef.get(id);
+    if(action&&['done','deferred'].includes(action.status))return;
+    if(phased&&!action?.before){
+     const linked=changedChildVerdicts(id,childrenOf(id),pass.reviews,run.reviews);
+     if(linked.length){
+      if(!action){action={ref:id,issues:[],refresh:false,status:'pending'};pass.actions.push(action);actionByRef.set(id,action);}
+      if(!action.issues.some(issue=>issue.dependencyChange))action.issues.push(...linked);
+      pass.actionsHash=qualityHash(pass.actions.map(({ref,issues,refresh})=>({ref,issues,refresh})));
+      if((q.counts[id]||0)>=max){await defer(action,{code:'DEPENDENCY_REVISION_LIMIT',problem:'直接引用已失效，本卡修订额度已用完'});return;}
+     }
+    }
+    if(!action)return;
     abort(signal);
     const blocked=childrenOf(action.ref).filter(ref=>actionByRef.get(ref)?.status==='deferred');
     if(blocked.length){await defer(action,{code:'DEPENDENCY_UNVERIFIED',problem:'下级尚未核验，本层候选保留原文，待同步',refs:blocked});return;}
