@@ -1,7 +1,8 @@
 // 自查：cmeiArt.ts 能不能挂进 milesRig（部件、id 前缀、转轴、默认藏着的变体），眼珠是不是裁在眼眶里，摆位常量除 gazeUnit 外是否和 Miles 一致。
-// 用法：node .scratch/buddy-cmei/check.cjs [path/to/milesArt.ts]
+// 用法：node .scratch/buddy-cmei/check.cjs [--ref <Miles 所在的 git 引用> | path/to/milesArt.ts]，比如 --ref origin/claude/handover-new-phase-review-c26739
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 const src = fs.readFileSync(path.join(__dirname, "cmeiArt.ts"), "utf8");
 const svg = src.match(/export const CMEI_SVG = `([^`]*)`;/)[1];
 const art = src.match(/export const CMEI_ART = (\{.*?\}) as const;/)[1];
@@ -24,9 +25,12 @@ for (const side of ["l", "r"]) {
   ok(new RegExp(`<g data-part="eye-${side}">.*?<g clip-path="url\\(#\\{id\\}-[^"]+\\)"><g data-part="iris-${side}">`).test(svg), `眼珠 iris-${side} 在 eye-${side} 里、套着眼眶的裁切`);
 }
 ok(/"gazeUnit":\s*8|gazeUnit: 8/.test(art), `gazeUnit 是 8：${art}`);
-const milesArtPath = process.argv[2];
-if (milesArtPath && fs.existsSync(milesArtPath)) {
-  const m = fs.readFileSync(milesArtPath, "utf8").match(/export const MILES_ART = (\{.*?\}) as const;/)[1];
+const refAt = process.argv.indexOf("--ref");
+const milesSrc = refAt > 0
+  ? execFileSync("git", ["show", `${process.argv[refAt + 1]}:apps/web/src/components/coagent/milesArt.ts`], { cwd: __dirname, encoding: "utf8", maxBuffer: 64 << 20 })
+  : process.argv[2] && fs.existsSync(process.argv[2]) ? fs.readFileSync(process.argv[2], "utf8") : null;
+if (milesSrc) {
+  const m = milesSrc.match(/export const MILES_ART = (\{.*?\}) as const;/)[1];
   const norm = (s) => s.replace(/\s/g, "").replace(/gazeUnit:\d+/, "");
   ok(norm(m) === norm(art), "除 gazeUnit 外，摆位常量和 MILES_ART 一致（胶囊里一样大、一样的位置）");
 } else {

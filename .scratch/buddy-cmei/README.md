@@ -1,6 +1,6 @@
 # 伙伴形象：C妹（设计稿）
 
-状态：2026-11-03 第一版，等孙铭泽确认；还没接进产品。
+状态：2026-11-03 第一版，等孙铭泽确认；还没接进产品。接手先看 `map.md`（交接、待办和注意事项）。
 
 - 原图：`source/c-mei-sheet.webp`（六格表情），孙铭泽提供，确认有授权、可以照原样用，头上的橙色花也照原样保留。
 - 在线预览（Miles 和 C妹 两颗胶囊都是活的）：https://claude.ai/artifact/Lzyo5LFWRoF33m4SD3LaBF
@@ -54,38 +54,59 @@
 | `cmei.svg` | 整张画，能直接打开看 |
 | `check.cjs` | 自查：部件、id 前缀、转轴、默认藏着的变体、眼珠裁切、摆位常量 |
 | `milesRig-iris-gaze.patch` | 给 `apps/web/src/components/coagent/milesRig.ts` 的补丁：画里有眼珠时转眼只移眼珠 |
-| `preview.html` | 预览页：Miles 和 C妹 两颗胶囊，动作一览，大图 |
-| `renders/` | 整张画、产品尺寸 1×/3×、剪影、15 个动作、眼睛特写（转眼和眨眼） |
+| `preview.html` | 预览页：Miles 和 C妹 两颗胶囊，动作一览，大图。由 `tools/build-preview.cjs` 生成，别手改 |
+| `tools/preview.src.html` | 预览页的模板：样式、版面和页面上的交互。改预览页改这里 |
+| `tools/build-preview.cjs` | 从 Miles 所在的分支取 `milesRig.ts`、`milesArt.ts`，打补丁、转成 JS，和 `cmeiArt.ts` 一起拼成 `preview.html` |
+| `tools/render.cjs` | 用 `preview.html` 截 `renders/` 里的图 |
+| `tools/verify-page.cjs` | 预览页自检：三种宽度/配色无报错无溢出，真动画里只转眼珠、切姿势、退场 |
+| `renders/` | 整张画（手举着 / 放进胶囊）、产品尺寸 1×/3×、剪影、动作一览、眼睛特写（转眼和眨眼） |
+| `map.md`、`issues/` | 交接：现状、待办和注意事项 |
 
-重新生成和自查（要 Pillow、numpy、scipy、scikit-image）：
+重新生成和自查，按顺序跑。`build.py` 要 Pillow、numpy、scipy、scikit-image；`tools/` 要 git、TypeScript、Playwright。
+
+```bash
+pip install pillow numpy scipy scikit-image
+```
+
+```bash
+git fetch origin claude/handover-new-phase-review-c26739
+```
 
 ```bash
 python3 .scratch/buddy-cmei/build.py
 ```
 
 ```bash
-node .scratch/buddy-cmei/check.cjs path/to/milesArt.ts
+node .scratch/buddy-cmei/check.cjs --ref origin/claude/handover-new-phase-review-c26739
 ```
 
-`milesArt.ts` 和 `milesRig.ts` 目前只在 `claude/handover-new-phase-review-c26739` 分支上；不给路径时只跳过摆位常量的比对。
+```bash
+node .scratch/buddy-cmei/tools/build-preview.cjs
+```
+
+```bash
+node .scratch/buddy-cmei/tools/verify-page.cjs
+```
+
+```bash
+node .scratch/buddy-cmei/tools/render.cjs
+```
+
+`milesArt.ts` 和 `milesRig.ts` 目前只在 `claude/handover-new-phase-review-c26739` 分支上；Miles 合进 main 以后，把上面的分支换成 `origin/main`（`check.cjs` 和 `build-preview.cjs` 都用 `--ref origin/main`）。
 
 ## 验证（11/03）
 
 - `check.cjs` 全部通过：部件都在、id 都带前缀、三个转轴、body 套着 head、默认藏着的变体、两颗眼珠都裁在眼眶里、摆位常量。
 - `cmeiArt.ts` 用 `tsc --strict` 编译通过。
-- 挂进打了补丁的 milesRig，15 个动作状态逐帧对照 Miles，见 `renders/motions.png`：
-  - 在听、在说（张嘴）、眨眼；
-  - 左右转头；
-  - 举手回弹、松手中途、手放进胶囊；
-  - 左右晃手；
-  - 耳机亮、呼吸、升起；
-  - 两种叠加的最坏情况。
+- 挂进打了补丁的 milesRig，动作逐帧对照 Miles：
+  - 11/03 用临时搭的页面核过 15 个状态：在听、在说（张嘴）、眨眼，左右转头，举手回弹、松手中途、手放进胶囊，左右晃手，耳机亮、呼吸、升起，两种叠加的最坏情况；
+  - 预览页上的 9 个见 `renders/motions.jpg`。
 - 眼睛放大看转眼和眨眼，见 `renders/glance.jpg`：转眼时只有眼珠在动，眨眼是整只眼睛压扁。
-- 实时动画跑过：
-  - 9 秒里转了眼，两颗眼珠同步，切到在说后回正；
-  - 出场、改名字、退场，控制台没有报错或警告；
-  - 预览页本身也抓到一次转眼。
-- 预览页在桌面（浅色、深色）和手机宽度下都没有报错，也没有横向溢出。
+- `tools/verify-page.cjs` 全部通过（11/04）：
+  - 桌面浅色、深色和手机宽度下都没有报错，也没有横向溢出；
+  - 真动画里 C妹 转了眼，只移两颗眼珠、两颗同步，Miles 照旧整只眼睛；
+  - 切到在说后眼珠回正；出场、转眼、切姿势、退场，控制台没有报错或警告。
+- `tools/build-preview.cjs` 重建出来的预览页和之前手工拼的逐字相同（只多了剪影的修正）。
 
 没做的：没在真实产品页面里跑过，因为 Miles 还在交接分支上。
 
