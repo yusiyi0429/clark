@@ -165,16 +165,26 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
     expect(last).not.toContain("--session-id");
   });
 
-  it("本会话 MCP 交产出物、交回：要密钥，只收工作目录里的文件，进发件箱", async () => {
-    const secret = JSON.parse(readFileSync(join(t.dataDir, "sessions", id, "session.json"), "utf8")).mcpSecret;
+  it("本会话 MCP（HTTP）交产出物、交回：要密钥，只收工作目录里的文件，进发件箱", async () => {
+    const sessionDir = join(t.dataDir, "sessions", id);
+    const secret = JSON.parse(readFileSync(join(sessionDir, "session.json"), "utf8")).mcpSecret;
+    const mcp = JSON.parse(readFileSync(join(sessionDir, "mcp.json"), "utf8")).mcpServers.tianshu;
+    expect(mcp).toEqual({ type: "http", url: `http://127.0.0.1:${t.port}/internal/sessions/${id}/mcp`, headers: { "x-tianshu-session-secret": secret } });
     writeFileSync(join(work, "方案.md"), "# 方案\n第一版");
-    const report = (body: unknown) => raw(t.port, { method: "POST", path: `/internal/sessions/${id}/report`, headers: { "x-tianshu-session-secret": secret, "content-type": "application/json" }, body: JSON.stringify(body) });
-    const ok = await report({ tool: "add_artifact", input: { path: "方案.md", title: "方案" } });
-    expect(ok.status).toBe(200);
-    const outside = await report({ tool: "add_artifact", input: { path: "../../etc/passwd" } });
-    expect(outside.status).toBe(400);
-    const hb = await report({ tool: "submit_handback", input: { summary: "做完了", criteria: [{ index: 1, result: "met", evidence: "hello.txt 已写" }] } });
-    expect(hb.status).toBe(200);
+    let n = 0;
+    const rpc = async (method: string, params?: unknown) => (await raw(t.port, {
+      method: "POST", path: `/internal/sessions/${id}/mcp`, headers: { "x-tianshu-session-secret": secret, "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: ++n, method, params }),
+    })).body;
+    expect((await rpc("initialize", { protocolVersion: "2025-06-18" })).result.serverInfo.name).toBe("tianshu-local");
+    expect((await rpc("tools/list")).result.tools.map((x: any) => x.name)).toEqual(["add_artifact", "add_evidence", "submit_handback"]);
+    expect((await rpc("tools/call", { name: "add_artifact", arguments: { path: "方案.md", title: "方案" } })).result.isError).toBe(false);
+    expect((await rpc("tools/call", { name: "add_artifact", arguments: { path: "../../etc/passwd" } })).result.isError).toBe(true);
+    expect((await rpc("tools/call", { name: "add_evidence", arguments: { kind: "link", title: "PR", url: "https://github.com/x/y/pull/1" } })).result.isError).toBe(false);
+    const hb = await rpc("tools/call", { name: "submit_handback", arguments: { summary: "做完了", criteria: [{ index: 1, result: "met", evidence: "hello.txt 已写" }] } });
+    expect(hb.result.isError).toBe(false);
+    const note = await raw(t.port, { method: "POST", path: `/internal/sessions/${id}/mcp`, headers: { "x-tianshu-session-secret": secret, "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
+    expect(note.status).toBe(202);
     const all = await readSse(t.port, token, id, { until: has("handback") });
     expect(all.find((e) => e.type === "artifact")).toMatchObject({ title: "方案", fileName: "方案.md" });
     expect(t.runner.outbox.status().pending).toBeGreaterThan(5); // 没关联云端：状态、计划、花费、产出物、交回都排着

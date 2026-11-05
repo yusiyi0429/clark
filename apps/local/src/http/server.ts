@@ -18,6 +18,7 @@ import type { ClaudeSetup } from "../agents/claudeSetup.js";
 import type { CloudLink, Settings } from "../cloud.js";
 import type { RunnerConfig } from "../config.js";
 import { DEV_PAGE } from "./devPage.js";
+import { handleMcpMessage } from "../sessionMcp.js";
 
 export interface ServerDeps {
   config: RunnerConfig;
@@ -174,30 +175,23 @@ export function createServer(d: ServerDeps): http.Server {
     return STREAMING;
   }
 
-  async function handleInternal(req: IncomingMessage, res: ServerResponse, sessionId: string) {
-    // 只给本会话 MCP 子进程用：浏览器发的请求一定带 Origin，带了就拒。
+  /** 本会话 MCP（HTTP）：只给 Claude Code 的 MCP 客户端用，浏览器发的请求一定带 Origin，带了就拒。 */
+  async function handleSessionMcp(req: IncomingMessage, res: ServerResponse, sessionId: string) {
     if (req.headers.origin !== undefined) return reject(res, { status: 403, code: "bad_origin", message: "内部接口不接受浏览器请求" });
     const secret = req.headers["x-tianshu-session-secret"];
     if (!d.sessions.verifySecret(sessionId, typeof secret === "string" ? secret : undefined)) return reject(res, { status: 401, code: "unauthorized", message: "会话密钥不对" });
+    if (req.method !== "POST") { res.writeHead(405, { allow: "POST" }); return res.end(); } // 不提供服务端推送流
     const j = checkJson(req);
     if (j) return reject(res, j);
     try {
-      const body = (await readBody(req)) as { tool?: string; input?: any };
-      const input = body?.input ?? {};
-      let text: string;
-      if (body?.tool === "add_artifact" && typeof input.path === "string") text = d.sessions.addArtifact(sessionId, input);
-      else if (body?.tool === "add_evidence" && ["note", "log", "link", "diff_summary"].includes(input.kind) && typeof input.title === "string") {
-        if (input.url !== undefined && !/^https?:\/\//.test(String(input.url))) throw new SessionError("validation", "链接只收 http(s)");
-        text = d.sessions.addEvidence(sessionId, input);
-      } else if (body?.tool === "submit_handback" && typeof input.summary === "string" && Array.isArray(input.criteria)) {
-        const criteria = input.criteria.filter((c: any) => Number.isInteger(c?.index) && c.index >= 1 && ["met", "partial", "unmet"].includes(c?.result))
-          .map((c: any) => ({ index: c.index, result: c.result, evidence: String(c.evidence ?? "").slice(0, 2000) }));
-        text = d.sessions.submitHandback(sessionId, { summary: input.summary, criteria });
-      } else throw new SessionError("validation", "工具名或参数不对");
-      send(res, 200, { text });
+      const body = await readBody(req);
+      const out = Array.isArray(body)
+        ? body.map((m) => handleMcpMessage(d.sessions, sessionId, m)).filter((r) => r !== null)
+        : handleMcpMessage(d.sessions, sessionId, body);
+      if (out === null || (Array.isArray(out) && !out.length)) { res.writeHead(202); return res.end(); }
+      send(res, 200, out);
     } catch (e) {
-      const status = e instanceof SessionError ? (e.code === "not_found" ? 404 : 400) : 500;
-      send(res, status, { error: { code: e instanceof SessionError ? e.code : "internal", message: e instanceof Error ? e.message : String(e) } });
+      send(res, 400, { jsonrpc: "2.0", id: null, error: { code: -32700, message: e instanceof Error ? e.message : String(e) } });
     }
   }
 
@@ -205,8 +199,8 @@ export function createServer(d: ServerDeps): http.Server {
     const hostBad = checkHost(req, d.config.port);
     if (hostBad) return reject(res, hostBad);
     const url = new URL(req.url ?? "/", "http://x");
-    const internal = /^\/internal\/sessions\/([0-9a-f-]{36})\/report$/.exec(url.pathname);
-    if (internal && req.method === "POST") return handleInternal(req, res, internal[1]!);
+    const internal = /^\/internal\/sessions\/([0-9a-f-]{36})\/mcp$/.exec(url.pathname);
+    if (internal) return handleSessionMcp(req, res, internal[1]!);
     // 开发测试页：只在 --dev 下提供；页面本身不含任何口令。
     if (d.config.dev && req.method === "GET" && url.pathname === "/dev" && req.headers.origin === undefined) {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });

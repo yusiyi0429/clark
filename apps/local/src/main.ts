@@ -1,14 +1,12 @@
 import { loadConfig, VERSION } from "./config.js";
 import { startRunner } from "./app.js";
-import { runSessionMcp } from "./sessionMcp.js";
 import { autostartEnabled, disableAutostart, enableAutostart } from "./autostart.js";
 
 const USAGE = `天枢本机程序 ${VERSION}
 用法：
   tianshu-local [run] [--dev] [--headless] [--port N] [--data-dir DIR]   启动（默认）
   tianshu-local autostart on|off|status                                  开机自启
-  tianshu-local version
-（mcp-session 由本机程序写进 Claude Code 的 MCP 配置，不用手动跑）`;
+  tianshu-local version`;
 
 function flag(args: string[], name: string): string | undefined {
   const i = args.indexOf(name);
@@ -31,9 +29,6 @@ async function main() {
   const command = argv[0] && !argv[0].startsWith("--") ? argv[0] : "run";
   const args = command === argv[0] ? argv.slice(1) : argv;
   switch (command) {
-    case "mcp-session":
-      await runSessionMcp();
-      return;
     case "version":
       console.log(VERSION);
       return;

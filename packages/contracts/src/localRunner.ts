@@ -9,7 +9,7 @@ import { Type, type Static, type TSchema } from "@sinclair/typebox";
  * - Host 必须是 127.0.0.1:<端口> 或 localhost:<端口>，否则 421；
  * - 必须带 Origin，且在本机白名单里（默认 https://tk.tokenkingos.com），否则 403；跨域头只回这个来源，不用通配；
  * - 除 GET /v1/health、POST /v1/pairings、GET /v1/pairings/:id 外，都要带请求头 x-tianshu-local-token（配对口令），否则 401；
- * - 带请求体的请求只收 application/json，否则 415。
+ * - POST、PUT、PATCH 只收 application/json，否则 415；没有内容的（如停下、强停、选文件夹）也发 {}。
  * 浏览器的 EventSource 不能带自定义头，网页要用 fetch + ReadableStream 读事件流，断线时把最后的 id 放进 Last-Event-ID 头重连。
  */
 
@@ -169,12 +169,16 @@ export const LocalModelProfile = Type.Object({
   isDefault: Type.Boolean(),
 }, strict);
 export const LocalModelListResponse = Type.Object({ profiles: Type.Array(LocalModelProfile) }, strict);
-/** PUT /v1/models/:id。apiKey 只写不读；不传表示保留原钥匙，传空串表示删除钥匙。 */
+/**
+ * PUT /v1/models/:id。
+ * - gateway：baseUrl、model 必填；apiKey 只写不读，不传表示保留原钥匙，传空串表示删除钥匙。
+ * - subscription：用本人登录，只选模型（如 opus、sonnet、haiku），不收 baseUrl 和 apiKey。
+ */
 export const LocalModelProfileUpsert = Type.Object({
   label: Type.String({ minLength: 1, maxLength: 40 }),
-  source: Type.Literal("gateway"),
+  source: LocalModelSource,
   agent: Type.Optional(LocalAgentKind),
-  baseUrl: Type.String({ minLength: 8, maxLength: 300, pattern: "^https?://" }),
+  baseUrl: Type.Optional(Type.String({ minLength: 8, maxLength: 300, pattern: "^https?://" })),
   model: Type.String({ minLength: 1, maxLength: 120 }),
   smallModel: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
   apiKey: Type.Optional(Type.String({ maxLength: 400 })),

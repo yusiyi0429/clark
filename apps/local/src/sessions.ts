@@ -11,6 +11,7 @@ import type { AgentAdapter, AgentRun } from "./agents/types.js";
 import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
+import { SESSION_MCP_NAME, SESSION_TOOL_NAMES } from "./sessionMcp.js";
 
 interface SessionRecord {
   id: string;
@@ -43,14 +44,11 @@ export interface SessionDeps {
   folders: Folders;
   outbox: Outbox;
   deviceId: string;
-  /** 本机程序自己的启动命令（本会话 MCP 用）：正式是单文件 exe，开发时是 node + 脚本。 */
-  selfCommand: string[];
-  port: number;
+  /** 本机程序实际监听的端口（本会话 MCP 回连用）。 */
+  port: () => number;
   onChange?: () => void;
 }
 
-const MCP_SERVER = "tianshu";
-const MCP_TOOLS = ["add_artifact", "add_evidence", "submit_handback"].map((t) => `mcp__${MCP_SERVER}__${t}`);
 const ARTIFACT_TYPES: Record<string, string> = {
   ".md": "text/markdown", ".markdown": "text/markdown", ".html": "text/html", ".htm": "text/html", ".pdf": "application/pdf",
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".txt": "text/plain",
@@ -162,14 +160,15 @@ export class SessionManager {
     return this.summary(rec);
   }
 
+  /** 本会话 MCP 的配置写成文件：地址和密钥不进命令行。 */
   private writeMcpConfig(rec: SessionRecord): string {
-    const [command, ...args] = this.d.selfCommand;
     const file = join(this.dir, rec.id, "mcp.json");
     writeJsonAtomic(file, {
       mcpServers: {
-        [MCP_SERVER]: {
-          type: "stdio", command, args: [...args, "mcp-session"],
-          env: { TIANSHU_LOCAL_PORT: String(this.d.port), TIANSHU_SESSION_ID: rec.id, TIANSHU_SESSION_SECRET: rec.mcpSecret },
+        [SESSION_MCP_NAME]: {
+          type: "http",
+          url: `http://127.0.0.1:${this.d.port()}/internal/sessions/${rec.id}/mcp`,
+          headers: { "x-tianshu-session-secret": rec.mcpSecret },
         },
       },
     });
@@ -184,7 +183,7 @@ export class SessionManager {
     mkdirSync(join(this.dir, rec.id), { recursive: true });
     const run = await adapter.start({
       sessionId: rec.id, cwd: rec.cwd, resume, model, includePersonalConfig: rec.includePersonalConfig,
-      mcpConfigPath: this.writeMcpConfig(rec), allowedTools: MCP_TOOLS,
+      mcpConfigPath: this.writeMcpConfig(rec), allowedTools: SESSION_TOOL_NAMES,
     });
     this.runs.set(rec.id, run);
     this.pending.set(rec.id, new Map());

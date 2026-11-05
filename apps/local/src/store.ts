@@ -30,3 +30,9 @@ export function registerFormats(): void {
 }
 
 export const nowIso = () => new Date().toISOString();
+
+/**
+ * 嵌在程序里的脚本和页面（托盘、测试页）用 String.raw 写。Bun 打包时会把中文改写成 \\uXXXX，
+ * 在 String.raw 里它不会被还原，所以用之前在这里还原。这些脚本本身不含 \\u 写法。
+ */
+export const embedded = (s: string) => s.replace(/\\u([0-9a-fA-F]{4})/g, (_m, h: string) => String.fromCharCode(parseInt(h, 16)));

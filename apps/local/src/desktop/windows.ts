@@ -1,3 +1,4 @@
+import { embedded } from "../store.js";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import type { Desktop, MenuAction, TrayState } from "./index.js";
@@ -7,7 +8,7 @@ import type { Desktop, MenuAction, TrayState } from "./index.js";
  * 按状态换色、右键菜单、左键单击都通。坑：.NET Framework 的 Console.In.ReadLineAsync 实际是阻塞的，
  * 会卡住界面线程导致点不动，所以用后台线程读 stdin、界面计时器取队列。
  */
-const TRAY_PS1 = String.raw`
+const TRAY_PS1 = embedded(String.raw`
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
@@ -88,7 +89,7 @@ $timer.Start()
 Out-Json @{ ready = $true }
 [System.Windows.Forms.Application]::Run()
 $ni.Dispose()
-`;
+`);
 
 export class WindowsDesktop implements Desktop {
   private child: ChildProcessWithoutNullStreams | null = null;

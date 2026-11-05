@@ -1,8 +1,9 @@
+import { embedded } from "../store.js";
 /**
  * 开发测试页（只在 --dev 下由 GET /dev 提供）：配对 → 选文件夹 → 开会话 → 看事件 → 插话 → 批权限 → 停下 → 强停。
  * 照契约直连本机 API，网页那边的实现可以照着它写。口令只存在本页的 sessionStorage。
  */
-export const DEV_PAGE = String.raw`<!doctype html>
+export const DEV_PAGE = embedded(String.raw`<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>天枢本机程序 · 测试页</title>
 <style>
@@ -33,6 +34,7 @@ let token = sessionStorage.getItem('lt') || ''; let current = ''; let lastSeq = 
 const $ = (id) => document.getElementById(id);
 const log = (s) => { const el = $('log'); el.textContent += s + '\n'; el.scrollTop = el.scrollHeight; };
 async function api(method, path, body) {
+  if (body === undefined && method !== 'GET' && method !== 'DELETE') body = {};
   const r = await fetch(base + path, { method, headers: { ...(token ? { [H]: token } : {}), ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error((j.error && j.error.message) || r.status);
@@ -100,4 +102,4 @@ async function watch(id) {
   }
 }
 refresh().catch((e) => log('连不上：' + e.message));
-</script></body></html>`;
+</script></body></html>`);

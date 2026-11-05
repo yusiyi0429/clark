@@ -1,3 +1,4 @@
+import { embedded } from "../store.js";
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import type { Desktop, MenuAction, TrayState } from "./index.js";
 
@@ -5,7 +6,7 @@ import type { Desktop, MenuAction, TrayState } from "./index.js";
  * macOS：菜单栏图标用系统自带 osascript 跑 JXA（ObjC 桥接 NSStatusBar），弹框用 display dialog / choose folder。
  * 这一份没在 Mac 上跑过（11/06 只有 Windows），12 月做 Mac 版时实测；走不通就换成 CI 在 macOS 上编的小 Swift 助手，接口不变。
  */
-const MENUBAR_JXA = String.raw`
+const MENUBAR_JXA = embedded(String.raw`
 ObjC.import('Cocoa');
 ObjC.import('Foundation');
 const app = $.NSApplication.sharedApplication;
@@ -49,7 +50,7 @@ $.NSNotificationCenter.defaultCenter.addObserverForNameObjectQueueUsingBlock($.N
 stdin.waitForDataInBackgroundAndNotify;
 out({ ready: true });
 app.run;
-`;
+`);
 
 const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 

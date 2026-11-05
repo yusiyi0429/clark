@@ -43,17 +43,21 @@ export class ModelProfiles {
 
   async upsert(id: string, body: TLocalModelProfileUpsert): Promise<TLocalModelProfile> {
     if (id === SUBSCRIPTION_ID) throw new Error("内置的订阅配置不能改");
+    const gateway = body.source === "gateway";
+    if (gateway && !body.baseUrl) throw new Error("网关模型要填地址");
+    if (!gateway && (body.baseUrl || body.apiKey)) throw new Error("订阅模型不填地址和钥匙");
     let list = this.stored().slice(1);
     if (body.isDefault) list = list.map((p) => ({ ...p, isDefault: false }));
     const prev = list.find((p) => p.id === id);
     const next: Stored = {
-      id, label: body.label, source: "gateway", agent: body.agent ?? "claude-code",
-      baseUrl: body.baseUrl.replace(/\/+$/, ""), model: body.model, smallModel: body.smallModel ?? null,
+      id, label: body.label, source: body.source, agent: body.agent ?? "claude-code",
+      baseUrl: gateway ? body.baseUrl!.replace(/\/+$/, "") : null, model: body.model, smallModel: body.smallModel ?? null,
       isDefault: body.isDefault ?? prev?.isDefault ?? false,
     };
     list = prev ? list.map((p) => (p.id === id ? next : p)) : [...list, next];
     writeJsonAtomic(this.file, list);
-    if (body.apiKey !== undefined) {
+    if (!gateway) await this.secrets.delete(keyName(id));
+    else if (body.apiKey !== undefined) {
       if (body.apiKey === "") await this.secrets.delete(keyName(id));
       else await this.secrets.set(keyName(id), body.apiKey);
     }

@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Server } from "node:http";
 import { loadConfig, VERSION, type RunnerConfig } from "./config.js";
@@ -39,13 +38,6 @@ export interface Runner {
   close(): Promise<void>;
 }
 
-/** 本机程序自己的启动命令：单文件 exe 直接是自己；开发时是 node（或 tsx）加脚本。 */
-export function selfCommand(): string[] {
-  const script = process.argv[1];
-  if (script && /\.(ts|js|mjs|cjs)$/.test(script) && existsSync(script)) return [process.execPath, ...process.execArgv, script];
-  return [process.execPath];
-}
-
 export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   registerFormats();
   const config = loadConfig({ dataDir: opts.dataDir, dev: opts.dev, port: opts.port });
@@ -66,7 +58,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   let sessionsRef: SessionManager | null = null;
   const updateTray = () => desktop.setState({ paired: tokens.count() > 0, running: sessionsRef?.activeCount() ?? 0, paused: settings.get().paused });
   const sessions = new SessionManager({
-    dataDir: config.dataDir, log, models, folders, outbox, deviceId: config.deviceId, port: config.port, selfCommand: selfCommand(),
+    dataDir: config.dataDir, log, models, folders, outbox, deviceId: config.deviceId, port: () => config.port,
     adapters: {
       "claude-code": new ClaudeCodeAdapter(opts.claudeBin ? async () => opts.claudeBin! : () => claude.bin()),
       codex: new CodexAdapter(),

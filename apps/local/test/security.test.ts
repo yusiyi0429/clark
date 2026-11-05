@@ -94,7 +94,7 @@ describe("本机 API 的安全检查", () => {
 
   it("内部回报接口：浏览器请求（带 Origin）和错密钥都拒", async () => {
     const id = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
-    expect((await raw(t.port, { method: "POST", path: `/internal/sessions/${id}/report`, headers: { origin: ORIGIN, "content-type": "application/json" }, body: "{}" })).status).toBe(403);
-    expect((await raw(t.port, { method: "POST", path: `/internal/sessions/${id}/report`, headers: { "x-tianshu-session-secret": "x", "content-type": "application/json" }, body: "{}" })).status).toBe(401);
+    expect((await raw(t.port, { method: "POST", path: `/internal/sessions/${id}/mcp`, headers: { origin: ORIGIN, "content-type": "application/json" }, body: "{}" })).status).toBe(403);
+    expect((await raw(t.port, { method: "POST", path: `/internal/sessions/${id}/mcp`, headers: { "x-tianshu-session-secret": "x", "content-type": "application/json" }, body: "{}" })).status).toBe(401);
   });
 });
