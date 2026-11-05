@@ -296,7 +296,7 @@ export type PiConversationRuntimeOptions = {
    */
   listBattlefields?: () => Promise<BattlefieldBrief[]>;
   /** 本体只读（按需工具 read_ontology，不进每轮上下文包）；没接本体时不提供。返回 null 表示本体暂时读不到。 */
-  readOntology?: (args: { part?: "company" | "strategy" | "battlefields"; battlefieldId?: string }) => Promise<Record<string, unknown> | null>;
+  readOntology?: (args: { part?: "company" | "strategy" | "battlefields" | "missions"; battlefieldId?: string }) => Promise<Record<string, unknown> | null>;
   /** 本体只读公司事实（按需工具 query_company，按人授权的域）；不提供时没有这个工具。 */
   company?: CompanyReader;
   listMissions?: (filters: { period?: string; battlefieldId?: string; capabilityId?: string; ownerId?: string }, viewer?: { personId: string; role: "ceo" | "member" }) => Promise<unknown[]>;
@@ -562,13 +562,13 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
     ...(options.readOntology ? [defineTool({
       name: "read_ontology",
       label: "读取本体",
-      description: "读取本体（tkos.world 业务世界）里登记的 Company、Strategy 与各战场的长期目标、本月目标（只读，带缓存，结果有截断）。part 只取一部分；battlefieldId 只取一个战场。",
+      description: "读取本体（tkos.world 业务世界）里登记的 Company、Strategy、各战场的长期目标、本月目标，以及 Mission、Task 清单（优先当月；标题、ref、状态、所属单元。只读，带缓存，结果有截断）。part 只取一部分；battlefieldId 只取一个战场。某个 Mission 或 Task 的正文和进展用 query_company 按名称查。",
       parameters: Type.Object({
-        part: Type.Optional(Type.Union([Type.Literal("company"), Type.Literal("strategy"), Type.Literal("battlefields")])),
+        part: Type.Optional(Type.Union([Type.Literal("company"), Type.Literal("strategy"), Type.Literal("battlefields"), Type.Literal("missions")])),
         battlefieldId: Type.Optional(Type.String()),
       }, { additionalProperties: false }),
       execute: async (_id, args) => {
-        const result = await options.readOntology!(args as { part?: "company" | "strategy" | "battlefields"; battlefieldId?: string });
+        const result = await options.readOntology!(args as { part?: "company" | "strategy" | "battlefields" | "missions"; battlefieldId?: string });
         // 本体读不到（D-48）：如实说没读到，不用本地资料补公司事实，并多记一条日志。
         if (!result) logEvent({ event: "world.ontology_unavailable", tool: "read_ontology", part: (args as { part?: string }).part ?? "all" });
         const value = result ?? { available: false, note: '这次没有读到本体：如实告诉用户没读到，不要用本地资料补公司事实，也不要说成本体里没有。' };
