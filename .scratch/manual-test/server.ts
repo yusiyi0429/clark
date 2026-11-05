@@ -257,11 +257,8 @@ async function main() {
           { battlefieldId: "product", outcome: "完成 CEO 与 DRI 双视角走查，按人核对四张任务卡与五条讨论意见。" }])]);
     }
     if (stage === "issued") {
-      const { value, headers } = await projectAs("browserceo", `/api/cards/monthly-plans/${planId}`);
-      const sign = value.cards[0].actions.find((action: { actionType: string }) => action.actionType === "monthly-plan.sign");
-      if (!sign) throw new Error("Fixture plan cannot be signed");
-      const result = await app!.app.inject({ method: "POST", url: "/api/actions/execute", headers, payload: { actionId: sign.actionId, input: {} } });
-      if (result.statusCode !== 200) throw new Error(`Fixture plan signing failed: ${result.statusCode}`);
+      // 不走签发动作：签发会立刻给三个战场自动起草任务卡，和下面王路遥的预置轮次、README 里的手动 draft 冲突。
+      await app!.sql("UPDATE monthly_plans SET status='confirmed', confirmed_at=$2, version=version+1 WHERE id=$1", [planId, appNow()]);
       luyaoTasks = (await seedWangLuyao(app!,planId,appNow(),"8742",TEST_CEO.personId)).tasks;
     }
     metadata = { ...metadata, planStage: stage, planSigned: stage === "issued" };
