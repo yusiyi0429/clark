@@ -801,8 +801,8 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         };
         const company = options.company;
         const knowledge = company ? terms.memory.map((query) => step("query_company", { query }, async () => {
-          const view = await company.read({ personId: input.viewer.personId, role: input.viewer.role }, { query }, input.signal);
-          return { query, status: view.status, entries: view.entries.map(({ title, text }) => ({ title, text })), ...(view.message ? { message: view.message } : {}) };
+          const view = await company.read({ personId: input.viewer.personId, role: input.viewer.role }, { query, locate: true }, input.signal);
+          return { query, status: view.status, entries: view.entries.map(({ ref, type, title, text }) => ({ ref, type, title, text })), ...(view.message ? { message: view.message } : {}) };
         })) : [];
         const web = terms.web.filter(() => searchCount < SEARCH_LIMIT).map((query) => {
           searchCount += 1;
@@ -846,7 +846,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         ...(options.company ? [defineTool({
           name: "query_company",
           label: "查询本体公司事实",
-          description: "只读查询本人被授权读取的本体（World）公司事实正文。新查询带 query；续页只带上次返回的 cursor。status 不是 ready/empty 时表示这次没读到本体，按返回的 message 处理。",
+          description: "只读查询本人被授权读取的本体（World）公司事实正文。新查询带 query；续页只带上次返回的 cursor。status 不是 ready/empty 时表示这次没读到本体，按返回的 message 处理。每条带 ref（本体对象 id@版本）和 type；回答里不写 ref，本人追问出处时照实给出对象名称、类型和 ref。",
           parameters: Type.Object({ query: Type.Optional(Type.String({ maxLength: 1000 })), cursor: Type.Optional(Type.String({ maxLength: 20 })) }, { additionalProperties: false }),
           execute: async (_id, args) => {
             const request = args as { query?: string; cursor?: string };
@@ -854,11 +854,11 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
             if (request.cursor && !saved) return textResult({ status: "unavailable", entries: [], message: '分页位置不属于本轮，请重新查询。' });
             const query = saved ? saved.query : request.query;
             const view = await withRetrieve(RETRIEVE_SOURCES.worldCompany, () => ({ hasQuery: Boolean(query), page: Boolean(saved) }),
-              () => options.company!.read({ personId: input.viewer.personId, role: input.viewer.role }, { query, cursor: saved?.cursor }, input.signal),
+              () => options.company!.read({ personId: input.viewer.personId, role: input.viewer.role }, { query, cursor: saved?.cursor, locate: true }, input.signal),
               (result) => ({ status: result.status, entries: result.entries.length }));
             let nextCursor: string | undefined;
             if (view.nextCursor) { nextCursor = `CP${companyCursors.size + 1}`; companyCursors.set(nextCursor, { cursor: view.nextCursor, query }); }
-            return textResult({ status: view.status, entries: view.entries.map(({ title, text }) => ({ title, text })),
+            return textResult({ status: view.status, entries: view.entries.map(({ ref, type, title, text }) => ({ ref, type, title, text })),
               ...(view.message ? { message: view.message } : {}), ...(nextCursor ? { nextCursor } : {}) });
           },
         })] : []),
