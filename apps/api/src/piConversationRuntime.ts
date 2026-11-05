@@ -846,7 +846,7 @@ export async function createPiConversationRuntime(options: PiConversationRuntime
         ...(options.company ? [defineTool({
           name: "query_company",
           label: "查询本体公司事实",
-          description: "只读查询本人被授权读取的本体（World）公司事实正文。新查询带 query；续页只带上次返回的 cursor。status 不是 ready/empty 时表示这次没读到本体，按返回的 message 处理。每条带 ref（本体对象 id@版本）和 type；回答里不写 ref，本人追问出处时照实给出对象名称、类型和 ref。",
+          description: "只读查询本人被授权读取的本体（World）公司事实正文。新查询带 query；续页只带上次返回的 cursor。status 不是 ready/empty 时表示这次没读到本体，按返回的 message 处理。每条带 ref（本体对象 id@版本）和 type；正文里不写 ref，出处标记和本人追问出处时照抄它。",
           parameters: Type.Object({ query: Type.Optional(Type.String({ maxLength: 1000 })), cursor: Type.Optional(Type.String({ maxLength: 20 })) }, { additionalProperties: false }),
           execute: async (_id, args) => {
             const request = args as { query?: string; cursor?: string };
