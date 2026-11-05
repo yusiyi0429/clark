@@ -48,7 +48,7 @@ export const SESSION_TOOLS = [
   },
 ] as const;
 
-export const SESSION_MCP_NAME = "tianshu";
+export const SESSION_MCP_NAME = "tianshu-session";
 export const SESSION_TOOL_NAMES = SESSION_TOOLS.map((t) => `mcp__${SESSION_MCP_NAME}__${t.name}`);
 
 function callTool(sessions: SessionManager, id: string, name: string, input: any): string {

@@ -90,7 +90,10 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
     expect(after("--setting-sources")).toBe("project,local");
     expect(a).toContain("--strict-mcp-config");
     expect(existsSync(after("--mcp-config"))).toBe(true);
-    expect(after("--allowedTools")).toContain("mcp__tianshu__submit_handback");
+    expect(after("--allowedTools")).toContain("mcp__tianshu-session__submit_handback");
+    expect(JSON.parse(after("--settings"))).toEqual({ skipWebFetchPreflight: true }); // 订阅也关掉 WebFetch 预检
+    expect(first.sessionSecret).toMatch(/^[0-9a-f]{48}$/); // 本会话密钥只经环境变量传
+    expect(a.join(" ")).not.toContain(first.sessionSecret);
     expect(a).not.toContain("--disallowedTools"); // 订阅模型保留自带搜索
     expect(first.envKeys.filter((k: string) => /^(ANTHROPIC_|CLAUDE_)/i.test(k) || k === "CLAUDECODE")).toEqual([]);
     expect(first.envKeys).toContain("DISABLE_AUTOUPDATER");
@@ -169,8 +172,9 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
   it("本会话 MCP（HTTP）交产出物、交回：要密钥，只收工作目录里的文件，进发件箱", async () => {
     const sessionDir = join(t.dataDir, "sessions", id);
     const secret = JSON.parse(readFileSync(join(sessionDir, "session.json"), "utf8")).mcpSecret;
-    const mcp = JSON.parse(readFileSync(join(sessionDir, "mcp.json"), "utf8")).mcpServers.tianshu;
-    expect(mcp).toEqual({ type: "http", url: `http://127.0.0.1:${t.port}/internal/sessions/${id}/mcp`, headers: { "x-tianshu-session-secret": secret } });
+    const servers = JSON.parse(readFileSync(join(sessionDir, "mcp.json"), "utf8")).mcpServers;
+    // 密钥不写进文件：Claude Code 启动时从环境变量展开 ${TIANSHU_SESSION_SECRET}；没关联云端时不挂天枢 MCP。
+    expect(servers).toEqual({ "tianshu-session": { type: "http", url: `http://127.0.0.1:${t.port}/internal/sessions/${id}/mcp`, headers: { "x-tianshu-session-secret": "${TIANSHU_SESSION_SECRET}" } } });
     writeFileSync(join(work, "方案.md"), "# 方案\n第一版");
     let n = 0;
     const rpc = async (method: string, params?: unknown) => (await raw(t.port, {
@@ -196,7 +200,9 @@ describe("模型配置与钥匙", () => {
   let t: Awaited<ReturnType<typeof startTestRunner>>;
   let token: string;
   const work = tempDir("tl-work-");
-  beforeAll(async () => { t = await startTestRunner({ pickFolder: work }); token = await pair(t.port); await api(t.port, token, "POST", "/v1/folders/pick", {}); });
+  // 云端请求一律打到桩上，测试绝不连线上。
+  const offline = (async () => { throw new Error("offline"); }) as unknown as typeof fetch;
+  beforeAll(async () => { t = await startTestRunner({ pickFolder: work, fetchImpl: offline }); token = await pair(t.port); await api(t.port, token, "POST", "/v1/folders/pick", {}); });
   afterAll(async () => { await t.cleanup(); });
 
   it("网关钥匙只写不读；拉起时地址和模型进 --settings，钥匙只进环境变量不进命令行", async () => {
@@ -216,8 +222,33 @@ describe("模型配置与钥匙", () => {
     expect(run.argv.join(" ")).not.toContain(key);
     const settings = JSON.parse(run.argv[run.argv.indexOf("--settings") + 1]);
     expect(run.argv[run.argv.indexOf("--disallowedTools") + 1]).toBe("WebSearch"); // 网关模型默认不给自带搜索
-    expect(settings).toEqual({ skipWebFetchPreflight: true, env: { ANTHROPIC_BASE_URL: "https://hub.example.com", ANTHROPIC_MODEL: "deepseek-v4.1-flash", ANTHROPIC_SMALL_FAST_MODEL: "deepseek-v4.1-flash" } });
+    expect(settings).toEqual({ skipWebFetchPreflight: true, env: { ANTHROPIC_BASE_URL: "https://hub.example.com", ANTHROPIC_MODEL: "deepseek-v4.1-flash", ANTHROPIC_DEFAULT_HAIKU_MODEL: "deepseek-v4.1-flash" } });
     await api(t.port, token, "POST", `/v1/sessions/${s.body.id}/kill`, {});
+  });
+
+  it("自带联网搜索按实测白名单默认开关，可以手动改", async () => {
+    const put = (id: string, model: string, extra = {}) => api(t.port, token, "PUT", `/v1/models/${id}`, { label: id, source: "gateway", baseUrl: "https://hub.example.com", model, ...extra });
+    expect((await put("ds", "wangsu/deepseek-v4.1-flash")).body.webSearch).toBe(true);
+    expect((await put("qw", "aliyun/qwen3.8-flash")).body.webSearch).toBe(false);
+    expect((await put("qw2", "aliyun/qwen3.8-flash", { webSearch: true })).body.webSearch).toBe(true);
+    expect((await api(t.port, token, "PUT", "/v1/models/sub-haiku", { label: "订阅 haiku", source: "subscription", model: "haiku" })).body.webSearch).toBe(true);
+  });
+
+  it("关联云端后每个会话挂天枢 MCP（/mcp/me），令牌只经环境变量传，不进文件和命令行", async () => {
+    const cloudToken = "cloud-token-0123456789abcdef";
+    expect((await api(t.port, token, "PUT", "/v1/cloud", { apiBaseUrl: "https://evil.example", token: cloudToken })).status).toBe(400);
+    expect((await api(t.port, token, "PUT", "/v1/cloud", { apiBaseUrl: ORIGIN, token: cloudToken, personName: "测试" })).status).toBe(200);
+    expect(JSON.stringify((await api(t.port, token, "GET", "/v1/cloud")).body)).not.toContain(cloudToken);
+    const s = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "card", cardId: "c-cloud" }, title: "云端 MCP", cwd: work, firstMessage: "hi" });
+    expect(s.status).toBe(200);
+    const file = readFileSync(join(t.dataDir, "sessions", s.body.id, "mcp.json"), "utf8");
+    expect(JSON.parse(file).mcpServers.tianshu).toEqual({ type: "http", url: "https://tk.tokenkingos.com/mcp/me", headers: { Authorization: "Bearer ${TIANSHU_CLOUD_TOKEN}" } });
+    expect(file).not.toContain(cloudToken);
+    const run = trace(work).at(-1);
+    expect(run.cloudToken).toBe(cloudToken);
+    expect(run.argv.join(" ")).not.toContain(cloudToken);
+    await api(t.port, token, "POST", `/v1/sessions/${s.body.id}/kill`, {});
+    await api(t.port, token, "DELETE", "/v1/cloud");
   });
 
   it("没填钥匙的网关配置不能开工；内置订阅配置不能删", async () => {

@@ -47,26 +47,28 @@ export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Rec
   // 模型不支持服务端搜索时，自带的 WebSearch 不报错还会编结果（11/06 实测 qwen3.8-flash），干脆不给这个工具。
   if (!launch.model.webSearch) args.push("--disallowedTools", "WebSearch");
 
-  const env: Record<string, string> = { DISABLE_AUTOUPDATER: "1" };
+  // MCP 配置文件里用 ${变量名} 引用的密钥和令牌，经子进程环境变量交给 Claude Code。
+  const env: Record<string, string> = { DISABLE_AUTOUPDATER: "1", ...launch.mcpEnv };
+  // WebFetch 抓取前默认连 api.anthropic.com 做域名检查，国内网络连不上就整个失败（11/06 实测）。每个会话都关掉。
+  const settings: { skipWebFetchPreflight: true; env?: Record<string, string> } = { skipWebFetchPreflight: true };
   const m = launch.model;
   if (m.source === "gateway") {
     if (!m.baseUrl || !m.model) throw new Error("网关模型缺地址或模型名");
-    const settingsEnv: Record<string, string> = {
+    settings.env = {
       ANTHROPIC_BASE_URL: m.baseUrl,
       ANTHROPIC_MODEL: m.model,
-      // WebFetch 的网页摘要用小模型；不设会去请求网关上不存在的 haiku。
-      ANTHROPIC_SMALL_FAST_MODEL: m.smallModel ?? m.model,
+      // WebFetch 摘要和后台小任务用的模型（ANTHROPIC_SMALL_FAST_MODEL 已废弃）；没配小模型就用主模型。
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: m.smallModel ?? m.model,
     };
     if (m.apiKey) {
       env.ANTHROPIC_AUTH_TOKEN = m.apiKey;
-      if (launch.includePersonalConfig) settingsEnv.ANTHROPIC_AUTH_TOKEN = m.apiKey;
+      if (launch.includePersonalConfig) settings.env.ANTHROPIC_AUTH_TOKEN = m.apiKey;
     }
     env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
-    // WebFetch 抓取前默认连 api.anthropic.com 做域名检查，国内网络连不上就整个失败（11/06 实测）。
-    args.push("--settings", JSON.stringify({ skipWebFetchPreflight: true, env: settingsEnv }));
   } else if (m.model) {
     args.push("--model", m.model);
   }
+  args.push("--settings", JSON.stringify(settings));
   return { args, env };
 }
 

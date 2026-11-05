@@ -13,6 +13,14 @@ import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
 import { SESSION_MCP_NAME, SESSION_TOOL_NAMES } from "./sessionMcp.js";
 
+/** 云端天枢 MCP 在会话里的名字：和本人在 Claude Code 里配的天枢 MCP 同名，工具名一致。 */
+const CLOUD_MCP_NAME = "tianshu";
+/**
+ * 云端天枢 MCP 里预先放行的只读工具（不弹权限请求）。联网搜索改由天枢提供（/mcp/me 上的 web_search，博查，钥匙留在服务器），
+ * 工具名等云端定了填进来。其余工具（写进展、建事项等）每次调用都要网页批准。
+ */
+const CLOUD_MCP_READONLY_TOOLS: string[] = [];
+
 interface SessionRecord {
   id: string;
   subject: TLocalSessionSubject;
@@ -46,6 +54,8 @@ export interface SessionDeps {
   deviceId: string;
   /** 本机程序实际监听的端口（本会话 MCP 回连用）。 */
   port: () => number;
+  /** 关联了云端时，天枢 MCP（/mcp/me）的地址和令牌；没关联返回 null，会话就不挂它。 */
+  cloudMcp?: () => Promise<{ url: string; token: string } | null>;
   onChange?: () => void;
 }
 
@@ -160,19 +170,29 @@ export class SessionManager {
     return this.summary(rec);
   }
 
-  /** 本会话 MCP 的配置写成文件：地址和密钥不进命令行。 */
-  private writeMcpConfig(rec: SessionRecord): string {
-    const file = join(this.dir, rec.id, "mcp.json");
-    writeJsonAtomic(file, {
-      mcpServers: {
-        [SESSION_MCP_NAME]: {
-          type: "http",
-          url: `http://127.0.0.1:${this.d.port()}/internal/sessions/${rec.id}/mcp`,
-          headers: { "x-tianshu-session-secret": rec.mcpSecret },
-        },
+  /**
+   * 本会话的 MCP 配置文件：本会话 MCP（交产出物、证据、交回）；关联了云端时再挂天枢 MCP（/mcp/me，搜索等）。
+   * 密钥和令牌不写进文件也不进命令行：文件里写 ${变量名}，Claude Code 启动时从子进程环境变量展开（11/06 实测）。
+   */
+  private async writeMcpConfig(rec: SessionRecord): Promise<{ path: string; env: Record<string, string>; allowedTools: string[] }> {
+    const env: Record<string, string> = { TIANSHU_SESSION_SECRET: rec.mcpSecret };
+    const servers: Record<string, unknown> = {
+      [SESSION_MCP_NAME]: {
+        type: "http",
+        url: `http://127.0.0.1:${this.d.port()}/internal/sessions/${rec.id}/mcp`,
+        headers: { "x-tianshu-session-secret": "${TIANSHU_SESSION_SECRET}" },
       },
-    });
-    return file;
+    };
+    const allowedTools = [...SESSION_TOOL_NAMES];
+    const cloud = await this.d.cloudMcp?.();
+    if (cloud) {
+      servers[CLOUD_MCP_NAME] = { type: "http", url: cloud.url, headers: { Authorization: "Bearer ${TIANSHU_CLOUD_TOKEN}" } };
+      env.TIANSHU_CLOUD_TOKEN = cloud.token;
+      allowedTools.push(...CLOUD_MCP_READONLY_TOOLS.map((t) => `mcp__${CLOUD_MCP_NAME}__${t}`));
+    }
+    const path = join(this.dir, rec.id, "mcp.json");
+    writeJsonAtomic(path, { mcpServers: servers });
+    return { path, env, allowedTools };
   }
 
   private async startRun(rec: SessionRecord, resume: boolean): Promise<AgentRun> {
@@ -181,9 +201,10 @@ export class SessionManager {
     const model = await this.d.models.resolve(rec.modelProfileId);
     if (!model) throw new SessionError("validation", "这个会话用的模型配置已被删除");
     mkdirSync(join(this.dir, rec.id), { recursive: true });
+    const mcp = await this.writeMcpConfig(rec);
     const run = await adapter.start({
       sessionId: rec.id, cwd: rec.cwd, resume, model, includePersonalConfig: rec.includePersonalConfig,
-      mcpConfigPath: this.writeMcpConfig(rec), allowedTools: SESSION_TOOL_NAMES,
+      mcpConfigPath: mcp.path, mcpEnv: mcp.env, allowedTools: mcp.allowedTools,
     });
     this.runs.set(rec.id, run);
     this.pending.set(rec.id, new Map());

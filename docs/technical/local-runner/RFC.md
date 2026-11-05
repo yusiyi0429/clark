@@ -44,7 +44,7 @@ claude -p --input-format stream-json --output-format stream-json …（每张卡
 | 表单跨站提交 | `POST/PUT/PATCH` 只收 `application/json`（415）；口令在自定义请求头，HTML 表单带不了、必须过预检 | 同上 |
 | 同一来源页面被注入脚本后悄悄配对 | 配对要本人在本机弹框里核对四位确认码点「是」；口令只交付一次，按来源绑定，本机只存 SHA-256 | 同上，另有托盘模式真机截图 |
 | 网页指使本机读任意目录 | 允许的文件夹只能经本机系统选择框添加；开会话的 `cwd` 必须在里面（先解析符号链接）；产出物只收本会话工作目录里的文件 | `sessions.test.ts` |
-| 内部 MCP 接口被网页调用 | `/internal/...` 带 `Origin` 一律 403（浏览器请求必带），另要本会话密钥（写在 `mcp.json` 文件里，不进命令行） | `security.test.ts` |
+| 内部 MCP 接口被网页调用 | `/internal/...` 带 `Origin` 一律 403（浏览器请求必带），另要本会话密钥（经子进程环境变量交给 Claude Code，不落盘、不进命令行） | `security.test.ts` |
 | 钥匙外泄 | 见 ADR 0029：只写不读，不进命令行，不出本机 | `sessions.test.ts`（钥匙不在 argv、不在任何响应里） |
 | 别的程序伪造登录 | 子进程环境变量白名单，不继承 `ANTHROPIC_*`、`CLAUDE_*` | `sessions.test.ts`（故意注入后检查子进程环境） |
 
@@ -67,11 +67,15 @@ claude -p --input-format stream-json --output-format stream-json --verbose
   --permission-mode manual --permission-prompts host --permission-prompt-tool stdio
   --session-id <会话 uuid>            # 续接时换成 --resume <同一个 uuid>
   --setting-sources project,local --strict-mcp-config   # 默认干净（ADR 0030）；带个人配置时去掉
-  --mcp-config <sessions/<id>/mcp.json> --allowedTools mcp__tianshu__add_artifact,…
-  [--model <订阅时选的模型>] [--settings {"skipWebFetchPreflight":true,"env":{ANTHROPIC_BASE_URL,ANTHROPIC_MODEL,ANTHROPIC_SMALL_FAST_MODEL}}]
-  [--disallowedTools WebSearch]        # 模型配置的 webSearch 关着时（网关默认关）
-env：白名单 + DISABLE_AUTOUPDATER=1 [+ ANTHROPIC_AUTH_TOKEN、CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1（网关）]
+  --mcp-config <sessions/<id>/mcp.json> --allowedTools mcp__tianshu-session__add_artifact,…
+  --settings {"skipWebFetchPreflight":true[,"env":{ANTHROPIC_BASE_URL,ANTHROPIC_MODEL,ANTHROPIC_DEFAULT_HAIKU_MODEL}（网关）]}
+  [--model <订阅时选的模型>]
+  [--disallowedTools WebSearch]        # 模型配置的 webSearch 关着时（网关默认关，实测白名单除外）
+env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET [+ TIANSHU_CLOUD_TOKEN（关联了云端）]
+     [+ ANTHROPIC_AUTH_TOKEN、CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1（网关）]
 ```
+
+`skipWebFetchPreflight` 每个会话都加：WebFetch 抓网页前会先把域名发给 api.anthropic.com 检查，国内网络连不上时 WebFetch 全部失败，这一步不看用哪家模型，`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` 也关不掉（11/06 两次独立实测）。
 
 - **启动**：`spawn`（`shell:false`、参数数组、`windowsHide`；Mac/Linux 自成进程组）。先发 `initialize` 控制请求，拿 `claude_code_version`，低于 `2.1.300` 拒绝（`agent_incompatible`）。可执行文件按默认安装位置找，不靠 PATH（附录 C）。
 - **事件映射**：`system/init` → `agent_info`；`assistant` 的 text → `assistant_text`、tool_use → `tool_call`（`TodoWrite` 另出 `plan`）；`user` 的 tool_result → `tool_result`（只留 600 字预览）；`control_request{can_use_tool}` → `permission_request`；`control_cancel_request` → `permission_resolved(deny,已撤回)`；`result` → `turn_end`（本轮用量取 `usage`，本轮花费取 `model_usage_since_last_result`，`total_cost_usd` 是会话累计）。子代理内部步骤（带 `parent_tool_use_id`）不逐条上屏。
@@ -88,16 +92,27 @@ env：白名单 + DISABLE_AUTOUPDATER=1 [+ ANTHROPIC_AUTH_TOKEN、CLAUDE_CODE_DI
 
 卡和调研专题是同一种会话，只是 `subject.kind` 不同：卡要 `cardId` 和允许文件夹里的 `cwd`；专题要 `topicId`，不给 `cwd` 时用本机程序的专用目录 `topics/<topicId>/`。
 
-## 7. 本会话 MCP
+## 7. 会话里的 MCP
 
-每个会话的 `mcp.json` 配一个 HTTP MCP `tianshu`，地址 `http://127.0.0.1:<端口>/internal/sessions/<id>/mcp`，请求头带本会话密钥。工具：`add_artifact`（工作目录里的 md/html/pdf/docx/txt，≤10 MB，同名再交是新一版）、`add_evidence`（说明/日志片段/链接/改动摘要）、`submit_handback`（逐条完成标准 met/partial/unmet + 证据 + 总结）。用 HTTP 而不是 stdio，是为了不给每个会话再起一个 150 MB 的本机程序进程。真机实测：Claude Code（haiku）经 ToolSearch 找到这几个工具，调用不弹权限，产出物和交回进了发件箱。
+每个会话的 `mcp.json`（`--strict-mcp-config` 下只有它）挂两个 HTTP MCP：
+
+| 名字 | 地址 | 什么时候挂 | 鉴权 |
+|-|-|-|-|
+| `tianshu-session`（本会话 MCP） | `http://127.0.0.1:<端口>/internal/sessions/<id>/mcp` | 总是 | 请求头 `x-tianshu-session-secret: ${TIANSHU_SESSION_SECRET}` |
+| `tianshu`（天枢 MCP） | `<apiBaseUrl>/mcp/me` | 关联了云端时 | `Authorization: Bearer ${TIANSHU_CLOUD_TOKEN}` |
+
+文件里只写 `${变量名}`，值经 Claude Code 子进程的环境变量传进去，Claude Code 启动时展开（11/06 用假 MCP 服务实测：收到的是展开后的请求头；真机实测本会话 MCP 照常连上）。所以本会话密钥和云端令牌既不落盘、也不进命令行。
+
+联网搜索由天枢 MCP 提供（`/mcp/me` 上的只读 `web_search`，博查，钥匙留在服务器、按人限流），本机不另起搜索 MCP、不存博查钥匙。它的工具名等云端定了，填进 `sessions.ts` 的 `CLOUD_MCP_READONLY_TOOLS` 预先放行；天枢 MCP 的其他工具（写进展、建事项等）每次调用都要网页批准。
+
+本会话 MCP 的工具：`add_artifact`（工作目录里的 md/html/pdf/docx/txt，≤10 MB，同名再交是新一版）、`add_evidence`（说明/日志片段/链接/改动摘要）、`submit_handback`（逐条完成标准 met/partial/unmet + 证据 + 总结）。用 HTTP 而不是 stdio，是为了不给每个会话再起一个 150 MB 的本机程序进程。真机实测：Claude Code（haiku）经 ToolSearch 找到这几个工具，调用不弹权限，产出物和交回进了发件箱。
 
 ## 8. 云端同步（本机 → 云端，单向）
 
 - `POST {apiBaseUrl}/api/local-runner/sync`，`Authorization: Bearer <个人令牌>`，体 `LocalSyncBatchRequest`（≤50 条、≤12 MB），回 `LocalSyncBatchResponse`。
 - 条目：`status`（状态变化）、`plan`（TodoWrite）、`evidence`、`artifact`（原文 base64）、`handback`、`cost`（每轮增量）。不传仓库文件、完整工具输出、环境变量、钥匙。
 - 幂等键 `<deviceId>:<sessionId>:<本会话同步序号>`。云端按键去重，重复的也回 `accepted`；`rejected` 的本机记一笔后出队；回执里没提到的、网络错、5xx 都退避重试（1 s × 2^n，最长 5 分钟）。发件箱先落盘（`outbox.json`），断网、重启都不丢。
-- 关联：网页 `PUT /v1/cloud` 交 `apiBaseUrl` 和令牌；`apiBaseUrl` 的来源必须在白名单里，免得被指到别处。**建议 api 会话**给个人令牌加一种 `local` 客户端（像已下线的 `collector`，只能调 `/api/local-runner/*`），网页配对后建一个这种令牌交给本机程序。
+- 关联：网页 `PUT /v1/cloud` 交 `apiBaseUrl` 和令牌；`apiBaseUrl` 的来源必须在白名单里，免得被指到别处。这个令牌同时用于会话里的天枢 MCP（第 7 节）。**建议 api 会话**给个人令牌加一种 `local` 客户端：能调 `/api/local-runner/*` 和 `/mcp/me`，网页配对后建一个这种令牌交给本机程序，设置页能看到、能吊销。
 
 ## 9. 模型
 
@@ -115,7 +130,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 [+ ANTHROPIC_AUTH_TOKEN、CLAUDE_CODE_DI
 
 ## 12. 以后接 Codex
 
-`AgentAdapter.start(launch) → AgentRun{ send, interrupt, respondPermission, kill, onEvent, onExit }` 已按 Codex 也能实现的粒度定；`agents/codex.ts` 现在抛 `not_implemented`。12 月接 `codex app-server`（附录 E）：`turn/steer` 插话、`turn/interrupt` 停下、`requestApproval` 批权限（不能附理由，先 steer 一句再拒）、`thread/resume` 续接；网关只能是 Responses API；花费要按 token 自己算；干净会话要用天枢专用 `CODEX_HOME`（代价是本人在天枢里再登一次 ChatGPT）。
+`AgentAdapter.start(launch) → AgentRun{ send, interrupt, respondPermission, kill, onEvent, onExit }` 已按 Codex 也能实现的粒度定；`agents/codex.ts` 现在抛 `not_implemented`。12 月接 `codex app-server`（附录 E）：`turn/steer` 插话、`turn/interrupt` 停下、`requestApproval` 批权限（不能附理由，先 steer 一句再拒）、`thread/resume` 续接；网关只能是 Responses API；花费要按 token 自己算；干净会话要用天枢专用 `CODEX_HOME`（代价是本人在天枢里再登一次 ChatGPT）。Codex 的 `web_search` 也是服务端工具、看供应商（11/06：TokenHub 上 DeepSeek 不搜、Qwen 能搜，和 Claude Code 正好相反），非白名单模型要写 `web_search = "disabled"`，否则上游一拒绝整轮就失败；挂天枢 MCP 时要写 `default_tools_approval_mode = "approve"`，否则 MCP 工具在无人值守时直接失败。
 
 ## 13. 测试与验证（11/06）
 
@@ -132,7 +147,9 @@ env：白名单 + DISABLE_AUTOUPDATER=1 [+ ANTHROPIC_AUTH_TOKEN、CLAUDE_CODE_DI
 4. **网页**：要做首次授权引导、配对、选文件夹、事件流（fetch 读 SSE）、批权限、插话、停下；测试页可以照抄。
 5. **下载源**：服务器给 `install.ps1` 要带 `charset=utf-8`（PowerShell 5.1 默认按 ISO-8859-1 解码，中文会乱）；Windows 签名、Mac 公证没做。
 6. **Claude Code 安装**：官方脚本在无终端环境下能否跑完没在干净机器上测；国内网络可能连不上 `downloads.claude.ai`。
-7. **合规**：「我们的程序替本人拉起官方 CLI、用本人订阅」算不算条款允许的用法，请法务确认；Codex app-server 登录方式文档写着不允许用于商业或托管服务。
+7. **工作目录在本人主目录下时**：即使只开 project/local 设置，`~/.claude/rules/*.md` 仍会被当成项目规则读进去（11/06 联网搜索实测发现）。给卡选工作目录时要知道这一点；要彻底干净得换 `CLAUDE_CONFIG_DIR`，代价是单独登录一次。
+8. **网关出错时重试太久**：网关回 500 时 Claude Code 默认重试约 3 分钟才失败。以后可按卡设 `CLAUDE_CODE_MAX_RETRIES` / `API_TIMEOUT_MS`（这次没做）。
+9. **合规**：「我们的程序替本人拉起官方 CLI、用本人订阅」算不算条款允许的用法，请法务确认；Codex app-server 登录方式文档写着不允许用于商业或托管服务。
 
 ---
 
@@ -151,6 +168,8 @@ env：白名单 + DISABLE_AUTOUPDATER=1 [+ ANTHROPIC_AUTH_TOKEN、CLAUDE_CODE_DI
 结论：能全程不碰终端。证据（隔离的 `CLAUDE_CONFIG_DIR`，没动本人登录）：`claude auth status --json` 纯本机读、不耗模型、不写文件，已登录退出码 0、未登录 1，但只说明有凭据（假 key 也显示已登录，所以必须清环境变量）；`claude auth login` 在 127.0.0.1 随机端口收回调，浏览器点授权即可，自动跳回失败时把浏览器显示的代码写进它的 stdin 也行（实测被读取）；官方安装 `irm https://claude.ai/install.ps1 | iex`，不要管理员、不再要求 Git for Windows，不支持自定义目录。原生安装默认后台自动更新，我们在子进程里设 `DISABLE_AUTOUPDATER=1`。拿不准：真实完成一次登录后的输出；Mac；无终端环境下跑官方安装脚本。
 
 ### D. 第三方模型下的 WebSearch / WebFetch
+
+（这一项后来改由专门的 agent 做了更全的实测，以它为准：主会话目录下 `.scratch/next-phase/实测_第三方模型下的联网搜索_2026-11-06.md`。两次结论一致；本机程序按它的要求配置：每个会话 `skipWebFetchPreflight`、网关用 `ANTHROPIC_DEFAULT_HAIKU_MODEL` 指便宜模型、自带搜索按白名单开、搜索改由天枢 MCP 提供。下面是本会话那次实测的摘要。）
 
 结论：WebFetch 能用，WebSearch 看模型。证据（TokenHub 真钥匙，只读不打印，真实调用 5 次）：WebFetch 在本机抓网页，再用 `ANTHROPIC_SMALL_FAST_MODEL` 的模型摘要；抓之前会连 `api.anthropic.com` 做域名检查，`skipWebFetchPreflight: true` 后不再连。WebSearch 会给网关发 Anthropic 服务端工具 `web_search_20250305`，由网关背后的厂商执行：`wangsu/deepseek-v4.1-flash` 和 `wangsu/claude-opus-5-5` 真搜到了，`aliyun/qwen3.8-flash` 没搜（`searchCount` 0）还编了结果和来源，不报错。要创峰确认：各模型对服务端搜索工具的支持，对不支持的直接报错。
 

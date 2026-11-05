@@ -12,6 +12,8 @@ export interface AgentLaunch {
   includePersonalConfig: boolean;
   /** 本会话要带的 MCP 配置文件路径（本机程序写好的 JSON），以及要预先放行的工具名。 */
   mcpConfigPath: string | null;
+  /** MCP 配置文件里 ${变量名} 引用的值（本会话密钥、云端令牌），只经子进程环境变量传。 */
+  mcpEnv: Record<string, string>;
   allowedTools: string[];
 }
 

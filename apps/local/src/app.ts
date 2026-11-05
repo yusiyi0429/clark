@@ -59,6 +59,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   const updateTray = () => desktop.setState({ paired: tokens.count() > 0, running: sessionsRef?.activeCount() ?? 0, paused: settings.get().paused });
   const sessions = new SessionManager({
     dataDir: config.dataDir, log, models, folders, outbox, deviceId: config.deviceId, port: () => config.port,
+    cloudMcp: async () => { const t = await cloud.target(); return t ? { url: new URL("/mcp/me", t.apiBaseUrl).toString(), token: t.token } : null; },
     adapters: {
       "claude-code": new ClaudeCodeAdapter(opts.claudeBin ? async () => opts.claudeBin! : () => claude.bin()),
       codex: new CodexAdapter(),

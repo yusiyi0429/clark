@@ -26,6 +26,13 @@ const builtIn: Stored = {
 
 const keyName = (id: string) => `model:${id}`;
 
+/**
+ * 经网关实测会真的执行 Claude Code 自带联网搜索的模型（11/06，TokenHub 的 Anthropic 入口）。不在这里的网关模型默认关掉自带搜索：
+ * 不支持的会静默不搜、凭记忆编结果。本人实测过别的模型能搜，可以在模型配置里手动打开。
+ */
+export const VERIFIED_SEARCH_MODELS = ["wangsu/claude-opus-5-5", "wangsu/deepseek-v4.1-flash"];
+const searchDefault = (source: string, model: string | null) => source !== "gateway" || VERIFIED_SEARCH_MODELS.includes(model ?? "");
+
 export class ModelProfiles {
   private readonly file: string;
   constructor(dataDir: string, private readonly secrets: SecretStore) { this.file = join(dataDir, "models.json"); }
@@ -38,7 +45,7 @@ export class ModelProfiles {
 
   async list(): Promise<TLocalModelProfile[]> {
     const out: TLocalModelProfile[] = [];
-    for (const p of this.stored()) out.push({ ...p, webSearch: p.webSearch ?? p.source !== "gateway", hasKey: p.source === "gateway" ? Boolean(await this.secrets.get(keyName(p.id))) : false });
+    for (const p of this.stored()) out.push({ ...p, webSearch: p.webSearch ?? searchDefault(p.source, p.model), hasKey: p.source === "gateway" ? Boolean(await this.secrets.get(keyName(p.id))) : false });
     return out;
   }
 
@@ -53,7 +60,7 @@ export class ModelProfiles {
     const next: Stored = {
       id, label: body.label, source: body.source, agent: body.agent ?? "claude-code",
       baseUrl: gateway ? body.baseUrl!.replace(/\/+$/, "") : null, model: body.model, smallModel: body.smallModel ?? null,
-      webSearch: body.webSearch ?? !gateway,
+      webSearch: body.webSearch ?? searchDefault(body.source, body.model),
       isDefault: body.isDefault ?? prev?.isDefault ?? false,
     };
     list = prev ? list.map((p) => (p.id === id ? next : p)) : [...list, next];
@@ -81,7 +88,7 @@ export class ModelProfiles {
     if (!p) return null;
     return {
       profileId: p.id, label: p.label, source: p.source,
-      baseUrl: p.baseUrl, model: p.model, smallModel: p.smallModel, webSearch: p.webSearch ?? p.source !== "gateway",
+      baseUrl: p.baseUrl, model: p.model, smallModel: p.smallModel, webSearch: p.webSearch ?? searchDefault(p.source, p.model),
       apiKey: p.source === "gateway" ? await this.secrets.get(keyName(p.id)) : null,
     };
   }

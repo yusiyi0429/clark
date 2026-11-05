@@ -142,7 +142,11 @@ export const LocalAgentLoginCodeRequest = Type.Object({ code: Type.String({ minL
 
 // ───────────────────────── 云端关联 ─────────────────────────
 
-/** PUT /v1/cloud：网页把天枢 api 地址和一个本机专用的个人令牌交给本机程序，用于单向同步。apiBaseUrl 的来源必须在白名单里。 */
+/**
+ * PUT /v1/cloud：网页把天枢 api 地址和一个本机专用的个人令牌交给本机程序。apiBaseUrl 的来源必须在白名单里。
+ * 这个令牌两处用：单向同步（POST /api/local-runner/sync），以及每个会话挂的天枢 MCP（/mcp/me，联网搜索等）。
+ * 令牌只存本机凭据库，挂 MCP 时经子进程环境变量传，不写进文件、不进命令行。
+ */
 export const LocalCloudLinkRequest = Type.Object({
   apiBaseUrl: Type.String({ minLength: 8, maxLength: 200 }),
   token: Type.String({ minLength: 16, maxLength: 400 }),
@@ -163,11 +167,12 @@ export const LocalModelProfile = Type.Object({
   agent: LocalAgentKind,
   baseUrl: Nullable(Type.String()),
   model: Nullable(Type.String()),
-  /** Claude Code 后台小任务（标题、WebFetch 摘要等）用的模型；不填则同 model。 */
+  /** 网关时 Claude Code 后台小任务（WebFetch 摘要等）用的便宜模型，经 ANTHROPIC_DEFAULT_HAIKU_MODEL 传；不填则同 model。 */
   smallModel: Nullable(Type.String()),
   /**
    * 是否允许用 Claude Code 自带的联网搜索。它是 Anthropic 服务端工具，要网关背后的模型真的支持；
-   * 不支持的模型（如 11/06 实测的 qwen3.8-flash）不报错还会编结果，所以网关模型默认关，实测能搜再打开。
+   * 不支持的模型（如 11/06 实测的 qwen3.8-flash）不报错还会编结果，所以网关模型默认关（实测能搜的 Opus、DeepSeek v4.1 flash 默认开），
+   * 关着时拉起加 --disallowedTools WebSearch。联网搜索主要靠天枢 MCP 提供的搜索工具。
    */
   webSearch: Type.Boolean(),
   hasKey: Type.Boolean(),
@@ -186,7 +191,7 @@ export const LocalModelProfileUpsert = Type.Object({
   baseUrl: Type.Optional(Type.String({ minLength: 8, maxLength: 300, pattern: "^https?://" })),
   model: Type.String({ minLength: 1, maxLength: 120 }),
   smallModel: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
-  /** 不传：订阅为 true，网关为 false。 */
+  /** 不传：订阅为 true；网关模型按实测白名单。 */
   webSearch: Type.Optional(Type.Boolean()),
   apiKey: Type.Optional(Type.String({ maxLength: 400 })),
   isDefault: Type.Optional(Type.Boolean()),
