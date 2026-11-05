@@ -1,4 +1,4 @@
-/* 选伙伴的样子（components/coagent/SkinPicker）：四格两列，每格一块晨雾蓝的台子上站着一颗活的胶囊，不写名字和介绍。 */
+/* 选伙伴的样子（components/coagent/SkinPicker）：两列，左边三颗胶囊、右边 Miles 和 C妹（11/04 用户定）；每格一块晨雾蓝的台子上站着一颗活的胶囊，不写名字和介绍。 */
 
 .picker { display: grid; gap: 14px; }
 
@@ -23,7 +23,8 @@
 
 .pose[data-selected] { background: #fff; color: #1f2a3d; box-shadow: 0 1px 3px rgb(31 53 86 / 12%); }
 
-.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+/* 按列排：清单前三种（横放胶囊）进左列，后两种（探出半身的形象）进右列。 */
+.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, auto); grid-auto-flow: column; gap: 10px; }
 
 .option {
   position: relative;
@@ -43,7 +44,7 @@
 .poses input, .options input { position: absolute; opacity: 0; pointer-events: none; }
 .option:has(input:focus-visible), .pose:has(input:focus-visible) { outline: 2px solid #3a6cf0; outline-offset: 2px; }
 
-/* 台子：参考图那种上浅下更浅的晨雾蓝；上面留出熊猫耳朵、Miles 探出来的那一截。格子窄时胶囊跟着变窄。 */
+/* 台子：参考图那种上浅下更浅的晨雾蓝；上面留出熊猫耳朵、Miles 和 C妹 探出来的那一截。格子窄时胶囊跟着变窄。 */
 .stage {
   display: grid;
   place-items: center;

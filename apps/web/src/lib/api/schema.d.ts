@@ -4987,7 +4987,7 @@ export interface components {
             admin?: boolean;
             buddy?: {
                 name: string;
-                form: "classic" | "alive" | "panda" | "miles";
+                form: "classic" | "alive" | "panda" | "miles" | "cmei";
                 personality?: "steady" | "cheerful" | "calm" | "critical";
             } | null;
         };
@@ -9344,10 +9344,10 @@ export interface components {
         };
         Buddy: {
             name: string;
-            form: "classic" | "alive" | "panda" | "miles";
+            form: "classic" | "alive" | "panda" | "miles" | "cmei";
             personality?: "steady" | "cheerful" | "calm" | "critical";
         };
-        BuddyForm: "classic" | "alive" | "panda" | "miles";
+        BuddyForm: "classic" | "alive" | "panda" | "miles" | "cmei";
         BuddyPersonality: "steady" | "cheerful" | "calm" | "critical";
         RailBackground: {
             choice: "mist" | "dusk" | "pine" | "night" | "sand" | "custom";

@@ -13,22 +13,27 @@
  * - 熊猫：白色的身子、黑眼圈、两只小耳朵（耳朵探出胶囊上沿，身子和页头胶囊照旧齐平）；底下一圈蓝光，
  *   不会被当成旁边那颗浅色的页头胶囊。
  * - Miles：一颗写着伙伴名字的小胶囊，男孩从上沿探出半身（MilesCapsule），整块 70×66，名字长时胶囊跟着变宽，最宽 96。
+ * - C妹：和 Miles 一样的一块，换成女生（一比一取自有授权的原图）。
  */
 
 import { useId, type CSSProperties } from "react";
 import { SiriWave } from "@/components/onboarding/SiriWave";
 import { MilesCapsule } from "./MilesCapsule";
+import type { MilesCapsuleSize } from "./milesRig";
 import { useListeningLevel } from "./presence";
-import type { CoAgentSkin } from "./skin";
+import { isFigureSkin, type CoAgentSkin } from "./skin";
 import s from "@/styles/coagent-capsule.module.css";
 
-export type CapsulePose = "listening" | "speaking";
+/** 待机（idle）只有本人的伙伴用：对话层页头、右下角入口没在听也没在说的时候。 */
+export type CapsulePose = "idle" | "listening" | "speaking";
 
-export function PresenceCapsule({ skin, pose, level: preview, leaving = false, name = "" }: {
+export function PresenceCapsule({ skin, pose, level: preview, leaving = false, name = "", milesSize }: {
   skin: CoAgentSkin;
   pose: CapsulePose;
-  /** 伙伴名字：只有 Miles 写在胶囊上；没起名字时写「Miles」。 */
+  /** 伙伴名字：只有 Miles、C妹 写在胶囊上；没起名字时写形象自己的名字。 */
   name?: string;
+  /** 只有 Miles、C妹 用：胶囊哪一档（对话层页头那颗大一号，名字和对话正文一样大）。 */
+  milesSize?: MilesCapsuleSize;
   /** 0–1：只有选形象时的预览传（模拟的声音）；不传就读会议录音那条麦克风流。 */
   level?: number;
   /** 正在凝回去：播完退场就会被移走。 */
@@ -38,7 +43,7 @@ export function PresenceCapsule({ skin, pose, level: preview, leaving = false, n
   const level = preview ?? live;
   const patchId = useId();
   const status = preview === undefined ? <span className={s.sr} role="status">{`Co-Agent ${pose === "listening" ? "在录这场会" : "已在群内说明背景"}`}</span> : null;
-  if (skin === "miles") return <MilesCapsule name={name} pose={pose} level={level} leaving={leaving}>{status}</MilesCapsule>;
+  if (isFigureSkin(skin)) return <MilesCapsule skin={skin} name={name} pose={pose} level={level} leaving={leaving} size={milesSize}>{status}</MilesCapsule>;
   return (
     <div className={s.capsule} data-skin={skin} data-pose={pose} data-leaving={leaving || undefined}>
       {skin === "panda" ? <><span className={s.ear} data-side="left" aria-hidden /><span className={s.ear} data-side="right" aria-hidden /></> : null}

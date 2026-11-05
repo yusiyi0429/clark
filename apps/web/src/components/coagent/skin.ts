@@ -2,13 +2,13 @@
 
 /**
  * 伙伴的样子（用户 2026-09-28 定，10-29 改叫「伙伴形象」）：默认是那道 Siri 色光；另外两种给想让它「像个同事」的人选 ——
- * 生命感（同一颗蓝色玻璃胶囊，光换成一双眼睛）和熊猫。10-31 加了 Miles：一个从小胶囊上沿探出半身的 2D 男孩。
- * 只换样子，出现的时机和状态不变。
+ * 生命感（同一颗蓝色玻璃胶囊，光换成一双眼睛）和熊猫。10-31 加了 Miles：一个从小胶囊上沿探出半身的 2D 男孩；
+ * 11-04 加了 C妹：同样从小胶囊上沿探出半身，一比一取自有授权的原图。只换样子，出现的时机和状态不变。
  *
  * 选的样子跟着伙伴存在服务端（components/buddy/useBuddy）。选伙伴以前只记在这台电脑的浏览器里，第一次选伙伴时默认停在那一种上。
  */
 
-export type CoAgentSkin = "classic" | "alive" | "panda" | "miles";
+export type CoAgentSkin = "classic" | "alive" | "panda" | "miles" | "cmei";
 
 /** label 只给读屏用：选的时候只看胶囊，不写名字。 */
 export const COAGENT_SKINS: { id: CoAgentSkin; label: string }[] = [
@@ -16,7 +16,15 @@ export const COAGENT_SKINS: { id: CoAgentSkin; label: string }[] = [
   { id: "alive", label: "生命感" },
   { id: "panda", label: "熊猫" },
   { id: "miles", label: "Miles" },
+  { id: "cmei", label: "C妹" },
 ];
+
+/** 从写着伙伴名字的小胶囊上沿探出半身的形象（MilesCapsule）：胶囊上写着名字，入口写「对话<名字>」。 */
+export type FigureSkin = Extract<CoAgentSkin, "miles" | "cmei">;
+
+export function isFigureSkin(skin: CoAgentSkin | null | undefined): skin is FigureSkin {
+  return skin === "miles" || skin === "cmei";
+}
 
 export function readStoredSkin(): CoAgentSkin {
   try {

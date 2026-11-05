@@ -48,7 +48,7 @@ describe("选择你的伙伴", () => {
     expect(clampBuddyName("Tom 小明")).toBe("Tom 小明");
   });
 
-  it("上面是名字，中间是四种形象（三颗胶囊和 Miles），下面是四种性格，选中的带标记", () => {
+  it("上面是名字，中间是五种形象（三颗胶囊、Miles 和 C妹），下面是四种性格，选中的带标记", () => {
     const html = renderToStaticMarkup(<BuddyPicker value={{ name: "团团", form: "alive", personality: "cheerful" }} onChange={() => undefined} />);
     expect(html).toContain("性格");
     expect(html.match(/name="buddy-personality"/g)).toHaveLength(4);
@@ -57,8 +57,8 @@ describe("选择你的伙伴", () => {
     expect(html).toContain("名字");
     expect(html).toMatch(/<input[^>]*value="团团"/);
     expect(html).not.toContain("maxLength");
-    expect(html.match(/name="coagent-skin"/g)).toHaveLength(4);
-    expect(html.match(/data-capsule="(classic|alive|panda|miles)"/g)).toHaveLength(4);
+    expect(html.match(/name="coagent-skin"/g)).toHaveLength(5);
+    expect(html.match(/data-capsule="(classic|alive|panda|miles|cmei)"/g)).toHaveLength(5);
     expect(html).toMatch(/data-selected="true"[^>]*><input[^>]*value="alive"/);
     expect(html).not.toMatch(/data-selected="true"[^>]*><input[^>]*value="classic"/);
   });
@@ -68,7 +68,7 @@ describe("选择你的伙伴", () => {
     expect(html).toMatch(/data-selected="true"[^>]*><input[^>]*value="miles"/);
     expect(html).toMatch(/<input[^>]*aria-label="Miles"[^>]*value="miles"/);
     expect(html).not.toContain("<strong>");
-    expect(html.match(/data-name="团团"/g)).toHaveLength(4);
+    expect(html.match(/data-name="团团"/g)).toHaveLength(5);
   });
 
   it("保存时去掉首尾空白，存好后告诉同页的其他读者；存不上就报错", async () => {
@@ -83,10 +83,10 @@ describe("选择你的伙伴", () => {
     expect(changed).toHaveBeenCalledTimes(1);
   });
 
-  it("设置里的伙伴形象：名字、四种形象和保存；还没读到伙伴时不能保存", () => {
+  it("设置里的伙伴形象：名字、五种形象和保存；还没读到伙伴时不能保存", () => {
     const html = renderToStaticMarkup(<BuddySettings onDone={() => undefined} />);
     expect(html).toContain("名字");
-    expect(html.match(/name="coagent-skin"/g)).toHaveLength(4);
+    expect(html.match(/name="coagent-skin"/g)).toHaveLength(5);
     expect(html).toMatch(/<button[^>]*type="submit"[^>]*disabled=""[^>]*>[^<]*保存/);
   });
 });

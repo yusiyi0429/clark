@@ -28,6 +28,7 @@ import { MissionGroupTranscript } from "./MissionGroupTranscript";
 import { MissionGroupComposer } from "./MissionGroupComposer";
 import { PresenceCapsule } from "@/components/coagent/PresenceCapsule";
 import { useListening } from "@/components/coagent/presence";
+import { isFigureSkin } from "@/components/coagent/skin";
 import { useBuddy, type Buddy } from "@/components/buddy/useBuddy";
 import type { DetailGroup } from "./missionCardGroup";
 import { MESSAGE_REPLY, type QuotePrefill, type QuoteSource, type TextQuote } from "./quotes";
@@ -396,7 +397,7 @@ function RailConversation({
         composerHeight={composerHeight}
         coagent={capsule}
         coagentBrief={!listening}
-        coagentNamed={buddy?.form === "miles"}
+        coagentNamed={isFigureSkin(buddy?.form)}
         deskWidth={deskOpen ? deskColumn : null}
         onDesk={canDesk ? setDeskOpen : undefined}
         headerAction={channel === "group" && threadGroup && !thread.left ? <ThreadMembersMenu objectType={otherThread?.objectType ?? "task"} objectId={taskGroup?.taskId ?? otherThread!.objectId} viewerId={threadGroup.viewerId} members={(thread.view?.members ?? threadGroup.members.map((member) => ({ ...member, title: null })))} onChanged={() => void thread.refresh()} />

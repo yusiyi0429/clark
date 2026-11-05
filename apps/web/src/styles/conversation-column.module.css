@@ -150,10 +150,10 @@
 }
 
 /*
- * 伙伴形象选了 Miles：整块 66 高，宽跟着名字（70–96，components/coagent/MilesCapsule），右列里按这个大小让位。
+ * 伙伴形象选了 Miles 或 C妹：整块 66 高，宽跟着名字（70–96，components/coagent/MilesCapsule），右列里按这个大小让位。
  * 实际宽度由 ConversationColumn 量出来写在宿主上（--coagent-jelly-width）。只改右列里的，会议页计时那颗不跟着变。
  */
-.root:has(.jelly [data-skin='miles']) { --coagent-capsule-width: var(--coagent-jelly-width, 70px); --coagent-capsule-height: 66px; }
+.root:has(.jelly :is([data-skin='miles'], [data-skin='cmei'])) { --coagent-capsule-width: var(--coagent-jelly-width, 70px); --coagent-capsule-height: 66px; }
 
 /* 收起右列仍在录音：整排页头（含计时胶囊）止于 Co-Agent 左沿之前 12px，正文继续铺满。 */
 @media (min-width: 960px) {
@@ -161,7 +161,7 @@
   .host:has(.root[data-mode='strip'][data-coagent='lasting']) :global(.ts-detail-header) {
     margin-right: calc(var(--conversation-open-width) / 2 + var(--coagent-capsule-width) / 2 + 12px - var(--reading-scrollbar, 0px));
   }
-  .host:has(.root[data-mode='strip'][data-coagent='lasting'] .jelly [data-skin='miles']) :global(.ts-detail-header) {
+  .host:has(.root[data-mode='strip'][data-coagent='lasting'] .jelly :is([data-skin='miles'], [data-skin='cmei'])) :global(.ts-detail-header) {
     margin-right: calc(var(--conversation-open-width) / 2 + var(--coagent-jelly-width, 70px) / 2 + 12px - var(--reading-scrollbar, 0px));
   }
 }

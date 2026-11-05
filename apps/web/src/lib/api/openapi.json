@@ -22533,6 +22533,10 @@
                       {
                         "const": "miles",
                         "type": "string"
+                      },
+                      {
+                        "const": "cmei",
+                        "type": "string"
                       }
                     ]
                   },
@@ -50827,6 +50831,10 @@
               {
                 "const": "miles",
                 "type": "string"
+              },
+              {
+                "const": "cmei",
+                "type": "string"
               }
             ]
           },
@@ -50868,6 +50876,10 @@
           },
           {
             "const": "miles",
+            "type": "string"
+          },
+          {
+            "const": "cmei",
             "type": "string"
           }
         ]

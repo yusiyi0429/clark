@@ -123,6 +123,9 @@ describe("全局输入条（clark workspace 614–640）", () => {
     const miles = dock({ buddy: { name: "miles", form: "miles" } });
     expect(miles).toMatch(/data-place="entry" data-skin="miles"/);
     expect(miles).toContain("对话miles");
+    const cmei = dock({ buddy: { name: "小C", form: "cmei" } });
+    expect(cmei).toMatch(/data-place="entry" data-skin="cmei"/);
+    expect(cmei).toContain(">对话小C<");
   });
 
   it("键盘面：首页占位「问点什么，或者说要约的会…」，二级页「继续讨论…」，批注后改为围绕批注", () => {

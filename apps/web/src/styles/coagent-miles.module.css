@@ -1,13 +1,12 @@
 /*
- * 伙伴形象 Miles（components/coagent/MilesCapsule、milesRig）：整块 66 高，上面是探出胶囊的半身，下面是写着名字的小胶囊；
- * 宽跟着名字（70–96，MilesCapsule 写在元素上）。
+ * 伙伴形象 Miles、C妹（components/coagent/MilesCapsule、milesRig）：上面是探出胶囊的半身，下面是写着名字的小胶囊（整块 66 高，
+ * 对话层页头那颗大一号、72 高）；宽跟着名字，高和宽都由 MilesCapsule 写在元素上。
  * 出现、退场和其他形象一样（capsuleIn / capsuleOut，coagent-capsule.module.css），Miles 自己升上来、沉回去由 milesRig 播。
- * 这里只放跟着姿势切换的几档：在听时头侧过来一点、目光朝向说话的人；在说时胶囊染一层淡淡的蓝紫。
+ * 这里只放跟着姿势切换的几档：待机时头摆正；在听时头侧过来一点、目光朝向说话的人；在说时胶囊染一层淡淡的蓝紫。
  */
 
 .miles {
   position: relative;
-  height: 66px;
   animation: capsuleIn 460ms cubic-bezier(0.32, 0.72, 0, 1) both;
   animation-delay: var(--coagent-enter-delay, 0ms);
 }

@@ -13,7 +13,7 @@
  *
  * Co-Agent 胶囊（components/coagent）浮在右列顶部居中，和左侧页头胶囊同一条上沿；中线按右列展开时的宽度算，
  * 收起右列时它原地不动。两种出现法：`lasting`（会议在录音）一直在，右列页头挪到它下面；`brief`（新人第一次进群、
- * Co-Agent 讲来龙去脉）只出现几秒，这几秒里暂时盖住右列页头，不挪版面。胶囊上已经写着伙伴名字时（Miles），
+ * Co-Agent 讲来龙去脉）只出现几秒，这几秒里暂时盖住右列页头，不挪版面。胶囊上已经写着伙伴名字时（Miles、C妹），
  * 伙伴频道的页头不再画 logo 和名字。
  */
 
@@ -114,7 +114,7 @@ export function ConversationColumn({
   coagent?: ReactNode;
   /** 胶囊只出现几秒：不挪右列页头，暂时盖住它。 */
   coagentBrief?: boolean;
-  /** 胶囊上写着伙伴名字（Miles）：伙伴频道的页头不再写一遍。 */
+  /** 胶囊上写着伙伴名字（Miles、C妹）：伙伴频道的页头不再写一遍。 */
   coagentNamed?: boolean;
   /**
    * 深度讨论（并排）：给了就是展开态，值是对话列的宽度（宿主按断点算好：600 / 680）。右列原地加宽，左侧材料让位，
@@ -166,7 +166,7 @@ export function ConversationColumn({
     return () => { observer.disconnect(); host.style.removeProperty("--reading-scrollbar"); };
   }, [hasCoagent]);
 
-  // 胶囊实际多宽（Miles 跟着名字变宽）：收起右列时页头按它让位。
+  // 胶囊实际多宽（Miles、C妹 跟着名字变宽）：收起右列时页头按它让位。
   useLayoutEffect(() => {
     const host = root.current?.closest<HTMLElement>(`.${c.host}`);
     const capsule = jelly.current;

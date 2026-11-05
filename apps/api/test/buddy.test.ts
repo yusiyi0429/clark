@@ -46,6 +46,7 @@ describe("本人的伙伴", () => {
       // 不带性格（旧页面）时沿用原来的。
       expect((await save({ name: "Miles", form: "miles" })).json()).toEqual({ name: "Miles", form: "miles", personality: "critical" });
       expect((await own()).json()).toEqual({ name: "Miles", form: "miles", personality: "critical" });
+      expect((await save({ name: "C妹", form: "cmei" })).json()).toEqual({ name: "C妹", form: "cmei", personality: "critical" });
       const other = await t.app.inject({ method: "GET", url: "/api/me/buddy", headers: { cookie: await t.loginCookie() } });
       expect(other.json()).toBeNull();
     } finally { await t.close(); }
