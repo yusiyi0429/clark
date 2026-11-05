@@ -165,6 +165,11 @@ export const LocalModelProfile = Type.Object({
   model: Nullable(Type.String()),
   /** Claude Code 后台小任务（标题、WebFetch 摘要等）用的模型；不填则同 model。 */
   smallModel: Nullable(Type.String()),
+  /**
+   * 是否允许用 Claude Code 自带的联网搜索。它是 Anthropic 服务端工具，要网关背后的模型真的支持；
+   * 不支持的模型（如 11/06 实测的 qwen3.8-flash）不报错还会编结果，所以网关模型默认关，实测能搜再打开。
+   */
+  webSearch: Type.Boolean(),
   hasKey: Type.Boolean(),
   isDefault: Type.Boolean(),
 }, strict);
@@ -181,6 +186,8 @@ export const LocalModelProfileUpsert = Type.Object({
   baseUrl: Type.Optional(Type.String({ minLength: 8, maxLength: 300, pattern: "^https?://" })),
   model: Type.String({ minLength: 1, maxLength: 120 }),
   smallModel: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+  /** 不传：订阅为 true，网关为 false。 */
+  webSearch: Type.Optional(Type.Boolean()),
   apiKey: Type.Optional(Type.String({ maxLength: 400 })),
   isDefault: Type.Optional(Type.Boolean()),
 }, strict);

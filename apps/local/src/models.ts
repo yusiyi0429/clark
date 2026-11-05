@@ -13,6 +13,7 @@ export interface ResolvedModel {
   baseUrl: string | null;
   model: string | null;
   smallModel: string | null;
+  webSearch: boolean;
   apiKey: string | null;
 }
 
@@ -20,7 +21,7 @@ type Stored = Omit<TLocalModelProfile, "hasKey">;
 
 const builtIn: Stored = {
   id: SUBSCRIPTION_ID, label: "我的 Claude 订阅", source: "subscription", agent: "claude-code",
-  baseUrl: null, model: null, smallModel: null, isDefault: true,
+  baseUrl: null, model: null, smallModel: null, webSearch: true, isDefault: true,
 };
 
 const keyName = (id: string) => `model:${id}`;
@@ -37,7 +38,7 @@ export class ModelProfiles {
 
   async list(): Promise<TLocalModelProfile[]> {
     const out: TLocalModelProfile[] = [];
-    for (const p of this.stored()) out.push({ ...p, hasKey: p.source === "gateway" ? Boolean(await this.secrets.get(keyName(p.id))) : false });
+    for (const p of this.stored()) out.push({ ...p, webSearch: p.webSearch ?? p.source !== "gateway", hasKey: p.source === "gateway" ? Boolean(await this.secrets.get(keyName(p.id))) : false });
     return out;
   }
 
@@ -52,6 +53,7 @@ export class ModelProfiles {
     const next: Stored = {
       id, label: body.label, source: body.source, agent: body.agent ?? "claude-code",
       baseUrl: gateway ? body.baseUrl!.replace(/\/+$/, "") : null, model: body.model, smallModel: body.smallModel ?? null,
+      webSearch: body.webSearch ?? !gateway,
       isDefault: body.isDefault ?? prev?.isDefault ?? false,
     };
     list = prev ? list.map((p) => (p.id === id ? next : p)) : [...list, next];
@@ -79,7 +81,7 @@ export class ModelProfiles {
     if (!p) return null;
     return {
       profileId: p.id, label: p.label, source: p.source,
-      baseUrl: p.baseUrl, model: p.model, smallModel: p.smallModel,
+      baseUrl: p.baseUrl, model: p.model, smallModel: p.smallModel, webSearch: p.webSearch ?? p.source !== "gateway",
       apiKey: p.source === "gateway" ? await this.secrets.get(keyName(p.id)) : null,
     };
   }

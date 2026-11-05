@@ -44,6 +44,8 @@ export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Rec
   if (!launch.includePersonalConfig) args.push("--setting-sources", "project,local", "--strict-mcp-config");
   if (launch.mcpConfigPath) args.push("--mcp-config", launch.mcpConfigPath);
   if (launch.allowedTools.length) args.push("--allowedTools", launch.allowedTools.join(","));
+  // 模型不支持服务端搜索时，自带的 WebSearch 不报错还会编结果（11/06 实测 qwen3.8-flash），干脆不给这个工具。
+  if (!launch.model.webSearch) args.push("--disallowedTools", "WebSearch");
 
   const env: Record<string, string> = { DISABLE_AUTOUPDATER: "1" };
   const m = launch.model;

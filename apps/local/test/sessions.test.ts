@@ -91,6 +91,7 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
     expect(a).toContain("--strict-mcp-config");
     expect(existsSync(after("--mcp-config"))).toBe(true);
     expect(after("--allowedTools")).toContain("mcp__tianshu__submit_handback");
+    expect(a).not.toContain("--disallowedTools"); // 订阅模型保留自带搜索
     expect(first.envKeys.filter((k: string) => /^(ANTHROPIC_|CLAUDE_)/i.test(k) || k === "CLAUDECODE")).toEqual([]);
     expect(first.envKeys).toContain("DISABLE_AUTOUPDATER");
 
@@ -205,7 +206,7 @@ describe("模型配置与钥匙", () => {
     expect(JSON.stringify(put.body)).not.toContain(key);
     const list = await api(t.port, token, "GET", "/v1/models");
     expect(JSON.stringify(list.body)).not.toContain(key);
-    expect(list.body.profiles.find((p: any) => p.id === "tokenhub-ds")).toMatchObject({ hasKey: true, baseUrl: "https://hub.example.com" });
+    expect(list.body.profiles.find((p: any) => p.id === "tokenhub-ds")).toMatchObject({ hasKey: true, baseUrl: "https://hub.example.com", webSearch: false });
 
     const s = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "card", cardId: "c2" }, title: "网关", cwd: work, modelProfileId: "tokenhub-ds", firstMessage: "hi" });
     expect(s.status).toBe(200);
@@ -214,6 +215,7 @@ describe("模型配置与钥匙", () => {
     expect(run.authToken).toBe(key);
     expect(run.argv.join(" ")).not.toContain(key);
     const settings = JSON.parse(run.argv[run.argv.indexOf("--settings") + 1]);
+    expect(run.argv[run.argv.indexOf("--disallowedTools") + 1]).toBe("WebSearch"); // 网关模型默认不给自带搜索
     expect(settings).toEqual({ skipWebFetchPreflight: true, env: { ANTHROPIC_BASE_URL: "https://hub.example.com", ANTHROPIC_MODEL: "deepseek-v4.1-flash", ANTHROPIC_SMALL_FAST_MODEL: "deepseek-v4.1-flash" } });
     await api(t.port, token, "POST", `/v1/sessions/${s.body.id}/kill`, {});
   });

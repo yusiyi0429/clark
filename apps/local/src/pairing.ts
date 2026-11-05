@@ -39,11 +39,6 @@ export class TokenStore {
     writeJsonAtomic(this.file, this.tokens);
   }
 
-  revokeAll(): void {
-    this.tokens = [];
-    writeJsonAtomic(this.file, this.tokens);
-  }
-
   count(): number {
     return this.tokens.length;
   }
