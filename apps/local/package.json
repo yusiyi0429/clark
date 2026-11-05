@@ -1,0 +1,24 @@
+{
+  "name": "@warmap/local",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "天枢本机程序：只监听 127.0.0.1，替本人在本机拉起 Claude Code，结果单向报给天枢",
+  "scripts": {
+    "dev": "tsx src/main.ts run --dev",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build": "node scripts/build.mjs",
+    "build:all": "node scripts/build.mjs --all"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.52",
+    "@warmap/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.8"
+  }
+}
