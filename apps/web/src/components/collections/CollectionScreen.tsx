@@ -18,6 +18,7 @@ import type { Card } from "@/lib/api/client";
 import { AskBox, QuestionThread } from "@/components/requests/RequestScreen";
 import { readRequest, requestError, runRequestAction } from "@/components/requests/requestApi";
 import r from "@/components/requests/requests.module.css";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { deadlineText, readCollectionRound, runCollectionAction } from "./collectionApi";
 import c from "./collections.module.css";
 
@@ -197,7 +198,7 @@ function Summary({ view }: { view: TCollectionView }) {
           <tbody>
             {view.entries.map((entry) => (
               <tr key={entry.personId} data-status={entry.status}>
-                <th scope="row"><span className={c.person}><span className={r.avatar} aria-hidden="true">{initial(entry.displayName)}</span>{entry.displayName}</span></th>
+                <th scope="row"><span className={c.person}><PersonAvatar personId={entry.personId} className={r.avatar}>{initial(entry.displayName)}</PersonAvatar>{entry.displayName}</span></th>
                 <td><span className={c.status} data-tone={STATUS[entry.status].tone}>{STATUS[entry.status].label}</span>
                   {entry.status === "confirmed" ? <small className={c.when}>{monthDayTime(entry.confirmedAt)}</small> : entry.filled ? <small className={c.when}>{entry.filled}/{entry.required}</small> : null}</td>
                 {view.fields.map((field) => <td key={field.key} className={field.kind === "number" ? c.num : undefined}>{entry.values[field.key] ? <CellValue field={field} value={entry.values[field.key]} /> : <span className={c.blank}>—</span>}</td>)}
@@ -209,7 +210,7 @@ function Summary({ view }: { view: TCollectionView }) {
       <ul className={c.cards} aria-label="每人一张">
         {view.entries.map((entry) => (
           <li key={entry.personId} className={c.personCard}>
-            <header><span className={c.person}><span className={r.avatar} aria-hidden="true">{initial(entry.displayName)}</span>{entry.displayName}</span>
+            <header><span className={c.person}><PersonAvatar personId={entry.personId} className={r.avatar}>{initial(entry.displayName)}</PersonAvatar>{entry.displayName}</span>
               <span className={c.status} data-tone={STATUS[entry.status].tone}>{STATUS[entry.status].label}</span></header>
             <dl>
               {view.fields.filter((field) => entry.values[field.key]).map((field) => (

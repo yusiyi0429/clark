@@ -24,6 +24,7 @@ export * from "./personalTokens.js";
 export * from "./personalProfile.js";
 export * from "./buddy.js";
 export * from "./railBackground.js";
+export * from "./avatar.js";
 export * from "./deliverables.js";
 export * from "./voiceprint.js";
 export * from "./onboarding.js";

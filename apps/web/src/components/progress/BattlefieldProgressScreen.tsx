@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TBattlefieldHelpItem, TBattlefieldPersonCard, TBattlefieldProgressGroup, TBattlefieldProgressResponse } from "@warmap/contracts";
 import { DetailFrame } from "@/components/shell/DetailFrame";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useRegisterDetail, useWorkspace } from "@/components/shell/WorkspaceContext";
 import { SegmentedSwitch } from "@/components/SegmentedSwitch";
 import { browserApi, type Card } from "@/lib/api/client";
@@ -117,7 +118,7 @@ function HelpCard({ item, mine, onNavigate, onBook }: { item: TBattlefieldHelpIt
   const prompt = `关于「${title}」，找${item.person.name}：`;
   return (
     <li className={s.card} data-help={item.kind}>
-      <span className={s.who}><Avatar name={item.person.name} />{mine ? "我" : item.person.name}<span className={s.sep}>·</span><span className={s.mission}>{item.mission.title}</span></span>
+      <span className={s.who}><Avatar person={item.person} />{mine ? "我" : item.person.name}<span className={s.sep}>·</span><span className={s.mission}>{item.mission.title}</span></span>
       <b className={s.title}>{title}</b>
       {line ? <p className={s.line}>{line}</p> : null}
       <span className={s.flag} data-kind={item.kind === "blocked" ? "blocked" : "slow"}>{flag}</span>
@@ -133,7 +134,7 @@ function HelpCard({ item, mine, onNavigate, onBook }: { item: TBattlefieldHelpIt
 function PersonCard({ card }: { card: TBattlefieldPersonCard }) {
   return (
     <li className={s.card} data-person={card.person.personId} data-me={card.me || undefined}>
-      <span className={s.head}><Avatar name={card.person.name} /><b>{card.me ? "我" : card.person.name}</b><small>本周动了 {card.movedThisWeek} 件</small></span>
+      <span className={s.head}><Avatar person={card.person} /><b>{card.me ? "我" : card.person.name}</b><small>本周动了 {card.movedThisWeek} 件</small></span>
       {card.missions.length ? (
         <ul className={s.missions}>
           {card.missions.map((mission) => (
@@ -150,4 +151,4 @@ function PersonCard({ card }: { card: TBattlefieldPersonCard }) {
   );
 }
 
-const Avatar = ({ name }: { name: string }) => <span className={s.avatar} aria-hidden="true">{Array.from(name)[0]}</span>;
+const Avatar = ({ person }: { person: { personId: string; name: string } }) => <PersonAvatar personId={person.personId} className={s.avatar}>{Array.from(person.name)[0]}</PersonAvatar>;

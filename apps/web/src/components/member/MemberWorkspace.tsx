@@ -44,7 +44,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
   const records = useMeetingRecords();
   const feishuEvents = useFeishuEvents();
   const radarSignals = noteworthySignals(home.radar);
-  const account = { displayName, loginId, role: "member" as const };
+  const account = { personId: viewerId, displayName, loginId, role: "member" as const };
   return (
     <WorkspaceFrame homeHref="/me" viewerId={viewerId} account={account} agentTitle="我的对话"
       home={<MemberHomeBody displayName={displayName} home={home} plan={plan} account={account} waitingReplies={requests.waitingReplies} />}

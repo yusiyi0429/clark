@@ -11,6 +11,7 @@ import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import type { THomePlanTask } from "@warmap/contracts";
 import { avatarInitial } from "@/components/AccountMenu";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useTaskDeliverable } from "./useTaskDeliverable";
 import { ReviewHeader } from "./ReviewHeader";
 import { CriteriaList } from "./CriteriaList";
@@ -76,7 +77,7 @@ export function TaskDeliverable({ task, activities, activityCount, newItem }: {
     <div className={d.panel}>
       <p className={d.facts}>
         <span className={d.owner} data-missing={data.responsibleName ? undefined : true}>
-          {data.responsibleName ? <i aria-hidden="true">{avatarInitial(data.responsibleName)}</i> : null}
+          {data.responsibleName ? <PersonAvatar personId={data.responsibleId} className={d.ownerAvatar}>{avatarInitial(data.responsibleName)}</PersonAvatar> : null}
           {data.responsibleName ?? "负责人未登记"}
         </span>
         <span>{source}</span>

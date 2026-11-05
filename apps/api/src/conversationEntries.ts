@@ -158,7 +158,7 @@ export function createConversationEntries(deps: EntryDeps): ConversationEntries 
       if (located.status === "many") {
         step("todo-locate", "定位待办", "active", `对上 ${located.total} 件，等你选`);
         deps.onCard({ kind: "todo_pick", question, candidates: located.todos.map((todo) => ({
-          requestId: todo.requestId, title: todo.title, initiatorName: todo.initiatorName, sentAt: todo.sentAt.toISOString(), href: requestHref(todo.requestId, isCeo),
+          requestId: todo.requestId, title: todo.title, initiatorId: todo.initiatorId, initiatorName: todo.initiatorName, sentAt: todo.sentAt.toISOString(), href: requestHref(todo.requestId, isCeo),
         })) });
         return {
           found: "choose", total: located.total, candidates: located.todos.map(todoFact),

@@ -1,0 +1,2 @@
+/* 头像圆里的照片：铺满外面那个圆（尺寸、圆角都跟各处原来的单字圆）。 */
+.photo { display: block; width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }

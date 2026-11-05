@@ -14,6 +14,7 @@ import { UsageResponse, OnboardingStepUsageRequest } from "./usage.js";
 import { PersonalProfileView, UpdatePersonalProfileRequest } from "./personalProfile.js";
 import { Buddy, BuddyForm, BuddyPersonality } from "./buddy.js";
 import { RailBackground, RailBackgroundChoice, SaveRailBackgroundRequest } from "./railBackground.js";
+import { PersonAvatarsResponse, SaveAvatarRequest, SavedAvatar } from "./avatar.js";
 import { DeliverableDissentRequest, DeliverableItem, DeliverableNote, DeliverableNotePatch, DeliverableReview, DeliverableVersion, ReviewCriterion, TaskDeliverableResponse, TaskDeliverableStatus } from "./deliverables.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
@@ -1969,6 +1970,30 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           responses: { "200": { description: "图片", content: { "image/jpeg": { schema: { type: "string", format: "binary" } }, "image/png": { schema: { type: "string", format: "binary" } }, "image/webp": { schema: { type: "string", format: "binary" } } } }, "401": errorResponse, "404": errorResponse },
         },
       },
+      "/api/me/avatar": {
+        put: {
+          operationId: "saveMyAvatar", summary: "本人换头像：网页裁好的 256×256 图",
+          requestBody: jsonBody({ $ref: "#/components/schemas/SaveAvatarRequest" }),
+          responses: { "200": { description: "保存后的头像版本", content: { "application/json": { schema: { $ref: "#/components/schemas/SavedAvatar" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "413": errorResponse },
+        },
+        delete: {
+          operationId: "deleteMyAvatar", summary: "本人删掉头像照片，回到单字",
+          responses: { "204": { description: "已删掉" }, "401": errorResponse, "403": errorResponse },
+        },
+      },
+      "/api/people/avatars": {
+        get: {
+          operationId: "listPersonAvatars", summary: "传过头像照片的人：personId → 头像版本；不在里面的人显示单字",
+          responses: { "200": { description: "头像版本", content: { "application/json": { schema: { $ref: "#/components/schemas/PersonAvatarsResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/people/{personId}/avatar": {
+        get: {
+          operationId: "getPersonAvatar", summary: "某个人的头像照片（地址带 ?v=version，可长期缓存）",
+          parameters: [{ name: "personId", in: "path", required: true, schema: { type: "string" } }, { name: "v", in: "query", required: false, schema: { type: "string" } }],
+          responses: { "200": { description: "图片", content: { "image/jpeg": { schema: { type: "string", format: "binary" } }, "image/png": { schema: { type: "string", format: "binary" } }, "image/webp": { schema: { type: "string", format: "binary" } } } }, "401": errorResponse, "404": errorResponse },
+        },
+      },
       "/api/me/tokens": {
         get: {
           operationId: "listPersonalTokens", summary: "列出本人未撤销的个人 MCP 令牌",
@@ -3313,6 +3338,9 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         RailBackground: RailBackground as JsonSchema,
         RailBackgroundChoice: RailBackgroundChoice as JsonSchema,
         SaveRailBackgroundRequest: SaveRailBackgroundRequest as JsonSchema,
+        SaveAvatarRequest: SaveAvatarRequest as JsonSchema,
+        SavedAvatar: SavedAvatar as JsonSchema,
+        PersonAvatarsResponse: PersonAvatarsResponse as JsonSchema,
         CreatePersonalTokenRequest: CreatePersonalTokenRequest as JsonSchema,
         CreatePersonalTokenResponse: CreatePersonalTokenResponse as JsonSchema,
         AdminOverviewResponse: AdminOverviewResponse as JsonSchema,

@@ -224,7 +224,7 @@ export const ConversationCard = Type.Union([
     kind: Type.Literal("todo_pick"),
     question: Type.String({ minLength: 1, maxLength: 1000 }),
     candidates: Type.Array(Type.Object({
-      requestId: Type.String({ minLength: 1 }), title: Type.String(), initiatorName: Type.String(), sentAt: Type.String(), href: Type.String({ minLength: 1 }),
+      requestId: Type.String({ minLength: 1 }), title: Type.String(), initiatorId: Type.Optional(Type.String()), initiatorName: Type.String(), sentAt: Type.String(), href: Type.String({ minLength: 1 }),
     }, { additionalProperties: false }), { minItems: 2, maxItems: 4 }),
   }, { additionalProperties: false }),
   /** 已整理好的问题，等本人点「发送」。 */

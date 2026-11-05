@@ -3,7 +3,7 @@
 /**
  * 个人菜单：通知栏左下角点自己的名字（收起成窄条时是头像）弹出。一级只放每天会点的和身份相关的（样稿 voice-keys-v3）——
  * 雷达、我的记忆（成员 /me/memory、CEO /memory）、定时任务（成员 /me/schedules、CEO /schedules）、「设置 ›」、CEO 的组织配置、双身份者切换工作台，最后是退出登录。
- * 配一次就不太动的收进「设置 ›」，在菜单右边弹出二级：语音输入、声纹（已配置时）、连接飞书（接了飞书时）、连接微信（接了微信时）、连接到外部工具、卸载本机采集器（装过的人才有）、伙伴形象、通知栏背景、修改口令、
+ * 配一次就不太动的收进「设置 ›」，在菜单右边弹出二级：个人资料、换头像、语音输入、声纹（已配置时）、连接飞书（接了飞书时）、连接微信（接了微信时）、连接到外部工具、卸载本机采集器（装过的人才有）、伙伴形象、通知栏背景、修改口令、
  * 重看首次引导、管理员视图（管理员）。
  * 声纹、雷达、口令、语音输入各开一个小弹窗，不离开当前页面。
  */
@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Modal, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, CalendarClock, ChevronRight, Image as ImageIcon, KeyRound, Link2, LogOut, Laptop, MessageCircle, Mic, PlugZap, Radar, RotateCcw, Settings, Settings2, Smile, X } from "lucide-react";
+import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, CalendarClock, ChevronRight, CircleUserRound, Image as ImageIcon, KeyRound, Link2, LogOut, Laptop, MessageCircle, Mic, PlugZap, Radar, RotateCcw, Settings, Settings2, Smile, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { feishuConnectHref, readFeishuConnection } from "@/lib/feishuLogin";
 import { logout } from "@/lib/logout";
@@ -21,6 +21,8 @@ import m from "@/styles/account-menu.module.css";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { BuddySettings } from "@/components/buddy/BuddySettings";
 import { RailBackgroundSettings } from "@/components/railBackground/RailBackgroundSettings";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
+import { AvatarEditor } from "@/components/avatar/AvatarEditor";
 import { VoiceKeysDialog } from "@/conversation/VoiceKeysDialog";
 import { CollectorUninstallPanel, useCollectorInstalled } from "@/components/CollectorUninstall";
 import { readTaskQualityEnabled } from "@/components/task-quality/taskQualityStatus";
@@ -28,6 +30,7 @@ import { PersonalProfileForm } from "@/components/PersonalProfileForm";
 import { WechatConnectPanel, readWechatConnection, type WechatConnection } from "@/components/WechatConnect";
 
 export interface Account {
+  personId?: string | null;
   displayName: string;
   loginId?: string;
   role: "ceo" | "member";
@@ -48,7 +51,7 @@ export function accountSubtitle(account: Account, demo: boolean): string {
   return [account.loginId, account.role === "ceo" ? "CEO" : "成员"].filter(Boolean).join(" · ");
 }
 
-type Dialog = "voiceprint" | "radar" | "connection" | "collector" | "coagent" | "railBackground" | "passcode" | "voice" | "profile" | "wechat" | null;
+type Dialog = "voiceprint" | "avatar" | "radar" | "connection" | "collector" | "coagent" | "railBackground" | "passcode" | "voice" | "profile" | "wechat" | null;
 
 export function AccountMenu({ account, compact = false, onNavigate }: { account: Account; compact?: boolean; onNavigate?: (href: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -129,18 +132,18 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
     <>
       <Popover isOpen={open} onOpenChange={openMenu}>
         <Button ref={trigger} variant="ghost" className={compact ? m.avatarButton : m.chip} aria-label={`${account.displayName}，打开个人菜单`} data-account-menu>
-          <span className={m.avatar} aria-hidden="true">
+          <PersonAvatar personId={account.personId} className={m.avatar}>
             {avatarInitial(account.displayName)}
-          </span>
+          </PersonAvatar>
           {compact ? null : <span className={m.name}>{account.displayName}</span>}
         </Button>
         <Popover.Content placement={compact ? "right bottom" : "top start"} offset={10} className={m.popover}>
           <TianshuPortalTheme>
             <Popover.Dialog className={m.menu} aria-label="个人菜单">
               <div className={m.who}>
-                <span className={m.avatarLarge} aria-hidden="true">
+                <PersonAvatar personId={account.personId} className={m.avatarLarge}>
                   {avatarInitial(account.displayName)}
-                </span>
+                </PersonAvatar>
                 <span>
                   <strong>{account.displayName}</strong>
                   {accountSubtitle(account, false) ? <small>{accountSubtitle(account, false)}</small> : null}
@@ -177,6 +180,10 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                       <Button variant="ghost" className={m.item} onPress={() => pick("profile")}>
                         <Settings2 size={16} aria-hidden="true" />
                         个人资料
+                      </Button>
+                      <Button variant="ghost" className={m.item} onPress={() => pick("avatar")}>
+                        <CircleUserRound size={16} aria-hidden="true" />
+                        换头像
                       </Button>
                       <Button variant="ghost" className={m.item} onPress={() => pick("voice")}>
                         <Mic size={16} aria-hidden="true" />
@@ -264,6 +271,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
           <VoiceprintCard />
         </MenuDialog>
       ) : null}
+      {dialog === "avatar" ? <MenuDialog title="换头像" onClose={() => setDialog(null)}><AvatarEditor personId={account.personId ?? null} initial={avatarInitial(account.displayName)} onDone={() => setDialog(null)} /></MenuDialog> : null}
       {dialog === "profile" ? <MenuDialog title="个人资料" onClose={() => setDialog(null)}><PersonalProfileForm /></MenuDialog> : null}
       {dialog === "radar" ? (
         <MenuDialog title={radarTitle} wide onClose={() => setDialog(null)}>

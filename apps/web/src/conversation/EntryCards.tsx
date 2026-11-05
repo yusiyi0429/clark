@@ -27,6 +27,7 @@ import { prepareQuestion, readRequest, requestError, runRequestAction } from "@/
 import { browserApi } from "@/lib/api/client";
 import { relativeDayTime } from "@/lib/companyTime";
 import r from "@/components/requests/requests.module.css";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import s from "@/styles/entry-cards.module.css";
 
 type Answer = { text: string; source: "body" | "question"; questionId: string | null };
@@ -185,7 +186,7 @@ function PickCard({ card, createdAt }: { card: Extract<TConversationCard, { kind
         {(picked ? [picked] : card.candidates).map((candidate) => (
           <li key={candidate.requestId}>
             <button type="button" className={s.pick} aria-pressed={candidate.requestId === chosen} disabled={chosen !== null} onClick={() => void choose(candidate)}>
-              <span className={r.avatar} aria-hidden="true">{initial(candidate.initiatorName)}</span>
+              <PersonAvatar personId={candidate.initiatorId} className={r.avatar}>{initial(candidate.initiatorName)}</PersonAvatar>
               <span className={s.pickText}><strong>{candidate.title}</strong><small>{candidate.initiatorName} · {relativeDayTime(candidate.sentAt)}</small></span>
               {chosen ? null : <ChevronRight size={16} aria-hidden="true" className={s.chevron} />}
             </button>

@@ -1,7 +1,8 @@
 import type { FastifyReply } from "fastify";
-import { Buddy, BuddyOrNull, MAX_RAIL_IMAGE_BYTES, PersonalProfileView, RailBackground, SaveRailBackgroundRequest, UpdatePersonalProfileRequest } from "@warmap/contracts";
+import { Buddy, BuddyOrNull, MAX_AVATAR_IMAGE_BYTES, MAX_RAIL_IMAGE_BYTES, PersonAvatarsResponse, PersonalProfileView, RailBackground, SaveAvatarRequest, SaveRailBackgroundRequest, SavedAvatar, UpdatePersonalProfileRequest } from "@warmap/contracts";
 import { BUDDY_NAME_UNITS, buddyNameUnits, readBuddy, saveBuddy } from "../buddy.js";
 import { RailBackgroundError, readRailBackground, readRailImage, saveRailBackground } from "../railBackground.js";
+import { AvatarError, deleteAvatar, listAvatarVersions, readAvatar, saveAvatar } from "../avatar.js";
 import { Type } from "@sinclair/typebox";
 import { AcceptMyTaskRequest, AddTaskCollaboratorsRequest, AppendTaskProgressRequest, Card, CreateMyTaskRequest, CreatePersonalTokenRequest, CreatePersonalTokenResponse, ListPersonalTokensResponse, MarkNotificationsSeenRequest, MeHomeResponse, MemberBattlefieldResponse, MemberMeetingsResponse, MonthPlanResponse, PatchMyTaskRequest, PutMyTaskNoteRequest, ReopenMyTaskRequest, ReturnMyTaskRequest, ReturnTaskAcceptanceRequest, StandaloneMyTaskRequest, SaveMonthPlanRequest, TaskAcceptanceDraft, TaskDetailResponse, TaskProgressEntry, UnreadThreadsResponse, DictationSessionResponse, DictationPolishRequest, DictationPolishResponse, HomePlanResponse, HomePlanMark, PlanCalendarResponse, Period, BattlefieldProgressResponse, CreatePlanMarkRequest, PatchPlanMarkRequest, type TDictationResult, type TTaskView, type TVoiceprintStatus } from "@warmap/contracts";
 import { listMyNotifications, markNotificationsSeen } from "../notifications.js";
@@ -82,6 +83,32 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   app.get("/api/me/rail-background/image", { preHandler: requirePerson }, async (req, reply) => {
     const found = await readRailImage(q, req.person!.personId);
     if (!found) return fail(reply, 404, "NOT_FOUND", "还没有上传过图片");
+    return reply.type(found.type).header("Cache-Control", "private, max-age=31536000, immutable")
+      .header("X-Content-Type-Options", "nosniff").send(found.image);
+  });
+
+  // 头像本人换、本人删；登录的人都能看别人的（和人员名册一样）。图片地址带 ?v=version，换图地址就变，图片本身可以长期缓存。
+  app.put("/api/me/avatar", { preHandler: requirePerson, bodyLimit: Math.ceil(MAX_AVATAR_IMAGE_BYTES / 3) * 4 + 64 * 1024,
+    schema: { body: SaveAvatarRequest, response: { 200: SavedAvatar } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    try {
+      return await saveAvatar(q, req.person!.personId, req.body.image);
+    } catch (error) {
+      if (error instanceof AvatarError) return fail(reply, error.status, error.code, error.message);
+      throw error;
+    }
+  });
+  app.delete("/api/me/avatar", { preHandler: requirePerson }, async (req, reply) => {
+    await deleteAvatar(q, req.person!.personId);
+    return reply.code(204).send();
+  });
+  app.get("/api/people/avatars", { preHandler: requirePerson, schema: { response: { 200: PersonAvatarsResponse } } }, async (_req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return { avatars: await listAvatarVersions(q) };
+  });
+  app.get("/api/people/:personId/avatar", { preHandler: requirePerson, schema: { params: Type.Object({ personId: Type.String({ minLength: 1 }) }) } }, async (req, reply) => {
+    const found = await readAvatar(q, req.params.personId);
+    if (!found) return fail(reply, 404, "NOT_FOUND", "没有头像照片");
     return reply.type(found.type).header("Cache-Control", "private, max-age=31536000, immutable")
       .header("X-Content-Type-Options", "nosniff").send(found.image);
   });

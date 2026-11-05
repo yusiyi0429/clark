@@ -1,0 +1,31 @@
+/* 换头像：现在的头像放大居中；裁剪时方框里放图，圆圈外压一层暗，圆里就是传上去的样子。 */
+.preview {
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--neutral-wash);
+  color: var(--ink-muted);
+  font-size: 36px;
+  font-weight: 600;
+}
+
+.stage {
+  position: relative;
+  justify-self: center;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--neutral-wash);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.stage:active { cursor: grabbing; }
+.image { position: absolute; top: 50%; left: 50%; max-width: none; pointer-events: none; }
+.ring { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 200px color-mix(in oklab, var(--ink) 45%, transparent); pointer-events: none; }
+
+.zoom { justify-self: center; width: 240px; }
+.actions { gap: 8px; }

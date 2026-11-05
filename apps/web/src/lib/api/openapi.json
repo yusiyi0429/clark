@@ -11271,6 +11271,200 @@
         }
       }
     },
+    "/api/me/avatar": {
+      "put": {
+        "operationId": "saveMyAvatar",
+        "summary": "本人换头像：网页裁好的 256×256 图",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveAvatarRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "保存后的头像版本",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedAvatar"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteMyAvatar",
+        "summary": "本人删掉头像照片，回到单字",
+        "responses": {
+          "204": {
+            "description": "已删掉"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/people/avatars": {
+      "get": {
+        "operationId": "listPersonAvatars",
+        "summary": "传过头像照片的人：personId → 头像版本；不在里面的人显示单字",
+        "responses": {
+          "200": {
+            "description": "头像版本",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonAvatarsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/people/{personId}/avatar": {
+      "get": {
+        "operationId": "getPersonAvatar",
+        "summary": "某个人的头像照片（地址带 ?v=version，可长期缓存）",
+        "parameters": [
+          {
+            "name": "personId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "v",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "图片",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/tokens": {
       "get": {
         "operationId": "listPersonalTokens",
@@ -22922,6 +23116,9 @@
                                   "type": "string"
                                 },
                                 "title": {
+                                  "type": "string"
+                                },
+                                "initiatorId": {
                                   "type": "string"
                                 },
                                 "initiatorName": {
@@ -51018,6 +51215,50 @@
           "image": {
             "maxLength": 4194368,
             "type": "string"
+          }
+        }
+      },
+      "SaveAvatarRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "image"
+        ],
+        "properties": {
+          "image": {
+            "minLength": 1,
+            "maxLength": 699116,
+            "type": "string"
+          }
+        }
+      },
+      "SavedAvatar": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "PersonAvatarsResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "avatars"
+        ],
+        "properties": {
+          "avatars": {
+            "type": "object",
+            "patternProperties": {
+              "^(.*)$": {
+                "type": "string"
+              }
+            }
           }
         }
       },

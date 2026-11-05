@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TBattlefieldProgressGroup } from "@warmap/contracts";
+import type { ReactNode } from "react";
+// 下面有一条直接调用组件函数找按钮（不经 React 渲染），头像里的 hook 不能这样调，换成同样标记的桩。
+vi.mock("@/components/avatar/PersonAvatar", () => ({
+  PersonAvatar: ({ className, children }: { className?: string; children: ReactNode }) => <span className={className} aria-hidden="true">{children}</span>,
+}));
 import { GroupView } from "./BattlefieldProgressScreen";
 
 const me = { personId: "sun", name: "孙铭泽" }, renhao = { personId: "renhao", name: "刘人豪" }, siyi = { personId: "siyi", name: "于斯一" };
