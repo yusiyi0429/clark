@@ -11,6 +11,8 @@ import { AttachButton } from "./ConversationAttachments";
 import { DictationControls } from "./DictationControls";
 import { DictationMirror } from "./DictationMirror";
 import { useDictation } from "./useDictation";
+import { useStableCallback } from "./stableCallback";
+import type { VoiceChannel } from "./voiceChannel";
 import type { ConversationData } from "./useConversation";
 import { QuoteChips } from "./QuoteChips";
 import { useAnswerOptionFill } from "./answerOptions";
@@ -19,18 +21,23 @@ import { quotedMessage, storedDraft, type QuotePrefill, type TextQuote } from ".
 import { useExitPresence } from "@/lib/motion";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
 import type { Buddy } from "@/components/buddy/useBuddy";
+import { isFigureSkin } from "@/components/coagent/skin";
 import d from "@/styles/conversation-dock.module.css";
 
 /** 收起打字面时附件键收窄淡出的时长：与输入条宽度过渡（conversation-dock.module.css .dock width 340ms）一致。 */
 const ATTACH_EXIT_MS = 340;
 
 /**
- * 全局输入条（clark `workspace.tsx` 614–640）：收起时只有一颗白色胶囊「对话天枢」（没有外面那层灰底；前面是本人伙伴的小号形象，Miles 从胶囊上沿探出半身；回答进行中、收着来了新话时它在说话），展开后是附件、小麦克风、输入框、发送。
+ * 全局输入条（clark `workspace.tsx` 614–640）：收起时只有一颗主按钮（没有外面那层灰底）。伙伴是默认、生命感、熊猫这三种胶囊形象时，主按钮就是那颗胶囊本身，
+ * 按原尺寸铺满主按钮原来的形状、不写名字（11/03 用户定：形象一看就是伙伴）；Miles、C妹 是一颗白色胶囊「对话<名字>」，形象从上沿探出半身。
+ * 回答进行中、收着来了新话时伙伴在说话。展开后是附件、小麦克风、输入框、发送。
  * 没有历史键、没有输入条上方的气泡（D2 / D6）：点「对话天枢」（或按唤醒键，见 wakeKey.ts）就是展开输入框、打开对话层，
  * 所有消息、出错说明都在对话层里；宿主把 keyboard 与对话层开合绑在一起。
  * 语音主要交给微信输入法；小麦克风是天枢自己的听写（useDictation），和附件键一样不起眼：文字边说边进输入框（带下划线，
  * 可改字），右边 [● 0:12 声波] ■ ↑；■ 停下、文字留在输入框，↑ 等整理后直接发出；听写中小麦克风变 ✕，✕ / Esc 恢复听写前的原文。
  * 听写出错交给对话层显示（onDictationError）。麦克风只在点这一下时请求。
+ * 对话层页头的伙伴和小麦克风是同一次听写（voice）：点伙伴 = 点小麦克风开始；在听时点伙伴 = ■（文字留在输入框）。
+ * 听写在不在听、声音多大报给页头的伙伴，它跟着变大、跟着声音动。
  * 小麦克风右边的小键盘图标打开语音快捷键面板（VoiceKeysDialog）；第一次点「对话天枢」时也弹一次（触屏不弹、不出这颗键）。
  * 宽屏上输入条右边缘固定、只向左伸缩（不再横移到正中）。回答进行中发送键变「停止本次回答」。
  * 待发送的卡片引用、文字引用、附件都在输入框里文字行上方那一行（D4）。
@@ -59,6 +66,7 @@ export const ConversationDock = memo(function ConversationDock({
   onRemoveQuotes,
   onRestoreQuotes,
   onDictationError,
+  voice,
   dockRef,
   wide = false,
   onWideExit,
@@ -110,6 +118,17 @@ export const ConversationDock = memo(function ConversationDock({
   useEffect(() => {
     onDictationError?.(dictation.error);
   }, [dictation.error, onDictationError]);
+
+  // 页头的伙伴：报给它在不在听、此刻的响度；点它开始听，在听时点它停下（文字留在输入框），收尾中不理。
+  const voiceLevel = dictation.levels[dictation.levels.length - 1] ?? 0;
+  useEffect(() => {
+    voice?.publish(dictation.active, dictation.active ? voiceLevel : 0);
+  }, [voice, dictation.active, voiceLevel]);
+  const toggleVoice = useStableCallback(() => {
+    if (dictation.phase === "listening") void confirmDictation();
+    else if (!dictation.active) void dictation.start();
+  });
+  useEffect(() => voice?.handle(toggleVoice), [voice, toggleVoice]);
 
   useEffect(() => {
     if (!prefill) return;
@@ -228,6 +247,8 @@ export const ConversationDock = memo(function ConversationDock({
   const placeholder =
     dictation.phase === "finishing" ? "正在收尾…" : dictation.active ? (dictation.live ? "正在听…" : "正在录音，结束后转写…") : activeReferences.length ? "围绕批注的内容输入问题或判断…" : detail ? "继续讨论…" : "问点什么，或者说要约的会…";
   const dockHeight = keyboard ? (composerExpanded ? composerHeight + (hasTray ? 48 : 12) : hasTray ? 84 : 48) : undefined;
+  const skin = buddy?.form ?? "classic";
+  const entryLabel = `对话${buddy?.name ?? "天枢"}`;
 
   return (
     <div
@@ -306,12 +327,12 @@ export const ConversationDock = memo(function ConversationDock({
         ) : null}
         <div className={d.content} style={{ height: keyboard ? (composerExpanded ? composerHeight : 36) : 48 }}>
           <div className={d.entryLayer} aria-hidden={keyboard} inert={keyboard}>
-            <button type="button" ref={entryButton} className={d.entryButton} data-attention={attention || undefined} onClick={() => {
+            <button type="button" ref={entryButton} className={d.entryButton} data-skin={skin} data-attention={attention || undefined} onClick={() => {
               onKeyboardChange(true);
               if (voiceIntroDue()) setVoiceKeys(true);
-            }} aria-expanded={false}>
+            }} aria-expanded={false} aria-label={entryLabel}>
               <BuddyMark buddy={buddy} place="entry" active={attention || busy} />
-              <span>对话{buddy?.name ?? "天枢"}</span>
+              {isFigureSkin(skin) ? <span>{entryLabel}</span> : null}
             </button>
           </div>
           <div className={d.textLayer} aria-hidden={!keyboard} inert={!keyboard}>
@@ -429,6 +450,8 @@ type DockProps = {
   onRestoreQuotes?: (quotes: TextQuote[]) => void;
   /** 听写出错（没授权、没听清）：交给对话层显示（D6）。 */
   onDictationError?: (error: string | null) => void;
+  /** 和对话层页头的伙伴共用这次听写（身份不变）。 */
+  voice?: VoiceChannel;
   /** 对话层处于放大（深度讨论）：输入框里的 Esc 先退出放大，回到普通对话层；再按一次才收起对话层。 */
   wide?: boolean;
   onWideExit?: () => void;

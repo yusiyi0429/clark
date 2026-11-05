@@ -16,12 +16,14 @@ import { useConversationScroll, type ScrollAnchor } from "./useConversationScrol
 import { resizeWindow } from "./resizeGate";
 import { prefersReducedMotion } from "@/lib/motion";
 import type { ConversationData } from "./useConversation";
+import { useVoice, type VoiceChannel } from "./voiceChannel";
 import w from "@/styles/app-shell.module.css";
 import t from "@/styles/conversation-transcript.module.css";
 
 /**
  * 对话记录（clark `ConversationHistorySheet`）：从输入条升起的浅色阅读面，非模态。
  * 没有页头横条（D1）：正文从顶部开始；顶上正中是本人的伙伴（回答进行中在说话），左上是放大 ⤢（有时才有），右上一颗圆形液态玻璃的「收起 ⌄」（11/03 用户定：去掉左上的天枢标识、⤢ 挪到左边）。
+ * 页头的伙伴和输入条的小麦克风是同一次听写（voice，11/03 用户定）：点伙伴开始听，在听时再点停下、文字留在输入框；在听时它变大、跟着说话的声音动。
  * 点对话层外的空白处、Esc 也收起（宿主在对话层外放一层透明的点击区，不盖遮罩）。附件键在输入条上（D2）。记录归谁写在 data-conversation-owner 上。
  * 输入条上方没有气泡（D6）：听写出错（notice）、发送失败（data.error）都作为轻提示写在这里。
  * 载入中、没读到、真的没有记录分开画。提案卡插在触发它的那轮回答之后（ConversationTimeline，B5）。
@@ -35,7 +37,7 @@ import t from "@/styles/conversation-transcript.module.css";
  * 滚动区一开始就是终态尺寸、贴着外框左上角，正文只在第一帧按终值排一次；流式上屏、思考追加、各处 ResizeObserver
  * 都等过渡结束再一次补齐（resizeGate）。
  */
-export function ConversationHistorySheet({ data, label, global, onClose, anchor = "end", onQuote, composerRef, notice, leaving = false, wide = false, onWide, buddy = null }: {
+export function ConversationHistorySheet({ data, label, global, onClose, anchor = "end", onQuote, composerRef, notice, leaving = false, wide = false, onWide, buddy = null, voice }: {
   data: ConversationData; label: string; global: boolean; onClose: () => void;
   /** 打开时停在哪：底部（默认），或最后一条回答的开头（从首页气泡点开）。 */
   anchor?: ScrollAnchor;
@@ -53,6 +55,8 @@ export function ConversationHistorySheet({ data, label, global, onClose, anchor 
   onWide?: (wide: boolean) => void;
   /** 本人的伙伴：页头正中画它，没选时是默认胶囊。 */
   buddy?: Buddy | null;
+  /** 和输入条共用的听写：给了，页头的伙伴就能点（点它 = 点小麦克风）；没给时它只是标识。 */
+  voice?: VoiceChannel;
 }) {
   const empty = data.historyStatus !== "loading" && data.historyStatus !== "error" && data.messages.length === 0 && !data.streaming;
   const owner = conversationOwner(global ? "global" : data.scope, label);
@@ -78,7 +82,8 @@ export function ConversationHistorySheet({ data, label, global, onClose, anchor 
       data-wide={wide || undefined}>
       {/* 顶部不放拖拽条也不放页头：一道磨砂渐隐，正文滚上来在这里淡出，不撞两颗圆键。 */}
       <div className={w.sheetFade} aria-hidden data-testid="conversation-sheet-fade" />
-      <span className={w.sheetBuddy} data-testid="conversation-sheet-buddy"><BuddyMark buddy={buddy} place="sheet" active={data.streaming} /></span>
+      {voice ? <SheetBuddy buddy={buddy} speaking={data.streaming} voice={voice} />
+        : <span className={w.sheetBuddy} data-testid="conversation-sheet-buddy"><BuddyMark buddy={buddy} place="sheet" active={data.streaming} /></span>}
       {onWide ? (
         <HeroButton variant="ghost" size="sm" isIconOnly className={`${w.glassButton} ${w.sheetWideKey}`} onPress={() => onWide(!wide)}
           data-desk-key title={wide ? "收起" : "深度讨论"} aria-label={wide ? "收起" : "深度讨论"} aria-expanded={wide}>
@@ -114,6 +119,18 @@ export function ConversationHistorySheet({ data, label, global, onClose, anchor 
       </div>
       <JumpToLatest visible={!scroll.atBottom} onJump={scroll.jumpToLatest} streaming={data.streaming} className={w.historyJump} />
     </section>
+  );
+}
+
+/** 页头正中可以点的伙伴：自己订阅听写的状态和响度（每 80ms 一帧），只有它跟着重画。 */
+function SheetBuddy({ buddy, speaking, voice }: { buddy: Buddy | null; speaking: boolean; voice: VoiceChannel }) {
+  const { listening, level } = useVoice(voice);
+  const label = listening ? "停止听写，文字留在输入框" : "语音输入";
+  return (
+    <button type="button" className={w.sheetBuddy} data-testid="conversation-sheet-buddy" onClick={voice.toggle}
+      aria-label={label} title={label} aria-pressed={listening}>
+      <BuddyMark buddy={buddy} place="sheet" active={speaking} listening={listening} level={level} />
+    </button>
   );
 }
 

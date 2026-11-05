@@ -55,7 +55,18 @@
 @media(prefers-reduced-transparency:reduce){.historySheet .sheetFade{-webkit-backdrop-filter:none;backdrop-filter:none}}
 .historySheet .glassButton{position:absolute;z-index:4;top:10px;display:grid;place-items:center;width:38px;height:38px;min-width:38px;min-height:38px;padding:0;border:1px solid #ffffffb3;border-radius:50%;background:#ffffff8c;-webkit-backdrop-filter:blur(14px) saturate(170%);backdrop-filter:blur(14px) saturate(170%);box-shadow:0 2px 10px #1d29351a,inset 0 1px #fff;color:#5c626d}
 /* 页头正中的伙伴（BuddyMark）：和两颗圆键（top 10、高 38）同一条中线。 */
-.historySheet .sheetBuddy{position:absolute;z-index:4;top:29px;left:50%;transform:translate(-50%,-50%);pointer-events:none}
+.historySheet .sheetBuddy{position:absolute;z-index:4;top:29px;left:50%;transform:translate(-50%,-50%);padding:0;border:0;border-radius:16px;background:none;color:inherit;pointer-events:none}
+/* 页头的伙伴能点（点它 = 点小麦克风）；Miles、C妹 从上沿往下排，在听时变大往下长，不顶出对话层。 */
+.historySheet button.sheetBuddy{pointer-events:auto;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.historySheet button.sheetBuddy:focus-visible{outline:2px solid #3A83F788;outline-offset:2px}
+.historySheet .sheetBuddy:has([data-skin=miles],[data-skin=cmei]){top:3px;transform:translateX(-50%)}
+/* C妹 头顶的呆毛比框高出约 7（在听时再放大一圈）：往下让 8，不被对话层上沿切掉；正文起点和淡出跟着往下 8。 */
+.historySheet .sheetBuddy:has([data-skin=cmei]){top:11px}
+/* Miles、C妹 比两颗圆键高（胶囊下沿到 75 左右）：正文从它下面开始，滚上来在它下沿之前就淡出，不从胶囊后面穿过去。 */
+.historySheet:has(.sheetBuddy :is([data-skin=miles],[data-skin=cmei])) .sheetScroll{padding-top:84px}
+.historySheet:has(.sheetBuddy :is([data-skin=miles],[data-skin=cmei])) .sheetFade{height:84px;background:linear-gradient(to bottom,var(--sheet-fade,#252527f0) 0%,var(--sheet-fade,#252527f0) 62%,transparent 100%);-webkit-mask-image:linear-gradient(to bottom,#000 0,#000 70%,transparent 100%);mask-image:linear-gradient(to bottom,#000 0,#000 70%,transparent 100%)}
+.historySheet:has(.sheetBuddy [data-skin=cmei]) .sheetScroll{padding-top:92px}
+.historySheet:has(.sheetBuddy [data-skin=cmei]) .sheetFade{height:92px}
 .historySheet .sheetCollapse{right:12px;cursor:pointer;transition:background 150ms ease,color 150ms ease,transform 150ms ease}
 .historySheet .sheetCollapse::after{content:'';position:absolute;inset:-3px;border-radius:50%}
 .historySheet .sheetCollapse:hover{background:#ffffffc7;color:#3f4754}

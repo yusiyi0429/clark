@@ -114,15 +114,17 @@ describe("全局输入条（clark workspace 614–640）", () => {
     expect(html).not.toContain("对话记录");
   });
 
-  it("选了伙伴：主按钮前面是伙伴的小号形象、写「对话团团」；没选时是默认胶囊；Miles 也写名字", () => {
+  it("默认、生命感、熊猫：主按钮就是伙伴那颗胶囊，不写名字（读屏照样念「对话团团」）；没选时是默认胶囊；Miles、C妹 还写「对话<名字>」", () => {
     const html = dock({ buddy: { name: "团团", form: "alive" } });
-    expect(html).toContain("对话团团");
+    expect(html).toMatch(/data-skin="alive"[^>]*aria-label="对话团团"/);
+    expect(html).not.toContain(">对话团团<");
     expect(html).not.toContain("对话天枢");
     expect(html).toMatch(/data-place="entry" data-skin="alive"/);
     expect(dock()).toMatch(/data-place="entry" data-skin="classic"/);
+    expect(dock()).not.toContain(">对话天枢<");
     const miles = dock({ buddy: { name: "miles", form: "miles" } });
     expect(miles).toMatch(/data-place="entry" data-skin="miles"/);
-    expect(miles).toContain("对话miles");
+    expect(miles).toContain(">对话miles<");
     const cmei = dock({ buddy: { name: "小C", form: "cmei" } });
     expect(cmei).toMatch(/data-place="entry" data-skin="cmei"/);
     expect(cmei).toContain(">对话小C<");

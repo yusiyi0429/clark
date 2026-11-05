@@ -33,6 +33,7 @@ import { useBuddy, type Buddy } from "@/components/buddy/useBuddy";
 import type { DetailGroup } from "./missionCardGroup";
 import { MESSAGE_REPLY, type QuotePrefill, type QuoteSource, type TextQuote } from "./quotes";
 import { useUnseenReply } from "./unseenReply";
+import { createVoiceChannel } from "./voiceChannel";
 import groupStyles from "@/styles/mission-group.module.css";
 import w from "@/styles/app-shell.module.css";
 
@@ -139,6 +140,8 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, buddy, ui }:
 
   /** 听写出错（没授权、没听清）：输入条交上来，在对话层里说（D6）。 */
   const [dictationError, setDictationError] = useState<string | null>(null);
+  /** 页头的伙伴和输入条的小麦克风共用的那次听写。 */
+  const [voice] = useState(createVoiceChannel);
   // 新引用 / 起草（引用提问、划词引用、起草文档）在没有右列的页面上：打字面和对话层一起出来。
   const usesDock = !rail || ui.historyOpen;
   useEffect(() => {
@@ -185,7 +188,7 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, buddy, ui }:
           <button type="button" className={w.historyBackdrop} data-testid="conversation-backdrop" aria-label="关闭对话记录" onClick={closeHistory}
             data-leaving={sheet.leaving || undefined} tabIndex={sheet.leaving ? -1 : undefined} />
           <ConversationHistorySheet data={data} label={target.label} global={global} onClose={closeHistory} composerRef={dockRef} leaving={sheet.leaving}
-            wide={canWide && sheetWide} onWide={canWide ? setSheetWide : undefined} buddy={buddy}
+            wide={canWide && sheetWide} onWide={canWide ? setSheetWide : undefined} buddy={buddy} voice={voice}
             notice={dictationError} onQuote={(text) => ui.quoteInConversation(text, { scope: target.scope, intent: MESSAGE_REPLY })} />
         </>
       ) : null}
@@ -200,6 +203,7 @@ function ScopedConversation({ target, detailOpen, rail, agentTitle, buddy, ui }:
         onKeyboardChange={keyboardChange}
         historyOpen={ui.historyOpen}
         onDictationError={setDictationError}
+        voice={voice}
         references={items}
         onRemoveReference={removeReference}
         onClearReferences={clearReferences}
