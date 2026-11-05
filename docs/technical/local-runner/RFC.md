@@ -26,7 +26,7 @@ DRI 在天枢网页上把活派给自己电脑上的官方 Claude Code：网页�
    ├─ eventLog   每会话 JSONL 事件日志，序号递增
    ├─ outbox     发件箱：落盘、退避重试、幂等键 → POST /api/local-runner/sync
    ├─ models / secrets / folders / cloud   模型配置、钥匙（DPAPI/钥匙串）、允许的文件夹、云端关联
-   └─ desktop/   托盘、确认框、选文件夹框（Windows：PowerShell+WinForms；Mac：osascript）
+   └─ desktop/   托盘、确认框、选文件夹框（Windows：首次启动用系统自带 csc 编的 C# 小程序；Mac：osascript）
    │ spawn（shell:false，参数数组，环境变量白名单）
    ▼
 claude -p --input-format stream-json --output-format stream-json …（每张卡一个进程，各用各的模型）
@@ -44,7 +44,11 @@ claude -p --input-format stream-json --output-format stream-json …（每张卡
 | 表单跨站提交 | `POST/PUT/PATCH` 只收 `application/json`（415）；口令在自定义请求头，HTML 表单带不了、必须过预检 | 同上 |
 | 同一来源页面被注入脚本后悄悄配对 | 配对要本人在本机弹框里核对四位确认码点「是」；口令只交付一次，按来源绑定，本机只存 SHA-256 | 同上，另有托盘模式真机截图 |
 | 网页指使本机读任意目录 | 允许的文件夹只能经本机系统选择框添加；开会话的 `cwd` 必须在里面（先解析符号链接）；产出物只收本会话工作目录里的文件 | `sessions.test.ts` |
-| 内部 MCP 接口被网页调用 | `/internal/...` 带 `Origin` 一律 403（浏览器请求必带），另要本会话密钥（经子进程环境变量交给 Claude Code，不落盘、不进命令行） | `security.test.ts` |
+| 内部 MCP 接口被网页调用 | `/internal/...` 带 `Origin` 一律 403（浏览器请求必带），另要本会话密钥（经子进程环境变量交给 Claude Code，不落盘、不进命令行；每次拉起换新，进程退出即作废） | `security.test.ts`、`sessions.test.ts` |
+| 怪请求打挂常驻进程 | 路径必须以单个 `/` 开头，否则 400；每个请求的处理都兜住异常，单个请求出错不会带走进程；发件箱发送失败也不往外抛 | `hardening.test.ts` |
+| 网页改个地址就把钥匙送走 | 改网关地址不带新钥匙时旧钥匙作废；钥匙和令牌只收可见 ASCII | `sessions.test.ts` |
+| 绕过暂停或已移除的文件夹 | 续接也重查暂停和允许的文件夹；网页能暂停，恢复只能在托盘里点 | `hardening.test.ts` |
+| 会话里的命令拿走云端令牌 | 天枢 MCP 经本机程序转发，令牌不进 Claude Code 的环境；网关钥匙仍在它的环境里（ADR 0029 接受这个风险） | `sessions.test.ts` |
 | 钥匙外泄 | 见 ADR 0029：只写不读，不进命令行，不出本机 | `sessions.test.ts`（钥匙不在 argv、不在任何响应里） |
 | 别的程序伪造登录 | 子进程环境变量白名单，不继承 `ANTHROPIC_*`、`CLAUDE_*` | `sessions.test.ts`（故意注入后检查子进程环境） |
 
@@ -71,7 +75,7 @@ claude -p --input-format stream-json --output-format stream-json --verbose
   --settings {"skipWebFetchPreflight":true[,"env":{ANTHROPIC_BASE_URL,ANTHROPIC_MODEL,ANTHROPIC_DEFAULT_HAIKU_MODEL}（网关）]}
   [--model <订阅时选的模型>]
   [--disallowedTools WebSearch]        # 模型配置的 webSearch 关着时（网关默认关，实测白名单除外）
-env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET [+ TIANSHU_CLOUD_TOKEN（关联了云端）]
+env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP 和天枢 MCP 转发共用）
      [+ ANTHROPIC_AUTH_TOKEN、CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1（网关）]
 ```
 
@@ -99,9 +103,9 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET [+ TIANSHU_CLOU
 | 名字 | 地址 | 什么时候挂 | 鉴权 |
 |-|-|-|-|
 | `tianshu-session`（本会话 MCP） | `http://127.0.0.1:<端口>/internal/sessions/<id>/mcp` | 总是 | 请求头 `x-tianshu-session-secret: ${TIANSHU_SESSION_SECRET}` |
-| `tianshu`（天枢 MCP） | `<apiBaseUrl>/mcp/me` | 关联了云端时 | `Authorization: Bearer ${TIANSHU_CLOUD_TOKEN}` |
+| `tianshu`（天枢 MCP） | `http://127.0.0.1:<端口>/internal/sessions/<id>/cloud-mcp`，本机程序换上云端令牌转发到 `<apiBaseUrl>/mcp/me`（含流式响应） | 关联了云端时 | 同上，会话密钥 |
 
-文件里只写 `${变量名}`，值经 Claude Code 子进程的环境变量传进去，Claude Code 启动时展开（11/06 用假 MCP 服务实测：收到的是展开后的请求头；真机实测本会话 MCP 照常连上）。所以本会话密钥和云端令牌既不落盘、也不进命令行。
+文件里只写 `${变量名}`，值经 Claude Code 子进程的环境变量传进去，Claude Code 启动时展开（11/06 用假 MCP 服务实测：收到的是展开后的请求头；真机实测本会话 MCP 照常连上）。所以本会话密钥不落盘、不进命令行；云端令牌只在本机程序里，会话和它跑的命令都拿不到。
 
 联网搜索由天枢 MCP 提供（`/mcp/me` 上的只读 `web_search`，博查，钥匙留在服务器、按人限流），本机不另起搜索 MCP、不存博查钥匙。它的工具名等云端定了，填进 `sessions.ts` 的 `CLOUD_MCP_READONLY_TOOLS` 预先放行；天枢 MCP 的其他工具（写进展、建事项等）每次调用都要网页批准。
 
@@ -122,7 +126,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET [+ TIANSHU_CLOU
 
 ## 10. 托盘与开机自启
 
-托盘图标四种状态：灰（没配对）、蓝（已连接）、绿（正在跑，提示里写「正在跑 N 张卡」）、橙（已暂停）。菜单：打开天枢 / 暂停全部（停下所有进行中的会话，不接新会话；再点是「恢复」）/ 退出（停掉所有会话进程后退出）。左键单击打开天枢。开机自启：Windows `HKCU\…\Run\TianshuLocal = "<exe>" run`；Mac LaunchAgent `com.tokenkingos.tianshu-local`（`RunAtLoad`，异常退出自动拉起）。已有一个在跑时再启动会直接退出。
+托盘助手：Windows 上本机程序第一次启动时，用 .NET Framework 自带的 `csc.exe` 把嵌在程序里的 C# 源码编成约 10 KB 的 `tianshu-tray-<哈希>.exe`，放在数据目录 `bin/` 里，常驻约 30 MB（原先用 PowerShell 宿主约 100 MB）。托盘图标四种状态：灰（没配对）、蓝（已连接）、绿（正在跑，提示里写「正在跑 N 张卡」）、橙（已暂停）。菜单：打开天枢 / 暂停全部（停下所有进行中的会话，不接新会话；再点是「恢复」）/ 退出（停掉所有会话进程后退出）。左键单击打开天枢。开机自启：Windows `HKCU\…\Run\TianshuLocal = "<exe>" run`；Mac LaunchAgent `com.tokenkingos.tianshu-local`（`RunAtLoad`，异常退出自动拉起）。已有一个在跑时再启动会直接退出。
 
 ## 11. 安装与卸载
 
@@ -134,22 +138,25 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET [+ TIANSHU_CLOU
 
 ## 13. 测试与验证（11/06）
 
-- 单测 24 条（`pnpm --filter @warmap/local test`）：安全 10、会话与适配器 8（假 `claude` 按 stream-json 说话，含参数、环境白名单、事件、SSE 补发、权限、插话、停下、强停、续接、本会话 MCP、钥匙不外泄、版本太旧、登录失效、Codex 未接）、发件箱 3；契约 6。故意放开环境白名单后对应用例失败（确认用例有效）。
+- 单测 38 条（`pnpm --filter @warmap/local test`）：安全 10、会话与适配器 14（假 `claude` 按 stream-json 说话，含参数、环境白名单、事件、SSE 补发、权限、插话、停下、强停、续接、本会话 MCP、天枢 MCP 转发、钥匙不外泄、搜索白名单、版本太旧、登录失效、Codex 未接）、发件箱 3、加固 11；契约 6。故意放开环境白名单、去掉续接互斥、去掉换地址作废钥匙、去掉日志补换行，对应用例都会失败（确认用例有效）。
+- 独立评审（11/06，xhigh）：13 条，8 条有复现。已修 12 条（怪路径打挂进程、换地址带走旧钥匙、续接不重查文件夹和暂停、并发续接起两个进程、强停追不上启动中的进程、发件箱被不合格条目卡住、发送异常带走进程、日志半行吞事件、钥匙串换行注入、测试页 XSS、安装脚本 BOM、升级残留子进程），带个人配置时钥匙进命令行改为拒绝开工；网关钥匙在会话环境里这条按 ADR 0029 接受。设计层两条见第 14 节。
 - 真机：编出的 exe + 真 Claude Code 2.1.318（haiku），冒烟命令走完配对 → 开工 → 事件 → 3 次批准 → 插话下一步生效（b.txt 改成 22）→ 新一轮 → 停下（interrupted）→ 强停（exited），花费 $0.003；另一次验证本会话 MCP 交证据和交回。真实调用共 2 次会话（4 轮）。
 - 托盘模式：配对确认框、选文件夹框、托盘图标/提示/菜单、暂停与恢复、菜单退出都在 Windows 11 上截图验证（`.scratch/local-runner/实验/截图/`）。
 - 安装：用本地 exe 跑 `install.ps1`（4.4 秒装好并启动、写入自启项）；按注册表里的命令行启动成功（模拟开机，未真重启）；`uninstall.ps1` 后进程、自启项、程序、数据、端口全部清掉。
 
 ## 14. 已知问题与待定
 
-1. **内存**：空闲约 255 MB（主程序 155 + PowerShell 托盘 100）。先把托盘换成原生小助手；再不够就评估 Node SEA（ADR 0028）。
-2. **Mac 没测**：JXA 菜单栏、`osascript` 弹框、钥匙串、LaunchAgent、`install.sh` 都只按文档写了。
-3. **云端接收端和令牌类型**：等 api 会话；本机这边在没关联时只排队。
-4. **网页**：要做首次授权引导、配对、选文件夹、事件流（fetch 读 SSE）、批权限、插话、停下；测试页可以照抄。
-5. **下载源**：服务器给 `install.ps1` 要带 `charset=utf-8`（PowerShell 5.1 默认按 ISO-8859-1 解码，中文会乱）；Windows 签名、Mac 公证没做。
-6. **Claude Code 安装**：官方脚本在无终端环境下能否跑完没在干净机器上测；国内网络可能连不上 `downloads.claude.ai`。
-7. **工作目录在本人主目录下时**：即使只开 project/local 设置，`~/.claude/rules/*.md` 仍会被当成项目规则读进去（11/06 联网搜索实测发现）。给卡选工作目录时要知道这一点；要彻底干净得换 `CLAUDE_CONFIG_DIR`，代价是单独登录一次。
-8. **网关出错时重试太久**：网关回 500 时 Claude Code 默认重试约 3 分钟才失败。以后可按卡设 `CLAUDE_CODE_MAX_RETRIES` / `API_TIMEOUT_MS`（这次没做）。
-9. **合规**：「我们的程序替本人拉起官方 CLI、用本人订阅」算不算条款允许的用法，请法务确认；Codex app-server 登录方式文档写着不允许用于商业或托管服务。
+1. **内存**：空闲约 195 MB（主程序 155–165 + 托盘助手约 30）。再要降就评估 Node SEA（ADR 0028）。
+2. **工具不按文件夹拦**：本机程序只管工作目录在允许的文件夹里；会话里 Write、Edit、Read 写绝对路径时，靠网页逐次批准把关，本机不按路径拦。要硬拦可以以后给每次权限请求加一层路径检查（只放行允许文件夹内的路径）。
+3. **项目配置不经网页就生效**：`-p` 模式没有「信任这个文件夹」的确认，仓库里 `.claude/settings.json` 的 hooks 和放行规则直接生效。允许的文件夹应只放本人信得过的仓库（ADR 0030）。
+4. **Mac 没测**：JXA 菜单栏、`osascript` 弹框、钥匙串、LaunchAgent、`install.sh` 都只按文档写了。
+5. **云端接收端和令牌类型**：等 api 会话；本机这边在没关联时只排队。
+6. **网页**：要做首次授权引导、配对、选文件夹、事件流（fetch 读 SSE）、批权限、插话、停下；测试页可以照抄。
+7. **下载源**：服务器给 `install.ps1` 要带 `charset=utf-8`（PowerShell 5.1 默认按 ISO-8859-1 解码，中文会乱）；Windows 签名、Mac 公证没做。
+8. **Claude Code 安装**：官方脚本在无终端环境下能否跑完没在干净机器上测；国内网络可能连不上 `downloads.claude.ai`。
+9. **工作目录在本人主目录下时**：即使只开 project/local 设置，`~/.claude/rules/*.md` 仍会被当成项目规则读进去（11/06 联网搜索实测发现）。给卡选工作目录时要知道这一点；要彻底干净得换 `CLAUDE_CONFIG_DIR`，代价是单独登录一次。
+10. **网关出错时重试太久**：网关回 500 时 Claude Code 默认重试约 3 分钟才失败。以后可按卡设 `CLAUDE_CODE_MAX_RETRIES` / `API_TIMEOUT_MS`（这次没做）。
+11. **合规**：「我们的程序替本人拉起官方 CLI、用本人订阅」算不算条款允许的用法，请法务确认；Codex app-server 登录方式文档写着不允许用于商业或托管服务。
 
 ---
 
@@ -157,7 +164,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET [+ TIANSHU_CLOU
 
 ### A. 打包选型
 
-结论：Bun `--compile`（ADR 0028）。证据：三种都在 Windows 11 上做了最小原型——Bun 原型（托盘 + HTTP/SSE + HKCU Run + TypeBox 校验）112 MB、约 0.2 s 起、工作集约 130–155 MB；Go 7.2 MB、89 ms、16.8 MB，但 Mac 托盘要 cgo 只能在 Mac 上编，TypeBox 不能复用；Node SEA 91.8 MB、139 ms、37.4 MB，默认弹控制台窗口，Mac 产物要重签，Node 24 没有 `--build-sea`。Bun 在 Windows 上直接编出 darwin-arm64（63 MB）和 darwin-x64（68 MB），Mach-O 带 `LC_CODE_SIGNATURE`（临时签名）。用 `irm`/`iwr`/`curl` 下载的文件实测都没有 Mark-of-the-Web。拿不准：Bun 的内存；Mac 上实际运行。托盘坑：.NET Framework 的 `Console.In.ReadLineAsync` 实际是阻塞的，会卡住界面线程导致托盘点不动，改用后台线程读 stdin。
+结论：Bun `--compile`（ADR 0028）。证据：三种都在 Windows 11 上做了最小原型——Bun 原型（托盘 + HTTP/SSE + HKCU Run + TypeBox 校验）112 MB、约 0.2 s 起、工作集约 130–155 MB；Go 7.2 MB、89 ms、16.8 MB，但 Mac 托盘要 cgo 只能在 Mac 上编，TypeBox 不能复用；Node SEA 91.8 MB、139 ms、37.4 MB，默认弹控制台窗口，Mac 产物要重签，Node 24 没有 `--build-sea`。Bun 在 Windows 上直接编出 darwin-arm64（63 MB）和 darwin-x64（68 MB），Mach-O 带 `LC_CODE_SIGNATURE`（临时签名）。用 `irm`/`iwr`/`curl` 下载的文件实测都没有 Mark-of-the-Web。拿不准：Bun 的内存；Mac 上实际运行。托盘坑：.NET Framework 的 `Console.In.ReadLineAsync` 实际是阻塞的，会卡住界面线程导致托盘点不动，改用后台线程读 stdin；没有控制台的窗口程序不能设 `Console.InputEncoding`，要在标准流上自己包 UTF-8 读写器。托盘最后换成本机用 `csc.exe` 编的 C# 小程序：编译 0.3–0.8 秒，约 10 KB，常驻约 30 MB。
 
 ### B. 一行命令安装
 

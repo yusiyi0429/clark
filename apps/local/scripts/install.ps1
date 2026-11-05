@@ -1,10 +1,13 @@
-﻿# 天枢本机程序 · Windows 一行安装：irm <下载源>/install.ps1 | iex
+# 天枢本机程序 · Windows 一行安装：irm <下载源>/install.ps1 | iex
 # 装到本人目录（不要管理员），注册开机自启，启动；检查 Claude Code，没装就装，没登录就带着登录。
 # 可调的环境变量：
 #   TIANSHU_LOCAL_DOWNLOAD_BASE  下载源（默认见下；以后放天枢服务器或 GitHub Release）
 #   TIANSHU_LOCAL_FILE           直接用本地这个 exe，不下载（开发和测试用）
 #   TIANSHU_LOCAL_SKIP_CLAUDE=1  不检查、不安装、不登录 Claude Code
 #   TIANSHU_LOCAL_NO_OPEN=1      装完不打开天枢网页
+# 不带 BOM：irm | iex 时 BOM 会让第一行注释失效；中文靠下载源回 Content-Type: text/plain; charset=utf-8。
+# 整个脚本包在 & { } 里：iex 在本人的终端作用域里执行，不能把 $ErrorActionPreference 之类留在那个窗口里。
+& {
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
@@ -23,7 +26,8 @@ New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 # 1. 停掉正在跑的旧版本（只停装在这个位置的那个）
 Get-Process -Name 'tianshu-local' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Exe } | ForEach-Object {
   Say '停掉正在运行的旧版本…'
-  Stop-Process -Id $_.Id -Force
+  # 连同它拉起的托盘助手和 Claude Code 进程一起停（只停这个 PID 的进程树）
+  & taskkill.exe /PID $_.Id /T /F | Out-Null
   Start-Sleep -Milliseconds 800
 }
 
@@ -90,3 +94,4 @@ Write-Host '装好了。' -ForegroundColor Green
 Say "程序：$Exe"
 Say "卸载：powershell -ExecutionPolicy Bypass -File `"$Uninstall`""
 if ($env:TIANSHU_LOCAL_NO_OPEN -ne '1') { Start-Process $TianshuUrl }
+}

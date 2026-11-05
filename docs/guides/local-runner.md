@@ -38,13 +38,14 @@ sh "$HOME/Library/Application Support/Tianshu/bin/uninstall.sh"
 |-|-|-|
 | 网页说连不上本机 | 托盘有没有图标；浏览器地址栏左边站点设置里「本地网络访问」是不是「屏蔽」 | 没图标就双击 `%LOCALAPPDATA%\Programs\Tianshu\tianshu-local.exe`，或重新跑安装命令；被屏蔽就改回「允许」（装成应用的窗口：右上角「⋮ → 应用信息」） |
 | 网页报 403 | 本机 `config.json` 的 `allowedOrigins`/`extraOrigins` | 本地开发的网页来源（如 `http://localhost:3000`）要加进 `extraOrigins`，改完重启本机程序 |
+| 托盘里是「已暂停」，网页开不了工 | 托盘图标是橙色 | 托盘菜单点「恢复」（网页只能暂停，不能替本人恢复） |
 | 网页报 401 | 口令失效（取消过配对、换了浏览器 profile） | 网页上重新「连接本机」 |
 | 开工报 `folder_not_allowed` | 目录不在允许的文件夹里 | 网页上添加文件夹（本机选择框） |
 | 开工报 `agent_not_installed` / `agent_incompatible` | 网页上的 Claude Code 状态 | 在网页上点安装，或手动 `irm https://claude.ai/install.ps1 \| iex`；版本太旧就 `claude update` |
 | 事件里出现 `auth_required` | `claude auth status --json` | 网页上点「登录 Claude」，或终端里 `claude auth login` |
 | 出现 `search_not_effective` | 这张卡用的模型 | 换成实测能搜的模型（DeepSeek v4.1 flash、Claude），或不用联网搜索 |
 | 云端看不到进展 | `GET /v1/cloud` 的 `outbox.pending`、`lastError` | 没关联就在网页上重新连接；`lastError` 写令牌无效就重新连接；断网时会自己补发 |
-| 托盘没有图标但程序在跑 | Win11 新图标默认收在任务栏右下角「^」里 | 拖到任务栏上常驻 |
+| 托盘没有图标但程序在跑 | Win11 新图标默认收在任务栏右下角「^」里；数据目录 `bin/` 下有没有 `tianshu-tray-*.exe`（第一次启动用系统自带的 csc.exe 编出来） | 拖到任务栏上常驻；没编出来多半是系统缺 .NET Framework 4，程序照常跑但没有托盘和本机弹框 |
 | 端口 47610 被占用 | `netstat -ano \| findstr 47610` | 在 `config.json` 里改 `port`；网页那边也要用同一个端口 |
 
 本机配置文件 `%LOCALAPPDATA%\Tianshu\local\config.json`（Mac：`~/Library/Application Support/Tianshu/local/config.json`），本人手改，网页改不了：

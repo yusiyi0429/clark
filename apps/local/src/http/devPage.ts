@@ -45,9 +45,11 @@ async function refresh() {
   if (!h.tokenValid) return;
   const s = await api('GET', '/v1/status'); const a = s.agents[0];
   $('agent').textContent = 'Claude Code：' + (a.installed ? a.version : '没装') + ' · ' + (a.loggedIn ? '已登录 ' + (a.subscriptionType || a.authMethod) : '未登录') + ' · 设置：' + a.setup.phase + (a.setup.loginUrl ? ' ' + a.setup.loginUrl : '') + ' · 云端待发 ' + s.cloud.outbox.pending;
-  const f = await api('GET', '/v1/folders'); $('folders').innerHTML = f.folders.map((x) => '<option value="' + x.path + '">' + x.label + '</option>').join('');
-  const m = await api('GET', '/v1/models'); $('models').innerHTML = m.profiles.map((x) => '<option value="' + x.id + '"' + (x.isDefault ? ' selected' : '') + '>' + x.label + '</option>').join('');
-  const ss = await api('GET', '/v1/sessions'); $('sessions').innerHTML = ss.sessions.map((x) => '<option value="' + x.id + '">' + x.title + ' · ' + x.status + '</option>').join('');
+  // 这些文字可能来自模型或本机文件名：一律用 textContent / Option 塞进去，不拼 HTML。
+  const fill = (sel, items) => { sel.replaceChildren(...items.map(([value, text, selected]) => new Option(text, value, selected, selected))); };
+  const f = await api('GET', '/v1/folders'); fill($('folders'), f.folders.map((x) => [x.path, x.label]));
+  const m = await api('GET', '/v1/models'); fill($('models'), m.profiles.map((x) => [x.id, x.label, x.isDefault]));
+  const ss = await api('GET', '/v1/sessions'); fill($('sessions'), ss.sessions.map((x) => [x.id, x.title + ' · ' + x.status]));
 }
 $('pair').onclick = async () => {
   const p = await api('POST', '/v1/pairings', { clientLabel: '测试页' }); $('pairInfo').textContent = '确认码 ' + p.code + '，到本机弹框里点允许';
@@ -80,15 +82,16 @@ function show(e) {
   else if (t === 'tool_result') log('    ' + (e.isError ? '✗ ' : '✓ ') + e.preview.slice(0, 160));
   else if (t === 'permission_request') {
     const d = document.createElement('div'); d.className = 'perm'; d.id = 'p-' + e.request.requestId;
-    d.innerHTML = '要权限：' + e.request.title + ' <button>允许</button>' + (e.request.canAllowForSession ? '<button>这张卡都允许</button>' : '') + '<button>拒绝</button>';
-    const [a, b, c] = d.querySelectorAll('button'); a.onclick = () => decide(e.request.requestId, 'allow', false);
-    if (e.request.canAllowForSession) { b.onclick = () => decide(e.request.requestId, 'allow', true); c.onclick = () => decide(e.request.requestId, 'deny'); } else b.onclick = () => decide(e.request.requestId, 'deny');
+    const btn = (text, onclick) => { const b = document.createElement('button'); b.textContent = text; b.onclick = onclick; return b; };
+    d.append('要权限：' + e.request.title + ' ', btn('允许', () => decide(e.request.requestId, 'allow', false)));
+    if (e.request.canAllowForSession) d.append(btn('这张卡都允许', () => decide(e.request.requestId, 'allow', true)));
+    d.append(btn('拒绝', () => decide(e.request.requestId, 'deny')));
     $('perms').appendChild(d); log('  ? ' + e.request.title);
   } else if (t === 'permission_resolved') { document.getElementById('p-' + e.requestId)?.remove(); log('  ' + (e.decision === 'allow' ? '已允许' : '已拒绝')); }
   else log('[' + e.seq + '] ' + t + ' ' + JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => !['seq', 'at', 'sessionId', 'type'].includes(k)))));
 }
 async function watch(id) {
-  if (abort) abort.abort(); if (id !== current) { lastSeq = 0; $('log').textContent = ''; $('perms').innerHTML = ''; } current = id; abort = new AbortController();
+  if (abort) abort.abort(); if (id !== current) { lastSeq = 0; $('log').textContent = ''; $('perms').replaceChildren(); } current = id; abort = new AbortController();
   // EventSource 不能带口令头，用 fetch 读 SSE；断了带 Last-Event-ID 重连。
   for (;;) {
     try {

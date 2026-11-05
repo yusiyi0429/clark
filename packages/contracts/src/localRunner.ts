@@ -23,6 +23,8 @@ const Instant = Type.String({ format: "date-time" });
 const Id = Type.String({ minLength: 1, maxLength: 80, pattern: "^[A-Za-z0-9_-]+$" });
 const Uuid = Type.String({ format: "uuid" });
 const strict = { additionalProperties: false } as const;
+/** 钥匙和令牌只收可见 ASCII（不含空格、换行等控制字符），免得经 stdin 交给系统凭据工具时被当成另一条命令。 */
+const SECRET_CHARS = "^[\x21-\x7E]*$";
 const Nullable = <T extends TSchema>(schema: T) => Type.Union([schema, Type.Null()]);
 
 // ───────────────────────── 通用 ─────────────────────────
@@ -119,11 +121,12 @@ export const LocalSettings = Type.Object({
   includePersonalConfigByDefault: Type.Boolean(),
   /** 只读：允许直连的网页来源。改它要在本机配置文件里改，网页不能改。 */
   allowedOrigins: Type.Array(Type.String()),
-  /** 托盘「暂停全部」后为 true：不接新会话；恢复后为 false。 */
+  /** 「暂停全部」后为 true：进行中的会话停下，不接新会话、不续接旧会话；只能在托盘里恢复。 */
   paused: Type.Boolean(),
 }, strict);
 export const LocalSettingsPatch = Type.Object({
   includePersonalConfigByDefault: Type.Optional(Type.Boolean()),
+  /** 网页只能暂停（true）；传 false 会被拒（409），恢复只能在本机托盘里点。 */
   paused: Type.Optional(Type.Boolean()),
 }, strict);
 
@@ -149,7 +152,7 @@ export const LocalAgentLoginCodeRequest = Type.Object({ code: Type.String({ minL
  */
 export const LocalCloudLinkRequest = Type.Object({
   apiBaseUrl: Type.String({ minLength: 8, maxLength: 200 }),
-  token: Type.String({ minLength: 16, maxLength: 400 }),
+  token: Type.String({ minLength: 16, maxLength: 400, pattern: SECRET_CHARS }),
   personName: Type.Optional(Type.String({ maxLength: 60 })),
 }, strict);
 
@@ -193,7 +196,7 @@ export const LocalModelProfileUpsert = Type.Object({
   smallModel: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
   /** 不传：订阅为 true；网关模型按实测白名单。 */
   webSearch: Type.Optional(Type.Boolean()),
-  apiKey: Type.Optional(Type.String({ maxLength: 400 })),
+  apiKey: Type.Optional(Type.String({ maxLength: 400, pattern: SECRET_CHARS })),
   isDefault: Type.Optional(Type.Boolean()),
 }, strict);
 

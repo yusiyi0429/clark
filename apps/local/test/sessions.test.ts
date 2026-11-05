@@ -200,9 +200,14 @@ describe("模型配置与钥匙", () => {
   let t: Awaited<ReturnType<typeof startTestRunner>>;
   let token: string;
   const work = tempDir("tl-work-");
-  // 云端请求一律打到桩上，测试绝不连线上。
-  const offline = (async () => { throw new Error("offline"); }) as unknown as typeof fetch;
-  beforeAll(async () => { t = await startTestRunner({ pickFolder: work, fetchImpl: offline }); token = await pair(t.port); await api(t.port, token, "POST", "/v1/folders/pick", {}); });
+  // 云端请求一律打到桩上，测试绝不连线上：/mcp/me 记下转发来的请求并回一条 JSON-RPC，同步接口当作断网。
+  const cloudCalls: { url: string; auth: string | null; body: string }[] = [];
+  const stub = (async (url: URL | string, init?: RequestInit) => {
+    if (!String(url).endsWith("/mcp/me")) throw new Error("offline");
+    cloudCalls.push({ url: String(url), auth: new Headers(init?.headers).get("authorization"), body: Buffer.from(init?.body as Uint8Array).toString("utf8") });
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { tools: [{ name: "web_search" }] } }), { headers: { "content-type": "application/json", "mcp-session-id": "s-1" } });
+  }) as unknown as typeof fetch;
+  beforeAll(async () => { t = await startTestRunner({ pickFolder: work, fetchImpl: stub }); token = await pair(t.port); await api(t.port, token, "POST", "/v1/folders/pick", {}); });
   afterAll(async () => { await t.cleanup(); });
 
   it("网关钥匙只写不读；拉起时地址和模型进 --settings，钥匙只进环境变量不进命令行", async () => {
@@ -234,21 +239,65 @@ describe("模型配置与钥匙", () => {
     expect((await api(t.port, token, "PUT", "/v1/models/sub-haiku", { label: "订阅 haiku", source: "subscription", model: "haiku" })).body.webSearch).toBe(true);
   });
 
-  it("关联云端后每个会话挂天枢 MCP（/mcp/me），令牌只经环境变量传，不进文件和命令行", async () => {
+  it("关联云端后每个会话挂天枢 MCP，经本机程序转发：云端令牌不进会话的文件、命令行和环境变量", async () => {
     const cloudToken = "cloud-token-0123456789abcdef";
     expect((await api(t.port, token, "PUT", "/v1/cloud", { apiBaseUrl: "https://evil.example", token: cloudToken })).status).toBe(400);
+    expect((await api(t.port, token, "PUT", "/v1/cloud", { apiBaseUrl: ORIGIN, token: "bad token\nadd-generic-password" })).status).toBe(400);
     expect((await api(t.port, token, "PUT", "/v1/cloud", { apiBaseUrl: ORIGIN, token: cloudToken, personName: "测试" })).status).toBe(200);
     expect(JSON.stringify((await api(t.port, token, "GET", "/v1/cloud")).body)).not.toContain(cloudToken);
     const s = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "card", cardId: "c-cloud" }, title: "云端 MCP", cwd: work, firstMessage: "hi" });
     expect(s.status).toBe(200);
-    const file = readFileSync(join(t.dataDir, "sessions", s.body.id, "mcp.json"), "utf8");
-    expect(JSON.parse(file).mcpServers.tianshu).toEqual({ type: "http", url: "https://tk.tokenkingos.com/mcp/me", headers: { Authorization: "Bearer ${TIANSHU_CLOUD_TOKEN}" } });
+    const sessionDir = join(t.dataDir, "sessions", s.body.id);
+    const file = readFileSync(join(sessionDir, "mcp.json"), "utf8");
+    expect(JSON.parse(file).mcpServers.tianshu).toEqual({ type: "http", url: `http://127.0.0.1:${t.port}/internal/sessions/${s.body.id}/cloud-mcp`, headers: { "x-tianshu-session-secret": "${TIANSHU_SESSION_SECRET}" } });
     expect(file).not.toContain(cloudToken);
     const run = trace(work).at(-1);
-    expect(run.cloudToken).toBe(cloudToken);
+    expect(run.cloudToken).toBeNull();
     expect(run.argv.join(" ")).not.toContain(cloudToken);
+
+    // 会话的 MCP 客户端经本机转发调天枢 MCP：本机换上云端令牌，原样转发请求和响应。
+    const secret = JSON.parse(readFileSync(join(sessionDir, "session.json"), "utf8")).mcpSecret;
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const proxied = await raw(t.port, { method: "POST", path: `/internal/sessions/${s.body.id}/cloud-mcp`, headers: { "x-tianshu-session-secret": secret, "content-type": "application/json", accept: "application/json, text/event-stream" }, body });
+    expect(proxied.status).toBe(200);
+    expect(proxied.headers["mcp-session-id"]).toBe("s-1");
+    expect(proxied.body.result.tools[0].name).toBe("web_search");
+    expect(cloudCalls.at(-1)).toEqual({ url: "https://tk.tokenkingos.com/mcp/me", auth: `Bearer ${cloudToken}`, body });
+    expect((await raw(t.port, { method: "POST", path: `/internal/sessions/${s.body.id}/cloud-mcp`, headers: { "x-tianshu-session-secret": "wrong", "content-type": "application/json" }, body })).status).toBe(401);
+
+    // 进程退出后本会话密钥作废。
     await api(t.port, token, "POST", `/v1/sessions/${s.body.id}/kill`, {});
+    expect((await raw(t.port, { method: "POST", path: `/internal/sessions/${s.body.id}/cloud-mcp`, headers: { "x-tianshu-session-secret": secret, "content-type": "application/json" }, body })).status).toBe(401);
     await api(t.port, token, "DELETE", "/v1/cloud");
+  });
+
+  it("改网关地址不带新钥匙时，旧钥匙作废（不会被发到新地址）", async () => {
+    await api(t.port, token, "PUT", "/v1/models/moved", { label: "x", source: "gateway", baseUrl: "https://hub.example.com", model: "m", apiKey: "sk-old-0123456789" });
+    expect((await api(t.port, token, "PUT", "/v1/models/moved", { label: "x", source: "gateway", baseUrl: "https://hub.example.com", model: "m2" })).body.hasKey).toBe(true);
+    expect((await api(t.port, token, "PUT", "/v1/models/moved", { label: "x", source: "gateway", baseUrl: "https://attacker.example", model: "m2" })).body.hasKey).toBe(false);
+    expect((await api(t.port, token, "PUT", "/v1/models/moved", { label: "x", source: "gateway", baseUrl: "https://hub2.example.com", model: "m2", apiKey: "sk-new-0123456789" })).body.hasKey).toBe(true);
+    expect((await api(t.port, token, "PUT", "/v1/models/moved", { label: "x", source: "gateway", baseUrl: "https://hub2.example.com", model: "m2", apiKey: "sk\nnew" })).status).toBe(400);
+  });
+
+  it("带个人配置又用网关模型：钥匙不进命令行；本人全局设置里自己设了钥匙就不开工", async () => {
+    const cfg = tempDir("tl-cfg-");
+    const prev = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = cfg;
+    try {
+      await api(t.port, token, "PUT", "/v1/models/gw-p", { label: "网关", source: "gateway", baseUrl: "https://hub.example.com", model: "m", apiKey: "sk-personal-0123456789" });
+      const ok = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "card", cardId: "c-p" }, title: "x", cwd: work, modelProfileId: "gw-p", firstMessage: "hi", includePersonalConfig: true });
+      expect(ok.status).toBe(200);
+      const run = trace(work).at(-1);
+      expect(run.argv.join(" ")).not.toContain("sk-personal-0123456789");
+      expect(run.argv).not.toContain("--setting-sources");
+      await api(t.port, token, "POST", `/v1/sessions/${ok.body.id}/kill`, {});
+      writeFileSync(join(cfg, "settings.json"), JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: "their-own" } }));
+      const refused = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "card", cardId: "c-p" }, title: "x", cwd: work, modelProfileId: "gw-p", firstMessage: "hi", includePersonalConfig: true });
+      expect(refused.status).toBe(400);
+      expect(refused.body.error.code).toBe("validation");
+    } finally {
+      if (prev === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = prev;
+    }
   });
 
   it("没填钥匙的网关配置不能开工；内置订阅配置不能删", async () => {

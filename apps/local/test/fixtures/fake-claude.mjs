@@ -7,7 +7,7 @@ import { createInterface } from "node:readline";
 const argv = process.argv.slice(2);
 const sid = argv[argv.indexOf("--session-id") + 1] ?? argv[argv.indexOf("--resume") + 1];
 const cfg = existsSync(".fake-claude.json") ? JSON.parse(readFileSync(".fake-claude.json", "utf8")) : {};
-appendFileSync(".fake-claude-trace.jsonl", JSON.stringify({ argv, envKeys: Object.keys(process.env), authToken: process.env.ANTHROPIC_AUTH_TOKEN ?? null, sessionSecret: process.env.TIANSHU_SESSION_SECRET ?? null, cloudToken: process.env.TIANSHU_CLOUD_TOKEN ?? null }) + "\n");
+appendFileSync(".fake-claude-trace.jsonl", JSON.stringify({ pid: process.pid, argv, envKeys: Object.keys(process.env), authToken: process.env.ANTHROPIC_AUTH_TOKEN ?? null, sessionSecret: process.env.TIANSHU_SESSION_SECRET ?? null, cloudToken: process.env.TIANSHU_CLOUD_TOKEN ?? null }) + "\n");
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 const mode = cfg.mode ?? "normal";
 
@@ -43,6 +43,7 @@ rl.on("line", (line) => {
   if (!line.trim()) return;
   const msg = JSON.parse(line);
   if (msg.type === "control_request" && msg.request.subtype === "initialize") {
+    if (cfg.initDelayMs) { setTimeout(() => out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { claude_code_version: cfg.version ?? "2.1.318", pid: process.pid } } }), cfg.initDelayMs); return; }
     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { claude_code_version: cfg.version ?? "2.1.318", pid: process.pid } } });
   } else if (msg.type === "control_request" && msg.request.subtype === "interrupt") {
     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { still_queued: [] } } });

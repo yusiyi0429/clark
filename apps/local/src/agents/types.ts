@@ -47,7 +47,7 @@ export interface AgentAdapter {
 }
 
 export class AgentStartError extends Error {
-  constructor(readonly code: "agent_not_installed" | "agent_incompatible" | "not_implemented" | "agent_not_logged_in", message: string) {
+  constructor(readonly code: "agent_not_installed" | "agent_incompatible" | "not_implemented" | "agent_not_logged_in" | "validation", message: string) {
     super(message);
   }
 }

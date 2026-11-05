@@ -34,6 +34,8 @@ export interface ServerDeps {
   settings: Settings;
   pickFolder: () => Promise<string | null>;
   onSettingsChange?: () => void;
+  /** 转发天枢 MCP 用；测试里换成桩。 */
+  fetchImpl: typeof fetch;
 }
 
 type RouteName = keyof typeof LOCAL_RUNNER_ROUTES;
@@ -123,7 +125,15 @@ export function createServer(d: ServerDeps): http.Server {
     },
     unlinkCloud: async () => { await d.cloud.unlink(); return d.cloud.view(); },
     getSettings: () => d.settings.get(),
-    patchSettings: (c) => { const s = d.settings.patch(validate(LocalSettingsPatch, c.body)); d.onSettingsChange?.(); return s; },
+    patchSettings: async (c) => {
+      const b = validate(LocalSettingsPatch, c.body);
+      // 网页只能暂停，不能替本人恢复：暂停是本机这一侧的刹车。
+      if (b.paused === false && d.settings.get().paused) throw new HttpError(409, "conflict", "只能在本机托盘里恢复");
+      const s = d.settings.patch(b);
+      if (b.paused) await d.sessions.interruptAll();
+      d.onSettingsChange?.();
+      return s;
+    },
     listModels: async () => ({ profiles: await d.models.list() }),
     putModel: async (c) => {
       if (!/^[A-Za-z0-9_-]{1,80}$/.test(c.params.id!)) throw new HttpError(400, "validation", "id 只能用字母数字、- 和 _");
@@ -137,15 +147,13 @@ export function createServer(d: ServerDeps): http.Server {
     pickFolder: async () => { const p = await d.pickFolder(); return { folder: p ? d.folders.add(p) : null }; },
     deleteFolder: (c) => { if (!d.folders.remove(c.params.id!)) throw new HttpError(404, "not_found", "没有这个文件夹"); return { ok: true }; },
     listSessions: () => ({ sessions: d.sessions.list() }),
-    createSession: async (c) => {
-      if (d.settings.get().paused) throw new HttpError(409, "conflict", "本机程序已暂停，先在托盘里恢复");
-      return d.sessions.create(validate(LocalCreateSessionRequest, c.body), { includePersonalConfig: d.settings.get().includePersonalConfigByDefault });
-    },
+    createSession: (c) =>
+      d.sessions.create(validate(LocalCreateSessionRequest, c.body), { includePersonalConfig: d.settings.get().includePersonalConfigByDefault }),
     getSession: (c) => d.sessions.get(c.params.id!),
     sessionEvents: (c) => streamEvents(c),
     sendMessage: (c) => d.sessions.sendMessage(c.params.id!, validate(LocalSendMessageRequest, c.body).text),
     interrupt: async (c) => ({ session: await d.sessions.interrupt(c.params.id!) }),
-    decidePermission: (c) => ({ session: d.sessions.decide(c.params.id!, decodeURIComponent(c.params.requestId!), validate(LocalPermissionDecisionRequest, c.body)) }),
+    decidePermission: (c) => ({ session: d.sessions.decide(c.params.id!, c.params.requestId!, validate(LocalPermissionDecisionRequest, c.body)) }),
     kill: async (c) => ({ session: await d.sessions.kill(c.params.id!) }),
   };
 
@@ -175,11 +183,17 @@ export function createServer(d: ServerDeps): http.Server {
     return STREAMING;
   }
 
-  /** 本会话 MCP（HTTP）：只给 Claude Code 的 MCP 客户端用，浏览器发的请求一定带 Origin，带了就拒。 */
-  async function handleSessionMcp(req: IncomingMessage, res: ServerResponse, sessionId: string) {
-    if (req.headers.origin !== undefined) return reject(res, { status: 403, code: "bad_origin", message: "内部接口不接受浏览器请求" });
+  /** 内部接口只给 Claude Code 的 MCP 客户端用：浏览器发的请求一定带 Origin，带了就拒；还要本会话密钥（进程活着时才有效）。 */
+  function internalGate(req: IncomingMessage, res: ServerResponse, sessionId: string): boolean {
+    if (req.headers.origin !== undefined) { reject(res, { status: 403, code: "bad_origin", message: "内部接口不接受浏览器请求" }); return false; }
     const secret = req.headers["x-tianshu-session-secret"];
-    if (!d.sessions.verifySecret(sessionId, typeof secret === "string" ? secret : undefined)) return reject(res, { status: 401, code: "unauthorized", message: "会话密钥不对" });
+    if (!d.sessions.verifySecret(sessionId, typeof secret === "string" ? secret : undefined)) { reject(res, { status: 401, code: "unauthorized", message: "会话密钥不对" }); return false; }
+    return true;
+  }
+
+  /** 本会话 MCP（交产出物、证据、交回）。 */
+  async function handleSessionMcp(req: IncomingMessage, res: ServerResponse, sessionId: string) {
+    if (!internalGate(req, res, sessionId)) return;
     if (req.method !== "POST") { res.writeHead(405, { allow: "POST" }); return res.end(); } // 不提供服务端推送流
     const j = checkJson(req);
     if (j) return reject(res, j);
@@ -195,12 +209,43 @@ export function createServer(d: ServerDeps): http.Server {
     }
   }
 
-  return http.createServer(async (req, res) => {
+  /**
+   * 天枢 MCP（/mcp/me）经本机程序转发：云端令牌只在本机程序里，不进 Claude Code 的环境变量，
+   * 所以它跑的命令、仓库里的脚本都拿不到。请求和响应（含流式响应）原样转发，只换掉鉴权头。
+   */
+  async function proxyCloudMcp(req: IncomingMessage, res: ServerResponse, sessionId: string) {
+    if (!internalGate(req, res, sessionId)) return;
+    const target = await d.cloud.target();
+    if (!target) return reject(res, { status: 503, code: "cloud_not_linked", message: "还没关联天枢云端" });
+    const headers: Record<string, string> = { authorization: `Bearer ${target.token}` };
+    for (const h of ["content-type", "accept", "mcp-session-id", "mcp-protocol-version", "last-event-id"]) {
+      const v = req.headers[h];
+      if (typeof v === "string") headers[h] = v;
+    }
+    const body = req.method === "POST" ? new Uint8Array(await readRaw(req)) : undefined;
+    const abort = new AbortController();
+    res.on("close", () => abort.abort());
+    try {
+      const up = await d.fetchImpl(new URL("/mcp/me", target.apiBaseUrl), { method: req.method, headers, body, signal: abort.signal });
+      const out: Record<string, string> = {};
+      for (const h of ["content-type", "mcp-session-id", "cache-control"]) { const v = up.headers.get(h); if (v) out[h] = v; }
+      res.writeHead(up.status, out);
+      if (up.body) for await (const chunk of up.body as unknown as AsyncIterable<Uint8Array>) res.write(chunk);
+      res.end();
+    } catch (e) {
+      if (res.headersSent) { res.end(); return; }
+      reject(res, { status: 502, code: "internal", message: `连不上天枢云端：${e instanceof Error ? e.message : String(e)}` });
+    }
+  }
+
+  async function handle(req: IncomingMessage, res: ServerResponse) {
     const hostBad = checkHost(req, d.config.port);
     if (hostBad) return reject(res, hostBad);
-    const url = new URL(req.url ?? "/", "http://x");
-    const internal = /^\/internal\/sessions\/([0-9a-f-]{36})\/mcp$/.exec(url.pathname);
-    if (internal) return handleSessionMcp(req, res, internal[1]!);
+    const rawUrl = req.url ?? "";
+    if (!rawUrl.startsWith("/") || rawUrl.startsWith("//")) return reject(res, { status: 400, code: "validation", message: "请求路径不对" });
+    const url = new URL(rawUrl, "http://127.0.0.1");
+    const internal = /^\/internal\/sessions\/([0-9a-f-]{36})\/(mcp|cloud-mcp)$/.exec(url.pathname);
+    if (internal) return internal[2] === "mcp" ? handleSessionMcp(req, res, internal[1]!) : proxyCloudMcp(req, res, internal[1]!);
     // 开发测试页：只在 --dev 下提供；页面本身不含任何口令。
     if (d.config.dev && req.method === "GET" && url.pathname === "/dev" && req.headers.origin === undefined) {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
@@ -222,7 +267,7 @@ export function createServer(d: ServerDeps): http.Server {
     const jsonBad = checkJson(req);
     if (jsonBad) return reject(res, jsonBad, cors);
     const m = route.re.exec(url.pathname)!;
-    const params = Object.fromEntries(route.keys.map((k, i) => [k, m[i + 1]!]));
+    const params = Object.fromEntries(route.keys.map((k, i) => [k, safeDecode(m[i + 1]!)]));
     try {
       const body = req.method === "GET" || req.method === "DELETE" ? undefined : await readBody(req);
       const out = await handlers[route.name]({ req, res, origin, params, body, token });
@@ -235,11 +280,33 @@ export function createServer(d: ServerDeps): http.Server {
         return reject(res, { status, code: e.code, message: e.message }, cors);
       }
       if (e instanceof AgentStartError) {
-        const status = e.code === "not_implemented" ? 501 : 409;
+        const status = e.code === "not_implemented" ? 501 : e.code === "validation" ? 400 : 409;
         return reject(res, { status, code: e.code, message: e.message }, cors);
       }
       return reject(res, { status: 500, code: "internal", message: e instanceof Error ? e.message : String(e) }, cors);
     }
+  }
+
+  // 任何一个请求出错都不能带走整个常驻进程（Bun 下未捕获的异常会直接退出）。
+  return http.createServer((req, res) => {
+    handle(req, res).catch((e) => {
+      if (!res.headersSent) reject(res, { status: 500, code: "internal", message: e instanceof Error ? e.message : String(e) });
+      else res.end();
+    });
+  });
+}
+
+function safeDecode(s: string): string {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+
+function readRaw(req: IncomingMessage): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on("data", (c: Buffer) => { size += c.length; if (size > MAX_BODY) { reject(new Error("请求体太大")); req.destroy(); } else chunks.push(c); });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
   });
 }
 

@@ -44,7 +44,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   if (opts.allowedOrigins) config.allowedOrigins = opts.allowedOrigins;
   const secrets = opts.secrets ?? createSecretStore(config.dataDir);
   const log = new EventLog(join(config.dataDir, "sessions"));
-  const desktop = opts.desktop ?? createDesktop(Boolean(opts.headless));
+  const desktop = opts.desktop ?? createDesktop(Boolean(opts.headless), config.dataDir);
   const tokens = new TokenStore(config.dataDir);
   const pairings = new Pairings(tokens, ({ code, origin, label }) =>
     desktop.confirm("天枢本机程序 · 配对", `${label}（${origin}）想连接这台电脑上的天枢本机程序。\n\n确认码：${code}\n\n和网页上显示的一致才点「是」。`));
@@ -59,7 +59,8 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   const updateTray = () => desktop.setState({ paired: tokens.count() > 0, running: sessionsRef?.activeCount() ?? 0, paused: settings.get().paused });
   const sessions = new SessionManager({
     dataDir: config.dataDir, log, models, folders, outbox, deviceId: config.deviceId, port: () => config.port,
-    cloudMcp: async () => { const t = await cloud.target(); return t ? { url: new URL("/mcp/me", t.apiBaseUrl).toString(), token: t.token } : null; },
+    cloudLinked: async () => Boolean(await cloud.target()),
+    paused: () => settings.get().paused,
     adapters: {
       "claude-code": new ClaudeCodeAdapter(opts.claudeBin ? async () => opts.claudeBin! : () => claude.bin()),
       codex: new CodexAdapter(),
@@ -70,6 +71,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   const server = createServer({
     config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings,
     pickFolder: () => desktop.pickFolder(),
+    fetchImpl: opts.fetchImpl ?? fetch,
     onSettingsChange: updateTray,
   });
 

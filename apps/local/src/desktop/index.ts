@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { join } from "node:path";
 import { WindowsDesktop } from "./windows.js";
 import { MacDesktop } from "./darwin.js";
 
@@ -6,7 +7,7 @@ export type MenuAction = "open" | "pause" | "resume" | "quit";
 export interface TrayState { paired: boolean; running: number; paused: boolean }
 
 /**
- * 托盘和本机弹框。Windows 用系统自带的 PowerShell 5.1 + WinForms（脚本嵌在程序里），
+ * 托盘和本机弹框。Windows 用系统自带的 .NET Framework 编出的 C# 小程序（WinForms，源码嵌在程序里），
  * macOS 用系统自带的 osascript（JXA 菜单栏 + display dialog / choose folder）。都不需要另装东西。
  */
 export interface Desktop {
@@ -33,9 +34,9 @@ export class HeadlessDesktop implements Desktop {
   stop() {}
 }
 
-export function createDesktop(headless: boolean): Desktop {
+export function createDesktop(headless: boolean, dataDir: string): Desktop {
   if (headless) return new HeadlessDesktop();
-  if (process.platform === "win32") return new WindowsDesktop();
+  if (process.platform === "win32") return new WindowsDesktop(join(dataDir, "bin"));
   if (process.platform === "darwin") return new MacDesktop();
   return new HeadlessDesktop();
 }

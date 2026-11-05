@@ -46,7 +46,7 @@ tianshu-local version
 | `src/eventLog.ts` | 每会话事件日志 |
 | `src/outbox.ts` | 发件箱：落盘、退避重试、幂等键 |
 | `src/models.ts`、`secrets.ts` | 模型配置；钥匙存 DPAPI / 钥匙串 |
-| `src/desktop/` | 托盘和本机弹框（Windows PowerShell+WinForms，Mac osascript） |
+| `src/desktop/` | 托盘和本机弹框（Windows：首次启动用系统自带 csc 编的 C# 小程序；Mac：osascript） |
 | `src/autostart.ts` | HKCU Run / LaunchAgent |
 | `scripts/` | 打包、冒烟、安装卸载脚本 |
 

@@ -28,6 +28,7 @@ describe("本机程序契约", () => {
   it("模型钥匙只写不读", () => {
     expect(Value.Check(LocalModelProfileUpsert, { label: "TokenHub DeepSeek", source: "gateway", baseUrl: "https://hub.example.com", model: "deepseek", apiKey: "k" })).toBe(true);
     expect(Value.Check(LocalModelProfileUpsert, { label: "x", source: "gateway", baseUrl: "file:///etc", model: "m" })).toBe(false);
+    expect(Value.Check(LocalModelProfileUpsert, { label: "x", source: "gateway", baseUrl: "https://hub.example.com", model: "m", apiKey: "sk\nadd-generic-password" })).toBe(false);
     expect(LocalModelProfile.properties).not.toHaveProperty("apiKey");
     expect(LocalModelProfile.properties).toHaveProperty("hasKey");
   });

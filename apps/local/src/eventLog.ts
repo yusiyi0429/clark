@@ -26,10 +26,13 @@ export class EventLog {
     if (!events) {
       events = [];
       try {
-        for (const line of readFileSync(this.file(sessionId), "utf8").split("\n")) {
+        const text = readFileSync(this.file(sessionId), "utf8");
+        for (const line of text.split("\n")) {
           if (!line.trim()) continue;
           try { events.push(JSON.parse(line) as TLocalSessionEvent); } catch { /* 断电留下的半行，跳过 */ }
         }
+        // 断电留下的半行没有换行：先补一个，下一条事件才不会拼在它后面一起丢掉。
+        if (text.length && !text.endsWith("\n")) appendFileSync(this.file(sessionId), "\n");
       } catch { /* 新会话还没有日志 */ }
       this.cache.set(sessionId, events);
     }

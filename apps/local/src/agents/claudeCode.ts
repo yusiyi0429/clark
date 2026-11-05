@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { TLocalPermissionRequestView, TLocalUsage } from "@warmap/contracts";
 import type { EventBody } from "../eventLog.js";
 import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer } from "./types.js";
-import { buildClaudeArgs, childEnv, describeTool, versionAtLeast } from "./claudeEnv.js";
+import { buildClaudeArgs, childEnv, describeTool, personalSettingsSetKey, versionAtLeast } from "./claudeEnv.js";
 
 /** 低于这个版本不保证兼容：11/05 实测基于 2.1.318；权限模式 default 改名 manual 也在 2.1.3xx。 */
 export const MIN_CLAUDE_VERSION = "2.1.300";
@@ -253,6 +253,9 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   async start(launch: AgentLaunch): Promise<AgentRun> {
     const bin = await this.resolveBin();
     if (!bin) throw new AgentStartError("agent_not_installed", "这台电脑上没找到 Claude Code");
+    if (launch.includePersonalConfig && launch.model.source === "gateway" && personalSettingsSetKey(this.baseEnv)) {
+      throw new AgentStartError("validation", "本人的 Claude Code 全局设置里自己设了模型钥匙，会盖过这张卡选的网关模型。请关掉「带上个人配置」，或改用订阅模型。");
+    }
     const { args, env } = buildClaudeArgs(launch);
     const child = spawn(bin.command, [...bin.prefixArgs, ...args], {
       cwd: launch.cwd,

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { AgentLaunch } from "./types.js";
 
 /**
@@ -34,9 +37,9 @@ export const PERMISSION_ARGS = [
 
 /**
  * 拉起参数。默认会话干净：只读项目和本地设置、只带本会话的 MCP；打开 includePersonalConfig 才带本人全局配置。
- * 网关模型：地址和模型名放 --settings 的 env（盖过本人全局配置，11/05 实测）；钥匙放进程环境变量，不进命令行
- * （macOS 上同机其他用户用 ps 看得到 argv）。带个人配置时，本人全局 settings 里的 ANTHROPIC_AUTH_TOKEN 会盖过进程环境，
- * 只有这种情况把钥匙也放进 --settings。
+ * 网关模型：地址和模型名放 --settings 的 env（盖过本人全局配置，11/05 实测）；钥匙只放进程环境变量，不进命令行
+ * （macOS 上同机其他用户用 ps 看得到 argv）。带个人配置时，本人全局 settings 里若也设了钥匙会盖过进程环境，
+ * 那种组合由 personalSettingsSetKey 拦下，不开工。
  */
 export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Record<string, string> } {
   const args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", ...PERMISSION_ARGS];
@@ -60,10 +63,7 @@ export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Rec
       // WebFetch 摘要和后台小任务用的模型（ANTHROPIC_SMALL_FAST_MODEL 已废弃）；没配小模型就用主模型。
       ANTHROPIC_DEFAULT_HAIKU_MODEL: m.smallModel ?? m.model,
     };
-    if (m.apiKey) {
-      env.ANTHROPIC_AUTH_TOKEN = m.apiKey;
-      if (launch.includePersonalConfig) settings.env.ANTHROPIC_AUTH_TOKEN = m.apiKey;
-    }
+    if (m.apiKey) env.ANTHROPIC_AUTH_TOKEN = m.apiKey;
     env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
   } else if (m.model) {
     args.push("--model", m.model);
@@ -99,4 +99,15 @@ export function versionAtLeast(v: string, min: string): boolean {
     if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
   }
   return true;
+}
+
+/** 本人全局 Claude Code 设置里有没有自己设模型钥匙（CC Switch 之类的工具会写进去）。有的话，它会盖过本会话用环境变量传的网关钥匙。 */
+export function personalSettingsSetKey(env: NodeJS.ProcessEnv = process.env): boolean {
+  const dir = env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+  try {
+    const s = JSON.parse(readFileSync(join(dir, "settings.json"), "utf8")) as { env?: Record<string, unknown> };
+    return Boolean(s.env && ("ANTHROPIC_AUTH_TOKEN" in s.env || "ANTHROPIC_API_KEY" in s.env));
+  } catch {
+    return false;
+  }
 }

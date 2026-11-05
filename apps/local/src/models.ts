@@ -69,6 +69,9 @@ export class ModelProfiles {
     else if (body.apiKey !== undefined) {
       if (body.apiKey === "") await this.secrets.delete(keyName(id));
       else await this.secrets.set(keyName(id), body.apiKey);
+    } else if (prev && prev.baseUrl !== next.baseUrl) {
+      // 地址变了却没给新钥匙：旧钥匙作废，免得被网页改个地址就把本人的钥匙发到别处。
+      await this.secrets.delete(keyName(id));
     }
     return (await this.list()).find((p) => p.id === id)!;
   }

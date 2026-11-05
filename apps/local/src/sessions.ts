@@ -54,8 +54,10 @@ export interface SessionDeps {
   deviceId: string;
   /** 本机程序实际监听的端口（本会话 MCP 回连用）。 */
   port: () => number;
-  /** 关联了云端时，天枢 MCP（/mcp/me）的地址和令牌；没关联返回 null，会话就不挂它。 */
-  cloudMcp?: () => Promise<{ url: string; token: string } | null>;
+  /** 关联了云端时会话挂天枢 MCP（经本机程序转发，令牌不进会话）。 */
+  cloudLinked?: () => Promise<boolean>;
+  /** 托盘或网页暂停后，不开新会话、不续接旧会话。 */
+  paused?: () => boolean;
   onChange?: () => void;
 }
 
@@ -72,6 +74,10 @@ export class SessionManager {
   private readonly runs = new Map<string, AgentRun>();
   private readonly pending = new Map<string, Map<string, TLocalPermissionRequestView>>();
   private readonly killed = new Set<string>();
+  /** 正在拉起（含续接握手）的会话：同一个会话同时只许有一次启动。 */
+  private readonly starting = new Map<string, Promise<AgentRun>>();
+  /** 启动途中被强停的会话：启动一完成就杀掉。 */
+  private readonly cancelled = new Set<string>();
   private readonly dir: string;
 
   constructor(private readonly d: SessionDeps) {
@@ -176,18 +182,19 @@ export class SessionManager {
    */
   private async writeMcpConfig(rec: SessionRecord): Promise<{ path: string; env: Record<string, string>; allowedTools: string[] }> {
     const env: Record<string, string> = { TIANSHU_SESSION_SECRET: rec.mcpSecret };
+    const local = `http://127.0.0.1:${this.d.port()}/internal/sessions/${rec.id}`;
+    const secretHeader = { "x-tianshu-session-secret": "${TIANSHU_SESSION_SECRET}" };
     const servers: Record<string, unknown> = {
       [SESSION_MCP_NAME]: {
         type: "http",
-        url: `http://127.0.0.1:${this.d.port()}/internal/sessions/${rec.id}/mcp`,
-        headers: { "x-tianshu-session-secret": "${TIANSHU_SESSION_SECRET}" },
+        url: `${local}/mcp`,
+        headers: secretHeader,
       },
     };
     const allowedTools = [...SESSION_TOOL_NAMES];
-    const cloud = await this.d.cloudMcp?.();
-    if (cloud) {
-      servers[CLOUD_MCP_NAME] = { type: "http", url: cloud.url, headers: { Authorization: "Bearer ${TIANSHU_CLOUD_TOKEN}" } };
-      env.TIANSHU_CLOUD_TOKEN = cloud.token;
+    if (await this.d.cloudLinked?.()) {
+      // 天枢 MCP 经本机程序转发（/internal/sessions/:id/cloud-mcp），云端令牌留在本机程序里，会话和它跑的命令都拿不到。
+      servers[CLOUD_MCP_NAME] = { type: "http", url: `${local}/cloud-mcp`, headers: secretHeader };
       allowedTools.push(...CLOUD_MCP_READONLY_TOOLS.map((t) => `mcp__${CLOUD_MCP_NAME}__${t}`));
     }
     const path = join(this.dir, rec.id, "mcp.json");
@@ -198,14 +205,24 @@ export class SessionManager {
   private async startRun(rec: SessionRecord, resume: boolean): Promise<AgentRun> {
     const adapter = this.d.adapters[rec.agent];
     if (!adapter) throw new SessionError("validation", `不支持的执行方 ${rec.agent}`);
+    if (this.d.paused?.()) throw new SessionError("conflict", "本机程序已暂停，先在托盘里恢复");
+    // 续接时也重查：允许的文件夹可能已被本人移除。
+    if (!this.d.folders.isAllowed(rec.cwd)) throw new SessionError("folder_not_allowed", "这个会话的目录已不在允许的文件夹里");
     const model = await this.d.models.resolve(rec.modelProfileId);
     if (!model) throw new SessionError("validation", "这个会话用的模型配置已被删除");
     mkdirSync(join(this.dir, rec.id), { recursive: true });
+    // 每次拉起换一个本会话密钥，进程退出即作废：会话里跑的命令就算读到它，也只在这一次进程活着时有用。
+    rec.mcpSecret = randomBytes(24).toString("hex");
+    if (this.records.has(rec.id)) this.save(rec);
     const mcp = await this.writeMcpConfig(rec);
     const run = await adapter.start({
       sessionId: rec.id, cwd: rec.cwd, resume, model, includePersonalConfig: rec.includePersonalConfig,
       mcpConfigPath: mcp.path, mcpEnv: mcp.env, allowedTools: mcp.allowedTools,
     });
+    if (this.cancelled.delete(rec.id)) {
+      await run.kill();
+      throw new SessionError("conflict", "启动途中已被强停");
+    }
     this.runs.set(rec.id, run);
     this.pending.set(rec.id, new Map());
     run.onEvent((e) => this.onAgentEvent(rec, e));
@@ -255,6 +272,7 @@ export class SessionManager {
     }
     this.pending.delete(rec.id);
     const killed = this.killed.delete(rec.id);
+    rec.mcpSecret = "";
     this.setStatus(rec, killed || code === 0 ? "exited" : "failed", { exitCode: code, reason: killed ? "已强停" : undefined });
     this.d.log.evict(rec.id);
   }
@@ -262,13 +280,18 @@ export class SessionManager {
   async sendMessage(id: string, text: string): Promise<TLocalSendMessageResponse> {
     const rec = this.must(id);
     let run = this.runs.get(id);
-    let delivery: TLocalSendMessageResponse["delivery"];
+    let resumed = false;
     if (!run) {
-      run = await this.startRun(rec, true);
-      delivery = "resumed";
-    } else {
-      delivery = rec.status === "idle" ? "new_turn" : "next_step";
+      const inflight = this.starting.get(id);
+      if (inflight) run = await inflight;
+      else {
+        const p = this.startRun(rec, true);
+        this.starting.set(id, p);
+        try { run = await p; } finally { this.starting.delete(id); }
+        resumed = true;
+      }
     }
+    const delivery: TLocalSendMessageResponse["delivery"] = resumed ? "resumed" : rec.status === "idle" ? "new_turn" : "next_step";
     this.emit(rec, { type: "user_message", text, source: "web" });
     run.send(text);
     if (delivery === "next_step") this.emit(rec, { type: "notice", level: "info", code: "interjection_next_step", text: "已送达，会在它下一步之前生效" });
@@ -300,6 +323,9 @@ export class SessionManager {
     if (run) {
       this.killed.add(id);
       await run.kill();
+    } else if (this.starting.has(id)) {
+      this.cancelled.add(id);
+      await this.starting.get(id)!.catch(() => undefined);
     }
     return this.summary(rec);
   }
@@ -317,7 +343,7 @@ export class SessionManager {
 
   verifySecret(id: string, secret: string | undefined): boolean {
     const rec = this.records.get(id);
-    if (!rec || !secret) return false;
+    if (!rec || !secret || !rec.mcpSecret) return false;
     const a = Buffer.from(secret);
     const b = Buffer.from(rec.mcpSecret);
     return a.length === b.length && timingSafeEqual(a, b);
@@ -335,10 +361,10 @@ export class SessionManager {
     if (size > MAX_ARTIFACT_BYTES) throw new SessionError("validation", "产出物超过 10 MB");
     const content = readFileSync(file);
     const sha256 = createHash("sha256").update(content).digest("hex");
-    const fileName = basename(file);
+    const fileName = basename(file).slice(-200);
     // 同名再交是同一个产出物的新一版。
     const artifactId = createHash("sha256").update(`${rec.id}:${fileName}`).digest("hex").slice(0, 24);
-    const title = input.title?.trim() || fileName;
+    const title = (input.title?.trim() || fileName).slice(0, 200);
     this.emit(rec, { type: "artifact", artifactId, title, fileName, size, sha256 });
     this.sync(rec, { type: "artifact", data: { artifactId, title, fileName, mimeType, size, sha256, contentBase64: content.toString("base64") } });
     return `已交：${title}（${Math.ceil(size / 1024)} KB）`;
@@ -346,8 +372,11 @@ export class SessionManager {
 
   addEvidence(id: string, input: { kind: "note" | "log" | "link" | "diff_summary"; title: string; text?: string; url?: string }): string {
     const rec = this.must(id);
-    this.sync(rec, { type: "evidence", data: { kind: input.kind, title: input.title.slice(0, 200), ...(input.text ? { text: input.text.slice(0, 8000) } : {}), ...(input.url ? { url: input.url } : {}) } });
-    this.emit(rec, { type: "notice", level: "info", code: "evidence_added", text: `交了一条证据：${input.title.slice(0, 80)}` });
+    const title = input.title.trim().slice(0, 200);
+    if (!title) throw new SessionError("validation", "证据要有标题");
+    if (input.url !== undefined && (!/^https?:\/\//.test(input.url) || input.url.length > 2000)) throw new SessionError("validation", "链接只收 2000 字以内的 http(s) 地址");
+    this.sync(rec, { type: "evidence", data: { kind: input.kind, title, ...(input.text ? { text: input.text.slice(0, 8000) } : {}), ...(input.url ? { url: input.url } : {}) } });
+    this.emit(rec, { type: "notice", level: "info", code: "evidence_added", text: `交了一条证据：${title.slice(0, 80)}` });
     return "已记下这条证据";
   }
 
