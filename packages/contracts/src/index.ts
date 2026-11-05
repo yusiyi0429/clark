@@ -38,6 +38,7 @@ export * from "./requests.js";
 export * from "./personalMemory.js";
 export * from "./memoryImport.js";
 export * from "./collector.js";
+export * from "./localRunner.js";
 export * from "./feishu.js";
 export * from "./wechat.js";
 export * from "./weeklyReviews.js";
