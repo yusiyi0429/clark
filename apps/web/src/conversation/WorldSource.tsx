@@ -15,12 +15,12 @@ import s from "@/styles/citation-panel.module.css";
  */
 
 type WorldSourceView = components["schemas"]["WorldSourceView"];
-export type WorldLoad = { state: "loading" } | { state: "missing" } | { state: "error" } | { state: "ready"; source: WorldSourceView };
+type WorldLoad ={ state: "loading" } | { state: "missing" } | { state: "error" } | { state: "ready"; source: WorldSourceView };
 
 const TYPE_LABELS: Record<string, string> = {
   Company: "公司", Strategy: "战略", LongTermGoal: "长期目标", PeriodGoal: "周期目标", ResponsibilityUnit: "责任单元", Activity: "执行事项",
 };
-export const worldTypeLabel = (type: string): string => TYPE_LABELS[type] ?? type;
+const worldTypeLabel = (type: string): string => TYPE_LABELS[type] ?? type;
 
 /** 第二行：本体 · 类型 · 引用时第几版；本体里已经有更新的版本时注明。 */
 export function worldLocator(version: number, source?: WorldSourceView): string {
@@ -39,11 +39,6 @@ function loadWorldSource(objectId: string): Promise<WorldLoad> {
   loads.set(objectId, next);
   void next.then((result) => { if (result.state === "error") loads.delete(objectId); });
   return next;
-}
-
-/** 测试用。 */
-export function resetWorldSources(): void {
-  loads.clear();
 }
 
 /** 一条出处对应的本体对象；不是 world: 出处时为 null。active 时才去读（浮层、底部弹层、面板打开时）。 */
@@ -87,7 +82,7 @@ export function WorldEvidence({ citeRef, trigger, onClose }: { citeRef: string; 
   const title = source?.title ?? "本体对象";
   const progress = source?.progress;
   return (
-    <aside className={d.drawer} role="dialog" aria-modal="false" aria-label={`依据：${title}`} data-source-drawer data-world-source={citeRef}>
+    <aside className={d.drawer} role="dialog" aria-modal="false" aria-label={`依据：${title}`} data-source-drawer>
       <header className={d.drawerHead}>
         <div>
           <small>{worldLocator(parsed.kind === "world" ? parsed.version : 0, source)}</small>
