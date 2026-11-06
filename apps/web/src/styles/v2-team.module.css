@@ -1,0 +1,85 @@
+/*
+ * 岗位页（components/team/**，V2 设计第 19.6 节）：左边岗位列表、右边一个岗位的三段 Markdown、工具和模型档位、修改记录；
+ * 顶上是待你确认的岗位修改。版式和插件页同一套（浅灰底、白卡、细边），只用现有 token。
+ */
+.page { height: 100%; overflow-y: auto; background: color-mix(in oklab, var(--ink) 2%, var(--surface)); }
+.wrap { display: grid; gap: 18px; max-width: 1040px; margin: 0 auto; padding: 28px 28px 40px; }
+.top { display: flex; align-items: center; gap: 12px; }
+.top h1 { margin: 0; font-size: 20px; font-weight: 650; }
+.grow { flex: 1; }
+.lab { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--ink-faint); font-size: 12px; font-weight: 500; }
+.faint { color: var(--ink-faint); font-size: 12px; }
+.count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 600; }
+
+/* 待你确认。 */
+.proposals { display: grid; gap: 8px; }
+.proposal { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid #dfe4e9; border-radius: 14px; background: var(--surface); box-shadow: 0 2px 8px #29334c08; }
+.proposalHead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+.proposalHead b { font-weight: 600; }
+.why { min-width: 0; margin: 0; color: var(--ink-muted); font-size: 12.5px; }
+.link { color: var(--ink-muted); font-size: 12.5px; text-decoration: none; }
+.link:hover { color: var(--brand-deep); }
+.textBtn { height: 26px; padding: 0 8px; border: 0; border-radius: 8px; background: none; color: var(--ink-muted); font-size: 12.5px; cursor: pointer; }
+.textBtn:hover { background: var(--wash-hover); color: var(--ink); }
+
+/* 改前改后。 */
+.diff { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.side { display: grid; align-content: start; gap: 4px; min-width: 0; }
+.lines { margin: 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in oklab, var(--ink) 2.5%, var(--surface)); font: 12px/1.65 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.lines span { display: block; min-height: 1.65em; padding: 0 4px; border-radius: 4px; }
+.lines span[data-change="del"] { background: var(--counter-wash); color: var(--counter); }
+.lines span[data-change="add"] { background: var(--confirmed-wash); color: var(--confirmed); }
+
+/* 列表和详情。 */
+.body { display: grid; grid-template-columns: 240px minmax(0, 1fr); align-items: start; gap: 16px; }
+.list { display: grid; gap: 2px; padding: 6px; border: 1px solid #dfe4e9; border-radius: 14px; background: var(--surface); }
+.item { display: grid; gap: 1px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; color: var(--ink); text-align: left; cursor: pointer; }
+.item:hover { background: var(--wash-hover); }
+.item[aria-current="true"] { background: color-mix(in oklab, var(--accent) 9%, var(--surface)); }
+.item b { font-size: 13.5px; font-weight: 600; }
+.item small { color: var(--ink-faint); font-size: 11.5px; }
+.empty { display: grid; justify-items: start; gap: 10px; padding: 18px; border: 1px dashed var(--hairline-strong); border-radius: 14px; }
+
+.detail { display: grid; gap: 16px; padding: 18px 20px 20px; border: 1px solid #dfe4e9; border-radius: 16px; background: var(--surface); }
+.detailHead { display: grid; gap: 4px; }
+.name { width: 100%; max-width: 360px; height: 34px; padding: 0 8px; margin-left: -8px; border: 1px solid transparent; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: 17px; font-weight: 650; }
+.name:hover { border-color: var(--hairline); }
+.name:focus { border-color: var(--accent); outline: 0; background: var(--field-bg); }
+.back { justify-self: start; display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 10px 0 6px; border: 1px solid var(--hairline); border-radius: 15px; background: var(--surface); color: var(--ink-muted); font-size: 13px; cursor: pointer; }
+.section { display: grid; gap: 6px; }
+.sectionHead { display: flex; align-items: center; gap: 8px; }
+.sectionHead .lab { font-size: 12.5px; color: var(--ink-muted); font-weight: 600; }
+.md { padding: 8px 10px; border: 1px solid transparent; border-radius: 10px; color: var(--ink); font-size: 13.5px; line-height: 1.7; cursor: text; }
+.md:hover { border-color: var(--hairline); }
+.md p { margin: 0 0 6px; }
+.md ul, .md ol { margin: 0 0 6px; padding-left: 20px; }
+.md h1, .md h2, .md h3 { margin: 10px 0 4px; font-size: 13.5px; }
+.md[data-empty] { color: var(--field-placeholder); }
+.editor { width: 100%; min-height: 120px; padding: 8px 10px; border: 1px solid var(--accent); border-radius: 10px; outline: 0; resize: vertical; background: var(--field-bg); color: var(--ink); font: 12.5px/1.7 var(--font-mono); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.choice { height: 28px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline-strong); color: var(--ink); font-size: 12.5px; cursor: pointer; }
+.choice[aria-checked="true"] { background: color-mix(in oklab, var(--accent) 9%, var(--surface)); box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--brand-deep); font-weight: 600; }
+.saveBar { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 0 -20px -20px; padding: 10px 20px; border-top: 1px solid var(--hairline); border-radius: 0 0 16px 16px; background: var(--surface); }
+
+/* 修改记录。 */
+.revisions { display: grid; gap: 2px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.revision { display: grid; gap: 8px; }
+.revisionLine { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 30px; padding: 4px 6px; border: 0; border-radius: 8px; background: none; color: var(--ink); font-size: 12.5px; text-align: left; cursor: pointer; }
+.revisionLine:hover { background: var(--wash-hover); }
+.ver { color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.badge { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 6px; background: var(--neutral-wash); color: var(--ink-muted); font-size: 11px; font-weight: 600; }
+.changes { display: grid; gap: 10px; padding: 0 6px 10px; }
+
+/* 从岗位包添加。 */
+.presets { display: grid; gap: 14px; padding: 4px 20px 18px; }
+.family { display: grid; gap: 4px; }
+.presetLine { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 2px 6px; border-radius: 10px; font-size: 13px; }
+.presetLine:nth-child(even) { background: #f8fafc; }
+
+@media (max-width: 959px) {
+  .wrap { padding: 16px 16px 24px; }
+  .body { grid-template-columns: minmax(0, 1fr); }
+  .detail { padding: 14px 14px 16px; }
+  .saveBar { margin: 0 -14px -16px; padding: 10px 14px; }
+  .diff { grid-template-columns: minmax(0, 1fr); }
+}

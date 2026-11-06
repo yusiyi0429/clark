@@ -6,7 +6,8 @@
  * 没装本机程序时给安装命令和「复制」，不写为什么要装。手机上是「我」：个人菜单在最上面，本机只能看。
  */
 import { useEffect, useState } from "react";
-import { Check, Copy, FolderPlus, X } from "lucide-react";
+import Link from "next/link";
+import { Check, ChevronRight, Copy, FolderPlus, UsersRound, X } from "lucide-react";
 import type { TLocalDeviceView } from "@warmap/contracts";
 import { AccountMenu, type Account } from "@/components/AccountMenu";
 import { HeroButton } from "@/components/HeroButton";
@@ -31,6 +32,7 @@ export function PluginsPage({ account }: { account: Account }) {
     <div className={s.page} data-testid="plugins-page">
       <div className={s.wrap}>
         {handheld ? <div className={s.meHead}><h1>我</h1><AccountMenu account={account} /></div> : <h1 className={s.pageTitle}>插件</h1>}
+        {handheld ? <Link href="/me/team" className={s.row}><UsersRound size={16} aria-hidden /><b>岗位</b><span className={s.grow} /><ChevronRight size={16} aria-hidden /></Link> : null}
         <LocalSection personName={account.displayName} handheld={handheld} />
         <DevicesSection />
       </div>
@@ -185,6 +187,7 @@ function ModelsAndFolders() {
             <button type="button" className={s.mini} aria-label={`移除 ${folder.label}`} onClick={() => void local.runner.removeFolder(folder.id).then(() => local.refresh())}><X size={13} aria-hidden /></button>
           </div>
         )) : <small className={s.faint}>还没有</small>}
+        {local.error ? <small className={s.error} role="alert">{local.error}</small> : null}
       </div>
     </div>
   );
