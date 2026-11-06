@@ -6,7 +6,7 @@ import {
   LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES,
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
   LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard, LocalBackgroundItem,
-  LocalSettings, LocalMergeSync,
+  LocalSettings, LocalMergeSync, LocalStatusResponse, LocalQuotaSource, LocalQuotaSync,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -271,6 +271,59 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalMergeSync, { ...held, reason: "busy" })).toBe(false);
     const batch = { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, items: [{ key: `${deviceId}:${sessionId}:13`, sessionId, subject: card.subject, occurredAt: at, type: "merge", data: merged }] };
     expect(Value.Check(LocalSyncBatchRequest, batch)).toBe(true);
+  });
+
+  it("额度和命令行工具在本机状态里；额度用完的卡停着等（hold、usage_limit）；花费分订阅和网关、网关带真钱；开工带档位；同步只带百分比、状态、时间", () => {
+    const at = "2026-11-07T07:00:00.000Z";
+    const claude = {
+      source: "claude_subscription", plan: "max", blockedUntil: null, extraUsage: false, updatedAt: at, error: null,
+      windows: [
+        { kind: "weekly_all", model: null, usedPercent: 79, state: "warning", resetsAt: "2026-11-07T00:00:00.229Z" },
+        { kind: "weekly_scoped", model: "Fable", usedPercent: 4, state: "ok", resetsAt: "2026-11-07T00:00:00.229Z" },
+      ],
+    };
+    expect(Value.Check(LocalQuotaSource, claude)).toBe(true);
+    expect(Value.Check(LocalQuotaSource, { ...claude, windows: [{ ...claude.windows[0], usedPercent: 101 }] })).toBe(false);
+    expect(Value.Check(LocalQuotaSource, { ...claude, email: "x@example.com" })).toBe(false); // 账号信息放不进来
+    const tools = [
+      { kind: "gh", state: "ready", version: "2.88.0", account: "someone", checkedAt: at },
+      { kind: "lark-cli", state: "expired", version: "1.0.93", account: "孙铭泽", checkedAt: at },
+    ];
+    const settings = { includePersonalConfigByDefault: false, allowedOrigins: [], paused: false, maxConcurrent: 3, autoMerge: true };
+    const status = {
+      deviceId, version: "0.1.0", agents: [], activeSessions: 0, slots: { max: 3, running: 0, queued: 0 },
+      cloud: { linked: false, apiBaseUrl: null, personName: null, outbox: { pending: 0, lastSyncedAt: null, lastError: null } }, settings, quota: [claude], tools,
+    };
+    expect(Value.Check(LocalStatusResponse, status)).toBe(true);
+    expect(Value.Check(LocalStatusResponse, { ...status, tools: [{ ...tools[0], kind: "git" }] })).toBe(false);
+
+    // 额度用完：一轮以 usage_limit 结束，卡停着等（摘要、状态事件、状态条目都带 hold）
+    const hold = { reason: "usage_limit", until: "2026-11-07T00:00:00.000Z" };
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null };
+    expect(Value.Check(LocalSessionEvent, { seq: 3, at, sessionId, type: "turn_end", isError: true, text: null, durationMs: 1, usage, errorKind: "usage_limit" })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { seq: 4, at, sessionId, type: "status", status: "idle", hold })).toBe(true);
+    const summary = {
+      id: sessionId, subject: { kind: "card", cardId: "card-1" }, title: "改登录页", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
+      cwd: "D:/repo", status: "idle", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 4, pendingPermissions: 0, queuePosition: null, usage, hold,
+    };
+    expect(Value.Check(LocalSessionSummary, summary)).toBe(true);
+    expect(Value.Check(LocalSessionSummary, { ...summary, hold: { reason: "budget", until: null } })).toBe(false);
+    const key = (n: number) => `${deviceId}:${sessionId}:${n}`;
+    const base = { sessionId, subject: summary.subject, occurredAt: at };
+    const sync = { quota: [{ source: "claude_subscription", windows: claude.windows, blockedUntil: null, updatedAt: at }] };
+    expect(Value.Check(LocalQuotaSync, sync.quota[0])).toBe(true);
+    expect(Value.Check(LocalQuotaSync, { ...sync.quota[0], plan: "max" })).toBe(false); // 计划名不同步
+    const items = [
+      { ...base, key: key(5), type: "status", data: { status: "idle", title: "改登录页", agent: "claude-code", modelLabel: "订阅", hold } },
+      { ...base, key: key(6), type: "cost", data: { modelLabel: "订阅", usage: { ...usage, costUsd: 0.12 }, source: "subscription", model: "claude-opus-5-5", money: null } },
+      { ...base, key: key(7), type: "cost", data: { modelLabel: "DeepSeek", usage, source: "gateway", model: "wangsu/deepseek-v4.1-flash", money: { amount: 0.031, currency: "CNY", estimated: true } } },
+      { ...base, key: key(8), type: "cost", data: { modelLabel: "旧版本机", usage } }, // 旧版本机发的不带来源也收
+    ];
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, ...sync, items })).toBe(true);
+
+    // 开工带档位（订阅模型按档位选模型和思考强度）
+    expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "card", cardId: "c1" }, title: "x", firstMessage: "做", modelTier: "light" })).toBe(true);
+    expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "card", cardId: "c1" }, title: "x", firstMessage: "做", modelTier: "max" })).toBe(false);
   });
 
   it("配对口令只在批准后出现；路由表里只有健康和配对不要口令", () => {
