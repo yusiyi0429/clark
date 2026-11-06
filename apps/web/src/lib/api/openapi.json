@@ -9224,7 +9224,7 @@
     "/api/plan-tasks/{taskId}/check/notify": {
       "post": {
         "operationId": "notifyCheckAcceptor",
-        "summary": "「请 X 看」（负责人）：给这一条约定的认可人推一条飞书私聊，带 Task 的链接；同一条一天最多推一次。personId 和约定里的认可人对不上 400 NOT_ACCEPTOR；这一条还不是「要 X 确认」409 NOT_AWAITING_ACCEPTOR；飞书没接 503 FEISHU_NOT_CONFIGURED",
+        "summary": "「请 X 看」（负责人）：给这一条约定的认可人推一条飞书私聊，带 Task 的链接；同一条一天最多推一次。personId 和约定里的认可人对不上 400 NOT_ACCEPTOR；这一条还不是「要 X 确认」409 NOT_AWAITING_ACCEPTOR；认可人没关联飞书 409 ACCEPTOR_NOT_ON_FEISHU；飞书没接 503 FEISHU_NOT_CONFIGURED",
         "parameters": [
           {
             "name": "taskId",

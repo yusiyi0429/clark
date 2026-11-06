@@ -261,6 +261,9 @@ describe("请 X 看", () => {
       await f.seedVersion("t-plain", 4, "done", ["有题库打分结果", "有新人上手录屏"], { headline: "h", summary: "s", gain: null, mismatch: null,
         criteria: [met(1, "评测报告.pdf 第 3 页"), gap(2)] });
       const notify = (body: unknown, cookie = f.member) => f.call("POST", "/api/plan-tasks/t-plain/check/notify", body, cookie);
+      const unlinked = await notify({ index: 1, personId: THIRD.personId });
+      expect([unlinked.statusCode, unlinked.json()]).toMatchObject([409, { code: "ACCEPTOR_NOT_ON_FEISHU", message: "测试丙还没关联飞书，推不了" }]);
+      await f.t.sql("INSERT INTO feishu_identities (person_id, open_id, name) VALUES ($1, 'ou_third', '测试丙')", [THIRD.personId]);
       const first = await notify({ index: 1, personId: THIRD.personId });
       expect(first.json()).toEqual({ status: "sent" });
       expect((await notify({ index: 1, personId: THIRD.personId })).json()).toEqual({ status: "already_sent" });
@@ -272,7 +275,6 @@ describe("请 X 看", () => {
         body: "测试乙的 Task「对话质量达标」第 1 条约定由你来认：有题库打分结果\n交付物第 4 版，证据在 评测报告.pdf 第 3 页。",
         links: [{ label: "打开 Task", path: "/me?planTask=t-plain" }] });
       // 队列里那一条由 feishu/notify.ts 发出：这里用打桩的飞书客户端跑一遍，看收件人和跳回 Task 的链接。
-      await f.t.sql("INSERT INTO feishu_identities (person_id, open_id, name) VALUES ($1, 'ou_third', '测试丙')", [THIRD.personId]);
       await feishuNotifyJobs({ pool: f.t.pool, client: f.client, publicOrigin: f.t.publicOrigin })[FEISHU_NOTIFY_KIND](jobs[0].payload, jobs[0] as never);
       expect(f.sent).toHaveLength(1);
       expect(f.sent[0]).toMatchObject({ type: "open_id", id: "ou_third", msgType: "interactive" });

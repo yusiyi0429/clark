@@ -225,6 +225,9 @@ export async function notifyAcceptor(q: Query, access: PlanTaskAccess, check: TT
   if (item.acceptor?.personId !== request.personId) throw new DeliverableError(400, "NOT_ACCEPTOR", "这一条约定的认可人不是这个人");
   if (item.status !== "needs_acceptor" || !check.version) throw new DeliverableError(409, "NOT_AWAITING_ACCEPTOR", "这一条还没有证据，先不用请人看");
   if (!feishuOn) throw new DeliverableError(503, "FEISHU_NOT_CONFIGURED", "飞书还没接上，推不了");
+  // 认可人没关联飞书时通知队列会直接算完成、什么也不发，这里先说清楚。
+  if (!(await q("SELECT 1 FROM feishu_identities WHERE person_id=$1", [request.personId])).rows.length)
+    throw new DeliverableError(409, "ACCEPTOR_NOT_ON_FEISHU", `${item.acceptor.name}还没关联飞书，推不了`);
   const task = access.task;
   const owner = names.get(access.ownerId) ?? access.ownerId;
   const notice: FeishuNotice = { personId: request.personId, title: `请看「${task.name}」第 ${item.index} 条`.slice(0, 200),
