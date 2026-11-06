@@ -46,15 +46,18 @@ function Permission({ entry, agentName, canAct, onDecide }: { entry: Extract<Ses
     setBusy(true);
     try { await onDecide(entry.request, decision, forSession); } finally { setBusy(false); }
   };
+  // 越界（碰允许的文件夹以外的路径）：标红写明路径，只能允许这一次（ADR 0031）。
+  const outside = entry.request.outsidePaths ?? [];
   return (
-    <div className={s.permission} data-testid="permission-request">
+    <div className={s.permission} data-testid="permission-request" data-outside={outside.length ? true : undefined}>
       <small className={s.who}>{agentName} 要权限</small>
       <p>{entry.request.title}</p>
+      {outside.length ? <ul className={s.outside} aria-label="越界的路径">{outside.map((path) => <li key={path}>越界：{path}</li>)}</ul> : null}
       {entry.decision ? <span className={s.decided} data-decision={entry.decision}>{entry.decision === "allow" ? "已批准" : "已拒绝"}</span>
         : canAct ? (
           <div className={s.actions}>
-            <HeroButton variant="primary" size="sm" onPress={() => void decide("allow")} isDisabled={busy}>批准</HeroButton>
-            {entry.request.canAllowForSession ? <HeroButton variant="secondary" size="sm" onPress={() => void decide("allow", true)} isDisabled={busy}>这张卡都允许</HeroButton> : null}
+            <HeroButton variant="primary" size="sm" onPress={() => void decide("allow")} isDisabled={busy}>{outside.length ? "允许这一次" : "批准"}</HeroButton>
+            {entry.request.canAllowForSession && !outside.length ? <HeroButton variant="secondary" size="sm" onPress={() => void decide("allow", true)} isDisabled={busy}>这张卡都允许</HeroButton> : null}
             <HeroButton variant="ghost" size="sm" onPress={() => void decide("deny")} isDisabled={busy}>拒绝</HeroButton>
           </div>
         ) : null}

@@ -86,12 +86,19 @@ describe("手机宽度只能看", () => {
     const cards = boardCards([item("a", { stage: "todo" })]);
     const html = renderToStaticMarkup(<BoardView board={board(cards.map((card) => card.item))} task={task} cards={cards} canStart={(card) => canStartCard({ ready: true, handheld: true, item: card.item })} deviceId={null} now={0} onStart={vi.fn()} onChanged={vi.fn()} />);
     expect(column(html, "todo")).not.toContain(">开始<");
-    const request = { requestId: "r", toolName: "Bash", title: "运行 pnpm test", input: {}, canAllowForSession: true, requestedAt: "2026-11-06T01:00:00Z" };
-    const transcript = (canAct: boolean) => renderToStaticMarkup(<SessionTranscript entries={[{ kind: "permission", seq: 1, at: request.requestedAt, request, decision: null }]} agentName="Claude Code" canAct={canAct} onDecide={vi.fn()} />);
+    const request = { requestId: "r", toolName: "Bash", title: "运行 pnpm test", input: {}, outsidePaths: [] as string[], canAllowForSession: true, requestedAt: "2026-11-06T01:00:00Z" };
+    const transcript = (canAct: boolean, extra: Partial<typeof request> = {}) =>
+      renderToStaticMarkup(<SessionTranscript entries={[{ kind: "permission", seq: 1, at: request.requestedAt, request: { ...request, ...extra }, decision: null }]} agentName="Claude Code" canAct={canAct} onDecide={vi.fn()} />);
     expect(transcript(false)).toContain("运行 pnpm test");
     expect(transcript(false)).not.toContain("批准");
     expect(transcript(true)).toContain("批准");
     expect(transcript(true)).toContain("这张卡都允许");
+    // 越界：标红写出路径，只能允许这一次。
+    const outside = transcript(true, { outsidePaths: ["C:\\Users\\me\\.ssh\\id_rsa"], canAllowForSession: false });
+    expect(outside).toContain("data-outside");
+    expect(outside).toContain("越界：C:\\Users\\me\\.ssh\\id_rsa");
+    expect(outside).toContain("允许这一次");
+    expect(outside).not.toContain("这张卡都允许");
   });
 });
 

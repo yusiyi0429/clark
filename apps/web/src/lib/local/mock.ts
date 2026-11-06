@@ -78,7 +78,7 @@ export function createMockRunner({ stepMs = 900, paired = true }: MockOptions = 
     (s) => { emit(s, { type: "assistant_text", text: "先读一下交代和相关代码，列个计划。" }); plan(s, 0); },
     (s) => { tool(s, "Read", "读 apps/web/src/app/manifest.ts"); plan(s, 1); },
     (s) => {
-      const request: TLocalPermissionRequestView = { requestId: `perm-${++seqId}`, toolName: "Bash", title: "运行 pnpm --filter @warmap/web test", input: { command: "pnpm --filter @warmap/web test" }, canAllowForSession: true, requestedAt: now() };
+      const request: TLocalPermissionRequestView = { requestId: `perm-${++seqId}`, toolName: "Bash", title: "运行 pnpm --filter @warmap/web test", input: { command: "pnpm --filter @warmap/web test" }, outsidePaths: [], canAllowForSession: true, requestedAt: now() };
       s.pending = request;
       s.summary = { ...s.summary, pendingPermissions: 1 };
       emit(s, { type: "permission_request", request });
