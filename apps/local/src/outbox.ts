@@ -17,6 +17,8 @@ export interface CloudTarget { apiBaseUrl: string; token: string }
 const MAX_BATCH_ITEMS = 50;
 const MAX_BATCH_BYTES = 12 * 1024 * 1024;
 const MAX_BACKOFF_MS = 5 * 60_000;
+/** 这么久没同步过任何东西就发一次心跳（云端 10 分钟没收到同步就当本机离线）。 */
+const HEARTBEAT_MS = 5 * 60_000;
 /** 这些 4xx 说明条目本身不合格：整批被拒时拆开逐条发，单条再被拒就丢掉，不让一条坏的卡住后面所有的。 */
 const isItemRejection = (status: number) => status >= 400 && status < 500 && ![401, 403, 408, 429].includes(status);
 
@@ -29,9 +31,14 @@ export class Outbox {
   private readonly blobDir: string;
   /** 发每一批时带上本机的位置数（app 接好会话管理后替换）。 */
   slots: () => TLocalSlots = () => ({ max: 3, running: 0, queued: 0 });
+  /** 有条目出队（云端收下或拒收）以后调：交回送到了，本机才去取验收交代。 */
+  onSent: () => void = () => {};
   private state: State;
   private timer: NodeJS.Timeout | null = null;
   private flushing: Promise<void> | null = null;
+  private beat: NodeJS.Timeout | null = null;
+  /** 云端上次收下一批（含心跳）的时间。 */
+  private lastOkAt = -Infinity;
 
   constructor(
     dataDir: string,
@@ -68,6 +75,11 @@ export class Outbox {
     this.schedule(300);
   }
 
+  /** 这一条还在队里（云端还没收下）。 */
+  has(key: string): boolean {
+    return this.state.entries.some((e) => e.item.key === key);
+  }
+
   status(): TLocalOutboxStatus {
     return { pending: this.state.entries.length, lastSyncedAt: this.state.lastSyncedAt, lastError: this.state.lastError };
   }
@@ -87,6 +99,36 @@ export class Outbox {
   stop(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    if (this.beat) clearInterval(this.beat);
+    this.beat = null;
+  }
+
+  /** 每分钟看一次要不要发心跳。 */
+  startHeartbeat(): void {
+    this.beat ??= setInterval(() => void this.heartbeat(), 60_000);
+    this.beat.unref?.();
+  }
+
+  /** 心跳：5 分钟里没同步过任何东西（闲着，或条目都在退避）时发一批空的，让云端知道本机还开着。从不抛错，没发成等下一分钟再试。 */
+  async heartbeat(): Promise<void> {
+    if (this.now() - this.lastOkAt < HEARTBEAT_MS) return;
+    const target = await this.target().catch(() => null);
+    if (!target) return;
+    const res = await this.post(target, []).catch(() => null);
+    if (!res?.ok) return;
+    this.lastOkAt = this.now();
+    this.state.lastSyncedAt = nowIso();
+    this.save();
+  }
+
+  private post(target: CloudTarget, items: TLocalSyncItem[]): Promise<Response> {
+    const body: TLocalSyncBatchRequest = { deviceId: this.meta.deviceId, runnerVersion: this.meta.runnerVersion, slots: this.slots(), items };
+    return this.fetchImpl(new URL(LOCAL_RUNNER_SYNC_PATH, target.apiBaseUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${target.token}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60_000),
+    });
   }
 
   /** 从不抛错：常驻进程里一次发送失败（比如钥匙解不开）不能带走整个程序。 */
@@ -129,16 +171,11 @@ export class Outbox {
       items.push(item);
       bytes += size;
     }
-    const body: TLocalSyncBatchRequest = { deviceId: this.meta.deviceId, runnerVersion: this.meta.runnerVersion, slots: this.slots(), items };
+    const before = this.state.entries.length;
     let error: string | null = null;
     let retryNow = false;
     try {
-      const res = await this.fetchImpl(new URL(LOCAL_RUNNER_SYNC_PATH, target.apiBaseUrl), {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${target.token}` },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(60_000),
-      });
+      const res = await this.post(target, items);
       if (!res.ok && isItemRejection(res.status)) {
         const detail = (await res.text().catch(() => "")).slice(0, 200);
         if (batch.length > 1) {
@@ -156,6 +193,7 @@ export class Outbox {
         if (!Value.Check(LocalSyncBatchResponse, parsed)) throw new Error("云端回执格式不对");
         const done = new Set([...parsed.accepted, ...parsed.rejected.map((r) => r.key)]);
         this.remove(done);
+        this.lastOkAt = this.now();
         this.state.lastSyncedAt = nowIso();
         if (parsed.rejected.length) error = `云端拒收 ${parsed.rejected.length} 条：${parsed.rejected[0]!.message}`;
         for (const e of batch) if (!done.has(e.item.key)) this.backoff(e);
@@ -165,7 +203,9 @@ export class Outbox {
       for (const entry of batch) this.backoff(entry);
     }
     this.state.lastError = error;
+    const sent = this.state.entries.length < before;
     this.save();
+    if (sent) this.onSent();
     if (retryNow || (!error && this.state.entries.some((e) => e.nextAt <= this.now()))) this.schedule(0);
     else this.scheduleNext();
   }

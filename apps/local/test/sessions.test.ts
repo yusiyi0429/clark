@@ -196,6 +196,13 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
     const queued = JSON.parse(readFileSync(join(t.dataDir, "outbox.json"), "utf8")).entries.map((e: any) => e.item);
     const keyOf = (type: string, pred: (d: any) => boolean) => queued.find((i: any) => i.type === type && pred(i.data)).key;
     expect(queued.find((i: any) => i.type === "handback").data.outputKeys).toEqual([keyOf("artifact", (d) => d.title === "方案"), keyOf("evidence", (d) => d.title === "PR")]);
+    // 验收没过，改了方案再交（同一个文件，A2 是它的新一版），这次不点名交回：本会话交过的全部，方案只算最新一版
+    writeFileSync(join(work, "方案.md"), "# 方案\n第二版");
+    expect((await call("add_artifact", { path: "方案.md", title: "方案" })).content[0]!.text).toContain("编号 A2");
+    expect((await call("hand_back", { summary: "改好了", criteria: [{ index: 1, result: "met", evidence: "方案第二版" }] })).content[0]!.text).toContain("E1、E2、A2");
+    const again = JSON.parse(readFileSync(join(t.dataDir, "outbox.json"), "utf8")).entries.map((e: any) => e.item);
+    const a2 = again.filter((i: any) => i.type === "artifact" && i.data.title === "方案").at(-1).key;
+    expect(again.filter((i: any) => i.type === "handback").at(-1).data.outputKeys).toEqual([keyOf("evidence", (d) => d.title === "PR"), keyOf("evidence", (d) => d.title === "草稿说明"), a2]);
     const note = await raw(t.port, { method: "POST", path: `/internal/sessions/${id}/mcp`, headers: { "x-tianshu-session-secret": secret, "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
     expect(note.status).toBe(202);
     const all = await readSse(t.port, token, id, { until: has("handback") });
@@ -228,6 +235,16 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
     expect(queued.find((i: any) => i.type === "topic_version").data).toEqual({ number: 3, kind: "outline", label: null, note: "第一次出提纲", body: "# 提纲\n1. 背景" });
     expect(queued.find((i: any) => i.type === "topic_version_feishu").data).toEqual({ number: 3, feishuUrl: "https://x.feishu.cn/docx/abc" });
     await api(t.port, token, "POST", `/v1/sessions/${tid}/kill`, {});
+
+    // 同一个专题再开一个会话，交代里的 latestVersion 还是旧的（云端还没收到第 3 版）：号接着本机已存的往下编，不撞号
+    const s2 = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "topic", topicId: "topic-1" }, title: "调研（续）", firstMessage: "接着写", versionBase: 2 });
+    const secret2 = JSON.parse(readFileSync(join(t.dataDir, "sessions", s2.body.id, "session.json"), "utf8")).mcpSecret;
+    const r2 = await raw(t.port, {
+      method: "POST", path: `/internal/sessions/${s2.body.id}/mcp`, headers: { "x-tianshu-session-secret": secret2, "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "save_version", arguments: { path: "提纲.md", kind: "draft" } } }),
+    });
+    expect(r2.body.result.content[0].text).toBe("已存第 4 版");
+    await api(t.port, token, "POST", `/v1/sessions/${s2.body.id}/kill`, {});
   });
 });
 

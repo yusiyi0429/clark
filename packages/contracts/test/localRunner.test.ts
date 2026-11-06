@@ -70,10 +70,12 @@ describe("本机程序契约", () => {
       { ...item, type: "status", data: { status: "running", title: "修登录页", agent: "claude-code", modelLabel: "订阅" } },
       { ...item, type: "cost", data: { modelLabel: "订阅", usage: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null } } },
     ] })).toBe(true);
-    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [] })).toBe(false);
+    // 空的一批是心跳
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [] })).toBe(true);
     // 每一批都带本机的位置数
     expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [{ ...item, type: "status", data: { status: "queued", title: "x", agent: "claude-code", modelLabel: "订阅" } }] })).toBe(false);
-    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...item, type: "status", data: { status: "queued", title: "x", agent: "claude-code", modelLabel: "订阅" } }] })).toBe(true);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...item, type: "status", data: { status: "queued", title: "x", agent: "claude-code", modelLabel: "订阅", queuePosition: 2 } }] })).toBe(true);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...item, type: "status", data: { status: "queued", title: "x", agent: "claude-code", modelLabel: "订阅", queuePosition: 0 } }] })).toBe(false);
     // 交回点名产出和证据；专题新的一版、存进飞书的地址
     const topic = { ...item, subject: { kind: "topic", topicId: "t-1" } };
     expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [

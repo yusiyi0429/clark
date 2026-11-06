@@ -5,7 +5,7 @@ import type { SessionManager } from "./sessions.js";
  * 本会话的 MCP（HTTP，挂在本机程序的 /internal/sessions/:id/mcp）：执行方用它把产出物、证据、交回、专题版本报给本机程序，
  * 本机程序再排进发件箱单向报给云端。用 HTTP 而不是 stdio：不用为每个会话再起一个本机程序进程。
  * 本机程序把地址和本会话密钥写进 --mcp-config 文件（不进命令行）；这些工具预先放行，不弹权限请求。
- * 卡和专题各看到自己那几个：卡交回（hand_back），专题存版本（save_version、set_feishu_url）。
+ * 各种会话看到自己那几个：卡交回（hand_back），专题存版本（save_version、set_feishu_url），规划员交计划（propose_plan），验收员交结论（submit_verdict）。
  */
 const ADD_ARTIFACT = {
   name: "add_artifact",
@@ -43,7 +43,7 @@ const HAND_BACK = {
           required: ["index", "result", "evidence"],
         },
       },
-      outputs: { type: "array", items: { type: "string" }, description: "用到的产出和证据的编号（add_artifact、add_evidence 返回的 A1、E1 等）。不填就是上次交回以后交的全部。" },
+      outputs: { type: "array", items: { type: "string" }, description: "用到的产出和证据的编号（add_artifact、add_evidence 返回的 A1、E1 等）。不填就是本会话交过的全部（同一个文件交过几次只算最新一版）。" },
     },
     required: ["summary", "criteria"],
   },
@@ -72,10 +72,73 @@ const SET_FEISHU_URL = {
   },
 };
 
+const PROPOSE_PLAN = {
+  name: "propose_plan",
+  description: "交计划和派活单草稿：计划几步（按先后）、风险；派活单 1–8 件，每件写交代（brief）、完成标准（doneDefinition，每行一条、能检查）、对约定第几条（criterionIndex，对不上不填）、岗位（role，交代里岗位清单的名字）、模型档位（modelTier）。本人让你改时，改完再交一次。",
+  inputSchema: {
+    type: "object",
+    properties: {
+      summary: { type: "string", description: "一句话说怎么拆，500 字以内" },
+      steps: {
+        type: "array", description: "计划的几步，按先后",
+        items: { type: "object", properties: { title: { type: "string" }, detail: { type: "string" } }, required: ["title"] },
+      },
+      risks: { type: "array", items: { type: "string" } },
+      cards: {
+        type: "array", minItems: 1, maxItems: 8,
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "要交付的结果，120 字以内" },
+            brief: { type: "string", description: "交代：做什么、从哪入手" },
+            doneDefinition: { type: "string", description: "完成标准，每行一条，500 字以内" },
+            criterionIndex: { type: "integer", minimum: 1, description: "对约定第几条" },
+            role: { type: "string", description: "岗位名字（交代里的岗位清单）" },
+            modelTier: { type: "string", enum: ["strong", "normal", "light"] },
+            why: { type: "string", description: "一句话为什么这么拆" },
+          },
+          required: ["title", "brief", "doneDefinition", "modelTier"],
+        },
+      },
+    },
+    required: ["summary", "cards"],
+  },
+};
+const SUBMIT_VERDICT = {
+  name: "submit_verdict",
+  description: "交验收结论（只交一次）：每条完成标准判一次（index 从 1 起，条数照交代），met 达到、partial 部分、unmet 没达到，写理由（reason）、依据（evidence），没达到的写怎么补（fix）；标准以外的建议放 beyondScope；summary 一句结论。",
+  inputSchema: {
+    type: "object",
+    properties: {
+      summary: { type: "string" },
+      criteria: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            index: { type: "integer", minimum: 1 }, verdict: { type: "string", enum: ["met", "partial", "unmet"] },
+            reason: { type: "string" }, evidence: { type: "string" }, fix: { type: "string" },
+          },
+          required: ["index", "verdict", "reason"],
+        },
+      },
+      beyondScope: { type: "array", items: { type: "string" } },
+    },
+    required: ["summary", "criteria"],
+  },
+};
+
 export const SESSION_MCP_NAME = "tianshu-session";
 
+const TOOLS: Record<TLocalSessionKind, { name: string }[]> = {
+  card: [ADD_ARTIFACT, ADD_EVIDENCE, HAND_BACK],
+  topic: [ADD_ARTIFACT, ADD_EVIDENCE, SAVE_VERSION, SET_FEISHU_URL],
+  plan: [PROPOSE_PLAN],
+  verify: [SUBMIT_VERDICT],
+};
+
 export function sessionTools(kind: TLocalSessionKind) {
-  return kind === "card" ? [ADD_ARTIFACT, ADD_EVIDENCE, HAND_BACK] : [ADD_ARTIFACT, ADD_EVIDENCE, SAVE_VERSION, SET_FEISHU_URL];
+  return TOOLS[kind];
 }
 
 /** 预先放行的工具名（--allowedTools）。 */
@@ -104,6 +167,8 @@ function callTool(sessions: SessionManager, id: string, kind: TLocalSessionKind,
     });
   }
   if (name === "set_feishu_url" && Number.isInteger(input?.number) && typeof input?.url === "string") return sessions.setFeishuUrl(id, input);
+  if (name === "propose_plan" && typeof input?.summary === "string" && Array.isArray(input?.cards)) return sessions.proposePlan(id, input);
+  if (name === "submit_verdict" && typeof input?.summary === "string" && Array.isArray(input?.criteria)) return sessions.submitVerdict(id, input);
   throw new Error("工具名或参数不对");
 }
 

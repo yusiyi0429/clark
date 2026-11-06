@@ -43,6 +43,8 @@ export interface AgentRun {
   respondPermission(requestId: string, answer: PermissionAnswer): boolean;
   /** 强停：只杀本进程树。 */
   kill(): Promise<void>;
+  /** 说完了：关掉输入，让执行方自己退出（验收员交完结论用）；一会儿还不退就强停。 */
+  close(): void;
   onEvent(fn: (e: EventBody) => void): void;
   onExit(fn: (code: number | null) => void): void;
 }

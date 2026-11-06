@@ -40,15 +40,16 @@ tianshu-local version
 | `src/main.ts`、`src/app.ts` | 命令行入口；把各部分接起来、托盘菜单动作 |
 | `src/http/server.ts`、`security.ts` | 路由；Host、Origin、口令、只收 JSON；SSE 补发；本会话 MCP 接口 |
 | `src/pairing.ts` | 配对（本机弹框确认码）、口令只存哈希 |
-| `src/sessions.ts` | 会话状态机、权限挂起、插话、停下、强停、续接、交产出物和交回、喂发件箱 |
+| `src/sessions.ts` | 会话状态机（卡、专题、规划员、验收员）、同时跑的上限和队列（验收员 → 规划员 → 执行）、权限挂起、插话、停下、强停、续接、交产出物和交回、交回后自己起验收员（取云端验收交代）、交计划和结论、喂发件箱 |
+| `src/plan.ts` | 计划条目算「第几步 / 共几步」 |
 | `src/agents/claudeCode.ts`、`claudeEnv.ts` | 拉起 Claude Code、参数、环境变量白名单、stream-json 归一化 |
 | `src/agents/pathGuard.ts` | 权限请求里认越界路径、放行建议越界就不给「这张卡都允许」（ADR 0031） |
-| `src/rolePrompt.ts`、`src/agents/feishuPlugin.ts` | 工作规矩和岗位进追加的系统提示词、挑刺子 agent、评审会那句话；岗位要飞书时挂的会话插件（ADR 0033） |
-| `src/sessionMcp.ts` | 本会话 MCP：卡交产出物、证据、交回；专题存版本、报飞书地址 |
+| `src/rolePrompt.ts`、`src/agents/feishuPlugin.ts` | 四种会话的工作规矩和岗位进追加的系统提示词、挑刺子 agent、评审会那句话、验收没过的改法；岗位要飞书时挂的会话插件（ADR 0037） |
+| `src/sessionMcp.ts` | 本会话 MCP：卡交产出物、证据、交回；专题存版本、报飞书地址；规划员交计划（propose_plan）；验收员交结论（submit_verdict） |
 | `src/agents/claudeSetup.ts` | 检测、安装、登录 Claude Code |
 | `src/agents/codex.ts` | Codex 占位（12 月） |
 | `src/eventLog.ts` | 每会话事件日志 |
-| `src/outbox.ts` | 发件箱：落盘、退避重试、幂等键 |
+| `src/outbox.ts` | 发件箱：落盘、退避重试、幂等键；闲着时的心跳 |
 | `src/models.ts`、`secrets.ts` | 模型配置；钥匙存 DPAPI / 钥匙串 |
 | `src/desktop/` | 托盘和本机弹框（Windows：首次启动用系统自带 csc 编的 C# 小程序；Mac：osascript） |
 | `src/autostart.ts` | HKCU Run / LaunchAgent |

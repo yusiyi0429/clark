@@ -284,7 +284,7 @@ export const LocalRoleTool = Type.Union([Type.Literal("tianshu"), Type.Literal("
 const RoleText = Type.String({ maxLength: 8000 });
 /**
  * 岗位（V2 设计第 19 节）：和云端交代里的 RoleBrief 同形，网页可原样转给本机。
- * 本机把职责、做法、验收口径写进会话追加的系统提示词（不往本人的仓库写文件，ADR 0033）；tools 决定挂哪些插件、给哪些工具。
+ * 本机把职责、做法、验收口径写进会话追加的系统提示词（不往本人的仓库写文件，ADR 0037）；tools 决定挂哪些插件、给哪些工具。
  * modelTier 由网页按档位挑好模型（modelProfileId），本机不看；id、kind、version 只用来显示和留痕。
  */
 export const LocalRole = Type.Object({
@@ -534,8 +534,9 @@ export const LocalSessionEvent = Type.Union([
   /** 专题存了新的一版（已排进上报队列）。 */
   ev("version", { number: Type.Integer({ minimum: 1 }), kind: LocalTopicVersionKind, label: Nullable(Type.String()), note: Nullable(Type.String()) }),
   /**
-   * 验收员交了结论。验收会话和被验的那张卡的会话里各有一条（同一份）：网页在卡的会话里看到没过、又没受阻时，把 returnText 经「说一句」送回执行会话；
-   * failStreak 是算上这次连续没过几次，blocked（累计到 2）时停在「受阻」等本人，不再自动送回。过了时 returnText 为 null。
+   * 验收员交了结论。验收会话和被验的那张卡的会话里各有一条（同一份），只给网页显示：failStreak 是算上这次连续没过几次，blocked（累计到 2）是「受阻」，
+   * returnText 是改法（过了时为 null）。网页**不要**据这条事件送回改法：送回只走云端那条路——verdict 同步上去，云端把改法写进那次交回，
+   * 网页原有的自动送回按交回送一次（多个标签页也只送一次）。
    */
   ev("verdict", {
     handbackKey: SyncKey, passed: Type.Boolean(), summary: Type.String(), criteria: Type.Array(LocalVerdictCriterion), beyondScope: Type.Array(Type.String()),
@@ -560,6 +561,8 @@ const syncItem = <T extends string, D extends TSchema>(type: T, data: D) => Type
 export const LocalSyncItem = Type.Union([
   syncItem("status", Type.Object({
     status: LocalSessionStatus, title: Type.String(), agent: LocalAgentKind, modelLabel: Type.String(),
+    /** 只在 status = queued 时带：排第几（1 起）。前面的开始或取消后，本机会给还在排的每件重发一条带新位置的 queued。 */
+    queuePosition: Type.Optional(Type.Integer({ minimum: 1 })),
   }, strict)),
   syncItem("plan", Type.Object({ entries: Type.Array(LocalPlanEntry, { maxItems: 100 }), progress: LocalPlanProgress }, strict)),
   /** 证据：一段说明、日志片段、链接（PR 等）、改动摘要。不传完整工具输出。 */
@@ -581,7 +584,7 @@ export const LocalSyncItem = Type.Union([
   }, strict)),
   /**
    * 交回（只有卡）。outputKeys 是这次交回点名用的产出和证据（它们的 artifact、evidence 条目的 key）：
-   * 执行方点了名就是那几份，没点名就是本会话上一次交回以后交的全部；可以为空。
+   * 执行方点了名就是那几份，没点名就是本会话交过的全部（同一个产出物交过几次只算最新一版）；可以为空。
    */
   syncItem("handback", Type.Object({
     summary: Type.String({ maxLength: 4000 }),
@@ -589,7 +592,7 @@ export const LocalSyncItem = Type.Union([
     outputKeys: Type.Array(SyncKey, { maxItems: 100 }),
   }, strict)),
   /**
-   * 专题新的一版（只有专题）：number 由本机从开工时的 versionBase 往下编；label 为 null 时云端按自己的规矩起名（「提纲」「第 N 版」）；
+   * 专题新的一版（只有专题）：number 由本机从开工时的 versionBase 和本机同一个专题已存到的号里取大的往下编；label 为 null 时云端按自己的规矩起名（「提纲」「第 N 版」）；
    * note 是这一版改了什么；body 是 Markdown 正文。
    */
   syncItem("topic_version", Type.Object({
@@ -617,7 +620,8 @@ export const LocalSyncBatchRequest = Type.Object({
   runnerVersion: Type.String(),
   /** 发这一批时本机的位置数（云端的 worker 列表和「资源」用）。 */
   slots: LocalSlots,
-  items: Type.Array(LocalSyncItem, { minItems: 1, maxItems: 50 }),
+  /** 可以为空：本机开着、5 分钟里没别的要报时发一批空的当心跳，云端照样刷新本机的在线时间和位置数，回 accepted、rejected 都为空。 */
+  items: Type.Array(LocalSyncItem, { maxItems: 50 }),
 }, strict);
 export const LocalSyncBatchResponse = Type.Object({
   /** 已存下或以前存过的幂等键；本机据此出队。 */

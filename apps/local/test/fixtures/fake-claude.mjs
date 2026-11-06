@@ -31,12 +31,41 @@ function startTurn(text) {
   }
   out({ type: "assistant", message: { content: [{ type: "text", text: `收到：${text}` }] }, parent_tool_use_id: null });
   out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_todo${turns}`, name: "TodoWrite", input: { todos: [{ content: "写文件", status: "in_progress" }] } }] }, parent_tool_use_id: null });
+  if (readOnly) { void readOnlyTurn(); return; }
   const file = cfg.writePath ?? "hello.txt";
   out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_w${turns}`, name: "Write", input: { file_path: file, content: "你好" } }] }, parent_tool_use_id: null });
   const permId = `perm-${turns}`;
   turn = { permId };
   const suggestions = cfg.suggestions ?? [{ type: "setMode", mode: "acceptEdits", destination: "session" }];
   out({ type: "control_request", request_id: permId, request: { subtype: "can_use_tool", tool_name: "Write", input: { file_path: file, content: "你好" }, permission_suggestions: suggestions, tool_use_id: `toolu_w${turns}` } });
+}
+
+// 只读会话（规划员、验收员）：和真 Claude Code 一样，--disallowedTools 里的 Write 根本不在工具里，不会来要写文件的权限。
+// 这时假 claude 照会话 MCP 给的工具交东西：有 submit_verdict 就交 .fake-claude.json 的 verdict（verdictOnTurn 指定第几轮才交），有 propose_plan 就交 plan。
+const disallowed = argv.includes("--disallowedTools") ? argv[argv.indexOf("--disallowedTools") + 1].split(",") : [];
+const readOnly = disallowed.includes("Write");
+async function sessionMcp(method, params) {
+  const mcp = JSON.parse(readFileSync(argv[argv.indexOf("--mcp-config") + 1], "utf8")).mcpServers["tianshu-session"];
+  const headers = { "content-type": "application/json", "x-tianshu-session-secret": process.env.TIANSHU_SESSION_SECRET ?? "" };
+  const r = await fetch(mcp.url, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: turns, method, params }) });
+  return (await r.json()).result;
+}
+async function readOnlyTurn() {
+  turn = { permId: "read-only" };
+  const tools = (await sessionMcp("tools/list")).tools.map((t) => t.name);
+  const name = tools.includes("submit_verdict") ? "submit_verdict" : tools.includes("propose_plan") ? "propose_plan" : null;
+  const args = name === "submit_verdict" ? cfg.verdict : name === "propose_plan" ? cfg.plan : null;
+  const onTurn = name === "submit_verdict" ? cfg.verdictOnTurn ?? 1 : 1;
+  let result = null;
+  if (name && args && turns >= onTurn) {
+    out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_m${turns}`, name: `mcp__tianshu-session__${name}`, input: args }] }, parent_tool_use_id: null });
+    result = await sessionMcp("tools/call", { name, arguments: args });
+    out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_m${turns}`, content: result.content, is_error: result.isError }] }, parent_tool_use_id: null });
+  }
+  appendFileSync(".fake-claude-trace.jsonl", JSON.stringify({ readOnlyTurn: sid, turn: turns, tools, called: result ? name : null, result }) + "\n");
+  if (!turn) return; // 途中被停下，这一轮已经结束
+  out({ type: "assistant", message: { content: [{ type: "text", text: result ? "交好了" : "看完了" }] }, parent_tool_use_id: null });
+  finish(true, result ? "交好了" : "看完了");
 }
 
 function finish(ok, text) {

@@ -1,6 +1,6 @@
 # RFC：天枢本机程序（apps/local）
 
-v0.1 · 2026-11-06 · 第一版（Windows 先行）。决策见 ADR [0028](../../adr/0028-local-runner-single-binary-with-bun.md)（打包）、[0029](../../adr/0029-local-runner-keys-stay-on-device.md)（钥匙）、[0030](../../adr/0030-local-runner-sessions-clean-by-default.md)（会话默认干净）、[0031](../../adr/0031-local-runner-outside-paths-flagged-not-denied.md)（越界路径）、[0032](../../adr/0032-local-runner-release-and-code-signing.md)（发布与签名，待本人定）、[0033](../../adr/0033-local-runner-roles-via-cli-flags.md)（岗位进会话）；接口以 `packages/contracts/src/localRunner.ts` 为准；装、卸、排错见 [runbook](../../guides/local-runner.md)。
+v0.1 · 2026-11-06 · 第一版（Windows 先行）。决策见 ADR [0028](../../adr/0028-local-runner-single-binary-with-bun.md)（打包）、[0029](../../adr/0029-local-runner-keys-stay-on-device.md)（钥匙）、[0030](../../adr/0030-local-runner-sessions-clean-by-default.md)（会话默认干净）、[0031](../../adr/0031-local-runner-outside-paths-flagged-not-denied.md)（越界路径）、[0032](../../adr/0032-local-runner-release-and-code-signing.md)（发布与签名，待本人定）、[0037](../../adr/0037-local-runner-roles-via-cli-flags.md)（岗位进会话）；接口以 `packages/contracts/src/localRunner.ts` 为准；装、卸、排错见 [runbook](../../guides/local-runner.md)。
 
 ## 0. 一句话
 
@@ -78,7 +78,7 @@ claude -p --input-format stream-json --output-format stream-json --verbose
               [,"claudeMdExcludes":["<主目录>/.claude/**","<主目录>/CLAUDE.md","<主目录>/CLAUDE.local.md"]]（干净会话）
               [,"env":{ANTHROPIC_BASE_URL,ANTHROPIC_MODEL,ANTHROPIC_DEFAULT_HAIKU_MODEL}（网关）]}
   [--model <订阅时选的模型>]
-  --append-system-prompt-file <sessions/<id>/system.md>   # 工作规矩 + 岗位（ADR 0033）
+  --append-system-prompt-file <sessions/<id>/system.md>   # 工作规矩 + 岗位（ADR 0037）
   [--agents <sessions/<id>/agents.json>]                 # 专题的挑刺子 agent
   [--plugin-dir <数据目录/plugins/tianshu-feishu>]        # 岗位要飞书时
   [--disallowedTools WebSearch]        # 模型配置的 webSearch 关着时（网关默认关，实测白名单除外）
@@ -102,9 +102,19 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 
 状态：`starting → running ⇄ waiting_permission → idle → running …`；进程退出为 `exited`（正常、强停）或 `failed`（异常退出码）。本机程序重启时，上次还活着的会话一律记为 `exited`，再发一句话就 `--resume` 续上。会话 id 同时是 Claude Code 的 `--session-id`。
 
-开工请求可带 `role`（岗位）和专题的 `critics`（挑刺岗位，最多 3 个），进会话的方式见 ADR 0033；网页「说一句」带 `kind: "review"` 就是专题的评审会：本机替本人说一句，让会话同时调用挑刺子 agent、合成「分歧和建议」存成 kind = review 的一版（11/06 真跑 haiku 验证过并行和存版本）。
+开工请求可带 `role`（岗位）和专题的 `critics`（挑刺岗位，最多 3 个），进会话的方式见 ADR 0037；网页「说一句」带 `kind: "review"` 就是专题的评审会：本机替本人说一句，让会话同时调用挑刺子 agent、合成「分歧和建议」存成 kind = review 的一版（11/06 真跑 haiku 验证过并行和存版本）。
+
+**同时跑的上限和队列（V2 设计 20.6，11/06）**：派活单点一次「开工」用 `POST /v1/sessions/batch` 把一批交给本机（最多 20 件，逐件给结果，开不了的那件不留记录）。同时最多跑 `maxConcurrent` 个（本机设置，默认 3，插件页可改）；占位置的是 starting、running、waiting_permission，一轮做完在等本人回复的 idle 不占。满了（或前面还有人在排）就进队，状态 `queued`（界面叫「等空位」），摘要里 `queuePosition` 是排第几；先来先跑，按进队先后（`queueOrder`，一批里同一毫秒的也分得清）。有空位就自动从队头接上：一轮做完、结束、失败、排队时取消、调大上限、托盘恢复、本机程序启动好以后都会接一次；暂停和关机时不接，暂停时也不收新开工。排着的「停下」「强停」都是取消（出队，不能再续）；排着的不能说一句。给已开工的会话说一句、续接已停下的会话不走队列（本人在网页上的直接操作），可能短暂超过上限。本机程序重启后，排着的照原样排着，刚从队里拉起、还没开始就断了的放回原位；有空位就接上，用新开（`--session-id`）不用续接。健康状态、本机状态、每一批同步载荷都带 `slots { max, running, queued }`；status 同步条目在 queued 时带 `queuePosition`，前面的走了就给还在排的每件重报新位置。计划事件和 plan 条目带 `progress`（第几步 / 共几步）。假 claude 测顺序、让位、取消、调上限、暂停、重启（`test/queue.test.ts`），真跑 haiku：上限 1、同时开 2 件，第 2 件排第 1，第 1 件这一轮做完马上接上（`.scratch/local-runner/实验/K_排队真跑结果.json`，两件共约 $0.002）。
 
 卡和调研专题是同一种会话，只是 `subject.kind` 不同：卡要 `cardId` 和允许文件夹里的 `cwd`；专题要 `topicId`，不给 `cwd` 时用本机程序的专用目录 `topics/<topicId>/`。
+
+**规划员和验收员（V2 设计第 21 节，11/06）**：拆卡和验收不在云端跑，在本人电脑上由本机程序拉起 Claude Code。会话种类加 `plan`（规划员）和 `verify`（验收员），和执行一样占位置；排队先后是验收员 → 规划员 → 执行（卡、专题），同一档先来先跑。
+- 规划员：网页开（`subject: { kind: "plan", taskId }`，第一句话是云端的拆卡交代，`role` 是规划员岗位），不给 `cwd` 时用 `plans/<taskId>/`。它用本会话工具 `propose_plan` 交计划（几步、先后、风险）和派活单草稿（每件的交代、完成标准、对约定第几条、岗位名、模型档位），经发件箱同步 `card_plan`；改了再交 `revision` +1。
+- 验收员：网页不能开。执行方 `hand_back` 以后本机自己起（不经云端）：先排着（`subject: { kind: "verify", cardId, handbackKey }`），等交回条目被云端收下，再向云端取验收交代（`GET /api/local-runner/verify-brief?handbackKey=…`：第一句话、交回时的完成标准、验收员岗位、之前连续没过几次）。取不到（没连天枢、断网、天枢出错）就排着，不挡别人，事件流里用 `notice`（`verify_waiting`）说在等什么，发件箱送出东西（连上天枢时会先把交回送上去）、本机程序启动后、每 15 秒都会再取；云端回 404（没有这次交回）不验，409（已有结论）不用验。拿到交代后按验收员岗位的档位挑模型（和网页一样按模型名认：opus 强、sonnet 普通、haiku/flash/mini/lite 轻，认不出用默认的；没配岗位用普通档），所以可以和执行用的模型不同。它用 `submit_verdict` 逐条判（条数照交代、只交一次），经发件箱同步 `verdict`；一轮做完没交就提醒一次；交完就让 Claude Code 自己退出（`exited`，原因「验收完了」），本人想问它，说一句会续上。
+- 规划员、验收员只读：`--disallowedTools` 加 Edit、MultiEdit、Write、NotebookEdit、Bash、PowerShell，子 agent（Agent、Task）也不给，免得绕过。没用 Claude Code 的 plan 模式：plan 模式会让模型走「出计划、请求退出」那一套，和交结论的工具不合。
+- 没过怎么办：送回改法只走云端一条路。`verdict` 同步上去，云端接收端把改法写进那次交回的记录，网页原有的自动送回按交回送一次（多个标签页也只送一次），经「说一句」送回执行会话（空闲时开新一轮，已退出时续上）；执行方改完再交回，本机再起一个验收员。连续第二次没过停在「受阻」等本人。验收会话和被验的卡的会话里各记一条 `verdict` 事件（结论、算上这次连续没过几次 `failStreak`、`blocked`、改法 `returnText`，格式和云端 `cardAcceptance.ts` 的一样），只给网页显示，网页不据它送回。
+- 天枢 MCP 的 `get_task_context`（Task、约定、Mission、近期的事和决定、上一版交付物和评审，带出处；云端在做）预先放行；挂不挂天枢 MCP 仍按岗位的工具名单。
+- 假 claude 测三种会话的参数和排队先后、交回后自动起验收、只读、没过送回再验、第二次受阻、取不到交代时排着等、重启后照样排着（`test/planVerify.test.ts`）；真跑见第 13 节。
 
 ## 7. 会话里的 MCP
 
@@ -117,24 +127,27 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 
 文件里只写 `${变量名}`，值经 Claude Code 子进程的环境变量传进去，Claude Code 启动时展开（11/06 用假 MCP 服务实测：收到的是展开后的请求头；真机实测本会话 MCP 照常连上）。所以本会话密钥不落盘、不进命令行；云端令牌只在本机程序里，会话和它跑的命令都拿不到。
 
-联网搜索由天枢 MCP 提供（`/mcp/me` 上的只读 `web_search`，博查，钥匙留在服务器、按人限流），本机不另起搜索 MCP、不存博查钥匙。工具名 `web_search`（11/06 定），已在 `sessions.ts` 的 `CLOUD_MCP_READONLY_TOOLS` 里预先放行；天枢 MCP 的其他工具（写进展、建事项等）每次调用都要网页批准。
+联网搜索由天枢 MCP 提供（`/mcp/me` 上的只读 `web_search`，博查，钥匙留在服务器、按人限流），本机不另起搜索 MCP、不存博查钥匙。预先放行的只有两个只读工具：`get_task_context`（挂了天枢 MCP 就放行）和 `web_search`（岗位有搜索时放行）；天枢 MCP 的其他工具（写进展、建事项等）每次调用都要网页批准。
 
-本会话 MCP 的工具（卡和专题各看到自己那几个）：
+本会话 MCP 的工具（每种会话各看到自己那几个）：
 
 | 工具 | 谁有 | 做什么 |
 |-|-|-|
 | `add_artifact` | 卡、专题 | 交工作目录里的 md/html/pdf/docx/txt（≤10 MB，同名再交是新一版），返回编号 A1、A2… |
 | `add_evidence` | 卡、专题 | 交说明、日志片段、链接、改动摘要，返回编号 E1、E2… |
-| `hand_back` | 卡 | 逐条完成标准 met/partial/unmet + 证据 + 总结，`outputs` 点名用哪几份（编号）；不点名就是上次交回以后交的全部 |
-| `save_version` | 专题 | 存一版：工作目录里的 Markdown 文件，`kind` 是 outline/draft/review，`note` 写改了什么；号从开工时的 `versionBase`（交代里的 latestVersion）往下编 |
+| `hand_back` | 卡 | 逐条完成标准 met/partial/unmet + 证据 + 总结，`outputs` 点名用哪几份（编号）；不点名就是本会话交过的全部，同一个文件交过几次只算最新一版（验收没过改完再交回，没改的产出也在） |
+| `save_version` | 专题 | 存一版：工作目录里的 Markdown 文件，`kind` 是 outline/draft/review，`note` 写改了什么；号从开工时的 `versionBase`（交代里的 latestVersion）和本机同一个专题别的会话已存到的号里取大的往下编（云端还没收到本机刚存的版本时也不撞号） |
 | `set_feishu_url` | 专题 | 某一版存进本人飞书以后，报回第几版和地址 |
+| `propose_plan` | 规划员 | 交计划（summary、steps、risks）和派活单（1–8 件：title、brief、doneDefinition、criterionIndex、role、modelTier、why），经发件箱同步 `card_plan`；改了再交是新的一次 |
+| `submit_verdict` | 验收员 | 每条完成标准判一次（met/partial/unmet、理由、依据、怎么补）、beyondScope、一句结论；只交一次，经发件箱同步 `verdict`，同时在被验的卡的会话里记一条结论事件 |
 
 用 HTTP 而不是 stdio，是为了不给每个会话再起一个 150 MB 的本机程序进程。真机实测：Claude Code（haiku）经 ToolSearch 找到这几个工具，调用不弹权限，产出物和交回进了发件箱。
 
 ## 8. 云端同步（本机 → 云端，单向）
 
 - `POST {apiBaseUrl}/api/local-runner/sync`，`Authorization: Bearer <个人令牌>`，体 `LocalSyncBatchRequest`（≤50 条、≤12 MB），回 `LocalSyncBatchResponse`。
-- 条目：`status`（状态变化）、`plan`（TodoWrite）、`evidence`、`artifact`（原文 base64）、`handback`（带 `outputKeys`：点名的产出和证据的条目幂等键，云端存成 `local_outputs.client_id`）、`topic_version`（专题新的一版：号、种类、名字或 null、改了什么、Markdown 正文）、`topic_version_feishu`（第几版已存进飞书、地址）、`cost`（每轮增量）。不传仓库文件、完整工具输出、环境变量、钥匙。
+- 心跳：云端 10 分钟没收到同步就当本机离线。本机开着、5 分钟里没同步过任何东西（闲着，或条目都在退避）时，发一批空的（`items: []`，照样带 `slots`），云端照样刷新在线时间和位置数；每分钟看一次，没关联云端不发，没发成等下一分钟。
+- 条目：`status`（状态变化）、`plan`（TodoWrite）、`evidence`、`artifact`（原文 base64）、`handback`（带 `outputKeys`：点名的产出和证据的条目幂等键，云端存成 `local_outputs.client_id`）、`topic_version`（专题新的一版：号、种类、名字或 null、改了什么、Markdown 正文）、`topic_version_feishu`（第几版已存进飞书、地址）、`card_plan`（规划员的计划和派活单草稿）、`verdict`（验收员的逐条结论，subject 带 cardId 和 handbackKey）、`cost`（每轮增量）。规划员、验收员的 status、plan、cost 条目 subject.kind 是 plan / verify，云端不能当成卡自己的状态。不传仓库文件、完整工具输出、环境变量、钥匙。
 - 幂等键 `<deviceId>:<sessionId>:<本会话同步序号>`。云端按键去重，重复的也回 `accepted`；`rejected` 的本机记一笔后出队；回执里没提到的、网络错、5xx 都退避重试（1 s × 2^n，最长 5 分钟）。发件箱先落盘（`outbox.json`），断网、重启都不丢。
 - 关联：网页 `PUT /v1/cloud` 交 `apiBaseUrl` 和令牌；`apiBaseUrl` 的来源必须在白名单里，免得被指到别处。这个令牌同时用于会话里的天枢 MCP（第 7 节）。**建议 api 会话**给个人令牌加一种 `local` 客户端：能调 `/api/local-runner/*` 和 `/mcp/me`，网页配对后建一个这种令牌交给本机程序，设置页能看到、能吊销。
 
@@ -161,6 +174,8 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 - 单测 52 条（`pnpm --filter @warmap/local test`）：安全 10、会话与适配器 15（假 `claude` 按 stream-json 说话，含参数、环境白名单、事件、SSE 补发、权限、插话、停下、强停、续接、本会话 MCP、天枢 MCP 转发、钥匙不外泄、搜索白名单、版本太旧、登录失效、Codex 未接）、发件箱 3、加固 10、越界与网关 14（第二轮，含目录链接、命令写法、放行建议越界、移除文件夹、旧条目、路径大小写）；契约 6。故意放开环境白名单、去掉续接互斥、去掉换地址作废钥匙、去掉日志补换行，以及第二轮的 14 处（越界不给「都允许」、建议改 session、建议越界、排除全局记忆、网关快速失败、重试提示、主目录提示、不存在的路径解链接、普通词查链接、旧条目复查、整个磁盘、移除文件夹后工作目录越界、工作目录换实际写法、PowerShell 不按 \ 转义），对应用例都会失败（确认用例有效）。
 - 独立评审（11/06，xhigh）：13 条，8 条有复现。已修 12 条（怪路径打挂进程、换地址带走旧钥匙、续接不重查文件夹和暂停、并发续接起两个进程、强停追不上启动中的进程、发件箱被不合格条目卡住、发送异常带走进程、日志半行吞事件、钥匙串换行注入、测试页 XSS、安装脚本 BOM、升级残留子进程），带个人配置时钥匙进命令行改为拒绝开工；网关钥匙在会话环境里这条按 ADR 0029 接受。设计层两条见第 14 节。
 - 第二轮独立评审（11/06，xhigh）：7 条确认、3 条可能。已修：借目录链接越界判成没越界（不存在的路径、相对路径）、命令切词漏认多种写法（另加「放行建议越界就不给都允许」这一层，不靠切词）、旧版本加的不合规矩的文件夹仍算数、测试超时偏紧、大小写测试测不出问题、`--verify` 整套旧版本也能通过、重试恢复后别的错误被算成模型服务的错、移除文件夹后工作目录仍算数、测试页回放旧事件报错；主目录两种写法都给排除规则；整个磁盘不能选。没改：主目录和仓库之间几层目录里的 CLAUDE.md 照默认读（ADR 0030）。
+- 第三轮（11/06，岗位、评审会、排队之后）：单测 64 条（另有排队 4 条：批量、先来先跑、让位、取消、调上限、暂停、重启恢复）、契约 92 条。上一轮自审的 5 处已修，每处都先在旧代码上让测试失败：整理飞书插件链接出错挡开工（另在 Bun 1.3.13 下核对只删链接）、评审版被当成最近一版、带个人配置时提示词说没找到飞书技能、主岗位没有搜索时挑刺子 agent 仍拿搜索、不点名交回漏掉前一轮的产出又重复算同一文件的旧版；另修同一专题两个会话存版本撞号。重新编三个平台后，exe 跑冒烟（$0.0032）和排队真跑（上限 1、同时 2 件，第 2 件排第 1，第 1 件 4.0 秒做完后马上接上）都通过。
+- 第四轮（11/06，拆卡和验收改在本机）：单测 68 条（新增 `test/planVerify.test.ts` 4 条：三种会话的参数和排队先后、只读、按档位挑模型、交回后自动起验收员、没过经说一句送回再验、第二次没过受阻、取不到交代时排着等、404 和 409、重启后照样排着、结论校验和提醒），契约 93 条。9 处变异（排队先后、只读、交回后起验收、等交代的不开始、结论报给卡的会话、提醒一次、交回送到再取交代、交完收工、第二次受阻）每处都有测试失败。重新编三个平台后，exe 冒烟通过（$0.003）；exe + 真 Claude Code（订阅 haiku）+ 假天枢真跑一次：规划员先读 get_task_context 再交 2 件的派活单（各对约定第 1、2 条）→ 一批开工 → 两件交回 → 本机各起一个验收员（交回送到天枢后 0.1 秒取到交代，0.4 秒开始）→ 两份结论同步上去（都过），验收员只用了 Glob、Read 和 submit_verdict，没来要过权限，交代里让它试写的 probe.txt 没写出来，交完自己退出；五个会话共 66 秒、$0.0196。记录 `.scratch/local-runner/实验/L_规划验收真跑结果.json`，脚本 `L_plan-verify-e2e.mjs`（第一次跑时汇总那段脚本有错，链路已跑完，结果由 `L_collect.mjs` 从本机程序的会话记录汇总；脚本错误已改）。
 - 和云端联调（11/06）：本机程序分支 + `claude/v2-board-api` 的接收端合进临时分支 `claude/local-runner-sync-e2e`（只在本机），时间机器起 API，真程序 + 真 Claude Code（haiku）走通配对 → 建设备令牌 → 关联云端 → 开卡 → 交产出物和交回 → 云端收到（13 条、2 份产出、1 条交回排队、卡变进行中）→ 断网时排队 6 条 → 恢复后自动补发 → 原样重发 6 条全部 accepted、表里不重复。44 秒，$0.0043。记录在 `.scratch/local-runner/实验/I_云端联调.md`。
 - 真机：编出的 exe + 真 Claude Code 2.1.318（haiku），冒烟命令走完配对 → 开工 → 事件 → 3 次批准 → 插话下一步生效（b.txt 改成 22）→ 新一轮 → 停下（interrupted）→ 强停（exited），花费 $0.003；另一次验证本会话 MCP 交证据和交回。真实调用共 2 次会话（4 轮）。
 - 托盘模式：配对确认框、选文件夹框、托盘图标/提示/菜单、暂停与恢复、菜单退出都在 Windows 11 上截图验证（`.scratch/local-runner/实验/截图/`）。
