@@ -30,6 +30,8 @@ const SECRET_CHARS = "^[\x21-\x7E]*$";
 const Nullable = <T extends TSchema>(schema: T) => Type.Union([schema, Type.Null()]);
 /** 同步条目的幂等键，交回时用它点名产出和证据（云端存成 local_outputs.client_id）。 */
 const SyncKey = Type.String({ minLength: 10, maxLength: 200 });
+/** git 提交号（完整的 40 位，SHA-256 仓库是 64 位）。 */
+const Sha = Type.String({ pattern: "^[0-9a-f]{40}([0-9a-f]{24})?$" });
 
 // ───────────────────────── 通用 ─────────────────────────
 
@@ -306,7 +308,7 @@ export const LocalRole = Type.Object({
 export const LocalCreateSessionRequest = Type.Object({
   subject: LocalSessionSubject,
   title: Type.String({ minLength: 1, maxLength: 120 }),
-  /** 工作目录：必须在允许的文件夹内。topic、plan 可不填，本机程序给它建一个专用目录。 */
+  /** 工作目录：必须在允许的文件夹内。topic、plan 可不填，本机程序给它建一个专用目录。卡的文件夹在 git 仓库里时，卡在自己的工作树里做（见 LocalWorkspace）。 */
   cwd: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
   agent: Type.Optional(LocalAgentKind),
   /** 不填用默认模型。 */
@@ -321,6 +323,30 @@ export const LocalCreateSessionRequest = Type.Object({
   /** 只有专题：评审会用的挑刺岗位（交代里的 critics，最多 3 个）。开工时定下，评审会时并行起它们。 */
   critics: Type.Optional(Type.Array(LocalRole, { maxItems: 3 })),
 }, strict);
+
+/**
+ * 卡的会话在哪做（ADR 0038）。本人选的文件夹在 git 仓库里（在某个分支上、至少有一个提交）时，每张卡在本机程序数据目录里的
+ * worktrees/<cardId> 开一个自己的工作树，新建分支 tianshu/<卡 id 前 8 位>-<标题里的英文和数字>，从开工那一刻主文件夹所在分支的最新提交开始；
+ * 几张卡同时做互不覆盖，交回时本机把没提交的改动提交到这个分支，验收员看开工以来这个分支上的改动，合回由本人点（POST /v1/sessions/:id/merge）。
+ * 不是 git 仓库（或不在分支上、还没有提交）时就在这个文件夹里做，同一个文件夹同时只做一张卡，别的排队。
+ */
+export const LocalWorkspace = Type.Union([
+  Type.Object({
+    kind: Type.Literal("worktree"),
+    /** 本人选的文件夹（主文件夹）：合回在这里合。 */
+    folder: Type.String(),
+    /** 工作树的根目录。会话的 cwd 是它（本人选的是仓库里的子文件夹时，是工作树里对应的子文件夹）。 */
+    path: Type.String(),
+    branch: Type.String(),
+    /** 开工时主文件夹所在的分支，合回到它。 */
+    baseBranch: Type.String(),
+    /** 开工时 baseBranch 的最新提交：卡的改动从这里算起。主文件夹里没提交的改动不带进工作树。 */
+    baseCommit: Sha,
+    /** 合回以后主文件夹里的提交（合回后工作树已清理，分支保留）；没合回为 null。 */
+    mergedCommit: Nullable(Sha),
+  }, strict),
+  Type.Object({ kind: Type.Literal("folder"), folder: Type.String() }, strict),
+]);
 
 export const LocalSessionSummary = Type.Object({
   /** 同时就是 Claude Code 的 --session-id，续接用它。 */
@@ -340,6 +366,8 @@ export const LocalSessionSummary = Type.Object({
   /** 排队时是第几个（1 起），没在排队为 null。 */
   queuePosition: Nullable(Type.Integer({ minimum: 1 })),
   usage: LocalUsage,
+  /** 只有卡：在工作树还是文件夹里做（本机总会填）。 */
+  workspace: Type.Optional(LocalWorkspace),
 }, strict);
 export const LocalSessionListResponse = Type.Object({ sessions: Type.Array(LocalSessionSummary) }, strict);
 
@@ -401,6 +429,17 @@ export const LocalPermissionDecisionRequest = Type.Object({
   /** allow 时可选：按 Claude Code 给的建议，这张卡（本会话）同类操作都允许。 */
   allowForSession: Type.Optional(Type.Boolean()),
 }, strict);
+
+/**
+ * POST /v1/sessions/:id/merge（体 {}）：把卡的分支合回主文件夹的 baseBranch，只在本人点了才合，本机从不自动合。合成了清理工作树、保留分支。
+ * 合不了时 merged = false，主文件夹原样不动：base_not_checked_out 主文件夹现在不在 baseBranch 上；dirty 主文件夹有没提交的改动（含没加进 git 的文件）；
+ * conflict 有冲突（已放弃这次合并）。files 是有改动或冲突的文件。卡不在工作树里、卡或它的验收员还在跑、卡的工作树里还有没提交的改动、已经合回过，回 409。
+ */
+export const LocalMergeBlockReason = Type.Union([Type.Literal("base_not_checked_out"), Type.Literal("dirty"), Type.Literal("conflict")]);
+export const LocalMergeResponse = Type.Union([
+  Type.Object({ merged: Type.Literal(true), commit: Sha, session: LocalSessionSummary }, strict),
+  Type.Object({ merged: Type.Literal(false), reason: LocalMergeBlockReason, message: Type.String(), files: Type.Array(Type.String(), { maxItems: 200 }) }, strict),
+]);
 
 /** POST /v1/sessions/:id/interrupt（停下，会话保留）与 /kill（强停，杀本会话进程树）的回执。 */
 export const LocalSessionActionResponse = Type.Object({ session: LocalSessionSummary }, strict);
@@ -476,6 +515,8 @@ export const LocalVerdict = Type.Object({
   modelLabel: Type.String(),
   roleId: Nullable(Uuid),
   roleVersion: Nullable(Type.Integer({ minimum: 1 })),
+  /** 验的是哪个提交（卡在工作树里做时就是交回的那个提交，验收员看的是 baseCommit 到它的改动）；卡在文件夹里做时不带。 */
+  commit: Type.Optional(Sha),
 }, strict);
 
 /**
@@ -530,7 +571,8 @@ export const LocalSessionEvent = Type.Union([
     errorKind: Type.Optional(Type.Union([Type.Literal("auth"), Type.Literal("api"), Type.Literal("interrupted"), Type.Literal("other")])),
   }),
   ev("artifact", { artifactId: Id, title: Type.String(), fileName: Type.String(), size: Type.Integer({ minimum: 0 }), sha256: Type.String() }),
-  ev("handback", { summary: Type.String(), criteria: Type.Array(LocalHandbackCriterion), outputKeys: Type.Array(SyncKey) }),
+  /** commit：卡在工作树里做时，交回那一刻分支上的提交（本机先把没提交的改动提交了）。 */
+  ev("handback", { summary: Type.String(), criteria: Type.Array(LocalHandbackCriterion), outputKeys: Type.Array(SyncKey), commit: Type.Optional(Sha) }),
   /** 专题存了新的一版（已排进上报队列）。 */
   ev("version", { number: Type.Integer({ minimum: 1 }), kind: LocalTopicVersionKind, label: Nullable(Type.String()), note: Nullable(Type.String()) }),
   /**
@@ -542,11 +584,17 @@ export const LocalSessionEvent = Type.Union([
     handbackKey: SyncKey, passed: Type.Boolean(), summary: Type.String(), criteria: Type.Array(LocalVerdictCriterion), beyondScope: Type.Array(Type.String()),
     failStreak: Type.Integer({ minimum: 0 }), blocked: Type.Boolean(), returnText: Nullable(Type.String()),
   }),
-  /** interjection_next_step：插话已送出，下一步生效；auth_required：执行方登录失效；agent_stderr：执行方报错输出；verify_waiting：验收在等交代（连不上天枢等）。 */
+  /**
+   * interjection_next_step：插话已送出，下一步生效；auth_required：执行方登录失效；agent_stderr：执行方报错输出；verify_waiting：验收在等交代（连不上天枢等）；
+   * workspace：卡开工时在哪做（工作树的分支、从哪个提交开始、主文件夹里没提交的改动没带进来）；merged：卡的分支已合回主文件夹。
+   */
   ev("notice", { level: Type.Union([Type.Literal("info"), Type.Literal("warn"), Type.Literal("error")]), code: Type.String(), text: Type.String() }),
 ]);
 
 // ───────────────────────── 云端同步载荷（本机 → 天枢 api，单向） ─────────────────────────
+
+/** 卡的分支和提交：branch 从 baseBranch 的 baseCommit 开出来，commit 是交回那一刻分支上的提交。 */
+export const LocalGitRef = Type.Object({ branch: Type.String(), baseBranch: Type.String(), baseCommit: Sha, commit: Sha }, strict);
 
 const syncItem = <T extends string, D extends TSchema>(type: T, data: D) => Type.Object({
   /** 幂等键：<deviceId>:<sessionId>:<本机序号>。云端按它去重，重复提交返回 accepted。 */
@@ -590,6 +638,8 @@ export const LocalSyncItem = Type.Union([
     summary: Type.String({ maxLength: 4000 }),
     criteria: Type.Array(LocalHandbackCriterion, { maxItems: 50 }),
     outputKeys: Type.Array(SyncKey, { maxItems: 100 }),
+    /** 卡在工作树里做时：分支、开工时的基线和交回的提交（云端和手机显示用）；在文件夹里做时不带。 */
+    git: Type.Optional(LocalGitRef),
   }, strict)),
   /**
    * 专题新的一版（只有专题）：number 由本机从开工时的 versionBase 和本机同一个专题已存到的号里取大的往下编；label 为 null 时云端按自己的规矩起名（「提纲」「第 N 版」）；
@@ -667,6 +717,10 @@ export type TLocalSendMessageRequest = Static<typeof LocalSendMessageRequest>;
 export type TLocalSendMessageResponse = Static<typeof LocalSendMessageResponse>;
 export type TLocalPermissionDecisionRequest = Static<typeof LocalPermissionDecisionRequest>;
 export type TLocalSessionActionResponse = Static<typeof LocalSessionActionResponse>;
+export type TLocalWorkspace = Static<typeof LocalWorkspace>;
+export type TLocalGitRef = Static<typeof LocalGitRef>;
+export type TLocalMergeBlockReason = Static<typeof LocalMergeBlockReason>;
+export type TLocalMergeResponse = Static<typeof LocalMergeResponse>;
 export type TLocalPlanEntry = Static<typeof LocalPlanEntry>;
 export type TLocalHandbackCriterion = Static<typeof LocalHandbackCriterion>;
 export type TLocalTopicVersionKind = Static<typeof LocalTopicVersionKind>;
@@ -721,4 +775,5 @@ export const LOCAL_RUNNER_ROUTES = {
   interrupt: { method: "POST", path: "/v1/sessions/:id/interrupt", auth: true },
   decidePermission: { method: "POST", path: "/v1/sessions/:id/permissions/:requestId", auth: true },
   kill: { method: "POST", path: "/v1/sessions/:id/kill", auth: true },
+  mergeSession: { method: "POST", path: "/v1/sessions/:id/merge", auth: true },
 } as const;

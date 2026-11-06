@@ -86,7 +86,12 @@ export class Folders {
     return dir;
   }
 
+  /** 卡的工作树放在这里（ADR 0038）：worktrees/<cardId>。 */
+  worktreeDir(cardId: string): string {
+    return join(this.dataDir, "worktrees", cardId.replace(/[^A-Za-z0-9_-]/g, "_"));
+  }
+
   isAllowed(cwd: string): boolean {
-    return this.contains(cwd) || isInside(join(this.dataDir, "topics"), cwd) || isInside(join(this.dataDir, "plans"), cwd);
+    return this.contains(cwd) || ["topics", "plans", "worktrees"].some((g) => isInside(join(this.dataDir, g), cwd));
   }
 }

@@ -1,4 +1,4 @@
-import type { TLocalRole, TLocalRoleTool, TLocalSessionKind, TLocalVerdictCriterion } from "@warmap/contracts";
+import type { TLocalRole, TLocalRoleTool, TLocalSessionKind, TLocalVerdictCriterion, TLocalWorkspace } from "@warmap/contracts";
 
 /**
  * 会话追加的系统提示词（--append-system-prompt-file）、挑刺子 agent 的定义（--agents）、评审会的那句话（ADR 0037）。
@@ -62,8 +62,18 @@ const FEISHU_NOTE: Record<"plugin" | "personal" | "none", string> = {
   none: "（这台电脑上没找到飞书技能，做不了时直接告诉本人）",
 };
 
-export function systemPrompt(kind: TLocalSessionKind, role: TLocalRole | null, critics: TLocalRole[], feishu: FeishuSkills): string {
+/** 卡在自己的工作树里做时多交代的几句（ADR 0038）。 */
+function worktreeNote(ws: Extract<TLocalWorkspace, { kind: "worktree" }>): string {
+  return `## 在哪做
+你在本机给这张卡新开的 git 工作树里（分支 ${ws.branch}，从 ${ws.baseBranch} 的提交 ${ws.baseCommit.slice(0, 7)} 开始），不是本人的主文件夹；别的卡在各自的工作树里，互不影响。
+- 工作树是新的：.env、node_modules 这类没进 git 的文件没有带过来。要装依赖就自己装；缺钥匙、缺配置就问本人。
+- 可以自己提交。交回时本机会把还没提交的改动提交到这个分支，验收员看的是开工以来这个分支上的全部改动。
+- 不要切换分支，不要改主文件夹（${ws.folder}）。`;
+}
+
+export function systemPrompt(kind: TLocalSessionKind, role: TLocalRole | null, critics: TLocalRole[], feishu: FeishuSkills, workspace: TLocalWorkspace | null = null): string {
   const parts = ["# 天枢本机会话", INTRO[kind], RULES[kind]];
+  if (workspace?.kind === "worktree") parts.push(worktreeNote(workspace));
   if (role) {
     parts.push(roleBlock(role, "## 你的岗位："));
     const tools = role.tools.map((t) => `- ${TOOL_TEXT[t]}${t === "feishu" ? FEISHU_NOTE[feishu ?? "none"] : ""}`);
@@ -90,6 +100,18 @@ export function returnText(criteria: string[], judged: TLocalVerdictCriterion[])
   const missed = judged.filter((c) => c.verdict !== "met")
     .map((c) => `第 ${c.index} 条「${criteria[c.index - 1] ?? ""}」，${c.reason}；怎么补：${c.fix ?? "补上能核对的证据"}`);
   return `验收没过：${missed.join("。")}。改完再交回。`;
+}
+
+/** 验收员交代末尾接上的这次交回的改动（卡在工作树里做时）：基线到交回的提交。验收员只读、不能跑命令，改动全靠这里和读文件。 */
+export function changesBrief(ws: { branch: string; baseBranch: string; baseCommit: string }, commit: string, diff: { stat: string; patch: string; truncated: boolean } | string): string {
+  const head = [
+    "## 这次交回的改动",
+    `分支 ${ws.branch} 的提交 ${commit.slice(0, 7)}，相对开工时 ${ws.baseBranch} 的 ${ws.baseCommit.slice(0, 7)}。当前工作目录就是这个分支，文件可以直接读。`,
+  ].join("\n");
+  if (typeof diff === "string") return `${head}\n\n改动没取到（${diff}），请直接读文件核对。`;
+  if (!diff.stat) return `${head}\n\n开工以来没有改动。`;
+  const cut = diff.truncated ? "\n…（太长，后面截掉了，没列出的改动请直接读文件）" : "";
+  return `${head}\n\n\`\`\`\n${diff.stat}\n\`\`\`\n\n\`\`\`diff\n${diff.patch}${cut}\n\`\`\``;
 }
 
 /** 网页点「评审会」时本机替本人说的那句话。 */

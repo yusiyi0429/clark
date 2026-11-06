@@ -1,13 +1,19 @@
 // 假的 `claude`：按 Claude Code 2.1.318 的 stream-json 双向协议说话（形态取自 11/05 实测日志），用来测适配器。
 // 每一轮：说一句 → 要写文件的权限 → 允许就写、拒绝就说被拒 → result。收到 interrupt 立即以 error_during_execution 结束这一轮。
 // 子进程环境走白名单，测试变量传不进来，所以配置读工作目录里的 .fake-claude.json，argv 和环境变量名记进 .fake-claude-trace.jsonl。
+// 工作目录里没有时往上找最近的一份（几张卡各用一个子文件夹时共用），记录也写在那儿。
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 
 const argv = process.argv.slice(2);
 const sid = argv[argv.indexOf("--session-id") + 1] ?? argv[argv.indexOf("--resume") + 1];
-const cfg = existsSync(".fake-claude.json") ? JSON.parse(readFileSync(".fake-claude.json", "utf8")) : {};
-appendFileSync(".fake-claude-trace.jsonl", JSON.stringify({ pid: process.pid, argv, envKeys: Object.keys(process.env), authToken: process.env.ANTHROPIC_AUTH_TOKEN ?? null, sessionSecret: process.env.TIANSHU_SESSION_SECRET ?? null, cloudToken: process.env.TIANSHU_CLOUD_TOKEN ?? null, maxRetries: process.env.CLAUDE_CODE_MAX_RETRIES ?? null, apiTimeout: process.env.API_TIMEOUT_MS ?? null }) + "\n");
+let home = process.cwd();
+while (!existsSync(join(home, ".fake-claude.json")) && dirname(home) !== home) home = dirname(home);
+if (!existsSync(join(home, ".fake-claude.json"))) home = process.cwd();
+const cfg = existsSync(join(home, ".fake-claude.json")) ? JSON.parse(readFileSync(join(home, ".fake-claude.json"), "utf8")) : {};
+const TRACE = join(home, ".fake-claude-trace.jsonl");
+appendFileSync(TRACE, JSON.stringify({ pid: process.pid, argv, envKeys: Object.keys(process.env), authToken: process.env.ANTHROPIC_AUTH_TOKEN ?? null, sessionSecret: process.env.TIANSHU_SESSION_SECRET ?? null, cloudToken: process.env.TIANSHU_CLOUD_TOKEN ?? null, maxRetries: process.env.CLAUDE_CODE_MAX_RETRIES ?? null, apiTimeout: process.env.API_TIMEOUT_MS ?? null }) + "\n");
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 const mode = cfg.mode ?? "normal";
 
@@ -62,7 +68,7 @@ async function readOnlyTurn() {
     result = await sessionMcp("tools/call", { name, arguments: args });
     out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_m${turns}`, content: result.content, is_error: result.isError }] }, parent_tool_use_id: null });
   }
-  appendFileSync(".fake-claude-trace.jsonl", JSON.stringify({ readOnlyTurn: sid, turn: turns, tools, called: result ? name : null, result }) + "\n");
+  appendFileSync(TRACE, JSON.stringify({ readOnlyTurn: sid, turn: turns, tools, called: result ? name : null, result }) + "\n");
   if (!turn) return; // 途中被停下，这一轮已经结束
   out({ type: "assistant", message: { content: [{ type: "text", text: result ? "交好了" : "看完了" }] }, parent_tool_use_id: null });
   finish(true, result ? "交好了" : "看完了");
@@ -85,7 +91,7 @@ rl.on("line", (line) => {
     const headers = { "content-type": "application/json", "x-tianshu-session-secret": process.env.TIANSHU_SESSION_SECRET ?? "" };
     fetch(mcp.url, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) })
       .then(async (r) => ({ status: r.status, tools: r.ok ? (await r.json()).result.tools.map((t) => t.name) : null }), (e) => ({ status: String(e) }))
-      .then((res) => { appendFileSync(".fake-claude-trace.jsonl", JSON.stringify({ mcpOnInit: res }) + "\n"); rl.emit("line", JSON.stringify({ ...msg, mcpChecked: true })); });
+      .then((res) => { appendFileSync(TRACE, JSON.stringify({ mcpOnInit: res }) + "\n"); rl.emit("line", JSON.stringify({ ...msg, mcpChecked: true })); });
     return;
   }
   if (msg.type === "control_request" && msg.request.subtype === "initialize") {
@@ -100,7 +106,7 @@ rl.on("line", (line) => {
   } else if (msg.type === "control_response") {
     const r = msg.response.response;
     if (!turn || msg.response.request_id !== turn.permId) return;
-    appendFileSync(".fake-claude-trace.jsonl", JSON.stringify({ permissionResponse: r }) + "\n");
+    appendFileSync(TRACE, JSON.stringify({ permissionResponse: r }) + "\n");
     if (r.behavior === "allow") {
       if (!cfg.writePath) writeFileSync("hello.txt", "你好");
       out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_w${turns}`, content: "File created successfully" }] }, parent_tool_use_id: null });

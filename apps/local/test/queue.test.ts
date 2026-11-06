@@ -1,6 +1,6 @@
 // 同时跑的上限和先来先跑的队列（V2 设计 20.6）：假 claude 每一轮先要一次写文件的权限，所以开起来的会话停在「等你批准」（占位置），
 // 批准后这一轮做完变 idle（让位）。
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { api, pair, raw, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
@@ -25,6 +25,8 @@ const started = (work: string) => existsSync(join(work, ".fake-claude-trace.json
 const statusItems = (dataDir: string, id: string) => JSON.parse(readFileSync(join(dataDir, "outbox.json"), "utf8")).entries
   .map((e: any) => e.item).filter((i: any) => i.sessionId === id && i.type === "status").map((i: any) => i.data);
 
+const sub = (work: string, name: string) => { mkdirSync(join(work, name), { recursive: true }); return join(work, name); };
+
 async function setup(max: number, reuse?: { dataDir: string; work: string; token: string }) {
   const work = reuse?.work ?? tempDir("tl-work-");
   const t = await startTestRunner({ pickFolder: work, fetchImpl: offline, dataDir: reuse?.dataDir });
@@ -33,10 +35,12 @@ async function setup(max: number, reuse?: { dataDir: string; work: string; token
   if (!reuse) {
     await call("POST", "/v1/folders/pick", {});
     expect((await call("PATCH", "/v1/settings", { maxConcurrent: max })).body.maxConcurrent).toBe(max);
+    writeFileSync(join(work, ".fake-claude.json"), "{}"); // 各卡的子文件夹共用这份配置，记录也写在这儿
   }
   const session = async (id: string) => (await call("GET", `/v1/sessions/${id}`)).body;
   const status = async (id: string) => (await session(id)).session.status as string;
-  const item = (title: string) => ({ subject: { kind: "card", cardId: title }, title, cwd: work, firstMessage: `做 ${title}` });
+  // 每张卡一个子文件夹：不是 git 仓库的同一个文件夹同时只做一张卡（ADR 0038），这里测的是位置和队列
+  const item = (title: string) => ({ subject: { kind: "card", cardId: title }, title, cwd: sub(work, title), firstMessage: `做 ${title}` });
   const open = async (title: string) => (await call("POST", "/v1/sessions", item(title))).body;
   const slots = async () => (await raw(t.port, { path: "/v1/health", headers: { origin: ORIGIN } })).body.slots;
   const waitStatus = (id: string, want: string) => until(async () => (await status(id)) === want);
@@ -47,7 +51,8 @@ async function setup(max: number, reuse?: { dataDir: string; work: string; token
   return { t, token, work, call, session, status, item, open, slots, waitStatus, allow };
 }
 
-describe("同时跑的上限和队列", () => {
+// 每条要拉起几个假 claude 进程，机器忙时单条要好几秒：显式给 30 秒，不靠 vitest 默认的 5 秒或 package.json 里的参数
+describe("同时跑的上限和队列", { timeout: 30_000 }, () => {
   it("上限 2、一批 4 件（夹一件开不了的）：前 2 件马上开，后 2 件排队；强停、一轮做完都让位，先来先跑", async () => {
     const h = await setup(2);
     try {

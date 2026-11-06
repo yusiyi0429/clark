@@ -107,6 +107,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   // 上次没开始的排队会话，有空位就接上（要等本机程序开始监听，本会话 MCP 才连得上）。
   sessions.pump();
   void sessions.pullBriefs();
+  void sessions.pruneWorktrees();
   await desktop.start((a) => void onMenu(a));
   updateTray();
   setInterval(updateTray, 10_000).unref();

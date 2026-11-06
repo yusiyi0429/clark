@@ -1,6 +1,6 @@
 // 拆卡和验收改在本机（V2 设计第 21 节）：规划员、验收员两种会话，交回后本机自己起验收员，结论报给云端和卡的会话。
 // 假 claude：执行会话每轮要一次写文件的权限；只读会话（--disallowedTools 里有 Write）不来要权限，照会话 MCP 给的工具交计划或结论（内容在 .fake-claude.json）。
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { api, pair, raw, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
@@ -77,7 +77,11 @@ async function setup(max: number, opts: { link?: boolean; reuse?: { dataDir: str
   const list = async () => (await call("GET", "/v1/sessions")).body.sessions as any[];
   const status = async (id: string) => (await session(id)).session.status as string;
   const waitStatus = (id: string, want: string) => until(async () => (await status(id)) === want);
-  const card = (title: string) => ({ subject: { kind: "card", cardId: title }, title, cwd: work, firstMessage: `做 ${title}` });
+  // 每张卡一个子文件夹（不是 git 仓库的同一个文件夹同时只做一张卡，ADR 0038）；假 claude 往上找到 work 里的配置
+  const card = (title: string) => {
+    mkdirSync(join(work, title), { recursive: true });
+    return { subject: { kind: "card", cardId: title }, title, cwd: join(work, title), firstMessage: `做 ${title}` };
+  };
   const open = async (req: unknown) => (await call("POST", "/v1/sessions", req)).body;
   const allow = async (id: string) => {
     const s = await until(async () => { const b = await session(id); return b.pendingPermissions[0] ? b : null; });
@@ -105,7 +109,8 @@ async function setup(max: number, opts: { link?: boolean; reuse?: { dataDir: str
 const flagList = (argv: string[], name: string) => (argv.includes(name) ? argv[argv.indexOf(name) + 1]!.split(",") : []);
 const flag = (argv: string[], name: string) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : null);
 
-describe("规划员和验收员", () => {
+// 每条要拉起几个假 claude 进程，机器忙时单条要好几秒：显式给 30 秒，不靠 vitest 默认的 5 秒或 package.json 里的参数
+describe("规划员和验收员", { timeout: 30_000 }, () => {
   it("排队先后验收员 → 规划员 → 执行；两者只读、各用自己的工具；验收员按岗位档位挑模型、交完结论就收工", async () => {
     const h = await setup(1);
     try {
