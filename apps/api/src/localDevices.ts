@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 import type { TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TLocalOutputView, TLocalPlanEntry, TLocalRunActivity,
-  TLocalRunBrief, TLocalRunView, TLocalSessionStatus } from "@warmap/contracts";
+  TLocalRunBrief, TLocalRunPlanProgress, TLocalRunView, TLocalSessionStatus } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
 import { issueLocalToken } from "./personalTokens.js";
 
@@ -58,16 +58,16 @@ export async function deviceOfToken(q: Query, tokenId: string): Promise<{ ownerI
 }
 
 export type RunRow = { id: string; owner_id: string; device_id: string; device_name: string | null; kind: "card" | "topic"; task_id: string | null; topic_id: string | null;
-  title: string | null; model_label: string | null; state: TLocalSessionStatus; plan: TLocalPlanEntry[]; last_activity: TLocalRunActivity | null;
+  title: string | null; model_label: string | null; state: TLocalSessionStatus; plan: TLocalPlanEntry[]; plan_progress: TLocalRunPlanProgress | null;
+  last_activity: TLocalRunActivity | null;
   timeline: TLocalRunActivity[]; tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost_usd: string | null;
   started_at: Date; running_at: Date | null; ended_at: Date | null; updated_at: Date };
 export const RUN_SELECT = `SELECT r.*,d.name AS device_name FROM local_runs r LEFT JOIN local_devices d ON d.owner_id=r.owner_id AND d.id=r.device_id`;
 
 export function runBrief(row: RunRow): TLocalRunBrief {
-  const current = row.plan.find((entry) => entry.status === "in_progress") ?? null;
   return {
     id: row.id, deviceId: row.device_id, deviceName: row.device_name ?? "本机", state: row.state, modelLabel: row.model_label,
-    plan: { done: row.plan.filter((entry) => entry.status === "completed").length, total: row.plan.length, current: current?.content ?? null },
+    plan: row.plan_progress ?? { done: 0, total: 0, step: 0, current: null },
     lastActivity: row.last_activity,
     cost: { inputTokens: row.tokens.input, outputTokens: row.tokens.output, costUsd: row.cost_usd === null ? null : Number(row.cost_usd) },
     startedAt: row.started_at.toISOString(), updatedAt: row.updated_at.toISOString(), endedAt: row.ended_at?.toISOString() ?? null,

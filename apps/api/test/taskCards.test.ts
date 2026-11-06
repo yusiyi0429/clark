@@ -6,7 +6,8 @@ import { boardFixture, THIRD, type BoardFixture } from "./boardFixture.js";
 const DEVICE = randomUUID();
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 6, 3, minute)).toISOString();
 const run = (f: BoardFixture, taskId: string, state: string, minute: number) => f.t.sql(`INSERT INTO local_runs(id,owner_id,device_id,kind,task_id,state,started_at,
-  plan,last_activity) VALUES($1,$2,$3,'card',$4,$5,$6,'[{"content":"读","status":"completed"},{"content":"写","status":"in_progress"}]'::jsonb,$7::jsonb)`,
+  plan,plan_progress,last_activity) VALUES($1,$2,$3,'card',$4,$5,$6,'[{"content":"读","status":"completed"},{"content":"写","status":"in_progress"}]'::jsonb,
+  '{"done":1,"total":2,"step":2,"current":"写"}'::jsonb,$7::jsonb)`,
 [randomUUID(), TEST_MEMBER.personId, DEVICE, taskId, state, at(minute), JSON.stringify({ at: at(minute), text: "在做" })]);
 const result = (verdicts: string[]) => JSON.stringify({ headline: "结论", beyondScope: [],
   criteria: verdicts.map((verdict, index) => ({ index: index + 1, verdict, reason: "理由", evidence: verdict === "met" ? "证据" : null, fix: verdict === "met" ? null : "补上" })) });
@@ -59,7 +60,7 @@ describe("执行看板：卡的投影和看板接口", () => {
         todo: ["todo", null], approval: ["doing", "approval"], reply: ["doing", "reply"], paused: ["doing", "paused"], review: ["review", null],
         failedOnce: ["doing", "review_failed"], failedReturned: ["doing", null], blocked: ["doing", "blocked"], crashed: ["doing", "blocked"], done: ["done", null] });
       expect(card("todo")).toEqual({ stage: "todo", wait: null, role: null, executor: null, model: null, criterion: null, run: null, handback: null, deliverable: null });
-      expect(card("approval").run).toMatchObject({ deviceId: DEVICE, deviceName: "本机", state: "waiting_permission", plan: { done: 1, total: 2, current: "写" },
+      expect(card("approval").run).toMatchObject({ deviceId: DEVICE, deviceName: "本机", state: "waiting_permission", plan: { done: 1, total: 2, step: 2, current: "写" },
         lastActivity: { text: "在做" }, cost: { inputTokens: 0, outputTokens: 0, costUsd: null }, endedAt: null });
       expect(card("failedOnce").handback).toMatchObject({ attempt: 1, status: "done", outcome: "fail", met: 1, total: 2, headline: "结论",
         returnText: "验收没过：第 2 条", returnedAt: null, overruled: false });

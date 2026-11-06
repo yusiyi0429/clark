@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import type { Pool, PoolClient } from "pg";
-import type { TLocalPlanEntry, TLocalRunActivity, TLocalSessionStatus, TLocalSyncBatchRequest, TLocalSyncBatchResponse, TLocalSyncItem } from "@warmap/contracts";
+import type { TLocalPlanEntry, TLocalRunActivity, TLocalSessionStatus, TLocalSyncBatchRequest, TLocalSyncBatchResponse, TLocalSyncItem, TLocalTopicVersionKind } from "@warmap/contracts";
 import { MAX_MATERIAL_TEXT_CHARS, runWorker } from "./materialParser.js";
 import { htmlToText } from "./meetingEvidence.js";
 import { UUID_PATTERN } from "./meetingStore.js";
@@ -29,7 +29,7 @@ const ARTIFACT_TYPES: Record<string, string> = {
   ".md": "text/markdown", ".markdown": "text/markdown", ".txt": "text/plain", ".html": "text/html", ".htm": "text/html", ".pdf": "application/pdf",
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 };
-const STATUS_TEXT: Record<TLocalSessionStatus, string> = { starting: "开工", running: "在做", waiting_permission: "等你批准", idle: "等你回复", exited: "停下了", failed: "异常退出" };
+const STATUS_TEXT: Record<TLocalSessionStatus, string> = { queued: "等空位", starting: "开工", running: "在做", waiting_permission: "等你批准", idle: "等你回复", exited: "停下了", failed: "异常退出" };
 const MILESTONE_STATES = new Set<TLocalSessionStatus>(["starting", "exited", "failed"]);
 
 /** 幂等键 <deviceId>:<sessionId>:<序号>：前两段要和这一批、这一条对得上，序号是本会话的同步序号。 */
@@ -145,11 +145,10 @@ async function applyType(client: PoolClient, deps: { storageDir: string }, owner
     }
     case "plan": {
       if (seq <= Number(run.plan_seq)) return null;
-      const entries = item.data.entries;
-      await client.query("UPDATE local_runs SET plan=$2::jsonb,plan_seq=$3 WHERE id=$1", [run.id, JSON.stringify(entries), seq]);
-      const current = entries.findIndex((entry) => entry.status === "in_progress");
-      await note(client, run, at, current >= 0 ? `第 ${current + 1}/${entries.length} 步：${entries[current].content}`
-        : `计划 ${entries.filter((entry) => entry.status === "completed").length}/${entries.length}`, false);
+      const { entries, progress } = item.data;
+      await client.query("UPDATE local_runs SET plan=$2::jsonb,plan_progress=$4::jsonb,plan_seq=$3 WHERE id=$1",
+        [run.id, JSON.stringify(entries), seq, JSON.stringify(progress)]);
+      await note(client, run, at, progress.current ? `第 ${progress.step}/${progress.total} 步：${progress.current}` : `计划 ${progress.done}/${progress.total}`, false);
       return null;
     }
     case "evidence": {
@@ -174,11 +173,24 @@ async function applyType(client: PoolClient, deps: { storageDir: string }, owner
       await client.query(`INSERT INTO local_outputs(id,owner_id,device_id,run_id,task_id,topic_id,kind,title,file_name,mime,size_bytes,sha256,storage_key,extracted_text,client_id,created_at)
         VALUES($1,$2,$3,$4,$5,$6,'artifact',$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
       [id, owner.personId, owner.deviceId, run.id, run.task_id, run.topic_id, title, fileName, mime, size, sha256, storageKey, text, item.key, at]);
-      // 本机程序还没有「专题新一版」条目时的临时做法：专题交出的 Markdown、纯文本就是新的一版；标题或文件名里有「评审」「review」的算评审会的一版，
-      // 有「提纲」「outline」的算提纲。
-      const label = run.topic_id && text && (mime === "text/markdown" || mime === "text/plain")
-        ? await saveTopicVersion(client, run, { kind: topicKind(`${title} ${fileName}`), body: text, note: null, clientId: item.key }, at) : null;
-      await note(client, run, at, label ? `存了${label}` : `交出：${title}`, true);
+      await note(client, run, at, `交出：${title}`, true);
+      return null;
+    }
+    case "topic_version": {
+      if (!run.topic_id) throw new SyncReject("INVALID_SUBJECT", "只有专题存版本");
+      const label = await saveTopicVersion(client, run, { ...item.data, clientId: item.key }, at);
+      await note(client, run, at, `存了${label}`, true);
+      return null;
+    }
+    case "topic_version_feishu": {
+      if (!run.topic_id) throw new SyncReject("INVALID_SUBJECT", "只有专题的版本能存进飞书");
+      const { number, feishuUrl } = item.data;
+      // 先认本会话自己存的那一版（本机号），再按号认以前的版本。
+      const saved = await client.query(`UPDATE topic_versions SET feishu_url=$4 WHERE id=(SELECT id FROM topic_versions WHERE topic_id=$1
+        AND ((run_id=$2 AND local_number=$3) OR number=$3) ORDER BY (run_id=$2 AND local_number=$3) IS TRUE DESC LIMIT 1) RETURNING label`,
+      [run.topic_id, run.id, number, feishuUrl]);
+      if (!saved.rowCount) throw new SyncReject("VERSION_NOT_FOUND", `没有第 ${number} 版`);
+      await note(client, run, at, `${saved.rows[0].label}存进了飞书`, true);
       return null;
     }
     case "handback": {
@@ -196,30 +208,31 @@ async function applyType(client: PoolClient, deps: { storageDir: string }, owner
   }
 }
 
-const topicKind = (name: string): "outline" | "draft" | "review" => /评审|review/i.test(name) ? "review" : /提纲|outline/i.test(name) ? "outline" : "draft";
-
-/** 专题存一版：号接着往下排；提纲叫「提纲」，评审会的一版叫「评审」，正文按第几版正文叫「第 N 版」。返回这一版的名字。 */
-export async function saveTopicVersion(client: PoolClient, run: Pick<RunRow, "id" | "topic_id">,
-  version: { kind: "outline" | "draft" | "review"; body: string; note: string | null; clientId: string }, at: Date): Promise<string> {
-  const counts = (await client.query(`SELECT COALESCE(max(number),0)::int AS number,count(*) FILTER (WHERE kind='draft')::int AS drafts
-    FROM topic_versions WHERE topic_id=$1`, [run.topic_id])).rows[0] as { number: number; drafts: number };
-  const label = version.kind === "outline" ? "提纲" : version.kind === "review" ? "评审" : `第 ${counts.drafts + 1} 版`;
-  await client.query(`INSERT INTO topic_versions(id,topic_id,number,kind,label,body,note,client_id,run_id,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [randomUUID(), run.topic_id, counts.number + 1, version.kind, label, version.body.slice(0, 200_000), version.note, version.clientId, run.id, at]);
+/**
+ * 专题存一版：号用本机编的（开工时的 versionBase 往下编）；这个号云端已经有了（两处同时写同一个专题）就排到最后，不丢这一版。
+ * 本机没起名时，提纲叫「提纲」，评审会的一版叫「评审」，正文按第几版正文叫「第 N 版」。返回这一版的名字。
+ */
+async function saveTopicVersion(client: PoolClient, run: Pick<RunRow, "id" | "topic_id">,
+  version: { number: number; kind: TLocalTopicVersionKind; label: string | null; body: string; note: string | null; clientId: string }, at: Date): Promise<string> {
+  const counts = (await client.query(`SELECT COALESCE(max(number),0)::int AS number,count(*) FILTER (WHERE kind='draft')::int AS drafts,
+    bool_or(number=$2) AS taken FROM topic_versions WHERE topic_id=$1`, [run.topic_id, version.number])).rows[0] as { number: number; drafts: number; taken: boolean | null };
+  const label = version.label ?? (version.kind === "outline" ? "提纲" : version.kind === "review" ? "评审" : `第 ${counts.drafts + 1} 版`);
+  await client.query(`INSERT INTO topic_versions(id,topic_id,number,local_number,kind,label,body,note,client_id,run_id,created_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [randomUUID(), run.topic_id, counts.taken ? counts.number + 1 : version.number, version.number, version.kind, label,
+    version.body, version.note, version.clientId, run.id, at]);
   await client.query("UPDATE research_topics SET last_version_at=$2,updated_at=$2 WHERE id=$1", [run.topic_id, at]);
   return label;
 }
 
 /**
- * 交回：记一行，完成标准取此刻卡的快照，算进去的产出是这张卡还没被哪次交回算过的全部产出和证据
- * （本机程序还不能点名用哪几份时的临时做法）。卡已完成、或执行方是本人自己做的，只记下来，不排 Agent 验收；
- * 没设执行方的老事项从本机交回，就当作 Claude Code 干的。
+ * 交回：记一行，完成标准取此刻卡的快照，算进去的产出是本机点名的那几份（outputKeys 是它们的同步条目键；本机拒收过的、对不上这张卡的不算）。
+ * 卡已完成、或执行方是本人自己做的，只记下来，不排 Agent 验收；没设执行方的老事项从本机交回，就当作 Claude Code 干的。
  */
 async function insertHandback(client: PoolClient, owner: Owner, key: string, run: RunRow, card: CardRow,
   data: Extract<TLocalSyncItem, { type: "handback" }>["data"], at: Date): Promise<string | null> {
   const attempt = (await client.query("SELECT COALESCE(max(attempt),0)::int+1 AS n FROM card_handbacks WHERE task_id=$1", [card.id])).rows[0].n as number;
-  const outputs = (await client.query(`SELECT o.id::text FROM local_outputs o WHERE o.task_id=$1
-    AND NOT EXISTS (SELECT 1 FROM card_handbacks h WHERE h.task_id=$1 AND h.output_ids ? o.id::text) ORDER BY o.created_at,o.id`, [card.id])).rows.map((row) => row.id as string);
+  const outputs = (await client.query("SELECT id::text FROM local_outputs WHERE task_id=$1 AND client_id=ANY($2::text[]) ORDER BY created_at,id",
+    [card.id, data.outputKeys])).rows.map((row) => row.id as string);
   const agent = card.status !== "done" && card.executor !== "self";
   if (agent && card.executor === null) await client.query("UPDATE tasks SET executor='claude_code' WHERE id=$1", [card.id]);
   const id = randomUUID();

@@ -46,15 +46,15 @@ export async function boardFixture(runtime: Parameters<typeof createTestApp>[2] 
   };
   /**
    * 配对一台电脑。send 是本机在一个新会话里报几条（subject 是卡或专题），返回会话 id；
-   * handBack 是本机做完一轮交回来：几份产出、几个链接证据、一次交回。
+   * handBack 是本机做完一轮交回来：几份产出、几个链接证据、一次点名用它们的交回。slots 是每批带的本机位置数。
    */
-  const local = async (name = "我的电脑") => {
+  const local = async (name = "我的电脑", slots = { max: 3, running: 1, queued: 0 }) => {
     const device = randomUUID();
     const token = (await call("POST", "/api/me/local-devices", { deviceId: device, name, os: "win32" })).json().token as string;
     const send = async (subject: { kind: "card"; cardId: string } | { kind: "topic"; topicId: string }, items: [string, unknown][]) => {
       const session = randomUUID();
       const res = await t.app.inject({ method: "POST", url: "/api/local-runner/sync", headers: { authorization: `Bearer ${token}` }, payload: { deviceId: device,
-        runnerVersion: "0.1.0", items: items.map(([type, data], index) => ({ key: `${device}:${session}:${index + 1}`, sessionId: session, subject,
+        runnerVersion: "0.1.0", slots, items: items.map(([type, data], index) => ({ key: `${device}:${session}:${index + 1}`, sessionId: session, subject,
           occurredAt: new Date(Date.UTC(2026, 10, 6, 1, 0, index + 1)).toISOString(), type, data })) } });
       if (res.statusCode !== 200 || res.json().rejected.length) throw new Error(res.body);
       return session;
@@ -64,17 +64,18 @@ export async function boardFixture(runtime: Parameters<typeof createTestApp>[2] 
       let seq = 0;
       const item = (type: string, data: unknown) => ({ key: `${device}:${session}:${++seq}`, sessionId: session, subject: { kind: "card", cardId },
         occurredAt: new Date(Date.UTC(2026, 10, 6, 3, 0, seq)).toISOString(), type, data });
-      const items = [
+      const outputs = [
         ...(options.files ?? [["方案.md", "# 方案\n有方案文档"]]).map(([name, text]) => {
           const buffer = Buffer.from(text);
           return item("artifact", { artifactId: `a${seq + 1}`, title: name, fileName: name, mimeType: "text/markdown", size: buffer.length,
             sha256: createHash("sha256").update(buffer).digest("hex"), contentBase64: buffer.toString("base64") });
         }),
         ...(options.links ?? ["https://example.com/review"]).map((url) => item("evidence", { kind: "link", title: "评审记录", url })),
-        item("handback", { summary: "做完了", criteria: [{ index: 1, result: "met", evidence: "方案.md" }, { index: 2, result: "met", evidence: "评审记录" }] }),
       ];
+      const items = [...outputs, item("handback", { summary: "做完了", criteria: [{ index: 1, result: "met", evidence: "方案.md" }, { index: 2, result: "met", evidence: "评审记录" }],
+        outputKeys: outputs.map((output) => output.key) })];
       const res = await t.app.inject({ method: "POST", url: "/api/local-runner/sync", headers: { authorization: `Bearer ${token}` },
-        payload: { deviceId: device, runnerVersion: "0.1.0", items } });
+        payload: { deviceId: device, runnerVersion: "0.1.0", slots, items } });
       if (res.statusCode !== 200 || res.json().rejected.length) throw new Error(res.body);
       return (await t.sql("SELECT id FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC LIMIT 1", [cardId]))[0].id as string;
     };
