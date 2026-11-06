@@ -91,9 +91,16 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
   const primary = useRef<HTMLButtonElement>(null);
   const recordResult = useRef<HTMLDivElement>(null);
   const naming = step === "buddy" && buddyPage === "name";
-  /** 选形象那一页，顶上换成选中的那颗（默认那颗还是原来的大胶囊）；选性格那一页顶上就是选好的那颗，摆成在说话，下面的示例像是它说的。 */
-  const heroSkin = step === "buddy" && ((buddyPage === "form" && buddyDraft.form !== "classic") || buddyPage === "personality") ? buddyDraft.form : null;
-  const heroLevel = useSimulatedLevel(heroSkin !== null);
+  /** 本人的伙伴：这次刚选的（选伙伴这一步存好了才往下走），或者以前就选好的；不知道时（undefined）是默认胶囊。 */
+  const own = buddy === null ? buddyDraft : buddy;
+  /**
+   * 选形象那一页，顶上换成选中的那颗（默认那颗还是原来的大胶囊）；选性格那一页顶上就是选好的那颗，摆成在说话，下面的示例像是它说的。
+   * 伙伴那一步之后的每一页，顶上一直是本人的伙伴（选的是默认那颗就还是原来的大胶囊）。
+   */
+  const heroSkin = step === "buddy"
+    ? (buddyPage === "form" && buddyDraft.form !== "classic") || buddyPage === "personality" ? buddyDraft.form : null
+    : own && own.form !== "classic" ? own.form : null;
+  const heroLevel = useSimulatedLevel(step === "buddy" && heroSkin !== null);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -231,7 +238,9 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
     </header>
     <div className={s.flow} data-step={step} data-role={data.role}>
       {heroSkin ? <div key={heroSkin} className={f.buddyHero} aria-hidden="true">
-        <PresenceCapsule skin={heroSkin} pose={buddyPage === "personality" ? "speaking" : "listening"} level={heroLevel} name={buddyDraft.name} />
+        <PresenceCapsule skin={heroSkin} name={own?.name}
+          pose={step === "buddy" ? buddyPage === "personality" ? "speaking" : "listening" : voice.recording ? "listening" : "idle"}
+          level={step === "buddy" ? heroLevel : voice.recording ? voice.level : 0} />
       </div> : <CoAgentCapsule acknowledge={acknowledge} state={voice.recording ? "listening" : "idle"} level={voice.level} />}
       <div className={s.stage}>
         <div className={s.content} key={step === "buddy" ? `buddy-${buddyPage}` : step.startsWith("tour-") ? "tour" : step} ref={content} data-step={step}>
