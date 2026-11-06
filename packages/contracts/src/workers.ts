@@ -44,6 +44,8 @@ export const WorkerCost = Type.Object({
  * 卡在验收中时，干活的是云端的验收员：role 是验收员岗位，resource.where=cloud，wait=reviewing。
  * step 是本机报的计划条目里正在做第几步、共几步、这一步写什么。needsYou：等你批准、等你回复、验收没过、受阻（排在「进行中」最前面）。
  * startedAt 是开工时间（等开工的为 null），elapsedSeconds 是到现在（已完成的到完成）用了多久。queueReason 只有「已排队」的有。
+ * step 取本机报的计划进度：n 是 progress.step，label 是 progress.current（没有正在做的一步时 step 为 null）。
+ * queuePosition 是「排第 n」：只有 queueReason=slot 的有，和本机程序的 queuePosition 同义——这台电脑上等空位的会话按开工先后排第几（1 起）。
  */
 export const WorkerItem = Type.Object({
   key: Type.String({ minLength: 1 }),
@@ -65,10 +67,12 @@ export const WorkerItem = Type.Object({
   wait: Nullable(WorkerMark),
   needsYou: Type.Boolean(),
   queueReason: Nullable(WorkerQueueReason),
+  queuePosition: Nullable(Type.Integer({ minimum: 1 })),
 }, strict);
 
 /**
- * 资源摘要：本人的设备（online 看最近一次上报的时间，10 分钟内算在线）；running 是本机正在跑的 worker 数，cap 是本机报的同时跑的上限（还没报为 null）；
+ * 资源摘要：本人的设备（online 看最近一次上报的时间，10 分钟内算在线）；running 和 cap 取在线设备最近一批同步报的 slots（本机程序契约的 LocalSlots）：
+ * running 是占着位置的会话数（slots.running 相加，含不带岗位的卡），cap 是同时跑的上限（slots.max 相加，没有在线设备报过为 null）；
  * 今天和本月的花费（按开工日、公司时区算，只算本机报的，云端验收的模型花费不在里面）。
  */
 export const WorkerResources = Type.Object({
