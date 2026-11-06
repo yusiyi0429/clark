@@ -28,6 +28,8 @@ export type ParsedSource =
   | { kind: "memory"; ref: string; file: string; section: number | null }
   | { kind: "chat"; ref: string; conversationId: string; sequence: number }
   | { kind: "pmem"; ref: string; id: string }
+  /** 本体对象：world:<object_id>@<version>（答案里照抄 query_company、read_ontology 给的 ref）。 */
+  | { kind: "world"; ref: string; objectId: string; version: number }
   | { kind: "unknown"; ref: string };
 
 const MATERIAL_VERSION = /^material:([^@#\s]+)@v(\d+)(?:#p(\d+))?$/;
@@ -69,6 +71,10 @@ export function parseSourceRef(ref: string): ParsedSource {
       return match ? { kind: "chat", ref, conversationId: match[1], sequence: Number(match[2]) } : { kind: "unknown", ref };
     }
     case "pmem": return /^[^\s#:]+$/.test(rest) ? { kind: "pmem", ref, id: rest } : { kind: "unknown", ref };
+    case "world": {
+      const match = /^([^@\s#:/]+)@(\d+)$/.exec(rest);
+      return match ? { kind: "world", ref, objectId: match[1], version: Number(match[2]) } : { kind: "unknown", ref };
+    }
     default: return { kind: "unknown", ref };
   }
 }

@@ -234,6 +234,7 @@ import {
   MaterialAnnotationView, CreateMaterialAnnotationRequest, CreateMaterialAnnotationResponse, MaterialRemovedView,
   RestoreMaterialRemovedRequest, MaterialEditProposalView, DecideMaterialEditProposalRequest, DecideMaterialAnnotationRequest,
   WeeklyProgressResponse,
+  WorldSourceView,
   FeishuAuthConfigResponse,
   FeishuCodeLoginRequest,
   FeishuConnectionResponse,
@@ -2845,6 +2846,19 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      "/api/ontology/objects/{id}": {
+        get: {
+          operationId: "getWorldSource",
+          summary: "出处卡：按本人在 COMPANY_WORLD_ACCESS_FILE 里被授权的域读一个本体对象当前这一版（类型、标题、版本、状态、负责人、当前进展）；只读",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", minLength: 1, maxLength: 128 }, description: "本体对象 id（不带 @版本）" }],
+          responses: {
+            "200": { description: "本体对象当前这一版", content: { "application/json": { schema: { $ref: "#/components/schemas/WorldSourceView" } } } },
+            "401": errorResponse,
+            "404": errorResponse,
+            "503": errorResponse,
+          },
+        },
+      },
       "/api/dri/todo-feedback": {
         post: {
           operationId: "importDriMonthlyTodoFeedback",
@@ -3376,6 +3390,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         DecideMaterialEditProposalRequest: DecideMaterialEditProposalRequest as JsonSchema,
         DecideMaterialAnnotationRequest: DecideMaterialAnnotationRequest as JsonSchema,
         WeeklyProgressResponse: WeeklyProgressResponse as JsonSchema,
+        WorldSourceView: WorldSourceView as JsonSchema,
         ListPersonalTokensResponse: ListPersonalTokensResponse as JsonSchema,
         PersonalProfileView: PersonalProfileView as JsonSchema,
         UpdatePersonalProfileRequest: UpdatePersonalProfileRequest as JsonSchema,

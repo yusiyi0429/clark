@@ -1,5 +1,6 @@
 import type { Query } from "./meetingStore.js";
 import { logEvent } from "./observability.js";
+import { companyPeriod } from "./monthlyPlans.js";
 import { WorldClient, WorldError, worldErrorCode, worldReadsEnabled, worldWritesEnabled, type WorldEnv, type WorldHead, type WorldInstance, type WorldInstanceName } from "./worldClient.js";
 
 /**
@@ -32,7 +33,9 @@ export type WorldUnitGoals = {
   lto: WorldGoal | null;
   periodGoals: WorldGoal[];
 };
-export type WorldSnapshot = { fetchedAt: string; company: WorldDoc | null; strategy: WorldDoc | null; units: WorldUnitGoals[] };
+/** Mission、Task 只取对象头（标题、ref、状态、所属单元），不逐个读正文；正文由 query_company 按问题去读。 */
+export type WorldItem = { objectId: string; ref: string; type: "Mission" | "Task"; title: string; lifecycle: string | null; unit: string | null };
+export type WorldSnapshot = { fetchedAt: string; company: WorldDoc | null; strategy: WorldDoc | null; units: WorldUnitGoals[]; items?: WorldItem[] };
 
 export type WorldStatus = {
   configured: boolean;
@@ -139,6 +142,14 @@ export async function loadWorldSnapshot(client: WorldClient, at: Date): Promise<
   const units = await client.listObjects({ type: "ResponsibilityUnit" });
   const ltos = await client.listObjects({ type: "LongTermGoal" });
   const pos = await client.listObjects({ type: "PeriodGoal" });
+  // Mission、Task：先按当前公司月让本体筛，筛空（这个月还没建）就不按周期；只列头，不多读对象。
+  const period = companyPeriod(at);
+  const current = async (type: WorldItem["type"]) => {
+    const inPeriod = await client.listObjects({ type, period });
+    return inPeriod.length ? inPeriod : client.listObjects({ type });
+  };
+  const missions = await current("Mission");
+  const tasks = await current("Task");
   const contractVersion = [companies, strategies, units, ltos, pos].flat().map((head) => (head as WorldHead & { contract_version?: string }).contract_version).find(Boolean) ?? null;
   const views = new Map<string, ObjectView>();
   const read = async (id: string): Promise<ObjectView> => {
@@ -172,8 +183,14 @@ export async function loadWorldSnapshot(client: WorldClient, at: Date): Promise<
       periodGoals: poGoals,
     });
   }
+  const unitTitles = new Map(units.flatMap((head) => (head.domain_id ? [[head.domain_id, worldDisplayText(head.title)] as const] : [])));
+  const items = [...missions, ...tasks].filter(usableWorldHead).map((head): WorldItem => ({
+    objectId: head.object_id, ref: `${head.object_id}@${head.version}`, type: head.object_type as WorldItem["type"], title: worldDisplayText(head.title),
+    lifecycle: (head.lifecycle as { display_name?: string; status?: string } | null)?.display_name ?? (head.lifecycle as { status?: string } | null)?.status ?? null,
+    unit: (head.domain_id && unitTitles.get(head.domain_id)) || null,
+  }));
   return {
-    snapshot: { fetchedAt: at.toISOString(), company, strategy, units: unitGoals },
+    snapshot: { fetchedAt: at.toISOString(), company, strategy, units: unitGoals, items },
     contractVersion,
     counts: { company: companies.length, strategy: strategies.length, units: units.length, longTermGoals: ltos.length, periodGoals: pos.length },
   };
@@ -294,7 +311,9 @@ export const WORLD_CONTEXT_NOTE = "这是本体（tkos.world 业务世界）里�
 /** 工具结果的上限（字符）：超过时逐条截短组件正文。 */
 export const WORLD_TOOL_MAX_CHARS = 12_000;
 
-export type OntologyQuery = { part?: "company" | "strategy" | "battlefields"; battlefieldId?: string };
+export type OntologyQuery = { part?: "company" | "strategy" | "battlefields" | "missions"; battlefieldId?: string };
+/** read_ontology 里 Mission、Task 各最多列几个。 */
+export const WORLD_ITEMS_MAX = 40;
 
 /**
  * read_ontology 的结果：Company / Strategy 的组件（每条最多 400 字，各最多 24 条）与各战场的长期目标、本期目标。
@@ -325,6 +344,10 @@ export function worldContextSection(snapshot: WorldSnapshot, period: string, que
         longTermGoal: unit.lto ? goal(unit.lto) : null,
         periodGoals: choosePeriodGoals(unit.periodGoals, period).map(goal),
       })),
+    } : {}),
+    ...(want("missions") && snapshot.items ? {
+      missions: (["Mission", "Task"] as const).flatMap((type) => snapshot.items!.filter((item) => item.type === type).slice(0, WORLD_ITEMS_MAX))
+        .map(({ type, title, ref, lifecycle, unit }) => ({ type, title, ref, lifecycle, unit })),
     } : {}),
   };
 }

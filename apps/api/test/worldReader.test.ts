@@ -9,7 +9,7 @@ import { loadPeopleDirectory } from "../src/peopleDirectory.js";
 import { createPiConversationRuntime } from "../src/piConversationRuntime.js";
 import { loadWorldInstance, resolveWorldEnv, resolveWorldTkEnv, WorldClient, type WorldInstance } from "../src/worldClient.js";
 import {
-  choosePeriodGoals, clearWorldReadCache, createWorldReader, mergeWorldGoalsIntoContext, ontologyToolResult, worldDisplayText,
+  choosePeriodGoals, clearWorldReadCache, createWorldReader, mergeWorldGoalsIntoContext, ontologyToolResult, worldDisplayText, WORLD_ITEMS_MAX,
   type WorldSnapshot,
 } from "../src/worldReader.js";
 import { createTestApp, TEST_CEO, testEnv } from "./helpers.js";
@@ -48,7 +48,12 @@ function fakeWorld(overrides: { companyId?: string } = {}) {
   const poOct = head("po-oct", "PeriodGoal", "TK 10 月：01 灯塔", "dom-growth");
   const poSep = head("po-sep", "PeriodGoal", "9 月目标", "dom-growth");
   const poOther = head("po-other", "PeriodGoal", "别的单元", "dom-other");
-  const lists: Record<string, Head[]> = { Company: [company], Strategy: [strategy], ResponsibilityUnit: [unit, other], LongTermGoal: [lto], PeriodGoal: [poOct, poSep, poOther] };
+  // Mission、Task 只列头：当月（按 period 筛）没有，退回不按周期；撤销的不列。
+  const mission = head("mission-lh", "Mission", "TK 灯塔交付", "dom-growth", { lifecycle: { status: "established", display_name: "已成立" } });
+  const cancelled = head("mission-old", "Mission", "已取消的 Mission", "dom-growth", { lifecycle: { status: "cancelled", display_name: "已取消" } });
+  const task = head("task-lh", "Task", "灯塔部署", "dom-other");
+  const lists: Record<string, Head[]> = { Company: [company], Strategy: [strategy], ResponsibilityUnit: [unit, other], LongTermGoal: [lto], PeriodGoal: [poOct, poSep, poOther],
+    Mission: [mission, cancelled], "Task@2026-11": [task] };
   const views: Record<string, unknown> = {
     [company.object_id]: view(company, {}, [{ id: "identity", components: [component("vision", "vision", "成为产业控股集团〔建议定义〕")] }]),
     [strategy.object_id]: view(strategy, {}, [{ id: "strategy_core", components: [component("thesis", "strategic_thesis", "布局 AIDC、TK、FDD 三个战场")] }]),
@@ -66,7 +71,10 @@ function fakeWorld(overrides: { companyId?: string } = {}) {
     if (call.url.pathname === "/healthz") return Response.json({ error: "deprecated" }, { status: 503 });
     if (call.url.pathname === "/v1/health") return Response.json({ ok: true, db: "ok" });
     if (call.url.pathname === "/openapi.json") return Response.json({ openapi: "3.1.0", info: { title: "tkos.world", version: "0.6.3" } });
-    if (call.url.pathname === "/v1/world/objects") return { items: lists[call.url.searchParams.get("type") ?? ""] ?? [], next_cursor: null };
+    if (call.url.pathname === "/v1/world/objects") {
+      const period = call.url.searchParams.get("period");
+      return { items: lists[`${call.url.searchParams.get("type") ?? ""}${period ? `@${period}` : ""}`] ?? [], next_cursor: null };
+    }
     const id = decodeURIComponent(call.url.pathname.replace("/v1/world/objects/", ""));
     return views[id] ?? Response.json({ error: { code: "NOT_FOUND", message: "not found" } }, { status: 404 });
   };
@@ -215,10 +223,12 @@ describe("正式实例与 TK 只读实例", () => {
 
 describe("world 只读：健康检查、快照、缓存与回退", () => {
   const q = async () => ({ rows: [] }) as never;
+  /** Mission、Task 按当前公司月筛：固定在 11 月，免得跨月测试结果变。 */
+  const NOV = new Date("2026-11-06T04:00:00Z");
 
   it("健康检查用只读调用验证连通：connected、计数、契约与服务端版本；状态里没有凭证和地址；只发 GET", async () => {
     const calls = stubWorld(fakeWorld());
-    const reader = createWorldReader({ q, env });
+    const reader = createWorldReader({ q, env, now: () => NOV });
     const status = await reader.check();
     expect(status).toMatchObject({
       configured: true, instance: "demo", scopeId: DEMO.scope_id, reads: true, writes: false, state: "connected",
@@ -240,6 +250,12 @@ describe("world 只读：健康检查、快照、缓存与回退", () => {
     expect(growth).toMatchObject({ battlefieldId: "growth", unit: { title: "增长（词元云集）" } });
     expect(growth.lto).toMatchObject({ ref: "lto-growth@2", horizon: "2027 年春节前", outcome: "春节前完成 词元云集 核心业务第一次被真实证明", successCriteria: "真实客户使用与付费" });
     expect(growth.periodGoals.map((goal) => goal.objectId).sort()).toEqual(["po-oct", "po-sep"]);
+    // Mission、Task 只到对象头：带 ref、状态和所属单元，撤销的不列，也不逐个读对象。
+    expect(snapshot.items).toEqual([
+      { objectId: "mission-lh", ref: "mission-lh@2", type: "Mission", title: "词元云集 灯塔交付", lifecycle: "已成立", unit: "增长（词元云集）" },
+      { objectId: "task-lh", ref: "task-lh@2", type: "Task", title: "灯塔部署", lifecycle: "草稿", unit: "未对应战场" },
+    ]);
+    expect(calls.some((call) => /\/v1\/world\/objects\/(mission|task)-/.test(call.url.pathname))).toBe(false);
   });
 
   it("请求路径与顺序：先 /v1/health，再列对象、逐个读对象，最后 /openapi.json；全程串行（任一时刻最多 1 个在途请求）；不碰 /healthz 和 /context", async () => {
@@ -250,15 +266,17 @@ describe("world 只读：健康检查、快照、缓存与回退", () => {
       active++; maxActive = Math.max(maxActive, active);
       try { await new Promise((resolve) => setTimeout(resolve, 5)); return handler(call); } finally { active--; }
     });
-    const reader = createWorldReader({ q, env });
+    const reader = createWorldReader({ q, env, now: () => NOV });
     const status = await reader.check();
     expect(status).toMatchObject({ state: "connected", serverVersion: "0.6.3" });
     expect(maxActive).toBe(1);
-    const trail = calls.map((call) => `${call.method} ${call.url.pathname}${call.url.searchParams.get("type") ? `?type=${call.url.searchParams.get("type")}` : ""}`);
+    const trail = calls.map((call) => `${call.method} ${call.url.pathname}${call.url.searchParams.get("type") ? `?type=${call.url.searchParams.get("type")}` : ""}${call.url.searchParams.get("period") ? `&period=${call.url.searchParams.get("period")}` : ""}`);
     expect(trail).toEqual([
       "GET /v1/health",
       "GET /v1/world/objects?type=Company", "GET /v1/world/objects?type=Strategy", "GET /v1/world/objects?type=ResponsibilityUnit",
       "GET /v1/world/objects?type=LongTermGoal", "GET /v1/world/objects?type=PeriodGoal",
+      "GET /v1/world/objects?type=Mission&period=2026-11", "GET /v1/world/objects?type=Mission",
+      "GET /v1/world/objects?type=Task&period=2026-11",
       `GET /v1/world/objects/${COMPANY_ID}`, "GET /v1/world/objects/strategy-1",
       "GET /v1/world/objects/lto-growth", "GET /v1/world/objects/po-oct", "GET /v1/world/objects/po-sep",
       "GET /openapi.json",
@@ -399,6 +417,21 @@ describe("本体目标：本期选择、按需工具与上下文包", () => {
     expect(choosePeriodGoals(goals, "2026-10").map((goal) => goal.objectId)).toEqual(["p1", "p2"]);
     expect(choosePeriodGoals(goals, "2026-11").map((goal) => goal.objectId)).toEqual(["p1", "p2"]);
     expect(choosePeriodGoals(goals.slice(2), "2026-11").map((goal) => goal.objectId)).toEqual(["p0"]);
+  });
+
+  it("按需工具的 Mission、Task 清单：带 ref、状态、所属单元，part=missions 只给清单，每类最多 WORLD_ITEMS_MAX 个", () => {
+    const items = Array.from({ length: WORLD_ITEMS_MAX + 3 }, (_, index) => ({
+      objectId: `m${index}`, ref: `m${index}@1`, type: "Mission" as const, title: `Mission ${index}`, lifecycle: "已成立", unit: "增长",
+    }));
+    const task = { objectId: "t1", ref: "t1@2", type: "Task" as const, title: "灯塔部署", lifecycle: "已指派", unit: "增长" };
+    const full = ontologyToolResult({ ...snapshot, items: [...items, task] }, "2026-10");
+    const missions = full.missions as Record<string, unknown>[];
+    expect(missions).toHaveLength(WORLD_ITEMS_MAX + 1);
+    expect(missions[0]).toEqual({ type: "Mission", title: "Mission 0", ref: "m0@1", lifecycle: "已成立", unit: "增长" });
+    expect(missions.at(-1)).toEqual({ type: "Task", title: "灯塔部署", ref: "t1@2", lifecycle: "已指派", unit: "增长" });
+    const only = ontologyToolResult({ ...snapshot, items: [task] }, "2026-10", { part: "missions" });
+    expect(Object.keys(only).filter((key) => !["source", "note", "asOf"].includes(key))).toEqual(["missions"]);
+    expect(ontologyToolResult(snapshot, "2026-10")).not.toHaveProperty("missions");
   });
 
   it("按需工具的结果：带引用和说明、按 part / 战场筛选、超长时截短；每轮上下文包只换长期目标正文、不加本体一节", () => {
