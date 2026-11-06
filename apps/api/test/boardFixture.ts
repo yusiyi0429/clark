@@ -35,7 +35,7 @@ export async function boardFixture(runtime: Parameters<typeof createTestApp>[2] 
   await mission("other", THIRD.personId);
   await t.sql("INSERT INTO member_access (person_id, login_id, passcode_hash, must_change) VALUES ($1, $2, $3, FALSE)", [THIRD.personId, THIRD.loginId, hashSecret(THIRD.passcode)]);
   const member = await t.memberCookie();
-  const call = (method: "GET" | "POST" | "PATCH" | "DELETE", url: string, payload?: unknown, cookie = member) =>
+  const call = (method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE", url: string, payload?: unknown, cookie = member) =>
     t.app.inject({ method, url, headers: { cookie, origin: t.publicOrigin }, ...(payload === undefined ? {} : { payload: payload as Record<string, unknown> }) });
   /** 本人在 mine 下挂 planTaskId 建一件执行事项（卡）。 */
   const card = async (title: string, options: { planTaskId?: string; doneDefinition?: string } = {}) => {

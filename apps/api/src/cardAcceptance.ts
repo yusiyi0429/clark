@@ -8,7 +8,7 @@ import { acceptanceProblem, type AcceptanceInput, type CardAcceptanceAgent } fro
 import type { Query } from "./meetingStore.js";
 import { requestRoleProposal } from "./roleProposals.js";
 import { reviewerRole, rolesById } from "./roles.js";
-import { CardError, effectiveOutcome, failStreak, type HandbackRow, type StoredAcceptance } from "./taskCards.js";
+import { CardError, cardAgreement, effectiveOutcome, failStreak, type CardPlanTask, type HandbackRow, type StoredAcceptance } from "./taskCards.js";
 import { postCoAgentMessage } from "./threads.js";
 
 /**
@@ -59,7 +59,9 @@ type OutputRow = { id: string; kind: "artifact" | "evidence"; title: string; fil
 
 /** onProposal：第二次没过时记下的岗位修改，提交后交给提岗位修改的队列。 */
 export function createCardAcceptanceQueue(options: { pool: Pool; storageDir: string; agent: CardAcceptanceAgent; fetchArticle: ArticleFetcher; now: () => Date;
-  onError: (cause: unknown) => void; onProposal: (proposalId: string) => void }) {
+  onError: (cause: unknown) => void; onProposal: (proposalId: string) => void;
+  /** 按推进人读卡挂的 Task 和它的约定（V1）；读不到为 null，这次就不带约定。 */
+  planTask: (ownerId: string, planTaskId: string) => Promise<CardPlanTask | null> }) {
   const running = new Map<string, Promise<void>>(), abort = new AbortController();
   const q: Query = options.pool.query.bind(options.pool);
   const stale = () => new Date(options.now().getTime() - STALE_MS);
@@ -124,7 +126,8 @@ export function createCardAcceptanceQueue(options: { pool: Pool; storageDir: str
       const input: AcceptanceInput = {
         card: { title: task.title, brief: task.brief, criteria: row.criteria.map((text, index) => ({ index: index + 1, text })) },
         taskCriterion: task.criterion_index && task.criterion_text ? { index: task.criterion_index, text: task.criterion_text } : null,
-        claims: row.claims, summary: row.summary, outputs, unreadable, agreement: null,
+        claims: row.claims, summary: row.summary, outputs, unreadable,
+        agreement: cardAgreement(task.plan_task_id ? (await options.planTask(row.owner_id, task.plan_task_id))?.agreement ?? null : null, task.criterion_index),
         role: role ? { name: role.name, acceptanceMd: role.acceptance_md } : null,
         reviewer: reviewer ? { name: reviewer.name, practiceMd: reviewer.practice_md, acceptanceMd: reviewer.acceptance_md } : null,
         ...(previous && effectiveOutcome(previous) === "fail" ? { previous: previous.result!.criteria.map((item) => ({ index: item.index,

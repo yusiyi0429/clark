@@ -52,6 +52,16 @@ export async function boardTask(open: OpenPlanTask, personId: string, taskId: st
   return own;
 }
 
+/**
+ * 卡对的那条 Task 标准的约定（V1）：用什么证明（卡对了第几条才有）、这次不包括什么。两样都没有为 null。
+ * 开工交代和验收的输入都用它。
+ */
+export function cardAgreement(agreement: TTaskAgreementResponse | null, criterionIndex: number | null): { proof: string | null; exclusions: string[] } | null {
+  if (!agreement) return null;
+  const proof = criterionIndex ? agreement.criteria.find((item) => item.index === criterionIndex)?.proof ?? null : null;
+  return proof || agreement.exclusions.length ? { proof, exclusions: agreement.exclusions } : null;
+}
+
 /** 卡挂的 Task，看不到、找不到为 null（其余错误照抛）。 */
 export const planTaskOrNull = (open: OpenPlanTask, personId: string) => (planTaskId: string): Promise<CardPlanTask | null> =>
   open(personId, planTaskId).catch((cause) => {
@@ -190,11 +200,11 @@ export async function patchCard(pool: Pool, ownerId: string, id: string, input: 
 }
 
 /**
- * GET /api/me/cards/:id/brief：开工时交给本机的交代（第 8.3、19.4 节）。约定里的「用什么证明」「这次不包括」等 V1 的约定读取合进来以后补上，现在是空的。
+ * GET /api/me/cards/:id/brief：开工时交给本机的交代（第 8.3、19.4 节）。约定（V1）写进来：卡对的那条标准用什么证明、这次不包括什么。
  * 本体上下文先只放 Mission 和 Task。role 是卡的岗位此刻的内容（岗位改了，下一张卡的交代就变）；职责、做法由本机程序注入会话，
  * markdown 里只写岗位名和它的验收口径（干完会按它验）。
  */
-export async function cardBrief(q: Query, ownerId: string, id: string, planTask: (planTaskId: string) => Promise<OwnTask | null>): Promise<TCardBriefResponse> {
+export async function cardBrief(q: Query, ownerId: string, id: string, planTask: (planTaskId: string) => Promise<CardPlanTask | null>): Promise<TCardBriefResponse> {
   const card = await ownCard(q, ownerId, id);
   const mission = card.mission_id ? (await q("SELECT id,title FROM missions WHERE id=$1", [card.mission_id])).rows[0] as { id: string; title: string } | undefined : undefined;
   const own = card.plan_task_id ? await planTask(card.plan_task_id) : null;
@@ -204,22 +214,26 @@ export async function cardBrief(q: Query, ownerId: string, id: string, planTask:
   const gap = review?.criteria.find((item) => item.index === card.criterion_index && item.verdict !== "met")?.fix ?? null;
   const judged = (await q("SELECT * FROM card_handbacks WHERE task_id=$1 AND status='done' AND outcome IS NOT NULL ORDER BY attempt DESC LIMIT 1", [id])).rows[0] as HandbackRow | undefined;
   const lastReturn = judged && effectiveOutcome(judged) === "fail" ? judged.return_text : null;
-  const criterion = card.criterion_index && card.criterion_text ? { index: card.criterion_index, text: card.criterion_text, proof: null } : null;
+  const agreement = cardAgreement(own?.agreement ?? null, card.criterion_index);
+  const criterion = card.criterion_index && card.criterion_text ? { index: card.criterion_index, text: card.criterion_text, proof: agreement?.proof ?? null } : null;
+  const exclusions = agreement?.exclusions ?? [];
   const role = card.role_id ? (await rolesById(q, [card.role_id])).get(card.role_id) : undefined;
   const lines = [
     `# 执行事项：${card.title}`, "",
     ...(mission ? [`- Mission：${mission.title}`] : []),
     ...(own ? [`- Task：${own.task.name}`] : []),
     ...(criterion ? [`- 对的是 Task 的第 ${criterion.index} 条标准：${criterion.text}`] : []),
+    ...(criterion?.proof ? [`- 这条用什么证明：${criterion.proof}`] : []),
     ...(role ? [`- 岗位：${role.name}`] : []),
     "", "## 交代", "", card.brief ?? "（没写交代，按标题和完成标准做）",
     "", "## 完成标准（交回时逐条写证据）", "", ...(standards.length ? standards.map((text, index) => `${index + 1}. ${text}`) : ["（还没写完成标准）"]),
+    ...(exclusions.length ? ["", "## 这次不包括", "", ...exclusions.map((text) => `- ${text}`)] : []),
     ...(gap ? ["", "## Task 最新一版评审里这条还差", "", gap] : []),
     ...(lastReturn ? ["", "## 上一次验收没过", "", lastReturn] : []),
     ...(role?.acceptance_md.trim() ? ["", `## ${role.name}的验收口径`, "", role.acceptance_md.trim()] : []),
   ];
   return { markdown: lines.join("\n").slice(0, 20_000), role: role ? roleBrief(role) : null, mission: mission ? { missionId: mission.id, title: mission.title } : null,
-    task: own ? { taskId: own.task.taskId, name: own.task.name } : null, criterion, exclusions: [], reviewGap: gap, lastReturn };
+    task: own ? { taskId: own.task.taskId, name: own.task.name } : null, criterion, exclusions, reviewGap: gap, lastReturn };
 }
 
 /** 拆卡（Task 负责人）：同一个 Task 已有一次在排队或在跑时返回那一次（created=false），不另起。 */

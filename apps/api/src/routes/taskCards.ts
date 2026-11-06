@@ -11,6 +11,7 @@ import { createCardPlanQueue } from "../cardPlanner.js";
 import { createRoleProposalAgent, type RoleProposalAgent } from "../roleProposalAgent.js";
 import { createRoleProposalQueue } from "../roleProposals.js";
 import { RoleError } from "../roles.js";
+import { agreementSnapshot } from "../taskAgreements.js";
 import { personDisplayNames } from "../people.js";
 import { acceptCardDrafts, boardTask, CardError, cardBrief, createCardPlan, dismissCardDraft, patchCard, planTaskOpener, planTaskOrNull, readBoard,
   readCardDetail } from "../taskCards.js";
@@ -44,7 +45,7 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     ?? createRoleProposalAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.lightModel, thinking: "off" }) });
   const acceptance = createCardAcceptanceQueue({ pool, storageDir: ctx.materialStorageDir, now: ctx.now, onError: () => app.log.error("card acceptance failed"),
     agent: deps.agents?.acceptance ?? createCardAcceptanceAgent(model), fetchArticle: deps.fetchArticle ?? createArticleFetcher(),
-    onProposal: (id) => { void proposals.enqueue(id); } });
+    onProposal: (id) => { void proposals.enqueue(id); }, planTask: (ownerId, planTaskId) => planTaskOf(ownerId)(planTaskId) });
   app.decorate("cardPlans", plans);
   app.decorate("cardAcceptance", acceptance);
   app.decorate("roleProposals", proposals);
@@ -131,7 +132,8 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
 
   app.post("/api/plan-tasks/:taskId/deliverable/versions/from-pending", { preHandler: requireMember, schema: { params: taskParams, body: CreateVersionFromPendingRequest,
     response: { 201: DeliverableVersion } } }, async (req, reply) => handle(reply, async () => {
-    const version = await createVersionFromPending(pool, await board(req.person!.personId, req.params.taskId), req.body.statement, ctx.materialStorageDir);
+    const own = await board(req.person!.personId, req.params.taskId);
+    const version = await createVersionFromPending(pool, own, req.body.statement, ctx.materialStorageDir, agreementSnapshot(own.agreement));
     void app.deliverables.enqueueReview(version.id);
     return reply.status(201).send(version);
   }));

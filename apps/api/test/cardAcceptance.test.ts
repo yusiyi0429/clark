@@ -170,4 +170,25 @@ describe("Agent 验收：队列、推翻、退回记录", { timeout: 30_000 }, (
       expect(detail.task.status).toBe("in_progress");
     } finally { await f.close(); }
   });
+
+  it("Task 的约定（V1）进卡的开工交代和验收的输入：卡对的那条用什么证明、这次不包括什么；没写约定时为空", async () => {
+    const f = await acceptanceFixture();
+    try {
+      const id = await f.card();
+      const before = (await f.call("GET", `/api/me/cards/${id}/brief`)).json();
+      expect(before).toMatchObject({ criterion: { index: 1, text: "有题库打分结果", proof: null }, exclusions: [] });
+      expect(before.markdown).not.toContain("这次不包括");
+      expect((await f.call("PUT", "/api/plan-tasks/task-open/agreement", { criteria: [{ index: 1, proof: "题库 200 题的打分表", acceptorId: null },
+        { index: 2, proof: "录屏链接", acceptorId: null }], exclusions: ["不含英文题库"] })).statusCode).toBe(200);
+
+      const brief = (await f.call("GET", `/api/me/cards/${id}/brief`)).json();
+      expect(brief).toMatchObject({ criterion: { index: 1, proof: "题库 200 题的打分表" }, exclusions: ["不含英文题库"] });
+      for (const text of ["这条用什么证明：题库 200 题的打分表", "## 这次不包括", "- 不含英文题库"]) expect(brief.markdown).toContain(text);
+
+      f.plan.push(["met", "met"]);
+      await f.handBack(id);
+      await f.settle();
+      expect(f.calls[0].input.agreement).toEqual({ proof: "题库 200 题的打分表", exclusions: ["不含英文题库"] });
+    } finally { await f.close(); }
+  });
 });
